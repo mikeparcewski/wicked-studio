@@ -14,6 +14,12 @@ import type { AssistVerbs } from '../src/components/AssistDock.js';
 
 const getChat = vi.fn();
 
+vi.mock('../src/api/diagnostics.js', () => ({
+  // The chat surface probes the daemon's engine version once a chat is live (F-W1-004 guard).
+  getDiagnostics: () => Promise.resolve({ components: { coreTs: '0.7.27' } }),
+  isDiagnosticsUnsupported: () => false,
+}));
+
 vi.mock('../src/api/client.js', () => ({
   api: {
     getChat: (...a: unknown[]) => getChat(...a),

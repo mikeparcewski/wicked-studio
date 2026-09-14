@@ -11,8 +11,8 @@
   "studioVersion": "0.5.10",
   "counts": {
     "files": 146,
-    "occurrences": 1326,
-    "static": 1143,
+    "occurrences": 1325,
+    "static": 1142,
     "dynamic": 62,
     "computed": 7
   },
@@ -105,12 +105,6 @@
     },
     {
       "testId": "agent-picker-excluded",
-      "files": [
-        "src/components/GroupChat.tsx"
-      ]
-    },
-    {
-      "testId": "agent-picker-nochat",
       "files": [
         "src/components/GroupChat.tsx"
       ]

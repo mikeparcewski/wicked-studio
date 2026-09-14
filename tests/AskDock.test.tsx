@@ -50,11 +50,18 @@ const { useFailureClocks } = await import('../src/store/failureClocks.js');
 const { useProjectsStore } = await import('../src/store/projects.js');
 const { useLiveChatsStore } = await import('../src/store/liveChats.js');
 
-/** The live-daemon roster shape in miniature: acp objects mark the chat-capable seats. */
+/** The live-daemon roster shape in miniature: the DAEMON states which seats it would seat
+ *  (`chat_admission`, crew >= 0.7.36, F-W1-005) — studio holds no capability rule of its own. */
+const ADMITTED = { unscoped: { ok: true }, scoped: { ok: true } };
+const REFUSED = {
+  ok: false,
+  reason: 'it has no ACP adapter registered, and a scoped chat holds only ACP-governed seats',
+  source: 'scope',
+};
 const ROSTER = [
-  { key: 'claude', enabled_for_council: true, acp: { binary: 'claude-agent-acp' } },
-  { key: 'codex', enabled_for_council: true }, // speaks-acp roster ⇒ absent key = not capable
-  { key: 'pi', enabled_for_council: false, acp: { binary: 'pi-acp' } },
+  { key: 'claude', enabled_for_council: true, acp: { binary: 'claude-agent-acp' }, chat_admission: ADMITTED },
+  { key: 'codex', enabled_for_council: true, chat_admission: { unscoped: REFUSED, scoped: REFUSED } },
+  { key: 'pi', enabled_for_council: false, acp: { binary: 'pi-acp' }, chat_admission: ADMITTED },
 ] as unknown as RosterSeat[];
 
 const DIAGNOSTICS: Diagnostics = {
@@ -209,7 +216,7 @@ describe('nothing launches without the user sending', () => {
 });
 
 describe('the chat-launch wire — the GroupChat seat machinery, one warm session', () => {
-  it('first send opens the chat with the CHAT-CAPABLE roster and fans the seeded question out', async () => {
+  it('first send opens the chat with the seats the DAEMON would seat, and fans the seeded question out', async () => {
     const user = userEvent.setup();
     wireDiagnostics('present');
     dock();
@@ -220,7 +227,7 @@ describe('the chat-launch wire — the GroupChat seat machinery, one warm sessio
     await waitFor(() => expect(openChat).toHaveBeenCalledTimes(1));
     const body = openChat.mock.calls[0]?.[0] as { chatId: string; clis?: string[] };
     expect(body.chatId).toMatch(/^[0-9a-f-]{36}$/);
-    expect(body.clis).toEqual(['claude', 'pi']); // acp-capable only — codex has no config
+    expect(body.clis).toEqual(['claude', 'pi']); // the seats the DAEMON would seat — codex is refused
     await waitFor(() => expect(sendChatMessage).toHaveBeenCalledWith(body.chatId, expect.stringContaining('what is in the estate store?')));
 
     // The chat block mounts for the session and the live-chats store knows it (rail row).

@@ -47,6 +47,14 @@ vi.mock('../src/api/client.js', () => ({
   wsBase: () => 'ws://localhost',
 }));
 
+// The E4 guard reads the daemon's engine version once a chat is live (review MED-2): unknown ⇒
+// guarded, so these tests state the engine they are talking to instead of inheriting a default.
+const getDiagnostics = vi.fn();
+vi.mock('../src/api/diagnostics.js', () => ({
+  getDiagnostics: (...a: unknown[]) => getDiagnostics(...a),
+  isDiagnosticsUnsupported: () => false,
+}));
+
 let emit: ((ev: unknown) => void) | null = null;
 vi.mock('../src/hooks/useEventStream.js', () => ({
   useEventStream: (fn: (ev: unknown) => void): void => {
@@ -60,7 +68,9 @@ const ROSTER = [
 ] as unknown as RosterSeat[];
 
 beforeEach(() => {
-  for (const spy of [openChat, getChat, closeChat, getRoster, sendChatMessage, reseatChat]) spy.mockReset();
+  for (const spy of [openChat, getChat, closeChat, getRoster, sendChatMessage, reseatChat, getDiagnostics]) spy.mockReset();
+  // Default: an engine that sends the ANSWER (core-ts ≥ 0.7.27, F-W1-004).
+  getDiagnostics.mockResolvedValue({ components: { coreTs: '0.7.27' } });
   getRoster.mockResolvedValue({ roster: ROSTER });
   openChat.mockImplementation((body: { chatId: string; clis?: string[] }) =>
     Promise.resolve({
@@ -111,6 +121,7 @@ describe('collapse retention — expanding restores every streamed byte', () => 
     });
     // While streaming the over-long text is narration (collapsed).
     expect(screen.getAllByTestId('chat-narration-line').some((l) => l.dataset['agent'] === 'claude' && /is working/.test(l.textContent!))).toBe(true);
+    await waitFor(() => expect(getDiagnostics).toHaveBeenCalled());
     act(() => {
       emit!({ type: 'chatReply', chat: chatId(), cliKey: 'claude', text: parts[2]!, ok: true });
     });
@@ -119,6 +130,24 @@ describe('collapse retention — expanding restores every streamed byte', () => 
     expect(bubble.textContent).toBe(parts[2]);
     expect(bubble.closest('[data-testid^="chat-narration-raw-"]'), 'a short answer is a turn, not collapsed narration').toBeNull();
     expect(chip('claude').dataset['state']).toBe('replied');
+  });
+
+  it('MED-2: against a 0.7.26 engine the E4 control STAYS — a shorter ok reply never clobbers the streamed bytes', async () => {
+    const user = userEvent.setup();
+    // The daemon's own self-report: an engine BELOW the answer-only floor. crew's runtime pin is
+    // `^0.7.26`, so this pairing ships today and the studio must not drop streamed text on it.
+    getDiagnostics.mockResolvedValue({ components: { coreTs: '0.7.26' } });
+    render(<GroupChat repoId={null} onBack={() => undefined} />);
+    fireEvent.click(screen.getByTestId('chat-scope-none'));
+    await sendText(user, 'plan it');
+    await waitFor(() => expect(getDiagnostics).toHaveBeenCalled());
+    const streamed = `the full plan ${'a'.repeat(1200)} and its tail`;
+    act(() => {
+      emit!({ type: 'chatDelta', chat: chatId(), cliKey: 'claude', text: streamed });
+      emit!({ type: 'chatReply', chat: chatId(), cliKey: 'claude', text: streamed.slice(-40), ok: true });
+    });
+    const bubble = document.querySelector('[data-testid="seat-bubble"][data-agent="claude"]') as HTMLElement;
+    expect(bubble.textContent, 'the longer streamed text stands on a pre-0.7.27 engine').toBe(streamed);
   });
 
   it('a NOT-ok reply (an eviction) keeps the longer streamed text — nothing said before the cut is lost (E4); collapse → expand is byte-equal', async () => {
