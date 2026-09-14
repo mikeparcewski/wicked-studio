@@ -18,6 +18,15 @@ npm publish dates. Every version listed here exists on
   - `SteeringGate` skips footnote extraction entirely for escalation prompts (`isFailureEscalation`): the full prompt — cause included — renders in the headline, which now carries `overflow-wrap: anywhere` so a long unbroken cause wraps instead of overflowing.
   - `isSeatFailure(escalation, failedCli)` (new predicate in `gateVerdictModel.ts`) gates `ReassignControl` in both `SteeringGate` and `CenterDashboard`: a PROVEN seatless escalation (`failedCli === null` — the unit is known and has no seat) renders no seat lever; a seat failure keeps the existing lever and Approve label unchanged; a host that cannot resolve the unit's seat (`failedSeatOf` → `undefined`: no `units` passed — the steering-author and testing-launch panels, the landing inbox before the run is loaded) keeps the lever as before, never reading "unknown" as "seatless" (#274, found by the independent review of the first cut).
 
+### Security
+- **site: patch Astro AVIF/SVG advisory chain (#227).** `site/package.json` lifts the Astro
+  constraint from `^7.1.3` to `^7.2.8`; npm resolves to **7.3.2**, patching
+  [GHSA-26w7-cxv4-gfx2](https://github.com/advisories/GHSA-26w7-cxv4-gfx2) (Astro < 7.2.8 Sharp/libheif
+  AVIF RCE). The updated Astro tree also pulls **svgo 4.1.0**, patching
+  [GHSA-w27v-7q3p-w38r](https://github.com/advisories/GHSA-w27v-7q3p-w38r) and
+  [GHSA-4vpr-x523-8j87](https://github.com/advisories/GHSA-4vpr-x523-8j87) (svgo removeScripts
+  SVG sanitisation bypasses). `npm audit` reports **0 vulnerabilities** after the update.
+
 ## [0.5.9] — 2026-09-13
 _The published bundle is built against `wicked-crew-api-types` **0.37.0** — the exact
 devDependency pin bumped from 0.36.0 in #270 (the deliver-gate wire: `HealthResponse.capabilities.deliverGate`,
