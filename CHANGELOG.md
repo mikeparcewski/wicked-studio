@@ -11,6 +11,15 @@ npm publish dates. Every version listed here exists on
 [npm](https://www.npmjs.com/package/wicked-studio?activeTab=versions).
 
 ## [Unreleased]
+
+<!-- fixall L4 -->
+- **The "Capture learnings" card files its run under the ambient project (FIX-IT-ALL L4-⑩; F-RC1-049 /
+  F-E2E-015).** From a project page the `capture-learnings` launch now carries `projectId:
+  <ambient project>` on the existing `launchRun` wire (`LaunchRunBody.projectId`, api-types 0.38.0), so
+  the run lands under `/p/<proj>/…` like every other launch from that page; from the flat `/repos`
+  page no `projectId` is sent and the run stays Unfiled honestly (there is no repo→project map to
+  guess from). The button title says "filed under the current project" when it applies.
+
 ### Fixed
 - **Seatless-run failure card: headline truncated at `(Failed):` and "sign a seat in" remedy shown for tool-only failures (F-E2E-014, refs #272).**
   `cleanPrompt` split on the first `[`, which in a triage-escalation prompt is the opening bracket of the engine's cause — so the cause was demoted to the collapsed "why this gate fired" disclosure (starting mid-token, since `slice(bracketIdx + 1)` stripped the bracket) and the headline stopped at `(Failed):`. The `ReassignControl` lever rendered for any failure escalation regardless of `assigned_cli`, so a run that never had a seat was told to retry on another seat / sign one in.
