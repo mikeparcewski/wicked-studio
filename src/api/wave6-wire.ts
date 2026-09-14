@@ -1,10 +1,12 @@
 /**
- * MIRROR of the wicked-crew-api-types 0.37.0 wave-6 additions (the governed testing journey —
+ * MIRROR of the wicked-crew-api-types 0.38.0 wave-6 additions (the governed testing journey —
  * crew#536, the wave-6 crew PR; `skills.stale-rules` from crew#535) — replace with imports from the
  * published package at release.
  *
- * Studio pins `wicked-crew-api-types` exactly (0.37.0 — crew#543's deliver-gate additions leave every
- * wave-6 shape byte-identical to 0.36.0; the regions below are relabelled by line range only). Every
+ * Studio pins `wicked-crew-api-types` exactly (0.38.0 — FIX-IT-ALL L8-0a, the wave-1 train's one
+ * api-types release: four regions gain ADDITIVE lines — `GateEvaluatedEvent.evaluatorVerdict?`,
+ * `UnitDistributedEvent.distinctnessFallback?`, `RosterSeat.council_bench` `@deprecated`,
+ * `ChatDetailResponse.messages?` — the other eleven are relabelled by line range only). Every
  * declaration below that is a contract
  * shape is a region copied VERBATIM from the package's `index.d.ts` between `>>> VERBATIM` /
  * `<<< VERBATIM` markers, labelled with the version and the 1-based line range it was cut from.
@@ -58,6 +60,7 @@
 import type {
   Campaign,
   ChatScope,
+  ChatTranscriptRecord,
   CoreEvent,
   PhaseRole,
   RepoCheckRun,
@@ -70,7 +73,7 @@ import type {
 
 // ── The QE authoring workflow — `POST /testing/author`, the plan, the registered test set ──────
 
-// >>> VERBATIM wicked-crew-api-types@0.37.0 index.d.ts:2827-2967 (crew#536) — the governed test-authoring launch: QeAuthorTestsWorkflowId, TestingAuthorBody, WorkflowPlanPhase, WorkflowPlan, TestingAuthorRun, TestingAuthorResponse, TestSetFile, TestSet
+// >>> VERBATIM wicked-crew-api-types@0.38.0 index.d.ts:3138-3278 (crew#536) — the governed test-authoring launch: QeAuthorTestsWorkflowId, TestingAuthorBody, WorkflowPlanPhase, WorkflowPlan, TestingAuthorRun, TestingAuthorResponse, TestSetFile, TestSet
 // ── The governed test-authoring launch (wave 6; api-types 0.36.0) ──────────────────────────────
 
 /**
@@ -215,7 +218,7 @@ export interface TestSet {
 // <<< VERBATIM
 
 /** The recon body, vendored as EVIDENCE: no `workflow` key — studio's launch ladder sends none. */
-// >>> VERBATIM wicked-crew-api-types@0.37.0 index.d.ts:2771-2804 (crew#536) — TestingReconBody (no `workflow` key)
+// >>> VERBATIM wicked-crew-api-types@0.38.0 index.d.ts:3082-3115 (crew#536) — TestingReconBody (no `workflow` key)
 /**
  * The `POST /testing/recon` request body (api-types 0.15.0) — the Testing page's campaign-recon
  * trigger. `problem` is the recon brief, passed to every launched run VERBATIM (the client owns
@@ -258,7 +261,7 @@ export const QE_AUTHOR_TESTS_WORKFLOW_ID = 'qe-author-tests' satisfies QeAuthorT
 
 // ── The campaigns surface — where the registered sets are served ──────────────────────────────
 
-// >>> VERBATIM wicked-crew-api-types@0.37.0 index.d.ts:4434-4445 (crew#536) — CampaignsListResponse incl. test_sets
+// >>> VERBATIM wicked-crew-api-types@0.38.0 index.d.ts:4837-4848 (crew#536) — CampaignsListResponse incl. test_sets
 /**
  * `GET /campaigns` 200 body (api-types 0.19.0 — `groups` is ADDITIVE: a pre-0.19 daemon sends
  * only `campaigns`). One fetch answers the whole grouping surface: engine campaigns (each
@@ -275,7 +278,7 @@ export interface CampaignsListResponse {
 
 // ── The diff route once the worktree is gone ──────────────────────────────────────────────────
 
-// >>> VERBATIM wicked-crew-api-types@0.37.0 index.d.ts:579-606 (crew#536) — RunDiff incl. source / branch / base
+// >>> VERBATIM wicked-crew-api-types@0.38.0 index.d.ts:664-691 (crew#536) — RunDiff incl. source / branch / base
 /**
  * Response of `GET /runs/:id/diff` / `GET /runs/:id/diff?path=<abs>` (DES-FEEDBACK-002 CREW-1) —
  * the run worktree's unified diff against HEAD (staged + unstaged), with untracked files appended
@@ -311,7 +314,7 @@ export type RunDiffSource = NonNullable<RunDiff['source']>;
 
 // ── Gate / floor / routing / fence / carrier / base events ────────────────────────────────────
 
-// >>> VERBATIM wicked-crew-api-types@0.37.0 index.d.ts:1034-1085 (crew#536) — GateEvaluatedEvent incl. ungated / ungatedReason / floorNote / judgeSkippedReason
+// >>> VERBATIM wicked-crew-api-types@0.38.0 index.d.ts:1174-1235 (crew#536) — GateEvaluatedEvent incl. ungated / ungatedReason / floorNote / judgeSkippedReason
 /** §3 B1 — the gate's decision depth, emitted alongside `gateDecided`. `denial` is the structured
  *  twin of `denialReason`: `null` when the gate approved, else the winning layer (deny-dominates) —
  *  `worktree_guard` and `repo_checks` are the two wicked-core F-036/F-039 layers. `judgeCli` /
@@ -363,10 +366,20 @@ export interface GateEvaluatedEvent {
    *  validator gated it) — `"no eligible judge seat distinct from creator \`claude\` (roster: …;
    *  benched: …)"`. `null` when a judge ran or none was wanted; absent on an older engine. */
   judgeSkippedReason?: string | null;
+  /**
+   * The evaluator's own `VERDICT:` token (api-types 0.38.0, additive; DES-L1 PR-1A, wicked-core-ts
+   * ≥ 0.7.27): after trimming leading decoration, the LAST line whose first token is `VERDICT`
+   * decides — `"PASS"`, `"FAIL"`, or whatever token the seat wrote (`"CONDITIONAL"` is not PASS).
+   * Parsed for an Evaluator-role agent unit only; `null` for creator / neutral / tool units and
+   * when no such line exists (then `denial.source` is `evaluator_verdict` and the gate escalates
+   * `verdict_not_pass`). ABSENT on an engine before the field — a reader treats absent as "not
+   * parsed", never as PASS.
+   */
+  evaluatorVerdict?: string | null;
 }
 // <<< VERBATIM
 
-// >>> VERBATIM wicked-crew-api-types@0.37.0 index.d.ts:1354-1411 (crew#536) — RepoChecksEvaluatedEvent incl. sandboxLevel / sandboxError / detectError
+// >>> VERBATIM wicked-crew-api-types@0.38.0 index.d.ts:1622-1679 (crew#536) — RepoChecksEvaluatedEvent incl. sandboxLevel / sandboxError / detectError
 /** wicked-core F-039 — the engine ran the repository's OWN checks in the worktree for the def's
  *  code-verifying unit (`verified_evidence` with an `executes_code` creator upstream: `bug/verify`,
  *  `feature/test`, `migration/verify`) and folded them into the gate as a deterministic floor. Fires
@@ -427,7 +440,7 @@ export type RepoChecksEvaluatedEvent = {
 };
 // <<< VERBATIM
 
-// >>> VERBATIM wicked-crew-api-types@0.37.0 index.d.ts:1671-1729 (crew#536) — UnitDistributedEvent (camelCase) + BenchedSeat
+// >>> VERBATIM wicked-crew-api-types@0.38.0 index.d.ts:1948-2020 (crew#536) — UnitDistributedEvent (camelCase) + BenchedSeat
 /**
  * Foundation wave: a unit was distributed with full routing detail.
  *
@@ -466,6 +479,20 @@ export interface UnitDistributedEvent {
   /** WHY the candidate seats were narrowed BEFORE the council voted (core#401): a non-portable
    *  skill constrained the unit to a claude seat. `null` when every roster seat was a candidate. */
   seatConstraint: string | null;
+  /**
+   * The evaluator ≠ creator DISCLOSURE as a field (wicked-core#461, crew#556): `'creator_seat'` when a
+   * review/test unit STAYS on a seat that built what it checks because no eligible seat distinct from
+   * the builders admits it — a single-eligible-seat roster, or a bench that emptied the pool
+   * (`degradedReason` then says which; on a bench-free single-seat roster it stays `null`, so this
+   * field is the ONLY disclosure). `null` otherwise. The fallback seat is always a still-eligible one:
+   * a benched or dead seat is never the fallback.
+   *
+   * OPTIONAL on this side of the wire deliberately: the engine emits the key unconditionally (`null`,
+   * never absent — the `seatConstraint` rule) from the wicked-core release carrying #461 on, but an
+   * older engine does not send it at all, and this contract must read frames from both. Consumers
+   * guard with `== null`, never `=== undefined`.
+   */
+  distinctnessFallback?: 'creator_seat' | null;
   /** @deprecated api-types 0.36.0 — the engine emits `routingMethod`; removed in 0.37. */
   routing_method?: 'council' | 'degraded' | 'evaluator_distinct' | 'tool';
   /** @deprecated api-types 0.36.0 — the engine emits `agreementPct`; removed in 0.37. */
@@ -489,7 +516,7 @@ export interface BenchedSeat {
 }
 // <<< VERBATIM
 
-// >>> VERBATIM wicked-crew-api-types@0.37.0 index.d.ts:1561-1591 (crew#536) — WorkerToolCallDeniedEvent
+// >>> VERBATIM wicked-crew-api-types@0.38.0 index.d.ts:1829-1859 (crew#536) — WorkerToolCallDeniedEvent
 /**
  * Wave 6 (F-7R2-012, api-types 0.36.0) — a WORKER seat asked to run a REMOTE-WRITING command
  * (`git push`, `gh pr create|merge|edit|comment`, a `gh api` mutation, `gh release`, …) and the
@@ -523,7 +550,7 @@ export type WorkerToolCallDeniedEvent = {
 };
 // <<< VERBATIM
 
-// >>> VERBATIM wicked-crew-api-types@0.37.0 index.d.ts:1134-1170 (crew#536) — AcpFallbackKind incl. the auth kinds + AcpFallbackEvent
+// >>> VERBATIM wicked-crew-api-types@0.38.0 index.d.ts:1284-1320 (crew#536) — AcpFallbackKind incl. the auth kinds + AcpFallbackEvent
 /**
  * `acpFallback.fallbackKind` — WHY a unit left the ACP carrier for the wrapped (single-shot) one:
  * - `binary_unavailable` / `session_died` / `auth_required` — the ACP session could not be had; the
@@ -563,7 +590,7 @@ export interface AcpFallbackEvent {
 }
 // <<< VERBATIM
 
-// >>> VERBATIM wicked-crew-api-types@0.37.0 index.d.ts:1526-1554 (crew#536) — RunBaseResolvedEvent incl. runBranch
+// >>> VERBATIM wicked-crew-api-types@0.38.0 index.d.ts:1794-1822 (crew#536) — RunBaseResolvedEvent incl. runBranch
 /** wicked-core#431 / F-3R2-013 — how the run's BASE commit was chosen when its worktree was minted:
  *  the engine fetches `origin` and, when the registered clone's `HEAD` is strictly behind the remote
  *  default branch's tip, bases the run on that tip — so the worker starts from the current code and
@@ -597,7 +624,7 @@ export type RunBaseResolvedEvent = {
 
 // ── The roster — auth, free tier, council eligibility, the bench ──────────────────────────────
 
-// >>> VERBATIM wicked-crew-api-types@0.37.0 index.d.ts:450-547 (crew#536) — RosterSeat incl. auth / auth_source / free_tier_source / council_eligible / council_bench + RosterSeatCouncilBench + SeatAuth
+// >>> VERBATIM wicked-crew-api-types@0.38.0 index.d.ts:529-632 (crew#536) — RosterSeat incl. auth / auth_source / free_tier_source / council_eligible / council_bench + RosterSeatCouncilBench + SeatAuth
 /**
  * A council seat (`AgenticCli`) as returned by `GET /roster`. Only the fields
  * the launch form uses are named; the index signature keeps the (large) rest of
@@ -673,12 +700,18 @@ export interface RosterSeat {
    * `councilSeatFailed` evidence (`non_zero_exit` / `timed_out`, the derivative `benched` kind
    * excluded), folded over a bounded window (`window_ms`) and cleared by the seat's next ok unit
    * output. `council_eligible` is false while it is present.
+   *
+   * @deprecated ABSENT from crew 0.7.36 (DES-L3 R5b): the daemon-wide council-failure ledger is
+   * retired — the engine benches a dead seat per run at its own ballot threshold and the run DTO
+   * carries the bench (`AgentSession.benched_seats`). Removed from this contract one minor later;
+   * a reader must tolerate absence today.
    */
   council_bench?: RosterSeatCouncilBench;
   [k: string]: unknown;
 }
 
-/** `RosterSeat.council_bench` (api-types 0.35.0). */
+/** `RosterSeat.council_bench` (api-types 0.35.0).
+ *  @deprecated ABSENT from crew 0.7.36 (see {@link RosterSeat.council_bench}); removed one minor later. */
 export interface RosterSeatCouncilBench {
   /** Primary ballot failures inside the window. */
   failures: number;
@@ -700,7 +733,7 @@ export type SeatAuth = 'signed_in' | 'signed_out' | 'not_required' | 'unknown';
 
 // ── Chat admission — the refused seats and why ────────────────────────────────────────────────
 
-// >>> VERBATIM wicked-crew-api-types@0.37.0 index.d.ts:3955-4016 (crew#536) — ChatSeatOutcome, ChatRefusalSource, ChatSeatRefusal, ChatOpenResponse incl. refused[], ChatSeatRefusedFrame
+// >>> VERBATIM wicked-crew-api-types@0.38.0 index.d.ts:4327-4388 (crew#536) — ChatSeatOutcome, ChatRefusalSource, ChatSeatRefusal, ChatOpenResponse incl. refused[], ChatSeatRefusedFrame
 /** One seat's warm-up outcome on `POST /chats`. */
 export interface ChatSeatOutcome {
   cliKey: string;
@@ -765,7 +798,7 @@ export type ChatSeatRefusedFrame = {
 };
 // <<< VERBATIM
 
-// >>> VERBATIM wicked-crew-api-types@0.37.0 index.d.ts:4038-4048 (crew#536) — ChatDetailResponse incl. refused[]
+// >>> VERBATIM wicked-crew-api-types@0.38.0 index.d.ts:4435-4451 (crew#536) — ChatDetailResponse incl. refused[]
 /** `GET /chats/:id` → 200. */
 export interface ChatDetailResponse {
   chatId: string;
@@ -776,12 +809,18 @@ export interface ChatDetailResponse {
    *  the admission copy survives a reload; `null` for a chat this daemon did not open; absent on a
    *  daemon predating the field. */
   refused?: ChatSeatRefusal[] | null;
+  /**
+   * The chat's transcript so far (api-types 0.38.0, additive; DES-L5, crew ≥ 0.7.35) — `[]` for a
+   * chat with no persisted turn yet; ABSENT on a daemon predating the field (a rejoin then shows
+   * "session continues" without history). Unbounded — a reply may be up to the engine's cap.
+   */
+  messages?: ChatTranscriptRecord[];
 }
 // <<< VERBATIM
 
 // ── The daemon-wide docs listing (no bridge spawn) ────────────────────────────────────────────
 
-// >>> VERBATIM wicked-crew-api-types@0.37.0 index.d.ts:3779-3833 (crew#536) — GET /interactive/docs: InteractiveDocsListing, InteractiveSeamKind, InteractiveDocIndexRow, InteractiveDocsUnreachable
+// >>> VERBATIM wicked-crew-api-types@0.38.0 index.d.ts:4151-4205 (crew#536) — GET /interactive/docs: InteractiveDocsListing, InteractiveSeamKind, InteractiveDocIndexRow, InteractiveDocsUnreachable
 /**
  * `GET /api/v1/interactive/docs` (api-types 0.36.0, studio #263) — every interactive document across
  * projects, listed by the DAEMON from disk WITHOUT spawning a bridge: each project's docs root

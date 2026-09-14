@@ -144,6 +144,8 @@ export const SKILL_PORTABILITY_REASON_COPY: Record<SkillPortabilityReason, strin
   'cwd-script': 'invokes a script relative to the cwd (python3 scripts/x.py, ./scripts/x) instead of the skill directory',
   'relative-link': 'links a sibling with ../ — a path outside the skill directory',
   'cross-skill-path': 'reaches into another skill\'s directory',
+  // api-types 0.38.0 types the token ahead of its detector (crew 0.7.36, FIX-IT-ALL L6): the exhaustive map needs the clause now.
+  'claude-dispatch': 'calls a Claude Code dispatch primitive (Task(, Skill(, context: fork) no other seat has',
   'requires-harness:claude': 'the skill\'s mechanics need the Claude harness itself (hooks, plugin catalogs) — nothing in the text to rewrite',
 };
 

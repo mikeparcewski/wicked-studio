@@ -40,8 +40,9 @@ const PINNED_PKG = fileURLToPath(new URL('../package.json', import.meta.url));
 const CAMPAIGNS_SRC = fileURLToPath(new URL('../src/api/campaigns.ts', import.meta.url));
 const TESTING_SRC = fileURLToPath(new URL('../src/api/testing.ts', import.meta.url));
 
-/** The version the wave-6 wire publishes under — the mirror's floor. */
-const WAVE6_VERSION = [0, 36, 0] as const;
+/** The mirror's floor: 0.38.0, the FIX-IT-ALL wave-1 api-types release the regions are vendored from
+ *  (the wave-6 wire itself published at 0.36.0; L8-0a raised the floor with the re-vendor). */
+const WAVE6_VERSION = [0, 38, 0] as const;
 
 const LABEL = /^wicked-crew-api-types@(\S+) index\.d\.ts:(\d+)-(\d+) /;
 const BEGIN = /^\/\/ >>> VERBATIM (.+)$/;
@@ -156,7 +157,7 @@ const WAVE6_DECLS = [
 
 /** The wave-6 SKILLS additions live in the skills block, vendored by `skills-wire.ts`. */
 const WAVE6_SKILLS_DECLS = [
-  "| 'skills.stale-rules';",
+  "| 'skills.stale-rules'",
   'export interface PortabilityRulesIdentity {',
   'export interface SnapshotRowDrift {',
   'drift?: SnapshotRowDrift[];',
