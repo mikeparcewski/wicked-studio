@@ -156,10 +156,16 @@ describe('wire433 fixtures — the shapes wicked-crew-api-types 0.33.0 declares'
 
   it('nested records match their declarations: RepoCheckRun rows, UnitDenial, WorktreeChangedPath', () => {
     const runKeys = declaredKeys('RepoCheckRun');
+    const runRequired = requiredKeys('RepoCheckRun');
     expect(runKeys).toContain('source');
+    // 0.38.0 (FIX-IT-ALL L8-0a) declares the seven baseline-diff keys (`boundS` … `base`) OPTIONAL: the
+    // 0.33.0 rows recorded here predate them, so the check is the frames' rule — every recorded key is
+    // declared, every REQUIRED key is present — not key-set equality.
     for (const floor of pinned['RepoChecksEvaluatedEvent']!) {
       for (const row of floor['checks'] as ReadonlyArray<Record<string, unknown>>) {
-        expect(Object.keys(row).sort()).toEqual(runKeys);
+        const keys = Object.keys(row).sort();
+        expect(keys.filter((k) => !runKeys.includes(k)), 'RepoCheckRun: undeclared keys').toEqual([]);
+        expect(runRequired.filter((k) => !keys.includes(k)), 'RepoCheckRun: missing required keys').toEqual([]);
         expect(Object.values(row).some((v) => v === undefined)).toBe(false);
       }
     }

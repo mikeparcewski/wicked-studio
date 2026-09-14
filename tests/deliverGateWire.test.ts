@@ -59,10 +59,14 @@ const STUDIO_BODY: LaunchBodyWithDeliver = { problem: 'fix the flaky test', deli
 const SESSION_GATED: Pick<AgentSession, 'auto_deliver'> = { auto_deliver: false };
 const SESSION_PREDATES: Pick<AgentSession, 'auto_deliver'> = {};
 
-/** 0.37.0's declaration lines, verbatim — each must be in the installed `index.d.ts`. */
+/** The declaration lines, verbatim — each must be in the installed `index.d.ts`. 0.38.0 (FIX-IT-ALL
+ *  L8-0a) names 0.37.0's inline `{ deliverGate: boolean }` as `HealthCapabilities` (structurally the
+ *  same object, `+ revisesPr?`); the compile-time pins above still satisfy it unchanged. */
 const DECLS = [
   'export interface HealthResponse {',
-  '  capabilities?: { deliverGate: boolean };',
+  '  capabilities?: HealthCapabilities;',
+  'export interface HealthCapabilities {',
+  '  deliverGate: boolean;',
   '  auto_deliver?: boolean;',
   "  deliverGate?: 'human' | 'auto';",
 ];
@@ -86,7 +90,9 @@ describe('the deliver-gate wire (api-types 0.37.0) — declared by the installed
       const rest = installedDts.slice(start);
       return rest.slice(0, rest.search(to));
     };
-    expect(between('export interface HealthResponse {', /\n}\n/)).toContain('capabilities?: { deliverGate: boolean };');
+    // 0.38.0 names the object: the field points at HealthCapabilities, whose first key is still deliverGate.
+    expect(between('export interface HealthResponse {', /\n}\n/)).toContain('capabilities?: HealthCapabilities;');
+    expect(between('export interface HealthCapabilities {', /\n}\n/)).toContain('deliverGate: boolean;');
     expect(between('export interface AgentSession {', /\n}\n/)).toContain('auto_deliver?: boolean;');
     expect(between('export interface LaunchRunBody {', /\n}\n/)).toContain("deliverGate?: 'human' | 'auto';");
   });

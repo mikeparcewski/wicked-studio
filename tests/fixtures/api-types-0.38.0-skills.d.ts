@@ -1,4 +1,4 @@
-// >>> VERBATIM wicked-crew-api-types@0.37.0 index.d.ts:1995-2445 (crew#535 via crew#536) — the skills block
+// >>> VERBATIM wicked-crew-api-types@0.38.0 index.d.ts:2281-2751 (crew#535 via crew#536) — the skills block
 // ── Skills — the daemon-owned garden plugin root, published as immutable snapshots (api-types 0.28.0) ──
 //
 // api-types 0.29.0 (design amendment v3.6, crew #490): the installer-managed copy
@@ -85,6 +85,11 @@ export interface SkillBaselineRecord {
  *     the portable form names that skill (`wicked-garden-<x>`) instead;
  *   - `requires-harness:claude` — the author declared `metadata.requires-harness: claude` in the
  *     frontmatter: the skill genuinely needs the Claude harness (not an authoring defect).
+ *   - `claude-dispatch` (api-types 0.38.0; crew ≥ 0.7.36, DES-L6 D-21) — the body CALLS a Claude
+ *     Code dispatch primitive (`Task(`, `Skill(`, `context: fork`, `AskUserQuestion`, `TaskCreate`)
+ *     that no other seat has: a pi/opencode/codex worker cannot follow it. The portable form is the
+ *     plain-prose Hand-off paragraph. Reported by the publisher; garden's lint fails the same
+ *     skill (12.38.0). An older daemon never emits the token.
  */
 export type SkillPortabilityReason =
   | 'plugin-root'
@@ -92,7 +97,8 @@ export type SkillPortabilityReason =
   | 'cwd-script'
   | 'relative-link'
   | 'cross-skill-path'
-  | 'requires-harness:claude';
+  | 'requires-harness:claude'
+  | 'claude-dispatch';
 
 /** Per-reason portability of a skill (F-079, api-types 0.34.0) — reported beside `portable`. */
 export interface SkillPortability {
@@ -391,6 +397,17 @@ export interface SkillMutationResult extends SkillAnalyzeResult {
  *  (`snapshot: null`), not a 409. */
 export interface SkillPublishResult extends SkillAnalyzeResult {
   snapshot: { gen: number; path: string; contentHash: string; skills: number } | null;
+  /** The BASE skill posture AFTER this publish (crew#554): `present: false` with a `finding` is the
+   *  "published a snapshot without the discipline skill" warning. Absent on a daemon before it. */
+  baseSkill?: BaseSkillPosture | null;
+  /**
+   * `true` when the publish found NOTHING to publish (api-types 0.38.0; crew#547 / DES-L6, crew ≥
+   * 0.7.36): the effective tree's `contentHash` equals the current generation's, so no new
+   * `snapshots/<gen>/` was minted, `current` did not move and `snapshot` is the CURRENT generation
+   * (its `gen` unchanged). ABSENT (never `false`) on a publish that staged a generation, and on a
+   * daemon before the field — a skin shows "already published as gen N", not a new generation.
+   */
+  unchanged?: true;
 }
 
 /** `POST /skills/refresh-baseline` 200 body — the three-way merge per FILE (baseline_old /
@@ -412,6 +429,9 @@ export interface SkillRefreshResult extends SkillAnalyzeResult {
   removed: string[];
   /** Skills flagged `conflict` by this refresh. */
   conflicts: string[];
+  /** The BASE skill posture AFTER this refresh (crew#554): a refresh moves the CATALOG, not the handed
+   *  generation, so `inCatalog: true, present: false` reads "publish to hand it". Absent on a daemon before it. */
+  baseSkill?: BaseSkillPosture | null;
 }
 
 /** The 409 body of a `/skills` mutation whose `expectedRevision` is stale — a CAS conflict, the
@@ -452,7 +472,7 @@ export interface ReplaceSkillBody {
 }
 // <<< VERBATIM
 
-// >>> VERBATIM wicked-crew-api-types@0.37.0 index.d.ts:4720-4779 (crew#535 via crew#536) — the diagnostics skills block
+// >>> VERBATIM wicked-crew-api-types@0.38.0 index.d.ts:5122-5191 (crew#535 via crew#536) — the diagnostics skills block
 /** The skills seam's state as `GET /diagnostics` reports it (skills keystone, api-types 0.28.0). */
 export type DiagnosticsSkillsState = 'published' | 'fallback' | 'blocked' | 'config-error' | 'disabled';
 
@@ -476,14 +496,19 @@ export interface DiagnosticsSkillsFinding {
    *  crew#535) = the CURRENT generation was published under OTHER portability rules than the daemon
    *  now runs — accepted (the snapshot is never rewritten; the runtime stays `published`), the rows
    *  that now derive differently are named (`SkillsManifestResponse.current.drift`), and a publish
-   *  records the running rules and clears it. */
+   *  records the running rules and clears it; `skills.base-skill` (crew#554 / wicked-core#468) =
+   *  the configured BASE skill (`SystemSettings.baseSkillRef`) is not in the current generation —
+   *  a `warning` under `baseSkillPolicy: 'warn'` (runs proceed without the discipline directive),
+   *  an `error` under `'require'` (the engine refuses every launch at intake); cleared by a publish
+   *  that hands it. Also carried as `DiagnosticsSkills.baseSkill.finding`. */
   kind:
     | 'skills.fallback'
     | 'skills.blocked'
     | 'skills.config'
     | 'skills.source'
     | 'skills.manifest'
-    | 'skills.stale-rules';
+    | 'skills.stale-rules'
+    | 'skills.base-skill';
   severity: 'warning' | 'error';
   message: string;
 }
@@ -512,5 +537,10 @@ export interface DiagnosticsSkills {
    *  layout. `null` only when `disabled`. */
   stateHome: string | null;
   findings: DiagnosticsSkillsFinding[];
+  /** The BASE skill posture (crew#554) — the System page's "discipline skill" row beside the skills
+   *  generation; its `finding` (when the generation lacks the skill) also rides `findings`. `null`
+   *  when the setting is off or the seam is `disabled`. A daemon before this field omits the key
+   *  (read it as `null`). */
+  baseSkill: BaseSkillPosture | null;
 }
 // <<< VERBATIM
