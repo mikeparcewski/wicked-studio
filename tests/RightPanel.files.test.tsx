@@ -125,6 +125,7 @@ describe('RightPanel Files tab — slice I inline viewer + preserved openPath/co
     expect(await screen.findByTestId('file-viewer')).toBeInTheDocument();
     expect(await screen.findByTestId('diff-line-add')).toHaveTextContent('+new');
     // Whole-run: NO path argument rides the call.
-    expect(getRunDiff).toHaveBeenCalledWith('run-1', undefined);
+    // BC-54 (fixall L8-8E ii): the Full-diff button asks for the fork-point diff — `base=merge-base`.
+    expect(getRunDiff).toHaveBeenCalledWith('run-1', undefined, 'merge-base');
   });
 });

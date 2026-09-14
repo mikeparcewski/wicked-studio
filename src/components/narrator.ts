@@ -3,6 +3,7 @@ import {
   distributionAgreementPct, distributionDegradedReason, distributionDistinctnessFallback,
   gateUngated, gateUngatedReason, WORKER_REMOTE_WRITE_REMEDY,
 } from '../api/wave6-wire.js';
+import { escalationCopy } from './denialCopy.js';
 import { isPrUrl } from './delivery.js';
 import { shortId } from './gateVerdictModel.js';
 import { runBaseLine, runBaseOf } from './runBaseModel.js';
@@ -69,6 +70,56 @@ export interface NarratorContext {
    * raw-prompt lines are exactly the noise the usability review flagged.
    */
   intent?: string | null;
+  /** The unit's seat (`units[ord].assigned_cli`, else the latest dispatch/denial frame's `cli`) —
+   *  the `dead_seat` row names it. Absent ⇒ "the seat". */
+  seatOf?: (ord: number | null | undefined) => string | null;
+  /** The refused command for a `boundary_deny` escalation, in DES-L8's order:
+   *  `gateEvaluated.denial.deniedTool` → the unit's latest `workerToolCallDenied.command` → null. */
+  deniedCommandOf?: (ord: number | null | undefined) => string | null;
+}
+
+/**
+ * The per-ord facts the escalation copy table needs but a single `gateEscalated` frame does not
+ * carry (review-L8-290 MED-1): the refused command and the seat. Derived ONCE from the run's
+ * events (+ units when the caller has them); `buildFeed` / `lastNarration` fold the result into the
+ * ctx when the caller supplied none, and `RunTimeline` reads the same helper — one lookup rule.
+ */
+export function escalationLookups(
+  events: readonly CoreEvent[],
+  units: readonly WorkUnit[] = [],
+): Pick<Required<NarratorContext>, 'seatOf' | 'deniedCommandOf'> {
+  const deniedTool = new Map<number, string>();
+  const deniedCommand = new Map<number, string>();
+  const seat = new Map<number, string>();
+  for (const e of events) {
+    const ord = num(e.ord);
+    if (ord === null) continue;
+    if (e.type === 'gateEvaluated') {
+      const d = e.denial;
+      const tool = d !== null && typeof d === 'object' ? (d as { deniedTool?: unknown }).deniedTool : undefined;
+      if (typeof tool === 'string' && tool !== '') deniedTool.set(ord, tool);
+    } else if (e.type === 'workerToolCallDenied') {
+      if (str(e.command) !== '') deniedCommand.set(ord, str(e.command));
+      if (str(e.cli) !== '') seat.set(ord, str(e.cli));
+    } else if (e.type === 'unitDispatched' && str(e.cli) !== '') {
+      seat.set(ord, str(e.cli));
+    }
+  }
+  return {
+    seatOf: (ord) => {
+      if (ord == null) return null;
+      const u = units.find((x) => x.ord === ord);
+      return u?.assigned_cli ?? seat.get(ord) ?? null;
+    },
+    deniedCommandOf: (ord) => (ord == null ? null : deniedTool.get(ord) ?? deniedCommand.get(ord) ?? null),
+  };
+}
+
+/** The caller's ctx with the escalation lookups filled in where it left them out. */
+function withLookups(ctx: NarratorContext, events: readonly CoreEvent[], units: readonly WorkUnit[] = []): NarratorContext {
+  if (ctx.seatOf !== undefined && ctx.deniedCommandOf !== undefined) return ctx;
+  const lookups = escalationLookups(events, units);
+  return { ...ctx, seatOf: ctx.seatOf ?? lookups.seatOf, deniedCommandOf: ctx.deniedCommandOf ?? lookups.deniedCommandOf };
 }
 
 /** Longest free-text fragment kept on one narration line. */
@@ -190,8 +241,53 @@ export function narrate(event: CoreEvent, ctx: NarratorContext): NarrationLine |
       if (n === 0) return null;
       return line(`${phase} touched ${n} file${n === 1 ? '' : 's'}`, 'info');
     }
-    case 'gateEscalated':
-      return line(`Gate approaching — ${clip(str(event['condition'])) || 'a check escalated to you'}`, 'gate');
+    case 'gateEscalated': {
+      // fixall L8-8E (crew #559): the engine's own class × denying layer → the one copy table
+      // (`escalationCopy`); an unknown pair keeps the condition token, never a guessed sentence.
+      const copy = escalationCopy(str(event['condition']) || null, str(event['denialSource']), {
+        ord,
+        verdictSummary: str(event['verdictSummary']) || null,
+        restored: typeof event['restored'] === 'boolean' ? (event['restored'] as boolean) : null,
+        discardedCount: Array.isArray(event['discarded']) ? (event['discarded'] as unknown[]).length : null,
+        suggestionRef: str(event['suggestionRef']) || null,
+        defGate: event['defGate'] === true,
+        outputCaptured: event['outputCaptured'] === true,
+        // MED-1: the refused command and the seat come from the run's other frames (ctx lookups).
+        deniedCommand: ctx.deniedCommandOf?.(ord) ?? null,
+        cli: ctx.seatOf?.(ord) ?? null,
+      });
+      return line(
+        copy.known
+          ? `Gate approaching — ${clip(copy.headline)}`
+          : `Gate approaching — ${clip(str(event['condition'])) || 'a check escalated to you'}`,
+        'gate',
+      );
+    }
+    case 'workerStallEscalated': {
+      // studio #284 / F-BM-006 (minimal render): the watchdog's frame — what it did, how it ended,
+      // whether a human is needed. `quietForMs` is this frame's clock (the engine's `workerStalled`
+      // carries `stalledSecs`). Live-only today: crew never appends these frames to the run log, so
+      // a reload cannot replay them (the crew companion is the coordinator's to place).
+      const quiet = num(event.quietForMs);
+      const mins = quiet !== null ? Math.max(1, Math.round(quiet / 60_000)) : null;
+      const needsYou = event.needsYou === true;
+      const from = str(event.previousCli);
+      const to = str(event.cli);
+      const seats = from !== '' && to !== '' ? ` (${from} → ${to})` : to !== '' ? ` (${to})` : '';
+      const outcome = str(event.outcome);
+      const what =
+        str(event.action) === 'reassign'
+          ? outcome === 'ok'
+            ? `reassigned${seats}`
+            : outcome === 'exhausted'
+              ? 'automatic recoveries spent — a human must intervene'
+              : `reassign failed${seats}`
+          : 'surfaced for you — the run was not touched';
+      return line(
+        `${needsYou ? 'Needs you — ' : ''}worker silent ${mins !== null ? `${mins} min` : '?'} — ${what}`,
+        needsYou ? 'gate' : 'info',
+      );
+    }
     case 'awaitingHuman':
       return line(`Gate: waiting on you${str(event.prompt) ? ` — ${promptHeadline(str(event.prompt))}` : ''}`, 'gate');
     case 'gateEvaluated': {
@@ -247,11 +343,16 @@ export function narrate(event: CoreEvent, ctx: NarratorContext): NarrationLine |
       return line(`Step failed on ${phase}${str(event.detail) ? ` — ${clip(str(event.detail))}` : ''}`, 'fail');
     case 'crashRecoveryRedrive':
       return line(`Engine restarted — re-dispatching ${phase} (attempt ${num(event.attempt) ?? 1})`, 'fail');
-    case 'workerStalled':
+    case 'workerStalled': {
+      // The engine's PTY frame carries `stalledSecs`; the daemon watchdog's detection frame carries
+      // `quietForMs` (api-types `WorkerStalledFrame`) — read either, never "?s" when one is present.
+      const quietMs = num(event.quietForMs);
+      const secs = num(event.stalledSecs) ?? (quietMs !== null ? Math.round(quietMs / 1000) : null);
       return line(
-        `Worker quiet for ${num(event.stalledSecs) ?? '?'}s — may be waiting at a prompt (open Term or send a message)`,
+        `Worker quiet for ${secs ?? '?'}s — may be waiting at a prompt (open Term or send a message)`,
         'gate',
       );
+    }
     case 'failureTriaged':
       return line(
         `Failure triaged: ${str(event.decision) || '?'}${str(event.analysis) ? ` — ${clip(str(event.analysis), 120)}` : ''}`,
@@ -479,6 +580,7 @@ export function buildFeed(
   const items: FeedItem[] = [];
   const seenArtifacts = new Set<string>();
   let lineNo = 0;
+  ctx = withLookups(ctx, sorted, units);
 
   for (const event of sorted) {
     const line = narrate(event, ctx);
@@ -536,6 +638,7 @@ export function buildFeed(
  */
 export function lastNarration(events: readonly CoreEvent[], ctx: NarratorContext): NarrationLine | null {
   const sorted = sortFeedEvents(events);
+  ctx = withLookups(ctx, sorted);
   for (let i = sorted.length - 1; i >= 0; i--) {
     const line = narrate(sorted[i]!, ctx);
     if (line !== null) return line;

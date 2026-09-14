@@ -12,6 +12,55 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+<!-- fixall L8 -->
+- **Escalation gates say what happened, from the engine's own class × denying layer (fixall L8-8E(i);
+  crew #559 / F-RC1-047 = F-RC2-061; DES-L8 r2 §5 PR-8E).** One copy table (`denialCopy.ts
+  escalationCopy(condition, denialSource, facts)`) shared by the narrator feed and the run timeline:
+  `boundary_deny × {input_governance, ""}` (the hook-veto arm whose source the engine folds away) reads
+  "a command was refused by governance: `<cmd>`" — a governance-refused `ls` no longer reads "tried to
+  write outside its workspace"; `evaluator_mutated_worktree` branches on `restored` (restored + N paths
+  discarded + the suggestion ref, or "could NOT be restored; inspect the worktree"); `dead_seat`,
+  `floor_failed × {repo_checks, repo_checks_timeout, pinned_validator, substance, deliverables}`,
+  `verdict_not_pass × {agent_validator, worker_failure, evaluator_verdict}` each have their sentence;
+  `defGate` / `outputCaptured` become footnotes; an unknown pair keeps today's wording (nothing is
+  guessed). `denialSourceLabel` learns `repo_checks_timeout`, `dead_seat`, `evaluator_verdict`.
+- **Repository checks render the engine's head-vs-base classification (D3 of the benchmark review;
+  api-types 0.38.0 `RepoCheckRun.classification/preExisting/regressions`).** `GateFloorCheck` carries
+  the three fields; `checkOutcome` reads `regression` as "regression — N new failure(s)" (red) and
+  `pre_existing_in_sandbox` (or the legacy `floor_env_mismatch`) as "failed on head AND base —
+  pre-existing, not this change" (not red); a frame without the field reads exactly as before.
+- **Wire facts that had no reader now render:** the unit header gains `discipline: <name> §<role>` from
+  `unitDispatched.baseSkill`, with "discipline named only (not handed)" ONLY on `handed === false`
+  (absent ⇒ unknown, core #479 / studio #275); `sandboxPosture` (F-E2E-039) and `worktreeRetained`
+  (F-RC1-064) frames get timeline rows; the narrator reads the watchdog's `workerStalled.quietForMs`
+  when `stalledSecs` is absent (no more "quiet for ?s") and narrates `workerStallEscalated` — "Needs
+  you — worker silent N min — automatic recoveries spent" (studio #284 / F-BM-006, the minimal live
+  render; the reload-safe needs-you card needs crew to persist the frames — coordinator to place).
+- **Full diff asks for `base=merge-base` (fixall L8-8E(ii); studio #244; BC-54).** `api.getRunDiff`
+  gains a third argument and the run page's Full-diff viewer sends it: committed + uncommitted run work
+  vs the fork point, instead of the worktree vs HEAD (which showed only uncommitted files).
+- **Send and its line agree by construction (fixall L8-8E(iii); F-089 = F-E2E-035, F-RC2-005/024/045).**
+  The composer's "Ready / Not ready to send" prefix reads the SAME `canSubmit` predicate that disables
+  the button. **"Revise PR #N" pre-fill** (DES-L9 §5): `RetryPrefill.revisesPr` deposits the PR; the
+  body carries `revisesPr` ONLY when `GET /health.capabilities.revisesPr === true` (else the chip reads
+  "this daemon cannot revise a PR — upgrade wicked-crew" and nothing is sent), with `deliver: 'pr'`.
+- **Saving a workflow round-trips `skill_ref` / `allowed_skills` / `required_deliverables` /
+  `validator_pin` (fixall L8-8E(iv); F-RC1-093).** One def→builder mapper (`builderPhaseOf`) feeds the
+  editor and the JSON import; `buildDef` writes the four fields back verbatim instead of nulling them.
+- **System reads seat standing off `auth`, offers Re-authenticate, and names the daemon's settings
+  path (fixall L8-8E(v); F-E2E-040 = F-RC2-043, F-004/013/010, studio #280 item 4; BC-56).** Seat rows
+  use the health rail's `seatStandingWord` fold (`signed_in` / `signed_out` / `not_required` (free tier)
+  / `unknown`); a seat whose own stderr reported the failure (`auth_source: 'seat-stderr'`) reads
+  "sign-in failed: <evidence>" and its button says **Re-authenticate**; the page shows `GET
+  /settings.path` (crew 0.7.36) instead of a hard-coded home-relative literal, and says when the
+  daemon does not report it.
+- **Run clocks prefer the run's own record (crew #496 / studio #230; BC-52).** `runWhenWord` takes
+  `AgentSession.created_at` (the sidebar and the command palette pass it); `runEndedWord` renders
+  `ended_at` as "finished N ago" and `null` for an undated run — never derived from now.
+- **Code Graph tile reads "150 of 5,470 shown" (crew #505 / F-RC1-100 / F-E2E-022; BC-53)** from
+  `CodeGraphData.totals` when the daemon sends it; the slice alone on an older daemon.
+- Housekeeping: the Testing page's gap hint drops the embedder clause (F-E2E housekeeping, `TestingPage`).
+
 ## [0.5.10] — 2026-09-15
 _The published bundle is built against `wicked-crew-api-types` **0.38.0** — the exact
 devDependency pin bumped from 0.37.0 in #283 (the wave-1 train's one api-types release; additive:

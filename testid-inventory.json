@@ -11,9 +11,9 @@
   "studioVersion": "0.5.10",
   "counts": {
     "files": 146,
-    "occurrences": 1322,
-    "static": 1139,
-    "dynamic": 61,
+    "occurrences": 1324,
+    "static": 1141,
+    "dynamic": 62,
     "computed": 7
   },
   "static": [
@@ -1908,6 +1908,12 @@
       ]
     },
     {
+      "testId": "escalation-headline",
+      "files": [
+        "src/components/RunTimeline.tsx"
+      ]
+    },
+    {
       "testId": "essence-entry",
       "files": [
         "src/components/HomeCommand.tsx"
@@ -2875,6 +2881,12 @@
     },
     {
       "testId": "launch-project-row",
+      "files": [
+        "src/components/ChatInput.tsx"
+      ]
+    },
+    {
+      "testId": "launch-revises-pr",
       "files": [
         "src/components/ChatInput.tsx"
       ]
@@ -7136,6 +7148,12 @@
       "pattern": "gate-reject-note-row-*",
       "files": [
         "src/components/GateRejectNote.tsx"
+      ]
+    },
+    {
+      "pattern": "graph-stat-*",
+      "files": [
+        "src/components/RepoDetailPage.tsx"
       ]
     },
     {

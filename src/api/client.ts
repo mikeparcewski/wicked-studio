@@ -389,10 +389,16 @@ export const api = {
    * `diff: ""` = clean tree — a real answer, not an error. 409 when the run has
    * no workdir or it was reaped; 507 past the server's execution buffer.
    */
-  getRunDiff: (runId: string, path?: string) =>
-    apiFetch<import('./types.js').RunDiff>(
-      `/runs/${encodeURIComponent(runId)}/diff${path === undefined ? '' : `?path=${encodeURIComponent(path)}`}`,
-    ),
+  getRunDiff: (runId: string, path?: string, base?: 'merge-base') => {
+    // `base=merge-base` (studio #244 / BC-54): committed + uncommitted run work vs the fork point
+    // (the route's `source: worktree` answer, or the branch fallback) — what "the run's diff" means
+    // to a reviewer. Omitted = the worktree vs HEAD, exactly the pre-field call.
+    const q = new URLSearchParams();
+    if (path !== undefined) q.set('path', path);
+    if (base !== undefined) q.set('base', base);
+    const qs = q.toString();
+    return apiFetch<import('./types.js').RunDiff>(`/runs/${encodeURIComponent(runId)}/diff${qs === '' ? '' : `?${qs}`}`);
+  },
 
   /**
    * Inject a message into one or all active agent sessions (POST /runs/:id/inject).
@@ -544,8 +550,7 @@ export const api = {
   // ── System settings ──────────────────────────────────────────────────────────
 
   /** Read persisted system settings (defaults applied server-side). */
-  getSettings: () =>
-    apiFetch<{ settings: import('./types.js').SystemSettings }>('/settings'),
+  getSettings: () => apiFetch<import('./types.js').SettingsResponse>('/settings'),
 
   /** Persist a partial settings update; returns the merged result. */
   updateSettings: (patch: Partial<import('./types.js').SystemSettings>) =>

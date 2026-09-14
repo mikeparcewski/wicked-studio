@@ -89,6 +89,121 @@ export function denialHeadline(f: DenialFacts, ord: number): string {
   }
 }
 
+// ── The escalation copy table (fixall L8-8E; crew #559 / F-RC1-047 = F-RC2-061) ─────────────
+// `gateEscalated` carries the engine's OWN class of the failure (`condition`, wicked-core
+// `actor.rs denial_class`) and the layer that denied (`denialSource`, `UnitDenial.source`). Before
+// this table every escalation fell to the prose classifier above — a governance-refused `ls` read
+// "tried to write outside its workspace". One table keyed by the pair, shared by the narrator feed,
+// the timeline and the gate card; an unknown pair answers `known: false` and the caller keeps its
+// existing wording (nothing is guessed). Every row describes a gate that IS open — each
+// `gateEscalated` is followed by `awaitingHuman`.
+
+/** The facts a row may draw on — all optional; absent ⇒ the generic form of the row. */
+export interface EscalationFacts {
+  ord: number | null;
+  /** `gateEscalated.verdictSummary` — only its first line is ever shown. */
+  verdictSummary?: string | null;
+  /** `gateEscalated.restored` (evaluator_mutated_worktree): `null`/absent ⇒ unknown. */
+  restored?: boolean | null;
+  /** `gateEscalated.discarded.length` when the frame listed the discarded paths. */
+  discardedCount?: number | null;
+  /** `gateEscalated.suggestionRef` — where the discarded evaluator edit was pinned. */
+  suggestionRef?: string | null;
+  /** The refused command, best-first: `gateEvaluated.denial.deniedTool` → the unit's
+   *  `workerToolCallDenied.command` → absent ("a command"). */
+  deniedCommand?: string | null;
+  /** A `boundary-read-deny:` claim marks a READ outside the workspace (appended, advisory). */
+  claimId?: string | null;
+  /** The unusable seat (`dead_seat`). */
+  cli?: string | null;
+  /** `gateEscalated.defGate` — the gate was declared by the workflow, not raised by a check. */
+  defGate?: boolean | null;
+  /** `gateEscalated.outputCaptured` — the unit's output was captured before the gate. */
+  outputCaptured?: boolean | null;
+}
+
+export interface EscalationCopy {
+  /** One plain sentence naming the class, the artifact under review and what happened. */
+  headline: string;
+  /** Footnotes the frame justifies (`declared by the workflow`, `output captured — view transcript`). */
+  notes: string[];
+  /** `true` when the (condition, denialSource) pair is one the engine emits and this table knows. */
+  known: boolean;
+}
+
+/** The deterministic-floor layers `floor_failed` can name, in a person's words. */
+const FLOOR_SOURCE_SENTENCE: Record<string, string> = {
+  repo_checks: 'repository checks failed',
+  repo_checks_timeout: 'repository checks timed out',
+  pinned_validator: 'the pinned validator failed',
+  substance: 'no reviewable substance was produced',
+  deliverables: 'declared deliverables are missing',
+};
+
+function firstLine(text: string | null | undefined): string {
+  return (text ?? '').replace(/\r/g, '').split('\n')[0]?.trim() ?? '';
+}
+
+export function escalationCopy(
+  condition: string | null | undefined,
+  denialSource: string | null | undefined,
+  facts: EscalationFacts,
+): EscalationCopy {
+  const unit = `Unit #${facts.ord ?? '?'}`;
+  const source = denialSource ?? '';
+  const summary = firstLine(facts.verdictSummary);
+  const tail = summary !== '' ? ` — ${summary}` : '';
+  const notes: string[] = [];
+  if (facts.defGate === true) notes.push('declared by the workflow');
+  if (facts.outputCaptured === true) notes.push('output captured — view transcript');
+  const known = (headline: string): EscalationCopy => ({ headline, notes, known: true });
+
+  switch (condition) {
+    case 'evaluator_mutated_worktree': {
+      const n = facts.discardedCount;
+      const paths = typeof n === 'number' ? ` (${n} path${n === 1 ? '' : 's'} discarded)` : '';
+      const state =
+        facts.restored === true
+          ? `the creator's tree was restored${paths}`
+          : facts.restored === false
+            ? 'the tree could NOT be restored; inspect the worktree'
+            : 'restore state unknown';
+      const pin = facts.suggestionRef ? ` · the discarded edit is pinned at ${facts.suggestionRef}` : '';
+      return known(`${unit}: the reviewer changed files it was only meant to check — ${state}${pin}`);
+    }
+    case 'boundary_deny': {
+      // `input_governance` names the layer; `""` is the hook-veto arm whose source identity the
+      // engine folded away (actor.rs) — the SAME refusal, so the same sentence.
+      if (source !== 'input_governance' && source !== '') break;
+      const cmd = facts.deniedCommand ? `: \`${facts.deniedCommand}\`` : '';
+      const read = facts.claimId?.startsWith('boundary-read-deny:') ? ' (a read outside the workspace)' : '';
+      return known(`${unit}: a command was refused by governance${cmd}${read}`);
+    }
+    case 'dead_seat':
+      if (source !== 'dead_seat' && source !== '') break;
+      return known(
+        `${unit}: ${facts.cli ? `seat ${facts.cli}` : 'the seat'} is unusable (signed out / not installed) — no eligible seat remains`,
+      );
+    case 'floor_failed': {
+      const sentence = FLOOR_SOURCE_SENTENCE[source];
+      if (sentence === undefined) break;
+      return known(`${unit}: ${sentence}${tail}`);
+    }
+    case 'verdict_not_pass':
+      if (source === 'agent_validator') return known(`${unit}: the review did not pass${tail}`);
+      if (source === 'worker_failure') return known(`${unit}: the worker exited before finishing${tail}`);
+      if (source === 'evaluator_verdict') return known(`${unit}: the evaluator's VERDICT was not PASS${tail}`);
+      break;
+    default:
+      break;
+  }
+  return {
+    headline: `${unit}: ${condition && condition !== '' ? condition : 'a check'} escalated to you${tail}`,
+    notes,
+    known: false,
+  };
+}
+
 /** One plain sentence saying what to do about it. */
 export function denialAdvice(f: DenialFacts): string {
   switch (f.kind) {

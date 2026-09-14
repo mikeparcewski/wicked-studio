@@ -42,6 +42,9 @@ interface Props {
   /** Absolute path of the viewed file; undefined = the whole-run diff viewer. */
   path?: string;
   defaultTab: ViewerTab;
+  /** `merge-base` = the whole-run diff vs the fork point (committed + uncommitted; studio #244);
+   *  absent = the worktree vs HEAD (the pre-field read). Threaded to `GET /runs/:id/diff?base=`. */
+  base?: 'merge-base';
   onClose: () => void;
   /** The daemon has no file/diff routes (generic route-absent 404). */
   onUnsupported: () => void;
@@ -137,7 +140,7 @@ function LoadingPane(): React.ReactElement {
   );
 }
 
-export function FileViewer({ runId, path, defaultTab, onClose, onUnsupported }: Props): React.ReactElement {
+export function FileViewer({ runId, path, defaultTab, base, onClose, onUnsupported }: Props): React.ReactElement {
   const [tab, setTab] = useState<ViewerTab>(path === undefined ? 'diff' : defaultTab);
   const [file, setFile] = useState<Fetched<RunFileContent> | null>(null);
   const [diff, setDiff] = useState<DiffFetched | null>(null);
@@ -192,7 +195,9 @@ export function FileViewer({ runId, path, defaultTab, onClose, onUnsupported }: 
       settled = true;
       setDiff({ state: 'timeout' });
     }, DIFF_TIMEOUT_MS);
-    api.getRunDiff(runId, path)
+    // `base` rides the call only when set: the file tab and a plain viewer keep the two-argument
+    // call byte-for-byte (their pins hold); the Full-diff button's `merge-base` is the one change (BC-54).
+    (base === undefined ? api.getRunDiff(runId, path) : api.getRunDiff(runId, path, base))
       .then((data) => {
         if (settled) return;
         settled = true;
@@ -208,7 +213,7 @@ export function FileViewer({ runId, path, defaultTab, onClose, onUnsupported }: 
         const cause = diffCauseOf(apiWire(e) ?? '');
         setDiff(cause !== null ? { state: 'cause', cause } : { state: 'error', message });
       });
-  }, [tab, path, runId, diffAttempt, onUnsupported]);
+  }, [tab, path, runId, diffAttempt, onUnsupported, base]);
 
   /** The retry affordance: clear the state so the effect re-dispatches. */
   function retryDiff(): void {

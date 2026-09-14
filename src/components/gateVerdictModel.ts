@@ -68,6 +68,16 @@ export interface GateFloorCheck {
    *  stream was empty or the frame predates the field, so no surface paints an empty box (F-255-03). */
   stdoutTail: string | null;
   stderrTail: string | null;
+  /** wicked-core#469 (api-types 0.38.0 `RepoCheckRun.classification`): how the engine classed a
+   *  failure against the base run — `regression` (fails on head, passes on base),
+   *  `pre_existing_in_sandbox` (fails on head AND base — not this change; the legacy token
+   *  `floor_env_mismatch` means the same), an open string for newer engines; `null` when the frame
+   *  predates the field or the check passed. Rendered by `checkOutcome` (D3 in the benchmark review:
+   *  a pre-existing failure used to read "failed"). */
+  classification: string | null;
+  /** Failure ids present on head AND base / on head only (`RepoCheckRun.preExisting` / `.regressions`). */
+  preExisting: string[];
+  regressions: string[];
 }
 
 /** The F-039 floor as `repoChecksEvaluated` reported it. */
@@ -207,6 +217,9 @@ function checkOf(raw: unknown): GateFloorCheck | null {
     durationMs: typeof c.durationMs === 'number' ? c.durationMs : 0,
     stdoutTail: tail(c.stdoutTail),
     stderrTail: tail(c.stderrTail),
+    classification: str(c.classification),
+    preExisting: strings(c.preExisting),
+    regressions: strings(c.regressions),
   };
 }
 
@@ -526,6 +539,9 @@ export function denialSourceLabel(source: string | null): string {
     case 'governance': return 'governance gate';
     case 'input_governance': return 'input governance';
     case 'worker_failure': return 'worker failure';
+    case 'repo_checks_timeout': return 'repository checks (timed out)';
+    case 'dead_seat': return 'seat unusable';
+    case 'evaluator_verdict': return 'evaluator verdict line';
     case 'substance': return 'no reviewable substance';
     case 'deliverables': return 'declared deliverables missing';
     case 'elicitation': return 'elicitation ended';
@@ -538,6 +554,14 @@ export function denialSourceLabel(source: string | null): string {
 export function checkOutcome(c: GateFloorCheck): { word: string; ok: boolean } {
   if (c.spawnError !== null) return { word: `could not start: ${c.spawnError}`, ok: false };
   if (c.timedOut) return { word: 'timed out', ok: false };
+  // wicked-core#469 classification (D3): the engine compared head against base — say which side.
+  if (c.classification === 'regression') {
+    const n = c.regressions.length;
+    return { word: n > 0 ? `regression — ${n} new failure${n === 1 ? '' : 's'}` : 'regression — fails on head, not on base', ok: false };
+  }
+  if (c.classification === 'pre_existing_in_sandbox' || c.classification === 'floor_env_mismatch') {
+    return { word: 'failed on head AND base — pre-existing, not this change', ok: true };
+  }
   if (c.exitCode === null) return { word: 'no exit code', ok: false };
   return { word: c.exitCode === 0 ? 'exit 0' : `exit ${c.exitCode}`, ok: c.exitCode === 0 };
 }
