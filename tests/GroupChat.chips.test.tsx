@@ -78,6 +78,12 @@ const ROSTER = [
   { key: 'pi', enabled_for_council: false, acp: { binary: 'pi-acp', transport: 'stdio' }, chat_admission: ADMITTED },
 ] as unknown as RosterSeat[];
 const CAPABLE = ['claude', 'pi'];
+/** The same roster as a daemon that publishes NO verdict would serve it (crew < 0.7.36). */
+const withoutVerdict = (seat: RosterSeat): RosterSeat => {
+  const copy = { ...(seat as unknown as Record<string, unknown>) };
+  delete copy['chat_admission'];
+  return copy as unknown as RosterSeat;
+};
 
 const ALL_SPIES = { openChat, getChat, closeChat, getRoster, sendChatMessage, listProjects };
 
@@ -230,10 +236,7 @@ describe('GroupChat — chips are truth (BRIEF-UX-001 C6/EC44)', () => {
 
   it('[+ Add] offers every seat when the daemon publishes no verdict, and an explicit pick joins the send', async () => {
     const user = userEvent.setup();
-    setCachedRoster(ROSTER.map((r) => {
-      const { chat_admission: _drop, ...rest } = r as unknown as Record<string, unknown>;
-      return rest;
-    }) as unknown as RosterSeat[]);
+    setCachedRoster(ROSTER.map(withoutVerdict));
     render(<GroupChat repoId={null} onBack={() => undefined} />);
     fireEvent.click(screen.getByTestId('chat-scope-none')); // studio#248: Unfiled = an EXPLICIT unscoped choice before the first send
 
