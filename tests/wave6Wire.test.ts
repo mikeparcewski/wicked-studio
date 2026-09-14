@@ -24,6 +24,7 @@ import {
   diffSource,
   distributionAgreementPct,
   distributionDegradedReason,
+  distributionDistinctnessFallback,
   gateUngated,
   gateUngatedReason,
   QE_AUTHOR_TESTS_WORKFLOW_ID,
@@ -264,5 +265,16 @@ describe('the null-safe readers — an older daemon\'s frame changes nothing', (
     expect(testSetOf(null)).toBeNull();
     expect(testSetOf({ id: 'x' })).toBeNull();
     expect(testSetOf({ run_id: 'r' })?.run_id).toBe('r');
+  });
+});
+
+
+describe('distribution distinctness fallback reader (#276)', () => {
+  it.each([undefined, null, 'unknown', true, 'creator_seat'])('accepts only the published token (%s)', (distinctnessFallback) => {
+    expect(distributionDistinctnessFallback({ type: 'unitDistributed', session: 'r', distinctnessFallback } as never))
+      .toBe(distinctnessFallback === 'creator_seat' ? 'creator_seat' : null);
+  });
+  it('treats an absent key as null', () => {
+    expect(distributionDistinctnessFallback({ type: 'unitDistributed', session: 'r' } as never)).toBeNull();
   });
 });

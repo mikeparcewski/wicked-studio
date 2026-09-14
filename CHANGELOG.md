@@ -12,6 +12,9 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+### Fixed
+- Disclose `distinctnessFallback: 'creator_seat'` beside unit routing and in the run-head note, even when no seats were benched (#276). Include any degraded reason; older daemons with an absent or null fallback retain existing rendering.
+
 ## [0.5.9] — 2026-09-13
 _The published bundle is built against `wicked-crew-api-types` **0.37.0** — the exact
 devDependency pin bumped from 0.36.0 in #270 (the deliver-gate wire: `HealthResponse.capabilities.deliverGate`,

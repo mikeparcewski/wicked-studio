@@ -119,3 +119,29 @@ describe('workerToolCallDenied — the remote-write fence (F-7R2-012)', () => {
     expect(line.text.endsWith(`— ${W6_REMEDY}`)).toBe(true);
   });
 });
+
+
+describe('creator-seat fallback on the routing line (#276)', () => {
+  const warning = 'evaluator ≠ creator not held — review stays on the creator seat (no distinct eligible seat)';
+  it.each([null, W6_DEGRADED_REASON])('discloses fallback even with degradedReason=%s', (degradedReason) => {
+    const line = narrate(ev({ ...UNIT_DISTRIBUTED_FULL, routingMethod: 'evaluator_distinct',
+      distinctnessFallback: 'creator_seat', degradedReason }), ctx)!;
+    expect(line.text).toBe(`phase-1 routed to claude — council 80% — ${warning}`
+      + (degradedReason !== null ? ` — council degraded: ${degradedReason}` : ''));
+    expect(line.tone).toBe('gate');
+    expect(line.ord).toBe(1);
+  });
+  it.each([undefined, null, 'unknown', true])('requires the exact fallback token (%s)', (distinctnessFallback) => {
+    const frame = { ...UNIT_DISTRIBUTED_FULL, routingMethod: 'evaluator_distinct', distinctnessFallback };
+    expect(narrate(ev(frame), ctx)).toMatchObject({ text: 'phase-1 routed to claude — council 80%', tone: 'info' });
+    expect(narrate(ev({ ...frame, degradedReason: 'creator_seat' }), ctx)).toMatchObject({
+      text: 'phase-1 routed to claude — council 80% — council degraded: creator_seat', tone: 'gate',
+    });
+  });
+  it('uses the token even without a routing method', () => {
+    expect(narrate(ev({ type: 'unitDistributed', session: 'r', ord: 1, cli: 'claude',
+      distinctnessFallback: 'creator_seat' }), ctx)).toMatchObject({
+      text: `phase-1 routed to claude — ${warning}`, tone: 'gate',
+    });
+  });
+});
