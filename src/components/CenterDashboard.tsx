@@ -22,7 +22,7 @@ import { useMembershipStore } from '../store/membership.js';
 import { useRunEventStore } from '../store/events.js';
 import { deliverLift } from './deliverLiftModel.js';
 import { GateVerdict } from './GateVerdict.js';
-import { gateVerdictFor, isFailureEscalation, isSeatFailure, isRestoredRetry, phaseLabel } from './gateVerdictModel.js';
+import { failedSeatOf, gateVerdictFor, isFailureEscalation, isSeatFailure, isRestoredRetry, phaseLabel } from './gateVerdictModel.js';
 import { ReassignControl } from './ReassignControl.js';
 import { useSteeringStore } from '../store/steering.js';
 import { launchPath, sessionProjectId } from '../hooks/ambientProject.js';
@@ -303,8 +303,9 @@ interface GateCardProps {
   /** The run's structured event log (already subscribed by the dashboard) — the evaluator verdict
    *  this gate is about is read from it (wicked-studio#250, F-3R2-006), exactly as `SteeringGate` does. */
   events: readonly CoreEvent[];
-  /** The run's units (snapshot) — names the verdict's phase. */
-  units: readonly WorkUnit[];
+  /** The run's units (snapshot) — names the verdict's phase and the failed unit's seat. `undefined`
+   *  when the run is not in the list yet (#274): the seat is then UNKNOWN, never seatless. */
+  units: readonly WorkUnit[] | undefined;
   /** The run's seat pool (`session.clis`) — the reassign offer on a failure escalation (F-7R2-007). */
   clis: readonly string[];
   /** True once THIS gate instance's durable history has been fetched and merged (see the
@@ -345,7 +346,8 @@ function GateActionCard({
   // like there, not on a deliver-lift escalation (another seat cannot fix a rebase conflict).
   const escalation = isFailureEscalation(prompt, verdict)
     && (typeof ord !== 'number' || deliverLift(events, ord) === null);
-  const failedCli = typeof ord === 'number' ? units.find((u) => u.ord === ord)?.assigned_cli ?? null : null;
+  // Tri-state (#274) — the same reading as the run page's card: `undefined` (run not loaded) keeps the lever.
+  const failedCli = failedSeatOf(units, ord);
   // wicked-core#431 (F-3R2-010 / F-255-01): the SAME relabel the run page's gate card applies, from
   // the same predicate — an open gate must not read "Retry against the restored tree" there and
   // "Approve" here. Approve on the restored-tree denial retries the phase against the creator's
@@ -450,7 +452,7 @@ function GateActionCard({
 
       {/* The evaluator verdict this gate is about (F-3R2-006) — see SteeringGate. */}
       {verdict !== null && (
-        <GateVerdict view={verdict} phase={phaseLabel(runId, units, verdict.ord)} />
+        <GateVerdict view={verdict} phase={phaseLabel(runId, units ?? NO_UNITS, verdict.ord)} />
       )}
 
       {/* F-7R2-007: the seat lever on a SEAT failure escalation — see SteeringGate.
@@ -460,7 +462,7 @@ function GateActionCard({
           runId={runId}
           ord={ord}
           pool={clis}
-          failedCli={failedCli}
+          failedCli={failedCli ?? null}
           amend={amend}
           compact
           onDone={() => clearGate(runId)}
@@ -503,7 +505,7 @@ function GateActionCard({
           onClick={() => void run(() => onApprove(runId))}
           {...(restoredRetry
             ? { title: "the evaluator's edit was discarded; the phase re-runs against the creator's verified tree" }
-            : escalation && failedCli !== null
+            : escalation && typeof failedCli === 'string'
               ? { title: `retries the unit on ${failedCli} — the seat that just failed; use Reassign to move it` }
               : {})}
           style={{
@@ -519,7 +521,7 @@ function GateActionCard({
             opacity: loading ? 0.5 : 1,
           }}
         >
-          {restoredRetry ? 'Retry against the restored tree' : escalation && failedCli !== null ? `Approve (retry on ${failedCli})` : 'Approve'}
+          {restoredRetry ? 'Retry against the restored tree' : escalation && typeof failedCli === 'string' ? `Approve (retry on ${failedCli})` : 'Approve'}
         </button>
         <button
           type="button"
@@ -1204,7 +1206,7 @@ export function CenterDashboard({
                     prompt={gate.prompt}
                     sessionLbl={lbl}
                     events={byRun[gate.runId] ?? NO_EVENTS}
-                    units={v?.units ?? NO_UNITS}
+                    units={v?.units}
                     clis={v?.session.clis ?? NO_CLIS}
                     ready={gateReady.has(gateInstanceKey(gate))}
                     onApprove={handleApprove}

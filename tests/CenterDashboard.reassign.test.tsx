@@ -58,10 +58,10 @@ beforeEach(() => {
   setCachedRoster(ROSTER);
 });
 
-function dash(): void {
+function dash(units = UNITS, loaded = true): void {
   render(
     <CenterDashboard
-      runs={[makeView({ id: RUN, problem: 'run the governed test', status: 'awaiting_human', unit_ix: 2, clis: POOL }, UNITS)]}
+      runs={loaded ? [makeView({ id: RUN, problem: 'run the governed test', status: 'awaiting_human', unit_ix: 2, clis: POOL }, units)] : []}
       onSelectRun={vi.fn()}
       onApproveGate={vi.fn()}
       onRejectGate={vi.fn()}
@@ -69,6 +69,29 @@ function dash(): void {
     />,
   );
 }
+
+// F-E2E-014 / #274 on the inbox card — the same tri-state as the run page's card, from the same
+// helper (`failedSeatOf`): a PROVEN seatless unit renders no lever; a run the list has not loaded
+// yet (no units to read) is UNKNOWN and keeps the lever exactly as before the fix.
+describe('the inbox gate card: seatless vs unknown seat (F-E2E-014, #274)', () => {
+  it('a seatless failure (assigned_cli null, run loaded) renders no reassign lever and a plain Approve', async () => {
+    dash(UNITS.map((u) => (u.ord === 3 ? { ...u, assigned_cli: null } : u)));
+    const card = await screen.findByTestId('gate-inbox-card');
+    await waitFor(() => expect(getRunEvents).toHaveBeenCalledTimes(1));
+    expect(within(card).getByRole('button', { name: /^Approve$/ })).toBeInTheDocument();
+    expect(within(card).queryByTestId('steering-reassign-row')).toBeNull();
+    expect(within(card).queryByTestId('steering-reassign-none')).toBeNull();
+  });
+
+  it('#274 — a gate whose run is not in the list yet (no units to read) keeps the lever: unknown is not seatless', async () => {
+    dash(UNITS, false);
+    const card = await screen.findByTestId('gate-inbox-card');
+    await waitFor(() => expect(getRunEvents).toHaveBeenCalledTimes(1));
+    // The control mounts (as on main before the fix); with no pool known yet it can only say so.
+    expect(within(card).queryByTestId('steering-reassign-row') ?? within(card).queryByTestId('steering-reassign-none')).not.toBeNull();
+    expect(within(card).getByRole('button', { name: /^Approve$/ })).toBeInTheDocument();
+  });
+});
 
 describe('the inbox gate card on a failure escalation', () => {
   it('F-7R2-018: renders no verdict block for unit 2 under the unit-3 escalation card', async () => {

@@ -12,7 +12,7 @@ import { DeliverLift } from './DeliverLift.js';
 import { deliverLift, textCarriesFailure } from './deliverLiftModel.js';
 import { GATE_HASH } from './GateChip.js';
 import { GateVerdict } from './GateVerdict.js';
-import { gateVerdictFor, isFailureEscalation, isSeatFailure, isRestoredRetry, phaseLabel } from './gateVerdictModel.js';
+import { failedSeatOf, gateVerdictFor, isFailureEscalation, isSeatFailure, isRestoredRetry, phaseLabel } from './gateVerdictModel.js';
 import { IntakePlan, isIntakeGate } from './IntakePlan.js';
 import { ReassignControl } from './ReassignControl.js';
 
@@ -85,7 +85,9 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
   // a refused lift is the engine's story, told by the lift block below — another seat cannot fix
   // a rebase conflict), which is why the control is also gated on `lift === null` at the render.
   const escalation = isFailureEscalation(prompt, verdict);
-  const failedCli = typeof ord === 'number' ? (units ?? EMPTY_UNITS).find((u) => u.ord === ord)?.assigned_cli ?? null : null;
+  // Tri-state (#274): a seat, `null` = the unit provably had none, `undefined` = this host cannot
+  // tell (no `units` — the steering-author / testing-launch panels) and must not read it as seatless.
+  const failedCli = failedSeatOf(units, ord);
   // A host without the run view (the steering-author and testing-launch panels hold only the run
   // id + the gate) reads the run ONCE for its seat pool when — and only when — the gate is a failure
   // escalation the lever applies to. Zero reads on every other gate; a failed read offers no lever.
@@ -412,7 +414,7 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
           runId={runId}
           ord={ord}
           pool={pool}
-          failedCli={failedCli}
+          failedCli={failedCli ?? null}
           amend={amend}
           onDone={() => {
             useAnnotationStore.getState().clearDraft(runId);
@@ -431,11 +433,11 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
           className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
           style={{ background: 'var(--status-run)', color: 'var(--surface-base)' }}
           {...(restoredRetry ? { title: "the evaluator's edit was discarded; the phase re-runs against the creator's verified tree" } : {})}
-          {...(escalation && failedCli !== null && !restoredRetry
+          {...(escalation && typeof failedCli === 'string' && !restoredRetry
             ? { title: `retries the unit on ${failedCli} — the seat that just failed; use Reassign to move it` }
             : {})}
         >
-          {restoredRetry ? 'Retry against the restored tree' : escalation && failedCli !== null ? `Approve (retry on ${failedCli})` : 'Approve'}
+          {restoredRetry ? 'Retry against the restored tree' : escalation && typeof failedCli === 'string' ? `Approve (retry on ${failedCli})` : 'Approve'}
         </button>
         <button
           data-testid="steering-approve-steer"

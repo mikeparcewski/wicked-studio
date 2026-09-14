@@ -11,13 +11,19 @@ import { SteeringGate } from '../src/components/SteeringGate.js';
 import { useAnnotationStore } from '../src/store/annotations.js';
 import { useGateStore } from '../src/store/gates.js';
 import { useRunEventStore } from '../src/store/events.js';
+import { clearCachedRoster, setCachedRoster } from '../src/store/rosterCache.js';
 import { useSteeringStore } from '../src/store/steering.js';
 import { makeUnit } from './factories.js';
+import type { RosterSeat } from '../src/api/types.js';
 
 const RUN = 'seatless-run-e2e014';
 const CAUSE = 'worktree missing: /repos/does-not-exist not found — nothing to plan against';
 const ESCALATION_PROMPT = `Unit 3 failed and triage escalated: recon passed, build faltered: triage judge failed (Failed): [${CAUSE}]`;
 const POOL = ['claude', 'codex'];
+const ROSTER: RosterSeat[] = [
+  { key: 'claude', display_name: 'Claude Code', binary: 'claude', enabled_for_council: true, health: { status: 'active', since: 'x' }, signed_in: true },
+  { key: 'codex', display_name: 'Codex', binary: 'codex', enabled_for_council: true, health: { status: 'active', since: 'x' }, signed_in: false },
+];
 
 const SEATLESS_UNITS = [
   makeUnit({ id: `${RUN}:u1`, session_id: RUN, ord: 1, stage: 'recon', status: 'done', assigned_cli: 'claude' }),
@@ -37,6 +43,9 @@ beforeEach(() => {
   useRunEventStore.setState({ byRun: { [RUN]: EVENTS } });
   vi.spyOn(client.api, 'confirmGate').mockResolvedValue({ status: 'ok' });
   vi.spyOn(client.api, 'getRun').mockRejectedValue(new Error('not needed'));
+  vi.spyOn(client.api, 'getRoster').mockResolvedValue({ roster: ROSTER });
+  clearCachedRoster();
+  setCachedRoster(ROSTER);
 });
 afterEach(cleanup);
 
@@ -71,6 +80,24 @@ describe('F-E2E-014: seatless-run failure card', () => {
     render(<SteeringGate runId={RUN} ord={3} prompt={LONG_PROMPT} units={SEATLESS_UNITS} clis={POOL} />);
     expect(screen.getByTestId('steering-prompt').textContent).toContain(LONG_CAUSE);
     expect(screen.queryByText('why this gate fired')).toBeNull();
+  });
+
+  // #274 — the regression the independent review of the first cut reproduced: a host that passes
+  // NO `units` (the steering-author panel; the testing-launch panel before its snapshot) cannot
+  // resolve the failed unit's seat. "Unknown" is not "seatless": the lever must stay, exactly as it
+  // did before this fix, and Approve reads plain "Approve" (no seat to name).
+  it('(c) #274 — a host that passes no units keeps the reassign lever: unknown is not seatless', () => {
+    render(<SteeringGate runId={RUN} ord={3} prompt={ESCALATION_PROMPT} clis={POOL} />);
+    expect(screen.getByTestId('steering-prompt')).toHaveTextContent(CAUSE);
+    expect(screen.getByTestId('steering-reassign-row')).toBeInTheDocument();
+    expect(screen.getByTestId('steering-approve')).toHaveTextContent('Approve');
+    expect(screen.getByTestId('steering-approve').textContent).not.toMatch(/retry on/);
+  });
+
+  it('(c) #274 — units known but the failed ord not among them is unknown too: the lever stays', () => {
+    render(<SteeringGate runId={RUN} ord={3} prompt={ESCALATION_PROMPT} units={SEATLESS_UNITS.filter((u) => u.ord !== 3)} clis={POOL} />);
+    expect(screen.getByTestId('steering-reassign-row')).toBeInTheDocument();
+    expect(screen.getByTestId('steering-approve').textContent).not.toMatch(/retry on/);
   });
 
   it('a genuine trailing footnote keeps its leading bracket (cleanPrompt hardening)', () => {

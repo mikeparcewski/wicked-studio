@@ -403,11 +403,30 @@ export function isFailureEscalation(prompt: string | undefined, view: GateVerdic
 }
 
 /**
- * Whether a failure escalation had a seat assigned to the failed unit (F-E2E-014).
- * A seatless / tool-only escalation (`failedCli === null`) never benefits from the seat-based
- * remedy — `ReassignControl` must not render for it.
+ * The failed unit's seat, TRI-STATE (#274 — the F-E2E-014 fix collapsed two of these into one):
+ *  - a `string` — the unit is known and had that seat;
+ *  - `null` — the unit is known and PROVABLY had no seat (a tool-only / seatless unit);
+ *  - `undefined` — this host cannot tell: it holds no `units` (the steering-author and testing-launch
+ *    panels, the landing inbox before the run is loaded), or the ord is not among the units it holds.
+ * Only the `null` reading suppresses the seat remedy; an unknown seat keeps the lever, exactly as
+ * every host did before F-E2E-014 (the panel's one-shot `GET /runs/:id` seat-pool read still applies).
  */
-export function isSeatFailure(escalation: boolean, failedCli: string | null): boolean {
+export function failedSeatOf(
+  units: readonly WorkUnit[] | undefined,
+  ord: number | undefined,
+): string | null | undefined {
+  if (typeof ord !== 'number' || units === undefined) return undefined;
+  const unit = units.find((u) => u.ord === ord);
+  return unit === undefined ? undefined : (unit.assigned_cli ?? null);
+}
+
+/**
+ * Whether a failure escalation may offer the seat-based remedy (F-E2E-014, #274). A seatless /
+ * tool-only escalation (`failedCli === null` — PROVEN by the unit) never benefits from it —
+ * `ReassignControl` must not render for it. An UNKNOWN seat (`undefined`, see {@link failedSeatOf})
+ * is not seatless: the lever stays, as it did before the fix.
+ */
+export function isSeatFailure(escalation: boolean, failedCli: string | null | undefined): boolean {
   return escalation && failedCli !== null;
 }
 
