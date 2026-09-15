@@ -12,6 +12,11 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.5.12] — 2026-09-15
+_Built against `wicked-crew-api-types` **0.38.0** (unchanged since 0.5.11)._
+
+- **System seat cards: opencode provider login + Log out action (#293).** `not_required` seats that carry a `login_invocation` now offer provider **Sign in** (the `free_tier` note demoted to a small secondary line below the row); a new **Log out** action runs the command-in-terminal through the same terminal modal, with the logout line derived client-side from `login_invocation` (trailing `login`→`logout`, env prefix preserved; underivable ⇒ no button). UI-only — no new daemon route.
+
 ## [0.5.11] — 2026-09-14
 _Built against `wicked-crew-api-types` **0.38.0** (unchanged since 0.5.10). FIX-IT-ALL wave 3 for the studio: #290 (L8 — escalation copy table, repo-check classification render, wire-fact readers, full-diff merge-base, one Send predicate, workflow round-trip, System auth rows) · #291 (L5 — the picker reads the daemon's `chat_admission`, an `ok` reply is the answer, Retry re-seats a refused seat). Bundled by wicked-crew 0.7.36._
 
@@ -1212,7 +1217,8 @@ The merged interactive layer: wicked-interactive's UI moved into this skin (DES-
   `git subtree split` (92 commits).
 - The SPA as a pure HTTP/WS client of the wicked-crew daemon: runs, gates, live CoreEvents.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.5.11...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.5.12...HEAD
+[0.5.12]: https://github.com/mikeparcewski/wicked-studio/compare/v0.5.11...v0.5.12
 [0.5.11]: https://github.com/mikeparcewski/wicked-studio/compare/v0.5.10...v0.5.11
 [0.5.10]: https://github.com/mikeparcewski/wicked-studio/compare/v0.5.9...v0.5.10
 [0.5.9]: https://github.com/mikeparcewski/wicked-studio/compare/v0.5.8...v0.5.9
