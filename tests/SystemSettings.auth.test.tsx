@@ -61,7 +61,10 @@ describe('System — seat rows read `auth`', () => {
     expect(screen.getByTestId('seat-signin-codex')).toHaveTextContent('sign in needed');
     expect(screen.getByTestId('seat-signin-agy')).toHaveTextContent('sign-in failed: No API key found');
     expect(screen.getByTestId('seat-signin-agy').dataset.authSource).toBe('seat-stderr');
-    expect(screen.getByTestId('seat-signin-pi')).toHaveTextContent('no sign-in needed (gemini free)');
+    // #1: the status word stays terse; the free tier moves to its own small line below.
+    expect(screen.getByTestId('seat-signin-pi')).toHaveTextContent('no sign-in needed');
+    expect(screen.getByTestId('seat-signin-pi')).not.toHaveTextContent('gemini free');
+    expect(screen.getByTestId('seat-freetier-pi')).toHaveTextContent('gemini free');
     expect(screen.getByTestId('seat-signin-opencode')).toHaveTextContent('auth unknown');
     expect(screen.queryByTestId('seat-signin-localonly')).toBeNull();
 

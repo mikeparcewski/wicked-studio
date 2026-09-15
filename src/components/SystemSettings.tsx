@@ -18,6 +18,23 @@ function isAbsolutePathLike(p: string): boolean {
   return p.startsWith('/') || p.startsWith('\\\\') || /^[A-Za-z]:[\\/]/.test(p);
 }
 
+/**
+ * Derive a seat's logout shell line from its engine-owned `login_invocation` by
+ * swapping the trailing login verb → `logout` (`codex auth login` → `codex auth
+ * logout`; `XDG_CONFIG_HOME=… opencode auth login` → `… opencode auth logout`).
+ * The roster carries no `logout_invocation` — `login_invocation` is passed through
+ * VERBATIM and there is no logout equivalent — so this is a client-side derivation.
+ * It returns `null` when the line has no recognizable trailing `login` verb, so a
+ * seat whose shape we don't recognize gets NO (possibly-wrong) logout button
+ * rather than a guessed command. Same PTY-terminal surface as sign-in — no daemon
+ * logout route exists (F-E2E-040); this runs the seat's OWN logout in the operator
+ * shell, symmetric to how sign-in runs `login_invocation`.
+ */
+function deriveLogoutInvocation(loginInvocation: string): string | null {
+  const line = loginInvocation.trimEnd();
+  return /\blogin$/.test(line) ? line.replace(/\blogin$/, 'logout') : null;
+}
+
 interface SettingRowProps {
   label: string;
   description: string;
@@ -64,8 +81,10 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
   const [clisSaved, setClisSaved] = useState(false);
   const clisSavedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  /** Seat whose sign-in terminal modal is open, or null. */
-  const [signInSeat, setSignInSeat] = useState<RosterSeat | null>(null);
+  /** The seat action whose PTY terminal modal is open (sign in OR log out), or null. */
+  const [seatAction, setSeatAction] = useState<
+    { seat: RosterSeat; line: string; title: string } | null
+  >(null);
   /** Daemon 400 from a save whose patch included worker_config_root — rendered inline at the field. */
   const [workerRootError, setWorkerRootError] = useState<string | null>(null);
 
@@ -363,93 +382,131 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
         <p className="text-xs mb-4" style={{ color: 'var(--ink-dim)' }}>
           Checked CLIs are pre-selected when you open the launch form (takes effect on the next new
           session). The status shows whether each seat looks signed in; Sign in opens that CLI&apos;s
-          own login flow in a terminal.
+          own login flow in a terminal, and Log out runs its logout so you can re-authenticate.
         </p>
         {roster.length === 0 ? (
           <p className="text-xs italic pb-4 font-mono" style={{ color: 'var(--ink-dim)' }}>Loading roster…</p>
         ) : (
           <div className="flex flex-col gap-2 pb-4">
-            {roster.map((seat) => (
-              <div key={seat.key} className="flex items-center gap-3">
-                {/* The label wraps ONLY the checkbox + name so the status/sign-in
-                    controls on the row never toggle the default-CLI checkbox. */}
-                <label className="flex items-center gap-3 cursor-pointer group flex-1 min-w-0">
-                  <input
-                    type="checkbox"
-                    checked={defaultClis.has(seat.key)}
-                    onChange={() => toggleDefaultCli(seat.key)}
-                    className="w-3.5 h-3.5 shrink-0" style={{ accentColor: 'var(--accent)' }}
-                  />
-                  <span className="text-sm font-mono truncate" style={{ color: 'var(--ink-high)' }}>
-                    {seat.display_name}
-                  </span>
-                </label>
-                <span className="text-xs font-mono" style={{ color: 'var(--ink-dim)' }}>
-                  {seat.key}
-                </span>
-                {(() => {
-                  // F-E2E-040 = F-RC2-043: the seat's standing is read off the roster's `auth`
-                  // (`seatStandingWord`, the same fold the health rail applies), not the legacy
-                  // `signed_in` boolean alone — and when the seat's OWN stderr reported the failure
-                  // (`auth_source: 'seat-stderr'`) the row says so and offers Re-authenticate.
-                  const standing = seatStandingWord(seat);
-                  const bag = seat as Record<string, unknown>;
-                  const stderrFailed = bag['auth_source'] === 'seat-stderr';
-                  const evidence = typeof bag['auth_evidence'] === 'string' ? (bag['auth_evidence'] as string) : '';
-                  const word =
-                    stderrFailed
-                      ? `sign-in failed${evidence !== '' ? `: ${evidence}` : ''}`
-                      : standing.kind === 'signed-in'
-                        ? '✓ signed in'
-                        : standing.kind === 'signed-out'
-                          ? 'sign in needed'
-                          : standing.kind === 'no-sign-in-needed' || standing.kind === 'ineligible'
-                            ? standing.detail
-                            : standing.auth === 'unknown'
-                              ? 'auth unknown'
-                              : null; // nothing on the wire — say nothing, never a fabricated state
-                  const color =
-                    stderrFailed || standing.kind === 'signed-out' || standing.kind === 'ineligible'
-                      ? 'var(--status-fail)'
-                      : standing.kind === 'signed-in' || standing.kind === 'no-sign-in-needed'
-                        ? 'var(--status-run)'
-                        : 'var(--ink-dim)';
-                  const offerLogin =
-                    seat.login_invocation !== undefined &&
-                    seat.login_invocation !== '' &&
-                    standing.kind !== 'signed-in' &&
-                    standing.kind !== 'no-sign-in-needed';
-                  const verb = stderrFailed ? 'Re-authenticate' : 'Sign in';
-                  return (
-                    <>
-                      {word !== null && (
-                        <span
-                          className="text-xs font-mono"
-                          style={{ color }}
-                          data-testid={`seat-signin-${seat.key}`}
-                          data-auth={standing.auth ?? ''}
-                          data-auth-source={stderrFailed ? 'seat-stderr' : ''}
-                          title={standing.title ?? undefined}
-                        >
-                          {word}
-                        </span>
-                      )}
-                      {offerLogin && (
-                        <button
-                          type="button"
-                          onClick={() => setSignInSeat(seat)}
-                          aria-label={`${verb} ${seat.display_name}`}
-                          className="px-2.5 py-1 rounded-lg text-xs font-medium shrink-0"
-                          style={{ background: 'var(--status-gate-dim)', color: 'var(--status-gate)', border: '1px solid var(--status-gate-dim)' }}
-                        >
-                          {verb}
-                        </button>
-                      )}
-                    </>
-                  );
-                })()}
-              </div>
-            ))}
+            {roster.map((seat) => {
+              // The free tier a `not_required` seat answers on (opencode: "OpenCode Zen …").
+              // #1: it moves to a small line BELOW the row — like the other cards — instead of
+              // standing in for the seat's sign-in action.
+              const freeTier = typeof seat.free_tier === 'string' ? seat.free_tier : '';
+              return (
+                <div key={seat.key} className="flex flex-col gap-1">
+                  <div className="flex items-center gap-3">
+                    {/* The label wraps ONLY the checkbox + name so the status/sign-in
+                        controls on the row never toggle the default-CLI checkbox. */}
+                    <label className="flex items-center gap-3 cursor-pointer group flex-1 min-w-0">
+                      <input
+                        type="checkbox"
+                        checked={defaultClis.has(seat.key)}
+                        onChange={() => toggleDefaultCli(seat.key)}
+                        className="w-3.5 h-3.5 shrink-0" style={{ accentColor: 'var(--accent)' }}
+                      />
+                      <span className="text-sm font-mono truncate" style={{ color: 'var(--ink-high)' }}>
+                        {seat.display_name}
+                      </span>
+                    </label>
+                    <span className="text-xs font-mono" style={{ color: 'var(--ink-dim)' }}>
+                      {seat.key}
+                    </span>
+                    {(() => {
+                      // F-E2E-040 = F-RC2-043: the seat's standing is read off the roster's `auth`
+                      // (`seatStandingWord`, the same fold the health rail applies), not the legacy
+                      // `signed_in` boolean alone — and when the seat's OWN stderr reported the failure
+                      // (`auth_source: 'seat-stderr'`) the row says so and offers Re-authenticate.
+                      const standing = seatStandingWord(seat);
+                      const bag = seat as Record<string, unknown>;
+                      const stderrFailed = bag['auth_source'] === 'seat-stderr';
+                      const evidence = typeof bag['auth_evidence'] === 'string' ? (bag['auth_evidence'] as string) : '';
+                      const word =
+                        stderrFailed
+                          ? `sign-in failed${evidence !== '' ? `: ${evidence}` : ''}`
+                          : standing.kind === 'signed-in'
+                            ? '✓ signed in'
+                            : standing.kind === 'signed-out'
+                              ? 'sign in needed'
+                              : standing.kind === 'no-sign-in-needed'
+                                // #1: the free-tier detail moves BELOW the row; the status word stays terse.
+                                ? 'no sign-in needed'
+                                : standing.kind === 'ineligible'
+                                  ? standing.detail
+                                  : standing.auth === 'unknown'
+                                    ? 'auth unknown'
+                                    : null; // nothing on the wire — say nothing, never a fabricated state
+                      const color =
+                        stderrFailed || standing.kind === 'signed-out' || standing.kind === 'ineligible'
+                          ? 'var(--status-fail)'
+                          : standing.kind === 'signed-in' || standing.kind === 'no-sign-in-needed'
+                            ? 'var(--status-run)'
+                            : 'var(--ink-dim)';
+                      const hasLogin = seat.login_invocation !== undefined && seat.login_invocation !== '';
+                      // #1: a `not_required` seat (opencode) now OFFERS its provider login like the
+                      // others — the only seat we never offer it to is one already signed in.
+                      const offerLogin = hasLogin && standing.kind !== 'signed-in';
+                      // #2: a logout line DERIVED from the seat's own `login_invocation` (the roster
+                      // carries no logout field), offered where there is a session to end.
+                      const logoutInvocation = hasLogin ? deriveLogoutInvocation(seat.login_invocation as string) : null;
+                      const offerLogout =
+                        logoutInvocation !== null &&
+                        (standing.kind === 'signed-in' || standing.kind === 'no-sign-in-needed');
+                      const verb = stderrFailed ? 'Re-authenticate' : 'Sign in';
+                      return (
+                        <>
+                          {word !== null && (
+                            <span
+                              className="text-xs font-mono"
+                              style={{ color }}
+                              data-testid={`seat-signin-${seat.key}`}
+                              data-auth={standing.auth ?? ''}
+                              data-auth-source={stderrFailed ? 'seat-stderr' : ''}
+                              title={standing.title ?? undefined}
+                            >
+                              {word}
+                            </span>
+                          )}
+                          {offerLogin && (
+                            <button
+                              type="button"
+                              onClick={() => setSeatAction({ seat, line: seat.login_invocation as string, title: `Sign in — ${seat.display_name}` })}
+                              aria-label={`${verb} ${seat.display_name}`}
+                              className="px-2.5 py-1 rounded-lg text-xs font-medium shrink-0"
+                              style={{ background: 'var(--status-gate-dim)', color: 'var(--status-gate)', border: '1px solid var(--status-gate-dim)' }}
+                            >
+                              {verb}
+                            </button>
+                          )}
+                          {offerLogout && (
+                            <button
+                              type="button"
+                              onClick={() => setSeatAction({ seat, line: logoutInvocation ?? '', title: `Log out — ${seat.display_name}` })}
+                              aria-label={`Log out ${seat.display_name}`}
+                              className="px-2.5 py-1 rounded-lg text-xs font-medium shrink-0"
+                              style={{ background: 'var(--surface-raised)', color: 'var(--ink-muted)', border: '1px solid var(--surface-raised)' }}
+                            >
+                              Log out
+                            </button>
+                          )}
+                        </>
+                      );
+                    })()}
+                  </div>
+                  {/* #1: the free-tier note — small, secondary, below the actions (aligned under the
+                      seat name), so a `not_required` card matches the shape of the others. */}
+                  {freeTier !== '' && (
+                    <p
+                      className="text-xs font-mono ml-[1.625rem]"
+                      style={{ color: 'var(--ink-dim)' }}
+                      data-testid={`seat-freetier-${seat.key}`}
+                    >
+                      {freeTier}
+                    </p>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
         {roster.length > 0 && (
@@ -470,15 +527,17 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
         )}
       </section>
 
-      {/* ── Seat sign-in terminal ─────────────────────────────────────────────
-          An interactive login shell (NO cmd — `login_invocation` is a SHELL LINE,
+      {/* ── Seat sign-in / log-out terminal ───────────────────────────────────
+          An interactive login shell (NO cmd — the invocation is a SHELL LINE,
           not an argv) into which Terminal types the line + "\n" over the terminal
-          WS once the PTY is up. The operator completes the CLI's URL/paste flow
-          right here. Keyed by seat so switching seats starts a fresh session. */}
-      {signInSeat !== null && (
+          WS once the PTY is up. The same surface for sign-in (`login_invocation`)
+          and log-out (derived) — no daemon route exists for either (F-E2E-040).
+          The operator completes the CLI's URL/paste flow right here. Keyed by
+          seat + title so switching seat or action starts a fresh session. */}
+      {seatAction !== null && (
         <Modal
-          title={`Sign in — ${signInSeat.display_name}`}
-          onClose={() => setSignInSeat(null)}
+          title={seatAction.title}
+          onClose={() => setSeatAction(null)}
         >
           <div className="flex flex-col gap-3">
             <p className="text-xs font-mono" style={{ color: 'var(--ink-muted)' }}>
@@ -487,14 +546,14 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
                 className="rounded px-1 py-0.5"
                 style={{ background: 'var(--surface-raised)', color: 'var(--ink-high)' }}
               >
-                {signInSeat.login_invocation}
+                {seatAction.line}
               </code>{' '}
-              in your shell — complete the sign-in flow below, then close this panel.
+              in your shell — complete the flow below, then close this panel.
             </p>
             <Terminal
-              key={signInSeat.key}
+              key={`${seatAction.seat.key}:${seatAction.title}`}
               cwd="."
-              initialInput={`${signInSeat.login_invocation ?? ''}\n`}
+              initialInput={`${seatAction.line}\n`}
             />
           </div>
         </Modal>
