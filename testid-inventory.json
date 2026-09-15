@@ -11,9 +11,9 @@
   "studioVersion": "0.5.11",
   "counts": {
     "files": 146,
-    "occurrences": 1325,
+    "occurrences": 1326,
     "static": 1142,
-    "dynamic": 62,
+    "dynamic": 63,
     "computed": 7
   },
   "static": [
@@ -7220,6 +7220,12 @@
       "pattern": "rail-title-*",
       "files": [
         "src/components/LeftSidebar.tsx"
+      ]
+    },
+    {
+      "pattern": "seat-freetier-*",
+      "files": [
+        "src/components/SystemSettings.tsx"
       ]
     },
     {
