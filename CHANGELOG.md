@@ -12,6 +12,8 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+- **Tests: `tests/deliverLiftModel.test.ts` — 43 vitest unit tests for `src/components/deliverLiftModel.ts`** (the deliver phase's pre-push story fold: `deliverLift`, `liftOutcomeLabel`, `liftIsFailure`, `reverifyChangedTree`, `splitElided`/`ELISION_MARKER`, `textCarriesFailure`).
+
 ## [0.5.12] — 2026-09-15
 _Built against `wicked-crew-api-types` **0.38.0** (unchanged since 0.5.11)._
 
