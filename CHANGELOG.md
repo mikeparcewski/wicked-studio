@@ -12,6 +12,12 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+- **Escalation gate: Retry / Request changes / Reject / Cancel run verbs (#299).** When the awaiting-human prompt starts with `"Unit N failed and triage escalated"`, the gate card replaces the standard Approve layout with four labelled actions: **Retry** (`confirmGate({approve:true})`); **Request changes** (`confirmGate({approve:false, action:'request_changes', amend})` — requires a note, disabled until the textarea has text); **Reject** (`confirmGate({approve:false})` — note optional); **Cancel run** (`cancelRun`). Each carries its own `data-testid` (`steering-retry`, `steering-request-changes`, `steering-reject`, `steering-cancel`). The confirm line explains each verb; non-escalation gates keep the existing layout unchanged.
+
+- **Deliver gate card: diffstat + full-diff expander (#300).** When the gate is on the deliver unit (`lift !== null`), the card fetches `GET /runs/:id/diff?base=merge-base` and renders a `<details>` summary (`data-testid="deliver-gate-diffstat"`) showing files-changed / +additions / −deletions and a "(diff truncated at 1 MB)" note when `truncated: true`. The raw unified diff is in `deliver-gate-full-diff`. If the request fails, the block is silently absent.
+
+- **Delivered run: "Revise this PR" action in the Delivery panel (#301).** When a run is in `pr-open` state and the host provides `navigate`, a **Revise this PR** button (`data-testid="run-revise-pr"`) appears below the PR link. Clicking it calls `setRetryPrefill` with `revisesPr: {number, title, headRef}` (from the PR URL, session problem, and `run_branch`) and navigates to `/runs/new` — the Build composer prefills from the deposited shape. `retryOf` is `null` (this is a revision, not a retry).
+
 - **Tests: `tests/deliverLiftModel.test.ts` — 43 vitest unit tests for `src/components/deliverLiftModel.ts`** (the deliver phase's pre-push story fold: `deliverLift`, `liftOutcomeLabel`, `liftIsFailure`, `reverifyChangedTree`, `splitElided`/`ELISION_MARKER`, `textCarriesFailure`).
 
 ## [0.5.12] — 2026-09-15

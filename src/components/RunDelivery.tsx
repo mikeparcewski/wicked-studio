@@ -3,6 +3,7 @@ import type { CoreEvent, SessionView } from '../api/types.js';
 import { useDeliveryStore } from '../store/delivery.js';
 import { useRunEventStore } from '../store/events.js';
 import { usePostHocDeliverStore } from '../store/postHocDeliver.js';
+import { setRetryPrefill } from '../store/retryPrefill.js';
 import { useIsSystemWorkflow } from '../store/workflowCache.js';
 import { DeliverLift } from './DeliverLift.js';
 import { deliverLift, textCarriesFailure } from './deliverLiftModel.js';
@@ -41,6 +42,14 @@ const EMPTY_EVENTS: CoreEvent[] = [];
 
 interface Props {
   view: SessionView;
+  /** Navigate to the build composer (opens the standard launch form, prefilled). */
+  navigate?: (path: string) => void;
+}
+
+/** Extract a GitHub PR number from a PR URL (`/pull/123`). `null` if not parseable. */
+function prNumberFromUrl(url: string): number | null {
+  const m = /\/pull\/(\d+)(?:[/?#]|$)/.exec(url);
+  return m ? parseInt(m[1]!, 10) : null;
 }
 
 /**
@@ -235,7 +244,7 @@ export const HEADLINE: Record<DeliveryClaim, string> = {
  * component is exported and rendered directly by tests and by any future
  * surface: one rule, held on both sides of the seam, never a second rule.
  */
-export function RunDelivery({ view }: Props): React.ReactElement {
+export function RunDelivery({ view, navigate }: Props): React.ReactElement {
   const runId = view.session.id;
   const fetched = useDeliveryStore((s) => s.byRun[runId]);
   // Post-hoc delivery (crew#393): the one write this card can make. Its answered
@@ -316,6 +325,40 @@ export function RunDelivery({ view }: Props): React.ReactElement {
           {href} <span aria-hidden>↗</span>
         </a>
       )}
+      {/* "Revise this PR" (#301): prefills the Build composer with `revisesPr` shape so the operator
+       *  can launch a follow-on run that targets the same branch. The composer sends `revisesPr` only
+       *  when `GET /health.capabilities.revisesPr === true` (ChatInput guards it) — the button here
+       *  always appears once a PR url is in hand; the capability check lives at send time.
+       *  `retryOf: null` — this is a revision, not a retry; lineage is carried by `revisesPr.number`. */}
+      {claim === 'pr-open' && href !== null && navigate !== undefined && (() => {
+        const prNum = prNumberFromUrl(href);
+        if (prNum === null) return null;
+        return (
+          <button
+            type="button"
+            data-testid="run-revise-pr"
+            data-pr={String(prNum)}
+            onClick={() => {
+              setRetryPrefill({
+                retryOf: null,
+                problem: view.session.problem,
+                clis: view.session.clis,
+                workflowId: view.session.workflow_id ?? null,
+                repoRef: view.session.repo_ref ?? null,
+                entityMode: view.session.entity_mode,
+                humanConfirm: view.session.human_confirm,
+                projectId: typeof view.session.project_id === 'string' ? view.session.project_id : null,
+                revisesPr: { number: prNum, title: view.session.problem, headRef: view.session.run_branch ?? '' },
+              });
+              navigate('/runs/new');
+            }}
+            className="rounded-lg px-3 py-1.5 text-xs font-semibold font-mono transition-opacity hover:opacity-80"
+            style={{ background: 'var(--surface-raised)', border: '1px solid var(--ink-dim)', color: 'var(--ink-muted)', alignSelf: 'flex-start' }}
+          >
+            Revise this PR
+          </button>
+        );
+      })()}
       {claim === 'delivered' && fetched === undefined && unitId !== null && (
         <p className="font-mono" style={{ color: 'var(--ink-dim)' }}>
           reading the deliver phase transcript for the PR link…

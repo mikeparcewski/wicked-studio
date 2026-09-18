@@ -80,8 +80,8 @@ describe('F-7R2-007: Reassign to <seat> + retry', () => {
     expect(options[1]!.textContent).toBe('pi — no sign-in observed — may fail or be benched');
     expect(options[1]).toHaveAttribute('data-state', 'signed-out');
     expect(screen.getByTestId('steering-reassign')).toHaveTextContent('Reassign to Claude Code + retry');
-    expect(screen.getByTestId('steering-approve')).toHaveTextContent('Approve (retry on codex)');
-    expect(screen.getByTestId('steering-approve').getAttribute('title')).toContain('the seat that just failed');
+    expect(screen.getByTestId('steering-retry')).toHaveTextContent('Retry');
+    expect(screen.getByTestId('steering-retry').getAttribute('title')).toContain('Re-dispatches the failed unit');
   });
 
   it('approves the retry, waits for the run to resume, then reassigns to the chosen seat — and resolves the gate', async () => {
@@ -145,7 +145,7 @@ describe('F-7R2-007: Reassign to <seat> + retry', () => {
     vi.spyOn(client.api, 'getRun').mockRejectedValue(new Error('not in this case'));
     render(<SteeringGate runId={RUN} ord={3} prompt="Approve unit 3 before it runs: build — the intent" units={UNITS} clis={POOL} />);
     expect(screen.queryByTestId('steering-reassign-row')).toBeNull();
-    expect(screen.getByTestId('steering-approve')).toHaveTextContent('Approve');
+    expect(screen.getByTestId('steering-approve')).toHaveTextContent('Approve'); // non-escalation: standard layout
     expect(client.api.getRun).not.toHaveBeenCalled(); // a pre-run gate never reads the run for a pool
     cleanup();
     render(<SteeringGate runId={RUN} ord={3} prompt={PROMPT} units={UNITS} clis={['codex']} />);
@@ -164,6 +164,6 @@ describe('F-7R2-007: Reassign to <seat> + retry', () => {
     render(<SteeringGate runId={RUN} ord={3} prompt={PROMPT} units={UNITS} />);
     await new Promise((r) => setTimeout(r, 10));
     expect(screen.queryByTestId('steering-reassign-row')).toBeNull();
-    expect(screen.getByTestId('steering-approve')).toBeInTheDocument();
+    expect(screen.getByTestId('steering-retry')).toBeInTheDocument(); // escalation layout even without pool
   });
 });

@@ -1,5 +1,5 @@
 import { useCallback, useState, useEffect, useMemo, useRef } from 'react';
-import { api, type GateDecision } from '../api/client.js';
+import { api, type GateDecision, type RunDiff } from '../api/client.js';
 import type { CoreEvent, CoverageReport, WorkUnit, WorkflowDef } from '../api/types.js';
 import { useGlobalShortcuts, type ShortcutEntry } from '../hooks/useGlobalShortcuts.js';
 import { useSteerPrefixes } from '../hooks/useSteerPrefixes.js';
@@ -52,6 +52,27 @@ function cleanPrompt(raw: string): { headline: string; footnote: string | null }
     headline: raw.slice(0, bracketIdx).trim(),
     footnote: raw.slice(bracketIdx, closeIdx !== -1 ? closeIdx + 1 : undefined).trim(),
   };
+}
+
+/** Parse a unified diff into file/addition/deletion counts for a diffstat line. */
+function parseDiffstat(diff: string): { files: number; additions: number; deletions: number } {
+  let files = 0, additions = 0, deletions = 0;
+  for (const line of diff.split('\n')) {
+    if (line.startsWith('diff --git ')) files++;
+    else if (line.startsWith('+') && !line.startsWith('+++ ')) additions++;
+    else if (line.startsWith('-') && !line.startsWith('--- ')) deletions++;
+  }
+  return { files, additions, deletions };
+}
+
+/** Format a diffstat into a compact summary string. */
+function diffstatLabel(diff: string): string {
+  const { files, additions, deletions } = parseDiffstat(diff);
+  if (files === 0) return 'no changes';
+  const parts = [`${files} file${files !== 1 ? 's' : ''} changed`];
+  if (additions > 0) parts.push(`+${additions}`);
+  if (deletions > 0) parts.push(`−${deletions}`);
+  return parts.join(', ');
 }
 
 /** Format a coverage report into a compact summary for gate-card display. */
@@ -139,6 +160,7 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [coverage, setCoverage] = useState<CoverageReport | null>(null);
+  const [runDiff, setRunDiff] = useState<RunDiff | null>(null);
   const message = useRef<HTMLParagraphElement>(null);
   const root = useRef<HTMLDivElement>(null);
   /** Synchronous double-fire guard for the keyboard path — `loading` is a
@@ -182,6 +204,18 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
     }).catch(() => { /* best-effort: no stats is fine */ });
   }, [repoRef]);
 
+  // Deliver gate diffstat (#300): when the gate is on the deliver unit (lift !== null), fetch the
+  // run's merge-base diff so the operator sees what approve will push before committing.
+  const hasLift = lift !== null;
+  useEffect(() => {
+    if (!hasLift) return;
+    let cancelled = false;
+    api.getRunDiff(runId, undefined, 'merge-base')
+      .then((d) => { if (!cancelled) setRunDiff(d); })
+      .catch(() => { /* diff unavailable — the card still renders without it */ });
+    return () => { cancelled = true; };
+  }, [runId, hasLift]);
+
   async function run(
     action: () => Promise<unknown>,
     intervention: { kind: SteeringAction; amend?: string },
@@ -215,6 +249,16 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
   const approve = (): Promise<void> =>
     run(() => api.confirmGate(runId, { approve: true }), { kind: 'approve' });
 
+  // Escalation Retry: re-dispatches the failed unit. Optionally carries the amend note — the
+  // deliver-unit prompt says "Approve to retry (optionally amend)" and other escalation shapes
+  // also accept amend on a plain approve; the daemon records it durably in the gate audit trail.
+  // Distinct from `approve()` so the non-escalation Approve path is not changed.
+  const retry = (): Promise<void> => {
+    const text = amend.trim();
+    const decision: GateDecision = text === '' ? { approve: true } : { approve: true, amend: text };
+    return run(() => api.confirmGate(runId, decision), { kind: 'approve', ...(text !== '' ? { amend: text } : {}) });
+  };
+
   const approveWithSteer = (): Promise<void> => {
     const text = amend.trim();
     if (!text) return Promise.resolve();
@@ -238,13 +282,25 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
   const cancel = (): Promise<void> =>
     run(() => api.cancelRun(runId), { kind: 'cancel' });
 
+  // Escalation gate only (#299): rewind to the most recent creator phase and re-dispatch it with
+  // the operator's note as amended guidance. `action: 'request_changes'` (api-types 0.38.0) is
+  // accepted by crew >= 0.7.36; an older daemon 400s — no capability flag guards it, so the button
+  // appears only on escalation cards (where the daemon version that opened the gate is >= 0.7.36).
+  const requestChanges = (): Promise<void> => {
+    const text = amend.trim();
+    if (!text) return Promise.resolve();
+    const decision: GateDecision = { approve: false, action: 'request_changes', amend: text };
+    return run(() => api.confirmGate(runId, decision), { kind: 'request-changes', amend: text });
+  };
+
   // DES-UX-001 §7.7 (slice AC): the gate panel honors a / r — the same
   // POST /runs/:id/gate its buttons fire, through the ONE slice-G registry
   // (the shared typing guard keeps the steer textarea's letters as letters).
   // Guarded on the panel HOLDING focus: a is approve exactly where approve
   // matters most, and nowhere else on the page.
   const actions = useRef({ approve, reject });
-  actions.current = { approve, reject };
+  // On escalation gates the 'a' key fires Retry (optionally carries amend), not the plain approve.
+  actions.current = { approve: escalation ? retry : approve, reject };
   const keyEntries = useMemo<ShortcutEntry[]>(() => {
     const focused = (): boolean =>
       !inflight.current &&
@@ -346,6 +402,27 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
       {/* The deliver lift + the engine's refusal for a gate on the deliver unit (wicked-core#431). */}
       {lift !== null && <DeliverLift view={lift} omitFailure={liftOmitsFailure} />}
 
+      {/* Deliver gate diffstat (#300): the diff of what this approve will push (GET /runs/:id/diff?base=merge-base). */}
+      {lift !== null && runDiff !== null && (
+        <details className="mb-2">
+          <summary
+            className="text-xs font-mono cursor-pointer select-none"
+            style={{ color: 'var(--ink-dim)' }}
+            data-testid="deliver-gate-diffstat"
+          >
+            {diffstatLabel(runDiff.diff)}
+            {runDiff.truncated ? ' (diff truncated at 1 MB)' : ''}
+          </summary>
+          <pre
+            data-testid="deliver-gate-full-diff"
+            className="text-[10px] font-mono overflow-auto max-h-64 mt-1 p-2 rounded"
+            style={{ background: 'var(--surface-base)', color: 'var(--ink-body)', whiteSpace: 'pre' }}
+          >
+            {runDiff.diff || '(empty diff)'}
+          </pre>
+        </details>
+      )}
+
       {/* Coverage stats — shown when evaluator gate fails and we have repo coverage data */}
       {isCoverageFail && coverage && (
         <p className="text-xs mb-2 font-mono" style={{ color: 'var(--ink-body)' }}>
@@ -424,55 +501,144 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
         />
       )}
 
-      {/* Four-button layout (2×2): Approve / Approve+steer / Reject / Cancel run */}
-      <div className="grid grid-cols-2 gap-2">
-        <button
-          data-testid="steering-approve"
-          onClick={() => void approve()}
-          disabled={loading}
-          className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
-          style={{ background: 'var(--status-run)', color: 'var(--surface-base)' }}
-          {...(restoredRetry ? { title: "the evaluator's edit was discarded; the phase re-runs against the creator's verified tree" } : {})}
-          {...(escalation && typeof failedCli === 'string' && !restoredRetry
-            ? { title: `retries the unit on ${failedCli} — the seat that just failed; use Reassign to move it` }
-            : {})}
-        >
-          {restoredRetry ? 'Retry against the restored tree' : escalation && typeof failedCli === 'string' ? `Approve (retry on ${failedCli})` : 'Approve'}
-        </button>
-        <button
-          data-testid="steering-approve-steer"
-          onClick={() => void approveWithSteer()}
-          disabled={loading || !amend.trim()}
-          className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
-          style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
-        >
-          {restoredRetry ? 'Retry + steer' : 'Approve + steer'}
-        </button>
-        <button
-          data-testid="steering-reject"
-          onClick={() => void reject()}
-          disabled={loading}
-          className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
-          style={{ background: 'var(--status-fail-dim)', border: '1px solid var(--status-fail-dim)', color: 'var(--status-fail)' }}
-        >
-          Reject
-        </button>
-        <button
-          data-testid="steering-cancel"
-          onClick={() => void cancel()}
-          disabled={loading}
-          className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
-          style={{ background: 'var(--surface-raised)', border: '1px solid var(--ink-dim)', color: 'var(--ink-muted)' }}
-        >
-          Cancel run
-        </button>
-      </div>
+      {escalation && lift === null ? (
+        /* Non-deliver escalation (#299): Retry / Request changes / Reject / Cancel run.
+         * "Request changes" rewinds to the last creator phase — semantically correct when a
+         * build/recon/verify unit failed. Deliver-unit escalations (lift !== null) suppress it
+         * because rewinding the creator cannot fix a git-push or rebase-conflict failure. */
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            data-testid="steering-retry"
+            onClick={() => void retry()}
+            disabled={loading}
+            className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
+            style={{ background: 'var(--status-run)', color: 'var(--surface-base)' }}
+            title="Re-dispatches the failed unit (carries your note as guidance if typed)"
+          >
+            Retry
+          </button>
+          <button
+            data-testid="steering-request-changes"
+            onClick={() => void requestChanges()}
+            disabled={loading || !amend.trim()}
+            className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
+            style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
+            title="Rewinds to the last creator phase and re-dispatches with your note (note required)"
+          >
+            Request changes
+          </button>
+          <button
+            data-testid="steering-reject"
+            onClick={() => void reject()}
+            disabled={loading}
+            className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
+            style={{ background: 'var(--status-fail-dim)', border: '1px solid var(--status-fail-dim)', color: 'var(--status-fail)' }}
+          >
+            Reject
+          </button>
+          <button
+            data-testid="steering-cancel"
+            onClick={() => void cancel()}
+            disabled={loading}
+            className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
+            style={{ background: 'var(--surface-raised)', border: '1px solid var(--ink-dim)', color: 'var(--ink-muted)' }}
+          >
+            Cancel run
+          </button>
+        </div>
+      ) : escalation && lift !== null ? (
+        /* Deliver-unit escalation (#299): Retry (optionally amend) / Reject / Cancel run.
+         * No "Request changes" — rewinding to the creator cannot fix a git-push or rebase-conflict
+         * failure; the daemon prompt says "Approve to retry (optionally amend), reject to fail the
+         * run". Retry spans the full row so the note is visually paired with the primary action. */
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            data-testid="steering-retry"
+            onClick={() => void retry()}
+            disabled={loading}
+            className="col-span-2 rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
+            style={{ background: 'var(--status-run)', color: 'var(--surface-base)' }}
+            title="Re-dispatches the deliver unit (carries your note as guidance if typed)"
+          >
+            Retry
+          </button>
+          <button
+            data-testid="steering-reject"
+            onClick={() => void reject()}
+            disabled={loading}
+            className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
+            style={{ background: 'var(--status-fail-dim)', border: '1px solid var(--status-fail-dim)', color: 'var(--status-fail)' }}
+          >
+            Reject
+          </button>
+          <button
+            data-testid="steering-cancel"
+            onClick={() => void cancel()}
+            disabled={loading}
+            className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
+            style={{ background: 'var(--surface-raised)', border: '1px solid var(--ink-dim)', color: 'var(--ink-muted)' }}
+          >
+            Cancel run
+          </button>
+        </div>
+      ) : (
+        /* Standard layout: Approve / Approve+steer / Reject / Cancel run */
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            data-testid="steering-approve"
+            onClick={() => void approve()}
+            disabled={loading}
+            className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
+            style={{ background: 'var(--status-run)', color: 'var(--surface-base)' }}
+            {...(restoredRetry ? { title: "the evaluator's edit was discarded; the phase re-runs against the creator's verified tree" } : {})}
+          >
+            {restoredRetry ? 'Retry against the restored tree' : 'Approve'}
+          </button>
+          <button
+            data-testid="steering-approve-steer"
+            onClick={() => void approveWithSteer()}
+            disabled={loading || !amend.trim()}
+            className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
+            style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
+          >
+            {restoredRetry ? 'Retry + steer' : 'Approve + steer'}
+          </button>
+          <button
+            data-testid="steering-reject"
+            onClick={() => void reject()}
+            disabled={loading}
+            className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
+            style={{ background: 'var(--status-fail-dim)', border: '1px solid var(--status-fail-dim)', color: 'var(--status-fail)' }}
+          >
+            Reject
+          </button>
+          <button
+            data-testid="steering-cancel"
+            onClick={() => void cancel()}
+            disabled={loading}
+            className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
+            style={{ background: 'var(--surface-raised)', border: '1px solid var(--ink-dim)', color: 'var(--ink-muted)' }}
+          >
+            Cancel run
+          </button>
+        </div>
+      )}
 
-      {/* Mode-selector note: workflow gates are always HITL regardless of run-level human_confirm */}
-      <p className="text-[10px] font-mono mt-2" style={{ color: 'var(--ink-dim)' }}>
-        Workflow-declared gate — run-level human_confirm setting does not apply here.
-        {' '}· a {restoredRetry ? 'retry' : 'approve'} · r reject while this card holds focus
-      </p>
+      {/* Mode-selector note / action hint */}
+      {escalation && lift === null ? (
+        <p className="text-[10px] font-mono mt-2" style={{ color: 'var(--ink-dim)' }}>
+          Retry re-runs the failed unit · Request changes rewinds to the last creator phase (note required) · Reject cancels the run
+        </p>
+      ) : escalation && lift !== null ? (
+        <p className="text-[10px] font-mono mt-2" style={{ color: 'var(--ink-dim)' }}>
+          Retry re-dispatches the deliver unit (optionally with a note) · Reject fails the run
+        </p>
+      ) : (
+        <p className="text-[10px] font-mono mt-2" style={{ color: 'var(--ink-dim)' }}>
+          Workflow-declared gate — run-level human_confirm setting does not apply here.
+          {' '}· a {restoredRetry ? 'retry' : 'approve'} · r reject while this card holds focus
+        </p>
+      )}
     </div>
   );
 }

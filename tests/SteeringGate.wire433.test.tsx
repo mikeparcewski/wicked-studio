@@ -252,7 +252,10 @@ describe('SteeringGate — the deliver lift on a gate opened on the deliver unit
     // Once on the whole card (F-255-02): the prompt carries it, so the lift block omits its copy.
     expect(screen.queryByTestId('deliver-lift-failure')).toBeNull();
     expect(mentions(screen.getByTestId('steering-gate'), "LIFT-CONFLICT — lifting the run's work")).toBe(1);
-    expect(screen.getByTestId('steering-approve')).toHaveTextContent('Approve'); // not a restored-tree gate
+    // Deliver-unit escalation (#299): Retry (full-width) / Reject / Cancel run — no Request changes.
+    // Rewinding to the creator cannot fix a git-push / rebase-conflict failure.
+    expect(screen.getByTestId('steering-retry')).toHaveTextContent('Retry');
+    expect(screen.queryByTestId('steering-request-changes')).toBeNull();
   });
 
   it('the addendum: refused for a wrong HEAD ref with NO lift frame — the deliver: text once, from the prompt', () => {
@@ -264,6 +267,7 @@ describe('SteeringGate — the deliver lift on a gate opened on the deliver unit
     expect(screen.queryByTestId('deliver-lift-remedy')).toBeNull();
     expect(screen.queryByTestId('deliver-lift-failure')).toBeNull();
     expect(mentions(screen.getByTestId('steering-gate'), "deliver: the worktree's HEAD is attached to")).toBe(1);
+    expect(screen.queryByTestId('steering-request-changes')).toBeNull(); // deliver-unit escalation: no rewind action
   });
 
   it('a prompt that does NOT carry the refusal (the daemon-restart fallback) leaves the lift block to say it — quoted refs as copyable code', () => {
@@ -279,6 +283,7 @@ describe('SteeringGate — the deliver lift on a gate opened on the deliver unit
     mount([...G6_EVENTS, ...DELIVER_REVERIFY_FAILED_TAIL], deliverRetryGate(REFUSAL_REVERIFY_FAILED));
     expect(DETAIL_REVERIFY_FAILED).toMatch(/chars elided/);
     expect(screen.queryByTestId('deliver-lift-failure')).toBeNull();
+    expect(screen.queryByTestId('steering-request-changes')).toBeNull(); // deliver-unit escalation: no rewind action
     expect(mentions(screen.getByTestId('steering-gate'), 'deliver: the tree that would ship')).toBe(1);
     expect(screen.getByTestId('deliver-lift-floor')).toHaveAttribute('data-floor', 'fail');
     // F-255-03: only the red row carries a tail — a passing check's output is not evidence of anything.
