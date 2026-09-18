@@ -13,9 +13,10 @@ import {
   type GovernedLaunchRoute,
   type LaunchIntent,
 } from '../api/testing.js';
-import type { Project, RepoEntry, WorkUnit, WorkflowDef } from '../api/types.js';
+import type { Project, RepoEntry, RosterSeat, WorkUnit, WorkflowDef } from '../api/types.js';
 import { QE_AUTHOR_TESTS_WORKFLOW_ID } from '../api/wave6-wire.js';
 import { useGateStore } from '../store/gates.js';
+import { getCachedRoster, subscribeRoster } from '../store/rosterCache.js';
 import { setCachedWorkflows } from '../store/workflowCache.js';
 import { runShortId } from './runIdentity.js';
 import { SteeringGate } from './SteeringGate.js';
@@ -184,6 +185,9 @@ export function TestingLaunchPanel({ intent, navigate, onClose, onLaunched, init
 }): React.ReactElement {
   const copy = INTENT_COPY[intent];
   const [instructions, setInstructions] = useState('');
+  // #302: CLIs chip row (disabled — crew schema has no clisJson on /testing/* bodies yet)
+  const [testRoster, setTestRoster] = useState<RosterSeat[] | null>(() => getCachedRoster());
+  useEffect(() => subscribeRoster(setTestRoster), []);
 
   // ── The governed workflow: read off the daemon, never assumed ─────────────
   const [workflows, setWorkflows] = useState<WorkflowsState>('loading');
@@ -555,6 +559,29 @@ export function TestingLaunchPanel({ intent, navigate, onClose, onLaunched, init
               />
               run unscoped — survey all registered repositories
             </label>
+          )}
+
+          {/* #302: CLIs chip row — same visual as Build composer; schema is strict (no clisJson
+              on TestingReconBody / TestingAuthorBody) so chips are disabled pending crew#631. */}
+          {testRoster !== null && testRoster.length > 0 && (
+            <div
+              data-testid="testing-clis-row"
+              className="flex flex-wrap items-center gap-1.5"
+            >
+              {testRoster.map((s) => (
+                <span
+                  key={s.key}
+                  className="rounded-full px-2 py-0.5 text-[10px] font-mono opacity-40 cursor-not-allowed select-none"
+                  style={{ background: 'var(--surface-raised)', color: 'var(--ink-body)', border: '1px solid var(--surface-overlay)' }}
+                  title="CLIs selection not yet available for Testing mode"
+                >
+                  {s.key}
+                </span>
+              ))}
+              <span className="text-[10px]" style={{ color: 'var(--ink-dim)' }}>
+                CLIs not yet configurable here — pending crew#631
+              </span>
+            </div>
           )}
 
           {error !== null && (

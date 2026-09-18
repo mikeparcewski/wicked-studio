@@ -208,7 +208,7 @@ describe('§7.9-4 / EC44 — explicit seat states', () => {
 });
 
 describe('the conversation→action bridge (§7.9)', () => {
-  it('Continue in Build deposits the transcript as context — a prefill, never a launch, no lineage claim', async () => {
+  it('Continue in Build: unscoped chat — PR-safe headline, replied-only seats, first-gate posture', async () => {
     const user = userEvent.setup();
     const navigate = vi.fn();
     render(<GroupChat repoId={null} onBack={() => undefined} navigate={navigate} />);
@@ -219,14 +219,41 @@ describe('the conversation→action bridge (§7.9)', () => {
     });
 
     await user.click(screen.getByTestId('chat-promote'));
+    // unscoped: launchPath(null, 'build') === '/runs/new'
     expect(navigate).toHaveBeenCalledWith('/runs/new');
     const prefill = peekRetryPrefill();
     expect(prefill).not.toBeNull();
     expect(prefill!.retryOf).toBeNull(); // chats are not runs — no lineage claim
+    // headline is the first user question (≤72 chars) as the problem's first line
+    expect(prefill!.problem).toMatch(/^sketch the uploader/);
+    // transcript appears below the --- separator
+    expect(prefill!.problem).toContain('---');
     expect(prefill!.problem).toContain('operator: sketch the uploader');
     expect(prefill!.problem).toContain('claude: start with the seams');
-    expect(prefill!.clis).toEqual(['claude', 'codex']); // the warm seats
+    // only replied seats: claude replied, codex is still working
+    expect(prefill!.clis).toEqual(['claude']);
+    // first-gate posture (§7.9 AC: "first gate" by default)
+    expect(prefill!.humanConfirm).toEqual({ before: 1 });
     // Nothing launched: the composer consumes this on ITS mount, editable first.
     expect(sendChatMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it('Continue in Build: scoped chat navigates into the project build route', async () => {
+    const user = userEvent.setup();
+    const navigate = vi.fn();
+    render(<GroupChat repoId={null} projectId="proj-42" onBack={() => undefined} navigate={navigate} />);
+    fireEvent.click(screen.getByTestId('chat-scope-none'));
+    await sendText(user, 'add search');
+    act(() => {
+      emit!({ type: 'chatReply', chat: chatId(), cliKey: 'claude', text: 'ok', ok: true });
+    });
+
+    await user.click(screen.getByTestId('chat-promote'));
+    // launchPath('proj-42', 'build') === '/p/proj-42/build/new'
+    expect(navigate).toHaveBeenCalledWith(expect.stringContaining('proj-42'));
+    expect(navigate).toHaveBeenCalledWith(expect.stringContaining('build'));
+    const prefill = peekRetryPrefill();
+    expect(prefill).not.toBeNull();
+    expect(prefill!.projectId).toBe('proj-42');
   });
 });
