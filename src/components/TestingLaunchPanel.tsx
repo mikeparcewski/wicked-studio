@@ -16,7 +16,7 @@ import {
 import type { Project, RepoEntry, RosterSeat, WorkUnit, WorkflowDef } from '../api/types.js';
 import { QE_AUTHOR_TESTS_WORKFLOW_ID } from '../api/wave6-wire.js';
 import { useGateStore } from '../store/gates.js';
-import { getCachedRoster, subscribeRoster } from '../store/rosterCache.js';
+import { getCachedRoster, setCachedRoster, subscribeRoster } from '../store/rosterCache.js';
 import { setCachedWorkflows } from '../store/workflowCache.js';
 import { runShortId } from './runIdentity.js';
 import { SteeringGate } from './SteeringGate.js';
@@ -187,7 +187,16 @@ export function TestingLaunchPanel({ intent, navigate, onClose, onLaunched, init
   const [instructions, setInstructions] = useState('');
   // #302: CLIs chip row (disabled — crew schema has no clisJson on /testing/* bodies yet)
   const [testRoster, setTestRoster] = useState<RosterSeat[] | null>(() => getCachedRoster());
-  useEffect(() => subscribeRoster(setTestRoster), []);
+  useEffect(() => {
+    const unsubscribe = subscribeRoster(setTestRoster);
+    if (getCachedRoster() !== null) return unsubscribe;
+    let cancelled = false;
+    Promise.resolve()
+      .then(() => api.getRoster())
+      .then(({ roster: seats }) => { if (!cancelled) { setCachedRoster(seats); setTestRoster(seats); } })
+      .catch(() => { /* cold roster: chips appear only after the fetch resolves */ });
+    return () => { cancelled = true; unsubscribe(); };
+  }, []);
 
   // ── The governed workflow: read off the daemon, never assumed ─────────────
   const [workflows, setWorkflows] = useState<WorkflowsState>('loading');

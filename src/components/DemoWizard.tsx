@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
+import { api } from '../api/client.js';
 import type { RosterSeat } from '../api/types.js';
 import { createDemoFromDraft, draftReady, stepReady, stepTitle, type DemoDraft } from '../interactive/demoWire.js';
-import { getCachedRoster, subscribeRoster } from '../store/rosterCache.js';
+import { getCachedRoster, setCachedRoster, subscribeRoster } from '../store/rosterCache.js';
 import { S } from './SurfaceState.js';
 
 // The demo wizard (DES-MERGE-001 §4.5, §4.1, §6.4 slice 14; reshaped by VIDEO-FB).
@@ -61,7 +62,16 @@ export function DemoWizard({ projectId, seed, msgId, repoRefs, style, onCancel, 
   const [error, setError] = useState<string | null>(null);
   // #302: CLIs chip row (disabled — demo create body has no clisJson field; pending crew#631)
   const [demoRoster, setDemoRoster] = useState<RosterSeat[] | null>(() => getCachedRoster());
-  useEffect(() => subscribeRoster(setDemoRoster), []);
+  useEffect(() => {
+    const unsubscribe = subscribeRoster(setDemoRoster);
+    if (getCachedRoster() !== null) return unsubscribe;
+    let cancelled = false;
+    Promise.resolve()
+      .then(() => api.getRoster())
+      .then(({ roster: seats }) => { if (!cancelled) { setCachedRoster(seats); setDemoRoster(seats); } })
+      .catch(() => { /* cold roster: chips appear only after the fetch resolves */ });
+    return () => { cancelled = true; unsubscribe(); };
+  }, []);
   const staged = draft.targetUrl.trim() !== '';
 
   function addStep(): void {

@@ -24,7 +24,7 @@ function launched(runId: string, over: Partial<AuditEntry> = {}): AuditEntry {
 describe('deriveProvenance (§3.3)', () => {
   it('derives actor + kind from the newest run.launched entry', () => {
     const p = deriveProvenance([launched('r-1')], 'r-1', false);
-    expect(p).toEqual({ state: 'known', actorId: 'mika', actorKind: 'human', channel: 'API' });
+    expect(p).toEqual({ state: 'known', actorId: 'mika', actorKind: 'human', channel: 'unrecorded' });
   });
 
   it('a launch this studio session witnessed derives channel "studio"', () => {
@@ -60,6 +60,23 @@ describe('deriveProvenance (§3.3)', () => {
     const bad = launched('r-1');
     (bad as Record<string, unknown>)['actor'] = { id: 42 };
     expect(deriveProvenance([bad], 'r-1', false)).toEqual({ state: 'unknown' });
+  });
+
+  // R6: no channel + no witness → 'unrecorded'; no channel + witness → 'studio';
+  // detail.channel: 'API' + witness → 'API' (daemon wins over witness)
+  it('R6a: no detail.channel + no witness → channel is unrecorded, never API', () => {
+    const p = deriveProvenance([launched('r-1')], 'r-1', false);
+    expect(p.state === 'known' && p.channel).toBe('unrecorded');
+  });
+
+  it('R6b: no detail.channel + witness → channel is studio', () => {
+    const p = deriveProvenance([launched('r-1')], 'r-1', true);
+    expect(p.state === 'known' && p.channel).toBe('studio');
+  });
+
+  it('R6c: detail.channel "API" + witness → channel is API (daemon wins)', () => {
+    const p = deriveProvenance([launched('r-1', { detail: { channel: 'API' } })], 'r-1', true);
+    expect(p.state === 'known' && p.channel).toBe('API');
   });
 });
 

@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import type { RosterSeat } from '../api/types.js';
 import { apiStatus } from '../api/errors.js';
-import { getCachedRoster, subscribeRoster } from '../store/rosterCache.js';
+import { api } from '../api/client.js';
+import { getCachedRoster, setCachedRoster, subscribeRoster } from '../store/rosterCache.js';
 import { createDoc, docBinding, getVersions, injectDocMessage, interactiveUrl, postEvent, postFork } from '../api/interactive.js';
 import { parseCreateAsk } from '../interactive/createAsk.js';
 import { docSlug } from '../interactive/docSlug.js';
@@ -734,7 +735,16 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
   const [noGrounding, setNoGrounding] = useState(false);
   // #302: show CLIs chip row (disabled — crew schema has no clisJson on doc APIs yet)
   const [docRoster, setDocRoster] = useState<RosterSeat[] | null>(() => getCachedRoster());
-  useEffect(() => subscribeRoster(setDocRoster), []);
+  useEffect(() => {
+    const unsubscribe = subscribeRoster(setDocRoster);
+    if (getCachedRoster() !== null) return unsubscribe;
+    let cancelled = false;
+    Promise.resolve()
+      .then(() => api.getRoster())
+      .then(({ roster: seats }) => { if (!cancelled) { setCachedRoster(seats); setDocRoster(seats); } })
+      .catch(() => { /* cold roster: chips appear only after the fetch resolves */ });
+    return () => { cancelled = true; unsubscribe(); };
+  }, []);
   // The picks belong to ONE launch context. This component is not remounted when the route moves
   // (App.tsx), so a selection made for project A would otherwise ride the next create in project
   // B — a 400 `repo_not_in_project` at best, a silently wrong subject at worst (Copilot on #241).

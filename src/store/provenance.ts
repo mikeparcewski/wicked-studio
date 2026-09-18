@@ -25,12 +25,13 @@ export type Provenance =
       actorId: string;
       actorKind: ActorKind;
       /**
-       * The launch channel. The audit detail carries no channel marker, so the
-       * honest derivation is: a run THIS studio session launched is `studio`
-       * (we witnessed the POST); anything else can only truthfully be called
-       * the API — a curl, another skin, a schedule all look identical here.
+       * The launch channel. Resolution order: (1) `detail.channel` on the audit
+       * entry (crew#632 — not yet written by the daemon); (2) the per-tab
+       * sessionStorage witness (`studio`); (3) `unrecorded` — the daemon has not
+       * written the field and this tab did not witness the launch. Never 'API'
+       * without the daemon saying so.
        */
-      channel: 'studio' | 'API';
+      channel: 'studio' | 'API' | 'unrecorded';
       /** Lineage from the audit detail (CREW-UX-3): the run this one retries. */
       retryOf?: string;
     }
@@ -67,11 +68,11 @@ export function deriveProvenance(
   const detail = (launched.detail ?? {}) as Record<string, unknown>;
   const retryOf = typeof detail['retryOf'] === 'string' ? detail['retryOf'] : undefined;
   const detailChannel = detail['channel'];
-  const channel: 'studio' | 'API' =
+  const channel: 'studio' | 'API' | 'unrecorded' =
     detailChannel === 'studio' ? 'studio'
     : detailChannel === 'API'  ? 'API'
     : launchedHere             ? 'studio'
-    :                            'API';
+    :                            'unrecorded';
   return {
     state: 'known',
     actorId: launched.actor.id,

@@ -24,7 +24,7 @@ npm publish dates. Every version listed here exists on
 
 - **CLIs chip row (#302): Document, Video, and Testing composers show disabled seat chips pending crew schema support.** `DocumentThread`, `DemoWizard`, and `TestingLaunchPanel` render the known roster as greyed-out CLIs chips with a one-line note; the chips become interactive once crew adds `clisJson` / a seat field to `InteractiveDocCreateRequest` / the demo create body / `TestingReconBody` / `TestingAuthorBody` (pending crew#631).
 
-- **Run provenance survives page reload (#298): sessionStorage witness + forward-compat `detail.channel` read.** `markLaunchedHere` now persists the studio-launch record to `sessionStorage` (survives same-session reload) in addition to the Zustand store; `deriveProvenance` reads `detail.channel` from the audit entry first (forward-compat for a future daemon field) then falls back to the persisted witness so "via studio" never flips to "via API" on reload.
+- **Run provenance survives page reload (#298): sessionStorage witness + forward-compat `detail.channel` read.** `markLaunchedHere` persists the studio-launch record to `sessionStorage` (survives same-session reload) in addition to the Zustand store; `deriveProvenance` reads `detail.channel` from the run record first (crew#632 — the daemon does not write it yet); until then a per-tab sessionStorage witness carries 'via studio' across a same-tab reload; a second tab or another browser still reads 'via API'; when neither the record nor the witness says anything the channel is reported as not recorded, never as 'API'.
 
 ## [0.5.12] — 2026-09-15
 _Built against `wicked-crew-api-types` **0.38.0** (unchanged since 0.5.11)._
