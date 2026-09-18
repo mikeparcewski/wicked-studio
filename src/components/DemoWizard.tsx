@@ -1,5 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { api } from '../api/client.js';
+import type { RosterSeat } from '../api/types.js';
 import { createDemoFromDraft, draftReady, stepReady, stepTitle, type DemoDraft } from '../interactive/demoWire.js';
+import { getCachedRoster, setCachedRoster, subscribeRoster } from '../store/rosterCache.js';
 import { S } from './SurfaceState.js';
 
 // The demo wizard (DES-MERGE-001 §4.5, §4.1, §6.4 slice 14; reshaped by VIDEO-FB).
@@ -57,6 +60,18 @@ export function DemoWizard({ projectId, seed, msgId, repoRefs, style, onCancel, 
   const [step, setStep] = useState({ subject: '', action: '' });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // #302: CLIs chip row (disabled — demo create body has no clisJson field; pending crew#631)
+  const [demoRoster, setDemoRoster] = useState<RosterSeat[] | null>(() => getCachedRoster());
+  useEffect(() => {
+    const unsubscribe = subscribeRoster(setDemoRoster);
+    if (getCachedRoster() !== null) return unsubscribe;
+    let cancelled = false;
+    Promise.resolve()
+      .then(() => api.getRoster())
+      .then(({ roster: seats }) => { if (!cancelled) { setCachedRoster(seats); setDemoRoster(seats); } })
+      .catch(() => { /* cold roster: chips appear only after the fetch resolves */ });
+    return () => { cancelled = true; unsubscribe(); };
+  }, []);
   const staged = draft.targetUrl.trim() !== '';
 
   function addStep(): void {
@@ -174,6 +189,29 @@ export function DemoWizard({ projectId, seed, msgId, repoRefs, style, onCancel, 
             </button>
           </div>
         </>
+      )}
+
+      {/* #302: CLIs chip row — same visual as Build composer; demo create body has no clisJson
+          (the governed spec run seats are chosen by the daemon) so chips are disabled pending crew#631. */}
+      {demoRoster !== null && demoRoster.length > 0 && (
+        <div
+          data-testid="demo-clis-row"
+          className="flex flex-wrap items-center gap-1.5"
+        >
+          {demoRoster.map((s) => (
+            <span
+              key={s.key}
+              className="rounded-full px-2 py-0.5 text-[10px] font-mono opacity-40 cursor-not-allowed select-none"
+              style={{ background: 'var(--surface-raised)', color: 'var(--ink-body)', border: '1px solid var(--surface-overlay)' }}
+              title="CLIs selection not yet available for Video mode"
+            >
+              {s.key}
+            </span>
+          ))}
+          <span className="text-[10px]" style={{ color: S.muted }}>
+            CLIs not yet configurable here — pending crew#631
+          </span>
+        </div>
       )}
 
       <div className="mt-auto flex items-center gap-2 pt-2">

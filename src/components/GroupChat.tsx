@@ -5,6 +5,7 @@ import { apiStatus, apiWire } from '../api/errors.js';
 import type {
   ChatOpenBody, ChatScope, ChatSeatRefusal, ChatTranscriptRecord, ChatUsage, Project, RepoEntry, RosterSeat,
 } from '../api/types.js';
+import { launchPath } from '../hooks/ambientProject.js';
 import { useEventStream } from '../hooks/useEventStream.js';
 import { pinAwaiting } from '../store/awaitingPins.js';
 import { fetchReposCached, getCachedRepos } from '../store/repoCache.js';
@@ -1398,26 +1399,34 @@ export function GroupChat({
    */
   function promoteToBuild(): void {
     if (navigate === undefined) return;
+    const userMessages = messages.filter((m) => m.kind === 'user');
+    const firstAsk = userMessages[0]?.text ?? '';
+    // PR-safe headline: first user question, ≤72 chars, absolute paths redacted
+    const headline = firstAsk
+      .replace(/\/(?:Users|home|root|tmp)\S*/g, '<path>')
+      .slice(0, 72)
+      .trimEnd();
     const transcript = messages
       .filter((m) => m.kind === 'user' || (m.kind === 'seat' && !m.pending))
       .map((m) => (m.kind === 'user' ? `operator: ${m.text}` : `${(m as { cliKey: string }).cliKey}: ${m.text}`))
       .join('\n');
     const MAX = 6000; // keep the prefill a context, not a payload
     const clipped = transcript.length > MAX ? `…${transcript.slice(-MAX)}` : transcript;
+    const ambient = projectId ?? selectedProjectRef.current;
     setRetryPrefill({
       retryOf: null,
-      problem: `Continue from this chat — the transcript is context, the last ask is the intent:\n\n${clipped}`,
+      problem: `${headline}\n\n---\n${clipped}`,
       clis: (() => {
-        const warm = Object.entries(seats).filter(([, st]) => WARM_STATES.has(st)).map(([k]) => k);
-        return warm.length > 0 ? warm : selectedAgentsRef.current;
+        const answered = Object.entries(seats).filter(([, st]) => st === 'replied').map(([k]) => k);
+        return answered.length > 0 ? answered : selectedAgentsRef.current;
       })(),
       workflowId: null,
       repoRef: repoId ?? null,
       entityMode: 'shared',
-      humanConfirm: 'none',
-      projectId: projectId ?? selectedProjectRef.current,
+      humanConfirm: { before: 1 },
+      projectId: ambient,
     });
-    navigate('/runs/new');
+    navigate(launchPath(ambient, 'build'));
   }
 
   async function endChat(): Promise<void> {

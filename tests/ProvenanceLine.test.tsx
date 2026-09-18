@@ -27,6 +27,16 @@ describe('ProvenanceLine', () => {
       .toHaveTextContent('launched via API (actor unknown)');
   });
 
+  it('unrecorded channel renders "launch channel not recorded", never "via unrecorded"', () => {
+    render(<ProvenanceLine
+      provenance={{ state: 'known', actorId: 'mika', actorKind: 'human', channel: 'unrecorded' }}
+      testId="run-provenance"
+    />);
+    const line = screen.getByTestId('run-provenance');
+    expect(line).toHaveTextContent('launch channel not recorded');
+    expect(line).not.toHaveTextContent('via unrecorded');
+  });
+
   it('renders the degraded copy while the audit answer is still null', () => {
     render(<ProvenanceLine provenance={null} testId="notif-provenance" />);
     expect(screen.getByTestId('notif-provenance'))

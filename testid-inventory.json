@@ -11,8 +11,8 @@
   "studioVersion": "0.5.12",
   "counts": {
     "files": 146,
-    "occurrences": 1336,
-    "static": 1147,
+    "occurrences": 1339,
+    "static": 1150,
     "dynamic": 63,
     "computed": 7
   },
@@ -1548,6 +1548,12 @@
       ]
     },
     {
+      "testId": "demo-clis-row",
+      "files": [
+        "src/components/DemoWizard.tsx"
+      ]
+    },
+    {
       "testId": "demo-picker",
       "files": [
         "src/components/VideoStoryboard.tsx"
@@ -1647,6 +1653,12 @@
       "testId": "doc-canvas",
       "files": [
         "src/components/DocumentCanvas.tsx"
+      ]
+    },
+    {
+      "testId": "doc-clis-row",
+      "files": [
+        "src/components/DocumentThread.tsx"
       ]
     },
     {
@@ -5986,6 +5998,12 @@
       "testId": "testing-campaign-open",
       "files": [
         "src/components/CampaignsPage.tsx"
+      ]
+    },
+    {
+      "testId": "testing-clis-row",
+      "files": [
+        "src/components/TestingLaunchPanel.tsx"
       ]
     },
     {

@@ -24,12 +24,22 @@ function launched(runId: string, over: Partial<AuditEntry> = {}): AuditEntry {
 describe('deriveProvenance (§3.3)', () => {
   it('derives actor + kind from the newest run.launched entry', () => {
     const p = deriveProvenance([launched('r-1')], 'r-1', false);
-    expect(p).toEqual({ state: 'known', actorId: 'mika', actorKind: 'human', channel: 'API' });
+    expect(p).toEqual({ state: 'known', actorId: 'mika', actorKind: 'human', channel: 'unrecorded' });
   });
 
   it('a launch this studio session witnessed derives channel "studio"', () => {
     const p = deriveProvenance([launched('r-1')], 'r-1', true);
     expect(p.state === 'known' && p.channel).toBe('studio');
+  });
+
+  it('detail.channel === "studio" yields studio regardless of launchedHere (forward-compat daemon field)', () => {
+    const p = deriveProvenance([launched('r-1', { detail: { channel: 'studio' } })], 'r-1', false);
+    expect(p.state === 'known' && p.channel).toBe('studio');
+  });
+
+  it('detail.channel === "API" overrides launchedHere (daemon wins)', () => {
+    const p = deriveProvenance([launched('r-1', { detail: { channel: 'API' } })], 'r-1', true);
+    expect(p.state === 'known' && p.channel).toBe('API');
   });
 
   it('carries retryOf from the audit detail (CREW-UX-3)', () => {
@@ -51,12 +61,30 @@ describe('deriveProvenance (§3.3)', () => {
     (bad as Record<string, unknown>)['actor'] = { id: 42 };
     expect(deriveProvenance([bad], 'r-1', false)).toEqual({ state: 'unknown' });
   });
+
+  // R6: no channel + no witness → 'unrecorded'; no channel + witness → 'studio';
+  // detail.channel: 'API' + witness → 'API' (daemon wins over witness)
+  it('R6a: no detail.channel + no witness → channel is unrecorded, never API', () => {
+    const p = deriveProvenance([launched('r-1')], 'r-1', false);
+    expect(p.state === 'known' && p.channel).toBe('unrecorded');
+  });
+
+  it('R6b: no detail.channel + witness → channel is studio', () => {
+    const p = deriveProvenance([launched('r-1')], 'r-1', true);
+    expect(p.state === 'known' && p.channel).toBe('studio');
+  });
+
+  it('R6c: detail.channel "API" + witness → channel is API (daemon wins)', () => {
+    const p = deriveProvenance([launched('r-1', { detail: { channel: 'API' } })], 'r-1', true);
+    expect(p.state === 'known' && p.channel).toBe('API');
+  });
 });
 
 describe('useProvenanceStore.load (§3.5: one fetch per run id, cached)', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     useProvenanceStore.setState({ byRun: {}, launchedHere: {} });
+    sessionStorage.clear();
   });
 
   it('fetches once, caches, and never re-fires on revisit', async () => {
@@ -85,6 +113,20 @@ describe('useProvenanceStore.load (§3.5: one fetch per run id, cached)', () => 
     useProvenanceStore.getState().load('r-9');
     await waitFor(() => {
       const p = useProvenanceStore.getState().byRun['r-9'];
+      expect(p?.state === 'known' && p.channel).toBe('studio');
+    });
+  });
+
+  it('studio channel survives page reload — sessionStorage witness persists across Zustand resets', async () => {
+    // Simulate: run was launched in a prior page load (sessionStorage persists; Zustand does not)
+    vi.spyOn(client.api, 'getAudit').mockResolvedValue({ entries: [launched('r-reload')] });
+    useProvenanceStore.getState().markLaunchedHere('r-reload');
+    // Simulate reload: reset Zustand (no markLaunchedHere call in the new session)
+    useProvenanceStore.setState({ byRun: {}, launchedHere: {} });
+    // sessionStorage still holds the witness from the prior session
+    useProvenanceStore.getState().load('r-reload');
+    await waitFor(() => {
+      const p = useProvenanceStore.getState().byRun['r-reload'];
       expect(p?.state === 'known' && p.channel).toBe('studio');
     });
   });
