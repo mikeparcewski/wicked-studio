@@ -684,7 +684,7 @@ export function App(): React.ReactElement {
 
       {/* Right panel only when a run is selected */}
       {selected !== null && (
-        <RightPanel view={selected} runs={runs} onSelectRun={selectRun} />
+        <RightPanel view={selected} runs={runs} onSelectRun={selectRun} navigate={navigate} />
       )}
 
       {/* ASK — the app-wide assist dock, a right-edge sibling column on every route.

@@ -11,8 +11,8 @@
   "studioVersion": "0.5.12",
   "counts": {
     "files": 146,
-    "occurrences": 1326,
-    "static": 1142,
+    "occurrences": 1336,
+    "static": 1147,
     "dynamic": 63,
     "computed": 7
   },
@@ -1413,6 +1413,18 @@
       "testId": "decisions-ledger",
       "files": [
         "src/components/DecisionsLedger.tsx"
+      ]
+    },
+    {
+      "testId": "deliver-gate-diffstat",
+      "files": [
+        "src/components/SteeringGate.tsx"
+      ]
+    },
+    {
+      "testId": "deliver-gate-full-diff",
+      "files": [
+        "src/components/SteeringGate.tsx"
       ]
     },
     {
@@ -4476,6 +4488,12 @@
       ]
     },
     {
+      "testId": "run-revise-pr",
+      "files": [
+        "src/components/RunDelivery.tsx"
+      ]
+    },
+    {
       "testId": "run-times",
       "files": [
         "src/components/runIdentity.tsx"
@@ -5723,6 +5741,12 @@
       ]
     },
     {
+      "testId": "steering-request-changes",
+      "files": [
+        "src/components/SteeringGate.tsx"
+      ]
+    },
+    {
       "testId": "steering-retire-cancel",
       "files": [
         "src/components/SteeringRetireModal.tsx"
@@ -5768,6 +5792,12 @@
       "testId": "steering-retired-note",
       "files": [
         "src/components/SteeringPage.tsx"
+      ]
+    },
+    {
+      "testId": "steering-retry",
+      "files": [
+        "src/components/SteeringGate.tsx"
       ]
     },
     {
