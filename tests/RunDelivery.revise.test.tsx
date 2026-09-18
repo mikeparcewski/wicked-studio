@@ -104,13 +104,13 @@ describe('RunDelivery — "Revise this PR" button (#301)', () => {
     });
   });
 
-  it('prefill carries the session problem as the title', async () => {
+  it('prefill problem is prefixed with "Revise PR #N (<headRef>):" and seeds from the session problem', async () => {
     const user = userEvent.setup();
     const navigate = vi.fn();
     render(<RunDelivery view={deliveredView()} navigate={navigate} />);
     await user.click(screen.getByTestId('run-revise-pr'));
     const prefill = takeRetryPrefill();
-    expect(prefill!.problem).toBe(PROBLEM);
+    expect(prefill!.problem).toBe(`Revise PR #42 (${RUN_BRANCH}): ${PROBLEM}`);
   });
 
   it('headRef falls back to empty string when run_branch is absent', async () => {

@@ -12,7 +12,7 @@ import { DeliverLift } from './DeliverLift.js';
 import { deliverLift, textCarriesFailure } from './deliverLiftModel.js';
 import { GATE_HASH } from './GateChip.js';
 import { GateVerdict } from './GateVerdict.js';
-import { failedSeatOf, gateVerdictFor, isFailureEscalation, isSeatFailure, isRestoredRetry, phaseLabel } from './gateVerdictModel.js';
+import { failedSeatOf, gateVerdictFor, isEscalationGate, isFailureEscalation, isSeatFailure, isRestoredRetry, phaseLabel } from './gateVerdictModel.js';
 import { IntakePlan, isIntakeGate } from './IntakePlan.js';
 import { ReassignControl } from './ReassignControl.js';
 
@@ -106,6 +106,11 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
   // a refused lift is the engine's story, told by the lift block below — another seat cannot fix
   // a rebase conflict), which is why the control is also gated on `lift === null` at the render.
   const escalation = isFailureEscalation(prompt, verdict);
+  // All engine escalation gates that render the four-verb layout (#299 AC1): triage-escalated,
+  // floor_failed (repo_checks), and verdict_not_pass (evaluator_verdict). Keyed on
+  // `isEscalationGate`; `escalation` (isFailureEscalation) is kept ONLY for the seat-reassign
+  // lever (F-7R2-007 / F-E2E-014) — that predicate must not widen.
+  const escalationGate = isEscalationGate(prompt, verdict);
   // Tri-state (#274): a seat, `null` = the unit provably had none, `undefined` = this host cannot
   // tell (no `units` — the steering-author / testing-launch panels) and must not read it as seatless.
   const failedCli = failedSeatOf(units, ord);
@@ -300,7 +305,7 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
   // matters most, and nowhere else on the page.
   const actions = useRef({ approve, reject });
   // On escalation gates the 'a' key fires Retry (optionally carries amend), not the plain approve.
-  actions.current = { approve: escalation ? retry : approve, reject };
+  actions.current = { approve: escalationGate ? retry : approve, reject };
   const keyEntries = useMemo<ShortcutEntry[]>(() => {
     const focused = (): boolean =>
       !inflight.current &&
@@ -337,7 +342,7 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
   // full cause appears in the headline (F-E2E-014). Non-escalation prompts carry a genuine
   // architectural footnote that belongs collapsed.
   const rawPrompt = prompt ?? 'Prompt unavailable (daemon restarted) — you can still approve or reject.';
-  const { headline, footnote } = escalation ? { headline: rawPrompt.trim(), footnote: null } : cleanPrompt(rawPrompt);
+  const { headline, footnote } = escalationGate ? { headline: rawPrompt.trim(), footnote: null } : cleanPrompt(rawPrompt);
 
   // Both mutation-gate prompts the engine has shipped — the pre-0.33.0 retry-or-reject wording and
   // wicked-core#431's "… Approve to retry the phase against the restored tree …" — carry
@@ -501,7 +506,7 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
         />
       )}
 
-      {escalation && lift === null ? (
+      {escalationGate && lift === null ? (
         /* Non-deliver escalation (#299): Retry / Request changes / Reject / Cancel run.
          * "Request changes" rewinds to the last creator phase — semantically correct when a
          * build/recon/verify unit failed. Deliver-unit escalations (lift !== null) suppress it
@@ -546,7 +551,7 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
             Cancel run
           </button>
         </div>
-      ) : escalation && lift !== null ? (
+      ) : escalationGate && lift !== null ? (
         /* Deliver-unit escalation (#299): Retry (optionally amend) / Reject / Cancel run.
          * No "Request changes" — rewinding to the creator cannot fix a git-push or rebase-conflict
          * failure; the daemon prompt says "Approve to retry (optionally amend), reject to fail the
@@ -625,11 +630,11 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
       )}
 
       {/* Mode-selector note / action hint */}
-      {escalation && lift === null ? (
+      {escalationGate && lift === null ? (
         <p className="text-[10px] font-mono mt-2" style={{ color: 'var(--ink-dim)' }}>
-          Retry re-runs the failed unit · Request changes rewinds to the last creator phase (note required) · Reject cancels the run
+          Retry re-runs the failed unit · Request changes rewinds to the last creator phase (note required) · Reject cancels the run · Cancel run stops the run without a gate decision
         </p>
-      ) : escalation && lift !== null ? (
+      ) : escalationGate && lift !== null ? (
         <p className="text-[10px] font-mono mt-2" style={{ color: 'var(--ink-dim)' }}>
           Retry re-dispatches the deliver unit (optionally with a note) · Reject fails the run
         </p>

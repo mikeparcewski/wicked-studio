@@ -277,6 +277,25 @@ export function RunDelivery({ view, navigate }: Props): React.ReactElement {
   const events = useRunEventStore((s) => s.byRun[runId]) ?? EMPTY_EVENTS;
   const deliverOrd = unitId === null ? null : (view.units.find((u) => u.id === unitId)?.ord ?? null);
   const lift = useMemo(() => (deliverOrd === null ? null : deliverLift(events, deliverOrd)), [events, deliverOrd]);
+  // Revise prefill context (#301): the last gateEvaluated's evaluatorVerdict (api-types 0.38.0)
+  // wins over denial.reason — appended after " — " in the seeded problem statement. The 0.7.38
+  // daemon serves no PR-review-thread route, so the run's own event log is the only source.
+  const reviseContext = useMemo(() => {
+    for (let i = events.length - 1; i >= 0; i--) {
+      const ev = events[i]!;
+      if (ev.type !== 'gateEvaluated') continue;
+      const raw = ev as Record<string, unknown>;
+      const evaluatorVerdict = raw['evaluatorVerdict'];
+      if (typeof evaluatorVerdict === 'string' && evaluatorVerdict.trim()) return evaluatorVerdict.trim();
+      const denial = raw['denial'];
+      if (typeof denial === 'object' && denial !== null) {
+        const dr = (denial as Record<string, unknown>)['reason'];
+        if (typeof dr === 'string' && dr.trim()) return dr.trim();
+      }
+      return null;
+    }
+    return null;
+  }, [events]);
   // A rejected deliver unit's `denial_reason` (rendered VERBATIM below) carries the engine's refusal
   // the lift view also holds as `failure` — FRAMED (`Worker FAILED on unit N: …`) and excerpted
   // differently from `stepFailed.detail` (actor.rs: 300/500 vs 150/250 head+tail) — so the lift block
@@ -339,16 +358,19 @@ export function RunDelivery({ view, navigate }: Props): React.ReactElement {
             data-testid="run-revise-pr"
             data-pr={String(prNum)}
             onClick={() => {
+              const headRef = view.session.run_branch ?? '';
+              const baseProblem = `Revise PR #${prNum} (${headRef}): ${view.session.problem}`;
+              const reviseProblem = reviseContext ? `${baseProblem} — ${reviseContext}` : baseProblem;
               setRetryPrefill({
                 retryOf: null,
-                problem: view.session.problem,
+                problem: reviseProblem,
                 clis: view.session.clis,
                 workflowId: view.session.workflow_id ?? null,
                 repoRef: view.session.repo_ref ?? null,
                 entityMode: view.session.entity_mode,
                 humanConfirm: view.session.human_confirm,
                 projectId: typeof view.session.project_id === 'string' ? view.session.project_id : null,
-                revisesPr: { number: prNum, title: view.session.problem, headRef: view.session.run_branch ?? '' },
+                revisesPr: { number: prNum, title: view.session.problem, headRef },
               });
               navigate('/runs/new');
             }}

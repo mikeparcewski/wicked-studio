@@ -15,6 +15,7 @@ import { useAnnotationStore } from '../src/store/annotations.js';
 import { useGateStore } from '../src/store/gates.js';
 import { useRunEventStore } from '../src/store/events.js';
 import { useSteeringStore } from '../src/store/steering.js';
+import type { CoreEvent } from '../src/api/types.js';
 
 const RUN = 'esc-gate-test';
 const ESCALATION_PROMPT = 'Unit 2 failed and triage escalated: the build phase timed out (Failed): [timeout after 120s]';
@@ -103,6 +104,7 @@ describe('SteeringGate — escalation gate layout (#299)', () => {
       expect(gate.textContent).toMatch(/Retry re-runs the failed unit/);
       expect(gate.textContent).toMatch(/Request changes rewinds to the last creator phase/);
       expect(gate.textContent).toMatch(/Reject cancels the run/);
+      expect(gate.textContent).toMatch(/Cancel run stops the run without a gate decision/);
       expect(gate.textContent).not.toMatch(/Workflow-declared gate/);
     });
 
@@ -128,6 +130,118 @@ describe('SteeringGate — escalation gate layout (#299)', () => {
     it('confirm line says "Workflow-declared gate" for non-escalation', () => {
       render(<SteeringGate runId={RUN} ord={3} prompt={NORMAL_PROMPT} />);
       expect(screen.getByTestId('steering-gate').textContent).toMatch(/Workflow-declared gate/);
+    });
+  });
+
+  // floor_failed prompt shape (condition=floor_failed, denialSource=repo_checks)
+  describe('floor_failed escalation gate (repo_checks denial)', () => {
+    const FLOOR_FAILED_PROMPT =
+      'Unit 3 failed its deterministic floor (repo_checks): typecheck exited 1. ' +
+      'confirm to retry the phase, or reject to cancel the run.';
+
+    function seedRepoChecksEvent(): void {
+      useRunEventStore.setState({
+        byRun: {
+          [RUN]: [
+            {
+              type: 'gateEvaluated',
+              ord: 3,
+              combined: false,
+              hasDeterministicFloor: true,
+              agentVerdict: null,
+              evaluatorPolicies: [],
+              denial: { source: 'repo_checks', reason: 'Repository checks failed on head', claimId: null, ruleIds: [], deniedTool: null, phase: 'build' },
+            } as unknown as CoreEvent,
+          ],
+        },
+      });
+    }
+
+    it('renders Retry, Request changes, Reject, Cancel run — not the standard Approve layout', () => {
+      seedRepoChecksEvent();
+      render(<SteeringGate runId={RUN} ord={3} prompt={FLOOR_FAILED_PROMPT} />);
+      expect(screen.getByTestId('steering-retry')).toBeInTheDocument();
+      expect(screen.getByTestId('steering-request-changes')).toBeInTheDocument();
+      expect(screen.getByTestId('steering-reject')).toBeInTheDocument();
+      expect(screen.getByTestId('steering-cancel')).toBeInTheDocument();
+      expect(screen.queryByTestId('steering-approve')).toBeNull();
+      expect(screen.queryByTestId('steering-approve-steer')).toBeNull();
+    });
+
+    it('Request changes → confirmGate({approve:false, action:"request_changes", amend}) with the note', async () => {
+      seedRepoChecksEvent();
+      const user = userEvent.setup();
+      render(<SteeringGate runId={RUN} ord={3} prompt={FLOOR_FAILED_PROMPT} />);
+      await user.type(screen.getByTestId('steering-amend'), 'fix the typecheck error');
+      await user.click(screen.getByTestId('steering-request-changes'));
+      expect(client.api.confirmGate).toHaveBeenCalledWith(RUN, {
+        approve: false,
+        action: 'request_changes',
+        amend: 'fix the typecheck error',
+      });
+    });
+
+    it('reassign row does NOT appear (no seat failure on a repo_checks denial)', () => {
+      seedRepoChecksEvent();
+      render(<SteeringGate runId={RUN} ord={3} prompt={FLOOR_FAILED_PROMPT} clis={['claude', 'codex']} units={[]} />);
+      expect(screen.queryByTestId('steering-reassign-status')).toBeNull();
+    });
+  });
+
+  // verdict_not_pass prompt shape (condition=verdict_not_pass, denialSource=evaluator_verdict)
+  describe('verdict_not_pass escalation gate (evaluator_verdict denial)', () => {
+    const VERDICT_NOT_PASS_PROMPT =
+      'Unit 4 verdict is NOT PASS — evaluator denied this phase. ' +
+      'confirm to retry the phase, request changes to send the review back to the creator phase, ' +
+      'or reject to cancel the run.';
+
+    function seedEvaluatorVerdictEvent(): void {
+      useRunEventStore.setState({
+        byRun: {
+          [RUN]: [
+            { type: 'unitDispatched', ord: 4, attempt: 0 } as unknown as CoreEvent,
+            {
+              type: 'gateEvaluated',
+              ord: 4,
+              combined: false,
+              hasDeterministicFloor: false,
+              agentVerdict: 'NOT PASS',
+              evaluatorPolicies: [],
+              denial: { source: 'evaluator_verdict', reason: 'Evaluator judged this NOT PASS', claimId: null, ruleIds: [], deniedTool: null, phase: 'verify' },
+            } as unknown as CoreEvent,
+          ],
+        },
+      });
+    }
+
+    it('renders Retry, Request changes, Reject, Cancel run — not the standard Approve layout', () => {
+      seedEvaluatorVerdictEvent();
+      render(<SteeringGate runId={RUN} ord={4} prompt={VERDICT_NOT_PASS_PROMPT} />);
+      expect(screen.getByTestId('steering-retry')).toBeInTheDocument();
+      expect(screen.getByTestId('steering-request-changes')).toBeInTheDocument();
+      expect(screen.getByTestId('steering-reject')).toBeInTheDocument();
+      expect(screen.getByTestId('steering-cancel')).toBeInTheDocument();
+      expect(screen.queryByTestId('steering-approve')).toBeNull();
+      expect(screen.queryByTestId('steering-approve-steer')).toBeNull();
+    });
+
+    it('Request changes → confirmGate({approve:false, action:"request_changes", amend}) with the note', async () => {
+      seedEvaluatorVerdictEvent();
+      const user = userEvent.setup();
+      render(<SteeringGate runId={RUN} ord={4} prompt={VERDICT_NOT_PASS_PROMPT} />);
+      await user.type(screen.getByTestId('steering-amend'), 'address the evaluator feedback');
+      await user.click(screen.getByTestId('steering-request-changes'));
+      expect(client.api.confirmGate).toHaveBeenCalledWith(RUN, {
+        approve: false,
+        action: 'request_changes',
+        amend: 'address the evaluator feedback',
+      });
+    });
+
+    it('reassign row does NOT appear (no seat failure on an evaluator_verdict denial)', () => {
+      seedEvaluatorVerdictEvent();
+      render(<SteeringGate runId={RUN} ord={4} prompt={VERDICT_NOT_PASS_PROMPT} clis={['claude', 'codex']} units={[]} />);
+      expect(screen.queryByTestId('steering-reassign-status')).toBeNull();
     });
   });
 
