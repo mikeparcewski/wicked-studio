@@ -27,9 +27,12 @@ There is no notion of a document, and Projects are a thin membership+activity pa
 
 [^projdetail]: **No longer true (amended 2026-09-20, wicked-studio#249).** That sentence
     describes `ProjectDetailPage` as it stood when this document was written. Since #207 the
-    page also owns Edit (rename/describe), Archive/Restore, and repo attach/detach — the
-    last being the *only* UI path that attaches a `crew.repo` to a project
-    (`ProjectRepositories.tsx:8-19`). It is no longer "nothing produced": it is the project
+    page also owns **Edit (rename/describe) and Archive/Restore** — of which it is the only
+    surface in the product (`ProjectDetailPage.tsx:190` and `:209` are the sole callers) — and
+    it carries repo attach/detach as well, though that one is **shared**: the same
+    `<ProjectRepositories>` component also renders on the `/p/:id` dashboard
+    (`ProjectDashboard.tsx:823`), and a repo can be bound at registration from `/repos`
+    (`RepositoriesPanel.tsx:303`). It is no longer "nothing produced": it is the project
     **management** surface, and it is retained at `/projects/:id` by the §1.5 amendment. The
     §1.1 critique still holds for what it was actually about — studio's *browse* IA made
     projects a directory listing rather than a place where work is visible, which is what
@@ -155,11 +158,21 @@ union stays for the side panels.
 > implemented that literally: `useLegacyRedirect` redirected the route away. The effect was
 > not a back-compat redirect but the **loss of a live surface** — `ProjectDetailPage` is
 > still rendered (`src/App.tsx:625`) and is the **only** place in the product that owns
-> Edit, Archive/Restore and repo attach/detach (`ProjectRepositories.tsx:8-19` — attach is
-> `POST /projects/:id/members`, detach `DELETE /projects/:id/members/:mid`; it is "the one
-> UI path that attaches a `crew.repo`"). Because the redirect fired, none of those verbs
-> was reachable by navigating the app, so operators could not archive or restore a project
-> at all (#214).
+> **Edit (rename/describe) and Archive/Restore**: `api.updateProject(id, {name, description})`
+> at `ProjectDetailPage.tsx:190` and `api.updateProject(id, {status})` at `:209` are the only
+> callers of either (the other `updateProject` callers — `ProjectDashboard.tsx:855`,
+> `wave6-wire.ts:1074` — write `interactiveRoot`, the Documents root, not these verbs).
+> Because the redirect fired, neither verb was reachable by navigating the app, so operators
+> could not archive or restore a project at all (#214).
+>
+> The page also carries **repo attach/detach, but that one is shared, not exclusive**: the
+> same `<ProjectRepositories>` component is mounted both here (`ProjectDetailPage.tsx:369`)
+> and on the `/p/:id` dashboard (`ProjectDashboard.tsx:823`), and a repo can additionally be
+> bound to a project at registration from `/repos` (`RepositoriesPanel.tsx:303`). The
+> component's own docstring (`ProjectRepositories.tsx:8-19`) says it is "the one UI path that
+> attaches a `crew.repo`" — true of the **component**, which both routes reuse; it is not a
+> claim about this **route**. Attach/detach therefore survived the redirect and is not part
+> of what #214 lost; **Edit and Archive/Restore alone carry this decision.**
 >
 > **The decision: `/projects/:id` is NOT retired. It is the live address of the project
 > management page.** The two surfaces coexist deliberately:
