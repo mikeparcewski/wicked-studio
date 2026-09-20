@@ -88,7 +88,7 @@ export function ProvenanceLine({ provenance, retryOf, retriedAs, onSelectRun, te
           )}
         </>
       ) : (
-        <span style={{ color: 'var(--ink-dim)' }}>launched via API (actor unknown)</span>
+        <span style={{ color: 'var(--ink-dim)' }}>launch not recorded</span>
       )}
       {backLink !== undefined && (
         <>

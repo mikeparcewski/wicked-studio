@@ -3,6 +3,7 @@ import type { AgentSession, CoreEvent } from '../src/api/types.js';
 import type { LoggedEvent } from '../src/store/runtime.js';
 import {
   deriveRunClocks,
+  deriveRunCost,
   durationWord,
   humanTitle,
   runShortId,
@@ -135,5 +136,57 @@ describe('durationWord', () => {
     expect(durationWord(59_000)).toBe('59s');
     expect(durationWord(60_000)).toBe('1m 0s');
     expect(durationWord(3_600_000 + 5 * 60_000)).toBe('1h 5m');
+  });
+});
+
+describe('deriveRunCost (wicked-crew#496, 2026-09-18 — the three AC shapes)', () => {
+  it('shape 1: numeric cost_usd renders the formatted dollar amount', () => {
+    const c = deriveRunCost({ cost_usd: 1.81 });
+    expect(c.text).toBe('$1.81');
+    expect(c.title).toBeUndefined();
+  });
+
+  it('shape 1: cost with usage_seats_reported and array usage_seats_unmetered', () => {
+    const c = deriveRunCost({ cost_usd: 1.81, usage_seats_reported: ['claude'], usage_seats_unmetered: ['pi'] });
+    expect(c.text).toBe('$1.81 · claude (pi unmetered)');
+  });
+
+  it('shape 1: cost with usage_seats_reported and boolean usage_seats_unmetered', () => {
+    const c = deriveRunCost({ cost_usd: 1.81, usage_seats_reported: ['claude', 'pi'], usage_seats_unmetered: true });
+    expect(c.text).toBe('$1.81 · claude, pi (unmetered)');
+  });
+
+  it('shape 1: cost with usage_seats_reported only (not unmetered)', () => {
+    const c = deriveRunCost({ cost_usd: 0.50, usage_seats_reported: ['claude'] });
+    expect(c.text).toBe('$0.50 · claude');
+  });
+
+  it('shape 1: sub-cent cost formats as <$0.01, never $0.00', () => {
+    const c = deriveRunCost({ cost_usd: 0.001 });
+    expect(c.text).toBe('<$0.01');
+  });
+
+  it('shape 2: null cost_usd → "unmetered", no title', () => {
+    const c = deriveRunCost({ cost_usd: null });
+    expect(c.text).toBe('unmetered');
+    expect(c.title).toBeUndefined();
+  });
+
+  it('shape 3: absent cost_usd → "cost not in run record" with crew#496 in title', () => {
+    const c = deriveRunCost({});
+    expect(c.text).toBe('cost not in run record');
+    expect(c.title).toContain('496');
+    expect(c.title).toContain('2026-09-18');
+  });
+
+  it('shape 3: non-session value → "cost not in run record"', () => {
+    expect(deriveRunCost(null).text).toBe('cost not in run record');
+    expect(deriveRunCost(undefined).text).toBe('cost not in run record');
+    expect(deriveRunCost('string').text).toBe('cost not in run record');
+  });
+
+  it('shape 3: non-finite cost_usd (NaN, Infinity) → "cost not in run record", never "$NaN"', () => {
+    expect(deriveRunCost({ cost_usd: NaN }).text).toBe('cost not in run record');
+    expect(deriveRunCost({ cost_usd: Infinity }).text).toBe('cost not in run record');
   });
 });

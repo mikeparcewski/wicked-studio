@@ -17,6 +17,14 @@ import { threadKey, useDocThreadStore } from '../src/store/docThread.js';
 import type { DocSummary } from '../src/api/interactive.js';
 import { apiBase } from '../src/api/client.js';
 
+// AC3: getDemoStatus drives the button's recording state — mock it so tests
+// control in_flight without routing /api/demo/status through the fetch stub.
+const getDemoStatusMock = vi.hoisted(() => vi.fn());
+vi.mock('../src/api/interactive.js', async (orig) => ({
+  ...(await orig<typeof import('../src/api/interactive.js')>()),
+  getDemoStatus: getDemoStatusMock,
+}));
+
 const PROJECT = 'proj-abc-123';
 const DEMO = 'checkout-walkthrough';
 
@@ -72,8 +80,10 @@ beforeEach(() => {
   useDocThreadStore.setState({
     messages: {}, genState: {}, pending: {}, hydrated: {}, landed: {}, lastSignalAt: {}, lastError: {},
   });
+  // AC3: default idle — each test overrides when needed.
+  getDemoStatusMock.mockResolvedValue({ state: 'idle', in_flight: false });
 });
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); getDemoStatusMock.mockReset(); });
 
 // ── 1 + 2. The corrected wire: storyboard HTML in a sandboxed iframe ─────────
 
@@ -200,6 +210,10 @@ describe('the right panel', () => {
 
 describe('the Record control', () => {
   it('speaks demo.requested at the click site and answers there (EC37)', async () => {
+    // AC3: mount poll → idle; re-poll after POST resolves → in_flight:true (recording).
+    getDemoStatusMock
+      .mockResolvedValueOnce({ state: 'idle', in_flight: false })
+      .mockResolvedValue({ state: 'working', in_flight: true });
     stubFetch({
       '/api/versions': { body: MANIFEST },
       '/api/events': { body: { ok: true, event_id: 'e1', correlation_id: 'c1' } },
@@ -221,8 +235,8 @@ describe('the Record control', () => {
     };
     expect(body.event_type).toBe('wicked.interactive.demo.requested');
     expect(body.payload.document_id).toBe(DEMO);
-    // Point-of-action: the button itself wears the pending state until the run
-    // resolves (the thread store's genState — set by recordFromThread).
+    // Point-of-action: the immediate re-poll after POST sets in_flight:true, so
+    // the button enters the "recording" state (AC3 — driven by getDemoStatus).
     expect(screen.getByTestId('video-record')).toHaveAttribute('data-state', 'recording');
     expect(screen.getByTestId('video-record')).toBeDisabled();
   });
@@ -249,6 +263,10 @@ describe("the recorder's failure line (#278, DES-L7 I3)", () => {
   });
 
   it('is hidden while a new attempt is in flight, and another demo\'s failure never shows here', async () => {
+    // AC3: re-poll after POST finds in_flight:true → button enters recording, thread error yields.
+    getDemoStatusMock
+      .mockResolvedValueOnce({ state: 'idle', in_flight: false })
+      .mockResolvedValue({ state: 'working', in_flight: true });
     stubFetch({
       '/api/versions': { body: MANIFEST },
       '/api/events': { body: { ok: true, event_id: 'e1', correlation_id: 'c1' } },
@@ -261,7 +279,7 @@ describe("the recorder's failure line (#278, DES-L7 I3)", () => {
     expect(screen.getAllByTestId('video-record-error')).toHaveLength(1);
     expect(screen.getByTestId('video-record-error')).not.toHaveTextContent('other demo failed');
     await userEvent.click(screen.getByTestId('video-record'));
-    // recordFromThread put the thread into 'generating' → the stale failure yields to the pending state.
+    // re-poll returned in_flight:true → stale failure yields to the recording state (AC3).
     expect(screen.getByTestId('video-record')).toHaveAttribute('data-state', 'recording');
     expect(screen.queryByTestId('video-record-error')).toBeNull();
   });

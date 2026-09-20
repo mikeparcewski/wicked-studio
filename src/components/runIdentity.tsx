@@ -149,6 +149,56 @@ export function durationWord(ms: number): string {
 
 const TERMINAL: ReadonlySet<string> = new Set(['completed', 'failed', 'cancelled']);
 
+// ── Cost from the run record (wicked-crew#496, 2026-09-18) ───────────────────
+
+// eslint-disable-next-line no-restricted-syntax -- '#496' is a GitHub issue reference, not a hex color
+const NO_COST_TITLE = 'cost is not in the run record — wicked-crew#496 (2026-09-18) has not landed on this daemon yet';
+
+function formatCostUsd(usd: number): string {
+  return usd < 0.01 ? '<$0.01' : `$${usd.toFixed(2)}`;
+}
+
+/** One rendered cost value — `title` carries the crew#496 note when cost is absent. */
+export interface RunCostView {
+  text: string;
+  title?: string;
+}
+
+/**
+ * Derives the cost display from the run record's optional-unknown cost fields
+ * (wicked-crew#496, 2026-09-18). Three states:
+ *  - `cost_usd` is a finite number → "$X.XX" with optional seat suffix
+ *  - `cost_usd` is `null` → "unmetered"
+ *  - `cost_usd` absent/non-number → "cost not in run record" with crew#496 in title
+ *
+ * Read as optional-unknown (no api-types bump needed).
+ */
+export function deriveRunCost(session: unknown): RunCostView {
+  const s = (typeof session === 'object' && session !== null)
+    ? (session as Record<string, unknown>)
+    : {} as Record<string, unknown>;
+  const costUsd = s['cost_usd'];
+  if (costUsd === null) return { text: 'unmetered' };
+  if (typeof costUsd !== 'number' || !Number.isFinite(costUsd)) {
+    return { text: 'cost not in run record', title: NO_COST_TITLE };
+  }
+  const reported = Array.isArray(s['usage_seats_reported'])
+    ? (s['usage_seats_reported'] as unknown[]).filter((x): x is string => typeof x === 'string').join(', ')
+    : '';
+  const unmetered = s['usage_seats_unmetered'];
+  let suffix = '';
+  if (Array.isArray(unmetered)) {
+    const u = (unmetered as unknown[]).filter((x): x is string => typeof x === 'string').join(', ');
+    if (u) suffix = reported ? ` · ${reported} (${u} unmetered)` : ` (${u} unmetered)`;
+    else if (reported) suffix = ` · ${reported}`;
+  } else if (unmetered === true) {
+    suffix = reported ? ` · ${reported} (unmetered)` : ' (unmetered)';
+  } else if (reported) {
+    suffix = ` · ${reported}`;
+  }
+  return { text: `${formatCostUsd(costUsd)}${suffix}` };
+}
+
 /**
  * The run detail's when block (§7.5 DOM AC: `[data-testid="run-times"]`) —
  * started · ended · duration. It began life as a full-width strip under the
@@ -158,7 +208,16 @@ const TERMINAL: ReadonlySet<string> = new Set(['completed', 'failed', 'cancelled
  * grammar — reads the two stores the app already fills for the selected run
  * (zero new requests), and every absent half is stated in operator language.
  */
-export function RunTimes({ runId, status }: { runId: string; status: string }): React.ReactElement {
+export function RunTimes({
+  runId,
+  status,
+  session,
+}: {
+  runId: string;
+  status: string;
+  /** The run record (AgentSession), read as unknown for the optional cost fields (no api-types bump). */
+  session?: unknown;
+}): React.ReactElement {
   const durable = useRunEventStore((s) => s.byRun[runId]);
   const live = useRuntimeStore((s) => s.logs[runId]);
   const { started, ended } = deriveRunClocks(durable ?? [], live ?? []);
@@ -177,12 +236,14 @@ export function RunTimes({ runId, status }: { runId: string; status: string }): 
       : 'still running';
   // No fabricated durations: both clocks or a stated absence ("—").
   const tookText = started !== null && ended !== null ? durationWord(ended.ms - started.ms) : '—';
+  const cost = deriveRunCost(session);
 
   const iso = (c: DerivedClock | null): string => (c === null ? '—' : new Date(c.ms).toISOString());
-  const rows: readonly (readonly [string, string])[] = [
-    ['started', startedText],
-    ['ended', endedText],
-    ['took', tookText],
+  const rows: readonly (readonly [string, string, string | undefined])[] = [
+    ['started', startedText, undefined],
+    ['ended', endedText, undefined],
+    ['took', tookText, undefined],
+    ['cost', cost.text, cost.title],
   ];
   return (
     <div
@@ -192,10 +253,10 @@ export function RunTimes({ runId, status }: { runId: string; status: string }): 
       className="flex flex-col gap-1.5"
       title={`derived from the run's event log (the run record carries no timestamps) — started: ${iso(started)} · ended: ${iso(ended)}`}
     >
-      {rows.map(([label, value]) => (
+      {rows.map(([label, value, title]) => (
         <div key={label} className="flex gap-2 text-[11px]">
           <span className="w-20 shrink-0 font-mono" style={{ color: 'var(--ink-dim)' }}>{label}</span>
-          <span className="font-mono" style={{ color: 'var(--ink-muted)' }}>{value}</span>
+          <span className="font-mono" style={{ color: 'var(--ink-muted)' }} {...(title !== undefined ? { title } : {})}>{value}</span>
         </div>
       ))}
     </div>

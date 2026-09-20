@@ -259,7 +259,8 @@ async function iFetch<T>(url: string, init?: RequestInit): Promise<T> {
       throw new ServiceHintError(res.status, msg, body.hint.trim());
     }
     // EC33: the translated ApiError — never the raw `API NNN:` framing.
-    throw new ApiError(res.status, msg);
+    // body is passed so callers can extract typed fields (e.g. the 409 in_flight remedy).
+    throw new ApiError(res.status, msg, body);
   }
   return res.json() as Promise<T>;
 }
@@ -637,6 +638,37 @@ export function listDemos(projectId: string): Promise<DocSummary[]> {
  * wrapper keeps its name and shape, and speaks `POST /api/events` underneath —
  * the same top-level route every other UI-originated intent rides.
  */
+/**
+ * `GET /d/:demoId/api/demo/status` — the demo's current recording state
+ * (crew#501 / wicked-interactive). Polled on mount and on every `status.posted`
+ * thread frame to drive the video-record button from the doc's in_flight state
+ * rather than local request flags.
+ */
+export interface DemoStatus {
+  /** The recording's current state name (e.g. `'working'`, `'idle'`). */
+  state: string;
+  /** True while a recording is in progress — the authoritative busy signal. */
+  in_flight: boolean;
+  /** Current step number (1-based) when in_flight. */
+  step?: number;
+  /** Current step label when in_flight. */
+  label?: string;
+  /** ISO timestamp of when the recording started. */
+  since?: string;
+  /** ISO timestamp the bridge started the recording job. */
+  started_at?: string;
+  /**
+   * Operator-facing remedy text the bridge sends on a 409 `in_flight` refusal —
+   * tells the user what to do instead of queueing a new recording.
+   */
+  remedy?: string;
+}
+
+/** `GET /d/:demoId/api/demo/status` — the demo's recording state. */
+export function getDemoStatus(projectId: string, demoId: string): Promise<DemoStatus> {
+  return iFetch<DemoStatus>(`${docBase(projectId, demoId)}/api/demo/status`);
+}
+
 export function requestRecord(projectId: string, demoId: string): Promise<{ queued: boolean }> {
   return postEvent(projectId, {
     event_type: 'wicked.interactive.demo.requested',
