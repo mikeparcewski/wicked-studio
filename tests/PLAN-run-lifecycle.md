@@ -91,12 +91,24 @@ Source: `tests/RepositoriesPanel.project.test.tsx`,
 
 | ID | Scenario | Kind | Status |
 |----|----------|------|--------|
-| RO-1 | Register & onboard disabled when name is empty (path present) | deterministic | **new** |
+| RO-1 | Register & onboard disabled when **neither** field is filled | deterministic | **new** |
 | RO-2 | Register & onboard disabled when path is empty (name present) | deterministic | **new** |
 | RO-3 | Register & onboard enabled when both name and path are filled | deterministic | **new** |
 | RO-4 | Unfiled (default): `registerRepo(name, path)` called; no `attachProjectMember` | deterministic | covered |
 | RO-5 | Selected project: `attachProjectMember` called after `registerRepo`; navigates to repo detail | deterministic | covered |
 | RO-6 | `ambientProject` pre-binds and locks the project field immediately; clicking the field does not open the dropdown | deterministic | **new** |
+
+**RO-1 note — why it is "neither field filled" and not "name empty, path present".**
+RO-1 was originally specified as *name empty while the path is present*, which cannot
+be produced by typing in the form: the path input's `onChange` calls `deriveName`
+(`src/components/RepositoriesPanel.tsx:579` → `:194`), which fills the name from the
+last path segment unless the user has already edited the name field
+(`nameEditedRef`). Since `canSubmit` is `newName.trim() && newPath.trim()`
+(`:328-330`), entering a path makes the name non-empty in the same keystroke, so the
+originally-specified state is unreachable through the UI. The shipped test therefore
+asserts the reachable disabled state — **neither field filled** — and RO-2 covers the
+other half (name present, path empty), which *is* reachable because typing a name sets
+`nameEditedRef` and suppresses the derive.
 
 ---
 
