@@ -2,13 +2,16 @@
 
 Covers five surfaces that together span the full run lifecycle: launch form →
 gate answering → archive/unarchive, plus the two supporting pickers (project
-switcher and repo onboarding). Every scenario listed here is a **deterministic
+switcher and repo onboarding). Every scenario in Areas 1–5 is a **deterministic
 tool check** (vitest + jsdom mocks, no live daemon) — a governed agent run
 would only be appropriate if the scenario required a non-deterministic AI
-decision during the test itself, which none of these do.
+decision during the test itself, which none of these do. Area 6 collects the
+**functional browser** scenarios, which are specified here but **not
+implemented in this repository** (#312).
 
 Legend: **covered** = already in an existing test file; **new** = implemented
-in `tests/run-lifecycle.test.tsx` by this plan.
+in `tests/run-lifecycle.test.tsx` by this plan; **not implemented** = specified
+only, nothing in the tree runs it.
 
 ---
 
@@ -97,6 +100,31 @@ Source: `tests/RepositoriesPanel.project.test.tsx`,
 
 ---
 
+## Area 6 — Functional browser scenarios (SPECIFIED, NOT IMPLEMENTED)
+
+These five were specified as a Playwright suite driving a real browser against a
+same-origin build and the W2 fixture. **None of them is implemented in this
+repository** — the suite was split out and is tracked in **#312**. They are
+listed so this plan stays honest about the difference between what is specified
+and what actually runs; nothing below should be read as coverage.
+
+| ID | Scenario | Kind | Status |
+|---|---|---|---|
+| LC-1 | Launch-form validation in a real browser: submit disabled until instructions AND a repo scope are set | functional (browser) | **not implemented (#312)** |
+| LC-2 | Gate answering: `awaitingHuman` frame → gate card → Approve → the gate POST | functional (browser) | **not implemented (#312)** — as originally written it asserted the gate card *detaches*, which is wrong: `ApprovalDock.tsx:43` keeps the card while the run's status is `awaiting_human`. Needs re-specification before anyone implements it. |
+| LC-3 | Archive chip ON + Unarchive happy path | functional (browser) | **not implemented (#312)** — never executed |
+| LC-4 | Archive chip toggled OFF | functional (browser) | **not implemented (#312)** — never executed |
+| LC-5 | Repo register form submit | functional (browser) | **not implemented (#312)** — never executed |
+
+Why they are not here: when the suite was executed against `main` it failed
+(LC-1 on a UI shape that has since moved behind a composer; LC-2 on the
+incorrect detach assertion above), and **no CI job runs `e2e/*.py`** — so
+landing it would have put a failing file in the tree that later reads as
+coverage. The code is preserved on `archive/run-lifecycle-e2e-258`; #312 carries
+the full diagnosis and what a revival needs.
+
+---
+
 ## Implementation notes
 
 New scenarios (GA-6, AU-4, AU-5, RO-1, RO-2, RO-3, RO-6) are implemented in
@@ -104,3 +132,5 @@ New scenarios (GA-6, AU-4, AU-5, RO-1, RO-2, RO-3, RO-6) are implemented in
 `@testing-library/react`, `userEvent.setup()` for interactions, `waitFor` for
 async assertions — no sleeps, no fixed waits. Each test asserts a concrete
 outcome on a real DOM node.
+
+The Area 6 scenarios (LC-1…LC-5) are **specified only** — see #312.
