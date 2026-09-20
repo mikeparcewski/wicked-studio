@@ -11,8 +11,8 @@
   "studioVersion": "0.5.12",
   "counts": {
     "files": 146,
-    "occurrences": 1339,
-    "static": 1150,
+    "occurrences": 1340,
+    "static": 1151,
     "dynamic": 63,
     "computed": 7
   },
@@ -1321,6 +1321,12 @@
     },
     {
       "testId": "dashboard-hidden-chip",
+      "files": [
+        "src/components/ProjectDashboard.tsx"
+      ]
+    },
+    {
+      "testId": "dashboard-manage",
       "files": [
         "src/components/ProjectDashboard.tsx"
       ]
