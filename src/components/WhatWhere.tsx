@@ -57,9 +57,10 @@ export function WhatWhere({ model, provenance, retriedAs, onSelectRun }: Props):
   return (
     <div data-testid="what-where" className="flex flex-col gap-1.5">
       {/* The provenance line — FIRST row of the card (DES-UX-001 §3.3): who or
-          what launched this run, degrading to "launched via API (actor
-          unknown)" rather than omitting the line. Lineage cross-links (§4.3)
-          ride inside it. */}
+          what launched this run, degrading to "launch not recorded" rather
+          than omitting the line — absence is reported as unknown, never
+          guessed as API (wicked-crew#632 omits the channel/actor fields when
+          it has none). Lineage cross-links (§4.3) ride inside it. */}
       <ProvenanceLine
         provenance={provenance ?? null}
         retryOf={session.retry_of}
