@@ -23,7 +23,17 @@ projects | project-detail`. It is *run-centric* — `/` is the run list, everyth
 side panel. `LeftSidebar.tsx` exposes three verbs at the top (`Do Work`, `New Chat`,
 `New Repository`) and four browse sections (Projects, Repositories, Chats, Work).
 There is no notion of a document, and Projects are a thin membership+activity page
-(`ProjectDetailPage.tsx` — Members / Activity, nothing produced).
+(`ProjectDetailPage.tsx` — Members / Activity, nothing produced).[^projdetail]
+
+[^projdetail]: **No longer true (amended 2026-09-20, wicked-studio#249).** That sentence
+    describes `ProjectDetailPage` as it stood when this document was written. Since #207 the
+    page also owns Edit (rename/describe), Archive/Restore, and repo attach/detach — the
+    last being the *only* UI path that attaches a `crew.repo` to a project
+    (`ProjectRepositories.tsx:8-19`). It is no longer "nothing produced": it is the project
+    **management** surface, and it is retained at `/projects/:id` by the §1.5 amendment. The
+    §1.1 critique still holds for what it was actually about — studio's *browse* IA made
+    projects a directory listing rather than a place where work is visible, which is what
+    the `/p/:id` shell fixes.
 
 **wicked-interactive** (`frontend/src/App.jsx`) is the inverse: a *single-document*
 application. The whole shell is built around one `currentDoc` in the URL, one manifest,
@@ -126,18 +136,49 @@ Design constraints:
 | Route | Surface | Replaces |
 |---|---|---|
 | `/` | orchestrator home board | studio's run list at `/` |
-| `/p/:projectId` | project home → redirects to last-used mode (default `chat`) | `/projects/:id` |
+| `/p/:projectId` | project home → redirects to last-used mode (default `chat`) | — (see the `/projects/:id` row) |
 | `/p/:projectId/chat[/:threadId]` | Chat mode | `/chat/new`, `/chats` |
 | `/p/:projectId/build[/:runId]` | Build mode | `/`, `/runs/:id`, `/runs/new` |
 | `/p/:projectId/document/:docId` | Document mode | interactive `?doc=` |
 | `/p/:projectId/video/:demoId` | Video mode | interactive demo path |
+| `/projects/:id` | **project management page** — Edit (rename/describe), Archive/Restore, repo attach/detach, Members, Activity | **NOT retired** (amended 2026-09-20) |
 | `/runs`, `/work`, `/chats` | flat cross-project lists (kept — power-user escape hatch) | unchanged |
 | `/repos`, `/repo-detail/:id`, `/coverage`, `/workflows`, `/domain`, `/policies`, `/rules`, `/system` | unchanged side panels | unchanged |
 
-Back-compat: existing studio paths (`/runs/:id`, `/projects/:id`) 301-equivalent
-client-side redirect into the new shape, resolving the project from the run. No bookmark
-breaks. `useRoute.ts` grows a project+mode parse ahead of the existing panel parse; the
-`Panel` union stays for the side panels.
+Back-compat: the existing studio run path (`/runs/:id`) 301-equivalent client-side
+redirects into the new shape, resolving the project from the run. No bookmark breaks.
+`useRoute.ts` grows a project+mode parse ahead of the existing panel parse; the `Panel`
+union stays for the side panels.
+
+> **AMENDMENT — 2026-09-20 (user decision; wicked-studio#249, fixes wicked-studio#214).**
+> As originally written this section retired `/projects/:id` into `/p/:id`, and studio
+> implemented that literally: `useLegacyRedirect` redirected the route away. The effect was
+> not a back-compat redirect but the **loss of a live surface** — `ProjectDetailPage` is
+> still rendered (`src/App.tsx:625`) and is the **only** place in the product that owns
+> Edit, Archive/Restore and repo attach/detach (`ProjectRepositories.tsx:8-19` — attach is
+> `POST /projects/:id/members`, detach `DELETE /projects/:id/members/:mid`; it is "the one
+> UI path that attaches a `crew.repo`"). Because the redirect fired, none of those verbs
+> was reachable by navigating the app, so operators could not archive or restore a project
+> at all (#214).
+>
+> **The decision: `/projects/:id` is NOT retired. It is the live address of the project
+> management page.** The two surfaces coexist deliberately:
+>
+> - `/p/:id` — the project **shell/dashboard**: where work is seen and started (modes, runs,
+>   gates, artifacts).
+> - `/projects/:id` — the project **management page**: where the project itself is
+>   administered (rename/describe, archive/restore, attach/detach repos, members, activity).
+>
+> This is accepted as **two overlapping project surfaces for now**, not as the end state; a
+> later consolidation may fold management into the shell, at which point this amendment is
+> the record of why the redirect must not simply be restored. §1.5's "no bookmark breaks"
+> principle is unchanged for every other legacy path (`/runs/:id`, `/runs`) — it is narrowed
+> here because `/projects/:id` was never a dead bookmark to rescue; it is a live page.
+>
+> Consequence worth naming: `NewProjectModal.tsx:33-38` has always defined the "Empty"
+> start as `startPath(id, 'empty') → /projects/:id` ("Empty = its detail page"), pinned by
+> `tests/NewProjectModal.test.tsx:44`. The redirect had been defeating that shipped intent;
+> removing it **restores** it.
 
 ### 1.6 What the rail becomes
 
@@ -712,7 +753,8 @@ one); attempting to emit a non-whitelisted event type returns 400.
 
 **Slice 4 — routes + mode switcher** *(~300 LOC)*
 Extend `useRoute.ts` with `/p/:projectId/:mode[/:artifactId]`; render the four-mode switcher;
-client-side redirects from `/runs/:id` and `/projects/:id`. Document/Video render a
+client-side redirects from `/runs/:id` (**not** from `/projects/:id` — retained as the
+management page by the §1.5 amendment of 2026-09-20). Document/Video render a
 placeholder that states what is coming (informative, §3.3).
 *AC:* `data-testid="mode-switcher"` shows 4 tabs; clicking **Build** URL-changes to
 `/p/<id>/build` and back-button returns; visiting a legacy `/runs/<id>` lands on
