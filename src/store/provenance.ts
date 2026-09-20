@@ -16,8 +16,8 @@ import type { ActorKind, AuditEntry } from '../api/types.js';
  *    caches the degraded answer too: revisits never re-fire.
  *  - List rows (notifications) read ONLY this cache — no fan-out.
  *  - Absence degrades honestly: no matching audit entry (or an unreachable
- *    trail) is `{state:'unknown'}`, rendered as the brief's own words —
- *    "launched via API (actor unknown)" — never an omitted line.
+ *    trail) is `{state:'unknown'}`, rendered as "launch not recorded" (wicked-crew#632:
+ *    absence means unknown, not API) — never an omitted line.
  */
 export type Provenance =
   | {

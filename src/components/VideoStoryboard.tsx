@@ -60,7 +60,7 @@ function DemoPicker({ projectId, navigate }: { projectId: string; navigate: Navi
           </h2>
           <p style={{ fontSize: 'var(--text-sm)', color: S.muted, margin: 0, lineHeight: 1.5 }}>
             A demo is a set of steps authored into a spec and recorded by the service in a
-            real browser. Describe one in the thread — "a demo of the checkout flow" — and
+            real browser. Describe one in the thread — “a demo of the checkout flow” — and
             it appears here as a storyboard with its player as soon as the spec exists.
           </p>
         </div>
@@ -246,6 +246,7 @@ function DemoSurface({
   // Document mode's canvas.
   const key = threadKey(projectId, demoId);
   const landed = useDocThreadStore((s) => s.landed[key]);
+  const lastSignalAt = useDocThreadStore((s) => s.lastSignalAt[key]);
   // #278 (DES-L7 I3): the thread store already folds the bridge's `status.posted {state:"error"}`
   // — a recorder failure delivered over the bus, live or hydrated after a reload — into
   // `lastError`; read it UNCONDITIONALLY so the failure renders on the storyboard too, not only
@@ -315,8 +316,9 @@ function DemoSurface({
 
   // ── VIDEO-FB finding 2: Record, a REAL control answering at the click site ──
   // `recBusy` is the POST round-trip (queuing state). `demoStatus` is the
-  // authoritative in_flight signal — polled on mount and on every `status.posted`
-  // frame (via `landed`), so a crew-triggered recording surfaces without a local POST.
+  // authoritative in_flight signal — polled on mount and on every folded frame
+  // (`lastSignalAt` advances on each `wicked.interactive.*` frame the store ingests),
+  // so a crew-triggered recording surfaces without a local POST.
   // EC37: the button IS the pending surface.
   const [recBusy, setRecBusy] = useState(false);
   const [recError, setRecError] = useState<string | null>(null);
@@ -324,16 +326,17 @@ function DemoSurface({
   const [recErrorIsRemedy, setRecErrorIsRemedy] = useState(false);
   const [demoStatus, setDemoStatus] = useState<DemoStatus | null>(null);
 
-  // Poll GET /d/:demoId/api/demo/status on mount and on every landed thread frame.
-  // `landed` is incremented each time the thread store folds a `status.posted` frame,
-  // making it the correct trigger for both crew-triggered and UI-triggered recordings.
+  // Poll GET /d/:demoId/api/demo/status on mount and on every folded frame.
+  // `lastSignalAt` advances on each parsed frame for this thread — including
+  // `status.posted {state:"working", step:N}` frames that land no version —
+  // so the effect re-fires on every liveness signal, not only version landings.
   useEffect(() => {
     let cancelled = false;
     getDemoStatus(projectId, demoId)
       .then((s) => { if (!cancelled) setDemoStatus(s); })
       .catch(() => { /* bridge unavailable or route absent — keep prior status */ });
     return () => { cancelled = true; };
-  }, [projectId, demoId, landed]);
+  }, [projectId, demoId, lastSignalAt]);
 
   const inFlight = demoStatus?.in_flight ?? false;
 
@@ -342,7 +345,7 @@ function DemoSurface({
     setRecBusy(true);
     setRecError(null);
     setRecErrorIsRemedy(false);
-    void recordFromThread({ projectId, demoId, ask: `Record "${demoId}".` })
+    void recordFromThread({ projectId, demoId, ask: `Record “${demoId}”.` })
       .then(() => {
         // POST succeeded — trigger an immediate status re-poll to pick up in_flight quickly.
         getDemoStatus(projectId, demoId)
@@ -380,7 +383,7 @@ function DemoSurface({
     setOverlayPct(50);
   };
 
-  const subject = `"${demoId}"`;
+  const subject = `“${demoId}”`;
   if (manifest === null) {
     return (
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
@@ -533,7 +536,7 @@ function DemoSurface({
             data-state={recBusy ? 'queuing' : inFlight ? 'recording' : 'idle'}
             disabled={recBusy || inFlight}
             onClick={record}
-            title={`Runs "${demoId}"'s authored steps in a real browser and lands the result as a new version — it re-records, it does not change the steps`}
+            title={`Runs “${demoId}”’s authored steps in a real browser and lands the result as a new version — it re-records, it does not change the steps`}
             style={{
               background: recBusy || inFlight ? 'var(--surface-raised)' : 'var(--accent)',
               border: '1px solid var(--accent-subtle)', borderRadius: 'var(--radius-full)',

@@ -2,7 +2,7 @@
 //
 // Four scenarios per the AC spec:
 //   1. Crew-triggered recording (no local POST) → data-state="recording" + disabled
-//   2. status.posted {state:"working"} from any producer → same (via landed re-poll)
+//   2. status.posted {state:"working"} from any producer → same (via lastSignalAt re-poll)
 //   3. 409 in_flight body → remedy text verbatim, no retry suffix
 //   4. #278 thread-error failure card unaffected by recording state
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -12,6 +12,7 @@ import { VideoStoryboard } from '../src/components/VideoStoryboard.js';
 import { ApiError } from '../src/api/errors.js';
 import { threadKey, useDocThreadStore } from '../src/store/docThread.js';
 import type { VersionManifest } from '../src/api/interactive.js';
+import type { CoreEvent } from '../src/api/types.js';
 
 const PROJECT = 'proj-ac3';
 const DEMO = 'my-demo';
@@ -114,8 +115,8 @@ describe('VideoStoryboard — record button state (AC3)', () => {
     expect(recordFromThreadMock).not.toHaveBeenCalled();
   });
 
-  it('status.posted from any producer → same: landed re-poll picks up in_flight:true', async () => {
-    // Initially idle; will flip to recording after the landed frame triggers re-poll.
+  it('status.posted from any producer → same: lastSignalAt re-poll picks up in_flight:true', async () => {
+    // Initially idle; will flip to recording after the signal frame triggers re-poll.
     getDemoStatusMock
       .mockResolvedValueOnce({ state: 'idle', in_flight: false })
       .mockResolvedValue({ state: 'working', in_flight: true });
@@ -126,10 +127,10 @@ describe('VideoStoryboard — record button state (AC3)', () => {
     const btn = await screen.findByTestId('video-record');
     expect(btn).toHaveAttribute('data-state', 'idle');
 
-    // Simulate a status.posted frame: increment landed in the thread store.
+    // Advance lastSignalAt directly — this is what the store does on every parsed frame.
     await act(async () => {
       useDocThreadStore.setState((s) => ({
-        landed: { ...s.landed, [KEY]: (s.landed[KEY] ?? 0) + 1 },
+        lastSignalAt: { ...s.lastSignalAt, [KEY]: Date.now() },
       }));
     });
 
@@ -137,6 +138,47 @@ describe('VideoStoryboard — record button state (AC3)', () => {
       expect(screen.getByTestId('video-record')).toHaveAttribute('data-state', 'recording');
     });
     expect(screen.getByTestId('video-record')).toBeDisabled();
+  });
+
+  it('status.posted working frame through ingest → re-polls and reaches data-state="recording"', async () => {
+    // First call: idle (mount). Second+ calls: working/in_flight with step label.
+    getDemoStatusMock
+      .mockResolvedValueOnce({ state: 'idle', in_flight: false })
+      .mockResolvedValue({ state: 'working', in_flight: true, step: 1, label: 'loading checkout page' });
+
+    mount();
+
+    // Wait for initial idle state.
+    const btn = await screen.findByTestId('video-record');
+    expect(btn).toHaveAttribute('data-state', 'idle');
+
+    // Fold a real status.posted {state:"working"} frame through the store's own ingest path.
+    // No direct store writes, no local POST, no version landing — pure bus frame.
+    const workingFrame: CoreEvent = {
+      type: 'interactiveEvent',
+      event: {
+        event_type: 'wicked.interactive.status.posted',
+        project_id: PROJECT,
+        payload: {
+          document_id: DEMO,
+          project_id: PROJECT,
+          state: 'working',
+          step: 1,
+          label: 'loading checkout page',
+        },
+      },
+    } as unknown as CoreEvent;
+
+    await act(async () => {
+      useDocThreadStore.getState().ingest(workingFrame);
+    });
+
+    // The ingest advances lastSignalAt; the effect re-fires; getDemoStatus returns working.
+    await waitFor(() => {
+      expect(screen.getByTestId('video-record')).toHaveAttribute('data-state', 'recording');
+    });
+    expect(screen.getByTestId('video-record')).toBeDisabled();
+    expect(screen.getByTestId('video-record')).toHaveTextContent('Recording — step 1: loading checkout page');
   });
 
   it('409 in_flight body → remedy text verbatim, no "nothing was queued" retry suffix', async () => {
