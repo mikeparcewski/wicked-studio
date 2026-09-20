@@ -26,12 +26,12 @@ export type Provenance =
       actorKind: ActorKind;
       /**
        * The launch channel. Resolution order: (1) `detail.channel` on the audit
-       * entry (crew#632 — not yet written by the daemon); (2) the per-tab
-       * sessionStorage witness (`studio`); (3) `unrecorded` — the daemon has not
-       * written the field and this tab did not witness the launch. Never 'API'
-       * without the daemon saying so.
+       * entry (crew#632 — compared case-insensitively; the daemon emits lower-case
+       * `studio|cli|api`); (2) the per-tab sessionStorage witness (`studio`);
+       * (3) `unrecorded` — the daemon has not written the field and this tab did
+       * not witness the launch. Never 'API'/'CLI' without the daemon saying so.
        */
-      channel: 'studio' | 'API' | 'unrecorded';
+      channel: 'studio' | 'CLI' | 'API' | 'unrecorded';
       /** Lineage from the audit detail (CREW-UX-3): the run this one retries. */
       retryOf?: string;
     }
@@ -67,12 +67,13 @@ export function deriveProvenance(
   if (launched === undefined) return { state: 'unknown' };
   const detail = (launched.detail ?? {}) as Record<string, unknown>;
   const retryOf = typeof detail['retryOf'] === 'string' ? detail['retryOf'] : undefined;
-  const detailChannel = detail['channel'];
-  const channel: 'studio' | 'API' | 'unrecorded' =
-    detailChannel === 'studio' ? 'studio'
-    : detailChannel === 'API'  ? 'API'
-    : launchedHere             ? 'studio'
-    :                            'unrecorded';
+  const channelRaw = typeof detail['channel'] === 'string' ? detail['channel'].toLowerCase() : '';
+  const channel: 'studio' | 'CLI' | 'API' | 'unrecorded' =
+    channelRaw === 'studio' ? 'studio'
+    : channelRaw === 'cli'  ? 'CLI'
+    : channelRaw === 'api'  ? 'API'
+    : launchedHere          ? 'studio'
+    :                         'unrecorded';
   return {
     state: 'known',
     actorId: launched.actor.id,

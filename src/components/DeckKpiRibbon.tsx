@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import type { DiagnosticsGovernance, GovernanceClaim, SessionView } from '../api/types.js';
 import type { Navigate } from '../hooks/useRoute.js';
 import { governedRuns } from '../board/steeringUsage.js';
-import { observedSpend } from '../board/metrics.js';
+import { dtoSpend, observedSpend } from '../board/metrics.js';
 import { useRuntimeStore } from '../store/runtime.js';
 import { useIsSystemWorkflow } from '../store/workflowCache.js';
 import {
@@ -91,7 +91,11 @@ export function DeckKpiRibbon({ runs, claims, governance = null, needCount, navi
     const reworkPct = live.length === 0 ? null : Math.round((retries / live.length) * 100);
 
     const governed = claims !== null ? governedRuns(claims, runs) : null;
-    const spend = observedSpend(logs);
+    // Spend: DTO sums when any live run carries cost_usd (wicked-crew#496); else session-observed fold.
+    const dto = dtoSpend(live);
+    const spend = dto !== null
+      ? { source: 'runs' as const, total: dto.total, count: dto.count }
+      : { source: 'session' as const, ...observedSpend(logs) };
 
     return {
       real, windowLabel: real ? '30d' : 'last 30',
@@ -165,10 +169,19 @@ export function DeckKpiRibbon({ runs, claims, governance = null, needCount, navi
             href="/steering" onGo={go('/steering')}
             bar={model.governed?.pct ?? null}
             sub={govError && govWhy !== null ? govWhy : model.governed === null ? 'not served' : `${model.governed.governed}/${model.governed.total} runs`} />
-          <Tile testId="home-kpi-spend" label="Spend · session"
-            value={model.spend.frames === 0 ? '—' : `$${model.spend.total.toFixed(2)}`}
-            href="/work" onGo={go('/work')}
-            sub={model.spend.frames === 0 ? 'no usage yet' : `${model.spend.frames} frames observed`} />
+          {(() => {
+            const s = model.spend;
+            const hasData = s.source === 'runs' ? s.count > 0 : s.frames > 0;
+            const spendLabel = s.source === 'runs' ? 'Spend · runs' : 'Spend · session';
+            const spendValue = hasData ? `$${s.total.toFixed(2)}` : '—';
+            const spendSub = s.source === 'runs'
+              ? `${s.count} run${s.count === 1 ? '' : 's'} with cost`
+              : s.frames === 0 ? 'no usage yet' : `${s.frames} frames observed`;
+            return (
+              <Tile testId="home-kpi-spend" label={spendLabel} value={spendValue}
+                href="/work" onGo={go('/work')} sub={spendSub} />
+            );
+          })()}
           <Tile testId="home-kpi-rework" label="Rework"
             value={model.reworkPct !== null ? String(model.reworkPct) : '—'} unit={model.reworkPct !== null ? '%' : ''}
             href="/work" onGo={go('/work')} sub="retries of prior runs" />

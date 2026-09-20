@@ -11,8 +11,8 @@
   "studioVersion": "0.5.12",
   "counts": {
     "files": 146,
-    "occurrences": 1340,
-    "static": 1151,
+    "occurrences": 1341,
+    "static": 1152,
     "dynamic": 63,
     "computed": 7
   },
@@ -4401,6 +4401,12 @@
       "testId": "run-chip",
       "files": [
         "src/components/ProjectCard.tsx"
+      ]
+    },
+    {
+      "testId": "run-cost-chip",
+      "files": [
+        "src/components/CenterDashboard.tsx"
       ]
     },
     {

@@ -201,6 +201,28 @@ export function burnSteps(logs: Record<string, LoggedEvent[]>): {
   return { steps, total: sum };
 }
 
+// ── dtoSpend — DTO-sourced cost sum across listed runs (wicked-crew#496) ──────
+
+/**
+ * Sum `cost_usd` from the listed runs' DTOs (wicked-crew#496, 2026-09-18).
+ * Read as optional-unknown — no api-types bump. Returns `null` when NO run
+ * carries a numeric `cost_usd`, signalling the caller to fall back to the
+ * session-observed fold (`observedSpend`).
+ */
+export function dtoSpend(runs: SessionView[]): { total: number; count: number } | null {
+  let total = 0;
+  let count = 0;
+  for (const v of runs) {
+    if (v.session.archived_at != null) continue;
+    const costUsd = (v.session as unknown as Record<string, unknown>)['cost_usd'];
+    if (typeof costUsd === 'number' && Number.isFinite(costUsd)) {
+      total += costUsd;
+      count += 1;
+    }
+  }
+  return count > 0 ? { total, count } : null;
+}
+
 // ── usageTotals — the Build footer's fold over the run event store ────────────
 
 /**

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { CoreEvent } from '../src/api/types.js';
 import {
   burnSteps,
+  dtoSpend,
   failedCount24h,
   failedCountAll,
   gateCount,
@@ -197,5 +198,39 @@ describe('ledeCounts — gates/live are runStats\' own numbers (§5.1 offender p
 
   it('the shared 24h span is the one constant', () => {
     expect(WINDOW_24H_MS).toBe(24 * HOUR);
+  });
+});
+
+describe('dtoSpend (AC2: DTO-sourced cost sum, wicked-crew#496)', () => {
+  function withCost(id: string, costUsd: number): ReturnType<typeof makeView> {
+    const v = makeView({ id, status: 'completed' });
+    (v.session as unknown as Record<string, unknown>)['cost_usd'] = costUsd;
+    return v;
+  }
+
+  it('sums cost_usd from runs that carry it', () => {
+    const result = dtoSpend([withCost('a', 1.00), withCost('b', 0.50)]);
+    expect(result).toEqual({ total: 1.50, count: 2 });
+  });
+
+  it('returns null when no run carries a numeric cost_usd', () => {
+    expect(dtoSpend([makeView({ id: 'a', status: 'completed' })])).toBeNull();
+  });
+
+  it('null cost_usd is not counted (null means unmetered, not zero)', () => {
+    const v = makeView({ id: 'a', status: 'completed' });
+    (v.session as unknown as Record<string, unknown>)['cost_usd'] = null;
+    expect(dtoSpend([v])).toBeNull();
+  });
+
+  it('excludes archived runs', () => {
+    const archived = withCost('arch', 100.00);
+    archived.session.archived_at = 1735689600;
+    const result = dtoSpend([withCost('live', 1.00), archived]);
+    expect(result).toEqual({ total: 1.00, count: 1 });
+  });
+
+  it('an empty list returns null', () => {
+    expect(dtoSpend([])).toBeNull();
   });
 });

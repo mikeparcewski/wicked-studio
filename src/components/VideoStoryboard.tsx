@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { getConversation, getVersions, interactiveDocUrl, interactiveUrl, listDemos } from '../api/interactive.js';
-import type { DocSummary, ForkResult, VersionManifest } from '../api/interactive.js';
+import { getDemoStatus, getConversation, getVersions, interactiveDocUrl, interactiveUrl, listDemos } from '../api/interactive.js';
+import type { DemoStatus, DocSummary, ForkResult, VersionManifest } from '../api/interactive.js';
+import { ApiError } from '../api/errors.js';
 import { recordFromThread } from '../interactive/demoWire.js';
 import { instrumentDemoHtml, subjectsFromBrief } from '../interactive/demoHtml.js';
 import { readAnchors, readExports, readSendStates } from '../interactive/threadStopgap.js';
@@ -59,7 +60,7 @@ function DemoPicker({ projectId, navigate }: { projectId: string; navigate: Navi
           </h2>
           <p style={{ fontSize: 'var(--text-sm)', color: S.muted, margin: 0, lineHeight: 1.5 }}>
             A demo is a set of steps authored into a spec and recorded by the service in a
-            real browser. Describe one in the thread — “a demo of the checkout flow” — and
+            real browser. Describe one in the thread — "a demo of the checkout flow" — and
             it appears here as a storyboard with its player as soon as the spec exists.
           </p>
         </div>
@@ -245,7 +246,6 @@ function DemoSurface({
   // Document mode's canvas.
   const key = threadKey(projectId, demoId);
   const landed = useDocThreadStore((s) => s.landed[key]);
-  const genState = useDocThreadStore((s) => s.genState[key] ?? 'terminal');
   // #278 (DES-L7 I3): the thread store already folds the bridge's `status.posted {state:"error"}`
   // — a recorder failure delivered over the bus, live or hydrated after a reload — into
   // `lastError`; read it UNCONDITIONALLY so the failure renders on the storyboard too, not only
@@ -314,24 +314,61 @@ function DemoSurface({
   }, [projectId, demoId, resolvedShown, landed]);
 
   // ── VIDEO-FB finding 2: Record, a REAL control answering at the click site ──
-  // `recBusy` is the HTTP round-trip; `recWaiting` holds until the thread's
-  // fold sees the run resolve (a landing, a completion, or the honesty budget's
-  // own machinery downstream). EC37: the button IS the pending surface.
+  // `recBusy` is the POST round-trip (queuing state). `demoStatus` is the
+  // authoritative in_flight signal — polled on mount and on every `status.posted`
+  // frame (via `landed`), so a crew-triggered recording surfaces without a local POST.
+  // EC37: the button IS the pending surface.
   const [recBusy, setRecBusy] = useState(false);
-  const [recWaiting, setRecWaiting] = useState(false);
   const [recError, setRecError] = useState<string | null>(null);
+  /** True when `recError` is the bridge's 409 remedy text — shown verbatim, no retry suffix. */
+  const [recErrorIsRemedy, setRecErrorIsRemedy] = useState(false);
+  const [demoStatus, setDemoStatus] = useState<DemoStatus | null>(null);
+
+  // Poll GET /d/:demoId/api/demo/status on mount and on every landed thread frame.
+  // `landed` is incremented each time the thread store folds a `status.posted` frame,
+  // making it the correct trigger for both crew-triggered and UI-triggered recordings.
   useEffect(() => {
-    if (recWaiting && genState !== 'generating') setRecWaiting(false);
-  }, [recWaiting, genState]);
+    let cancelled = false;
+    getDemoStatus(projectId, demoId)
+      .then((s) => { if (!cancelled) setDemoStatus(s); })
+      .catch(() => { /* bridge unavailable or route absent — keep prior status */ });
+    return () => { cancelled = true; };
+  }, [projectId, demoId, landed]);
+
+  const inFlight = demoStatus?.in_flight ?? false;
+
   function record(): void {
-    if (recBusy || recWaiting) return;
+    if (recBusy || inFlight) return;
     setRecBusy(true);
     setRecError(null);
-    void recordFromThread({ projectId, demoId, ask: `Record “${demoId}”.` })
-      .then(() => { setRecWaiting(true); })
-      .catch((e: unknown) => { setRecError(e instanceof Error ? e.message : String(e)); })
+    setRecErrorIsRemedy(false);
+    void recordFromThread({ projectId, demoId, ask: `Record "${demoId}".` })
+      .then(() => {
+        // POST succeeded — trigger an immediate status re-poll to pick up in_flight quickly.
+        getDemoStatus(projectId, demoId)
+          .then((s) => { setDemoStatus(s); })
+          .catch(() => {});
+      })
+      .catch((e: unknown) => {
+        if (e instanceof ApiError && e.status === 409) {
+          // 409 in_flight: the bridge is already recording — render the bridge's remedy verbatim.
+          const b = (e.body as Record<string, unknown> | undefined) ?? {};
+          const remedy = typeof b['remedy'] === 'string' ? b['remedy'] : null;
+          if (remedy !== null) {
+            const since = typeof b['since'] === 'string' ? ` (since ${b['since']})` : '';
+            setRecError(`${remedy}${since}`);
+            setRecErrorIsRemedy(true);
+            return;
+          }
+        }
+        setRecError(e instanceof Error ? e.message : String(e));
+      })
       .finally(() => { setRecBusy(false); });
   }
+
+  const recordingLabel = inFlight && demoStatus !== undefined && demoStatus !== null && demoStatus.step !== undefined
+    ? `Recording — step ${demoStatus.step}: ${demoStatus.label ?? '…'}`
+    : 'Recording — running the authored steps…';
 
   // ── Compare lens (Document's §7 grammar, on the storyboard) ─────────────────
   const [cmp, setCmp] = useState<number | null>(null);
@@ -343,7 +380,7 @@ function DemoSurface({
     setOverlayPct(50);
   };
 
-  const subject = `“${demoId}”`;
+  const subject = `"${demoId}"`;
   if (manifest === null) {
     return (
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
@@ -493,23 +530,23 @@ function DemoSurface({
           <button
             type="button"
             data-testid="video-record"
-            data-state={recBusy ? 'queuing' : recWaiting ? 'recording' : 'idle'}
-            disabled={recBusy || recWaiting}
+            data-state={recBusy ? 'queuing' : inFlight ? 'recording' : 'idle'}
+            disabled={recBusy || inFlight}
             onClick={record}
-            title={`Runs “${demoId}”’s authored steps in a real browser and lands the result as a new version — it re-records, it does not change the steps`}
+            title={`Runs "${demoId}"'s authored steps in a real browser and lands the result as a new version — it re-records, it does not change the steps`}
             style={{
-              background: recBusy || recWaiting ? 'var(--surface-raised)' : 'var(--accent)',
+              background: recBusy || inFlight ? 'var(--surface-raised)' : 'var(--accent)',
               border: '1px solid var(--accent-subtle)', borderRadius: 'var(--radius-full)',
-              color: recBusy || recWaiting ? 'var(--ink-high)' : 'var(--accent-fg)',
-              cursor: recBusy || recWaiting ? 'default' : 'pointer',
+              color: recBusy || inFlight ? 'var(--ink-high)' : 'var(--accent-fg)',
+              cursor: recBusy || inFlight ? 'default' : 'pointer',
               fontFamily: 'var(--font-sans)', fontSize: 'var(--text-xs)', fontWeight: 600,
               padding: '4px 12px',
             }}
           >
             {recBusy
               ? 'Queuing the recording…'
-              : recWaiting
-                ? 'Recording — running the authored steps…'
+              : inFlight
+                ? recordingLabel
                 : '⏺ Re-record'}
           </button>
           {recError !== null && (
@@ -523,10 +560,10 @@ function DemoSurface({
                 maxWidth: '340px', padding: '2px 8px',
               }}
             >
-              {recError} — nothing was queued; try again.
+              {recErrorIsRemedy ? recError : `${recError} — nothing was queued; try again.`}
             </span>
           )}
-          {threadError !== null && recError === null && !recBusy && !recWaiting && (
+          {threadError !== null && recError === null && !recBusy && !inFlight && (
             <span
               data-testid="video-record-error"
               data-source="thread"

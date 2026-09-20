@@ -70,7 +70,7 @@ export function WhatWhere({ model, provenance, retriedAs, onSelectRun }: Props):
       {/* The when block (started · ended · duration) — moved here from the run
           header strip (DES-RUN-NARRATOR §8, revised 2026-08-31): the header
           condensed to one row and this is where the run's context rows live. */}
-      <RunTimes runId={session.id} status={session.status} />
+      <RunTimes runId={session.id} status={session.status} session={session} />
       <Row label="intent" value={session.problem} />
       <Row label="repo" value={session.repo_ref ?? '—'} mono />
       {/* §7.10: the compact tail, full path on hover — never the 5-line wrap.

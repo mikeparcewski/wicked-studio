@@ -78,6 +78,32 @@ describe('deriveProvenance (§3.3)', () => {
     const p = deriveProvenance([launched('r-1', { detail: { channel: 'API' } })], 'r-1', true);
     expect(p.state === 'known' && p.channel).toBe('API');
   });
+
+  // crew#632 — the daemon emits lower-case channel tokens; case-insensitive compare (AC4 follow-through)
+  it('AC4: lower-case "studio" from daemon → channel is studio', () => {
+    const p = deriveProvenance([launched('r-1', { detail: { channel: 'studio' } })], 'r-1', false);
+    expect(p.state === 'known' && p.channel).toBe('studio');
+  });
+
+  it('AC4: lower-case "api" from daemon → channel is API (label keeps upper-case)', () => {
+    const p = deriveProvenance([launched('r-1', { detail: { channel: 'api' } })], 'r-1', false);
+    expect(p.state === 'known' && p.channel).toBe('API');
+  });
+
+  it('AC4: "cli" from daemon → channel is CLI (rendered "via CLI")', () => {
+    const p = deriveProvenance([launched('r-1', { detail: { channel: 'cli' } })], 'r-1', false);
+    expect(p.state === 'known' && p.channel).toBe('CLI');
+  });
+
+  it('AC4: upper-case "CLI" from daemon → channel is CLI (case-insensitive)', () => {
+    const p = deriveProvenance([launched('r-1', { detail: { channel: 'CLI' } })], 'r-1', false);
+    expect(p.state === 'known' && p.channel).toBe('CLI');
+  });
+
+  it('AC4: unknown channel token → falls through to launchedHere / unrecorded', () => {
+    const p = deriveProvenance([launched('r-1', { detail: { channel: 'unknown' } })], 'r-1', false);
+    expect(p.state === 'known' && p.channel).toBe('unrecorded');
+  });
 });
 
 describe('useProvenanceStore.load (§3.5: one fetch per run id, cached)', () => {

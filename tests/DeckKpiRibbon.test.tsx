@@ -62,3 +62,36 @@ describe('DeckKpiRibbon — real created_at windows', () => {
     expect(screen.getByTestId('home-kpi-governed')).toHaveAttribute('data-value', '—');
   });
 });
+
+describe('DeckKpiRibbon — spend tile (AC2: DTO sums over session-observed fold)', () => {
+  function runWithCost(id: string, costUsd: number): ReturnType<typeof makeView> {
+    // Inject cost_usd as optional-unknown on the session DTO (no api-types bump)
+    const v = makeView({ id, status: 'completed', created_at: secs(NOW - DAY) });
+    (v.session as unknown as Record<string, unknown>)['cost_usd'] = costUsd;
+    return v;
+  }
+
+  it('uses DTO sums and labels "Spend · runs" when any live run carries cost_usd', () => {
+    ribbon([runWithCost('a', 1.81), runWithCost('b', 0.19)]);
+    const tile = screen.getByTestId('home-kpi-spend');
+    expect(tile).toHaveTextContent('Spend · runs');
+    expect(tile).toHaveAttribute('data-value', '$2.00');
+  });
+
+  it('falls back to session-observed and labels "Spend · session" when no run carries cost_usd', () => {
+    ribbon([makeView({ id: 'a', status: 'completed', created_at: secs(NOW - DAY) })]);
+    const tile = screen.getByTestId('home-kpi-spend');
+    expect(tile).toHaveTextContent('Spend · session');
+    // No cliUsage frames → "—" and "no usage yet"
+    expect(tile).toHaveAttribute('data-value', '—');
+    expect(tile).toHaveTextContent('no usage yet');
+  });
+
+  it('archived runs are excluded from the DTO sum', () => {
+    const archived = runWithCost('archived', 100.00);
+    archived.session.archived_at = 1735689600;
+    ribbon([runWithCost('live', 1.00), archived]);
+    const tile = screen.getByTestId('home-kpi-spend');
+    expect(tile).toHaveAttribute('data-value', '$1.00');
+  });
+});
