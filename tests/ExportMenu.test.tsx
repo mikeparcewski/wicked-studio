@@ -9,8 +9,9 @@ import userEvent from '@testing-library/user-event';
 import { ProjectCard } from '../src/components/ProjectCard.js';
 import { VersionStrip } from '../src/components/VersionStrip.js';
 import type { BoardProject } from '../src/hooks/useBoardModel.js';
+import type { CoreEvent } from '../src/api/types.js';
 import { threadKey, useDocThreadStore, type DocMsg } from '../src/store/docThread.js';
-import { useExportAnswers } from '../src/store/exportAnswers.js';
+import { exportKey, useExportAnswers } from '../src/store/exportAnswers.js';
 
 const postExport = vi.fn();
 const postFork = vi.fn();
@@ -97,11 +98,16 @@ async function press(format: string, scope?: HTMLElement): Promise<void> {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Prevent hydrateExports from issuing real network requests in all suites below.
+  vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('no network in unit tests')));
   useDocThreadStore.setState({ messages: {}, genState: {}, pending: {}, hydrated: {}, landed: {} });
   useExportAnswers.getState().clear();
   postExport.mockResolvedValue(reply('roadmap_v3.pdf'));
 });
-afterEach(cleanup);
+afterEach(() => {
+  vi.unstubAllGlobals();
+  cleanup();
+});
 
 describe('the version strip exports the SELECTED version (§4.4, §4.2)', () => {
   it('AC: all three formats are offered, per version', () => {
@@ -242,5 +248,105 @@ describe('the board card exports without opening the document (§1.4, §4.4)', (
     // §3.3: the control is in the same block, so the retry is one press away.
     expect(within(menu).getAllByTestId('export-format')).toHaveLength(3);
     expect(within(menu).getAllByTestId('export-format')[2]).toBeEnabled();
+  });
+});
+
+describe('export hydration on document open and version change (wicked-studio#234 stopgap probe)', () => {
+  // The real interactive proxy URL the test mock produces for a doc-mounted export file.
+  const exportHref = (format: string) =>
+    `/api/v1/projects/${PROJECT}/interactive/d/${DOC}/api/export/file/roadmap_v3.${format}`;
+
+  function okFetch(): ReturnType<typeof vi.fn> {
+    return vi.fn().mockResolvedValue({
+      ok: true,
+      body: { cancel: () => Promise.resolve() },
+    });
+  }
+
+  it('T1: a 200-answering probe seeds READY for every format and renders the doc-mounted href', async () => {
+    vi.stubGlobal('fetch', okFetch());
+    strip();
+    await waitFor(() => expect(screen.getAllByTestId('export-ready')).toHaveLength(3));
+    const ready = screen.getAllByTestId('export-ready');
+    const byFormat = (f: string) => ready.find((a) => a.getAttribute('data-format') === f);
+    expect(byFormat('html')).toHaveAttribute('href', exportHref('html'));
+    expect(byFormat('pdf')).toHaveAttribute('href', exportHref('pdf'));
+    expect(byFormat('pptx')).toHaveAttribute('href', exportHref('pptx'));
+    // No plain format buttons remain once all three are READY.
+    expect(screen.queryByTestId('export-format')).toBeNull();
+  });
+
+  it('T2: a 404 probe leaves all three plain format buttons and no export-ready link', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: false, body: null });
+    vi.stubGlobal('fetch', fetchMock);
+    strip();
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+    expect(screen.queryByTestId('export-ready')).toBeNull();
+    expect(screen.getAllByTestId('export-format')).toHaveLength(3);
+  });
+
+  it('T3: a probe rejection shows no download link and no error card', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network failure')));
+    strip();
+    // Let the microtask queue drain.
+    await new Promise<void>((r) => { setTimeout(r, 50); });
+    expect(screen.queryByTestId('export-ready')).toBeNull();
+    expect(screen.queryByTestId('export-hint')).toBeNull();
+  });
+
+  it('T4: hydrate seeds html READY, then a new pdf POST adds a second export-ready without duplicating', async () => {
+    vi.stubGlobal('fetch', vi.fn()
+      // html probe 200, pdf/pptx 404
+      .mockResolvedValueOnce({ ok: true, body: { cancel: () => Promise.resolve() } })
+      .mockResolvedValue({ ok: false, body: null }));
+    postExport.mockResolvedValue(reply('roadmap_v3.pdf'));
+    strip();
+    // Wait for html hydration to settle.
+    await waitFor(() => {
+      const r = screen.getAllByTestId('export-ready');
+      return r.length === 1 && r[0]!.getAttribute('data-format') === 'html';
+    });
+    // Now press pdf — the probe already ran, so the store pre-check keeps it from re-probing.
+    await press('pdf');
+    await waitFor(() => expect(screen.getAllByTestId('export-ready')).toHaveLength(2));
+    const formats = screen.getAllByTestId('export-ready').map((a) => a.getAttribute('data-format'));
+    expect(formats).toContain('html');
+    expect(formats).toContain('pdf');
+    // Only pptx remains as a plain button.
+    expect(screen.getAllByTestId('export-format').map((b) => b.getAttribute('data-format'))).toEqual(['pptx']);
+  });
+
+  it('T5: regression — the POST export path and §7.2 click-site chip are unchanged by hydration', async () => {
+    // Probe rejects so no READY is pre-seeded; we verify the POST flow is intact.
+    let release: (v: unknown) => void = () => {};
+    postExport.mockImplementation(() => new Promise((res) => { release = res; }));
+    strip();
+    await press('pdf');
+    expect(screen.getByTestId('export-pending').closest('[data-format="pdf"]')).not.toBeNull();
+    release(reply('roadmap_v3.pdf'));
+    const ready = await screen.findByTestId('export-ready');
+    expect(ready).toHaveAttribute('data-format', 'pdf');
+    expect(ready).toHaveAttribute('data-version', '3');
+    expect(ready).toHaveAttribute(
+      'href', `/api/v1/projects/${PROJECT}/interactive/d/${DOC}/download/roadmap_v3.pdf`);
+  });
+
+  it('T6: regression — ingest(export.generated) adds a thread message but does NOT seed exportAnswers', () => {
+    const key = exportKey(PROJECT, DOC);
+    useDocThreadStore.getState().ingest({
+      type: 'interactiveEvent',
+      event: {
+        event_type: 'wicked.interactive.export.generated',
+        payload: {
+          project_id: PROJECT, document_id: DOC,
+          format: 'pdf', file: 'roadmap_v3.pdf',
+          download: `/d/${DOC}/api/export/file/roadmap_v3.pdf`,
+        },
+      },
+    } as unknown as CoreEvent);
+    // The WS frame writes a thread transcript entry (the artifact line)...
+    expect(messages().some((m) => m.kind === 'agent' && m.author === 'export')).toBe(true);
+    // ...but exportAnswers MUST remain empty — hydrate seeds it via probe, not WS frames.
+    expect(useExportAnswers.getState().answers[key] ?? []).toHaveLength(0);
   });
 });

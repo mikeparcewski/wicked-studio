@@ -263,9 +263,9 @@ describe('DocumentCanvas — bridge_unavailable (§7.12, §3.3)', () => {
 
     await userEvent.click(await screen.findByTestId('doc-canvas-retry'));
     expect(await screen.findByTestId('doc-canvas')).toBeInTheDocument();
-    // Load 1 failed, load 2 (the retry) answered the manifest — and the healthy
-    // frame's own HTML read (the docfb2 instrument fetch) is load 3.
-    expect(attempt).toBe(3);
+    // Loads 1–3: failed manifest, retry manifest, docfb2 instrument fetch.
+    // Loads 4–6: hydrateExports probes (html/pdf/pptx) fired by VersionStrip on render.
+    expect(attempt).toBe(6);
   });
 });
 
