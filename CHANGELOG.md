@@ -12,6 +12,8 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.5.13] — 2026-09-21
+
 - **AC1 — Run cost from the run record (wicked-crew#496, 2026-09-18).** Execute run rows (`CenterDashboard RunRow`) and the run identity strip (`RunTimes` in `WhatWhere`) now render cost from the DTO's `cost_usd` field only — never from `cliUsage` session fold. Three display shapes: a numeric `cost_usd` → formatted dollar chip (sub-cent shows `<$0.01`; `usage_seats_reported`/`usage_seats_unmetered` appended when present); `null` → "unmetered"; absent or non-finite → "cost not in run record" with `data-testid="run-cost-chip"` and a `title` citing crew#496 so operators know the daemon version that lands the field. The field is read as optional-unknown with no api-types bump.
 
 - **AC2 — KPI spend tile reads DTO cost sums when present (#303).** `DeckKpiRibbon`'s spend tile now prefers DTO sums: when any non-archived live run carries a numeric `cost_usd`, the tile shows "Spend · runs" labeled from those sums; when no run has the field it falls back to the `observedSpend` session-fold labeled "Spend · session". The Burn tab is unchanged.
@@ -1243,7 +1245,8 @@ The merged interactive layer: wicked-interactive's UI moved into this skin (DES-
   `git subtree split` (92 commits).
 - The SPA as a pure HTTP/WS client of the wicked-crew daemon: runs, gates, live CoreEvents.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.5.12...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.5.13...HEAD
+[0.5.13]: https://github.com/mikeparcewski/wicked-studio/compare/v0.5.12...v0.5.13
 [0.5.12]: https://github.com/mikeparcewski/wicked-studio/compare/v0.5.11...v0.5.12
 [0.5.11]: https://github.com/mikeparcewski/wicked-studio/compare/v0.5.10...v0.5.11
 [0.5.10]: https://github.com/mikeparcewski/wicked-studio/compare/v0.5.9...v0.5.10
