@@ -10,7 +10,8 @@ import { create } from 'zustand';
  */
 
 /** `reassign` (F-7R2-007): the operator approved the retry AND moved the unit to another seat. */
-export type SteeringAction = 'approve' | 'approve-with-steer' | 'reject' | 'cancel' | 'reassign';
+/** `request-changes` (#299): an escalation gate only — sends `action: 'request_changes'` to rewind to the creator phase. */
+export type SteeringAction = 'approve' | 'approve-with-steer' | 'reject' | 'cancel' | 'reassign' | 'request-changes';
 
 export interface SteeringEntry {
   /** Monotonic order key. */

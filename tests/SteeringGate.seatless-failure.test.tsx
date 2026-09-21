@@ -56,21 +56,22 @@ describe('F-E2E-014: seatless-run failure card', () => {
     expect(screen.queryByText('why this gate fired')).toBeNull();
   });
 
-  it('(a) seatless failure — no ReassignControl lever; Approve reads plain "Approve"', () => {
+  it('(a) seatless failure — no ReassignControl lever; escalation layout shows Retry button', () => {
     render(<SteeringGate runId={RUN} ord={3} prompt={ESCALATION_PROMPT} units={SEATLESS_UNITS} clis={POOL} />);
     expect(screen.queryByTestId('steering-reassign-row')).toBeNull();
     expect(screen.queryByTestId('steering-reassign-none')).toBeNull();
-    expect(screen.getByTestId('steering-approve')).toHaveTextContent('Approve');
-    expect(screen.getByTestId('steering-approve').textContent).not.toMatch(/retry on/);
+    expect(screen.getByTestId('steering-retry')).toHaveTextContent('Retry');
+    expect(screen.getByTestId('steering-request-changes')).toBeInTheDocument();
+    expect(screen.queryByTestId('steering-approve')).toBeNull();
   });
 
-  it('(b) seat failure — existing ReassignControl lever and Approve label preserved', () => {
+  it('(b) seat failure — ReassignControl lever present; escalation layout shows Retry', () => {
     const SEATED_UNITS = SEATLESS_UNITS.map((u) =>
       u.ord === 3 ? { ...u, assigned_cli: 'codex' } : u,
     );
     render(<SteeringGate runId={RUN} ord={3} prompt={ESCALATION_PROMPT} units={SEATED_UNITS} clis={POOL} />);
     expect(screen.getByTestId('steering-reassign-row')).toBeInTheDocument();
-    expect(screen.getByTestId('steering-approve')).toHaveTextContent('Approve (retry on codex)');
+    expect(screen.getByTestId('steering-retry')).toHaveTextContent('Retry');
   });
 
   it('(c) a long cause renders in full in the headline — not truncated or demoted', () => {
@@ -90,14 +91,14 @@ describe('F-E2E-014: seatless-run failure card', () => {
     render(<SteeringGate runId={RUN} ord={3} prompt={ESCALATION_PROMPT} clis={POOL} />);
     expect(screen.getByTestId('steering-prompt')).toHaveTextContent(CAUSE);
     expect(screen.getByTestId('steering-reassign-row')).toBeInTheDocument();
-    expect(screen.getByTestId('steering-approve')).toHaveTextContent('Approve');
-    expect(screen.getByTestId('steering-approve').textContent).not.toMatch(/retry on/);
+    expect(screen.getByTestId('steering-retry')).toHaveTextContent('Retry'); // escalation layout
+    expect(screen.queryByTestId('steering-approve')).toBeNull();
   });
 
   it('(c) #274 — units known but the failed ord not among them is unknown too: the lever stays', () => {
     render(<SteeringGate runId={RUN} ord={3} prompt={ESCALATION_PROMPT} units={SEATLESS_UNITS.filter((u) => u.ord !== 3)} clis={POOL} />);
     expect(screen.getByTestId('steering-reassign-row')).toBeInTheDocument();
-    expect(screen.getByTestId('steering-approve').textContent).not.toMatch(/retry on/);
+    expect(screen.getByTestId('steering-retry')).toHaveTextContent('Retry'); // escalation layout
   });
 
   it('a genuine trailing footnote keeps its leading bracket (cleanPrompt hardening)', () => {

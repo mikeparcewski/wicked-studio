@@ -29,6 +29,7 @@ import { launchPath, sessionProjectId } from '../hooks/ambientProject.js';
 import { chroniclePath, modePath } from '../hooks/useRoute.js';
 import { useTimeRange } from '../hooks/useTimeRange.js';
 import { DeliveryChip } from './RunDelivery.js';
+import { deriveRunCost } from './runIdentity.js';
 import { TimeRangeSelector } from './TimeRangeSelector.js';
 import { WorkChronicle } from './WorkChronicle.js';
 
@@ -711,6 +712,20 @@ function RunRow({ view, failReason, onSelect }: RunRowProps): React.ReactElement
           run PRODUCED, next to what it is doing. Pure DTO, zero requests; a run
           with no deliver phase renders nothing rather than an "unknown" badge. */}
       <DeliveryChip view={view} />
+      {/* Cost from the run record (wicked-crew#496, 2026-09-18): read as optional-unknown.
+          All three states render — absent cost names crew#496 via title, not bare silence. */}
+      {(() => {
+        const cost = deriveRunCost(view.session);
+        return (
+          <span
+            data-testid="run-cost-chip"
+            style={{ fontSize: 'var(--text-2xs)', color: 'var(--ink-dim)', ...mono, flexShrink: 0 }}
+            {...(cost.title !== undefined ? { title: cost.title } : {})}
+          >
+            {cost.text}
+          </span>
+        );
+      })()}
       {/* Status word + phase detail: data, so mono; the detail dims (§5.4). */}
       <span style={{ fontSize: 'var(--text-xs)', color: m.color, ...mono, flexShrink: 0, transition: 'color var(--dur-base)' }}>
         {m.status}

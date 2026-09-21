@@ -416,6 +416,31 @@ export function isFailureEscalation(prompt: string | undefined, view: GateVerdic
 }
 
 /**
+ * Whether this gate is an ENGINE ESCALATION — any of the daemon 0.7.38 escalation conditions
+ * that render the four-verb layout (Retry / Request changes / Reject / Cancel run):
+ *  - the triage-escalated spelling ("Unit N failed and triage escalated");
+ *  - the "confirm to retry the phase" prompt family (`floor_failed` and `verdict_not_pass`
+ *    conditions — floor-check failure and evaluator-verdict failure respectively);
+ *  - a denial whose source is `repo_checks` or `evaluator_verdict` (the promptless
+ *    daemon-restart fallback for the two non-triage conditions above).
+ *
+ * Distinct from {@link isFailureEscalation}, which is used only for the seat-reassign lever
+ * (F-7R2-007 / F-E2E-014). `isFailureEscalation` must not widen.
+ */
+export function isEscalationGate(prompt: string | undefined, view: GateVerdictView | null): boolean {
+  // Triage spelling (prompt-based — unique across all engine versions)
+  if (prompt !== undefined && /^\s*Unit\s+\d+\s+failed and triage escalated/i.test(prompt)) return true;
+  // floor_failed (repo_checks) and verdict_not_pass (evaluator_verdict) — denial-source is
+  // authoritative. The same denial source covers the promptless daemon-restart fallback:
+  // `gateEvaluated` is emitted before `awaitingHuman`, so the event log always carries the denial
+  // when the gate card renders. We do NOT match on the "confirm to retry the phase" prompt text
+  // alone — the legacy worktree-guard prompt (pre-wicked-core#431) uses identical wording.
+  if (view?.denial?.source === 'repo_checks') return true;
+  if (view?.denial?.source === 'evaluator_verdict') return true;
+  return false;
+}
+
+/**
  * The failed unit's seat, TRI-STATE (#274 — the F-E2E-014 fix collapsed two of these into one):
  *  - a `string` — the unit is known and had that seat;
  *  - `null` — the unit is known and PROVABLY had no seat (a tool-only / seatless unit);

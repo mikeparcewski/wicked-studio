@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
+import type { RosterSeat } from '../api/types.js';
 import { apiStatus } from '../api/errors.js';
+import { api } from '../api/client.js';
+import { getCachedRoster, setCachedRoster, subscribeRoster } from '../store/rosterCache.js';
 import { createDoc, docBinding, getVersions, injectDocMessage, interactiveUrl, postEvent, postFork } from '../api/interactive.js';
 import { parseCreateAsk } from '../interactive/createAsk.js';
 import { docSlug } from '../interactive/docSlug.js';
@@ -730,6 +733,18 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
   // repository grounding, which the thread then records.
   const [subjectStatus, setSubjectStatus] = useState<SubjectStatus>('loading');
   const [noGrounding, setNoGrounding] = useState(false);
+  // #302: show CLIs chip row (disabled — crew schema has no clisJson on doc APIs yet)
+  const [docRoster, setDocRoster] = useState<RosterSeat[] | null>(() => getCachedRoster());
+  useEffect(() => {
+    const unsubscribe = subscribeRoster(setDocRoster);
+    if (getCachedRoster() !== null) return unsubscribe;
+    let cancelled = false;
+    Promise.resolve()
+      .then(() => api.getRoster())
+      .then(({ roster: seats }) => { if (!cancelled) { setCachedRoster(seats); setDocRoster(seats); } })
+      .catch(() => { /* cold roster: chips appear only after the fetch resolves */ });
+    return () => { cancelled = true; unsubscribe(); };
+  }, []);
   // The picks belong to ONE launch context. This component is not remounted when the route moves
   // (App.tsx), so a selection made for project A would otherwise ride the next create in project
   // B — a 400 `repo_not_in_project` at best, a silently wrong subject at worst (Copilot on #241).
@@ -1316,6 +1331,29 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
             onNoGrounding={setNoGrounding}
             onStatus={setSubjectStatus}
           />
+        )}
+        {/* #302: CLIs chip row — same visual as Build composer; schema is strict (no clisJson
+            on InteractiveDocCreateRequest) so chips are disabled pending a crew schema update. */}
+        {launching && docRoster !== null && docRoster.length > 0 && (
+          <div
+            data-testid="doc-clis-row"
+            className="flex flex-wrap items-center gap-1.5"
+            style={{ paddingLeft: 2 }}
+          >
+            {docRoster.map((s) => (
+              <span
+                key={s.key}
+                className="rounded-full px-2 py-0.5 text-[10px] font-mono opacity-40 cursor-not-allowed select-none"
+                style={{ background: 'var(--surface-raised)', color: 'var(--ink-body)', border: '1px solid var(--surface-overlay)' }}
+                title="CLIs selection not yet available for Document mode"
+              >
+                {s.key}
+              </span>
+            ))}
+            <span className="text-[10px]" style={{ color: 'var(--ink-dim)' }}>
+              CLIs not yet configurable here — pending crew#631
+            </span>
+          </div>
         )}
         {/* §5.3's composer contract, worn by every mode: --surface-raised at
             --radius-xl, the wk-composer focus ring (--accent-dim via

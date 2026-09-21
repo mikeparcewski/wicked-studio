@@ -21,16 +21,28 @@ describe('ProvenanceLine', () => {
     expect(line).toHaveTextContent('via studio');
   });
 
-  it('degrades to the exact copy — the line is never absent', () => {
+  it('degrades to "launch not recorded" — the line is never absent, never claims API', () => {
     render(<ProvenanceLine provenance={{ state: 'unknown' }} testId="run-provenance" />);
-    expect(screen.getByTestId('run-provenance'))
-      .toHaveTextContent('launched via API (actor unknown)');
+    const line = screen.getByTestId('run-provenance');
+    expect(line).toHaveTextContent('launch not recorded');
+    expect(line).not.toHaveTextContent('API');
   });
 
-  it('renders the degraded copy while the audit answer is still null', () => {
+  it('unrecorded channel renders "launch channel not recorded", never "via unrecorded"', () => {
+    render(<ProvenanceLine
+      provenance={{ state: 'known', actorId: 'mika', actorKind: 'human', channel: 'unrecorded' }}
+      testId="run-provenance"
+    />);
+    const line = screen.getByTestId('run-provenance');
+    expect(line).toHaveTextContent('launch channel not recorded');
+    expect(line).not.toHaveTextContent('via unrecorded');
+  });
+
+  it('renders "launch not recorded" while the audit answer is still null', () => {
     render(<ProvenanceLine provenance={null} testId="notif-provenance" />);
-    expect(screen.getByTestId('notif-provenance'))
-      .toHaveTextContent('launched via API (actor unknown)');
+    const line = screen.getByTestId('notif-provenance');
+    expect(line).toHaveTextContent('launch not recorded');
+    expect(line).not.toHaveTextContent('API');
   });
 
   it('lineage cross-links render short ids and navigate on click', async () => {
@@ -57,7 +69,17 @@ describe('ProvenanceLine', () => {
     render(<ProvenanceLine provenance={{ state: 'unknown' }} retryOf="r-original-run"
       testId="run-provenance" />);
     const line = screen.getByTestId('run-provenance');
-    expect(line).toHaveTextContent('launched via API (actor unknown)');
+    expect(line).toHaveTextContent('launch not recorded');
     expect(screen.getByTestId('lineage-retry-of')).toHaveTextContent('retry of r-origin');
+  });
+
+  it('unknown branch: renders "launch not recorded" in ink-dim, never the old API fallback (wicked-crew#632)', () => {
+    render(<ProvenanceLine provenance={{ state: 'unknown' }} testId="run-provenance" />);
+    const line = screen.getByTestId('run-provenance');
+    const unknown = line.querySelector('[style*="ink-dim"]');
+    expect(unknown).not.toBeNull();
+    expect(unknown!.textContent).toBe('launch not recorded');
+    expect(line.textContent).not.toMatch(/API/);
+    expect(line.textContent).not.toMatch(/actor unknown/);
   });
 });

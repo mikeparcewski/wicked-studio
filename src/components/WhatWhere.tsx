@@ -57,9 +57,10 @@ export function WhatWhere({ model, provenance, retriedAs, onSelectRun }: Props):
   return (
     <div data-testid="what-where" className="flex flex-col gap-1.5">
       {/* The provenance line — FIRST row of the card (DES-UX-001 §3.3): who or
-          what launched this run, degrading to "launched via API (actor
-          unknown)" rather than omitting the line. Lineage cross-links (§4.3)
-          ride inside it. */}
+          what launched this run, degrading to "launch not recorded" rather
+          than omitting the line — absence is reported as unknown, never
+          guessed as API (wicked-crew#632 omits the channel/actor fields when
+          it has none). Lineage cross-links (§4.3) ride inside it. */}
       <ProvenanceLine
         provenance={provenance ?? null}
         retryOf={session.retry_of}
@@ -70,7 +71,7 @@ export function WhatWhere({ model, provenance, retriedAs, onSelectRun }: Props):
       {/* The when block (started · ended · duration) — moved here from the run
           header strip (DES-RUN-NARRATOR §8, revised 2026-08-31): the header
           condensed to one row and this is where the run's context rows live. */}
-      <RunTimes runId={session.id} status={session.status} />
+      <RunTimes runId={session.id} status={session.status} session={session} />
       <Row label="intent" value={session.problem} />
       <Row label="repo" value={session.repo_ref ?? '—'} mono />
       {/* §7.10: the compact tail, full path on hover — never the 5-line wrap.

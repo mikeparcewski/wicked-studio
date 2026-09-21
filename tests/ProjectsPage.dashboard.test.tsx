@@ -212,6 +212,16 @@ describe('the register stays complete', () => {
     expect(all).toContain('p-old');
   });
 
+  it('studio#214: archived project cards navigate to /projects/:id (the management page with Restore), not /p/:id (the dashboard)', async () => {
+    const navigate = vi.fn();
+    await page(navigate);
+    fireEvent.click(screen.getByText(/Show 1 archived project/));
+    const archivedCard = screen.getAllByTestId('project-card').find((c) => c.getAttribute('data-project-id') === 'p-old')!;
+    fireEvent.click(archivedCard);
+    expect(navigate).toHaveBeenCalledWith('/projects/p-old');
+    expect(navigate).not.toHaveBeenCalledWith('/p/p-old');
+  });
+
   it('preserves create and the creation verbs in the header', async () => {
     const navigate = vi.fn();
     await page(navigate);

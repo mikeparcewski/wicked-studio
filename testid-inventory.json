@@ -8,11 +8,11 @@
     "Entry kinds: `static` values appear verbatim in the DOM; `dynamic` are template-literal testids with each ${expr} normalised to '*'; `computed` carry the raw JSX expression — dynamic/computed resolve only against a live DOM."
   ],
   "version": 1,
-  "studioVersion": "0.5.12",
+  "studioVersion": "0.5.13",
   "counts": {
     "files": 146,
-    "occurrences": 1326,
-    "static": 1142,
+    "occurrences": 1341,
+    "static": 1152,
     "dynamic": 63,
     "computed": 7
   },
@@ -1326,6 +1326,12 @@
       ]
     },
     {
+      "testId": "dashboard-manage",
+      "files": [
+        "src/components/ProjectDashboard.tsx"
+      ]
+    },
+    {
       "testId": "dashboard-meta",
       "files": [
         "src/components/ProjectDashboard.tsx"
@@ -1413,6 +1419,18 @@
       "testId": "decisions-ledger",
       "files": [
         "src/components/DecisionsLedger.tsx"
+      ]
+    },
+    {
+      "testId": "deliver-gate-diffstat",
+      "files": [
+        "src/components/SteeringGate.tsx"
+      ]
+    },
+    {
+      "testId": "deliver-gate-full-diff",
+      "files": [
+        "src/components/SteeringGate.tsx"
       ]
     },
     {
@@ -1536,6 +1554,12 @@
       ]
     },
     {
+      "testId": "demo-clis-row",
+      "files": [
+        "src/components/DemoWizard.tsx"
+      ]
+    },
+    {
       "testId": "demo-picker",
       "files": [
         "src/components/VideoStoryboard.tsx"
@@ -1635,6 +1659,12 @@
       "testId": "doc-canvas",
       "files": [
         "src/components/DocumentCanvas.tsx"
+      ]
+    },
+    {
+      "testId": "doc-clis-row",
+      "files": [
+        "src/components/DocumentThread.tsx"
       ]
     },
     {
@@ -4374,6 +4404,12 @@
       ]
     },
     {
+      "testId": "run-cost-chip",
+      "files": [
+        "src/components/CenterDashboard.tsx"
+      ]
+    },
+    {
       "testId": "run-degraded",
       "files": [
         "src/components/RunDegradedNote.tsx"
@@ -4473,6 +4509,12 @@
       "testId": "run-retry",
       "files": [
         "src/components/ChatPanel.tsx"
+      ]
+    },
+    {
+      "testId": "run-revise-pr",
+      "files": [
+        "src/components/RunDelivery.tsx"
       ]
     },
     {
@@ -5723,6 +5765,12 @@
       ]
     },
     {
+      "testId": "steering-request-changes",
+      "files": [
+        "src/components/SteeringGate.tsx"
+      ]
+    },
+    {
       "testId": "steering-retire-cancel",
       "files": [
         "src/components/SteeringRetireModal.tsx"
@@ -5768,6 +5816,12 @@
       "testId": "steering-retired-note",
       "files": [
         "src/components/SteeringPage.tsx"
+      ]
+    },
+    {
+      "testId": "steering-retry",
+      "files": [
+        "src/components/SteeringGate.tsx"
       ]
     },
     {
@@ -5956,6 +6010,12 @@
       "testId": "testing-campaign-open",
       "files": [
         "src/components/CampaignsPage.tsx"
+      ]
+    },
+    {
+      "testId": "testing-clis-row",
+      "files": [
+        "src/components/TestingLaunchPanel.tsx"
       ]
     },
     {

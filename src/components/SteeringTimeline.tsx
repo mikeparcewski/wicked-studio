@@ -5,11 +5,12 @@ interface Props {
 }
 
 const ACTION_STYLE: Record<SteeringAction, { label: string; color: string }> = {
-  approve:            { label: 'Approved',          color: 'var(--status-run)' },
-  'approve-with-steer':{ label: 'Approved + steered',color: 'var(--status-gate)' },
-  reject:             { label: 'Rejected',           color: 'var(--status-fail)' },
-  cancel:             { label: 'Cancelled run',      color: 'var(--ink-muted)' },
-  reassign:           { label: 'Reassigned',         color: 'var(--status-gate)' },
+  approve:              { label: 'Approved',           color: 'var(--status-run)' },
+  'approve-with-steer': { label: 'Approved + steered', color: 'var(--status-gate)' },
+  reject:               { label: 'Rejected',            color: 'var(--status-fail)' },
+  cancel:               { label: 'Cancelled run',       color: 'var(--ink-muted)' },
+  reassign:             { label: 'Reassigned',          color: 'var(--status-gate)' },
+  'request-changes':    { label: 'Request changes',     color: 'var(--status-fail)' },
 };
 
 export function SteeringTimeline({ runId }: Props): React.ReactElement {
@@ -62,7 +63,9 @@ export function SteeringTimeline({ runId }: Props): React.ReactElement {
                       ? 'run rejected'
                       : e.action === 'reassign'
                         ? `retry moved to ${e.cli ?? 'another seat'}`
-                        : 'run cancelled'}{' '}
+                        : e.action === 'request-changes'
+                          ? 'rewound to creator phase'
+                          : 'run cancelled'}{' '}
                 — as recorded
               </p>
             </li>

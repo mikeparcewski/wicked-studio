@@ -26,6 +26,7 @@ interface Props {
   /** The loaded run index (App's one `useRuns()` array) — forward lineage only, no new fetch. */
   runs?: SessionView[];
   onSelectRun?: (id: string) => void;
+  navigate?: (path: string) => void;
 }
 
 type AccordionId =
@@ -479,7 +480,7 @@ function FilesPanel({ model }: { model: RunModel }): React.ReactElement {
   );
 }
 
-export function RightPanel({ view, runs, onSelectRun }: Props): React.ReactElement {
+export function RightPanel({ view, runs, onSelectRun, navigate }: Props): React.ReactElement {
   const [collapsed, setCollapsed] = useState(false);
   const [openAccordion, setOpenAccordion] = useState<AccordionId | null>('whatwhere');
 
@@ -705,7 +706,7 @@ export function RightPanel({ view, runs, onSelectRun }: Props): React.ReactEleme
                 page already hydrated — still zero requests of its own. */}
             {openId === id && id === 'delivery' && (
               <div className="px-4 py-3" style={{ background: 'var(--surface-base)' }}>
-                <RunDelivery view={view} />
+                <RunDelivery view={view} {...(navigate !== undefined ? { navigate } : {})} />
               </div>
             )}
             {openId === id && id !== 'delivery' && model && (

@@ -67,8 +67,13 @@ const versions = (): number[] =>
 
 // A bare `() => postFork.mockReset()` would return the mock, which vitest takes as the
 // hook's teardown function and then CALLS — so the block form is load-bearing.
-beforeEach(() => { postFork.mockReset(); });
+beforeEach(() => {
+  postFork.mockReset();
+  // Prevent hydrateExports from issuing real network requests in these tests.
+  vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('no network in unit tests')));
+});
 afterEach(() => {
+  vi.unstubAllGlobals();
   cleanup();
   document.body.innerHTML = '';
 });

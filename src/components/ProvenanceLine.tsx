@@ -81,10 +81,14 @@ export function ProvenanceLine({ provenance, retryOf, retriedAs, onSelectRun, te
           >
             {provenance.actorKind}
           </span>
-          <span>via {provenance.channel}</span>
+          {provenance.channel === 'unrecorded' ? (
+            <span style={{ color: 'var(--ink-dim)' }}>launch channel not recorded</span>
+          ) : (
+            <span>via {provenance.channel}</span>
+          )}
         </>
       ) : (
-        <span style={{ color: 'var(--ink-dim)' }}>launched via API (actor unknown)</span>
+        <span style={{ color: 'var(--ink-dim)' }}>launch not recorded</span>
       )}
       {backLink !== undefined && (
         <>

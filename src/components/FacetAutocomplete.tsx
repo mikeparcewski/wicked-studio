@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 /**
  * A reusable facet FILTER as a text input with `key=value` autocomplete (the user's ask:
@@ -38,6 +38,9 @@ export function FacetAutocomplete({
   const [open, setOpen] = useState(false);
   const [highlight, setHighlight] = useState(0);
   const blurTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Clear a pending blur-close if the component unmounts while the timer is live,
+  // so the 120 ms callback never fires into a torn-down React environment.
+  useEffect(() => () => { if (blurTimer.current !== null) clearTimeout(blurTimer.current); }, []);
 
   /** The options that match the typed text (case-insensitive substring); empty text shows all. */
   const matches = useMemo(() => {

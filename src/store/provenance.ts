@@ -16,8 +16,8 @@ import type { ActorKind, AuditEntry } from '../api/types.js';
  *    caches the degraded answer too: revisits never re-fire.
  *  - List rows (notifications) read ONLY this cache — no fan-out.
  *  - Absence degrades honestly: no matching audit entry (or an unreachable
- *    trail) is `{state:'unknown'}`, rendered as the brief's own words —
- *    "launched via API (actor unknown)" — never an omitted line.
+ *    trail) is `{state:'unknown'}`, rendered as "launch not recorded" (wicked-crew#632:
+ *    absence means unknown, not API) — never an omitted line.
  */
 export type Provenance =
   | {
@@ -25,12 +25,13 @@ export type Provenance =
       actorId: string;
       actorKind: ActorKind;
       /**
-       * The launch channel. The audit detail carries no channel marker, so the
-       * honest derivation is: a run THIS studio session launched is `studio`
-       * (we witnessed the POST); anything else can only truthfully be called
-       * the API — a curl, another skin, a schedule all look identical here.
+       * The launch channel. Resolution order: (1) `detail.channel` on the audit
+       * entry (crew#632 — compared case-insensitively; the daemon emits lower-case
+       * `studio|cli|api`); (2) the per-tab sessionStorage witness (`studio`);
+       * (3) `unrecorded` — the daemon has not written the field and this tab did
+       * not witness the launch. Never 'API'/'CLI' without the daemon saying so.
        */
-      channel: 'studio' | 'API';
+      channel: 'studio' | 'CLI' | 'API' | 'unrecorded';
       /** Lineage from the audit detail (CREW-UX-3): the run this one retries. */
       retryOf?: string;
     }
@@ -40,6 +41,14 @@ export type Provenance =
  * Pure derivation over the audit page (unit-tested): the NEWEST `run.launched`
  * entry for this run wins (`GET /audit` serves newest-first). Anything short of
  * a well-formed actor is the degraded answer — never a fabricated name.
+ *
+ * Channel resolution order (survives page reload):
+ *  1. `detail.channel` on the audit entry — forward-compat field the daemon may
+ *     write in a future version; type-safe today (AuditEntry.detail is
+ *     `Record<string, unknown>`; no schema change needed to read it).
+ *  2. `launchedHere` — set by the caller from the sessionStorage witness so the
+ *     'studio' answer survives a same-session page reload even before the daemon
+ *     writes the channel field.
  */
 export function deriveProvenance(
   entries: readonly AuditEntry[],
@@ -58,13 +67,41 @@ export function deriveProvenance(
   if (launched === undefined) return { state: 'unknown' };
   const detail = (launched.detail ?? {}) as Record<string, unknown>;
   const retryOf = typeof detail['retryOf'] === 'string' ? detail['retryOf'] : undefined;
+  const channelRaw = typeof detail['channel'] === 'string' ? detail['channel'].toLowerCase() : '';
+  const channel: 'studio' | 'CLI' | 'API' | 'unrecorded' =
+    channelRaw === 'studio' ? 'studio'
+    : channelRaw === 'cli'  ? 'CLI'
+    : channelRaw === 'api'  ? 'API'
+    : launchedHere          ? 'studio'
+    :                         'unrecorded';
   return {
     state: 'known',
     actorId: launched.actor.id,
     actorKind: launched.actor.kind,
-    channel: launchedHere ? 'studio' : 'API',
+    channel,
     ...(retryOf !== undefined ? { retryOf } : {}),
   };
+}
+
+/** SessionStorage key for runs this studio session launched (survives page reload). */
+const SESSION_KEY = 'wk-studio-launches';
+
+function readSessionLaunches(): Record<string, true> {
+  try {
+    const raw = sessionStorage.getItem(SESSION_KEY);
+    return raw !== null ? (JSON.parse(raw) as Record<string, true>) : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeSessionLaunch(runId: string): void {
+  try {
+    const current = readSessionLaunches();
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify({ ...current, [runId]: true }));
+  } catch {
+    // sessionStorage unavailable (e.g. private-browsing quota) — degrade silently
+  }
 }
 
 interface ProvenanceStore {
@@ -84,8 +121,10 @@ export const useProvenanceStore = create<ProvenanceStore>((set, get) => ({
   byRun: {},
   launchedHere: {},
 
-  markLaunchedHere: (runId) =>
-    set((s) => ({ launchedHere: { ...s.launchedHere, [runId]: true } })),
+  markLaunchedHere: (runId) => {
+    writeSessionLaunch(runId);
+    set((s) => ({ launchedHere: { ...s.launchedHere, [runId]: true } }));
+  },
 
   load: (runId) => {
     if (get().byRun[runId] !== undefined || inflight.has(runId)) return;
@@ -93,10 +132,15 @@ export const useProvenanceStore = create<ProvenanceStore>((set, get) => ({
     api
       .getAudit(runId)
       .then(({ entries }) => {
+        // Check both the in-memory Zustand witness AND the sessionStorage record so
+        // 'studio' survives a same-session page reload even before the daemon writes
+        // the channel field to the audit entry.
+        const launchedHere =
+          get().launchedHere[runId] === true || readSessionLaunches()[runId] === true;
         set((s) => ({
           byRun: {
             ...s.byRun,
-            [runId]: deriveProvenance(entries, runId, s.launchedHere[runId] === true),
+            [runId]: deriveProvenance(entries, runId, launchedHere),
           },
         }));
       })
