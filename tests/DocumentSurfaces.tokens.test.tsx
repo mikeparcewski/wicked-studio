@@ -52,7 +52,12 @@ function manifest(versions: VersionEntry[]): VersionManifest {
   return { head: versions[versions.length - 1]!.version, versions };
 }
 
+beforeEach(() => {
+  // Prevent hydrateExports from issuing real network requests in these tests.
+  vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('no network in unit tests')));
+});
 afterEach(() => {
+  vi.unstubAllGlobals();
   cleanup();
   vi.restoreAllMocks();
   useDocThreadStore.setState({ messages: {}, genState: {}, pending: {}, hydrated: {}, landed: {} });

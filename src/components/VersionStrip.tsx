@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { postFork } from '../api/interactive.js';
 import type { ForkResult, VersionEntry, VersionManifest } from '../api/interactive.js';
 import { versionPath, type Navigate } from '../hooks/useRoute.js';
+import { hydrateExports } from '../interactive/exportHydrate.js';
 import { threadKey, useDocThreadStore, type DocMsg } from '../store/docThread.js';
 import { ExportMenu } from './ExportMenu.js';
 import { ThemesMenu } from './ThemesMenu.js';
@@ -172,6 +173,9 @@ export function VersionStrip({
   // actually on the wire's side of truth — see anchorOf.
   const msgs = useDocThreadStore((s) => s.messages[threadKey(projectId, docId)] ?? NO_MSGS);
   const anchorsByVersion = useMemo(() => anchorsFrom(msgs), [msgs]);
+  // Seed exportAnswers from a bridge probe so export links survive a reload
+  // (wicked-studio#234 stopgap; see exportHydrate.ts for the disclosure).
+  useEffect(() => hydrateExports(projectId, docId, selected), [projectId, docId, selected]);
 
   function select(entry: VersionEntry): void {
     navigate(versionPath(projectId, docId, entry.version, mode));

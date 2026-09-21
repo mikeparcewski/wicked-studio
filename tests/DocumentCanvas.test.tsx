@@ -12,6 +12,7 @@ import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { DocumentCanvas } from '../src/components/DocumentCanvas.js';
 import { threadKey, useDocThreadStore } from '../src/store/docThread.js';
+import { useExportAnswers } from '../src/store/exportAnswers.js';
 import type { DocSummary, VersionManifest } from '../src/api/interactive.js';
 
 const PROJECT = 'proj-abc-123';
@@ -79,6 +80,7 @@ afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
+  useExportAnswers.getState().clear();
 });
 
 describe('DocumentCanvas — the frame (§5.3, §6.3)', () => {
@@ -248,8 +250,10 @@ describe('DocumentCanvas — bridge_unavailable (§7.12, §3.3)', () => {
 
   it('Retry re-issues the load, and a now-healthy bridge renders the frame', async () => {
     let attempt = 0;
-    vi.stubGlobal('fetch', vi.fn(() => {
+    const seen: string[] = [];
+    vi.stubGlobal('fetch', vi.fn((url: string) => {
       attempt += 1;
+      seen.push(url);
       const reply: Reply = attempt === 1 ? BRIDGE_DOWN : { body: MANIFEST };
       return Promise.resolve({
         ok: (reply.status ?? 200) < 300,
@@ -263,9 +267,9 @@ describe('DocumentCanvas — bridge_unavailable (§7.12, §3.3)', () => {
 
     await userEvent.click(await screen.findByTestId('doc-canvas-retry'));
     expect(await screen.findByTestId('doc-canvas')).toBeInTheDocument();
-    // Load 1 failed, load 2 (the retry) answered the manifest — and the healthy
-    // frame's own HTML read (the docfb2 instrument fetch) is load 3.
-    expect(attempt).toBe(3);
+    // The Retry AC: one failed manifest load, one retried manifest load.
+    // (The instrument fetch and hydrate probes are unrelated to the Retry behaviour under test.)
+    expect(seen.filter((u) => u.includes('/api/versions'))).toHaveLength(2);
   });
 });
 
