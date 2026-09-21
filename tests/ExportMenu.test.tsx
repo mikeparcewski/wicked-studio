@@ -257,9 +257,15 @@ describe('export hydration on document open and version change (wicked-studio#23
     `/api/v1/projects/${PROJECT}/interactive/d/${DOC}/api/export/file/roadmap_v3.${format}`;
 
   function okFetch(): ReturnType<typeof vi.fn> {
-    return vi.fn().mockResolvedValue({
-      ok: true,
-      body: { cancel: () => Promise.resolve() },
+    return vi.fn((url: string) => {
+      const ct = url.endsWith('.html') ? 'text/html'
+        : url.endsWith('.pdf') ? 'application/pdf'
+        : 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+      return Promise.resolve({
+        ok: true,
+        body: { cancel: () => Promise.resolve() },
+        headers: { get: (h: string) => h === 'content-type' ? ct : null },
+      });
     });
   }
 
@@ -286,25 +292,30 @@ describe('export hydration on document open and version change (wicked-studio#23
   });
 
   it('T3: a probe rejection shows no download link and no error card', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network failure')));
+    const fetchMock = vi.fn().mockRejectedValue(new Error('network failure'));
+    vi.stubGlobal('fetch', fetchMock);
     strip();
-    // Let the microtask queue drain.
-    await new Promise<void>((r) => { setTimeout(r, 50); });
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
     expect(screen.queryByTestId('export-ready')).toBeNull();
     expect(screen.queryByTestId('export-hint')).toBeNull();
   });
 
   it('T4: hydrate seeds html READY, then a new pdf POST adds a second export-ready without duplicating', async () => {
     vi.stubGlobal('fetch', vi.fn()
-      // html probe 200, pdf/pptx 404
-      .mockResolvedValueOnce({ ok: true, body: { cancel: () => Promise.resolve() } })
+      // html probe 200 with correct content-type, pdf/pptx 404
+      .mockResolvedValueOnce({
+        ok: true,
+        body: { cancel: () => Promise.resolve() },
+        headers: { get: (h: string) => h === 'content-type' ? 'text/html' : null },
+      })
       .mockResolvedValue({ ok: false, body: null }));
     postExport.mockResolvedValue(reply('roadmap_v3.pdf'));
     strip();
     // Wait for html hydration to settle.
     await waitFor(() => {
       const r = screen.getAllByTestId('export-ready');
-      return r.length === 1 && r[0]!.getAttribute('data-format') === 'html';
+      expect(r).toHaveLength(1);
+      expect(r[0]).toHaveAttribute('data-format', 'html');
     });
     // Now press pdf — the probe already ran, so the store pre-check keeps it from re-probing.
     await press('pdf');
@@ -329,6 +340,22 @@ describe('export hydration on document open and version change (wicked-studio#23
     expect(ready).toHaveAttribute('data-version', '3');
     expect(ready).toHaveAttribute(
       'href', `/api/v1/projects/${PROJECT}/interactive/d/${DOC}/download/roadmap_v3.pdf`);
+  });
+
+  it('T_ct: a 200 probe carrying Content-Type: text/html does not seed READY for pdf or pptx', async () => {
+    const fetchMock = vi.fn(() => Promise.resolve({
+      ok: true,
+      body: { cancel: () => Promise.resolve() },
+      headers: { get: (h: string) => h === 'content-type' ? 'text/html; charset=utf-8' : null },
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    strip();
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+    const ready = screen.queryAllByTestId('export-ready');
+    const formats = ready.map((a) => a.getAttribute('data-format'));
+    expect(formats).not.toContain('pdf');
+    expect(formats).not.toContain('pptx');
+    expect(screen.queryByTestId('export-hint')).toBeNull();
   });
 
   it('T6: regression — ingest(export.generated) adds a thread message but does NOT seed exportAnswers', () => {
