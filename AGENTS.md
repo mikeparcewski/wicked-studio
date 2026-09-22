@@ -1,0 +1,1 @@
+READ @CLAUDE.md

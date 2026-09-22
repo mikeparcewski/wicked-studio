@@ -16,7 +16,10 @@ answer HITL gates, browse projects/evidence/coverage, watch live CoreEvents.
 ## Where things live
 
 - `src/api/` — HTTP client + wire types; `src/components/` — the UI.
-- `.product/` — design docs (DES-*, BRIEF-*): read before reshaping a surface.
+- `.product/` — design docs (DES-*, BRIEF-*): read before reshaping a surface, **if you
+  have them**. The directory is gitignored (`.gitignore` line 35) and tracked in no
+  commit, so a fresh clone has none of it; do not treat a missing `.product/` as a
+  mistake, and do not cite a `.product/…` path as something a reviewer can open.
 - `tests/` — vitest (jsdom): `npm test`; typecheck with `npm run typecheck`.
 - `e2e/` — Python E2E suites driven against a live daemon.
 - `site/` — the marketing site: its own app/deps, excluded from vitest.
