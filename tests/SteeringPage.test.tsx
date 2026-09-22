@@ -387,8 +387,8 @@ describe('SteeringPage — seededness', () => {
     // The unseeded state does NOT hide the way in: the Add menu (draft row / assistant)
     // is exactly how a store gets seeded from here.
     expect(screen.getByTestId('steering-add-menu')).toBeInTheDocument();
-    // No grid (and no facets) to fiddle with an empty store.
-    expect(screen.queryByTestId('steering-grid-filter-search')).toBeNull();
+    // The grid renders even in the unseeded state (so "Add row" can create the first rule).
+    expect(screen.getByTestId('steering-grid-filter-search')).toBeInTheDocument();
   });
 
   it('a daemon that cannot answer meta is never accused of an unseeded store', async () => {
@@ -407,6 +407,25 @@ describe('SteeringPage — seededness', () => {
 
     expect(await screen.findByTestId('steering-rules-empty')).toHaveTextContent('No steering rules in the store.');
     expect(screen.queryByTestId('steering-unseeded')).toBeNull();
+  });
+
+  // studio#212 — "Add row" must produce a draft row even on an unseeded store.
+  // Clicking the Add menu's row entry bumps addTick → SteeringGrid's effect fires
+  // → freshDraft() mounts as the draft row. The guard `{!unseeded && <SteeringGrid>}`
+  // blocked this by never mounting the grid at all.
+  it('clicking "Add row" on an unseeded empty store opens a draft row in the grid (studio#212)', async () => {
+    const user = userEvent.setup();
+    listConformanceRules.mockResolvedValue({ rules: [] });
+    wire({ meta: () => Promise.resolve({ meta: { seeded: false } }) });
+    page();
+
+    // Wait for unseeded state to settle.
+    await screen.findByTestId('steering-unseeded');
+
+    await user.click(screen.getByTestId('steering-add-menu'));
+    await user.click(await screen.findByTestId('steering-add-open'));
+
+    expect(await screen.findByTestId('steering-grid-draft')).toBeInTheDocument();
   });
 });
 

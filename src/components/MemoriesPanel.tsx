@@ -42,6 +42,8 @@ export function MemoriesPanel(): React.ReactElement {
   const [facet, setFacet] = useState<string | null>(null);
   /** The memory a retire confirm is open for, or null. */
   const [retiring, setRetiring] = useState<MemoryItem | null>(null);
+  /** Scoped memory count for the retire confirm (null = not yet loaded or unavailable). */
+  const [retireCount, setRetireCount] = useState<number | null>(null);
   const [retireBusy, setRetireBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
 
@@ -102,6 +104,7 @@ export function MemoriesPanel(): React.ReactElement {
     void retireMemory({ scope_prefix: target.scope })
       .then(({ erased }) => {
         setRetiring(null);
+        setRetireCount(null);
         setNote(`Retired scope ${target.scope} — erased ${erased} memor${erased === 1 ? 'y' : 'ies'}.`);
         void load(query);
       })
@@ -234,7 +237,11 @@ export function MemoriesPanel(): React.ReactElement {
           style={{ background: 'var(--status-fail-dim)', border: '1px solid var(--status-fail)' }}
         >
           <p className="text-[11px]" style={{ color: 'var(--ink-high)' }}>
-            Retire the scope <span className="font-mono">{retiring.scope}</span>? Retire erases the whole
+            Retire the scope <span className="font-mono">{retiring.scope}</span>?{' '}
+            {retireCount !== null
+              ? <>{retireCount} {retireCount === 1 ? 'memory' : 'memories'} will be erased — retire covers the whole</>
+              : <>Retire erases the whole</>
+            }{' '}
             SUBTREE — every memory filed at or under this scope — not just this one row. This cannot be undone.
           </p>
           <div className="flex items-center gap-2">
@@ -251,7 +258,7 @@ export function MemoriesPanel(): React.ReactElement {
             <button
               type="button"
               data-testid="memory-retire-cancel"
-              onClick={() => setRetiring(null)}
+              onClick={() => { setRetiring(null); setRetireCount(null); }}
               className="rounded px-2 py-1 text-[10px]"
               style={{ color: 'var(--ink-dim)', border: '1px solid var(--surface-raised)' }}
             >
@@ -292,7 +299,13 @@ export function MemoriesPanel(): React.ReactElement {
                 <button
                   type="button"
                   data-testid="memory-retire"
-                  onClick={() => setRetiring(m)}
+                  onClick={() => {
+                    setRetiring(m);
+                    setRetireCount(null);
+                    void memoryCoverage({ scope_prefix: m.scope })
+                      .then(({ total }) => setRetireCount(total ?? null))
+                      .catch(() => setRetireCount(null));
+                  }}
                   title={`Retire the scope ${m.scope} (erases the whole subtree)`}
                   className="shrink-0 rounded px-2 py-0.5 text-[10px] font-semibold focus:outline-none focus-visible:ring-1"
                   style={{ color: 'var(--status-fail)', border: '1px solid var(--status-fail-dim)' }}

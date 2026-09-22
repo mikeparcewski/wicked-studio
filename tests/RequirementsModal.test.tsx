@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { RequirementsModal } from '../src/components/RequirementsModal.js';
 import type { RequirementDetail, RequirementsPage } from '../src/api/types.js';
@@ -7,12 +7,14 @@ import type { RequirementDetail, RequirementsPage } from '../src/api/types.js';
 const listRequirements = vi.fn();
 const getRequirement = vi.fn();
 const patchRequirement = vi.fn();
+const launchRun = vi.fn();
 
 vi.mock('../src/api/client.js', () => ({
   api: {
     listRequirements: (...a: unknown[]) => listRequirements(...a),
     getRequirement: (...a: unknown[]) => getRequirement(...a),
     patchRequirement: (...a: unknown[]) => patchRequirement(...a),
+    launchRun: (...a: unknown[]) => launchRun(...a),
   },
 }));
 
@@ -142,5 +144,29 @@ describe('RequirementsModal', () => {
         screen.queryByText('No requirements have been extracted for this repo.'),
       ).not.toBeInTheDocument();
     });
+  });
+
+  // studio#229 — Escape must close the modal (useModalEscape wiring)
+  it('Escape key closes the modal (studio#229)', async () => {
+    const onClose = vi.fn();
+    render(<RequirementsModal repoId="r1" repoName="repo" onClose={onClose} />);
+    await screen.findByText('Totals include tax');
+    fireEvent.keyDown(document, { key: 'Escape', bubbles: true, cancelable: true });
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  // studio#229 — empty corpus must offer a "Run domain extraction" button that launches a run
+  it('"Run domain extraction" button appears on empty corpus and launches the workflow (studio#229)', async () => {
+    const user = userEvent.setup();
+    listRequirements.mockResolvedValue(page([], 0, 0));
+    launchRun.mockResolvedValue({ runId: 'run-42' });
+    render(<RequirementsModal repoId="r1" repoName="my-repo" onClose={() => {}} />);
+
+    const btn = await screen.findByRole('button', { name: /Run domain extraction/i });
+    expect(btn).toBeInTheDocument();
+    await user.click(btn);
+    expect(launchRun).toHaveBeenCalledWith(
+      expect.objectContaining({ repoRef: 'r1', workflow: 'domain-extraction' }),
+    );
   });
 });

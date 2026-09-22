@@ -179,4 +179,26 @@ describe('MemoriesPanel — retire is a SUBTREE erase (honest granularity)', () 
     expect(screen.queryByTestId('memory-retire-confirm-banner')).toBeNull();
     expect(apiFetch.mock.calls.some((c) => c[0] === '/memory/retire')).toBe(false);
   });
+
+  // studio#206 — retire confirm must show blast-radius count from a scoped coverage call.
+  // `brain:wicked/doc:ops` URL-encodes to `brain%3Awicked%2Fdoc%3Aops`.
+  it('retire confirm shows the scoped memory count before the destructive action (studio#206)', async () => {
+    apiFetch.mockImplementation((path: unknown) => {
+      const s = String(path);
+      if (s === '/memory/coverage') return Promise.resolve({ total: 2 });
+      if (s === '/memory/coverage?scope_prefix=brain%3Awicked%2Fdoc%3Aops')
+        return Promise.resolve({ total: 3 });
+      if (s.startsWith('/memory')) return Promise.resolve({ memories: [M1, M2] });
+      return Promise.reject(new ApiError(404, 'Not Found'));
+    });
+    render(<MemoriesPanel />);
+    const user = userEvent.setup();
+
+    const rows = await screen.findAllByTestId('memory-row');
+    await user.click(within(rows[0]!).getByTestId('memory-retire'));
+
+    const banner = await screen.findByTestId('memory-retire-confirm-banner');
+    // The count from the scoped coverage call must appear in the confirm text.
+    expect(banner).toHaveTextContent(/3\s+memor/i);
+  });
 });

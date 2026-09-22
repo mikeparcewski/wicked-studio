@@ -11,6 +11,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '../api/client.js';
 import type { RequirementSummary, RequirementDetail, RequirementsPage, RequirementPatch } from '../api/types.js';
+import { useModalEscape } from './Modal.js';
 
 const T = {
   canvas: 'var(--surface-base)',
@@ -97,6 +98,8 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
           },
     );
   }
+
+  useModalEscape(onClose);
 
   const totalPages = page !== null ? Math.max(1, Math.ceil(page.total / PAGE_SIZE)) : 1;
   const pageNo = Math.floor(offset / PAGE_SIZE) + 1;
@@ -196,13 +199,24 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
               // has never run, that sentence is false and it hides the only action that would
               // help. `corpus === 0` means there is nothing to search at all, so no filter can be
               // responsible and the distinction is decidable here (FINDING-065).
-              <div className="p-6 space-y-1">
+              <div className="p-6 space-y-2">
                 <p className="text-[12px] font-mono" style={{ color: T.ink }}>
                   No requirements have been extracted for this repo.
                 </p>
-                <p className="text-[12px] font-mono" style={{ color: T.faint }}>
-                  Run domain extraction on it to populate this view.
-                </p>
+                <button
+                  type="button"
+                  className="text-[12px] font-mono font-semibold rounded px-3 py-1.5"
+                  style={{ color: T.accent, border: `1px solid ${T.accent}` }}
+                  onClick={() => {
+                    void api.launchRun({
+                      repoRef: repoId,
+                      workflow: 'domain-extraction',
+                      problem: `Run domain extraction for ${repoName}`,
+                    });
+                  }}
+                >
+                  Run domain extraction
+                </button>
               </div>
             ) : page.items.length === 0 ? (
               <p className="text-[12px] font-mono p-6" style={{ color: T.faint }}>No requirements match.</p>

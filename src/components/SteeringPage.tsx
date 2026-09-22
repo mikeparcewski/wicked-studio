@@ -424,22 +424,20 @@ export function SteeringPage({ type, navigate, search = '', runs = [] }: {
               </p>
             )}
 
-            {!unseeded && (
-              <SteeringGrid
-                key={`grid-${type ?? 'all'}`}
-                rules={rules}
-                type={type ?? 'all'}
-                loading={rulesLoading}
-                error={rulesError}
-                selectedId={selectedId}
-                onSelect={(id) => setSelectedId((cur) => (cur === id ? null : id))}
-                onCommit={commitRule}
-                onCreate={createRule}
-                onRetired={onRetired}
-                addRequestTick={addTick}
-                idFilter={unusedIds}
-              />
-            )}
+            <SteeringGrid
+              key={`grid-${type ?? 'all'}`}
+              rules={rules}
+              type={type ?? 'all'}
+              loading={rulesLoading}
+              error={rulesError}
+              selectedId={selectedId}
+              onSelect={(id) => setSelectedId((cur) => (cur === id ? null : id))}
+              onCommit={commitRule}
+              onCreate={createRule}
+              onRetired={onRetired}
+              addRequestTick={addTick}
+              idFilter={unusedIds}
+            />
           </>
         )}
       </div>
