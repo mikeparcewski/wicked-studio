@@ -570,7 +570,13 @@ export function GroupChat({
    *  chat this daemon did not open (restart). Stated, never guessed. */
   const [scopeUnstated, setScopeUnstated] = useState(false);
 
+  /** The 501 remedy's LEGACY unscoped open (codex on #327): a daemon old enough to answer 501
+   *  refuses `scopeKind` too, so the fallback sends neither projectId, repoRefs nor scopeKind.
+   *  Any explicit scope choice clears it. */
+  const legacyUnscopedRef = useRef(false);
+
   function chooseScopeMode(mode: ChatScopeMode): void {
+    legacyUnscopedRef.current = false;
     setScopeMode(mode);
     setScopeGap(null);
     if (mode !== 'repos') setScopePickerOpen(false);
@@ -578,6 +584,7 @@ export function GroupChat({
 
   /** "Choose repos…": the mode AND the picker; the registry loads on this gesture. */
   function openScopePicker(): void {
+    legacyUnscopedRef.current = false;
     setScopeMode('repos');
     setScopeGap(null);
     setScopePickerOpen((v) => !v || scopeModeRef.current !== 'repos');
@@ -606,6 +613,7 @@ export function GroupChat({
       // A project change is a scope change: the previous project's repo pick and picker do not
       // carry over (Copilot on #253) — the new project's default is "all its repos", and an
       // Unfiled switch is back to the explicit-choice state.
+      legacyUnscopedRef.current = false;
       setScopeMode('project');
       setScopeRepoIds([]);
       setScopePickerOpen(false);
@@ -619,6 +627,7 @@ export function GroupChat({
    * the project shell — there the context IS the project and cannot be dropped.
    */
   function fallbackUnscoped(): void {
+    legacyUnscopedRef.current = true;
     setScopeMode('system');
     setScopeRepoIds([]);
     setSelectedProjectId(null);
@@ -776,6 +785,7 @@ export function GroupChat({
     setScopeUnstated(false);
     // The create-flow scope choice belongs to the surface it was made on (Copilot on
     // #253): a repo pick made for one route must not ride the next route's open.
+    legacyUnscopedRef.current = false;
     setScopeMode('project');
     setScopeRepoIds([]);
     setScopePickerOpen(false);
@@ -1141,7 +1151,7 @@ export function GroupChat({
           body.repoRefs = [...scopeRepoIdsRef.current];
         }
         // studio#323 R4: `system` / `everything` NAME their kind; a bound project rides as filing.
-        if (!repoId && (scopeModeRef.current === 'system' || scopeModeRef.current === 'everything')) {
+        if (!repoId && !legacyUnscopedRef.current && (scopeModeRef.current === 'system' || scopeModeRef.current === 'everything')) {
           body.scopeKind = scopeModeRef.current;
         }
         // Admissibility (crew#502 / review W3S-253-01): a SCOPED chat admits only governed seats
@@ -1456,6 +1466,7 @@ export function GroupChat({
     clearStoredChatId(storageKey);
     // The next chat on this surface starts from the scope default, never from the
     // closed chat's repo pick (Copilot on #253).
+    legacyUnscopedRef.current = false;
     setScopeMode('project');
     setScopeRepoIds([]);
     setScopePickerOpen(false);
@@ -1868,7 +1879,7 @@ export function GroupChat({
                 className="self-start text-[11px] px-2.5 py-1 rounded-lg"
                 style={{ background: 'var(--surface-raised)', color: 'var(--ink-high)', border: '1px solid var(--surface-overlay)' }}
               >
-                Continue as a System chat — the agents read no repositories
+                Continue unscoped — the agents read no repositories
               </button>
             )}
           </div>

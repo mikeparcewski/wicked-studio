@@ -516,7 +516,7 @@ describe('crew#502 refusals render as clear inline errors', () => {
     expect(err.textContent).toContain('The daemon refused to open this chat — repo \'scratchpad\' is registered at');
   });
 
-  it('501 — the engine predates chat scope: stated, and "Continue as a System chat" re-arms a FRESH system chat', async () => {
+  it('501 — the engine predates chat scope: stated, and "Continue unscoped" re-arms a FRESH chat on the LEGACY unscoped body (no scopeKind)', async () => {
     refuse(CHAT_OPEN_REFUSALS.engine);
     render(<GroupChat repoId={null} onBack={() => undefined} />);
     await sendAsRepos();
@@ -537,7 +537,8 @@ describe('crew#502 refusals render as clear inline errors', () => {
     expect(retry.chatId).not.toBe(refusedId);
     expect('repoRefs' in retry).toBe(false);
     expect('projectId' in retry).toBe(false);
-    expect(retry.scopeKind).toBe('system');
+    // codex on #327: the 501 remedy is the LEGACY unscoped body — a daemon that old refuses scopeKind.
+    expect('scopeKind' in retry).toBe(false);
     expect(await screen.findByTestId('chat-scope')).toHaveAttribute('data-kind', 'none');
   });
 
