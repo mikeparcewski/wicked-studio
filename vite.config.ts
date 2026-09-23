@@ -37,6 +37,6 @@ export default defineConfig({
     // and fails resolving @playwright/test (installed only under site/).
     // wicked-worktrees/ holds governed-run worktrees (gitignored checkouts a
     // crew run makes INSIDE this repo) — same sweep problem, foreign suites.
-    exclude: [...configDefaults.exclude, 'site/**', 'wicked-worktrees/**'],
+    exclude: [...configDefaults.exclude, 'site/**', 'wicked-worktrees/**', 'tests/e2e/**'],
   },
 });
