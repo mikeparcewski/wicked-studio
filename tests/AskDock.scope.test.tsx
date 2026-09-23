@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { ApiError } from '../src/api/errors.js';
 import type { ChatOpenBody, ChatScope, RosterSeat } from '../src/api/types.js';
 
 /**
@@ -135,7 +136,7 @@ describe('Ask scope control (studio#323 R4)', () => {
     await ask();
     const body = lastBody();
     expect(body.scopeKind).toBe('system');
-    expect('projectId' in body).toBe(false);
+    expect(body.projectId).toBe('api-migration'); // filing only (codex on #327) — crew still admits unscoped
     expect(body.clis).toEqual(['claude', 'pi']);
   });
 
@@ -198,5 +199,47 @@ describe('Ask scope survives close/reopen with the session', () => {
     dock('/steering');
     expect(screen.queryByTestId('ask-scope')).toBeNull();
     expect(screen.getByTestId('assist-context')).toHaveTextContent('scope: not stated by the daemon');
+  });
+});
+
+// codex on #327 (1): on a project route the chat is FILED to that project whatever its scope —
+// the pairs crew a32a208 accepts: system/everything + projectId, and repoRefs + projectId.
+describe('Ask on a project route files the chat to the project', () => {
+  it.each([
+    ['system', { scopeKind: 'system', projectId: 'api-migration' }],
+    ['everything', { scopeKind: 'everything', projectId: 'api-migration' }],
+    ['repo:r-billing', { repoRefs: ['r-billing'], projectId: 'api-migration' }],
+  ])('%s rides with projectId as filing', async (choice, fields) => {
+    const user = userEvent.setup();
+    dock('/p/api-migration/build');
+    await waitFor(() => expect(screen.getByRole('option', { name: 'Repo · billing' })).toBeInTheDocument());
+    await user.selectOptions(screen.getByTestId('ask-scope'), choice);
+    await ask();
+    const body = lastBody();
+    expect({ scopeKind: body.scopeKind, repoRefs: body.repoRefs, projectId: body.projectId }).toEqual(fields);
+  });
+
+  it('off a project route nothing is filed', async () => {
+    const user = userEvent.setup();
+    dock('/steering');
+    await user.selectOptions(screen.getByTestId('ask-scope'), 'system');
+    await ask();
+    expect('projectId' in lastBody()).toBe(false);
+  });
+});
+
+// codex on #327 (2): a refused open is translated like GroupChat's — a pre-0.39.0 daemon's
+// "unknown field `scopeKind`" names the upgrade instead of reaching the dock raw.
+describe('Ask translates a refused open', () => {
+  it('a daemon predating named scopes gets the upgrade sentence, not the raw wire', async () => {
+    const user = userEvent.setup();
+    openChat.mockRejectedValue(new ApiError(400,
+      'Invalid request body: unknown field `scopeKind` — this endpoint does not accept it, and ignoring it would run a different request than you sent'));
+    dock('/steering');
+    await user.type(screen.getByTestId('assist-input'), 'hello?');
+    await user.click(screen.getByTestId('assist-send'));
+    const note = await screen.findByTestId('assist-note');
+    expect(note).toHaveTextContent('This daemon predates the System and Everything chat scopes — upgrade wicked-crew, or choose Project or Repos.');
+    expect(sendChatMessage).not.toHaveBeenCalled();
   });
 });

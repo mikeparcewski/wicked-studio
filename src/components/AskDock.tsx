@@ -27,7 +27,8 @@ import {
   describeResolvedScope,
   type AskScopeChoice,
 } from './ChatScopeSelect.js';
-import { defaultSelection } from './GroupChat.js';
+import { defaultSelection, describeChatOpenRefusal } from './GroupChat.js';
+import { apiStatus, apiWire } from '../api/errors.js';
 import { routeProjectId } from '../hooks/useRoute.js';
 
 /**
@@ -182,9 +183,13 @@ export function AskDock({ runs, pathname, onClose, navigate }: {
           const choice = scopeChoiceRef.current;
           const clis = defaultSelection(roster, askScopeIsScoped(choice));
           id = crypto.randomUUID();
-          const body: ChatOpenBody = { chatId: id, ...askScopeOpenFields(choice) };
+          const body: ChatOpenBody = { chatId: id, ...askScopeOpenFields(choice, routeProjectId(packInputs.current.pathname)) };
           if (clis.length > 0) body.clis = clis;
-          const { seats, scope } = await api.openChat(body);
+          // A refused open reads as GroupChat's does (codex on #327): a pre-0.39.0 daemon's
+          // "unknown field `scopeKind`" names the upgrade, never the raw wire.
+          const { seats, scope } = await api.openChat(body).catch((e: unknown) => {
+            throw new Error(describeChatOpenRefusal(apiStatus(e), apiWire(e), e instanceof Error ? e.message : String(e)));
+          });
           const ready = seats.filter((s) => s.ok).map((s) => s.cliKey);
           if (ready.length === 0) {
             const detail =

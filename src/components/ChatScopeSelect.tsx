@@ -16,12 +16,18 @@ export function defaultAskScope(routeProjectId: string | null): AskScopeChoice {
 /**
  * The open-body fields a choice puts on `POST /chats`. `system` / `everything` NAME their kind
  * (`scopeKind`, api-types 0.39.0); a project or repo keeps the legacy body (`projectId` /
- * `repoRefs`) every scoped daemon already accepts and resolves the same way.
+ * `repoRefs`) every scoped daemon already accepts and resolves the same way. `filingProjectId` —
+ * the project route Ask was opened on — FILES the chat there whatever its scope, as GroupChat does
+ * (crew accepts system/everything + projectId and repoRefs + projectId; codex on #327).
  */
-export function askScopeOpenFields(choice: AskScopeChoice): Pick<ChatOpenBody, 'scopeKind' | 'projectId' | 'repoRefs'> {
-  if (choice === 'system' || choice === 'everything') return { scopeKind: choice };
+export function askScopeOpenFields(
+  choice: AskScopeChoice,
+  filingProjectId: string | null = null,
+): Pick<ChatOpenBody, 'scopeKind' | 'projectId' | 'repoRefs'> {
+  const filing = filingProjectId !== null ? { projectId: filingProjectId } : {};
+  if (choice === 'system' || choice === 'everything') return { scopeKind: choice, ...filing };
   if (choice.startsWith('project:')) return { projectId: choice.slice('project:'.length) };
-  return { repoRefs: [choice.slice('repo:'.length)] };
+  return { repoRefs: [choice.slice('repo:'.length)], ...filing };
 }
 
 /** Is the chat SCOPED (held to read-only repository roots)? Only `system` reads none. */
