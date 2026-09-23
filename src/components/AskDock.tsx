@@ -115,10 +115,19 @@ export function AskDock({ runs, pathname, onClose, navigate }: {
           try {
             await api.sendChatMessage(id, text);
             return { chatId: id };
-          } catch {
-            // The RESUMED session is gone (idle reaper, pool cap, a daemon restart) —
-            // forget it and open a fresh session for this question below. A session
-            // THIS mount opened fails loud, as before.
+          } catch (sendErr) {
+            // A failed send is NOT proof the session is gone — a 5xx or a network blip
+            // against a still-warm chat must not orphan it. Ask the daemon, as GroupChat's
+            // rejoin does: ONLY an empty seat list (a 200) means reclaimed. Anything else —
+            // warm seats, or a probe that itself fails ("do not know") — keeps the id and
+            // surfaces the send's own error.
+            const gone = await api
+              .getChat(id)
+              .then((detail) => detail.seats.length === 0)
+              .catch(() => false);
+            if (!gone) throw sendErr;
+            // Reclaimed (idle reaper, pool cap, a daemon restart) — forget it and open a
+            // fresh session for this question below.
             forgetAskSession(id);
             chatIdRef.current = null;
             seededRef.current = false;

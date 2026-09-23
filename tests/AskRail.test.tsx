@@ -73,6 +73,24 @@ describe('the Ask launcher — a floating chat bubble bottom-right (studio#323 R
     expect(screen.getByTestId('ask-launcher').style.right).toBe('304px');
   });
 
+  it('narrow viewport + right panel: the open panel stays fully on screen (left edge >= 0)', () => {
+    const prev = window.innerWidth;
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 375 });
+    try {
+      render(<AskLauncher open onToggle={() => undefined} rightOffsetPx={288}><div /></AskLauncher>);
+      const panel = screen.getByTestId('ask-panel');
+      const bubble = screen.getByTestId('ask-launcher');
+      const px = (v: string): number => Number(v.replace(/px$/, ''));
+      const panelLeft = 375 - px(panel.style.right) - px(panel.style.width);
+      expect(panelLeft).toBeGreaterThanOrEqual(0);
+      expect(px(panel.style.right)).toBeGreaterThanOrEqual(0);
+      // The bubble is on screen too.
+      expect(375 - px(bubble.style.right) - 48).toBeGreaterThanOrEqual(0);
+    } finally {
+      Object.defineProperty(window, 'innerWidth', { configurable: true, value: prev });
+    }
+  });
+
   it('clicking it fires onToggle', async () => {
     const onToggle = vi.fn();
     render(<AskLauncher open={false} onToggle={onToggle} />);

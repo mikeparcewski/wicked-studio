@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { RUNS_BAR_PX } from './RunsBottomPanel.js';
 
 /**
@@ -11,7 +12,9 @@ import { RUNS_BAR_PX } from './RunsBottomPanel.js';
  *   - it clears the runs bottom bar: `bottom` starts above `RUNS_BAR_PX` (the root's
  *     reserved padding — App.tsx), so the collapsed bar never covers it;
  *   - it clears the right panel: when a run is selected App passes that panel's width
- *     as `rightOffsetPx`, and both bubble and panel shift left by it;
+ *     as `rightOffsetPx`, and both bubble and panel shift left by it — unless the
+ *     viewport is too narrow for the panel to fit beside it, when both overlay the
+ *     right panel instead (the panel never runs off the left edge);
  *   - z-index 40 — the runs sheet's layer, below the palette/modals/toasts (z-50).
  *
  * The chord Ctrl/⌘+Shift+A does the same toggle (registered in App). The launcher only
@@ -23,6 +26,20 @@ export const ASK_BUBBLE_PX = 48;
 export const ASK_GUTTER_PX = 16;
 /** The floating panel's width — the dock's old `w-96` column. */
 export const ASK_PANEL_WIDTH_PX = 384;
+/** Below this much free width beside the right panel, the launcher stops clearing it
+ *  and overlays it instead — a squeezed panel is worse than a covered one. */
+export const ASK_PANEL_MIN_PX = 320;
+
+/** The viewport width, tracked across resizes. */
+function useViewportWidth(): number {
+  const [w, setW] = useState(() => window.innerWidth);
+  useEffect(() => {
+    const on = (): void => setW(window.innerWidth);
+    window.addEventListener('resize', on);
+    return () => window.removeEventListener('resize', on);
+  }, []);
+  return w;
+}
 
 const ASK_LABEL = 'Ask — governed answers about your projects, repos, and this studio (Ctrl/⌘+Shift+A)';
 
@@ -43,7 +60,14 @@ export function AskLauncher({ open, onToggle, rightOffsetPx = 0, children }: {
   /** The dock, rendered inside the floating panel while `open`. */
   children?: React.ReactNode;
 }): React.ReactElement {
-  const right = ASK_GUTTER_PX + rightOffsetPx;
+  const vw = useViewportWidth();
+  // The panel's width budget is what is LEFT beside the right panel: clear it only
+  // when the panel still fits there, otherwise overlay it (narrow viewports) so the
+  // panel never runs off the left edge.
+  const clearsPanel = vw - 2 * ASK_GUTTER_PX - rightOffsetPx >= ASK_PANEL_MIN_PX;
+  const offset = clearsPanel ? rightOffsetPx : 0;
+  const right = ASK_GUTTER_PX + offset;
+  const panelWidth = Math.max(0, Math.min(ASK_PANEL_WIDTH_PX, vw - 2 * ASK_GUTTER_PX - offset));
   const bubbleBottom = RUNS_BAR_PX + ASK_GUTTER_PX;
   const panelBottom = bubbleBottom + ASK_BUBBLE_PX + 12;
   return (
@@ -58,7 +82,7 @@ export function AskLauncher({ open, onToggle, rightOffsetPx = 0, children }: {
             position: 'fixed',
             right,
             bottom: panelBottom,
-            width: `min(${ASK_PANEL_WIDTH_PX}px, calc(100vw - ${2 * ASK_GUTTER_PX}px))`,
+            width: panelWidth,
             height: `min(640px, calc(100vh - ${panelBottom + ASK_GUTTER_PX}px))`,
             zIndex: 40,
             borderRadius: 'var(--radius-lg)',

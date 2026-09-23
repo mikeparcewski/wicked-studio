@@ -12,7 +12,9 @@ same-origin build — no crew daemon involved.
   R2  a question sent from Ask shows up on /chats as a live card labelled "Ask"
       with the question as its title;
   R3  closing and reopening Ask resumes the SAME session (its block is back, keyed
-      by the same chat id), and "Open in full chat" lands on /chat/<that id>.
+      by the same chat id), and "Open in full chat" lands on /chat/<that id>;
+  narrow at 375px wide with a run selected (right panel up), the bubble AND the
+      open panel stay fully on screen.
 
 Capture: e2e/shots/ask-323-open.png (bubble + open panel).
 
@@ -121,6 +123,21 @@ with sync_playwright() as p:
     page.wait_for_url(f"**/chat/{chat_id}", timeout=5000)
     check("r3-open-in-full-chat", page.url.endswith(f"/chat/{chat_id}"), url=page.url)
     check("r3-dock-closed-after-promote", page.get_by_test_id("ask-panel").count() == 0)
+
+    # ── Narrow viewport + a selected run (right panel): the panel stays on screen ──
+    narrow = browser.new_page(viewport={"width": 375, "height": 700}, device_scale_factor=1)
+    narrow.goto(f"{origin}/runs/r-upload", wait_until="networkidle")
+    nb = narrow.get_by_test_id("ask-launcher")
+    nb.wait_for(state="visible", timeout=10000)
+    nbb = nb.bounding_box()
+    check("narrow-bubble-on-screen", nbb["x"] >= 0 and nbb["x"] + nbb["width"] <= 375, bubble=nbb)
+    nb.click()
+    npanel = narrow.get_by_test_id("ask-panel")
+    npanel.wait_for(state="visible", timeout=5000)
+    npb = npanel.bounding_box()
+    check("narrow-panel-on-screen", npb["x"] >= 0 and npb["x"] + npb["width"] <= 375 and npb["width"] >= 200,
+          panel=npb)
+    narrow.close()
 
     browser.close()
 
