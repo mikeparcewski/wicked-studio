@@ -41,7 +41,7 @@
  */
 import type { BaseSkillPosture } from './types.js';
 
-// >>> VERBATIM wicked-crew-api-types@0.39.0 index.d.ts:2330-2800 (crew#535 via crew#536) — the skills block
+// >>> VERBATIM wicked-crew-api-types@0.39.0 index.d.ts:2334-2804 (crew#535 via crew#536) — the skills block
 // ── Skills — the daemon-owned garden plugin root, published as immutable snapshots (api-types 0.28.0) ──
 //
 // api-types 0.29.0 (design amendment v3.6, crew #490): the installer-managed copy
@@ -515,7 +515,7 @@ export interface ReplaceSkillBody {
 }
 // <<< VERBATIM
 
-// >>> VERBATIM wicked-crew-api-types@0.39.0 index.d.ts:5297-5366 (crew#535 via crew#536) — the diagnostics skills block
+// >>> VERBATIM wicked-crew-api-types@0.39.0 index.d.ts:5301-5402 (crew#535 via crew#536) — the diagnostics skills block
 /** The skills seam's state as `GET /diagnostics` reports it (skills keystone, api-types 0.28.0). */
 export type DiagnosticsSkillsState = 'published' | 'fallback' | 'blocked' | 'config-error' | 'disabled';
 
@@ -543,7 +543,9 @@ export interface DiagnosticsSkillsFinding {
    *  the configured BASE skill (`SystemSettings.baseSkillRef`) is not in the current generation —
    *  a `warning` under `baseSkillPolicy: 'warn'` (runs proceed without the discipline directive),
    *  an `error` under `'require'` (the engine refuses every launch at intake); cleared by a publish
-   *  that hands it. Also carried as `DiagnosticsSkills.baseSkill.finding`. */
+   *  that hands it. Also carried as `DiagnosticsSkills.baseSkill.finding`; `skills.phase-skill`
+   *  (`warning`, crew#661) = a subsystem's phases declare a skill the published snapshot did not hold
+   *  when it armed, so they run without it — one per `DiagnosticsSkills.phaseSkillGaps` entry. */
   kind:
     | 'skills.fallback'
     | 'skills.blocked'
@@ -551,7 +553,8 @@ export interface DiagnosticsSkillsFinding {
     | 'skills.source'
     | 'skills.manifest'
     | 'skills.stale-rules'
-    | 'skills.base-skill';
+    | 'skills.base-skill'
+    | 'skills.phase-skill';
   severity: 'warning' | 'error';
   message: string;
 }
@@ -585,5 +588,34 @@ export interface DiagnosticsSkills {
    *  when the setting is off or the seam is `disabled`. A daemon before this field omits the key
    *  (read it as `null`). */
   baseSkill: BaseSkillPosture | null;
+  /** Subsystems whose phases run WITHOUT a skill their workflow declares (crew#661; additive) — one
+   *  entry per subsystem, judged when that seam ARMED (the decision holds until the daemon restarts).
+   *  Each entry also rides `findings` as a `skills.phase-skill` warning. `[]` when every armed seam
+   *  holds its skill; ABSENT on a daemon before this field (read it as unknown, not as `[]`). */
+  phaseSkillGaps?: DiagnosticsPhaseSkillGap[];
+}
+
+/**
+ * One subsystem whose phases declare a skill the published snapshot did not hold when the subsystem
+ * armed (crew#661) — today the interactive seams' `wicked-garden-draft` quality floor. The phases
+ * run DEGRADED (no `skill_ref`, no quality floor) and every run launched on it says so in
+ * `AgentSession.skill_gaps`; the engine would refuse a `skill_ref` its snapshot lacks, so the seam
+ * cannot simply stamp it.
+ */
+export interface DiagnosticsPhaseSkillGap {
+  /** The subsystem (`interactive-draft` / `interactive-edit` / `interactive-chat`). */
+  subsystem: string;
+  /** The workflow id the subsystem launches. */
+  workflow: string;
+  /** The agent phases that declare the skill and run without it. */
+  phases: string[];
+  /** The declared skill (`wicked-garden-draft`). */
+  skill: string;
+  /** The published skills generation judged at arm time, or `null` when none was published. */
+  gen: number | null;
+  /** Epoch ms of the arm-time judgement. */
+  armedAt: number;
+  /** The fix: republish the skills snapshot from a wicked-garden that carries the skill, then restart. */
+  remedy: string;
 }
 // <<< VERBATIM

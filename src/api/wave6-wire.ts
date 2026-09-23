@@ -75,7 +75,7 @@ import type {
 
 // ── The QE authoring workflow — `POST /testing/author`, the plan, the registered test set ──────
 
-// >>> VERBATIM wicked-crew-api-types@0.39.0 index.d.ts:3182-3322 (crew#536) — the governed test-authoring launch: QeAuthorTestsWorkflowId, TestingAuthorBody, WorkflowPlanPhase, WorkflowPlan, TestingAuthorRun, TestingAuthorResponse, TestSetFile, TestSet
+// >>> VERBATIM wicked-crew-api-types@0.39.0 index.d.ts:3186-3326 (crew#536) — the governed test-authoring launch: QeAuthorTestsWorkflowId, TestingAuthorBody, WorkflowPlanPhase, WorkflowPlan, TestingAuthorRun, TestingAuthorResponse, TestSetFile, TestSet
 // ── The governed test-authoring launch (wave 6; api-types 0.36.0) ──────────────────────────────
 
 /**
@@ -220,7 +220,7 @@ export interface TestSet {
 // <<< VERBATIM
 
 /** The recon body, vendored as EVIDENCE: no `workflow` key — studio's launch ladder sends none. */
-// >>> VERBATIM wicked-crew-api-types@0.39.0 index.d.ts:3126-3159 (crew#536) — TestingReconBody (no `workflow` key)
+// >>> VERBATIM wicked-crew-api-types@0.39.0 index.d.ts:3130-3163 (crew#536) — TestingReconBody (no `workflow` key)
 /**
  * The `POST /testing/recon` request body (api-types 0.15.0) — the Testing page's campaign-recon
  * trigger. `problem` is the recon brief, passed to every launched run VERBATIM (the client owns
@@ -263,7 +263,7 @@ export const QE_AUTHOR_TESTS_WORKFLOW_ID = 'qe-author-tests' satisfies QeAuthorT
 
 // ── The campaigns surface — where the registered sets are served ──────────────────────────────
 
-// >>> VERBATIM wicked-crew-api-types@0.39.0 index.d.ts:5007-5018 (crew#536) — CampaignsListResponse incl. test_sets
+// >>> VERBATIM wicked-crew-api-types@0.39.0 index.d.ts:5011-5022 (crew#536) — CampaignsListResponse incl. test_sets
 /**
  * `GET /campaigns` 200 body (api-types 0.19.0 — `groups` is ADDITIVE: a pre-0.19 daemon sends
  * only `campaigns`). One fetch answers the whole grouping surface: engine campaigns (each
@@ -280,7 +280,7 @@ export interface CampaignsListResponse {
 
 // ── The diff route once the worktree is gone ──────────────────────────────────────────────────
 
-// >>> VERBATIM wicked-crew-api-types@0.39.0 index.d.ts:702-729 (crew#536) — RunDiff incl. source / branch / base
+// >>> VERBATIM wicked-crew-api-types@0.39.0 index.d.ts:706-733 (crew#536) — RunDiff incl. source / branch / base
 /**
  * Response of `GET /runs/:id/diff` / `GET /runs/:id/diff?path=<abs>` (DES-FEEDBACK-002 CREW-1) —
  * the run worktree's unified diff against HEAD (staged + unstaged), with untracked files appended
@@ -316,7 +316,7 @@ export type RunDiffSource = NonNullable<RunDiff['source']>;
 
 // ── Gate / floor / routing / fence / carrier / base events ────────────────────────────────────
 
-// >>> VERBATIM wicked-crew-api-types@0.39.0 index.d.ts:1212-1273 (crew#536) — GateEvaluatedEvent incl. ungated / ungatedReason / floorNote / judgeSkippedReason
+// >>> VERBATIM wicked-crew-api-types@0.39.0 index.d.ts:1216-1277 (crew#536) — GateEvaluatedEvent incl. ungated / ungatedReason / floorNote / judgeSkippedReason
 /** §3 B1 — the gate's decision depth, emitted alongside `gateDecided`. `denial` is the structured
  *  twin of `denialReason`: `null` when the gate approved, else the winning layer (deny-dominates) —
  *  `worktree_guard` and `repo_checks` are the two wicked-core F-036/F-039 layers. `judgeCli` /
@@ -381,7 +381,7 @@ export interface GateEvaluatedEvent {
 }
 // <<< VERBATIM
 
-// >>> VERBATIM wicked-crew-api-types@0.39.0 index.d.ts:1660-1717 (crew#536) — RepoChecksEvaluatedEvent incl. sandboxLevel / sandboxError / detectError
+// >>> VERBATIM wicked-crew-api-types@0.39.0 index.d.ts:1664-1721 (crew#536) — RepoChecksEvaluatedEvent incl. sandboxLevel / sandboxError / detectError
 /** wicked-core F-039 — the engine ran the repository's OWN checks in the worktree for the def's
  *  code-verifying unit (`verified_evidence` with an `executes_code` creator upstream: `bug/verify`,
  *  `feature/test`, `migration/verify`) and folded them into the gate as a deterministic floor. Fires
@@ -442,7 +442,7 @@ export type RepoChecksEvaluatedEvent = {
 };
 // <<< VERBATIM
 
-// >>> VERBATIM wicked-crew-api-types@0.39.0 index.d.ts:1986-2064 (crew#536) — UnitDistributedEvent (camelCase) + BenchedSeat
+// >>> VERBATIM wicked-crew-api-types@0.39.0 index.d.ts:1990-2068 (crew#536) — UnitDistributedEvent (camelCase) + BenchedSeat
 /**
  * Foundation wave: a unit was distributed with full routing detail.
  *
@@ -524,7 +524,7 @@ export interface BenchedSeat {
 }
 // <<< VERBATIM
 
-// >>> VERBATIM wicked-crew-api-types@0.39.0 index.d.ts:1867-1897 (crew#536) — WorkerToolCallDeniedEvent
+// >>> VERBATIM wicked-crew-api-types@0.39.0 index.d.ts:1871-1901 (crew#536) — WorkerToolCallDeniedEvent
 /**
  * Wave 6 (F-7R2-012, api-types 0.36.0) — a WORKER seat asked to run a REMOTE-WRITING command
  * (`git push`, `gh pr create|merge|edit|comment`, a `gh api` mutation, `gh release`, …) and the
@@ -558,7 +558,7 @@ export type WorkerToolCallDeniedEvent = {
 };
 // <<< VERBATIM
 
-// >>> VERBATIM wicked-crew-api-types@0.39.0 index.d.ts:1322-1358 (crew#536) — AcpFallbackKind incl. the auth kinds + AcpFallbackEvent
+// >>> VERBATIM wicked-crew-api-types@0.39.0 index.d.ts:1326-1362 (crew#536) — AcpFallbackKind incl. the auth kinds + AcpFallbackEvent
 /**
  * `acpFallback.fallbackKind` — WHY a unit left the ACP carrier for the wrapped (single-shot) one:
  * - `binary_unavailable` / `session_died` / `auth_required` — the ACP session could not be had; the
@@ -598,7 +598,7 @@ export interface AcpFallbackEvent {
 }
 // <<< VERBATIM
 
-// >>> VERBATIM wicked-crew-api-types@0.39.0 index.d.ts:1832-1860 (crew#536) — RunBaseResolvedEvent incl. runBranch
+// >>> VERBATIM wicked-crew-api-types@0.39.0 index.d.ts:1836-1864 (crew#536) — RunBaseResolvedEvent incl. runBranch
 /** wicked-core#431 / F-3R2-013 — how the run's BASE commit was chosen when its worktree was minted:
  *  the engine fetches `origin` and, when the registered clone's `HEAD` is strictly behind the remote
  *  default branch's tip, bases the run on that tip — so the worker starts from the current code and
@@ -632,7 +632,7 @@ export type RunBaseResolvedEvent = {
 
 // ── The roster — auth, free tier, council eligibility, the bench ──────────────────────────────
 
-// >>> VERBATIM wicked-crew-api-types@0.39.0 index.d.ts:567-670 (crew#536) — RosterSeat incl. auth / auth_source / free_tier_source / council_eligible / council_bench + RosterSeatCouncilBench + SeatAuth
+// >>> VERBATIM wicked-crew-api-types@0.39.0 index.d.ts:571-674 (crew#536) — RosterSeat incl. auth / auth_source / free_tier_source / council_eligible / council_bench + RosterSeatCouncilBench + SeatAuth
 /**
  * A council seat (`AgenticCli`) as returned by `GET /roster`. Only the fields
  * the launch form uses are named; the index signature keeps the (large) rest of
@@ -741,7 +741,7 @@ export type SeatAuth = 'signed_in' | 'signed_out' | 'not_required' | 'unknown';
 
 // ── Chat admission — the refused seats and why ────────────────────────────────────────────────
 
-// >>> VERBATIM wicked-crew-api-types@0.39.0 index.d.ts:4429-4558 (crew#536) — ChatSeatOutcome, ChatRefusalSource, ChatSeatRefusal, ChatOpenResponse incl. refused[], ChatSeatRefusedFrame
+// >>> VERBATIM wicked-crew-api-types@0.39.0 index.d.ts:4433-4562 (crew#536) — ChatSeatOutcome, ChatRefusalSource, ChatSeatRefusal, ChatOpenResponse incl. refused[], ChatSeatRefusedFrame
 /** One seat's warm-up outcome on `POST /chats`. */
 export interface ChatSeatOutcome {
   cliKey: string;
@@ -874,7 +874,7 @@ export type ChatSeatRefusedFrame = {
 };
 // <<< VERBATIM
 
-// >>> VERBATIM wicked-crew-api-types@0.39.0 index.d.ts:4605-4621 (crew#536) — ChatDetailResponse incl. refused[]
+// >>> VERBATIM wicked-crew-api-types@0.39.0 index.d.ts:4609-4625 (crew#536) — ChatDetailResponse incl. refused[]
 /** `GET /chats/:id` → 200. */
 export interface ChatDetailResponse {
   chatId: string;
@@ -896,7 +896,7 @@ export interface ChatDetailResponse {
 
 // ── The daemon-wide docs listing (no bridge spawn) ────────────────────────────────────────────
 
-// >>> VERBATIM wicked-crew-api-types@0.39.0 index.d.ts:4231-4285 (crew#536) — GET /interactive/docs: InteractiveDocsListing, InteractiveSeamKind, InteractiveDocIndexRow, InteractiveDocsUnreachable
+// >>> VERBATIM wicked-crew-api-types@0.39.0 index.d.ts:4235-4289 (crew#536) — GET /interactive/docs: InteractiveDocsListing, InteractiveSeamKind, InteractiveDocIndexRow, InteractiveDocsUnreachable
 /**
  * `GET /api/v1/interactive/docs` (api-types 0.36.0, studio #263) — every interactive document across
  * projects, listed by the DAEMON from disk WITHOUT spawning a bridge: each project's docs root

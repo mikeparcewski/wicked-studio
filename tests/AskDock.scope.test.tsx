@@ -100,6 +100,7 @@ beforeEach(() => {
   useProjectsStore.setState({ projects: PROJECTS as never, loading: false, error: null });
   useLiveChatsStore.setState({ sessions: {} });
   try { localStorage.clear(); } catch { /* stubbed in setup */ }
+  try { sessionStorage.clear(); } catch { /* stubbed in setup */ }
 });
 
 describe('Ask scope control (studio#323 R4)', () => {
@@ -157,5 +158,45 @@ describe('Ask scope control (studio#323 R4)', () => {
     await ask();
     await waitFor(() => expect(screen.getByTestId('assist-context')).toHaveTextContent('scope: system'));
     expect(screen.queryByTestId('ask-scope')).toBeNull();
+  });
+});
+
+// studio#323 R4 × R3: the resolved scope rides the persisted Ask session (`wicked.ask.session`),
+// so a REOPENED dock restates it instead of offering a scope select for a chat that is open.
+describe('Ask scope survives close/reopen with the session', () => {
+  const STORED_EVERYTHING: ChatScope = {
+    kind: 'everything', repos: [{ id: 'r-billing', name: 'billing', rootPath: '/w/billing' }],
+    cwd: '/tmp/chats/x', graph: { bound: false, reason: 'stated by the daemon' }, dangling: [],
+  };
+
+  it('the open persists the scope the daemon resolved with the session', async () => {
+    openChat.mockImplementation((body: ChatOpenBody) =>
+      Promise.resolve({ chatId: body.chatId, seats: [{ cliKey: 'claude', ok: true }], scope: STORED_EVERYTHING }),
+    );
+    dock('/steering');
+    await ask();
+    await waitFor(() => expect(sendChatMessage).toHaveBeenCalledTimes(1));
+    const stored = JSON.parse(sessionStorage.getItem('wicked.ask.session') ?? 'null') as { scope?: ChatScope };
+    expect(stored.scope).toEqual(STORED_EVERYTHING);
+  });
+
+  it('a reopened dock over a stored session shows the stored scope and NO scope select', async () => {
+    sessionStorage.setItem('wicked.ask.session', JSON.stringify({
+      chatId: 'c0ffee00-0000-4000-8000-000000000001', title: 'earlier', seeded: true, scope: STORED_EVERYTHING,
+    }));
+    getChat.mockResolvedValue({ chatId: 'c0ffee00-0000-4000-8000-000000000001', seats: ['claude'] });
+    dock('/steering');
+    expect(screen.queryByTestId('ask-scope')).toBeNull();
+    expect(screen.getByTestId('assist-context')).toHaveTextContent('scope: everything · 1 repo');
+  });
+
+  it('a stored session saved WITHOUT a scope still hides the select and says the scope was not stated', async () => {
+    sessionStorage.setItem('wicked.ask.session', JSON.stringify({
+      chatId: 'c0ffee00-0000-4000-8000-000000000002', title: 'older', seeded: true,
+    }));
+    getChat.mockResolvedValue({ chatId: 'c0ffee00-0000-4000-8000-000000000002', seats: ['claude'] });
+    dock('/steering');
+    expect(screen.queryByTestId('ask-scope')).toBeNull();
+    expect(screen.getByTestId('assist-context')).toHaveTextContent('scope: not stated by the daemon');
   });
 });

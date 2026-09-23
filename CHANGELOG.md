@@ -33,6 +33,10 @@ npm publish dates. Every version listed here exists on
   any value a newer engine sends — showed nothing. It now reads "evaluator ≠ creator held by seat
   instance only — the reviewer runs the same cli as the builder", and any other non-null value gets
   a generic "not recognised … treat the review as not independent" disclosure, as the contract says.
+- **A reopened Ask dock restates the open chat's scope.** The scope the daemon resolved is persisted
+  with the Ask session (`wicked.ask.session`, studio#323 R3) and read back on reopen, so the header
+  says `scope: …` for the resumed chat instead of offering a scope choice; a session saved without
+  one reads "scope: not stated by the daemon".
 
 - **Ask no longer resumes a session the daemon already reaped (studio#328).** On reopen, the resumed session's `GET /chats/:id` probe now follows GroupChat's rule: a 200 with no seats means reclaimed, so the dock drops the resumed block (no "still on the line" note, no "Open in full chat" to a dead chat), forgets the stored `wicked.ask.session`, and the next question opens a fresh session. A probe that fails keeps the session and shows the transient error.
 

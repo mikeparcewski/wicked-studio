@@ -95,7 +95,10 @@ describe('src/api/skills-wire.ts — a byte-for-byte mirror of the 0.39.0 skills
     // 0.36.0 (F-083 / crew#535): the stale-rules finding kind, and the manifest's recorded-vs-running rules + drift.
     expect(diagnostics).toContain("    | 'skills.stale-rules'");
     // 0.38.0 (crew#557 on main): the union closes on the base-skill finding kind.
-    expect(diagnostics).toContain("    | 'skills.base-skill';");
+    expect(diagnostics).toContain("    | 'skills.base-skill'");
+    // 0.39.0 (crew#661): the union closes on the phase-skill finding kind.
+    expect(diagnostics).toContain("    | 'skills.phase-skill';");
+    expect(diagnostics).toContain('export interface DiagnosticsPhaseSkillGap {');
     expect(skills).toContain('    rules?: {');
     expect(skills).toContain('    drift?: SnapshotRowDrift[];');
     // The three wire rules the mirror header restates come from the block itself.
