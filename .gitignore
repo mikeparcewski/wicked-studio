@@ -35,8 +35,6 @@ e2e/artifacts/**/.*.tmp
 .product/
 docs/testing/
 
-# Playwright (root app e2e, studio#322)
-/playwright-report/
+# Playwright (root app e2e, studio#322) — playwright-report/ and test-results/ are ignored above
 /blob-report/
-/test-results/
 /.playwright/
