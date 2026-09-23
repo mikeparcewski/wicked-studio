@@ -1,5 +1,5 @@
 /**
- * MIRROR of wicked-crew-api-types 0.38.0 skills block (crew#531, crew#535) — replace with imports from the
+ * MIRROR of wicked-crew-api-types 0.39.0 skills block (crew#531, crew#535) — replace with imports from the
  * published package at release.
  *
  * Studio pins `wicked-crew-api-types` exactly; the skills contract lives in the package's skills
@@ -7,7 +7,7 @@
  * two regions copied VERBATIM from the package's `index.d.ts` between the `>>> VERBATIM` /
  * `<<< VERBATIM` markers. Nothing inside a marked region is studio's wording, and nothing may be
  * edited there: `tests/skillsWire.test.ts` pins each region byte-for-byte against the vendored
- * fixture `tests/fixtures/api-types-0.38.0-skills.d.ts`, so any drift — a hand edit here, or a
+ * fixture `tests/fixtures/api-types-0.39.0-skills.d.ts`, so any drift — a hand edit here, or a
  * re-vendored fixture from a re-minted contract — fails the suite until both sides agree again.
  *
  * 0.38.0 (FIX-IT-ALL L8-0a — the wave-1 train's one api-types release, cut from crew main) is ADDITIVE
@@ -41,7 +41,7 @@
  */
 import type { BaseSkillPosture } from './types.js';
 
-// >>> VERBATIM wicked-crew-api-types@0.38.0 index.d.ts:2286-2756 (crew#535 via crew#536) — the skills block
+// >>> VERBATIM wicked-crew-api-types@0.39.0 index.d.ts:2324-2794 (crew#535 via crew#536) — the skills block
 // ── Skills — the daemon-owned garden plugin root, published as immutable snapshots (api-types 0.28.0) ──
 //
 // api-types 0.29.0 (design amendment v3.6, crew #490): the installer-managed copy
@@ -515,7 +515,7 @@ export interface ReplaceSkillBody {
 }
 // <<< VERBATIM
 
-// >>> VERBATIM wicked-crew-api-types@0.38.0 index.d.ts:5127-5196 (crew#535 via crew#536) — the diagnostics skills block
+// >>> VERBATIM wicked-crew-api-types@0.39.0 index.d.ts:5291-5360 (crew#535 via crew#536) — the diagnostics skills block
 /** The skills seam's state as `GET /diagnostics` reports it (skills keystone, api-types 0.28.0). */
 export type DiagnosticsSkillsState = 'published' | 'fallback' | 'blocked' | 'config-error' | 'disabled';
 

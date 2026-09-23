@@ -1,9 +1,9 @@
 /**
- * MIRROR of the wicked-crew-api-types 0.38.0 wave-6 additions (the governed testing journey —
+ * MIRROR of the wicked-crew-api-types 0.39.0 wave-6 additions (the governed testing journey —
  * crew#536, the wave-6 crew PR; `skills.stale-rules` from crew#535) — replace with imports from the
  * published package at release.
  *
- * Studio pins `wicked-crew-api-types` exactly (0.38.0 — FIX-IT-ALL L8-0a, the wave-1 train's one
+ * Studio pins `wicked-crew-api-types` exactly (0.39.0 — relabelled for studio#323 R4; 0.38.0 was FIX-IT-ALL L8-0a, the wave-1 train's one
  * api-types release: four regions gain ADDITIVE lines — `GateEvaluatedEvent.evaluatorVerdict?`,
  * `UnitDistributedEvent.distinctnessFallback?`, `RosterSeat.council_bench` `@deprecated`,
  * `ChatDetailResponse.messages?` — the other eleven are relabelled by line range only). Every
@@ -75,7 +75,7 @@ import type {
 
 // ── The QE authoring workflow — `POST /testing/author`, the plan, the registered test set ──────
 
-// >>> VERBATIM wicked-crew-api-types@0.38.0 index.d.ts:3138-3278 (crew#536) — the governed test-authoring launch: QeAuthorTestsWorkflowId, TestingAuthorBody, WorkflowPlanPhase, WorkflowPlan, TestingAuthorRun, TestingAuthorResponse, TestSetFile, TestSet
+// >>> VERBATIM wicked-crew-api-types@0.39.0 index.d.ts:3176-3316 (crew#536) — the governed test-authoring launch: QeAuthorTestsWorkflowId, TestingAuthorBody, WorkflowPlanPhase, WorkflowPlan, TestingAuthorRun, TestingAuthorResponse, TestSetFile, TestSet
 // ── The governed test-authoring launch (wave 6; api-types 0.36.0) ──────────────────────────────
 
 /**
@@ -220,7 +220,7 @@ export interface TestSet {
 // <<< VERBATIM
 
 /** The recon body, vendored as EVIDENCE: no `workflow` key — studio's launch ladder sends none. */
-// >>> VERBATIM wicked-crew-api-types@0.38.0 index.d.ts:3082-3115 (crew#536) — TestingReconBody (no `workflow` key)
+// >>> VERBATIM wicked-crew-api-types@0.39.0 index.d.ts:3120-3153 (crew#536) — TestingReconBody (no `workflow` key)
 /**
  * The `POST /testing/recon` request body (api-types 0.15.0) — the Testing page's campaign-recon
  * trigger. `problem` is the recon brief, passed to every launched run VERBATIM (the client owns
@@ -263,7 +263,7 @@ export const QE_AUTHOR_TESTS_WORKFLOW_ID = 'qe-author-tests' satisfies QeAuthorT
 
 // ── The campaigns surface — where the registered sets are served ──────────────────────────────
 
-// >>> VERBATIM wicked-crew-api-types@0.38.0 index.d.ts:4837-4848 (crew#536) — CampaignsListResponse incl. test_sets
+// >>> VERBATIM wicked-crew-api-types@0.39.0 index.d.ts:5001-5012 (crew#536) — CampaignsListResponse incl. test_sets
 /**
  * `GET /campaigns` 200 body (api-types 0.19.0 — `groups` is ADDITIVE: a pre-0.19 daemon sends
  * only `campaigns`). One fetch answers the whole grouping surface: engine campaigns (each
@@ -280,7 +280,7 @@ export interface CampaignsListResponse {
 
 // ── The diff route once the worktree is gone ──────────────────────────────────────────────────
 
-// >>> VERBATIM wicked-crew-api-types@0.38.0 index.d.ts:664-691 (crew#536) — RunDiff incl. source / branch / base
+// >>> VERBATIM wicked-crew-api-types@0.39.0 index.d.ts:702-729 (crew#536) — RunDiff incl. source / branch / base
 /**
  * Response of `GET /runs/:id/diff` / `GET /runs/:id/diff?path=<abs>` (DES-FEEDBACK-002 CREW-1) —
  * the run worktree's unified diff against HEAD (staged + unstaged), with untracked files appended
@@ -316,7 +316,7 @@ export type RunDiffSource = NonNullable<RunDiff['source']>;
 
 // ── Gate / floor / routing / fence / carrier / base events ────────────────────────────────────
 
-// >>> VERBATIM wicked-crew-api-types@0.38.0 index.d.ts:1174-1235 (crew#536) — GateEvaluatedEvent incl. ungated / ungatedReason / floorNote / judgeSkippedReason
+// >>> VERBATIM wicked-crew-api-types@0.39.0 index.d.ts:1212-1273 (crew#536) — GateEvaluatedEvent incl. ungated / ungatedReason / floorNote / judgeSkippedReason
 /** §3 B1 — the gate's decision depth, emitted alongside `gateDecided`. `denial` is the structured
  *  twin of `denialReason`: `null` when the gate approved, else the winning layer (deny-dominates) —
  *  `worktree_guard` and `repo_checks` are the two wicked-core F-036/F-039 layers. `judgeCli` /
@@ -381,7 +381,7 @@ export interface GateEvaluatedEvent {
 }
 // <<< VERBATIM
 
-// >>> VERBATIM wicked-crew-api-types@0.38.0 index.d.ts:1622-1679 (crew#536) — RepoChecksEvaluatedEvent incl. sandboxLevel / sandboxError / detectError
+// >>> VERBATIM wicked-crew-api-types@0.39.0 index.d.ts:1660-1717 (crew#536) — RepoChecksEvaluatedEvent incl. sandboxLevel / sandboxError / detectError
 /** wicked-core F-039 — the engine ran the repository's OWN checks in the worktree for the def's
  *  code-verifying unit (`verified_evidence` with an `executes_code` creator upstream: `bug/verify`,
  *  `feature/test`, `migration/verify`) and folded them into the gate as a deterministic floor. Fires
@@ -442,7 +442,7 @@ export type RepoChecksEvaluatedEvent = {
 };
 // <<< VERBATIM
 
-// >>> VERBATIM wicked-crew-api-types@0.38.0 index.d.ts:1948-2020 (crew#536) — UnitDistributedEvent (camelCase) + BenchedSeat
+// >>> VERBATIM wicked-crew-api-types@0.39.0 index.d.ts:1986-2058 (crew#536) — UnitDistributedEvent (camelCase) + BenchedSeat
 /**
  * Foundation wave: a unit was distributed with full routing detail.
  *
@@ -518,7 +518,7 @@ export interface BenchedSeat {
 }
 // <<< VERBATIM
 
-// >>> VERBATIM wicked-crew-api-types@0.38.0 index.d.ts:1829-1859 (crew#536) — WorkerToolCallDeniedEvent
+// >>> VERBATIM wicked-crew-api-types@0.39.0 index.d.ts:1867-1897 (crew#536) — WorkerToolCallDeniedEvent
 /**
  * Wave 6 (F-7R2-012, api-types 0.36.0) — a WORKER seat asked to run a REMOTE-WRITING command
  * (`git push`, `gh pr create|merge|edit|comment`, a `gh api` mutation, `gh release`, …) and the
@@ -552,7 +552,7 @@ export type WorkerToolCallDeniedEvent = {
 };
 // <<< VERBATIM
 
-// >>> VERBATIM wicked-crew-api-types@0.38.0 index.d.ts:1284-1320 (crew#536) — AcpFallbackKind incl. the auth kinds + AcpFallbackEvent
+// >>> VERBATIM wicked-crew-api-types@0.39.0 index.d.ts:1322-1358 (crew#536) — AcpFallbackKind incl. the auth kinds + AcpFallbackEvent
 /**
  * `acpFallback.fallbackKind` — WHY a unit left the ACP carrier for the wrapped (single-shot) one:
  * - `binary_unavailable` / `session_died` / `auth_required` — the ACP session could not be had; the
@@ -592,7 +592,7 @@ export interface AcpFallbackEvent {
 }
 // <<< VERBATIM
 
-// >>> VERBATIM wicked-crew-api-types@0.38.0 index.d.ts:1794-1822 (crew#536) — RunBaseResolvedEvent incl. runBranch
+// >>> VERBATIM wicked-crew-api-types@0.39.0 index.d.ts:1832-1860 (crew#536) — RunBaseResolvedEvent incl. runBranch
 /** wicked-core#431 / F-3R2-013 — how the run's BASE commit was chosen when its worktree was minted:
  *  the engine fetches `origin` and, when the registered clone's `HEAD` is strictly behind the remote
  *  default branch's tip, bases the run on that tip — so the worker starts from the current code and
@@ -626,7 +626,7 @@ export type RunBaseResolvedEvent = {
 
 // ── The roster — auth, free tier, council eligibility, the bench ──────────────────────────────
 
-// >>> VERBATIM wicked-crew-api-types@0.38.0 index.d.ts:529-632 (crew#536) — RosterSeat incl. auth / auth_source / free_tier_source / council_eligible / council_bench + RosterSeatCouncilBench + SeatAuth
+// >>> VERBATIM wicked-crew-api-types@0.39.0 index.d.ts:567-670 (crew#536) — RosterSeat incl. auth / auth_source / free_tier_source / council_eligible / council_bench + RosterSeatCouncilBench + SeatAuth
 /**
  * A council seat (`AgenticCli`) as returned by `GET /roster`. Only the fields
  * the launch form uses are named; the index signature keeps the (large) rest of
@@ -735,7 +735,7 @@ export type SeatAuth = 'signed_in' | 'signed_out' | 'not_required' | 'unknown';
 
 // ── Chat admission — the refused seats and why ────────────────────────────────────────────────
 
-// >>> VERBATIM wicked-crew-api-types@0.38.0 index.d.ts:4327-4388 (crew#536) — ChatSeatOutcome, ChatRefusalSource, ChatSeatRefusal, ChatOpenResponse incl. refused[], ChatSeatRefusedFrame
+// >>> VERBATIM wicked-crew-api-types@0.39.0 index.d.ts:4423-4552 (crew#536) — ChatSeatOutcome, ChatRefusalSource, ChatSeatRefusal, ChatOpenResponse incl. refused[], ChatSeatRefusedFrame
 /** One seat's warm-up outcome on `POST /chats`. */
 export interface ChatSeatOutcome {
   cliKey: string;
@@ -768,6 +768,47 @@ export interface ChatSeatRefusal {
   source?: ChatRefusalSource;
 }
 
+/**
+ * Single-seat degradation disclosure (crew#641/#650): present on `POST /chats` → 201 and on
+ * `POST /chats/:id/messages` → 202 whenever exactly ONE seat is warm — refusals or not, since a
+ * one-seat chat cannot disagree with itself either way. Named here so callers do not have to reason
+ * about the `refused[]` array. The root cause is tracked as wicked-core#563.
+ */
+export interface ChatSingleSeatDegradation {
+  degraded: true;
+  /** The one warm seat key (e.g. `"claude"`). */
+  warmed: string;
+  /**
+   * The seats currently ON RECORD as refused, with each reason and source — EVIDENCE, not the
+   * trigger. It describes the daemon's RECORD (what the open, or the last `POST /chats/:id/seats`,
+   * observed); `warmed` describes the roster NOW, and the two are different moments.
+   *
+   * `[]` with `refusalsKnown: true` therefore means **no refusal is on record** — NOT "no seat was
+   * ever refused": a seat re-seated through `POST /chats/:id/seats` is removed from the record when
+   * it warms, and a seat RELEASED mid-session (it blew its turn budget) was never refused at all,
+   * yet either can leave a chat with one warm seat and an empty record. `[]` with `refusalsKnown:
+   * false` means the record is GONE — see that field.
+   */
+  refused: ChatSeatRefusal[];
+  /**
+   * Whether `refused` is the record this daemon actually holds (crew#650, review follow-up). `true`
+   * on every 201 (the daemon just opened the chat) and on a 202 for a chat it still holds. `false`
+   * on a 202 for a chat this daemon did not open — the engine keeps a warm session across a restart,
+   * the daemon's in-memory scope index does not — where `refused: []` means THE RECORD IS GONE, not
+   * that nothing was refused, and `message` says so instead of asserting either way. Absent on a
+   * daemon predating this field, where `[]` was ambiguous.
+   */
+  refusalsKnown?: boolean;
+  /**
+   * Human-readable summary naming the degradation, its cause, and wicked-core#563. It states only
+   * what the answering route witnessed: the 201 performed the open, so it may say the chat was
+   * opened with a single seat; a 202 knows the roster NOW and the refusal record and says nothing
+   * about how the chat came to look this way — the one warm seat may be the survivor of a two-seat
+   * chat whose other seat was released.
+   */
+  message: string;
+}
+
 /** `POST /chats` → 201. */
 export interface ChatOpenResponse {
   chatId: string;
@@ -779,6 +820,33 @@ export interface ChatOpenResponse {
   /** Every seat that was asked for or defaulted and is NOT in `seats` as warm, with its reason
    *  (api-types 0.35.0). Empty when every seat warmed; absent on a daemon predating the field. */
   refused?: ChatSeatRefusal[];
+  /**
+   * crew#641/#650: present whenever exactly ONE seat is warm — the chat cannot disagree with
+   * itself, which is equally true when nothing was refused (a chat opened with one seat on
+   * purpose). ABSENT only when two or more seats are warm. Absent on a daemon predating this
+   * field; a daemon between #641 and #650 emitted it only when `refused` was non-empty.
+   */
+  singleSeat?: ChatSingleSeatDegradation;
+}
+
+/** `POST /chats/:id/messages` → 202. */
+export interface ChatMessageResponse {
+  /** The seats the engine delivered the message to (warm seat keys). */
+  seats: string[];
+  /** The turn id stamped on every `chatDelta` / `chatReply` frame for this message. Absent on a
+   *  daemon predating the turn index (crew ≥ 0.7.35). */
+  turnId?: string;
+  /**
+   * crew#641/#650: re-stated on every turn when the chat has exactly one WARM seat — decided from
+   * the warm roster, never from the seats this turn reached, and never from whether refusals are
+   * still on record (a restarted daemon has none and the chat is still single-seated). ABSENT when
+   * two or more seats are warm. Absent on a daemon predating this field.
+   *
+   * This is a statement about NOW. It never describes how the chat was opened — the single warm seat
+   * may be the survivor of a multi-seat chat whose other seats were refused, re-seated or released —
+   * and only `POST /chats` → 201, which performed the open, says anything about that moment.
+   */
+  singleSeat?: ChatSingleSeatDegradation;
 }
 
 /**
@@ -800,7 +868,7 @@ export type ChatSeatRefusedFrame = {
 };
 // <<< VERBATIM
 
-// >>> VERBATIM wicked-crew-api-types@0.38.0 index.d.ts:4435-4451 (crew#536) — ChatDetailResponse incl. refused[]
+// >>> VERBATIM wicked-crew-api-types@0.39.0 index.d.ts:4599-4615 (crew#536) — ChatDetailResponse incl. refused[]
 /** `GET /chats/:id` → 200. */
 export interface ChatDetailResponse {
   chatId: string;
@@ -822,7 +890,7 @@ export interface ChatDetailResponse {
 
 // ── The daemon-wide docs listing (no bridge spawn) ────────────────────────────────────────────
 
-// >>> VERBATIM wicked-crew-api-types@0.38.0 index.d.ts:4151-4205 (crew#536) — GET /interactive/docs: InteractiveDocsListing, InteractiveSeamKind, InteractiveDocIndexRow, InteractiveDocsUnreachable
+// >>> VERBATIM wicked-crew-api-types@0.39.0 index.d.ts:4225-4279 (crew#536) — GET /interactive/docs: InteractiveDocsListing, InteractiveSeamKind, InteractiveDocIndexRow, InteractiveDocsUnreachable
 /**
  * `GET /api/v1/interactive/docs` (api-types 0.36.0, studio #263) — every interactive document across
  * projects, listed by the DAEMON from disk WITHOUT spawning a bridge: each project's docs root
