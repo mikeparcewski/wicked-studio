@@ -78,16 +78,9 @@ describe('AppChrome (DES-VISION-001 §3.1, §5.2)', () => {
     }
   });
 
-  it('renders the Ask entry (a ? circle) in the slot the connection word held', () => {
-    render(<AppChrome collapsed={false} navigate={() => {}} onOpenAsk={() => {}} />);
-    const ask = screen.getByTestId('rail-ask');
-
-    // The chrome carries no status dot; the Ask action is the only thing beside
-    // the wordmark, and it is a compact circular '?' button.
-    expect(screen.queryByTestId('connection-dot')).toBeNull();
-    expect(ask).toHaveTextContent('?');
-    expect(ask.style.borderRadius).toBe('var(--radius-full)');
-    expect(ask).toHaveAttribute('title', 'ask');
+  it('carries NO Ask entry — it floats bottom-right now (studio#323 R1)', () => {
+    render(<AppChrome collapsed={false} navigate={() => {}} />);
+    expect(screen.queryByTestId('rail-ask')).toBeNull();
     // No leftover status words next to the logo/name.
     expect(screen.queryByText('live')).toBeNull();
     expect(screen.queryByText('connecting…')).toBeNull();

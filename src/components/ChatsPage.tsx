@@ -11,7 +11,9 @@ import {
 } from '../board/windowStats.js';
 import { useEventStream } from '../hooks/useEventStream.js';
 import { rangeWord, useTimeRange } from '../hooks/useTimeRange.js';
+import { readAskSession } from '../store/askSession.js';
 import { useGateStore } from '../store/gates.js';
+import { useLiveChatsStore, type LiveChatOrigin } from '../store/liveChats.js';
 import { useMembershipStore } from '../store/membership.js';
 import { ageWord } from './DashboardTiles.js';
 import {
@@ -57,6 +59,16 @@ interface LiveChatRow extends LiveChatSnapshot {
   /** When this page last SAW a stream frame for the chat (0 = never). */
   lastFrameAt: number;
 }
+
+/** A live card: the daemon's row reconciled with what THIS client knows (studio#323 R2). */
+interface LiveChatCard extends LiveChatRow {
+  /** Which surface opened it — absent when neither the store nor the Ask session says. */
+  origin?: LiveChatOrigin;
+  /** The first question asked — the card's human handle — when known. */
+  title?: string;
+}
+
+const ORIGIN_WORD: Record<LiveChatOrigin, string> = { ask: 'Ask', chat: 'Chat' };
 
 /** A frame this recent reads as "streaming now" — observed, never asserted. */
 const STREAMING_WINDOW_MS = 30_000;
@@ -127,16 +139,21 @@ export function ChatsPage({ runs, onSelect, navigate }: Props): React.ReactEleme
   // "streaming now" from the FIRST frame — a session is visible here while it
   // streams, even one this list fetch predates.
   const [liveChats, setLiveChats] = useState<LiveChatRow[] | null>(null);
+  /** When the ANSWERED `GET /chats` was requested — null while pending or when it failed.
+   *  A successful list is authoritative over the client store for sessions seen before it. */
+  const [censusAt, setCensusAt] = useState<number | null>(null);
   useEffect(() => {
     let cancelled = false;
+    const startedAt = Date.now();
     api
       .listChats()
       .then(({ chats }) => {
         if (cancelled) return;
         setLiveChats(chats.map((c) => ({ ...c, lastFrameAt: 0 })));
+        setCensusAt(startedAt);
       })
       .catch(() => {
-        if (!cancelled) setLiveChats([]); // unreachable — the live cards stay absent
+        if (!cancelled) setLiveChats([]); // unreachable — the client store is the fallback
       });
     return () => {
       cancelled = true;
@@ -174,11 +191,50 @@ export function ChatsPage({ runs, onSelect, navigate }: Props): React.ReactEleme
     });
   });
 
+  // ── ONE census (studio#323 R2): the daemon's pool (`GET /chats`) reconciled with
+  // the client's live store — the SAME store the rail renders, which Ask and Chat
+  // deposit into the moment they open a session. Deduped by id; the store adds the
+  // sessions the fetch predates or has not seen, plus each one's origin + title.
+  // The persisted Ask session (sessionStorage) labels an Ask chat across a reload,
+  // when the in-memory store has forgotten it.
+  const storeChats = useLiveChatsStore((s) => s.sessions);
+  const live: LiveChatCard[] = useMemo(() => {
+    const ask = readAskSession();
+    const byId = new Map<string, LiveChatCard>();
+    for (const c of liveChats ?? []) byId.set(c.chatId, { ...c });
+    for (const sess of Object.values(storeChats)) {
+      const row = byId.get(sess.chatId);
+      // The daemon answered and omitted it: a session last seen BEFORE that request is
+      // gone (a restart, a reap, a missed chatClosed) — never a live card to a dead
+      // /chat/:id. One seen after the request started may simply postdate the answer.
+      if (row === undefined && censusAt !== null && sess.lastSeenAt < censusAt) continue;
+      if (row === undefined) {
+        byId.set(sess.chatId, { chatId: sess.chatId, seats: [...sess.seats], idleSecs: null, lastFrameAt: 0 });
+      } else {
+        const seats = [...row.seats];
+        for (const k of sess.seats) if (!seats.includes(k)) seats.push(k);
+        row.seats = seats;
+      }
+    }
+    for (const card of byId.values()) {
+      const sess = storeChats[card.chatId];
+      const isAsk = ask !== null && ask.chatId === card.chatId;
+      const origin = sess?.origin ?? (isAsk ? 'ask' : undefined);
+      const title = sess?.title ?? (isAsk && ask.title !== '' ? ask.title : undefined);
+      if (origin !== undefined) card.origin = origin;
+      if (title !== undefined) card.title = title;
+    }
+    return [...byId.values()];
+  }, [liveChats, storeChats, censusAt]);
+
   /** End a warm session from the list — the zombie-cleanup affordance. */
   function endLiveChat(chatId: string): void {
     void api
       .closeChat(chatId)
-      .then(() => setLiveChats((prev) => (prev === null ? prev : prev.filter((c) => c.chatId !== chatId))))
+      .then(() => {
+        setLiveChats((prev) => (prev === null ? prev : prev.filter((c) => c.chatId !== chatId)));
+        useLiveChatsStore.getState().remove(chatId);
+      })
       .catch(() => {
         /* teardown is best-effort — the daemon's idle reaper collects either way */
       });
@@ -205,7 +261,6 @@ export function ChatsPage({ runs, onSelect, navigate }: Props): React.ReactEleme
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `now` re-derives with the data, not a timer
     [buckets, attachedAt],
   );
-  const live = liveChats ?? [];
   const liveN = live.length;
   const seatN = liveSeatCount(live);
   const stalled = stalledLiveChats(live);
@@ -236,7 +291,11 @@ export function ChatsPage({ runs, onSelect, navigate }: Props): React.ReactEleme
   const visibleRuns = chip === 'live' ? [] : searchedRuns.filter((v) => matchesChip(v.session.status, chip));
   const searchedLive = q === ''
     ? live
-    : live.filter((c) => c.chatId.toLowerCase().includes(q) || c.seats.some((s) => s.toLowerCase().includes(q)));
+    : live.filter((c) =>
+        c.chatId.toLowerCase().includes(q)
+        || (c.title ?? '').toLowerCase().includes(q)
+        || (c.origin !== undefined && ORIGIN_WORD[c.origin].toLowerCase().includes(q))
+        || c.seats.some((s) => s.toLowerCase().includes(q)));
   const visibleLive = (chip === 'all' || chip === 'live') ? searchedLive : [];
   const hiddenByWindow = q === '' ? allChats.length - buckets.current.length : 0;
 
@@ -416,8 +475,28 @@ export function ChatsPage({ runs, onSelect, navigate }: Props): React.ReactEleme
                     className="w-2 h-2 rounded-full shrink-0"
                     style={{ background: 'var(--status-run)' }}
                   />
-                  <span className="text-sm font-mono truncate" style={{ color: 'var(--ink-high)', minWidth: 0 }}>
-                    live · {c.chatId.slice(0, 8)}
+                  {/* studio#323 R2: where it came from + what was asked — never
+                      an anonymous `live · <hex>`. The id stays on the meta line. */}
+                  <span
+                    data-testid="live-chat-origin"
+                    data-origin={c.origin ?? 'unknown'}
+                    title={c.origin === undefined ? 'Opened elsewhere — this client did not see which surface' : `Started from ${ORIGIN_WORD[c.origin]}`}
+                    className="text-[10px] font-mono px-2 py-0.5 rounded-full shrink-0"
+                    style={{ color: 'var(--ink-muted)', border: '1px solid var(--surface-raised)' }}
+                  >
+                    {c.origin !== undefined ? ORIGIN_WORD[c.origin] : 'Session'}
+                  </span>
+                  <span
+                    data-testid="live-chat-title"
+                    title={c.title}
+                    className="truncate"
+                    style={{
+                      color: c.title !== undefined ? 'var(--ink-high)' : 'var(--ink-dim)', minWidth: 0,
+                      fontSize: 'var(--text-xs)', fontFamily: 'var(--font-sans)',
+                      fontStyle: c.title !== undefined ? 'normal' : 'italic',
+                    }}
+                  >
+                    {c.title !== undefined ? humanTitle(c.title) : 'Untitled live chat'}
                   </span>
                   {streaming ? (
                     <span
@@ -452,7 +531,7 @@ export function ChatsPage({ runs, onSelect, navigate }: Props): React.ReactEleme
                   {c.seats.length > 0
                     ? <SeatChips seats={c.seats} />
                     : <span style={CARD_META}>seats unknown</span>}
-                  <span style={{ ...CARD_META, marginLeft: 'auto' }}>warm on the daemon</span>
+                  <span style={{ ...CARD_META, marginLeft: 'auto' }}>live · {c.chatId.slice(0, 8)}</span>
                 </div>
               </div>
             );

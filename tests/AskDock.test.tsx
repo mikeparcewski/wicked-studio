@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ApiError } from '../src/api/errors.js';
@@ -120,6 +120,8 @@ beforeEach(() => {
   useLiveChatsStore.setState({ sessions: {} });
   useFailureClocks.setState({ failedAtByRun: {} });
   try { localStorage.clear(); } catch { /* stubbed in setup */ }
+  // studio#323 R3: the Ask session persists per tab — every case starts with none.
+  sessionStorage.clear();
 });
 
 describe('the context pack — diagnostics presence-gated, both fixtures', () => {
@@ -270,5 +272,139 @@ describe('the chat-launch wire — the GroupChat seat machinery, one warm sessio
     const note = await screen.findByTestId('assist-note');
     expect(note).toHaveTextContent('No agent seat came up — claude: no ACP config');
     expect(sendChatMessage).not.toHaveBeenCalled();
+  });
+});
+
+describe('the Ask session survives close/reopen, and promotes into the full chat (studio#323 R3)', () => {
+  const FIXED_ID = '5e55104e-0000-4000-8000-000000000323';
+  afterEach(() => {
+    vi.restoreAllMocks();
+    sessionStorage.clear();
+  });
+
+  it('reopening Ask RESUMES the same session — no second POST /chats', async () => {
+    vi.spyOn(crypto, 'randomUUID').mockReturnValue(FIXED_ID);
+    sessionStorage.clear();
+    const user = userEvent.setup();
+    wireDiagnostics('present');
+
+    dock();
+    await user.type(screen.getByTestId('assist-input'), 'first question');
+    await user.click(screen.getByTestId('assist-send'));
+    await waitFor(() => expect(sendChatMessage).toHaveBeenCalledTimes(1));
+    expect(openChat).toHaveBeenCalledTimes(1);
+
+    // Close Ask: App unmounts the dock (`{askOpen && <AskDock/>}`).
+    cleanup();
+
+    // Reopen: the session's block is back BEFORE any send, and a send rides it.
+    dock();
+    expect(screen.getByTestId('assist-chat')).toHaveAttribute('data-chat-id', FIXED_ID);
+    await user.type(screen.getByTestId('assist-input'), 'after reopen');
+    await user.click(screen.getByTestId('assist-send'));
+    await waitFor(() => expect(sendChatMessage).toHaveBeenCalledTimes(2));
+
+    expect(openChat).toHaveBeenCalledTimes(1); // still ONE session
+    expect(sendChatMessage.mock.calls[1]).toEqual([FIXED_ID, 'after reopen']);
+  });
+
+  it('a resumed session the daemon reaped opens a FRESH one for the next question', async () => {
+    const ids = ['dead0000-0000-4000-8000-000000000001', 'f4e50000-0000-4000-8000-000000000002'];
+    vi.spyOn(crypto, 'randomUUID').mockImplementation(() => ids.shift() as `${string}-${string}-${string}-${string}-${string}`);
+    sessionStorage.clear();
+    const user = userEvent.setup();
+    wireDiagnostics('present');
+
+    dock();
+    await user.type(screen.getByTestId('assist-input'), 'first');
+    await user.click(screen.getByTestId('assist-send'));
+    await waitFor(() => expect(sendChatMessage).toHaveBeenCalledTimes(1));
+    cleanup();
+
+    // The daemon no longer holds the first session: its message send is refused.
+    sendChatMessage.mockImplementationOnce(() => Promise.reject(new ApiError(404, 'unknown chat')));
+    // …and the probe proves it: GET /chats/:id answers NO seats (the daemon's "reclaimed").
+    getChat.mockResolvedValue({ chatId: 'dead0000-0000-4000-8000-000000000001', seats: [] });
+    dock();
+    await user.type(screen.getByTestId('assist-input'), 'second');
+    await user.click(screen.getByTestId('assist-send'));
+    await waitFor(() => expect(openChat).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(sendChatMessage).toHaveBeenCalledTimes(3));
+
+    expect((openChat.mock.calls[1]?.[0] as { chatId: string }).chatId).toBe('f4e50000-0000-4000-8000-000000000002');
+    expect(sendChatMessage.mock.calls[2]?.[0]).toBe('f4e50000-0000-4000-8000-000000000002');
+  });
+
+  it('a resumed send that fails while the chat is still WARM keeps the session — no second POST /chats, the error shows', async () => {
+    vi.spyOn(crypto, 'randomUUID').mockReturnValue(FIXED_ID);
+    const user = userEvent.setup();
+    wireDiagnostics('present');
+
+    dock();
+    await user.type(screen.getByTestId('assist-input'), 'first');
+    await user.click(screen.getByTestId('assist-send'));
+    await waitFor(() => expect(sendChatMessage).toHaveBeenCalledTimes(1));
+    cleanup();
+
+    // A transient 500 on the send — the daemon STILL holds the chat (warm seats).
+    sendChatMessage.mockImplementationOnce(() => Promise.reject(new ApiError(500, 'daemon hiccup')));
+    getChat.mockResolvedValue({ chatId: FIXED_ID, seats: ['claude', 'pi'] });
+    dock();
+    await user.type(screen.getByTestId('assist-input'), 'second');
+    await user.click(screen.getByTestId('assist-send'));
+
+    await waitFor(() =>
+      expect(screen.getAllByTestId('assist-note').filter((n) => n.getAttribute('data-tone') === 'fail')).toHaveLength(1),
+    );
+    const failNote = screen.getAllByTestId('assist-note').find((n) => n.getAttribute('data-tone') === 'fail');
+    expect(failNote).toHaveTextContent('daemon hiccup');
+    expect(getChat).toHaveBeenCalledWith(FIXED_ID); // the gone-probe ran
+    expect(openChat).toHaveBeenCalledTimes(1); // no fresh session minted
+    expect(JSON.parse(sessionStorage.getItem('wicked.ask.session') ?? 'null')).toEqual({ chatId: FIXED_ID, title: 'first', seeded: true });
+  });
+
+  it('a first send that FAILED leaves the session unseeded: after reopen the next question still carries the context pack', async () => {
+    vi.spyOn(crypto, 'randomUUID').mockReturnValue(FIXED_ID);
+    const user = userEvent.setup();
+    wireDiagnostics('present');
+
+    // The chat opens, but the first (seeded) message never lands.
+    sendChatMessage.mockImplementationOnce(() => Promise.reject(new ApiError(500, 'send failed')));
+    dock();
+    await user.type(screen.getByTestId('assist-input'), 'first');
+    await user.click(screen.getByTestId('assist-send'));
+    await waitFor(() => expect(sendChatMessage).toHaveBeenCalledTimes(1));
+    await screen.findByText(/send failed/);
+    cleanup();
+
+    dock();
+    await user.type(screen.getByTestId('assist-input'), 'retry question');
+    await user.click(screen.getByTestId('assist-send'));
+    await waitFor(() => expect(sendChatMessage).toHaveBeenCalledTimes(2));
+
+    const [chatId, message] = sendChatMessage.mock.calls[1] as [string, string];
+    expect(chatId).toBe(FIXED_ID); // the same warm session — not orphaned
+    expect(openChat).toHaveBeenCalledTimes(1);
+    expect(message.startsWith('retry question')).toBe(true);
+    expect(message).toContain('[studio context pack');
+  });
+
+  it('"Open in full chat" navigates to /chat/:id for the dock session and closes the dock', async () => {
+    vi.spyOn(crypto, 'randomUUID').mockReturnValue(FIXED_ID);
+    sessionStorage.clear();
+    const user = userEvent.setup();
+    const navigate = vi.fn();
+    const onClose = vi.fn();
+    wireDiagnostics('present');
+
+    render(<AskDock runs={[]} pathname="/" onClose={onClose} navigate={navigate} />);
+    await user.type(screen.getByTestId('assist-input'), 'promote me');
+    await user.click(screen.getByTestId('assist-send'));
+    await waitFor(() => expect(sendChatMessage).toHaveBeenCalledTimes(1));
+
+    await user.click(screen.getByTestId('assist-dock-expand'));
+
+    expect(navigate).toHaveBeenCalledWith(`/chat/${FIXED_ID}`);
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 });

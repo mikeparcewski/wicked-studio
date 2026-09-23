@@ -4,6 +4,7 @@ import { getDiagnostics, isDiagnosticsUnsupported } from '../api/diagnostics.js'
 import type { RepoEntry, SessionView } from '../api/types.js';
 import { needsYouRows } from '../board/needsYou.js';
 import { useFailureClocks } from '../store/failureClocks.js';
+import { forgetAskSession, readAskSession, writeAskSession } from '../store/askSession.js';
 import { useGateStore } from '../store/gates.js';
 import { useLiveChatsStore } from '../store/liveChats.js';
 import { useMembershipStore } from '../store/membership.js';
@@ -37,11 +38,13 @@ import { defaultSelection } from './GroupChat.js';
  * chips prefill the composer, never submit it.
  */
 
-export function AskDock({ runs, pathname, onClose }: {
+export function AskDock({ runs, pathname, onClose, navigate }: {
   runs: SessionView[];
   pathname: string;
-  /** Collapsing the dock closes Ask entirely — the rail button/shortcut reopen it. */
+  /** Collapsing the dock closes Ask entirely — the launcher bubble/shortcut reopen it. */
   onClose: () => void;
+  /** The promote door (studio#323 R3): "Open in full chat" routes to `/chat/:id`. */
+  navigate?: (path: string) => void;
 }): React.ReactElement {
   const [diag, setDiag] = useState<DiagnosticsState>({ kind: 'loading' });
   const [repos, setRepos] = useState<RepoEntry[]>(() => getCachedRepos() ?? []);
@@ -94,15 +97,51 @@ export function AskDock({ runs, pathname, onClose }: {
     diagnostics: diag,
   };
 
+  /** The session this dock RESUMES (studio#323 R3): the dock unmounts on close, so the
+   *  id lives in sessionStorage — reopening Ask rejoins it instead of minting a second
+   *  session and orphaning the first. Read once per mount. */
+  const [resumed] = useState(() => readAskSession());
   /** The live chat session this dock opened — later sends reuse its warm seats. */
-  const chatIdRef = useRef<string | null>(null);
-  /** True once the context pack rode a message — it seeds the FIRST send only. */
-  const seededRef = useRef(false);
+  const chatIdRef = useRef<string | null>(resumed?.chatId ?? null);
+  /** True once the context pack LANDED with a message — it seeds the first successful
+   *  send only. A resumed session carries its persisted flag: a first send that failed
+   *  leaves it unseeded, so the pack still rides the next question. */
+  const seededRef = useRef(resumed?.seeded === true);
+  /** The session's first question — its /chats handle, re-persisted with the flag. */
+  const titleRef = useRef(resumed?.title ?? '');
 
   const verbs: AssistVerbs = useMemo(
     () => ({
       send: async (text) => {
         let id = chatIdRef.current;
+        if (id !== null && resumed !== null && id === resumed.chatId) {
+          const message = seededRef.current ? text : `${text}\n\n---\n${buildContextPack(packInputs.current)}`;
+          try {
+            await api.sendChatMessage(id, message);
+            if (!seededRef.current) {
+              seededRef.current = true;
+              writeAskSession({ chatId: id, title: titleRef.current, seeded: true });
+            }
+            return { chatId: id };
+          } catch (sendErr) {
+            // A failed send is NOT proof the session is gone — a 5xx or a network blip
+            // against a still-warm chat must not orphan it. Ask the daemon, as GroupChat's
+            // rejoin does: ONLY an empty seat list (a 200) means reclaimed. Anything else —
+            // warm seats, or a probe that itself fails ("do not know") — keeps the id and
+            // surfaces the send's own error.
+            const gone = await api
+              .getChat(id)
+              .then((detail) => detail.seats.length === 0)
+              .catch(() => false);
+            if (!gone) throw sendErr;
+            // Reclaimed (idle reaper, pool cap, a daemon restart) — forget it and open a
+            // fresh session for this question below.
+            forgetAskSession(id);
+            chatIdRef.current = null;
+            seededRef.current = false;
+            id = null;
+          }
+        }
         if (id === null) {
           // The chat-capable roster (EC44's derivation, reused verbatim) — cached when any
           // surface already fetched it; one GET /roster otherwise.
@@ -126,16 +165,23 @@ export function AskDock({ runs, pathname, onClose }: {
             throw new Error(`No agent seat came up — ${detail}`);
           }
           chatIdRef.current = id;
-          // The session is live — make it findable on the rail (the J4 live row).
-          useLiveChatsStore.getState().upsert(id, ready);
+          // Persist for the tab — a close/reopen (or reload) resumes THIS session.
+          titleRef.current = text;
+          writeAskSession({ chatId: id, title: text, seeded: false });
+          // The session is live — make it findable on the rail (the J4 live row) and on
+          // /chats, labelled with where it came from and what was asked (studio#323 R2).
+          useLiveChatsStore.getState().upsert(id, ready, { origin: 'ask', title: text });
         }
         const message = seededRef.current ? text : `${text}\n\n---\n${buildContextPack(packInputs.current)}`;
         await api.sendChatMessage(id, message);
-        seededRef.current = true;
+        if (!seededRef.current) {
+          seededRef.current = true;
+          writeAskSession({ chatId: id, title: titleRef.current, seeded: true });
+        }
         return { chatId: id };
       },
     }),
-    [],
+    [resumed],
   );
 
   const prompts = useMemo(
@@ -180,6 +226,16 @@ export function AskDock({ runs, pathname, onClose }: {
         prompts,
       }}
       verbs={verbs}
+      resumeChatId={resumed?.chatId ?? null}
+      fill
+      onExpandChat={
+        navigate === undefined
+          ? undefined
+          : (chatId) => {
+              navigate(`/chat/${encodeURIComponent(chatId)}`);
+              onClose();
+            }
+      }
       open
       onOpenChange={(next) => {
         if (!next) onClose();
