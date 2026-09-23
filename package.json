@@ -32,6 +32,7 @@
     "lint": "eslint src tests",
     "manifest:testids": "node scripts/generate-testid-inventory.mjs",
     "test": "vitest run",
+    "test:e2e": "playwright test",
     "test:watch": "vitest",
     "prepare": "node scripts/prepare-dist.mjs"
   },
@@ -66,6 +67,7 @@
     "typescript-eslint": "^8.63.0",
     "vite": "^6.4.3",
     "vitest": "^3.2.6",
+    "@playwright/test": "^1.62.1",
     "wicked-crew-api-types": "0.38.0"
   },
   "engines": {

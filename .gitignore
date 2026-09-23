@@ -34,3 +34,7 @@ e2e/artifacts/**/.*.tmp
 .codegraph/
 .product/
 docs/testing/
+
+# Playwright (root app e2e, studio#322) — playwright-report/ and test-results/ are ignored above
+/blob-report/
+/.playwright/

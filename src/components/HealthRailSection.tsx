@@ -363,7 +363,7 @@ export function HealthRailSection({ open, onToggle }: Props): React.ReactElement
       ref={ref}
       data-testid="rail-health-section"
       data-open={open}
-      className="shrink-0 px-2 pb-2 pt-1"
+      className="shrink-0 px-2 pb-2 pt-1 flex flex-col max-h-[45vh]"
       style={{ borderTop: '1px solid var(--surface-raised)' }}
     >
       <button
@@ -410,7 +410,7 @@ export function HealthRailSection({ open, onToggle }: Props): React.ReactElement
         )}
       </button>
       {open && (
-        <div className="flex flex-col pt-0.5 px-1">
+        <div className="flex flex-col pt-0.5 px-1 overflow-y-auto min-h-0 flex-1">
           <CheckRow label="WebSocket" ok={wsStatus === 'connected'} detail={pillLabel} />
           {healthError ? (
             <CheckRow label="API server" ok={false} detail="unreachable" />
