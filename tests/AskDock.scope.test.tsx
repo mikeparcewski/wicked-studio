@@ -243,3 +243,38 @@ describe('Ask translates a refused open', () => {
     expect(sendChatMessage).not.toHaveBeenCalled();
   });
 });
+
+// codex round 3 on #327 (1): Ask stays mounted across navigation — until a chat is open, an
+// UNTOUCHED scope follows the route's project; a manual choice survives navigation.
+describe('Ask scope default follows the route until a choice is made', () => {
+  it('navigating project A → project B with the dock open sends project B', async () => {
+    const view = render(<AskDock runs={[]} pathname="/p/api-migration/build" onClose={() => undefined} />);
+    expect(screen.getByTestId('ask-scope')).toHaveValue('project:api-migration');
+    view.rerender(<AskDock runs={[]} pathname="/p/billing-rewrite/build" onClose={() => undefined} />);
+    expect(screen.getByTestId('ask-scope')).toHaveValue('project:billing-rewrite');
+    await ask();
+    expect(lastBody().projectId).toBe('billing-rewrite');
+  });
+
+  it('a MANUAL choice survives navigation (the filing follows the current route)', async () => {
+    const user = userEvent.setup();
+    const view = render(<AskDock runs={[]} pathname="/p/api-migration/build" onClose={() => undefined} />);
+    await user.selectOptions(screen.getByTestId('ask-scope'), 'system');
+    view.rerender(<AskDock runs={[]} pathname="/p/billing-rewrite/build" onClose={() => undefined} />);
+    expect(screen.getByTestId('ask-scope')).toHaveValue('system');
+    await ask();
+    expect(lastBody().scopeKind).toBe('system');
+    expect(lastBody().projectId).toBe('billing-rewrite');
+  });
+});
+
+// codex round 3 on #327 (2): `/p/default/*` is the synthesized Unfiled bucket — never a project.
+describe('Ask on the Unfiled bucket route', () => {
+  it('/p/default/build defaults to Everything and files nothing', async () => {
+    dock('/p/default/build');
+    expect(screen.getByTestId('ask-scope')).toHaveValue('everything');
+    await ask();
+    expect(lastBody().scopeKind).toBe('everything');
+    expect('projectId' in lastBody()).toBe(false);
+  });
+});

@@ -29,7 +29,7 @@ import {
 } from './ChatScopeSelect.js';
 import { defaultSelection, describeChatOpenRefusal } from './GroupChat.js';
 import { apiStatus, apiWire } from '../api/errors.js';
-import { routeProjectId } from '../hooks/useRoute.js';
+import { ambientProjectId } from '../hooks/ambientProject.js';
 
 /**
  * ASK — the app-wide binding of the ASSIST DOCK (DES-ASSIST-DOCK §5: "the dock becomes
@@ -129,7 +129,11 @@ export function AskDock({ runs, pathname, onClose, navigate }: {
   // everything, until the user picks. Once open, the header states what the daemon RESOLVED —
   // persisted with the session, so a reopened dock never offers a scope select for a chat that is
   // already open (a resumed session from before the field reads "not stated", never a choice).
-  const [scopeChoice, setScopeChoice] = useState<AskScopeChoice>(() => defaultAskScope(routeProjectId(pathname)));
+  // Ask stays mounted across navigation (codex round 3 on #327): an UNTOUCHED choice is derived
+  // from the CURRENT route each render; only a manual pick is state, and it survives navigation.
+  // `ambientProjectId` is the one project-from-route rule (`/p/default` = Unfiled = none).
+  const [manualScope, setManualScope] = useState<AskScopeChoice | null>(null);
+  const scopeChoice: AskScopeChoice = manualScope ?? defaultAskScope(ambientProjectId(pathname));
   const scopeChoiceRef = useRef(scopeChoice);
   scopeChoiceRef.current = scopeChoice;
   /** `undefined` = no chat open yet (the select shows); `null` = open, scope not stated. */
@@ -183,7 +187,7 @@ export function AskDock({ runs, pathname, onClose, navigate }: {
           const choice = scopeChoiceRef.current;
           const clis = defaultSelection(roster, askScopeIsScoped(choice));
           id = crypto.randomUUID();
-          const body: ChatOpenBody = { chatId: id, ...askScopeOpenFields(choice, routeProjectId(packInputs.current.pathname)) };
+          const body: ChatOpenBody = { chatId: id, ...askScopeOpenFields(choice, ambientProjectId(packInputs.current.pathname)) };
           if (clis.length > 0) body.clis = clis;
           // A refused open reads as GroupChat's does (codex on #327): a pre-0.39.0 daemon's
           // "unknown field `scopeKind`" names the upgrade, never the raw wire.
@@ -265,7 +269,7 @@ export function AskDock({ runs, pathname, onClose, navigate }: {
         prompts,
         controls:
           openedScope === undefined ? (
-            <ChatScopeSelect value={scopeChoice} onChange={setScopeChoice} projects={projects} repos={repos} />
+            <ChatScopeSelect value={scopeChoice} onChange={setManualScope} projects={projects} repos={repos} />
           ) : undefined,
       }}
       verbs={verbs}

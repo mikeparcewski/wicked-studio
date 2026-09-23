@@ -376,10 +376,3 @@ export function useRoute(): Route & {
 
   return { ...parse(pathname), navigate, panelPath, search, pathname };
 }
-
-/** The project the address is in (`/p/:projectId/*`, the legacy `/projects/:id`), else null —
- *  the same parse `useRoute` applies, for a consumer that holds only a pathname (Ask's scope
- *  default, studio#323 R4). */
-export function routeProjectId(pathname: string): string | null {
-  return parse(pathname).projectId;
-}
