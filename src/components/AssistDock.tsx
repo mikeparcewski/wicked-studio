@@ -50,6 +50,9 @@ export interface AssistContext {
   /** Quick-prompt chips for the EMPTY thread: clicking one PREFILLS the composer
    *  (never sends — nothing launches without the user's own send). */
   prompts?: readonly AssistPrompt[];
+  /** Surface-owned controls for the EMPTY thread, beside the hint (Ask's scope select —
+   *  studio#323 R4: decided before the first send, so shown only while nothing was sent). */
+  controls?: React.ReactNode;
 }
 
 export interface AssistPrompt {
@@ -700,6 +703,7 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
             <p data-testid="assist-empty" className="text-[11px] leading-relaxed" style={{ color: 'var(--ink-dim)' }}>
               {context.hint ?? 'Type below, or drop documents here.'}
             </p>
+            {context.controls}
             {context.prompts !== undefined && context.prompts.length > 0 && (
               <div data-testid="assist-prompts" className="flex flex-wrap gap-1.5">
                 {context.prompts.map((p) => (

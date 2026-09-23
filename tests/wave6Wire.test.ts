@@ -271,9 +271,22 @@ describe('the null-safe readers — an older daemon\'s frame changes nothing', (
 
 
 describe('distribution distinctness fallback reader (#276)', () => {
-  it.each([undefined, null, 'unknown', true, 'creator_seat'])('accepts only the published token (%s)', (distinctnessFallback) => {
+  it.each([
+    [undefined, null],
+    [null, null],
+    ['creator_seat', 'creator_seat'],
+    ['same_cli_instance', 'same_cli_instance'],
+  ])('reads the published tokens (%s)', (distinctnessFallback, expected) => {
     expect(distributionDistinctnessFallback({ type: 'unitDistributed', session: 'r', distinctnessFallback } as never))
-      .toBe(distinctnessFallback === 'creator_seat' ? 'creator_seat' : null);
+      .toBe(expected);
+  });
+  // api-types 0.39.0 (crew#666): an unrecognised non-null value is a disclosure, carried verbatim.
+  it.each([
+    ['unknown', { unrecognised: 'unknown' }],
+    [true, { unrecognised: 'true' }],
+  ])('carries an unrecognised value (%s) instead of dropping it', (distinctnessFallback, expected) => {
+    expect(distributionDistinctnessFallback({ type: 'unitDistributed', session: 'r', distinctnessFallback } as never))
+      .toEqual(expected);
   });
   it('treats an absent key as null', () => {
     expect(distributionDistinctnessFallback({ type: 'unitDistributed', session: 'r' } as never)).toBeNull();

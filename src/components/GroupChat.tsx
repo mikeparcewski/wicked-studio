@@ -144,9 +144,12 @@ export function chatScopedNow(o: {
   scopeMode: ChatScopeMode;
   scopeRepoIds: readonly string[];
 }): boolean {
-  return (
-    Boolean(o.repoId) || Boolean(o.projectId) || (o.scopeMode === 'repos' && o.scopeRepoIds.length > 0)
-  );
+  // studio#323 R4: `system` reads no repository (the daemon gives it the UNSCOPED admission even
+  // when filed into a project); `everything` reads every registered one.
+  if (o.repoId) return true;
+  if (o.scopeMode === 'system') return false;
+  if (o.scopeMode === 'everything') return true;
+  return Boolean(o.projectId) || (o.scopeMode === 'repos' && o.scopeRepoIds.length > 0);
 }
 
 /** {@link chatScopedNow} at mount, before any scope control has been touched. */
@@ -244,12 +247,17 @@ function clearStoredChatId(repoId?: string | null): void {
 // MCP over it. `POST /chats` decides the scope from the body — explicit `repoRefs`
 // win; else `projectId` means EVERY `crew.repo` member of the project; else NONE
 // (the seats see only their scratch root). The create flow therefore carries a
-// scope control, `kind: 'none'` is an EXPLICIT choice (never the silent default a
-// forgotten Unfiled field would produce), and the opened chat STATES the scope
-// the daemon resolved (`ChatOpenResponse.scope` / `ChatDetailResponse.scope`).
+// scope control and the opened chat STATES the scope the daemon resolved
+// (`ChatOpenResponse.scope` / `ChatDetailResponse.scope`).
+//
+// studio#323 R4 (crew `scopeKind`, api-types 0.39.0): the vocabulary is
+// system + everything / project / repos. `system` (the platform itself — no
+// repository) and `everything` (every registered repo) NAME their kind on the
+// open; `project` and `repos` keep the legacy body older daemons accept. The
+// old explicit "Unscoped" is `system` now — a stated scope, not an absence.
 
 /** The create-flow scope control's position. */
-export type ChatScopeMode = 'project' | 'repos' | 'none';
+export type ChatScopeMode = 'system' | 'everything' | 'project' | 'repos';
 
 /** `ChatOpenBody.repoRefs` takes 1–32 entries (api-types 0.32.0). */
 export const MAX_SCOPE_REPOS = 32;
@@ -272,10 +280,10 @@ export function chatScopeGap(input: {
       ? 'Pick at least one repository for the agents to read — or choose another scope.'
       : null;
   }
-  if (input.mode === 'none') return null;
+  if (input.mode === 'system' || input.mode === 'everything') return null;
   return input.projectId !== null
     ? null
-    : 'Unfiled chats give the agents nothing to read. Pick a project (all its repositories), choose repositories, or continue unscoped.';
+    : 'Unfiled chats give the agents nothing to read. Pick a project (all its repositories), choose repositories, Everything (every registered repository), or System (the platform itself).';
 }
 
 /**
@@ -294,6 +302,10 @@ export function describeChatOpenRefusal(status: number | null, wire: string | nu
     return /^Repo /.test(wire)
       ? `Scope refused — ${wire}. Name repositories that are registered (by id, or a name only one repo carries) and send again.`
       : wire;
+  }
+  if (status === 400 && wire !== null && /`scopeKind`/.test(wire)) {
+    // A daemon without api-types 0.39.0's named kinds rejects the field as unknown (studio#323 R4).
+    return `This daemon predates the System and Everything chat scopes — upgrade wicked-crew, or choose Project or Repos. (${wire})`;
   }
   if (status === 400 && wire !== null && /ambiguous/i.test(wire)) {
     return `Scope refused — ${wire}`;
@@ -558,7 +570,13 @@ export function GroupChat({
    *  chat this daemon did not open (restart). Stated, never guessed. */
   const [scopeUnstated, setScopeUnstated] = useState(false);
 
+  /** The 501 remedy's LEGACY unscoped open (codex on #327): a daemon old enough to answer 501
+   *  refuses `scopeKind` too, so the fallback sends neither projectId, repoRefs nor scopeKind.
+   *  Any explicit scope choice clears it. */
+  const legacyUnscopedRef = useRef(false);
+
   function chooseScopeMode(mode: ChatScopeMode): void {
+    legacyUnscopedRef.current = false;
     setScopeMode(mode);
     setScopeGap(null);
     if (mode !== 'repos') setScopePickerOpen(false);
@@ -566,6 +584,7 @@ export function GroupChat({
 
   /** "Choose repos…": the mode AND the picker; the registry loads on this gesture. */
   function openScopePicker(): void {
+    legacyUnscopedRef.current = false;
     setScopeMode('repos');
     setScopeGap(null);
     setScopePickerOpen((v) => !v || scopeModeRef.current !== 'repos');
@@ -585,8 +604,7 @@ export function GroupChat({
       prev.includes(id) ? prev.filter((x) => x !== id) : prev.length >= MAX_SCOPE_REPOS ? prev : [...prev, id]);
   }
 
-  /** The project switcher's selection: a project makes `none` meaningless (the
-   *  daemon scopes to the project whenever `projectId` rides the open). */
+  /** The project switcher's selection (a project change is a scope change). */
   function selectProject(id: string | null): void {
     const changed = id !== selectedProjectRef.current;
     setSelectedProjectId(id);
@@ -595,11 +613,10 @@ export function GroupChat({
       // A project change is a scope change: the previous project's repo pick and picker do not
       // carry over (Copilot on #253) — the new project's default is "all its repos", and an
       // Unfiled switch is back to the explicit-choice state.
+      legacyUnscopedRef.current = false;
       setScopeMode('project');
       setScopeRepoIds([]);
       setScopePickerOpen(false);
-    } else if (id !== null && scopeModeRef.current === 'none') {
-      setScopeMode('project');
     }
   }
 
@@ -610,7 +627,8 @@ export function GroupChat({
    * the project shell — there the context IS the project and cannot be dropped.
    */
   function fallbackUnscoped(): void {
-    setScopeMode('none');
+    legacyUnscopedRef.current = true;
+    setScopeMode('system');
     setScopeRepoIds([]);
     setSelectedProjectId(null);
     setOpenError(null);
@@ -767,6 +785,7 @@ export function GroupChat({
     setScopeUnstated(false);
     // The create-flow scope choice belongs to the surface it was made on (Copilot on
     // #253): a repo pick made for one route must not ride the next route's open.
+    legacyUnscopedRef.current = false;
     setScopeMode('project');
     setScopeRepoIds([]);
     setScopePickerOpen(false);
@@ -1131,6 +1150,10 @@ export function GroupChat({
         if (scopeModeRef.current === 'repos' && scopeRepoIdsRef.current.length > 0) {
           body.repoRefs = [...scopeRepoIdsRef.current];
         }
+        // studio#323 R4: `system` / `everything` NAME their kind; a bound project rides as filing.
+        if (!repoId && !legacyUnscopedRef.current && (scopeModeRef.current === 'system' || scopeModeRef.current === 'everything')) {
+          body.scopeKind = scopeModeRef.current;
+        }
         // Admissibility (crew#502 / review W3S-253-01): a SCOPED chat admits only governed seats
         // — crew pre-filters its DEFAULT roster to seats with `acp_input_governance` / `os_sandbox`
         // ONLY when `clis` is omitted; an explicit list is passed through and the engine refuses
@@ -1140,9 +1163,12 @@ export function GroupChat({
         // audience shown is the audience the daemon admitted. An EDITED selection is the
         // operator's word and rides as asked (refused seats say why); an unscoped open keeps the
         // pre-existing rule (the displayed chips ARE the audience — EC44).
-        const scoped =
-          Boolean(repoId) || Boolean(boundProject) ||
-          (scopeModeRef.current === 'repos' && scopeRepoIdsRef.current.length > 0);
+        const scoped = chatScopedNow({
+          repoId,
+          projectId: boundProject,
+          scopeMode: scopeModeRef.current,
+          scopeRepoIds: scopeRepoIdsRef.current,
+        });
         const daemonPicksSeats = scoped && !chipsTouchedRef.current;
         // Otherwise an empty selection omits `clis` — the daemon warms its own default
         // roster (the pre-existing wire semantics for an absent array).
@@ -1440,6 +1466,7 @@ export function GroupChat({
     clearStoredChatId(storageKey);
     // The next chat on this surface starts from the scope default, never from the
     // closed chat's repo pick (Copilot on #253).
+    legacyUnscopedRef.current = false;
     setScopeMode('project');
     setScopeRepoIds([]);
     setScopePickerOpen(false);
@@ -1762,10 +1789,12 @@ export function GroupChat({
             </span>
           ) : scope.kind === 'none' ? (
             <span>unscoped — the agents see only their private scratch root: no repositories, no code graph</span>
+          ) : scope.kind === 'system' ? (
+            <span>system — the platform itself: no repositories, no code graph; the agents know the daemon only from what the message carries</span>
           ) : (
             <>
               <span>
-                {scope.kind === 'project' ? 'project' : 'repos'} · {scope.repos.length} repositor{scope.repos.length === 1 ? 'y' : 'ies'} · read-only
+                {scope.kind === 'project' ? 'project' : scope.kind === 'everything' ? 'everything' : 'repos'} · {scope.repos.length} repositor{scope.repos.length === 1 ? 'y' : 'ies'} · read-only
               </span>
               {scope.repos.map((r) => (
                 <span
@@ -1986,9 +2015,10 @@ export function GroupChat({
             />
           </div>
         )}
-        {/* studio#248: the scope control — decided at open, so it lives in the
-            create window with the project field. Three positions; `none` is an
-            explicit click (the send waits otherwise — `chatScopeGap`). */}
+        {/* studio#248 / studio#323 R4: the scope control — decided at open, so it
+            lives in the create window with the project field. Four positions:
+            system, everything, project, repos (the send waits on an unfiled
+            project choice — `chatScopeGap`). */}
         {showScopeField && (
           <div
             data-testid="chat-scope-row"
@@ -2014,19 +2044,19 @@ export function GroupChat({
                     style={{ border: '1px solid var(--surface-raised)', borderRadius: 'var(--radius-md)', padding: '1px' }}
                   >
                     {([
+                      ['system', 'chat-scope-system', 'System',
+                        'The platform itself — daemon, seats, runs, configuration. No repositories, no code graph'],
+                      ['everything', 'chat-scope-everything', 'Everything',
+                        'Every registered repository, across all projects, read-only (no single code graph spans them)'],
                       ['project', 'chat-scope-project', boundProjectId !== null ? 'All project repos' : 'Project repos',
                         boundProjectId !== null
                           ? 'Every repository attached to the project, read-only, grounded on the project graph'
                           : 'Pick a project first — its repositories become the scope'],
                       ['repos', 'chat-scope-repos', `Choose repos…${scopeMode === 'repos' && scopeRepoIds.length > 0 ? ` ${scopeRepoIds.length}` : ''}`,
                         'Name the repositories the agents may read (by registry id)'],
-                      ['none', 'chat-scope-none', 'Unscoped',
-                        boundProjectId !== null
-                          ? 'A chat filed into a project is scoped to it — unfile it (Unfiled) to chat unscoped'
-                          : 'No repositories, no code graph — the agents see only their private scratch root'],
                     ] as const).map(([mode, tid, label, title]) => {
                       const active = scopeMode === mode;
-                      const disabled = (mode === 'project' && boundProjectId === null) || (mode === 'none' && boundProjectId !== null);
+                      const disabled = mode === 'project' && boundProjectId === null;
                       return (
                         <button
                           key={mode}
@@ -2049,20 +2079,22 @@ export function GroupChat({
                     })}
                   </div>
                   <span data-testid="chat-scope-summary" className="text-[11px]" style={{ color: scopeMode === 'project' && boundProjectId === null ? 'var(--status-gate)' : 'var(--ink-muted)' }}>
-                    {scopeMode === 'project'
+                    {scopeMode === 'system'
+                      ? 'the platform itself — no repositories, no code graph'
+                      : scopeMode === 'everything'
+                      ? 'every registered repository · read-only · no single code graph'
+                      : scopeMode === 'project'
                       ? boundProjectId !== null
                         ? 'every repository of the project · read-only · project graph when indexed'
                         : 'no project selected — the agents would have nothing to read'
-                      : scopeMode === 'repos'
-                        ? scopeRepoIds.length === 0
+                      : scopeRepoIds.length === 0
                           ? 'pick the repositories below'
-                          : `${scopeRepoIds.length} repositor${scopeRepoIds.length === 1 ? 'y' : 'ies'} · read-only${boundProjectId !== null ? ' · project graph when indexed' : scopeRepoIds.length === 1 ? ' · its own graph when indexed' : ' · no graph for several repos without a project'}`
-                        : 'unscoped — no repositories, no code graph; the agents see only their scratch root'}
+                          : `${scopeRepoIds.length} repositor${scopeRepoIds.length === 1 ? 'y' : 'ies'} · read-only${boundProjectId !== null ? ' · project graph when indexed' : scopeRepoIds.length === 1 ? ' · its own graph when indexed' : ' · no graph for several repos without a project'}`}
                   </span>
                 </>
               )}
             </div>
-            {(repoId || (scopeMode === 'repos' ? scopeRepoIds.length > 0 : boundProjectId !== null)) && (
+            {scopedNow && (
               <p data-testid="chat-scope-admission" className="text-[11px]" style={{ color: 'var(--ink-dim)', margin: 0 }}>
                 a scoped chat admits only governed seats — refused seats say why
               </p>

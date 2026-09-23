@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import { getDiagnostics, isDiagnosticsUnsupported } from '../api/diagnostics.js';
-import type { RepoEntry, SessionView } from '../api/types.js';
+import type { ChatOpenBody, ChatScope, RepoEntry, SessionView } from '../api/types.js';
 import { needsYouRows } from '../board/needsYou.js';
 import { useFailureClocks } from '../store/failureClocks.js';
 import { forgetAskSession, readAskSession, writeAskSession } from '../store/askSession.js';
@@ -19,7 +19,17 @@ import {
   type DiagnosticsState,
 } from './askContext.js';
 import { AssistDock, type AssistVerbs } from './AssistDock.js';
-import { defaultSelection } from './GroupChat.js';
+import {
+  askScopeIsScoped,
+  askScopeOpenFields,
+  ChatScopeSelect,
+  defaultAskScope,
+  describeResolvedScope,
+  type AskScopeChoice,
+} from './ChatScopeSelect.js';
+import { defaultSelection, describeChatOpenRefusal } from './GroupChat.js';
+import { apiStatus, apiWire } from '../api/errors.js';
+import { ambientProjectId } from '../hooks/ambientProject.js';
 
 /**
  * ASK — the app-wide binding of the ASSIST DOCK (DES-ASSIST-DOCK §5: "the dock becomes
@@ -37,6 +47,11 @@ import { defaultSelection } from './GroupChat.js';
  * seed honest quick prompts). NOTHING launches until the user sends — the quick-prompt
  * chips prefill the composer, never submit it.
  */
+
+/** The persisted scope rides only when the daemon stated one (a missing key reads as not stated). */
+function scopeField(scope: ChatScope | null): { scope?: ChatScope } {
+  return scope !== null ? { scope } : {};
+}
 
 export function AskDock({ runs, pathname, onClose, navigate }: {
   runs: SessionView[];
@@ -110,6 +125,22 @@ export function AskDock({ runs, pathname, onClose, navigate }: {
   /** The session's first question — its /chats handle, re-persisted with the flag. */
   const titleRef = useRef(resumed?.title ?? '');
 
+  // studio#323 R4 — the chat's scope, chosen before the first send: the route's project, else
+  // everything, until the user picks. Once open, the header states what the daemon RESOLVED —
+  // persisted with the session, so a reopened dock never offers a scope select for a chat that is
+  // already open (a resumed session from before the field reads "not stated", never a choice).
+  // Ask stays mounted across navigation (codex round 3 on #327): an UNTOUCHED choice is derived
+  // from the CURRENT route each render; only a manual pick is state, and it survives navigation.
+  // `ambientProjectId` is the one project-from-route rule (`/p/default` = Unfiled = none).
+  const [manualScope, setManualScope] = useState<AskScopeChoice | null>(null);
+  const scopeChoice: AskScopeChoice = manualScope ?? defaultAskScope(ambientProjectId(pathname));
+  const scopeChoiceRef = useRef(scopeChoice);
+  scopeChoiceRef.current = scopeChoice;
+  /** `undefined` = no chat open yet (the select shows); `null` = open, scope not stated. */
+  const [openedScope, setOpenedScope] = useState<ChatScope | null | undefined>(() =>
+    resumed === null ? undefined : (resumed.scope ?? null));
+  const scopeRef = useRef<ChatScope | null>(resumed?.scope ?? null);
+
   const verbs: AssistVerbs = useMemo(
     () => ({
       send: async (text) => {
@@ -120,7 +151,7 @@ export function AskDock({ runs, pathname, onClose, navigate }: {
             await api.sendChatMessage(id, message);
             if (!seededRef.current) {
               seededRef.current = true;
-              writeAskSession({ chatId: id, title: titleRef.current, seeded: true });
+              writeAskSession({ chatId: id, title: titleRef.current, seeded: true, ...scopeField(scopeRef.current) });
             }
             return { chatId: id };
           } catch (sendErr) {
@@ -140,6 +171,8 @@ export function AskDock({ runs, pathname, onClose, navigate }: {
             chatIdRef.current = null;
             seededRef.current = false;
             id = null;
+            // The fresh session below opens with the scope chosen now (the one on record stands
+            // for the reclaimed chat only).
           }
         }
         if (id === null) {
@@ -151,11 +184,16 @@ export function AskDock({ runs, pathname, onClose, navigate }: {
             setCachedRoster(fetched);
             roster = fetched;
           }
-          const clis = defaultSelection(roster);
+          const choice = scopeChoiceRef.current;
+          const clis = defaultSelection(roster, askScopeIsScoped(choice));
           id = crypto.randomUUID();
-          const body: { chatId: string; clis?: string[] } = { chatId: id };
+          const body: ChatOpenBody = { chatId: id, ...askScopeOpenFields(choice, ambientProjectId(packInputs.current.pathname)) };
           if (clis.length > 0) body.clis = clis;
-          const { seats } = await api.openChat(body);
+          // A refused open reads as GroupChat's does (codex on #327): a pre-0.39.0 daemon's
+          // "unknown field `scopeKind`" names the upgrade, never the raw wire.
+          const { seats, scope } = await api.openChat(body).catch((e: unknown) => {
+            throw new Error(describeChatOpenRefusal(apiStatus(e), apiWire(e), e instanceof Error ? e.message : String(e)));
+          });
           const ready = seats.filter((s) => s.ok).map((s) => s.cliKey);
           if (ready.length === 0) {
             const detail =
@@ -165,9 +203,11 @@ export function AskDock({ runs, pathname, onClose, navigate }: {
             throw new Error(`No agent seat came up — ${detail}`);
           }
           chatIdRef.current = id;
+          scopeRef.current = scope ?? null;
+          setOpenedScope(scope ?? null);
           // Persist for the tab — a close/reopen (or reload) resumes THIS session.
           titleRef.current = text;
-          writeAskSession({ chatId: id, title: text, seeded: false });
+          writeAskSession({ chatId: id, title: text, seeded: false, ...scopeField(scopeRef.current) });
           // The session is live — make it findable on the rail (the J4 live row) and on
           // /chats, labelled with where it came from and what was asked (studio#323 R2).
           useLiveChatsStore.getState().upsert(id, ready, { origin: 'ask', title: text });
@@ -176,7 +216,7 @@ export function AskDock({ runs, pathname, onClose, navigate }: {
         await api.sendChatMessage(id, message);
         if (!seededRef.current) {
           seededRef.current = true;
-          writeAskSession({ chatId: id, title: titleRef.current, seeded: true });
+          writeAskSession({ chatId: id, title: titleRef.current, seeded: true, ...scopeField(scopeRef.current) });
         }
         return { chatId: id };
       },
@@ -216,7 +256,10 @@ export function AskDock({ runs, pathname, onClose, navigate }: {
       context={{
         surface: 'ask',
         title: 'Ask',
-        contextLabel: `here: ${sectionLabel(pathname)}`,
+        contextLabel:
+          openedScope === undefined
+            ? `here: ${sectionLabel(pathname)}`
+            : `here: ${sectionLabel(pathname)} · ${describeResolvedScope(openedScope)}`,
         placeholder: 'Ask about projects, repos, runs — or this studio itself…',
         hint:
           'Your question opens a governed chat session — the agents carry the estate/garden ' +
@@ -224,6 +267,10 @@ export function AskDock({ runs, pathname, onClose, navigate }: {
           'about your projects AND diagnose the app itself. ' +
           contextPackSummary(diag),
         prompts,
+        controls:
+          openedScope === undefined ? (
+            <ChatScopeSelect value={scopeChoice} onChange={setManualScope} projects={projects} repos={repos} />
+          ) : undefined,
       }}
       verbs={verbs}
       resumeChatId={resumed?.chatId ?? null}
@@ -235,6 +282,9 @@ export function AskDock({ runs, pathname, onClose, navigate }: {
         if (chatIdRef.current === chatId) {
           chatIdRef.current = null;
           seededRef.current = false;
+          // No chat is open any more: the next send opens a fresh one, so the scope is a choice again.
+          scopeRef.current = null;
+          setOpenedScope(undefined);
         }
       }}
       fill

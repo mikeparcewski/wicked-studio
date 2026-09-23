@@ -85,7 +85,7 @@ describe('GroupChat — create-flow project binding (slice B)', () => {
   it('renders the Unfiled field, fetches nothing on mount, and opens the chat WITHOUT projectId', async () => {
     const user = userEvent.setup();
     render(<GroupChat repoId={null} onBack={() => undefined} />);
-    fireEvent.click(screen.getByTestId('chat-scope-none')); // studio#248: Unfiled = an EXPLICIT unscoped choice before the first send
+    fireEvent.click(screen.getByTestId('chat-scope-system')); // studio#248: Unfiled = an EXPLICIT unscoped choice before the first send
 
     const field = screen.getByTestId('project-field');
     expect(field.textContent).toContain('Unfiled');
@@ -104,7 +104,7 @@ describe('GroupChat — create-flow project binding (slice B)', () => {
   it('loads projects on first open, and the selection binds the chat at creation', async () => {
     const user = userEvent.setup();
     render(<GroupChat repoId={null} onBack={() => undefined} />);
-    fireEvent.click(screen.getByTestId('chat-scope-none')); // studio#248: Unfiled = an EXPLICIT unscoped choice before the first send
+    fireEvent.click(screen.getByTestId('chat-scope-system')); // studio#248: Unfiled = an EXPLICIT unscoped choice before the first send
 
     await user.click(screen.getByTestId('project-field'));
     expect(listProjects).toHaveBeenCalledTimes(1);

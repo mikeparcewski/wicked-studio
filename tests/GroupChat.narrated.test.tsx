@@ -102,7 +102,7 @@ describe('§11.1 — narration vs conversation in the DOM', () => {
   it('user turn stays a turn; a streaming worker output collapses to narration with the raw stream behind the expander', async () => {
     const user = userEvent.setup();
     render(<GroupChat repoId={null} onBack={() => undefined} />);
-    fireEvent.click(screen.getByTestId('chat-scope-none')); // studio#248: Unfiled = an EXPLICIT unscoped choice before the first send
+    fireEvent.click(screen.getByTestId('chat-scope-system')); // studio#248: Unfiled = an EXPLICIT unscoped choice before the first send
     await sendText(user, 'what needs fixing?');
 
     // The user's message is a first-class bubble.
@@ -131,7 +131,7 @@ describe('§11.1 — narration vs conversation in the DOM', () => {
   it('a short ok reply becomes a first-class conversational turn; an over-long one stays narration', async () => {
     const user = userEvent.setup();
     render(<GroupChat repoId={null} onBack={() => undefined} />);
-    fireEvent.click(screen.getByTestId('chat-scope-none')); // studio#248: Unfiled = an EXPLICIT unscoped choice before the first send
+    fireEvent.click(screen.getByTestId('chat-scope-system')); // studio#248: Unfiled = an EXPLICIT unscoped choice before the first send
     await sendText(user, 'go');
 
     act(() => {
@@ -154,7 +154,7 @@ describe('§11.1 — narration vs conversation in the DOM', () => {
   it('a failed reply collapses to fail-tone narration', async () => {
     const user = userEvent.setup();
     render(<GroupChat repoId={null} onBack={() => undefined} />);
-    fireEvent.click(screen.getByTestId('chat-scope-none')); // studio#248: Unfiled = an EXPLICIT unscoped choice before the first send
+    fireEvent.click(screen.getByTestId('chat-scope-system')); // studio#248: Unfiled = an EXPLICIT unscoped choice before the first send
     await sendText(user, 'go');
     act(() => {
       emit!({ type: 'chatReply', chat: chatId(), cliKey: 'claude', text: 'model refused', ok: false });
@@ -166,7 +166,7 @@ describe('§11.1 — narration vs conversation in the DOM', () => {
   it('seat lifecycle is narration: joined-the-chat lines carry the seat chip', async () => {
     const user = userEvent.setup();
     render(<GroupChat repoId={null} onBack={() => undefined} />);
-    fireEvent.click(screen.getByTestId('chat-scope-none')); // studio#248: Unfiled = an EXPLICIT unscoped choice before the first send
+    fireEvent.click(screen.getByTestId('chat-scope-system')); // studio#248: Unfiled = an EXPLICIT unscoped choice before the first send
     await sendText(user, 'hello');
     const seats = screen.getAllByTestId('chat-narration-seat').map((s) => s.textContent);
     expect(seats).toContain('claude');
@@ -179,7 +179,7 @@ describe('§11.2 — out-of-order arrival renders chronologically', () => {
   it('a turn-1 reply finalizing after turn 2 opened stays BEFORE the turn-2 user bubble', async () => {
     const user = userEvent.setup();
     render(<GroupChat repoId={null} onBack={() => undefined} />);
-    fireEvent.click(screen.getByTestId('chat-scope-none')); // studio#248: Unfiled = an EXPLICIT unscoped choice before the first send
+    fireEvent.click(screen.getByTestId('chat-scope-system')); // studio#248: Unfiled = an EXPLICIT unscoped choice before the first send
     await sendText(user, 'first ask');
     await user.type(screen.getByRole('textbox'), 'second ask');
     await user.keyboard('{Enter}');
@@ -203,7 +203,7 @@ describe('§11.4 — the pinned now-bar', () => {
   it('says working while a reply streams, your turn when the crew is done, and jumps to the tail', async () => {
     const user = userEvent.setup();
     render(<GroupChat repoId={null} onBack={() => undefined} />);
-    fireEvent.click(screen.getByTestId('chat-scope-none')); // studio#248: Unfiled = an EXPLICIT unscoped choice before the first send
+    fireEvent.click(screen.getByTestId('chat-scope-system')); // studio#248: Unfiled = an EXPLICIT unscoped choice before the first send
     await sendText(user, 'go');
 
     expect(screen.getByTestId('now-bar-status')).toHaveTextContent('working');
@@ -226,7 +226,7 @@ describe('§11.4 — the pinned now-bar', () => {
   it('collects the artifacts replies name into the chip, and renders inline cards', async () => {
     const user = userEvent.setup();
     render(<GroupChat repoId={null} onBack={() => undefined} />);
-    fireEvent.click(screen.getByTestId('chat-scope-none')); // studio#248: Unfiled = an EXPLICIT unscoped choice before the first send
+    fireEvent.click(screen.getByTestId('chat-scope-system')); // studio#248: Unfiled = an EXPLICIT unscoped choice before the first send
     await sendText(user, 'go');
     act(() => {
       emit!({
@@ -245,7 +245,7 @@ describe('§11.5 — the pinned approval dock, answerable from the chat surface'
   it('a gate keyed by the chat session renders as a SIBLING of the scroll region, and reject carries the typed note', async () => {
     const user = userEvent.setup();
     render(<GroupChat repoId={null} onBack={() => undefined} />);
-    fireEvent.click(screen.getByTestId('chat-scope-none')); // studio#248: Unfiled = an EXPLICIT unscoped choice before the first send
+    fireEvent.click(screen.getByTestId('chat-scope-system')); // studio#248: Unfiled = an EXPLICIT unscoped choice before the first send
     await sendText(user, 'go');
 
     act(() => {
@@ -279,7 +279,7 @@ describe('§11.5 — the pinned approval dock, answerable from the chat surface'
   it('an open elicitation docks the same way', async () => {
     const user = userEvent.setup();
     render(<GroupChat repoId={null} onBack={() => undefined} />);
-    fireEvent.click(screen.getByTestId('chat-scope-none')); // studio#248: Unfiled = an EXPLICIT unscoped choice before the first send
+    fireEvent.click(screen.getByTestId('chat-scope-system')); // studio#248: Unfiled = an EXPLICIT unscoped choice before the first send
     await sendText(user, 'go');
     act(() => {
       useElicitationStore.getState().setElicitation({
@@ -301,7 +301,7 @@ describe('§11.5 — the pinned approval dock, answerable from the chat surface'
     // run ids — swept gates[chatId], unmounting the dock mid-decision.
     const user = userEvent.setup();
     render(<GroupChat repoId={null} onBack={() => undefined} />);
-    fireEvent.click(screen.getByTestId('chat-scope-none')); // studio#248: Unfiled = an EXPLICIT unscoped choice before the first send
+    fireEvent.click(screen.getByTestId('chat-scope-system')); // studio#248: Unfiled = an EXPLICIT unscoped choice before the first send
     await sendText(user, 'go');
 
     act(() => {
@@ -349,7 +349,7 @@ describe('§11.5 — the pinned approval dock, answerable from the chat surface'
   it('renders no dock when nothing awaits the human', async () => {
     const user = userEvent.setup();
     render(<GroupChat repoId={null} onBack={() => undefined} />);
-    fireEvent.click(screen.getByTestId('chat-scope-none')); // studio#248: Unfiled = an EXPLICIT unscoped choice before the first send
+    fireEvent.click(screen.getByTestId('chat-scope-system')); // studio#248: Unfiled = an EXPLICIT unscoped choice before the first send
     await sendText(user, 'go');
     expect(screen.queryByTestId('approval-dock')).not.toBeInTheDocument();
   });
@@ -359,7 +359,7 @@ describe('§11.6 — the full transcript stays reachable', () => {
   it('the view toggle swaps narration for the old bubbles and back, zero requests', async () => {
     const user = userEvent.setup();
     render(<GroupChat repoId={null} onBack={() => undefined} />);
-    fireEvent.click(screen.getByTestId('chat-scope-none')); // studio#248: Unfiled = an EXPLICIT unscoped choice before the first send
+    fireEvent.click(screen.getByTestId('chat-scope-system')); // studio#248: Unfiled = an EXPLICIT unscoped choice before the first send
     await sendText(user, 'go');
     act(() => {
       emit!({ type: 'chatReply', chat: chatId(), cliKey: 'claude', text: 'y'.repeat(3000), ok: true });
@@ -387,7 +387,7 @@ describe('§11.6 — the full transcript stays reachable', () => {
   it('picking a layout arrangement implies the full transcript', async () => {
     const user = userEvent.setup();
     render(<GroupChat repoId={null} onBack={() => undefined} />);
-    fireEvent.click(screen.getByTestId('chat-scope-none')); // studio#248: Unfiled = an EXPLICIT unscoped choice before the first send
+    fireEvent.click(screen.getByTestId('chat-scope-system')); // studio#248: Unfiled = an EXPLICIT unscoped choice before the first send
     await sendText(user, 'go');
     act(() => {
       emit!({ type: 'chatReply', chat: chatId(), cliKey: 'claude', text: 'a', ok: true });
@@ -403,7 +403,7 @@ describe('DES-L5 §5-h — `chatSeatRefused` is narration with the reason and it
   it('renders the seat line, greys the chip with the reason, and keeps the seat out of the next send', async () => {
     const user = userEvent.setup();
     render(<GroupChat repoId={null} onBack={() => undefined} />);
-    fireEvent.click(screen.getByTestId('chat-scope-none'));
+    fireEvent.click(screen.getByTestId('chat-scope-system'));
     await sendText(user, 'hello');
     // The daemon's admission dropped a DEFAULT seat before the engine saw it —
     // broadcast right after the open, with the cause class.
@@ -432,7 +432,7 @@ describe('DES-L5 §5-h — `chatSeatRefused` is narration with the reason and it
   it('a frame without a source says "daemon"; a frame for another chat is ignored', async () => {
     const user = userEvent.setup();
     render(<GroupChat repoId={null} onBack={() => undefined} />);
-    fireEvent.click(screen.getByTestId('chat-scope-none'));
+    fireEvent.click(screen.getByTestId('chat-scope-system'));
     await sendText(user, 'hello');
     act(() => {
       emit!({ type: 'chatSeatRefused', chat: 'someone-else', cliKey: 'agy', reason: 'benched' });

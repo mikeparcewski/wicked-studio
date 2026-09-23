@@ -78,7 +78,8 @@ describe('creator-seat fallback disclosure (#276)', () => {
       warning + (degradedReason !== null ? ` — council degraded: ${degradedReason}` : ''),
     );
   });
-  it.each([undefined, null, 'unknown', true])('does not infer fallback from routingMethod or prose (%s)', (distinctnessFallback) => {
+  // An unrecognised non-null value is a disclosure now (crew#666) — tests/narrator.distinctness.test.tsx.
+  it.each([undefined, null])('does not infer fallback from routingMethod or prose (%s)', (distinctnessFallback) => {
     const frame = ev({ ...UNIT_DISTRIBUTED_FULL, routingMethod: 'evaluator_distinct', distinctnessFallback });
     const { rerender } = render(<RunDegradedNote events={[frame]} />);
     expect(screen.queryByTestId('run-degraded')).toBeNull();

@@ -3,7 +3,7 @@
  *
  * `src/api/skills-wire.ts` carries the skills block and the `diagnostics.skills` block of
  * `wicked-crew-api-types@0.38.0` (crew#543; the skills block is 0.36.0/crew#535 — the 0.34.0/crew#531 block plus F-083 — unchanged) copied VERBATIM between `>>> VERBATIM` / `<<< VERBATIM`
- * markers, and `tests/fixtures/api-types-0.38.0-skills.d.ts` is a byte copy of the same regions
+ * markers, and `tests/fixtures/api-types-0.39.0-skills.d.ts` is a byte copy of the same regions
  * taken from the package's `index.d.ts`. This test compares every marked region of the two files:
  * a hand edit to the mirror, or a re-vendored fixture from a re-minted contract, fails here until
  * both agree again — the mirror can never quietly drift from the wire crew serves.
@@ -19,7 +19,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const MIRROR = fileURLToPath(new URL('../src/api/skills-wire.ts', import.meta.url));
-const FIXTURE = fileURLToPath(new URL('./fixtures/api-types-0.38.0-skills.d.ts', import.meta.url));
+const FIXTURE = fileURLToPath(new URL('./fixtures/api-types-0.39.0-skills.d.ts', import.meta.url));
 const INSTALLED = fileURLToPath(new URL('../node_modules/wicked-crew-api-types/index.d.ts', import.meta.url));
 const INSTALLED_PKG = fileURLToPath(new URL('../node_modules/wicked-crew-api-types/package.json', import.meta.url));
 const PINNED_PKG = fileURLToPath(new URL('../package.json', import.meta.url));
@@ -53,10 +53,10 @@ function regions(path: string): Array<{ label: string; body: string }> {
   return out;
 }
 
-describe('src/api/skills-wire.ts — a byte-for-byte mirror of the 0.38.0 skills contract', () => {
+describe('src/api/skills-wire.ts — a byte-for-byte mirror of the 0.39.0 skills contract', () => {
   it('carries the MIRROR header naming the contract, the PR, and the release swap', () => {
     const head = readFileSync(MIRROR, 'utf8').slice(0, 400);
-    expect(head).toContain('MIRROR of wicked-crew-api-types 0.38.0 skills block (crew#531, crew#535) — replace with imports from the');
+    expect(head).toContain('MIRROR of wicked-crew-api-types 0.39.0 skills block (crew#531, crew#535) — replace with imports from the');
     expect(head).toContain('published package at release.');
   });
 
@@ -71,10 +71,10 @@ describe('src/api/skills-wire.ts — a byte-for-byte mirror of the 0.38.0 skills
     }
   });
 
-  it('the two regions are the skills block and the diagnostics.skills block of 0.38.0', () => {
+  it('the two regions are the skills block and the diagnostics.skills block of 0.39.0', () => {
     const labels = regions(FIXTURE).map((r) => r.label);
-    expect(labels[0]).toMatch(/^wicked-crew-api-types@0\.38\.0 index\.d\.ts.* — the skills block$/);
-    expect(labels[1]).toMatch(/^wicked-crew-api-types@0\.38\.0 index\.d\.ts.* — the diagnostics skills block$/);
+    expect(labels[0]).toMatch(/^wicked-crew-api-types@0\.39\.0 index\.d\.ts.* — the skills block$/);
+    expect(labels[1]).toMatch(/^wicked-crew-api-types@0\.39\.0 index\.d\.ts.* — the diagnostics skills block$/);
     const [skills, diagnostics] = regions(FIXTURE).map((r) => r.body);
     // The declarations studio consumes are all in the block — a re-mint that drops one fails here.
     for (const name of [
@@ -95,7 +95,10 @@ describe('src/api/skills-wire.ts — a byte-for-byte mirror of the 0.38.0 skills
     // 0.36.0 (F-083 / crew#535): the stale-rules finding kind, and the manifest's recorded-vs-running rules + drift.
     expect(diagnostics).toContain("    | 'skills.stale-rules'");
     // 0.38.0 (crew#557 on main): the union closes on the base-skill finding kind.
-    expect(diagnostics).toContain("    | 'skills.base-skill';");
+    expect(diagnostics).toContain("    | 'skills.base-skill'");
+    // 0.39.0 (crew#661): the union closes on the phase-skill finding kind.
+    expect(diagnostics).toContain("    | 'skills.phase-skill';");
+    expect(diagnostics).toContain('export interface DiagnosticsPhaseSkillGap {');
     expect(skills).toContain('    rules?: {');
     expect(skills).toContain('    drift?: SnapshotRowDrift[];');
     // The three wire rules the mirror header restates come from the block itself.

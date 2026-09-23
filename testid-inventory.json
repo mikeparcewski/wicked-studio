@@ -10,9 +10,9 @@
   "version": 1,
   "studioVersion": "0.5.13",
   "counts": {
-    "files": 147,
-    "occurrences": 1345,
-    "static": 1156,
+    "files": 148,
+    "occurrences": 1346,
+    "static": 1157,
     "dynamic": 63,
     "computed": 7
   },
@@ -197,6 +197,12 @@
       "testId": "ask-panel",
       "files": [
         "src/components/AskLauncher.tsx"
+      ]
+    },
+    {
+      "testId": "ask-scope",
+      "files": [
+        "src/components/ChatScopeSelect.tsx"
       ]
     },
     {

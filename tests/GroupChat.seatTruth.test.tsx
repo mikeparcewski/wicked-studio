@@ -102,7 +102,7 @@ describe('collapse retention — expanding restores every streamed byte', () => 
   it('F-W1-004 (R-L5-2): an OK reply IS the answer — a >collapse-threshold narration stream finalizes to the reply text, not the concatenation', async () => {
     const user = userEvent.setup();
     render(<GroupChat repoId={null} onBack={() => undefined} />);
-    fireEvent.click(screen.getByTestId('chat-scope-none')); // studio#248: Unfiled = an EXPLICIT unscoped choice before the first send
+    fireEvent.click(screen.getByTestId('chat-scope-system')); // studio#248: Unfiled = an EXPLICIT unscoped choice before the first send
     await sendText(user, 'plan it');
 
     // The seat narrates between tool calls ("Let me explore…"), well past
@@ -138,7 +138,7 @@ describe('collapse retention — expanding restores every streamed byte', () => 
     // `^0.7.26`, so this pairing ships today and the studio must not drop streamed text on it.
     getDiagnostics.mockResolvedValue({ components: { coreTs: '0.7.26' } });
     render(<GroupChat repoId={null} onBack={() => undefined} />);
-    fireEvent.click(screen.getByTestId('chat-scope-none'));
+    fireEvent.click(screen.getByTestId('chat-scope-system'));
     await sendText(user, 'plan it');
     await waitFor(() => expect(getDiagnostics).toHaveBeenCalled());
     const streamed = `the full plan ${'a'.repeat(1200)} and its tail`;
@@ -153,7 +153,7 @@ describe('collapse retention — expanding restores every streamed byte', () => 
   it('a NOT-ok reply (an eviction) keeps the longer streamed text — nothing said before the cut is lost (E4); collapse → expand is byte-equal', async () => {
     const user = userEvent.setup();
     render(<GroupChat repoId={null} onBack={() => undefined} />);
-    fireEvent.click(screen.getByTestId('chat-scope-none'));
+    fireEvent.click(screen.getByTestId('chat-scope-system'));
     await sendText(user, 'plan it');
     const parts = [
       `plan head ${'a'.repeat(600)} `,
@@ -200,7 +200,7 @@ describe('one source for seat truth — the chip reads the feed’s own log', ()
   it('a not-ok reply shows FAILED on the header chip (with the turn’s reason), never "replied" (E4)', async () => {
     const user = userEvent.setup();
     render(<GroupChat repoId={null} onBack={() => undefined} />);
-    fireEvent.click(screen.getByTestId('chat-scope-none')); // studio#248: Unfiled = an EXPLICIT unscoped choice before the first send
+    fireEvent.click(screen.getByTestId('chat-scope-system')); // studio#248: Unfiled = an EXPLICIT unscoped choice before the first send
     await sendText(user, 'plan it');
 
     act(() => {
@@ -228,7 +228,7 @@ describe('one source for seat truth — the chip reads the feed’s own log', ()
   it('a seat streaming its next turn is WORKING again — the posture heals forward', async () => {
     const user = userEvent.setup();
     render(<GroupChat repoId={null} onBack={() => undefined} />);
-    fireEvent.click(screen.getByTestId('chat-scope-none')); // studio#248: Unfiled = an EXPLICIT unscoped choice before the first send
+    fireEvent.click(screen.getByTestId('chat-scope-system')); // studio#248: Unfiled = an EXPLICIT unscoped choice before the first send
     await sendText(user, 'plan it');
     act(() => {
       emit!({ type: 'chatReply', chat: chatId(), cliKey: 'claude', text: 'nope', ok: false });
@@ -270,7 +270,7 @@ describe('DES-L5 R16b — the send targets what the chips say, minus the seats r
       }),
     );
     render(<GroupChat repoId={null} onBack={() => undefined} />);
-    fireEvent.click(screen.getByTestId('chat-scope-none'));
+    fireEvent.click(screen.getByTestId('chat-scope-system'));
     await sendText(user, 'plan it');
     // The FIRST send (the arm) fans out to the seats that came up — codex never sat.
     expect(sendChatMessage).toHaveBeenLastCalledWith(chatId(), 'plan it', ['claude']);
@@ -300,7 +300,7 @@ describe('DES-L5 R16b — the send targets what the chips say, minus the seats r
   it('a seat whose SESSION died mid-chat (chatSessionFailed) stays a chip and is re-seated by the next send', async () => {
     const user = userEvent.setup();
     render(<GroupChat repoId={null} onBack={() => undefined} />);
-    fireEvent.click(screen.getByTestId('chat-scope-none'));
+    fireEvent.click(screen.getByTestId('chat-scope-system'));
     await sendText(user, 'one');
     act(() => {
       emit!({ type: 'chatReply', chat: chatId(), cliKey: 'claude', text: 'a', ok: true });
@@ -320,7 +320,7 @@ describe('DES-L5 R16b — the send targets what the chips say, minus the seats r
   it('a warm audience is sent explicitly too — `targets` names every seat chip (the engine re-seats a missing one)', async () => {
     const user = userEvent.setup();
     render(<GroupChat repoId={null} onBack={() => undefined} />);
-    fireEvent.click(screen.getByTestId('chat-scope-none'));
+    fireEvent.click(screen.getByTestId('chat-scope-system'));
     await sendText(user, 'one');
     act(() => {
       emit!({ type: 'chatReply', chat: chatId(), cliKey: 'claude', text: 'a', ok: true });
@@ -338,7 +338,7 @@ describe('DES-L5 §4 — `chatReply.usage` renders as the bubble’s footer', ()
   it('a reply with usage shows `in · out · $`; `costUsd: null` drops the price; `usage: null` shows nothing', async () => {
     const user = userEvent.setup();
     render(<GroupChat repoId={null} onBack={() => undefined} />);
-    fireEvent.click(screen.getByTestId('chat-scope-none'));
+    fireEvent.click(screen.getByTestId('chat-scope-system'));
     await sendText(user, 'cost me');
     act(() => {
       emit!({
@@ -368,7 +368,7 @@ describe('F-W1-005 — a refused seat is re-tried IN PLACE on the live chat (Ret
       }),
     );
     render(<GroupChat repoId={null} onBack={() => undefined} />);
-    fireEvent.click(screen.getByTestId('chat-scope-none'));
+    fireEvent.click(screen.getByTestId('chat-scope-system'));
     await sendText(user, 'hello');
     expect(chip('codex').dataset['state']).toBe('failed');
     const retry = document.querySelector('[data-testid="seat-retry"][data-agent="codex"]') as HTMLElement;
@@ -401,7 +401,7 @@ describe('F-W1-005 — a refused seat is re-tried IN PLACE on the live chat (Ret
       }),
     );
     render(<GroupChat repoId={null} onBack={() => undefined} />);
-    fireEvent.click(screen.getByTestId('chat-scope-none'));
+    fireEvent.click(screen.getByTestId('chat-scope-system'));
     await sendText(user, 'hello');
     reseatChat.mockResolvedValueOnce({ chatId: chatId(), seats: [{ cliKey: 'codex', ok: false, error: 'still no ACP config for codex' }], refused: [{ cliKey: 'codex', reason: 'still no ACP config for codex', source: 'engine' }] });
     await user.click(document.querySelector('[data-testid="seat-retry"][data-agent="codex"]') as HTMLElement);

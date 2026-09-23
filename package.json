@@ -68,7 +68,7 @@
     "vite": "^6.4.3",
     "vitest": "^3.2.6",
     "@playwright/test": "^1.62.1",
-    "wicked-crew-api-types": "0.38.0"
+    "wicked-crew-api-types": "0.39.0"
   },
   "engines": {
     "node": ">=22.0.0"

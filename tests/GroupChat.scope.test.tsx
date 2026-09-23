@@ -96,12 +96,12 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe('the gap rule (chatScopeGap)', () => {
-  it('blocks the silent none and an empty repo pick; passes repo-entry, project, explicit none, and a filled pick', () => {
+  it('blocks the silent none and an empty repo pick; passes repo-entry, project, System (studio#323 R4), and a filled pick', () => {
     expect(chatScopeGap({ repoId: null, mode: 'project', projectId: null, repoIds: [] })).toMatch(/Unfiled chats give the agents nothing to read/);
     expect(chatScopeGap({ repoId: null, mode: 'repos', projectId: null, repoIds: [] })).toMatch(/Pick at least one repository/);
     expect(chatScopeGap({ repoId: 'r1', mode: 'project', projectId: null, repoIds: [] })).toBeNull();
     expect(chatScopeGap({ repoId: null, mode: 'project', projectId: 'p', repoIds: [] })).toBeNull();
-    expect(chatScopeGap({ repoId: null, mode: 'none', projectId: null, repoIds: [] })).toBeNull();
+    expect(chatScopeGap({ repoId: null, mode: 'system', projectId: null, repoIds: [] })).toBeNull();
     expect(chatScopeGap({ repoId: null, mode: 'repos', projectId: null, repoIds: ['a'] })).toBeNull();
   });
 
@@ -205,15 +205,15 @@ describe('the create-flow scope control', () => {
     await typeAndSend();
     expect(openChat).not.toHaveBeenCalled();
     expect(row).toHaveAttribute('data-blocked', 'true');
-    expect(screen.getByTestId('chat-scope-gap').textContent).toContain('continue unscoped');
+    expect(screen.getByTestId('chat-scope-gap').textContent).toContain('or System (the platform itself)');
     // The draft is still in the composer — nothing was lost.
     expect((screen.getByRole('textbox') as HTMLTextAreaElement).value).toBe('hello there');
   });
 
-  it('an EXPLICIT Unscoped click lets the send open the chat with neither projectId nor repoRefs, and the header states "unscoped"', async () => {
+  it('an EXPLICIT System click (studio#323 R4 — the old Unscoped) opens with neither projectId nor repoRefs; a daemon answering kind none is still stated as "unscoped"', async () => {
     render(<GroupChat repoId={null} onBack={() => undefined} />);
-    fireEvent.click(screen.getByTestId('chat-scope-none'));
-    expect(screen.getByTestId('chat-scope-row')).toHaveAttribute('data-mode', 'none');
+    fireEvent.click(screen.getByTestId('chat-scope-system'));
+    expect(screen.getByTestId('chat-scope-row')).toHaveAttribute('data-mode', 'system');
     await typeAndSend();
     await waitFor(() => expect(openChat).toHaveBeenCalledTimes(1));
     const body = lastBody();
@@ -235,7 +235,7 @@ describe('the create-flow scope control', () => {
     await user.click(screen.getAllByTestId('project-switcher-option')[0]!);
     expect(screen.getByTestId('chat-scope-project')).not.toBeDisabled();
     expect(screen.getByTestId('chat-scope-project')).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByTestId('chat-scope-none'), 'a filed chat is scoped to its project — none is not an option').toBeDisabled();
+    expect(screen.getByTestId('chat-scope-system'), 'studio#323 R4: System stays choosable in a project (filing only)').not.toBeDisabled();
     expect(screen.getByTestId('chat-scope-summary').textContent).toContain('every repository of the project');
     await typeAndSend('file me');
     await waitFor(() => expect(openChat).toHaveBeenCalledTimes(1));
@@ -318,7 +318,7 @@ describe('the create-flow scope control', () => {
   it('a repo-entry chat (repoId) is its own scope: no control, no gap, repoRef rides the open as before', async () => {
     render(<GroupChat repoId="studio-api" onBack={() => undefined} />);
     expect(screen.getByTestId('chat-scope-fixed').textContent).toContain('this repository');
-    expect(screen.queryByTestId('chat-scope-none')).toBeNull();
+    expect(screen.queryByTestId('chat-scope-system')).toBeNull();
     await typeAndSend('repo ask');
     await waitFor(() => expect(openChat).toHaveBeenCalledTimes(1));
     expect(lastBody().repoRef).toBe('studio-api');
@@ -390,7 +390,7 @@ describe('seat admissibility on a scoped open (review W3S-253-01)', () => {
 
   it('an UNSCOPED open keeps the displayed chips as the audience (EC44) — clis is sent', async () => {
     render(<GroupChat repoId={null} onBack={() => undefined} />);
-    fireEvent.click(screen.getByTestId('chat-scope-none'));
+    fireEvent.click(screen.getByTestId('chat-scope-system'));
     await typeAndSend('unscoped');
     await waitFor(() => expect(openChat).toHaveBeenCalledTimes(1));
     expect(lastBody().clis).toEqual(['claude']);
@@ -401,7 +401,7 @@ describe('the scope statement on older daemons and rejoins', () => {
   it('a 201 WITHOUT a scope (pre-0.32 daemon) is stated as "not stated", never guessed', async () => {
     openChat.mockImplementation((body: ChatOpenBody) => Promise.resolve({ chatId: body.chatId, seats: [{ cliKey: 'claude', ok: true }] }));
     render(<GroupChat repoId={null} onBack={() => undefined} />);
-    fireEvent.click(screen.getByTestId('chat-scope-none'));
+    fireEvent.click(screen.getByTestId('chat-scope-system'));
     await typeAndSend();
     const line = await screen.findByTestId('chat-scope');
     expect(line).toHaveAttribute('data-kind', 'unknown');
@@ -411,7 +411,7 @@ describe('the scope statement on older daemons and rejoins', () => {
   it('a 201 carrying `scope: null` (off-contract) reads like the omission — "not stated"', async () => {
     openChat.mockImplementation((body: ChatOpenBody) => Promise.resolve({ chatId: body.chatId, seats: [{ cliKey: 'claude', ok: true }], scope: null }));
     render(<GroupChat repoId={null} onBack={() => undefined} />);
-    fireEvent.click(screen.getByTestId('chat-scope-none'));
+    fireEvent.click(screen.getByTestId('chat-scope-system'));
     await typeAndSend();
     const line = await screen.findByTestId('chat-scope');
     expect(line).toHaveAttribute('data-kind', 'unknown');
@@ -489,7 +489,7 @@ describe('crew#502 refusals render as clear inline errors', () => {
   it('a TRANSPORT failure keeps the provisional id (FINDING-027) — the open may have warmed seats', async () => {
     openChat.mockRejectedValue(new Error('Failed to fetch'));
     render(<GroupChat repoId={null} onBack={() => undefined} />);
-    fireEvent.click(screen.getByTestId('chat-scope-none'));
+    fireEvent.click(screen.getByTestId('chat-scope-system'));
     await typeAndSend('hello');
     const err = await screen.findByTestId('chat-open-error');
     expect(err).toHaveAttribute('data-status', 'none');
@@ -516,7 +516,7 @@ describe('crew#502 refusals render as clear inline errors', () => {
     expect(err.textContent).toContain('The daemon refused to open this chat — repo \'scratchpad\' is registered at');
   });
 
-  it('501 — the engine predates chat scope: stated, and "Continue unscoped" re-arms a FRESH unscoped chat', async () => {
+  it('501 — the engine predates chat scope: stated, and "Continue unscoped" re-arms a FRESH chat on the LEGACY unscoped body (no scopeKind)', async () => {
     refuse(CHAT_OPEN_REFUSALS.engine);
     render(<GroupChat repoId={null} onBack={() => undefined} />);
     await sendAsRepos();
@@ -529,7 +529,7 @@ describe('crew#502 refusals render as clear inline errors', () => {
     openChat.mockImplementation((body: ChatOpenBody) => Promise.resolve(chatOpened(body.chatId!, SCOPE_NONE)));
     fireEvent.click(screen.getByTestId('chat-scope-fallback-none'));
     expect(screen.queryByTestId('chat-open-error')).toBeNull();
-    expect(screen.getByTestId('chat-scope-row')).toHaveAttribute('data-mode', 'none');
+    expect(screen.getByTestId('chat-scope-row')).toHaveAttribute('data-mode', 'system');
     const user = userEvent.setup();
     await user.keyboard('{Enter}');
     await waitFor(() => expect(openChat).toHaveBeenCalledTimes(2));
@@ -537,6 +537,8 @@ describe('crew#502 refusals render as clear inline errors', () => {
     expect(retry.chatId).not.toBe(refusedId);
     expect('repoRefs' in retry).toBe(false);
     expect('projectId' in retry).toBe(false);
+    // codex on #327: the 501 remedy is the LEGACY unscoped body — a daemon that old refuses scopeKind.
+    expect('scopeKind' in retry).toBe(false);
     expect(await screen.findByTestId('chat-scope')).toHaveAttribute('data-kind', 'none');
   });
 

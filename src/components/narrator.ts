@@ -51,11 +51,14 @@ export function narrateDistributionWarning(event: CoreEvent): string | null {
   const degraded = distributionDegradedReason(event);
   const fallback = distributionDistinctnessFallback(event);
   const reason = degraded !== null ? `council degraded: ${degraded}` : null;
-  if (fallback === 'creator_seat') {
-    return 'evaluator ≠ creator not held — review stays on the creator seat (no distinct eligible seat)'
-      + (reason !== null ? ` — ${reason}` : '');
-  }
-  return reason;
+  if (fallback === null) return reason;
+  const disclosure =
+    fallback === 'creator_seat'
+      ? 'evaluator ≠ creator not held — review stays on the creator seat (no distinct eligible seat)'
+      : fallback === 'same_cli_instance'
+        ? 'evaluator ≠ creator held by seat instance only — the reviewer runs the same cli as the builder'
+        : `evaluator ≠ creator disclosure not recognised by this studio (${fallback.unrecognised}) — treat the review as not independent`;
+  return disclosure + (reason !== null ? ` — ${reason}` : '');
 }
 
 /** Resolves an ord to the phase vocabulary the stepper already speaks. */

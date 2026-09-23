@@ -79,7 +79,7 @@ beforeEach(() => {
 describe('GroupChat — the §5.3 visual language', () => {
   it('the first-run instruction reads sans / --ink-body', () => {
     render(<GroupChat repoId={null} onBack={() => undefined} />);
-    fireEvent.click(screen.getByTestId('chat-scope-none')); // studio#248: Unfiled = an EXPLICIT unscoped choice before the first send
+    fireEvent.click(screen.getByTestId('chat-scope-system')); // studio#248: Unfiled = an EXPLICIT unscoped choice before the first send
     const instruction = screen.getByTestId('chat-firstrun-instruction');
     expect(instruction.style.fontFamily).toBe('var(--font-sans)');
     expect(instruction.style.color).toBe('var(--ink-body)');
@@ -88,7 +88,7 @@ describe('GroupChat — the §5.3 visual language', () => {
 
   it('the composer: --surface-raised, --radius-xl, and the wk-composer focus-ring hook', () => {
     render(<GroupChat repoId={null} onBack={() => undefined} />);
-    fireEvent.click(screen.getByTestId('chat-scope-none')); // studio#248: Unfiled = an EXPLICIT unscoped choice before the first send
+    fireEvent.click(screen.getByTestId('chat-scope-system')); // studio#248: Unfiled = an EXPLICIT unscoped choice before the first send
     const composer = screen.getByRole('textbox') as HTMLTextAreaElement;
     expect(composer.className).toContain('wk-composer');
     expect(composer.style.background).toBe('var(--surface-raised)');
@@ -98,7 +98,7 @@ describe('GroupChat — the §5.3 visual language', () => {
 
   it('the default chips wear §6.3 anatomy in tokens; [+ Add] is dashed --ink-dim; Send is accent-filled', () => {
     render(<GroupChat repoId={null} onBack={() => undefined} />);
-    fireEvent.click(screen.getByTestId('chat-scope-none')); // studio#248: Unfiled = an EXPLICIT unscoped choice before the first send
+    fireEvent.click(screen.getByTestId('chat-scope-system')); // studio#248: Unfiled = an EXPLICIT unscoped choice before the first send
     const chip = screen.getAllByTestId('agent-chip')[0]!;
     expect(chip.style.background).toBe('var(--surface-raised)');
     expect(chip.style.borderRadius).toBe('var(--radius-full)');
@@ -129,7 +129,7 @@ describe('GroupChat — the §5.3 visual language', () => {
   it('user messages are transparent; agent bubbles sit on --surface-card; chips disclose with wk-disclose', async () => {
     const user = userEvent.setup();
     render(<GroupChat repoId={null} onBack={() => undefined} />);
-    fireEvent.click(screen.getByTestId('chat-scope-none')); // studio#248: Unfiled = an EXPLICIT unscoped choice before the first send
+    fireEvent.click(screen.getByTestId('chat-scope-system')); // studio#248: Unfiled = an EXPLICIT unscoped choice before the first send
 
     await user.type(screen.getByRole('textbox'), 'make me a deck');
     await user.keyboard('{Enter}');
@@ -152,7 +152,7 @@ describe('DES-L5 §4 — the turn budget is named BEFORE a seat is evicted for i
   it('the composer carries the static budget copy once seats are warm, never on first-run', async () => {
     const user = userEvent.setup();
     render(<GroupChat repoId={null} onBack={() => undefined} />);
-    fireEvent.click(screen.getByTestId('chat-scope-none'));
+    fireEvent.click(screen.getByTestId('chat-scope-system'));
     expect(screen.queryByTestId('chat-turn-budget-note')).toBeNull();
     await user.type(screen.getByRole('textbox'), 'make me a deck');
     await user.keyboard('{Enter}');

@@ -1,3 +1,5 @@
+import type { ChatScope } from '../api/types.js';
+
 /**
  * The Ask dock's ACTIVE chat session, persisted for the tab (studio#323 R3).
  *
@@ -18,6 +20,10 @@ export interface AskSession {
   /** True once a message carrying the context pack LANDED — until then a resumed
    *  session still owes the pack to its next send. */
   seeded: boolean;
+  /** The scope the daemon RESOLVED at open (studio#323 R4) — restated on reopen instead of a scope
+   *  select. `null`/absent = not stated (a daemon predating scope, or a session saved before this
+   *  field). */
+  scope?: ChatScope | null;
 }
 
 export const ASK_SESSION_KEY = 'wicked.ask.session';
@@ -32,6 +38,7 @@ export function readAskSession(): AskSession | null {
       chatId: parsed.chatId,
       title: typeof parsed.title === 'string' ? parsed.title : '',
       seeded: parsed.seeded === true,
+      scope: isChatScope(parsed.scope) ? parsed.scope : null,
     };
   } catch {
     return null;
@@ -54,4 +61,11 @@ export function forgetAskSession(chatId?: string): void {
   } catch {
     /* nothing to forget */
   }
+}
+
+/** A stored scope is trusted only in its wire shape (a `kind` string and a `repos` array). */
+function isChatScope(v: unknown): v is ChatScope {
+  return v !== null && typeof v === 'object'
+    && typeof (v as { kind?: unknown }).kind === 'string'
+    && Array.isArray((v as { repos?: unknown }).repos);
 }
