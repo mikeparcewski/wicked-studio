@@ -188,8 +188,11 @@ describe('RequirementsModal', () => {
     await waitFor(() => expect(screen.getByText(/run-77/)).toBeInTheDocument());
 
     // Try again once the POST has settled — this is exactly when the old guard re-armed.
-    const after = screen.queryByRole('button', { name: /Run domain extraction|Extraction launched/i });
-    if (after) await user.click(after);
+    // getByRole THROWS if the button is gone — a conditional click here would let a regression that
+    // unmounts the button skip the action under test and pass on the call count alone.
+    const after = screen.getByRole('button', { name: /Extraction launched/i });
+    expect(after).toBeDisabled();
+    await user.click(after);
     expect(launchRun).toHaveBeenCalledTimes(1);
     expect(useProvenanceStore.getState().launchedHere['run-77']).toBe(true);
   });

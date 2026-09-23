@@ -248,7 +248,7 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
                 </button>
                 {extractRunId !== null && (
                   <p className="text-[11px] font-mono" style={{ color: T.faint }}>
-                    Domain extraction is running as {extractRunId}. Requirements appear here once it completes.
+                    Domain extraction is running as {extractRunId}. Reopen this view once it completes to see the extracted requirements.
                   </p>
                 )}
                 {extractError !== null && (
