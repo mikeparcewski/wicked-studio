@@ -12,6 +12,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '../api/client.js';
 import type { RequirementSummary, RequirementDetail, RequirementsPage, RequirementPatch } from '../api/types.js';
 import { useModalEscape } from './Modal.js';
+import { useProvenanceStore } from '../store/provenance.js';
 
 const T = {
   canvas: 'var(--surface-base)',
@@ -51,6 +52,10 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [extracting, setExtracting] = useState(false);
   const [extractError, setExtractError] = useState<string | null>(null);
+  // The run a successful launch started. The guard must outlive the POST: `launchRun` resolves
+  // in tens of ms while the extraction runs for minutes, so re-enabling on settle let a second
+  // click spawn a duplicate run (studio#324 D2). Once launched, the button stays disabled.
+  const [extractRunId, setExtractRunId] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchPage = useCallback(
@@ -213,11 +218,11 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
                 </p>
                 <button
                   type="button"
-                  disabled={extracting}
+                  disabled={extracting || extractRunId !== null}
                   className="text-[12px] font-mono font-semibold rounded px-3 py-1.5 disabled:opacity-50"
                   style={{ color: T.accent, border: `1px solid ${T.accent}` }}
                   onClick={() => {
-                    if (extracting) return;
+                    if (extracting || extractRunId !== null) return;
                     setExtracting(true);
                     setExtractError(null);
                     api.launchRun({
@@ -225,12 +230,27 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
                       workflow: 'domain-extraction',
                       problem: `Run domain extraction for ${repoName}`,
                     })
+                      .then(({ runId }) => {
+                        // Same provenance witness ChatInput records for a launch from studio.
+                        useProvenanceStore.getState().markLaunchedHere(runId);
+                        setExtractRunId(runId);
+                      })
+                      // A failed launch re-arms the button so the operator can retry.
                       .catch((e: unknown) => setExtractError(e instanceof Error ? e.message : String(e)))
                       .finally(() => setExtracting(false));
                   }}
                 >
-                  {extracting ? 'Launching…' : 'Run domain extraction'}
+                  {extracting
+                    ? 'Launching…'
+                    : extractRunId !== null
+                      ? 'Extraction launched'
+                      : 'Run domain extraction'}
                 </button>
+                {extractRunId !== null && (
+                  <p className="text-[11px] font-mono" style={{ color: T.faint }}>
+                    Domain extraction is running as {extractRunId}. Requirements appear here once it completes.
+                  </p>
+                )}
                 {extractError !== null && (
                   <p className="text-[11px] font-mono" style={{ color: T.deny }}>{extractError}</p>
                 )}

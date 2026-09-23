@@ -244,4 +244,31 @@ describe('MemoriesPanel — retire is a SUBTREE erase (honest granularity)', () 
     expect(screen.getByTestId('memory-retire-confirm-banner')).toHaveTextContent(/500\s+memor/i);
     expect(screen.getByTestId('memory-retire-confirm-banner')).toHaveTextContent('brain:wicked/doc:macos');
   });
+  // studio#324 round 2, Defect 1 — re-clicking Retire on the SAME row must not wipe the
+  // blast-radius count. setRetiring(m) is a no-op for an identical row, so an effect keyed on
+  // the row object never re-fires, while an unconditional setRetireCount(null) clears it.
+  // Expected value (3) comes from the scoped-coverage mock below, not from the component.
+  it('re-clicking Retire on the same row keeps the scoped count (studio#324 D1)', async () => {
+    apiFetch.mockImplementation((path: unknown) => {
+      const s = String(path);
+      if (s === '/memory/coverage') return Promise.resolve({ total: 2 });
+      if (s === '/memory/coverage?scope_prefix=brain%3Awicked%2Fdoc%3Aops')
+        return Promise.resolve({ total: 3 });
+      if (s.startsWith('/memory')) return Promise.resolve({ memories: [M1, M2] });
+      return Promise.reject(new ApiError(404, 'Not Found'));
+    });
+    render(<MemoriesPanel />);
+    const user = userEvent.setup();
+    const rows = await screen.findAllByTestId('memory-row');
+
+    await user.click(within(rows[0]!).getByTestId('memory-retire'));
+    await waitFor(() =>
+      expect(screen.getByTestId('memory-retire-confirm-banner')).toHaveTextContent(/3\s+memor/i),
+    );
+
+    // Same row again — the count must survive, not silently regress to the count-less warning.
+    await user.click(within(rows[0]!).getByTestId('memory-retire'));
+    await act(async () => { await new Promise<void>((r) => setTimeout(r, 0)); });
+    expect(screen.getByTestId('memory-retire-confirm-banner')).toHaveTextContent(/3\s+memor/i);
+  });
 });

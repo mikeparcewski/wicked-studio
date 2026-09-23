@@ -47,18 +47,21 @@ export function MemoriesPanel(): React.ReactElement {
   const [retireBusy, setRetireBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
 
+  // Keyed on the SCOPE STRING, not the row object: re-selecting the same row (or another row
+  // with the same scope) must neither drop the count nor refetch it (studio#324 D1).
+  const retiringScope = retiring?.scope ?? null;
   // Fetch the scoped coverage count whenever the retiring scope changes.
   // The `active` flag discards stale resolutions from a prior scope's in-flight request
   // (two rapid retire clicks would otherwise let the first request's late resolution
   // overwrite the second scope's correct count — the race described in studio#race).
   useEffect(() => {
-    if (retiring === null) return;
+    if (retiringScope === null) return;
     let active = true;
-    void memoryCoverage({ scope_prefix: retiring.scope })
+    void memoryCoverage({ scope_prefix: retiringScope })
       .then(({ total }) => { if (active) setRetireCount(total ?? null); })
       .catch(() => { if (active) setRetireCount(null); });
     return () => { active = false; };
-  }, [retiring]);
+  }, [retiringScope]);
 
   const load = useCallback(async (q: string): Promise<void> => {
     setLoading(true);
@@ -313,8 +316,10 @@ export function MemoriesPanel(): React.ReactElement {
                   type="button"
                   data-testid="memory-retire"
                   onClick={() => {
+                    // Clear the count only when the scope actually changes — otherwise the
+                    // effect (keyed on the scope) does not re-fire and nothing would refill it.
+                    if (retiringScope !== m.scope) setRetireCount(null);
                     setRetiring(m);
-                    setRetireCount(null);
                   }}
                   title={`Retire the scope ${m.scope} (erases the whole subtree)`}
                   className="shrink-0 rounded px-2 py-0.5 text-[10px] font-semibold focus:outline-none focus-visible:ring-1"

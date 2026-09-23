@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { useProvenanceStore } from '../src/store/provenance.js';
 import { RequirementsModal } from '../src/components/RequirementsModal.js';
 import type { RequirementDetail, RequirementsPage } from '../src/api/types.js';
 
@@ -169,6 +170,28 @@ describe('RequirementsModal', () => {
     expect(launchRun).toHaveBeenCalledWith(
       expect.objectContaining({ repoRef: 'r1', workflow: 'domain-extraction' }),
     );
+  });
+
+  // studio#324 round 2, Defect 2 — the guard must outlive the POST. launchRun resolves in
+  // tens of ms while the extraction runs for minutes; resetting on `finally` re-enables the
+  // button and a second click spawns a DUPLICATE run. After a successful launch the button
+  // must stay disabled, the run must be named, and provenance recorded.
+  // Expected run id ('run-77') comes from the launchRun mock, not from the component.
+  it('a second click after a successful launch does not start a second run (studio#324 D2)', async () => {
+    const user = userEvent.setup();
+    listRequirements.mockResolvedValue(page([], 0, 0));
+    launchRun.mockResolvedValue({ runId: 'run-77' });
+    render(<RequirementsModal repoId="r1" repoName="my-repo" onClose={() => {}} />);
+
+    const btn = await screen.findByRole('button', { name: /Run domain extraction/i });
+    await user.click(btn);
+    await waitFor(() => expect(screen.getByText(/run-77/)).toBeInTheDocument());
+
+    // Try again once the POST has settled — this is exactly when the old guard re-armed.
+    const after = screen.queryByRole('button', { name: /Run domain extraction|Extraction launched/i });
+    if (after) await user.click(after);
+    expect(launchRun).toHaveBeenCalledTimes(1);
+    expect(useProvenanceStore.getState().launchedHere['run-77']).toBe(true);
   });
 
   // Defect 4 — button must be disabled while the launch is in flight (spam guard) and
