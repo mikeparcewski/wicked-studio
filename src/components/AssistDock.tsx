@@ -431,7 +431,7 @@ function DockChat({ chatId, resumed = false }: { chatId: string; resumed?: boole
 
 // ── The dock ──────────────────────────────────────────────────────────────────────────────────
 
-export function AssistDock({ context, verbs, importable, open, onOpenChange, onError, resumeChatId = null, onExpandChat }: {
+export function AssistDock({ context, verbs, importable, open, onOpenChange, onError, resumeChatId = null, onExpandChat, fill = false }: {
   context: AssistContext;
   verbs: AssistVerbs;
   /** Which attachments offer the Import-directly fork. Absent ⇒ everything is analysis-only. */
@@ -446,6 +446,9 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
   /** The promote door (studio#323 R3): when wired, the header offers "Open in full
    *  chat" for the newest chat session the dock holds. */
   onExpandChat?: ((chatId: string) => void) | undefined;
+  /** Fill the container (the floating Ask panel) instead of the fixed `w-96` column —
+   *  a narrow container must never clip the composer. */
+  fill?: boolean;
 }): React.ReactElement {
   const [items, setItems] = useState<ThreadItem[]>(() =>
     resumeChatId !== null
@@ -601,7 +604,7 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
       data-testid="assist-dock"
       data-surface={context.surface}
       aria-label={context.title}
-      className="flex h-full w-96 shrink-0 flex-col overflow-hidden"
+      className={`flex h-full ${fill ? 'w-full min-w-0' : 'w-96 shrink-0'} flex-col overflow-hidden`}
       style={{
         borderLeft: `1px solid ${dragOver ? 'var(--accent)' : 'var(--surface-raised)'}`,
         background: 'var(--surface-rail)',

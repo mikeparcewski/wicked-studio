@@ -137,6 +137,12 @@ with sync_playwright() as p:
     npb = npanel.bounding_box()
     check("narrow-panel-on-screen", npb["x"] >= 0 and npb["x"] + npb["width"] <= 375 and npb["width"] >= 200,
           panel=npb)
+    # The INNER dock must fit its container — not a fixed 384px column clipped by it.
+    ndock = narrow.get_by_test_id("assist-dock").bounding_box()
+    check("narrow-dock-inside-viewport", ndock["x"] >= 0 and ndock["x"] + ndock["width"] <= 375
+          and ndock["x"] + ndock["width"] <= npb["x"] + npb["width"] + 0.5, dock=ndock, panel=npb)
+    nsend = narrow.get_by_test_id("assist-send").bounding_box()
+    check("narrow-send-inside-viewport", nsend["x"] + nsend["width"] <= npb["x"] + npb["width"], send=nsend, panel=npb)
     narrow.close()
 
     browser.close()

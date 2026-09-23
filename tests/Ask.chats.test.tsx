@@ -80,20 +80,52 @@ async function askOnce(question: string): Promise<void> {
 }
 
 describe('an Ask-started chat on the Chats page (studio#323 R2)', () => {
-  it('appears in the live band even when GET /chats has not listed it, labelled Ask + its question', async () => {
-    listChats.mockResolvedValue({ chats: [] });
+  it('falls back to the client store when GET /chats FAILS — the Ask chat is still listed, labelled Ask + its question', async () => {
+    listChats.mockRejectedValue(new Error('daemon unreachable'));
     await askOnce('What is in the estate store?');
 
     render(<ChatsPage runs={[]} onSelect={() => {}} navigate={() => {}} />);
     await waitFor(() => expect(listChats).toHaveBeenCalledTimes(1));
 
-    const row = screen.getByTestId('live-chat-row');
+    const row = await screen.findByTestId('live-chat-row');
     expect(row).toHaveAttribute('data-chat-id', ASK_ID);
     expect(screen.getByTestId('live-chat-origin')).toHaveAttribute('data-origin', 'ask');
     expect(screen.getByTestId('live-chat-origin')).toHaveTextContent('Ask');
     expect(screen.getByTestId('live-chat-title')).toHaveTextContent('What is in the estate store?');
     // The anonymous hex handle is no longer the card's title.
     expect(screen.getByTestId('live-chat-title')).not.toHaveTextContent('live ·');
+  });
+
+  it('a successful GET /chats is AUTHORITATIVE: a store session it omits (seen before the request) is dropped', async () => {
+    // A session this client saw a minute ago — then the daemon restarted / reaped it
+    // and the chatClosed frame was missed.
+    useLiveChatsStore.setState({
+      sessions: { 'stale-chat-1': { chatId: 'stale-chat-1', seats: ['claude'], lastSeenAt: Date.now() - 60_000, origin: 'ask', title: 'old question' } },
+    });
+    listChats.mockResolvedValue({ chats: [] });
+
+    render(<ChatsPage runs={[]} onSelect={() => {}} navigate={() => {}} />);
+    await waitFor(() => expect(listChats).toHaveBeenCalledTimes(1));
+    // Let the resolved list land.
+    await waitFor(() => expect(screen.getByTestId('stat-live-seats')).toHaveTextContent('no live sessions'));
+
+    expect(screen.queryAllByTestId('live-chat-row')).toHaveLength(0);
+  });
+
+  it('a store session seen AFTER the request started survives an authoritative list that predates it', async () => {
+    let resolveList: (v: { chats: unknown[] }) => void = () => undefined;
+    listChats.mockReturnValue(new Promise((r) => { resolveList = r; }));
+
+    render(<ChatsPage runs={[]} onSelect={() => {}} navigate={() => {}} />);
+    await waitFor(() => expect(listChats).toHaveBeenCalledTimes(1));
+    // Opened while the fetch is in flight (lastSeenAt after the request started).
+    useLiveChatsStore.setState({
+      sessions: { 'fresh-chat-1': { chatId: 'fresh-chat-1', seats: ['claude'], lastSeenAt: Date.now() + 1_000, origin: 'ask', title: 'new question' } },
+    });
+    resolveList({ chats: [] });
+
+    await waitFor(() => expect(screen.getByTestId('live-chat-row')).toHaveAttribute('data-chat-id', 'fresh-chat-1'));
+    expect(screen.getAllByTestId('live-chat-row')).toHaveLength(1);
   });
 
   it('is ONE card when the daemon also lists it — deduped by id, keeping the daemon idle age', async () => {

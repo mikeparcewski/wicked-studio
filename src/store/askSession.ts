@@ -15,6 +15,9 @@ export interface AskSession {
   chatId: string;
   /** The first question asked in this session — its handle on the Chats page. */
   title: string;
+  /** True once a message carrying the context pack LANDED — until then a resumed
+   *  session still owes the pack to its next send. */
+  seeded: boolean;
 }
 
 export const ASK_SESSION_KEY = 'wicked.ask.session';
@@ -25,7 +28,11 @@ export function readAskSession(): AskSession | null {
     if (raw === null) return null;
     const parsed = JSON.parse(raw) as Partial<AskSession> | null;
     if (parsed === null || typeof parsed.chatId !== 'string' || parsed.chatId === '') return null;
-    return { chatId: parsed.chatId, title: typeof parsed.title === 'string' ? parsed.title : '' };
+    return {
+      chatId: parsed.chatId,
+      title: typeof parsed.title === 'string' ? parsed.title : '',
+      seeded: parsed.seeded === true,
+    };
   } catch {
     return null;
   }

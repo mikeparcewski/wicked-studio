@@ -139,16 +139,21 @@ export function ChatsPage({ runs, onSelect, navigate }: Props): React.ReactEleme
   // "streaming now" from the FIRST frame — a session is visible here while it
   // streams, even one this list fetch predates.
   const [liveChats, setLiveChats] = useState<LiveChatRow[] | null>(null);
+  /** When the ANSWERED `GET /chats` was requested — null while pending or when it failed.
+   *  A successful list is authoritative over the client store for sessions seen before it. */
+  const [censusAt, setCensusAt] = useState<number | null>(null);
   useEffect(() => {
     let cancelled = false;
+    const startedAt = Date.now();
     api
       .listChats()
       .then(({ chats }) => {
         if (cancelled) return;
         setLiveChats(chats.map((c) => ({ ...c, lastFrameAt: 0 })));
+        setCensusAt(startedAt);
       })
       .catch(() => {
-        if (!cancelled) setLiveChats([]); // unreachable — the live cards stay absent
+        if (!cancelled) setLiveChats([]); // unreachable — the client store is the fallback
       });
     return () => {
       cancelled = true;
@@ -199,6 +204,10 @@ export function ChatsPage({ runs, onSelect, navigate }: Props): React.ReactEleme
     for (const c of liveChats ?? []) byId.set(c.chatId, { ...c });
     for (const sess of Object.values(storeChats)) {
       const row = byId.get(sess.chatId);
+      // The daemon answered and omitted it: a session last seen BEFORE that request is
+      // gone (a restart, a reap, a missed chatClosed) — never a live card to a dead
+      // /chat/:id. One seen after the request started may simply postdate the answer.
+      if (row === undefined && censusAt !== null && sess.lastSeenAt < censusAt) continue;
       if (row === undefined) {
         byId.set(sess.chatId, { chatId: sess.chatId, seats: [...sess.seats], idleSecs: null, lastFrameAt: 0 });
       } else {
@@ -216,7 +225,7 @@ export function ChatsPage({ runs, onSelect, navigate }: Props): React.ReactEleme
       if (title !== undefined) card.title = title;
     }
     return [...byId.values()];
-  }, [liveChats, storeChats]);
+  }, [liveChats, storeChats, censusAt]);
 
   /** End a warm session from the list — the zombie-cleanup affordance. */
   function endLiveChat(chatId: string): void {

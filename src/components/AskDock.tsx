@@ -103,17 +103,25 @@ export function AskDock({ runs, pathname, onClose, navigate }: {
   const [resumed] = useState(() => readAskSession());
   /** The live chat session this dock opened — later sends reuse its warm seats. */
   const chatIdRef = useRef<string | null>(resumed?.chatId ?? null);
-  /** True once the context pack rode a message — it seeds the FIRST send only (a
-   *  resumed session already carried it). */
-  const seededRef = useRef(resumed !== null);
+  /** True once the context pack LANDED with a message — it seeds the first successful
+   *  send only. A resumed session carries its persisted flag: a first send that failed
+   *  leaves it unseeded, so the pack still rides the next question. */
+  const seededRef = useRef(resumed?.seeded === true);
+  /** The session's first question — its /chats handle, re-persisted with the flag. */
+  const titleRef = useRef(resumed?.title ?? '');
 
   const verbs: AssistVerbs = useMemo(
     () => ({
       send: async (text) => {
         let id = chatIdRef.current;
         if (id !== null && resumed !== null && id === resumed.chatId) {
+          const message = seededRef.current ? text : `${text}\n\n---\n${buildContextPack(packInputs.current)}`;
           try {
-            await api.sendChatMessage(id, text);
+            await api.sendChatMessage(id, message);
+            if (!seededRef.current) {
+              seededRef.current = true;
+              writeAskSession({ chatId: id, title: titleRef.current, seeded: true });
+            }
             return { chatId: id };
           } catch (sendErr) {
             // A failed send is NOT proof the session is gone — a 5xx or a network blip
@@ -158,14 +166,18 @@ export function AskDock({ runs, pathname, onClose, navigate }: {
           }
           chatIdRef.current = id;
           // Persist for the tab — a close/reopen (or reload) resumes THIS session.
-          writeAskSession({ chatId: id, title: text });
+          titleRef.current = text;
+          writeAskSession({ chatId: id, title: text, seeded: false });
           // The session is live — make it findable on the rail (the J4 live row) and on
           // /chats, labelled with where it came from and what was asked (studio#323 R2).
           useLiveChatsStore.getState().upsert(id, ready, { origin: 'ask', title: text });
         }
         const message = seededRef.current ? text : `${text}\n\n---\n${buildContextPack(packInputs.current)}`;
         await api.sendChatMessage(id, message);
-        seededRef.current = true;
+        if (!seededRef.current) {
+          seededRef.current = true;
+          writeAskSession({ chatId: id, title: titleRef.current, seeded: true });
+        }
         return { chatId: id };
       },
     }),
@@ -215,6 +227,7 @@ export function AskDock({ runs, pathname, onClose, navigate }: {
       }}
       verbs={verbs}
       resumeChatId={resumed?.chatId ?? null}
+      fill
       onExpandChat={
         navigate === undefined
           ? undefined
