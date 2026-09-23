@@ -4,12 +4,13 @@ import userEvent from '@testing-library/user-event';
 import { chordMatches, registerShortcuts, type ShortcutEntry } from '../src/hooks/useGlobalShortcuts.js';
 
 /**
- * The ASK entry (the app-wide ask feature): relocated by the rail-header restyle
- * into the app chrome, taking the connection dot's old status-word slot — it now
- * sits NEXT TO the connection dot and ABOVE the notification bell. It keeps its
- * OWN idiom: an accent-dressed action button (`data-idiom="ask"`), not a nav
- * heading row and not a bell sibling. Its chord (Ctrl/⌘+Shift+A) registers in
- * the ONE shortcut registry, so the '?' overlay documents it for free.
+ * The ASK entry (studio#323 R1): it LEFT the rail chrome — the `?` circle beside the
+ * logo is gone — and is a floating chat bubble fixed bottom-right (AskLauncher), the
+ * traditional help/chat-launcher position. The bubble toggles the Ask dock, which
+ * floats as a panel anchored to it (an overlay, not a layout column). It clears the
+ * runs bottom bar and, when a run is selected, the right panel. Its chord
+ * (Ctrl/⌘+Shift+A) registers in the ONE shortcut registry, so the '?' overlay
+ * documents it for free.
  */
 
 vi.mock('../src/hooks/useBoardModel.js', () => ({
@@ -24,71 +25,75 @@ vi.mock('../src/api/client.js', () => ({
 }));
 
 const { LeftSidebar } = await import('../src/components/LeftSidebar.js');
+const { AskLauncher } = await import('../src/components/AskLauncher.js');
 
-function rail(onOpenAsk?: () => void): void {
-  render(
-    <LeftSidebar
-      runs={[]}
-      navigate={() => undefined}
-      pathname="/"
-      {...(onOpenAsk !== undefined ? { onOpenAsk } : {})}
-    />,
-  );
+function rail(): void {
+  render(<LeftSidebar runs={[]} navigate={() => undefined} pathname="/" />);
 }
 
 beforeEach(() => {
   cleanup();
 });
 
-describe('the Ask entry — placement in the chrome + idiom', () => {
-  it('sits in the chrome ABOVE the notification bell; the connection dot is gone', () => {
-    rail(() => undefined);
-    const ask = screen.getByTestId('rail-ask');
-    const bell = screen.getByTitle('Notifications'); // the bell trigger
-    // The connection dot was removed (nav-ui-tweaks) — Ask now owns the chrome
-    // slot beside the wordmark.
-    expect(screen.queryByTestId('connection-dot')).toBeNull();
-    // The chrome (with Ask) is above the bell row: ask → bell in DOM order.
-    expect(ask.compareDocumentPosition(bell) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  });
-
-  it('is its OWN idiom: an accent button, not a heading row and not a bell sibling', () => {
-    rail(() => undefined);
-    const ask = screen.getByTestId('rail-ask');
-    expect(ask.tagName).toBe('BUTTON');
-    expect(ask).toHaveAttribute('data-idiom', 'ask');
-    // Not a nav heading: no chevron, no aria-expanded, none of the heading testids.
-    expect(ask).not.toHaveAttribute('aria-expanded');
-    expect(ask.querySelector('[data-testid="rail-chevron"]')).toBeNull();
-    // Accent-dressed — visually distinct from the muted nav rows.
-    expect(ask.style.border).toContain('var(--accent)');
-    // The chord is declared on the control for a11y + at-a-glance discovery.
-    expect(ask.getAttribute('aria-keyshortcuts')).toContain('Shift+A');
-  });
-
-  it('clicking it fires onOpenAsk', async () => {
-    const onOpenAsk = vi.fn();
-    rail(onOpenAsk);
-    await userEvent.setup().click(screen.getByTestId('rail-ask'));
-    expect(onOpenAsk).toHaveBeenCalledTimes(1);
-  });
-
-  it('renders NO Ask entry when the app has not wired one (no dead door)', () => {
-    rail(undefined);
+describe('the Ask entry — out of the rail chrome (studio#323 R1)', () => {
+  it('the rail carries NO Ask entry, expanded or collapsed', async () => {
+    rail();
+    expect(screen.queryByTestId('rail-ask')).toBeNull();
+    expect(screen.queryByTestId('ask-launcher')).toBeNull();
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Collapse sidebar' }));
     expect(screen.queryByTestId('rail-ask')).toBeNull();
   });
+});
 
-  it('collapsed: preserves the Ask action as an icon beside the compact chrome', async () => {
-    rail(() => undefined);
-    await userEvent.setup().click(screen.getByRole('button', { name: 'Collapse sidebar' }));
+describe('the Ask launcher — a floating chat bubble bottom-right (studio#323 R1)', () => {
+  it('is fixed to the bottom-right corner, above the 28px runs bar', () => {
+    render(<AskLauncher open={false} onToggle={() => undefined} />);
+    const bubble = screen.getByTestId('ask-launcher');
+    expect(bubble.style.position).toBe('fixed');
+    expect(bubble.style.right).toBe('16px');
+    expect(bubble.style.bottom).toBe('44px'); // 28px runs bar + 16px gutter
+    expect(bubble.style.left).toBe('');
+    expect(bubble.style.top).toBe('');
+    expect(bubble.style.borderRadius).toBe('var(--radius-full)');
+  });
 
-    const ask = screen.getByTestId('rail-ask');
-    expect(ask.style.width).toBe('28px');
-    expect(ask.style.height).toBe('28px');
-    expect(ask).not.toHaveTextContent('Ask');
-    // The connection dot was removed from the chrome (nav-ui-tweaks).
-    expect(screen.queryByTestId('connection-dot')).toBeNull();
-    expect(screen.getByRole('button', { name: 'Expand sidebar' })).toBeInTheDocument();
+  it('is a chat glyph, not a "?" — and keeps its own idiom + chord', () => {
+    render(<AskLauncher open={false} onToggle={() => undefined} />);
+    const bubble = screen.getByTestId('ask-launcher');
+    expect(bubble.tagName).toBe('BUTTON');
+    expect(bubble).toHaveAttribute('data-idiom', 'ask');
+    expect(bubble).not.toHaveTextContent('?');
+    expect(bubble.querySelector('svg')).not.toBeNull();
+    expect(bubble.getAttribute('aria-keyshortcuts')).toContain('Shift+A');
+    expect(bubble).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('stays clear of the right panel: shifts left by the offset App passes', () => {
+    render(<AskLauncher open={false} onToggle={() => undefined} rightOffsetPx={288} />);
+    expect(screen.getByTestId('ask-launcher').style.right).toBe('304px');
+  });
+
+  it('clicking it fires onToggle', async () => {
+    const onToggle = vi.fn();
+    render(<AskLauncher open={false} onToggle={onToggle} />);
+    await userEvent.setup().click(screen.getByTestId('ask-launcher'));
+    expect(onToggle).toHaveBeenCalledTimes(1);
+  });
+
+  it('closed: no panel; open: the dock floats in a fixed panel anchored ABOVE the bubble', () => {
+    const { rerender } = render(
+      <AskLauncher open={false} onToggle={() => undefined}><div data-testid="dock-child" /></AskLauncher>,
+    );
+    expect(screen.queryByTestId('ask-panel')).toBeNull();
+    expect(screen.queryByTestId('dock-child')).toBeNull();
+
+    rerender(<AskLauncher open onToggle={() => undefined}><div data-testid="dock-child" /></AskLauncher>);
+    const panel = screen.getByTestId('ask-panel');
+    expect(panel.style.position).toBe('fixed');
+    expect(panel.style.right).toBe('16px');
+    expect(panel.style.bottom).toBe('104px'); // bubble bottom 44 + 48 bubble + 12 gap
+    expect(panel).toContainElement(screen.getByTestId('dock-child'));
+    expect(screen.getByTestId('ask-launcher')).toHaveAttribute('aria-expanded', 'true');
   });
 });
 

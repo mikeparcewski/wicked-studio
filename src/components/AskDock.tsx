@@ -4,6 +4,7 @@ import { getDiagnostics, isDiagnosticsUnsupported } from '../api/diagnostics.js'
 import type { RepoEntry, SessionView } from '../api/types.js';
 import { needsYouRows } from '../board/needsYou.js';
 import { useFailureClocks } from '../store/failureClocks.js';
+import { forgetAskSession, readAskSession, writeAskSession } from '../store/askSession.js';
 import { useGateStore } from '../store/gates.js';
 import { useLiveChatsStore } from '../store/liveChats.js';
 import { useMembershipStore } from '../store/membership.js';
@@ -37,11 +38,13 @@ import { defaultSelection } from './GroupChat.js';
  * chips prefill the composer, never submit it.
  */
 
-export function AskDock({ runs, pathname, onClose }: {
+export function AskDock({ runs, pathname, onClose, navigate }: {
   runs: SessionView[];
   pathname: string;
-  /** Collapsing the dock closes Ask entirely — the rail button/shortcut reopen it. */
+  /** Collapsing the dock closes Ask entirely — the launcher bubble/shortcut reopen it. */
   onClose: () => void;
+  /** The promote door (studio#323 R3): "Open in full chat" routes to `/chat/:id`. */
+  navigate?: (path: string) => void;
 }): React.ReactElement {
   const [diag, setDiag] = useState<DiagnosticsState>({ kind: 'loading' });
   const [repos, setRepos] = useState<RepoEntry[]>(() => getCachedRepos() ?? []);
@@ -94,15 +97,34 @@ export function AskDock({ runs, pathname, onClose }: {
     diagnostics: diag,
   };
 
+  /** The session this dock RESUMES (studio#323 R3): the dock unmounts on close, so the
+   *  id lives in sessionStorage — reopening Ask rejoins it instead of minting a second
+   *  session and orphaning the first. Read once per mount. */
+  const [resumed] = useState(() => readAskSession());
   /** The live chat session this dock opened — later sends reuse its warm seats. */
-  const chatIdRef = useRef<string | null>(null);
-  /** True once the context pack rode a message — it seeds the FIRST send only. */
-  const seededRef = useRef(false);
+  const chatIdRef = useRef<string | null>(resumed?.chatId ?? null);
+  /** True once the context pack rode a message — it seeds the FIRST send only (a
+   *  resumed session already carried it). */
+  const seededRef = useRef(resumed !== null);
 
   const verbs: AssistVerbs = useMemo(
     () => ({
       send: async (text) => {
         let id = chatIdRef.current;
+        if (id !== null && resumed !== null && id === resumed.chatId) {
+          try {
+            await api.sendChatMessage(id, text);
+            return { chatId: id };
+          } catch {
+            // The RESUMED session is gone (idle reaper, pool cap, a daemon restart) —
+            // forget it and open a fresh session for this question below. A session
+            // THIS mount opened fails loud, as before.
+            forgetAskSession(id);
+            chatIdRef.current = null;
+            seededRef.current = false;
+            id = null;
+          }
+        }
         if (id === null) {
           // The chat-capable roster (EC44's derivation, reused verbatim) — cached when any
           // surface already fetched it; one GET /roster otherwise.
@@ -126,8 +148,11 @@ export function AskDock({ runs, pathname, onClose }: {
             throw new Error(`No agent seat came up — ${detail}`);
           }
           chatIdRef.current = id;
-          // The session is live — make it findable on the rail (the J4 live row).
-          useLiveChatsStore.getState().upsert(id, ready);
+          // Persist for the tab — a close/reopen (or reload) resumes THIS session.
+          writeAskSession({ chatId: id, title: text });
+          // The session is live — make it findable on the rail (the J4 live row) and on
+          // /chats, labelled with where it came from and what was asked (studio#323 R2).
+          useLiveChatsStore.getState().upsert(id, ready, { origin: 'ask', title: text });
         }
         const message = seededRef.current ? text : `${text}\n\n---\n${buildContextPack(packInputs.current)}`;
         await api.sendChatMessage(id, message);
@@ -135,7 +160,7 @@ export function AskDock({ runs, pathname, onClose }: {
         return { chatId: id };
       },
     }),
-    [],
+    [resumed],
   );
 
   const prompts = useMemo(
@@ -180,6 +205,15 @@ export function AskDock({ runs, pathname, onClose }: {
         prompts,
       }}
       verbs={verbs}
+      resumeChatId={resumed?.chatId ?? null}
+      onExpandChat={
+        navigate === undefined
+          ? undefined
+          : (chatId) => {
+              navigate(`/chat/${encodeURIComponent(chatId)}`);
+              onClose();
+            }
+      }
       open
       onOpenChange={(next) => {
         if (!next) onClose();

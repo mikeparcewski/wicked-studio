@@ -1232,8 +1232,9 @@ export function GroupChat({
           setOpenError(failure);
           return { ready, failure };
         }
-        // The session is live — make it findable (J4: the rail's live row).
-        if (ready.length > 0) useLiveChatsStore.getState().upsert(id, ready);
+        // The session is live — make it findable (J4: the rail's live row), and
+        // labelled as a Chat-surface session on /chats (studio#323 R2).
+        if (ready.length > 0) useLiveChatsStore.getState().upsert(id, ready, { origin: 'chat' });
         return { ready, failure: null };
       } catch (e: unknown) {
         const status = apiStatus(e);
@@ -1367,6 +1368,9 @@ export function GroupChat({
       }));
       try {
         await api.sendChatMessage(id, text, audience);
+        // studio#323 R2: the first question is the session's handle on /chats
+        // (fill-only — a later send never renames it).
+        if (id in useLiveChatsStore.getState().sessions) useLiveChatsStore.getState().upsert(id, [], { title: text });
         // Accepted — the draft leaves the composer only now (§7.9-2). A mid-flight
         // edit is the operator's newer draft and is left alone.
         setInput((cur) => (cur.trim() === text ? '' : cur));

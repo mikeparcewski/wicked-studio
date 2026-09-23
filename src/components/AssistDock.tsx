@@ -86,7 +86,7 @@ type ThreadItem =
   | { kind: 'user'; text: string; files: string[] }
   | { kind: 'note'; tone: NarrationTone; text: string }
   | { kind: 'run'; runId: string }
-  | { kind: 'chat'; chatId: string };
+  | { kind: 'chat'; chatId: string; resumed?: boolean };
 
 interface PendingAttachment {
   name: string;
@@ -246,7 +246,23 @@ interface DockChatMsg {
  * the one `GET /chats/:id` snapshot — frames that streamed before this block mounted are
  * healed by the authoritative reply, never re-invented.
  */
-function DockChat({ chatId }: { chatId: string }): React.ReactElement {
+/** A resumed block's replay: the daemon's persisted transcript as dock bubbles. The
+ *  user's own turns render as `you`, trimmed of the context pack Ask appends. */
+function replayDockTranscript(records: readonly unknown[]): DockChatMsg[] {
+  const out: DockChatMsg[] = [];
+  for (const r of records) {
+    const rec = r as { kind?: string; cliKey?: string; text?: string; ok?: boolean };
+    if (typeof rec.text !== 'string') continue;
+    if (rec.kind === 'user') {
+      out.push({ cliKey: 'you', text: rec.text.split('\n\n---\n', 1)[0] ?? rec.text, pending: false, ok: true });
+    } else if (typeof rec.cliKey === 'string') {
+      out.push({ cliKey: rec.cliKey, text: rec.text, pending: false, ok: rec.ok ?? true });
+    }
+  }
+  return out;
+}
+
+function DockChat({ chatId, resumed = false }: { chatId: string; resumed?: boolean }): React.ReactElement {
   const [seats, setSeats] = useState<Record<string, DockSeatState>>({});
   const [msgs, setMsgs] = useState<DockChatMsg[]>([]);
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -260,12 +276,21 @@ function DockChat({ chatId }: { chatId: string }): React.ReactElement {
     let cancelled = false;
     void api
       .getChat(chatId)
-      .then(({ seats: warm }) => {
+      .then((detail) => {
         if (cancelled) return;
+        const warm = detail.seats;
         setSeats((prev) => ({
           ...Object.fromEntries(warm.map((k) => [k, 'ready' as DockSeatState])),
           ...prev,
         }));
+        // A RESUMED block (studio#323 R3) replays what the session already said —
+        // only then: a fresh block streams its own frames, and replaying a reply
+        // those frames will also deliver would double it.
+        const messages = (detail as { messages?: unknown }).messages;
+        if (resumed && Array.isArray(messages)) {
+          const replayed = replayDockTranscript(messages);
+          setMsgs((prev) => (prev.length > 0 ? prev : replayed));
+        }
       })
       .catch(() => {
         /* snapshot unavailable — the frames below still speak for themselves */
@@ -273,7 +298,7 @@ function DockChat({ chatId }: { chatId: string }): React.ReactElement {
     return () => {
       cancelled = true;
     };
-  }, [chatId]);
+  }, [chatId, resumed]);
 
   /** A seat's streaming chunk belongs to its OLDEST pending bubble (FIFO — the wire
    *  carries no turn field); a chunk with no pending bubble opens its own. */
@@ -406,7 +431,7 @@ function DockChat({ chatId }: { chatId: string }): React.ReactElement {
 
 // ── The dock ──────────────────────────────────────────────────────────────────────────────────
 
-export function AssistDock({ context, verbs, importable, open, onOpenChange, onError }: {
+export function AssistDock({ context, verbs, importable, open, onOpenChange, onError, resumeChatId = null, onExpandChat }: {
   context: AssistContext;
   verbs: AssistVerbs;
   /** Which attachments offer the Import-directly fork. Absent ⇒ everything is analysis-only. */
@@ -415,8 +440,21 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
   onOpenChange: (open: boolean) => void;
   /** Optional error tap (the surface may also surface send failures its own way). */
   onError?: ((message: string) => void) | undefined;
+  /** A chat session this dock RESUMES on mount (studio#323 R3) — its block renders
+   *  immediately and replays the session's transcript. */
+  resumeChatId?: string | null;
+  /** The promote door (studio#323 R3): when wired, the header offers "Open in full
+   *  chat" for the newest chat session the dock holds. */
+  onExpandChat?: ((chatId: string) => void) | undefined;
 }): React.ReactElement {
-  const [items, setItems] = useState<ThreadItem[]>([]);
+  const [items, setItems] = useState<ThreadItem[]>(() =>
+    resumeChatId !== null
+      ? [
+          { kind: 'note', tone: 'info', text: 'Resumed your earlier session — its agents are still on the line.' },
+          { kind: 'chat', chatId: resumeChatId, resumed: true },
+        ]
+      : [],
+  );
   const [text, setText] = useState('');
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   const [sending, setSending] = useState(false);
@@ -431,6 +469,15 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
     for (let i = items.length - 1; i >= 0; i -= 1) {
       const item = items[i];
       if (item !== undefined && item.kind === 'run') return item.runId;
+      if (item !== undefined && item.kind === 'chat') return item.chatId;
+    }
+    return null;
+  }, [items]);
+
+  /** The newest CHAT session in the thread — what the promote door opens. */
+  const latestChatId = useMemo(() => {
+    for (let i = items.length - 1; i >= 0; i -= 1) {
+      const item = items[i];
       if (item !== undefined && item.kind === 'chat') return item.chatId;
     }
     return null;
@@ -573,6 +620,20 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
         <span data-testid="assist-context" className="truncate font-mono text-[10px]" style={{ color: 'var(--ink-dim)' }}>
           {context.contextLabel}
         </span>
+        {onExpandChat !== undefined && latestChatId !== null && (
+          <button
+            type="button"
+            data-testid="assist-dock-expand"
+            data-chat-id={latestChatId}
+            aria-label="Open in full chat"
+            title="Open this conversation in the full chat interface"
+            onClick={() => onExpandChat(latestChatId)}
+            className="ml-auto shrink-0 rounded px-1.5 py-0.5 font-mono text-[10px] focus:outline-none focus-visible:ring-1"
+            style={{ color: 'var(--accent)', border: '1px solid var(--surface-overlay)' }}
+          >
+            Open in full chat ↗
+          </button>
+        )}
         <button
           type="button"
           data-testid="assist-dock-toggle"
@@ -580,7 +641,7 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
           aria-expanded
           title="Collapse (remembered)"
           onClick={() => onOpenChange(false)}
-          className="ml-auto rounded px-1 text-sm focus:outline-none focus-visible:ring-1"
+          className={`${onExpandChat !== undefined && latestChatId !== null ? '' : 'ml-auto '}rounded px-1 text-sm focus:outline-none focus-visible:ring-1`}
           style={{ color: 'var(--ink-dim)' }}
         >
           »
@@ -638,7 +699,7 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
             );
           }
           if (item.kind === 'chat') {
-            return <DockChat key={item.chatId} chatId={item.chatId} />;
+            return <DockChat key={item.chatId} chatId={item.chatId} resumed={item.resumed === true} />;
           }
           return <DockRun key={item.runId} runId={item.runId} />;
         })}

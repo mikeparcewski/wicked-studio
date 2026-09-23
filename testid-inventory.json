@@ -10,9 +10,9 @@
   "version": 1,
   "studioVersion": "0.5.13",
   "counts": {
-    "files": 146,
-    "occurrences": 1341,
-    "static": 1152,
+    "files": 147,
+    "occurrences": 1345,
+    "static": 1156,
     "dynamic": 63,
     "computed": 7
   },
@@ -188,6 +188,18 @@
       ]
     },
     {
+      "testId": "ask-launcher",
+      "files": [
+        "src/components/AskLauncher.tsx"
+      ]
+    },
+    {
+      "testId": "ask-panel",
+      "files": [
+        "src/components/AskLauncher.tsx"
+      ]
+    },
+    {
       "testId": "assist-analyze",
       "files": [
         "src/components/AssistDock.tsx"
@@ -237,6 +249,12 @@
     },
     {
       "testId": "assist-dock",
+      "files": [
+        "src/components/AssistDock.tsx"
+      ]
+    },
+    {
+      "testId": "assist-dock-expand",
       "files": [
         "src/components/AssistDock.tsx"
       ]
@@ -3098,6 +3116,12 @@
       ]
     },
     {
+      "testId": "live-chat-origin",
+      "files": [
+        "src/components/ChatsPage.tsx"
+      ]
+    },
+    {
       "testId": "live-chat-row",
       "files": [
         "src/components/ChatsPage.tsx"
@@ -3105,6 +3129,12 @@
     },
     {
       "testId": "live-chat-streaming",
+      "files": [
+        "src/components/ChatsPage.tsx"
+      ]
+    },
+    {
+      "testId": "live-chat-title",
       "files": [
         "src/components/ChatsPage.tsx"
       ]
@@ -4040,12 +4070,6 @@
       "testId": "rail-all-runs",
       "files": [
         "src/components/RunsSection.tsx"
-      ]
-    },
-    {
-      "testId": "rail-ask",
-      "files": [
-        "src/components/AppChrome.tsx"
       ]
     },
     {

@@ -54,10 +54,6 @@ interface Props {
    *  auto-collapses the rail to its icon state; leaving restores what the user had.
    *  Hover-peek still works, and the expand control stays live — auto, not locked. */
   immersive?: boolean;
-  /** Opens the app-wide ASK dock (the AskDock binding of the assist panel). Threaded
-   *  into the chrome (AppChrome), where the Ask entry took the connection word's slot;
-   *  it renders only when the app wires this — the chrome never paints a dead door. */
-  onOpenAsk?: () => void;
 }
 
 // The rail is chrome (`--surface-rail`); the token dress is §3.1/§3.5's.
@@ -583,7 +579,7 @@ function SteeringSectionRows({ navigate }: { navigate: (p: string) => void }): R
 
 const flatRunPath = (id: string): string => `/runs/${encodeURIComponent(id)}`;
 
-export function LeftSidebar({ runs, navigate, pathname, runPath = flatRunPath, immersive = false, onOpenAsk }: Props): React.ReactElement {
+export function LeftSidebar({ runs, navigate, pathname, runPath = flatRunPath, immersive = false }: Props): React.ReactElement {
   const [collapsed, setCollapsed] = useState(false);
   const [hovered, setHovered] = useState(false);
   const [newProjectOpen, setNewProjectOpen] = useState(false);
@@ -695,7 +691,7 @@ export function LeftSidebar({ runs, navigate, pathname, runPath = flatRunPath, i
           collapse/expand "menu" control clear separation — distinct actions,
           not one cluster (item 1). */}
       <div className={`flex shrink-0 ${isExpanded ? 'items-center gap-2 pr-2' : 'flex-col items-center pt-2 gap-2'}`}>
-        <AppChrome collapsed={!isExpanded} navigate={navigate} {...(onOpenAsk !== undefined ? { onOpenAsk } : {})} />
+        <AppChrome collapsed={!isExpanded} navigate={navigate} />
         <button
           type="button"
           onClick={() => setCollapsed(v => !v)}

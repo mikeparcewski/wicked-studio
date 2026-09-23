@@ -27,57 +27,17 @@ import { WickedLogo } from './WickedLogo.js';
  * Health detail lives in ONE place — the rail-foot HealthRailSection, opened
  * from its own header toggle (its ♥ glyph is colored by health there).
  *
- * The Ask entry took the slot the connection word once held (rail-header
- * restyle): a compact circular `?` button that opens the app-wide assist dock.
+ * The Ask entry LEFT the chrome (studio#323 R1): it is a floating chat bubble
+ * bottom-right now (AskLauncher), the traditional help/chat-launcher position.
  */
 
 interface Props {
   /** The rail's collapsed state: icon-only column instead of the header row. */
   collapsed: boolean;
   navigate: (path: string) => void;
-  /** Opens the app-wide ASK dock (AskDock). The Ask entry renders only when the
-   *  app wires this; the chrome never paints a dead door. The Ctrl/⌘+Shift+A
-   *  chord does the same. */
-  onOpenAsk?: () => void;
 }
 
-/**
- * The Ask entry — a compact CIRCULAR `?` button (nav-ui-tweaks) that opens the
- * app-wide assist dock (AskDock). Its OWN idiom, not a nav row and not a bell
- * sibling; the accent dress keeps it visually distinct. The chord
- * Ctrl/⌘+Shift+A does the same and is documented in the '?' overlay. Renders
- * only when the app wires `onOpenAsk` — the chrome never paints a dead door.
- */
-const ASK_LABEL = 'Ask — governed answers about your projects, repos, and this studio (Ctrl/⌘+Shift+A)';
-function AskEntry({ collapsed, onOpenAsk }: { collapsed: boolean; onOpenAsk: () => void }): React.ReactElement {
-  // A circle either way; collapsed keeps the 28px hit target, expanded is a
-  // touch smaller to sit inside the header row.
-  const size = collapsed ? '28px' : '24px';
-  return (
-    <button
-      type="button"
-      data-testid="rail-ask"
-      data-idiom="ask"
-      aria-label={ASK_LABEL}
-      aria-keyshortcuts="Control+Shift+A Meta+Shift+A"
-      title="ask"
-      onClick={onOpenAsk}
-      className="flex items-center justify-center transition-opacity hover:opacity-90 focus:outline-none focus-visible:ring-1"
-      style={{
-        flexShrink: 0,
-        width: size, height: size, padding: 0,
-        borderRadius: 'var(--radius-full)',
-        background: 'var(--accent-subtle)',
-        border: '1px solid var(--accent)',
-        color: 'var(--accent)',
-      }}
-    >
-      <span aria-hidden style={{ fontSize: 'var(--text-xs)', lineHeight: 1, fontWeight: 'var(--weight-semi)' }}>?</span>
-    </button>
-  );
-}
-
-export function AppChrome({ collapsed, navigate, onOpenAsk }: Props): React.ReactElement {
+export function AppChrome({ collapsed, navigate }: Props): React.ReactElement {
   const logoUrl = useAppearanceStore((s) => s.appearance.logo_url);
   // The product name shown in the chrome (nav-ui-tweaks): a Settings override,
   // falling back to the default wordmark when unset.
@@ -114,7 +74,6 @@ export function AppChrome({ collapsed, navigate, onOpenAsk }: Props): React.Reac
         style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 'var(--space-1)' }}
       >
         {logoSlot}
-        {onOpenAsk !== undefined && <AskEntry collapsed onOpenAsk={onOpenAsk} />}
       </div>
     );
   }
@@ -141,9 +100,6 @@ export function AppChrome({ collapsed, navigate, onOpenAsk }: Props): React.Reac
       >
         {siteName}
       </button>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', flexShrink: 0 }}>
-        {onOpenAsk !== undefined && <AskEntry collapsed={false} onOpenAsk={onOpenAsk} />}
-      </div>
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CenterDashboard } from './components/CenterDashboard.js';
 import { AskDock } from './components/AskDock.js';
+import { AskLauncher } from './components/AskLauncher.js';
 import { CommandPalette, paletteShortcutEntries } from './components/CommandPalette.js';
 import { ChatsPage } from './components/ChatsPage.js';
 import { GateNotifications } from './components/GateNotifications.js';
@@ -76,6 +77,8 @@ const LIFECYCLE_EVENTS: ReadonlySet<string> = new Set([
 
 /** Terminal run states — a run here can no longer be cancelled. */
 const TERMINAL_STATES = ['completed', 'cancelled', 'failed'];
+/** The expanded RightPanel's width (`w-72`) — the Ask launcher stays clear of it. */
+const RIGHT_PANEL_PX = 288;
 
 export function App(): React.ReactElement {
   const { panel, runId, repoId, projectId, mode, artifactId, showLaunch, showRegisterRepo, chatMode, chronicleView, campaignsView, campaignId, steeringSection, testingPage, navigate, search, pathname } = useRoute();
@@ -256,8 +259,8 @@ export function App(): React.ReactElement {
     setShortcutsPaletteOpen(paletteOpen);
   }, [paletteOpen]);
 
-  // ASK — the app-wide assist dock (AskDock): opened from the rail's Ask button
-  // or Ctrl/⌘+Shift+A; collapsing the dock closes it entirely.
+  // ASK — the app-wide assist dock (AskDock): opened from the floating launcher
+  // bubble (AskLauncher) or Ctrl/⌘+Shift+A; collapsing the dock closes it entirely.
   const [askOpen, setAskOpen] = useState(false);
 
   const shortcutEntries = useMemo(
@@ -674,7 +677,6 @@ export function App(): React.ReactElement {
         pathname={pathname}
         runPath={runPath}
         immersive={immersive}
-        onOpenAsk={() => setAskOpen(true)}
       />
 
       <div id="main" tabIndex={-1} className="flex flex-1 overflow-hidden" style={{ outline: 'none' }}>
@@ -686,11 +688,19 @@ export function App(): React.ReactElement {
         <RightPanel view={selected} runs={runs} onSelectRun={selectRun} navigate={navigate} />
       )}
 
-      {/* ASK — the app-wide assist dock, a right-edge sibling column on every route.
-          Renders only while open; NOTHING launches until the user sends. */}
-      {askOpen && (
-        <AskDock runs={runs} pathname={pathname} onClose={() => setAskOpen(false)} />
-      )}
+      {/* ASK — the floating chat bubble bottom-right (studio#323 R1) and, while open,
+          the app-wide assist dock as a panel anchored to it — an overlay, never a
+          layout column. The dock renders only while open; NOTHING launches until the
+          user sends. Its session persists across close/reopen (AskDock, R3). */}
+      <AskLauncher
+        open={askOpen}
+        onToggle={() => setAskOpen((v) => !v)}
+        rightOffsetPx={selected !== null ? RIGHT_PANEL_PX : 0}
+      >
+        {askOpen && (
+          <AskDock runs={runs} pathname={pathname} navigate={navigate} onClose={() => setAskOpen(false)} />
+        )}
+      </AskLauncher>
 
       {/* The universal command palette (DES-FEEDBACK-002 §1, slice G) — corpus
           from already-loaded stores + the runs prop; repos cached on first open. */}
