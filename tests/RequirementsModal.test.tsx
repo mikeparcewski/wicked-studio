@@ -1,18 +1,21 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { useProvenanceStore } from '../src/store/provenance.js';
 import { RequirementsModal } from '../src/components/RequirementsModal.js';
 import type { RequirementDetail, RequirementsPage } from '../src/api/types.js';
 
 const listRequirements = vi.fn();
 const getRequirement = vi.fn();
 const patchRequirement = vi.fn();
+const launchRun = vi.fn();
 
 vi.mock('../src/api/client.js', () => ({
   api: {
     listRequirements: (...a: unknown[]) => listRequirements(...a),
     getRequirement: (...a: unknown[]) => getRequirement(...a),
     patchRequirement: (...a: unknown[]) => patchRequirement(...a),
+    launchRun: (...a: unknown[]) => launchRun(...a),
   },
 }));
 
@@ -55,6 +58,7 @@ describe('RequirementsModal', () => {
     listRequirements.mockReset().mockResolvedValue(page([row]));
     getRequirement.mockReset().mockResolvedValue({ requirement: detail });
     patchRequirement.mockReset();
+    launchRun.mockReset();
   });
 
   it('lists requirements from the server and shows corpus counts', async () => {
@@ -142,5 +146,100 @@ describe('RequirementsModal', () => {
         screen.queryByText('No requirements have been extracted for this repo.'),
       ).not.toBeInTheDocument();
     });
+  });
+
+  // studio#229 — Escape must close the modal (useModalEscape wiring)
+  it('Escape key closes the modal (studio#229)', async () => {
+    const onClose = vi.fn();
+    render(<RequirementsModal repoId="r1" repoName="repo" onClose={onClose} />);
+    await screen.findByText('Totals include tax');
+    fireEvent.keyDown(document, { key: 'Escape', bubbles: true, cancelable: true });
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  // studio#229 — empty corpus must offer a "Run domain extraction" button that launches a run
+  it('"Run domain extraction" button appears on empty corpus and launches the workflow (studio#229)', async () => {
+    const user = userEvent.setup();
+    listRequirements.mockResolvedValue(page([], 0, 0));
+    launchRun.mockResolvedValue({ runId: 'run-42' });
+    render(<RequirementsModal repoId="r1" repoName="my-repo" onClose={() => {}} />);
+
+    const btn = await screen.findByRole('button', { name: /Run domain extraction/i });
+    expect(btn).toBeInTheDocument();
+    await user.click(btn);
+    expect(launchRun).toHaveBeenCalledWith(
+      expect.objectContaining({ repoRef: 'r1', workflow: 'domain-extraction' }),
+    );
+  });
+
+  // studio#324 round 2, Defect 2 — the guard must outlive the POST. launchRun resolves in
+  // tens of ms while the extraction runs for minutes; resetting on `finally` re-enables the
+  // button and a second click spawns a DUPLICATE run. After a successful launch the button
+  // must stay disabled, the run must be named, and provenance recorded.
+  // Expected run id ('run-77') comes from the launchRun mock, not from the component.
+  it('a second click after a successful launch does not start a second run (studio#324 D2)', async () => {
+    const user = userEvent.setup();
+    listRequirements.mockResolvedValue(page([], 0, 0));
+    launchRun.mockResolvedValue({ runId: 'run-77' });
+    render(<RequirementsModal repoId="r1" repoName="my-repo" onClose={() => {}} />);
+
+    const btn = await screen.findByRole('button', { name: /Run domain extraction/i });
+    await user.click(btn);
+    await waitFor(() => expect(screen.getByText(/run-77/)).toBeInTheDocument());
+
+    // Try again once the POST has settled — this is exactly when the old guard re-armed.
+    // getByRole THROWS if the button is gone — a conditional click here would let a regression that
+    // unmounts the button skip the action under test and pass on the call count alone.
+    const after = screen.getByRole('button', { name: /Extraction launched/i });
+    expect(after).toBeDisabled();
+    await user.click(after);
+    expect(launchRun).toHaveBeenCalledTimes(1);
+    expect(useProvenanceStore.getState().launchedHere['run-77']).toBe(true);
+  });
+
+  // Defect 4 — button must be disabled while the launch is in flight (spam guard) and
+  // surface a failure rather than swallowing it with `void`.
+  it('"Run domain extraction" button is disabled while launching and surfaces failure', async () => {
+    const user = userEvent.setup();
+    listRequirements.mockResolvedValue(page([], 0, 0));
+    let rejectLaunch!: (e: Error) => void;
+    launchRun.mockReturnValue(new Promise<{ runId: string }>((_res, rej) => { rejectLaunch = rej; }));
+    render(<RequirementsModal repoId="r1" repoName="my-repo" onClose={() => {}} />);
+
+    const btn = await screen.findByRole('button', { name: /Run domain extraction/i });
+    await user.click(btn);
+
+    // Button becomes disabled (shows "Launching…") and a second click is guarded.
+    expect(btn).toBeDisabled();
+    expect(btn).toHaveTextContent('Launching…');
+    expect(launchRun).toHaveBeenCalledTimes(1);
+
+    // Reject the launch: the error must surface in the UI.
+    rejectLaunch(new Error('daemon unavailable'));
+    await waitFor(() => expect(screen.getByText('daemon unavailable')).toBeInTheDocument());
+    // Button is re-enabled after failure.
+    expect(btn).not.toBeDisabled();
+  });
+
+  // Defect 5 — Escape with the edit rail open must close the rail, not the whole modal.
+  it('Escape with the edit rail open closes the rail first, not the modal', async () => {
+    const onClose = vi.fn();
+    const user = userEvent.setup();
+    render(<RequirementsModal repoId="r1" repoName="repo" onClose={onClose} />);
+
+    // Open the edit rail by clicking a requirement row.
+    await user.click(await screen.findByText('Totals include tax'));
+    // Rail is open — wait for it to load.
+    expect(await screen.findByText('⚑ Mark as risk')).toBeInTheDocument();
+
+    // Press Escape — must close the rail, not the modal.
+    fireEvent.keyDown(document, { key: 'Escape', bubbles: true, cancelable: true });
+
+    expect(onClose).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.queryByText('⚑ Mark as risk')).not.toBeInTheDocument());
+
+    // A second Escape (rail now closed) must close the modal.
+    fireEvent.keyDown(document, { key: 'Escape', bubbles: true, cancelable: true });
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 });

@@ -42,8 +42,26 @@ export function MemoriesPanel(): React.ReactElement {
   const [facet, setFacet] = useState<string | null>(null);
   /** The memory a retire confirm is open for, or null. */
   const [retiring, setRetiring] = useState<MemoryItem | null>(null);
+  /** Scoped memory count for the retire confirm (null = not yet loaded or unavailable). */
+  const [retireCount, setRetireCount] = useState<number | null>(null);
   const [retireBusy, setRetireBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
+
+  // Keyed on the SCOPE STRING, not the row object: re-selecting the same row (or another row
+  // with the same scope) must neither drop the count nor refetch it (studio#324 D1).
+  const retiringScope = retiring?.scope ?? null;
+  // Fetch the scoped coverage count whenever the retiring scope changes.
+  // The `active` flag discards stale resolutions from a prior scope's in-flight request
+  // (two rapid retire clicks would otherwise let the first request's late resolution
+  // overwrite the second scope's correct count — the race described in studio#race).
+  useEffect(() => {
+    if (retiringScope === null) return;
+    let active = true;
+    void memoryCoverage({ scope_prefix: retiringScope })
+      .then(({ total }) => { if (active) setRetireCount(total ?? null); })
+      .catch(() => { if (active) setRetireCount(null); });
+    return () => { active = false; };
+  }, [retiringScope]);
 
   const load = useCallback(async (q: string): Promise<void> => {
     setLoading(true);
@@ -102,6 +120,7 @@ export function MemoriesPanel(): React.ReactElement {
     void retireMemory({ scope_prefix: target.scope })
       .then(({ erased }) => {
         setRetiring(null);
+        setRetireCount(null);
         setNote(`Retired scope ${target.scope} — erased ${erased} memor${erased === 1 ? 'y' : 'ies'}.`);
         void load(query);
       })
@@ -234,7 +253,11 @@ export function MemoriesPanel(): React.ReactElement {
           style={{ background: 'var(--status-fail-dim)', border: '1px solid var(--status-fail)' }}
         >
           <p className="text-[11px]" style={{ color: 'var(--ink-high)' }}>
-            Retire the scope <span className="font-mono">{retiring.scope}</span>? Retire erases the whole
+            Retire the scope <span className="font-mono">{retiring.scope}</span>?{' '}
+            {retireCount !== null
+              ? <>{retireCount} {retireCount === 1 ? 'memory' : 'memories'} will be erased — retire covers the whole</>
+              : <>Retire erases the whole</>
+            }{' '}
             SUBTREE — every memory filed at or under this scope — not just this one row. This cannot be undone.
           </p>
           <div className="flex items-center gap-2">
@@ -251,7 +274,7 @@ export function MemoriesPanel(): React.ReactElement {
             <button
               type="button"
               data-testid="memory-retire-cancel"
-              onClick={() => setRetiring(null)}
+              onClick={() => { setRetiring(null); setRetireCount(null); }}
               className="rounded px-2 py-1 text-[10px]"
               style={{ color: 'var(--ink-dim)', border: '1px solid var(--surface-raised)' }}
             >
@@ -292,7 +315,12 @@ export function MemoriesPanel(): React.ReactElement {
                 <button
                   type="button"
                   data-testid="memory-retire"
-                  onClick={() => setRetiring(m)}
+                  onClick={() => {
+                    // Clear the count only when the scope actually changes — otherwise the
+                    // effect (keyed on the scope) does not re-fire and nothing would refill it.
+                    if (retiringScope !== m.scope) setRetireCount(null);
+                    setRetiring(m);
+                  }}
                   title={`Retire the scope ${m.scope} (erases the whole subtree)`}
                   className="shrink-0 rounded px-2 py-0.5 text-[10px] font-semibold focus:outline-none focus-visible:ring-1"
                   style={{ color: 'var(--status-fail)', border: '1px solid var(--status-fail-dim)' }}

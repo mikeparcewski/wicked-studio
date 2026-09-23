@@ -376,7 +376,7 @@ export function draftRule(d: Pick<DraftState, 'id' | 'steering_type' | 'severity
 const TYPE_OPTIONS = STEERING_TYPES.map((t) => ({ value: t, label: STEERING_TYPE_LABELS[t] }));
 const SEVERITY_OPTIONS = SEVERITIES.map((s) => ({ value: s, label: s }));
 
-export function SteeringGrid({ rules, type, loading, error, selectedId, onSelect, onCommit, onCreate, onRetired, addRequestTick = 0, idFilter = null }: {
+export function SteeringGrid({ rules, type, loading, error, selectedId, onSelect, onCommit, onCreate, onRetired, addRequestTick = 0, idFilter = null, unseeded = false }: {
   /** The FULL store — this grid applies the page scope itself, one predicate everywhere. */
   rules: SteeringRule[];
   /** The page scope: one of the seven types, or `all` (the Policies `All` filter — every rule). */
@@ -398,6 +398,10 @@ export function SteeringGrid({ rules, type, loading, error, selectedId, onSelect
   /** Restrict the sheet to these rule ids (the `?usage=unused` click-through from the
    *  usage band). `null` = no restriction; the facets still apply on top. */
   idFilter?: readonly string[] | null;
+  /** When true the `steering-unseeded` banner in the shell already handles the empty-store
+   *  visual — suppress the grid's own "No steering rules in the store." paragraph to avoid
+   *  two conflicting "nothing here" signals. The FilterStrip and draft row are unaffected. */
+  unseeded?: boolean;
 }): React.ReactElement {
   const [facets, setFacets] = useState<GridFacets>(GRID_FACETS_DEFAULT);
   const [draft, setDraft] = useState<DraftState | null>(null);
@@ -462,6 +466,9 @@ export function SteeringGrid({ rules, type, loading, error, selectedId, onSelect
       );
     }
     if (visible.length === 0 && draft === null) {
+      // When the store is empty and unseeded, the shell's `steering-unseeded` banner already
+      // owns the "nothing here" visual — rendering a second sentence here would conflict.
+      if (unseeded && rules.length === 0) return <></>;
       // Three DIFFERENT kinds of empty, each named: facets hid rows that exist; this TYPE has
       // none (the store does — add a row or hand the assistant a doc); the store is empty.
       return (

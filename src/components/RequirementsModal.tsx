@@ -11,6 +11,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '../api/client.js';
 import type { RequirementSummary, RequirementDetail, RequirementsPage, RequirementPatch } from '../api/types.js';
+import { useModalEscape } from './Modal.js';
+import { useProvenanceStore } from '../store/provenance.js';
 
 const T = {
   canvas: 'var(--surface-base)',
@@ -48,6 +50,12 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
   const [page, setPage] = useState<RequirementsPage | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [extracting, setExtracting] = useState(false);
+  const [extractError, setExtractError] = useState<string | null>(null);
+  // The run a successful launch started. The guard must outlive the POST: `launchRun` resolves
+  // in tens of ms while the extraction runs for minutes, so re-enabling on settle let a second
+  // click spawn a duplicate run (studio#324 D2). Once launched, the button stays disabled.
+  const [extractRunId, setExtractRunId] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchPage = useCallback(
@@ -97,6 +105,14 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
           },
     );
   }
+
+  // Escape must close the rail first (discarding unsaved edits is preferable to closing the
+  // whole modal and losing navigation context). Only when no rail is open does it close the modal.
+  const handleEscape = useCallback((): void => {
+    if (selectedKey !== null) setSelectedKey(null);
+    else onClose();
+  }, [selectedKey, onClose]);
+  useModalEscape(handleEscape);
 
   const totalPages = page !== null ? Math.max(1, Math.ceil(page.total / PAGE_SIZE)) : 1;
   const pageNo = Math.floor(offset / PAGE_SIZE) + 1;
@@ -196,13 +212,48 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
               // has never run, that sentence is false and it hides the only action that would
               // help. `corpus === 0` means there is nothing to search at all, so no filter can be
               // responsible and the distinction is decidable here (FINDING-065).
-              <div className="p-6 space-y-1">
+              <div className="p-6 space-y-2">
                 <p className="text-[12px] font-mono" style={{ color: T.ink }}>
                   No requirements have been extracted for this repo.
                 </p>
-                <p className="text-[12px] font-mono" style={{ color: T.faint }}>
-                  Run domain extraction on it to populate this view.
-                </p>
+                <button
+                  type="button"
+                  disabled={extracting || extractRunId !== null}
+                  className="text-[12px] font-mono font-semibold rounded px-3 py-1.5 disabled:opacity-50"
+                  style={{ color: T.accent, border: `1px solid ${T.accent}` }}
+                  onClick={() => {
+                    if (extracting || extractRunId !== null) return;
+                    setExtracting(true);
+                    setExtractError(null);
+                    api.launchRun({
+                      repoRef: repoId,
+                      workflow: 'domain-extraction',
+                      problem: `Run domain extraction for ${repoName}`,
+                    })
+                      .then(({ runId }) => {
+                        // Same provenance witness ChatInput records for a launch from studio.
+                        useProvenanceStore.getState().markLaunchedHere(runId);
+                        setExtractRunId(runId);
+                      })
+                      // A failed launch re-arms the button so the operator can retry.
+                      .catch((e: unknown) => setExtractError(e instanceof Error ? e.message : String(e)))
+                      .finally(() => setExtracting(false));
+                  }}
+                >
+                  {extracting
+                    ? 'Launching…'
+                    : extractRunId !== null
+                      ? 'Extraction launched'
+                      : 'Run domain extraction'}
+                </button>
+                {extractRunId !== null && (
+                  <p className="text-[11px] font-mono" style={{ color: T.faint }}>
+                    Domain extraction is running as {extractRunId}. Reopen this view once it completes to see the extracted requirements.
+                  </p>
+                )}
+                {extractError !== null && (
+                  <p className="text-[11px] font-mono" style={{ color: T.deny }}>{extractError}</p>
+                )}
               </div>
             ) : page.items.length === 0 ? (
               <p className="text-[12px] font-mono p-6" style={{ color: T.faint }}>No requirements match.</p>
