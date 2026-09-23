@@ -227,6 +227,16 @@ export function AskDock({ runs, pathname, onClose, navigate }: {
       }}
       verbs={verbs}
       resumeChatId={resumed?.chatId ?? null}
+      onResumeGone={(chatId) => {
+        // studio#328: the daemon reclaimed it — forget the stored id so no reopen
+        // repeats the dead session, and the next send opens a fresh one.
+        forgetAskSession(chatId);
+        useLiveChatsStore.getState().remove(chatId);
+        if (chatIdRef.current === chatId) {
+          chatIdRef.current = null;
+          seededRef.current = false;
+        }
+      }}
       fill
       onExpandChat={
         navigate === undefined
