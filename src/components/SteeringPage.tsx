@@ -437,6 +437,7 @@ export function SteeringPage({ type, navigate, search = '', runs = [] }: {
               onRetired={onRetired}
               addRequestTick={addTick}
               idFilter={unusedIds}
+              unseeded={unseeded}
             />
           </>
         )}

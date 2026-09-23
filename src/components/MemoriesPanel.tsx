@@ -47,6 +47,19 @@ export function MemoriesPanel(): React.ReactElement {
   const [retireBusy, setRetireBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
 
+  // Fetch the scoped coverage count whenever the retiring scope changes.
+  // The `active` flag discards stale resolutions from a prior scope's in-flight request
+  // (two rapid retire clicks would otherwise let the first request's late resolution
+  // overwrite the second scope's correct count — the race described in studio#race).
+  useEffect(() => {
+    if (retiring === null) return;
+    let active = true;
+    void memoryCoverage({ scope_prefix: retiring.scope })
+      .then(({ total }) => { if (active) setRetireCount(total ?? null); })
+      .catch(() => { if (active) setRetireCount(null); });
+    return () => { active = false; };
+  }, [retiring]);
+
   const load = useCallback(async (q: string): Promise<void> => {
     setLoading(true);
     setError(null);
@@ -302,9 +315,6 @@ export function MemoriesPanel(): React.ReactElement {
                   onClick={() => {
                     setRetiring(m);
                     setRetireCount(null);
-                    void memoryCoverage({ scope_prefix: m.scope })
-                      .then(({ total }) => setRetireCount(total ?? null))
-                      .catch(() => setRetireCount(null));
                   }}
                   title={`Retire the scope ${m.scope} (erases the whole subtree)`}
                   className="shrink-0 rounded px-2 py-0.5 text-[10px] font-semibold focus:outline-none focus-visible:ring-1"

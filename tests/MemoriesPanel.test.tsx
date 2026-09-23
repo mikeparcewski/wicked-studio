@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 /**
@@ -197,8 +197,51 @@ describe('MemoriesPanel — retire is a SUBTREE erase (honest granularity)', () 
     const rows = await screen.findAllByTestId('memory-row');
     await user.click(within(rows[0]!).getByTestId('memory-retire'));
 
-    const banner = await screen.findByTestId('memory-retire-confirm-banner');
-    // The count from the scoped coverage call must appear in the confirm text.
-    expect(banner).toHaveTextContent(/3\s+memor/i);
+    // findByTestId resolves when the banner MOUNTS, before the async count arrives.
+    // Use waitFor on the text content so the test genuinely fails if the count never renders.
+    await waitFor(() =>
+      expect(screen.getByTestId('memory-retire-confirm-banner')).toHaveTextContent(/3\s+memor/i),
+    );
+  });
+
+  // studio#race — a second retire click before the first fetch resolves must discard the
+  // stale count, not overwrite the correct one. This test FAILS at HEAD (click A resolves
+  // last and sets retireCount=1, overwriting B's 500).
+  it('stale scoped-coverage call is discarded — second retire click wins (studio#race)', async () => {
+    let resolveOps!: (v: { total: number }) => void;
+    let resolveMacos!: (v: { total: number }) => void;
+    apiFetch.mockImplementation((path: unknown) => {
+      const s = String(path);
+      if (s === '/memory/coverage') return Promise.resolve({ total: 2 });
+      if (s === '/memory/coverage?scope_prefix=brain%3Awicked%2Fdoc%3Aops')
+        return new Promise<{ total: number }>((res) => { resolveOps = res; });
+      if (s === '/memory/coverage?scope_prefix=brain%3Awicked%2Fdoc%3Amacos')
+        return new Promise<{ total: number }>((res) => { resolveMacos = res; });
+      if (s.startsWith('/memory')) return Promise.resolve({ memories: [M1, M2] });
+      return Promise.reject(new ApiError(404, 'Not Found'));
+    });
+    render(<MemoriesPanel />);
+    const user = userEvent.setup();
+
+    const rows = await screen.findAllByTestId('memory-row');
+    // Click retire on M1 (ops) — slow fetch in flight.
+    await user.click(within(rows[0]!).getByTestId('memory-retire'));
+    // Immediately switch to M2 (macos) — fast fetch in flight.
+    await user.click(within(rows[1]!).getByTestId('memory-retire'));
+
+    // B (macos) completes first: banner must show 500 for scope macos.
+    resolveMacos({ total: 500 });
+    await waitFor(() =>
+      expect(screen.getByTestId('memory-retire-confirm-banner')).toHaveTextContent(/500\s+memor/i),
+    );
+
+    // A (ops) resolves late — a stale result. At HEAD this overwrites 500 → 1.
+    // After the fix (useEffect + active flag), it is discarded.
+    resolveOps({ total: 1 });
+    await act(async () => { await new Promise<void>((r) => setTimeout(r, 0)); });
+
+    // The banner must still show 500 for scope macos — stale ops must be discarded.
+    expect(screen.getByTestId('memory-retire-confirm-banner')).toHaveTextContent(/500\s+memor/i);
+    expect(screen.getByTestId('memory-retire-confirm-banner')).toHaveTextContent('brain:wicked/doc:macos');
   });
 });

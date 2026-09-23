@@ -49,6 +49,8 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
   const [page, setPage] = useState<RequirementsPage | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [extracting, setExtracting] = useState(false);
+  const [extractError, setExtractError] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchPage = useCallback(
@@ -99,7 +101,13 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
     );
   }
 
-  useModalEscape(onClose);
+  // Escape must close the rail first (discarding unsaved edits is preferable to closing the
+  // whole modal and losing navigation context). Only when no rail is open does it close the modal.
+  const handleEscape = useCallback((): void => {
+    if (selectedKey !== null) setSelectedKey(null);
+    else onClose();
+  }, [selectedKey, onClose]);
+  useModalEscape(handleEscape);
 
   const totalPages = page !== null ? Math.max(1, Math.ceil(page.total / PAGE_SIZE)) : 1;
   const pageNo = Math.floor(offset / PAGE_SIZE) + 1;
@@ -205,18 +213,27 @@ export function RequirementsModal({ repoId, repoName, onClose, onNavigateCompone
                 </p>
                 <button
                   type="button"
-                  className="text-[12px] font-mono font-semibold rounded px-3 py-1.5"
+                  disabled={extracting}
+                  className="text-[12px] font-mono font-semibold rounded px-3 py-1.5 disabled:opacity-50"
                   style={{ color: T.accent, border: `1px solid ${T.accent}` }}
                   onClick={() => {
-                    void api.launchRun({
+                    if (extracting) return;
+                    setExtracting(true);
+                    setExtractError(null);
+                    api.launchRun({
                       repoRef: repoId,
                       workflow: 'domain-extraction',
                       problem: `Run domain extraction for ${repoName}`,
-                    });
+                    })
+                      .catch((e: unknown) => setExtractError(e instanceof Error ? e.message : String(e)))
+                      .finally(() => setExtracting(false));
                   }}
                 >
-                  Run domain extraction
+                  {extracting ? 'Launching…' : 'Run domain extraction'}
                 </button>
+                {extractError !== null && (
+                  <p className="text-[11px] font-mono" style={{ color: T.deny }}>{extractError}</p>
+                )}
               </div>
             ) : page.items.length === 0 ? (
               <p className="text-[12px] font-mono p-6" style={{ color: T.faint }}>No requirements match.</p>

@@ -57,6 +57,7 @@ describe('RequirementsModal', () => {
     listRequirements.mockReset().mockResolvedValue(page([row]));
     getRequirement.mockReset().mockResolvedValue({ requirement: detail });
     patchRequirement.mockReset();
+    launchRun.mockReset();
   });
 
   it('lists requirements from the server and shows corpus counts', async () => {
@@ -168,5 +169,51 @@ describe('RequirementsModal', () => {
     expect(launchRun).toHaveBeenCalledWith(
       expect.objectContaining({ repoRef: 'r1', workflow: 'domain-extraction' }),
     );
+  });
+
+  // Defect 4 — button must be disabled while the launch is in flight (spam guard) and
+  // surface a failure rather than swallowing it with `void`.
+  it('"Run domain extraction" button is disabled while launching and surfaces failure', async () => {
+    const user = userEvent.setup();
+    listRequirements.mockResolvedValue(page([], 0, 0));
+    let rejectLaunch!: (e: Error) => void;
+    launchRun.mockReturnValue(new Promise<{ runId: string }>((_res, rej) => { rejectLaunch = rej; }));
+    render(<RequirementsModal repoId="r1" repoName="my-repo" onClose={() => {}} />);
+
+    const btn = await screen.findByRole('button', { name: /Run domain extraction/i });
+    await user.click(btn);
+
+    // Button becomes disabled (shows "Launching…") and a second click is guarded.
+    expect(btn).toBeDisabled();
+    expect(btn).toHaveTextContent('Launching…');
+    expect(launchRun).toHaveBeenCalledTimes(1);
+
+    // Reject the launch: the error must surface in the UI.
+    rejectLaunch(new Error('daemon unavailable'));
+    await waitFor(() => expect(screen.getByText('daemon unavailable')).toBeInTheDocument());
+    // Button is re-enabled after failure.
+    expect(btn).not.toBeDisabled();
+  });
+
+  // Defect 5 — Escape with the edit rail open must close the rail, not the whole modal.
+  it('Escape with the edit rail open closes the rail first, not the modal', async () => {
+    const onClose = vi.fn();
+    const user = userEvent.setup();
+    render(<RequirementsModal repoId="r1" repoName="repo" onClose={onClose} />);
+
+    // Open the edit rail by clicking a requirement row.
+    await user.click(await screen.findByText('Totals include tax'));
+    // Rail is open — wait for it to load.
+    expect(await screen.findByText('⚑ Mark as risk')).toBeInTheDocument();
+
+    // Press Escape — must close the rail, not the modal.
+    fireEvent.keyDown(document, { key: 'Escape', bubbles: true, cancelable: true });
+
+    expect(onClose).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.queryByText('⚑ Mark as risk')).not.toBeInTheDocument());
+
+    // A second Escape (rail now closed) must close the modal.
+    fireEvent.keyDown(document, { key: 'Escape', bubbles: true, cancelable: true });
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 });
