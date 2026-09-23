@@ -26,6 +26,14 @@ npm publish dates. Every version listed here exists on
   `wave6-wire.ts` / `skills-wire.ts` relabelled; the chat-refusal region re-vendored to carry the
   upstream `ChatSingleSeatDegradation` / `ChatMessageResponse` additions).
 
+### Fixed
+- **The evaluator ≠ creator disclosure is no longer silent for `same_cli_instance` or an unknown
+  value.** `narrateDistributionWarning` (routing line + run head) handled only `creator_seat`, so a
+  review unit on a distinct seat INSTANCE of the builder's own cli (wicked-core#595, crew#666) — or
+  any value a newer engine sends — showed nothing. It now reads "evaluator ≠ creator held by seat
+  instance only — the reviewer runs the same cli as the builder", and any other non-null value gets
+  a generic "not recognised … treat the review as not independent" disclosure, as the contract says.
+
 - **Ask no longer resumes a session the daemon already reaped (studio#328).** On reopen, the resumed session's `GET /chats/:id` probe now follows GroupChat's rule: a 200 with no seats means reclaimed, so the dock drops the resumed block (no "still on the line" note, no "Open in full chat" to a dead chat), forgets the stored `wicked.ask.session`, and the next question opens a fresh session. A probe that fails keeps the session and shows the transient error.
 
 - **Ask floats bottom-right, its chats show up on Chats, and it opens into the full chat (studio#323 R1–R3).** The Ask entry left the rail chrome (the `?` circle beside the logo) and is now a floating chat bubble fixed bottom-right (`AskLauncher`, `data-testid="ask-launcher"`), clear of the runs bar and — when a run is selected — the right panel; the Ask dock floats as a panel anchored above it instead of pushing a 384px layout column. Ctrl/⌘+Shift+A still toggles it. The Chats page now reconciles the daemon's `GET /chats` with the client's live-chats store (the same store the rail reads), deduped by id, so an Ask-started chat is listed there — a successful list is authoritative (a store session it omits that was last seen before the request is dropped, never a live card to a dead `/chat/:id`), and the store is the fallback when the list fails; every live card carries an origin marker (Ask / Chat / Session when unknown) and the first question as its title instead of `live · <8 hex>`. The Ask dock gained **Open in full chat**, which routes to `/chat/:id` for the dock's session (the full chat replays the daemon-kept transcript). Closing and reopening Ask no longer mints a second session: the active Ask chat id is persisted in `sessionStorage`, reopening resumes it (and replays its transcript in the dock), and a resumed session falls back to a fresh one only when the daemon proves it is gone (`GET /chats/:id` answers no seats) — a 5xx or network failure keeps the session and shows the error. On a narrow viewport with a run selected, the launcher overlays the right panel rather than pushing the Ask panel off-screen.

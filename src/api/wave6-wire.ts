@@ -75,7 +75,7 @@ import type {
 
 // ── The QE authoring workflow — `POST /testing/author`, the plan, the registered test set ──────
 
-// >>> VERBATIM wicked-crew-api-types@0.39.0 index.d.ts:3176-3316 (crew#536) — the governed test-authoring launch: QeAuthorTestsWorkflowId, TestingAuthorBody, WorkflowPlanPhase, WorkflowPlan, TestingAuthorRun, TestingAuthorResponse, TestSetFile, TestSet
+// >>> VERBATIM wicked-crew-api-types@0.39.0 index.d.ts:3182-3322 (crew#536) — the governed test-authoring launch: QeAuthorTestsWorkflowId, TestingAuthorBody, WorkflowPlanPhase, WorkflowPlan, TestingAuthorRun, TestingAuthorResponse, TestSetFile, TestSet
 // ── The governed test-authoring launch (wave 6; api-types 0.36.0) ──────────────────────────────
 
 /**
@@ -220,7 +220,7 @@ export interface TestSet {
 // <<< VERBATIM
 
 /** The recon body, vendored as EVIDENCE: no `workflow` key — studio's launch ladder sends none. */
-// >>> VERBATIM wicked-crew-api-types@0.39.0 index.d.ts:3120-3153 (crew#536) — TestingReconBody (no `workflow` key)
+// >>> VERBATIM wicked-crew-api-types@0.39.0 index.d.ts:3126-3159 (crew#536) — TestingReconBody (no `workflow` key)
 /**
  * The `POST /testing/recon` request body (api-types 0.15.0) — the Testing page's campaign-recon
  * trigger. `problem` is the recon brief, passed to every launched run VERBATIM (the client owns
@@ -263,7 +263,7 @@ export const QE_AUTHOR_TESTS_WORKFLOW_ID = 'qe-author-tests' satisfies QeAuthorT
 
 // ── The campaigns surface — where the registered sets are served ──────────────────────────────
 
-// >>> VERBATIM wicked-crew-api-types@0.39.0 index.d.ts:5001-5012 (crew#536) — CampaignsListResponse incl. test_sets
+// >>> VERBATIM wicked-crew-api-types@0.39.0 index.d.ts:5007-5018 (crew#536) — CampaignsListResponse incl. test_sets
 /**
  * `GET /campaigns` 200 body (api-types 0.19.0 — `groups` is ADDITIVE: a pre-0.19 daemon sends
  * only `campaigns`). One fetch answers the whole grouping surface: engine campaigns (each
@@ -442,7 +442,7 @@ export type RepoChecksEvaluatedEvent = {
 };
 // <<< VERBATIM
 
-// >>> VERBATIM wicked-crew-api-types@0.39.0 index.d.ts:1986-2058 (crew#536) — UnitDistributedEvent (camelCase) + BenchedSeat
+// >>> VERBATIM wicked-crew-api-types@0.39.0 index.d.ts:1986-2064 (crew#536) — UnitDistributedEvent (camelCase) + BenchedSeat
 /**
  * Foundation wave: a unit was distributed with full routing detail.
  *
@@ -493,8 +493,14 @@ export interface UnitDistributedEvent {
    * never absent — the `seatConstraint` rule) from the wicked-core release carrying #461 on, but an
    * older engine does not send it at all, and this contract must read frames from both. Consumers
    * guard with `== null`, never `=== undefined`.
+   *
+   * `'same_cli_instance'` (wicked-core#591/#595): the unit IS on a seat distinct from every builder
+   * seat, but that seat runs the SAME cli as a builder (`claude#2` grading `claude#1`) — instance
+   * distinctness removes the creator's context, not the model's blind spots, so it is a degraded
+   * gate and disclosed. `'creator_seat'` dominates when both would apply. Consumers must treat an
+   * unrecognised value as a disclosure too, never as "distinct".
    */
-  distinctnessFallback?: 'creator_seat' | null;
+  distinctnessFallback?: 'creator_seat' | 'same_cli_instance' | null;
   /** @deprecated api-types 0.36.0 — the engine emits `routingMethod`; removed in 0.37. */
   routing_method?: 'council' | 'degraded' | 'evaluator_distinct' | 'tool';
   /** @deprecated api-types 0.36.0 — the engine emits `agreementPct`; removed in 0.37. */
@@ -735,7 +741,7 @@ export type SeatAuth = 'signed_in' | 'signed_out' | 'not_required' | 'unknown';
 
 // ── Chat admission — the refused seats and why ────────────────────────────────────────────────
 
-// >>> VERBATIM wicked-crew-api-types@0.39.0 index.d.ts:4423-4552 (crew#536) — ChatSeatOutcome, ChatRefusalSource, ChatSeatRefusal, ChatOpenResponse incl. refused[], ChatSeatRefusedFrame
+// >>> VERBATIM wicked-crew-api-types@0.39.0 index.d.ts:4429-4558 (crew#536) — ChatSeatOutcome, ChatRefusalSource, ChatSeatRefusal, ChatOpenResponse incl. refused[], ChatSeatRefusedFrame
 /** One seat's warm-up outcome on `POST /chats`. */
 export interface ChatSeatOutcome {
   cliKey: string;
@@ -868,7 +874,7 @@ export type ChatSeatRefusedFrame = {
 };
 // <<< VERBATIM
 
-// >>> VERBATIM wicked-crew-api-types@0.39.0 index.d.ts:4599-4615 (crew#536) — ChatDetailResponse incl. refused[]
+// >>> VERBATIM wicked-crew-api-types@0.39.0 index.d.ts:4605-4621 (crew#536) — ChatDetailResponse incl. refused[]
 /** `GET /chats/:id` → 200. */
 export interface ChatDetailResponse {
   chatId: string;
@@ -890,7 +896,7 @@ export interface ChatDetailResponse {
 
 // ── The daemon-wide docs listing (no bridge spawn) ────────────────────────────────────────────
 
-// >>> VERBATIM wicked-crew-api-types@0.39.0 index.d.ts:4225-4279 (crew#536) — GET /interactive/docs: InteractiveDocsListing, InteractiveSeamKind, InteractiveDocIndexRow, InteractiveDocsUnreachable
+// >>> VERBATIM wicked-crew-api-types@0.39.0 index.d.ts:4231-4285 (crew#536) — GET /interactive/docs: InteractiveDocsListing, InteractiveSeamKind, InteractiveDocIndexRow, InteractiveDocsUnreachable
 /**
  * `GET /api/v1/interactive/docs` (api-types 0.36.0, studio #263) — every interactive document across
  * projects, listed by the DAEMON from disk WITHOUT spawning a bridge: each project's docs root
@@ -1011,13 +1017,20 @@ export function distributionDegradedReason(ev: CoreEvent): string | null {
   return str((ev as Record<string, unknown>)['degradedReason']);
 }
 
-/** Additive crew#556 field, read outside the pinned 0.37.0 mirror. Older daemons
- *  omit it; only the closed `creator_seat` token discloses a distinctness fallback. */
-export function distributionDistinctnessFallback(ev: CoreEvent): 'creator_seat' | null {
+/** Additive crew#556 field, read outside the pinned mirror. Older daemons omit it (null). Any
+ *  non-null value discloses a distinctness fallback — `same_cli_instance` since wicked-core#595 /
+ *  crew#666, and an unrecognised value as `{ unrecognised }` (the contract: never read as distinct). */
+export function distributionDistinctnessFallback(ev: CoreEvent): DistinctnessFallback | null {
   const value = (ev as Record<string, unknown>)['distinctnessFallback'];
   if (value == null) return null;
-  return value === 'creator_seat' ? value : null;
+  if (value === 'creator_seat' || value === 'same_cli_instance') return value;
+  // The contract (api-types 0.39.0): an unrecognised value is a disclosure too, never "distinct".
+  return { unrecognised: typeof value === 'string' ? value : JSON.stringify(value) };
 }
+
+/** A `unitDistributed.distinctnessFallback` as read: a published token, or an unrecognised value
+ *  (a newer engine's token, or off-contract) carried verbatim so it can still be disclosed. */
+export type DistinctnessFallback = 'creator_seat' | 'same_cli_instance' | { unrecognised: string };
 
 /** `unitDistributed.agreementPct` (camelCase as emitted and declared); `null` when absent or not finite. */
 export function distributionAgreementPct(ev: CoreEvent): number | null {

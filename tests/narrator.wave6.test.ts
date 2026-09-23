@@ -131,7 +131,8 @@ describe('creator-seat fallback on the routing line (#276)', () => {
     expect(line.tone).toBe('gate');
     expect(line.ord).toBe(1);
   });
-  it.each([undefined, null, 'unknown', true])('requires the exact fallback token (%s)', (distinctnessFallback) => {
+  // An unrecognised non-null value is a disclosure now (crew#666) — tests/narrator.distinctness.test.tsx.
+  it.each([undefined, null])('no fallback value (%s) adds no disclosure', (distinctnessFallback) => {
     const frame = { ...UNIT_DISTRIBUTED_FULL, routingMethod: 'evaluator_distinct', distinctnessFallback };
     expect(narrate(ev(frame), ctx)).toMatchObject({ text: 'phase-1 routed to claude — council 80%', tone: 'info' });
     expect(narrate(ev({ ...frame, degradedReason: 'creator_seat' }), ctx)).toMatchObject({
