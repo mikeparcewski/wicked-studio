@@ -1,12 +1,13 @@
 import { expect, test } from '@playwright/test';
 
+// Shaped to the RosterSeat wire contract (src/api/wave6-wire.ts) so the rows render as they do live.
 const ROSTER = {
   roster: [
-    { name: 'claude',   status: 'active', kind: 'agent', health: { status: 'ok' } },
-    { name: 'codex',    status: 'active', kind: 'agent', health: { status: 'ok' } },
-    { name: 'pi',       status: 'active', kind: 'agent', health: { status: 'ok' } },
-    { name: 'copilot',  status: 'active', kind: 'agent', health: { status: 'ok' } },
-    { name: 'opencode', status: 'active', kind: 'agent', health: { status: 'ok' } },
+    { key: 'claude', display_name: 'claude', binary: 'claude', enabled_for_council: true, health: { status: 'active' } },
+    { key: 'codex', display_name: 'codex', binary: 'codex', enabled_for_council: true, health: { status: 'active' } },
+    { key: 'pi', display_name: 'pi', binary: 'pi', enabled_for_council: true, health: { status: 'active' } },
+    { key: 'copilot', display_name: 'copilot', binary: 'copilot', enabled_for_council: true, health: { status: 'active' } },
+    { key: 'opencode', display_name: 'opencode', binary: 'opencode', enabled_for_council: true, health: { status: 'active' } },
   ],
 };
 
@@ -76,6 +77,11 @@ test('expanded health rail clips at default 5-seat roster and must be scrollable
   await page.goto('/');
   await page.getByTestId('rail-health-toggle').click();
   await expect(page.getByTestId('rail-seat-row')).toHaveCount(ROSTER.roster.length);
+  // Each row renders as a healthy, keyed seat: a fixture that drifts from the wire contract
+  // fails here instead of passing on a count of broken rows.
+  for (const seat of ROSTER.roster) {
+    await expect(page.locator(`[data-testid="rail-seat-row"][data-seat="${seat.key}"]`)).toContainText('✓');
+  }
 
   const section = page.getByTestId('rail-health-section');
   // The expanded body is the direct child div of the section (toggle is a button sibling).

@@ -12,17 +12,20 @@ export default defineConfig({
   reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : [['list']],
   use: {
     baseURL: `http://127.0.0.1:${PORT}`,
-    viewport: { width: 1440, height: 700 },
     trace: 'on-first-retry',
   },
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  // The viewport goes AFTER the device spread: the preset carries its own 1280×720, and a
+  // project-level `use` beats the top-level one, so a top-level viewport would be silently lost.
+  projects: [
+    { name: 'chromium', use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 700 } } },
+  ],
   webServer: {
     // Use the production preview server so VITE_API_HOST (.env.development) is NOT
     // injected — API calls hit window.location.origin and Playwright's page.route()
-    // mocks intercept them cleanly. Run `npm run build` before `npm run test:e2e`.
-    command: `npm run preview -- --host 127.0.0.1 --port ${PORT}`,
+    // mocks intercept them cleanly. Build first so preview never serves a stale or missing dist/.
+    command: `npm run build && npm run preview -- --host 127.0.0.1 --port ${PORT}`,
     url: `http://127.0.0.1:${PORT}`,
     reuseExistingServer: !process.env.CI,
-    timeout: 60_000,
+    timeout: 180_000,
   },
 });
