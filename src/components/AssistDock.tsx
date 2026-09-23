@@ -262,7 +262,17 @@ function replayDockTranscript(records: readonly unknown[]): DockChatMsg[] {
   return out;
 }
 
-function DockChat({ chatId, resumed = false }: { chatId: string; resumed?: boolean }): React.ReactElement {
+/** What a RESUMED block's one `GET /chats/:id` probe proved (studio#328). */
+type ResumeProbe = { kind: 'gone' } | { kind: 'error'; message: string };
+
+function DockChat({ chatId, resumed = false, onResumeProbe }: {
+  chatId: string;
+  resumed?: boolean;
+  /** Resumed blocks only: the probe found the session reclaimed, or could not tell. */
+  onResumeProbe?: ((outcome: ResumeProbe) => void) | undefined;
+}): React.ReactElement {
+  const onResumeProbeRef = useRef(onResumeProbe);
+  onResumeProbeRef.current = onResumeProbe;
   const [seats, setSeats] = useState<Record<string, DockSeatState>>({});
   const [msgs, setMsgs] = useState<DockChatMsg[]>([]);
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -279,6 +289,12 @@ function DockChat({ chatId, resumed = false }: { chatId: string; resumed?: boole
       .then((detail) => {
         if (cancelled) return;
         const warm = detail.seats;
+        // GroupChat's rejoin rule: ONLY a 200 with no seats means reclaimed — a resumed
+        // block must not keep presenting a session the daemon no longer holds.
+        if (resumed && warm.length === 0) {
+          onResumeProbeRef.current?.({ kind: 'gone' });
+          return;
+        }
         setSeats((prev) => ({
           ...Object.fromEntries(warm.map((k) => [k, 'ready' as DockSeatState])),
           ...prev,
@@ -292,8 +308,12 @@ function DockChat({ chatId, resumed = false }: { chatId: string; resumed?: boole
           setMsgs((prev) => (prev.length > 0 ? prev : replayed));
         }
       })
-      .catch(() => {
-        /* snapshot unavailable — the frames below still speak for themselves */
+      .catch((e: unknown) => {
+        // A fresh block: the frames speak for themselves. A RESUMED block: "do not
+        // know" keeps the session, but says so rather than claiming it is live.
+        if (!cancelled && resumed) {
+          onResumeProbeRef.current?.({ kind: 'error', message: e instanceof Error ? e.message : String(e) });
+        }
       });
     return () => {
       cancelled = true;
@@ -431,7 +451,9 @@ function DockChat({ chatId, resumed = false }: { chatId: string; resumed?: boole
 
 // ── The dock ──────────────────────────────────────────────────────────────────────────────────
 
-export function AssistDock({ context, verbs, importable, open, onOpenChange, onError, resumeChatId = null, onExpandChat, fill = false }: {
+const RESUMED_NOTE = 'Resumed your earlier session — its agents are still on the line.';
+
+export function AssistDock({ context, verbs, importable, open, onOpenChange, onError, resumeChatId = null, onExpandChat, onResumeGone, fill = false }: {
   context: AssistContext;
   verbs: AssistVerbs;
   /** Which attachments offer the Import-directly fork. Absent ⇒ everything is analysis-only. */
@@ -449,11 +471,14 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
   /** Fill the container (the floating Ask panel) instead of the fixed `w-96` column —
    *  a narrow container must never clip the composer. */
   fill?: boolean;
+  /** The resumed session was reclaimed by the daemon (studio#328) — the surface forgets
+   *  it, so the next send opens a fresh session. */
+  onResumeGone?: ((chatId: string) => void) | undefined;
 }): React.ReactElement {
   const [items, setItems] = useState<ThreadItem[]>(() =>
     resumeChatId !== null
       ? [
-          { kind: 'note', tone: 'info', text: 'Resumed your earlier session — its agents are still on the line.' },
+          { kind: 'note', tone: 'info', text: RESUMED_NOTE },
           { kind: 'chat', chatId: resumeChatId, resumed: true },
         ]
       : [],
@@ -561,6 +586,23 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
       onError?.(msg);
     } finally {
       setSending(false);
+    }
+  };
+
+  /** studio#328: a resumed block's probe answered. Reclaimed → drop the resumed block
+   *  (and its "still on the line" note), say so, and let the surface forget it; could
+   *  not tell → keep it and show the transient error. */
+  const onResumeProbe = (chatId: string, outcome: ResumeProbe): void => {
+    if (outcome.kind === 'gone') {
+      setItems((cur) => [
+        ...cur.filter(
+          (it) => !(it.kind === 'chat' && it.chatId === chatId) && !(it.kind === 'note' && it.text === RESUMED_NOTE),
+        ),
+        { kind: 'note', tone: 'info', text: 'Your earlier session has ended — your next question opens a new one.' },
+      ]);
+      onResumeGone?.(chatId);
+    } else {
+      note('fail', `Could not check your earlier session (${outcome.message}) — keeping it; your next question retries.`);
     }
   };
 
@@ -702,7 +744,14 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
             );
           }
           if (item.kind === 'chat') {
-            return <DockChat key={item.chatId} chatId={item.chatId} resumed={item.resumed === true} />;
+            return (
+              <DockChat
+                key={item.chatId}
+                chatId={item.chatId}
+                resumed={item.resumed === true}
+                onResumeProbe={item.resumed === true ? (outcome) => onResumeProbe(item.chatId, outcome) : undefined}
+              />
+            );
           }
           return <DockRun key={item.runId} runId={item.runId} />;
         })}

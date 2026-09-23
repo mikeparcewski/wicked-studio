@@ -308,7 +308,7 @@ describe('the Ask session survives close/reopen, and promotes into the full chat
     expect(sendChatMessage.mock.calls[1]).toEqual([FIXED_ID, 'after reopen']);
   });
 
-  it('a resumed session the daemon reaped opens a FRESH one for the next question', async () => {
+  it('a resumed session the daemon reaps AFTER the dock opened: the next question opens a FRESH one', async () => {
     const ids = ['dead0000-0000-4000-8000-000000000001', 'f4e50000-0000-4000-8000-000000000002'];
     vi.spyOn(crypto, 'randomUUID').mockImplementation(() => ids.shift() as `${string}-${string}-${string}-${string}-${string}`);
     sessionStorage.clear();
@@ -321,11 +321,14 @@ describe('the Ask session survives close/reopen, and promotes into the full chat
     await waitFor(() => expect(sendChatMessage).toHaveBeenCalledTimes(1));
     cleanup();
 
-    // The daemon no longer holds the first session: its message send is refused.
-    sendChatMessage.mockImplementationOnce(() => Promise.reject(new ApiError(404, 'unknown chat')));
-    // …and the probe proves it: GET /chats/:id answers NO seats (the daemon's "reclaimed").
-    getChat.mockResolvedValue({ chatId: 'dead0000-0000-4000-8000-000000000001', seats: [] });
+    // Reopen while the session is still warm (the mount probe sees seats)…
     dock();
+    await waitFor(() => expect(getChat).toHaveBeenCalledWith('dead0000-0000-4000-8000-000000000001'));
+    expect(screen.getByTestId('assist-chat')).toHaveAttribute('data-chat-id', 'dead0000-0000-4000-8000-000000000001');
+    // …then the daemon reaps it before the next send: the send is refused, and the
+    // send-path probe proves it (GET /chats/:id answers NO seats — "reclaimed").
+    sendChatMessage.mockImplementationOnce(() => Promise.reject(new ApiError(404, 'unknown chat')));
+    getChat.mockResolvedValue({ chatId: 'dead0000-0000-4000-8000-000000000001', seats: [] });
     await user.type(screen.getByTestId('assist-input'), 'second');
     await user.click(screen.getByTestId('assist-send'));
     await waitFor(() => expect(openChat).toHaveBeenCalledTimes(2));
@@ -387,6 +390,51 @@ describe('the Ask session survives close/reopen, and promotes into the full chat
     expect(openChat).toHaveBeenCalledTimes(1);
     expect(message.startsWith('retry question')).toBe(true);
     expect(message).toContain('[studio context pack');
+  });
+
+  it('reopen after the daemon REAPED the session: the resumed block is dropped, the stored id forgotten, no door to a dead chat (studio#328)', async () => {
+    vi.spyOn(crypto, 'randomUUID').mockReturnValue(FIXED_ID);
+    const user = userEvent.setup();
+    wireDiagnostics('present');
+
+    dock();
+    await user.type(screen.getByTestId('assist-input'), 'first');
+    await user.click(screen.getByTestId('assist-send'));
+    await waitFor(() => expect(sendChatMessage).toHaveBeenCalledTimes(1));
+    cleanup();
+
+    // The daemon reclaimed it: GET /chats/:id answers 200 with NO seats.
+    getChat.mockResolvedValue({ chatId: FIXED_ID, seats: [] });
+    render(<AskDock runs={[]} pathname="/" onClose={() => undefined} navigate={() => undefined} />);
+
+    await waitFor(() => expect(screen.queryByTestId('assist-chat')).toBeNull());
+    expect(screen.queryByTestId('assist-dock-expand')).toBeNull();
+    expect(sessionStorage.getItem('wicked.ask.session')).toBeNull();
+    expect(screen.queryByText(/still on the line/)).toBeNull();
+    expect(screen.getByText(/earlier session has ended/)).toBeInTheDocument();
+  });
+
+  it('reopen when the probe itself FAILS: the session is kept and the transient error shows (studio#328)', async () => {
+    vi.spyOn(crypto, 'randomUUID').mockReturnValue(FIXED_ID);
+    const user = userEvent.setup();
+    wireDiagnostics('present');
+
+    dock();
+    await user.type(screen.getByTestId('assist-input'), 'first');
+    await user.click(screen.getByTestId('assist-send'));
+    await waitFor(() => expect(sendChatMessage).toHaveBeenCalledTimes(1));
+    cleanup();
+
+    getChat.mockRejectedValue(new ApiError(500, 'daemon hiccup'));
+    dock();
+
+    await waitFor(() =>
+      expect(screen.getAllByTestId('assist-note').filter((n) => n.getAttribute('data-tone') === 'fail')).toHaveLength(1),
+    );
+    const failNote = screen.getAllByTestId('assist-note').find((n) => n.getAttribute('data-tone') === 'fail');
+    expect(failNote).toHaveTextContent('daemon hiccup');
+    expect(screen.getByTestId('assist-chat')).toHaveAttribute('data-chat-id', FIXED_ID);
+    expect(JSON.parse(sessionStorage.getItem('wicked.ask.session') ?? 'null')).toEqual({ chatId: FIXED_ID, title: 'first', seeded: true });
   });
 
   it('"Open in full chat" navigates to /chat/:id for the dock session and closes the dock', async () => {

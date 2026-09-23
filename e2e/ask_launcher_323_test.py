@@ -13,6 +13,8 @@ same-origin build — no crew daemon involved.
       with the question as its title;
   R3  closing and reopening Ask resumes the SAME session (its block is back, keyed
       by the same chat id), and "Open in full chat" lands on /chat/<that id>;
+  #328 after the daemon reaps the session, reopening Ask drops the dead block, offers
+      no "Open in full chat", and forgets the stored id;
   narrow at 375px wide with a run selected (right panel up), the bubble AND the
       open panel stay fully on screen.
 
@@ -123,6 +125,20 @@ with sync_playwright() as p:
     page.wait_for_url(f"**/chat/{chat_id}", timeout=5000)
     check("r3-open-in-full-chat", page.url.endswith(f"/chat/{chat_id}"), url=page.url)
     check("r3-dock-closed-after-promote", page.get_by_test_id("ask-panel").count() == 0)
+
+    # ── studio#328: the daemon reaps the session; reopening Ask must not present it ──
+    status = page.evaluate(
+        "async (id) => (await fetch(`/api/v1/chats/${encodeURIComponent(id)}`, { method: 'DELETE' })).status",
+        chat_id)
+    check("r328-fixture-reaped", status == 200, status=status)
+    page.get_by_test_id("ask-launcher").click()
+    page.get_by_test_id("assist-dock").wait_for(state="visible", timeout=5000)
+    page.get_by_text("earlier session has ended").wait_for(state="visible", timeout=5000)
+    check("r328-dead-block-dropped", page.get_by_test_id("assist-chat").count() == 0
+          and page.get_by_test_id("assist-dock-expand").count() == 0)
+    stored = page.evaluate("() => sessionStorage.getItem('wicked.ask.session')")
+    check("r328-stored-id-forgotten", stored is None, stored=stored)
+    page.get_by_test_id("ask-launcher").click()
 
     # ── Narrow viewport + a selected run (right panel): the panel stays on screen ──
     narrow = browser.new_page(viewport={"width": 375, "height": 700}, device_scale_factor=1)
