@@ -12,6 +12,8 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.5.14] — 2026-09-23
+
 ### Added
 - **studio#323 R4 — Chat scope is system + everything / project / repos, in Chat AND Ask.** GroupChat's
   three chips (All project repos / Choose repos / Unscoped) become four: **System** (the platform
@@ -1295,7 +1297,8 @@ The merged interactive layer: wicked-interactive's UI moved into this skin (DES-
   `git subtree split` (92 commits).
 - The SPA as a pure HTTP/WS client of the wicked-crew daemon: runs, gates, live CoreEvents.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.5.13...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.5.14...HEAD
+[0.5.14]: https://github.com/mikeparcewski/wicked-studio/compare/v0.5.13...v0.5.14
 [0.5.13]: https://github.com/mikeparcewski/wicked-studio/compare/v0.5.12...v0.5.13
 [0.5.12]: https://github.com/mikeparcewski/wicked-studio/compare/v0.5.11...v0.5.12
 [0.5.11]: https://github.com/mikeparcewski/wicked-studio/compare/v0.5.10...v0.5.11
