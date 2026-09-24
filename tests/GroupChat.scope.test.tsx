@@ -556,3 +556,41 @@ describe('crew#502 refusals render as clear inline errors', () => {
     expect(screen.queryByTestId('chat-scope-fallback-none')).toBeNull();
   });
 });
+
+describe('the composer reports its LIVE height to the shell (studio#333)', () => {
+  class FakeResizeObserver {
+    static instances: FakeResizeObserver[] = [];
+    observe = vi.fn();
+    disconnect = vi.fn();
+    unobserve = vi.fn();
+    constructor(readonly cb: ResizeObserverCallback) { FakeResizeObserver.instances.push(this); }
+    fire(): void { this.cb([], this as unknown as ResizeObserver); }
+  }
+
+  it('measures on mount, re-measures on every resize (the picker growing), and hands back 0 on unmount', () => {
+    vi.stubGlobal('ResizeObserver', FakeResizeObserver);
+    try {
+      const onComposerResize = vi.fn();
+      const { unmount } = render(<GroupChat repoId={null} onBack={() => undefined} onComposerResize={onComposerResize} />);
+      const band = screen.getByTestId('chat-composer');
+      // Mount measured the band (jsdom lays nothing out, so 0) and started observing IT.
+      expect(onComposerResize).toHaveBeenCalledWith(0);
+      const ro = FakeResizeObserver.instances.at(-1)!;
+      expect(ro.observe).toHaveBeenCalledWith(band);
+      // The band grows (the scope picker opened): the observer re-measures the band.
+      const rect = vi.spyOn(band, 'getBoundingClientRect');
+      rect.mockReturnValue({ height: 224 } as DOMRect);
+      ro.fire();
+      expect(onComposerResize).toHaveBeenLastCalledWith(224);
+      rect.mockReturnValue({ height: 183 } as DOMRect);
+      ro.fire();
+      expect(onComposerResize).toHaveBeenLastCalledWith(183);
+      // Gone: the observer is dropped and the shell gets the corner back.
+      unmount();
+      expect(ro.disconnect).toHaveBeenCalled();
+      expect(onComposerResize).toHaveBeenLastCalledWith(0);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});

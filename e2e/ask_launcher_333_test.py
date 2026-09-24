@@ -13,11 +13,15 @@ same-origin build — no crew daemon involved.
           - the bubble's bottom edge is ABOVE the composer band's top edge;
           - the point at Send's centre hits the Send button (nothing covers it);
           - the open Ask panel also sits above the composer and inside the viewport;
+          - when the composer GROWS ("Choose repos…" opens the scope picker) the bubble
+            follows the composer's LIVE height: neither Send nor the picker intersects
+            it, and it settles back once the picker closes;
         and the empty-state helper copy names the #327 scope vocabulary
         (System / Everything / Project repos / Choose repos), not
         "a repo list, or unscoped".
 
-Capture: e2e/shots/ask-333-chats.png (New chat with the bubble beside the composer).
+Capture: e2e/shots/ask-333-chats.png (New chat, bubble above the composer) and
+e2e/shots/ask-333-chats-picker.png (the picker open, bubble lifted with it).
 
 Prereqs: Python Playwright. Builds dist-sameorigin/ itself unless
 SKIP_STUDIO_BUILD=1. Env: FEEDBACK_PORT (default 4333). Prints a JSON report;
@@ -111,6 +115,34 @@ with sync_playwright() as p:
     check("send-does-not-intersect-panel", not intersects(s, pb), send=s, panel=pb)
     bubble.click()
     panel.wait_for(state="detached", timeout=5000)
+
+    # ── the composer GROWS ("Choose repos…" opens the picker): the bubble follows ──
+    # The offset is the composer's LIVE height (a ResizeObserver in GroupChat reports
+    # it up to the shell) — not a constant measured at the closed state.
+    page.get_by_test_id("chat-scope-repos").click()
+    picker = page.get_by_test_id("chat-scope-picker")
+    picker.wait_for(state="visible", timeout=5000)
+    page.wait_for_timeout(300)  # one observer tick + paint
+    b2 = bubble.bounding_box()
+    s2 = send.bounding_box()
+    c2 = composer.bounding_box()
+    pk = picker.bounding_box()
+    check("picker-open-composer-grew", c2["height"] > c["height"], before=c, after=c2, picker=pk)
+    page.screenshot(path=str(SHOTS / "ask-333-chats-picker.png"))
+    check("picker-send-does-not-intersect-bubble", not intersects(s2, b2), send=s2, bubble=b2)
+    check("picker-does-not-intersect-bubble", not intersects(pk, b2), picker=pk, bubble=b2)
+    check("picker-bubble-above-composer", b2["y"] + b2["height"] <= c2["y"] and b2["y"] >= 0,
+          bubble_bottom=b2["y"] + b2["height"], composer_top=c2["y"])
+    hit2 = page.evaluate(
+        "([x, y]) => document.elementFromPoint(x, y)?.closest('[data-testid=\"chat-send\"]') !== null",
+        [s2["x"] + s2["width"] / 2, s2["y"] + s2["height"] / 2])
+    check("picker-send-centre-not-covered", hit2 is True)
+    # …and back: closing the picker shrinks the composer and the bubble settles back down.
+    page.get_by_test_id("chat-scope-repos").click()
+    picker.wait_for(state="detached", timeout=5000)
+    page.wait_for_timeout(300)
+    b3 = bubble.bounding_box()
+    check("picker-closed-bubble-settles-back", abs(b3["y"] - b["y"]) <= 1, before=b, after=b3)
 
     # ── the empty-state helper copy names the #327 vocabulary ───────────────────
     scope_copy = page.get_by_test_id("chat-firstrun-scope").inner_text()

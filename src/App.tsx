@@ -29,7 +29,7 @@ import { GovernanceDashboard } from './components/GovernanceDashboard.js';
 import { TestingPage } from './components/TestingPage.js';
 import { RunsBottomPanel, RUNS_BAR_PX } from './components/RunsBottomPanel.js';
 import { ChatPanel } from './components/ChatPanel.js';
-import { CHAT_COMPOSER_PX, GroupChat } from './components/GroupChat.js';
+import { GroupChat } from './components/GroupChat.js';
 import { WorkflowViewer } from './components/WorkflowViewer.js';
 import { WorkPage } from './components/WorkPage.js';
 import { ShortcutOverlay } from './components/ShortcutOverlay.js';
@@ -262,6 +262,10 @@ export function App(): React.ReactElement {
   // ASK — the app-wide assist dock (AskDock): opened from the floating launcher
   // bubble (AskLauncher) or Ctrl/⌘+Shift+A; collapsing the dock closes it entirely.
   const [askOpen, setAskOpen] = useState(false);
+  // studio#333: the Chat surface's bottom composer puts its Send in the bubble's corner.
+  // GroupChat reports the band's LIVE height (a ResizeObserver — it grows with the scope
+  // picker) and 0 on unmount; the launcher clears it exactly as it clears the right panel.
+  const [chatComposerPx, setChatComposerPx] = useState(0);
 
   const shortcutEntries = useMemo(
     () => [
@@ -355,6 +359,7 @@ export function App(): React.ReactElement {
         navigate={navigate}
         routedChatId={routedChatId}
         reflectUrl={reflectUrl}
+        onComposerResize={setChatComposerPx}
       />
     </div>
   );
@@ -662,12 +667,6 @@ export function App(): React.ReactElement {
   // sheet auto-collapses on the same transition (EC27).
   const immersive = projectId !== null && (mode === 'document' || mode === 'video');
 
-  // studio#333: the Chat surface (GroupChat — the flat `/chat/*` routes and the project
-  // shell's chat mode, the same conditions `renderCenter`/`renderModeSurface` pick it on)
-  // renders a full-width bottom composer whose Send sits in the Ask bubble's corner. The
-  // launcher clears it by the band's height, exactly as it clears the right panel.
-  const chatComposer = chatMode && selected === null && (projectId === null || artifactId === null);
-
   return (
     // §5.2: the root reserves the bar's 28px as padding — the collapsed bar is
     // a ROW, not an overlay, so every surface (board, dashboards, canvas — and
@@ -702,7 +701,7 @@ export function App(): React.ReactElement {
         open={askOpen}
         onToggle={() => setAskOpen((v) => !v)}
         rightOffsetPx={selected !== null ? RIGHT_PANEL_PX : 0}
-        bottomOffsetPx={chatComposer ? CHAT_COMPOSER_PX : 0}
+        bottomOffsetPx={chatComposerPx}
       >
         {askOpen && (
           <AskDock runs={runs} pathname={pathname} navigate={navigate} onClose={() => setAskOpen(false)} />

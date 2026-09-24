@@ -17,7 +17,8 @@ import { RUNS_BAR_PX } from './RunsBottomPanel.js';
  *     right panel instead (the panel never runs off the left edge);
  *   - it clears a bottom composer (studio#333): when the route renders a full-width
  *     bottom composer whose primary action sits in this corner (Chat's Send), App passes
- *     that band's height as `bottomOffsetPx`, and both bubble and panel lift above it —
+ *     that band's LIVE height (the surface measures it — it grows with the scope picker)
+ *     as `bottomOffsetPx`, and both bubble and panel lift above it —
  *     the same contract as the right panel, on the other axis. The panel's height budget
  *     shrinks by the same amount, so it never runs off the top edge;
  *   - z-index 40 — the runs sheet's layer, below the palette/modals/toasts (z-50).
