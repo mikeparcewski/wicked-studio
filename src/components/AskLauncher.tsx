@@ -20,7 +20,10 @@ import { RUNS_BAR_PX } from './RunsBottomPanel.js';
  *     that band's LIVE height (the surface measures it — it grows with the scope picker)
  *     as `bottomOffsetPx`, and both bubble and panel lift above it —
  *     the same contract as the right panel, on the other axis. The panel's height budget
- *     shrinks by the same amount, so it never runs off the top edge;
+ *     shrinks by the same amount, so it never runs off the top edge — and, as on the
+ *     width axis, a viewport too SHORT to clear the composer clamps the lift instead:
+ *     the bubble and its gutter always stay on screen (overlaying the composer, never
+ *     above the top edge), and the panel's height never goes negative;
  *   - z-index 40 — the runs sheet's layer, below the palette/modals/toasts (z-50).
  *
  * The chord Ctrl/⌘+Shift+A does the same toggle (registered in App). The launcher only
@@ -32,19 +35,21 @@ export const ASK_BUBBLE_PX = 48;
 export const ASK_GUTTER_PX = 16;
 /** The floating panel's width — the dock's old `w-96` column. */
 export const ASK_PANEL_WIDTH_PX = 384;
+/** The floating panel's height cap; shorter viewports get what is left above the bubble. */
+export const ASK_PANEL_HEIGHT_PX = 640;
 /** Below this much free width beside the right panel, the launcher stops clearing it
  *  and overlays it instead — a squeezed panel is worse than a covered one. */
 export const ASK_PANEL_MIN_PX = 320;
 
-/** The viewport width, tracked across resizes. */
-function useViewportWidth(): number {
-  const [w, setW] = useState(() => window.innerWidth);
+/** The viewport size, tracked across resizes. */
+function useViewportSize(): { vw: number; vh: number } {
+  const [size, setSize] = useState(() => ({ vw: window.innerWidth, vh: window.innerHeight }));
   useEffect(() => {
-    const on = (): void => setW(window.innerWidth);
+    const on = (): void => setSize({ vw: window.innerWidth, vh: window.innerHeight });
     window.addEventListener('resize', on);
     return () => window.removeEventListener('resize', on);
   }, []);
-  return w;
+  return size;
 }
 
 const ASK_LABEL = 'Ask — governed answers about your projects, repos, and this studio (Ctrl/⌘+Shift+A)';
@@ -69,7 +74,7 @@ export function AskLauncher({ open, onToggle, rightOffsetPx = 0, bottomOffsetPx 
   /** The dock, rendered inside the floating panel while `open`. */
   children?: React.ReactNode;
 }): React.ReactElement {
-  const vw = useViewportWidth();
+  const { vw, vh } = useViewportSize();
   // The panel's width budget is what is LEFT beside the right panel: clear it only
   // when the panel still fits there, otherwise overlay it (narrow viewports) so the
   // panel never runs off the left edge.
@@ -77,8 +82,16 @@ export function AskLauncher({ open, onToggle, rightOffsetPx = 0, bottomOffsetPx 
   const offset = clearsPanel ? rightOffsetPx : 0;
   const right = ASK_GUTTER_PX + offset;
   const panelWidth = Math.max(0, Math.min(ASK_PANEL_WIDTH_PX, vw - 2 * ASK_GUTTER_PX - offset));
-  const bubbleBottom = RUNS_BAR_PX + bottomOffsetPx + ASK_GUTTER_PX;
+  // The lift is clamped to the viewport's height: the bubble plus its gutter must stay
+  // on screen, so a viewport too short to clear the composer overlays it instead
+  // (the width axis's rule, on this axis) — never a bubble above the top edge.
+  const bubbleBottom = Math.max(
+    0,
+    Math.min(RUNS_BAR_PX + bottomOffsetPx + ASK_GUTTER_PX, vh - ASK_GUTTER_PX - ASK_BUBBLE_PX),
+  );
   const panelBottom = bubbleBottom + ASK_BUBBLE_PX + 12;
+  // The panel's height budget is what is left above the bubble — never negative.
+  const panelHeight = Math.max(0, Math.min(ASK_PANEL_HEIGHT_PX, vh - panelBottom - ASK_GUTTER_PX));
   return (
     <>
       {open && (
@@ -92,7 +105,7 @@ export function AskLauncher({ open, onToggle, rightOffsetPx = 0, bottomOffsetPx 
             right,
             bottom: panelBottom,
             width: panelWidth,
-            height: `min(640px, calc(100vh - ${panelBottom + ASK_GUTTER_PX}px))`,
+            height: panelHeight,
             zIndex: 40,
             borderRadius: 'var(--radius-lg)',
             border: '1px solid var(--surface-overlay)',

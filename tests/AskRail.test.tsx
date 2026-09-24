@@ -77,8 +77,27 @@ describe('the Ask launcher — a floating chat bubble bottom-right (studio#323 R
     render(<AskLauncher open onToggle={() => undefined} bottomOffsetPx={184}><div /></AskLauncher>);
     expect(screen.getByTestId('ask-launcher').style.bottom).toBe('228px'); // 28 bar + 184 band + 16 gutter
     expect(screen.getByTestId('ask-panel').style.bottom).toBe('288px'); // bubble bottom 228 + 48 bubble + 12 gap
-    expect(screen.getByTestId('ask-panel').style.height).toContain('calc(100vh - 304px)');
+    // jsdom's innerHeight is 768: the budget above the bubble is 768 - 288 - 16.
+    expect(screen.getByTestId('ask-panel').style.height).toBe('464px');
     expect(screen.getByTestId('ask-launcher').style.right).toBe('16px'); // the other axis is untouched
+  });
+
+  it('short viewport + tall composer: the bubble is clamped on screen and the panel height never goes negative', () => {
+    const prev = window.innerHeight;
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 300 });
+    try {
+      // 28 bar + 224 band + 16 gutter = 268 would put the bubble's top at -16px.
+      render(<AskLauncher open onToggle={() => undefined} bottomOffsetPx={224}><div /></AskLauncher>);
+      const px = (v: string): number => Number(v.replace(/px$/, ''));
+      const bubble = screen.getByTestId('ask-launcher');
+      expect(px(bubble.style.bottom)).toBe(300 - 16 - 48); // bubble + gutter stay visible
+      expect(px(bubble.style.bottom)).toBeGreaterThanOrEqual(0);
+      const panel = screen.getByTestId('ask-panel');
+      expect(px(panel.style.height)).toBeGreaterThanOrEqual(0);
+      expect(px(panel.style.bottom) + px(panel.style.height)).toBeLessThanOrEqual(300);
+    } finally {
+      Object.defineProperty(window, 'innerHeight', { configurable: true, value: prev });
+    }
   });
 
   it('narrow viewport + right panel: the open panel stays fully on screen (left edge >= 0)', () => {

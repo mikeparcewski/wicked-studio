@@ -21,7 +21,8 @@ npm publish dates. Every version listed here exists on
   through, so bubble and panel lift above the composer whatever it shows. The composer band and its
   Send button carry `chat-composer` / `chat-send` testids; `e2e/ask_launcher_333_test.py` asserts
   the Send box never intersects the bubble, closed AND with the picker open (red before, green
-  after). The Chat empty-state helper
+  after). The lift is clamped to the viewport's height — the bubble and its gutter always stay on
+  screen and the panel's height never goes negative on a short viewport. The Chat empty-state helper
   now names the #327 scope vocabulary (System / Everything / Project repos / Choose repos) instead
   of "a repo list, or unscoped".
 
