@@ -15,6 +15,11 @@ import { RUNS_BAR_PX } from './RunsBottomPanel.js';
  *     as `rightOffsetPx`, and both bubble and panel shift left by it — unless the
  *     viewport is too narrow for the panel to fit beside it, when both overlay the
  *     right panel instead (the panel never runs off the left edge);
+ *   - it clears a bottom composer (studio#333): when the route renders a full-width
+ *     bottom composer whose primary action sits in this corner (Chat's Send), App passes
+ *     that band's height as `bottomOffsetPx`, and both bubble and panel lift above it —
+ *     the same contract as the right panel, on the other axis. The panel's height budget
+ *     shrinks by the same amount, so it never runs off the top edge;
  *   - z-index 40 — the runs sheet's layer, below the palette/modals/toasts (z-50).
  *
  * The chord Ctrl/⌘+Shift+A does the same toggle (registered in App). The launcher only
@@ -52,11 +57,14 @@ function ChatGlyph(): React.ReactElement {
   );
 }
 
-export function AskLauncher({ open, onToggle, rightOffsetPx = 0, children }: {
+export function AskLauncher({ open, onToggle, rightOffsetPx = 0, bottomOffsetPx = 0, children }: {
   open: boolean;
   onToggle: () => void;
   /** Width of a right-edge panel the launcher must stay clear of (0 = none). */
   rightOffsetPx?: number;
+  /** Height of a bottom-edge band (a full-width composer) above the runs bar the
+   *  launcher must stay clear of (0 = none). */
+  bottomOffsetPx?: number;
   /** The dock, rendered inside the floating panel while `open`. */
   children?: React.ReactNode;
 }): React.ReactElement {
@@ -68,7 +76,7 @@ export function AskLauncher({ open, onToggle, rightOffsetPx = 0, children }: {
   const offset = clearsPanel ? rightOffsetPx : 0;
   const right = ASK_GUTTER_PX + offset;
   const panelWidth = Math.max(0, Math.min(ASK_PANEL_WIDTH_PX, vw - 2 * ASK_GUTTER_PX - offset));
-  const bubbleBottom = RUNS_BAR_PX + ASK_GUTTER_PX;
+  const bubbleBottom = RUNS_BAR_PX + bottomOffsetPx + ASK_GUTTER_PX;
   const panelBottom = bubbleBottom + ASK_BUBBLE_PX + 12;
   return (
     <>

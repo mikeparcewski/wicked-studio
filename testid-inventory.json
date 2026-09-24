@@ -11,8 +11,8 @@
   "studioVersion": "0.5.14",
   "counts": {
     "files": 148,
-    "occurrences": 1346,
-    "static": 1157,
+    "occurrences": 1348,
+    "static": 1159,
     "dynamic": 63,
     "computed": 7
   },
@@ -812,6 +812,12 @@
       ]
     },
     {
+      "testId": "chat-composer",
+      "files": [
+        "src/components/GroupChat.tsx"
+      ]
+    },
+    {
       "testId": "chat-export",
       "files": [
         "src/components/DocPanel.tsx"
@@ -1007,6 +1013,12 @@
       "testId": "chat-seat",
       "files": [
         "src/components/ChatsPage.tsx"
+      ]
+    },
+    {
+      "testId": "chat-send",
+      "files": [
+        "src/components/GroupChat.tsx"
       ]
     },
     {

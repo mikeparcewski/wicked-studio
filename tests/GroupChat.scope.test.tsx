@@ -200,7 +200,12 @@ describe('the create-flow scope control', () => {
     expect(row).toHaveAttribute('data-mode', 'project');
     expect(screen.getByTestId('chat-scope-project')).toBeDisabled(); // no project bound yet
     expect(screen.getByTestId('chat-scope-summary').textContent).toContain('no project selected');
-    expect(screen.getByTestId('chat-firstrun-scope').textContent).toContain('read only the repositories in scope');
+    const helper = screen.getByTestId('chat-firstrun-scope').textContent ?? '';
+    expect(helper).toContain('read only the repositories in scope');
+    // studio#333: the #327 vocabulary — never the retired "a repo list, or unscoped".
+    for (const word of ['System', 'Everything', 'Project repos', 'Choose repos']) expect(helper).toContain(word);
+    expect(helper).not.toContain('repo list');
+    expect(helper).not.toContain('unscoped');
     expect(listRepos).not.toHaveBeenCalled();
     await typeAndSend();
     expect(openChat).not.toHaveBeenCalled();

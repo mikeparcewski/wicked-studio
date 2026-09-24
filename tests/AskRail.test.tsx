@@ -73,6 +73,14 @@ describe('the Ask launcher — a floating chat bubble bottom-right (studio#323 R
     expect(screen.getByTestId('ask-launcher').style.right).toBe('304px');
   });
 
+  it('stays clear of a bottom composer (studio#333): bubble AND panel lift by the offset App passes', () => {
+    render(<AskLauncher open onToggle={() => undefined} bottomOffsetPx={184}><div /></AskLauncher>);
+    expect(screen.getByTestId('ask-launcher').style.bottom).toBe('228px'); // 28 bar + 184 band + 16 gutter
+    expect(screen.getByTestId('ask-panel').style.bottom).toBe('288px'); // bubble bottom 228 + 48 bubble + 12 gap
+    expect(screen.getByTestId('ask-panel').style.height).toContain('calc(100vh - 304px)');
+    expect(screen.getByTestId('ask-launcher').style.right).toBe('16px'); // the other axis is untouched
+  });
+
   it('narrow viewport + right panel: the open panel stays fully on screen (left edge >= 0)', () => {
     const prev = window.innerWidth;
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: 375 });

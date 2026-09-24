@@ -363,6 +363,16 @@ interface Props {
   reflectUrl?: boolean;
 }
 
+/**
+ * The composer band's height at the create window (project row + scope row + the two-row
+ * textarea, inside its padding and border) — measured at 1440x700. App hands it to the Ask
+ * launcher as `bottomOffsetPx` while this surface renders (studio#333), so the floating
+ * bubble and its panel sit above the composer instead of on its Send button. The band
+ * only shrinks once a chat is open (the project row folds into the header), so the
+ * create-window height is the clearance.
+ */
+export const CHAT_COMPOSER_PX = 184;
+
 export function GroupChat({
   repoId, onBack, projectId = null, navigate, routedChatId = null, reflectUrl = false,
 }: Props): React.ReactElement {
@@ -1942,8 +1952,9 @@ export function GroupChat({
                 before the first send — said here so the scope row reads as intended. */}
             <p data-testid="chat-firstrun-scope" style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-muted)', fontFamily: 'var(--font-sans)', margin: 0, maxWidth: '480px' }}>
               The agents read only the repositories in scope — read-only, grounded on the
-              project’s code graph when one is indexed. Choose the scope below: a project
-              (all its repositories), a repo list, or unscoped.
+              project’s code graph when one is indexed. Choose the scope below: System (the
+              platform itself), Everything (every registered repository), Project repos, or
+              Choose repos.
             </p>
           </div>
         )}
@@ -1995,7 +2006,7 @@ export function GroupChat({
       {/* Input — §5.3 token usage: the composer sits on --surface-raised at
           --radius-xl; its focus ring is --accent-dim (wk-composer in
           global.css), never the full accent (§5.3 motion: too dominant). */}
-      <div className="px-6 py-3 border-t shrink-0" style={{ borderColor: 'var(--surface-raised)' }}>
+      <div data-testid="chat-composer" className="px-6 py-3 border-t shrink-0" style={{ borderColor: 'var(--surface-raised)' }}>
         {/* §5.2: the project field sits ABOVE the intent input, Unfiled default. */}
         {showProjectField && (
           <div className="flex items-center gap-2 pb-2" data-testid="chat-project-row">
@@ -2406,6 +2417,7 @@ export function GroupChat({
           />
           <button
             type="button"
+            data-testid="chat-send"
             onClick={() => void send()}
             // Typing is how the selected agents warm — so text alone enables Send,
             // including the §6.2 retry after a rejected open (send re-arms). The
