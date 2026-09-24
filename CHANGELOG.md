@@ -12,6 +12,20 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+### Fixed
+- **studio#333 — the Ask bubble no longer covers Chat's Send button.** On `/chats` → New chat at
+  1440×700 the floating launcher (#326) sat on the composer's Send, clipping it to "S…". The
+  launcher takes a `bottomOffsetPx` — the same contract as the run right-panel's `rightOffsetPx`,
+  on the other axis — and GroupChat reports its composer band's LIVE height (a ResizeObserver —
+  the band grows when "Choose repos…" opens the scope picker; 0 on unmount) which the shell passes
+  through, so bubble and panel lift above the composer whatever it shows. The composer band and its
+  Send button carry `chat-composer` / `chat-send` testids; `e2e/ask_launcher_333_test.py` asserts
+  the Send box never intersects the bubble, closed AND with the picker open (red before, green
+  after). The lift is clamped to the viewport's height — the bubble and its gutter always stay on
+  screen and the panel's height never goes negative on a short viewport. The Chat empty-state helper
+  now names the #327 scope vocabulary (System / Everything / Project repos / Choose repos) instead
+  of "a repo list, or unscoped".
+
 ## [0.5.14] — 2026-09-23
 
 ### Added

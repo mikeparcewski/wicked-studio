@@ -349,6 +349,14 @@ interface Props {
    *  URL reflection (which replaces, so Back never walks through /chat/new). */
   navigate?: (path: string, opts?: { replace?: boolean }) => void;
   /**
+   * studio#333: the composer band's LIVE height in px, reported on mount, on every
+   * resize (the scope picker opening, the project row, a taller draft) and as 0 on
+   * unmount. The shell hands it to the Ask launcher as `bottomOffsetPx`, so the
+   * floating bubble sits above the composer whatever it is currently showing —
+   * never a constant measured at one state.
+   */
+  onComposerResize?: (px: number) => void;
+  /**
    * The chat session id the URL names (`/chat/:id`, J4/C6) — the surface
    * REJOINS it if the daemon still holds it, and says honestly that it is
    * gone if not. `null` on `/chat/new` and in the project shell.
@@ -364,10 +372,27 @@ interface Props {
 }
 
 export function GroupChat({
-  repoId, onBack, projectId = null, navigate, routedChatId = null, reflectUrl = false,
+  repoId, onBack, projectId = null, navigate, routedChatId = null, reflectUrl = false, onComposerResize,
 }: Props): React.ReactElement {
   /** Where this surface remembers its live chat id — by repo, by project, or the flat `_` key. */
   const storageKey = chatStorageKey(repoId, projectId);
+  /** The composer band (studio#333) — measured for the shell, see `onComposerResize`. */
+  const composerRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const el = composerRef.current;
+    const report = onComposerResize;
+    if (el === null || report === undefined) return undefined;
+    const measure = (): void => report(el.getBoundingClientRect().height);
+    measure();
+    // jsdom (and any environment without ResizeObserver) keeps the one measurement.
+    if (typeof ResizeObserver === 'undefined') return () => report(0);
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => {
+      ro.disconnect();
+      report(0); // the corner is the launcher's again once this surface is gone
+    };
+  }, [onComposerResize]);
   const [chatId, setChatId] = useState<string | null>(null);
   const [seats, setSeats] = useState<Record<string, SeatState>>({});
   const [seatErrors, setSeatErrors] = useState<Record<string, string>>({});
@@ -1942,8 +1967,9 @@ export function GroupChat({
                 before the first send — said here so the scope row reads as intended. */}
             <p data-testid="chat-firstrun-scope" style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-muted)', fontFamily: 'var(--font-sans)', margin: 0, maxWidth: '480px' }}>
               The agents read only the repositories in scope — read-only, grounded on the
-              project’s code graph when one is indexed. Choose the scope below: a project
-              (all its repositories), a repo list, or unscoped.
+              project’s code graph when one is indexed. Choose the scope below: System (the
+              platform itself), Everything (every registered repository), Project repos, or
+              Choose repos.
             </p>
           </div>
         )}
@@ -1995,7 +2021,7 @@ export function GroupChat({
       {/* Input — §5.3 token usage: the composer sits on --surface-raised at
           --radius-xl; its focus ring is --accent-dim (wk-composer in
           global.css), never the full accent (§5.3 motion: too dominant). */}
-      <div className="px-6 py-3 border-t shrink-0" style={{ borderColor: 'var(--surface-raised)' }}>
+      <div ref={composerRef} data-testid="chat-composer" className="px-6 py-3 border-t shrink-0" style={{ borderColor: 'var(--surface-raised)' }}>
         {/* §5.2: the project field sits ABOVE the intent input, Unfiled default. */}
         {showProjectField && (
           <div className="flex items-center gap-2 pb-2" data-testid="chat-project-row">
@@ -2406,6 +2432,7 @@ export function GroupChat({
           />
           <button
             type="button"
+            data-testid="chat-send"
             onClick={() => void send()}
             // Typing is how the selected agents warm — so text alone enables Send,
             // including the §6.2 retry after a rejected open (send re-arms). The

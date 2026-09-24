@@ -200,7 +200,12 @@ describe('the create-flow scope control', () => {
     expect(row).toHaveAttribute('data-mode', 'project');
     expect(screen.getByTestId('chat-scope-project')).toBeDisabled(); // no project bound yet
     expect(screen.getByTestId('chat-scope-summary').textContent).toContain('no project selected');
-    expect(screen.getByTestId('chat-firstrun-scope').textContent).toContain('read only the repositories in scope');
+    const helper = screen.getByTestId('chat-firstrun-scope').textContent ?? '';
+    expect(helper).toContain('read only the repositories in scope');
+    // studio#333: the #327 vocabulary — never the retired "a repo list, or unscoped".
+    for (const word of ['System', 'Everything', 'Project repos', 'Choose repos']) expect(helper).toContain(word);
+    expect(helper).not.toContain('repo list');
+    expect(helper).not.toContain('unscoped');
     expect(listRepos).not.toHaveBeenCalled();
     await typeAndSend();
     expect(openChat).not.toHaveBeenCalled();
@@ -549,5 +554,43 @@ describe('crew#502 refusals render as clear inline errors', () => {
     const err = await screen.findByTestId('chat-open-error');
     expect(err).toHaveAttribute('data-status', '501');
     expect(screen.queryByTestId('chat-scope-fallback-none')).toBeNull();
+  });
+});
+
+describe('the composer reports its LIVE height to the shell (studio#333)', () => {
+  class FakeResizeObserver {
+    static instances: FakeResizeObserver[] = [];
+    observe = vi.fn();
+    disconnect = vi.fn();
+    unobserve = vi.fn();
+    constructor(readonly cb: ResizeObserverCallback) { FakeResizeObserver.instances.push(this); }
+    fire(): void { this.cb([], this as unknown as ResizeObserver); }
+  }
+
+  it('measures on mount, re-measures on every resize (the picker growing), and hands back 0 on unmount', () => {
+    vi.stubGlobal('ResizeObserver', FakeResizeObserver);
+    try {
+      const onComposerResize = vi.fn();
+      const { unmount } = render(<GroupChat repoId={null} onBack={() => undefined} onComposerResize={onComposerResize} />);
+      const band = screen.getByTestId('chat-composer');
+      // Mount measured the band (jsdom lays nothing out, so 0) and started observing IT.
+      expect(onComposerResize).toHaveBeenCalledWith(0);
+      const ro = FakeResizeObserver.instances.at(-1)!;
+      expect(ro.observe).toHaveBeenCalledWith(band);
+      // The band grows (the scope picker opened): the observer re-measures the band.
+      const rect = vi.spyOn(band, 'getBoundingClientRect');
+      rect.mockReturnValue({ height: 224 } as DOMRect);
+      ro.fire();
+      expect(onComposerResize).toHaveBeenLastCalledWith(224);
+      rect.mockReturnValue({ height: 183 } as DOMRect);
+      ro.fire();
+      expect(onComposerResize).toHaveBeenLastCalledWith(183);
+      // Gone: the observer is dropped and the shell gets the corner back.
+      unmount();
+      expect(ro.disconnect).toHaveBeenCalled();
+      expect(onComposerResize).toHaveBeenLastCalledWith(0);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

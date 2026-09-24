@@ -262,6 +262,10 @@ export function App(): React.ReactElement {
   // ASK — the app-wide assist dock (AskDock): opened from the floating launcher
   // bubble (AskLauncher) or Ctrl/⌘+Shift+A; collapsing the dock closes it entirely.
   const [askOpen, setAskOpen] = useState(false);
+  // studio#333: the Chat surface's bottom composer puts its Send in the bubble's corner.
+  // GroupChat reports the band's LIVE height (a ResizeObserver — it grows with the scope
+  // picker) and 0 on unmount; the launcher clears it exactly as it clears the right panel.
+  const [chatComposerPx, setChatComposerPx] = useState(0);
 
   const shortcutEntries = useMemo(
     () => [
@@ -355,6 +359,7 @@ export function App(): React.ReactElement {
         navigate={navigate}
         routedChatId={routedChatId}
         reflectUrl={reflectUrl}
+        onComposerResize={setChatComposerPx}
       />
     </div>
   );
@@ -696,6 +701,7 @@ export function App(): React.ReactElement {
         open={askOpen}
         onToggle={() => setAskOpen((v) => !v)}
         rightOffsetPx={selected !== null ? RIGHT_PANEL_PX : 0}
+        bottomOffsetPx={chatComposerPx}
       >
         {askOpen && (
           <AskDock runs={runs} pathname={pathname} navigate={navigate} onClose={() => setAskOpen(false)} />
