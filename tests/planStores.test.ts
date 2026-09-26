@@ -19,6 +19,8 @@ const client = await import('../src/api/client.js');
 const { ApiError } = await import('../src/api/errors.js');
 const { proposePlanEdit, retryPlanEdit, resetPlanEdits, usePlanEdits } = await import('../src/store/planEdits.js');
 const { loadCatalog, requestPreview, resetPlanCatalog, usePlanCatalog } = await import('../src/store/planCatalog.js');
+const { useLaunchPreview } = await import('../src/hooks/useLaunchPlan.js');
+const { renderHook } = await import('@testing-library/react');
 const { GATE_MOVED_TEXT, sendGateDecision, useGateActionStore } = await import('../src/board/gateActions.js');
 const { useGateStore } = await import('../src/store/gates.js');
 
@@ -81,6 +83,15 @@ describe('the preview cache and the catalog', () => {
     expect(apiFetch).toHaveBeenCalledTimes(2);
   });
 
+  it('a failed preview is not cached: asking again re-requests it', async () => {
+    const body = { plan: { steps: [{ catalog: 'build' }] } };
+    apiFetch.mockRejectedValueOnce(new ApiError(500, 'boom'));
+    expect((await requestPreview(body)).status).toBe('error');
+    apiFetch.mockResolvedValueOnce({ steps: [], graph: 'ready' });
+    expect((await requestPreview(body)).status).toBe('ready');
+    expect(apiFetch).toHaveBeenCalledTimes(2);
+  });
+
   it('a 501 preview is unsupported, not an error', async () => {
     apiFetch.mockRejectedValue(new ApiError(501, 'the engine lacks previewPlan'));
     expect(await requestPreview({ plan: { steps: [{ catalog: 'build' }] } })).toEqual({ status: 'unsupported' });
@@ -129,5 +140,49 @@ describe('a gate decision that outlived its gate', () => {
     const error = await sendGateDecision('r1', { approve: true, ord: 3 });
     expect(error).toMatch(/not awaiting a human gate/);
     expect(getGate).not.toHaveBeenCalled();
+  });
+});
+
+describe('before:N on a launch the PA scopes first', () => {
+  const input = {
+    plan: { steps: [{ catalog: 'build' }] },
+    workflow: '',
+    projectId: null,
+    repoRef: null,
+    deliver: null,
+    mode: 'balanced' as const,
+    confirm: 'before' as const,
+    beforeOrd: 1,
+  };
+  const previewCalls = () => apiFetch.mock.calls.filter((c) => String(c[0]).includes('preview'));
+
+  it('a failed preview refuses the launch instead of sending an unshifted before:N', async () => {
+    apiFetch.mockImplementation(async (url: unknown) => {
+      if (String(url).includes('preview')) throw new ApiError(500, 'boom');
+      return [];
+    });
+    const { result } = renderHook(() => useLaunchPreview(input));
+    await expect(result.current.resolveHumanConfirm()).rejects.toThrow(/launch preview failed/);
+  });
+
+  it('a ready preview with the PA scope step first shifts before:N by one', async () => {
+    apiFetch.mockImplementation(async (url: unknown) => {
+      if (String(url).includes('preview')) {
+        return { steps: [{ id: 'pa-scope', catalog: 'understand' }, { catalog: 'build' }], graph: 'pending_pa_scope' };
+      }
+      return [];
+    });
+    const { result } = renderHook(() => useLaunchPreview(input));
+    expect(await result.current.resolveHumanConfirm()).toBe('before:2');
+    expect(previewCalls().length).toBeGreaterThan(0);
+  });
+
+  it('a daemon without the preview route (no scope step) sends before:N unshifted', async () => {
+    apiFetch.mockImplementation(async (url: unknown) => {
+      if (String(url).includes('preview')) throw new ApiError(501, 'the engine lacks previewPlan');
+      return [];
+    });
+    const { result } = renderHook(() => useLaunchPreview(input));
+    expect(await result.current.resolveHumanConfirm()).toBe('before:1');
   });
 });

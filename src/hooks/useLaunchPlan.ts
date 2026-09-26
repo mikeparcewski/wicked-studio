@@ -137,6 +137,12 @@ export function useLaunchPreview(input: LaunchPreviewInput): LaunchPreviewModel 
     const unshifted = humanConfirmFor(input.mode, input.confirm, input.beforeOrd, 0);
     if (unshifted === undefined || !unshifted.startsWith('before:') || previewBody === null) return unshifted;
     const st = await requestPreview(previewBody);
+    // The preview is the only word on whether the PA's scope step is ord 1, so a failed preview
+    // refuses the launch instead of guessing: an unshifted before:N would pause on the scope step
+    // and let unit N run unpaused. `unsupported` is an older daemon, whose engine has no scope step.
+    if (st.status === 'error') {
+      throw new Error(`Can't place the "pause before step ${input.beforeOrd}" gate: the launch preview failed (${st.error}). Try again.`);
+    }
     const offset = st.status === 'ready' ? scopeOffset(st.preview) : 0;
     return humanConfirmFor(input.mode, input.confirm, input.beforeOrd, offset);
   }, [input.mode, input.confirm, input.beforeOrd, previewBody]);

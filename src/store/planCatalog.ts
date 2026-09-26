@@ -107,7 +107,8 @@ const inflight = new Map<string, Promise<PreviewState>>();
 export function requestPreview(body: PlanPreviewBody): Promise<PreviewState> {
   const key = previewKey(body);
   const cached = usePlanCatalog.getState().previews[key];
-  if (cached !== undefined && cached.status !== 'loading') return Promise.resolve(cached);
+  // A failed preview is not served from the cache: the composer's "try again" asks again.
+  if (cached !== undefined && cached.status !== 'loading' && cached.status !== 'error') return Promise.resolve(cached);
   const running = inflight.get(key);
   if (running !== undefined) return running;
   setPreview(key, { status: 'loading' });
