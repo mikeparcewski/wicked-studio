@@ -33,6 +33,20 @@ npm publish dates. Every version listed here exists on
   into the old project's run (`/p/beta/build/a1`). The memory is now keyed by project
   (`hooks/useModeMemory.ts`).
 - The palette hands focus back without scrolling the view the operator left.
+- **Wave 1 round 2 — a stalled run is never hidden.** An active run whose freshest activity
+  evidence (a streamed frame, or its durable event tail — never an attach/project clock) has
+  decayed past the triage threshold (30 min silent) is `stalled`: `bandFor` puts it in NEEDS YOU
+  and the needs-you queue carries a `stalled-run` row, so home is never "calm" over a wedged run
+  (`board/boardAttention.ts` `isStalled`, `store/activityClocks.ts`).
+- **Wave 1 round 2 — zero is quiet.** Count tiles (Needs you / Failed / Review and the delivery
+  strip) take their tone from `board/countTone.ts`: a zero is neutral, a status colour marks only a
+  non-zero exception (`data-tone` on each tile).
+- **Wave 1 round 2 — draft edits survive the run finishing.** The draft's kind is fixed when it
+  opens, so a status flip no longer refetches over the operator's edits.
+- **Wave 1 round 2 — Back never leaves studio.** App-pushed history entries are marked; the raw
+  views go Back only from a marked entry and otherwise navigate to `/`. Escape over the files view
+  with the palette open closes only the palette (capture-phase, palette-yielding, like Modal). A
+  pending scroll restore is cancelled by the operator's first scroll.
 - **studio#333 — the Ask bubble no longer covers Chat's Send button.** On `/chats` → New chat at
   1440×700 the floating launcher (#326) sat on the composer's Send, clipping it to "S…". The
   launcher takes a `bottomOffsetPx` — the same contract as the run right-panel's `rightOffsetPx`,

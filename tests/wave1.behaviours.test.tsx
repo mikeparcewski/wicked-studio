@@ -2,12 +2,15 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
 import { makeView } from './factories.js';
 import { bandCountLine, bandExpandsByDefault } from '../src/board/bandExpansion.js';
+import { bandFor, isStalled } from '../src/board/boardAttention.js';
+import { countTone } from '../src/board/countTone.js';
+import { needsYouRows } from '../src/board/needsYou.js';
 import { runTargetHits } from '../src/palette/runTargets.js';
 import { draftOutbound, outboundKindFor, STATUS_HEAD } from '../src/api/outbound.js';
 import { OUTBOUND_ACTIONS } from '../src/hooks/useOutboundDraft.js';
 import { useModeMemory } from '../src/hooks/useModeMemory.js';
 import { announceNavigateAway, useHistoryScroll, useHistoryState } from '../src/hooks/useHistoryState.js';
-import { runEventsPath, runFilesPath, useRoute } from '../src/hooks/useRoute.js';
+import { leaveRoute, runEventsPath, runFilesPath, useRoute } from '../src/hooks/useRoute.js';
 
 /**
  * Studio wave 1 — the behaviour layer under the four journeys (e2e/wave1_*_test.py).
@@ -156,5 +159,57 @@ describe('project-scoped mode memory', () => {
     expect(result.current('build')).toBeNull();
     rerender({ pid: 'alpha', artifact: null });
     expect(result.current('build')).toBe('a1');
+  });
+});
+
+describe('round 2 — a stalled run is an exception', () => {
+  const now = 10 * 60 * 60_000;
+  it('silence past the running decay threshold is a stall; no evidence claims nothing', () => {
+    expect(isStalled(now - 2 * 60 * 60_000, now)).toBe(true);
+    expect(isStalled(now - 10 * 60_000, now)).toBe(false);
+    expect(isStalled(undefined, now)).toBe(false);
+  });
+
+  it('bandFor sends a stalled active run to NEEDS YOU, not WORKING', () => {
+    expect(bandFor([{ kind: 'stalled', at: now - 2 * 60 * 60_000, runId: 'r1' }], true, now)).toBe('needs-you');
+    expect(bandFor([{ kind: 'running', at: now - 60_000, runId: 'r1' }], true, now)).toBe('working');
+  });
+
+  it('the needs-you queue carries a row for it (so calm is impossible)', () => {
+    const rows = needsYouRows({
+      runs: [makeView({ id: 'r1', status: 'executing', problem: 'tighten limits' })],
+      gates: {}, failedAt: {}, attachedAt: {}, projectIds: {}, chats: [], repos: [], campaigns: [],
+      stalledAt: { r1: now - 2 * 60 * 60_000 }, now,
+    });
+    expect(rows.map((r) => [r.kind, r.key])).toEqual([['stalled-run', 'stalled:r1']]);
+    expect(rows[0]?.text).toContain('2h');
+  });
+});
+
+describe('round 2 — zero is quiet', () => {
+  it('a zero count is neutral whatever its kind; a status tone needs a non-zero exception', () => {
+    expect(countTone(0, 'fail')).toBe('neutral');
+    expect(countTone(0, 'gate')).toBe('neutral');
+    expect(countTone(1, 'fail')).toBe('fail');
+    expect(countTone(3, 'gate')).toBe('gate');
+    expect(countTone(5, 'neutral')).toBe('neutral');
+  });
+});
+
+describe('round 2 — Back never leaves studio', () => {
+  it('an entry the app pushed goes Back; a first entry goes to the fallback', () => {
+    const navigate = vi.fn();
+    const back = vi.spyOn(window.history, 'back').mockImplementation(() => {});
+    window.history.replaceState(null, '', '/runs/r1/events'); // opened as the first entry
+    leaveRoute(navigate);
+    expect(back).not.toHaveBeenCalled();
+    expect(navigate).toHaveBeenCalledWith('/');
+
+    window.history.replaceState(null, '', '/');
+    const r = renderHook(() => useRoute()).result;
+    act(() => r.current.navigate('/runs/r1/events'));
+    leaveRoute(navigate);
+    expect(back).toHaveBeenCalledTimes(1);
+    back.mockRestore();
   });
 });

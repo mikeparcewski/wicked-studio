@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import type { SessionView } from '../api/types.js';
 import type { Navigate } from '../hooks/useRoute.js';
+import { COUNT_TONE_COLOR, countTone, type CountKind } from '../board/countTone.js';
 import { deliveryCounts } from '../board/windowStats.js';
 import { useIsSystemWorkflow } from '../store/workflowCache.js';
 
@@ -22,21 +23,30 @@ export function DeckVerifiedStrip({ runs, navigate }: {
 }): React.ReactElement {
   const isSystemWorkflow = useIsSystemWorkflow();
   const c = useMemo(() => deliveryCounts(runs, isSystemWorkflow), [runs, isSystemWorkflow]);
-  const cell = (path: string) => (e: React.MouseEvent): void => { e.preventDefault(); navigate(path); };
+  const cells: Array<{ key: string; count: number; kind: CountKind; path: string; label: string }> = [
+    { key: 'verified', count: c.delivered, kind: 'neutral', path: '/work?filter=delivered', label: 'Verified & delivered' },
+    { key: 'stranded', count: c.stranded, kind: 'gate', path: '/work?filter=stranded', label: 'Stranded — needs review' },
+    { key: 'vacuous', count: c.vacuous, kind: 'gate', path: '/work?filter=vacuous', label: 'Vacuous — no change to deliver' },
+  ];
   return (
     <div className="deck-vrbar" data-testid="home-delivery-strip" role="group" aria-label="Delivery outcomes">
-      <a className="deck-vrcell" data-testid="delivery-verified" href="/work?filter=delivered" onClick={cell('/work?filter=delivered')}>
-        <span className="deck-vn ok">{c.delivered}</span>
-        <span className="deck-vl">Verified &amp; delivered</span>
-      </a>
-      <a className="deck-vrcell" data-testid="delivery-stranded" href="/work?filter=stranded" onClick={cell('/work?filter=stranded')}>
-        <span className="deck-vn warn">{c.stranded}</span>
-        <span className="deck-vl">Stranded — needs review</span>
-      </a>
-      <a className="deck-vrcell" data-testid="delivery-vacuous" href="/work?filter=vacuous" onClick={cell('/work?filter=vacuous')}>
-        <span className="deck-vn bad">{c.vacuous}</span>
-        <span className="deck-vl">Vacuous — no change to deliver</span>
-      </a>
+      {cells.map((x) => {
+        // Zero is quiet: the tone is the count-tone model's, never a fixed per-cell colour.
+        const tone = countTone(x.count, x.kind);
+        return (
+          <a
+            key={x.key}
+            className="deck-vrcell"
+            data-testid={`delivery-${x.key}`}
+            data-tone={tone}
+            href={x.path}
+            onClick={(e) => { e.preventDefault(); navigate(x.path); }}
+          >
+            <span className="deck-vn" style={{ color: COUNT_TONE_COLOR[tone] }}>{x.count}</span>
+            <span className="deck-vl">{x.label}</span>
+          </a>
+        );
+      })}
     </div>
   );
 }

@@ -84,6 +84,7 @@ const MAX_LINES = 2;
 export const ATTENTION_DOT: Record<Attention, string> = {
   gate:    'var(--status-gate)',
   failing: 'var(--status-fail)',
+  stalled: 'var(--status-gate)',
   running: 'var(--status-run)',
   drafts:  'var(--ink-muted)',
   quiet:   'var(--ink-dim)',
@@ -95,15 +96,23 @@ export const ATTENTION_DOT: Record<Attention, string> = {
 export const SIGNAL_BAR: Record<SignalKind, string> = {
   gate:    'var(--status-gate)',
   failing: 'var(--status-fail)',
+  stalled: 'var(--status-gate)',
   running: 'var(--status-run)',
   drafts:  'var(--status-done)',
 };
+
+/** The pill's colour: the card's attention dot, except for a STALLED run — its status
+ *  still says "executing", but the pill names the exception (wave 1 round 2). */
+function pillColor(kind: SignalKind, attention: Attention): string {
+  return kind === 'stalled' ? SIGNAL_BAR.stalled : ATTENTION_DOT[attention];
+}
 
 /** The pill's word for the signal that put the card in NEEDS YOU — user words
  *  (V3: an executing run reads "working", never a scheduler word). */
 const PILL: Record<SignalKind, string> = {
   gate: 'gate',
   failing: 'failed',
+  stalled: 'stalled',
   running: 'working',
   drafts: 'draft',
 };
@@ -505,7 +514,7 @@ export function ProjectCard({
             style={{
               marginLeft: 'auto', flexShrink: 0, fontSize: 'var(--text-2xs)',
               fontWeight: 'var(--weight-bold)', letterSpacing: '0.06em',
-              textTransform: 'uppercase', color: ATTENTION_DOT[attention],
+              textTransform: 'uppercase', color: pillColor(signal.kind, attention),
               border: '1px solid var(--surface-raised)', borderRadius: 'var(--radius-full)',
               padding: '1px 8px',
             }}

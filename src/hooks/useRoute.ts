@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { isSteeringSection, isSteeringType, type SteeringSection } from '../api/steering.js';
 import { isTestingSubPage } from '../api/testing.js';
-import { announceNavigateAway } from './useHistoryState.js';
+import { announceNavigateAway, inAppEntryState, isInAppEntry, replacedEntryState } from './useHistoryState.js';
 
 // `execute` / `vibe` / `demo` are the three primary-path dashboard routes the
 // nav-reorg split the former `Make` union into (build → Execute, document → Vibe,
@@ -180,11 +180,12 @@ export function runFilesPath(runId: string): string {
 }
 
 /**
- * Leave a routed view the way the operator arrived: browser Back when there is an
- * entry to go back to (the palette verb pushed one), else `fallback`.
+ * Leave a routed view the way the operator arrived: browser Back when the current entry
+ * was pushed by studio itself (so Back lands in studio), else `fallback` — a deep link
+ * opened as the tab's first entry must never Back out of the app (wave 1 round 2).
  */
 export function leaveRoute(navigate: Navigate, fallback = '/'): void {
-  if (window.history.length > 1) window.history.back();
+  if (isInAppEntry()) window.history.back();
   else navigate(fallback);
 }
 
@@ -388,11 +389,11 @@ export function useRoute(): Route & {
   }, []);
 
   const navigate = useCallback<Navigate>((path, opts) => {
-    if (opts?.replace) history.replaceState(null, '', path);
+    if (opts?.replace) history.replaceState(replacedEntryState(), '', path);
     else {
       // The LEAVING entry snapshots its view state first (useHistoryState), so Back restores it.
       announceNavigateAway();
-      history.pushState(null, '', path);
+      history.pushState(inAppEntryState(), '', path);
     }
     // Parse pathname-only for the panel/mode router (a hash like `#gate` must
     // not ride into the artifact id), but also capture the search string so

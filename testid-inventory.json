@@ -11,9 +11,9 @@
   "studioVersion": "0.5.14",
   "counts": {
     "files": 150,
-    "occurrences": 1358,
-    "static": 1168,
-    "dynamic": 64,
+    "occurrences": 1356,
+    "static": 1165,
+    "dynamic": 65,
     "computed": 7
   },
   "static": [
@@ -1575,24 +1575,6 @@
       "testId": "deliver-toggle-row",
       "files": [
         "src/components/ChatInput.tsx"
-      ]
-    },
-    {
-      "testId": "delivery-stranded",
-      "files": [
-        "src/components/DeckVerifiedStrip.tsx"
-      ]
-    },
-    {
-      "testId": "delivery-vacuous",
-      "files": [
-        "src/components/DeckVerifiedStrip.tsx"
-      ]
-    },
-    {
-      "testId": "delivery-verified",
-      "files": [
-        "src/components/DeckVerifiedStrip.tsx"
       ]
     },
     {
@@ -7250,6 +7232,12 @@
       "pattern": "dashboard-mode-*",
       "files": [
         "src/components/ProjectDashboard.tsx"
+      ]
+    },
+    {
+      "pattern": "delivery-*",
+      "files": [
+        "src/components/DeckVerifiedStrip.tsx"
       ]
     },
     {

@@ -156,7 +156,7 @@ interface HomeWires {
 const NO_WIRES: HomeWires = { chats: null, campaigns: null, claims: null, rules: null, perRule: null, diag: null, evalCount: null };
 
 export function HomeBoard({ runs, navigate, onOpenAsk }: Props): React.ReactElement {
-  const { items, unfiled, failedAt, repos, loading, error } = useBoardModel(runs);
+  const { items, unfiled, failedAt, stalledAt, repos, loading, error } = useBoardModel(runs);
   const scroller = useRef<HTMLDivElement>(null);
   const [box, setBox] = useState({ w: 0, h: 0 });
   const [scrollTop, setScrollTop] = useState(0);
@@ -252,9 +252,10 @@ export function HomeBoard({ runs, navigate, onOpenAsk }: Props): React.ReactElem
         repos,
         // The needs-you wall reads the ENGINE campaigns off the listing (a label group has no gate of its own).
         campaigns: wires.campaigns?.campaigns ?? [],
+        stalledAt,
         now,
       }),
-    [runs, gates, failedAt, attachedAt, projectIdByRun, wires.chats, wires.campaigns, repos, now],
+    [runs, gates, failedAt, attachedAt, projectIdByRun, wires.chats, wires.campaigns, repos, stalledAt, now],
   );
 
   // Slice H's keyboard triage cursor — survives on the wall's gated cards.
