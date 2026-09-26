@@ -1,10 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import type { CoreEvent, SessionView } from '../api/types.js';
+import { needsYouRows } from '../board/needsYou.js';
 import { peekTarget, type PeekTarget } from '../board/peekTarget.js';
 import { gateVerdictFor, phaseLabel, type GateVerdictView } from '../components/gateVerdictModel.js';
 import { useRunEventStore } from '../store/events.js';
+import { useElicitationStore } from '../store/elicitations.js';
+import { useFailureClocks } from '../store/failureClocks.js';
 import { useGateStore } from '../store/gates.js';
+import { useNotificationStore } from '../store/notifications.js';
+import { useStallEscalationStore } from '../store/stallEscalations.js';
 import { anyModalOpen, useLayerStore } from '../store/layers.js';
 import { useMembershipStore } from '../store/membership.js';
 import { capturePlace, restorePlace, useReturnPlace } from '../store/place.js';
@@ -61,10 +66,35 @@ export function usePeekJump(runs: SessionView[], navigate: Navigate): PeekView {
   const projects = useProjectsStore((s) => s.projects);
   const canReturn = useReturnPlace((s) => s.place !== null);
 
-  const target = useMemo(
-    () => peekTarget({ runs, gates, projectIdByRun, attachedAtByRun }),
-    [runs, gates, projectIdByRun, attachedAtByRun],
-  );
+  const failedAt = useFailureClocks((s) => s.failedAtByRun);
+  const elicitations = useElicitationStore((s) => s.elicitations);
+  const notifications = useNotificationStore((s) => s.notifications);
+  const stallEscalations = useStallEscalationStore((s) => s.escalations);
+
+  // THE ranked queue (wave 2b's `needsYouRows` → `compareNeeds`), folded from the app-wide
+  // stores so peek works on every route. The home page's own wires (chats, campaigns,
+  // repo graphs, proposals) are not loaded off-home; those kinds rank below everything
+  // folded here, so they only become the peek when nothing else needs you.
+  const target = useMemo(() => {
+    const steerRequests = notifications
+      .filter((n) => n.kind === 'steer_requested' && !n.read)
+      .map((n) => ({ id: n.id, runId: n.runId, message: n.message, ts: n.ts }));
+    const rows = needsYouRows({
+      runs,
+      gates,
+      failedAt,
+      attachedAt: attachedAtByRun,
+      projectIds: projectIdByRun,
+      chats: [],
+      repos: [],
+      campaigns: [],
+      elicitations,
+      steerRequests,
+      stallEscalations,
+      now: Date.now(),
+    });
+    return peekTarget({ rows, gates, runs, projectIdByRun });
+  }, [runs, gates, failedAt, attachedAtByRun, projectIdByRun, elicitations, notifications, stallEscalations]);
 
   // The handlers live in a stable entry table; they read the current world through refs.
   const targetRef = useRef(target);
@@ -177,6 +207,7 @@ function usePeekEvidence(target: PeekTarget | null, runs: SessionView[]): PeekEv
     ? hydrated
     : fetched?.runId === target.runId ? fetched.events : null;
   if (events === null) return { verdict: null, phase: null, loading: true };
+  if (target.kind !== 'gate' || target.runId === null) return { verdict: null, phase: null, loading: false };
   const verdict = gateVerdictFor(events, target.ord ?? undefined, target.prompt ?? undefined);
   const units = runs.find((v) => v.session.id === target.runId)?.units ?? [];
   return { verdict, phase: verdict === null ? null : phaseLabel(target.runId, units, verdict.ord), loading: false };

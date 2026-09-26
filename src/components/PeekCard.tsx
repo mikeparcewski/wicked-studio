@@ -23,6 +23,8 @@ export function PeekCard({ view }: { view: PeekView }): React.ReactElement | nul
       aria-label="Peek: the top item that needs you"
       data-testid="peek-card"
       data-run-id={target?.runId ?? ''}
+      data-key={target?.key ?? ''}
+      data-kind={target?.kind ?? ''}
       className="fixed flex flex-col gap-2 overflow-y-auto z-50"
       style={{
         top: 56, right: 16, width: 420, maxHeight: '70vh',
@@ -53,8 +55,8 @@ export function PeekCard({ view }: { view: PeekView }): React.ReactElement | nul
       ) : (
         <>
           <p style={{ margin: 0, fontSize: 'var(--text-xs)', fontFamily: 'var(--font-mono)', color: 'var(--ink-dim)' }}>
-            {view.projectName ?? 'unfiled'} · {target.runId}
-            {target.receivedAt !== null && <> · waiting {ago(target.receivedAt)}</>}
+            {view.projectName ?? 'unfiled'}{target.runId !== null && <> · {target.runId}</>}
+            {target.at !== null && <> · waiting {ago(target.at)}</>}
           </p>
           <p data-testid="peek-subject" style={{ margin: 0, fontSize: 'var(--text-sm)', fontWeight: 'var(--weight-semi)', color: 'var(--ink-high)' }}>
             {target.subject}
@@ -66,9 +68,11 @@ export function PeekCard({ view }: { view: PeekView }): React.ReactElement | nul
               background: 'var(--status-gate-dim)', borderRadius: 'var(--radius-md)', padding: '8px 10px',
             }}
           >
-            {target.prompt ?? 'The gate’s question was not cached (the daemon restarted). Open it to read the thread.'}
+            {target.kind === 'gate'
+              ? target.prompt ?? 'The gate’s question was not cached (the daemon restarted). Open it to read the thread.'
+              : target.text}
           </p>
-          <div data-testid="peek-evidence">
+          {target.kind === 'gate' && <div data-testid="peek-evidence">
             {evidence.loading ? (
               <p style={{ margin: 0, fontSize: 'var(--text-xs)', color: 'var(--ink-dim)' }}>Reading the run&rsquo;s evidence…</p>
             ) : evidence.verdict !== null ? (
@@ -78,7 +82,7 @@ export function PeekCard({ view }: { view: PeekView }): React.ReactElement | nul
                 No evaluator verdict on record for this gate yet.
               </p>
             )}
-          </div>
+          </div>}
           <div className="flex items-center gap-2">
             <button
               type="button"
@@ -90,7 +94,7 @@ export function PeekCard({ view }: { view: PeekView }): React.ReactElement | nul
                 fontSize: 'var(--text-xs)', fontWeight: 'var(--weight-semi)', padding: '4px 10px',
               }}
             >
-              Go to the gate <span style={KBD}>G</span>
+              {target.kind === 'gate' ? 'Go to the gate' : 'Go to it'} <span style={KBD}>G</span>
             </button>
             <span style={{ fontSize: 'var(--text-2xs)', color: 'var(--ink-dim)' }}>
               then <span style={KBD}>B</span> brings you back here

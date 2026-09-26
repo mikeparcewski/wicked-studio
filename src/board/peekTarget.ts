@@ -1,66 +1,76 @@
 import type { SessionView } from '../api/types.js';
 import type { OpenGate } from '../store/gates.js';
-import { gateOpenPath } from './gateActions.js';
+import type { NeedKind, NeedRow } from './needsYou.js';
 
 /**
- * The item a peek shows and a jump goes to (studio wave 2a, behaviour 3): the TOP gate
- * that needs you, across every project.
+ * The item a peek shows and a jump goes to (studio wave 2a, behaviour 3): the TOP item of
+ * the ONE ranked needs-you queue (wave 2b, `needsYouRows` → `compareNeeds`). No second
+ * ranking exists here: whatever the queue puts first, peek shows and jump opens.
  *
- * Pure in every input, so the choice is pinnable in unit tests. Order matches the home
- * queue's gate rows (`needsYou.ts` today: newest gate first, clockless last, run id as the
- * tie-break). When the ranked queue lands (wave 2b), this should read that ranking's top
- * gate instead of re-deriving it; the seam is this one function.
+ * Pure — the caller hands in the queue's ranked rows. A folded group ("2 approvals") is
+ * never a destination on its own, so its top-ranked member stands in for it. A gate row
+ * carries its cached gate (prompt + ord) so the peek card can show the evidence behind it.
  */
 
 export interface PeekTarget {
-  runId: string;
-  /** The owning project, or null when neither the DTO nor the membership mirror places it. */
+  /** The queue row's identity (`gate:<run>`, `elicit:<run>`, `fail:<run>`, …). */
+  key: string;
+  kind: NeedKind;
+  /** The run the row is about, when it is about one. */
+  runId: string | null;
+  /** The owning project, when known. */
   projectId: string | null;
-  /** The run's intent — what the gate is holding up. */
+  /** What the item is about (run intent, repo, campaign). */
   subject: string;
-  /** The gate's own question, or null when the daemon restarted and the prompt was lost. */
+  /** The queue's own one-line narration for it. */
+  text: string;
+  /** A gate's question, or null (not a gate, or the daemon restarted and lost it). */
   prompt: string | null;
-  /** The gate's unit ord, when the gate record is cached. */
+  /** A gate's unit ord, when the gate record is cached. */
   ord: number | null;
-  /** When the gate opened (epoch ms), or null when no clock is held. */
-  receivedAt: number | null;
-  /** Where a jump lands: the thread, at the gate card (`#gate`). */
+  /** How long it has waited (epoch ms), or null when no wire carries a clock. */
+  at: number | null;
+  /** Where a jump lands: the row's act-in-place destination (a gate: the thread at `#gate`). */
   path: string;
 }
 
 export interface PeekInputs {
-  runs: readonly SessionView[];
+  /** The ranked queue rows (`needsYouRows` output, or its grouped fold). */
+  rows: readonly NeedRow[];
   gates: Readonly<Record<string, OpenGate>>;
-  /** run id → project id (the membership mirror). */
+  runs: readonly SessionView[];
   projectIdByRun: Readonly<Record<string, string>>;
-  /** run id → membership attach clock, the fallback when no gate clock is held. */
-  attachedAtByRun?: Readonly<Record<string, number>>;
 }
 
-export function peekTarget(inputs: PeekInputs): PeekTarget | null {
-  const { runs, gates, projectIdByRun } = inputs;
-  const attached = inputs.attachedAtByRun ?? {};
-  const waiting = runs.filter(
-    (v) => v.session.status === 'awaiting_human' && v.session.archived_at == null,
-  );
-  if (waiting.length === 0) return null;
-  const clock = (v: SessionView): number | null =>
-    gates[v.session.id]?.receivedAt ?? attached[v.session.id] ?? null;
-  const top = [...waiting].sort(
-    (a, b) =>
-      (clock(b) ?? -Infinity) - (clock(a) ?? -Infinity)
-      || a.session.id.localeCompare(b.session.id),
-  )[0]!;
-  const id = top.session.id;
-  const gate = gates[id];
-  const projectId = typeof top.session.project_id === 'string' ? top.session.project_id : projectIdByRun[id] ?? null;
+/** Row keys spell their run as `<prefix>:<runId>` (needsYou.ts's dedupe identity). */
+const RUN_KEYED: ReadonlySet<NeedKind> = new Set([
+  'gate', 'elicitation', 'stall-escalated', 'steer-request', 'failed-run', 'stalled-run', 'stranded-run',
+]);
+
+function runOf(row: NeedRow): string | null {
+  if (!RUN_KEYED.has(row.kind)) return null;
+  const i = row.key.indexOf(':');
+  return i < 0 ? null : row.key.slice(i + 1);
+}
+
+export function peekTarget({ rows, gates, runs, projectIdByRun }: PeekInputs): PeekTarget | null {
+  const first = rows[0];
+  if (first === undefined) return null;
+  const top = first.members?.[0] ?? first;
+  const runId = runOf(top);
+  const run = runId === null ? undefined : runs.find((v) => v.session.id === runId);
+  const gate = top.kind === 'gate' && runId !== null ? gates[runId] : undefined;
+  const dto = run?.session.project_id;
   return {
-    runId: id,
-    projectId,
-    subject: top.session.problem,
+    key: top.key,
+    kind: top.kind,
+    runId,
+    projectId: typeof dto === 'string' ? dto : runId !== null ? projectIdByRun[runId] ?? null : null,
+    subject: top.subject,
+    text: top.text,
     prompt: gate?.prompt ?? null,
     ord: gate?.ord ?? null,
-    receivedAt: clock(top),
-    path: projectId !== null ? gateOpenPath(projectId, id) : `/runs/${encodeURIComponent(id)}`,
+    at: top.at,
+    path: top.action.kind === 'open' ? top.action.path : top.subjectPath,
   };
 }

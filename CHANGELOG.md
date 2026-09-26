@@ -56,12 +56,14 @@ npm publish dates. Every version listed here exists on
   overwriting it. The handover's "system" section says it is checking while the audit read is in
   flight and says the daemon cannot say only when the read fails. The project brief snapshots only
   live runs and counts a run as new only when its `created_at` is after you left.
-- **Wave 2a — peek, jump, back.** `P` shows the top gate that needs you (its prompt and the
-  evaluator verdict it is asking about) in place, with the URL unchanged; `G` goes to that gate;
+- **Wave 2a — peek, jump, back.** `P` shows the top item that needs you (for a gate, its prompt
+  and the evaluator verdict it is asking about) in place, with the URL unchanged; `G` goes to that gate;
   `B` puts you back exactly where you were: the route, every `data-place-scroll` scroller's
   offset, the focused control, and any panel registered with `usePlacePanel`. All three are in the
   shortcut registry, so the `?` overlay lists them under "Peek, jump, back". Behaviour in
   `board/peekTarget.ts`, `store/place.ts`, `hooks/usePeekJump.ts`; `PeekCard` only renders.
+  The peeked item is the top of wave 2b's ONE ranked queue (`needsYouRows` → `compareNeeds`;
+  a folded group stands for its top member), so peek and jump follow the queue's ranking.
 - **Wave 2a — preview, then commit, with an undo window.** A gate decision from the board chip,
   the triage keys (`a`, `r` + note), the palette verbs, or the batch bar is queued for 10 s with an
   Undo toast ("Approving in 10 s", what will happen, Undo); the `POST /runs/:id/gate` goes out only
