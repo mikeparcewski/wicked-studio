@@ -11,8 +11,8 @@
   "studioVersion": "0.5.14",
   "counts": {
     "files": 155,
-    "occurrences": 1391,
-    "static": 1197,
+    "occurrences": 1393,
+    "static": 1199,
     "dynamic": 67,
     "computed": 7
   },
@@ -5585,6 +5585,12 @@
       ]
     },
     {
+      "testId": "steering-actions",
+      "files": [
+        "src/components/SteeringGate.tsx"
+      ]
+    },
+    {
       "testId": "steering-add-menu",
       "files": [
         "src/components/SteeringAddMenu.tsx"
@@ -5916,6 +5922,12 @@
     },
     {
       "testId": "steering-prompt",
+      "files": [
+        "src/components/SteeringGate.tsx"
+      ]
+    },
+    {
+      "testId": "steering-prompt-toggle",
       "files": [
         "src/components/SteeringGate.tsx"
       ]
