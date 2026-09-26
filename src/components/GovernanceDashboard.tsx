@@ -26,6 +26,7 @@ import { ProposalsSection } from './ProposalsSection.js';
 import { FacetAutocomplete } from './FacetAutocomplete.js';
 import { KeyValueChips } from './ProposalChips.js';
 import { SeverityChip } from './SteeringChips.js';
+import { useNeedsSources } from '../store/needsSources.js';
 
 /**
  * The GOVERNED-KNOWLEDGE dashboard (`/steering/dashboard`) — the review-forward Steering home
@@ -86,6 +87,8 @@ export function GovernanceDashboard({ navigate }: { navigate: Navigate }): React
     try {
       const ps = await listProposals({ state: 'pending' });
       setPending(ps);
+      // The needs-you queue's proposals input rides this read (a deposit, zero requests).
+      useNeedsSources.getState().depositProposals(ps);
       setProposalsUnsupported(false);
       setProposalsError(false);
     } catch (e) {

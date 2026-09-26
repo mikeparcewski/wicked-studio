@@ -1,34 +1,28 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { api } from '../api/client.js';
-import { listCampaigns, type CampaignsListing } from '../api/campaigns.js';
 import { testDoorWord } from '../board/campaignStats.js';
 import { getDiagnostics, type Diagnostics } from '../api/diagnostics.js';
 import type { SteeringRule } from '../api/steering.js';
 import type { GovernanceClaim, SessionView } from '../api/types.js';
 import { getWikiScoreboard, type WikiRuleEvidenceRow } from '../api/wiki.js';
-import { listProposals, type Proposal } from '../api/proposals.js';
 import { bandHint, bandLabel } from '../board/bandCopy.js';
 import { bandCountLine, bandExpandsByDefault } from '../board/bandExpansion.js';
 import { windowRows } from '../board/boardWindow.js';
-import type { LiveChatSnapshot } from '../board/chatStats.js';
-import { isFreshInstall, needsYouRows } from '../board/needsYou.js';
+import { isFreshInstall } from '../board/needsYou.js';
 import { leadMovingRun } from '../board/phaseProgress.js';
 import { useBoardModel, type BoardProject } from '../hooks/useBoardModel.js';
 import { useHistoryScroll, useHistoryState } from '../hooks/useHistoryState.js';
 import { modePath, projectPath, runTimelinePath, type Navigate } from '../hooks/useRoute.js';
 import { useHandover } from '../hooks/useHandover.js';
-import { useNeedsQueue } from '../hooks/useNeedsQueue.js';
+import { useNeedsClock, useNeedsRows } from '../hooks/useNeedsRows.js';
 import { useSkinVariant } from '../hooks/useSkin.js';
 import { useSkinSlots } from '../store/skinSlots.js';
 import { useTriageCursor, type TriageCursor, type TriageItem } from '../hooks/useTriageCursor.js';
-import { useElicitationStore } from '../store/elicitations.js';
-import { useNotificationStore } from '../store/notifications.js';
-import { useStallEscalationStore } from '../store/stallEscalations.js';
+import { useCampaignsStore } from '../store/campaigns.js';
+import { HOME_FRESH_MS, useNeedsSources } from '../store/needsSources.js';
 import { usePlacePanel } from '../hooks/usePlacePanel.js';
 import { useDocsCache } from '../store/docsCache.js';
 import { useGateStore } from '../store/gates.js';
-import { useMembershipStore } from '../store/membership.js';
 import { BatchGateBar } from './BatchGateBar.js';
 import { HomeVerbs, RecentActivity } from './HomeCommand.js';
 import { DeckKpiRibbon } from './DeckKpiRibbon.js';
@@ -37,7 +31,7 @@ import { DeckSectionDoors, type SectionDoor } from './DeckSectionDoors.js';
 import { DeckBurnChart } from './DeckBurnChart.js';
 import { listEvalRuns } from '../api/testing.js';
 import { HandoverPanel } from './HandoverPanel.js';
-import { NeedsYouQueue } from './NeedsYouQueue.js';
+import { NeedsQueueSurface } from './NeedsYouQueue.js';
 import { ACTIVE_CARD_H, ago, ProjectCard, QUIET_CARD_H } from './ProjectCard.js';
 import { humanTitle } from './runIdentity.js';
 import { ProjectSparkline } from './ProjectSparkline.js';
@@ -67,10 +61,12 @@ import { ProjectSparkline } from './ProjectSparkline.js';
  * the queue and the KPI band are BOTH visible without scrolling at 1440×700;
  * the wall keeps its own windowed scroller below (boardWindow.ts, unchanged).
  *
- * Wire honesty: the section wires (`/chats`, `/campaigns`, `/governance/*`,
- * wiki scoreboard, `/diagnostics`) are read once per mount, failure-tolerant:
- * a daemon that cannot answer degrades that feature to its absent state and
- * never the page (older tests' partial API mocks ride the same seam).
+ * Wire honesty: the section wires (`/governance/*`, wiki scoreboard,
+ * `/diagnostics`, evals) are read once per mount, failure-tolerant: a daemon
+ * that cannot answer degrades that feature to its absent state and never the
+ * page (older tests' partial API mocks ride the same seam). The needs-you
+ * queue's own wires (`/chats`, `/campaigns`, `/repos`, `/proposals`) are the
+ * app shell's (`store/needsSources.ts`): Home re-reads only the stale ones.
  */
 
 /** Card gap — §1.3's composition (blocks and cards sit 8px apart, `--space-2`). */
@@ -84,8 +80,6 @@ const FALLBACK_H = 900;
 const BAND_H = 34;
 /** Collapsed QUIET shows at most this many one-line chips (D5). */
 const QUIET_PREVIEW = 6;
-/** The coarse re-age tick for the queue/KPI clocks (the board-model idiom). */
-const TICK_MS = 60_000;
 
 const CSS = {
   bandLabel: {
@@ -150,26 +144,22 @@ function BandGrid({ items, columns, rowH, firstRow, lastRow, navigate, cursor }:
 }
 
 /** The section wires the command center reads once per mount — null until (and
- *  unless) each answers; absence degrades the feature, never the page. */
+ *  unless) each answers; absence degrades the feature, never the page. The needs-you queue's
+ *  own inputs (chats, campaigns, repos, proposals) are NOT here: they live in the app-level
+ *  source (`store/needsSources.ts`), read once for the whole shell. */
 interface HomeWires {
-  chats: LiveChatSnapshot[] | null;
-  /** The ONE `GET /campaigns` answer — campaigns + label groups, plus the api-types 0.36.0 test
-   *  sets (`testSets: null` inside = a pre-0.36 daemon). */
-  campaigns: CampaignsListing | null;
   claims: GovernanceClaim[] | null;
   rules: SteeringRule[] | null;
   perRule: WikiRuleEvidenceRow[] | null;
   diag: Diagnostics | null;
   /** Count of recorded eval runs (the eval store) — the Evals door's number. */
   evalCount: number | null;
-  /** Pending steering/memory proposals (`GET /proposals?state=pending`) — queue rows. */
-  proposals: Proposal[] | null;
 }
 
-const NO_WIRES: HomeWires = { chats: null, campaigns: null, claims: null, rules: null, perRule: null, diag: null, evalCount: null, proposals: null };
+const NO_WIRES: HomeWires = { claims: null, rules: null, perRule: null, diag: null, evalCount: null };
 
 export function HomeBoard({ runs, navigate, onOpenAsk }: Props): React.ReactElement {
-  const { items, unfiled, failedAt, stalledAt, repos, loading, error } = useBoardModel(runs);
+  const { items, unfiled, failedAt, repos, loading, error } = useBoardModel(runs);
   const scroller = useRef<HTMLDivElement>(null);
   const [box, setBox] = useState({ w: 0, h: 0 });
   const [scrollTop, setScrollTop] = useState(0);
@@ -182,12 +172,13 @@ export function HomeBoard({ runs, navigate, onOpenAsk }: Props): React.ReactElem
   usePlacePanel('home.workingOpen', workingOpen, setWorkingOpen);
   const [shelfOpen, setShelfOpen] = useState(false);
   const [wires, setWires] = useState<HomeWires>(NO_WIRES);
-  /** The coarse age tick — rows re-age without any data changing. */
-  const [now, setNow] = useState(() => Date.now());
+  /** The coarse age tick — rows re-age without any data changing (shared with the rail). */
+  const now = useNeedsClock();
 
+  // The queue's inputs are app-level (store/needsSources.ts): arriving on Home re-reads only
+  // the ones gone stale, so a route walk back to Home costs nothing.
   useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), TICK_MS);
-    return () => clearInterval(t);
+    void useNeedsSources.getState().load(HOME_FRESH_MS);
   }, []);
 
   // The section wires — one read each per mount, all failure-tolerant (§7):
@@ -204,8 +195,6 @@ export function HomeBoard({ runs, navigate, onOpenAsk }: Props): React.ReactElem
     const deposit = (part: Partial<HomeWires>): void => {
       if (!cancelled) setWires((w) => ({ ...w, ...part }));
     };
-    void read(() => api.listChats()).then((r) => r !== null && deposit({ chats: r.chats }));
-    void read(() => listCampaigns()).then((r) => r !== null && deposit({ campaigns: r }));
     void read(() => api.listClaims()).then((r) => r !== null && deposit({ claims: r.claims }));
     void read(() => api.listConformanceRules()).then(
       (r) => r !== null && deposit({ rules: r.rules as SteeringRule[] }),
@@ -215,7 +204,6 @@ export function HomeBoard({ runs, navigate, onOpenAsk }: Props): React.ReactElem
     );
     void read(() => getDiagnostics()).then((r) => r !== null && deposit({ diag: r }));
     void read(() => listEvalRuns()).then((r) => r !== null && deposit({ evalCount: r.length }));
-    void read(() => listProposals({ state: 'pending' })).then((r) => r !== null && deposit({ proposals: r }));
     return () => { cancelled = true; };
   }, []);
 
@@ -245,60 +233,22 @@ export function HomeBoard({ runs, navigate, onOpenAsk }: Props): React.ReactElem
   const quiet = items.filter((i) => i.band === 'quiet');
 
   const gates = useGateStore((s) => s.gates);
-  const projectIdByRun = useMembershipStore((s) => s.projectIdByRun);
-  const elicitations = useElicitationStore((s) => s.elicitations);
-  const notifications = useNotificationStore((s) => s.notifications);
-  const stallEscalations = useStallEscalationStore((s) => s.escalations);
-  // The bell's unread steer requests — the queue's `steer-request` rows.
-  const steerRequests = useMemo(
-    () =>
-      notifications
-        .filter((n) => n.kind === 'steer_requested' && !n.read)
-        .map((n) => ({ id: n.id, runId: n.runId, message: n.message, ts: n.ts })),
-    [notifications],
-  );
 
-  // The board's charts + the queue's ages bucket on the one honest per-run
-  // clock the board already fetched — membership attach, merged across projects.
-  const attachedAt = useMemo(() => {
-    const merged: Record<string, number> = {};
-    for (const item of items) Object.assign(merged, item.attachedAt);
-    return merged;
-  }, [items]);
-
-  // ── THE needs-you fold (§3) — the queue, the KPI tile and the calm state all
-  // derive from THIS one call; no second derivation exists to disagree with it.
-  const needRows = useMemo(
-    () =>
-      needsYouRows({
-        runs,
-        gates,
-        failedAt,
-        attachedAt,
-        projectIds: projectIdByRun,
-        chats: wires.chats ?? [],
-        repos,
-        // The needs-you wall reads the ENGINE campaigns off the listing (a label group has no gate of its own).
-        campaigns: wires.campaigns?.campaigns ?? [],
-        stalledAt,
-        elicitations,
-        steerRequests,
-        stallEscalations,
-        proposals: wires.proposals ?? [],
-        now,
-      }),
-    [runs, gates, failedAt, attachedAt, projectIdByRun, wires.chats, wires.campaigns, wires.proposals, repos, stalledAt, elicitations, steerRequests, stallEscalations, now],
-  );
-
-  // The queue's behaviour (wave 2b): grouping, the cursor, the verbs. Called BEFORE the
-  // wall's triage cursor — registration order is shortcut precedence, and the queue's
-  // keys (guarded on focus inside the queue) must be offered first.
-  const queue = useNeedsQueue(needRows, navigate, now);
+  // ── THE needs-you fold (§3) — the queue, the KPI tile and the calm state all derive from
+  // THIS one fold (`useNeedsRows`, app-level: the rail and peek read the same rows); no second
+  // derivation exists to disagree with it.
+  const needRows = useNeedsRows(runs, now);
   // The skin decides WHERE the queue renders, never what it is: `rail` docks it into the
-  // shell's right rail (when that region is mounted), `inline` keeps it in the command center.
+  // shell's right rail (the shell mounts it there on every route), `inline` keeps it in the
+  // command center. A rail variant with no rail mounted renders inline — never nowhere.
   const queueVariant = useSkinVariant('needsQueue');
   const rightRail = useSkinSlots((s) => s.rightRail);
   const queueInRail = queueVariant === 'rail' && rightRail !== null;
+  // The Test door's census — the campaigns store the needs source keeps loaded.
+  const campaignsSupport = useCampaignsStore((s) => s.support);
+  const campaignList = useCampaignsStore((s) => s.campaigns);
+  const campaignGroups = useCampaignsStore((s) => s.groups);
+  const testSets = useCampaignsStore((s) => s.testSets);
   // Handover on arrival (wave 2b): after an absence, the first thing Home shows.
   const handover = useHandover(runs, failedAt);
 
@@ -385,7 +335,7 @@ export function HomeBoard({ runs, navigate, onOpenAsk }: Props): React.ReactElem
       { key: 'execute', label: 'Execute', glyph: '▸', count: plural(runs.length, 'run'), href: '/execute', color: 'var(--status-run)' },
       // The same census as the landing's "Tests" tile (campaigns + label groups) — with the produced
       // sets appended once a 0.36 daemon serves them (`testDoorWord`); a pre-0.36 answer says only "N tests".
-      { key: 'test', label: 'Test', glyph: '✓', count: wires.campaigns === null ? null : testDoorWord(wires.campaigns), href: '/testing/campaigns', color: 'var(--section-test)' },
+      { key: 'test', label: 'Test', glyph: '✓', count: campaignsSupport !== 'supported' ? null : testDoorWord({ campaigns: campaignList, groups: campaignGroups, testSets }), href: '/testing/campaigns', color: 'var(--section-test)' },
       // F-1/F-2: the census the count covers is said — "N documents" only once the daemon-wide index
       // (or an explicit fan-out) has answered for every project; otherwise "in opened projects".
       { key: 'vibe', label: 'Vibe', glyph: '▤', count: docsCensus === 'opened' ? `${plural(docsCount, 'document')} in opened projects` : plural(docsCount, 'document'), href: '/vibe', color: 'var(--section-vibe)' },
@@ -393,7 +343,7 @@ export function HomeBoard({ runs, navigate, onOpenAsk }: Props): React.ReactElem
       { key: 'evals', label: 'Evals', glyph: '◈', count: wires.evalCount === null ? null : plural(wires.evalCount, 'run'), href: '/testing/evals', color: 'var(--status-gate)' },
       { key: 'steering', label: 'Steering', glyph: '☸', count: wires.rules === null ? null : plural(wires.rules.length, 'rule'), href: '/steering/dashboard', color: 'var(--accent)' },
     ];
-  }, [runs.length, docsCount, docsCensus, wires.campaigns, wires.evalCount, wires.rules]);
+  }, [runs.length, docsCount, docsCensus, campaignsSupport, campaignList, campaignGroups, testSets, wires.evalCount, wires.rules]);
 
   // The fresh-install welcome (§6): verbs + Ask, prominent — and NOTHING
   // measured, because nothing has ever run (no fabricated zeros).
@@ -473,9 +423,9 @@ export function HomeBoard({ runs, navigate, onOpenAsk }: Props): React.ReactElem
               padding: '0 var(--space-6) var(--space-4)', maxHeight: '52vh', minHeight: 0,
             }}
           >
-            {queueInRail
-              ? createPortal(<NeedsYouQueue queue={queue} runs={runs} navigate={navigate} now={now} variant="rail" />, rightRail)
-              : <NeedsYouQueue queue={queue} runs={runs} navigate={navigate} now={now} />}
+            {/* The queue's keys act only while focus is inside it, and the wall's triage keys
+                yield then (`queueHasFocus`) — so it never matters which registered first. */}
+            {!queueInRail && <NeedsQueueSurface rows={needRows} runs={runs} navigate={navigate} now={now} />}
             <div
               style={{
                 flex: '1 1 0', minWidth: '320px', display: 'flex', flexDirection: 'column',

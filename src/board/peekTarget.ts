@@ -35,7 +35,7 @@ export interface PeekTarget {
 }
 
 export interface PeekInputs {
-  /** The ranked queue rows (`needsYouRows` output, or its grouped fold). */
+  /** The ranked queue rows (`useNeedsRows` — the app-level `needsYouRows` fold — or its grouped fold). */
   rows: readonly NeedRow[];
   gates: Readonly<Record<string, OpenGate>>;
   runs: readonly SessionView[];

@@ -20,6 +20,7 @@ import type { ConfirmMode } from './ContextPopover.js';
 import { NewProjectModal } from './NewProjectModal.js';
 import { ProjectSwitcher } from './ProjectSwitcher.js';
 import { deliverKindOf, SYSTEM_WORKFLOW_IDS, type RunKind, type RunMode } from './runMode.js';
+import { HOME_FRESH_MS, useNeedsSources } from '../store/needsSources.js';
 
 interface Props {
   /** If set, we're in "run selected" mode — steer if gated, inject if executing, placeholder otherwise. */
@@ -404,9 +405,12 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
       .catch(() => {
         /* roster load failure is non-fatal */
       });
-    api
-      .listRepos()
-      .then(({ repos: rs }) => setRepos(rs))
+    // The repo register is the app-level needs source's (one read shared with the shell's board
+    // model and the queue's repo-graph rows) — a fresh answer costs no request.
+    useNeedsSources
+      .getState()
+      .loadRepos(HOME_FRESH_MS)
+      .then((rs) => setRepos(rs))
       .catch(() => {});
     api
       .listWorkflows()

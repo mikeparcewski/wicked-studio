@@ -13,9 +13,10 @@ import type { Navigate } from './useRoute.js';
  * Keys live on the queue ITSELF: j/k (and ↓/↑) walk the queue and Enter acts on the
  * selected row — a group expands or collapses, a row does its verb — while focus is
  * inside the queue (Tab onto it, or click it). With focus elsewhere the keys yield, so
- * the portfolio wall's triage cursor keeps j/k exactly as before. The hook must be
- * called BEFORE the wall's `useTriageCursor` in the same component: registration order
- * is the shortcut table's precedence, and the queue's entries are the ones with a guard.
+ * the portfolio wall's triage cursor keeps j/k exactly as before. The two sets of keys
+ * are mutually exclusive by guard (the queue's need focus inside it; the wall's yield
+ * while it has it), so registration order is irrelevant — the queue may be mounted by
+ * Home or by the shell's right rail (`NeedsQueueSurface`), on any route.
  *
  * Focus and selection agree (review of #336): focusing anything inside a row selects
  * that row; focus leaving the queue clears the selection; the cursor moves DOM focus

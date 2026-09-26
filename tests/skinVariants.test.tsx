@@ -38,6 +38,8 @@ const { AppearanceSettings } = await import('../src/components/AppearanceSetting
 const { LeftSidebar } = await import('../src/components/LeftSidebar.js');
 const { HomeBoard } = await import('../src/components/HomeBoard.js');
 const { SkinRightRail } = await import('../src/components/SkinRightRail.js');
+const { NeedsQueueSurface } = await import('../src/components/NeedsYouQueue.js');
+const { useNeedsClock, useNeedsRows } = await import('../src/hooks/useNeedsRows.js');
 
 const root = () => document.documentElement;
 const setSkin = (skin: 'studio' | 'compact-rail'): void => {
@@ -73,10 +75,9 @@ describe('the skin picker (Appearance settings)', () => {
 });
 
 describe('the shell layout choice', () => {
-  it('opens the right rail only for a right-rail skin, on Home', () => {
-    expect(rightRailOpen(skinById('compact-rail'), 'home')).toBe(true);
-    expect(rightRailOpen(skinById('compact-rail'), 'work')).toBe(false);
-    expect(rightRailOpen(skinById('studio'), 'home')).toBe(false);
+  it('opens the right rail for a right-rail skin on every route, never for the classic shell', () => {
+    expect(rightRailOpen(skinById('compact-rail'))).toBe(true);
+    expect(rightRailOpen(skinById('studio'))).toBe(false);
   });
 });
 
@@ -158,13 +159,28 @@ describe('every nav destination is reachable under every skin', () => {
 describe('the Needs-you queue variant', () => {
   const runs = [makeView({ id: 'r-f1', status: 'failed', problem: 'broke it' })];
 
-  function mountHome(): void {
-    render(
+  /** The shell's wiring (App.tsx): Home in the center; under a right-rail skin, the rail with
+   *  the queue surface over the ONE app-level fold. */
+  function Shell(): React.ReactElement {
+    const now = useNeedsClock();
+    const rows = useNeedsRows(runs, now);
+    const skin = skinById(useAppearanceStore((s) => s.appearance.skin));
+    return (
       <div style={{ display: 'flex' }}>
         <HomeBoard runs={runs} navigate={() => {}} onOpenAsk={() => {}} />
-        {rightRailOpen(skinById(useAppearanceStore.getState().appearance.skin), 'home') && <SkinRightRail />}
-      </div>,
+        {rightRailOpen(skin) && (
+          <SkinRightRail>
+            {skin.variants.needsQueue === 'rail' && (
+              <NeedsQueueSurface rows={rows} runs={runs} navigate={() => {}} now={now} variant="rail" />
+            )}
+          </SkinRightRail>
+        )}
+      </div>
     );
+  }
+
+  function mountHome(): void {
+    render(<Shell />);
   }
 
   it('studio: inline in the command center; no right rail', async () => {

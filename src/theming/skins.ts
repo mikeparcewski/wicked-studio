@@ -10,7 +10,7 @@
  *                   (never a primitive, never a colour: themes own colour). Applied as
  *                   inline custom properties on <html>, the §3.3 cascade seam.
  *   2. `shell`    — the shell layout: `classic`, or `right-rail` (the shell reserves a
- *                   persistent right column on Home).
+ *                   persistent right column on every route).
  *   3. `variants` — which variant renders each behaviour surface.
  *
  * Kept deliberately small: a surface's variant union only holds variants that exist.
@@ -133,9 +133,9 @@ export function skinTokenKeys(): SkinToken[] {
 export const RIGHT_RAIL_PX = 340;
 
 /**
- * Whether the shell renders its right rail for this route. The rail holds the Needs-you
- * queue, whose fold (needsYouRows) is computed on Home — so the rail opens on Home.
+ * Whether the shell renders its right rail. The rail holds the Needs-you queue, whose fold
+ * (`useNeedsRows`) reads app-level sources — so a right-rail skin has its rail on EVERY route.
  */
-export function rightRailOpen(skin: SkinManifest, panel: string): boolean {
-  return skin.shell === 'right-rail' && panel === 'home';
+export function rightRailOpen(skin: SkinManifest): boolean {
+  return skin.shell === 'right-rail';
 }

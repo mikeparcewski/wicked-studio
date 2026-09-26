@@ -2,15 +2,11 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import type { CoreEvent, SessionView } from '../api/types.js';
 import { useGateActionStore } from '../board/gateActions.js';
-import { needsYouRows } from '../board/needsYou.js';
+import type { NeedRow } from '../board/needsYou.js';
 import { peekTarget, type PeekTarget } from '../board/peekTarget.js';
 import { gateVerdictFor, phaseLabel, type GateVerdictView } from '../components/gateVerdictModel.js';
 import { useRunEventStore } from '../store/events.js';
-import { useElicitationStore } from '../store/elicitations.js';
-import { useFailureClocks } from '../store/failureClocks.js';
 import { useGateStore } from '../store/gates.js';
-import { useNotificationStore } from '../store/notifications.js';
-import { useStallEscalationStore } from '../store/stallEscalations.js';
 import { anyModalOpen, useLayerStore } from '../store/layers.js';
 import { useMembershipStore } from '../store/membership.js';
 import { capturePlace, restorePlace, useReturnPlace } from '../store/place.js';
@@ -65,49 +61,29 @@ const withoutHash = (path: string): string => path.split('#')[0] ?? path;
 /** P, G and B stand down while a modal or the '?' overlay owns the keyboard. */
 const keysFree = (): boolean => !anyModalOpen() && !useLayerStore.getState().shortcutOverlayOpen;
 
-export function usePeekJump(runs: SessionView[], navigate: Navigate): PeekView {
+/**
+ * `rows` is THE ranked needs-you queue — the app-level fold (`useNeedsRows`) Home and the right
+ * rail render — so what peek shows is, on every route, exactly the queue's top item.
+ */
+export function usePeekJump(runs: SessionView[], navigate: Navigate, rows: readonly NeedRow[]): PeekView {
   const open = useLayerStore((s) => s.peekOpen);
   const gates = useGateStore((s) => s.gates);
   const projectIdByRun = useMembershipStore((s) => s.projectIdByRun);
-  const attachedAtByRun = useMembershipStore((s) => s.attachedAtByRun);
   const projects = useProjectsStore((s) => s.projects);
   const canReturn = useReturnPlace((s) => s.place !== null);
 
-  const failedAt = useFailureClocks((s) => s.failedAtByRun);
-  const elicitations = useElicitationStore((s) => s.elicitations);
-  const notifications = useNotificationStore((s) => s.notifications);
-  const stallEscalations = useStallEscalationStore((s) => s.escalations);
   const decisions = useGateActionStore((s) => s.byGate);
 
-  // THE ranked queue (wave 2b's `needsYouRows` → `compareNeeds`), folded from the app-wide
-  // stores so peek works on every route. The home page's own wires (chats, campaigns,
-  // repo graphs, proposals) are not loaded off-home; those kinds rank below everything
-  // folded here, so they only become the peek when nothing else needs you.
+  // THE ranked queue's top item (wave 2b's `needsYouRows` → `compareNeeds`, folded once,
+  // app-wide, by `useNeedsRows` — the same rows Home and the rail show, on every route).
   const target = useMemo(() => {
-    const steerRequests = notifications
-      .filter((n) => n.kind === 'steer_requested' && !n.read)
-      .map((n) => ({ id: n.id, runId: n.runId, message: n.message, ts: n.ts }));
-    const rows = needsYouRows({
-      runs,
-      gates,
-      failedAt,
-      attachedAt: attachedAtByRun,
-      projectIds: projectIdByRun,
-      chats: [],
-      repos: [],
-      campaigns: [],
-      elicitations,
-      steerRequests,
-      stallEscalations,
-      now: Date.now(),
-    });
     // A gate that already has a decision (queued, in flight, answered) is never peeked again.
     const decided = (id: string): boolean => {
       const cur = decisions[id];
       return cur !== undefined && (cur.queued || cur.busy || cur.answered !== null);
     };
     return peekTarget({ rows, gates, runs, projectIdByRun, decided });
-  }, [runs, gates, failedAt, attachedAtByRun, projectIdByRun, elicitations, notifications, stallEscalations, decisions]);
+  }, [rows, runs, gates, projectIdByRun, decisions]);
 
   // The handlers live in a stable entry table; they read the current world through refs.
   const targetRef = useRef(target);

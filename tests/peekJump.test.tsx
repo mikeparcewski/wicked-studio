@@ -14,11 +14,14 @@ vi.mock('../src/api/client.js', () => ({
 }));
 
 const { usePeekJump } = await import('../src/hooks/usePeekJump.js');
+const { useNeedsClock, useNeedsRows } = await import('../src/hooks/useNeedsRows.js');
+const { useNeedsSources } = await import('../src/store/needsSources.js');
 const { usePlacePanel } = await import('../src/hooks/usePlacePanel.js');
 const { PeekCard } = await import('../src/components/PeekCard.js');
 const { listShortcuts } = await import('../src/hooks/useGlobalShortcuts.js');
 const { overlayRows } = await import('../src/components/ShortcutOverlay.js');
 const { useGateStore } = await import('../src/store/gates.js');
+const { useElicitationStore } = await import('../src/store/elicitations.js');
 const { useLayerStore } = await import('../src/store/layers.js');
 const { useMembershipStore } = await import('../src/store/membership.js');
 const { useReturnPlace } = await import('../src/store/place.js');
@@ -28,8 +31,10 @@ const run = (id: string, status: string): SessionView =>
 
 const RUNS = [run('r1', 'executing'), run('b1', 'awaiting_human')];
 
-function Harness({ navigate }: { navigate: (p: string) => void }): React.ReactElement {
-  const view = usePeekJump(RUNS, navigate);
+function Harness({ navigate, runs = RUNS }: { navigate: (p: string) => void; runs?: SessionView[] }): React.ReactElement {
+  // The shell's wiring: the ONE app-level fold, handed to peek.
+  const rows = useNeedsRows(runs, useNeedsClock());
+  const view = usePeekJump(runs, navigate, rows);
   const [panel, setPanel] = useState(false);
   usePlacePanel('test.panel', panel, setPanel);
   return (
@@ -56,9 +61,31 @@ beforeEach(() => {
     gates: { b1: { runId: 'b1', ord: 3, prompt: 'Approve unit 3?', lifecycle: 'open', receivedAt: 1_000 } },
   });
   useMembershipStore.setState({ projectIdByRun: { r1: 'gamma', b1: 'beta' }, attachedAtByRun: {} });
+  useElicitationStore.setState({ elicitations: {} });
 });
 
 describe('peek', () => {
+  it('off Home, peek sees the app-level queue — a pending proposal, then an elicitation above it', () => {
+    useGateStore.setState({ gates: {} });
+    const runs = [run('r1', 'executing')];
+    act(() => useNeedsSources.setState({
+      proposals: [{
+        id: 'prop-1', kind_type: 'memory', state: 'pending', facets: {}, provenance: {},
+        payload: { content: 'Prefer the retry helper', tier: 'semantic' }, created_at: 1_700_000_000,
+      }],
+      readAt: { chats: Date.now(), proposals: Date.now(), repos: Date.now(), campaigns: Date.now() },
+    }));
+    render(<Harness navigate={vi.fn()} runs={runs} />);
+    press('p');
+    expect(screen.getByTestId('peek-card').getAttribute('data-key')).toBe('proposal:prop-1');
+    press('p');
+    act(() => useElicitationStore.getState().ingest({
+      type: 'elicitationCreated', session: 'r1', elicitationId: 'el-1', message: 'Which bucket?', options: null,
+    } as never));
+    press('p');
+    expect(screen.getByTestId('peek-card').getAttribute('data-key')).toBe('elicit:r1');
+  });
+
   it('P shows the top gate in place and leaves the URL alone; P again closes', () => {
     const navigate = vi.fn();
     render(<Harness navigate={navigate} />);

@@ -10,6 +10,7 @@ import {
   type ProposalKind,
 } from '../api/proposals.js';
 import { ProposalsList } from './ProposalsList.js';
+import { useNeedsSources } from '../store/needsSources.js';
 
 /**
  * The governed-knowledge PROPOSAL-review section — the reusable "proposals (review)" half that
@@ -53,6 +54,9 @@ export function ProposalsSection({ kind, heading, onDecision }: {
     try {
       const ps = await listProposals({ state: 'pending' });
       setProposals(ps);
+      // The needs-you queue's proposals input rides this read (a deposit, zero requests), so a
+      // decided proposal leaves the rail and peek as soon as this list reconciles.
+      useNeedsSources.getState().depositProposals(ps);
     } catch (e) {
       if (isProposalsUnsupported(e)) setUnsupported(true);
       else setError(e instanceof Error ? e.message : String(e));

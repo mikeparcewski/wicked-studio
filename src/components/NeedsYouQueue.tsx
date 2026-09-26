@@ -1,6 +1,6 @@
 import type { SessionView } from '../api/types.js';
 import { calmCopy, type NeedRow } from '../board/needsYou.js';
-import type { NeedsQueue } from '../hooks/useNeedsQueue.js';
+import { useNeedsQueue, type NeedsQueue } from '../hooks/useNeedsQueue.js';
 import type { Navigate } from '../hooks/useRoute.js';
 import type { SkinVariants } from '../theming/skins.js';
 import { TONE_COLOR, TONE_GLYPH } from './narrator.js';
@@ -207,4 +207,23 @@ export function NeedsYouQueue({ queue, runs, navigate, now, variant = 'inline' }
       )}
     </section>
   );
+}
+
+/**
+ * The queue as a mountable surface: the behaviour hook (`useNeedsQueue` — grouping, cursor,
+ * verbs) over the app-level fold's rows (`useNeedsRows`), rendered by {@link NeedsYouQueue}.
+ * Home mounts it inline; the shell's right rail mounts it on every route. Exactly one is
+ * mounted at a time (Home stands down while the rail holds the queue), so the queue's keys are
+ * registered once.
+ */
+export function NeedsQueueSurface({ rows, runs, navigate, now, variant = 'inline' }: {
+  /** The ranked rows — `useNeedsRows`, the one fold. */
+  rows: NeedRow[];
+  runs: SessionView[];
+  navigate: Navigate;
+  now: number;
+  variant?: SkinVariants['needsQueue'];
+}): React.ReactElement {
+  const queue = useNeedsQueue(rows, navigate, now);
+  return <NeedsYouQueue queue={queue} runs={runs} navigate={navigate} now={now} variant={variant} />;
 }

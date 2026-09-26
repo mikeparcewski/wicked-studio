@@ -19,6 +19,7 @@ import { NewProjectModal } from './NewProjectModal.js';
 import { ago } from './ProjectCard.js';
 import { ProjectSwitcher } from './ProjectSwitcher.js';
 import { RepoFindings } from './RepoFindings.js';
+import { useNeedsSources } from '../store/needsSources.js';
 
 type SourceMode = 'local' | 'remote';
 
@@ -184,6 +185,8 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
     setLoading(true);
     Promise.all([api.listRepos(), api.listRuns()])
       .then(([{ repos: rs }, { runs: rv }]) => {
+        // The needs-you queue's repo-graph input rides this read (a deposit, zero requests).
+        useNeedsSources.getState().depositRepos(rs);
         setRepos(rs);
         setRuns(rv);
       })
@@ -308,6 +311,11 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
       }
 
       setRepos((prev) => [...prev, repo]);
+      // A just-registered repo joins the queue's register at once (its "never indexed" row).
+      const known = useNeedsSources.getState().repos;
+      if (known !== null && !known.some((r) => r.id === repo.id)) {
+        useNeedsSources.getState().depositRepos([...known, repo]);
+      }
       setShowRegister(false);
       setNewName('');
       setNewPath('');

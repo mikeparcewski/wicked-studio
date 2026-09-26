@@ -21,6 +21,7 @@ import {
 } from './dashboardKit.js';
 import { humanTitle, runShortId, runWhenWord } from './runIdentity.js';
 import { RUN_DOT } from './RunsSection.js';
+import { useNeedsSources } from '../store/needsSources.js';
 
 interface Props {
   runs: SessionView[];
@@ -148,6 +149,8 @@ export function ChatsPage({ runs, onSelect, navigate }: Props): React.ReactEleme
     api
       .listChats()
       .then(({ chats }) => {
+        // The needs-you queue's stalled-chat input rides this census (a deposit, zero requests).
+        useNeedsSources.getState().depositChats(chats);
         if (cancelled) return;
         setLiveChats(chats.map((c) => ({ ...c, lastFrameAt: 0 })));
         setCensusAt(startedAt);

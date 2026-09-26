@@ -565,6 +565,11 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          #   SIMPLE shape (no `options` key: approve/reject), so a triage `a`
          #   answers in place (preview, commit, undo window).
          "wave2a_feed": False, "gate_simple": [],
+         # ── The app-shell needs queue (e2e/needs_shell_test.py) ──
+         # proposals — None: GET /proposals answers the standing unknown-route 404 (a daemon
+         #   predating the proposal queue). A list: the pending governed-knowledge proposals
+         #   the route serves (`{proposals: [...]}`, the crew wire), filtered by `?state=`.
+         "proposals": None,
          }
 state_lock = threading.Lock()
 # Wave 2a: every POST /runs/:id/gate the fixture received (read over GET /__fixture/gate-posts).
@@ -2872,6 +2877,18 @@ class W2Handler(SimpleHTTPRequestHandler):
         # Slice J (§5.2): the decisions corpus — read on the search GESTURE only.
         if path == "/api/v1/governance/claims":
             self._json(200, {"claims": GOVERNANCE_CLAIMS})
+            return True
+        # GET /api/v1/proposals — the governed-knowledge review queue (switch-gated: None ⇒ the
+        # unknown-route 404 every standing rig sees).
+        if path == "/api/v1/proposals":
+            with state_lock:
+                rows = state["proposals"]
+            if rows is None:
+                self._json(404, {"error": f"w2 fixture: no such endpoint {path}"})
+            else:
+                q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+                want = (q.get("state") or [""])[0]
+                self._json(200, {"proposals": [r for r in rows if not want or r.get("state") == want]})
             return True
         # /api/v1/chats — every live chat (the FINDING-027 wire: chatId, seats,
         # idleSecs number|null). Slice AB's /chats live-session band reads it.
