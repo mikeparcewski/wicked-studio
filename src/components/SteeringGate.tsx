@@ -45,6 +45,8 @@ interface Props {
 
 const EMPTY_EVENTS: CoreEvent[] = [];
 const EMPTY_UNITS: WorkUnit[] = [];
+/** Past this many characters a gate prompt renders clamped to four lines, with a toggle. */
+export const PROMPT_CLAMP_CHARS = 320;
 
 /** Strip the bracketed architectural footnote from a workflow gate prompt. */
 function cleanPrompt(raw: string): { headline: string; footnote: string | null } {
@@ -158,6 +160,7 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
   // `guidance` note FIRST, the session-scoped draft ON TOP (the newer local
   // edit wins). Neither ⇒ blank, as today. The lazy initializer reads once;
   // `prepopulated` is a mount-stable fact.
+  const [promptOpen, setPromptOpen] = useState(false);
   const [amend, setAmend] = useState(
     () =>
       useAnnotationStore.getState().drafts[runId]
@@ -369,6 +372,11 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
   // wicked-core#431's "… Approve to retry the phase against the restored tree …" — carry
   // "NOT PASS", so this match holds across the wording change (re-checked for api-types 0.33.0).
   const isCoverageFail = headline.toLowerCase().includes('not pass') || headline.toLowerCase().includes('coverage');
+  // A long prompt (the engine echoes the run intent per unit) is clamped so the answer controls
+  // stay near it; the answer bar below is also pinned, so nothing actionable leaves the screen.
+  const longPrompt = headline.length > PROMPT_CLAMP_CHARS;
+  // A new prompt on the same mounted gate (the dock reuses the card per run) starts clamped again.
+  useEffect(() => setPromptOpen(false), [headline]);
 
   return (
     <div
@@ -409,11 +417,30 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
         // Focusable only programmatically: the deep-link target, never a tab stop.
         tabIndex={-1}
         className="text-xs mb-1 leading-relaxed font-mono"
-        style={{ color: 'var(--ink-body)', outline: 'none', overflowWrap: 'anywhere' }}
         data-testid="steering-prompt"
+        {...(longPrompt ? { 'data-clamped': String(!promptOpen) } : {})}
+        style={{
+          color: 'var(--ink-body)',
+          outline: 'none',
+          overflowWrap: 'anywhere',
+          ...(longPrompt && !promptOpen
+            ? { display: '-webkit-box', WebkitLineClamp: 4, WebkitBoxOrient: 'vertical', overflow: 'hidden' }
+            : {}),
+        }}
       >
         {headline}
       </p>
+      {longPrompt && (
+        <button
+          type="button"
+          data-testid="steering-prompt-toggle"
+          onClick={() => setPromptOpen((o) => !o)}
+          className="text-[10px] font-mono mb-2"
+          style={{ color: 'var(--ink-dim)' }}
+        >
+          {promptOpen ? 'show less' : 'show the full prompt'}
+        </button>
+      )}
 
       {/* The intake gate's PLAN (F-7R2-008): on the pre-run gate for the run's FIRST unit, every
           planned phase with its executor, skill and seat — what "approve" launches — instead of the
@@ -476,200 +503,208 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
         </details>
       )}
 
-      {/* Steer textarea — guide the re-run. Slice BD: pre-populated from the
-          session draft when one existed at mount (`amend-prepopulated`, §4.5),
-          auto-expanded to fit it (the "expands automatically" contract of
-          §4.3 — no click needed to see the whole draft), and armed with the
-          Alt+1/2/3 steer prefixes (useSteerPrefixes — bindings deviate from
-          the doc per the operator steer recorded there). Edits sync BACK to
-          the draft store so a remount before the decision keeps the newest
-          text; the decision clears it (see run()). */}
-      <textarea
-        ref={steerRef}
-        data-testid={prepopulated ? 'amend-prepopulated' : 'steering-amend'}
-        data-run-id={runId}
-        className="w-full rounded-lg p-2 text-xs mb-3 resize-none font-mono"
-        style={{
-          background: 'var(--surface-rail)',
-          border: '1px solid var(--surface-raised)',
-          color: 'var(--ink-high)',
-          outline: 'none',
-        }}
-        rows={Math.min(8, Math.max(2, amend.split('\n').length))}
-        placeholder={
-          isCoverageFail && coverage && coverage.unaccounted > 0
-            ? `${coverage.unaccounted} nodes unaccounted — add guidance for the evaluator, e.g. "focus on services/ directory"`
-            : 'Optional note — rides "Approve + steer" as guidance, or "Reject" as the recorded reason'
-        }
-        value={amend}
-        onChange={(e) => applyAmend(e.target.value)}
-        disabled={locked}
-      />
-
-      {error && (
-        <p className="text-xs mb-3 font-mono" style={{ color: 'var(--status-fail)' }} data-testid="steering-error">
-          {error}
-        </p>
-      )}
-
-      {/* F-7R2-007: on a SEAT failure escalation, the seat lever — approve the retry, then move
-          the unit to a seat that is not the one that just failed (crew's reassign route). A
-          seatless / tool-only escalation (failedCli === null) suppresses this lever entirely
-          (F-E2E-014): signing a seat in cannot fix a failure no seat was involved in. The steer
-          text rides the approve here too. */}
-      {isSeatFailure(escalation, failedCli) && pool !== null && lift === null && (
-        <ReassignControl
-          runId={runId}
-          ord={ord}
-          pool={pool}
-          failedCli={failedCli ?? null}
-          amend={amend}
-          onDone={() => {
-            useAnnotationStore.getState().clearDraft(runId);
-            clearGate(runId);
-            onResolved?.();
+      {/* The answer bar is pinned to the bottom of the scrolling pane: however long the prompt,
+          verdict, plan or diff above it, the note and the decision buttons stay on screen. */}
+      <div
+        data-testid="steering-actions"
+        className="sticky bottom-0 -mx-4 -mb-4 px-4 pt-3 pb-4 rounded-b-xl"
+        style={{ background: 'var(--surface-rail)', borderTop: '1px solid var(--surface-raised)', zIndex: 1 }}
+      >
+        {/* Steer textarea — guide the re-run. Slice BD: pre-populated from the
+            session draft when one existed at mount (`amend-prepopulated`, §4.5),
+            auto-expanded to fit it (the "expands automatically" contract of
+            §4.3 — no click needed to see the whole draft), and armed with the
+            Alt+1/2/3 steer prefixes (useSteerPrefixes — bindings deviate from
+            the doc per the operator steer recorded there). Edits sync BACK to
+            the draft store so a remount before the decision keeps the newest
+            text; the decision clears it (see run()). */}
+        <textarea
+          ref={steerRef}
+          data-testid={prepopulated ? 'amend-prepopulated' : 'steering-amend'}
+          data-run-id={runId}
+          className="w-full rounded-lg p-2 text-xs mb-3 resize-none font-mono"
+          style={{
+            background: 'var(--surface-rail)',
+            border: '1px solid var(--surface-raised)',
+            color: 'var(--ink-high)',
+            outline: 'none',
           }}
+          rows={Math.min(8, Math.max(2, amend.split('\n').length))}
+          placeholder={
+            isCoverageFail && coverage && coverage.unaccounted > 0
+              ? `${coverage.unaccounted} nodes unaccounted — add guidance for the evaluator, e.g. "focus on services/ directory"`
+              : 'Optional note — rides "Approve + steer" as guidance, or "Reject" as the recorded reason'
+          }
+          value={amend}
+          onChange={(e) => applyAmend(e.target.value)}
+          disabled={locked}
         />
-      )}
 
-      {escalationGate && lift === null ? (
-        /* Non-deliver escalation (#299): Retry / Request changes / Reject / Cancel run.
-         * "Request changes" rewinds to the last creator phase — semantically correct when a
-         * build/recon/verify unit failed. Deliver-unit escalations (lift !== null) suppress it
-         * because rewinding the creator cannot fix a git-push or rebase-conflict failure. */
-        <div className="grid grid-cols-2 gap-2">
-          <button
-            data-testid="steering-retry"
-            onClick={() => void retry()}
-            disabled={locked}
-            className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
-            style={{ background: 'var(--status-run)', color: 'var(--surface-base)' }}
-            title="Re-dispatches the failed unit (carries your note as guidance if typed)"
-          >
-            Retry
-          </button>
-          <button
-            data-testid="steering-request-changes"
-            onClick={() => void requestChanges()}
-            disabled={locked || !amend.trim()}
-            className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
-            style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
-            title="Rewinds to the last creator phase and re-dispatches with your note (note required)"
-          >
-            Request changes
-          </button>
-          <button
-            data-testid="steering-reject"
-            onClick={() => void reject()}
-            disabled={locked}
-            className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
-            style={{ background: 'var(--status-fail-dim)', border: '1px solid var(--status-fail-dim)', color: 'var(--status-fail)' }}
-          >
-            Reject
-          </button>
-          <button
-            data-testid="steering-cancel"
-            onClick={() => void cancel()}
-            disabled={locked}
-            className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
-            style={{ background: 'var(--surface-raised)', border: '1px solid var(--ink-dim)', color: 'var(--ink-muted)' }}
-          >
-            Cancel run
-          </button>
-        </div>
-      ) : escalationGate && lift !== null ? (
-        /* Deliver-unit escalation (#299): Retry (optionally amend) / Reject / Cancel run.
-         * No "Request changes" — rewinding to the creator cannot fix a git-push or rebase-conflict
-         * failure; the daemon prompt says "Approve to retry (optionally amend), reject to fail the
-         * run". Retry spans the full row so the note is visually paired with the primary action. */
-        <div className="grid grid-cols-2 gap-2">
-          <button
-            data-testid="steering-retry"
-            onClick={() => void retry()}
-            disabled={locked}
-            className="col-span-2 rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
-            style={{ background: 'var(--status-run)', color: 'var(--surface-base)' }}
-            title="Re-dispatches the deliver unit (carries your note as guidance if typed)"
-          >
-            Retry
-          </button>
-          <button
-            data-testid="steering-reject"
-            onClick={() => void reject()}
-            disabled={locked}
-            className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
-            style={{ background: 'var(--status-fail-dim)', border: '1px solid var(--status-fail-dim)', color: 'var(--status-fail)' }}
-          >
-            Reject
-          </button>
-          <button
-            data-testid="steering-cancel"
-            onClick={() => void cancel()}
-            disabled={locked}
-            className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
-            style={{ background: 'var(--surface-raised)', border: '1px solid var(--ink-dim)', color: 'var(--ink-muted)' }}
-          >
-            Cancel run
-          </button>
-        </div>
-      ) : (
-        /* Standard layout: Approve / Approve+steer / Reject / Cancel run */
-        <div className="grid grid-cols-2 gap-2">
-          <button
-            data-testid="steering-approve"
-            onClick={() => void approve()}
-            disabled={locked}
-            className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
-            style={{ background: 'var(--status-run)', color: 'var(--surface-base)' }}
-            {...(restoredRetry ? { title: "the evaluator's edit was discarded; the phase re-runs against the creator's verified tree" } : {})}
-          >
-            {restoredRetry ? 'Retry against the restored tree' : 'Approve'}
-          </button>
-          <button
-            data-testid="steering-approve-steer"
-            onClick={() => void approveWithSteer()}
-            disabled={locked || !amend.trim()}
-            className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
-            style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
-          >
-            {restoredRetry ? 'Retry + steer' : 'Approve + steer'}
-          </button>
-          <button
-            data-testid="steering-reject"
-            onClick={() => void reject()}
-            disabled={locked}
-            className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
-            style={{ background: 'var(--status-fail-dim)', border: '1px solid var(--status-fail-dim)', color: 'var(--status-fail)' }}
-          >
-            Reject
-          </button>
-          <button
-            data-testid="steering-cancel"
-            onClick={() => void cancel()}
-            disabled={locked}
-            className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
-            style={{ background: 'var(--surface-raised)', border: '1px solid var(--ink-dim)', color: 'var(--ink-muted)' }}
-          >
-            Cancel run
-          </button>
-        </div>
-      )}
+        {error && (
+          <p className="text-xs mb-3 font-mono" style={{ color: 'var(--status-fail)' }} data-testid="steering-error">
+            {error}
+          </p>
+        )}
 
-      {/* Mode-selector note / action hint */}
-      {escalationGate && lift === null ? (
-        <p className="text-[10px] font-mono mt-2" style={{ color: 'var(--ink-dim)' }}>
-          Retry re-runs the failed unit · Request changes rewinds to the last creator phase (note required) · Reject cancels the run · Cancel run stops the run without a gate decision
-        </p>
-      ) : escalationGate && lift !== null ? (
-        <p className="text-[10px] font-mono mt-2" style={{ color: 'var(--ink-dim)' }}>
-          Retry re-dispatches the deliver unit (optionally with a note) · Reject fails the run
-        </p>
-      ) : (
-        <p className="text-[10px] font-mono mt-2" style={{ color: 'var(--ink-dim)' }}>
-          Workflow-declared gate — run-level human_confirm setting does not apply here.
-          {' '}· a {restoredRetry ? 'retry' : 'approve'} · r reject while this card holds focus
-        </p>
-      )}
+        {/* F-7R2-007: on a SEAT failure escalation, the seat lever — approve the retry, then move
+            the unit to a seat that is not the one that just failed (crew's reassign route). A
+            seatless / tool-only escalation (failedCli === null) suppresses this lever entirely
+            (F-E2E-014): signing a seat in cannot fix a failure no seat was involved in. The steer
+            text rides the approve here too. */}
+        {isSeatFailure(escalation, failedCli) && pool !== null && lift === null && (
+          <ReassignControl
+            runId={runId}
+            ord={ord}
+            pool={pool}
+            failedCli={failedCli ?? null}
+            amend={amend}
+            onDone={() => {
+              useAnnotationStore.getState().clearDraft(runId);
+              clearGate(runId);
+              onResolved?.();
+            }}
+          />
+        )}
+
+        {escalationGate && lift === null ? (
+          /* Non-deliver escalation (#299): Retry / Request changes / Reject / Cancel run.
+           * "Request changes" rewinds to the last creator phase — semantically correct when a
+           * build/recon/verify unit failed. Deliver-unit escalations (lift !== null) suppress it
+           * because rewinding the creator cannot fix a git-push or rebase-conflict failure. */
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              data-testid="steering-retry"
+              onClick={() => void retry()}
+              disabled={locked}
+              className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
+              style={{ background: 'var(--status-run)', color: 'var(--surface-base)' }}
+              title="Re-dispatches the failed unit (carries your note as guidance if typed)"
+            >
+              Retry
+            </button>
+            <button
+              data-testid="steering-request-changes"
+              onClick={() => void requestChanges()}
+              disabled={locked || !amend.trim()}
+              className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
+              style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
+              title="Rewinds to the last creator phase and re-dispatches with your note (note required)"
+            >
+              Request changes
+            </button>
+            <button
+              data-testid="steering-reject"
+              onClick={() => void reject()}
+              disabled={locked}
+              className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
+              style={{ background: 'var(--status-fail-dim)', border: '1px solid var(--status-fail-dim)', color: 'var(--status-fail)' }}
+            >
+              Reject
+            </button>
+            <button
+              data-testid="steering-cancel"
+              onClick={() => void cancel()}
+              disabled={locked}
+              className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
+              style={{ background: 'var(--surface-raised)', border: '1px solid var(--ink-dim)', color: 'var(--ink-muted)' }}
+            >
+              Cancel run
+            </button>
+          </div>
+        ) : escalationGate && lift !== null ? (
+          /* Deliver-unit escalation (#299): Retry (optionally amend) / Reject / Cancel run.
+           * No "Request changes" — rewinding to the creator cannot fix a git-push or rebase-conflict
+           * failure; the daemon prompt says "Approve to retry (optionally amend), reject to fail the
+           * run". Retry spans the full row so the note is visually paired with the primary action. */
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              data-testid="steering-retry"
+              onClick={() => void retry()}
+              disabled={locked}
+              className="col-span-2 rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
+              style={{ background: 'var(--status-run)', color: 'var(--surface-base)' }}
+              title="Re-dispatches the deliver unit (carries your note as guidance if typed)"
+            >
+              Retry
+            </button>
+            <button
+              data-testid="steering-reject"
+              onClick={() => void reject()}
+              disabled={locked}
+              className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
+              style={{ background: 'var(--status-fail-dim)', border: '1px solid var(--status-fail-dim)', color: 'var(--status-fail)' }}
+            >
+              Reject
+            </button>
+            <button
+              data-testid="steering-cancel"
+              onClick={() => void cancel()}
+              disabled={locked}
+              className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
+              style={{ background: 'var(--surface-raised)', border: '1px solid var(--ink-dim)', color: 'var(--ink-muted)' }}
+            >
+              Cancel run
+            </button>
+          </div>
+        ) : (
+          /* Standard layout: Approve / Approve+steer / Reject / Cancel run */
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              data-testid="steering-approve"
+              onClick={() => void approve()}
+              disabled={locked}
+              className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
+              style={{ background: 'var(--status-run)', color: 'var(--surface-base)' }}
+              {...(restoredRetry ? { title: "the evaluator's edit was discarded; the phase re-runs against the creator's verified tree" } : {})}
+            >
+              {restoredRetry ? 'Retry against the restored tree' : 'Approve'}
+            </button>
+            <button
+              data-testid="steering-approve-steer"
+              onClick={() => void approveWithSteer()}
+              disabled={locked || !amend.trim()}
+              className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
+              style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
+            >
+              {restoredRetry ? 'Retry + steer' : 'Approve + steer'}
+            </button>
+            <button
+              data-testid="steering-reject"
+              onClick={() => void reject()}
+              disabled={locked}
+              className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
+              style={{ background: 'var(--status-fail-dim)', border: '1px solid var(--status-fail-dim)', color: 'var(--status-fail)' }}
+            >
+              Reject
+            </button>
+            <button
+              data-testid="steering-cancel"
+              onClick={() => void cancel()}
+              disabled={locked}
+              className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
+              style={{ background: 'var(--surface-raised)', border: '1px solid var(--ink-dim)', color: 'var(--ink-muted)' }}
+            >
+              Cancel run
+            </button>
+          </div>
+        )}
+
+        {/* Mode-selector note / action hint */}
+        {escalationGate && lift === null ? (
+          <p className="text-[10px] font-mono mt-2" style={{ color: 'var(--ink-dim)' }}>
+            Retry re-runs the failed unit · Request changes rewinds to the last creator phase (note required) · Reject cancels the run · Cancel run stops the run without a gate decision
+          </p>
+        ) : escalationGate && lift !== null ? (
+          <p className="text-[10px] font-mono mt-2" style={{ color: 'var(--ink-dim)' }}>
+            Retry re-dispatches the deliver unit (optionally with a note) · Reject fails the run
+          </p>
+        ) : (
+          <p className="text-[10px] font-mono mt-2" style={{ color: 'var(--ink-dim)' }}>
+            Workflow-declared gate — run-level human_confirm setting does not apply here.
+            {' '}· a {restoredRetry ? 'retry' : 'approve'} · r reject while this card holds focus
+          </p>
+        )}
+      </div>
     </div>
   );
 }
