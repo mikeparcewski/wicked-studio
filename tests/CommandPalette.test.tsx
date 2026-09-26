@@ -223,13 +223,13 @@ describe('the verb table (§1.3)', () => {
     expect(rows().find((r) => r.textContent?.includes('Cancel run'))).toBeUndefined();
   });
 
-  it('Approve/Reject gate show only for awaiting_human and fire the chip wire (POST gate)', () => {
+  it('Approve/Reject gate show only for awaiting_human and fire the chip wire (POST gate)', async () => {
     renderPalette({ selectedRun: RUNS[0] ?? null });
     fireEvent.change(screen.getByTestId('palette-input'), { target: { value: '> approve' } });
     const row = rows().find((r) => r.textContent?.includes('Approve gate'));
     expect(row).toBeDefined();
     fireEvent.click(row!);
-    expect(confirmGate).toHaveBeenCalledWith('r-gate', { approve: true });
+    await vi.waitFor(() => expect(confirmGate).toHaveBeenCalledWith('r-gate', { approve: true }));
   });
 
   it('Toggle Theme flips the appearance store instance (the §2.14 mechanism)', () => {

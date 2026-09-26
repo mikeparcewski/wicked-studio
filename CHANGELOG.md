@@ -56,8 +56,40 @@ npm publish dates. Every version listed here exists on
   overwriting it. The handover's "system" section says it is checking while the audit read is in
   flight and says the daemon cannot say only when the read fails. The project brief snapshots only
   live runs and counts a run as new only when its `created_at` is after you left.
+- **Wave 2a — peek, jump, back.** `P` shows the top item that needs you (for a gate, its prompt
+  and the evaluator verdict it is asking about) in place, with the URL unchanged; `G` goes to that gate;
+  `B` puts you back exactly where you were: the route, every `data-place-scroll` scroller's
+  offset, the focused control, and any panel registered with `usePlacePanel`. All three are in the
+  shortcut registry, so the `?` overlay lists them under "Peek, jump, back". Behaviour in
+  `board/peekTarget.ts`, `store/place.ts`, `hooks/usePeekJump.ts`; `PeekCard` only renders.
+  The peeked item is the top of wave 2b's ONE ranked queue (`needsYouRows` → `compareNeeds`;
+  a folded group stands for its top member), so peek and jump follow the queue's ranking.
+- **Wave 2a — preview, then commit, with an undo window.** A gate decision from the board chip,
+  the triage keys (`a`, `r` + note), the palette verbs, or the batch bar is queued for 10 s with an
+  Undo toast ("Approving in 10 s", what will happen, Undo); the `POST /runs/:id/gate` goes out only
+  when the window ends. Undo sends nothing and the gate stays open; closing the tab inside the
+  window sends nothing either, and the toast says so. A batch is one window, then the sequential
+  fan-out. Behaviour in `board/undoQueue.ts`; `UndoToasts` only renders.
+  Every human gate decision in studio rides it: the thread's gate card (buttons and its `a`/`r`
+  keys), the project dashboard, the steer composer, the reassign control and the unit detail all
+  decide through `commitGateDecision`, and `tests/gateWireSingleCaller.test.ts` fails if any other
+  module calls the gate POST.
+  A queued decision is about ONE gate: it records the gate's `ord` and sends it (crew#681 answers
+  409 `gate_changed` / `gate_unknown`; any refusal is shown as "Not sent: …" with the server's reason,
+  never resent). If that gate
+  is answered elsewhere, the run moves on, or a NEW gate opens on the run during the window, the
+  decision is dropped unsent and the toast says so. Every outcome is visible whichever surface is
+  mounted (sent / failed / not sent); a refused second decision is never silent. The toast names
+  the gate ("Approving beta · b1 in 8 s"); the gate card shows the shared queued state with its
+  controls disabled; peek, triage selection and batch skip gates that already carry a decision;
+  a reject reason survives Undo; `B` after chained jumps returns to the first origin; `P`/`G`/`B`
+  stand down under a modal or the `?` overlay.
 
 ### Fixed
+- **Back after opening a gate.** The thread's gate card consumed the `#gate` hash with
+  `history.replaceState(null, …)`, which wiped wave 1's in-app mark from the history entry, so a
+  later Back from that entry went to a fallback page instead of the previous one. The entry's
+  state is now kept whole (`keepEntryState`).
 - **Wave 1 — project switch reused the previous project's run.** The project shell's per-mode
   artifact memory was not scoped to the project, so after switching project a mode tab could route
   into the old project's run (`/p/beta/build/a1`). The memory is now keyed by project

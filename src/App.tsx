@@ -34,12 +34,17 @@ import { GroupChat } from './components/GroupChat.js';
 import { WorkflowViewer } from './components/WorkflowViewer.js';
 import { WorkPage } from './components/WorkPage.js';
 import { ShortcutOverlay } from './components/ShortcutOverlay.js';
+import { PeekCard } from './components/PeekCard.js';
+import { UndoToasts } from './components/UndoToasts.js';
 import { SystemSettings } from './components/SystemSettings.js';
 import { ThemePage } from './components/ThemePage.js';
 import { ambientProjectId } from './hooks/ambientProject.js';
 import { useEventStream } from './hooks/useEventStream.js';
 import { useVisitClock } from './hooks/useVisitClock.js';
 import { useProjectVisits } from './hooks/useProjectVisits.js';
+import { usePeekJump } from './hooks/usePeekJump.js';
+import { usePlacePanel } from './hooks/usePlacePanel.js';
+import { useRunsPanelStore } from './store/runsPanel.js';
 import { setShortcutsPaletteOpen, useGlobalShortcuts } from './hooks/useGlobalShortcuts.js';
 import { useLegacyRedirect, useMakeRedirect, useRetiredSettingsRedirect, useSteeringRedirect, useTestingRedirect } from './hooks/useLegacyRedirect.js';
 import { modePath, routedVersion, useRoute, type Mode } from './hooks/useRoute.js';
@@ -315,6 +320,17 @@ export function App(): React.ReactElement {
     [runId, runs, onKill],
   );
   useGlobalShortcuts(shortcutEntries);
+
+  // ── Studio wave 2a: peek (P), jump (G), back (B) — and the panels "back" reopens ──
+  const peek = usePeekJump(runs, navigate);
+  usePlacePanel('ask-dock', askOpen, setAskOpen);
+  const runsSheetOpen = useRunsPanelStore((s) => s.expanded);
+  const setRunsSheetOpen = useCallback((open: boolean) => {
+    const sheet = useRunsPanelStore.getState();
+    if (open) sheet.expand();
+    else sheet.collapse();
+  }, []);
+  usePlacePanel('runs-sheet', runsSheetOpen, setRunsSheetOpen);
 
   // ── Repo graph modal — opened from RepoDetailPage via onOpenGraph ───────────
   const [graphModalRepo, setGraphModalRepo] = useState<RepoEntry | null>(null);
@@ -773,6 +789,11 @@ export function App(): React.ReactElement {
           root renders on all of them, and the overlay's corpus is the registry
           itself, so each surface documents exactly the keys it registered. */}
       <ShortcutOverlay />
+
+      {/* Wave 2a: the peek card (P) and the gate-decision Undo toasts — skins over
+          usePeekJump and board/undoQueue. */}
+      <PeekCard view={peek} />
+      <UndoToasts />
 
       {/* Repo graph modal — opened from RepoDetailPage */}
       {graphModalRepo !== null && (

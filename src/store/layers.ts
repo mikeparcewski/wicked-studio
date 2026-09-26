@@ -19,6 +19,8 @@ interface LayerStore {
   shortcutOverlayOpen: boolean;
   /** The bell's notifications popover — the modal/popover rung of the chain. */
   bellOpen: boolean;
+  /** The peek card (wave 2a) — a popover-rung layer: Escape closes it before triage. */
+  peekOpen: boolean;
   /** The open modal family, in mount (= open) order — last is topmost. The
    *  rungs beneath modal/popover (bell, sheet, triage, compare lens) yield
    *  while ANY modal is open, and only the TOP modal answers Escape, so one
@@ -26,6 +28,7 @@ interface LayerStore {
   modalIds: number[];
   setShortcutOverlayOpen: (open: boolean) => void;
   setBellOpen: (open: boolean) => void;
+  setPeekOpen: (open: boolean) => void;
   pushModal: () => number;
   popModal: (id: number) => void;
 }
@@ -35,9 +38,11 @@ let nextModalId = 1;
 export const useLayerStore = create<LayerStore>((set) => ({
   shortcutOverlayOpen: false,
   bellOpen: false,
+  peekOpen: false,
   modalIds: [],
   setShortcutOverlayOpen: (open) => set({ shortcutOverlayOpen: open }),
   setBellOpen: (open) => set({ bellOpen: open }),
+  setPeekOpen: (open) => set({ peekOpen: open }),
   pushModal: () => {
     const id = nextModalId++;
     set((s) => ({ modalIds: [...s.modalIds, id] }));

@@ -282,7 +282,7 @@ with sync_playwright() as p:
 
     # ── AC 2: a approves the simple gate — one POST, no navigation ──────────────
     page.keyboard.press("a")
-    page.locator(f'[data-testid="gate-answered-{SIMPLE_RUN}"]').wait_for(timeout=10000)
+    page.locator(f'[data-testid="gate-answered-{SIMPLE_RUN}"]').wait_for(timeout=20000)  # 10 s undo window first (wave 2a)
     page.keyboard.press("a")  # answered — the shared guard drops the second
     page.wait_for_timeout(400)
     approve_posts = gate_posts[posts_before:]
@@ -295,7 +295,7 @@ with sync_playwright() as p:
     )
     report["steps"]["a_approves_once"] = {
         "ok": all([
-            approve_posts == [(f"/api/v1/runs/{SIMPLE_RUN}/gate", {"approve": True})],
+            approve_posts == [(f"/api/v1/runs/{SIMPLE_RUN}/gate", {"approve": True, "ord": 0})],
             approve_state["path"] == "/",                   # answering never navigates
             approve_state["answered"] is not None
             and "approved" in approve_state["answered"],
@@ -348,12 +348,12 @@ with sync_playwright() as p:
     page.wait_for_function(
         "() => document.querySelector('[data-testid=\"gate-reject-note\"]') === null", timeout=5000
     )
-    page.wait_for_timeout(400)
+    page.wait_for_timeout(10800)  # wave 2a: the reject waits out its 10 s undo window, then POSTs
     reject_posts = gate_posts[posts_before_reject:]
     report["steps"]["r_note_rides_amend"] = {
         "ok": reject_posts == [(
             f"/api/v1/runs/{SIMPLE_RUN}/gate",
-            {"approve": False, "amend": "needs the Q3 numbers first"},
+            {"approve": False, "amend": "needs the Q3 numbers first", "ord": 0},
         )],
         "gate_posts": reject_posts,
     }
@@ -387,7 +387,7 @@ with sync_playwright() as p:
         SIMPLE_RUN,
     )
     page.keyboard.press("a")
-    page.locator(f'[data-testid="gate-answered-{SIMPLE_RUN}"]').wait_for(timeout=10000)
+    page.locator(f'[data-testid="gate-answered-{SIMPLE_RUN}"]').wait_for(timeout=20000)  # 10 s undo window first (wave 2a)
     page.wait_for_timeout(400)
     dash_posts = gate_posts[posts_before_dash:]
     report["steps"]["dashboard_inbox_cursor"] = {
@@ -395,7 +395,7 @@ with sync_playwright() as p:
             dash["selected"],
             dash["focusedItem"] == SIMPLE_RUN,
             dash["ringColor"] == accent,
-            dash_posts == [(f"/api/v1/runs/{SIMPLE_RUN}/gate", {"approve": True})],
+            dash_posts == [(f"/api/v1/runs/{SIMPLE_RUN}/gate", {"approve": True, "ord": 0})],
             page.evaluate("() => window.location.pathname") == f"/p/{SIMPLE_PROJECT}",
         ]),
         **dash,

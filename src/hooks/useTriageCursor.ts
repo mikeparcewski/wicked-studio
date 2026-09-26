@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { clearBatchSelection, toggleBatchSelect, useBatchGateStore } from '../board/batchGates.js';
-import { decideGate, gateOpenPath } from '../board/gateActions.js';
+import { decideGate, gateOpenPath, isDecisionPending } from '../board/gateActions.js';
 import { isSimpleGate, type OpenGate } from '../store/gates.js';
 import { anyModalOpen, useLayerStore } from '../store/layers.js';
 import { useRunsPanelStore } from '../store/runsPanel.js';
@@ -189,7 +189,9 @@ export function useTriageCursor(
         description: 'Select the gate for batch resolution',
         guard: () => {
           const item = current();
-          return wallOwnsKeys() && item !== null && item.runId !== null && isSimpleGate(item.gate);
+          // A gate that already has a decision (queued, in flight, answered) is not selectable.
+          return wallOwnsKeys() && item !== null && item.runId !== null && isSimpleGate(item.gate)
+            && !isDecisionPending(item.runId);
         },
         handler: (e) => {
           const item = current();
@@ -225,6 +227,7 @@ export function useTriageCursor(
           !useRunsPanelStore.getState().expanded &&
           !useLayerStore.getState().shortcutOverlayOpen &&
           !useLayerStore.getState().bellOpen &&
+          !useLayerStore.getState().peekOpen &&
           !anyModalOpen(),
         handler: () => {
           setNoteFor(null);

@@ -22,6 +22,7 @@ import { useTriageCursor, type TriageCursor, type TriageItem } from '../hooks/us
 import { useElicitationStore } from '../store/elicitations.js';
 import { useNotificationStore } from '../store/notifications.js';
 import { useStallEscalationStore } from '../store/stallEscalations.js';
+import { usePlacePanel } from '../hooks/usePlacePanel.js';
 import { useDocsCache } from '../store/docsCache.js';
 import { useGateStore } from '../store/gates.js';
 import { useMembershipStore } from '../store/membership.js';
@@ -173,6 +174,9 @@ export function HomeBoard({ runs, navigate, onOpenAsk }: Props): React.ReactElem
   // expand/collapse and the board's scroll belong to the history entry, so Back restores them.
   const [quietOpen, setQuietOpen] = useHistoryState('home.quietOpen', bandExpandsByDefault('quiet'));
   const [workingOpen, setWorkingOpen] = useHistoryState('home.workingOpen', bandExpandsByDefault('working'));
+  // Wave 2a: the bands are part of "where you were" — the Back key reopens them.
+  usePlacePanel('home.quietOpen', quietOpen, setQuietOpen);
+  usePlacePanel('home.workingOpen', workingOpen, setWorkingOpen);
   const [shelfOpen, setShelfOpen] = useState(false);
   const [wires, setWires] = useState<HomeWires>(NO_WIRES);
   /** The coarse age tick — rows re-age without any data changing. */
@@ -493,6 +497,7 @@ export function HomeBoard({ runs, navigate, onOpenAsk }: Props): React.ReactElem
             ref={scroller}
             onScroll={onScroll}
             data-testid="project-board"
+            data-place-scroll="home-board"
             data-total={items.length}
             data-needs-you={needsYou.length}
             data-working={working.length}

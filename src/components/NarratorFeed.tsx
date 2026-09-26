@@ -331,6 +331,7 @@ export function NarratorFeed({
     <div
       ref={scrollRef}
       data-testid="thread"
+      data-place-scroll={`run-feed-${lens}`}
       className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-3 max-w-3xl w-full mx-auto"
     >
       {/* Feed header: what this stream is + the raw-wire toggle (§4). */}

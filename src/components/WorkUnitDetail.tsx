@@ -1,3 +1,4 @@
+import { commitGateDecision } from '../board/gateActions.js';
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import type { StageKind, UnitStatus, WorkUnit } from '../api/types.js';
@@ -83,7 +84,8 @@ export function WorkUnitDetail({ runId, unit, isGated, onResolved, onOpenFile }:
   async function approve(): Promise<void> {
     setApproving(true);
     try {
-      await api.confirmGate(runId, { approve: true });
+      const outcome = await commitGateDecision(runId, { approve: true });
+      if (outcome !== 'sent') return;
       clearGate(runId);
       onResolved?.();
     } finally {

@@ -332,7 +332,7 @@ describe('ProjectDashboard — the full-width project command surface', () => {
     expect(tile).toHaveTextContent('Approve the outline?');
 
     fireEvent.click(within(tile).getByTestId('gate-approve-r-gate'));
-    await waitFor(() => expect(confirmGate).toHaveBeenCalledWith('r-gate', { approve: true }));
+    await waitFor(() => expect(confirmGate).toHaveBeenCalledWith('r-gate', expect.objectContaining({ approve: true })));
     // The chip clears its gate from the shared store exactly as it does on the board.
     expect(useGateStore.getState().gates['r-gate']).toBeUndefined();
   });

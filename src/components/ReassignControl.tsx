@@ -1,3 +1,4 @@
+import { commitGateDecision } from '../board/gateActions.js';
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api/client.js';
 import type { RosterSeat } from '../api/types.js';
@@ -120,7 +121,8 @@ export function ReassignControl({
       if (!approved) {
         setPhase('approving');
         const text = amend?.trim() ?? '';
-        await api.confirmGate(runId, { approve: true, ...(text !== '' ? { amend: text } : {}) });
+        const outcome = await commitGateDecision(runId, { approve: true, ...(text !== '' ? { amend: text } : {}) });
+        if (outcome !== 'sent') { setPhase('idle'); return; } // undone: nothing approved, nothing to reassign
         setApproved(true);
       }
       // The daemon reassigns only an EXECUTING run: wait for the approve to take.

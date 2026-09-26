@@ -454,14 +454,14 @@ with sync_playwright() as p:
     posts_before = len(gate_posts)
     pageC.locator('[data-testid="batch-approve-all"]').click()
     pageC.wait_for_function(
-        "() => document.querySelector('[data-testid=\"batch-bar\"]') === null", timeout=10000
+        "() => document.querySelector('[data-testid=\"batch-bar\"]') === null", timeout=20000  # wave 2a undo window
     )
     pageC.wait_for_timeout(300)
     approve_posts = gate_posts[posts_before:]
     report["steps"]["approve_all_fans_out"] = {
         "ok": approve_posts == [
-            (f"/api/v1/runs/{SIMPLE_RUN}/gate", {"approve": True}),
-            (f"/api/v1/runs/{BATCH1_RUN}/gate", {"approve": True}),
+            (f"/api/v1/runs/{SIMPLE_RUN}/gate", {"approve": True, "ord": 0}),
+            (f"/api/v1/runs/{BATCH1_RUN}/gate", {"approve": True, "ord": 0}),
         ],
         "gate_posts": approve_posts,
     }
@@ -474,7 +474,7 @@ with sync_playwright() as p:
     pageC.locator('[data-testid="batch-bar"][data-count="2"]').wait_for(timeout=5000)
     posts_before = len(gate_posts)
     pageC.locator('[data-testid="batch-approve-all"]').click()
-    pageC.locator(f'[data-testid="batch-failure-row"][data-run-id="{BATCH1_RUN}"]').wait_for(timeout=10000)
+    pageC.locator(f'[data-testid="batch-failure-row"][data-run-id="{BATCH1_RUN}"]').wait_for(timeout=20000)  # 10 s undo window first
     pageC.wait_for_timeout(300)
     failure = pageC.evaluate(
         """(run) => ({
@@ -502,7 +502,7 @@ with sync_playwright() as p:
     posts_before = len(gate_posts)
     pageC.locator(f'[data-testid="batch-retry-{BATCH1_RUN}"]').click()
     pageC.wait_for_function(
-        "() => document.querySelector('[data-testid=\"batch-bar\"]') === null", timeout=10000
+        "() => document.querySelector('[data-testid=\"batch-bar\"]') === null", timeout=20000  # wave 2a undo window
     )
     pageC.wait_for_timeout(300)
     retry_posts = gate_posts[posts_before:]
@@ -522,14 +522,14 @@ with sync_playwright() as p:
     pageC.keyboard.type("wrong branch")
     pageC.keyboard.press("Enter")
     pageC.wait_for_function(
-        "() => document.querySelector('[data-testid=\"batch-bar\"]') === null", timeout=10000
+        "() => document.querySelector('[data-testid=\"batch-bar\"]') === null", timeout=20000  # wave 2a undo window
     )
     pageC.wait_for_timeout(300)
     reject_posts = gate_posts[posts_before:]
     report["steps"]["reject_all_rides_amend"] = {
         "ok": reject_posts == [
-            (f"/api/v1/runs/{SIMPLE_RUN}/gate", {"approve": False, "amend": "wrong branch"}),
-            (f"/api/v1/runs/{BATCH1_RUN}/gate", {"approve": False, "amend": "wrong branch"}),
+            (f"/api/v1/runs/{SIMPLE_RUN}/gate", {"approve": False, "amend": "wrong branch", "ord": 0}),
+            (f"/api/v1/runs/{BATCH1_RUN}/gate", {"approve": False, "amend": "wrong branch", "ord": 0}),
         ],
         "gate_posts": reject_posts,
     }

@@ -297,7 +297,7 @@ with sync_playwright() as p:
         """() => document.querySelector('[data-testid="amend-prepopulated"]')?.value""")
     page.locator('[data-testid="steering-approve-steer"]').click()
     page.wait_for_function("() => true", timeout=1000)
-    page.wait_for_timeout(800)
+    page.wait_for_timeout(10800)  # wave 2a: the steer-approve waits out its 10 s undo window
     posts = [json.loads(b) for b in gate_posts]
     check("draft_rides_the_existing_amend_field",
           len(posts) == 1

@@ -117,11 +117,14 @@ describe('the triage cursor (slice H, §2.2)', () => {
     expect(selectedKeys()).toEqual([]);
   });
 
-  it('a on a simple-gate row fires the exact POST once — a second a is dropped', () => {
+  it('a on a simple-gate row fires the exact POST once — a second a is dropped', async () => {
     render(<Harness items={items3()} navigate={vi.fn()} />);
     press('j');
     press('a');
-    press('a'); // in-flight/answered — the shared double-submit guard drops it
+    press('a'); // queued/in-flight/answered — the shared double-submit guard drops it
+    await vi.waitFor(() => expect(client.api.confirmGate).toHaveBeenCalledTimes(1));
+    press('a');
+    await new Promise((r) => setTimeout(r, 5));
     expect(client.api.confirmGate).toHaveBeenCalledTimes(1);
     expect(client.api.confirmGate).toHaveBeenCalledWith('r1', { approve: true });
   });
@@ -157,7 +160,7 @@ describe('the triage cursor (slice H, §2.2)', () => {
     expect(document.activeElement).toBe(note);
     await user.keyboard('needs the Q3 numbers first');
     await user.keyboard('{Enter}');
-    expect(client.api.confirmGate).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(client.api.confirmGate).toHaveBeenCalledTimes(1));
     expect(client.api.confirmGate).toHaveBeenCalledWith('r1', {
       approve: false, amend: 'needs the Q3 numbers first',
     });

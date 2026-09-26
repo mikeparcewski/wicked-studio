@@ -1,4 +1,16 @@
 import '@testing-library/jest-dom';
+import { beforeEach } from 'vitest';
+import { resetDecisionsForTest, setUndoWindowForTest } from '../src/board/undoQueue.js';
+
+// Wave 2a: every human gate decision waits out a 10 s undo window (src/board/undoQueue.ts).
+// Suites that pin the decision's WIRE get it on the next tick; the suites that pin the window
+// itself (tests/undoQueue.test.tsx, tests/gateCardUndo.test.tsx) restore 10 s in their own
+// beforeEach. Decision state (queued/answered per run) is wiped between tests so one test's
+// answered gate never drops the next test's decision.
+beforeEach(() => {
+  setUndoWindowForTest(0);
+  resetDecisionsForTest();
+});
 
 // A few suites opt out of the suite-wide jsdom env (`@vitest-environment node` — e.g.
 // tests/testidInventory.test.ts, pure filesystem). This setup file still runs for them;

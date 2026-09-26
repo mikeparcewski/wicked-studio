@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { decideGate } from '../board/gateActions.js';
+import { decisionPreview, takeRestoredNote } from '../board/undoQueue.js';
 
 /**
  * The inline reject note (DES-FEEDBACK-002 §2.3, slice H): what `r` opens on a
@@ -44,7 +45,8 @@ interface Props {
 }
 
 export function GateRejectNote({ runId, onClose }: Props): React.ReactElement {
-  const [note, setNote] = useState('');
+  // A note handed back by Undo re-seeds the input (wave 2a round 3 — the reason is never lost).
+  const [note, setNote] = useState(() => takeRestoredNote(runId));
   const ref = useRef<HTMLInputElement>(null);
 
   // Focused immediately (§2.3) — which is also what flips the typing guard on.
@@ -79,7 +81,9 @@ export function GateRejectNote({ runId, onClose }: Props): React.ReactElement {
         onKeyDown={onKeyDown}
         style={CSS.input}
       />
-      <span style={CSS.hint} aria-hidden>↵ reject · esc cancel</span>
+      <span style={CSS.hint} data-testid="gate-reject-preview" title={decisionPreview('reject', 1, note.trim() !== '')}>
+        ↵ reject (10 s to undo) · esc cancel
+      </span>
     </div>
   );
 }

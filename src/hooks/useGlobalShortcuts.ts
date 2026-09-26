@@ -30,7 +30,7 @@ export interface ShortcutChord {
 }
 
 /** The '?' overlay's section headings (DES-UX-001 §7.7, slice AC). */
-export type ShortcutGroup = 'triage' | 'palette' | 'gates' | 'panels';
+export type ShortcutGroup = 'triage' | 'palette' | 'gates' | 'navigate' | 'panels';
 
 export interface ShortcutEntry {
   id: string;

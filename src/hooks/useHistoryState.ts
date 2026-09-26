@@ -25,6 +25,13 @@ export function replacedEntryState(): Record<string, unknown> {
   return readEntry(IN_APP) === true ? { [IN_APP]: true } : {};
 }
 
+/** The CURRENT entry's state, whole — for rewriting the entry's URL in place (dropping a
+ *  one-shot hash) without losing the in-app mark or any view state stored on it. */
+export function keepEntryState(): Record<string, unknown> {
+  const st: unknown = window.history.state;
+  return st !== null && typeof st === 'object' ? { ...(st as Record<string, unknown>) } : {};
+}
+
 /** True when the CURRENT entry was pushed by the app — so `history.back()` lands in studio. */
 export function isInAppEntry(): boolean {
   return readEntry(IN_APP) === true;

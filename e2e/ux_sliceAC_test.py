@@ -175,7 +175,7 @@ with sync_playwright() as p:
     page.keyboard.press("a")
     page.keyboard.press("a")
     page.wait_for_function("() => window.__done === undefined || true", timeout=1000)
-    page.wait_for_timeout(600)
+    page.wait_for_timeout(10800)  # wave 2a: the decision waits out its 10 s undo window
     approve_posts = [json.loads(b) for b in gate_posts[unfocused_posts:]]
 
     check("gate_panel_a_approves_once",
@@ -191,7 +191,7 @@ with sync_playwright() as p:
     page.locator('[data-testid="steering-gate"]').wait_for(timeout=30000)
     page.locator('[data-testid="steering-gate"]').click()
     page.keyboard.press("r")
-    page.wait_for_timeout(600)
+    page.wait_for_timeout(10800)  # wave 2a: the 10 s undo window first
     reject_posts = [json.loads(b) for b in gate_posts]
     check("gate_panel_r_rejects",
           len(reject_posts) == 1 and reject_posts[0].get("approve") is False,
