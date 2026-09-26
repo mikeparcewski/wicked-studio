@@ -12,7 +12,41 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+### Added
+- **Wave 1 — dark when healthy.** The home board's WORKING band collapses to one count line
+  (`Working (n)`, expandable); only exception bands (Needs you) open by default, so a healthy
+  portfolio shows no animated card and the one gated project is the only expanded card. The rule
+  lives in `board/bandExpansion.ts`; the expansion and the board's scroll ride the history entry
+  (`hooks/useHistoryState.ts`), so Back restores them.
+- **Wave 1 — raw in one step.** Palette verbs for ANY run by id or intent words: `>events <run>`
+  opens `/runs/:id/events` (the run's raw event JSON), `>files <run>` opens `/runs/:id/files` (the
+  existing worktree/diff viewer), `>config` opens `/system`. Each is a route, so browser Back
+  returns to where you were with the palette closed. Targets live in `palette/runTargets.ts`.
+- **Wave 1 — outbound harness.** A "Draft update" action on every run drafts the PR description
+  (completed run) or a status update (anything else) from crew's `GET /runs/:id/deliver-text`, in
+  an editable text area with a Copy action. One data function (`api/outbound.ts`,
+  `{kind: 'pr' | 'status', runId}`) and one action list (`OUTBOUND_ACTIONS`, Copy only today).
+
 ### Fixed
+- **Wave 1 — project switch reused the previous project's run.** The project shell's per-mode
+  artifact memory was not scoped to the project, so after switching project a mode tab could route
+  into the old project's run (`/p/beta/build/a1`). The memory is now keyed by project
+  (`hooks/useModeMemory.ts`).
+- The palette hands focus back without scrolling the view the operator left.
+- **Wave 1 round 2 — a stalled run is never hidden.** An active run whose freshest activity
+  evidence (a streamed frame, or its durable event tail — never an attach/project clock) has
+  decayed past the triage threshold (30 min silent) is `stalled`: `bandFor` puts it in NEEDS YOU
+  and the needs-you queue carries a `stalled-run` row, so home is never "calm" over a wedged run
+  (`board/boardAttention.ts` `isStalled`, `store/activityClocks.ts`).
+- **Wave 1 round 2 — zero is quiet.** Count tiles (Needs you / Failed / Review and the delivery
+  strip) take their tone from `board/countTone.ts`: a zero is neutral, a status colour marks only a
+  non-zero exception (`data-tone` on each tile).
+- **Wave 1 round 2 — draft edits survive the run finishing.** The draft's kind is fixed when it
+  opens, so a status flip no longer refetches over the operator's edits.
+- **Wave 1 round 2 — Back never leaves studio.** App-pushed history entries are marked; the raw
+  views go Back only from a marked entry and otherwise navigate to `/`. Escape over the files view
+  with the palette open closes only the palette (capture-phase, palette-yielding, like Modal). A
+  pending scroll restore is cancelled by the operator's first scroll.
 - **studio#333 — the Ask bubble no longer covers Chat's Send button.** On `/chats` → New chat at
   1440×700 the floating launcher (#326) sat on the composer's Send, clipping it to "S…". The
   launcher takes a `bottomOffsetPx` — the same contract as the run right-panel's `rightOffsetPx`,

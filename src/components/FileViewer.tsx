@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { isShortcutsPaletteOpen } from '../hooks/useGlobalShortcuts.js';
 import type { CSSProperties } from 'react';
 import { api, apiWire, isRouteAbsent } from '../api/client.js';
 import type { RunDiff, RunFileContent } from '../api/types.js';
@@ -150,10 +151,17 @@ export function FileViewer({ runId, path, defaultTab, base, onClose, onUnsupport
   // Escape closes (the Modal pattern); the caller restores focus to the row.
   useEffect(() => {
     function handler(e: KeyboardEvent): void {
-      if (e.key === 'Escape') onClose();
+      if (e.key !== 'Escape') return;
+      // §7.7 chain (wave 1 round 2): the palette above closes first — the same yield
+      // Modal's useModalEscape makes; one press, one layer.
+      if (isShortcutsPaletteOpen()) return;
+      onClose();
     }
-    document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
+    // CAPTURE phase, like useModalEscape: it must run BEFORE the palette's own Escape
+    // handler closes the palette (React flushes that close synchronously, so a bubble
+    // listener would see the palette already shut and close the viewer too).
+    document.addEventListener('keydown', handler, true);
+    return () => document.removeEventListener('keydown', handler, true);
   }, [onClose]);
 
   // Fetch on first tab activation only — the user gesture is the trigger.

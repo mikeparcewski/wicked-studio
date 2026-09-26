@@ -15,7 +15,7 @@
  * half-life-decayed) is the design commitment.
  */
 
-export type SignalKind = 'gate' | 'failing' | 'running' | 'drafts';
+export type SignalKind = 'gate' | 'failing' | 'stalled' | 'running' | 'drafts';
 
 /** One thing about a project that could want attention, and when it last said so. */
 export interface Signal {
@@ -34,6 +34,10 @@ const DAY = 24 * HOUR;
 export const SEVERITY: Record<SignalKind, number> = {
   gate: 100,
   failing: 70,
+  // A live run that has gone silent (wave 1 round 2): below a failure (nothing has
+  // broken yet), above healthy work — and, like a gate, it does not decay: waiting
+  // does not un-wedge a run.
+  stalled: 60,
   running: 40,
   drafts: 15,
 };
@@ -47,6 +51,7 @@ export const SEVERITY: Record<SignalKind, number> = {
  */
 export const HALF_LIFE: Record<SignalKind, number> = {
   gate: Infinity,
+  stalled: Infinity,
   running: 30 * MINUTE,
   failing: 4 * HOUR,
   drafts: 7 * DAY,
@@ -87,6 +92,18 @@ export function topSignal(
   return signal === null ? { score: 0, signal: null } : { score, signal };
 }
 
+/**
+ * A live run is STALLED once its freshest evidence of activity — a streamed frame or
+ * its durable event tail, never an attach/project clock (those go stale while a run
+ * works, C6) — has decayed below the triage threshold: the same `running` decay the
+ * board already orders by (base 40, 30-minute half-life ⇒ 30 minutes of silence).
+ * No evidence at all is not silence: it is unknown, and claims nothing.
+ */
+export function isStalled(lastEvidenceAt: number | undefined, now: number): boolean {
+  if (lastEvidenceAt === undefined) return false;
+  return scoreOf({ kind: 'running', at: lastEvidenceAt }, now) < TRIAGE_THRESHOLD;
+}
+
 export type Band = 'needs-you' | 'working' | 'quiet';
 
 /** Which band a score renders in. Exactly the threshold is still NEEDS YOU.
@@ -103,8 +120,10 @@ export function bandOf(score: number): Band {
  * EXECUTING runs reading "Nothing needs you right now" because its band hung
  * off a decaying live-frame clock instead of the run DTO the board already held.
  *
- *   NEEDS YOU — a human is the blocker: a waiting gate (never decays), or a
- *               failure fresh enough to still demand triage (the F3 decay).
+ *   NEEDS YOU — a human is the blocker: a waiting gate (never decays), a
+ *               failure fresh enough to still demand triage (the F3 decay), or a
+ *               live run gone silent past the stall threshold (`isStalled`) —
+ *               an active run is NOT automatically healthy (wave 1 round 2).
  *   WORKING   — work is accumulating fine WITHOUT needing anyone: any
  *               non-terminal run (`hasActiveRun`, read off DTO statuses — a
  *               project with one is NEVER quiet, no matter what any clock
@@ -118,6 +137,7 @@ export function bandFor(signals: Signal[], hasActiveRun: boolean, now: number): 
   if (signals.some((s) => s.kind === 'failing' && scoreOf(s, now) >= TRIAGE_THRESHOLD)) {
     return 'needs-you';
   }
+  if (signals.some((s) => s.kind === 'stalled')) return 'needs-you';
   if (hasActiveRun) return 'working';
   if (signals.some((s) => s.kind === 'running' && scoreOf(s, now) >= TRIAGE_THRESHOLD)) {
     return 'working';

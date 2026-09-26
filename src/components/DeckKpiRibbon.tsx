@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import type { DiagnosticsGovernance, GovernanceClaim, SessionView } from '../api/types.js';
 import type { Navigate } from '../hooks/useRoute.js';
+import { COUNT_TONE_COLOR, countTone, type CountTone } from '../board/countTone.js';
 import { governedRuns } from '../board/steeringUsage.js';
 import { dtoSpend, observedSpend } from '../board/metrics.js';
 import { useRuntimeStore } from '../store/runtime.js';
@@ -143,15 +144,15 @@ export function DeckKpiRibbon({ runs, claims, governance = null, needCount, navi
         <div className="deck-ghead"><span className="deck-glyph">▲</span><span className="deck-tag">Attention</span></div>
         <div className="deck-tiles">
           <Tile testId="home-kpi-needs" lead label="Needs you" value={String(needCount)}
-            valueColor={needCount > 0 ? 'var(--status-gate)' : undefined}
+            tone={countTone(needCount, 'gate')}
             href="#needs-you" onGo={(e) => { e.preventDefault(); document.querySelector('[data-testid="needs-you-queue"]')?.scrollIntoView({ block: 'start' }); }}
             sub={needCount > 0 ? 'waiting on you' : 'all clear'} />
           <Tile testId="home-kpi-failed" label={`Failed · ${model.windowLabel}`} value={String(model.counts.failed)}
-            delta={model.failedDelta} deltaBadUp valueColor={model.counts.failed > 0 ? 'var(--status-fail)' : undefined}
+            delta={model.failedDelta} deltaBadUp tone={countTone(model.counts.failed, 'fail')}
             href="/work?filter=failed" onGo={go('/work?filter=failed')}
             sub={model.reworkPct !== null ? `rework ${model.reworkPct}%` : 'no rework'} />
           <Tile testId="home-kpi-review" label="Review" value={String(model.reviewQueue)}
-            valueColor={model.reviewQueue > 0 ? 'var(--status-gate)' : undefined}
+            tone={countTone(model.reviewQueue, 'gate')}
             href="/work?filter=stranded" onGo={go('/work?filter=stranded')}
             sub="stranded + vacuous" />
         </div>
@@ -192,7 +193,7 @@ export function DeckKpiRibbon({ runs, claims, governance = null, needCount, navi
 }
 
 /** One ribbon tile — the deck's luminous mono metric, delta pill, optional sparkline or bar. */
-function Tile({ testId, label, value, unit = '', delta, deltaBadUp, valueColor, state, sub, spark, bar, lead, href, onGo }: {
+function Tile({ testId, label, value, unit = '', delta, deltaBadUp, valueColor, tone, state, sub, spark, bar, lead, href, onGo }: {
   testId: string;
   label: string;
   value: string;
@@ -200,6 +201,8 @@ function Tile({ testId, label, value, unit = '', delta, deltaBadUp, valueColor, 
   delta?: StatDelta;
   deltaBadUp?: boolean;
   valueColor?: string | undefined;
+  /** A COUNT tile's tone (board/countTone) — rendered as `data-tone` and as the value's colour. */
+  tone?: CountTone;
   /** A named degraded state the tile is in (rendered as `data-state`), or undefined. */
   state?: string | undefined;
   sub?: string;
@@ -215,6 +218,7 @@ function Tile({ testId, label, value, unit = '', delta, deltaBadUp, valueColor, 
   // "bad-up" tiles (failed) invert the good/bad color of the delta.
   const good = deltaBadUp ? dir === 'down' : dir === 'up';
   const deltaClass = dir === 'flat' ? 'flat' : good ? 'up' : 'down';
+  const color = tone !== undefined ? COUNT_TONE_COLOR[tone] : valueColor;
   return (
     <a
       className={`deck-tile${lead ? ' lead' : ''}`}
@@ -224,12 +228,13 @@ function Tile({ testId, label, value, unit = '', delta, deltaBadUp, valueColor, 
       data-value={`${value}${unit}`}
       data-delta={hasDelta ? dir : 'none'}
       data-state={state}
+      data-tone={tone}
       href={href}
       onClick={onGo}
     >
       <div className="deck-lab">{label}</div>
       <div className="deck-val">
-        <span className="deck-big" style={valueColor ? { color: valueColor } : undefined}>{value}</span>
+        <span className="deck-big" style={color ? { color } : undefined}>{value}</span>
         {unit !== '' && <span className="deck-unit">{unit}</span>}
         {d !== null && (
           <span className={`deck-delta ${deltaClass}`}>{d > 0 ? '▲' : d < 0 ? '▼' : '±'} {Math.abs(d)}</span>

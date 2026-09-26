@@ -5,12 +5,14 @@ import type { Project, ProjectMember, RepoEntry, SessionView } from '../api/type
 import {
   bandFor,
   compareScored,
+  isStalled,
   topSignal,
   type Band,
   type Signal,
 } from '../board/boardAttention.js';
 import { sessionProjectId } from './ambientProject.js';
 import { useDocsCache } from '../store/docsCache.js';
+import { useActivityClocks } from '../store/activityClocks.js';
 import { useFailureClocks } from '../store/failureClocks.js';
 import { useGateStore, type OpenGate } from '../store/gates.js';
 import { useMembershipStore } from '../store/membership.js';
@@ -45,7 +47,7 @@ import { useRuntimeStore } from '../store/runtime.js';
  */
 
 /** Attention buckets — §1.4's vocabulary, kept for the card's dot + label (D8). */
-export type Attention = 'gate' | 'failing' | 'running' | 'drafts' | 'quiet';
+export type Attention = 'gate' | 'failing' | 'stalled' | 'running' | 'drafts' | 'quiet';
 
 /** Statuses that mean the run is moving under its own power. */
 const ACTIVE: ReadonlySet<string> = new Set(['planning', 'distributing', 'executing']);
@@ -141,6 +143,8 @@ function signalsOf(
   failedAt: Record<string, number>,
   activityAt: number | undefined,
   attachedAt: Record<string, number>,
+  evidenceAt: (runId: string) => number | undefined,
+  now: number,
 ): Signal[] {
   const fallback = project.updated_at;
   const signals: Signal[] = [];
@@ -153,7 +157,12 @@ function signalsOf(
     } else if (status === 'failed') {
       signals.push({ kind: 'failing', at: failedAt[id] ?? fallback, runId: id });
     } else if (ACTIVE.has(status)) {
-      signals.push({ kind: 'running', at: logTail(id) ?? Math.max(attachedAt[id] ?? 0, fallback), runId: id });
+      // Wave 1 round 2: a live run silent past the stall threshold is an exception,
+      // judged ONLY on activity evidence (a frame or its durable tail) — never on the
+      // attach/project clocks, which go stale while a run works (C6).
+      const evidence = evidenceAt(id);
+      if (isStalled(evidence, now)) signals.push({ kind: 'stalled', at: evidence!, runId: id });
+      else signals.push({ kind: 'running', at: logTail(id) ?? Math.max(attachedAt[id] ?? 0, fallback), runId: id });
     }
   }
   if (docs.length > 0) {
@@ -255,6 +264,12 @@ export interface BoardModel {
    */
   failedAt: Record<string, number>;
   /**
+   * Live runs gone silent past the stall threshold (run id → the last activity
+   * evidence) — wave 1 round 2. The needs-you queue reads it; the band verdict
+   * already folds the same evidence (`bandFor`).
+   */
+  stalledAt: Record<string, number>;
+  /**
    * The repo register the board already fetched for its name join (zero new
    * requests) — exposed for the home command center's needs-you fold (graph
    * states) and essence strip (DES-HOME-COMMAND-CENTER §3/§5).
@@ -277,6 +292,7 @@ export function useBoardModel(runs: SessionView[]): BoardModel {
    *  app-wide mirror store (the membership idiom): this hook is the only
    *  WRITER; the Ask dock's needs-you fold reads the same clocks (E1). */
   const failedAt = useFailureClocks((s) => s.failedAtByRun);
+  const lastEventAt = useActivityClocks((s) => s.lastEventAtByRun);
   const gates = useGateStore((s) => s.gates);
   // Relayed doc statuses (slice 6) — REACTIVE, unlike `logs`: a `status.posted`
   // is rare (one per doc edit, not one per streamed frame) and it must be able
@@ -287,6 +303,8 @@ export function useBoardModel(runs: SessionView[]): BoardModel {
   const placed = useRef<Set<string>>(new Set());
   /** Run ids whose event tail has been asked for — once per run id, ever (R2). */
   const backfilled = useRef<Set<string>>(new Set());
+  /** Active run ids whose durable tail has been asked for — once per run id, ever. */
+  const activityBackfilled = useRef<Set<string>>(new Set());
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), TICK_MS);
     return () => clearInterval(t);
@@ -393,6 +411,39 @@ export function useBoardModel(runs: SessionView[]): BoardModel {
     }
   }, [runs, loading, failedAt]);
 
+  // Wave 1 round 2: an ACTIVE run's last durable event is the silence evidence when no
+  // frame has streamed this session — same budget and tolerance as the failure tails.
+  useEffect(() => {
+    if (loading) return;
+    for (const v of runs) {
+      const id = v.session.id;
+      if (!ACTIVE.has(v.session.status) || activityBackfilled.current.has(id)) continue;
+      if (lastEventAt[id] !== undefined) continue;
+      if (activityBackfilled.current.size >= MAX_BACKFILL) break;
+      activityBackfilled.current.add(id);
+      // Deferred into the promise so a synchronous throw (a daemon client without the
+      // route, a partial test mock) is a miss like any other, never a render error.
+      void Promise.resolve()
+        .then(() => api.getRunEvents(id))
+        .then(({ events }) => {
+          const ts = events[events.length - 1]?.ts;
+          if (typeof ts === 'number') useActivityClocks.getState().merge({ [id]: ts });
+        })
+        .catch(() => { /* no durable log — no evidence, no stall claim */ });
+    }
+  }, [runs, loading, lastEventAt]);
+
+  /** The freshest activity evidence for a run: a streamed frame or its durable tail. */
+  const evidenceAt = useMemo(() => {
+    return (id: string): number | undefined => {
+      const log = useRuntimeStore.getState().logs[id];
+      const frame = log !== undefined && log.length > 0 ? log[log.length - 1]?.ts : undefined;
+      const tail = lastEventAt[id];
+      if (frame === undefined) return tail;
+      return tail === undefined ? frame : Math.max(frame, tail);
+    };
+  }, [lastEventAt]);
+
   const items = useMemo(
     () => {
       // Live-frame clocks are read NON-reactively: the tick and every run/binding/
@@ -409,7 +460,7 @@ export function useBoardModel(runs: SessionView[]): BoardModel {
           const mine = runs.filter((v) => belongsTo(v, project.id, b.runIds));
           const signals = signalsOf(
             project, mine, b.docs, gates, logTail, failedAt,
-            docActivity[project.id]?.at, b.attachedAt,
+            docActivity[project.id]?.at, b.attachedAt, evidenceAt, now,
           );
           const { score, signal } = topSignal(signals, now);
           // C6: the band verdict reads the run DTO statuses the board ALREADY
@@ -429,8 +480,18 @@ export function useBoardModel(runs: SessionView[]): BoardModel {
           ),
         );
     },
-    [projects, bindings, runs, gates, docActivity, failedAt, now],
+    [projects, bindings, runs, gates, docActivity, failedAt, evidenceAt, now],
   );
+
+  const stalledAt = useMemo(() => {
+    const out: Record<string, number> = {};
+    for (const v of runs) {
+      if (!ACTIVE.has(v.session.status)) continue;
+      const ev = evidenceAt(v.session.id);
+      if (isStalled(ev, now)) out[v.session.id] = ev!;
+    }
+    return out;
+  }, [runs, evidenceAt, now]);
 
   // The unfiled set (F5, re-pointed by DES-UX-001 §2.3 rule 3): a run whose DTO
   // carries `project_id: null` is what the DAEMON considers unfiled — daemon
@@ -448,5 +509,5 @@ export function useBoardModel(runs: SessionView[]): BoardModel {
     });
   }, [runs, projects, bindings, loading]);
 
-  return { items, unfiled, failedAt, repos: repoList, loading, error };
+  return { items, unfiled, failedAt, stalledAt, repos: repoList, loading, error };
 }

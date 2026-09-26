@@ -43,7 +43,7 @@ import { repoOnboard } from './repoStats.js';
  */
 
 export type NeedKind =
-  | 'gate' | 'failed-run' | 'stranded-run' | 'campaign' | 'repo-graph' | 'stalled-chat';
+  | 'gate' | 'failed-run' | 'stalled-run' | 'stranded-run' | 'campaign' | 'repo-graph' | 'stalled-chat';
 
 /** The act-in-place affordance a row carries — the component wires the verbs. */
 export type NeedAction =
@@ -82,6 +82,9 @@ const SEVERITY: Record<NeedKind, number> = {
   // Below a failure (nothing broke) but above the ambient rows: finished,
   // reviewable work sitting invisible in a worktree IS a person's job (crew#393).
   'stranded-run': 65,
+  // A live run gone silent past the stall threshold (wave 1 round 2) — the board's
+  // `isStalled` verdict; the operator checks on it (open the run, its Term, inject).
+  'stalled-run': 62,
   campaign: 60,
   'repo-graph': 50, // 'never' drops to 30 below
   'stalled-chat': 25,
@@ -109,6 +112,9 @@ export interface NeedsYouInputs {
   repos: readonly RepoEntry[];
   /** `GET /campaigns` snapshot; empty when unsupported. */
   campaigns: readonly Campaign[];
+  /** Live runs gone silent past the stall threshold (run id → last evidence) — the
+   *  board model's `stalledAt`; absent = no stall evidence held. */
+  stalledAt?: Record<string, number>;
   now: number;
 }
 
@@ -130,10 +136,18 @@ export function retryPrefillOf(v: SessionView): RetryPrefill {
   };
 }
 
+/** "2h" / "45m" — how long a stalled run has been silent. */
+function silentWord(ms: number): string {
+  const min = Math.floor(ms / 60_000);
+  if (min < 60) return `${min}m`;
+  return min % 60 === 0 ? `${min / 60}h` : `${Math.floor(min / 60)}h ${min % 60}m`;
+}
+
 const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 export function needsYouRows(inputs: NeedsYouInputs): NeedRow[] {
   const { runs, gates, failedAt, attachedAt, projectIds, chats, repos, campaigns, now } = inputs;
+  const stalledAt = inputs.stalledAt ?? {};
   const rows: NeedRow[] = [];
   const live = runs.filter((v) => v.session.archived_at == null);
 
@@ -222,6 +236,20 @@ export function needsYouRows(inputs: NeedsYouInputs): NeedRow[] {
         at: failedAt[s.id] ?? attachedAt[s.id] ?? null,
         subjectPath: `/runs/${encodeURIComponent(s.id)}`,
         action: { kind: 'retry-prefill', prefill: retryPrefillOf(v), label: 'Retry ›' },
+      });
+    } else if (stalledAt[s.id] !== undefined) {
+      shownRunIds.add(s.id);
+      const silent = Math.max(0, now - stalledAt[s.id]!);
+      rows.push({
+        key: `stalled:${s.id}`,
+        kind: 'stalled-run',
+        severity: SEVERITY['stalled-run'],
+        subject: s.problem,
+        text: `No activity for ${silentWord(silent)} — the run may be wedged`,
+        tone: 'gate',
+        at: stalledAt[s.id]!,
+        subjectPath: `/runs/${encodeURIComponent(s.id)}`,
+        action: { kind: 'open', path: `/runs/${encodeURIComponent(s.id)}`, label: 'Check run ›' },
       });
     } else if (s.status === 'completed' && deliveryOf(v).state === 'stranded') {
       // Stranded completed runs (crew#393): the daemon's OWN wire verdict — a

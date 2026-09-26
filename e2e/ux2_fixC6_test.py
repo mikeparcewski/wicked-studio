@@ -89,6 +89,16 @@ def check(step: str, ok: bool, **detail) -> None:
         sys.exit(1)
 
 
+def open_working(page) -> None:
+    """Studio wave 1 (dark when healthy): WORKING collapses to a count line by default —
+    expand it to reach the card this rig asserts on (the expansion rides history state,
+    so a reload keeps it open)."""
+    band = page.locator(WORKING_BAND)
+    band.wait_for(timeout=30000)
+    if band.get_attribute("data-expanded") == "false":
+        page.get_by_test_id("band-working-toggle").click()
+
+
 def board_state(page) -> dict:
     """One DOM read: everything the ACs assert about the three bands."""
     return page.evaluate(
@@ -134,7 +144,7 @@ def assert_working(step: str, s: dict) -> None:
           and s["cardInWorking"]
           and not s["cardInNeeds"]
           and s["working"] == 1
-          and s["workingLabel"] == "Working"
+          and (s["workingLabel"] or "").startswith("Working")  # wave 1: "Working (n)"
           and not s["uploadQuietChip"]
           and "15h" not in s["cardText"]
           # NEEDS YOU is gates + the fresh failure, never the executing run.
@@ -160,6 +170,7 @@ with sync_playwright() as p:
     # ── Scene 1 (AC 1 + 2): cold load — WORKING off the DTO status alone ───────
     page.goto(f"{ORIGIN}/", wait_until="domcontentloaded")
     page.locator('[data-testid="project-board"]').wait_for(timeout=30000)
+    open_working(page)
     page.add_style_tag(content=HIDE_GATE_TOASTS)
     page.locator(f"{WORKING_BAND} {CARD}").wait_for(timeout=30000)
     s1 = board_state(page)
@@ -173,6 +184,7 @@ with sync_playwright() as p:
     #    (fresh page, zero frames, every clock stale) ─────────────────────────────
     page.reload(wait_until="domcontentloaded")
     page.locator('[data-testid="project-board"]').wait_for(timeout=30000)
+    open_working(page)
     page.add_style_tag(content=HIDE_GATE_TOASTS)
     page.locator(f"{WORKING_BAND} {CARD}").wait_for(timeout=30000)
     assert_working("reload_still_working", board_state(page))

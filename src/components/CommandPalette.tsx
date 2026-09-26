@@ -5,6 +5,7 @@ import { api } from '../api/client.js';
 import { UNFILED_MOUNT } from '../api/interactive.js';
 import { fetchReposCached, getCachedRepos } from '../store/repoCache.js';
 import { fuzzyMatch, type FuzzyResult } from '../palette/fuzzy.js';
+import { runTargetHits } from '../palette/runTargets.js';
 import { launchPath } from '../hooks/ambientProject.js';
 import { modePath, projectPath, type Navigate } from '../hooks/useRoute.js';
 import type { ShortcutEntry } from '../hooks/useGlobalShortcuts.js';
@@ -253,7 +254,9 @@ export function CommandPalette({
 
   const close = (): void => {
     onClose();
-    restoreRef.current?.focus?.();
+    // preventScroll: handing focus back must not scroll the view the operator left (wave 1 —
+    // the board's toggle sat above the scrolled-to cards, and focusing it jumped to the top).
+    restoreRef.current?.focus?.({ preventScroll: true });
   };
 
   // ── The corpus (§1.3/§1.4): stores + props only — zero fetching here ────────
@@ -524,6 +527,8 @@ export function CommandPalette({
         },
       },
       { name: 'Open Terminal', action: () => setShowTerminal(true) },
+      // Wave 1: the daemon's configuration surface, one verb away (a route — Back returns).
+      { name: 'Config', action: () => navigate('/system') },
       {
         name: 'Cancel run',
         when: selectedRun !== null && !TERMINAL.has(status),
@@ -566,6 +571,22 @@ export function CommandPalette({
       if (b.m.score !== a.m.score) return b.m.score - a.m.score;
       return a.en.rank - b.en.rank;
     });
+    // Wave 1 ("raw in one step"): `>events r1` / `>files <name>` — a raw target for ANY
+    // run, resolved by the palette model and listed ahead of the plain verbs.
+    if (scope === 'verbs') {
+      const targeted = runTargetHits(needle, runs).map((hit, i): { en: Entry; m: FuzzyResult } => ({
+        en: {
+          id: `target-${hit.target.key}-${hit.run.session.id}`,
+          group: 'verbs',
+          label: `${hit.target.name} · ${runTitle(hit.run.session)}`,
+          context: hit.run.session.status,
+          href: hit.href,
+          rank: i,
+        },
+        m: { score: 0, positions: [] },
+      }));
+      return [...targeted, ...matched];
+    }
     return matched;
   }, [runs, projects, repos, gates, claims, prompts, projectNameByRun, attachedAtByRun, scope, needle, runPath, navigate, projectId, selectedRun, onKill]);
 

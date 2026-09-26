@@ -70,6 +70,9 @@ async function expandQuiet(): Promise<void> {
 
 describe('HomeBoard — the orchestrator board', () => {
   beforeEach(() => {
+    // Wave 1 (dark when healthy): WORKING is collapsed by default; this suite exercises the
+    // working CARDS themselves, so it opens the band the way Back restores it (history state).
+    window.history.replaceState({ 'home.workingOpen': true }, '');
     projects = [];
     members = {};
     docs = {};
@@ -213,6 +216,8 @@ describe('HomeBoard — the orchestrator board', () => {
     expect(at20).toBeGreaterThan(0);
     expect(at20).toBeLessThanOrEqual(20);
     cleanup();
+    // A fresh board, not Back to this one: the expanded QUIET band lives in the history entry.
+    window.history.replaceState({ 'home.workingOpen': true }, '');
 
     // Tripling the board does NOT triple what is mounted — what mounts is bounded
     // by the viewport's row capacity (plus overscan), never by the project count.

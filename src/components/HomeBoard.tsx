@@ -7,11 +7,13 @@ import type { SteeringRule } from '../api/steering.js';
 import type { GovernanceClaim, SessionView } from '../api/types.js';
 import { getWikiScoreboard, type WikiRuleEvidenceRow } from '../api/wiki.js';
 import { bandHint, bandLabel } from '../board/bandCopy.js';
+import { bandCountLine, bandExpandsByDefault } from '../board/bandExpansion.js';
 import { windowRows } from '../board/boardWindow.js';
 import type { LiveChatSnapshot } from '../board/chatStats.js';
 import { isFreshInstall, needsYouRows } from '../board/needsYou.js';
 import { leadMovingRun } from '../board/phaseProgress.js';
 import { useBoardModel, type BoardProject } from '../hooks/useBoardModel.js';
+import { useHistoryScroll, useHistoryState } from '../hooks/useHistoryState.js';
 import { modePath, projectPath, runTimelinePath, type Navigate } from '../hooks/useRoute.js';
 import { useTriageCursor, type TriageCursor, type TriageItem } from '../hooks/useTriageCursor.js';
 import { useDocsCache } from '../store/docsCache.js';
@@ -154,11 +156,14 @@ interface HomeWires {
 const NO_WIRES: HomeWires = { chats: null, campaigns: null, claims: null, rules: null, perRule: null, diag: null, evalCount: null };
 
 export function HomeBoard({ runs, navigate, onOpenAsk }: Props): React.ReactElement {
-  const { items, unfiled, failedAt, repos, loading, error } = useBoardModel(runs);
+  const { items, unfiled, failedAt, stalledAt, repos, loading, error } = useBoardModel(runs);
   const scroller = useRef<HTMLDivElement>(null);
   const [box, setBox] = useState({ w: 0, h: 0 });
   const [scrollTop, setScrollTop] = useState(0);
-  const [quietOpen, setQuietOpen] = useState(false);
+  // Dark when healthy (wave 1): only exception bands open by default. The operator's
+  // expand/collapse and the board's scroll belong to the history entry, so Back restores them.
+  const [quietOpen, setQuietOpen] = useHistoryState('home.quietOpen', bandExpandsByDefault('quiet'));
+  const [workingOpen, setWorkingOpen] = useHistoryState('home.workingOpen', bandExpandsByDefault('working'));
   const [shelfOpen, setShelfOpen] = useState(false);
   const [wires, setWires] = useState<HomeWires>(NO_WIRES);
   /** The coarse age tick — rows re-age without any data changing. */
@@ -211,6 +216,9 @@ export function HomeBoard({ runs, navigate, onOpenAsk }: Props): React.ReactElem
     return () => window.removeEventListener('resize', measure);
   }, []);
 
+  // Back to the board lands where the operator left it (once the grid has its real height).
+  useHistoryScroll(scroller, 'home.scroll');
+
   const onScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
     setScrollTop(e.currentTarget.scrollTop);
   }, []);
@@ -244,9 +252,10 @@ export function HomeBoard({ runs, navigate, onOpenAsk }: Props): React.ReactElem
         repos,
         // The needs-you wall reads the ENGINE campaigns off the listing (a label group has no gate of its own).
         campaigns: wires.campaigns?.campaigns ?? [],
+        stalledAt,
         now,
       }),
-    [runs, gates, failedAt, attachedAt, projectIdByRun, wires.chats, wires.campaigns, repos, now],
+    [runs, gates, failedAt, attachedAt, projectIdByRun, wires.chats, wires.campaigns, repos, stalledAt, now],
   );
 
   // Slice H's keyboard triage cursor — survives on the wall's gated cards.
@@ -278,11 +287,12 @@ export function HomeBoard({ runs, navigate, onOpenAsk }: Props): React.ReactElem
   const needsTop = needsYou.length === 0 ? 0 : BAND_H;
   const needsH = needsYou.length === 0 ? 0 : Math.ceil(needsYou.length / columns) * activeRowH;
   const workingTop = needsTop + needsH + BAND_H;
-  const workingH = working.length === 0 ? 0 : Math.ceil(working.length / columns) * activeRowH;
+  const workingShown = workingOpen ? working.length : 0;
+  const workingH = workingShown === 0 ? 0 : Math.ceil(workingShown / columns) * activeRowH;
   const quietGridTop = workingTop + (working.length === 0 ? 0 : workingH + BAND_H);
 
   const needsWin = windowRows(needsYou.length, columns, activeRowH, scrollTop, viewH, needsTop);
-  const workingWin = windowRows(working.length, columns, activeRowH, scrollTop, viewH, workingTop);
+  const workingWin = windowRows(workingShown, columns, activeRowH, scrollTop, viewH, workingTop);
   const quietWin = quietOpen
     ? windowRows(quiet.length, columns, quietRowH, scrollTop, viewH, quietGridTop)
     : null;
@@ -293,7 +303,7 @@ export function HomeBoard({ runs, navigate, onOpenAsk }: Props): React.ReactElem
       : Math.min(needsYou.length, (needsWin.lastRow + 1) * columns) - needsWin.firstRow * columns) +
     (workingWin.lastRow < workingWin.firstRow
       ? 0
-      : Math.min(working.length, (workingWin.lastRow + 1) * columns) - workingWin.firstRow * columns) +
+      : Math.min(workingShown, (workingWin.lastRow + 1) * columns) - workingWin.firstRow * columns) +
     (quietWin === null || quietWin.lastRow < quietWin.firstRow
       ? 0
       : Math.min(quiet.length, (quietWin.lastRow + 1) * columns) - quietWin.firstRow * columns);
@@ -500,16 +510,38 @@ export function HomeBoard({ runs, navigate, onOpenAsk }: Props): React.ReactElem
             )}
 
             {working.length > 0 && (
-              <section data-testid="band-working" data-count={working.length} style={{ marginTop: needsYou.length > 0 ? '18px' : 0 }}>
-                <p style={{ ...CSS.bandLabel, color: 'var(--status-run)' }} title={bandHint('working')}>{bandLabel('working')}</p>
-                <BandGrid
-                  items={working}
-                  columns={columns}
-                  rowH={activeRowH}
-                  firstRow={workingWin.firstRow}
-                  lastRow={workingWin.lastRow}
-                  navigate={navigate}
-                />
+              <section
+                data-testid="band-working"
+                data-count={working.length}
+                data-expanded={workingOpen}
+                style={{ marginTop: needsYou.length > 0 ? '18px' : 0 }}
+              >
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: '10px' }}>
+                  <p style={{ ...CSS.bandLabel, color: 'var(--status-run)', margin: 0 }} title={bandHint('working')}>
+                    {bandCountLine('working', working.length)}
+                  </p>
+                  <button
+                    type="button"
+                    data-testid="band-working-toggle"
+                    aria-expanded={workingOpen}
+                    onClick={() => setWorkingOpen((v) => !v)}
+                    style={CSS.toggle}
+                  >
+                    {workingOpen ? '[ collapse ▴ ]' : '[ expand ▾ ]'}
+                  </button>
+                </div>
+                {workingOpen && (
+                  <div style={{ marginTop: '10px' }}>
+                    <BandGrid
+                      items={working}
+                      columns={columns}
+                      rowH={activeRowH}
+                      firstRow={workingWin.firstRow}
+                      lastRow={workingWin.lastRow}
+                      navigate={navigate}
+                    />
+                  </div>
+                )}
               </section>
             )}
 
@@ -521,10 +553,11 @@ export function HomeBoard({ runs, navigate, onOpenAsk }: Props): React.ReactElem
                 style={{ marginTop: '18px' }}
               >
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: '10px' }}>
-                  <p style={{ ...CSS.bandLabel, color: 'var(--ink-dim)', margin: 0 }} title={bandHint('quiet')}>{bandLabel('quiet')} ({quiet.length})</p>
+                  <p style={{ ...CSS.bandLabel, color: 'var(--ink-dim)', margin: 0 }} title={bandHint('quiet')}>{bandCountLine('quiet', quiet.length)}</p>
                   <button
                     type="button"
                     data-testid="band-quiet-toggle"
+                    aria-expanded={quietOpen}
                     onClick={() => setQuietOpen((v) => !v)}
                     style={CSS.toggle}
                   >

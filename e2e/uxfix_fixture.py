@@ -228,6 +228,13 @@ NPM = "npm.cmd" if os.name == "nt" else "npm"
 # hider keeps hiding every card; nothing about its mechanism changed.
 HIDE_GATE_TOASTS = '[data-testid="gate-notification"] { display: none !important; }'
 
+# Studio wave 1 (dark when healthy): the home board's WORKING band collapses to a count line
+# by default, and its expansion rides the history entry (`home.workingOpen`). Rigs that assert
+# on the working CARDS (the W2 upload-endpoint card, its narration) open it before the app
+# boots — `ctx.add_init_script(OPEN_WORKING_BAND)` — exactly the state Back would restore.
+OPEN_WORKING_BAND = ("history.replaceState(Object.assign({}, history.state, "
+                     "{'home.workingOpen': true}), '');")
+
 # ── The frozen clock (§4.0 determinism): every age derives from this one NOW0 ──
 NOW0 = int(time.time() * 1000)
 SEC, MIN, HOUR, DAY = 1_000, 60_000, 3_600_000, 86_400_000
@@ -522,6 +529,21 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          #   NO `qe-author-tests` (a daemon predating the wave): the panel shows the
          #   plain-run banner and POST /testing/recon takes the launch.
          "governed_testing": False, "governed_testing_workflow_absent": False,
+         # ── Studio wave 1 (e2e/wave1_*_test.py) ──
+         # wave1 — REPLACES the W2 corpus with a small healthy portfolio: three
+         #   projects (alpha / beta / gamma), each with ONE executing run (a1 / b1 /
+         #   r1), plus a COMPLETED run c1 in gamma. No gates, no failures — the
+         #   "dark when healthy" board. `gate_now: ["b1"]` flips b1 to a waiting
+         #   gate (the one exception). r1 carries a recorded event tail (the raw
+         #   events view) and every wave-1 run answers GET /runs/:id/deliver-text
+         #   (the outbound draft). Default False: no standing rig's wires change.
+         "wave1": False,
+         # wave1_stall — r1's durable event tail ends 2 HOURS ago: an executing run
+         #   that has gone silent (wave 1 round 2: a stalled run is an exception).
+         # status_over — {run id: status} applied last on both run wires, so a rig can
+         #   flip a run mid-page (pair with an extra_frames lifecycle frame so the app
+         #   reconciles) or seed one failed run into the healthy corpus.
+         "wave1_stall": False, "status_over": {},
          }
 state_lock = threading.Lock()
 
@@ -650,6 +672,54 @@ J5_RUNS = [
 J5_MEMBER_REFS = ["r-cxl-new", "r-cxl-old"]
 ATTACHED_AT["r-cxl-new"] = NOW0 - 2 * HOUR
 ATTACHED_AT["r-cxl-old"] = NOW0 - 3 * DAY
+
+# ── Studio wave 1: the healthy-portfolio corpus, behind `wave1` ────────────────
+WAVE1_PROJECTS = [
+    project("alpha", "alpha", NOW0 - 2 * MIN),
+    project("beta", "beta", NOW0 - 3 * MIN),
+    project("gamma", "gamma", NOW0 - 4 * MIN),
+]
+WAVE1_RUNS = [
+    session("a1", "executing", "add request tracing to the alpha API", "add request tracing"),
+    session("b1", "executing", "migrate beta's settings page to the new form kit",
+            "migrate the settings page"),
+    session("r1", "executing", "tighten gamma's upload size limits", "tighten the upload limits"),
+    session("c1", "completed", "document gamma's retry policy", "document the retry policy"),
+]
+WAVE1_RUNS[3]["units"][0]["status"] = "done"
+WAVE1_MEMBERS = {"alpha": ["a1"], "beta": ["b1"], "gamma": ["r1", "c1"]}
+WAVE1_ATTACHED_AT = {"a1": NOW0 - 2 * MIN, "b1": NOW0 - 3 * MIN,
+                     "r1": NOW0 - 4 * MIN, "c1": NOW0 - 50 * MIN}
+# r1's durable tail — real event_to_json shapes with RecordedEvent's ts + seq.
+WAVE1_R1_EVENTS = [
+    {"type": "sessionStarted", "sessionId": "r1", "ts": NOW0 - 4 * MIN, "seq": 1},
+    {"type": "unitPlanned", "sessionId": "r1", "ord": 0,
+     "description": "tighten the upload limits", "stage": "build",
+     "ts": NOW0 - 4 * MIN + 2 * SEC, "seq": 2},
+    {"type": "unitExecuting", "sessionId": "r1", "ord": 0, "cli": "claude",
+     "ts": NOW0 - 4 * MIN + 5 * SEC, "seq": 3},
+]
+# r1 gone silent: the same tail, two hours old (wave1_stall).
+WAVE1_R1_STALL_EVENTS = [dict(e, ts=e["ts"] - 2 * HOUR + 4 * MIN) for e in WAVE1_R1_EVENTS]
+WAVE1_R1_DIFF = """\
+diff --git a/src/upload.ts b/src/upload.ts
+--- a/src/upload.ts
++++ b/src/upload.ts
+@@ -1,3 +1,3 @@
+ export const LIMITS = {
+-  maxBytes: 50_000_000,
++  maxBytes: 10_000_000,
+ };
+"""
+# GET /runs/:id/deliver-text — crew#524's text/plain framing: line 1 the title,
+# line 2 blank, then the body (composed from the run record).
+def wave1_deliver_text(run: dict) -> str:
+    s = run["session"]
+    return (f"docs: {s['problem']}\n\n"
+            f"## Summary\n\n{s['problem']}.\n\n"
+            f"## Run\n\n- run: {s['id']}\n- status: {s['status']}\n"
+            f"- phases: {', '.join(u['description'] for u in run['units'])}\n")
+
 
 # ── Slice V (DES-UX-001 §3/§4): the provenance + retry corpus, behind `provenance` ──
 #
@@ -2019,6 +2089,8 @@ def assemble_runs() -> list:
     with state_lock:
         if state["no_runs"]:
             runs = []
+        elif state["wave1"]:
+            runs = list(WAVE1_RUNS)
         else:
             runs = RUNS + ([ORPHAN] if state["orphan"] else []) \
                 + ([LONG_RUN] if state["long_prompt"] else []) \
@@ -2123,6 +2195,13 @@ def assemble_runs() -> list:
             # corpora are on (this is the membership-derived fallback).
             if project_dto_on and "project_id" not in r["session"]:
                 r["session"]["project_id"] = RUN_PROJECT.get(r["session"]["id"])
+    with state_lock:
+        status_over = dict(state["status_over"])
+    if status_over:
+        runs = json.loads(json.dumps(runs))
+        for r in runs:
+            if r["session"]["id"] in status_over:
+                r["session"]["status"] = status_over[r["session"]["id"]]
     return runs
 
 
@@ -2661,6 +2740,9 @@ class W2Handler(SimpleHTTPRequestHandler):
                 # Slice X2: this-lifetime created projects ride the list too.
                 created = json.loads(json.dumps(created_projects))
             rows = PROJECTS + (BATCH_PROJECTS if batch_on else []) + created
+            with state_lock:
+                if state["wave1"]:
+                    rows = list(WAVE1_PROJECTS)
             # C6 fix: the stale-clock reproduction — upload-endpoint's project
             # clock reads 15 HOURS old while its run executes NOW.
             if c6_on:
@@ -2748,6 +2830,15 @@ class W2Handler(SimpleHTTPRequestHandler):
         # /api/v1/projects/<id>/members
         if len(parts) == 6 and parts[3] == "projects" and parts[5] == "members":
             pid = urllib.parse.unquote(parts[4])
+            with state_lock:
+                wave1_on = state["wave1"]
+            if wave1_on:
+                self._json(200, {"members": [
+                    {"id": f"{pid}:crew.run:{ref}", "project_id": pid,
+                     "member_kind": "crew.run", "member_ref": ref, "meta": None,
+                     "attached_at": WAVE1_ATTACHED_AT[ref], "attached_by": "studio"}
+                    for ref in WAVE1_MEMBERS.get(pid, [])]})
+                return True
             refs = list(MEMBERS.get(pid, []))
             with state_lock:
                 chat_runs_on = state["chat_runs"]
@@ -2868,10 +2959,27 @@ class W2Handler(SimpleHTTPRequestHandler):
             else:
                 self._json(404, {"error": f"no gate cached for {rid}"})
             return True
+        # /api/v1/runs/<id>/deliver-text (crew#524) — text/plain, framed.
+        if len(parts) == 6 and parts[3] == "runs" and parts[5] == "deliver-text":
+            rid = urllib.parse.unquote(parts[4])
+            found = next((r for r in assemble_runs() if r["session"]["id"] == rid), None)
+            if found is None:
+                self._json(404, {"error": "Run not found"})
+                return True
+            body = wave1_deliver_text(found).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return True
         # /api/v1/runs/<id>/events
         if len(parts) == 6 and parts[3] == "runs" and parts[5] == "events":
             rid = urllib.parse.unquote(parts[4])
             events = list(RUN_EVENTS.get(rid, []))
+            with state_lock:
+                if state["wave1"] and rid == "r1":
+                    events = list(WAVE1_R1_STALL_EVENTS if state["wave1_stall"] else WAVE1_R1_EVENTS)
             with state_lock:
                 viewer_on = state["viewer"]
                 river_on = state["river"]
@@ -2957,6 +3065,12 @@ class W2Handler(SimpleHTTPRequestHandler):
             orphan_on = state["orphan"]
             forensics_on = state["forensics"]
             gt_on = state["governed_testing"]
+        # Studio wave 1: r1's worktree diff (the `>files r1` route opens the viewer on it).
+        with state_lock:
+            wave1_on = state["wave1"]
+        if wave1_on and rid == "r1" and leaf == "diff":
+            self._json(200, {"diff": WAVE1_R1_DIFF, "truncated": False, "source": "worktree"})
+            return
         # Wave 6 (F-7R2-013): the completed governed test's worktree is GONE, and the wave-6
         # daemon serves the RUN BRANCH vs its base — 200 with `source: "branch"` — instead of the
         # pre-0.36 409 "workdir no longer exists". Lit by its own switch, whole-run only.
