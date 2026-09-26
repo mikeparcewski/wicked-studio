@@ -375,6 +375,8 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
   // A long prompt (the engine echoes the run intent per unit) is clamped so the answer controls
   // stay near it; the answer bar below is also pinned, so nothing actionable leaves the screen.
   const longPrompt = headline.length > PROMPT_CLAMP_CHARS;
+  // A new prompt on the same mounted gate (the dock reuses the card per run) starts clamped again.
+  useEffect(() => setPromptOpen(false), [headline]);
 
   return (
     <div

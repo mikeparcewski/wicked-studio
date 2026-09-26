@@ -52,3 +52,21 @@ describe('SteeringGate keeps the answer on screen', () => {
     expect(client.api.confirmGate).toHaveBeenCalled();
   });
 });
+
+describe('SteeringGate re-clamps a new prompt', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    useGateStore.setState({ gates: {} });
+    useAnnotationStore.setState({ drafts: {} });
+  });
+
+  it('an expanded prompt collapses when the same mounted card gets a new long prompt', async () => {
+    const user = userEvent.setup();
+    const first = 'first ' + 'a'.repeat(PROMPT_CLAMP_CHARS + 10);
+    const { rerender } = render(<SteeringGate runId="run-42" ord={5} prompt={first} />);
+    await user.click(screen.getByTestId('steering-prompt-toggle'));
+    expect(screen.getByTestId('steering-prompt')).toHaveAttribute('data-clamped', 'false');
+    rerender(<SteeringGate runId="run-42" ord={7} prompt={'second ' + 'b'.repeat(PROMPT_CLAMP_CHARS + 10)} />);
+    expect(screen.getByTestId('steering-prompt')).toHaveAttribute('data-clamped', 'true');
+  });
+});
