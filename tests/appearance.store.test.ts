@@ -80,7 +80,7 @@ describe('load (§3.3 startup)', () => {
 describe('sanitizeAppearance (external store — never trusted)', () => {
   it('clamps channels, defaults junk, and empties logo/theme correctly', () => {
     expect(sanitizeAppearance({ accent_h: 999, accent_s: -4, accent_l: 'x', logo_url: '', theme: 'sepia' }))
-      .toEqual({ accent_h: 359, accent_s: 0, accent_l: 62, logo_url: null, theme: 'dark', site_name: null });
+      .toEqual({ accent_h: 359, accent_s: 0, accent_l: 62, logo_url: null, theme: 'dark', site_name: null, skin: 'studio' });
     expect(sanitizeAppearance(null)).toEqual(DEFAULT_APPEARANCE);
     expect(sanitizeAppearance({ accent_h: 179.6 }).accent_h).toBe(180);
     // site_name: a blank/whitespace value is the default (null); a real name is kept.

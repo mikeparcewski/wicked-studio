@@ -13,6 +13,20 @@ npm publish dates. Every version listed here exists on
 ## [Unreleased]
 
 ### Added
+- **Skin contract.** Studio's shape is now a skin over the one behaviour layer. A skin is a
+  manifest (`theming/skins.ts`): token overrides of the same semantic-token names tokens.css
+  declares (never a primitive, never a colour), a shell layout (`classic` | `right-rail`), and a
+  variant for each behaviour surface (Needs-you queue, live runs, handover, peek card, undo
+  toasts, nav rail). The active skin rides `studio.appearance.skin` beside the theme, is stamped
+  on `<html>` as `data-skin` (default `studio`, the current look), and is chosen in a new Skin
+  picker on the Theme page. The proof skin `compact-rail` docks the Needs-you queue into a
+  full-height right rail on Home, collapses the left nav to icons, and tightens the type and
+  spacing scales. Every destination the full nav exposes stays reachable in the icon rail:
+  each section's glyph, Notifications, Settings (an icon flyout with Theme / Workflows /
+  System) and Health (the heart icon, opening the health registry in a flyout), each with an
+  aria-label; the icon variant no longer hover-expands. The e2e fixture's `STUDIO_SKIN` env var boots any journey under a skin;
+  `e2e/skin_contract_test.py` checks that the structure changes, the queue behaves the same, and
+  the nav's destinations are the same set under both skins.
 - **Wave 1 — dark when healthy.** The home board's WORKING band collapses to one count line
   (`Working (n)`, expandable); only exception bands (Needs you) open by default, so a healthy
   portfolio shows no animated card and the one gated project is the only expanded card. The rule

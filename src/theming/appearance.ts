@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { api } from '../api/client.js';
+import { DEFAULT_SKIN_ID, isSkinId, skinById, skinTokenKeys, type SkinId } from './skins.js';
 
 /**
  * Per-install appearance (DES-VISION-001 §3.3): the three accent primitives,
@@ -26,6 +27,9 @@ export interface StudioAppearance {
   /** A custom product name for the chrome (nav-ui-tweaks). `null` = the default
    *  wordmark (`DEFAULT_SITE_NAME`); a non-empty string overrides it. */
   site_name: string | null;
+  /** The skin (theming/skins.ts) — shape over the one behaviour layer. Applied as
+   *  `data-skin` on <html> next to `data-theme`; `studio` is the current look. */
+  skin: SkinId;
 }
 
 export const APPEARANCE_KEY = 'studio.appearance';
@@ -42,6 +46,7 @@ export const DEFAULT_APPEARANCE: StudioAppearance = {
   logo_url: null,
   theme: 'dark',
   site_name: null,
+  skin: DEFAULT_SKIN_ID,
 };
 
 const PERSIST_DEBOUNCE_MS = 400;
@@ -62,6 +67,7 @@ export function sanitizeAppearance(raw: unknown): StudioAppearance {
     logo_url: typeof o.logo_url === 'string' && o.logo_url !== '' ? o.logo_url : null,
     theme: o.theme === 'light' ? 'light' : 'dark',
     site_name: typeof o.site_name === 'string' && o.site_name.trim() !== '' ? o.site_name.trim() : null,
+    skin: isSkinId(o.skin) ? o.skin : DEFAULT_SKIN_ID,
   };
 }
 
@@ -69,7 +75,8 @@ export function sanitizeAppearance(raw: unknown): StudioAppearance {
  * Write the appearance onto `<html>`: the three accent primitives as §3.3
  * spells them, `--logo-url` as a quoted `url(...)` (removed when unset, so the
  * slot's `var(--logo-url, none)` fallback renders the default mark), and the
- * theme instance as the `data-theme` attribute (§2.14 — absent = dark, §2.13).
+ * theme instance as the `data-theme` attribute (§2.14 — absent = dark, §2.13), and the
+ * skin as `data-skin` plus its token overrides (theming/skins.ts).
  */
 export function applyAppearance(a: StudioAppearance): void {
   const root = document.documentElement;
@@ -83,6 +90,21 @@ export function applyAppearance(a: StudioAppearance): void {
   }
   if (a.theme === 'light') root.setAttribute('data-theme', 'light');
   else root.removeAttribute('data-theme');
+  applySkin(root, a.skin);
+}
+
+/**
+ * The skin half: `data-skin` (always stamped — `studio` included) and the skin's token
+ * overrides as inline custom properties. Every token ANY skin overrides is cleared first,
+ * so a swap never leaves the previous skin's density behind.
+ */
+function applySkin(root: HTMLElement, id: SkinId): void {
+  const skin = skinById(id);
+  root.setAttribute('data-skin', skin.id);
+  for (const name of skinTokenKeys()) root.style.removeProperty(name);
+  for (const [name, value] of Object.entries(skin.tokens)) {
+    if (value !== undefined) root.style.setProperty(name, value);
+  }
 }
 
 interface AppearanceStore {
