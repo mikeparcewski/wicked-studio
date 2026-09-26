@@ -64,7 +64,7 @@ function inputs(over: Partial<NeedsYouInputs>): NeedsYouInputs {
 }
 
 describe('needsYouRows — severity order and honest clocks', () => {
-  it('orders gate › failed › campaign › repo › stalled chat, newest first within a kind', () => {
+  it('orders gate › failed › campaign › repo › stalled chat, longest-waiting first within a kind (wave 2b)', () => {
     const rows = needsYouRows(inputs({
       runs: [
         makeView({ id: 'r-fail-old', status: 'failed' }),
@@ -79,8 +79,8 @@ describe('needsYouRows — severity order and honest clocks', () => {
     }));
     expect(rows.map((r) => r.key)).toEqual([
       'gate:r-gate',
-      'fail:r-fail-new',
       'fail:r-fail-old',
+      'fail:r-fail-new',
       'campaign:camp-1',
       'repo:repo-never',
       'chat:chat-1',

@@ -35,6 +35,12 @@ export function announceNavigateAway(): void {
   window.dispatchEvent(new Event(NAVIGATE_AWAY));
 }
 
+/** Subscribe to that moment (the leaving entry's DOM is still mounted); returns the unsubscribe. */
+export function onNavigateAway(fn: () => void): () => void {
+  window.addEventListener(NAVIGATE_AWAY, fn);
+  return () => window.removeEventListener(NAVIGATE_AWAY, fn);
+}
+
 function readEntry(key: string): unknown {
   const st: unknown = window.history.state;
   return st !== null && typeof st === 'object' ? (st as Record<string, unknown>)[key] : undefined;

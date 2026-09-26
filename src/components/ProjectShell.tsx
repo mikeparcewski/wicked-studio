@@ -1,15 +1,19 @@
 import { useCallback, useEffect } from 'react';
 import { UNFILED_MOUNT } from '../api/interactive.js';
+import type { SessionView } from '../api/types.js';
 import { useModeMemory } from '../hooks/useModeMemory.js';
 import { usePreflight } from '../hooks/usePreflight.js';
+import { useProjectBrief } from '../hooks/useProjectVisits.js';
 import { MODES, modePath, projectPath, type Mode, type Navigate } from '../hooks/useRoute.js';
 import { useConnectionStore } from '../store/connection.js';
 import { useProjectsStore } from '../store/projects.js';
+import { projectEntryPath } from '../store/projectVisits.js';
 import {
   enablingAction, gateForMode, useProjectReadiness, useReadinessStore,
 } from '../store/readiness.js';
 import { InstallGate } from './InstallGate.js';
 import { ModeSwitcher } from './ModeSwitcher.js';
+import { ProjectBrief } from './ProjectBrief.js';
 import { ProjectSwitcher } from './ProjectSwitcher.js';
 
 // The shell's breadcrumb bar is chrome (DES-VISION-001 §5.2: breadcrumb, mode
@@ -45,6 +49,8 @@ interface Props {
   navigate: Navigate;
   /** The mode surface: an existing studio surface for Chat/Build, a placeholder otherwise. */
   children: React.ReactNode;
+  /** The run list — the "since you were last here" brief folds it (wave 2b). */
+  runs?: SessionView[];
 }
 
 /**
@@ -60,7 +66,9 @@ interface Props {
  * it blocks HERE, in front of the surface — the surface never mounts, so a gated mode
  * issues no doomed requests — and only for Document and Video.
  */
-export function ProjectShell({ projectId, mode, artifactId, navigate, children }: Props): React.ReactElement {
+const NO_RUNS: SessionView[] = [];
+
+export function ProjectShell({ projectId, mode, artifactId, navigate, children, runs = NO_RUNS }: Props): React.ReactElement {
   const projects = useProjectsStore((s) => s.projects);
   const loadProjects = useProjectsStore((s) => s.load);
 
@@ -76,6 +84,9 @@ export function ProjectShell({ projectId, mode, artifactId, navigate, children }
     (next: Mode) => navigate(modePath(projectId, next, lastArtifact(next))),
     [navigate, projectId, lastArtifact],
   );
+
+  // Wave 2b: what changed in this project while the operator was in another one.
+  const brief = useProjectBrief(projectId, runs);
 
   const project = projects.find((p) => p.id === projectId) ?? null;
   // Slice U (DES-UX-001 §6.2): the synthesized `default` bucket never rides the
@@ -140,7 +151,9 @@ export function ProjectShell({ projectId, mode, artifactId, navigate, children }
           projects={projects}
           onSelect={(nextId) => {
             if (nextId === null || nextId === projectId) return;
-            navigate(modePath(nextId, mode));
+            // Wave 2b: the verb is kept (slice J), and a project the operator has been in
+            // reopens where they last were under that verb (its route; scroll follows).
+            navigate(projectEntryPath(nextId, mode, modePath(nextId, mode)));
           }}
           dashboard={{
             href: projectPath(projectId),
@@ -164,6 +177,8 @@ export function ProjectShell({ projectId, mode, artifactId, navigate, children }
           {MODE_LABEL[mode]}
         </span>
       </header>
+
+      <ProjectBrief brief={brief} />
 
       <ModeSwitcher mode={mode} onSelect={onSelectMode} unavailable={unavailable} />
 

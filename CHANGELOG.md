@@ -26,6 +26,36 @@ npm publish dates. Every version listed here exists on
   (completed run) or a status update (anything else) from crew's `GET /runs/:id/deliver-text`, in
   an editable text area with a Copy action. One data function (`api/outbound.ts`,
   `{kind: 'pr' | 'status', runId}`) and one action list (`OUTBOUND_ACTIONS`, Copy only today).
+- **Wave 2b — one queue ranked by consequence.** The home needs-you queue adds MCP elicitations,
+  agent steer requests (the bell's unread `steer_requested`), the stall watchdog's needs-a-human
+  escalations (`workerStallEscalated`, superseding the board's stalled-run row) and pending
+  steering/memory proposals. One ranking function (`compareNeeds` in `board/needsYou.ts`): the
+  kind's consequence class, then the waiting-age band (longest waiting first), then stakes, then
+  exact age and key. Alike simple items fold into one expandable row ("2 approvals",
+  `board/needsQueue.ts`). Focus the queue and j/k walk it; Enter expands a group or does the row's
+  verb (`hooks/useNeedsQueue.ts`). A failure now dates from the daemon's `ended_at` first.
+- **Wave 2b — handover on arrival.** Studio records your last visit (a visible tab, in
+  localStorage). After an absence of at least 30 minutes (`studio.handover.awayMinutes` in crew's
+  settings store overrides the default), Home opens with a "While you were away" panel in a fixed
+  order: decisions due, what broke, what finished, and what the system did for you (system-actor
+  audit entries via `GET /audit?since=`, crew#677). Every row links to its run. Dismissing the panel
+  keeps it closed until the next absence (`board/handover.ts`, `store/visit.ts`).
+- **Wave 2b — switching projects with a brief.** Switching projects from the context header keeps
+  your current mode and lands where you last were in that project under that mode: the route, and
+  the scroll once the surface can hold it. A band then shows what changed since you left,
+  e.g. "since 14:05: 1 run finished, 1 gate". Leaving a project snapshots its runs' statuses, and
+  the brief compares against that snapshot (`board/projectBrief.ts`, `store/projectVisits.ts`,
+  `hooks/useProjectVisits.ts`).
+- **Wave 2b round 2 (review of #336).** The queue's cursor no longer pulls focus back from Ask or
+  any input on a live update, and focus and selection now agree: a click or a Tab onto a row
+  selects that row, and focus leaving the queue clears the selection. Enter acts only when the
+  selected row (or the queue itself) has focus, so Enter on a focused Retry runs Retry. The wall's
+  triage keys (j/k, a/r, x/Space, Enter) stand down while the queue has focus, so `a` can no
+  longer approve a wall-selected card's gate from inside the queue. The minute heartbeat now
+  treats a gap past the threshold (a laptop that slept with the tab open) as an arrival instead of
+  overwriting it. The handover's "system" section says it is checking while the audit read is in
+  flight and says the daemon cannot say only when the read fails. The project brief snapshots only
+  live runs and counts a run as new only when its `created_at` is after you left.
 
 ### Fixed
 - **Wave 1 — project switch reused the previous project's run.** The project shell's per-mode

@@ -38,6 +38,8 @@ import { SystemSettings } from './components/SystemSettings.js';
 import { ThemePage } from './components/ThemePage.js';
 import { ambientProjectId } from './hooks/ambientProject.js';
 import { useEventStream } from './hooks/useEventStream.js';
+import { useVisitClock } from './hooks/useVisitClock.js';
+import { useProjectVisits } from './hooks/useProjectVisits.js';
 import { setShortcutsPaletteOpen, useGlobalShortcuts } from './hooks/useGlobalShortcuts.js';
 import { useLegacyRedirect, useMakeRedirect, useRetiredSettingsRedirect, useSteeringRedirect, useTestingRedirect } from './hooks/useLegacyRedirect.js';
 import { modePath, routedVersion, useRoute, type Mode } from './hooks/useRoute.js';
@@ -48,6 +50,7 @@ import { useGateStore } from './store/gates.js';
 import { useElicitationStore } from './store/elicitations.js';
 import { useLiveChatsStore } from './store/liveChats.js';
 import { useNotificationStore } from './store/notifications.js';
+import { useStallEscalationStore } from './store/stallEscalations.js';
 import { useRuntimeStore } from './store/runtime.js';
 import { useRunEventStore } from './store/events.js';
 import { useDocThreadStore } from './store/docThread.js';
@@ -93,6 +96,7 @@ export function App(): React.ReactElement {
   const ingestRunEvent = useRunEventStore((s) => s.ingest);
   const ingestDocThread = useDocThreadStore((s) => s.ingest);
   const ingestLiveChat = useLiveChatsStore((s) => s.ingest);
+  const ingestStallEscalation = useStallEscalationStore((s) => s.ingest);
 
   // Dashboard gate callbacks — the CenterDashboard handles the API call + store
   // clearing itself; these callbacks exist for any post-confirmation side-effects
@@ -120,6 +124,8 @@ export function App(): React.ReactElement {
       // J4 round 2: chat frames announce/retire live sessions for the rail's
       // Chat accordion — evidence this subscription already carries, no fetch.
       ingestLiveChat(event);
+      // Wave 2b: the watchdog's needs-a-human escalations feed the needs-you queue.
+      ingestStallEscalation(event);
       // TH-14: fold core's Campaign* frames (a cheap prefix miss for everything else) so the
       // campaign scoreboard's node status is live the moment the daemon relays them (TH-9).
       ingestCampaign(event);
@@ -128,10 +134,15 @@ export function App(): React.ReactElement {
       notifyGateIfUnfocused(event);
       if (LIFECYCLE_EVENTS.has(event.type)) refresh();
     },
-    [ingestGate, ingestCampaign, ingestAnnotation, ingestElicitation, ingestNotif, ingestRuntime, ingestRunEvent, ingestDocThread, ingestLiveChat, refresh],
+    [ingestGate, ingestCampaign, ingestAnnotation, ingestElicitation, ingestNotif, ingestRuntime, ingestRunEvent, ingestDocThread, ingestLiveChat, ingestStallEscalation, refresh],
   );
 
   useEventStream(handleEvent);
+
+  // Wave 2b: the operator's visit clock — an absence past the threshold opens a handover.
+  useVisitClock();
+  // Wave 2b: per-project last route + scroll, and the snapshot a return is briefed against.
+  useProjectVisits(projectId, pathname + search, runs, runsLoaded);
 
   // Per-install appearance (DES-VISION-001 §3.3): one startup read of crew's
   // settings store; `studio.appearance` lands as inline custom-property
@@ -464,7 +475,7 @@ export function App(): React.ReactElement {
     // below is untouched and still owns the flat cross-project lists and side panels.
     if (projectId !== null && mode !== null) {
       return (
-        <ProjectShell projectId={projectId} mode={mode} artifactId={artifactId} navigate={navigate}>
+        <ProjectShell projectId={projectId} mode={mode} artifactId={artifactId} navigate={navigate} runs={runs}>
           {renderModeSurface(mode, projectId)}
         </ProjectShell>
       );

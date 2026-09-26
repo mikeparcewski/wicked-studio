@@ -1,7 +1,7 @@
 import type { SessionView } from '../api/types.js';
 import { calmCopy, type NeedRow } from '../board/needsYou.js';
+import type { NeedsQueue } from '../hooks/useNeedsQueue.js';
 import type { Navigate } from '../hooks/useRoute.js';
-import { setRetryPrefill } from '../store/retryPrefill.js';
 import { TONE_COLOR, TONE_GLYPH } from './narrator.js';
 import { ago } from './ProjectCard.js';
 import { humanTitle } from './runIdentity.js';
@@ -16,6 +16,12 @@ import { humanTitle } from './runIdentity.js';
  *   repo graph   → Re-index › (the same prefill idiom) / Open repo ›
  *   campaign     → Open test › (the engine campaign, rendered in Test vocabulary — #203)
  *   stalled chat → Open chat ›
+ *   elicitation  → Answer ›   steer request → Steer ›   stall escalation → Check run ›
+ *   proposal     → Review ›
+ *
+ * Studio wave 2b: the rows, their grouping ("2 approvals", expandable), the ranking,
+ * the keyboard cursor and the verbs all come from `useNeedsQueue` — this component only
+ * renders them. Keys: focus the queue (Tab or click), then j/k walk it and Enter acts.
  *
  * THE CONTRADICTION GUARD IS STRUCTURAL: this component receives the fold's
  * rows and branches on `rows.length === 0` — the calm copy derives from the
@@ -50,8 +56,9 @@ const CSS = {
   },
 } as const satisfies Record<string, React.CSSProperties>;
 
-export function NeedsYouQueue({ rows, runs, navigate, now }: {
-  rows: NeedRow[];
+export function NeedsYouQueue({ queue, runs, navigate, now }: {
+  /** The queue's behaviour (`useNeedsQueue`): rows, groups, cursor, verbs. */
+  queue: NeedsQueue;
   /** For the calm line's live working count — `calmCopy` reads `runStats`. */
   runs: SessionView[];
   navigate: Navigate;
@@ -63,41 +70,99 @@ export function NeedsYouQueue({ rows, runs, navigate, now }: {
     onClick: (e) => { e.preventDefault(); navigate(path); },
   });
 
-  /** The act verb: prefills DEPOSIT and navigate — nothing is ever posted here. */
+  /** The act verb — the hook does it (prefills DEPOSIT and navigate; nothing is posted). */
   const act = (row: NeedRow): React.ReactElement => {
     const a = row.action;
     if (a.kind === 'open') {
       return (
-        <a {...link(a.path)} data-testid="need-act" data-act="open" style={CSS.act}>
+        <a
+          href={a.path}
+          onClick={(e) => { e.preventDefault(); queue.act(a); }}
+          data-testid="need-act"
+          data-act="open"
+          style={CSS.act}
+        >
           {a.label}
         </a>
       );
     }
-    const onClick = (): void => {
-      setRetryPrefill(a.prefill);
-      navigate('/runs/new');
-    };
     return (
-      <button
-        type="button"
-        data-testid="need-act"
-        data-act={a.kind}
-        onClick={onClick}
-        style={CSS.act}
-      >
+      <button type="button" data-testid="need-act" data-act={a.kind} onClick={() => queue.act(a)} style={CSS.act}>
         {a.label}
       </button>
     );
   };
 
+  const line = (row: NeedRow, testId: 'need-row' | 'need-member'): React.ReactElement => {
+    const selected = queue.selectedKey === row.key;
+    const isGroup = row.members !== undefined;
+    const open = isGroup && queue.expanded.has(row.key);
+    return (
+      <div
+        key={row.key}
+        data-testid={testId}
+        data-kind={row.kind}
+        data-key={row.key}
+        data-count={row.members?.length ?? 1}
+        data-queue-item={row.key}
+        data-kbd-selected={selected ? 'true' : undefined}
+        tabIndex={-1}
+        // Severity stripe (command-deck redesign): a glowing left edge colored by the row's
+        // tone, so what needs you reads by color at a glance (gate/failed/stranded/…).
+        style={{
+          ...CSS.row,
+          borderLeft: `3px solid ${TONE_COLOR[row.tone]}`,
+          paddingLeft: testId === 'need-member' ? '27px' : '9px',
+          boxShadow: `inset 4px 0 10px -6px ${TONE_COLOR[row.tone]}`,
+          outline: selected ? '1px solid var(--accent)' : 'none',
+          outlineOffset: '-1px',
+          background: selected ? 'var(--surface-raised)' : undefined,
+        }}
+      >
+        <span aria-hidden style={{ color: TONE_COLOR[row.tone], flexShrink: 0, fontSize: 'var(--text-xs)' }}>
+          {TONE_GLYPH[row.tone]}
+        </span>
+        {isGroup ? (
+          <span title={row.subject} style={CSS.subject}>{row.subject}</span>
+        ) : (
+          <a {...link(row.subjectPath)} title={row.subject} style={CSS.subject}>
+            {humanTitle(row.subject)}
+          </a>
+        )}
+        <span data-testid="need-line" title={row.text} style={{ ...CSS.line, color: TONE_COLOR[row.tone] }}>
+          {row.text}
+        </span>
+        <span data-testid="need-age" style={CSS.age}>
+          {row.at !== null ? ago(row.at, at) : 'age unknown'}
+        </span>
+        {isGroup ? (
+          <button
+            type="button"
+            data-testid="need-group-toggle"
+            aria-expanded={open}
+            onClick={() => queue.toggle(row.key)}
+            style={CSS.act}
+          >
+            {open ? 'Collapse ▴' : 'Expand ▾'}
+          </button>
+        ) : (
+          act(row)
+        )}
+      </div>
+    );
+  };
+
   return (
     <section
+      ref={queue.rootRef}
+      tabIndex={0}
+      aria-label="Needs you — focus, then j/k to move and Enter to act"
       data-testid="needs-you-queue"
-      data-count={rows.length}
+      data-count={queue.count}
       style={{
         flex: '1.4 1 0', minWidth: 0, display: 'flex', flexDirection: 'column',
         background: 'var(--surface-card)', border: '1px solid var(--surface-raised)',
-        borderRadius: 'var(--radius-lg)', overflow: 'hidden',
+        borderRadius: 'var(--radius-lg)', overflow: 'hidden', outline: 'none',
       }}
     >
       <p
@@ -105,12 +170,12 @@ export function NeedsYouQueue({ rows, runs, navigate, now }: {
           margin: 0, padding: '8px 10px 6px',
           fontSize: 'var(--text-2xs)', fontWeight: 'var(--weight-bold)',
           letterSpacing: '0.08em', textTransform: 'uppercase',
-          color: rows.length > 0 ? 'var(--status-gate)' : 'var(--ink-dim)',
+          color: queue.count > 0 ? 'var(--status-gate)' : 'var(--ink-dim)',
         }}
       >
-        Needs you{rows.length > 0 ? ` (${rows.length})` : ''}
+        Needs you{queue.count > 0 ? ` (${queue.count})` : ''}
       </p>
-      {rows.length === 0 ? (
+      {queue.rows.length === 0 ? (
         // The ONLY calm copy on the page — same fold, one branch (§3).
         <p
           data-testid="home-calm"
@@ -123,34 +188,14 @@ export function NeedsYouQueue({ rows, runs, navigate, now }: {
         </p>
       ) : (
         <div style={{ overflowY: 'auto', minHeight: 0 }}>
-          {rows.map((row) => (
-            <div
-              key={row.key}
-              data-testid="need-row"
-              data-kind={row.kind}
-              data-key={row.key}
-              // Severity stripe (command-deck redesign): a glowing left edge colored by the row's
-              // tone, so what needs you reads by color at a glance (gate/failed/stranded/…).
-              style={{
-                ...CSS.row,
-                borderLeft: `3px solid ${TONE_COLOR[row.tone]}`,
-                paddingLeft: '9px',
-                boxShadow: `inset 4px 0 10px -6px ${TONE_COLOR[row.tone]}`,
-              }}
-            >
-              <span aria-hidden style={{ color: TONE_COLOR[row.tone], flexShrink: 0, fontSize: 'var(--text-xs)' }}>
-                {TONE_GLYPH[row.tone]}
-              </span>
-              <a {...link(row.subjectPath)} title={row.subject} style={CSS.subject}>
-                {humanTitle(row.subject)}
-              </a>
-              <span data-testid="need-line" title={row.text} style={{ ...CSS.line, color: TONE_COLOR[row.tone] }}>
-                {row.text}
-              </span>
-              <span data-testid="need-age" style={CSS.age}>
-                {row.at !== null ? ago(row.at, at) : 'age unknown'}
-              </span>
-              {act(row)}
+          {queue.rows.map((row) => (
+            <div key={row.key} role="group">
+              {line(row, 'need-row')}
+              {row.members !== undefined && queue.expanded.has(row.key) && (
+                <div data-testid="need-members" data-group={row.key}>
+                  {row.members.map((m) => line(m, 'need-member'))}
+                </div>
+              )}
             </div>
           ))}
         </div>
