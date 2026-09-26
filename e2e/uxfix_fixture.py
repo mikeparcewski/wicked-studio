@@ -289,8 +289,9 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          #                   a daemon predating diagnostics); "healthy" serves the
          #                   clean block instead.
          #   chat_scope    — POST /api/v1/chats resolves and STATES a scope (crew#502)
-         #                   from the body (repoRefs → repos; projectId → project;
-         #                   else none), 404s unknown refs naming every missing one,
+         #                   from the body (scopeKind system/everything → that kind,
+         #                   api-types 0.39.0 / studio#323 R4; repoRefs → repos;
+         #                   projectId → project; else none), 404s unknown refs naming every missing one,
          #                   and GET /chats/<id> carries the recorded scope. Default
          #                   False: the standing chat rigs see the pre-scope 201.
          #   chat_scope_501 — POST /chats answers crew's 501 "engine predates chat
@@ -4000,7 +4001,32 @@ class W2Handler(SimpleHTTPRequestHandler):
             if scope_on:
                 refs = ([body["repoRef"]] if body.get("repoRef") else []) + list(body.get("repoRefs") or [])
                 registry = [REPO_ENTRY] if repo_on else []
-                if refs:
+                scope_kind = body.get("scopeKind")
+                if scope_kind == "system":
+                    # studio#323 R4 (crew chat-scope.ts): the platform itself — a STATED scope
+                    # that reads no repository; a bound project rides as filing only.
+                    scope = {"kind": "system", "repos": [], "cwd": CHAT_SCRATCH.format(chat_id),
+                             "graph": {"bound": False,
+                                       "reason": "a system chat is about the wicked platform itself (daemon, seats, "
+                                                 "runs, configuration), so no repository and no code graph are in "
+                                                 "scope; its seats have no live read of the daemon — only what the "
+                                                 "message carries."},
+                             "dangling": []}
+                    if body.get("projectId"):
+                        scope["projectId"] = body["projectId"]
+                elif scope_kind == "everything":
+                    # Every registered repo across all projects; no single graph spans them.
+                    scope = {"kind": "everything", "repos": [scope_repo(r) for r in registry],
+                             "cwd": CHAT_SCRATCH.format(chat_id),
+                             "graph": {"bound": False,
+                                       "reason": ("no repository is registered with this daemon, so there is "
+                                                  "nothing to read and no code graph.") if not registry else
+                                                 f"{len(registry)} registered repos across all projects and no "
+                                                 "single code graph spans them."},
+                             "dangling": []}
+                    if body.get("projectId"):
+                        scope["projectId"] = body["projectId"]
+                elif refs:
                     found = [r for r in registry if r["id"] in refs or r["name"] in refs]
                     missing = [ref for ref in refs if not any(r["id"] == ref or r["name"] == ref for r in registry)]
                     if missing:
@@ -4028,13 +4054,16 @@ class W2Handler(SimpleHTTPRequestHandler):
                                        "reason": "the chat names no project and no repos, so its seats see only their own "
                                                  "scratch root and no code graph; pass projectId or repoRefs to scope it."},
                              "dangling": []}
-                if scope_501 and scope["kind"] != "none":
+                # crew routes.ts: `none` and `system` read no repository, so they take the
+                # UNSCOPED admission and open on an engine that predates chat scope.
+                scoped = scope["kind"] not in ("none", "system")
+                if scope_501 and scoped:
                     return self._json(501, {"error": CHAT_SCOPE_501})
                 # crew's admissibility pre-filter (routes.ts @ #518): with `clis` OMITTED on a
                 # SCOPED open the DEFAULT roster is filtered to governed seats; an explicit list
                 # is passed through as asked. The fixture's stand-in for "governed" is the
                 # chat-capable set (the same seats chat_ensure admits).
-                if scope["kind"] != "none" and not body.get("clis"):
+                if scoped and not body.get("clis"):
                     clis = ["claude"] if admit_subset else list(CHAT_CAPABLE_KEYS)
             # Slice AB (§7.9-4): seats named by `chat_reject_seats` answer the
             # daemon's real per-seat shape — ok:false with an error the chip
