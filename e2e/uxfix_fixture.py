@@ -228,6 +228,13 @@ NPM = "npm.cmd" if os.name == "nt" else "npm"
 # hider keeps hiding every card; nothing about its mechanism changed.
 HIDE_GATE_TOASTS = '[data-testid="gate-notification"] { display: none !important; }'
 
+# Studio wave 1 (dark when healthy): the home board's WORKING band collapses to a count line
+# by default, and its expansion rides the history entry (`home.workingOpen`). Rigs that assert
+# on the working CARDS (the W2 upload-endpoint card, its narration) open it before the app
+# boots — `ctx.add_init_script(OPEN_WORKING_BAND)` — exactly the state Back would restore.
+OPEN_WORKING_BAND = ("history.replaceState(Object.assign({}, history.state, "
+                     "{'home.workingOpen': true}), '');")
+
 # ── The frozen clock (§4.0 determinism): every age derives from this one NOW0 ──
 NOW0 = int(time.time() * 1000)
 SEC, MIN, HOUR, DAY = 1_000, 60_000, 3_600_000, 86_400_000
@@ -686,6 +693,16 @@ WAVE1_R1_EVENTS = [
     {"type": "unitExecuting", "sessionId": "r1", "ord": 0, "cli": "claude",
      "ts": NOW0 - 4 * MIN + 5 * SEC, "seq": 3},
 ]
+WAVE1_R1_DIFF = """\
+diff --git a/src/upload.ts b/src/upload.ts
+--- a/src/upload.ts
++++ b/src/upload.ts
+@@ -1,3 +1,3 @@
+ export const LIMITS = {
+-  maxBytes: 50_000_000,
++  maxBytes: 10_000_000,
+ };
+"""
 # GET /runs/:id/deliver-text — crew#524's text/plain framing: line 1 the title,
 # line 2 blank, then the body (composed from the run record).
 def wave1_deliver_text(run: dict) -> str:
@@ -3033,6 +3050,12 @@ class W2Handler(SimpleHTTPRequestHandler):
             orphan_on = state["orphan"]
             forensics_on = state["forensics"]
             gt_on = state["governed_testing"]
+        # Studio wave 1: r1's worktree diff (the `>files r1` route opens the viewer on it).
+        with state_lock:
+            wave1_on = state["wave1"]
+        if wave1_on and rid == "r1" and leaf == "diff":
+            self._json(200, {"diff": WAVE1_R1_DIFF, "truncated": False, "source": "worktree"})
+            return
         # Wave 6 (F-7R2-013): the completed governed test's worktree is GONE, and the wave-6
         # daemon serves the RUN BRANCH vs its base — 200 with `source: "branch"` — instead of the
         # pre-0.36 409 "workdir no longer exists". Lit by its own switch, whole-run only.

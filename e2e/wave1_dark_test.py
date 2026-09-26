@@ -94,7 +94,7 @@ with sync_playwright() as p:
     cards_in_band = band.locator('[data-testid="project-card"]').count()
     check("working-band-has-no-cards", cards_in_band == 0, cards=cards_in_band)
     line = band.inner_text()
-    check("working-band-is-a-count-line", "3" in line and len(line.strip().splitlines()) <= 2, line=line)
+    check("working-band-is-a-count-line", "(3)" in line, line=line)
     visible = page.evaluate(VISIBLE_CARDS)
     check("no-project-card-in-viewport", visible == [], visible=visible)
     animated = page.evaluate(ANIMATED_EDGES)

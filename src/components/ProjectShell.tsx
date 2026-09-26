@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect } from 'react';
 import { UNFILED_MOUNT } from '../api/interactive.js';
+import { useModeMemory } from '../hooks/useModeMemory.js';
 import { usePreflight } from '../hooks/usePreflight.js';
 import { MODES, modePath, projectPath, type Mode, type Navigate } from '../hooks/useRoute.js';
 import { useConnectionStore } from '../store/connection.js';
@@ -67,14 +68,13 @@ export function ProjectShell({ projectId, mode, artifactId, navigate, children }
     if (projects.length === 0) void loadProjects();
   }, [projects.length, loadProjects]);
 
-  // Per-mode artifact memory: Build → Chat → Build lands back on the same run rather
-  // than on an empty surface. A ref (not state) because it never drives a render.
-  const lastArtifact = useRef<Partial<Record<Mode, string>>>({});
-  if (artifactId) lastArtifact.current[mode] = artifactId;
+  // Per-mode artifact memory, scoped to the project: Build → Chat → Build lands back on
+  // the same run, and a project switch never carries the old project's run along.
+  const lastArtifact = useModeMemory(projectId, mode, artifactId);
 
   const onSelectMode = useCallback(
-    (next: Mode) => navigate(modePath(projectId, next, lastArtifact.current[next] ?? null)),
-    [navigate, projectId],
+    (next: Mode) => navigate(modePath(projectId, next, lastArtifact(next))),
+    [navigate, projectId, lastArtifact],
   );
 
   const project = projects.find((p) => p.id === projectId) ?? null;

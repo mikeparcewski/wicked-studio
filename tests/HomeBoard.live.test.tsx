@@ -83,6 +83,9 @@ async function board(runs: SessionView[]): Promise<void> {
 
 describe('HomeBoard — live activity (slice 6)', () => {
   beforeEach(() => {
+    // Wave 1 (dark when healthy): WORKING is collapsed by default; this suite exercises the
+    // working CARDS themselves, so it opens the band the way Back restores it (history state).
+    window.history.replaceState({ 'home.workingOpen': true }, '');
     projects = [];
     members = {};
     docs = {};

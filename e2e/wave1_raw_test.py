@@ -124,7 +124,10 @@ with sync_playwright() as p:
     palette_run(page, ">files r1")
     page.wait_for_function("() => window.location.pathname === '/runs/r1/files'", timeout=10000)
     page.get_by_test_id("file-viewer").wait_for(state="visible", timeout=10000)
-    check("files-route-shows-viewer", True)
+    page.wait_for_function(
+        "() => (document.querySelector('[data-testid=\"file-viewer\"]')?.textContent ?? '').includes('maxBytes')",
+        timeout=10000)
+    check("files-route-shows-r1-diff", True)
     back_home(page, "files")
 
     # ── >config → /system ────────────────────────────────────────────────────────

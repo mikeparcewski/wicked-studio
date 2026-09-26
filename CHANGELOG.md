@@ -12,7 +12,27 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+### Added
+- **Wave 1 — dark when healthy.** The home board's WORKING band collapses to one count line
+  (`Working (n)`, expandable); only exception bands (Needs you) open by default, so a healthy
+  portfolio shows no animated card and the one gated project is the only expanded card. The rule
+  lives in `board/bandExpansion.ts`; the expansion and the board's scroll ride the history entry
+  (`hooks/useHistoryState.ts`), so Back restores them.
+- **Wave 1 — raw in one step.** Palette verbs for ANY run by id or intent words: `>events <run>`
+  opens `/runs/:id/events` (the run's raw event JSON), `>files <run>` opens `/runs/:id/files` (the
+  existing worktree/diff viewer), `>config` opens `/system`. Each is a route, so browser Back
+  returns to where you were with the palette closed. Targets live in `palette/runTargets.ts`.
+- **Wave 1 — outbound harness.** A "Draft update" action on every run drafts the PR description
+  (completed run) or a status update (anything else) from crew's `GET /runs/:id/deliver-text`, in
+  an editable text area with a Copy action. One data function (`api/outbound.ts`,
+  `{kind: 'pr' | 'status', runId}`) and one action list (`OUTBOUND_ACTIONS`, Copy only today).
+
 ### Fixed
+- **Wave 1 — project switch reused the previous project's run.** The project shell's per-mode
+  artifact memory was not scoped to the project, so after switching project a mode tab could route
+  into the old project's run (`/p/beta/build/a1`). The memory is now keyed by project
+  (`hooks/useModeMemory.ts`).
+- The palette hands focus back without scrolling the view the operator left.
 - **studio#333 — the Ask bubble no longer covers Chat's Send button.** On `/chats` → New chat at
   1440×700 the floating launcher (#326) sat on the composer's Send, clipping it to "S…". The
   launcher takes a `bottomOffsetPx` — the same contract as the run right-panel's `rightOffsetPx`,

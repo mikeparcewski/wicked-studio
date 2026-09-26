@@ -46,7 +46,11 @@ describe('the board consumes this module rather than repeating it', () => {
     ['working', 'Working'],
     ['quiet', 'Quiet'],
   ] as const)('renders the %s label from bandLabel(), not a literal', (band, literal) => {
-    expect(jsxText).toContain(`bandLabel('${band}')`);
+    // Wave 1: a COLLAPSED band renders its count line through `bandCountLine` (board/bandExpansion),
+    // which is itself `bandLabel(band) (n)` — the same module, one hop further.
+    expect(
+      jsxText.includes(`bandLabel('${band}')`) || jsxText.includes(`bandCountLine('${band}'`),
+    ).toBe(true);
     expect(jsxText).not.toContain(`>${literal}<`);
   });
 

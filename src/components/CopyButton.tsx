@@ -6,9 +6,11 @@ import { useEffect, useRef, useState } from 'react';
  * action, no accessible name. This is the same clipboard pattern as the rail's file-path copy
  * (`RightPanel`: `navigator.clipboard.writeText` + a transient "copied"); where the clipboard API is
  * unavailable (an insecure origin, an old embedder) the label says "copy failed" instead of
- * pretending. Accessible name: `copy <command>` — the visible label stays one word.
+ * pretending. Accessible name: `copy <command>` — the visible label stays one word. `label`
+ * overrides the accessible name when the copied text is long prose (the outbound draft), not
+ * a one-line command worth reading aloud.
  */
-export function CopyButton({ command }: { command: string }): React.ReactElement {
+export function CopyButton({ command, label }: { command: string; label?: string }): React.ReactElement {
   const [state, setState] = useState<'idle' | 'copied' | 'failed'>('idle');
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(
@@ -43,8 +45,8 @@ export function CopyButton({ command }: { command: string }): React.ReactElement
     <button
       type="button"
       onClick={onCopy}
-      aria-label={`copy ${command}`}
-      title={`copy ${command} to the clipboard`}
+      aria-label={label ?? `copy ${command}`}
+      title={label ?? `copy ${command} to the clipboard`}
       data-testid="copy-command"
       data-command={command}
       data-state={state}

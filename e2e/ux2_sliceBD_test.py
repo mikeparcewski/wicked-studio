@@ -61,6 +61,7 @@ from urllib.parse import urlparse
 from uxfix_fixture import (
     GATE_NOW_PROMPT,
     HIDE_GATE_TOASTS,
+    OPEN_WORKING_BAND,
     REPO,
     ensure_build,
     set_fixture,
@@ -118,6 +119,7 @@ VSHOTS.mkdir(parents=True, exist_ok=True)
 with sync_playwright() as p:
     browser = p.chromium.launch()
     ctx = browser.new_context(viewport={"width": 1440, "height": 900}, device_scale_factor=1)
+    ctx.add_init_script(OPEN_WORKING_BAND)  # wave 1: this rig asserts on WORKING cards
     page = ctx.new_page()
 
     # The request tap (AC 2): every API request the page fires, by path.

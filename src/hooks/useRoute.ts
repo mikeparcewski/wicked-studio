@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { isSteeringSection, isSteeringType, type SteeringSection } from '../api/steering.js';
 import { isTestingSubPage } from '../api/testing.js';
+import { announceNavigateAway } from './useHistoryState.js';
 
 // `execute` / `vibe` / `demo` are the three primary-path dashboard routes the
 // nav-reorg split the former `Make` union into (build → Execute, document → Vibe,
@@ -38,7 +39,11 @@ import { isTestingSubPage } from '../api/testing.js';
 // `skills` is the Skills file manager (`/skills`, the skills keystone) — the catalog of the
 // daemon's effective plugin root. A flat panel with no sub-routes: the one skill a deep link
 // opens rides `?skill=<name>` in `search` (read via `readSkillDeepLink`), never a path segment.
-export type Panel = 'home' | 'runs' | 'workflows' | 'skills' | 'steering' | 'testing' | 'repos' | 'system' | 'theme' | 'chats' | 'work' | 'repo-detail' | 'projects' | 'project-detail' | 'execute' | 'vibe' | 'demo' | 'not-found';
+// `run-events` / `run-files` (studio wave 1, "raw in one step"): a run's raw event JSON and its
+// worktree files/diff as REAL routes — `/runs/:id/events`, `/runs/:id/files` — so the palette
+// verb that opens them is one history entry and browser Back returns to where you were. The run
+// id rides in `artifactId` (NOT `runId`: no run-selected machinery, no legacy shell redirect).
+export type Panel = 'home' | 'runs' | 'run-events' | 'run-files' | 'workflows' | 'skills' | 'steering' | 'testing' | 'repos' | 'system' | 'theme' | 'chats' | 'work' | 'repo-detail' | 'projects' | 'project-detail' | 'execute' | 'vibe' | 'demo' | 'not-found';
 
 const PANELS: Panel[] = ['runs', 'workflows', 'skills', 'repos', 'system', 'theme', 'chats', 'work', 'repo-detail', 'projects', 'project-detail', 'execute', 'vibe', 'demo'];
 
@@ -162,6 +167,25 @@ export function chroniclePath(projectId: string): string {
  */
 export function runTimelinePath(runId: string): string {
   return `/runs/${encodeURIComponent(runId)}/timeline`;
+}
+
+/** A run's raw event JSON (`GET /runs/:id/events`) as a route — see `run-events`. */
+export function runEventsPath(runId: string): string {
+  return `/runs/${encodeURIComponent(runId)}/events`;
+}
+
+/** A run's worktree files / whole-run diff as a route — see `run-files`. */
+export function runFilesPath(runId: string): string {
+  return `/runs/${encodeURIComponent(runId)}/files`;
+}
+
+/**
+ * Leave a routed view the way the operator arrived: browser Back when there is an
+ * entry to go back to (the palette verb pushed one), else `fallback`.
+ */
+export function leaveRoute(navigate: Navigate, fallback = '/'): void {
+  if (window.history.length > 1) window.history.back();
+  else navigate(fallback);
 }
 
 /**
@@ -329,6 +353,8 @@ function parse(pathname: string): Route {
   // arms: a garbage top-level address is a dead address, not a run list.
   if (first === 'runs') {
     if (second === 'new') return route({ panel: 'runs', showLaunch: true });
+    if (second && third === 'events') return route({ panel: 'run-events', artifactId: safeDecode(second) });
+    if (second && third === 'files') return route({ panel: 'run-files', artifactId: safeDecode(second) });
     if (second) return route({ panel: 'runs', runId: safeDecode(second) });
     return route({ panel: 'runs' });
   }
@@ -363,7 +389,11 @@ export function useRoute(): Route & {
 
   const navigate = useCallback<Navigate>((path, opts) => {
     if (opts?.replace) history.replaceState(null, '', path);
-    else history.pushState(null, '', path);
+    else {
+      // The LEAVING entry snapshots its view state first (useHistoryState), so Back restores it.
+      announceNavigateAway();
+      history.pushState(null, '', path);
+    }
     // Parse pathname-only for the panel/mode router (a hash like `#gate` must
     // not ride into the artifact id), but also capture the search string so
     // components keyed on ?v=N re-render on version selection (slice 9).

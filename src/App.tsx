@@ -22,6 +22,7 @@ import { RepositoriesPanel } from './components/RepositoriesPanel.js';
 import { RepoDetailPage } from './components/RepoDetailPage.js';
 import { RepoGraphModal } from './components/RepoGraphModal.js';
 import { RightPanel } from './components/RightPanel.js';
+import { RunRawView } from './components/RunRawView.js';
 import { SkillsPage } from './components/SkillsPage.js';
 import { SteeringPage } from './components/SteeringPage.js';
 import { MemoriesPanel } from './components/MemoriesPanel.js';
@@ -484,6 +485,18 @@ export function App(): React.ReactElement {
         <div className="flex-1 overflow-y-auto">
           <ProjectDashboard projectId={projectId} runs={runs} navigate={navigate} />
         </div>
+      );
+    }
+    // Wave 1 ("raw in one step"): a run's raw event JSON / worktree files as routes — the
+    // palette's `>events <run>` / `>files <run>` verbs land here, and Back returns.
+    if ((panel === 'run-events' || panel === 'run-files') && artifactId !== null) {
+      return (
+        <RunRawView
+          target={panel === 'run-events' ? 'events' : 'files'}
+          runId={artifactId}
+          run={runs.find((v) => v.session.id === artifactId) ?? null}
+          navigate={navigate}
+        />
       );
     }
     // `/` is the orchestrator board (§1.4, slice 5); the flat run list it replaced is

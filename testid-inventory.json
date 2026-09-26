@@ -10,10 +10,10 @@
   "version": 1,
   "studioVersion": "0.5.14",
   "counts": {
-    "files": 148,
-    "occurrences": 1348,
-    "static": 1159,
-    "dynamic": 63,
+    "files": 150,
+    "occurrences": 1358,
+    "static": 1168,
+    "dynamic": 64,
     "computed": 7
   },
   "static": [
@@ -399,6 +399,12 @@
     },
     {
       "testId": "band-working",
+      "files": [
+        "src/components/HomeBoard.tsx"
+      ]
+    },
+    {
+      "testId": "band-working-toggle",
       "files": [
         "src/components/HomeBoard.tsx"
       ]
@@ -3579,6 +3585,30 @@
       ]
     },
     {
+      "testId": "outbound-actions",
+      "files": [
+        "src/components/OutboundDraft.tsx"
+      ]
+    },
+    {
+      "testId": "outbound-draft",
+      "files": [
+        "src/components/OutboundDraft.tsx"
+      ]
+    },
+    {
+      "testId": "outbound-error",
+      "files": [
+        "src/components/OutboundDraft.tsx"
+      ]
+    },
+    {
+      "testId": "outbound-text",
+      "files": [
+        "src/components/OutboundDraft.tsx"
+      ]
+    },
+    {
       "testId": "overlay-slider",
       "files": [
         "src/components/DocumentCanvas.tsx",
@@ -4242,6 +4272,18 @@
       ]
     },
     {
+      "testId": "raw-events",
+      "files": [
+        "src/components/RunRawView.tsx"
+      ]
+    },
+    {
+      "testId": "raw-events-error",
+      "files": [
+        "src/components/RunRawView.tsx"
+      ]
+    },
+    {
       "testId": "repo-capture-learnings",
       "files": [
         "src/components/RepositoriesPanel.tsx"
@@ -4506,6 +4548,12 @@
       ]
     },
     {
+      "testId": "run-draft-update",
+      "files": [
+        "src/components/ChatPanel.tsx"
+      ]
+    },
+    {
       "testId": "run-header",
       "files": [
         "src/components/ChatPanel.tsx"
@@ -4545,6 +4593,12 @@
       "testId": "run-pending",
       "files": [
         "src/components/ChatPanel.tsx"
+      ]
+    },
+    {
+      "testId": "run-raw-back",
+      "files": [
+        "src/components/RunRawView.tsx"
       ]
     },
     {
@@ -7322,6 +7376,12 @@
       "pattern": "rail-title-*",
       "files": [
         "src/components/LeftSidebar.tsx"
+      ]
+    },
+    {
+      "pattern": "run-raw-*",
+      "files": [
+        "src/components/RunRawView.tsx"
       ]
     },
     {

@@ -22,6 +22,9 @@ import { RunDegradedNote } from './RunDegradedNote.js';
 import { deriveArtifacts, lastNarration, type NarratorContext } from './narrator.js';
 import { runTitle } from './runIdentity.js';
 import { RunTimeline } from './RunTimeline.js';
+import { OutboundDraft } from './OutboundDraft.js';
+import { Modal } from './Modal.js';
+import { OUTBOUND_TITLE, outboundKindFor } from '../api/outbound.js';
 import { UnitList } from './UnitList.js';
 import { VerdictDetail } from './VerdictDetail.js';
 import type { RunMode } from './runMode.js';
@@ -904,6 +907,7 @@ function RunChat({
   }
 
   const showFeed = !isTerminal || runTab === 'feed';
+  const [draftOpen, setDraftOpen] = useState(false);
 
   return (
     <div className="flex flex-col h-full">
@@ -955,6 +959,18 @@ function RunChat({
         {isTerminal && <InspectMenu lens={runTab} onSelect={setRunTab} />}
         <ModePill mode={mode} onChange={onModeChange} readOnly={isTerminal} />
         <ExportEvidenceButton runId={session.id} disabled={!isTerminal} />
+        {/* Wave 1: the outbound harness — draft the PR (finished) or status update (in flight)
+            from the run record, edit it, copy it out. */}
+        <button
+          type="button"
+          data-testid="run-draft-update"
+          onClick={() => setDraftOpen(true)}
+          title="Draft an update about this run from its record — editable, then copy it out"
+          className="shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold font-mono transition-opacity hover:opacity-80"
+          style={{ background: 'var(--surface-raised)', color: 'var(--ink-body)' }}
+        >
+          Draft update
+        </button>
         {/* Archive for terminal runs (#219): write-off → navigates back so the
             run leaves the active list; the run index refreshes on success. An
             already-archived run (reached through the Archived chip) offers
@@ -1113,6 +1129,11 @@ function RunChat({
           onClearInjectTarget={() => setInjectTarget('all')}
           {...(navigate !== undefined ? { navigate } : {})}
         />
+      )}
+      {draftOpen && (
+        <Modal title={OUTBOUND_TITLE[outboundKindFor(session.status)]} onClose={() => setDraftOpen(false)}>
+          <OutboundDraft kind={outboundKindFor(session.status)} runId={session.id} />
+        </Modal>
       )}
     </div>
   );
