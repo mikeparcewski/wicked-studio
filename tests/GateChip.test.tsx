@@ -1,5 +1,4 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { setUndoWindowForTest } from '../src/board/undoQueue.js';
 import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ProjectCard } from '../src/components/ProjectCard.js';
@@ -168,7 +167,3 @@ describe('board gate chips (§1.4 — answerable, not a badge)', () => {
     expect(screen.getByTestId(`gate-approve-${RUN}`)).toBeEnabled();
   });
 });
-
-// Wave 2a: these tests pin the SEND path; the 10 s undo window has its own suite
-// (tests/undoQueue.test.tsx), so here a committed decision goes out on the next tick.
-beforeEach(() => setUndoWindowForTest(0));

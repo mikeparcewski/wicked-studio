@@ -3,7 +3,7 @@ import { api } from '../api/client.js';
 import type { GateDecision } from '../api/types.js';
 import { modePath } from '../hooks/useRoute.js';
 import { useGateStore } from '../store/gates.js';
-import { decisionPreview, queueDecision } from './undoQueue.js';
+import { describeDecision, onDecisionTestReset, queueDecision } from './undoQueue.js';
 
 /**
  * The ONE gate-decision implementation (DES-FEEDBACK-002 §2.3, slice H): the
@@ -43,6 +43,8 @@ interface GateActionsStore {
 }
 
 export const useGateActionStore = create<GateActionsStore>(() => ({ byGate: {} }));
+
+onDecisionTestReset(() => useGateActionStore.setState({ byGate: {} }));
 
 function patch(runId: string, part: Partial<GateActionState>): void {
   useGateActionStore.setState((s) => ({
@@ -89,23 +91,41 @@ useGateStore.subscribe((state, prev) => {
  * stay live — calling again is the retry.
  */
 export function decideGate(runId: string, decision: GateDecision): Promise<void> {
+  // Errors are already named in the shared state (the chip renders them).
+  return commitGateDecision(runId, decision).then(() => undefined, () => undefined);
+}
+
+/** How a committed decision ended: it went out, the operator undid it, or the
+ *  double-submit guard dropped it (already queued, in flight, or answered). */
+export type DecisionOutcome = 'sent' | 'undone' | 'dropped';
+
+/**
+ * THE decision path, for callers that own their own UI around it (the thread's
+ * gate card, the dashboard, the steer composer, the reassign control, the unit
+ * detail): queue behind the undo window, then send. Resolves with the outcome;
+ * REJECTS with the named error when the POST fails, so a caller keeps its
+ * error line. Side effects that assume the decision landed belong behind
+ * `outcome === 'sent'`.
+ */
+export function commitGateDecision(runId: string, decision: GateDecision): Promise<DecisionOutcome> {
   const cur = useGateActionStore.getState().byGate[runId] ?? IDLE_GATE_ACTION;
-  if (cur.queued || cur.busy || cur.answered !== null) return Promise.resolve();
+  if (cur.queued || cur.busy || cur.answered !== null) return Promise.resolve('dropped');
   patch(runId, { queued: true, error: null });
-  const verb = decision.approve ? 'approve' : 'reject';
-  return new Promise<void>((resolve) => {
+  const { verb, preview } = describeDecision(decision);
+  return new Promise<DecisionOutcome>((resolve, reject) => {
     queueDecision({
       verb,
       runIds: [runId],
-      preview: decisionPreview(verb, 1, !decision.approve && (decision.amend ?? '') !== ''),
+      preview,
       commit: async () => {
         patch(runId, { queued: false });
-        await sendGateDecision(runId, decision);
-        resolve();
+        const error = await sendGateDecision(runId, decision);
+        if (error === null) resolve('sent');
+        else reject(new Error(error));
       },
       onUndo: () => {
         patch(runId, { queued: false });
-        resolve();
+        resolve('undone');
       },
     });
   });
@@ -117,18 +137,22 @@ export function decideGate(runId: string, decision: GateDecision): Promise<void>
  * fan-out). Same double-submit guard: a call while a POST is open, or after it
  * landed, is dropped.
  */
-export async function sendGateDecision(runId: string, decision: GateDecision): Promise<void> {
+export async function sendGateDecision(runId: string, decision: GateDecision): Promise<string | null> {
   const cur = useGateActionStore.getState().byGate[runId] ?? IDLE_GATE_ACTION;
-  if (cur.busy || cur.answered !== null) return;
+  if (cur.busy || cur.answered !== null) return 'not sent — already answered or still in flight';
   patch(runId, { busy: true, error: null });
   try {
+    // The ONLY `confirmGate` call in studio (tests/gateWireSingleCaller.test.ts pins it).
     await api.confirmGate(runId, decision);
     patch(runId, { answered: decision.approve ? 'approved' : 'rejected' });
     // Prune the local gate immediately; the run's own status follows from the
     // daemon's frame, which is what actually moves the card (§1.4 live).
     useGateStore.getState().clearGate(runId);
+    return null;
   } catch (e) {
-    patch(runId, { error: e instanceof Error ? e.message : String(e) });
+    const error = e instanceof Error ? e.message : String(e);
+    patch(runId, { error });
+    return error;
   } finally {
     patch(runId, { busy: false });
   }

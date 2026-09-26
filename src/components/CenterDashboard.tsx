@@ -1,3 +1,4 @@
+import { commitGateDecision } from '../board/gateActions.js';
 /**
  * CenterDashboard — Build mode's home surface, given a purpose (DES-UXFIX-001 §2.7, F7).
  *
@@ -967,7 +968,8 @@ export function CenterDashboard({
   // ── Gate handlers (with steering store + gate-store sync) ─────────────────
   const handleApprove = useCallback(
     async (runId: string, amend?: string): Promise<void> => {
-      await api.confirmGate(runId, { approve: true, ...(amend ? { amend } : {}) });
+      const outcome = await commitGateDecision(runId, { approve: true, ...(amend ? { amend } : {}) });
+      if (outcome !== 'sent') return;
       recordSteering({
         runId,
         action: amend ? 'approve-with-steer' : 'approve',
@@ -981,7 +983,8 @@ export function CenterDashboard({
 
   const handleReject = useCallback(
     async (runId: string): Promise<void> => {
-      await api.confirmGate(runId, { approve: false });
+      const outcome = await commitGateDecision(runId, { approve: false });
+      if (outcome !== 'sent') return;
       recordSteering({ runId, action: 'reject' });
       clearGate(runId);
       onRejectGate(runId);

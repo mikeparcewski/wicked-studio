@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import type { GateDecision } from '../api/types.js';
 
 /**
  * Preview, then commit, with an undo window (studio wave 2a, behaviour 5).
@@ -18,7 +19,7 @@ import { create } from 'zustand';
 
 export const UNDO_WINDOW_MS = 10_000;
 
-export type DecisionVerb = 'approve' | 'reject';
+export type DecisionVerb = 'approve' | 'reject' | 'request-changes';
 
 export interface PendingDecision {
   id: number;
@@ -102,6 +103,21 @@ export function undoDecision(id: number): void {
   h.onUndo?.();
 }
 
+const testResets: Array<() => void> = [];
+
+/** A decision-state owner (the gate-action store) registers how to wipe itself between tests. */
+export function onDecisionTestReset(reset: () => void): void {
+  testResets.push(reset);
+}
+
+/** Tests only: drop every queued decision (nothing sent) and every registered decision state. */
+export function resetDecisionsForTest(): void {
+  for (const h of handles.values()) clearTimeout(h.timer);
+  handles.clear();
+  useUndoQueue.setState({ pending: [] });
+  for (const reset of testResets) reset();
+}
+
 /** Send every queued decision now (tests, and nothing else). */
 export async function flushDecisionsForTest(): Promise<void> {
   const ids = [...handles.keys()];
@@ -125,9 +141,15 @@ export function secondsLeft(p: PendingDecision, now: number): number {
   return Math.max(0, Math.ceil((p.dueAt - Math.max(now, p.queuedAt)) / 1000));
 }
 
+const HEADLINE_VERB: Record<DecisionVerb, string> = {
+  approve: 'Approving',
+  reject: 'Rejecting',
+  'request-changes': 'Requesting changes',
+};
+
 /** "Approving in 10 s" / "Rejecting 3 gates in 4 s". */
 export function undoHeadline(p: PendingDecision, now: number): string {
-  const verb = p.verb === 'approve' ? 'Approving' : 'Rejecting';
+  const verb = HEADLINE_VERB[p.verb];
   const what = p.runIds.length > 1 ? ` ${p.runIds.length} gates` : '';
   return `${verb}${what} in ${secondsLeft(p, now)} s`;
 }
@@ -143,6 +165,26 @@ export function decisionPreview(verb: DecisionVerb, count: number, withNote = fa
   }
   const note = withNote ? ', with your note on the gate record' : '';
   return count > 1 ? `${count} runs are cancelled at their gates${note}.` : `The run is cancelled at this gate${note}.`;
+}
+
+/**
+ * Verb + "what will happen" for ANY gate decision the wire can carry — plain approve, approve
+ * with a steer note, reject (with or without a note), request changes — so every caller of the
+ * shared decision path gets an honest toast without spelling its own copy.
+ */
+export function describeDecision(decision: GateDecision, count = 1): { verb: DecisionVerb; preview: string } {
+  const note = (decision.amend ?? '').trim() !== '';
+  if (decision.approve) {
+    const base = decisionPreview('approve', count);
+    return { verb: 'approve', preview: note ? `${base.slice(0, -1)}, carrying your note as guidance.` : base };
+  }
+  if ((decision as { action?: string }).action === 'request_changes') {
+    return {
+      verb: 'request-changes',
+      preview: 'The run rewinds to its last creator phase and redoes it with your note.',
+    };
+  }
+  return { verb: 'reject', preview: decisionPreview('reject', count, note) };
 }
 
 /** The page-close contract, in the toast's own words. */

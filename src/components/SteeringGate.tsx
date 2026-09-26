@@ -1,3 +1,5 @@
+import { commitGateDecision } from '../board/gateActions.js';
+import { keepEntryState } from '../hooks/useHistoryState.js';
 import { useCallback, useState, useEffect, useMemo, useRef } from 'react';
 import { api, type GateDecision, type RunDiff } from '../api/client.js';
 import type { CoreEvent, CoverageReport, WorkUnit, WorkflowDef } from '../api/types.js';
@@ -197,7 +199,9 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
     if (el === null) return;
     el.scrollIntoView({ block: 'center' });
     el.focus({ preventScroll: true });
-    window.history.replaceState(null, '', window.location.pathname);
+    // Keep the entry's own state (wave 1's in-app mark, any history-state view keys): only
+    // the one-shot hash goes, so a later Back still lands on the page before this one.
+    window.history.replaceState(keepEntryState(), '', `${window.location.pathname}${window.location.search}`);
   }, [runId]);
 
   useEffect(() => {
@@ -230,7 +234,10 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
     setLoading(true);
     setError(null);
     try {
-      await action();
+      // A gate decision rides the shared undo window (wave 2a): only a decision
+      // that actually went out records steering, clears the draft, and resolves.
+      const outcome = await action();
+      if (outcome === 'undone' || outcome === 'dropped') return;
       recordSteering({
         runId,
         action: intervention.kind,
@@ -252,7 +259,7 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
   }
 
   const approve = (): Promise<void> =>
-    run(() => api.confirmGate(runId, { approve: true }), { kind: 'approve' });
+    run(() => commitGateDecision(runId, { approve: true }), { kind: 'approve' });
 
   // Escalation Retry: re-dispatches the failed unit. Optionally carries the amend note — the
   // deliver-unit prompt says "Approve to retry (optionally amend)" and other escalation shapes
@@ -261,14 +268,14 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
   const retry = (): Promise<void> => {
     const text = amend.trim();
     const decision: GateDecision = text === '' ? { approve: true } : { approve: true, amend: text };
-    return run(() => api.confirmGate(runId, decision), { kind: 'approve', ...(text !== '' ? { amend: text } : {}) });
+    return run(() => commitGateDecision(runId, decision), { kind: 'approve', ...(text !== '' ? { amend: text } : {}) });
   };
 
   const approveWithSteer = (): Promise<void> => {
     const text = amend.trim();
     if (!text) return Promise.resolve();
     const decision: GateDecision = { approve: true, amend: text };
-    return run(() => api.confirmGate(runId, decision), { kind: 'approve-with-steer', amend: text });
+    return run(() => commitGateDecision(runId, decision), { kind: 'approve-with-steer', amend: text });
   };
 
   // The steer text rides REJECT too (DES-RUN-NARRATOR §7 — the reject-note gap):
@@ -278,7 +285,7 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
   const reject = (): Promise<void> => {
     const text = amend.trim();
     const decision: GateDecision = text === '' ? { approve: false } : { approve: false, amend: text };
-    return run(() => api.confirmGate(runId, decision), {
+    return run(() => commitGateDecision(runId, decision), {
       kind: 'reject',
       ...(text !== '' ? { amend: text } : {}),
     });
@@ -295,7 +302,7 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
     const text = amend.trim();
     if (!text) return Promise.resolve();
     const decision: GateDecision = { approve: false, action: 'request_changes', amend: text };
-    return run(() => api.confirmGate(runId, decision), { kind: 'request-changes', amend: text });
+    return run(() => commitGateDecision(runId, decision), { kind: 'request-changes', amend: text });
   };
 
   // DES-UX-001 §7.7 (slice AC): the gate panel honors a / r — the same

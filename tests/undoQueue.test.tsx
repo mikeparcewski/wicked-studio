@@ -16,7 +16,8 @@ const { api } = await import('../src/api/client.js');
 const { decideGate, useGateActionStore } = await import('../src/board/gateActions.js');
 const { runBatchDecision, toggleBatchSelect, useBatchGateStore } = await import('../src/board/batchGates.js');
 const {
-  CLOSE_NOTE, UNDO_WINDOW_MS, decisionPreview, isQueued, undoDecision, undoHeadline, useUndoQueue,
+  CLOSE_NOTE, UNDO_WINDOW_MS, decisionPreview, describeDecision, isQueued, setUndoWindowForTest, undoDecision,
+  undoHeadline, useUndoQueue,
 } = await import('../src/board/undoQueue.js');
 const { UndoToasts } = await import('../src/components/UndoToasts.js');
 const { GateChip } = await import('../src/components/GateChip.js');
@@ -24,6 +25,7 @@ const { GateChip } = await import('../src/components/GateChip.js');
 const confirmGate = vi.mocked(api.confirmGate);
 
 beforeEach(() => {
+  setUndoWindowForTest(null); // this suite pins the real 10 s window
   vi.useFakeTimers();
   confirmGate.mockReset().mockResolvedValue({ status: 'resumed' });
   useGateActionStore.setState({ byGate: {} });
@@ -119,6 +121,8 @@ describe('the copy', () => {
     expect(decisionPreview('approve', 3)).toBe('3 runs resume past their gates.');
     expect(decisionPreview('reject', 1)).toMatch(/cancelled/);
     expect(decisionPreview('reject', 1, true)).toMatch(/your note/);
+    expect(describeDecision({ approve: true, amend: 'go' }).preview).toMatch(/guidance/);
+    expect(describeDecision({ approve: false, action: 'request_changes', amend: 'x' } as never).verb).toBe('request-changes');
     expect(CLOSE_NOTE).toMatch(/nothing is sent/);
     expect(CLOSE_NOTE).toMatch(/stays open/);
   });

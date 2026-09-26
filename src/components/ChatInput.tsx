@@ -1,3 +1,4 @@
+import { commitGateDecision } from '../board/gateActions.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, ApiError } from '../api/client.js';
 import type { EntityMode, LaunchBodyWithDeliver, Project, RepoEntry, RosterSeat, WorkflowDef } from '../api/types.js';
@@ -665,7 +666,8 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     setSteering(true);
     setSteerError(null);
     try {
-      await api.confirmGate(runId, { approve: true, amend: text });
+      const outcome = await commitGateDecision(runId, { approve: true, amend: text });
+      if (outcome !== 'sent') return; // undone: the text stays for another go
       setSteerText('');
       clearGate(runId);
     } catch (err) {

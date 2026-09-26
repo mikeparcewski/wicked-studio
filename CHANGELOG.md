@@ -68,8 +68,16 @@ npm publish dates. Every version listed here exists on
   when the window ends. Undo sends nothing and the gate stays open; closing the tab inside the
   window sends nothing either, and the toast says so. A batch is one window, then the sequential
   fan-out. Behaviour in `board/undoQueue.ts`; `UndoToasts` only renders.
+  Every human gate decision in studio rides it: the thread's gate card (buttons and its `a`/`r`
+  keys), the project dashboard, the steer composer, the reassign control and the unit detail all
+  decide through `commitGateDecision`, and `tests/gateWireSingleCaller.test.ts` fails if any other
+  module calls the gate POST.
 
 ### Fixed
+- **Back after opening a gate.** The thread's gate card consumed the `#gate` hash with
+  `history.replaceState(null, …)`, which wiped wave 1's in-app mark from the history entry, so a
+  later Back from that entry went to a fallback page instead of the previous one. The entry's
+  state is now kept whole (`keepEntryState`).
 - **Wave 1 — project switch reused the previous project's run.** The project shell's per-mode
   artifact memory was not scoped to the project, so after switching project a mode tab could route
   into the old project's run (`/p/beta/build/a1`). The memory is now keyed by project

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   CLOSE_NOTE,
+  type DecisionVerb,
   undoDecision,
   undoHeadline,
   useUndoQueue,
@@ -9,7 +10,7 @@ import {
 /** One toast, ready to render: every string is decided here, never in the skin. */
 export interface UndoToastView {
   id: number;
-  verb: 'approve' | 'reject';
+  verb: DecisionVerb;
   /** "Approving in 10 s" — counts down while the window is open. */
   headline: string;
   /** What will happen when it sends. */

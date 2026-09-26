@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { GateDecision } from '../api/types.js';
 import { IDLE_GATE_ACTION, sendGateDecision, useGateActionStore } from './gateActions.js';
-import { decisionPreview, queueDecision } from './undoQueue.js';
+import { describeDecision, queueDecision } from './undoQueue.js';
 
 /**
  * Batch gate resolution (DES-FEEDBACK-002 §9, P2-9, slice L): a selection
@@ -92,7 +92,7 @@ export function runBatchDecision(decision: GateDecision): Promise<void> {
   const s = useBatchGateStore.getState();
   if (s.running || s.queued || s.selected.length === 0) return Promise.resolve();
   const ids = [...s.selected];
-  const verb = decision.approve ? 'approve' : 'reject';
+  const { verb, preview } = describeDecision(decision, ids.length);
   const markQueued = (queued: boolean): void =>
     useGateActionStore.setState((cur) => {
       const byGate = { ...cur.byGate };
@@ -105,7 +105,7 @@ export function runBatchDecision(decision: GateDecision): Promise<void> {
     queueDecision({
       verb,
       runIds: ids,
-      preview: decisionPreview(verb, ids.length, !decision.approve && (decision.amend ?? '') !== ''),
+      preview,
       commit: async () => {
         markQueued(false);
         useBatchGateStore.setState({ queued: false });

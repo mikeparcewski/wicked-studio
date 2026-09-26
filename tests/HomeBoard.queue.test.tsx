@@ -1,5 +1,4 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { setUndoWindowForTest } from '../src/board/undoQueue.js';
 import { act, cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { Project } from '../src/api/types.js';
@@ -179,7 +178,3 @@ describe('HomeBoard — the needs-you queue', () => {
     expect(onOpenAsk).toHaveBeenCalledTimes(1);
   });
 });
-
-// Wave 2a: these tests pin the SEND path; the 10 s undo window has its own suite
-// (tests/undoQueue.test.tsx), so here a committed decision goes out on the next tick.
-beforeEach(() => setUndoWindowForTest(0));

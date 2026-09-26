@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { setUndoWindowForTest } from '../src/board/undoQueue.js';
 
 /**
  * Batch gate resolution (DES-FEEDBACK-002 §9, slice L): the selection model,
@@ -138,7 +137,3 @@ describe('per-id failure honesty (§9.2/§9.5)', () => {
     expect(confirmGate).not.toHaveBeenCalled();
   });
 });
-
-// Wave 2a: these tests pin the SEND path; the 10 s undo window has its own suite
-// (tests/undoQueue.test.tsx), so here a committed decision goes out on the next tick.
-beforeEach(() => setUndoWindowForTest(0));
