@@ -1,6 +1,5 @@
 import { create } from 'zustand';
 import { api } from '../api/client.js';
-import { ApiError } from '../api/errors.js';
 import type { GateDecision } from '../api/types.js';
 import { modePath } from '../hooks/useRoute.js';
 import { useGateStore } from '../store/gates.js';
@@ -11,13 +10,11 @@ import {
 
 /**
  * The gate a decision answers (`GateDecision.ord`, wicked-crew-api-types 0.44.0 / crew#681): the
- * daemon answers 409 `gate_changed` when it is no longer the open gate. Local until studio pins
- * api-types ≥ 0.44.0 — then this is plain `GateDecision`.
+ * daemon answers 409 `gate_changed` when it is no longer the open gate and 409 `gate_unknown` when
+ * it cannot tell. Crew bundles this dist, so the two ship together: the key is always sent when
+ * the gate is known. Local until studio pins api-types ≥ 0.44.0 — then this is plain `GateDecision`.
  */
 type GateDecisionWire = GateDecision & { ord?: number };
-
-/** An older daemon's strict schema refuses `ord` with a 400; once seen, stop sending it. */
-let daemonTakesOrd = true;
 
 /**
  * The ONE gate-decision implementation (DES-FEEDBACK-002 §2.3, slice H): the
@@ -235,23 +232,9 @@ export async function sendGateDecision(runId: string, decision: GateDecisionWire
   if (cur.busy || cur.answered !== null) return 'not sent — already answered or still in flight';
   patch(runId, { busy: true, error: null });
   try {
-    const { ord, ...plain } = decision;
-    let body: GateDecisionWire = ord !== undefined && daemonTakesOrd ? { ...plain, ord } : plain;
-    for (let attempt = 0; ; attempt += 1) {
-      try {
-        // The ONLY `confirmGate` call in studio (tests/gateWireSingleCaller.test.ts pins it).
-        await api.confirmGate(runId, body as GateDecision);
-        break;
-      } catch (e) {
-        // A daemon older than api-types 0.44.0 refuses the unknown `ord` (400) — the contract
-        // says omit it there. Resend once without it; every later decision omits it.
-        const ordRefused = e instanceof ApiError && e.status === 400 && body.ord !== undefined
-          && /unknown fields?[^—]*`ord`/.test(e.wire); // crew's strict-schema sentence
-        if (attempt > 0 || !ordRefused) throw e;
-        daemonTakesOrd = false;
-        body = plain;
-      }
-    }
+    // The ONLY `confirmGate` call in studio (tests/gateWireSingleCaller.test.ts pins it). A refusal
+    // (400, 409 gate_changed / gate_unknown) is never retried: the caller reports it as "Not sent".
+    await api.confirmGate(runId, decision as GateDecision);
     patch(runId, { answered: decision.approve ? 'approved' : 'rejected' });
     // Prune the local gate immediately; the run's own status follows from the
     // daemon's frame, which is what actually moves the card (§1.4 live).
