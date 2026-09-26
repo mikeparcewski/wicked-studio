@@ -110,7 +110,7 @@ describe('the inbox gate card on a failure escalation', () => {
     expect(within(card).getByRole('button', { name: 'Approve (retry on codex)' })).toBeInTheDocument();
 
     fireEvent.click(within(row).getByTestId('steering-reassign'));
-    await waitFor(() => expect(confirmGate).toHaveBeenCalledWith(RUN, { approve: true }));
+    await waitFor(() => expect(confirmGate).toHaveBeenCalledWith(RUN, { approve: true, ord: 3 }));
     await waitFor(() => expect(reassignRun).toHaveBeenCalledWith(RUN, 'claude'));
     await waitFor(() => expect(useGateStore.getState().gates[RUN]).toBeUndefined());
   });

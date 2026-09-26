@@ -184,7 +184,7 @@ describe('AssistDock — the pinned gate', () => {
     expect(screen.getByTestId('assist-thread').contains(gate)).toBe(false);
 
     await user.click(within(gate).getByTestId('steering-approve'));
-    await waitFor(() => expect(confirmGate).toHaveBeenCalledWith('run-x1', { approve: true }));
+    await waitFor(() => expect(confirmGate).toHaveBeenCalledWith('run-x1', { approve: true, ord: 0 }));
     expect(onRunResolved).toHaveBeenCalledTimes(1);
   });
 });

@@ -1,4 +1,5 @@
-import { commitGateDecision } from '../board/gateActions.js';
+import { commitGateDecision, IDLE_GATE_ACTION, useGateActionStore } from '../board/gateActions.js';
+import { reportDecision } from '../board/undoQueue.js';
 import { keepEntryState } from '../hooks/useHistoryState.js';
 import { useCallback, useState, useEffect, useMemo, useRef } from 'react';
 import { api, type GateDecision, type RunDiff } from '../api/client.js';
@@ -173,6 +174,12 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
   /** Synchronous double-fire guard for the keyboard path — `loading` is a
    *  render-cycle behind a fast second keydown. */
   const inflight = useRef(false);
+  // Wave 2a round 3: the gate's SHARED decision state — a decision made here, on the board chip,
+  // by a triage key or the palette. While one is queued (or sending, or sent) this card's controls
+  // are disabled and it says so, exactly as the chip does.
+  const shared = useGateActionStore((s) => s.byGate[runId]) ?? IDLE_GATE_ACTION;
+  const decided = shared.queued || shared.busy || shared.answered !== null;
+  const locked = loading || decided;
   const steerRef = useRef<HTMLTextAreaElement>(null);
 
   // One writer for the steer text (slice BD): local state for the render, the
@@ -229,15 +236,21 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
     action: () => Promise<unknown>,
     intervention: { kind: SteeringAction; amend?: string },
   ): Promise<void> {
-    if (inflight.current) return;
+    if (inflight.current) {
+      // Never silent (wave 2a round 3): a second decision while one is in progress says why it
+      // did nothing.
+      reportDecision('not-sent', 'Not sent: this gate already has a decision in progress — see its Undo toast.');
+      return;
+    }
     inflight.current = true;
     setLoading(true);
     setError(null);
     try {
-      // A gate decision rides the shared undo window (wave 2a): only a decision
-      // that actually went out records steering, clears the draft, and resolves.
+      // A gate decision rides the shared undo window (wave 2a): only a decision that actually
+      // went out records steering, clears the draft, and resolves. Undone, cancelled (the gate
+      // changed) and dropped outcomes have already said so in the toast area.
       const outcome = await action();
-      if (outcome === 'undone' || outcome === 'dropped') return;
+      if (outcome === 'undone' || outcome === 'cancelled' || outcome === 'dropped') return;
       recordSteering({
         runId,
         action: intervention.kind,
@@ -314,8 +327,9 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
   // On escalation gates the 'a' key fires Retry (optionally carries amend), not the plain approve.
   actions.current = { approve: escalationGate ? retry : approve, reject };
   const keyEntries = useMemo<ShortcutEntry[]>(() => {
+    // No in-flight check here: a key pressed while a decision is in progress reaches `run`, which
+    // says so, instead of vanishing.
     const focused = (): boolean =>
-      !inflight.current &&
       root.current !== null &&
       root.current.contains(document.activeElement);
     return [
@@ -383,6 +397,11 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
         run {runId.slice(0, 8)}
         {typeof ord === 'number' ? ` · before unit #${ord}` : ''}
       </p>
+      {decided && (
+        <p data-testid="steering-queued" className="text-xs font-mono mb-2" style={{ color: 'var(--ink-muted)' }}>
+          {shared.queued ? 'queued · undo in toast' : shared.busy ? 'answering…' : `${shared.answered} · advancing…`}
+        </p>
+      )}
 
       {/* Headline prompt — the actionable part only */}
       <p
@@ -484,7 +503,7 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
         }
         value={amend}
         onChange={(e) => applyAmend(e.target.value)}
-        disabled={loading}
+        disabled={locked}
       />
 
       {error && (
@@ -522,7 +541,7 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
           <button
             data-testid="steering-retry"
             onClick={() => void retry()}
-            disabled={loading}
+            disabled={locked}
             className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
             style={{ background: 'var(--status-run)', color: 'var(--surface-base)' }}
             title="Re-dispatches the failed unit (carries your note as guidance if typed)"
@@ -532,7 +551,7 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
           <button
             data-testid="steering-request-changes"
             onClick={() => void requestChanges()}
-            disabled={loading || !amend.trim()}
+            disabled={locked || !amend.trim()}
             className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
             style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
             title="Rewinds to the last creator phase and re-dispatches with your note (note required)"
@@ -542,7 +561,7 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
           <button
             data-testid="steering-reject"
             onClick={() => void reject()}
-            disabled={loading}
+            disabled={locked}
             className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
             style={{ background: 'var(--status-fail-dim)', border: '1px solid var(--status-fail-dim)', color: 'var(--status-fail)' }}
           >
@@ -551,7 +570,7 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
           <button
             data-testid="steering-cancel"
             onClick={() => void cancel()}
-            disabled={loading}
+            disabled={locked}
             className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
             style={{ background: 'var(--surface-raised)', border: '1px solid var(--ink-dim)', color: 'var(--ink-muted)' }}
           >
@@ -567,7 +586,7 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
           <button
             data-testid="steering-retry"
             onClick={() => void retry()}
-            disabled={loading}
+            disabled={locked}
             className="col-span-2 rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
             style={{ background: 'var(--status-run)', color: 'var(--surface-base)' }}
             title="Re-dispatches the deliver unit (carries your note as guidance if typed)"
@@ -577,7 +596,7 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
           <button
             data-testid="steering-reject"
             onClick={() => void reject()}
-            disabled={loading}
+            disabled={locked}
             className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
             style={{ background: 'var(--status-fail-dim)', border: '1px solid var(--status-fail-dim)', color: 'var(--status-fail)' }}
           >
@@ -586,7 +605,7 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
           <button
             data-testid="steering-cancel"
             onClick={() => void cancel()}
-            disabled={loading}
+            disabled={locked}
             className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
             style={{ background: 'var(--surface-raised)', border: '1px solid var(--ink-dim)', color: 'var(--ink-muted)' }}
           >
@@ -599,7 +618,7 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
           <button
             data-testid="steering-approve"
             onClick={() => void approve()}
-            disabled={loading}
+            disabled={locked}
             className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
             style={{ background: 'var(--status-run)', color: 'var(--surface-base)' }}
             {...(restoredRetry ? { title: "the evaluator's edit was discarded; the phase re-runs against the creator's verified tree" } : {})}
@@ -609,7 +628,7 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
           <button
             data-testid="steering-approve-steer"
             onClick={() => void approveWithSteer()}
-            disabled={loading || !amend.trim()}
+            disabled={locked || !amend.trim()}
             className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
             style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
           >
@@ -618,7 +637,7 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
           <button
             data-testid="steering-reject"
             onClick={() => void reject()}
-            disabled={loading}
+            disabled={locked}
             className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
             style={{ background: 'var(--status-fail-dim)', border: '1px solid var(--status-fail-dim)', color: 'var(--status-fail)' }}
           >
@@ -627,7 +646,7 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
           <button
             data-testid="steering-cancel"
             onClick={() => void cancel()}
-            disabled={loading}
+            disabled={locked}
             className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
             style={{ background: 'var(--surface-raised)', border: '1px solid var(--ink-dim)', color: 'var(--ink-muted)' }}
           >

@@ -56,10 +56,10 @@ describe('the gate moves under a queued decision', () => {
     void decideGate('b1', { approve: true });
     await vi.advanceTimersByTimeAsync(4_000);
     act(() => { useGateStore.getState().ingest({ type: 'resumed', session: 'b1' } as never); });
+    expect(results()).toEqual(['not-sent: Not sent: the gate on beta · b1 was answered elsewhere or the run moved on.']);
     await vi.advanceTimersByTimeAsync(UNDO_WINDOW_MS);
     expect(confirmGate).not.toHaveBeenCalled();
     expect(useUndoQueue.getState().pending).toEqual([]);
-    expect(results()).toEqual(['not-sent: Not sent: the gate on beta · b1 was answered elsewhere or the run moved on.']);
     expect(useGateActionStore.getState().byGate['b1']?.queued ?? false).toBe(false);
   });
 
@@ -70,9 +70,9 @@ describe('the gate moves under a queued decision', () => {
     act(() => {
       useGateStore.getState().ingest({ type: 'awaitingHuman', session: 'b1', ord: 4, prompt: 'Approve unit 4?' } as never);
     });
+    expect(results()[0]).toMatch(/^not-sent: Not sent: a new gate opened on beta · b1/);
     await vi.advanceTimersByTimeAsync(UNDO_WINDOW_MS);
     expect(confirmGate).not.toHaveBeenCalled();
-    expect(results()[0]).toMatch(/^not-sent: Not sent: a new gate opened on beta · b1/);
     // The new gate is answerable afresh.
     void decideGate('b1', { approve: true });
     await vi.advanceTimersByTimeAsync(UNDO_WINDOW_MS);

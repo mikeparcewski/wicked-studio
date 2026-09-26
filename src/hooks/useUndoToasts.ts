@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   CLOSE_NOTE,
+  type DecisionResult,
   type DecisionVerb,
   undoDecision,
   undoHeadline,
@@ -18,6 +19,11 @@ export interface UndoToastView {
   /** The page-close contract. */
   closeNote: string;
   undo: () => void;
+}
+
+/** How queued decisions ENDED (sent / failed / not sent), briefly — visible on every route. */
+export function useDecisionResults(): readonly DecisionResult[] {
+  return useUndoQueue((s) => s.results);
 }
 
 /** The queued decisions as toasts, re-read on a short tick so the countdown moves. */

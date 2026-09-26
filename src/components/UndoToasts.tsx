@@ -1,4 +1,6 @@
-import { useUndoToasts } from '../hooks/useUndoToasts.js';
+import { useDecisionResults, useUndoToasts } from '../hooks/useUndoToasts.js';
+
+const RESULT_COLOR = { sent: 'var(--status-run)', failed: 'var(--status-fail)', 'not-sent': 'var(--status-gate)' } as const;
 
 /**
  * The Undo toasts (studio wave 2a, behaviour 5) — a skin over `useUndoToasts`: one toast
@@ -7,7 +9,8 @@ import { useUndoToasts } from '../hooks/useUndoToasts.js';
  */
 export function UndoToasts(): React.ReactElement | null {
   const toasts = useUndoToasts();
-  if (toasts.length === 0) return null;
+  const results = useDecisionResults();
+  if (toasts.length === 0 && results.length === 0) return null;
   return (
     <div
       // Top-centre: a decision is made on a card or a row lower down the page, and the toast
@@ -15,6 +18,22 @@ export function UndoToasts(): React.ReactElement | null {
       className="fixed left-1/2 flex flex-col items-center gap-2 z-50"
       style={{ top: 12, transform: 'translateX(-50%)' }}
     >
+      {results.map((r) => (
+        <p
+          key={`r${r.id}`}
+          role="status"
+          aria-live="polite"
+          data-testid="undo-result"
+          data-kind={r.kind}
+          style={{
+            margin: 0, maxWidth: 480, padding: '6px 12px', borderRadius: 'var(--radius-lg)',
+            background: 'var(--surface-overlay)', boxShadow: 'var(--shadow-overlay)',
+            fontSize: 'var(--text-xs)', color: RESULT_COLOR[r.kind],
+          }}
+        >
+          {r.text}
+        </p>
+      ))}
       {toasts.map((t) => (
         <div
           key={t.id}

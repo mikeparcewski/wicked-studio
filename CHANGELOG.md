@@ -74,6 +74,15 @@ npm publish dates. Every version listed here exists on
   keys), the project dashboard, the steer composer, the reassign control and the unit detail all
   decide through `commitGateDecision`, and `tests/gateWireSingleCaller.test.ts` fails if any other
   module calls the gate POST.
+  A queued decision is about ONE gate: it records the gate's `ord` and sends it (crew#681's 409
+  `gate_changed` backstop; resent once without it to a daemon that refuses the key). If that gate
+  is answered elsewhere, the run moves on, or a NEW gate opens on the run during the window, the
+  decision is dropped unsent and the toast says so. Every outcome is visible whichever surface is
+  mounted (sent / failed / not sent); a refused second decision is never silent. The toast names
+  the gate ("Approving beta · b1 in 8 s"); the gate card shows the shared queued state with its
+  controls disabled; peek, triage selection and batch skip gates that already carry a decision;
+  a reject reason survives Undo; `B` after chained jumps returns to the first origin; `P`/`G`/`B`
+  stand down under a modal or the `?` overlay.
 
 ### Fixed
 - **Back after opening a gate.** The thread's gate card consumed the `#gate` hash with

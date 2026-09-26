@@ -460,8 +460,8 @@ with sync_playwright() as p:
     approve_posts = gate_posts[posts_before:]
     report["steps"]["approve_all_fans_out"] = {
         "ok": approve_posts == [
-            (f"/api/v1/runs/{SIMPLE_RUN}/gate", {"approve": True}),
-            (f"/api/v1/runs/{BATCH1_RUN}/gate", {"approve": True}),
+            (f"/api/v1/runs/{SIMPLE_RUN}/gate", {"approve": True, "ord": 0}),
+            (f"/api/v1/runs/{BATCH1_RUN}/gate", {"approve": True, "ord": 0}),
         ],
         "gate_posts": approve_posts,
     }
@@ -528,8 +528,8 @@ with sync_playwright() as p:
     reject_posts = gate_posts[posts_before:]
     report["steps"]["reject_all_rides_amend"] = {
         "ok": reject_posts == [
-            (f"/api/v1/runs/{SIMPLE_RUN}/gate", {"approve": False, "amend": "wrong branch"}),
-            (f"/api/v1/runs/{BATCH1_RUN}/gate", {"approve": False, "amend": "wrong branch"}),
+            (f"/api/v1/runs/{SIMPLE_RUN}/gate", {"approve": False, "amend": "wrong branch", "ord": 0}),
+            (f"/api/v1/runs/{BATCH1_RUN}/gate", {"approve": False, "amend": "wrong branch", "ord": 0}),
         ],
         "gate_posts": reject_posts,
     }

@@ -79,7 +79,7 @@ describe('board gate chips (§1.4 — answerable, not a badge)', () => {
     openGate();
     const navigate = card();
     await user.click(screen.getByTestId(`gate-approve-${RUN}`));
-    expect(client.api.confirmGate).toHaveBeenCalledWith(RUN, { approve: true });
+    expect(client.api.confirmGate).toHaveBeenCalledWith(RUN, { approve: true, ord: 0 });
     expect(navigate).not.toHaveBeenCalled();
     // The gate is pruned locally; the card then follows the run's status (slice 6).
     expect(useGateStore.getState().gates[RUN]).toBeUndefined();
@@ -91,7 +91,7 @@ describe('board gate chips (§1.4 — answerable, not a badge)', () => {
     openGate();
     card();
     await user.click(screen.getByTestId(`gate-reject-${RUN}`));
-    expect(client.api.confirmGate).toHaveBeenCalledWith(RUN, { approve: false });
+    expect(client.api.confirmGate).toHaveBeenCalledWith(RUN, { approve: false, ord: 0 });
   });
 
   it('the card reflects the run advancing in place — the chip goes with the status', async () => {

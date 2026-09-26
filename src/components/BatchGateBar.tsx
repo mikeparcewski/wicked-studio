@@ -1,13 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 import {
+  BATCH_NOTE_KEY,
   clearBatchSelection,
+  eligibleSelection,
   retryBatchOne,
   runBatchDecision,
   toggleBatchSelect,
   useBatchGateStore,
 } from '../board/batchGates.js';
-import { gateOpenPath } from '../board/gateActions.js';
-import { decisionPreview } from '../board/undoQueue.js';
+import { gateOpenPath, useGateActionStore } from '../board/gateActions.js';
+import { decisionPreview, takeRestoredNote } from '../board/undoQueue.js';
 import type { Navigate } from '../hooks/useRoute.js';
 import { isSimpleGate, type OpenGate } from '../store/gates.js';
 import { useMembershipStore } from '../store/membership.js';
@@ -117,17 +119,23 @@ export function BatchSelectBox({ runId, gate }: {
 }
 
 export function BatchGateBar({ navigate }: { navigate: Navigate }): React.ReactElement | null {
-  const { selected, running, queued, done, total, failures } = useBatchGateStore();
+  const { selected: chosen, running, queued, done, total, failures } = useBatchGateStore();
+  // Honest counts (wave 2a round 3): a selected gate that already carries a decision (queued,
+  // in flight, answered) is not something this bar will send.
+  useGateActionStore((s) => s.byGate);
+  const selected = queued || running ? chosen : eligibleSelection(chosen);
+  const decided = chosen.length - selected.length;
   const projectIdByRun = useMembershipStore((s) => s.projectIdByRun);
   const [noteOpen, setNoteOpen] = useState(false);
-  const [note, setNote] = useState('');
+  // A reject note handed back by Undo re-seeds the input (never lost).
+  const [note, setNote] = useState(() => takeRestoredNote(BATCH_NOTE_KEY));
   const noteRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (noteOpen) noteRef.current?.focus();
   }, [noteOpen]);
 
-  if (selected.length === 0 && failures.length === 0) return null;
+  if (chosen.length === 0 && failures.length === 0) return null;
 
   const submitRejects = (): void => {
     setNoteOpen(false);
@@ -147,7 +155,8 @@ export function BatchGateBar({ navigate }: { navigate: Navigate }): React.ReactE
         <p style={CSS.count}>
           {running
             ? `${done}/${total}…`
-            : `${selected.length} ${selected.length === 1 ? 'gate' : 'gates'} selected`}
+            : `${selected.length} ${selected.length === 1 ? 'gate' : 'gates'} selected${
+              decided > 0 ? ` · ${decided} already decided, left out` : ''}`}
         </p>
         {noteOpen ? (
           // §9.2: the reject note opens ONCE at bar level; its text rides
@@ -193,7 +202,11 @@ export function BatchGateBar({ navigate }: { navigate: Navigate }): React.ReactE
               data-testid="batch-reject-all"
               disabled={running || queued || selected.length === 0}
               title={decisionPreview('reject', selected.length)}
-              onClick={() => setNoteOpen(true)}
+              onClick={() => {
+                const restored = takeRestoredNote(BATCH_NOTE_KEY);
+                if (restored !== '') setNote(restored);
+                setNoteOpen(true);
+              }}
               style={{ ...CSS.btn, background: 'var(--status-fail-dim)', color: 'var(--status-fail)' }}
             >
               Reject all…

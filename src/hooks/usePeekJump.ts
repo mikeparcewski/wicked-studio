@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import type { CoreEvent, SessionView } from '../api/types.js';
+import { useGateActionStore } from '../board/gateActions.js';
 import { needsYouRows } from '../board/needsYou.js';
 import { peekTarget, type PeekTarget } from '../board/peekTarget.js';
 import { gateVerdictFor, phaseLabel, type GateVerdictView } from '../components/gateVerdictModel.js';
@@ -53,10 +54,16 @@ export interface PeekView {
 
 const NO_EVIDENCE: PeekEvidence = { verdict: null, phase: null, loading: false };
 
-function hereHref(): string {
-  const { pathname, search, hash } = window.location;
-  return `${pathname}${search}${hash}`;
+/** Where you are, WITHOUT the hash: `#gate` is consumed on arrival, so it never identifies a place. */
+function herePath(): string {
+  const { pathname, search } = window.location;
+  return `${pathname}${search}`;
 }
+
+const withoutHash = (path: string): string => path.split('#')[0] ?? path;
+
+/** P, G and B stand down while a modal or the '?' overlay owns the keyboard. */
+const keysFree = (): boolean => !anyModalOpen() && !useLayerStore.getState().shortcutOverlayOpen;
 
 export function usePeekJump(runs: SessionView[], navigate: Navigate): PeekView {
   const open = useLayerStore((s) => s.peekOpen);
@@ -70,6 +77,7 @@ export function usePeekJump(runs: SessionView[], navigate: Navigate): PeekView {
   const elicitations = useElicitationStore((s) => s.elicitations);
   const notifications = useNotificationStore((s) => s.notifications);
   const stallEscalations = useStallEscalationStore((s) => s.escalations);
+  const decisions = useGateActionStore((s) => s.byGate);
 
   // THE ranked queue (wave 2b's `needsYouRows` → `compareNeeds`), folded from the app-wide
   // stores so peek works on every route. The home page's own wires (chats, campaigns,
@@ -93,8 +101,13 @@ export function usePeekJump(runs: SessionView[], navigate: Navigate): PeekView {
       stallEscalations,
       now: Date.now(),
     });
-    return peekTarget({ rows, gates, runs, projectIdByRun });
-  }, [runs, gates, failedAt, attachedAtByRun, projectIdByRun, elicitations, notifications, stallEscalations]);
+    // A gate that already has a decision (queued, in flight, answered) is never peeked again.
+    const decided = (id: string): boolean => {
+      const cur = decisions[id];
+      return cur !== undefined && (cur.queued || cur.busy || cur.answered !== null);
+    };
+    return peekTarget({ rows, gates, runs, projectIdByRun, decided });
+  }, [runs, gates, failedAt, attachedAtByRun, projectIdByRun, elicitations, notifications, stallEscalations, decisions]);
 
   // The handlers live in a stable entry table; they read the current world through refs.
   const targetRef = useRef(target);
@@ -108,8 +121,13 @@ export function usePeekJump(runs: SessionView[], navigate: Navigate): PeekView {
       const t = targetRef.current;
       if (t === null) return;
       close();
-      // Jumping again from the gate itself must not overwrite where you came from.
-      if (hereHref() !== t.path) useReturnPlace.setState({ place: capturePlace() });
+      if (herePath() === withoutHash(t.path)) {
+        navRef.current(t.path); // already there: re-land on the gate, keep the return place
+        return;
+      }
+      // Chained jumps keep the ORIGINAL return place: B always goes back to where the first jump
+      // left from, however many jumps followed it.
+      if (useReturnPlace.getState().place === null) useReturnPlace.setState({ place: capturePlace() });
       navRef.current(t.path);
     };
     const back = (): void => {
@@ -128,6 +146,7 @@ export function usePeekJump(runs: SessionView[], navigate: Navigate): PeekView {
       chord: { key: 'p' },
       group: 'navigate',
       description: 'Peek at the top item that needs you (the URL stays put)',
+      guard: keysFree,
       handler: (e) => {
         e.preventDefault();
         const layers = useLayerStore.getState();
@@ -139,7 +158,7 @@ export function usePeekJump(runs: SessionView[], navigate: Navigate): PeekView {
       chord: { key: 'g' },
       group: 'navigate',
       description: 'Jump to the top item that needs you',
-      guard: () => targetRef.current !== null,
+      guard: () => keysFree() && targetRef.current !== null,
       handler: (e) => {
         e.preventDefault();
         actions.jump();
@@ -150,7 +169,7 @@ export function usePeekJump(runs: SessionView[], navigate: Navigate): PeekView {
       chord: { key: 'b' },
       group: 'navigate',
       description: 'Back to exactly where you were before the jump',
-      guard: () => useReturnPlace.getState().place !== null,
+      guard: () => keysFree() && useReturnPlace.getState().place !== null,
       handler: (e) => {
         e.preventDefault();
         actions.back();

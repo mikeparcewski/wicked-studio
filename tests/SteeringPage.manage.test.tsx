@@ -485,7 +485,7 @@ describe('SteeringPage — add with chat (the dock message → the authoring run
 
     // Approving rides the same POST /runs/:id/gate as every gate, then the page reloads rules.
     await user.click(within(gate).getByTestId('steering-approve'));
-    await waitFor(() => expect(confirmGate).toHaveBeenCalledWith('run-author-1', { approve: true }));
+    await waitFor(() => expect(confirmGate).toHaveBeenCalledWith('run-author-1', expect.objectContaining({ approve: true })));
     await waitFor(() => expect(listConformanceRules).toHaveBeenCalledTimes(2));
   });
 

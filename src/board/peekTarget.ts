@@ -40,6 +40,9 @@ export interface PeekInputs {
   gates: Readonly<Record<string, OpenGate>>;
   runs: readonly SessionView[];
   projectIdByRun: Readonly<Record<string, string>>;
+  /** Runs whose gate already has a decision (queued, in flight, answered): never peeked — a
+   *  second decision there would be refused (wave 2a round 3). */
+  decided?: (runId: string) => boolean;
 }
 
 /** Row keys spell their run as `<prefix>:<runId>` (needsYou.ts's dedupe identity). */
@@ -53,10 +56,16 @@ function runOf(row: NeedRow): string | null {
   return i < 0 ? null : row.key.slice(i + 1);
 }
 
-export function peekTarget({ rows, gates, runs, projectIdByRun }: PeekInputs): PeekTarget | null {
-  const first = rows[0];
-  if (first === undefined) return null;
-  const top = first.members?.[0] ?? first;
+export function peekTarget({ rows, gates, runs, projectIdByRun, decided }: PeekInputs): PeekTarget | null {
+  // The queue's order, flattened (a group's members in their ranked order), minus every gate that
+  // already carries a decision.
+  const top = rows
+    .flatMap((r) => r.members ?? [r])
+    .find((r) => {
+      const id = r.kind === 'gate' ? runOf(r) : null;
+      return id === null || decided === undefined || !decided(id);
+    });
+  if (top === undefined) return null;
   const runId = runOf(top);
   const run = runId === null ? undefined : runs.find((v) => v.session.id === runId);
   const gate = top.kind === 'gate' && runId !== null ? gates[runId] : undefined;

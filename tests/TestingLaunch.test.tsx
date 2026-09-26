@@ -359,7 +359,7 @@ describe('the presence-gate — an older crew (no POST /testing/recon) keeps tod
     const gate = await screen.findByTestId('steering-gate');
     expect(gate).toHaveAttribute('data-run-id', 'run-old-1');
     await user.click(within(gate).getByTestId('steering-approve'));
-    await waitFor(() => expect(confirmGate).toHaveBeenCalledWith('run-old-1', { approve: true }));
+    await waitFor(() => expect(confirmGate).toHaveBeenCalledWith('run-old-1', expect.objectContaining({ approve: true })));
     expect(await screen.findByTestId('testing-launch-resolved')).toHaveTextContent(/Tests/);
   });
 
@@ -1017,7 +1017,7 @@ describe('T17–T19 — the single-run intake gate: the EXISTING SteeringGate ca
     if (amend !== undefined) await user.type(within(gate).getByTestId('steering-amend'), amend);
     await user.click(within(gate).getByTestId(button));
 
-    await waitFor(() => expect(confirmGate).toHaveBeenCalledWith('run-1', decision));
+    await waitFor(() => expect(confirmGate).toHaveBeenCalledWith('run-1', expect.objectContaining(decision)));
     expect(confirmGate).toHaveBeenCalledTimes(1);
     expect(cancelRun).not.toHaveBeenCalled();
     const resolved = await within(panel).findByTestId('testing-launch-resolved');

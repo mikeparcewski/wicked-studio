@@ -104,11 +104,12 @@ with sync_playwright() as p:
     page.wait_for_timeout(max(0, int((pressed + 4.0 - time.monotonic()) * 1000)))
     set_fixture(origin, status_over={"b1": "executing"}, gate_now=[],
                 extra_frames=[{"type": "resumed", "session": "b1"}])
-    page.wait_for_timeout(max(0, int((pressed + 12.0 - time.monotonic()) * 1000)))
+    page.wait_for_timeout(max(0, int((pressed + 6.5 - time.monotonic()) * 1000)))  # the frame lands within ~1 s
     page.screenshot(path=str(SHOTS / "wave2a-safety-elsewhere.png"))
-    check("elsewhere-nothing-sent", len(server_posts(origin)) == 0, server=len(server_posts(origin)))
     check("elsewhere-notice", "not-sent: Not sent: the gate on beta · b1 was answered elsewhere" in notice(page),
           notice=notice(page))
+    page.wait_for_timeout(max(0, int((pressed + 12.0 - time.monotonic()) * 1000)))
+    check("elsewhere-nothing-sent", len(server_posts(origin)) == 0, server=len(server_posts(origin)))
     page.close()
 
     # ── a NEW gate on the same run mid-window ───────────────────────────────────
@@ -116,10 +117,11 @@ with sync_playwright() as p:
     pressed = approve_on_board(page)
     page.wait_for_timeout(max(0, int((pressed + 4.0 - time.monotonic()) * 1000)))
     set_fixture(origin, extra_gates=[{"session": "b1", "ord": 4, "prompt": "Approve unit 4 before it runs: ship it"}])
-    page.wait_for_timeout(max(0, int((pressed + 12.0 - time.monotonic()) * 1000)))
+    page.wait_for_timeout(max(0, int((pressed + 6.5 - time.monotonic()) * 1000)))
     page.screenshot(path=str(SHOTS / "wave2a-safety-newgate.png"))
-    check("newgate-nothing-sent", len(server_posts(origin)) == 0, server=len(server_posts(origin)))
     check("newgate-notice", "not-sent: Not sent: a new gate opened on beta · b1" in notice(page), notice=notice(page))
+    page.wait_for_timeout(max(0, int((pressed + 12.0 - time.monotonic()) * 1000)))
+    check("newgate-nothing-sent", len(server_posts(origin)) == 0, server=len(server_posts(origin)))
     page.close()
 
     # ── undisturbed: one POST after 10 s, naming its gate ───────────────────────

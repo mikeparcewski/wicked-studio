@@ -94,7 +94,7 @@ describe('F-7R2-007: Reassign to <seat> + retry', () => {
     fireEvent.change(screen.getByTestId('steering-amend'), { target: { value: 'use the other seat' } });
     fireEvent.click(screen.getByTestId('steering-reassign'));
 
-    await waitFor(() => expect(client.api.confirmGate).toHaveBeenCalledWith(RUN, { approve: true, amend: 'use the other seat' }));
+    await waitFor(() => expect(client.api.confirmGate).toHaveBeenCalledWith(RUN, expect.objectContaining({ approve: true, amend: 'use the other seat' })));
     await waitFor(() => expect(client.api.reassignRun).toHaveBeenCalledWith(RUN, 'claude'), { timeout: 3000 });
     expect(client.api.getRun).toHaveBeenCalledTimes(3);
     await waitFor(() => expect(screen.getByTestId('steering-reassign-row')).toHaveAttribute('data-phase', 'done'));

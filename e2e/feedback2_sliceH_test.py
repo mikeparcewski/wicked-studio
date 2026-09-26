@@ -295,7 +295,7 @@ with sync_playwright() as p:
     )
     report["steps"]["a_approves_once"] = {
         "ok": all([
-            approve_posts == [(f"/api/v1/runs/{SIMPLE_RUN}/gate", {"approve": True})],
+            approve_posts == [(f"/api/v1/runs/{SIMPLE_RUN}/gate", {"approve": True, "ord": 0})],
             approve_state["path"] == "/",                   # answering never navigates
             approve_state["answered"] is not None
             and "approved" in approve_state["answered"],
@@ -353,7 +353,7 @@ with sync_playwright() as p:
     report["steps"]["r_note_rides_amend"] = {
         "ok": reject_posts == [(
             f"/api/v1/runs/{SIMPLE_RUN}/gate",
-            {"approve": False, "amend": "needs the Q3 numbers first"},
+            {"approve": False, "amend": "needs the Q3 numbers first", "ord": 0},
         )],
         "gate_posts": reject_posts,
     }
@@ -395,7 +395,7 @@ with sync_playwright() as p:
             dash["selected"],
             dash["focusedItem"] == SIMPLE_RUN,
             dash["ringColor"] == accent,
-            dash_posts == [(f"/api/v1/runs/{SIMPLE_RUN}/gate", {"approve": True})],
+            dash_posts == [(f"/api/v1/runs/{SIMPLE_RUN}/gate", {"approve": True, "ord": 0})],
             page.evaluate("() => window.location.pathname") == f"/p/{SIMPLE_PROJECT}",
         ]),
         **dash,

@@ -11,8 +11,8 @@
   "studioVersion": "0.5.14",
   "counts": {
     "files": 154,
-    "occurrences": 1383,
-    "static": 1190,
+    "occurrences": 1385,
+    "static": 1192,
     "dynamic": 66,
     "computed": 7
   },
@@ -5903,6 +5903,12 @@
       ]
     },
     {
+      "testId": "steering-queued",
+      "files": [
+        "src/components/SteeringGate.tsx"
+      ]
+    },
+    {
       "testId": "steering-reassign",
       "files": [
         "src/components/ReassignControl.tsx"
@@ -6785,6 +6791,12 @@
     },
     {
       "testId": "undo-preview",
+      "files": [
+        "src/components/UndoToasts.tsx"
+      ]
+    },
+    {
+      "testId": "undo-result",
       "files": [
         "src/components/UndoToasts.tsx"
       ]

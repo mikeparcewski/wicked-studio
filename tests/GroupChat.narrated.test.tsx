@@ -269,10 +269,11 @@ describe('§11.5 — the pinned approval dock, answerable from the chat surface'
     await user.type(screen.getByTestId('steering-amend'), 'not like this — keep the queue');
     await user.click(screen.getByTestId('steering-reject'));
     await waitFor(() =>
-      expect(confirmGate).toHaveBeenCalledWith(chatId(), {
+      // The decision names the gate it was made on (wave 2a round 3 — `ord`).
+      expect(confirmGate).toHaveBeenCalledWith(chatId(), expect.objectContaining({
         approve: false,
         amend: 'not like this — keep the queue',
-      }),
+      })),
     );
   });
 

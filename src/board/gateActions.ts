@@ -1,9 +1,23 @@
 import { create } from 'zustand';
 import { api } from '../api/client.js';
+import { ApiError } from '../api/errors.js';
 import type { GateDecision } from '../api/types.js';
 import { modePath } from '../hooks/useRoute.js';
 import { useGateStore } from '../store/gates.js';
-import { describeDecision, onDecisionTestReset, queueDecision } from './undoQueue.js';
+import { useMembershipStore } from '../store/membership.js';
+import {
+  cancelDecision, describeDecision, onDecisionTestReset, queueDecision, reportDecision, restoreNote,
+} from './undoQueue.js';
+
+/**
+ * The gate a decision answers (`GateDecision.ord`, wicked-crew-api-types 0.44.0 / crew#681): the
+ * daemon answers 409 `gate_changed` when it is no longer the open gate. Local until studio pins
+ * api-types ≥ 0.44.0 — then this is plain `GateDecision`.
+ */
+type GateDecisionWire = GateDecision & { ord?: number };
+
+/** An older daemon's strict schema refuses `ord` with a 400; once seen, stop sending it. */
+let daemonTakesOrd = true;
 
 /**
  * The ONE gate-decision implementation (DES-FEEDBACK-002 §2.3, slice H): the
@@ -59,6 +73,18 @@ function patch(runId: string, part: Partial<GateActionState>): void {
 // chip until the daemon's frame moves the run.
 useGateStore.subscribe((state, prev) => {
   if (state.gates === prev.gates) return;
+  // Wave 2a round 3: a QUEUED decision is about one gate. If that gate leaves (answered elsewhere,
+  // the run moved on) or is replaced by a new one (a new ord), the decision is dropped unsent —
+  // before the stale-state reset below re-arms the run's controls for whatever is open now.
+  for (const [runId, w] of watched) {
+    if (w.ord === undefined) continue;
+    const now = state.gates[runId];
+    if (now === undefined) {
+      cancelDecision(w.id, `Not sent: the gate on ${gateLabel(runId)} was answered elsewhere or the run moved on.`);
+    } else if (now.ord !== w.ord) {
+      cancelDecision(w.id, `Not sent: a new gate opened on ${gateLabel(runId)} — your decision was for the one before it.`);
+    }
+  }
   const stale = Object.entries(state.gates)
     .filter(([runId, gate]) => {
       const before = prev.gates[runId];
@@ -95,9 +121,51 @@ export function decideGate(runId: string, decision: GateDecision): Promise<void>
   return commitGateDecision(runId, decision).then(() => undefined, () => undefined);
 }
 
-/** How a committed decision ended: it went out, the operator undid it, or the
- *  double-submit guard dropped it (already queued, in flight, or answered). */
-export type DecisionOutcome = 'sent' | 'undone' | 'dropped';
+/** How a committed decision ended: it went out; the operator undid it; the world
+ *  cancelled it (its gate left or changed while queued); or the double-submit guard
+ *  dropped it (already queued, in flight, or answered). Every outcome but `sent` and
+ *  `undone` also reports a visible notice (`undoQueue` results) — never silent. */
+export type DecisionOutcome = 'sent' | 'undone' | 'cancelled' | 'dropped';
+
+/** Queued decisions watching their gate: run id → the decision's queue id and the gate's ord. */
+const watched = new Map<string, { id: number; ord: number | undefined }>();
+
+/** "beta · b1" — the gate in words, for the toast and the notices. */
+export function gateLabel(runId: string): string {
+  const name = useMembershipStore.getState().projectNameByRun[runId];
+  return name !== undefined && name !== '' ? `${name} · ${runId}` : runId;
+}
+
+/** True while `runId` has a decision queued, in flight, or landed — peek, triage and batch skip it. */
+export function isDecisionPending(runId: string): boolean {
+  const cur = useGateActionStore.getState().byGate[runId];
+  return cur !== undefined && (cur.queued || cur.busy || cur.answered !== null);
+}
+
+/** Watch `runIds`' gates for a queued decision `id` (the batch's path): capture each open gate's
+ *  ord now; a gate that leaves or changes before the send cancels the decision. Returns the ords. */
+export function watchDecision(id: number, runIds: readonly string[]): Record<string, number | undefined> {
+  const ords: Record<string, number | undefined> = {};
+  for (const runId of runIds) {
+    const ord = useGateStore.getState().gates[runId]?.ord;
+    ords[runId] = ord;
+    watched.set(runId, { id, ord });
+  }
+  return ords;
+}
+
+/** Stop watching (the decision was sent, undone, or cancelled). */
+export function unwatchDecision(runIds: readonly string[]): void {
+  for (const runId of runIds) watched.delete(runId);
+}
+
+/** The notice for a decision the double-submit guard refused. */
+function dropNotice(runId: string, cur: GateActionState): string {
+  const state = cur.queued ? 'is waiting to send (see its Undo toast)' : cur.busy ? 'is being sent' : 'was already sent';
+  return `Not sent: ${gateLabel(runId)} already has a decision that ${state}.`;
+}
+
+const PAST: Record<string, string> = { approve: 'Approved', reject: 'Rejected', 'request-changes': 'Requested changes on' };
 
 /**
  * THE decision path, for callers that own their own UI around it (the thread's
@@ -109,25 +177,50 @@ export type DecisionOutcome = 'sent' | 'undone' | 'dropped';
  */
 export function commitGateDecision(runId: string, decision: GateDecision): Promise<DecisionOutcome> {
   const cur = useGateActionStore.getState().byGate[runId] ?? IDLE_GATE_ACTION;
-  if (cur.queued || cur.busy || cur.answered !== null) return Promise.resolve('dropped');
+  if (cur.queued || cur.busy || cur.answered !== null) {
+    reportDecision('not-sent', dropNotice(runId, cur));
+    return Promise.resolve('dropped');
+  }
   patch(runId, { queued: true, error: null });
   const { verb, preview } = describeDecision(decision);
+  const label = gateLabel(runId);
+  const amend = decision.amend ?? null;
+  // The gate this decision was made on — watched while queued, and sent so the daemon can refuse
+  // a decision that outlived its gate (409 gate_changed).
+  const ord = useGateStore.getState().gates[runId]?.ord;
   return new Promise<DecisionOutcome>((resolve, reject) => {
-    queueDecision({
+    const id = queueDecision({
       verb,
       runIds: [runId],
       preview,
+      label,
+      amend,
       commit: async () => {
+        watched.delete(runId);
         patch(runId, { queued: false });
-        const error = await sendGateDecision(runId, decision);
-        if (error === null) resolve('sent');
-        else reject(new Error(error));
+        const error = await sendGateDecision(runId, ord === undefined ? decision : { ...decision, ord });
+        if (error === null) {
+          reportDecision('sent', `${PAST[verb] ?? 'Answered'} ${label}.`);
+          resolve('sent');
+        } else {
+          reportDecision('failed', `Not sent: ${label} — ${error}`);
+          reject(new Error(error));
+        }
       },
       onUndo: () => {
+        watched.delete(runId);
         patch(runId, { queued: false });
+        if (amend !== null) restoreNote(runId, amend);
         resolve('undone');
       },
+      onCancel: () => {
+        watched.delete(runId);
+        patch(runId, { queued: false });
+        if (amend !== null) restoreNote(runId, amend);
+        resolve('cancelled');
+      },
     });
+    watched.set(runId, { id, ord });
   });
 }
 
@@ -137,13 +230,28 @@ export function commitGateDecision(runId: string, decision: GateDecision): Promi
  * fan-out). Same double-submit guard: a call while a POST is open, or after it
  * landed, is dropped.
  */
-export async function sendGateDecision(runId: string, decision: GateDecision): Promise<string | null> {
+export async function sendGateDecision(runId: string, decision: GateDecisionWire): Promise<string | null> {
   const cur = useGateActionStore.getState().byGate[runId] ?? IDLE_GATE_ACTION;
   if (cur.busy || cur.answered !== null) return 'not sent — already answered or still in flight';
   patch(runId, { busy: true, error: null });
   try {
-    // The ONLY `confirmGate` call in studio (tests/gateWireSingleCaller.test.ts pins it).
-    await api.confirmGate(runId, decision);
+    const { ord, ...plain } = decision;
+    let body: GateDecisionWire = ord !== undefined && daemonTakesOrd ? { ...plain, ord } : plain;
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        // The ONLY `confirmGate` call in studio (tests/gateWireSingleCaller.test.ts pins it).
+        await api.confirmGate(runId, body as GateDecision);
+        break;
+      } catch (e) {
+        // A daemon older than api-types 0.44.0 refuses the unknown `ord` (400) — the contract
+        // says omit it there. Resend once without it; every later decision omits it.
+        const ordRefused = e instanceof ApiError && e.status === 400 && body.ord !== undefined
+          && /unknown fields?[^—]*`ord`/.test(e.wire); // crew's strict-schema sentence
+        if (attempt > 0 || !ordRefused) throw e;
+        daemonTakesOrd = false;
+        body = plain;
+      }
+    }
     patch(runId, { answered: decision.approve ? 'approved' : 'rejected' });
     // Prune the local gate immediately; the run's own status follows from the
     // daemon's frame, which is what actually moves the card (§1.4 live).

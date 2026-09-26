@@ -359,7 +359,7 @@ report["steps"]["ec17_all_modes"] = {
 }
 report["steps"]["gate_chip_reuse"] = {
     # The dashboard chip speaks the board chip's wire: POST /runs/r-q3/gate {approve:true}.
-    "ok": approve_posts == [("/api/v1/runs/r-q3/gate", {"approve": True})],
+    "ok": approve_posts == [("/api/v1/runs/r-q3/gate", {"approve": True, "ord": 0})],
     "gate_posts": approve_posts,
 }
 report["console_errors"] = console_errors[:10]

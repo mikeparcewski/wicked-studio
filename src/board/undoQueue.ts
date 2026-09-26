@@ -26,6 +26,10 @@ export interface PendingDecision {
   verb: DecisionVerb;
   /** The runs this decision answers — one for a single gate, N for a batch. */
   runIds: string[];
+  /** Which gate, in words: "beta · b1" (project · run); null for a batch. */
+  label: string | null;
+  /** The note riding the decision, if any — handed back on Undo so it is never lost. */
+  amend: string | null;
   /** The "what will happen" line (see {@link decisionPreview}). */
   preview: string;
   /** Epoch ms at which the decision was committed. */
@@ -34,16 +38,65 @@ export interface PendingDecision {
   dueAt: number;
 }
 
-interface UndoQueueStore {
-  pending: PendingDecision[];
+/**
+ * How a decision ENDED, kept briefly so the outcome is visible whichever surface is mounted: it
+ * went out, it failed, or it was not sent (the gate was answered elsewhere, a new gate opened, or
+ * the gate already had a decision). Never silent.
+ */
+export interface DecisionResult {
+  id: number;
+  kind: 'sent' | 'failed' | 'not-sent';
+  text: string;
+  at: number;
 }
 
-export const useUndoQueue = create<UndoQueueStore>(() => ({ pending: [] }));
+/** How long a result stays on screen. */
+export const RESULT_TTL_MS = 8_000;
+
+interface UndoQueueStore {
+  pending: PendingDecision[];
+  results: DecisionResult[];
+  /** Notes handed back by an Undo, keyed by run id (or `batch`), until a surface re-seeds from them. */
+  restoredNotes: Record<string, string>;
+}
+
+export const useUndoQueue = create<UndoQueueStore>(() => ({ pending: [], results: [], restoredNotes: {} }));
+
+let nextResultId = 1;
+
+/** Record an outcome (a toast-level line, gone after {@link RESULT_TTL_MS}). */
+export function reportDecision(kind: DecisionResult['kind'], text: string): void {
+  const id = nextResultId++;
+  useUndoQueue.setState((s) => ({ results: [...s.results, { id, kind, text, at: Date.now() }] }));
+  setTimeout(() => {
+    useUndoQueue.setState((s) => ({ results: s.results.filter((r) => r.id !== id) }));
+  }, RESULT_TTL_MS);
+}
+
+/** Hand a note back after an Undo. */
+export function restoreNote(key: string, text: string): void {
+  if (text.trim() === '') return;
+  useUndoQueue.setState((s) => ({ restoredNotes: { ...s.restoredNotes, [key]: text } }));
+}
+
+/** Take (and clear) a note handed back by an Undo — the surface re-seeds its input with it. */
+export function takeRestoredNote(key: string): string {
+  const text = useUndoQueue.getState().restoredNotes[key] ?? '';
+  if (text !== '') {
+    useUndoQueue.setState((s) => {
+      const restoredNotes = { ...s.restoredNotes };
+      delete restoredNotes[key];
+      return { restoredNotes };
+    });
+  }
+  return text;
+}
 
 interface Handle {
   timer: ReturnType<typeof setTimeout>;
   commit: () => Promise<void> | void;
   onUndo: (() => void) | undefined;
+  onCancel: ((reason: string) => void) | undefined;
 }
 
 const handles = new Map<number, Handle>();
@@ -58,10 +111,14 @@ export interface QueueSpec {
   verb: DecisionVerb;
   runIds: string[];
   preview: string;
-  /** Sends the decision — runs exactly once, when the window ends, unless undone. */
+  label?: string | null;
+  amend?: string | null;
+  /** Sends the decision — runs exactly once, when the window ends, unless undone or cancelled. */
   commit: () => Promise<void> | void;
   /** Runs when the operator undoes the decision (release per-gate "queued" state). */
   onUndo?: () => void;
+  /** Runs when the WORLD cancels it (the gate left or changed); defaults to `onUndo`. */
+  onCancel?: (reason: string) => void;
 }
 
 let windowOverride: number | null = null;
@@ -81,13 +138,16 @@ export function queueDecision(spec: QueueSpec): number {
     remove(id);
     void h.commit();
   }, windowMs);
-  handles.set(id, { timer, commit: spec.commit, onUndo: spec.onUndo });
+  handles.set(id, { timer, commit: spec.commit, onUndo: spec.onUndo, onCancel: spec.onCancel });
   useUndoQueue.setState((s) => ({
     pending: [
       ...s.pending,
       (() => {
         const queuedAt = Date.now();
-        return { id, verb: spec.verb, runIds: [...spec.runIds], preview: spec.preview, queuedAt, dueAt: queuedAt + windowMs };
+        return {
+          id, verb: spec.verb, runIds: [...spec.runIds], preview: spec.preview,
+          label: spec.label ?? null, amend: spec.amend ?? null, queuedAt, dueAt: queuedAt + windowMs,
+        };
       })(),
     ],
   }));
@@ -103,6 +163,19 @@ export function undoDecision(id: number): void {
   h.onUndo?.();
 }
 
+/**
+ * The world moved under a queued decision (its gate was answered elsewhere, the run ended, or a
+ * NEW gate opened): drop it unsent and say so — `reason` is the notice the operator reads.
+ */
+export function cancelDecision(id: number, reason: string): void {
+  const h = handles.get(id);
+  if (h === undefined) return;
+  clearTimeout(h.timer);
+  remove(id);
+  (h.onCancel ?? h.onUndo)?.(reason);
+  reportDecision('not-sent', reason);
+}
+
 const testResets: Array<() => void> = [];
 
 /** A decision-state owner (the gate-action store) registers how to wipe itself between tests. */
@@ -114,7 +187,7 @@ export function onDecisionTestReset(reset: () => void): void {
 export function resetDecisionsForTest(): void {
   for (const h of handles.values()) clearTimeout(h.timer);
   handles.clear();
-  useUndoQueue.setState({ pending: [] });
+  useUndoQueue.setState({ pending: [], results: [], restoredNotes: {} });
   for (const reset of testResets) reset();
 }
 
@@ -147,10 +220,10 @@ const HEADLINE_VERB: Record<DecisionVerb, string> = {
   'request-changes': 'Requesting changes',
 };
 
-/** "Approving in 10 s" / "Rejecting 3 gates in 4 s". */
+/** "Approving beta · b1 in 8 s" / "Rejecting 3 gates in 4 s". */
 export function undoHeadline(p: PendingDecision, now: number): string {
   const verb = HEADLINE_VERB[p.verb];
-  const what = p.runIds.length > 1 ? ` ${p.runIds.length} gates` : '';
+  const what = p.runIds.length > 1 ? ` ${p.runIds.length} gates` : p.label !== null ? ` ${p.label}` : '';
   return `${verb}${what} in ${secondsLeft(p, now)} s`;
 }
 
