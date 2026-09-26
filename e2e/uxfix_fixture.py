@@ -554,7 +554,9 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          #   `run.stall.escalated` on r1, honouring `?since=` / `?action=` / `?runId=`.
          # simple_gates — run ids whose SessionView answers awaiting_human with a
          #   SIMPLE cached gate (no options: the approve/reject pair).
-         "wave2b": False, "simple_gates": [],
+         # audit_delay_ms — GET /audit answers only after this delay (the handover's
+         #   in-flight state is observable).
+         "wave2b": False, "simple_gates": [], "audit_delay_ms": 0,
          }
 state_lock = threading.Lock()
 
@@ -2765,6 +2767,9 @@ class W2Handler(SimpleHTTPRequestHandler):
             # Wave 2b: the handover's trail — `?since=` (crew#677, unix millis, inclusive).
             with state_lock:
                 wave2b_on = state["wave2b"]
+                audit_delay = state["audit_delay_ms"]
+            if audit_delay:
+                time.sleep(audit_delay / 1000)
             if wave2b_on:
                 entries = [e for e in WAVE2B_AUDIT if not run_id or e.get("runId") == run_id]
             since = (q.get("since") or [""])[0]

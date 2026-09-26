@@ -12,6 +12,13 @@ elicitation raised over /ws on e1, and one failed run (f1, an hour ago).
   4. Resolve one gate over /ws (a `resumed` frame): within 2 s, with no reload, the
      approvals drop to 1 — a lone gate row, no group.
 
+Round 2 (review of #336): the queue beside other focus owners —
+  R2-1  a selected queue row never steals focus back from Ask on a run event;
+  R2-2  with a wall card selected AND the queue focused on another project's gate,
+        `a` decides nothing (the wall yields; the queue does not own `a`);
+  R2-3  Enter on a focused act control does that control's verb, not the remembered
+        row's; a click on a row selects it.
+
 Captures: e2e/shots/wave2b-queue-{grouped,expanded,resolved}.png.
 
 Prereqs: Python Playwright. Builds dist-sameorigin/ itself unless SKIP_STUDIO_BUILD=1.
@@ -141,6 +148,83 @@ with sync_playwright() as p:
     check("resolved-within-2s", True, elapsed_s=elapsed, rows=[r["key"] for r in page.evaluate(TOP_ROWS)])
     check("no-reload", page.evaluate("() => window.__w2bNoReload === true"))
     page.screenshot(path=str(SHOTS / "wave2b-queue-resolved.png"))
+
+    # ── Round 2: the queue beside other focus owners ───────────────────────────
+    gate_posts: list = []
+    page.on("request", lambda r: gate_posts.append(r.url)
+            if r.method == "POST" and "/gate" in r.url else None)
+
+    def fresh_home() -> None:
+        set_fixture(origin, simple_gates=["g1", "g2"], status_over={}, extra_frames=[])
+        page.goto(f"{origin}/", wait_until="networkidle")
+        page.get_by_test_id("needs-you-queue").wait_for(state="visible", timeout=15000)
+        page.wait_for_function(
+            "() => !!document.querySelector('[data-testid=\"need-row\"][data-key=\"group:approval\"]')",
+            timeout=10000)
+
+    # W2B_R2 (optional, e.g. "2,3"; 4 = R2-3b) runs a subset of the round-2 steps — each is independent.
+    only = {x.strip() for x in os.environ.get("W2B_R2", "1,2,3,4").split(",")}
+
+    # R2-1. A selected queue row must not steal focus back from Ask on a run event.
+    if "1" in only:
+        fresh_home()
+        page.get_by_test_id("needs-you-queue").focus()
+        page.keyboard.press("j")
+        check("r2-queue-row-selected", page.evaluate(SELECTED) == "group:approval")
+        page.keyboard.press("Control+Shift+A")
+        page.get_by_test_id("assist-input").wait_for(state="visible", timeout=10000)
+        page.get_by_test_id("assist-input").click()
+        page.keyboard.type("hello there")
+        set_fixture(origin, extra_frames=[{"type": "unitExecuting", "session": "e1", "ord": 0},
+                                          {"type": "resumed", "session": "b1", "ord": 0}])
+        page.wait_for_timeout(2500)
+        page.keyboard.type(" again")
+        focus = page.evaluate("() => { const a = document.activeElement; return a ? (a.dataset.testid || a.tagName) : null; }")
+        typed = page.get_by_test_id("assist-input").input_value()
+        check("r2-ask-keeps-focus-through-run-event", focus == "assist-input" and typed == "hello there again",
+              focus=focus, typed=typed)
+
+    # R2-2. Wall selection on card A + queue focus on gate B: `a` must decide NOTHING.
+    if "2" in only:
+        fresh_home()
+        page.evaluate("() => document.activeElement && document.activeElement.blur()")
+        page.keyboard.press("j")
+        wall = page.evaluate("() => { const c = document.querySelector('[data-testid=\"band-needs-you\"] [data-kbd-selected]'); "
+                             "return c ? c.getAttribute('data-kbd-item') : null; }")
+        check("r2-wall-card-selected", wall in ("alpha", "beta"), wall=wall)
+        other_run = "g2" if wall == "alpha" else "g1"
+        page.get_by_test_id("needs-you-queue").focus()
+        page.keyboard.press("j")
+        page.keyboard.press("Enter")
+        page.wait_for_function("() => document.querySelectorAll('[data-testid=\"need-member\"]').length === 2", timeout=3000)
+        for _ in range(3):
+            if page.evaluate(SELECTED) == f"gate:{other_run}":
+                break
+            page.keyboard.press("j")
+        check("r2-queue-on-gate-b", page.evaluate(SELECTED) == f"gate:{other_run}", selected=page.evaluate(SELECTED))
+        gate_posts.clear()
+        page.keyboard.press("a")
+        page.wait_for_timeout(1000)
+        check("r2-a-decides-nothing-while-queue-focused", gate_posts == [], posts=gate_posts, wall=wall)
+
+    # R2-3a. Enter on a focused control acts on THAT control, not the remembered row.
+    if "3" in only:
+        fresh_home()
+        page.get_by_test_id("needs-you-queue").focus()
+        page.keyboard.press("j")  # remembered row = the approvals group
+        page.locator('[data-testid="need-row"][data-key="fail:f1"] [data-testid="need-act"]').focus()
+        page.keyboard.press("Enter")
+        page.wait_for_timeout(800)
+        path = page.evaluate("() => window.location.pathname")
+        expanded = page.locator('[data-testid="need-member"]').count()
+        check("r2-enter-on-retry-runs-retry", path == "/runs/new" and expanded == 0, path=path, expanded=expanded)
+
+    # R2-3b. A click on a row selects it (focus and selection agree).
+    if "4" in only:
+        fresh_home()
+        page.locator('[data-testid="need-row"][data-key="fail:f1"] [data-testid="need-line"]').click()
+        check("r2-click-selects-row", page.evaluate(SELECTED) == "fail:f1", selected=page.evaluate(SELECTED))
+        page.screenshot(path=str(SHOTS / "wave2b-queue-click-selects.png"))
 
     set_fixture(origin, wave1=False, wave2b=False, simple_gates=[], status_over={}, extra_frames=[])
     browser.close()

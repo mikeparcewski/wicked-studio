@@ -67,14 +67,20 @@ with sync_playwright() as p:
         "if (!sessionStorage.getItem('w2b.seeded')) { sessionStorage.setItem('w2b.seeded', '1'); "
         f"localStorage.setItem('studio.visit', JSON.stringify({{ lastSeenAt: Date.now() - {3 * HOUR_MS} }})); }}")
 
+    # The audit read answers only after 4 s: its in-flight state must say "loading",
+    # never "this daemon cannot say" (review of #336, item 6).
     set_fixture(origin, wave1=True, wave2b=True, simple_gates=["g1"], gate_now=[],
-                status_over={}, extra_frames=[])
-    page.goto(f"{origin}/", wait_until="networkidle")
+                status_over={}, extra_frames=[], audit_delay_ms=4000)
+    page.goto(f"{origin}/", wait_until="domcontentloaded")
     try:
         page.get_by_test_id("handover-panel").wait_for(state="visible", timeout=15000)
     except Exception:
         page.screenshot(path=str(SHOTS / "wave2b-handover-missing.png"))
         fail("handover-shows", "no handover panel after a 3 h absence")
+    sys_sec = page.locator('[data-testid="handover-section"][data-section="system"]')
+    loading = {"state": sys_sec.get_attribute("data-state"), "text": sys_sec.inner_text()}
+    check("audit-in-flight-says-loading",
+          loading["state"] == "loading" and "cannot say" not in loading["text"], **loading)
     try:
         page.wait_for_function(
             """() => { const s = [...document.querySelectorAll('[data-testid="handover-section"]')];
@@ -113,7 +119,8 @@ with sync_playwright() as p:
     page.wait_for_timeout(800)
     check("dismissed-stays-gone", page.locator('[data-testid="handover-panel"]').count() == 0)
 
-    set_fixture(origin, wave1=False, wave2b=False, simple_gates=[], status_over={}, extra_frames=[])
+    set_fixture(origin, wave1=False, wave2b=False, simple_gates=[], status_over={}, extra_frames=[],
+                audit_delay_ms=0)
     browser.close()
 
 report["ok"] = True
