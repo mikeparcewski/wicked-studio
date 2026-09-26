@@ -544,6 +544,17 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          #   flip a run mid-page (pair with an extra_frames lifecycle frame so the app
          #   reconciles) or seed one failed run into the healthy corpus.
          "wave1_stall": False, "status_over": {},
+         # ── Studio wave 2b (e2e/wave2b_*_test.py) ──
+         # wave2b — ADDS to the wave1 corpus (turn both on): five runs across alpha /
+         #   beta / gamma — two gate candidates (g1 alpha, g2 beta), an executing run
+         #   the rig can raise an MCP elicitation on over /ws (e1 gamma), a run that
+         #   FAILED an hour ago (f1 beta) and one that COMPLETED two hours ago (d1
+         #   alpha), both carrying the daemon's `ended_at` (unix seconds). GET /audit
+         #   serves a human gate decision and the stall watchdog's system-actor
+         #   `run.stall.escalated` on r1, honouring `?since=` / `?action=` / `?runId=`.
+         # simple_gates — run ids whose SessionView answers awaiting_human with a
+         #   SIMPLE cached gate (no options: the approve/reject pair).
+         "wave2b": False, "simple_gates": [],
          }
 state_lock = threading.Lock()
 
@@ -698,6 +709,31 @@ WAVE1_R1_EVENTS = [
      "ts": NOW0 - 4 * MIN + 2 * SEC, "seq": 2},
     {"type": "unitExecuting", "sessionId": "r1", "ord": 0, "cli": "claude",
      "ts": NOW0 - 4 * MIN + 5 * SEC, "seq": 3},
+]
+# ── Studio wave 2b: added to the wave1 corpus, behind `wave2b` ─────────────────
+WAVE2B_RUNS = [
+    session("g1", "executing", "approve alpha's schema change", "apply the schema change"),
+    session("g2", "executing", "bump beta's cache TTL", "bump the cache TTL"),
+    session("e1", "executing", "backfill gamma's audit table", "backfill the audit table"),
+    session("f1", "failed", "rotate beta's API keys", "rotate the API keys"),
+    session("d1", "completed", "ship alpha's changelog", "ship the changelog"),
+]
+WAVE2B_RUNS[3]["session"]["ended_at"] = (NOW0 - HOUR) // 1000
+WAVE2B_RUNS[4]["session"]["ended_at"] = (NOW0 - 2 * HOUR) // 1000
+WAVE2B_RUNS[4]["units"][0]["status"] = "done"
+WAVE2B_MEMBERS = {"alpha": ["g1", "d1"], "beta": ["g2", "f1"], "gamma": ["e1"]}
+WAVE2B_ATTACHED_AT = {"g1": NOW0 - 3 * MIN, "g2": NOW0 - 3 * MIN, "e1": NOW0 - 5 * MIN,
+                      "f1": NOW0 - 4 * HOUR, "d1": NOW0 - 5 * HOUR}
+# The simple gates' cached records: g1 has waited longer than g2.
+WAVE2B_GATES = {"g1": ("Approve the schema change?", 20 * MIN),
+                "g2": ("Approve the TTL bump?", 10 * MIN)}
+WAVE2B_AUDIT = [
+    {"ts": NOW0 - 40 * MIN, "action": "gate.decided",
+     "actor": {"id": "local", "kind": "human", "trust": "admin"},
+     "runId": "b1", "detail": {"approve": True}},
+    {"ts": NOW0 - 30 * MIN, "action": "run.stall.escalated",
+     "actor": {"id": "crew.stall-watchdog", "kind": "system", "trust": "admin"},
+     "runId": "r1", "detail": {"quietForMs": 1_800_000, "outcome": "surfaced"}},
 ]
 # r1 gone silent: the same tail, two hours old (wave1_stall).
 WAVE1_R1_STALL_EVENTS = [dict(e, ts=e["ts"] - 2 * HOUR + 4 * MIN) for e in WAVE1_R1_EVENTS]
@@ -2090,7 +2126,7 @@ def assemble_runs() -> list:
         if state["no_runs"]:
             runs = []
         elif state["wave1"]:
-            runs = list(WAVE1_RUNS)
+            runs = list(WAVE1_RUNS) + (list(WAVE2B_RUNS) if state["wave2b"] else [])
         else:
             runs = RUNS + ([ORPHAN] if state["orphan"] else []) \
                 + ([LONG_RUN] if state["long_prompt"] else []) \
@@ -2197,9 +2233,12 @@ def assemble_runs() -> list:
                 r["session"]["project_id"] = RUN_PROJECT.get(r["session"]["id"])
     with state_lock:
         status_over = dict(state["status_over"])
-    if status_over:
+        simple_gates = list(state["simple_gates"])
+    if status_over or simple_gates:
         runs = json.loads(json.dumps(runs))
         for r in runs:
+            if r["session"]["id"] in simple_gates:
+                r["session"]["status"] = "awaiting_human"
             if r["session"]["id"] in status_over:
                 r["session"]["status"] = status_over[r["session"]["id"]]
     return runs
@@ -2723,6 +2762,14 @@ class W2Handler(SimpleHTTPRequestHandler):
                 if run_id:
                     pool = [e for e in pool if e.get("runId") == run_id]
                 entries = pool
+            # Wave 2b: the handover's trail — `?since=` (crew#677, unix millis, inclusive).
+            with state_lock:
+                wave2b_on = state["wave2b"]
+            if wave2b_on:
+                entries = [e for e in WAVE2B_AUDIT if not run_id or e.get("runId") == run_id]
+            since = (q.get("since") or [""])[0]
+            if since:
+                entries = [e for e in entries if e.get("ts", 0) >= int(since)]
             if action:
                 entries = [e for e in entries if e.get("action") == action]
             entries = sorted(entries, key=lambda e: -e.get("ts", 0))
@@ -2832,12 +2879,16 @@ class W2Handler(SimpleHTTPRequestHandler):
             pid = urllib.parse.unquote(parts[4])
             with state_lock:
                 wave1_on = state["wave1"]
+                wave2b_on = state["wave2b"]
             if wave1_on:
+                refs = list(WAVE1_MEMBERS.get(pid, [])) \
+                    + (WAVE2B_MEMBERS.get(pid, []) if wave2b_on else [])
+                clocks = {**WAVE1_ATTACHED_AT, **WAVE2B_ATTACHED_AT}
                 self._json(200, {"members": [
                     {"id": f"{pid}:crew.run:{ref}", "project_id": pid,
                      "member_kind": "crew.run", "member_ref": ref, "meta": None,
-                     "attached_at": WAVE1_ATTACHED_AT[ref], "attached_by": "studio"}
-                    for ref in WAVE1_MEMBERS.get(pid, [])]})
+                     "attached_at": clocks[ref], "attached_by": "studio"}
+                    for ref in refs]})
                 return True
             refs = list(MEMBERS.get(pid, []))
             with state_lock:
@@ -2942,6 +2993,11 @@ class W2Handler(SimpleHTTPRequestHandler):
             elif rid in BATCH_GATE_PROMPTS and state["batch_gates"]:
                 # Slice L: the batch corpus's SIMPLE cached gates (no options).
                 prompt, age = BATCH_GATE_PROMPTS[rid]
+                self._json(200, {"runId": rid, "ord": 0, "lifecycle": "open",
+                                 "prompt": prompt, "receivedAt": iso(NOW0 - age)})
+            elif rid in state["simple_gates"] and rid in WAVE2B_GATES:
+                # Wave 2b: a SIMPLE cached gate (no options — the approve/reject pair).
+                prompt, age = WAVE2B_GATES[rid]
                 self._json(200, {"runId": rid, "ord": 0, "lifecycle": "open",
                                  "prompt": prompt, "receivedAt": iso(NOW0 - age)})
             elif rid in state["gate_now"]:
