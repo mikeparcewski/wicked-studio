@@ -100,6 +100,21 @@ describe('Back restores where you were — history-entry state', () => {
     back.rerender();
     expect(el.scrollTop).toBe(240);
   });
+
+  it('a user scroll before the content is tall enough cancels the pending restore', () => {
+    window.history.replaceState({ 'k.late': 240 }, '', '/');
+    const el = document.createElement('div');
+    let scrollHeight = 100;
+    Object.defineProperty(el, 'scrollHeight', { get: () => scrollHeight });
+    Object.defineProperty(el, 'clientHeight', { get: () => 100 });
+    const ref = { current: el };
+    const hook = renderHook(() => useHistoryScroll(ref, 'k.late'));
+    el.scrollTop = 30;
+    el.dispatchEvent(new Event('scroll')); // the operator moved first
+    scrollHeight = 600;
+    hook.rerender();
+    expect(el.scrollTop).toBe(30); // no jump minutes later
+  });
 });
 
 describe('outbound harness — the draft', () => {

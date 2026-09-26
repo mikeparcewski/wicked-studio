@@ -62,7 +62,7 @@ with sync_playwright() as p:
         "document.addEventListener('DOMContentLoaded', () => { const s = document.createElement('style'); "
         f"s.textContent = {json.dumps(HIDE_GATE_TOASTS)}; document.head.appendChild(s); }});")
 
-    set_fixture(origin, wave1=True, gate_now=[])
+    set_fixture(origin, wave1=True, gate_now=[], status_over={})
     page.goto(f"{origin}/runs/c1", wait_until="networkidle")
     page.get_by_test_id("run-header").wait_for(state="visible", timeout=15000)
 
@@ -105,7 +105,26 @@ with sync_playwright() as p:
     check("live-run-kind-is-status",
           page.get_by_test_id("outbound-draft").get_attribute("data-kind") == "status")
 
-    set_fixture(origin, wave1=False, gate_now=[])
+    # ── round 2: the run FINISHES while the operator edits — the edit survives ──
+    live = page.get_by_test_id("outbound-text")
+    page.wait_for_function(
+        "() => (document.querySelector('[data-testid=\"outbound-text\"]')?.value ?? '').length > 0",
+        timeout=10000)
+    live.evaluate("el => { el.focus(); el.setSelectionRange(el.value.length, el.value.length); }")
+    page.keyboard.type("\nEdited while it ran.")
+    typed = live.input_value()
+    page.get_by_test_id("run-cancel").wait_for(state="attached", timeout=10000)
+    set_fixture(origin, status_over={"r1": "completed"},
+                extra_frames=[{"type": "sessionCompleted", "session": "r1"}])
+    # The app has seen the flip once the run offers no Cancel (terminal runs cannot be cancelled).
+    page.get_by_test_id("run-cancel").wait_for(state="detached", timeout=15000)
+    page.wait_for_timeout(1500)
+    page.screenshot(path=str(SHOTS / "wave1-draft-survives.png"))
+    check("edit-survives-run-finishing", live.input_value() == typed,
+          before_len=len(typed), after_len=len(live.input_value()))
+    check("kind-fixed-at-open", page.get_by_test_id("outbound-draft").get_attribute("data-kind") == "status")
+
+    set_fixture(origin, wave1=False, gate_now=[], status_over={})
     browser.close()
 
 report["ok"] = True

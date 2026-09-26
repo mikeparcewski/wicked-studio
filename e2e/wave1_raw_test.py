@@ -130,11 +130,40 @@ with sync_playwright() as p:
     check("files-route-shows-r1-diff", True)
     back_home(page, "files")
 
+    # ── round 2: Escape with the palette open over /runs/r1/files closes ONLY the palette ──
+    palette_run(page, ">files r1")
+    page.wait_for_function("() => window.location.pathname === '/runs/r1/files'", timeout=10000)
+    page.get_by_test_id("file-viewer").wait_for(state="visible", timeout=10000)
+    page.keyboard.press("Control+k")
+    page.get_by_test_id("command-palette").wait_for(state="visible", timeout=5000)
+    page.keyboard.press("Escape")
+    page.get_by_test_id("command-palette").wait_for(state="detached", timeout=5000)
+    page.wait_for_timeout(400)
+    check("escape-closes-palette-not-files",
+          page.evaluate("() => window.location.pathname") == "/runs/r1/files"
+          and page.get_by_test_id("file-viewer").count() == 1,
+          path=page.evaluate("() => window.location.pathname"))
+    back_home(page, "files-escape")
+
     # ── >config → /system ────────────────────────────────────────────────────────
     palette_run(page, ">config")
     page.wait_for_function("() => window.location.pathname === '/system'", timeout=10000)
     check("config-route", True)
     back_home(page, "config")
+
+    # ── round 2: the raw view opened as the FIRST entry — its Back stays in studio ──
+    first = browser.new_page(viewport={"width": W, "height": H}, device_scale_factor=1)
+    first.goto(f"{origin}/runs/r1/events", wait_until="networkidle")
+    first.get_by_test_id("raw-events").wait_for(state="visible", timeout=10000)
+    first.get_by_test_id("run-raw-back").click()
+    try:
+        first.wait_for_function("() => window.location.origin + window.location.pathname === "
+                                f"{json.dumps(origin + '/')}", timeout=10000)
+        landed = True
+    except Exception:  # noqa: BLE001 — reported below
+        landed = False
+    check("first-entry-back-lands-home", landed, url=first.url)
+    first.close()
 
     set_fixture(origin, wave1=False, gate_now=[])
     browser.close()

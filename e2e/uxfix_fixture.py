@@ -538,6 +538,12 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          #   events view) and every wave-1 run answers GET /runs/:id/deliver-text
          #   (the outbound draft). Default False: no standing rig's wires change.
          "wave1": False,
+         # wave1_stall — r1's durable event tail ends 2 HOURS ago: an executing run
+         #   that has gone silent (wave 1 round 2: a stalled run is an exception).
+         # status_over — {run id: status} applied last on both run wires, so a rig can
+         #   flip a run mid-page (pair with an extra_frames lifecycle frame so the app
+         #   reconciles) or seed one failed run into the healthy corpus.
+         "wave1_stall": False, "status_over": {},
          }
 state_lock = threading.Lock()
 
@@ -693,6 +699,8 @@ WAVE1_R1_EVENTS = [
     {"type": "unitExecuting", "sessionId": "r1", "ord": 0, "cli": "claude",
      "ts": NOW0 - 4 * MIN + 5 * SEC, "seq": 3},
 ]
+# r1 gone silent: the same tail, two hours old (wave1_stall).
+WAVE1_R1_STALL_EVENTS = [dict(e, ts=e["ts"] - 2 * HOUR + 4 * MIN) for e in WAVE1_R1_EVENTS]
 WAVE1_R1_DIFF = """\
 diff --git a/src/upload.ts b/src/upload.ts
 --- a/src/upload.ts
@@ -2187,6 +2195,13 @@ def assemble_runs() -> list:
             # corpora are on (this is the membership-derived fallback).
             if project_dto_on and "project_id" not in r["session"]:
                 r["session"]["project_id"] = RUN_PROJECT.get(r["session"]["id"])
+    with state_lock:
+        status_over = dict(state["status_over"])
+    if status_over:
+        runs = json.loads(json.dumps(runs))
+        for r in runs:
+            if r["session"]["id"] in status_over:
+                r["session"]["status"] = status_over[r["session"]["id"]]
     return runs
 
 
@@ -2964,7 +2979,7 @@ class W2Handler(SimpleHTTPRequestHandler):
             events = list(RUN_EVENTS.get(rid, []))
             with state_lock:
                 if state["wave1"] and rid == "r1":
-                    events = list(WAVE1_R1_EVENTS)
+                    events = list(WAVE1_R1_STALL_EVENTS if state["wave1_stall"] else WAVE1_R1_EVENTS)
             with state_lock:
                 viewer_on = state["viewer"]
                 river_on = state["river"]
