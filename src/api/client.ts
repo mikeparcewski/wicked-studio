@@ -178,6 +178,15 @@ export const api = {
   getAuditByAction: (action: string) =>
     apiFetch<AuditPage>(`/audit?action=${encodeURIComponent(action)}`),
 
+  /**
+   * The audit trail since an instant (`GET /audit?since=<epoch ms>`, crew#677 — inclusive,
+   * newest first) — the handover's "what the system did for you". A daemon predating
+   * `since` ignores it and answers the newest page of the whole trail, so callers filter
+   * on `ts` themselves too.
+   */
+  getAuditSince: (since: number, limit = 200) =>
+    apiFetch<AuditPage>(`/audit?since=${Math.max(0, Math.floor(since))}&limit=${limit}`),
+
   /** A run's durably-persisted event trail (`GET /runs/:id/events`). Used to backfill the event
    * store on a reload with no live `/ws` replay so Burn/insight panels are not empty (FINDING-013).
    * Rejects (503) when the engine build has no event-log binding — callers treat that as "no backfill". */

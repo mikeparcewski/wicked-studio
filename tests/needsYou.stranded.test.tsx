@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
-import { needsYouRows, type NeedsYouInputs } from '../src/board/needsYou.js';
+import { needsYouRows, type NeedRow, type NeedsYouInputs } from '../src/board/needsYou.js';
+import { useNeedsQueue } from '../src/hooks/useNeedsQueue.js';
 import { narrateStranded } from '../src/components/narrator.js';
 import { NeedsYouQueue } from '../src/components/NeedsYouQueue.js';
 import { makeUnit, makeView } from './factories.js';
@@ -112,13 +113,20 @@ describe('stranded completed runs queue (crew#393)', () => {
   });
 });
 
+/** The queue component renders what `useNeedsQueue` derives (wave 2b: skins only render). */
+function Queue({ rows, runs }: { rows: NeedRow[]; runs: SessionView[] }): React.ReactElement {
+  const navigate = vi.fn();
+  const queue = useNeedsQueue(rows, navigate, NOW);
+  return <NeedsYouQueue queue={queue} runs={runs} navigate={navigate} now={NOW} />;
+}
+
 describe('the home queue component counts stranded runs', () => {
   afterEach(cleanup);
 
   it('renders the stranded row in the needs-you count, never the calm copy', () => {
     const runs = [completedRun('r-str', 'stranded'), completedRun('r-ok', 'delivered')];
     const rows = needsYouRows(inputs({ runs }));
-    render(<NeedsYouQueue rows={rows} runs={runs} navigate={vi.fn()} now={NOW} />);
+    render(<Queue rows={rows} runs={runs} />);
 
     const queue = screen.getByTestId('needs-you-queue');
     expect(queue.dataset.count).toBe('1');

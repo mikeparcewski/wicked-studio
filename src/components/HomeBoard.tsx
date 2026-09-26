@@ -6,6 +6,7 @@ import { getDiagnostics, type Diagnostics } from '../api/diagnostics.js';
 import type { SteeringRule } from '../api/steering.js';
 import type { GovernanceClaim, SessionView } from '../api/types.js';
 import { getWikiScoreboard, type WikiRuleEvidenceRow } from '../api/wiki.js';
+import { listProposals, type Proposal } from '../api/proposals.js';
 import { bandHint, bandLabel } from '../board/bandCopy.js';
 import { bandCountLine, bandExpandsByDefault } from '../board/bandExpansion.js';
 import { windowRows } from '../board/boardWindow.js';
@@ -15,7 +16,12 @@ import { leadMovingRun } from '../board/phaseProgress.js';
 import { useBoardModel, type BoardProject } from '../hooks/useBoardModel.js';
 import { useHistoryScroll, useHistoryState } from '../hooks/useHistoryState.js';
 import { modePath, projectPath, runTimelinePath, type Navigate } from '../hooks/useRoute.js';
+import { useHandover } from '../hooks/useHandover.js';
+import { useNeedsQueue } from '../hooks/useNeedsQueue.js';
 import { useTriageCursor, type TriageCursor, type TriageItem } from '../hooks/useTriageCursor.js';
+import { useElicitationStore } from '../store/elicitations.js';
+import { useNotificationStore } from '../store/notifications.js';
+import { useStallEscalationStore } from '../store/stallEscalations.js';
 import { useDocsCache } from '../store/docsCache.js';
 import { useGateStore } from '../store/gates.js';
 import { useMembershipStore } from '../store/membership.js';
@@ -26,6 +32,7 @@ import { DeckVerifiedStrip } from './DeckVerifiedStrip.js';
 import { DeckSectionDoors, type SectionDoor } from './DeckSectionDoors.js';
 import { DeckBurnChart } from './DeckBurnChart.js';
 import { listEvalRuns } from '../api/testing.js';
+import { HandoverPanel } from './HandoverPanel.js';
 import { NeedsYouQueue } from './NeedsYouQueue.js';
 import { ACTIVE_CARD_H, ago, ProjectCard, QUIET_CARD_H } from './ProjectCard.js';
 import { humanTitle } from './runIdentity.js';
@@ -151,9 +158,11 @@ interface HomeWires {
   diag: Diagnostics | null;
   /** Count of recorded eval runs (the eval store) — the Evals door's number. */
   evalCount: number | null;
+  /** Pending steering/memory proposals (`GET /proposals?state=pending`) — queue rows. */
+  proposals: Proposal[] | null;
 }
 
-const NO_WIRES: HomeWires = { chats: null, campaigns: null, claims: null, rules: null, perRule: null, diag: null, evalCount: null };
+const NO_WIRES: HomeWires = { chats: null, campaigns: null, claims: null, rules: null, perRule: null, diag: null, evalCount: null, proposals: null };
 
 export function HomeBoard({ runs, navigate, onOpenAsk }: Props): React.ReactElement {
   const { items, unfiled, failedAt, stalledAt, repos, loading, error } = useBoardModel(runs);
@@ -199,6 +208,7 @@ export function HomeBoard({ runs, navigate, onOpenAsk }: Props): React.ReactElem
     );
     void read(() => getDiagnostics()).then((r) => r !== null && deposit({ diag: r }));
     void read(() => listEvalRuns()).then((r) => r !== null && deposit({ evalCount: r.length }));
+    void read(() => listProposals({ state: 'pending' })).then((r) => r !== null && deposit({ proposals: r }));
     return () => { cancelled = true; };
   }, []);
 
@@ -229,6 +239,17 @@ export function HomeBoard({ runs, navigate, onOpenAsk }: Props): React.ReactElem
 
   const gates = useGateStore((s) => s.gates);
   const projectIdByRun = useMembershipStore((s) => s.projectIdByRun);
+  const elicitations = useElicitationStore((s) => s.elicitations);
+  const notifications = useNotificationStore((s) => s.notifications);
+  const stallEscalations = useStallEscalationStore((s) => s.escalations);
+  // The bell's unread steer requests — the queue's `steer-request` rows.
+  const steerRequests = useMemo(
+    () =>
+      notifications
+        .filter((n) => n.kind === 'steer_requested' && !n.read)
+        .map((n) => ({ id: n.id, runId: n.runId, message: n.message, ts: n.ts })),
+    [notifications],
+  );
 
   // The board's charts + the queue's ages bucket on the one honest per-run
   // clock the board already fetched — membership attach, merged across projects.
@@ -253,10 +274,21 @@ export function HomeBoard({ runs, navigate, onOpenAsk }: Props): React.ReactElem
         // The needs-you wall reads the ENGINE campaigns off the listing (a label group has no gate of its own).
         campaigns: wires.campaigns?.campaigns ?? [],
         stalledAt,
+        elicitations,
+        steerRequests,
+        stallEscalations,
+        proposals: wires.proposals ?? [],
         now,
       }),
-    [runs, gates, failedAt, attachedAt, projectIdByRun, wires.chats, wires.campaigns, repos, stalledAt, now],
+    [runs, gates, failedAt, attachedAt, projectIdByRun, wires.chats, wires.campaigns, wires.proposals, repos, stalledAt, elicitations, steerRequests, stallEscalations, now],
   );
+
+  // The queue's behaviour (wave 2b): grouping, the cursor, the verbs. Called BEFORE the
+  // wall's triage cursor — registration order is shortcut precedence, and the queue's
+  // keys (guarded on focus inside the queue) must be offered first.
+  const queue = useNeedsQueue(needRows, navigate, now);
+  // Handover on arrival (wave 2b): after an absence, the first thing Home shows.
+  const handover = useHandover(runs, failedAt);
 
   // Slice H's keyboard triage cursor — survives on the wall's gated cards.
   const triageItems = useMemo<TriageItem[]>(
@@ -414,6 +446,7 @@ export function HomeBoard({ runs, navigate, onOpenAsk }: Props): React.ReactElem
 
       {!fresh && !loading && error === null && (
         <>
+          <HandoverPanel handover={handover} navigate={navigate} now={now} />
           {/* ── The KPI ribbon: the hero, full-width — FLOW / ATTENTION / TRUST&SPEND on the real
                  created_at clock (the command-deck redesign). ── */}
           <div style={{ flexShrink: 0, padding: '0 var(--space-6)' }}>
@@ -428,7 +461,7 @@ export function HomeBoard({ runs, navigate, onOpenAsk }: Props): React.ReactElem
               padding: '0 var(--space-6) var(--space-4)', maxHeight: '52vh', minHeight: 0,
             }}
           >
-            <NeedsYouQueue rows={needRows} runs={runs} navigate={navigate} now={now} />
+            <NeedsYouQueue queue={queue} runs={runs} navigate={navigate} now={now} />
             <div
               style={{
                 flex: '1 1 0', minWidth: '320px', display: 'flex', flexDirection: 'column',
