@@ -557,8 +557,18 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          # audit_delay_ms — GET /audit answers only after this delay (the handover's
          #   in-flight state is observable).
          "wave2b": False, "simple_gates": [], "audit_delay_ms": 0,
+         # ── Studio wave 2a (e2e/wave2a_*_test.py) ──
+         # wave2a_feed — r1's durable tail grows a long run of narrated output
+         #   captures, so its feed is tall enough to scroll to "the middle" (peek,
+         #   jump, back). Rides WITH `wave1`.
+         # gate_simple — run ids in `gate_now` whose cached gate GET answers the
+         #   SIMPLE shape (no `options` key: approve/reject), so a triage `a`
+         #   answers in place (preview, commit, undo window).
+         "wave2a_feed": False, "gate_simple": [],
          }
 state_lock = threading.Lock()
+# Wave 2a: every POST /runs/:id/gate the fixture received (read over GET /__fixture/gate-posts).
+gate_post_log: list = []
 
 # ── The crew settings store (DES-VISION-001 §3.3, vision slice 7) ──────────────
 #
@@ -736,6 +746,12 @@ WAVE2B_AUDIT = [
     {"ts": NOW0 - 30 * MIN, "action": "run.stall.escalated",
      "actor": {"id": "crew.stall-watchdog", "kind": "system", "trust": "admin"},
      "runId": "r1", "detail": {"quietForMs": 1_800_000, "outcome": "surfaced"}},
+]
+# wave2a_feed: r1's feed grows 40 narrated unit-output captures after its tail.
+WAVE2A_R1_FEED = [
+    {"type": "unitOutputCaptured", "session": "r1", "ord": 0, "cli": "claude",
+     "outputBytes": 4096 + 512 * i, "ts": NOW0 - 3 * MIN + i * SEC, "seq": 4 + i}
+    for i in range(40)
 ]
 # r1 gone silent: the same tail, two hours old (wave1_stall).
 WAVE1_R1_STALL_EVENTS = [dict(e, ts=e["ts"] - 2 * HOUR + 4 * MIN) for e in WAVE1_R1_EVENTS]
@@ -3005,6 +3021,10 @@ class W2Handler(SimpleHTTPRequestHandler):
                 prompt, age = WAVE2B_GATES[rid]
                 self._json(200, {"runId": rid, "ord": 0, "lifecycle": "open",
                                  "prompt": prompt, "receivedAt": iso(NOW0 - age)})
+            elif rid in state["gate_now"] and rid in state["gate_simple"]:
+                # Wave 2a: the SIMPLE shape (no `options` key) — answered in place.
+                self._json(200, {"runId": rid, "ord": 3, "lifecycle": "open",
+                                 "prompt": GATE_NOW_PROMPT, "receivedAt": iso(NOW0)})
             elif rid in state["gate_now"]:
                 # Slice BD: the arrived gate for an annotated run — `options:
                 # null` = free text, the COMPLEX shape (§7.11): a steer-worthy
@@ -3041,6 +3061,8 @@ class W2Handler(SimpleHTTPRequestHandler):
             with state_lock:
                 if state["wave1"] and rid == "r1":
                     events = list(WAVE1_R1_STALL_EVENTS if state["wave1_stall"] else WAVE1_R1_EVENTS)
+                    if state["wave2a_feed"]:
+                        events = events + WAVE2A_R1_FEED
             with state_lock:
                 viewer_on = state["viewer"]
                 river_on = state["river"]
@@ -3754,6 +3776,12 @@ class W2Handler(SimpleHTTPRequestHandler):
         if self.headers.get("Upgrade", "").lower() == "websocket":
             return self._ws()
         path = urllib.parse.urlparse(self.path).path
+        # Wave 2a: the SERVER-side record of every gate decision that arrived —
+        # the only witness for "closing the tab during the undo window sends nothing".
+        if path == "/__fixture/gate-posts":
+            with state_lock:
+                posts = list(gate_post_log)
+            return self._json(200, {"posts": posts})
         if self._api(path):
             return None
         if not Path(self.translate_path(self.path)).is_file():
@@ -3766,6 +3794,9 @@ class W2Handler(SimpleHTTPRequestHandler):
         if path == "/__fixture":
             # `reset_learn` clears the learned-theme readback state between page
             # loads (the brand-learn rig re-runs the flow from a clean 404).
+            if body.get("reset_gate_posts"):
+                with state_lock:
+                    gate_post_log.clear()
             if body.get("reset_learn"):
                 with learned_lock:
                     learned_themes.clear()
@@ -3916,6 +3947,7 @@ class W2Handler(SimpleHTTPRequestHandler):
             rid = urllib.parse.unquote(parts[4])
             with state_lock:
                 conflict = rid in state["gate_409"]
+                gate_post_log.append({"runId": rid, "body": body, "at": time.time()})
             if conflict:
                 # Slice L (§9.5): the daemon's real 409 — the run stopped
                 # awaiting between the selection and the fan-out.
