@@ -13,6 +13,16 @@ npm publish dates. Every version listed here exists on
 ## [Unreleased]
 
 ### Added
+- **The Needs-you queue lives in the app shell.** Its inputs (live chats, campaigns, the repo
+  register, pending proposals) are loaded by one app-level store (`store/needsSources.ts`) and
+  folded by one hook (`useNeedsRows`), so Home, the right rail and peek read the same ranked rows
+  on every route. Under `compact-rail` the right rail now shows on every route, and peek off Home
+  sees proposals, chats, campaigns and repo graphs, not only gates and the `/ws`-fed stores. Each
+  input is read once and re-read only when Home finds it older than 30 s, so a route walk re-reads
+  nothing. The shell's board model and the launch composer share the one `GET /repos`, and the
+  pages that already read chats, proposals or repos deposit their answers into the store without
+  a request. `e2e/needs_shell_test.py` covers the rail on a run page, peek on a run page, and the
+  request budget.
 - **Skin contract.** Studio's shape is now a skin over the one behaviour layer. A skin is a
   manifest (`theming/skins.ts`): token overrides of the same semantic-token names tokens.css
   declares (never a primitive, never a colour), a shell layout (`classic` | `right-rail`), and a

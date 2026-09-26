@@ -37,6 +37,7 @@ import { useIsSystemWorkflow } from '../store/workflowCache.js';
 import { DeliveryChip } from './RunDelivery.js';
 import { humanTitle, runShortId, runWhenWord } from './runIdentity.js';
 import { STATUS_STYLE } from './RunCard.js';
+import { useNeedsSources } from '../store/needsSources.js';
 
 /**
  * The project HOMEPAGE — `/p/:projectId` with no mode segment (lane B): the
@@ -220,6 +221,8 @@ export function ProjectDashboard({ projectId, runs, navigate }: Props): React.Re
     void (async () => {
       try {
         const ps = await listProposals({ state: 'pending' });
+        // The needs-you queue's proposals input rides this read (a deposit, zero requests).
+        useNeedsSources.getState().depositProposals(ps);
         if (!cancelled) setPendingReview(ps.filter((p) => proposalKind(p) !== 'other').length);
       } catch {
         // Unsupported OR any read failure: no GK band, never an error wall on the project home.

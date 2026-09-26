@@ -17,6 +17,8 @@ import { useFailureClocks } from '../store/failureClocks.js';
 import { useGateStore, type OpenGate } from '../store/gates.js';
 import { useMembershipStore } from '../store/membership.js';
 import { useProjectsStore } from '../store/projects.js';
+import { activityEvidence, stalledRuns } from '../board/stalls.js';
+import { HOME_FRESH_MS, useNeedsSources } from '../store/needsSources.js';
 import { useRuntimeStore } from '../store/runtime.js';
 
 /**
@@ -315,9 +317,11 @@ export function useBoardModel(runs: SessionView[]): BoardModel {
     void (async () => {
       let active: Project[];
       try {
+        // The repo register rides the app-level needs source: the shell's board model and
+        // Home's share ONE read (it is also the queue's repo-graph input).
         const [{ projects: all }, repos] = await Promise.all([
           api.listProjects(),
-          api.listRepos().then((r) => r.repos).catch(() => []),
+          useNeedsSources.getState().loadRepos(HOME_FRESH_MS).catch((): RepoEntry[] => []),
         ]);
         // The synthesized "Unfiled" bucket is NOT a project and never renders as a
         // card (F5, D4) — the same exclusion `useLegacyRedirect` applies, for the
@@ -434,15 +438,7 @@ export function useBoardModel(runs: SessionView[]): BoardModel {
   }, [runs, loading, lastEventAt]);
 
   /** The freshest activity evidence for a run: a streamed frame or its durable tail. */
-  const evidenceAt = useMemo(() => {
-    return (id: string): number | undefined => {
-      const log = useRuntimeStore.getState().logs[id];
-      const frame = log !== undefined && log.length > 0 ? log[log.length - 1]?.ts : undefined;
-      const tail = lastEventAt[id];
-      if (frame === undefined) return tail;
-      return tail === undefined ? frame : Math.max(frame, tail);
-    };
-  }, [lastEventAt]);
+  const evidenceAt = useMemo(() => activityEvidence(lastEventAt), [lastEventAt]);
 
   const items = useMemo(
     () => {
@@ -483,15 +479,7 @@ export function useBoardModel(runs: SessionView[]): BoardModel {
     [projects, bindings, runs, gates, docActivity, failedAt, evidenceAt, now],
   );
 
-  const stalledAt = useMemo(() => {
-    const out: Record<string, number> = {};
-    for (const v of runs) {
-      if (!ACTIVE.has(v.session.status)) continue;
-      const ev = evidenceAt(v.session.id);
-      if (isStalled(ev, now)) out[v.session.id] = ev!;
-    }
-    return out;
-  }, [runs, evidenceAt, now]);
+  const stalledAt = useMemo(() => stalledRuns(runs, evidenceAt, now), [runs, evidenceAt, now]);
 
   // The unfiled set (F5, re-pointed by DES-UX-001 §2.3 rule 3): a run whose DTO
   // carries `project_id: null` is what the DAEMON considers unfiled — daemon

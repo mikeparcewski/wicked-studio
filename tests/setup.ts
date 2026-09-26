@@ -7,9 +7,14 @@ import { resetDecisionsForTest, setUndoWindowForTest } from '../src/board/undoQu
 // itself (tests/undoQueue.test.tsx, tests/gateCardUndo.test.tsx) restore 10 s in their own
 // beforeEach. Decision state (queued/answered per run) is wiped between tests so one test's
 // answered gate never drops the next test's decision.
-beforeEach(() => {
+// The needs-you queue's app-level sources (src/store/needsSources.ts) are session-scoped with a
+// freshness window; every test starts never-read, so each suite's per-test API mocks are read.
+// Imported lazily, AFTER the suite's own `vi.mock`s are registered: a static import here would
+// cache the store over the real API client before a suite could mock it.
+beforeEach(async () => {
   setUndoWindowForTest(0);
   resetDecisionsForTest();
+  (await import('../src/store/needsSources.js')).resetNeedsSourcesForTest();
 });
 
 // A few suites opt out of the suite-wide jsdom env (`@vitest-environment node` — e.g.
