@@ -135,3 +135,40 @@ describe('the ? overlay', () => {
     ]);
   });
 });
+
+describe('round 3', () => {
+  it('P, G and B stand down while a modal or the ? overlay owns the keyboard', () => {
+    const navigate = vi.fn();
+    render(<Harness navigate={navigate} />);
+    useLayerStore.setState({ modalIds: [7] });
+    press('p');
+    expect(screen.queryByTestId('peek-card')).toBeNull();
+    press('g');
+    expect(navigate).not.toHaveBeenCalled();
+    useLayerStore.setState({ modalIds: [], shortcutOverlayOpen: true });
+    press('p');
+    expect(screen.queryByTestId('peek-card')).toBeNull();
+  });
+
+  it('a gate with a queued decision is not peeked again', async () => {
+    const { decideGate } = await import('../src/board/gateActions.js');
+    render(<Harness navigate={vi.fn()} />);
+    act(() => { void decideGate('b1', { approve: true }); });
+    press('p');
+    expect(screen.getByTestId('peek-empty')).toBeTruthy();
+  });
+
+  it('B after chained jumps returns to the FIRST origin', () => {
+    const navigate = vi.fn((path: string) => window.history.pushState(null, '', path));
+    render(<Harness navigate={navigate} />);
+    press('g'); // r1 → b1's gate
+    expect(window.location.pathname).toBe('/p/beta/build/b1');
+    // the thread consumes #gate; the operator wanders, then jumps again
+    window.history.pushState(null, '', '/p/alpha/chat');
+    press('g');
+    expect(window.location.pathname).toBe('/p/beta/build/b1');
+    press('b');
+    expect(navigate).toHaveBeenLastCalledWith('/p/gamma/build/r1');
+  });
+});
+

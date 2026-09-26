@@ -54,4 +54,13 @@ describe('peekTarget reads the ranked queue', () => {
     const t = peekTarget({ rows: ranked, gates: {}, runs, projectIdByRun: {} });
     expect(t).toMatchObject({ kind: 'failed-run', runId: 'f', prompt: null, text: ranked[0]!.text });
   });
+
+  it('skips a gate that already has a decision (queued, in flight, answered) — round 3', () => {
+    const runs = [run('a', 'awaiting_human'), run('b', 'awaiting_human')];
+    const gates = { a: gate('a', NOW - 40 * MIN), b: gate('b', NOW - 5 * MIN) };
+    const ranked = groupAlike(rows({ runs, gates, projectIds: { a: 'p', b: 'p' } }), NOW);
+    const t = peekTarget({ rows: ranked, gates, runs, projectIdByRun: { a: 'p', b: 'p' }, decided: (id) => id === 'a' });
+    expect(t?.runId).toBe('b');
+    expect(peekTarget({ rows: ranked, gates, runs, projectIdByRun: {}, decided: () => true })).toBeNull();
+  });
 });

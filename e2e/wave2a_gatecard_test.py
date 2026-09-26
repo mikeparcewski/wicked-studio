@@ -6,7 +6,7 @@ The run page's own gate card (SteeringGate) decides through the same undo window
 Against the `wave1` corpus with a gate waiting on b1 (`gate_now`):
 
   approve  on /p/beta/build/b1, click the gate card's Approve: the toast reads
-           "Approving in 10 s" with Undo; ZERO POST /runs/b1/gate for the first 9 s
+           "Approving beta · b1 in 10 s" with Undo; ZERO POST /runs/b1/gate for the first 9 s
            (browser tap AND the fixture's server log).
   undo     Undo → still zero POSTs past the window; the gate card is still there with
            Approve enabled (the gate stays open).
@@ -86,7 +86,7 @@ with sync_playwright() as p:
     check("card-approve-shows-toast", shown, browser_posts_after_click=len(posts),
           server_posts_after_click=len(server_posts(origin)))
     text = page.get_by_test_id("undo-toast").text_content() or ""
-    check("toast-reads-approving-in-10s", "Approving in 10 s" in text, text=text)
+    check("toast-reads-approving-in-10s", "Approving beta · b1 in 10 s" in text, text=text)
     check("toast-has-undo", page.get_by_test_id("undo-toast").get_by_role("button", name="Undo").count() == 1)
     page.screenshot(path=str(SHOTS / "wave2a-gatecard-toast.png"))
     page.wait_for_timeout(max(0, int((pressed + 9.0 - time.monotonic()) * 1000)))

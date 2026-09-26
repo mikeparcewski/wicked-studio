@@ -38,7 +38,7 @@ describe('the gate card rides the undo window', () => {
     vi.useFakeTimers();
     renderCard();
     act(() => { fireEvent.click(screen.getByTestId('steering-approve')); });
-    expect(screen.getByTestId('undo-toast').textContent).toContain('Approving in 10 s');
+    expect(screen.getByTestId('undo-toast').textContent).toContain('Approving r-gate in 10 s');
     await act(async () => { await vi.advanceTimersByTimeAsync(9_000); });
     expect(client.api.confirmGate).not.toHaveBeenCalled();
     await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
@@ -62,7 +62,7 @@ describe('the gate card rides the undo window', () => {
     renderCard();
     screen.getByTestId('steering-gate').focus();
     act(() => { fireEvent.keyDown(window, { key: 'a' }); });
-    expect(screen.getByTestId('undo-toast').textContent).toContain('Approving in 10 s');
+    expect(screen.getByTestId('undo-toast').textContent).toContain('Approving r-gate in 10 s');
     await act(async () => { await vi.advanceTimersByTimeAsync(9_000); });
     expect(client.api.confirmGate).not.toHaveBeenCalled();
   });

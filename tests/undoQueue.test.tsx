@@ -109,11 +109,13 @@ describe('a batch is one window, then the sequential fan-out', () => {
 
 describe('the copy', () => {
   it('headline counts down and names a batch', () => {
-    const p = { id: 1, verb: 'approve' as const, runIds: ['r1'], preview: '', queuedAt: 10_000, dueAt: 20_000 };
+    const p = { id: 1, verb: 'approve' as const, runIds: ['r1'], preview: '', label: null, amend: null, queuedAt: 10_000, dueAt: 20_000 };
     expect(undoHeadline(p, 10_000)).toBe('Approving in 10 s');
     expect(undoHeadline(p, 9_000)).toBe('Approving in 10 s'); // a stale clock never reads 11 s
     expect(undoHeadline(p, 15_500)).toBe('Approving in 5 s');
     expect(undoHeadline({ ...p, verb: 'reject', runIds: ['a', 'b', 'c'] }, 10_000)).toBe('Rejecting 3 gates in 10 s');
+    // Round 3: a single decision names its gate.
+    expect(undoHeadline({ ...p, label: 'beta · b1', dueAt: 18_000 }, 10_000)).toBe('Approving beta · b1 in 8 s');
   });
 
   it('says what will happen, and that a reject cancels the run', () => {
@@ -139,7 +141,7 @@ describe('the toast and the chip render the queue', () => {
     );
     act(() => { fireEvent.click(screen.getByTestId('gate-approve-r1')); });
     const toast = screen.getByTestId('undo-toast');
-    expect(toast.textContent).toContain('Approving in 10 s');
+    expect(toast.textContent).toContain('Approving r1 in 10 s');
     expect(screen.getByTestId('undo-preview').textContent).toBe('The run resumes past this gate.');
     expect(screen.getByTestId('undo-close-note').textContent).toBe(CLOSE_NOTE);
     expect(screen.getByTestId('gate-queued-r1')).toBeTruthy();

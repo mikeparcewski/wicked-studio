@@ -6,7 +6,7 @@ WINDOW (1440x700).
 Against the `wave1` corpus with a SIMPLE gate waiting on b1 (`gate_now` + `gate_simple`):
 beta's card sits in NEEDS YOU and the triage cursor answers it in place.
 
-  queue    j selects beta, a approves: the toast reads "Approving in 10 s" with an Undo
+  queue    j selects beta, a approves: the toast reads "Approving beta · b1 in 10 s" with an Undo
            button and a what-will-happen line; ZERO POST /runs/b1/gate for the first 9 s
            (counted twice: the browser's request tap AND the fixture's server log).
   undo     Undo → still zero POSTs after the window would have closed; the gate is still
@@ -100,7 +100,7 @@ with sync_playwright() as p:
     check("toast-shows", shown, browser_posts_after_press=len(posts),
           server_posts_after_press=len(server_posts(origin)))
     text = toast.text_content() or ""
-    check("toast-reads-approving-in-10s", "Approving in 10 s" in text, text=text)
+    check("toast-reads-approving-in-10s", "Approving beta · b1 in 10 s" in text, text=text)
     check("toast-has-undo", toast.get_by_role("button", name="Undo").count() == 1)
     check("toast-says-what-will-happen", toast.get_by_test_id("undo-preview").count() == 1
           and len(toast.get_by_test_id("undo-preview").text_content() or "") > 0,
