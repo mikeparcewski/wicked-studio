@@ -10,14 +10,18 @@ import { clockTime } from './handover.js';
  * you were away — whatever its `ended_at` says or omits.
  */
 
-/** A project's runs at the moment the operator left it: run id → status. */
+/** A project's LIVE runs at the moment the operator left it: run id → status. Terminal
+ *  runs are left out — they cannot change, and a long project history must not crowd
+ *  the snapshot's bound (a run missing from it is not thereby "new"). */
 export type StatusSnapshot = Record<string, string>;
 
 const TERMINAL: ReadonlySet<string> = new Set(['completed', 'failed', 'cancelled']);
 
 export function snapshotStatuses(runs: readonly SessionView[]): StatusSnapshot {
   const out: StatusSnapshot = {};
-  for (const v of runs) if (v.session.archived_at == null) out[v.session.id] = v.session.status;
+  for (const v of runs) {
+    if (v.session.archived_at == null && !TERMINAL.has(v.session.status)) out[v.session.id] = v.session.status;
+  }
   return out;
 }
 
@@ -26,13 +30,14 @@ export interface BriefCounts {
   finished: number;
   /** Live when you left, failed now. */
   failed: number;
-  /** Runs that did not exist when you left. */
+  /** Runs launched since you left — dated by the daemon's `created_at`; an undated run
+   *  is never counted as new. */
   started: number;
   /** Open decisions now: runs waiting on a human. */
   gates: number;
 }
 
-export function projectBrief(before: StatusSnapshot, runs: readonly SessionView[]): BriefCounts {
+export function projectBrief(before: StatusSnapshot, runs: readonly SessionView[], leftAt: number): BriefCounts {
   const counts: BriefCounts = { finished: 0, failed: 0, started: 0, gates: 0 };
   for (const v of runs) {
     if (v.session.archived_at != null) continue;
@@ -40,7 +45,8 @@ export function projectBrief(before: StatusSnapshot, runs: readonly SessionView[
     const now = v.session.status;
     if (now === 'awaiting_human') counts.gates += 1;
     if (was === undefined) {
-      counts.started += 1;
+      const created = v.session.created_at;
+      if (typeof created === 'number' && created * 1000 >= leftAt) counts.started += 1;
       continue;
     }
     if (!TERMINAL.has(was) && TERMINAL.has(now)) {

@@ -49,7 +49,8 @@ export function useHandover(runs: readonly SessionView[], failedAt: Record<strin
             elicitations,
             failedAt,
             projectIds,
-            audit: audit !== null && audit.since === since ? audit.entries : null,
+            // No answer for THIS absence yet = in flight; an answer of null = the read failed.
+            audit: audit !== null && audit.since === since ? audit.entries : 'loading',
             since,
           }),
     [since, runs, gates, elicitations, failedAt, projectIds, audit],

@@ -83,8 +83,8 @@ describe('handoverSections — four sections, fixed order', () => {
 
   it('an unreadable trail is said, never counted as "the system did nothing"', () => {
     const s = handoverSections({ runs, gates: {}, elicitations: {}, failedAt: {}, projectIds: {}, audit: null, since });
-    expect(s[3]!.available).toBe(false);
-    expect(s[0]!.available).toBe(true);
+    expect(s[3]!.state).toBe('failed');
+    expect(s[0]!.state).toBe('ready');
   });
 });
 
@@ -99,7 +99,7 @@ describe('projectBrief — since you were last here (behaviour 7)', () => {
       makeView({ id: 'a1', status: 'completed' }),
       makeView({ id: 'g1', status: 'awaiting_human' }),
       makeView({ id: 'd1', status: 'completed' }),
-    ]);
+    ], NOW - HOUR);
     expect(counts).toEqual({ finished: 1, failed: 0, started: 0, gates: 1 });
     expect(briefHasNews(counts)).toBe(true);
     const since = new Date(2026, 8, 26, 9, 5).getTime();
@@ -109,7 +109,7 @@ describe('projectBrief — since you were last here (behaviour 7)', () => {
 
   it('nothing changed and nothing waiting — nothing to say', () => {
     const runs = [makeView({ id: 'a1', status: 'executing' })];
-    expect(briefHasNews(projectBrief(snapshotStatuses(runs), runs))).toBe(false);
+    expect(briefHasNews(projectBrief(snapshotStatuses(runs), runs, NOW - HOUR))).toBe(false);
   });
 });
 

@@ -137,7 +137,7 @@ export function useProjectBrief(projectId: string, runs: readonly SessionView[])
   const byRun = useMembershipStore((s) => s.projectIdByRun);
   return useMemo(() => {
     if (brief === null || brief.projectId !== projectId) return null;
-    const counts = projectBrief(brief.statuses, runsOfProject(runs, projectId, byRun));
+    const counts = projectBrief(brief.statuses, runsOfProject(runs, projectId, byRun), brief.since);
     if (!briefHasNews(counts)) return null;
     return { line: briefLine(brief.since, counts), counts, dismiss };
   }, [brief, projectId, runs, byRun, dismiss]);

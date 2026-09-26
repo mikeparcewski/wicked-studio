@@ -69,7 +69,7 @@ export function HandoverPanel({ handover, navigate, now }: {
         {handover.sections.map((sec) => {
           const tone = countTone(sec.items.length, SECTION_KIND[sec.key]);
           return (
-            <div key={sec.key} data-testid="handover-section" data-section={sec.key} data-count={sec.items.length} style={{ minWidth: 0 }}>
+            <div key={sec.key} data-testid="handover-section" data-section={sec.key} data-count={sec.items.length} data-state={sec.state} style={{ minWidth: 0 }}>
               <p
                 style={{
                   margin: '0 0 4px', fontSize: 'var(--text-2xs)', fontWeight: 'var(--weight-bold)',
@@ -79,12 +79,16 @@ export function HandoverPanel({ handover, navigate, now }: {
               >
                 {sec.title}
                 <span data-testid="handover-count" data-tone={tone} style={{ color: COUNT_TONE_COLOR[tone] ?? 'var(--ink-muted)', fontFamily: 'var(--font-mono)' }}>
-                  {sec.items.length}
+                  {sec.state === 'loading' ? '…' : sec.items.length}
                 </span>
               </p>
               {sec.items.length === 0 ? (
                 <p style={{ margin: 0, fontSize: 'var(--text-xs)', color: 'var(--ink-dim)' }}>
-                  {sec.available ? EMPTY_COPY[sec.key] : 'This daemon cannot say (no audit read).'}
+                  {sec.state === 'loading'
+                    ? 'Checking the audit trail…'
+                    : sec.state === 'failed'
+                      ? 'This daemon cannot say (the audit read failed).'
+                      : EMPTY_COPY[sec.key]}
                 </p>
               ) : (
                 <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: '2px' }}>

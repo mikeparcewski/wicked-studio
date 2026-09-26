@@ -80,12 +80,15 @@ export interface HandoverItem {
   path: string;
 }
 
+/** A section's wire: `loading` while its read is in flight, `failed` when the daemon
+ *  could not answer — never the same thing (a slow read is not "cannot say"). */
+export type HandoverSectionState = 'ready' | 'loading' | 'failed';
+
 export interface HandoverSection {
   key: HandoverSectionKey;
   title: string;
   items: HandoverItem[];
-  /** False when the section's wire could not answer (an absent audit read). */
-  available: boolean;
+  state: HandoverSectionState;
 }
 
 export interface HandoverInputs {
@@ -96,8 +99,8 @@ export interface HandoverInputs {
   failedAt: Record<string, number>;
   /** run id → project id (the membership mirror). */
   projectIds: Record<string, string>;
-  /** `GET /audit?since=` — null while unread or unsupported. */
-  audit: readonly AuditEntry[] | null;
+  /** `GET /audit?since=`: the entries, `'loading'` while in flight, null when it failed. */
+  audit: readonly AuditEntry[] | 'loading' | null;
   since: number;
 }
 
@@ -185,7 +188,7 @@ export function handoverSections(inp: HandoverInputs): HandoverSection[] {
 
   // Filtered here too: a daemon predating `?since=` ignores the parameter and answers
   // the newest page of the whole trail.
-  const system: HandoverItem[] = (audit ?? [])
+  const system: HandoverItem[] = (Array.isArray(audit) ? audit : [])
     .filter((e) => e.actor?.kind === 'system' && e.ts >= since && !SYSTEM_BOOKKEEPING.has(e.action))
     .map((e) => {
       const v = e.runId !== undefined ? byId.get(e.runId) : undefined;
@@ -213,6 +216,6 @@ export function handoverSections(inp: HandoverInputs): HandoverSection[] {
     key,
     title: HANDOVER_TITLES[key],
     items: items[key],
-    available: key !== 'system' || audit !== null,
+    state: key !== 'system' || Array.isArray(audit) ? 'ready' : audit === 'loading' ? 'loading' : 'failed',
   }));
 }

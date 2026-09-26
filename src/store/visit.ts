@@ -42,8 +42,10 @@ function write(v: VisitState): void {
 interface VisitStore extends VisitState {
   /** The operator arrived (boot, or the tab became visible again). */
   arrive: (now: number, thresholdMs: number) => void;
-  /** Still here — move the clock without judging an absence. */
-  heartbeat: (now: number) => void;
+  /** Still here — move the clock. A gap of at least `thresholdMs` since the last beat is
+   *  an absence the tab saw itself (the machine slept with the tab visible, no hidden
+   *  event): it is judged as an arrival first, so the handover is not overwritten. */
+  heartbeat: (now: number, thresholdMs: number) => void;
   /** Dismiss the handover: it does not return until the next absence. */
   dismiss: () => void;
 }
@@ -58,10 +60,13 @@ export const useVisitStore = create<VisitStore>((set, get) => ({
     set(next);
   },
 
-  heartbeat: (now) => {
-    const next: VisitState = { ...read(), lastSeenAt: now };
+  heartbeat: (now, thresholdMs) => {
+    const prev = read();
+    const next: VisitState = prev.lastSeenAt !== null && now - prev.lastSeenAt >= thresholdMs
+      ? arriveState(prev, now, thresholdMs)
+      : { ...prev, lastSeenAt: now };
     write(next);
-    set({ lastSeenAt: now, handover: next.handover });
+    set(next);
   },
 
   dismiss: () => {

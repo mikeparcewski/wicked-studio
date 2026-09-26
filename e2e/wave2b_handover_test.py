@@ -81,6 +81,7 @@ with sync_playwright() as p:
     loading = {"state": sys_sec.get_attribute("data-state"), "text": sys_sec.inner_text()}
     check("audit-in-flight-says-loading",
           loading["state"] == "loading" and "cannot say" not in loading["text"], **loading)
+    page.screenshot(path=str(SHOTS / "wave2b-handover-loading.png"))
     try:
         page.wait_for_function(
             """() => { const s = [...document.querySelectorAll('[data-testid="handover-section"]')];

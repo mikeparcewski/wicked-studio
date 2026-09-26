@@ -29,9 +29,9 @@ export function useVisitClock(): void {
     const onVisibility = (): void => {
       const { arrive, heartbeat } = useVisitStore.getState();
       if (visible()) arrive(Date.now(), thresholdMs);
-      else heartbeat(Date.now());
+      else heartbeat(Date.now(), thresholdMs);
     };
-    const onPageHide = (): void => useVisitStore.getState().heartbeat(Date.now());
+    const onPageHide = (): void => useVisitStore.getState().heartbeat(Date.now(), thresholdMs);
 
     void (async () => {
       let minutes = sanitizeAwayMinutes(undefined);
@@ -45,7 +45,7 @@ export function useVisitClock(): void {
       thresholdMs = minutes * 60_000;
       if (visible()) useVisitStore.getState().arrive(Date.now(), thresholdMs);
       timer = setInterval(() => {
-        if (visible()) useVisitStore.getState().heartbeat(Date.now());
+        if (visible()) useVisitStore.getState().heartbeat(Date.now(), thresholdMs);
       }, HEARTBEAT_MS);
       document.addEventListener('visibilitychange', onVisibility);
       window.addEventListener('pagehide', onPageHide);

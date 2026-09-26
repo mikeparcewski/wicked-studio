@@ -46,6 +46,16 @@ npm publish dates. Every version listed here exists on
   e.g. "since 14:05: 1 run finished, 1 gate". Leaving a project snapshots its runs' statuses, and
   the brief compares against that snapshot (`board/projectBrief.ts`, `store/projectVisits.ts`,
   `hooks/useProjectVisits.ts`).
+- **Wave 2b round 2 (review of #336).** The queue's cursor no longer pulls focus back from Ask or
+  any input on a live update, and focus and selection now agree: a click or a Tab onto a row
+  selects that row, and focus leaving the queue clears the selection. Enter acts only when the
+  selected row (or the queue itself) has focus, so Enter on a focused Retry runs Retry. The wall's
+  triage keys (j/k, a/r, x/Space, Enter) stand down while the queue has focus, so `a` can no
+  longer approve a wall-selected card's gate from inside the queue. The minute heartbeat now
+  treats a gap past the threshold (a laptop that slept with the tab open) as an arrival instead of
+  overwriting it. The handover's "system" section says it is checking while the audit read is in
+  flight and says the daemon cannot say only when the read fails. The project brief snapshots only
+  live runs and counts a run as new only when its `created_at` is after you left.
 
 ### Fixed
 - **Wave 1 — project switch reused the previous project's run.** The project shell's per-mode

@@ -6,6 +6,7 @@ import { anyModalOpen, useLayerStore } from '../store/layers.js';
 import { useRunsPanelStore } from '../store/runsPanel.js';
 import type { Navigate } from './useRoute.js';
 import { useGlobalShortcuts, type ShortcutEntry } from './useGlobalShortcuts.js';
+import { queueHasFocus } from './useNeedsQueue.js';
 
 /**
  * The roving triage cursor (DES-FEEDBACK-002 §2, P0-2, slice H): j/k walk the
@@ -110,6 +111,10 @@ export function useTriageCursor(
     const current = (): TriageItem | null =>
       itemsRef.current.find((i) => i.key === selRef.current) ?? null;
 
+    /** Wave 2b (review of #336): while the needs-you queue holds focus, the wall's keys
+     *  yield — `a` on a queue row must never decide the wall-selected card's gate. */
+    const wallOwnsKeys = (): boolean => !queueHasFocus();
+
     const move = (delta: number) => (e: KeyboardEvent): void => {
       e.preventDefault(); // arrows must move the cursor, not the scroller
       const list = itemsRef.current;
@@ -122,7 +127,7 @@ export function useTriageCursor(
     };
 
     /** `a`/`r` exist only where a gate waits — elsewhere they yield silently. */
-    const gated = (): boolean => current()?.runId != null;
+    const gated = (): boolean => wallOwnsKeys() && current()?.runId != null;
 
     const openThread = (e: KeyboardEvent, item: TriageItem, runId: string): void => {
       e.preventDefault();
@@ -130,10 +135,10 @@ export function useTriageCursor(
     };
 
     return [
-      { id: 'triage-next-j', chord: { key: 'j' }, group: 'triage', description: 'Select the next card', handler: move(1) },
-      { id: 'triage-next-down', chord: { key: 'arrowdown' }, group: 'triage', description: 'Select the next card', handler: move(1) },
-      { id: 'triage-prev-k', chord: { key: 'k' }, group: 'triage', description: 'Select the previous card', handler: move(-1) },
-      { id: 'triage-prev-up', chord: { key: 'arrowup' }, group: 'triage', description: 'Select the previous card', handler: move(-1) },
+      { id: 'triage-next-j', chord: { key: 'j' }, group: 'triage', description: 'Select the next card', guard: wallOwnsKeys, handler: move(1) },
+      { id: 'triage-next-down', chord: { key: 'arrowdown' }, group: 'triage', description: 'Select the next card', guard: wallOwnsKeys, handler: move(1) },
+      { id: 'triage-prev-k', chord: { key: 'k' }, group: 'triage', description: 'Select the previous card', guard: wallOwnsKeys, handler: move(-1) },
+      { id: 'triage-prev-up', chord: { key: 'arrowup' }, group: 'triage', description: 'Select the previous card', guard: wallOwnsKeys, handler: move(-1) },
       {
         id: 'triage-approve',
         chord: { key: 'a' },
@@ -184,7 +189,7 @@ export function useTriageCursor(
         description: 'Select the gate for batch resolution',
         guard: () => {
           const item = current();
-          return item !== null && item.runId !== null && isSimpleGate(item.gate);
+          return wallOwnsKeys() && item !== null && item.runId !== null && isSimpleGate(item.gate);
         },
         handler: (e) => {
           const item = current();
@@ -198,7 +203,7 @@ export function useTriageCursor(
         chord: { key: 'enter' },
         group: 'triage',
         description: 'Open the selected card',
-        guard: () => selRef.current !== null,
+        guard: () => wallOwnsKeys() && selRef.current !== null,
         handler: (e) => {
           const item = current();
           if (item === null) return;
