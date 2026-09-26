@@ -132,6 +132,7 @@ export function NotificationBell({ navigate, collapsed = false }: Props): React.
         }
         aria-expanded={open}
         aria-haspopup="true"
+        data-nav-dest="notifications"
         title="Notifications"
         onClick={() => setOpen(!open)}
         className="flex items-center rounded transition-opacity hover:opacity-70"

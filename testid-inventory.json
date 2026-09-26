@@ -10,10 +10,10 @@
   "version": 1,
   "studioVersion": "0.5.14",
   "counts": {
-    "files": 154,
-    "occurrences": 1385,
-    "static": 1192,
-    "dynamic": 66,
+    "files": 155,
+    "occurrences": 1391,
+    "static": 1197,
+    "dynamic": 67,
     "computed": 7
   },
   "static": [
@@ -4271,6 +4271,12 @@
       ]
     },
     {
+      "testId": "rail-health-flyout",
+      "files": [
+        "src/components/HealthRailSection.tsx"
+      ]
+    },
+    {
       "testId": "rail-health-heart",
       "files": [
         "src/components/HealthRailSection.tsx"
@@ -4292,6 +4298,12 @@
       "testId": "rail-health-toggle",
       "files": [
         "src/components/HealthRailSection.tsx"
+      ]
+    },
+    {
+      "testId": "rail-icon-settings",
+      "files": [
+        "src/components/LeftSidebar.tsx"
       ]
     },
     {
@@ -4341,6 +4353,12 @@
       "testId": "rail-seat-row",
       "files": [
         "src/components/HealthRailSection.tsx"
+      ]
+    },
+    {
+      "testId": "rail-settings-flyout",
+      "files": [
+        "src/components/LeftSidebar.tsx"
       ]
     },
     {
@@ -5498,6 +5516,18 @@
       "testId": "skills-upgrade-badge",
       "files": [
         "src/components/SkillChips.tsx"
+      ]
+    },
+    {
+      "testId": "skin-picker",
+      "files": [
+        "src/components/AppearanceSettings.tsx"
+      ]
+    },
+    {
+      "testId": "skin-right-rail",
+      "files": [
+        "src/components/SkinRightRail.tsx"
       ]
     },
     {
@@ -7569,6 +7599,12 @@
       "pattern": "skills-tab-*",
       "files": [
         "src/components/SkillDrawer.tsx"
+      ]
+    },
+    {
+      "pattern": "skin-option-*",
+      "files": [
+        "src/components/AppearanceSettings.tsx"
       ]
     },
     {

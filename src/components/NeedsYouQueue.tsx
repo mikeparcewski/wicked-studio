@@ -2,6 +2,7 @@ import type { SessionView } from '../api/types.js';
 import { calmCopy, type NeedRow } from '../board/needsYou.js';
 import type { NeedsQueue } from '../hooks/useNeedsQueue.js';
 import type { Navigate } from '../hooks/useRoute.js';
+import type { SkinVariants } from '../theming/skins.js';
 import { TONE_COLOR, TONE_GLYPH } from './narrator.js';
 import { ago } from './ProjectCard.js';
 import { humanTitle } from './runIdentity.js';
@@ -56,13 +57,16 @@ const CSS = {
   },
 } as const satisfies Record<string, React.CSSProperties>;
 
-export function NeedsYouQueue({ queue, runs, navigate, now }: {
+export function NeedsYouQueue({ queue, runs, navigate, now, variant = 'inline' }: {
   /** The queue's behaviour (`useNeedsQueue`): rows, groups, cursor, verbs. */
   queue: NeedsQueue;
   /** For the calm line's live working count — `calmCopy` reads `runStats`. */
   runs: SessionView[];
   navigate: Navigate;
   now?: number;
+  /** The skin's variant (theming/skins.ts): a column of the command center, or the
+   *  full height of the shell's right rail. Same rows, same verbs either way. */
+  variant?: SkinVariants['needsQueue'];
 }): React.ReactElement {
   const at = now ?? Date.now();
   const link = (path: string): { href: string; onClick: (e: React.MouseEvent) => void } => ({
@@ -159,8 +163,9 @@ export function NeedsYouQueue({ queue, runs, navigate, now }: {
       aria-label="Needs you — focus, then j/k to move and Enter to act"
       data-testid="needs-you-queue"
       data-count={queue.count}
+      data-skin-variant={variant}
       style={{
-        flex: '1.4 1 0', minWidth: 0, display: 'flex', flexDirection: 'column',
+        flex: variant === 'rail' ? '1 1 auto' : '1.4 1 0', minWidth: 0, display: 'flex', flexDirection: 'column',
         background: 'var(--surface-card)', border: '1px solid var(--surface-raised)',
         borderRadius: 'var(--radius-lg)', overflow: 'hidden', outline: 'none',
       }}

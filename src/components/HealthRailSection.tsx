@@ -278,9 +278,12 @@ interface Props {
   /** Controlled by the rail so the chrome dot can expand this section (§6.2). */
   open: boolean;
   onToggle: () => void;
+  /** The collapsed / icon nav: the header is the heart icon alone (aria-label "Health") and
+   *  the registry opens as a flyout beside the rail. Same state, same fetches, same rows. */
+  compact?: boolean;
 }
 
-export function HealthRailSection({ open, onToggle }: Props): React.ReactElement {
+export function HealthRailSection({ open, onToggle, compact = false }: Props): React.ReactElement {
   const wsStatus = useConnectionStore((s) => s.status);
   const [health, setHealth] = useState<HealthInfo | null>(null);
   const [healthError, setHealthError] = useState(false);
@@ -363,15 +366,21 @@ export function HealthRailSection({ open, onToggle }: Props): React.ReactElement
       ref={ref}
       data-testid="rail-health-section"
       data-open={open}
-      className="shrink-0 px-2 pb-2 pt-1 flex flex-col max-h-[45vh]"
+      data-compact={compact || undefined}
+      className={compact ? 'shrink-0 relative flex flex-col items-center pb-2 pt-1' : 'shrink-0 px-2 pb-2 pt-1 flex flex-col max-h-[45vh]'}
       style={{ borderTop: '1px solid var(--surface-raised)' }}
     >
       <button
         type="button"
         data-testid="rail-health-toggle"
+        data-nav-dest="health"
         aria-expanded={open}
+        aria-label={compact ? 'Health' : undefined}
+        title={compact ? 'Health' : undefined}
         onClick={onToggle}
-        className="w-full flex items-center gap-2 px-1 py-1.5 text-left transition-colors"
+        className={compact
+          ? 'w-9 h-9 relative flex items-center justify-center rounded-md transition-colors'
+          : 'w-full flex items-center gap-2 px-1 py-1.5 text-left transition-colors'}
         style={{
           background: 'transparent',
           color: open ? 'var(--ink-high)' : 'var(--ink-muted)',
@@ -380,7 +389,7 @@ export function HealthRailSection({ open, onToggle }: Props): React.ReactElement
           fontWeight: 'var(--weight-semi)',
         }}
       >
-        <span
+        {!compact && <span
           aria-hidden
           data-testid="rail-health-chevron"
           className="inline-block leading-none"
@@ -390,7 +399,7 @@ export function HealthRailSection({ open, onToggle }: Props): React.ReactElement
           }}
         >
           ›
-        </span>
+        </span>}
         <span
           aria-hidden
           data-testid="rail-health-heart"
@@ -399,18 +408,30 @@ export function HealthRailSection({ open, onToggle }: Props): React.ReactElement
         >
           ♥
         </span>
-        <span>Health</span>
+        {!compact && <span>Health</span>}
         {sick && (
           <span
             data-testid="rail-health-summary-dot"
             aria-label="a health check needs attention"
-            className="w-2 h-2 rounded-full shrink-0 ml-auto"
+            className={compact ? 'w-2 h-2 rounded-full absolute top-1 right-1' : 'w-2 h-2 rounded-full shrink-0 ml-auto'}
             style={{ background: 'var(--status-fail)' }}
           />
         )}
       </button>
       {open && (
-        <div className="flex flex-col pt-0.5 px-1 overflow-y-auto min-h-0 flex-1">
+        <div
+          data-testid={compact ? 'rail-health-flyout' : undefined}
+          className={compact
+            ? 'fixed z-50 flex flex-col p-2 overflow-y-auto rounded-lg'
+            : 'flex flex-col pt-0.5 px-1 overflow-y-auto min-h-0 flex-1'}
+          style={compact
+            ? {
+                left: '64px', bottom: '40px', width: '300px', maxHeight: '60vh',
+                background: 'var(--surface-overlay)', border: '1px solid var(--surface-raised)',
+                boxShadow: 'var(--shadow-overlay)',
+              }
+            : undefined}
+        >
           <CheckRow label="WebSocket" ok={wsStatus === 'connected'} detail={pillLabel} />
           {healthError ? (
             <CheckRow label="API server" ok={false} detail="unreachable" />

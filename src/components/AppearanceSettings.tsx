@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { DEFAULT_SITE_NAME, useAppearanceStore } from '../theming/appearance.js';
+import { SKINS, isSkinId } from '../theming/skins.js';
 import { WickedLogo } from './WickedLogo.js';
 
 /**
@@ -20,6 +21,9 @@ import { WickedLogo } from './WickedLogo.js';
  *
  * Theme (§2.14): dark is tokens.css itself; light is the one theme instance,
  * applied as `data-theme="light"` on <html> and persisted with the rest.
+ *
+ * Skin (theming/skins.ts): the shape — layout, density, which variant renders each
+ * behaviour surface — applied as `data-skin` on <html>, persisted with the rest.
  *
  * Status colors are FIXED semantic signals (§2.6) — deliberately absent here.
  */
@@ -334,6 +338,45 @@ export function AppearanceSettings(): React.ReactElement {
         <div className="flex items-center gap-1.5 shrink-0">
           {themeButton('dark', 'Dark')}
           {themeButton('light', 'Light')}
+        </div>
+      </div>
+
+      {/* ── Skin (theming/skins.ts): the SHAPE over the one behaviour layer — layout, density,
+             which variant renders each surface. Applied live as `data-skin`, persisted with the rest. ── */}
+      <div className="flex items-start justify-between gap-4 py-4 border-b" style={{ borderColor: 'var(--surface-raised)' }}>
+        <div className="flex-1 min-w-0">
+          <p id="skin-label" className="text-sm font-medium" style={{ color: 'var(--ink-high)' }}>Skin</p>
+          <p className="text-xs mt-0.5" style={{ color: 'var(--ink-muted)' }}>
+            Layout and density. Every behaviour, key and verb works the same in every skin.
+          </p>
+        </div>
+        <div
+          role="radiogroup"
+          aria-labelledby="skin-label"
+          data-testid="skin-picker"
+          className="flex flex-col gap-1.5 shrink-0"
+          style={{ maxWidth: '320px' }}
+        >
+          {SKINS.map((skin) => {
+            const active = appearance.skin === skin.id;
+            return (
+              <button
+                key={skin.id}
+                type="button"
+                role="radio"
+                aria-checked={active}
+                data-testid={`skin-option-${skin.id}`}
+                onClick={() => { if (isSkinId(skin.id)) update({ skin: skin.id }); }}
+                className="text-left px-3 py-1.5 rounded-md"
+                style={active
+                  ? { background: 'var(--accent-subtle)', border: '1px solid var(--accent)' }
+                  : { background: 'transparent', border: '1px solid var(--surface-raised)' }}
+              >
+                <span className="block text-xs font-medium" style={{ color: 'var(--ink-high)' }}>{skin.name}</span>
+                <span className="block text-xs" style={{ color: 'var(--ink-muted)' }}>{skin.description}</span>
+              </button>
+            );
+          })}
         </div>
       </div>
 

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { api } from '../api/client.js';
 import { listCampaigns, type CampaignsListing } from '../api/campaigns.js';
 import { testDoorWord } from '../board/campaignStats.js';
@@ -18,6 +19,8 @@ import { useHistoryScroll, useHistoryState } from '../hooks/useHistoryState.js';
 import { modePath, projectPath, runTimelinePath, type Navigate } from '../hooks/useRoute.js';
 import { useHandover } from '../hooks/useHandover.js';
 import { useNeedsQueue } from '../hooks/useNeedsQueue.js';
+import { useSkinVariant } from '../hooks/useSkin.js';
+import { useSkinSlots } from '../store/skinSlots.js';
 import { useTriageCursor, type TriageCursor, type TriageItem } from '../hooks/useTriageCursor.js';
 import { useElicitationStore } from '../store/elicitations.js';
 import { useNotificationStore } from '../store/notifications.js';
@@ -291,6 +294,11 @@ export function HomeBoard({ runs, navigate, onOpenAsk }: Props): React.ReactElem
   // wall's triage cursor — registration order is shortcut precedence, and the queue's
   // keys (guarded on focus inside the queue) must be offered first.
   const queue = useNeedsQueue(needRows, navigate, now);
+  // The skin decides WHERE the queue renders, never what it is: `rail` docks it into the
+  // shell's right rail (when that region is mounted), `inline` keeps it in the command center.
+  const queueVariant = useSkinVariant('needsQueue');
+  const rightRail = useSkinSlots((s) => s.rightRail);
+  const queueInRail = queueVariant === 'rail' && rightRail !== null;
   // Handover on arrival (wave 2b): after an absence, the first thing Home shows.
   const handover = useHandover(runs, failedAt);
 
@@ -465,7 +473,9 @@ export function HomeBoard({ runs, navigate, onOpenAsk }: Props): React.ReactElem
               padding: '0 var(--space-6) var(--space-4)', maxHeight: '52vh', minHeight: 0,
             }}
           >
-            <NeedsYouQueue queue={queue} runs={runs} navigate={navigate} now={now} />
+            {queueInRail
+              ? createPortal(<NeedsYouQueue queue={queue} runs={runs} navigate={navigate} now={now} variant="rail" />, rightRail)
+              : <NeedsYouQueue queue={queue} runs={runs} navigate={navigate} now={now} />}
             <div
               style={{
                 flex: '1 1 0', minWidth: '320px', display: 'flex', flexDirection: 'column',

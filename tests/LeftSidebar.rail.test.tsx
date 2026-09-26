@@ -514,16 +514,20 @@ describe('accordion contents (§3.3)', () => {
 });
 
 describe('the collapsed rail (§3.2)', () => {
-  it('shows exactly eleven glyph links (Skills → /skills, Evals → its runner, Steering → its Dashboard, Settings → /system)', async () => {
+  it('shows ten glyph links (Skills → /skills, Evals → its runner, Steering → its Dashboard) and a Settings icon flyout', async () => {
     rail();
     await screen.findByRole('button', { name: 'wicked-studio' });
 
     fireEvent.click(screen.getByRole('button', { name: 'Collapse sidebar' }));
     const glyphs = screen.getAllByTestId('rail-collapsed-glyph');
-    expect(glyphs).toHaveLength(11);
+    expect(glyphs).toHaveLength(10);
     expect(glyphs.map((g) => g.getAttribute('href'))).toEqual([
-      '/projects', '/execute', '/testing/campaigns', '/vibe', '/demo', '/chats', '/repos', '/skills', '/steering/dashboard', '/testing/evals', '/system',
+      '/projects', '/execute', '/testing/campaigns', '/vibe', '/demo', '/chats', '/repos', '/skills', '/steering/dashboard', '/testing/evals',
     ]);
+    // Settings keeps all three of its pages reachable at icon width (the skin rule: every
+    // destination the full rail exposes is reachable from the icon column).
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
+    expect(screen.getAllByRole('menuitem').map((m) => m.textContent)).toEqual(['Theme', 'Workflows', 'System']);
     // The Skills glyph is ◆, labelled for the icon-only column.
     const skillsGlyph = glyphs[7]!;
     expect(skillsGlyph).toHaveAttribute('aria-label', 'Skills');

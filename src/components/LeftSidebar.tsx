@@ -7,6 +7,8 @@ import { modePath, projectPath, versionPath, type Mode } from '../hooks/useRoute
 import { fetchReposCached, getCachedRepos } from '../store/repoCache.js';
 import { useLiveChatsStore } from '../store/liveChats.js';
 import { useProjectsStore } from '../store/projects.js';
+import { useSkinVariant } from '../hooks/useSkin.js';
+import { useDismissable } from '../hooks/useDismissable.js';
 import { memoriesPath, policiesPath, steeringDashboardPath, STEERING_SECTIONS, STEERING_SECTION_LABELS, type SteeringSection } from '../api/steering.js';
 import { skillsPath } from '../api/skills.js';
 import { testingLaunchPath, testingPath } from '../api/testing.js';
@@ -376,6 +378,7 @@ function RailHeading({ path, open, onToggle, onNew, navigate, children, extra }:
           <a
             href={path.dash}
             data-testid="heading-dashboard"
+            data-nav-dest={`section:${path.key}`}
             aria-label={`${path.title} dashboard`}
             title={`${path.title} dashboard`}
             onClick={(e) => { e.preventDefault(); navigate(path.dash as string); }}
@@ -580,7 +583,17 @@ function SteeringSectionRows({ navigate }: { navigate: (p: string) => void }): R
 const flatRunPath = (id: string): string => `/runs/${encodeURIComponent(id)}`;
 
 export function LeftSidebar({ runs, navigate, pathname, runPath = flatRunPath, immersive = false }: Props): React.ReactElement {
-  const [collapsed, setCollapsed] = useState(false);
+  // The skin's nav variant (theming/skins.ts): `icons` starts — and, on a live skin swap,
+  // lands — collapsed to the glyph column; `full` is the accordion. The collapse toggle and
+  // hover-expand stay the operator's either way.
+  const navVariant = useSkinVariant('navRail');
+  const [collapsed, setCollapsed] = useState(navVariant === 'icons');
+  const lastNavVariant = useRef(navVariant);
+  useEffect(() => {
+    if (navVariant === lastNavVariant.current) return;
+    lastNavVariant.current = navVariant;
+    setCollapsed(navVariant === 'icons');
+  }, [navVariant]);
   const [hovered, setHovered] = useState(false);
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   // Vibe / Demo each fork their ＋ into a project-picker popover locked to their mode.
@@ -632,7 +645,14 @@ export function LeftSidebar({ runs, navigate, pathname, runPath = flatRunPath, i
   // board's first column, not a taxonomy of its own (C3: reads, never re-sorts).
   const { items, loading, error } = useBoardModel(runs);
 
-  const isExpanded = !collapsed || hovered;
+  // The icon variant stays icons: every destination is reachable from the glyph column
+  // itself (sections, Settings and Health flyouts, the bell), so hover never swaps the rail.
+  const isExpanded = !collapsed || (hovered && navVariant !== 'icons');
+  // The icon column's Settings flyout (the full rail's Settings accordion, as an icon).
+  const [settingsFlyout, setSettingsFlyout] = useState(false);
+  const settingsFlyoutRef = useRef<HTMLDivElement>(null);
+  const settingsIconRef = useRef<HTMLButtonElement>(null);
+  useDismissable(settingsFlyout, () => setSettingsFlyout(false), settingsFlyoutRef, settingsIconRef);
 
   // Fetch-on-expand (§3.3): expansion is the gesture; the 5s poll retired.
   // The session cache is shared with the palette — cold: one GET; warm: none.
@@ -679,9 +699,10 @@ export function LeftSidebar({ runs, navigate, pathname, runPath = flatRunPath, i
   return (
     <div
       data-testid="left-rail"
+      data-skin-variant={navVariant}
       className={`flex flex-col shrink-0 transition-all duration-200 ${isExpanded ? 'w-[280px]' : 'w-14'}`}
       style={{ background: S.bg, borderRight: `1px solid ${S.border}` }}
-      onMouseEnter={() => { if (collapsed) setHovered(true); }}
+      onMouseEnter={() => { if (collapsed && navVariant !== 'icons') setHovered(true); }}
       onMouseLeave={() => setHovered(false)}
     >
       {/* The app chrome (DES-VISION-001 §6.3 slice 3): logo slot + product name,
@@ -948,11 +969,12 @@ export function LeftSidebar({ runs, navigate, pathname, runPath = flatRunPath, i
            LINK to its dashboard route (Settings → /system); accordions don't
            exist at this width. */
         <div className="flex-1 px-2 flex flex-col gap-0.5 mt-1">
-          {PATHS.map((path) => (
+          {PATHS.filter((path) => path.key !== 'settings').map((path) => (
             <a
               key={path.key}
               href={path.collapsedHref}
               data-testid="rail-collapsed-glyph"
+              data-nav-dest={`section:${path.key}`}
               aria-label={path.title}
               title={path.title}
               onClick={(e) => { e.preventDefault(); navigate(path.collapsedHref); }}
@@ -964,14 +986,43 @@ export function LeftSidebar({ runs, navigate, pathname, runPath = flatRunPath, i
               <span aria-hidden style={{ fontSize: 'var(--text-sm)' }}>{path.glyph}</span>
             </a>
           ))}
+          {/* Settings — the accordion's three pages, as an icon flyout. */}
+          <div ref={settingsFlyoutRef} className="relative">
+            <button
+              ref={settingsIconRef}
+              type="button"
+              data-testid="rail-icon-settings"
+              aria-label="Settings"
+              title="Settings"
+              aria-haspopup="menu"
+              aria-expanded={settingsFlyout}
+              onClick={() => setSettingsFlyout((v) => !v)}
+              className="w-9 h-9 mx-auto flex items-center justify-center rounded-md transition-colors"
+              style={{ color: settingsFlyout ? S.high : S.muted, background: settingsFlyout ? S.hover : 'transparent' }}
+            >
+              <span aria-hidden style={{ fontSize: 'var(--text-sm)' }}>{P_SETTINGS.glyph}</span>
+            </button>
+            {settingsFlyout && (
+              <div
+                data-testid="rail-settings-flyout"
+                className="absolute z-50 rounded-lg py-1"
+                style={{
+                  left: '100%', top: 0, marginLeft: 'var(--space-2)', width: '200px',
+                  background: 'var(--surface-overlay)', border: '1px solid var(--surface-raised)',
+                  boxShadow: 'var(--shadow-overlay)',
+                }}
+              >
+                <SettingsShortcutRows navigate={(p) => { setSettingsFlyout(false); navigate(p); }} />
+              </div>
+            )}
+          </div>
         </div>
       )}
 
       {/* The rail's FOOT — the slot Settings vacated (§8.1): the health
           registry, dressed exactly like the section it replaces (§6.2). */}
-      {isExpanded && (
-        <HealthRailSection open={healthOpen} onToggle={() => setHealthOpen((v) => !v)} />
-      )}
+      {/* Collapsed, the same section renders as the heart icon with its registry in a flyout. */}
+      <HealthRailSection open={healthOpen} onToggle={() => setHealthOpen((v) => !v)} compact={!isExpanded} />
 
       {/* The new-project flow (§1.3), opened from Projects' ＋ (§3.1). */}
       {newProjectOpen && (

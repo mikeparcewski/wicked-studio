@@ -38,6 +38,9 @@ import { PeekCard } from './components/PeekCard.js';
 import { UndoToasts } from './components/UndoToasts.js';
 import { SystemSettings } from './components/SystemSettings.js';
 import { ThemePage } from './components/ThemePage.js';
+import { SkinRightRail } from './components/SkinRightRail.js';
+import { useSkin } from './hooks/useSkin.js';
+import { RIGHT_RAIL_PX, rightRailOpen } from './theming/skins.js';
 import { ambientProjectId } from './hooks/ambientProject.js';
 import { useEventStream } from './hooks/useEventStream.js';
 import { useVisitClock } from './hooks/useVisitClock.js';
@@ -707,6 +710,11 @@ export function App(): React.ReactElement {
   // sheet auto-collapses on the same transition (EC27).
   const immersive = projectId !== null && (mode === 'document' || mode === 'video');
 
+  // The skin's shell layout (theming/skins.ts): a right-rail skin reserves a full-height
+  // column at the right edge on Home, which the Needs-you queue docks into by variant.
+  const skin = useSkin();
+  const railOpen = rightRailOpen(skin, panel);
+
   return (
     // §5.2: the root reserves the bar's 28px as padding — the collapsed bar is
     // a ROW, not an overlay, so every surface (board, dashboards, canvas — and
@@ -728,6 +736,8 @@ export function App(): React.ReactElement {
         {renderCenter()}
       </div>
 
+      {railOpen && <SkinRightRail />}
+
       {/* Right panel only when a run is selected */}
       {selected !== null && (
         <RightPanel view={selected} runs={runs} onSelectRun={selectRun} navigate={navigate} />
@@ -740,7 +750,7 @@ export function App(): React.ReactElement {
       <AskLauncher
         open={askOpen}
         onToggle={() => setAskOpen((v) => !v)}
-        rightOffsetPx={selected !== null ? RIGHT_PANEL_PX : 0}
+        rightOffsetPx={(selected !== null ? RIGHT_PANEL_PX : 0) + (railOpen ? RIGHT_RAIL_PX : 0)}
         bottomOffsetPx={chatComposerPx}
       >
         {askOpen && (

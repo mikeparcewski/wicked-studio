@@ -36,6 +36,7 @@ export function SettingsShortcutRows({ navigate }: Props): React.ReactElement {
           key={item.path}
           type="button"
           role="menuitem"
+          data-nav-dest={`settings:${item.path}`}
           onClick={() => navigate(item.path)}
           className="w-full text-left px-6 py-1.5 rounded text-xs font-mono transition-colors hover:bg-surface-raised hover:text-ink-body focus-visible:outline-none focus-visible:bg-surface-raised focus-visible:text-ink-body"
           style={{ color: 'var(--ink-muted)' }}

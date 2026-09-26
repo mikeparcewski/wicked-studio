@@ -580,8 +580,14 @@ gate_post_log: list = []
 # pre-slice-7 board pixel-identical. The slice-7 rig overwrites the key between
 # page loads via POST /__fixture {"appearance": {...}} (None restores defaults)
 # and reads back what the page PUT.
+#
+# STUDIO_SKIN (env) — the skin every rig boots under (src/theming/skins.ts). It rides the
+# stored `studio.appearance.skin`, the SAME path the Theme page's picker persists through,
+# so `STUDIO_SKIN=compact-rail python3 e2e/wave2b_queue_test.py` runs a behaviour journey
+# under the proof skin with no rig change. Unset = `studio`, the current look.
+STUDIO_SKIN = os.environ.get("STUDIO_SKIN", "studio")
 DEFAULT_APPEARANCE = {"accent_h": 258, "accent_s": 72, "accent_l": 62,
-                      "logo_url": None, "theme": "dark"}
+                      "logo_url": None, "theme": "dark", "skin": STUDIO_SKIN}
 settings_store: dict = {"graphNodeLimit": 150,
                         "studio.appearance": dict(DEFAULT_APPEARANCE)}
 
