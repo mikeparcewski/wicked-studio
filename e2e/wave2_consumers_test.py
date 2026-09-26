@@ -25,13 +25,15 @@ The DOM ACs, verbatim mapping:
      (the heart's governance contribution is pinned in the unit suite — this roster's
      inactive codex seat colours it on its own).
   3. SCOPED NEW CHAT (#248): on /chat/new the Scope row is present; an Unfiled send
-     is BLOCKED (nothing POSTed, the gap stated, the draft kept); "Unscoped" then
-     opens with neither projectId nor repoRefs and the header states "unscoped".
+     is BLOCKED (nothing POSTed, the gap stated, the draft kept); "System" (studio#323
+     R4 renamed the old explicit "Unscoped" chip, `chat-scope-none` → `chat-scope-system`)
+     then opens with scopeKind="system" and neither projectId nor repoRefs, and the
+     header states "system".
      A fresh /chat/new with "Choose repos…" lists the registry (GET /repos on that
      gesture), picking studio-api sends repoRefs=["studio-api"], and the header
      states the repo (path on hover) and the daemon's no-graph reason. With
      `chat_scope_501` the scoped open renders the 501 sentence inline with the
-     "Continue unscoped" fallback.
+     unscoped fallback (`chat-scope-fallback-none`).
 
 Captures (§12.0 contract: 1440x900, device_scale_factor=1) into e2e/shots/vision/:
   wave2-repo-findings.png   the /repos card with the finding row + action
@@ -189,15 +191,24 @@ with sync_playwright() as p:
           and not [u for m, u in posts if "/api/v1/chats" in u]
           and composer.input_value() == "hello crew",
           gap=page.locator(TID("chat-scope-gap")).inner_text())
-    page.locator(TID("chat-scope-none")).click()
+    # studio#323 R4 (#327): the explicit no-repository choice is the "System" chip now —
+    # a NAMED scope (`scopeKind: "system"`), not the absence of one.
+    system_bodies: list = []
+    page.on("request", lambda r: system_bodies.append(r.post_data_json)
+            if r.method == "POST" and r.url.endswith("/api/v1/chats") else None)
+    page.locator(TID("chat-scope-system")).click()
     composer.press("Enter")
     line = page.locator(TID("chat-scope"))
     line.wait_for(timeout=10000)
     chat_posts = [u for m, u in posts if u.endswith("/api/v1/chats")]
-    check("unscoped_opens_and_is_stated",
-          len(chat_posts) == 1 and line.get_attribute("data-kind") == "none"
-          and "unscoped" in line.inner_text(),
-          kind=line.get_attribute("data-kind"))
+    sys_body = system_bodies[0] if system_bodies else {}
+    check("system_opens_and_is_stated",
+          len(chat_posts) == 1 and len(system_bodies) == 1
+          and sys_body.get("scopeKind") == "system"
+          and "projectId" not in sys_body and "repoRefs" not in sys_body
+          and line.get_attribute("data-kind") == "system"
+          and "system — the platform itself" in line.inner_text(),
+          body=sys_body, kind=line.get_attribute("data-kind"), text=line.inner_text()[:160])
 
     # A fresh chat, scoped to a picked repo.
     page.locator(TID("chat-close")).click()
