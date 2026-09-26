@@ -571,10 +571,27 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          #   predating the proposal queue). A list: the pending governed-knowledge proposals
          #   the route serves (`{proposals: [...]}`, the crew wire), filtered by `?state=`.
          "proposals": None,
+         # ── Team-plan UI (DES-TEAMING-002 T9, e2e/t9_plan_ui_test.py) ──
+         # team_plan — GET /catalog, GET /presets, POST /plans/preview and POST /runs/:id/plan
+         #   answer on the crew 0.47.0 wire, and the team corpus (TEAM_RUNS: a live preset run,
+         #   a gated preset run, a completed user-plan run, a system run) rides GET /runs,
+         #   filed under upload-endpoint. Off: the unknown-route 404s standing rigs see.
+         # plan_edit_fail_once — the FIRST POST /runs/:id/plan is taken by the "engine" but
+         #   answered 503 (the answer lost in transit), so a retry with the same requestId
+         #   answers duplicate: true.
+         # gate_moved — run ids whose POST /runs/:id/gate answers crew's 409 gate_changed
+         #   (openOrd 4); from then on that run's cached gate GET serves the ord-4 gate.
+         "team_plan": False, "plan_edit_fail_once": False, "gate_moved": [],
          }
 state_lock = threading.Lock()
 # Wave 2a: every POST /runs/:id/gate the fixture received (read over GET /__fixture/gate-posts).
 gate_post_log: list = []
+# T9: every POST /plans/preview and POST /runs/:id/plan body (GET /__fixture/plan-posts), the
+# requestIds the "engine" has taken (requestId -> proposal_id), and the runs whose gate moved.
+plan_post_log: list = []
+plan_edit_taken: dict = {}
+plan_edit_failed_once: list = []
+gate_moved_done: set = set()
 
 # ── The crew settings store (DES-VISION-001 §3.3, vision slice 7) ──────────────
 #
@@ -683,6 +700,103 @@ RUNS = [
 ]
 ORPHAN = session("r-orphan", "executing", "stranded work from another client",
                  "stranded work from another client")
+
+# ── T9 team corpus (switch `team_plan`) ────────────────────────────────────────
+# The engine catalog as crew 0.47.0 serves it (GET /catalog) — including `domain_coverage`, an
+# entry no studio list names, so a picker showing it proves it reads the catalog.
+def _cat(cid: str, kind: str, role: str, executes_code: bool, desc: str, **extra) -> dict:
+    return {"id": cid, "kind": kind, "role": role, "gate": "auto", "gate_type": None,
+            "executes_code": executes_code, "executor": extra.get("executor", "agent"),
+            "validator_pin": extra.get("pin"), "pinned": extra.get("pin") is not None,
+            "evidence_floor": extra.get("evidence_floor", False),
+            "verified_evidence": extra.get("verified", False), "skill_ref": None,
+            "description": desc}
+
+
+TEAM_CATALOG = [
+    _cat("understand", "recon", "neutral", False, "Read the repo and say what the work touches"),
+    _cat("test_plan", "test", "evaluator", False, "Write the test plan before the change"),
+    _cat("design", "recon", "neutral", False, "Design the change"),
+    _cat("build", "build", "creator", True, "Make the change"),
+    _cat("test", "test", "evaluator", True, "Run the tests", verified=True),
+    _cat("review", "review", "evaluator", False, "Review the change"),
+    _cat("domain_coverage", "test", "evaluator", True, "Check domain coverage",
+         pin="coverage-validator", evidence_floor=True, verified=True),
+    _cat("deliver", "build", "neutral", True, "Push and open the PR", executor="tool"),
+]
+TEAM_PRESETS = [{"name": "feature", "scope": "global", "created_by": "builtin", "updated_at": 1,
+                 "steps": [{"catalog": "understand", "id": "understand"},
+                           {"catalog": "build", "id": "build"},
+                           {"catalog": "test", "id": "test"}]}]
+TEAM_GATE_PROMPT = "Approve unit 3 before it runs: build the rate limiter"
+TEAM_GATE_MOVED_PROMPT = "Approve unit 4 before it runs: review the rate limiter"
+
+
+def team_preview(body: dict) -> dict:
+    """POST /plans/preview, deterministically: a creator plan without touch is pending the PA's
+    scope (X1); with touch it scores band 40-69 (70-100 when it touches migrations/) and the floor
+    adds test_plan/design before and review after; a plan with no creator step needs no graph."""
+    plan = body.get("plan") or {}
+    steps = [dict(st, id=st.get("id") or st["catalog"], added_by="plan") for st in plan.get("steps", [])]
+    touch = plan.get("touch") or []
+    manual = (body.get("humanConfirm") or "none") != "none"
+    creator = any(st["catalog"] in ("build", "produce") for st in steps)
+    base = {"deterministic": 0, "destructive": False, "floor_override": None, "def": {}}
+    if creator and not touch:
+        return {**base, "score": 0, "band": "0-19", "high_risk": False, "floor": [],
+                "reasons": ["pending the PA's scope: the plan declares no touch set"],
+                "steps": [{"catalog": "understand", "id": "pa-scope", "owner": "pa",
+                           "added_by": "plan"}] + steps,
+                "pauses": manual, "pause_reason": "manual_mode" if manual else None,
+                "graph": "pending_pa_scope"}
+    if not creator:
+        return {**base, "score": 0, "band": "0-19", "high_risk": False, "floor": [],
+                "reasons": ["no creator step"], "steps": steps,
+                "pauses": manual, "pause_reason": "manual_mode" if manual else None,
+                "graph": "not_needed"}
+    high = any("migrations/" in t for t in touch)
+    band = "70-100" if high else "40-69"
+    have = {st["catalog"] for st in steps}
+    floor = ["test_plan", "design", "build", "review"]
+    before = [{"catalog": c, "id": c, "added_by": "floor", "floor_reason": f"band {band} requires {c}"}
+              for c in ("test_plan", "design") if c not in have]
+    after = [{"catalog": "review", "id": "review", "added_by": "floor",
+              "floor_reason": f"band {band} requires review"}] if "review" not in have else []
+    pauses = manual or high
+    return {**base, "score": 85 if high else 55, "band": band, "high_risk": high, "floor": floor,
+            "reasons": [f"touch {', '.join(touch)}"], "steps": before + steps + after,
+            "pauses": pauses,
+            "pause_reason": "manual_mode" if manual else ("high_risk" if high else None),
+            "graph": "ready"}
+
+
+def _team_run(rid: str, status: str, problem: str, identity: dict, **extra) -> dict:
+    r = session(rid, status, problem, problem)
+    r["session"]["run_identity"] = identity
+    r["session"].update(extra)
+    return r
+
+
+TEAM_RUNS = [
+    _team_run("r-team", "executing", "add a rate limiter to the upload endpoint",
+              {"kind": "preset", "name": "feature", "user_plan": False, "system": False},
+              workflow_id="feature"),
+    _team_run("r-team-gate", "awaiting_human", "gate the rate limiter build",
+              {"kind": "preset", "name": "feature", "user_plan": False, "system": False},
+              workflow_id="feature", human_confirm="before:3", unit_ix=2),
+    # A completed user plan on its per-run def: no catalog serves `r-team-plan:plan-2`, so only
+    # run_identity can say it is ordinary build work (the "no deliver phase" claim is licensed).
+    _team_run("r-team-plan", "completed", "tidy the upload handler",
+              {"kind": "user_plan", "name": None, "user_plan": True, "system": False},
+              workflow_id="r-team-plan:plan-2", workdir="/w9/team-plan"),
+    # A machine-owned run on a materialised def with a known workdir: before run_identity, studio
+    # showed it a Delivery section (arm 3); `system: true` keeps it off delivery surfaces.
+    _team_run("r-team-sys", "completed", "draft the upload notes",
+              {"kind": "workflow", "name": "interactive-draft", "user_plan": False, "system": True},
+              workflow_id="wf-r-team-sys", workdir="/w9/team-sys"),
+]
+TEAM_MEMBER_REFS = [r["session"]["id"] for r in TEAM_RUNS]
+
 
 # ── Fix slice J4/J5: the outcome-partition corpus, behind `j5_runs` ───────────
 #
@@ -2195,6 +2309,9 @@ def assemble_runs() -> list:
         # (each awaiting its intake gate) ride BOTH wires (list + detail).
         if state["governed_testing"] and not state["no_runs"]:
             runs = runs + [gt_done_run()] + json.loads(json.dumps(gt_launched))
+        # T9: the team corpus rides BOTH wires (list + detail).
+        if state["team_plan"] and not state["no_runs"]:
+            runs = runs + json.loads(json.dumps(TEAM_RUNS))
     if viewer_on or repo_refs_on or forensics_on or provenance_on or project_dto_on \
             or chronicle_on or nerve_on or gate_now or guidance or wire433_on:
         runs = json.loads(json.dumps(runs))
@@ -2734,6 +2851,17 @@ class W2Handler(SimpleHTTPRequestHandler):
         if path == "/api/v1/runs":
             self._json(200, {"runs": assemble_runs()})
             return True
+        # T9: the engine's phase catalog and the presets (crew 0.47.0), switch-gated.
+        if path in ("/api/v1/catalog", "/api/v1/presets"):
+            with state_lock:
+                on = state["team_plan"]
+            if not on:
+                self._json(404, {"error": f"w2 fixture: no such endpoint {path}"})
+            elif path == "/api/v1/catalog":
+                self._json(200, {"entries": TEAM_CATALOG})
+            else:
+                self._json(200, {"presets": TEAM_PRESETS})
+            return True
         # Wave 6: GET /workflows — the QE workflow the panel reads before it launches (switch-gated:
         # off, the unknown-route 404 standing rigs see; on, the def list with — or, under
         # `governed_testing_workflow_absent`, WITHOUT — `qe-author-tests`).
@@ -2954,6 +3082,10 @@ class W2Handler(SimpleHTTPRequestHandler):
             # Slice L: the batch corpus projects' runs.
             if batch_on:
                 refs.extend(BATCH_MEMBERS.get(pid, []))
+            # T9: the team corpus files under upload-endpoint.
+            with state_lock:
+                if state["team_plan"] and pid == "upload-endpoint":
+                    refs.extend(TEAM_MEMBER_REFS)
             # Slice S: runs launched this lifetime — the atomic attach means the
             # membership record and the DTO echo agree from the first read.
             with state_lock:
@@ -3055,6 +3187,13 @@ class W2Handler(SimpleHTTPRequestHandler):
                 # gate answered in the thread, where pre-population lives.
                 self._json(200, {"runId": rid, "ord": 3, "lifecycle": "open",
                                  "prompt": GATE_NOW_PROMPT,
+                                 "receivedAt": iso(NOW0), "options": None})
+            elif rid == "r-team-gate" and state["team_plan"]:
+                # T9: the gate a decision is made on (ord 3), or — once the gate moved — the one
+                # that replaced it (ord 4). Complex shape: answered on the run page's card.
+                moved = rid in gate_moved_done
+                self._json(200, {"runId": rid, "ord": 4 if moved else 3, "lifecycle": "open",
+                                 "prompt": TEAM_GATE_MOVED_PROMPT if moved else TEAM_GATE_PROMPT,
                                  "receivedAt": iso(NOW0), "options": None})
             elif any(r["session"]["id"] == rid for r in gt_launched):
                 # Wave 6: every New test launched this lifetime pauses at its intake gate
@@ -3806,6 +3945,10 @@ class W2Handler(SimpleHTTPRequestHandler):
             with state_lock:
                 posts = list(gate_post_log)
             return self._json(200, {"posts": posts})
+        if path == "/__fixture/plan-posts":
+            with state_lock:
+                posts = list(plan_post_log)
+            return self._json(200, {"posts": posts})
         if self._api(path):
             return None
         if not Path(self.translate_path(self.path)).is_file():
@@ -3821,6 +3964,12 @@ class W2Handler(SimpleHTTPRequestHandler):
             if body.get("reset_gate_posts"):
                 with state_lock:
                     gate_post_log.clear()
+            if body.get("reset_plan"):
+                with state_lock:
+                    plan_post_log.clear()
+                    plan_edit_taken.clear()
+                    plan_edit_failed_once.clear()
+                    gate_moved_done.clear()
             if body.get("reset_learn"):
                 with learned_lock:
                     learned_themes.clear()
@@ -3934,6 +4083,45 @@ class W2Handler(SimpleHTTPRequestHandler):
         # (CREW-UX-3: 400 on an unknown id, crew routes.ts:588); then a REAL
         # launch when project_dto is on (the run rides GET /runs with its
         # project_id echo — atomic filing), else slice V's plain 201.
+        # T9: POST /plans/preview — the launch's own decision, persisting nothing.
+        if path == "/api/v1/plans/preview":
+            with state_lock:
+                on = state["team_plan"]
+                if on:
+                    plan_post_log.append({"route": "preview", "body": body, "at": time.time()})
+            if not on:
+                return self._json(404, {"error": f"w2 fixture: no such endpoint {path}"})
+            if not (body.get("plan") or {}).get("steps"):
+                return self._json(400, {"error": "Invalid request body"})
+            return self._json(200, team_preview(body))
+        # T9: POST /runs/:id/plan — a mid-run edit, idempotent by requestId (crew team/routes.ts).
+        m = re.match(r"^/api/v1/runs/([^/]+)/plan$", path)
+        if m:
+            rid = urllib.parse.unquote(m.group(1))
+            with state_lock:
+                on = state["team_plan"]
+                fail_once = state["plan_edit_fail_once"]
+                if on:
+                    plan_post_log.append({"route": "edit", "runId": rid, "body": body, "at": time.time()})
+                req_id = body.get("requestId") or f"minted-{len(plan_post_log)}"
+                taken = plan_edit_taken.get(req_id)
+                if on and taken is None:
+                    plan_edit_taken[req_id] = f"prop-{len(plan_edit_taken) + 1}"
+                lose_answer = on and taken is None and fail_once and not plan_edit_failed_once
+                if lose_answer:
+                    plan_edit_failed_once.append(req_id)
+            if not on:
+                return self._json(404, {"error": f"w2 fixture: no such endpoint {path}"})
+            if lose_answer:
+                return self._json(503, {"error": "upstream closed the connection before answering"})
+            if taken is not None:
+                return self._json(200, {"proposal_id": taken, "duplicate": True, "band": None,
+                                        "high_risk": None, "floor_added": []})
+            adds_build = any(st.get("catalog") == "build" for st in (body.get("plan") or {}).get("steps", []))
+            return self._json(200, {"proposal_id": plan_edit_taken[req_id], "duplicate": False,
+                                    "band": "70-100" if adds_build else "40-69",
+                                    "high_risk": adds_build,
+                                    "floor_added": ["design", "review"] if adds_build else []})
         if path == "/api/v1/runs":
             retry_of = body.get("retryOf")
             if retry_of is not None:
@@ -3971,7 +4159,17 @@ class W2Handler(SimpleHTTPRequestHandler):
             rid = urllib.parse.unquote(parts[4])
             with state_lock:
                 conflict = rid in state["gate_409"]
+                moved = rid in state["gate_moved"] and rid not in gate_moved_done
                 gate_post_log.append({"runId": rid, "body": body, "at": time.time()})
+                if moved:
+                    gate_moved_done.add(rid)
+            if moved:
+                # T9: crew's real 409 for a decision that outlived its gate (routes.ts, api-types 0.44.0).
+                return self._json(409, {
+                    "error": f"Gate changed: this decision was made on the gate before unit {body.get('ord')}, "
+                             "but the open gate is before unit 4 — it was answered or replaced. "
+                             "Read the open gate before deciding.",
+                    "code": "gate_changed", "openOrd": 4})
             if conflict:
                 # Slice L (§9.5): the daemon's real 409 — the run stopped
                 # awaiting between the selection and the fan-out.

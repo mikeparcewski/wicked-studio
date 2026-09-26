@@ -73,13 +73,18 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); clearCachedWorkflows(); });
 
+/** The run as a 0.46.0+ daemon serves it: `run_identity` says what it is, with no lookup. */
+function withIdentity(v: SessionView, system: boolean, name: string): SessionView {
+  return { ...v, session: { ...v.session, run_identity: { kind: 'workflow', name, user_plan: false, system } } as SessionView['session'] };
+}
+
 describe('before the defs load, a run with no deliver phase gets no section at all', () => {
   for (const wf of DENYLIST_BLIND_SPOT) {
     it(`${wf}: no Delivery header, no body, no remedy`, () => {
-      render(<RightPanel view={noDeliverRun(`r-${wf}`, wf)} />);
-      // This is the window the defect lived in: the denylist cannot rule these
-      // out, so the section used to render and say "This run has no deliver
-      // phase." about a document thread.
+      render(<RightPanel view={withIdentity(noDeliverRun(`r-${wf}`, wf), true, wf)} />);
+      // This is the window the defect lived in: nothing cold could rule these out, so the
+      // section used to render and say "This run has no deliver phase." about a document
+      // thread. The daemon's `run_identity.system` now rules them out on the DTO itself.
       expect(screen.queryByRole('button', { name: /Delivery/ })).not.toBeInTheDocument();
       expect(screen.queryByTestId('run-delivery')).not.toBeInTheDocument();
       expect(document.body.textContent).not.toContain('This run has no deliver phase.');
@@ -87,6 +92,19 @@ describe('before the defs load, a run with no deliver phase gets no section at a
       expect(getUnitOutput).not.toHaveBeenCalled();
     });
   }
+
+  it('a daemon before run_identity (api-types < 0.46.0), cold: the worktree fact only, never the claim', async () => {
+    // Studio no longer keeps its own system-id list, so on an older daemon a document thread
+    // with a workdir shows the worktree line until the defs land — a DTO fact, never a
+    // classification claim and never the remedy. Crew bundles this dist, so a 0.46.0+ daemon
+    // (run_identity on every run) is the served case.
+    render(<RightPanel view={noDeliverRun('r-old', 'interactive-draft')} />);
+    fireEvent.click(await screen.findByRole('button', { name: /Delivery/ }));
+    const body = await screen.findByTestId('run-delivery');
+    expect(body).toHaveTextContent('the work is in /w/tree');
+    expect(body).not.toHaveTextContent('This run has no deliver phase.');
+    expect(body).not.toHaveTextContent('deliver: pr');
+  });
 
   it('an ORDINARY workflow keeps its WORKTREE cold — the fact, never the claim (#126)', async () => {
     // #125 withheld this section entirely until the defs landed, which took the

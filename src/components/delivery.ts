@@ -1,5 +1,5 @@
 import type { SessionView, SessionWithDelivery, WorkUnit } from '../api/types.js';
-import { deliverKindOf, type IsSystemWorkflow } from './runMode.js';
+import { deliverKindOf, type IsSystemWorkflow, type RunKind } from './runMode.js';
 
 /**
  * Delivery — the one derivation every surface reads (wicked-studio#122, slice DA).
@@ -352,6 +352,46 @@ export const DELIVERY_COLOR: Record<DeliveryClaim, string> = {
   'failed':             'var(--status-fail)',
 };
 
+/** The fields of a run {@link runKindOfView} reads. */
+export interface RunKindSource {
+  workflow_id?: string | null;
+  run_identity?: unknown;
+}
+
+/**
+ * A RUN's kind: the daemon's `run_identity` when it sent one (it knows what the run is — a preset,
+ * a user plan, a registered workflow, free text — from the engine's record, and whether it is
+ * machine-owned), else `runMode.deliverKindOf` over the recorded workflow id (a daemon before
+ * api-types 0.46.0).
+ */
+export function runKindOfView(session: RunKindSource, isSystemWorkflow?: IsSystemWorkflow): RunKind {
+  const id = identityOf(session);
+  if (id !== undefined) {
+    if (id.system) return 'system';
+    return id.kind === 'free_text' ? 'freeform' : 'build';
+  }
+  return deliverKindOf(session.workflow_id, isSystemWorkflow);
+}
+
+/**
+ * Whether studio may CLAIM a classification about the run ("this run has no deliver phase", the
+ * `deliver: pr` remedy): the daemon's `run_identity` says it is not a system run and knows what it
+ * is; before 0.46.0, a def in hand says `is_system === false`. Anything else says nothing.
+ */
+export function runClassLicensed(session: RunKindSource, isSystemWorkflow?: IsSystemWorkflow): boolean {
+  const id = identityOf(session);
+  if (id !== undefined) return !id.system && id.kind !== 'unknown' && id.kind !== 'free_text';
+  const wf = session.workflow_id?.trim() ?? '';
+  return isSystemWorkflow?.(wf) === false;
+}
+
+function identityOf(session: RunKindSource): { system: boolean; kind: string } | undefined {
+  const id = session.run_identity;
+  if (typeof id !== 'object' || id === null) return undefined;
+  const r = id as { system?: unknown; kind?: unknown };
+  return typeof r.system === 'boolean' && typeof r.kind === 'string' ? { system: r.system, kind: r.kind } : undefined;
+}
+
 /**
  * Can this run deliver at all? The ONE predicate behind both the rail's Delivery
  * section and the project census, so the two surfaces cannot disagree about what
@@ -408,14 +448,9 @@ export const DELIVERY_COLOR: Record<DeliveryClaim, string> = {
  */
 export function canDeliver(view: SessionView, isSystemWorkflow?: IsSystemWorkflow): boolean {
   if (deliveryOf(view).state !== 'none') return true;
-  const wf = view.session.workflow_id?.trim() ?? '';
-  // The lookup is deliberately called TWICE — once inside `deliverKindOf`, once for the licence.
-  // Collapsing it into a closure over one memoized answer was tried (Copilot on #125 raised the
-  // repeat) and REVERTED: `tests/deliverKind.shared.test.tsx` pins that `canDeliver` hands
-  // `deliverKindOf` the very lookup it received, which is the guard stopping this slice and the
-  // composer from re-forking the rule — the defect that took a whole round to find. Weakening a
-  // structural invariant to save a map lookup on an array of at most 17 defs is the wrong trade.
-  return deliverKindOf(wf, isSystemWorkflow) === 'build' && isSystemWorkflow?.(wf) === false;
+  // The kind and the licence both read the run's own `run_identity` first (api-types 0.46.0), then
+  // the SAME lookup the composer classifies with (`runMode.deliverKindOf`) — one rule, never a copy.
+  return runKindOfView(view.session, isSystemWorkflow) === 'build' && runClassLicensed(view.session, isSystemWorkflow);
 }
 
 /**
@@ -477,8 +512,7 @@ export function hasDeliverySection(
   isSystemWorkflow?: IsSystemWorkflow,
 ): boolean {
   if (canDeliver(view, isSystemWorkflow)) return true;
-  const wf = view.session.workflow_id?.trim() ?? '';
-  if (deliverKindOf(wf, isSystemWorkflow) !== 'build') return false;
+  if (runKindOfView(view.session, isSystemWorkflow) !== 'build') return false;
   const workdir = view.session.workdir;
   return typeof workdir === 'string' && workdir.trim() !== '';
 }

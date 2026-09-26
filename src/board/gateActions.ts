@@ -1,8 +1,9 @@
 import { create } from 'zustand';
 import { api } from '../api/client.js';
+import { ApiError } from '../api/errors.js';
 import type { GateDecision } from '../api/types.js';
 import { modePath } from '../hooks/useRoute.js';
-import { useGateStore } from '../store/gates.js';
+import { choicesOf, useGateStore } from '../store/gates.js';
 import { useMembershipStore } from '../store/membership.js';
 import {
   cancelDecision, describeDecision, onDecisionTestReset, queueDecision, reportDecision, restoreNote,
@@ -241,11 +242,54 @@ export async function sendGateDecision(runId: string, decision: GateDecisionWire
     useGateStore.getState().clearGate(runId);
     return null;
   } catch (e) {
+    if (gateMovedCode(e) !== null) {
+      // The gate this decision was made on is no longer the open one (answered elsewhere or
+      // replaced), or the daemon cannot tell which is open. Never re-send: re-read the gate so the
+      // person sees what is open now, and say why nothing was sent.
+      patch(runId, { busy: false });
+      await refreshGate(runId);
+      patch(runId, { error: GATE_MOVED_TEXT });
+      return GATE_MOVED_TEXT;
+    }
     const error = e instanceof Error ? e.message : String(e);
     patch(runId, { error });
     return error;
   } finally {
     patch(runId, { busy: false });
+  }
+}
+
+/** What the person reads when their decision outlived its gate. */
+export const GATE_MOVED_TEXT =
+  'the gate moved before your decision was sent (it was answered or replaced), so nothing was sent. '
+  + 'The open gate is shown again; decide again.';
+
+/** crew's 409 code for a decision that named a gate which is no longer open, else `null`. */
+export function gateMovedCode(e: unknown): 'gate_changed' | 'gate_unknown' | null {
+  if (!(e instanceof ApiError) || e.status !== 409) return null;
+  const code = typeof e.body === 'object' && e.body !== null ? (e.body as Record<string, unknown>)['code'] : undefined;
+  return code === 'gate_changed' || code === 'gate_unknown' ? code : null;
+}
+
+/**
+ * Re-read the run's open gate (`GET /runs/:id/gate`) into the gate store: the new gate replaces
+ * the old one, and no cached gate drops it. A failed read leaves the store as it was.
+ */
+export async function refreshGate(runId: string): Promise<void> {
+  const store = useGateStore.getState();
+  try {
+    const g = await api.getGate(runId);
+    const choices = choicesOf(g as unknown as Record<string, unknown>);
+    store.setGate({
+      runId: g.runId,
+      ord: g.ord,
+      prompt: g.prompt,
+      lifecycle: g.lifecycle,
+      receivedAt: Date.parse(g.receivedAt) || Date.now(),
+      ...(choices !== undefined ? { choices } : {}),
+    });
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 404) store.clearGate(runId);
   }
 }
 
