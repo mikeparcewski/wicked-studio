@@ -46,15 +46,13 @@ describe('ChatInput workflow selector (system-workflow filter)', () => {
     expect(values).toContain('custom-wf');
   });
 
-  it('hides legacy system workflows by ID even when is_system flag is absent', async () => {
+  it('trusts the daemon\'s is_system flag: studio keeps no system-id list of its own', async () => {
     const user = userEvent.setup();
     vi.mocked(client.api.listWorkflows).mockResolvedValue({
       workflows: [
-        // No is_system flag — caught by the SYSTEM_WORKFLOW_IDS denylist.
-        { id: 'survey-repo',        phases: [] },
-        { id: 'domain-graph-slice', phases: [] },
-        { id: 'memories',           phases: [] },
-        { id: 'feature',            phases: [] },
+        { id: 'survey-repo', phases: [], is_system: true },
+        { id: 'memories',    phases: [], is_system: true },
+        { id: 'feature',     phases: [] },
       ],
     });
 
@@ -63,7 +61,6 @@ describe('ChatInput workflow selector (system-workflow filter)', () => {
     const values = await openPopoverAndGetValues(user);
 
     expect(values).not.toContain('survey-repo');
-    expect(values).not.toContain('domain-graph-slice');
     expect(values).not.toContain('memories');
     expect(values).toContain('feature');
   });

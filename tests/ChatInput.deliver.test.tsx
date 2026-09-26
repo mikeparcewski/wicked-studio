@@ -334,11 +334,16 @@ describe('ChatInput delivery (#123)', () => {
   });
 
   it('the chat surface (workflowOverride: chat) never delivers and stays silent', async () => {
+    // The daemon flags chat `is_system` (studio keeps no system-id list of its own).
+    vi.mocked(client.api.listWorkflows).mockResolvedValue({
+      workflows: [{ id: 'feature', is_system: false, phases: [] }, { id: 'chat', is_system: true, phases: [] }],
+    });
     const user = userEvent.setup();
     render(
       <ChatInput runId={null} runStatus={null} onLaunched={vi.fn()} workflowOverride="chat" />,
     );
     await bind(user, { repo: 'studio-api' });
+    await waitFor(() => expect(client.api.listWorkflows).toHaveBeenCalled());
 
     // A system workflow has nothing to deliver — no notice, no key.
     expect(screen.queryByTestId('deliver-notice')).toBeNull();

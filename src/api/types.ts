@@ -106,6 +106,12 @@ export type LaunchBodyWithDeliver = Omit<LaunchRunBody, 'deliver'> & {
    * Mutually exclusive with `campaignId`. Echoed as `AgentSession.group_label`.
    */
   groupLabel?: string;
+  /**
+   * A user-composed plan (DES-TEAMING-002 T3; api-types 0.45.0+): ordered catalog steps and the
+   * predicted `touch` set. Mutually exclusive with `workflow`. Hand-declared (studio pins 0.39.0;
+   * see `./teamPlan.ts`) — delete on the bump that carries `LaunchRunBody.plan`.
+   */
+  plan?: import('./teamPlan.js').LaunchPlan;
 };
 
 // ── GET /runs/:id/acceptance (AW-14 / AW-18 — arch-R13a + R16) ────────────────

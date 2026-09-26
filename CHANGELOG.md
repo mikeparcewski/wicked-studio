@@ -13,6 +13,21 @@ npm publish dates. Every version listed here exists on
 ## [Unreleased]
 
 ### Added
+- **The plan UI for team runs (DES-TEAMING-002 T9).** The composer's **Phases** picker lists the
+  engine's catalog (`GET /catalog`), not a list of our own; a composed plan launches as `plan`
+  (with an optional touch set), never `workflow`. Before Send, a **launch preview**
+  (`POST /plans/preview`, for a composed plan or a named preset) shows the score, the band, the
+  steps the floor added, and whether the launch pauses and why. A plan the PA will scope first
+  (`graph: "pending_pa_scope"`) shows no score and no floor markers, because its floor is only the
+  baseline's. `before:N` is sent as `before:N+1` when the preview's first step is the PA's
+  `pa-scope` step (ord 1). The engine accepts only a number there, so the shift is read off the
+  preview. A live preset or user-plan run gets a **Plan** section on its run page: adding phases
+  sends `POST /runs/:id/plan` with a fresh `requestId` per edit and shows the answer's band,
+  high-risk flag and floor additions. Retrying a lost answer re-sends the same `requestId`, and
+  `duplicate: true` reads "Already applied". The types are hand-declared from
+  wicked-crew-api-types 0.47.0 (`src/api/teamPlan.ts`) until a published version carries them.
+  `e2e/t9_plan_ui_test.py` covers all of it under both skins.
+
 - **The Needs-you queue lives in the app shell.** Its inputs (live chats, campaigns, the repo
   register, pending proposals) are loaded by one app-level store (`store/needsSources.ts`) and
   folded by one hook (`useNeedsRows`), so Home, the right rail and peek read the same ranked rows
@@ -108,6 +123,15 @@ npm publish dates. Every version listed here exists on
   controls disabled; peek, triage selection and batch skip gates that already carry a decision;
   a reject reason survives Undo; `B` after chained jumps returns to the first origin; `P`/`G`/`B`
   stand down under a modal or the `?` overlay.
+
+### Changed
+- **A gate decision that outlived its gate is refreshed, not retried.** On crew's 409
+  `gate_changed` / `gate_unknown`, the one decision path (`board/gateActions.ts`) re-reads the
+  open gate, shows it, and says the gate moved; nothing is re-sent.
+- **Runs are classified by the daemon's `run_identity`.** A run's kind comes from
+  `run_identity.system` / `.kind` (api-types 0.46.0), and a launch's from the def's `is_system`.
+  Studio's own `SYSTEM_WORKFLOW_IDS` list is deleted. On a daemon before 0.46.0, a cold cache shows
+  a machine-owned run's worktree line (a fact), never the "no deliver phase" claim.
 
 ### Fixed
 - **Back after opening a gate.** The thread's gate card consumed the `#gate` hash with

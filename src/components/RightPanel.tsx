@@ -20,6 +20,8 @@ import { DeliveryBadge, RunDelivery } from './RunDelivery.js';
 import { SteeringTimeline } from './SteeringTimeline.js';
 import { Terminal } from './Terminal.js';
 import { WhatWhere } from './WhatWhere.js';
+import { PlanEditPanel } from './PlanEditPanel.js';
+import { planEditAvailability } from '../board/planModel.js';
 
 interface Props {
   view: SessionView;
@@ -38,7 +40,8 @@ type AccordionId =
   | 'whatwhere'
   | 'assumptions'
   | 'files'
-  | 'delivery';
+  | 'delivery'
+  | 'plan';
 
 /**
  * The rail's sections. The contract is **nine on a run that can deliver, eight
@@ -46,6 +49,9 @@ type AccordionId =
  * freeform runs, per `canDeliver`. There is no fixed count of nine: `delivery`
  * is the conditional ninth, and a surface that says otherwise is describing
  * build runs only.
+ *
+ * `plan` is conditional the same way: only a LIVE planned run (a preset or a user plan, per the
+ * daemon's `run_identity`) has a plan to add phases to (DES-TEAMING-002 T9, `planEditAvailability`).
  *
  * Delivery is a section like every other — not a pinned band above the list,
  * not a tablist — because "delivery isn't a top level class, it goes in the
@@ -62,6 +68,7 @@ type AccordionId =
  */
 const ACCORDIONS: { id: AccordionId; label: string }[] = [
   { id: 'whatwhere', label: 'What / Where' },
+  { id: 'plan', label: 'Plan' },
   { id: 'decisions', label: 'Decisions' },
   { id: 'governance', label: 'Governance' },
   { id: 'burn', label: 'Burn' },
@@ -538,7 +545,11 @@ export function RightPanel({ view, runs, onSelectRun, navigate }: Props): React.
   // half is a visibility gate, not a wire read.
   const isSystemWorkflow = useIsSystemWorkflow();
   const sections = useMemo(
-    () => (hasDeliverySection(view, isSystemWorkflow) ? ACCORDIONS : ACCORDIONS.filter((a) => a.id !== 'delivery')),
+    () => {
+      const delivery = hasDeliverySection(view, isSystemWorkflow);
+      const plan = planEditAvailability(view.session).show;
+      return ACCORDIONS.filter((a) => (a.id !== 'delivery' || delivery) && (a.id !== 'plan' || plan));
+    },
     [view, isSystemWorkflow],
   );
 
@@ -671,6 +682,7 @@ export function RightPanel({ view, runs, onSelectRun, navigate }: Props): React.
           <div key={id} style={{ borderBottom: '1px solid var(--surface-raised)' }}>
             <button
               type="button"
+              data-testid={`rail-accordion-${id}`}
               onClick={() => toggleAccordion(id)}
               className="w-full flex items-center justify-between px-4 py-2.5 text-left transition-colors"
               style={{ color: openId === id ? 'var(--ink-high)' : 'var(--ink-muted)' }}
@@ -709,7 +721,12 @@ export function RightPanel({ view, runs, onSelectRun, navigate }: Props): React.
                 <RunDelivery view={view} {...(navigate !== undefined ? { navigate } : {})} />
               </div>
             )}
-            {openId === id && id !== 'delivery' && model && (
+            {openId === id && id === 'plan' && (
+              <div className="px-4 py-3" style={{ background: 'var(--surface-base)' }}>
+                <PlanEditPanel view={view} />
+              </div>
+            )}
+            {openId === id && id !== 'delivery' && id !== 'plan' && model && (
               <div className="px-4 py-3" style={{ background: 'var(--surface-base)' }}>
                 {id === 'decisions' && <DecisionsLedger model={model} />}
                 {id === 'governance' && <GovernanceAudit model={model} />}

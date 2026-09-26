@@ -224,6 +224,8 @@ export function ContextPopover({
           {confirmMode === 'before' && (
             <input
               type="number"
+              data-testid="launch-before-ord"
+              aria-label="Before unit number"
               min={1}
               value={beforeOrd}
               onChange={(e) => onBeforeOrdChange(Math.max(1, Number(e.target.value) || 1))}

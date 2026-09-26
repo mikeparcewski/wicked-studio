@@ -10,10 +10,10 @@
   "version": 1,
   "studioVersion": "0.5.14",
   "counts": {
-    "files": 155,
-    "occurrences": 1393,
-    "static": 1199,
-    "dynamic": 67,
+    "files": 158,
+    "occurrences": 1427,
+    "static": 1230,
+    "dynamic": 68,
     "computed": 7
   },
   "static": [
@@ -2280,6 +2280,12 @@
       ]
     },
     {
+      "testId": "floor-marker",
+      "files": [
+        "src/components/LaunchPreview.tsx"
+      ]
+    },
+    {
       "testId": "followup-bar",
       "files": [
         "src/components/FollowUpComposer.tsx"
@@ -2934,6 +2940,12 @@
       ]
     },
     {
+      "testId": "launch-before-ord",
+      "files": [
+        "src/components/ContextPopover.tsx"
+      ]
+    },
+    {
       "testId": "launch-confirm",
       "files": [
         "src/components/ChatInput.tsx"
@@ -2973,6 +2985,30 @@
       "testId": "launch-gate",
       "files": [
         "src/components/ContextPopover.tsx"
+      ]
+    },
+    {
+      "testId": "launch-preview",
+      "files": [
+        "src/components/LaunchPreview.tsx"
+      ]
+    },
+    {
+      "testId": "launch-preview-error",
+      "files": [
+        "src/components/LaunchPreview.tsx"
+      ]
+    },
+    {
+      "testId": "launch-preview-pause",
+      "files": [
+        "src/components/LaunchPreview.tsx"
+      ]
+    },
+    {
+      "testId": "launch-preview-unsupported",
+      "files": [
+        "src/components/LaunchPreview.tsx"
       ]
     },
     {
@@ -3754,6 +3790,18 @@
       ]
     },
     {
+      "testId": "phase-catalog-error",
+      "files": [
+        "src/components/PhasePicker.tsx"
+      ]
+    },
+    {
+      "testId": "phase-catalog-unsupported",
+      "files": [
+        "src/components/PhasePicker.tsx"
+      ]
+    },
+    {
       "testId": "phase-ladder",
       "files": [
         "src/components/PhaseLadder.tsx"
@@ -3766,6 +3814,42 @@
       ]
     },
     {
+      "testId": "phase-option",
+      "files": [
+        "src/components/PhasePicker.tsx"
+      ]
+    },
+    {
+      "testId": "phase-picker",
+      "files": [
+        "src/components/PhasePicker.tsx"
+      ]
+    },
+    {
+      "testId": "phase-picker-toggle",
+      "files": [
+        "src/components/ChatInput.tsx"
+      ]
+    },
+    {
+      "testId": "phase-remove",
+      "files": [
+        "src/components/PhasePicker.tsx"
+      ]
+    },
+    {
+      "testId": "phase-selected",
+      "files": [
+        "src/components/PhasePicker.tsx"
+      ]
+    },
+    {
+      "testId": "phase-selection",
+      "files": [
+        "src/components/PhasePicker.tsx"
+      ]
+    },
+    {
       "testId": "phase-strip",
       "files": [
         "src/components/PhaseStrip.tsx"
@@ -3775,6 +3859,66 @@
       "testId": "phase-strip-overflow",
       "files": [
         "src/components/PhaseStrip.tsx"
+      ]
+    },
+    {
+      "testId": "plan-edit",
+      "files": [
+        "src/components/PlanEditPanel.tsx"
+      ]
+    },
+    {
+      "testId": "plan-edit-band",
+      "files": [
+        "src/components/PlanEditPanel.tsx"
+      ]
+    },
+    {
+      "testId": "plan-edit-error",
+      "files": [
+        "src/components/PlanEditPanel.tsx"
+      ]
+    },
+    {
+      "testId": "plan-edit-floor-added",
+      "files": [
+        "src/components/PlanEditPanel.tsx"
+      ]
+    },
+    {
+      "testId": "plan-edit-high-risk",
+      "files": [
+        "src/components/PlanEditPanel.tsx"
+      ]
+    },
+    {
+      "testId": "plan-edit-propose",
+      "files": [
+        "src/components/PlanEditPanel.tsx"
+      ]
+    },
+    {
+      "testId": "plan-edit-result",
+      "files": [
+        "src/components/PlanEditPanel.tsx"
+      ]
+    },
+    {
+      "testId": "plan-edit-retry",
+      "files": [
+        "src/components/PlanEditPanel.tsx"
+      ]
+    },
+    {
+      "testId": "plan-edit-unavailable",
+      "files": [
+        "src/components/PlanEditPanel.tsx"
+      ]
+    },
+    {
+      "testId": "plan-touch",
+      "files": [
+        "src/components/PhasePicker.tsx"
       ]
     },
     {
@@ -3808,9 +3952,27 @@
       ]
     },
     {
+      "testId": "preview-band",
+      "files": [
+        "src/components/LaunchPreview.tsx"
+      ]
+    },
+    {
+      "testId": "preview-floor-note",
+      "files": [
+        "src/components/LaunchPreview.tsx"
+      ]
+    },
+    {
       "testId": "preview-gate-chip",
       "files": [
         "src/components/AppearanceSettings.tsx"
+      ]
+    },
+    {
+      "testId": "preview-high-risk",
+      "files": [
+        "src/components/LaunchPreview.tsx"
       ]
     },
     {
@@ -3820,9 +3982,33 @@
       ]
     },
     {
+      "testId": "preview-pending-scope",
+      "files": [
+        "src/components/LaunchPreview.tsx"
+      ]
+    },
+    {
       "testId": "preview-primary",
       "files": [
         "src/components/AppearanceSettings.tsx"
+      ]
+    },
+    {
+      "testId": "preview-score",
+      "files": [
+        "src/components/LaunchPreview.tsx"
+      ]
+    },
+    {
+      "testId": "preview-step",
+      "files": [
+        "src/components/LaunchPreview.tsx"
+      ]
+    },
+    {
+      "testId": "preview-steps",
+      "files": [
+        "src/components/LaunchPreview.tsx"
       ]
     },
     {
@@ -7562,6 +7748,12 @@
       "pattern": "mode-tab-*",
       "files": [
         "src/components/ModeSwitcher.tsx"
+      ]
+    },
+    {
+      "pattern": "rail-accordion-*",
+      "files": [
+        "src/components/RightPanel.tsx"
       ]
     },
     {
