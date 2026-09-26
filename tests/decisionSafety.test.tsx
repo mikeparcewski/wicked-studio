@@ -147,13 +147,33 @@ describe('batch counts only what it will send', () => {
   });
 });
 
-describe('an older daemon refuses ord', () => {
-  it('resends once without it, and stops sending it', async () => {
+describe('a refused send is a visible "Not sent" with the server\'s reason — never resent (round 4)', () => {
+  const refusals: Array<[string, number, string]> = [
+    ['gate_unknown', 409, 'Gate unknown: this decision names the gate before unit 3, but the daemon cannot tell which gate is open on this run — refresh and decide again.'],
+    ['gate_changed', 409, 'Gate changed: this decision was made on the gate before unit 3, but the open gate is before unit 4'],
+    ['a 400', 400, 'Invalid request body: unknown field `ord` — this endpoint does not accept it'],
+  ];
+  it.each(refusals)('%s: exactly one POST (with ord), and the reason is shown', async (_name, status, wire) => {
+    openGate('b1', 3);
+    confirmGate.mockRejectedValueOnce(new ApiError(status, wire));
+    void decideGate('b1', { approve: true });
+    await vi.advanceTimersByTimeAsync(UNDO_WINDOW_MS);
+    expect(confirmGate.mock.calls.map((c) => c[1])).toEqual([{ approve: true, ord: 3 }]);
+    const [only, ...rest] = useUndoQueue.getState().results;
+    expect(rest).toEqual([]);
+    expect(only?.kind).toBe('failed');
+    expect(only?.text.startsWith('Not sent: beta · b1 — ')).toBe(true);
+    expect(only?.text).toContain(wire);
+  });
+
+  it('the next decision still names its gate (no session-wide stop)', async () => {
     openGate('b1', 3);
     confirmGate.mockRejectedValueOnce(new ApiError(400, 'Invalid request body: unknown field `ord` — this endpoint does not accept it'));
     void decideGate('b1', { approve: true });
     await vi.advanceTimersByTimeAsync(UNDO_WINDOW_MS);
-    expect(confirmGate.mock.calls.map((c) => c[1])).toEqual([{ approve: true, ord: 3 }, { approve: true }]);
-    expect(results()).toEqual(['sent: Approved beta · b1.']);
+    useGateActionStore.setState({ byGate: {} });
+    void decideGate('b1', { approve: true });
+    await vi.advanceTimersByTimeAsync(UNDO_WINDOW_MS);
+    expect(confirmGate.mock.calls.map((c) => c[1])).toEqual([{ approve: true, ord: 3 }, { approve: true, ord: 3 }]);
   });
 });
