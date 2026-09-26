@@ -15,6 +15,10 @@ Runs against the shared W2 fixture (uxfix_fixture.py) with the `wave1` corpus pl
   back     B → the address is /p/gamma/build/r1 again, the feed's scrollTop is within
            10px of where it was, and focus is back on "Draft update".
   overlay  ? lists all three keys under their own section.
+  queue    (wave 2b corpus) with the ranked needs-you queue focused, P peeks the QUEUE's top
+           item (the approvals group's top member, gate:g1) with the URL unchanged; Esc closes
+           it and focus stays in the queue; G opens /p/alpha/build/g1; B comes back to `/`
+           with focus back in the queue.
 
 Capture: e2e/shots/wave2a-peek.png, wave2a-jump.png, wave2a-back.png.
 
@@ -156,7 +160,46 @@ with sync_playwright() as p:
                                   "Back to exactly where you were")), text=text[-600:])
     page.keyboard.press("Escape")
 
-    set_fixture(origin, wave1=False, wave2a_feed=False, gate_now=[], extra_gates=[])
+    # ── the ranked queue (wave 2b) holds focus: P peeks the QUEUE's top item ────
+    set_fixture(origin, wave1=True, wave2a_feed=False, wave2b=True, simple_gates=["g1", "g2"],
+                gate_now=[], extra_gates=[], extra_frames=[], status_over={})
+    q = browser.new_page(viewport={"width": W, "height": H}, device_scale_factor=1)
+    q.add_init_script(
+        "document.addEventListener('DOMContentLoaded', () => { const s = document.createElement('style'); "
+        f"s.textContent = {json.dumps(HIDE_GATE_TOASTS)}; document.head.appendChild(s); }});")
+    q.goto(f"{origin}/", wait_until="networkidle")
+    q.get_by_test_id("needs-you-queue").wait_for(state="visible", timeout=15000)
+    check("queue-top-is-approvals", wait_ok(
+        q, "() => { const r = document.querySelector('[data-testid=\"need-row\"]');"
+           " return !!r && r.dataset.kind === 'gate' && (r.textContent ?? '').includes('2 approvals'); }", 10000),
+        top=q.evaluate("() => document.querySelector('[data-testid=\"need-row\"]')?.dataset.key"))
+    q.get_by_test_id("needs-you-queue").focus()
+    href0 = q.evaluate("() => window.location.href")
+    q.keyboard.press("p")
+    check("queue-focused-peek-shows", wait_ok(q, "() => !!document.querySelector('[data-testid=\"peek-card\"]')", 5000))
+    # The approvals group stands for its top-ranked member: g1 has waited 20 min, g2 10 min.
+    peek_key = q.get_by_test_id("peek-card").get_attribute("data-key")
+    check("queue-focused-peek-is-queue-top", peek_key == "gate:g1", peek_key=peek_key)
+    check("queue-focused-peek-url-unchanged", q.evaluate("() => window.location.href") == href0)
+    q.screenshot(path=str(SHOTS / "wave2a-peek-queue.png"))
+    q.keyboard.press("Escape")
+    check("queue-escape-closes-peek-keeps-queue-focus",
+          wait_ok(q, "() => !document.querySelector('[data-testid=\"peek-card\"]')", 3000)
+          and q.evaluate("() => !!document.activeElement?.closest('[data-testid=\"needs-you-queue\"]')"),
+          focused=q.evaluate("() => document.activeElement?.getAttribute('data-testid')"))
+    q.keyboard.press("g")
+    check("queue-jump-to-g1", wait_ok(q, "() => window.location.pathname === '/p/alpha/build/g1'"),
+          url=q.evaluate("() => window.location.href"))
+    q.keyboard.press("b")
+    check("queue-back-home-focus-on-queue", wait_ok(
+        q, "() => window.location.pathname === '/'"
+           " && !!document.activeElement?.closest('[data-testid=\"needs-you-queue\"]')", 8000),
+        url=q.evaluate("() => window.location.href"),
+        focused=q.evaluate("() => document.activeElement?.getAttribute('data-testid')"))
+    q.close()
+
+    set_fixture(origin, wave1=False, wave2a_feed=False, wave2b=False, simple_gates=[], gate_now=[],
+                extra_gates=[])
     browser.close()
 
 report["ok"] = True
