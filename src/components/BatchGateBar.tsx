@@ -7,6 +7,7 @@ import {
   useBatchGateStore,
 } from '../board/batchGates.js';
 import { gateOpenPath } from '../board/gateActions.js';
+import { decisionPreview } from '../board/undoQueue.js';
 import type { Navigate } from '../hooks/useRoute.js';
 import { isSimpleGate, type OpenGate } from '../store/gates.js';
 import { useMembershipStore } from '../store/membership.js';
@@ -116,7 +117,7 @@ export function BatchSelectBox({ runId, gate }: {
 }
 
 export function BatchGateBar({ navigate }: { navigate: Navigate }): React.ReactElement | null {
-  const { selected, running, done, total, failures } = useBatchGateStore();
+  const { selected, running, queued, done, total, failures } = useBatchGateStore();
   const projectIdByRun = useMembershipStore((s) => s.projectIdByRun);
   const [noteOpen, setNoteOpen] = useState(false);
   const [note, setNote] = useState('');
@@ -180,7 +181,8 @@ export function BatchGateBar({ navigate }: { navigate: Navigate }): React.ReactE
             <button
               type="button"
               data-testid="batch-approve-all"
-              disabled={running || selected.length === 0}
+              disabled={running || queued || selected.length === 0}
+              title={decisionPreview('approve', selected.length)}
               onClick={() => void runBatchDecision({ approve: true })}
               style={{ ...CSS.btn, background: 'var(--status-run-dim)', color: 'var(--status-run)' }}
             >
@@ -189,7 +191,8 @@ export function BatchGateBar({ navigate }: { navigate: Navigate }): React.ReactE
             <button
               type="button"
               data-testid="batch-reject-all"
-              disabled={running || selected.length === 0}
+              disabled={running || queued || selected.length === 0}
+              title={decisionPreview('reject', selected.length)}
               onClick={() => setNoteOpen(true)}
               style={{ ...CSS.btn, background: 'var(--status-fail-dim)', color: 'var(--status-fail)' }}
             >
@@ -198,7 +201,7 @@ export function BatchGateBar({ navigate }: { navigate: Navigate }): React.ReactE
             <button
               type="button"
               data-testid="batch-clear"
-              disabled={running}
+              disabled={running || queued}
               onClick={clearBatchSelection}
               style={CSS.clear}
             >
@@ -207,6 +210,13 @@ export function BatchGateBar({ navigate }: { navigate: Navigate }): React.ReactE
           </>
         )}
       </div>
+
+      {/* Wave 2a: what each verb will do, before it is committed (10 s undo after). */}
+      {!running && !queued && selected.length > 0 && (
+        <p data-testid="batch-preview" style={{ ...CSS.hint, margin: 0, whiteSpace: 'normal' }}>
+          Approve all: {decisionPreview('approve', selected.length)} Reject all: {decisionPreview('reject', selected.length)} Both wait 10 s for Undo.
+        </p>
+      )}
 
       {/* §9.2 per-id honesty: which ids failed, why, retry-just-this-one. */}
       {failures.map((f) => {

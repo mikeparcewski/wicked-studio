@@ -2,6 +2,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'rea
 import { lostQuorum, quorumLabel } from './councilQuorum.js';
 import { api, downloadRunEvidence } from '../api/client.js';
 import { useGlobalShortcuts, type ShortcutEntry } from '../hooks/useGlobalShortcuts.js';
+import { usePlacePanel } from '../hooks/usePlacePanel.js';
 import type { SessionView, WorkUnit } from '../api/types.js';
 import { executingOrd } from '../api/run-state.js';
 import { useRunEventStore } from '../store/events.js';
@@ -854,6 +855,9 @@ function RunChat({
   // run view now; Timeline/Units live behind the header's Inspect ▾ control,
   // not as sibling tabs. Live runs are always the feed.
   const [runTab, setRunTab] = useState<RunLens>('feed');
+  // Wave 2a: the lens and an open evidence file are part of "where you were".
+  usePlacePanel('run.lens', runTab, setRunTab);
+  usePlacePanel('run.evidenceFile', evidenceFile, setEvidenceFile);
 
   const style = STATUS_STYLE[session.status] ?? { label: session.status, className: '', color: 'var(--ink-muted)' };
   const isTerminal = ['completed', 'cancelled', 'failed'].includes(session.status);

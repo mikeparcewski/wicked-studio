@@ -18,10 +18,11 @@ import { useLayerStore } from '../store/layers.js';
  * yields while it is up, via `useLayerStore.shortcutOverlayOpen`).
  */
 
-const GROUP_ORDER: readonly ShortcutGroup[] = ['triage', 'gates', 'palette', 'panels'];
+const GROUP_ORDER: readonly ShortcutGroup[] = ['triage', 'gates', 'navigate', 'palette', 'panels'];
 const GROUP_LABEL: Record<ShortcutGroup, string> = {
   triage: 'Triage',
   gates: 'Gates',
+  navigate: 'Peek, jump, back',
   palette: 'Palette',
   panels: 'Panels & layers',
 };

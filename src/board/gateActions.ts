@@ -3,6 +3,7 @@ import { api } from '../api/client.js';
 import type { GateDecision } from '../api/types.js';
 import { modePath } from '../hooks/useRoute.js';
 import { useGateStore } from '../store/gates.js';
+import { decisionPreview, queueDecision } from './undoQueue.js';
 
 /**
  * The ONE gate-decision implementation (DES-FEEDBACK-002 §2.3, slice H): the
@@ -25,6 +26,8 @@ import { useGateStore } from '../store/gates.js';
 export const GATE_HASH = '#gate';
 
 export interface GateActionState {
+  /** Committed but inside the undo window (wave 2a): nothing sent yet, Undo still possible. */
+  queued: boolean;
   /** A POST is in flight — the §3.3 "answering…" state. */
   busy: boolean;
   /** The decision landed; the run is advancing (the chip's terminal line). */
@@ -33,7 +36,7 @@ export interface GateActionState {
   error: string | null;
 }
 
-export const IDLE_GATE_ACTION: GateActionState = { busy: false, answered: null, error: null };
+export const IDLE_GATE_ACTION: GateActionState = { queued: false, busy: false, answered: null, error: null };
 
 interface GateActionsStore {
   byGate: Record<string, GateActionState>;
@@ -72,13 +75,49 @@ useGateStore.subscribe((state, prev) => {
 /**
  * Answer a gate — `{approve:true}`, or `{approve:false, amend?}` where the
  * optional amend is the reject note the daemon's gate audit durably records
- * (§2.3 wire honesty). Guards double submission exactly as the chip always
- * has: a second call while the first POST is open, or after it landed, is
- * dropped rather than sent (a re-sent decision is a 409 at best and a second,
- * unintended decision at worst). On failure the error is named in the shared
- * state and the controls stay live — calling again is the retry.
+ * (§2.3 wire honesty).
+ *
+ * Wave 2a: the decision is QUEUED for the undo window (`undoQueue.ts`), never
+ * POSTed on the spot — the Undo toast can take it back, and closing the tab
+ * inside the window sends nothing. The returned promise settles when the
+ * decision is sent (or undone).
+ *
+ * Guards double submission exactly as the chip always has: a second call while
+ * the first is queued, in flight, or landed is dropped rather than sent (a
+ * re-sent decision is a 409 at best and a second, unintended decision at
+ * worst). On failure the error is named in the shared state and the controls
+ * stay live — calling again is the retry.
  */
-export async function decideGate(runId: string, decision: GateDecision): Promise<void> {
+export function decideGate(runId: string, decision: GateDecision): Promise<void> {
+  const cur = useGateActionStore.getState().byGate[runId] ?? IDLE_GATE_ACTION;
+  if (cur.queued || cur.busy || cur.answered !== null) return Promise.resolve();
+  patch(runId, { queued: true, error: null });
+  const verb = decision.approve ? 'approve' : 'reject';
+  return new Promise<void>((resolve) => {
+    queueDecision({
+      verb,
+      runIds: [runId],
+      preview: decisionPreview(verb, 1, !decision.approve && (decision.amend ?? '') !== ''),
+      commit: async () => {
+        patch(runId, { queued: false });
+        await sendGateDecision(runId, decision);
+        resolve();
+      },
+      onUndo: () => {
+        patch(runId, { queued: false });
+        resolve();
+      },
+    });
+  });
+}
+
+/**
+ * The SEND half — the one `POST /runs/:id/gate` every studio gate decision goes
+ * through once its undo window has closed (`decideGate` above, the batch
+ * fan-out). Same double-submit guard: a call while a POST is open, or after it
+ * landed, is dropped.
+ */
+export async function sendGateDecision(runId: string, decision: GateDecision): Promise<void> {
   const cur = useGateActionStore.getState().byGate[runId] ?? IDLE_GATE_ACTION;
   if (cur.busy || cur.answered !== null) return;
   patch(runId, { busy: true, error: null });

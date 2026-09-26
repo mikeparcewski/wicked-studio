@@ -275,8 +275,8 @@ with sync_playwright() as p:
     page.locator('[data-testid="gate-approve-r-q3"]').wait_for(timeout=30000)
     posts_before = len(gate_posts)
     page.locator('[data-testid="gate-approve-r-q3"]').click()
-    # The POST is fired synchronously on click; give the tap one settle tick.
-    page.wait_for_timeout(500)
+    # Wave 2a: the decision waits out its 10 s undo window, then POSTs; give it one tick more.
+    page.wait_for_timeout(11000)
     approve_posts = gate_posts[posts_before:]
 
     page.close()

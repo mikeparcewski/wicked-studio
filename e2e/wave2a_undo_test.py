@@ -76,8 +76,9 @@ def open_board(browser):
 def approve_with_a(page) -> float:
     page.evaluate("() => document.activeElement && document.activeElement.blur()")
     page.keyboard.press("j")
+    # The cursor is on beta: first press selects it; after an Undo it is still there.
     page.wait_for_function(
-        "() => document.activeElement?.getAttribute('data-kbd-item') === 'beta'", timeout=5000)
+        "() => !!document.querySelector('[data-kbd-item=\"beta\"][data-kbd-selected=\"true\"]')", timeout=5000)
     page.keyboard.press("a")
     return time.monotonic()
 

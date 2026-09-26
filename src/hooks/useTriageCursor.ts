@@ -225,6 +225,7 @@ export function useTriageCursor(
           !useRunsPanelStore.getState().expanded &&
           !useLayerStore.getState().shortcutOverlayOpen &&
           !useLayerStore.getState().bellOpen &&
+          !useLayerStore.getState().peekOpen &&
           !anyModalOpen(),
         handler: () => {
           setNoteFor(null);

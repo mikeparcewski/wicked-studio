@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { decideGate } from '../board/gateActions.js';
+import { decisionPreview } from '../board/undoQueue.js';
 
 /**
  * The inline reject note (DES-FEEDBACK-002 §2.3, slice H): what `r` opens on a
@@ -79,7 +80,9 @@ export function GateRejectNote({ runId, onClose }: Props): React.ReactElement {
         onKeyDown={onKeyDown}
         style={CSS.input}
       />
-      <span style={CSS.hint} aria-hidden>↵ reject · esc cancel</span>
+      <span style={CSS.hint} data-testid="gate-reject-preview" title={decisionPreview('reject', 1, note.trim() !== '')}>
+        ↵ reject (10 s to undo) · esc cancel
+      </span>
     </div>
   );
 }

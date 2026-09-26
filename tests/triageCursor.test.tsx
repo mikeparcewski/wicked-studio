@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { setUndoWindowForTest } from '../src/board/undoQueue.js';
 import { act, render, screen } from '@testing-library/react';
 import { GateRejectNote } from '../src/components/GateRejectNote.js';
 import { useTriageCursor, type TriageItem } from '../src/hooks/useTriageCursor.js';
@@ -117,11 +118,14 @@ describe('the triage cursor (slice H, §2.2)', () => {
     expect(selectedKeys()).toEqual([]);
   });
 
-  it('a on a simple-gate row fires the exact POST once — a second a is dropped', () => {
+  it('a on a simple-gate row fires the exact POST once — a second a is dropped', async () => {
     render(<Harness items={items3()} navigate={vi.fn()} />);
     press('j');
     press('a');
-    press('a'); // in-flight/answered — the shared double-submit guard drops it
+    press('a'); // queued/in-flight/answered — the shared double-submit guard drops it
+    await vi.waitFor(() => expect(client.api.confirmGate).toHaveBeenCalledTimes(1));
+    press('a');
+    await new Promise((r) => setTimeout(r, 5));
     expect(client.api.confirmGate).toHaveBeenCalledTimes(1);
     expect(client.api.confirmGate).toHaveBeenCalledWith('r1', { approve: true });
   });
@@ -157,7 +161,7 @@ describe('the triage cursor (slice H, §2.2)', () => {
     expect(document.activeElement).toBe(note);
     await user.keyboard('needs the Q3 numbers first');
     await user.keyboard('{Enter}');
-    expect(client.api.confirmGate).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(client.api.confirmGate).toHaveBeenCalledTimes(1));
     expect(client.api.confirmGate).toHaveBeenCalledWith('r1', {
       approve: false, amend: 'needs the Q3 numbers first',
     });
@@ -267,3 +271,7 @@ describe('the shared decision state (gateActions.ts, §2.3)', () => {
     expect(client.api.confirmGate).toHaveBeenCalledTimes(2);
   });
 });
+
+// Wave 2a: these tests pin the SEND path; the 10 s undo window has its own suite
+// (tests/undoQueue.test.tsx), so here a committed decision goes out on the next tick.
+beforeEach(() => setUndoWindowForTest(0));

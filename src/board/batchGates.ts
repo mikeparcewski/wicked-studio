@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { GateDecision } from '../api/types.js';
-import { decideGate, IDLE_GATE_ACTION, useGateActionStore } from './gateActions.js';
+import { IDLE_GATE_ACTION, sendGateDecision, useGateActionStore } from './gateActions.js';
+import { decisionPreview, queueDecision } from './undoQueue.js';
 
 /**
  * Batch gate resolution (DES-FEEDBACK-002 §9, P2-9, slice L): a selection
@@ -37,6 +38,9 @@ interface BatchGateStore {
   selected: string[];
   /** A fan-out is in flight — the bar's `2/3…` state; re-entry is dropped. */
   running: boolean;
+  /** Wave 2a: a batch decision sits in its undo window (nothing sent yet);
+   *  re-entry is dropped and the selection is frozen until it sends or is undone. */
+  queued: boolean;
   /** Completed POSTs of the current/last fan-out, out of `total`. */
   done: number;
   total: number;
@@ -46,14 +50,14 @@ interface BatchGateStore {
   lastDecision: GateDecision | null;
 }
 
-const IDLE = { selected: [], running: false, done: 0, total: 0, failures: [], lastDecision: null };
+const IDLE = { selected: [], running: false, queued: false, done: 0, total: 0, failures: [], lastDecision: null };
 
 export const useBatchGateStore = create<BatchGateStore>(() => ({ ...IDLE }));
 
 /** Toggle one run's membership. Callers guard eligibility (simple + answerable). */
 export function toggleBatchSelect(runId: string): void {
   useBatchGateStore.setState((s) => {
-    if (s.running) return s; // the selection is frozen while a fan-out runs
+    if (s.running || s.queued) return s; // frozen while a fan-out is queued or running
     return s.selected.includes(runId)
       ? { selected: s.selected.filter((id) => id !== runId) }
       : { selected: [...s.selected, runId] };
@@ -63,28 +67,67 @@ export function toggleBatchSelect(runId: string): void {
 /** Escape / route change: drop everything, fire nothing (§9.5). */
 export function clearBatchSelection(): void {
   const s = useBatchGateStore.getState();
-  if (s.running) return;
+  if (s.running || s.queued) return;
   if (s.selected.length === 0 && s.failures.length === 0 && s.lastDecision === null) return;
   useBatchGateStore.setState({ ...IDLE });
 }
 
-/** One decision for one id through the shared path; returns the named error or null. */
+/** One decision for one id through the shared SEND path; returns the named error or null.
+ *  (The undo window was the batch's, once, before the fan-out began.) */
 async function decideOne(runId: string, decision: GateDecision): Promise<string | null> {
-  await decideGate(runId, decision);
+  await sendGateDecision(runId, decision);
   const after = useGateActionStore.getState().byGate[runId] ?? IDLE_GATE_ACTION;
   if (after.answered !== null) return null;
   return after.error ?? 'not sent — already answered or still in flight';
 }
 
 /**
+ * Commit a batch decision (wave 2a): ONE undo window for the whole batch — one
+ * toast, one Undo — then the fan-out. The selection is snapshotted at commit and
+ * frozen while queued; each id wears the per-gate `queued` state on its card.
+ * Undo releases everything and sends nothing. The returned promise settles when
+ * the fan-out finishes (or the batch is undone).
+ */
+export function runBatchDecision(decision: GateDecision): Promise<void> {
+  const s = useBatchGateStore.getState();
+  if (s.running || s.queued || s.selected.length === 0) return Promise.resolve();
+  const ids = [...s.selected];
+  const verb = decision.approve ? 'approve' : 'reject';
+  const markQueued = (queued: boolean): void =>
+    useGateActionStore.setState((cur) => {
+      const byGate = { ...cur.byGate };
+      for (const id of ids) byGate[id] = { ...(byGate[id] ?? IDLE_GATE_ACTION), queued };
+      return { byGate };
+    });
+  useBatchGateStore.setState({ queued: true });
+  markQueued(true);
+  return new Promise<void>((resolve) => {
+    queueDecision({
+      verb,
+      runIds: ids,
+      preview: decisionPreview(verb, ids.length, !decision.approve && (decision.amend ?? '') !== ''),
+      commit: async () => {
+        markQueued(false);
+        useBatchGateStore.setState({ queued: false });
+        await fanOut(ids, decision);
+        resolve();
+      },
+      onUndo: () => {
+        markQueued(false);
+        useBatchGateStore.setState({ queued: false });
+        resolve();
+      },
+    });
+  });
+}
+
+/**
  * The fan-out: N sequential `POST /runs/:id/gate` calls in selection order.
- * A second call while one runs is dropped (plus `decideGate`'s own per-run
+ * A second call while one runs is dropped (plus `sendGateDecision`'s own per-run
  * guard underneath — the shared-store double-submit contract).
  */
-export async function runBatchDecision(decision: GateDecision): Promise<void> {
-  const s = useBatchGateStore.getState();
-  if (s.running || s.selected.length === 0) return;
-  const ids = [...s.selected];
+async function fanOut(ids: string[], decision: GateDecision): Promise<void> {
+  if (useBatchGateStore.getState().running) return;
   useBatchGateStore.setState({
     running: true, done: 0, total: ids.length, failures: [], lastDecision: decision,
   });

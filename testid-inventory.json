@@ -10,10 +10,10 @@
   "version": 1,
   "studioVersion": "0.5.14",
   "counts": {
-    "files": 152,
-    "occurrences": 1367,
-    "static": 1175,
-    "dynamic": 65,
+    "files": 154,
+    "occurrences": 1383,
+    "static": 1190,
+    "dynamic": 66,
     "computed": 7
   },
   "static": [
@@ -435,6 +435,12 @@
     },
     {
       "testId": "batch-ineligible",
+      "files": [
+        "src/components/BatchGateBar.tsx"
+      ]
+    },
+    {
+      "testId": "batch-preview",
       "files": [
         "src/components/BatchGateBar.tsx"
       ]
@@ -2358,6 +2364,12 @@
       ]
     },
     {
+      "testId": "gate-reject-preview",
+      "files": [
+        "src/components/GateRejectNote.tsx"
+      ]
+    },
+    {
       "testId": "gate-toast",
       "files": [
         "src/components/GateNotifications.tsx"
@@ -3691,6 +3703,54 @@
       "testId": "panel-tab",
       "files": [
         "src/components/DocPanel.tsx"
+      ]
+    },
+    {
+      "testId": "peek-card",
+      "files": [
+        "src/components/PeekCard.tsx"
+      ]
+    },
+    {
+      "testId": "peek-close",
+      "files": [
+        "src/components/PeekCard.tsx"
+      ]
+    },
+    {
+      "testId": "peek-empty",
+      "files": [
+        "src/components/PeekCard.tsx"
+      ]
+    },
+    {
+      "testId": "peek-evidence",
+      "files": [
+        "src/components/PeekCard.tsx"
+      ]
+    },
+    {
+      "testId": "peek-jump",
+      "files": [
+        "src/components/PeekCard.tsx"
+      ]
+    },
+    {
+      "testId": "peek-no-verdict",
+      "files": [
+        "src/components/PeekCard.tsx"
+      ]
+    },
+    {
+      "testId": "peek-prompt",
+      "files": [
+        "src/components/PeekCard.tsx"
+      ]
+    },
+    {
+      "testId": "peek-subject",
+      "files": [
+        "src/components/PeekCard.tsx"
       ]
     },
     {
@@ -6706,6 +6766,36 @@
       ]
     },
     {
+      "testId": "undo-button",
+      "files": [
+        "src/components/UndoToasts.tsx"
+      ]
+    },
+    {
+      "testId": "undo-close-note",
+      "files": [
+        "src/components/UndoToasts.tsx"
+      ]
+    },
+    {
+      "testId": "undo-headline",
+      "files": [
+        "src/components/UndoToasts.tsx"
+      ]
+    },
+    {
+      "testId": "undo-preview",
+      "files": [
+        "src/components/UndoToasts.tsx"
+      ]
+    },
+    {
+      "testId": "undo-toast",
+      "files": [
+        "src/components/UndoToasts.tsx"
+      ]
+    },
+    {
       "testId": "unfiled-card",
       "files": [
         "src/components/ProjectsPage.tsx"
@@ -7344,6 +7434,12 @@
     },
     {
       "pattern": "gate-open-*",
+      "files": [
+        "src/components/GateChip.tsx"
+      ]
+    },
+    {
+      "pattern": "gate-queued-*",
       "files": [
         "src/components/GateChip.tsx"
       ]

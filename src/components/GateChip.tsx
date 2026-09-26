@@ -5,6 +5,7 @@ import {
   IDLE_GATE_ACTION,
   useGateActionStore,
 } from '../board/gateActions.js';
+import { decisionPreview } from '../board/undoQueue.js';
 import type { Navigate } from '../hooks/useRoute.js';
 import { isSimpleGate, type OpenGate } from '../store/gates.js';
 
@@ -79,7 +80,7 @@ export function GateChip({ runId, projectId, gate, navigate }: Props): React.Rea
   // (slice H, §2.3): one `decideGate` per gate, whoever fires it — so a
   // keyboard approve shows its "answering…"/answered/error states right here
   // on the chip, and the double-submit guard holds across input methods.
-  const { busy, answered, error } = useGateActionStore((s) => s.byGate[runId]) ?? IDLE_GATE_ACTION;
+  const { queued, busy, answered, error } = useGateActionStore((s) => s.byGate[runId]) ?? IDLE_GATE_ACTION;
 
   if (!isSimpleGate(gate)) {
     // The gate MESSAGE is the destination, not just the run — the hash is what tells
@@ -107,6 +108,15 @@ export function GateChip({ runId, projectId, gate, navigate }: Props): React.Rea
     void decideGate(runId, { approve });
   };
 
+  // Wave 2a: committed, inside the undo window — nothing sent yet; the toast owns Undo.
+  if (queued) {
+    return (
+      <span style={CSS.wrap} data-testid={`gate-queued-${runId}`}>
+        <span style={{ ...CSS.label, color: 'var(--ink-muted)', fontWeight: 'var(--weight-normal)' }}>queued · undo in toast</span>
+      </span>
+    );
+  }
+
   if (answered !== null) {
     return (
       <span style={CSS.wrap} data-testid={`gate-answered-${runId}`}>
@@ -128,7 +138,7 @@ export function GateChip({ runId, projectId, gate, navigate }: Props): React.Rea
         data-testid={`gate-approve-${runId}`}
         onClick={() => answer(true)}
         disabled={busy}
-        title={error !== null ? 'Retry approve' : gate?.prompt ?? 'Approve this gate'}
+        title={error !== null ? 'Retry approve' : `${gate?.prompt ?? 'Approve this gate'} — ${decisionPreview('approve', 1)}`}
         style={{ ...CSS.approve, opacity: busy ? 0.5 : 1 }}
       >
         Approve
@@ -138,7 +148,7 @@ export function GateChip({ runId, projectId, gate, navigate }: Props): React.Rea
         data-testid={`gate-reject-${runId}`}
         onClick={() => answer(false)}
         disabled={busy}
-        title={error !== null ? 'Retry reject' : 'Reject this gate'}
+        title={error !== null ? 'Retry reject' : `Reject this gate — ${decisionPreview('reject', 1)}`}
         style={{ ...CSS.reject, opacity: busy ? 0.5 : 1 }}
       >
         Reject

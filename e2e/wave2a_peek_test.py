@@ -10,7 +10,8 @@ Runs against the shared W2 fixture (uxfix_fixture.py) with the `wave1` corpus pl
   arrival  a gate arrives on b1 (project beta): `gate_now` + a live awaitingHuman frame.
   peek     P → the peek card shows the top gate (b1's prompt: its evidence) in place;
            the URL is byte-identical to before.
-  jump     G → the address is b1's gate: /p/beta/build/b1#gate.
+  jump     G → the address is b1's gate (/p/beta/build/b1#gate; the thread consumes the hash
+           and focuses the gate prompt).
   back     B → the address is /p/gamma/build/r1 again, the feed's scrollTop is within
            10px of where it was, and focus is back on "Draft update".
   overlay  ? lists all three keys under their own section.
@@ -116,9 +117,15 @@ with sync_playwright() as p:
 
     # ── jump ────────────────────────────────────────────────────────────────────
     page.keyboard.press("g")
+    # The gate's address is /p/beta/build/b1#gate; the thread consumes the one-shot `#gate` on
+    # arrival (SteeringGate) by scrolling the gate card in and focusing its prompt — so "at the
+    # gate" is: the b1 thread, with the gate prompt holding focus.
     check("jump-to-b1-gate", wait_ok(
-        page, "() => window.location.pathname === '/p/beta/build/b1' && window.location.hash === '#gate'"),
-        url=page.evaluate("() => window.location.href"))
+        page, "() => window.location.pathname === '/p/beta/build/b1'"
+              " && (window.location.hash === '#gate'"
+              "     || document.activeElement?.getAttribute('data-testid') === 'steering-prompt')"),
+        url=page.evaluate("() => window.location.href"),
+        focused=page.evaluate("() => document.activeElement?.getAttribute('data-testid')"))
     check("peek-closed-on-jump", page.get_by_test_id("peek-card").count() == 0)
     page.wait_for_timeout(800)
     page.screenshot(path=str(SHOTS / "wave2a-jump.png"))
