@@ -7,7 +7,7 @@ import type { WorkflowDef } from '../api/types.js';
  * (wicked-studio#122 D-1).
  *
  * `is_system` is the AUTHORITATIVE answer to "may this run deliver a PR", and
- * before this module only the composer had it: `runMode.SYSTEM_WORKFLOW_IDS`
+ * before this module only the composer had it: a `runMode` denylist (since removed)
  * listed five ids while the live daemon serves ELEVEN system workflows, so
  * `collab` and all five `interactive-*` (the document and video seams — the
  * most-used non-build flows) classified as build work everywhere the composer

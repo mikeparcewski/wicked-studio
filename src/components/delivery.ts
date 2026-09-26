@@ -1,5 +1,5 @@
 import type { SessionView, SessionWithDelivery, WorkUnit } from '../api/types.js';
-import { deliverKindOf, type IsSystemWorkflow } from './runMode.js';
+import { runClassLicensed, runKindOfView, type IsSystemWorkflow } from './runMode.js';
 
 /**
  * Delivery — the one derivation every surface reads (wicked-studio#122, slice DA).
@@ -408,14 +408,9 @@ export const DELIVERY_COLOR: Record<DeliveryClaim, string> = {
  */
 export function canDeliver(view: SessionView, isSystemWorkflow?: IsSystemWorkflow): boolean {
   if (deliveryOf(view).state !== 'none') return true;
-  const wf = view.session.workflow_id?.trim() ?? '';
-  // The lookup is deliberately called TWICE — once inside `deliverKindOf`, once for the licence.
-  // Collapsing it into a closure over one memoized answer was tried (Copilot on #125 raised the
-  // repeat) and REVERTED: `tests/deliverKind.shared.test.tsx` pins that `canDeliver` hands
-  // `deliverKindOf` the very lookup it received, which is the guard stopping this slice and the
-  // composer from re-forking the rule — the defect that took a whole round to find. Weakening a
-  // structural invariant to save a map lookup on an array of at most 17 defs is the wrong trade.
-  return deliverKindOf(wf, isSystemWorkflow) === 'build' && isSystemWorkflow?.(wf) === false;
+  // The kind and the licence both read the run's own `run_identity` first (api-types 0.46.0), then
+  // the SAME lookup the composer classifies with (`runMode.deliverKindOf`) — one rule, never a copy.
+  return runKindOfView(view.session, isSystemWorkflow) === 'build' && runClassLicensed(view.session, isSystemWorkflow);
 }
 
 /**
@@ -477,8 +472,7 @@ export function hasDeliverySection(
   isSystemWorkflow?: IsSystemWorkflow,
 ): boolean {
   if (canDeliver(view, isSystemWorkflow)) return true;
-  const wf = view.session.workflow_id?.trim() ?? '';
-  if (deliverKindOf(wf, isSystemWorkflow) !== 'build') return false;
+  if (runKindOfView(view.session, isSystemWorkflow) !== 'build') return false;
   const workdir = view.session.workdir;
   return typeof workdir === 'string' && workdir.trim() !== '';
 }

@@ -19,8 +19,11 @@ import { describeGate, normalizeRepoRefs, repoSlugOf, resolveLaunchTarget } from
 import type { ConfirmMode } from './ContextPopover.js';
 import { NewProjectModal } from './NewProjectModal.js';
 import { ProjectSwitcher } from './ProjectSwitcher.js';
-import { deliverKindOf, SYSTEM_WORKFLOW_IDS, type RunKind, type RunMode } from './runMode.js';
+import { deliverKindOf, type RunKind, type RunMode } from './runMode.js';
 import { HOME_FRESH_MS, useNeedsSources } from '../store/needsSources.js';
+import { useLaunchPreview, usePhaseSelection } from '../hooks/useLaunchPlan.js';
+import { LaunchPreview } from './LaunchPreview.js';
+import { PhasePicker } from './PhasePicker.js';
 
 interface Props {
   /** If set, we're in "run selected" mode — steer if gated, inject if executing, placeholder otherwise. */
@@ -207,7 +210,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   );
 
   const selectableWorkflows = useMemo(
-    () => workflows.filter((w) => !w.is_system && !SYSTEM_WORKFLOW_IDS.has(w.id)),
+    () => workflows.filter((w) => !w.is_system),
     [workflows],
   );
   const [selectedClis, setSelectedClis] = useState<Set<string>>(new Set());
@@ -323,7 +326,11 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   // The effective workflow and its kind, derived ONCE for the submit guard, the
   // wire body, the deliver notice and the pre-send summary below.
   const launchWorkflow = workflowOverride?.trim() || workflow;
-  const launchKind = deliverKind(launchWorkflow);
+  // The phase picker (DES-TEAMING-002 T9): a composed plan replaces the workflow on the wire
+  // (`plan` and `workflow` are mutually exclusive) and is build work.
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const selection = usePhaseSelection(pickerOpen);
+  const launchKind: RunKind = selection.composing ? 'build' : deliverKind(launchWorkflow);
   // What is attached, as the resolver counts it — the chips, the Target-repo
   // options and the preflight's "no repository" all read this one list.
   const attachedRefs = normalizeRepoRefs(repoRefs);
@@ -350,6 +357,19 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(prefill?.projectId ?? null);
   const [showNewProject, setShowNewProject] = useState(false);
   const projectsRequested = useRef(false);
+
+  // The launch preview (T9): what the engine would decide for the composed plan or the named
+  // preset — and the `before:N` shift past the PA's scope step, read off the same preview.
+  const launchPreview = useLaunchPreview({
+    plan: selection.plan,
+    workflow: launchWorkflow,
+    projectId: lockedProjectId ?? selectedProjectId,
+    repoRef: targetRepoRef,
+    deliver: launchKind === 'build' && targetRepoRef !== null ? (deliverOn ? 'pr' : 'none') : null,
+    mode,
+    confirm: confirmMode,
+    beforeOrd,
+  });
 
   function loadProjects(): void {
     if (projectsRequested.current) return;
@@ -554,7 +574,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     // the detector reading one from the text — launched with no repo attached
     // cannot produce reviewable work. Warn-and-block: ZERO POST /runs until a
     // repo attaches or the operator overrides ("Launch anyway").
-    const codeShaped = Boolean(workflowOverride?.trim() || workflow || detectWorkflow(problem));
+    const codeShaped = Boolean(selection.composing || workflowOverride?.trim() || workflow || detectWorkflow(problem));
     if (!preflightOverride && codeShaped && noRepoAttached) {
       setPreflightBlocked(true);
       return;
@@ -580,19 +600,18 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     const seats = roster.filter((s) => selectedClis.has(s.key));
     if (seats.length > 0) body.clisJson = JSON.stringify(seats);
     body.entityMode = entityMode;
-    // Ask → gate all; Autonomous → no human gates (confirmMode selection ignored); Balanced/unset → popover applies.
-    if (mode === 'ask') {
-      body.humanConfirm = 'all';
-    } else if (mode !== 'autonomous') {
-      if (confirmMode === 'all') body.humanConfirm = 'all';
-      else if (confirmMode === 'before') body.humanConfirm = `before:${beforeOrd}`;
-    }
+    // Ask → gate all; Autonomous → no human gates (confirmMode selection ignored); Balanced/unset →
+    // the posture applies. `before:N` counts the run's own units: on a launch the PA scopes first
+    // (its step is ord 1, wicked-core X1) it is sent as N + 1, read off the launch preview.
+    const humanConfirm = await launchPreview.resolveHumanConfirm();
+    if (humanConfirm !== undefined) body.humanConfirm = humanConfirm;
     // The ONE repo this run works in (F-028): the resolved target — an explicit
     // tick or the Target-repo choice wins over auto-attached project members;
     // a lone attached repo needs no choice. Never `repoRefs[0]`.
     if (targetRepoRef !== null) body.repoRef = targetRepoRef;
     const wf = launchWorkflow;
-    if (wf) body.workflow = wf;
+    if (selection.plan !== null) body.plan = selection.plan;
+    else if (wf) body.workflow = wf;
     // Delivery (crew#293/studio#123, wire reworked by crew#393): a repo-scoped
     // BUILD launch ALWAYS carries the key — `'pr'` when the toggle is on,
     // `'none'` when it is off. Explicit-off matters on the 0.18.0 wire: the
@@ -603,7 +622,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     // run launches WITHOUT the key (the daemon defaults those to `'none'`;
     // older daemons also 400 on `'none'`, so unlicensed bodies never carry it).
     // The same verdict is on screen before the operator sends (`deliverNotice`).
-    if (deliverKind(wf) === 'build' && targetRepoRef !== null) body.deliver = deliverOn ? 'pr' : 'none';
+    if (launchKind === 'build' && targetRepoRef !== null) body.deliver = deliverOn ? 'pr' : 'none';
     // F-E2E-030: the deliver gate is the engine's default; the body says nothing to be gated.
     // Only the explicitly unattended postures send the opt-out — and only with a delivery.
     if (body.deliver === 'pr' && autoDeliver && daemonDeliverGate === true) body.deliverGate = 'auto';
@@ -617,7 +636,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     if (retryOf) body.retryOf = retryOf;
     // DES-L9 §5: `revisesPr` rides the body ONLY when this daemon says it can revise a PR (an
     // older launch schema 400s on the key); a revision is always a PR delivery onto that PR.
-    if (revisesPr !== null && daemonRevisesPr === true && targetRepoRef !== null) {
+    if (revisesPr !== null && daemonRevisesPr === true && targetRepoRef !== null && selection.plan === null) {
       body.revisesPr = revisesPr.number;
       body.deliver = 'pr';
     }
@@ -1084,7 +1103,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     >
       {/* ── Project binding — the FIRST field of every create flow (§5.2) ──
           Unfiled by default; pre-bound-and-locked from project context (§4.3). */}
-      <div className="flex items-center gap-2 px-1" data-testid="launch-project-row">
+      <div className="flex items-center gap-2 px-1 flex-wrap" data-testid="launch-project-row">
         <span
           className="text-[11px] font-mono uppercase tracking-widest"
           style={{ color: 'var(--ink-dim)' }}
@@ -1166,6 +1185,22 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
           />
         )}
 
+        {/* ── The phase picker's toggle (DES-TEAMING-002 T9). ── */}
+        <button
+          type="button"
+          data-testid="phase-picker-toggle"
+          aria-expanded={pickerOpen}
+          onClick={() => setPickerOpen((v) => !v)}
+          className="rounded-lg px-2 py-1 text-[11px] font-mono"
+          style={{
+            background: pickerOpen ? 'var(--accent-subtle)' : 'var(--surface-card)',
+            border: '1px solid var(--surface-raised)',
+            color: 'var(--ink-high)',
+          }}
+        >
+          {selection.composing ? `Phases (${selection.picked.length})` : 'Phases'}
+        </button>
+
         {/* ── Gate posture at top level (§7.8, slice AC) — the + drawer keeps
             the full matrix; this is the always-visible control whose shipped
             default is COMPOSER_DEFAULT_GATE_POSTURE (never "none"). ── */}
@@ -1195,6 +1230,9 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
           <option value="none">{deliverNotice?.state === 'on' && mode !== 'ask' && daemonDeliverGate === true ? 'No gates · auto-deliver' : 'No gates'}</option>
         </select>
       </div>
+
+      {pickerOpen && <PhasePicker model={selection} />}
+      <LaunchPreview model={launchPreview} />
 
       {showNewProject && (
         <NewProjectModal
@@ -1429,7 +1467,8 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
       {launchKind === 'build' && (
         <p
           data-testid="launch-confirm"
-          data-workflow={launchWorkflow}
+          data-workflow={selection.composing ? '' : launchWorkflow}
+          data-plan={selection.plan === null ? '' : selection.plan.steps.map((st) => st.id ?? st.catalog).join(' ')}
           data-target={targetRepoRef ?? ''}
           data-gate={describeGate(mode, confirmMode, beforeOrd)}
           className="text-xs px-1 font-mono"
@@ -1438,7 +1477,11 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
           {/* F-089 / F-E2E-035: ONE predicate — the same `canSubmit` that disables Send — so the
               line and the button can never disagree ("Send enabled but Not ready to send"). */}
           {canSubmit ? 'Ready to send: ' : 'Not ready to send: '}
-          <span data-testid="launch-confirm-workflow" style={{ color: 'var(--ink-high)' }}>{launchWorkflow}</span>
+          <span data-testid="launch-confirm-workflow" style={{ color: 'var(--ink-high)' }}>
+            {selection.plan === null
+              ? launchWorkflow
+              : `plan: ${selection.plan.steps.map((st) => st.id ?? st.catalog).join(' → ')}`}
+          </span>
           {' on '}
           <span data-testid="launch-confirm-target" style={{ color: targetLabel === null ? 'var(--status-gate)' : 'var(--ink-high)' }}>
             {targetLabel ?? (target.kind === 'ambiguous' ? 'no target repo chosen' : 'no repository')}

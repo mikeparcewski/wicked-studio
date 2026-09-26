@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as client from '../src/api/client.js';
 import { canDeliver, deliverySummary } from '../src/components/delivery.js';
-import { deliverKindOf, runKindOf, SYSTEM_WORKFLOW_IDS, type RunKind } from '../src/components/runMode.js';
+import { deliverKindOf, runClassLicensed, runKindOf, runKindOfView, type RunKind } from '../src/components/runMode.js';
 import {
   clearCachedWorkflows,
   fetchWorkflowsCached,
@@ -16,7 +16,7 @@ import { BUILD_IDS, DENYLIST_BLIND_SPOT, LIVE_WORKFLOWS, SYSTEM_IDS } from './fi
 /**
  * `deliverKindOf` — the ONE run-kind predicate (wicked-studio#122 D-1).
  *
- * The defect, in one line: `SYSTEM_WORKFLOW_IDS` names FIVE of the daemon's
+ * The defect, in one line: studio's old system-id denylist named FIVE of the daemon's
  * ELEVEN system workflows, so `canDeliver` classified `collab` and all five
  * `interactive-*` — the document and video seams — as build work, and the rail
  * offered them a remedy ("launch with deliver: pr") that studio's own composer
@@ -40,37 +40,55 @@ describe('the ELEVEN real is_system ids all classify system', () => {
     });
   }
 
-  /**
-   * The former blind spot, now closed (studio#126). These six were the daemon's
-   * system workflows the denylist did not name, so with the catalog unavailable
-   * studio classified `collab` and every `interactive-*` as build work — the
-   * flag was the ONLY thing ruling them out.
-   *
-   * #126 made that gap load-bearing: once the Delivery section renders on a DTO
-   * fact rather than waiting for the catalog, "show a `feature` run's worktree
-   * while the defs load" and "never show an `interactive-draft` run a section,
-   * warm or cold" are the same instant, and with the gap open there was nothing
-   * to tell the two apart by. So the list names all eleven now, and these six
-   * classify system with NO lookup at all.
-   */
-  it('the six the denylist never knew are on it now — system with no lookup', () => {
+  it('with NO lookup the six document/video ids are build by id alone — no studio-side list', () => {
+    // The daemon owns the system list (is_system on defs, run_identity.system on runs). Studio's
+    // old SYSTEM_WORKFLOW_IDS copy is gone; with no def in hand an id says nothing on its own.
     for (const id of DENYLIST_BLIND_SPOT) {
-      expect(SYSTEM_WORKFLOW_IDS.has(id), `${id} must be on the denylist`).toBe(true);
-      expect(runKindOf(id), `${id} cold`).toBe<RunKind>('system');
-      // Cold, warm, and with a flag that agrees — every path says system.
-      expect(deliverKindOf(id, undefined), `${id} with no lookup`).toBe<RunKind>('system');
-      expect(deliverKindOf(id, KNOWN), `${id} must be system`).toBe<RunKind>('system');
+      expect(runKindOf(id), `${id} cold`).toBe<RunKind>('build');
+      // …and still never CLAIMS a delivery classification: nothing licenses it.
       expect(canDeliver(viewOf(id), undefined), `${id} cannot deliver cold`).toBe(false);
     }
-    expect(DENYLIST_BLIND_SPOT).toHaveLength(6);
+  });
+});
+
+describe('a RUN is classified by the daemon\'s run_identity (api-types 0.46.0)', () => {
+  const withIdentity = (workflow_id: string, run_identity: object) => {
+    const v = viewOf(workflow_id);
+    return { ...v, session: { ...v.session, run_identity } as typeof v.session };
+  };
+
+  it('system: true is system whatever the workflow id or lookup says', () => {
+    const v = withIdentity('wf-r1-materialised', { kind: 'workflow', name: 'interactive-draft', user_plan: false, system: true });
+    expect(runKindOfView(v.session, KNOWN)).toBe<RunKind>('system');
+    expect(canDeliver(v, () => false)).toBe(false);
   });
 
-  /** The denylist is now exactly the daemon's system set — measured, not assumed. */
-  it('names all ELEVEN system workflows the live daemon serves', () => {
-    expect(SYSTEM_WORKFLOW_IDS.size).toBe(11);
-    for (const id of [...SYSTEM_IDS, ...DENYLIST_BLIND_SPOT]) {
-      expect(SYSTEM_WORKFLOW_IDS.has(id), `${id} missing from the denylist`).toBe(true);
-    }
+  it('a user plan on a per-run def is build and licensed — no catalog entry needed', () => {
+    const v = withIdentity('r1:plan-2', { kind: 'user_plan', name: null, user_plan: true, system: false });
+    expect(KNOWN('r1:plan-2')).toBeUndefined();
+    expect(runKindOfView(v.session, KNOWN)).toBe<RunKind>('build');
+    expect(runClassLicensed(v.session, KNOWN)).toBe(true);
+    expect(canDeliver(v, KNOWN)).toBe(true);
+  });
+
+  it('a preset run is build and licensed', () => {
+    const v = withIdentity('feature', { kind: 'preset', name: 'feature', user_plan: false, system: false });
+    expect(canDeliver(v, undefined)).toBe(true);
+  });
+
+  it('free text is freeform; unknown is build but never licensed', () => {
+    const free = withIdentity('', { kind: 'free_text', name: null, user_plan: false, system: false });
+    expect(runKindOfView(free.session)).toBe<RunKind>('freeform');
+    const unknown = withIdentity('wf-x', { kind: 'unknown', name: null, user_plan: false, system: false });
+    expect(runKindOfView(unknown.session)).toBe<RunKind>('build');
+    expect(runClassLicensed(unknown.session, () => false)).toBe(false);
+  });
+
+  it('without run_identity (a daemon before 0.46.0) the def lookup decides', () => {
+    expect(runKindOfView({ workflow_id: 'chat' }, KNOWN)).toBe<RunKind>('system');
+    expect(runKindOfView({ workflow_id: 'feature' }, KNOWN)).toBe<RunKind>('build');
+    expect(runClassLicensed({ workflow_id: 'feature' }, KNOWN)).toBe(true);
+    expect(runClassLicensed({ workflow_id: 'wf-unknown' }, KNOWN)).toBe(false);
   });
 });
 
@@ -87,23 +105,20 @@ describe('the six NON-system ids stay build', () => {
   }
 });
 
-describe('the denylist survives as a FALLBACK, and the rule stays one-directional', () => {
-  it('with NO lookup, every id falls back to the denylist verdict verbatim', () => {
+describe('the flag is the only system signal for a launch, and it only withholds', () => {
+  it('with NO lookup, every workflow id is build', () => {
     for (const id of [...SYSTEM_IDS, ...BUILD_IDS]) {
       expect(deliverKindOf(id)).toBe(runKindOf(id));
+      expect(deliverKindOf(id)).toBe<RunKind>('build');
     }
   });
 
-  it('an unknown def never PROMOTES a denylisted id to build', () => {
-    // The one-directional guarantee studio#124 wrote and this refactor inherits:
-    // the flag may only ever withhold delivery. A def that is absent, or that
-    // positively says `is_system: false`, cannot overturn the denylist.
-    expect(deliverKindOf('chat', () => undefined)).toBe<RunKind>('system');
-    expect(deliverKindOf('chat', () => false)).toBe<RunKind>('system');
-    expect(deliverKindOf('memories', () => false)).toBe<RunKind>('system');
+  it('a positively-known is_system demotes to system', () => {
+    expect(deliverKindOf('chat', () => true)).toBe<RunKind>('system');
+    expect(deliverKindOf('chat', KNOWN)).toBe<RunKind>('system');
   });
 
-  it('an unknown def leaves a pre-flag workflow deliverable — degrading, not guessing', () => {
+  it('an unknown def leaves a workflow (or a preset launched by name) deliverable', () => {
     expect(deliverKindOf('some-workflow-shipped-tomorrow', () => undefined)).toBe<RunKind>('build');
     expect(deliverKindOf('some-workflow-shipped-tomorrow', KNOWN)).toBe<RunKind>('build');
   });
@@ -145,9 +160,6 @@ describe('the census stops counting document and video threads (D5, re-opened by
     // ordinary, so an unproven id is never counted whichever way it would have
     // classified. The delivering runs need no licence: they have a deliver unit.
     expect(deliverySummary(runs)).toBe('2 ran deliver');
-    // Since #126 the denylist rules them out on its own too, so the census is now
-    // right for BOTH reasons — unproven licence and a positive system verdict.
-    for (const id of DENYLIST_BLIND_SPOT) expect(runKindOf(id)).toBe<RunKind>('system');
   });
 });
 

@@ -9,7 +9,7 @@ import type { WorkflowDef } from '../../src/api/types.js';
  * "the def is present" — not the flag's value — is what licenses a positive
  * deliverable answer, and `isSystemWorkflowIn` is written that way.
  *
- * `SYSTEM_WORKFLOW_IDS`, the pre-D-1 denylist, named five of the eleven. The six
+ * The pre-D-1 denylist (since removed) named five of the eleven. The six
  * it missed are `collab` and the five `interactive-*` — the document and video
  * seams, i.e. the most-used non-build flows in the product.
  */

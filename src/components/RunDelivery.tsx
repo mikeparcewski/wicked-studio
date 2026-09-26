@@ -15,6 +15,7 @@ import {
   resolveDelivery,
   type DeliveryClaim,
 } from './delivery.js';
+import { runClassLicensed } from './runMode.js';
 import { compactPath } from './WhatWhere.js';
 
 const EMPTY_EVENTS: CoreEvent[] = [];
@@ -311,7 +312,7 @@ export function RunDelivery({ view, navigate }: Props): React.ReactElement {
   // the fetch degraded, or the id is a materialised `wf-<runId>` that no catalog
   // will ever carry — is NOT a licence. See the cold-cache invariant above.
   const isSystemWorkflow = useIsSystemWorkflow();
-  const remedyLicensed = isSystemWorkflow(view.session.workflow_id?.trim() ?? '') === false;
+  const remedyLicensed = runClassLicensed(view.session, isSystemWorkflow);
 
   return (
     <div data-testid="run-delivery" data-state={claim} className="flex flex-col gap-1.5 text-[11px]">
