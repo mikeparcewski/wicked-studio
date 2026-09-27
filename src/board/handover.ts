@@ -1,5 +1,6 @@
 import type { AuditEntry, SessionView } from '../api/types.js';
 import { endedAtMs, type ElicitationLite, type GateLite } from './needsYou.js';
+import { standingOrderActionText } from './standingOrders.js';
 
 /**
  * HANDOVER ON ARRIVAL (studio wave 2b, behaviour 1) — the pure half.
@@ -12,7 +13,8 @@ import { endedAtMs, type ElicitationLite, type GateLite } from './needsYou.js';
  *   2. broke     — runs that failed since you left;
  *   3. finished  — runs that completed since you left;
  *   4. system    — what the system did for you: audit entries whose actor is `system`
- *                  (the stall watchdog's `run.stall.*`), since you left.
+ *                  (the stall watchdog's `run.stall.*`, a standing order's approve / hold /
+ *                  queued message — named by the order, behaviour 10), since you left.
  *
  * Clocks are the daemon's own: a run's `ended_at` (api-types 0.38, unix seconds), the
  * durable failure tail for a failure the wire has no `ended_at` for, the audit entry's
@@ -118,6 +120,9 @@ const SYSTEM_ACTION_TEXT: Record<string, string> = {
 const SYSTEM_BOOKKEEPING: ReadonlySet<string> = new Set(['run.ended']);
 
 function systemText(e: AuditEntry): string {
+  // Behaviour 10: an action a standing order took names the order.
+  const byOrder = standingOrderActionText(e);
+  if (byOrder !== undefined) return byOrder;
   if (e.action === 'run.stall.escalated') {
     const d = (e.detail ?? {}) as Record<string, unknown>;
     if (d['action'] === 'reassign' && d['outcome'] === 'ok') return 'The stall watchdog reassigned a silent worker';
