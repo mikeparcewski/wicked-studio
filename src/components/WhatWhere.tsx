@@ -6,6 +6,7 @@ import type { Provenance } from '../store/provenance.js';
 import { ProvenanceLine } from './ProvenanceLine.js';
 import { runBase, runBaseLine } from './runBaseModel.js';
 import { RunTimes } from './runIdentity.js';
+import { TrustReceipt } from './TrustReceipt.js';
 
 const EMPTY_EVENTS: CoreEvent[] = [];
 
@@ -95,6 +96,8 @@ export function WhatWhere({ model, provenance, retriedAs, onSelectRun }: Props):
       )}
       <Row label="roster" value={session.clis.length > 0 ? session.clis.join(', ') : '—'} mono />
       <Row label="entity" value={session.entity_mode} />
+      {/* Brainstorm idea 13: the trust receipt — a low-risk preset run's route, trusted in one move. */}
+      <TrustReceipt session={session} />
     </div>
   );
 }
