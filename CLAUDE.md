@@ -21,7 +21,10 @@ answer HITL gates, browse projects/evidence/coverage, watch live CoreEvents.
   commit, so a fresh clone has none of it; do not treat a missing `.product/` as a
   mistake, and do not cite a `.product/…` path as something a reviewer can open.
 - `tests/` — vitest (jsdom): `npm test`; typecheck with `npm run typecheck`.
-- `e2e/` — Python E2E suites driven against a live daemon.
+- `e2e/` — Python Playwright journeys on the in-process fixture (`e2e/uxfix_fixture.py`);
+  `python3 e2e/run_journeys.py` runs the behaviour set CI runs (under both skins, via
+  `STUDIO_SKIN`); `--all` runs every journey except the few marked `LIVE` there (they need a
+  real daemon or bridge).
 - `site/` — the marketing site: its own app/deps, excluded from vitest.
 - `wicked-worktrees/` — gitignored checkouts created by governed runs inside
   this repo; never edit or clean them by hand.
