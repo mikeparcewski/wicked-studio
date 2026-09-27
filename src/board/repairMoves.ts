@@ -1,4 +1,4 @@
-import type { LaunchBodyWithDeliver, SessionView } from '../api/types.js';
+import type { LaunchBodyWithDeliver, RosterSeat, SessionView } from '../api/types.js';
 import type { GovernanceReplayOutcome } from '../api/governanceReplay.js';
 import { ONBOARDING_WORKFLOW_ID } from './repoStats.js';
 
@@ -83,21 +83,25 @@ function confirmWire(hc: unknown): string | undefined {
 }
 
 /** How a failed run is relaunched: an onboarding run through its repo's onboard route (the route
- *  that owns that workflow), anything else through `POST /runs` with the same brief, seats,
- *  workflow, repo, gates and project, and `retryOf` for lineage. A repo-scoped workflow run says
+ *  that owns that workflow), anything else through `POST /runs` with the same brief, workflow,
+ *  repo, gates and project, and `retryOf` for lineage. Seats: `clisJson` is a JSON array of ROSTER
+ *  SEAT objects (the composer's spelling), so the run's seat keys are mapped through `roster`; when
+ *  no roster is at hand or none of its seats remain, the key is omitted and the daemon's roster
+ *  default applies. A repo-scoped workflow run says
  *  `deliver: 'none'` explicitly — the daemon defaults an omitted key to a PR, and a batch retry
  *  must not open PRs the original launch may never have asked for. */
 export type RetryLaunch =
   | { via: 'onboard'; repoId: string }
   | { via: 'runs'; body: LaunchBodyWithDeliver };
 
-export function retryLaunchOf(v: SessionView): RetryLaunch {
+export function retryLaunchOf(v: SessionView, roster: readonly RosterSeat[] | null = null): RetryLaunch {
   const s = v.session;
   if (s.workflow_id === ONBOARDING_WORKFLOW_ID && typeof s.repo_ref === 'string' && s.repo_ref !== '') {
     return { via: 'onboard', repoId: s.repo_ref };
   }
   const body: LaunchBodyWithDeliver = { problem: s.problem, retryOf: s.id };
-  if (s.clis.length > 0) body.clisJson = JSON.stringify(s.clis);
+  const seats = (roster ?? []).filter((seat) => s.clis.includes(seat.key));
+  if (seats.length > 0) body.clisJson = JSON.stringify(seats);
   if (s.entity_mode !== undefined) body.entityMode = s.entity_mode;
   const hc = confirmWire(s.human_confirm);
   if (hc !== undefined) body.humanConfirm = hc;
@@ -113,7 +117,7 @@ export function retryConsequence(runs: readonly SessionView[], failedInWindow: n
   const skipped = failedInWindow - runs.length;
   const head = runs.length === 0
     ? 'Nothing to retry'
-    : `Relaunches ${plural(runs.length, 'run')} with the same brief, seats, workflow and gates; none opens a PR on its own`;
+    : `Relaunches ${plural(runs.length, 'run')} with the same brief, workflow, gates and seats (where the roster still has them); none opens a PR on its own`;
   return skipped > 0 ? `${head} · ${plural(skipped, 'failure')} already retried, skipped` : head;
 }
 

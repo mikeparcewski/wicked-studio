@@ -23,7 +23,8 @@ npm publish dates. Every version listed here exists on
   that failures stay quarantined; the real replay posts only on confirm, then diagnostics is re-read.
   The Failed tile carries "Retry", previewing the failures in its window not yet retried and
   relaunching exactly those (onboarding runs through their repo's onboard route, the rest through
-  `POST /runs` with `retryOf` and `deliver: 'none'` on repo-scoped workflows). *Broken-clock pill*:
+  `POST /runs` with `retryOf`, the run's seats as roster seat objects where the roster still has
+  them, and `deliver: 'none'` on repo-scoped workflows). *Broken-clock pill*:
   an absent or impossible age (before 2020, i.e. a seconds-as-ms slip, or in the future) renders as
   an "age unknown" / "impossible age" pill linking to the record, never "20702d", on the Needs You
   queue, Home's recent activity and quiet chips, and the runs list; a group's age and the "oldest

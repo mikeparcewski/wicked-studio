@@ -12,13 +12,14 @@ import type { GovernanceClaim, RepoEntry } from '../src/api/types.js';
 import { makeView } from './factories.js';
 import { GOVERNANCE_DEADLETTERS } from './fixtures/wave2.js';
 
-const { rerunOnboarding, launchRun } = vi.hoisted(() => ({
+const { rerunOnboarding, launchRun, getRoster } = vi.hoisted(() => ({
   rerunOnboarding: vi.fn(async (id: string) => ({ runId: `onboard-${id}` })),
   launchRun: vi.fn(async () => ({ runId: 'r-new' })),
+  getRoster: vi.fn(async () => ({ roster: [{ key: 'claude', command: 'claude' }, { key: 'codex', command: 'codex' }] })),
 }));
 vi.mock('../src/api/client.js', async (orig) => {
   const real = await orig<typeof import('../src/api/client.js')>();
-  return { ...real, api: { ...real.api, rerunOnboarding, launchRun } };
+  return { ...real, api: { ...real.api, rerunOnboarding, launchRun, getRoster } };
 });
 
 const { replayGovernanceDeadletters } = vi.hoisted(() => ({ replayGovernanceDeadletters: vi.fn() }));
@@ -160,7 +161,7 @@ describe('idea 5 — the Failed tile carries Retry failed', () => {
     expect(repair).toHaveAttribute('data-repair', 'retry');
     await userEvent.click(repair);
     const preview = screen.getByTestId('kpi-repair-preview');
-    expect(preview).toHaveTextContent('Relaunches 1 run with the same brief, seats, workflow and gates; none opens a PR on its own');
+    expect(preview).toHaveTextContent('Relaunches 1 run with the same brief, workflow, gates and seats (where the roster still has them); none opens a PR on its own');
     expect(preview).toHaveTextContent('1 failure already retried, skipped');
     expect(launchRun).not.toHaveBeenCalled();
     await userEvent.click(screen.getByTestId('kpi-repair-confirm'));
@@ -168,8 +169,16 @@ describe('idea 5 — the Failed tile carries Retry failed', () => {
     expect(launchRun).toHaveBeenCalledTimes(1);
     expect(launchRun).toHaveBeenCalledWith(expect.objectContaining({
       problem: 'fix the flaky upload test', retryOf: 'f1', repoRef: 'repo-a', workflow: 'bug', deliver: 'none',
-      clisJson: JSON.stringify(['claude']),
+      // Roster SEAT objects, never bare keys (the composer's clisJson spelling).
+      clisJson: JSON.stringify([{ key: 'claude', command: 'claude' }]),
     }));
+  });
+
+  it('with no roster at hand the seats key is omitted (the daemon default), never bare keys', () => {
+    const v = makeView({ id: 'x', status: 'failed', clis: ['claude'] });
+    const plan = retryLaunchOf(v, null);
+    expect(plan.via).toBe('runs');
+    expect(plan.via === 'runs' && plan.body.clisJson).toBeFalsy();
   });
 
   it('a failed onboarding run retries through its repo onboard route', () => {

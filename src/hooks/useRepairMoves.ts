@@ -1,7 +1,8 @@
 import { useCallback, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import { replayGovernanceDeadletters, type GovernanceReplayOutcome } from '../api/governanceReplay.js';
-import type { SessionView } from '../api/types.js';
+import type { RosterSeat, SessionView } from '../api/types.js';
+import { getCachedRoster, setCachedRoster } from '../store/rosterCache.js';
 import { retryLaunchOf } from '../board/repairMoves.js';
 
 /**
@@ -135,8 +136,18 @@ export function useRetryFailed(runs: readonly SessionView[]): {
     const failures: BatchResult['failures'] = [];
     let launched = 0;
     setState({ phase: 'running', done: 0, total: list.length });
+    // The seats ride as roster seat objects: the cached roster, else one read of it.
+    let roster: RosterSeat[] | null = getCachedRoster();
+    if (roster === null) {
+      try {
+        roster = (await api.getRoster()).roster;
+        setCachedRoster(roster);
+      } catch {
+        roster = null; // the daemon's roster default applies
+      }
+    }
     for (const [i, v] of list.entries()) {
-      const plan = retryLaunchOf(v);
+      const plan = retryLaunchOf(v, roster);
       try {
         if (plan.via === 'onboard') await api.rerunOnboarding(plan.repoId);
         else await api.launchRun(plan.body);
