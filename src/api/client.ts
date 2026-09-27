@@ -324,6 +324,9 @@ export const api = {
 
   /** The council seats for the launch form. */
   getRoster: () => apiFetch<{ roster: RosterSeat[] }>('/roster'),
+  /** Each seat's week (`GET /roster/record`, crew#690) — the Health panel's weekly 1:1. */
+  getSeatRecord: (days = 7) =>
+    apiFetch<import('./seatRecord.js').SeatRecordResponse>(`/roster/record?days=${days}`),
 
   /** Registered repos → the target-repo picker. */
   listRepos: () => apiFetch<{ repos: RepoEntry[] }>('/repos'),

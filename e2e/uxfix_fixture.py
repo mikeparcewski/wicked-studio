@@ -606,8 +606,15 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          #   evaluator NOT PASS escalation (the engine's recorded `VERDICT: FAIL` frames), rides GET
          #   /runs; its events, gate and the creator phase's transcript are served for the card.
          "gate_move": False,
+         # seat_week — brainstorm-actionable idea 9 (e2e/agent_1on1_test.py): GET /roster/record
+         #   serves SEAT_WEEK (crew#690's shape) and pi carries a sign-in line; POST
+         #   /governance/rules is recorded (GET /__fixture/rule-posts). Off: /roster/record answers
+         #   Fastify's bare unknown-route 404, a daemon predating crew#690.
+         "seat_week": False,
          }
 state_lock = threading.Lock()
+# Idea 9: every POST /governance/rules body the fixture received (GET /__fixture/rule-posts).
+rule_post_log: list = []
 # Wave 2a: every POST /runs/:id/gate the fixture received (read over GET /__fixture/gate-posts).
 gate_post_log: list = []
 # T9: every POST /plans/preview and POST /runs/:id/plan body (GET /__fixture/plan-posts), the
@@ -2312,6 +2319,29 @@ REPO_CONTRIBUTORS = [
 # incapable spelling — and `agy` carries an explicit null: no current
 # engine emits it, but the client treats a null claim as "no config" too
 # (belt), and the fixture keeps that arm honest end-to-end.
+# Idea 9 (e2e/agent_1on1_test.py): four seats, four weeks, shaped like crew#690's
+# `GET /roster/record` — claude clean (no change), codex stalling on reviews (route reviews
+# away), agy absent (no units), pi benched for sign-in (sign in).
+def _seat_rec(cli, **kw):
+    base = {"cli": cli, "units": 0, "gated": 0, "firstPass": 0, "rework": 0, "stalls": 0,
+            "benched": 0, "benchReasons": {}, "costUsd": None, "costedUsage": 0, "byPhase": {}}
+    base.update(kw)
+    return base
+
+
+def seat_week_record():
+    now_ms = int(time.time() * 1000)
+    return {"days": 7, "since": now_ms - 7 * 86_400_000, "until": now_ms, "runsRead": 9, "truncated": False,
+            "seats": [
+                _seat_rec("claude", units=6, gated=5, firstPass=5, costUsd=3.2, costedUsage=6,
+                          byPhase={"build": {"units": 6, "gated": 5, "firstPass": 5, "rework": 0, "stalls": 0}}),
+                _seat_rec("codex", units=5, gated=4, firstPass=3, rework=1, stalls=3, costUsd=0.84, costedUsage=5,
+                          byPhase={"build": {"units": 2, "gated": 2, "firstPass": 2, "rework": 0, "stalls": 0},
+                                   "review": {"units": 3, "gated": 2, "firstPass": 1, "rework": 1, "stalls": 3}}),
+                _seat_rec("pi", benched=2, benchReasons={"signed out": 2}),
+            ]}
+
+
 CODEX_HEALTH_MESSAGE = ("quota exceeded: the monthly usage limit for this "
                         "seat has been reached upstream")
 ROSTER = [
@@ -3142,7 +3172,19 @@ class W2Handler(SimpleHTTPRequestHandler):
             if roster_down:
                 self._json(500, {"error": "roster unavailable (fixture)"})
             else:
-                self._json(200, {"roster": ROSTER})
+                with state_lock:
+                    week = state["seat_week"]
+                roster = ([{**s, "login_invocation": "pi login"} if s["key"] == "pi" else s for s in ROSTER]
+                          if week else ROSTER)
+                self._json(200, {"roster": roster})
+            return True
+        if path == "/api/v1/roster/record":
+            with state_lock:
+                week = state["seat_week"]
+            if week:
+                self._json(200, seat_week_record())
+            else:
+                self._json(404, {"message": f"Route GET:{path} not found", "error": "Not Found", "statusCode": 404})
             return True
         # Slice J (§5.2): the decisions corpus — read on the search GESTURE only.
         if path == "/api/v1/governance/claims":
@@ -4131,6 +4173,10 @@ class W2Handler(SimpleHTTPRequestHandler):
             with state_lock:
                 posts = list(plan_post_log)
             return self._json(200, {"posts": posts})
+        if path == "/__fixture/rule-posts":
+            with state_lock:
+                posts = list(rule_post_log)
+            return self._json(200, {"posts": posts})
         if self._api(path):
             return None
         if not Path(self.translate_path(self.path)).is_file():
@@ -4152,6 +4198,9 @@ class W2Handler(SimpleHTTPRequestHandler):
             if body.get("reset_gate_posts"):
                 with state_lock:
                     gate_post_log.clear()
+            if body.get("reset_rule_posts"):
+                with state_lock:
+                    rule_post_log.clear()
             if body.get("reset_plan"):
                 with state_lock:
                     plan_post_log.clear()
@@ -4489,6 +4538,13 @@ class W2Handler(SimpleHTTPRequestHandler):
                 opened["scope"] = scope
             return self._json(201, opened)
         # Wave A (crew#689): the dead-letter replay over the `deadletters` block — dry run first.
+        if path == "/api/v1/governance/rules":
+            with state_lock:
+                rule_post_log.append(body)
+                week = state["seat_week"]
+            if not week:
+                return self._json(404, {"error": f"w2 fixture: no such endpoint {path}"})
+            return self._json(200, {"status": "ok"})
         if path == "/api/v1/governance/deadletters/replay":
             dry = body.get("dryRun") is True
             with state_lock:

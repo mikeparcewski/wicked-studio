@@ -11,8 +11,8 @@
   "studioVersion": "0.5.14",
   "counts": {
     "files": 161,
-    "occurrences": 1470,
-    "static": 1265,
+    "occurrences": 1478,
+    "static": 1273,
     "dynamic": 68,
     "computed": 7
   },
@@ -4710,7 +4710,55 @@
       ]
     },
     {
+      "testId": "rail-seat",
+      "files": [
+        "src/components/HealthRailSection.tsx"
+      ]
+    },
+    {
+      "testId": "rail-seat-move",
+      "files": [
+        "src/components/HealthRailSection.tsx"
+      ]
+    },
+    {
+      "testId": "rail-seat-move-button",
+      "files": [
+        "src/components/HealthRailSection.tsx"
+      ]
+    },
+    {
+      "testId": "rail-seat-move-consequence",
+      "files": [
+        "src/components/HealthRailSection.tsx"
+      ]
+    },
+    {
+      "testId": "rail-seat-move-result",
+      "files": [
+        "src/components/HealthRailSection.tsx"
+      ]
+    },
+    {
       "testId": "rail-seat-row",
+      "files": [
+        "src/components/HealthRailSection.tsx"
+      ]
+    },
+    {
+      "testId": "rail-seat-week",
+      "files": [
+        "src/components/HealthRailSection.tsx"
+      ]
+    },
+    {
+      "testId": "rail-seat-week-line",
+      "files": [
+        "src/components/HealthRailSection.tsx"
+      ]
+    },
+    {
+      "testId": "rail-seat-week-window",
       "files": [
         "src/components/HealthRailSection.tsx"
       ]

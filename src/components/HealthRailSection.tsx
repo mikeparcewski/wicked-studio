@@ -1,9 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { api } from '../api/client.js';
 import { getDiagnostics, isDiagnosticsUnsupported } from '../api/diagnostics.js';
+import type { SeatRecord } from '../api/seatRecord.js';
 import type { DiagnosticsGovernance, DiagnosticsGovernanceFinding, RosterSeat } from '../api/types.js';
+import { coachSeat, recordsByCli, seatWeekLine, type CoachMove } from '../board/seatCoaching.js';
+import { useSeatWeek, type MoveState, type SeatWeekRead } from '../hooks/useSeatWeek.js';
 import { useConnectionStore } from '../store/connection.js';
 import { setCachedRoster } from '../store/rosterCache.js';
+import { Modal } from './Modal.js';
+import { Terminal } from './Terminal.js';
 
 /**
  * The rail-foot health section (DES-FEEDBACK-003 §6.2, slice O): the operator —
@@ -154,6 +160,75 @@ function SeatRow({ seat }: { seat: RosterSeat }): React.ReactElement {
   );
 }
 
+const MONO_2XS = { fontSize: 'var(--text-2xs)', fontFamily: 'var(--font-mono)' } as const;
+
+/**
+ * The seat's weekly 1:1 (Wave B, idea 9) under its registry row: the week's record on one line, then
+ * the ONE coaching move — its consequence first, then the button that takes it. "No change needed"
+ * has no button. The move's result replaces the button once it lands.
+ */
+function SeatWeek({ seat, record, move, state, onMove }: {
+  seat: RosterSeat;
+  record: SeatRecord | undefined;
+  move: CoachMove;
+  state: MoveState | undefined;
+  onMove: () => void;
+}): React.ReactElement {
+  return (
+    <div data-testid="rail-seat-week" data-seat={seat.key} style={{ paddingLeft: '20px', marginBottom: '6px', minWidth: 0 }}>
+      <div data-testid="rail-seat-week-line" style={{ ...MONO_2XS, color: 'var(--ink-muted)', overflowWrap: 'anywhere' }}>
+        {seatWeekLine(record)}
+      </div>
+      <div data-testid="rail-seat-move" data-kind={move.kind} data-seat={seat.key} style={{ marginTop: '2px' }}>
+        {move.consequence === null ? (
+          <div title={move.why} style={{ ...MONO_2XS, color: 'var(--ink-dim)' }}>
+            {move.label}
+          </div>
+        ) : (
+          <>
+            <p data-testid="rail-seat-move-consequence" title={move.kind === 'route-away' ? move.rule.statement : undefined} style={{ ...MONO_2XS, margin: '0 0 3px', color: 'var(--ink-body)', overflowWrap: 'anywhere' }}>
+              <span style={{ color: 'var(--status-gate)' }}>{move.why}.</span> {move.consequence}
+            </p>
+            {state?.status === 'done' || state?.status === 'error' ? (
+              <p
+                data-testid="rail-seat-move-result"
+                data-status={state.status}
+                style={{ ...MONO_2XS, margin: 0, color: state.status === 'done' ? 'var(--status-run)' : 'var(--status-fail)', overflowWrap: 'anywhere' }}
+              >
+                {state.note}
+              </p>
+            ) : (
+              <button
+                type="button"
+                data-testid="rail-seat-move-button"
+                disabled={state?.status === 'busy'}
+                onClick={onMove}
+                className="rounded px-1.5 py-0.5"
+                style={{ ...MONO_2XS, color: 'var(--ink-high)', background: 'var(--surface-raised)', border: '1px solid var(--surface-raised)', cursor: state?.status === 'busy' ? 'wait' : 'pointer' }}
+              >
+                {move.label} ›
+              </button>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** The window caption under the seats header: what the week covers, or why there is no week. */
+function weekCaption(week: SeatWeekRead): { text: string; color: string } | null {
+  if (week.kind === 'loading') return { text: 'this week: checking…', color: 'var(--ink-dim)' };
+  if (week.kind === 'absent') return { text: 'this week: not reported by this daemon — upgrade wicked-crew', color: 'var(--ink-dim)' };
+  if (week.kind === 'error') return { text: `this week: unavailable — ${week.message}`, color: 'var(--status-fail)' };
+  const r = week.record;
+  const to = new Date(r.until).toISOString().slice(0, 10);
+  return {
+    text: `last ${r.days} days to ${to} · ${r.runsRead} run${r.runsRead === 1 ? '' : 's'} read${r.truncated ? ' (capped: oldest skipped)' : ''}`,
+    color: 'var(--ink-dim)',
+  };
+}
+
 /** What the expand learned about governance (studio#246). */
 type GovernanceRead =
   | { kind: 'loading' }
@@ -290,6 +365,10 @@ export function HealthRailSection({ open, onToggle, compact = false }: Props): R
   const [roster, setRoster] = useState<RosterSeat[] | null>(null);
   const [rosterError, setRosterError] = useState(false);
   const [governance, setGovernance] = useState<GovernanceRead>({ kind: 'loading' });
+  // Wave B, idea 9: the seats' week, read on the same expand gesture.
+  const { week, moves, apply, markOpened } = useSeatWeek(open);
+  const [signIn, setSignIn] = useState<{ seat: RosterSeat; line: string } | null>(null);
+  const weekRecords = week.kind === 'ok' ? recordsByCli(week.record) : null;
   /** The expand generation a diagnostics read belongs to — a completion from an earlier
    *  expand must not overwrite a later one (the findings drive the heart and the dot). */
   const governanceGen = useRef(0);
@@ -452,7 +531,41 @@ export function HealthRailSection({ open, onToggle, compact = false }: Props): R
           ) : roster === null ? (
             <CheckRow label="seats" ok={null} detail="checking…" />
           ) : (
-            roster.map((seat) => <SeatRow key={seat.key} seat={seat} />)
+            <>
+              {(() => {
+                const cap = weekCaption(week);
+                return cap === null ? null : (
+                  <p data-testid="rail-seat-week-window" data-state={week.kind} style={{ ...MONO_2XS, margin: '0 0 4px', color: cap.color, overflowWrap: 'anywhere' }}>
+                    {cap.text}
+                  </p>
+                );
+              })()}
+              {roster.map((seat) => {
+                const record = weekRecords?.get(seat.key);
+                const move = week.kind === 'ok' ? coachSeat(record, seat, week.record) : null;
+                return (
+                  <div key={seat.key} data-testid="rail-seat" data-seat={seat.key}>
+                    <SeatRow seat={seat} />
+                    {move !== null && (
+                      <SeatWeek
+                        seat={seat}
+                        record={record}
+                        move={move}
+                        state={moves[seat.key]}
+                        onMove={() => {
+                          if (move.kind === 'sign-in') {
+                            setSignIn({ seat, line: move.line });
+                            markOpened(seat.key);
+                          } else {
+                            void apply(seat.key, move);
+                          }
+                        }}
+                      />
+                    )}
+                  </div>
+                );
+              })}
+            </>
           )}
           <p
             aria-hidden
@@ -463,6 +576,17 @@ export function HealthRailSection({ open, onToggle, compact = false }: Props): R
           </p>
           <GovernanceRows read={governance} />
         </div>
+      )}
+      {signIn !== null && createPortal(
+        <Modal title={`Sign in — ${signIn.seat.display_name}`} onClose={() => setSignIn(null)}>
+          <div className="flex flex-col gap-3">
+            <p className="text-xs font-mono" style={{ color: 'var(--ink-muted)' }}>
+              Running <code className="rounded px-1 py-0.5" style={{ background: 'var(--surface-raised)', color: 'var(--ink-high)' }}>{signIn.line}</code> in your shell — complete the flow below, then close this panel.
+            </p>
+            <Terminal key={signIn.seat.key} cwd="." initialInput={`${signIn.line}\n`} />
+          </div>
+        </Modal>,
+        document.body,
       )}
     </div>
   );
