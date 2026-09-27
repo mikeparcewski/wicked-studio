@@ -62,7 +62,7 @@ function why(e: unknown): string {
 }
 
 export function useTakes({
-  projectId, docId, manifest, split, navigate, onForked, exitCompare, onShowChat,
+  projectId, docId, manifest, split, navigate, onForked, exitCompare, onShowChat, onShowReceipt,
 }: {
   projectId: string;
   docId: string;
@@ -76,6 +76,8 @@ export function useTakes({
   exitCompare: () => void;
   /** Put the thread in view — where a sent remix shows up. */
   onShowChat: () => void;
+  /** Put the pick's receipt in view (the panel's Compare tab) — its failures included. */
+  onShowReceipt: () => void;
 }): TakesControl {
   const key = threadKey(projectId, docId);
   const msgs = useDocThreadStore((s) => s.messages[key] ?? NO_MSGS);
@@ -127,6 +129,7 @@ export function useTakes({
     });
     setPick({ phase: 'idle' });
     exitCompare();
+    onShowReceipt();
     if (working.status === 'fulfilled' && working.value !== null) onForked(working.value);
     else if (working.status === 'fulfilled') navigate(versionPath(projectId, docId, null));
   }

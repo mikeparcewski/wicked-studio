@@ -437,6 +437,7 @@ function DocFrame({
     onForked,
     exitCompare,
     onShowChat: () => panel.onExpand('chat'),
+    onShowReceipt: () => panel.onExpand('compare'),
   });
 
   const subject = `“${docId}”`;

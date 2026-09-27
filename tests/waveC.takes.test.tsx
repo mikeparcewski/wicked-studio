@@ -24,7 +24,7 @@ const LINEAR: VersionManifest = { head: 3, versions: [entry(1, null), entry(2, 1
 
 type Call = { method: string; url: string; body: unknown };
 
-function stubFetch(manifest: VersionManifest): Call[] {
+function stubFetch(manifest: VersionManifest, proposalStatus = 201): Call[] {
   const calls: Call[] = [];
   vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
     const method = init?.method ?? 'GET';
@@ -36,7 +36,9 @@ function stubFetch(manifest: VersionManifest): Call[] {
       json: () => Promise.resolve(payload),
     });
     if (method === 'GET' && url.includes('/api/versions')) return reply(200, manifest);
-    if (method === 'POST' && url.endsWith('/api/v1/proposals')) return reply(201, { id: 'prop-9' });
+    if (method === 'POST' && url.endsWith('/api/v1/proposals')) {
+      return proposalStatus === 201 ? reply(201, { id: 'prop-9' }) : reply(proposalStatus, { error: 'estate is down' });
+    }
     if (method === 'POST' && url.includes('/api/fork')) return reply(200, { version: 4, parent: 2 });
     if (method === 'POST' && url.includes('/api/events')) return reply(200, { ok: true });
     return Promise.reject(new Error(`unrouted fetch: ${method} ${url}`));
@@ -147,6 +149,21 @@ describe('takes on the compare split', () => {
     expect(screen.getByTestId('takes-receipt-working').textContent).toContain('as v4');
     // The pick closes the split: the working version is back on the solo canvas.
     expect(screen.queryByTestId('compare-panes')).toBeNull();
+  });
+
+  it('a failed filing is said in the receipt, which comes into view even from another tab', async () => {
+    const calls = stubFetch(LINEAR, 502);
+    await openTakes(calls);
+    await userEvent.click(screen.getAllByTestId('take-pick')[1]!);
+    // The person moved the panel to Chat while the split stays on the canvas.
+    await userEvent.click(document.querySelector('[data-testid="panel-tab"][data-tab="chat"]') as HTMLElement);
+    await userEvent.click(screen.getByTestId('take-pick-confirm'));
+    await waitFor(() => expect(screen.getByTestId('doc-panel').getAttribute('data-tab')).toBe('compare'));
+    const filed = screen.getByTestId('takes-receipt-proposal');
+    expect(filed.getAttribute('data-failed')).toBe('true');
+    expect(filed.textContent).toMatch(/^The preference was not filed: .+/);
+    // The fork is independent of the filing and still happened.
+    expect(screen.getByTestId('takes-receipt-working').textContent).toContain('as v4');
   });
 
   it('cancel sends nothing', async () => {
