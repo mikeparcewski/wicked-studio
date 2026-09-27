@@ -36,6 +36,8 @@ export interface PendingDecision {
   queuedAt: number;
   /** Epoch ms at which the POST goes out. */
   dueAt: number;
+  /** The page-close contract for this decision, when it is not a gate's ({@link CLOSE_NOTE}). */
+  closeNote?: string;
 }
 
 /**
@@ -113,6 +115,8 @@ export interface QueueSpec {
   preview: string;
   label?: string | null;
   amend?: string | null;
+  /** The page-close line, when the decision is not a gate's (defaults to {@link CLOSE_NOTE}). */
+  closeNote?: string;
   /** Sends the decision — runs exactly once, when the window ends, unless undone or cancelled. */
   commit: () => Promise<void> | void;
   /** Runs when the operator undoes the decision (release per-gate "queued" state). */
@@ -147,6 +151,7 @@ export function queueDecision(spec: QueueSpec): number {
         return {
           id, verb: spec.verb, runIds: [...spec.runIds], preview: spec.preview,
           label: spec.label ?? null, amend: spec.amend ?? null, queuedAt, dueAt: queuedAt + windowMs,
+          ...(spec.closeNote !== undefined ? { closeNote: spec.closeNote } : {}),
         };
       })(),
     ],

@@ -1,5 +1,7 @@
 import type { SessionView } from '../api/types.js';
 import { calmCopy, type NeedRow } from '../board/needsYou.js';
+import { memberPage, visibleMembers } from '../board/needsQueue.js';
+import { acceptMemoryPreview } from '../board/proposalTriage.js';
 import { useNeedsQueue, type NeedsQueue } from '../hooks/useNeedsQueue.js';
 import type { Navigate } from '../hooks/useRoute.js';
 import type { SkinVariants } from '../theming/skins.js';
@@ -18,7 +20,7 @@ import { humanTitle } from './runIdentity.js';
  *   campaign     → Open test › (the engine campaign, rendered in Test vocabulary — #203)
  *   stalled chat → Open chat ›
  *   elicitation  → Answer ›   steer request → Steer ›   stall escalation → Check run ›
- *   proposal     → Review ›
+ *   proposal     → Review ›  (a proposal GROUP also carries "Accept N memory-only ›" — Wave B, idea 4)
  *
  * Studio wave 2b: the rows, their grouping ("2 approvals", expandable), the ranking,
  * the keyboard cursor and the verbs all come from `useNeedsQueue` — this component only
@@ -122,6 +124,83 @@ export function NeedsYouQueue({ queue, runs, navigate, now, variant = 'inline' }
     );
   };
 
+  /** The proposal group's "Accept N memory-only" (idea 4): opens a preview; while queued it is the Undo. */
+  const acceptAct = (a: Extract<NeedRow['action'], { kind: 'accept-memory' }>): React.ReactElement => {
+    const s = queue.accept.state;
+    const label = s.phase === 'queued'
+      ? `Undo accepting ${s.count}`
+      : s.phase === 'sending'
+        ? `Accepting ${s.done}/${s.total}…`
+        : a.label;
+    return (
+      <button
+        type="button"
+        data-testid="need-accept-act"
+        data-accept-phase={s.phase}
+        disabled={s.phase === 'sending'}
+        title={s.phase === 'idle' ? 'Preview exactly which memory proposals would be accepted' : undefined}
+        onClick={() => (s.phase === 'queued' ? queue.accept.undo() : queue.act(a))}
+        style={{ ...CSS.act, ...(s.phase === 'sending' ? { cursor: 'default', color: 'var(--ink-muted)' } : {}) }}
+      >
+        {label}
+      </button>
+    );
+  };
+
+  /** The preview under the proposal group: exactly what the accept will send, and what stays. */
+  const acceptPreview = (): React.ReactElement | null => {
+    const s = queue.accept.state;
+    if (s.phase !== 'preview') return null;
+    return (
+      <div
+        data-testid="need-accept-preview"
+        data-count={s.items.length}
+        style={{ ...CSS.row, flexDirection: 'column', alignItems: 'stretch', gap: '4px', paddingLeft: '27px' }}
+      >
+        <span style={{ ...CSS.line, whiteSpace: 'normal', color: 'var(--ink-body)' }}>
+          {acceptMemoryPreview(s.items.length, s.staying)}
+        </span>
+        <ul style={{ margin: 0, paddingLeft: '16px', maxHeight: '120px', overflowY: 'auto' }}>
+          {s.items.map((i) => (
+            <li key={i.id} data-testid="need-accept-item" data-id={i.id} style={{ ...CSS.line, display: 'list-item' }}>
+              {i.subject}
+            </li>
+          ))}
+        </ul>
+        <span style={{ display: 'flex', gap: '6px' }}>
+          <button type="button" data-testid="need-accept-confirm" onClick={queue.accept.confirm} style={CSS.act}>
+            {`Accept these ${s.items.length}`}
+          </button>
+          <button type="button" data-testid="need-accept-cancel" onClick={queue.accept.cancel} style={{ ...CSS.act, color: 'var(--ink-muted)' }}>
+            Cancel
+          </button>
+        </span>
+      </div>
+    );
+  };
+
+  /** A paged group's pager (a proposal group shows a few members at a time). */
+  const pager = (row: NeedRow): React.ReactElement | null => {
+    const m = memberPage(row, queue.pages[row.key] ?? 0);
+    if (m.pages <= 1) return null;
+    const next = Math.min(m.items.length, m.total - m.to);
+    return (
+      <div data-testid="need-members-pager" data-page={m.page} style={{ ...CSS.row, paddingLeft: '27px' }}>
+        <span style={{ ...CSS.age, flex: 1 }}>{`Showing ${m.from}–${m.to} of ${m.total}`}</span>
+        {m.page > 0 && (
+          <button type="button" data-testid="need-page-prev" onClick={() => queue.setPage(row.key, m.page - 1)} style={CSS.act}>
+            ‹ Previous
+          </button>
+        )}
+        {m.page < m.pages - 1 && (
+          <button type="button" data-testid="need-page-next" onClick={() => queue.setPage(row.key, m.page + 1)} style={CSS.act}>
+            {`Next ${next} ›`}
+          </button>
+        )}
+      </div>
+    );
+  };
+
   const line = (row: NeedRow, testId: 'need-row' | 'need-member'): React.ReactElement => {
     const selected = queue.selectedKey === row.key;
     const isGroup = row.members !== undefined;
@@ -146,6 +225,9 @@ export function NeedsYouQueue({ queue, runs, navigate, now, variant = 'inline' }
           outline: selected ? '1px solid var(--accent)' : 'none',
           outlineOffset: '-1px',
           background: selected ? 'var(--surface-raised)' : undefined,
+          // A group row carrying a batch move wraps its buttons under the line when the queue is
+          // narrow (the rail skin), rather than pushing them out of view.
+          ...(row.action.kind === 'accept-memory' || row.action.kind === 'batch-onboard' ? { flexWrap: 'wrap' as const } : {}),
         }}
       >
         <span aria-hidden style={{ color: TONE_COLOR[row.tone], flexShrink: 0, fontSize: 'var(--text-xs)' }}>
@@ -161,7 +243,7 @@ export function NeedsYouQueue({ queue, runs, navigate, now, variant = 'inline' }
         {/* A batch move's line IS its consequence: it wraps rather than truncate (idea 3). */}
         <span data-testid="need-line" title={row.text} style={{
           ...CSS.line, color: TONE_COLOR[row.tone],
-          ...(row.action.kind === 'batch-onboard' ? { whiteSpace: 'normal' } : {}),
+          ...(row.action.kind === 'batch-onboard' || row.action.kind === 'accept-memory' ? { whiteSpace: 'normal' } : {}),
         }}>
           {row.text}
         </span>
@@ -174,6 +256,7 @@ export function NeedsYouQueue({ queue, runs, navigate, now, variant = 'inline' }
           {...(isGroup ? {} : { href: row.subjectPath, onOpen: navigate })}
         />
         {isGroup && row.action.kind === 'batch-onboard' && batchAct(row.action, row.text)}
+        {isGroup && row.action.kind === 'accept-memory' && acceptAct(row.action)}
         {isGroup ? (
           <button
             type="button"
@@ -231,9 +314,11 @@ export function NeedsYouQueue({ queue, runs, navigate, now, variant = 'inline' }
           {queue.rows.map((row) => (
             <div key={row.key} role="group">
               {line(row, 'need-row')}
+              {row.action.kind === 'accept-memory' && acceptPreview()}
               {row.members !== undefined && queue.expanded.has(row.key) && (
                 <div data-testid="need-members" data-group={row.key}>
-                  {row.members.map((m) => line(m, 'need-member'))}
+                  {visibleMembers(row, queue.pages[row.key] ?? 0).map((m) => line(m, 'need-member'))}
+                  {pager(row)}
                 </div>
               )}
             </div>
