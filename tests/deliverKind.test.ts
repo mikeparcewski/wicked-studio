@@ -10,6 +10,7 @@ import {
   setCachedWorkflows,
   subscribeWorkflows,
 } from '../src/store/workflowCache.js';
+import { presetSystemFlag } from '../src/store/planCatalog.js';
 import { makeUnit, makeView } from './factories.js';
 import { BUILD_IDS, DENYLIST_BLIND_SPOT, LIVE_WORKFLOWS, SYSTEM_IDS } from './fixtures/workflows.js';
 
@@ -221,5 +222,39 @@ describe('the shared workflow cache: ONE GET for the app, degrading silently', (
     fetchWorkflowsCached();
     expect(spy).not.toHaveBeenCalled();
     unsub();
+  });
+});
+
+describe('a name with no def reads the preset flag (DES-TEAMING-002 M3/M4)', () => {
+  // `chat` and `onboarding` are the engine's built-in presets on a 0.48.0 daemon: no def on
+  // `GET /workflows`, `system: true` on `GET /presets`. The preset's flag is the same name-keyed
+  // classification, so they stay system; a def of the name still wins; nothing known stays unknown.
+  const defs = LIVE_WORKFLOWS.filter((w) => w.id !== 'chat' && w.id !== 'onboarding');
+  const presets = presetSystemFlag.bind(null, {
+    '': [
+      { name: 'chat', scope: 'global', steps: [], created_by: 'builtin', updated_at: 0, system: true },
+      { name: 'onboarding', scope: 'global', steps: [], created_by: 'builtin', updated_at: 0, system: true },
+      { name: 'feature', scope: 'global', steps: [], created_by: 'builtin', updated_at: 0, system: false },
+    ],
+    'proj-1': [{ name: 'my-flow', scope: 'project:proj-1', steps: [], created_by: 'api', updated_at: 0, system: false }],
+  });
+  const lookup = (wf: string) => isSystemWorkflowIn(defs, wf, presets);
+
+  it('chat and onboarding classify system from their presets', () => {
+    expect(deliverKindOf('chat', lookup)).toBe<RunKind>('system');
+    expect(deliverKindOf('onboarding', lookup)).toBe<RunKind>('system');
+  });
+
+  it('a user preset in any loaded scope classifies build; a def still wins over a preset', () => {
+    expect(lookup('my-flow')).toBe(false);
+    expect(deliverKindOf('my-flow', lookup)).toBe<RunKind>('build');
+    expect(isSystemWorkflowIn(defs, 'feature', () => true)).toBe(false);
+  });
+
+  it('no def and no preset row (or a row without the flag, an older daemon) is unknown, never system', () => {
+    expect(lookup('nope')).toBeUndefined();
+    expect(isSystemWorkflowIn(defs, 'chat')).toBeUndefined();
+    expect(presetSystemFlag({ '': [{ name: 'chat', scope: 'global', steps: [], created_by: 'builtin', updated_at: 0 }] }, 'chat')).toBeUndefined();
+    expect(presetSystemFlag({ '': 'loading', x: 'unsupported' }, 'chat')).toBeUndefined();
   });
 });

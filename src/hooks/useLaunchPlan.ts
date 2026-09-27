@@ -105,7 +105,10 @@ export function useLaunchPreview(input: LaunchPreviewInput): LaunchPreviewModel 
   }, [input.projectId]);
 
   const { plan } = input;
-  const preset = plan !== null ? null : presetFor(presets, input.projectId, input.workflow.trim());
+  // A system preset (chat, onboarding) is machine-owned: its launch previews nothing, as the def it
+  // replaced never did (DES-TEAMING-002 M3).
+  const named = plan !== null ? null : presetFor(presets, input.projectId, input.workflow.trim());
+  const preset = named?.system === true ? null : named;
 
   // The preview's gate mode: any before:N is manual mode, so the unshifted token previews the same.
   const previewConfirm = humanConfirmFor(input.mode, input.confirm, input.beforeOrd, 0);

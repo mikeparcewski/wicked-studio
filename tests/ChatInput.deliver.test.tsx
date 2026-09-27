@@ -6,6 +6,8 @@ import * as client from '../src/api/client.js';
 import type { LaunchBodyWithDeliver } from '../src/api/types.js';
 import { DEFAULT_COMPOSER_PREFS, useComposerPrefsStore } from '../src/store/composerPrefs.js';
 import { clearRetryPrefill, setRetryPrefill } from '../src/store/retryPrefill.js';
+import { teamPlanApi } from '../src/api/teamPlan.js';
+import { resetPlanCatalog } from '../src/store/planCatalog.js';
 
 /**
  * studio#123, wire reworked by crew#393 (api-types 0.18.0) — the composer's
@@ -353,5 +355,36 @@ describe('ChatInput delivery (#123)', () => {
     const body = sentBody();
     expect(body.workflow).toBe('chat');
     expect('deliver' in body, 'chat is not build work').toBe(false);
+  });
+
+  it('chat as the engine built-in PRESET (DES-TEAMING-002 M3): no chat def, the preset says system — the launch is unchanged', async () => {
+    // A daemon on api-types 0.48.0: `GET /workflows` no longer lists `chat`, and `GET /presets`
+    // serves it with `system: true`. The chat surface's launch body must be exactly the one above.
+    resetPlanCatalog();
+    vi.spyOn(teamPlanApi, 'presets').mockResolvedValue({
+      presets: [
+        { name: 'chat', scope: 'global', steps: [{ catalog: 'understand', id: 'explore' }], created_by: 'builtin', updated_at: 0, system: true },
+        { name: 'feature', scope: 'global', steps: [{ catalog: 'build', id: 'build' }], created_by: 'builtin', updated_at: 0, system: false },
+      ],
+    });
+    const preview = vi.spyOn(teamPlanApi, 'previewPlan');
+    const user = userEvent.setup();
+    render(
+      <ChatInput runId={null} runStatus={null} onLaunched={vi.fn()} workflowOverride="chat" />,
+    );
+    await bind(user, { repo: 'studio-api' });
+    await waitFor(() => expect(teamPlanApi.presets).toHaveBeenCalled());
+    await waitFor(() => expect(client.api.listWorkflows).toHaveBeenCalled());
+
+    expect(screen.queryByTestId('deliver-notice')).toBeNull();
+    expect(screen.queryByTestId('launch-preview'), 'a system preset previews nothing').toBeNull();
+
+    await send(user, 'what changed in the api last week');
+    await waitFor(() => expect(client.api.launchRun).toHaveBeenCalledTimes(1));
+    const body = sentBody();
+    expect(body.workflow).toBe('chat');
+    expect('deliver' in body, 'chat is not build work').toBe(false);
+    expect(preview).not.toHaveBeenCalled();
+    resetPlanCatalog();
   });
 });

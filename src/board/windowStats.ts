@@ -249,8 +249,8 @@ export interface DeliveryCounts {
    * `vacuous` — a run that was EXPECTED to deliver completed with no change to deliver. Counted
    * only under {@link canDeliver}'s licence (a deliver unit on the run, or a workflow positively
    * known not to be a system one): the daemon stamps `'vacuous'` on every completed repo-scoped
-   * run whose worktree is untouched, which is the DESIGNED outcome of `onboarding`, `survey-repo`
-   * and the other system workflows (wicked-studio#250, F-3R2-018 — nine onboarding runs read
+   * run whose worktree is untouched, which is the DESIGNED outcome of `onboarding` and the other
+   * system workflows (wicked-studio#250, F-3R2-018 — nine onboarding runs read
    * "9 Vacuous — needs retry" and buried the one real signal). Those are not a delivery finding
    * and never count here.
    */
