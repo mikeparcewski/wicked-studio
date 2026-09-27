@@ -21,6 +21,20 @@ npm publish dates. Every version listed here exists on
   still drains the outbox, instead of "the daemon refused this — not found".
 
 ### Added
+- **Capture anything, where you already are (Studio OS behaviour 8, on the Wave A–C pattern).**
+  A **Capture** verb sits beside **Do Work** in Home's verb row, and the same drop is in the Ask
+  dock. Paste notes or a transcript, add files, or drop a whiteboard photo, and pick the project.
+  The consequence is said before the send: the team files what these say as proposals on that
+  project, they land in Needs You on Home, and nothing is kept until you accept it. The drop posts
+  `POST /projects/:id/capture` (crew api-types 0.48.0), and crew files a small run whose only output
+  is proposals in the ONE queue. There is no second review surface: while the run works, studio
+  re-reads the pending queue into the needs-you sources, so the rows land in Home's EXISTING
+  proposal triage (#357). The triage line names what the team filed each row as ("Memory only — a
+  captured decision: …", "Changes enforcement — lands a development rule (warn) from your
+  capture"), and "Accept N memory-only" covers the harmless ones. The Capture verb carries the last
+  capture's count ("· 5 waiting"); the open drop and the Ask dock show the full line (how many wait,
+  split by consequence, with **Review in Needs You**). Journey: `e2e/capture_test.py`, in the
+  behaviour set.
 - **Standing orders: the Away switch says what it will do (Studio OS behaviour 10, on the Wave A–C
   pattern).** Home's Standing-orders strip carries the away switch with its consequence first: a
   preview built from the orders in force ("While you are away: 3 orders active: will approve band

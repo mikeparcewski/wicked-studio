@@ -638,6 +638,13 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          #   crew's 409 deliveries_frozen for an approve of a DELIVER gate (r-trust-deliver; pair with
          #   trust_rules). Off: those routes answer the unknown-route 404 an older daemon gives.
          "home_runs": False,
+         # ── Capture (Studio OS behaviour 8, e2e/capture_test.py) ──
+         # capture — POST /projects/:id/capture answers on the crew 0.48.0 wire (201 {runId});
+         #   the "capture run" files capture_rows (1 intent, 2 decisions, 1 memory proposed as a
+         #   pattern, 1 development rule) into the `proposals` queue (pair with proposals=[]), where
+         #   Home's Wave B triage decides them over its own approve route. Off: the unknown-route
+         #   404. Every capture POST lands in capture_post_log (GET /__fixture/capture-posts).
+         "capture": False,
          }
 state_lock = threading.Lock()
 # Idea 9: every POST /governance/rules body the fixture received (GET /__fixture/rule-posts).
@@ -657,6 +664,32 @@ standing_order_posts: list = []
 preset_put_log: list = []
 FREEZE_THAWED = {"frozen": False, "since": None, "by": None, "reason": None}
 delivery_freeze: dict = dict(FREEZE_THAWED)
+# Capture: every POST /projects/:id/capture and /proposals/:id/{approve,reject} body the fixture
+# received (GET /__fixture/capture-posts), and the capture runs it minted.
+capture_post_log: list = []
+capture_seq = [0]
+CAPTURE_IMAGE_TYPES = {"image/png", "image/jpeg", "image/gif", "image/webp"}
+
+
+def capture_rows(run_id: str, project_id: str) -> list:
+    """What the capture run files — the crew 0.48.0 shapes: kind "memory", payload.capture, the
+    run's project facet (the shim stamps it), provenance.run_id = the capture run."""
+    def row(n: int, capture: str, content: str, tier: str, **extra) -> dict:
+        return {"id": f"{run_id}-p{n}", "kind_type": "memory",
+                "payload": {"content": content, "tier": tier, "capture": capture, **extra},
+                "facets": {"project": project_id}, "provenance": {"run_id": run_id, "run_unit": "1"},
+                "state": "pending", "created_at": NOW0 // 1000 + n}
+    return [
+        row(1, "intent", "Add resumable uploads to the upload endpoint", "episodic"),
+        row(2, "decision", "Chose S3 presigned URLs over proxying uploads through the API, to keep large files off the app servers", "semantic"),
+        row(3, "decision", "Uploads are capped at 5 GB per file for launch", "semantic"),
+        row(4, "memory", "Large uploads should go straight to object storage with presigned URLs, not through the app", "procedural", reach="pattern"),
+        {"id": f"{run_id}-p5", "kind_type": "policy:development",
+         "payload": {"rule": "Every upload route streams to object storage; none buffers a file in memory",
+                     "severity": "warn", "capture": "rule"},
+         "facets": {"project": project_id}, "provenance": {"run_id": run_id, "run_unit": "1"},
+         "state": "pending", "created_at": NOW0 // 1000 + 5},
+    ]
 
 # ── The crew settings store (DES-VISION-001 §3.3, vision slice 7) ──────────────
 #
@@ -4453,6 +4486,48 @@ class W2Handler(SimpleHTTPRequestHandler):
             return True
         return False
 
+    def _capture_post(self, path: str, body: dict) -> bool:
+        """Capture (Studio OS behaviour 8): the capture launch and the review's decisions."""
+        m = re.fullmatch(r"/api/v1/projects/([^/]+)/capture", path)
+        if m:
+            with state_lock:
+                on = state["capture"]
+            if not on:
+                self._json(404, {"error": f"w2 fixture: no such endpoint {path}"})
+                return True
+            pid = urllib.parse.unquote(m.group(1))
+            notes = body.get("notes") or ""
+            files = body.get("files") or []
+            seen = []
+            for i, f in enumerate(files):
+                if "dataBase64" in f:
+                    if f.get("mediaType") not in CAPTURE_IMAGE_TYPES:
+                        self._json(400, {"error": f"files[{i}]: mediaType {json.dumps(f.get('mediaType'))} is not one a vision seat reads"})
+                        return True
+                    try:
+                        raw = base64.b64decode(f["dataBase64"], validate=True)
+                    except (ValueError, TypeError):
+                        self._json(400, {"error": f"files[{i}]: dataBase64 is not base64"})
+                        return True
+                    seen.append({"name": f.get("name"), "kind": "image", "mediaType": f["mediaType"], "bytes": len(raw),
+                                 "png": raw[:8] == b"\x89PNG\r\n\x1a\n"})
+                else:
+                    seen.append({"name": f.get("name"), "kind": "text", "text": f.get("text")})
+            if not notes.strip() and not seen:
+                self._json(400, {"error": "a capture needs notes or at least one file"})
+                return True
+            if pid not in {p["id"] for p in PROJECTS}:
+                self._json(404, {"error": f"Project {pid} not found"})
+                return True
+            with state_lock:
+                capture_seq[0] += 1
+                rid = f"r-capture-{capture_seq[0]}"
+                capture_post_log.append({"route": "capture", "projectId": pid, "notes": notes, "files": seen, "runId": rid})
+                state["proposals"] = list(state["proposals"] or []) + capture_rows(rid, pid)
+            self._json(201, {"runId": rid})
+            return True
+        return False
+
     def do_GET(self):  # noqa: N802 (stdlib naming)
         if self.headers.get("Upgrade", "").lower() == "websocket":
             return self._ws()
@@ -4494,6 +4569,10 @@ class W2Handler(SimpleHTTPRequestHandler):
         if path == "/__fixture/standing-order-posts":
             with state_lock:
                 posts = list(standing_order_posts)
+            return self._json(200, {"posts": posts})
+        if path == "/__fixture/capture-posts":
+            with state_lock:
+                posts = list(capture_post_log)
             return self._json(200, {"posts": posts})
         if self._api(path):
             return None
@@ -4544,6 +4623,10 @@ class W2Handler(SimpleHTTPRequestHandler):
             if isinstance(body.get("standing_seed"), list):
                 with state_lock:
                     STANDING["orders"] = json.loads(json.dumps(body["standing_seed"]))
+            if body.get("reset_capture"):
+                with state_lock:
+                    capture_post_log.clear()
+                    capture_seq[0] = 0
             if body.get("reset_learn"):
                 with learned_lock:
                     learned_themes.clear()
@@ -4584,6 +4667,8 @@ class W2Handler(SimpleHTTPRequestHandler):
                 state.update({k: v for k, v in body.items() if k in state})
                 snapshot = dict(state)
             return self._json(200, {"ok": True, "state": snapshot})
+        if self._capture_post(path, body if isinstance(body, dict) else {}):
+            return None
         # The slice-6 document journey's writes (create / fork / bus emit).
         if self._interactive_post(path, body if isinstance(body, dict) else {}):
             return None

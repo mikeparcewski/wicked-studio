@@ -10,10 +10,10 @@
   "version": 1,
   "studioVersion": "0.5.14",
   "counts": {
-    "files": 166,
-    "occurrences": 1553,
-    "static": 1350,
-    "dynamic": 68,
+    "files": 167,
+    "occurrences": 1569,
+    "static": 1364,
+    "dynamic": 69,
     "computed": 7
   },
   "static": [
@@ -779,6 +779,90 @@
       "testId": "campaigns-unsupported",
       "files": [
         "src/components/CampaignsPage.tsx"
+      ]
+    },
+    {
+      "testId": "capture",
+      "files": [
+        "src/components/CaptureDrop.tsx"
+      ]
+    },
+    {
+      "testId": "capture-consequence",
+      "files": [
+        "src/components/CaptureDrop.tsx"
+      ]
+    },
+    {
+      "testId": "capture-dismiss",
+      "files": [
+        "src/components/CaptureDrop.tsx"
+      ]
+    },
+    {
+      "testId": "capture-drop",
+      "files": [
+        "src/components/CaptureDrop.tsx"
+      ]
+    },
+    {
+      "testId": "capture-error",
+      "files": [
+        "src/components/CaptureDrop.tsx"
+      ]
+    },
+    {
+      "testId": "capture-file",
+      "files": [
+        "src/components/CaptureDrop.tsx"
+      ]
+    },
+    {
+      "testId": "capture-files",
+      "files": [
+        "src/components/CaptureDrop.tsx"
+      ]
+    },
+    {
+      "testId": "capture-notes",
+      "files": [
+        "src/components/CaptureDrop.tsx"
+      ]
+    },
+    {
+      "testId": "capture-open",
+      "files": [
+        "src/components/CaptureDrop.tsx"
+      ]
+    },
+    {
+      "testId": "capture-project",
+      "files": [
+        "src/components/CaptureDrop.tsx"
+      ]
+    },
+    {
+      "testId": "capture-review",
+      "files": [
+        "src/components/CaptureDrop.tsx"
+      ]
+    },
+    {
+      "testId": "capture-send",
+      "files": [
+        "src/components/CaptureDrop.tsx"
+      ]
+    },
+    {
+      "testId": "capture-status",
+      "files": [
+        "src/components/CaptureDrop.tsx"
+      ]
+    },
+    {
+      "testId": "capture-status-line",
+      "files": [
+        "src/components/CaptureDrop.tsx"
       ]
     },
     {
@@ -8249,6 +8333,12 @@
       ]
     },
     {
+      "pattern": "*-line",
+      "files": [
+        "src/components/CaptureDrop.tsx"
+      ]
+    },
+    {
       "pattern": "*-list",
       "files": [
         "src/components/MadeDashboard.tsx"
@@ -8580,6 +8670,7 @@
       "files": [
         "src/components/AgeStamp.tsx",
         "src/components/AppearanceSettings.tsx",
+        "src/components/CaptureDrop.tsx",
         "src/components/ChatPanel.tsx",
         "src/components/DashboardTiles.tsx",
         "src/components/DeckKpiRibbon.tsx",

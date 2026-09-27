@@ -25,6 +25,7 @@ import { DashboardGrid, StatTile } from './dashboardKit.js';
 import { TONE_COLOR, TONE_GLYPH } from './narrator.js';
 import { NewProjectModal } from './NewProjectModal.js';
 import { AgeStamp } from './AgeStamp.js';
+import { CaptureDrop } from './CaptureDrop.js';
 import { ago } from './ProjectCard.js';
 import { humanTitle } from './runIdentity.js';
 
@@ -51,9 +52,11 @@ const VERB_CSS: React.CSSProperties = {
   cursor: 'pointer', whiteSpace: 'nowrap', textDecoration: 'none', font: 'inherit',
 };
 
-export function HomeVerbs({ navigate, onOpenAsk, prominent = false }: {
+export function HomeVerbs({ navigate, onOpenAsk, prominent = false, runs }: {
   navigate: Navigate;
   onOpenAsk: () => void;
+  /** The runs the app holds: present = the Capture drop sits beside Do Work (behaviour 8). */
+  runs?: readonly SessionView[];
   /** Fresh-install welcome: the verbs are the page (§6). */
   prominent?: boolean;
 }): React.ReactElement {
@@ -75,6 +78,8 @@ export function HomeVerbs({ navigate, onOpenAsk, prominent = false }: {
       style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}
     >
       {verb('Do Work', '/runs/new', 'home-verb-work')}
+      {/* Behaviour 8: capture where you already are — what it files lands in Needs You below. */}
+      {runs !== undefined && !prominent && <CaptureDrop runs={runs} />}
       <button
         type="button"
         data-testid="home-verb-project"

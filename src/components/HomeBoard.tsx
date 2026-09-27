@@ -382,7 +382,7 @@ export function HomeBoard({ runs, navigate, onOpenAsk }: Props): React.ReactElem
             What needs you, across everything.
           </p>
         </div>
-        {!fresh && <HomeVerbs navigate={navigate} onOpenAsk={onOpenAsk} />}
+        {!fresh && <HomeVerbs navigate={navigate} onOpenAsk={onOpenAsk} runs={runs} />}
         {/* The flat run list stays reachable (§1.5 escape hatch) — at /work. */}
         <a
           href="/work"

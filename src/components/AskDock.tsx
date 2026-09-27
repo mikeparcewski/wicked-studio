@@ -19,6 +19,7 @@ import {
   type DiagnosticsState,
 } from './askContext.js';
 import { AssistDock, type AssistVerbs } from './AssistDock.js';
+import { CaptureDrop } from './CaptureDrop.js';
 import {
   askScopeIsScoped,
   askScopeOpenFields,
@@ -269,7 +270,16 @@ export function AskDock({ runs, pathname, onClose, navigate }: {
         prompts,
         controls:
           openedScope === undefined ? (
-            <ChatScopeSelect value={scopeChoice} onChange={setManualScope} projects={projects} repos={repos} />
+            <>
+              <ChatScopeSelect value={scopeChoice} onChange={setManualScope} projects={projects} repos={repos} />
+              {/* Behaviour 8: or drop notes / a photo instead — the proposals land in Home's Needs You. */}
+              <CaptureDrop
+                runs={runs}
+                pathname={pathname}
+                inline
+                onReview={navigate === undefined ? undefined : () => { navigate('/'); onClose(); }}
+              />
+            </>
           ) : undefined,
       }}
       verbs={verbs}
