@@ -8,24 +8,29 @@ import type { StandingOrdersState } from '../src/api/standingOrders.js';
  * rule the invariant refuses cannot be kept. The away switch writes through the daemon.
  */
 
-const state: StandingOrdersState = { away: false, awaySince: null, orders: [], outbox: [] };
-const api = {
-  get: vi.fn(async () => structuredClone(state)),
-  setAway: vi.fn(async (away: boolean) => {
-    state.away = away;
-    return structuredClone(state);
-  }),
-  parse: vi.fn(),
-  create: vi.fn(async (text: string, rule: StandingOrdersState['orders'][number]['rule']) => {
-    const order = { id: 'o1', text, rule, createdAt: 1 };
-    state.orders.push(order);
-    return { order };
-  }),
-  remove: vi.fn(async (id: string) => {
-    state.orders = state.orders.filter((o) => o.id !== id);
-    return { removed: true as const };
-  }),
-};
+// Hoisted with the mock (vi.mock is hoisted above every import): the factory never reaches for a
+// binding the module has not initialised yet.
+const { state, api } = vi.hoisted(() => {
+  const state: StandingOrdersState = { away: false, awaySince: null, orders: [], outbox: [] };
+  const api = {
+    get: vi.fn(async () => structuredClone(state)),
+    setAway: vi.fn(async (away: boolean) => {
+      state.away = away;
+      return structuredClone(state);
+    }),
+    parse: vi.fn(),
+    create: vi.fn(async (text: string, rule: StandingOrdersState['orders'][number]['rule']) => {
+      const order = { id: 'o1', text, rule, createdAt: 1 };
+      state.orders.push(order);
+      return { order };
+    }),
+    remove: vi.fn(async (id: string) => {
+      state.orders = state.orders.filter((o) => o.id !== id);
+      return { removed: true as const };
+    }),
+  };
+  return { state, api };
+});
 vi.mock('../src/api/standingOrders.js', () => ({ standingOrdersApi: api }));
 
 const { StandingOrdersPanel } = await import('../src/components/StandingOrdersPanel.js');
