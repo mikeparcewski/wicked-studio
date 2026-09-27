@@ -10,9 +10,9 @@
   "version": 1,
   "studioVersion": "0.5.14",
   "counts": {
-    "files": 159,
-    "occurrences": 1444,
-    "static": 1243,
+    "files": 160,
+    "occurrences": 1453,
+    "static": 1248,
     "dynamic": 68,
     "computed": 7
   },
@@ -2922,6 +2922,36 @@
       ]
     },
     {
+      "testId": "kpi-repair",
+      "files": [
+        "src/components/DeckKpiRibbon.tsx"
+      ]
+    },
+    {
+      "testId": "kpi-repair-cancel",
+      "files": [
+        "src/components/DeckKpiRibbon.tsx"
+      ]
+    },
+    {
+      "testId": "kpi-repair-confirm",
+      "files": [
+        "src/components/DeckKpiRibbon.tsx"
+      ]
+    },
+    {
+      "testId": "kpi-repair-preview",
+      "files": [
+        "src/components/DeckKpiRibbon.tsx"
+      ]
+    },
+    {
+      "testId": "kpi-repair-result",
+      "files": [
+        "src/components/DeckKpiRibbon.tsx"
+      ]
+    },
+    {
       "testId": "ladder-gate",
       "files": [
         "src/components/PhaseLadder.tsx"
@@ -3495,7 +3525,7 @@
       ]
     },
     {
-      "testId": "need-age",
+      "testId": "need-batch-act",
       "files": [
         "src/components/NeedsYouQueue.tsx"
       ]
@@ -7936,6 +7966,7 @@
     {
       "expression": "testId",
       "files": [
+        "src/components/AgeStamp.tsx",
         "src/components/AppearanceSettings.tsx",
         "src/components/ChatPanel.tsx",
         "src/components/DashboardTiles.tsx",

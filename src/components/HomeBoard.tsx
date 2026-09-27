@@ -32,7 +32,8 @@ import { DeckBurnChart } from './DeckBurnChart.js';
 import { listEvalRuns } from '../api/testing.js';
 import { HandoverPanel } from './HandoverPanel.js';
 import { NeedsQueueSurface } from './NeedsYouQueue.js';
-import { ACTIVE_CARD_H, ago, ProjectCard, QUIET_CARD_H } from './ProjectCard.js';
+import { AgeStamp } from './AgeStamp.js';
+import { ACTIVE_CARD_H, ProjectCard, QUIET_CARD_H } from './ProjectCard.js';
 import { humanTitle } from './runIdentity.js';
 import { ProjectSparkline } from './ProjectSparkline.js';
 
@@ -205,6 +206,11 @@ export function HomeBoard({ runs, navigate, onOpenAsk }: Props): React.ReactElem
     void read(() => getDiagnostics()).then((r) => r !== null && deposit({ diag: r }));
     void read(() => listEvalRuns()).then((r) => r !== null && deposit({ evalCount: r.length }));
     return () => { cancelled = true; };
+  }, []);
+
+  // A repair move (idea 5 — the dead-letter replay) changed what diagnostics reports: re-read it.
+  const rereadDiagnostics = useCallback(() => {
+    void getDiagnostics().then((r) => setWires((w) => ({ ...w, diag: r })), () => undefined);
   }, []);
 
   useEffect(() => {
@@ -412,7 +418,7 @@ export function HomeBoard({ runs, navigate, onOpenAsk }: Props): React.ReactElem
           {/* ── The KPI ribbon: the hero, full-width — FLOW / ATTENTION / TRUST&SPEND on the real
                  created_at clock (the command-deck redesign). ── */}
           <div style={{ flexShrink: 0, padding: '0 var(--space-6)' }}>
-            <DeckKpiRibbon runs={runs} claims={wires.claims} governance={wires.diag?.governance ?? null} needCount={needRows.length} navigate={navigate} now={now} />
+            <DeckKpiRibbon runs={runs} claims={wires.claims} governance={wires.diag?.governance ?? null} needCount={needRows.length} navigate={navigate} now={now} onRepaired={rereadDiagnostics} />
           </div>
 
           {/* ── The command center: the needs-you queue (spine, left) + the live-pulse column. ── */}
@@ -588,7 +594,7 @@ export function HomeBoard({ runs, navigate, onOpenAsk }: Props): React.ReactElem
                         {i.project.name}
                         <ProjectSparkline runs={i.runs} attachedAt={i.attachedAt} />
                         <span style={{ color: 'var(--ink-dim)' }}>
-                          · {ago(i.signal?.at ?? i.project.updated_at)}
+                          · <AgeStamp at={i.signal?.at ?? i.project.updated_at} now={now} />
                         </span>
                       </a>
                     ))}

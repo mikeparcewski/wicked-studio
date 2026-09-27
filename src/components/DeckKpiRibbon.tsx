@@ -1,4 +1,5 @@
-import { useMemo } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { DiagnosticsGovernance, GovernanceClaim, SessionView } from '../api/types.js';
 import type { Navigate } from '../hooks/useRoute.js';
 import { COUNT_TONE_COLOR, countTone, type CountTone } from '../board/countTone.js';
@@ -22,6 +23,9 @@ import {
   type StatDelta,
 } from '../board/windowStats.js';
 import { Sparkline } from './dashboardKit.js';
+import { replayPreviewLines, replayResultLine, retryableFailed, retryConsequence } from '../board/repairMoves.js';
+import { useDeadletterReplay, useRetryFailed } from '../hooks/useRepairMoves.js';
+import { humanTitle } from './runIdentity.js';
 
 /**
  * The command deck's hero: the KPI ribbon (DES-HOME-COMMAND-CENTER, redesign). Three THEMED groups
@@ -50,11 +54,13 @@ interface Props {
   governance?: DiagnosticsGovernance | null | undefined;
   /** THE needs-you fold's count — the ribbon shows exactly what the feed lists. */
   needCount: number;
+  /** A repair move changed what the daemon reports (a dead-letter replay ran) — re-read it. */
+  onRepaired?: () => void;
   navigate: Navigate;
   now?: number;
 }
 
-export function DeckKpiRibbon({ runs, claims, governance = null, needCount, navigate, now }: Props): React.ReactElement {
+export function DeckKpiRibbon({ runs, claims, governance = null, needCount, navigate, now, onRepaired }: Props): React.ReactElement {
   const at = now ?? Date.now();
   const logs = useRuntimeStore((s) => s.logs);
   // The `is_system` lookup licenses the vacuous count (wicked-studio#250, F-3R2-018) — the same
@@ -98,7 +104,11 @@ export function DeckKpiRibbon({ runs, claims, governance = null, needCount, navi
       ? { source: 'runs' as const, total: dto.total, count: dto.count }
       : { source: 'session' as const, ...observedSpend(logs) };
 
+    // Idea 5: the failures a "Retry failed" would relaunch (in the tile's window, not yet retried).
+    const retryable = retryableFailed(current, live);
+
     return {
+      retryable,
       real, windowLabel: real ? '30d' : 'last 30',
       runsCurrent: current.length, runsDelta, failedDelta, counts, activeNow, spark,
       health, successWord, reviewQueue, reworkPct, governed, spend,
@@ -106,6 +116,14 @@ export function DeckKpiRibbon({ runs, claims, governance = null, needCount, navi
   }, [runs, claims, logs, at, isSystemWorkflow]);
 
   const go = (path: string) => (e: React.MouseEvent) => { e.preventDefault(); navigate(path); };
+
+  // Idea 5 — numbers are repair moves: a troubled tile carries its fix, consequence first.
+  const replay = useDeadletterReplay(onRepaired);
+  const retry = useRetryFailed(model.retryable);
+  const deadletters = governance !== null
+    && governance.store !== null
+    && governance.findings.some((f) => f.kind === 'governance.deadletter' && f.severity === 'error')
+    && governance.deadletters.count > 0;
 
   // #246: the Governed tile degrades when the daemon says its governance evidence is not landing
   // — the same signal the Health rail's heart reads (a null store, or an error finding such as
@@ -150,7 +168,10 @@ export function DeckKpiRibbon({ runs, claims, governance = null, needCount, navi
           <Tile testId="home-kpi-failed" label={`Failed · ${model.windowLabel}`} value={String(model.counts.failed)}
             delta={model.failedDelta} deltaBadUp tone={countTone(model.counts.failed, 'fail')}
             href="/work?filter=failed" onGo={go('/work?filter=failed')}
-            sub={model.reworkPct !== null ? `rework ${model.reworkPct}%` : 'no rework'} />
+            sub={model.reworkPct !== null ? `rework ${model.reworkPct}%` : 'no rework'}
+            repair={model.retryable.length > 0 || retry.state.phase !== 'idle'
+              ? <RetryMove retry={retry} runs={model.retryable} failedInWindow={model.counts.failed} />
+              : undefined} />
           <Tile testId="home-kpi-review" label="Review" value={String(model.reviewQueue)}
             tone={countTone(model.reviewQueue, 'gate')}
             href="/work?filter=stranded" onGo={go('/work?filter=stranded')}
@@ -169,7 +190,9 @@ export function DeckKpiRibbon({ runs, claims, governance = null, needCount, navi
             state={govError ? 'governance-error' : undefined}
             href="/steering" onGo={go('/steering')}
             bar={model.governed?.pct ?? null}
-            sub={govError && govWhy !== null ? govWhy : model.governed === null ? 'not served' : `${model.governed.governed}/${model.governed.total} runs`} />
+            sub={govError && govWhy !== null ? govWhy : model.governed === null ? 'not served' : `${model.governed.governed}/${model.governed.total} runs`}
+            // The move stays mounted while it runs or reports: the re-read count may clear the trouble.
+            repair={deadletters || replay.state.phase !== 'idle' ? <ReplayMove replay={replay} /> : undefined} />
           {(() => {
             const s = model.spend;
             const hasData = s.source === 'runs' ? s.count > 0 : s.frames > 0;
@@ -193,7 +216,7 @@ export function DeckKpiRibbon({ runs, claims, governance = null, needCount, navi
 }
 
 /** One ribbon tile — the deck's luminous mono metric, delta pill, optional sparkline or bar. */
-function Tile({ testId, label, value, unit = '', delta, deltaBadUp, valueColor, tone, state, sub, spark, bar, lead, href, onGo }: {
+function Tile({ testId, label, value, unit = '', delta, deltaBadUp, valueColor, tone, state, sub, spark, bar, lead, href, onGo, repair }: {
   testId: string;
   label: string;
   value: string;
@@ -211,6 +234,8 @@ function Tile({ testId, label, value, unit = '', delta, deltaBadUp, valueColor, 
   lead?: boolean;
   href: string;
   onGo: (e: React.MouseEvent) => void;
+  /** The tile's repair move (idea 5) — rendered BESIDE the tile's link, never inside it. */
+  repair?: React.ReactNode;
 }): React.ReactElement {
   const hasDelta = delta !== undefined && delta.previous !== null;
   const d = hasDelta ? delta!.current - delta!.previous! : null;
@@ -219,7 +244,7 @@ function Tile({ testId, label, value, unit = '', delta, deltaBadUp, valueColor, 
   const good = deltaBadUp ? dir === 'down' : dir === 'up';
   const deltaClass = dir === 'flat' ? 'flat' : good ? 'up' : 'down';
   const color = tone !== undefined ? COUNT_TONE_COLOR[tone] : valueColor;
-  return (
+  const tile = (
     <a
       className={`deck-tile${lead ? ' lead' : ''}`}
       data-testid={testId}
@@ -248,5 +273,152 @@ function Tile({ testId, label, value, unit = '', delta, deltaBadUp, valueColor, 
       )}
       {sub !== undefined && <div className="deck-sub">{sub}</div>}
     </a>
+  );
+  if (repair === undefined) return tile;
+  return (
+    <div className={`deck-tile-host${lead ? ' lead' : ''}`}>
+      {tile}
+      {repair}
+    </div>
+  );
+}
+
+const POP_W = 320;
+
+/** The repair button on a tile (beside its value, so the ribbon never reflows), and its
+ *  consequence popover — portalled, because the ribbon's panels clip their overflow. */
+function RepairShell({ kind, label, title, open, onOpen, children }: {
+  kind: 'replay' | 'retry';
+  label: string;
+  /** What the move does, in full — the button's hover and accessible name. */
+  title: string;
+  open: boolean;
+  onOpen: () => void;
+  children: React.ReactNode;
+}): React.ReactElement {
+  const btn = useRef<HTMLButtonElement>(null);
+  const [at, setAt] = useState<{ top: number; left: number } | null>(null);
+  useLayoutEffect(() => {
+    if (!open || btn.current === null) return;
+    const place = (): void => {
+      const r = btn.current!.getBoundingClientRect();
+      setAt({ top: r.bottom + 6, left: Math.max(8, Math.min(r.right - POP_W, window.innerWidth - POP_W - 8)) });
+    };
+    place();
+    window.addEventListener('resize', place);
+    window.addEventListener('scroll', place, true);
+    return () => {
+      window.removeEventListener('resize', place);
+      window.removeEventListener('scroll', place, true);
+    };
+  }, [open]);
+  return (
+    <>
+      <button ref={btn} type="button" className="deck-repair" data-testid="kpi-repair" data-repair={kind}
+        aria-expanded={open} aria-label={title} title={title} onClick={onOpen}>
+        {label}
+      </button>
+      {open && at !== null && createPortal(
+        <div className="deck-repair-pop" role="dialog" aria-label={title} data-testid="kpi-repair-preview" data-repair={kind}
+          style={{ top: at.top, left: at.left, width: POP_W }}>
+          {children}
+        </div>,
+        document.body,
+      )}
+    </>
+  );
+}
+
+function RepairButtons({ confirm, onConfirm, onCancel, disabled }: {
+  confirm: string | null;
+  onConfirm?: () => void;
+  onCancel: () => void;
+  disabled?: boolean;
+}): React.ReactElement {
+  return (
+    <div className="deck-repair-actions">
+      {confirm !== null && (
+        <button type="button" className="deck-repair-go" data-testid="kpi-repair-confirm" disabled={disabled} onClick={onConfirm}>
+          {confirm}
+        </button>
+      )}
+      <button type="button" className="deck-repair-cancel" data-testid="kpi-repair-cancel" onClick={onCancel}>
+        {confirm === null ? 'Close' : 'Cancel'}
+      </button>
+    </div>
+  );
+}
+
+/** Governed tile: "Replay" — a dry run first; the real replay only on confirm. */
+function ReplayMove({ replay }: { replay: ReturnType<typeof useDeadletterReplay> }): React.ReactElement {
+  const s = replay.state;
+  return (
+    <RepairShell kind="replay" label="Replay ›" title="Replay the dead-lettered governance events (dry run first)" open={s.phase !== 'idle'} onOpen={() => void replay.preview()}>
+      {s.phase === 'previewing' && <p className="deck-repair-line">Dry run: reading the outbox…</p>}
+      {s.phase === 'preview' && (
+        <>
+          <p className="deck-repair-head">Dry run — nothing has moved yet</p>
+          {replayPreviewLines(s.outcome).map((l) => <p key={l} className="deck-repair-line">{l}</p>)}
+          <RepairButtons
+            confirm={s.outcome.read > 0 ? `Replay ${s.outcome.read}` : null}
+            disabled={s.outcome.blocker !== null}
+            onConfirm={() => void replay.confirm()}
+            onCancel={replay.dismiss}
+          />
+        </>
+      )}
+      {s.phase === 'replaying' && <p className="deck-repair-line">Replaying {s.preview.read}…</p>}
+      {s.phase === 'done' && (
+        <>
+          <p className="deck-repair-line" data-testid="kpi-repair-result">{replayResultLine(s.outcome)}</p>
+          <RepairButtons confirm={null} onCancel={replay.dismiss} />
+        </>
+      )}
+      {s.phase === 'error' && (
+        <>
+          <p className="deck-repair-line" data-testid="kpi-repair-result">{s.message}</p>
+          <RepairButtons confirm={null} onCancel={replay.dismiss} />
+        </>
+      )}
+    </RepairShell>
+  );
+}
+
+const RETRY_LIST_MAX = 5;
+
+/** Failed tile: "Retry failed" — the preview names what relaunches; confirm relaunches it. */
+function RetryMove({ retry, runs, failedInWindow }: {
+  retry: ReturnType<typeof useRetryFailed>;
+  runs: readonly SessionView[];
+  failedInWindow: number;
+}): React.ReactElement {
+  const s = retry.state;
+  const shown = s.phase === 'preview' ? s.runs : runs;
+  return (
+    <RepairShell kind="retry" label="Retry ›" title="Retry the failed runs (preview first)" open={s.phase !== 'idle'} onOpen={retry.open}>
+      {s.phase === 'preview' && (
+        <>
+          <p className="deck-repair-head">{retryConsequence(shown, failedInWindow)}</p>
+          <ul className="deck-repair-list">
+            {shown.slice(0, RETRY_LIST_MAX).map((v) => <li key={v.session.id}>{humanTitle(v.session.problem, 48)}</li>)}
+            {shown.length > RETRY_LIST_MAX && <li>…and {shown.length - RETRY_LIST_MAX} more</li>}
+          </ul>
+          <RepairButtons
+            confirm={shown.length > 0 ? `Retry ${shown.length}` : null}
+            onConfirm={() => void retry.confirm()}
+            onCancel={retry.dismiss}
+          />
+        </>
+      )}
+      {s.phase === 'running' && <p className="deck-repair-line">Relaunching {s.done}/{s.total}…</p>}
+      {s.phase === 'done' && (
+        <>
+          <p className="deck-repair-line" data-testid="kpi-repair-result">
+            Relaunched {s.launched}{s.failures.length > 0 ? ` · ${s.failures.length} refused: ${s.failures.map((f) => f.error).join('; ')}` : ''}
+          </p>
+          <RepairButtons confirm={null} onCancel={retry.dismiss} />
+        </>
+      )}
+    </RepairShell>
   );
 }

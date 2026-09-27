@@ -1,4 +1,6 @@
-import { rankNeeds, type NeedGroupKey, type NeedRow } from './needsYou.js';
+import { plausibleClock } from './ageHonesty.js';
+import { rankNeeds, type NeedAction, type NeedGroupKey, type NeedRow } from './needsYou.js';
+import { batchOnboardConsequence, batchOnboardLabel } from './repairMoves.js';
 
 /**
  * The needs-you QUEUE's shape over the fold (studio wave 2b): alike SIMPLE items fold
@@ -23,7 +25,27 @@ const GROUP_WORDS: Record<NeedGroupKey, { one: string; many: string; line: strin
     many: 'proposals to review',
     line: 'Policies and memories waiting on review',
   },
+  reindex: {
+    one: 'repo never indexed',
+    many: 'repos never indexed',
+    line: 'No onboarding run on record',
+  },
 };
+
+/** The group row's own move and line: a `reindex` group carries the batch onboard with its
+ *  consequence (idea 3); every other group opens its lead member, as before. */
+function groupMove(key: NeedGroupKey, ranked: readonly NeedRow[]): { action: NeedAction; text: string } {
+  const lead = ranked[0]!;
+  if (key === 'reindex') {
+    const repoIds = ranked.map((m) => m.batch?.repoId).filter((id): id is string => id !== undefined);
+    const estimate = lead.batch?.estimate ?? { medianMs: null, samples: 0 };
+    return {
+      action: { kind: 'batch-onboard', repoIds, label: batchOnboardLabel(repoIds.length) },
+      text: batchOnboardConsequence(repoIds.length, estimate),
+    };
+  }
+  return { action: lead.action, text: GROUP_WORDS[key].line };
+}
 
 export function groupLabel(key: NeedGroupKey, n: number): string {
   const w = GROUP_WORDS[key];
@@ -44,8 +66,9 @@ export function groupAlike(rows: readonly NeedRow[], now: number): NeedRow[] {
     const ranked = rankNeeds([...members], now);
     for (const m of ranked) folded.add(m.key);
     const lead = ranked[0]!;
-    const clocks = ranked.map((m) => m.at).filter((t): t is number => t !== null);
-    const w = GROUP_WORDS[key];
+    // Only plausible clocks age a group: one broken member must not read as the oldest (idea 14).
+    const clocks = ranked.map((m) => plausibleClock(m.at, now)).filter((t): t is number => t !== null);
+    const move = groupMove(key, ranked);
     out.push({
       key: `group:${key}`,
       kind: lead.kind,
@@ -54,11 +77,11 @@ export function groupAlike(rows: readonly NeedRow[], now: number): NeedRow[] {
       groupKey: key,
       members: ranked,
       subject: groupLabel(key, ranked.length),
-      text: w.line,
+      text: move.text,
       tone: lead.tone,
       at: clocks.length > 0 ? Math.min(...clocks) : null,
       subjectPath: lead.subjectPath,
-      action: lead.action,
+      action: move.action,
     });
   }
   for (const r of rows) if (!folded.has(r.key)) out.push(r);

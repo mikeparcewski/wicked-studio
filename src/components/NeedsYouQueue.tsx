@@ -4,7 +4,7 @@ import { useNeedsQueue, type NeedsQueue } from '../hooks/useNeedsQueue.js';
 import type { Navigate } from '../hooks/useRoute.js';
 import type { SkinVariants } from '../theming/skins.js';
 import { TONE_COLOR, TONE_GLYPH } from './narrator.js';
-import { ago } from './ProjectCard.js';
+import { AgeStamp } from './AgeStamp.js';
 import { humanTitle } from './runIdentity.js';
 
 /**
@@ -97,6 +97,31 @@ export function NeedsYouQueue({ queue, runs, navigate, now, variant = 'inline' }
     );
   };
 
+  /** A group's batch move (idea 3): its consequence is the row's line; progress replaces the verb. */
+  const batchAct = (a: Extract<NeedRow['action'], { kind: 'batch-onboard' }>, consequence: string): React.ReactElement => {
+    const b = queue.batch;
+    const label = b.phase === 'running'
+      ? `Launching ${b.done}/${b.total}…`
+      : b.phase === 'done'
+        ? `Launched ${b.launched}${b.failures.length > 0 ? ` · ${b.failures.length} refused` : ''}`
+        : a.label;
+    return (
+      <button
+        type="button"
+        data-testid="need-batch-act"
+        data-batch-phase={b.phase}
+        disabled={b.phase !== 'idle'}
+        title={b.phase === 'done' && b.failures.length > 0
+          ? b.failures.map((f) => `${f.id}: ${f.error}`).join('\n')
+          : b.phase === 'idle' ? `${consequence} — one run per repo, each builds that repo's code graph` : undefined}
+        onClick={() => queue.act(a)}
+        style={{ ...CSS.act, ...(b.phase !== 'idle' ? { cursor: 'default', color: 'var(--ink-muted)' } : {}) }}
+      >
+        {label}
+      </button>
+    );
+  };
+
   const line = (row: NeedRow, testId: 'need-row' | 'need-member'): React.ReactElement => {
     const selected = queue.selectedKey === row.key;
     const isGroup = row.members !== undefined;
@@ -133,12 +158,22 @@ export function NeedsYouQueue({ queue, runs, navigate, now, variant = 'inline' }
             {humanTitle(row.subject)}
           </a>
         )}
-        <span data-testid="need-line" title={row.text} style={{ ...CSS.line, color: TONE_COLOR[row.tone] }}>
+        {/* A batch move's line IS its consequence: it wraps rather than truncate (idea 3). */}
+        <span data-testid="need-line" title={row.text} style={{
+          ...CSS.line, color: TONE_COLOR[row.tone],
+          ...(row.action.kind === 'batch-onboard' ? { whiteSpace: 'normal' } : {}),
+        }}>
           {row.text}
         </span>
-        <span data-testid="need-age" style={CSS.age}>
-          {row.at !== null ? ago(row.at, at) : 'age unknown'}
-        </span>
+        {/* Idea 14: an absent or impossible clock is a pill that says so and opens the record. */}
+        <AgeStamp
+          at={row.at}
+          now={at}
+          testId="need-age"
+          style={CSS.age}
+          {...(isGroup ? {} : { href: row.subjectPath, onOpen: navigate })}
+        />
+        {isGroup && row.action.kind === 'batch-onboard' && batchAct(row.action, row.text)}
         {isGroup ? (
           <button
             type="button"

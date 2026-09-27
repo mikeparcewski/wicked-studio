@@ -13,6 +13,22 @@ npm publish dates. Every version listed here exists on
 ## [Unreleased]
 
 ### Added
+- **Home's elements carry their own next move (Wave A, lane home: ideas 3, 5 and 14).**
+  *Collapse clones*: two or more never-indexed repos fold into ONE Needs You row whose line states
+  the consequence ("Launches 9 onboarding runs · ~N min each (median of K past onboards)", or "time
+  unknown" when none has finished) and whose "Index all 9 repos" launches one onboarding run per
+  repo through `POST /repos/:id/onboard`, reporting what launched and what was refused.
+  *Numbers are repair moves*: the Governed tile's dead-letter count carries "Replay", which asks
+  `POST /governance/deadletters/replay` (crew#689) for a DRY RUN first and shows what would move and
+  that failures stay quarantined; the real replay posts only on confirm, then diagnostics is re-read.
+  The Failed tile carries "Retry", previewing the failures in its window not yet retried and
+  relaunching exactly those (onboarding runs through their repo's onboard route, the rest through
+  `POST /runs` with `retryOf` and `deliver: 'none'` on repo-scoped workflows). *Broken-clock pill*:
+  an absent or impossible age (before 2020, i.e. a seconds-as-ms slip, or in the future) renders as
+  an "age unknown" / "impossible age" pill linking to the record, never "20702d", on the Needs You
+  queue, Home's recent activity and quiet chips, and the runs list; a group's age and the "oldest
+  waiting" line ignore broken clocks. `tests/waveA.home.test.tsx` and `e2e/wavea_home_test.py`
+  (added to the behaviour set) pin it.
 - **Chat stays off delivery when it is an engine preset (DES-TEAMING-002 M3, crew api-types 0.48.0).**
   `chat` and `onboarding` are now the engine's built-in presets: `GET /workflows` no longer lists
   them and `GET /presets` carries `system: true` on them. The run-kind lookup

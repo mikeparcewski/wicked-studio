@@ -24,6 +24,7 @@ import { useRuntimeStore } from '../store/runtime.js';
 import { DashboardGrid, StatTile } from './dashboardKit.js';
 import { TONE_COLOR, TONE_GLYPH } from './narrator.js';
 import { NewProjectModal } from './NewProjectModal.js';
+import { AgeStamp } from './AgeStamp.js';
 import { ago } from './ProjectCard.js';
 import { humanTitle } from './runIdentity.js';
 
@@ -136,7 +137,7 @@ export function HomeKpiBand({ runs, attachedAt, needRows, claims, navigate, now 
   const health = healthOf(counts.done, counts.terminal);
   const successWord = counts.terminal === 0 ? '—' : `${Math.round((counts.done / counts.terminal) * 100)}%`;
   const governed = claims !== null ? governedRuns(claims, runs) : null;
-  const oldest = oldestNeedAt(needRows);
+  const oldest = oldestNeedAt(needRows, at);
 
   const door = (path: string): { href: string; onOpen: () => void } => ({
     href: path,
@@ -379,9 +380,8 @@ export function RecentActivity({ runs, navigate, now }: {
           >
             · {humanTitle(r.problem, 40)}
           </span>
-          <span style={{ color: 'var(--ink-dim)', flexShrink: 0, fontSize: 'var(--text-2xs)' }}>
-            {ago(r.at, at)}
-          </span>
+          {/* Inside the row's link, so the pill (idea 14) is a span — the row opens the record. */}
+          <AgeStamp at={r.at} now={at} style={{ color: 'var(--ink-dim)', flexShrink: 0, fontSize: 'var(--text-2xs)' }} />
         </a>
       ))}
     </section>
