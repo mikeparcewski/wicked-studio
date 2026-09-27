@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
 import { api } from '../api/client.js';
+import { ApiError } from '../api/errors.js';
 import { replayGovernanceDeadletters, type GovernanceReplayOutcome } from '../api/governanceReplay.js';
 import type { RosterSeat, SessionView } from '../api/types.js';
 import { getCachedRoster, setCachedRoster } from '../store/rosterCache.js';
@@ -13,6 +14,13 @@ import { retryLaunchOf } from '../board/repairMoves.js';
  */
 
 const errText = (err: unknown): string => (err instanceof Error ? err.message : String(err));
+
+/** A replay refusal in operator words: a daemon without the route (crew before #689) answers 404,
+ *  which is "too old", not "refused" — and the host CLI still drains the outbox. */
+const replayErrText = (err: unknown): string =>
+  err instanceof ApiError && err.status === 404
+    ? 'This daemon predates dead-letter replay — upgrade wicked-crew, or run `wicked-crew governance replay <outbox>` on its host.'
+    : errText(err);
 
 /** One batch launch's outcome: how many went, and which did not (with the daemon's words). */
 export interface BatchResult {
@@ -84,7 +92,7 @@ export function useDeadletterReplay(onChanged?: () => void): {
     try {
       setState({ phase: 'preview', outcome: await replayGovernanceDeadletters(true) });
     } catch (err) {
-      setState({ phase: 'error', message: errText(err) });
+      setState({ phase: 'error', message: replayErrText(err) });
     }
   }, []);
   const confirm = useCallback(async () => {
@@ -94,7 +102,7 @@ export function useDeadletterReplay(onChanged?: () => void): {
     try {
       setState({ phase: 'done', outcome: await replayGovernanceDeadletters(false) });
     } catch (err) {
-      setState({ phase: 'error', message: errText(err) });
+      setState({ phase: 'error', message: replayErrText(err) });
     }
     onChanged?.();
   }, [onChanged]);

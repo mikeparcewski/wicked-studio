@@ -287,6 +287,12 @@ export function endedAtMs(v: SessionView): number | null {
   return typeof t === 'number' ? t * 1000 : null;
 }
 
+/** The engine's terminal clock (`finished_at`, already unix MILLIS), or null. */
+export function finishedAtMs(v: SessionView): number | null {
+  const t = v.session.finished_at;
+  return typeof t === 'number' && t > 0 ? t : null;
+}
+
 const TERMINAL_STATUSES: ReadonlySet<string> = new Set(['completed', 'failed', 'cancelled']);
 
 /** One-line clip for a queue line. */
@@ -393,9 +399,10 @@ export function needsYouRows(inputs: NeedsYouInputs): NeedRow[] {
         subject: s.problem,
         text: 'Run failed',
         tone: 'fail',
-        // The daemon's own terminal clock first (api-types 0.38 `ended_at`), then the
-        // durable-log tail, then the attach clock.
-        at: endedAtMs(v) ?? failedAt[s.id] ?? attachedAt[s.id] ?? null,
+        // The daemon's own terminal clock first (api-types 0.38 `ended_at`), then the engine's
+        // terminal clock (`finished_at`, millis — present when the daemon booted after the run
+        // ended and so has no `run.ended` entry), then the durable-log tail, then the attach clock.
+        at: endedAtMs(v) ?? finishedAtMs(v) ?? failedAt[s.id] ?? attachedAt[s.id] ?? null,
         subjectPath: `/runs/${encodeURIComponent(s.id)}`,
         action: { kind: 'retry-prefill', prefill: retryPrefillOf(v), label: 'Retry ›' },
       });

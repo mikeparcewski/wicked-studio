@@ -285,7 +285,7 @@ function Tile({ testId, label, value, unit = '', delta, deltaBadUp, valueColor, 
 
 const POP_W = 320;
 
-/** The repair button on a tile (beside its value, so the ribbon never reflows), and its
+/** The repair button on a tile (on its own line under the tile's rows), and its
  *  consequence popover — portalled, because the ribbon's panels clip their overflow. */
 function RepairShell({ kind, label, title, open, onOpen, children }: {
   kind: 'replay' | 'retry';

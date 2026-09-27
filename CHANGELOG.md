@@ -12,6 +12,14 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+### Fixed
+- **Wave A home, verified on the live rig at 1440x700.** The tile repair moves ("Retry", "Replay")
+  sat over the tile's value row and covered a two-digit value's delta badge or unit; they now take
+  their own line under the tile. A failed run with no `ended_at` (the daemon booted after it ended)
+  now ages by the engine's terminal clock `finished_at` instead of showing "age unknown". A daemon
+  without the replay route (404, crew before #689) is named as too old, with the host CLI that
+  still drains the outbox, instead of "the daemon refused this — not found".
+
 ### Added
 - **Home's elements carry their own next move (Wave A, lane home: ideas 3, 5 and 14).**
   *Collapse clones*: two or more never-indexed repos fold into ONE Needs You row whose line states
