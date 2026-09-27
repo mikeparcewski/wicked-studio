@@ -16,6 +16,7 @@ const SECTION_KIND: Record<HandoverSectionKey, CountKind> = {
   decisions: 'gate',
   broke: 'fail',
   finished: 'neutral',
+  orders: 'neutral',
   system: 'neutral',
 };
 
@@ -23,6 +24,7 @@ const EMPTY_COPY: Record<HandoverSectionKey, string> = {
   decisions: 'Nothing waiting on you.',
   broke: 'Nothing broke.',
   finished: 'Nothing finished.',
+  orders: 'Your standing orders took no actions.',
   system: 'The system took no actions.',
 };
 
@@ -65,7 +67,7 @@ export function HandoverPanel({ handover, navigate, now }: {
           Dismiss
         </button>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 'var(--space-3)' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${handover.sections.length}, minmax(0, 1fr))`, gap: 'var(--space-3)' }}>
         {handover.sections.map((sec) => {
           const tone = countTone(sec.items.length, SECTION_KIND[sec.key]);
           return (

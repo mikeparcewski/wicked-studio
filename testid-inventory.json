@@ -10,9 +10,9 @@
   "version": 1,
   "studioVersion": "0.5.14",
   "counts": {
-    "files": 165,
-    "occurrences": 1532,
-    "static": 1330,
+    "files": 166,
+    "occurrences": 1553,
+    "static": 1350,
     "dynamic": 68,
     "computed": 7
   },
@@ -6158,6 +6158,126 @@
       "testId": "sources-panel",
       "files": [
         "src/components/ComposerContext.tsx"
+      ]
+    },
+    {
+      "testId": "standing-order-cancel",
+      "files": [
+        "src/components/StandingOrdersPanel.tsx"
+      ]
+    },
+    {
+      "testId": "standing-order-confirm",
+      "files": [
+        "src/components/StandingOrdersPanel.tsx"
+      ]
+    },
+    {
+      "testId": "standing-order-input",
+      "files": [
+        "src/components/StandingOrdersPanel.tsx"
+      ]
+    },
+    {
+      "testId": "standing-order-origin",
+      "files": [
+        "src/components/StandingOrdersPanel.tsx"
+      ]
+    },
+    {
+      "testId": "standing-order-parse",
+      "files": [
+        "src/components/StandingOrdersPanel.tsx"
+      ]
+    },
+    {
+      "testId": "standing-order-parse-error",
+      "files": [
+        "src/components/StandingOrdersPanel.tsx"
+      ]
+    },
+    {
+      "testId": "standing-order-parsed",
+      "files": [
+        "src/components/StandingOrdersPanel.tsx"
+      ]
+    },
+    {
+      "testId": "standing-order-queued",
+      "files": [
+        "src/components/StandingOrdersPanel.tsx"
+      ]
+    },
+    {
+      "testId": "standing-order-refused",
+      "files": [
+        "src/components/StandingOrdersPanel.tsx"
+      ]
+    },
+    {
+      "testId": "standing-order-remove",
+      "files": [
+        "src/components/StandingOrdersPanel.tsx"
+      ]
+    },
+    {
+      "testId": "standing-order-row",
+      "files": [
+        "src/components/StandingOrdersPanel.tsx"
+      ]
+    },
+    {
+      "testId": "standing-order-words",
+      "files": [
+        "src/components/StandingOrdersPanel.tsx"
+      ]
+    },
+    {
+      "testId": "standing-orders-away",
+      "files": [
+        "src/components/StandingOrdersPanel.tsx"
+      ]
+    },
+    {
+      "testId": "standing-orders-count",
+      "files": [
+        "src/components/StandingOrdersPanel.tsx"
+      ]
+    },
+    {
+      "testId": "standing-orders-error",
+      "files": [
+        "src/components/StandingOrdersPanel.tsx"
+      ]
+    },
+    {
+      "testId": "standing-orders-invariant",
+      "files": [
+        "src/components/StandingOrdersPanel.tsx"
+      ]
+    },
+    {
+      "testId": "standing-orders-outbox",
+      "files": [
+        "src/components/StandingOrdersPanel.tsx"
+      ]
+    },
+    {
+      "testId": "standing-orders-panel",
+      "files": [
+        "src/components/StandingOrdersPanel.tsx"
+      ]
+    },
+    {
+      "testId": "standing-orders-preview",
+      "files": [
+        "src/components/StandingOrdersPanel.tsx"
+      ]
+    },
+    {
+      "testId": "standing-orders-toggle",
+      "files": [
+        "src/components/StandingOrdersPanel.tsx"
       ]
     },
     {

@@ -1,5 +1,6 @@
 import type { AuditEntry, SessionView } from '../api/types.js';
 import { endedAtMs, type ElicitationLite, type GateLite } from './needsYou.js';
+import { standingOrderActionText } from './standingOrders.js';
 
 /**
  * HANDOVER ON ARRIVAL (studio wave 2b, behaviour 1) — the pure half.
@@ -11,8 +12,11 @@ import { endedAtMs, type ElicitationLite, type GateLite } from './needsYou.js';
  *   1. decisions — what waits on you NOW: open gates and MCP elicitations on live runs;
  *   2. broke     — runs that failed since you left;
  *   3. finished  — runs that completed since you left;
- *   4. system    — what the system did for you: audit entries whose actor is `system`
- *                  (the stall watchdog's `run.stall.*`), since you left.
+ *   4. orders    — what your standing orders did (behaviour 10): each approve / hold /
+ *                  queued message an order took, NAMED by the order. Present only when an
+ *                  order acted — a quiet absence keeps the four sections it always had;
+ *   5. system    — what the rest of the system did for you: audit entries whose actor is
+ *                  `system` (the stall watchdog's `run.stall.*`), since you left.
  *
  * Clocks are the daemon's own: a run's `ended_at` (api-types 0.38, unix seconds), the
  * durable failure tail for a failure the wire has no `ended_at` for, the audit entry's
@@ -58,14 +62,15 @@ export function clockTime(ms: number): string {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
-export type HandoverSectionKey = 'decisions' | 'broke' | 'finished' | 'system';
+export type HandoverSectionKey = 'decisions' | 'broke' | 'finished' | 'orders' | 'system';
 
-export const HANDOVER_ORDER: readonly HandoverSectionKey[] = ['decisions', 'broke', 'finished', 'system'];
+export const HANDOVER_ORDER: readonly HandoverSectionKey[] = ['decisions', 'broke', 'finished', 'orders', 'system'];
 
 export const HANDOVER_TITLES: Record<HandoverSectionKey, string> = {
   decisions: 'Decisions due',
   broke: 'What broke',
   finished: 'What finished',
+  orders: 'What your standing orders did',
   system: 'What the system did for you',
 };
 
@@ -188,19 +193,22 @@ export function handoverSections(inp: HandoverInputs): HandoverSection[] {
 
   // Filtered here too: a daemon predating `?since=` ignores the parameter and answers
   // the newest page of the whole trail.
-  const system: HandoverItem[] = (Array.isArray(audit) ? audit : [])
-    .filter((e) => e.actor?.kind === 'system' && e.ts >= since && !SYSTEM_BOOKKEEPING.has(e.action))
-    .map((e) => {
-      const v = e.runId !== undefined ? byId.get(e.runId) : undefined;
-      return {
-        key: `audit:${e.ts}:${e.action}:${e.runId ?? ''}`,
-        runId: e.runId ?? null,
-        subject: v?.session.problem ?? (e.runId !== undefined ? e.runId : e.action),
-        text: systemText(e),
-        at: e.ts,
-        path: e.runId !== undefined ? runPath(e.runId, v !== undefined ? pidOf(v) : projectIds[e.runId]) : '/system',
-      };
+  const orders: HandoverItem[] = [];
+  const system: HandoverItem[] = [];
+  for (const e of Array.isArray(audit) ? audit : []) {
+    if (e.actor?.kind !== 'system' || e.ts < since || SYSTEM_BOOKKEEPING.has(e.action)) continue;
+    // Behaviour 10: an action a standing order took goes to its own section, naming the order.
+    const byOrder = standingOrderActionText(e);
+    const v = e.runId !== undefined ? byId.get(e.runId) : undefined;
+    (byOrder !== undefined ? orders : system).push({
+      key: `audit:${e.ts}:${e.action}:${e.runId ?? ''}`,
+      runId: e.runId ?? null,
+      subject: v?.session.problem ?? (e.runId !== undefined ? e.runId : e.action),
+      text: byOrder ?? systemText(e),
+      at: e.ts,
+      path: e.runId !== undefined ? runPath(e.runId, v !== undefined ? pidOf(v) : projectIds[e.runId]) : '/system',
     });
+  }
 
   const newestFirst = (a: HandoverItem, b: HandoverItem): number =>
     (b.at ?? -Infinity) - (a.at ?? -Infinity) || a.key.localeCompare(b.key);
@@ -210,9 +218,10 @@ export function handoverSections(inp: HandoverInputs): HandoverSection[] {
     decisions,
     broke: broke.sort(newestFirst),
     finished: finished.sort(newestFirst),
+    orders: orders.sort(newestFirst),
     system: system.sort(newestFirst),
   };
-  return HANDOVER_ORDER.map((key) => ({
+  return HANDOVER_ORDER.filter((key) => key !== 'orders' || orders.length > 0).map((key) => ({
     key,
     title: HANDOVER_TITLES[key],
     items: items[key],

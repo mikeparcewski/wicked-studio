@@ -569,6 +569,14 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          # audit_delay_ms — GET /audit answers only after this delay (the handover's
          #   in-flight state is observable).
          "wave2b": False, "simple_gates": [], "audit_delay_ms": 0,
+         # ── Studio behaviour 10 (e2e/standing_orders_test.py) ──
+         # standing_orders — the crew standing-orders surface (GET/PUT/POST/DELETE
+         #   /standing-orders, POST /standing-orders/parse). False = a daemon predating
+         #   it (every route 404s). The fixture EMULATES crew's evaluator: an active
+         #   approve order answers a matching wave-2b simple gate (the run leaves
+         #   awaiting_human) and writes crew's `gate.decided` audit line, actor
+         #   `standing-order:<id>`, detail.standingOrder {id, text}.
+         "standing_orders": False,
          # ── Studio wave 2a (e2e/wave2a_*_test.py) ──
          # wave2a_feed — r1's durable tail grows a long run of narrated output
          #   captures, so its feed is tall enough to scroll to "the middle" (peek,
@@ -1176,6 +1184,57 @@ WAVE2B_AUDIT = [
      "actor": {"id": "crew.stall-watchdog", "kind": "system", "trust": "admin"},
      "runId": "r1", "detail": {"quietForMs": 1_800_000, "outcome": "surfaced"}},
 ]
+# Behaviour 10: the standing-orders store the fixture serves, and the audit lines its
+# emulated evaluator wrote (merged into the wave-2b trail). The gate each wave-2b gated run
+# holds reviews one phase — the evaluator matches an order's `trigger.phase` against it.
+STANDING = {"away": False, "awaySince": None, "orders": [], "outbox": []}
+STANDING_AUDIT: list = []
+WAVE2B_GATE_PHASE = {"g1": "intake", "g2": "intake"}
+WAVE2B_RUN_PROJECT = {"g1": "alpha", "g2": "beta"}
+
+
+def standing_parse(text: str):
+    """The fixture's deterministic 'seat': plain words → a rule (crew's parse contract)."""
+    t = text.lower()
+    project = next((p for p in ("alpha", "beta", "gamma") if p in t), None)
+    scope = {"kind": "project", "projectId": project} if project else {"kind": "all"}
+    phase = "deliver" if "deliver" in t else "intake" if "intake" in t else "*"
+    action = "hold" if "hold" in t else "notify" if ("wake" in t or "tell" in t) else "approve"
+    rule = {"scope": scope, "trigger": {"kind": "gate", "phase": phase},
+            "action": action, "activeWhen": "always" if "always" in t else "away"}
+    refused = ("an order never answers the deliver gate — it always waits for you"
+               if action == "approve" and phase == "deliver" else None)
+    return rule, refused
+
+
+def standing_sweep() -> None:
+    """Crew's evaluator, emulated: active approve orders answer matching open simple gates."""
+    for order in list(STANDING["orders"]):
+        rule = order["rule"]
+        if rule["action"] != "approve" or (rule["activeWhen"] == "away" and not STANDING["away"]):
+            continue
+        # A band- or preset-scoped order matches only a run scored into that band / launched from
+        # that preset (crew's evaluator); the wave-2b gated runs are neither.
+        if rule["trigger"].get("band") is not None or rule["trigger"].get("preset") is not None:
+            continue
+        for rid in list(state["simple_gates"]):
+            if rid not in WAVE2B_GATE_PHASE:
+                continue
+            if rule["scope"]["kind"] == "project" and rule["scope"]["projectId"] != WAVE2B_RUN_PROJECT[rid]:
+                continue
+            if rule["trigger"]["phase"] not in ("*", WAVE2B_GATE_PHASE[rid]):
+                continue
+            state["simple_gates"] = [g for g in state["simple_gates"] if g != rid]
+            state["status_over"] = {**state["status_over"], rid: "executing"}
+            STANDING_AUDIT.append({
+                "ts": int(time.time() * 1000), "action": "gate.decided",
+                "actor": {"id": f"standing-order:{order['id']}", "kind": "system", "trust": "operator"},
+                "runId": rid,
+                "detail": {"approve": True, "ord": 0, "status": "executing",
+                           "standingOrder": {"id": order["id"], "text": order["text"]}},
+            })
+
+
 # wave2a_feed: r1's feed grows 40 narrated unit-output captures after its tail.
 WAVE2A_R1_FEED = [
     {"type": "unitOutputCaptured", "session": "r1", "ord": 0, "cli": "claude",
@@ -3180,6 +3239,15 @@ class W2Handler(SimpleHTTPRequestHandler):
         self.close_connection = True
 
     def _api(self, path: str) -> bool:
+        # Behaviour 10: GET /standing-orders. Switch off: fall through to the ideas 7/8/13 handler
+        # below (its orders, or the unknown-route 404 of a daemon predating the surface).
+        if path == "/api/v1/standing-orders":
+            with state_lock:
+                on = state["standing_orders"]
+                snap = json.loads(json.dumps(STANDING))
+            if on:
+                self._json(200, snap)
+                return True
         if path == "/api/v1/health":
             self._json(200, {"status": "ok", "version": "w2-fixture", "ping": "pong"})
             return True
@@ -3309,7 +3377,9 @@ class W2Handler(SimpleHTTPRequestHandler):
             if audit_delay:
                 time.sleep(audit_delay / 1000)
             if wave2b_on:
-                entries = [e for e in WAVE2B_AUDIT if not run_id or e.get("runId") == run_id]
+                with state_lock:
+                    trail = WAVE2B_AUDIT + list(STANDING_AUDIT)
+                entries = [e for e in trail if not run_id or e.get("runId") == run_id]
             since = (q.get("since") or [""])[0]
             if since:
                 entries = [e for e in entries if e.get("ts", 0) >= int(since)]
@@ -4466,6 +4536,14 @@ class W2Handler(SimpleHTTPRequestHandler):
                     plan_edit_taken.clear()
                     plan_edit_failed_once.clear()
                     gate_moved_done.clear()
+            if body.get("reset_standing"):
+                with state_lock:
+                    STANDING.update({"away": False, "awaySince": None, "orders": [], "outbox": []})
+                    STANDING_AUDIT.clear()
+            # Behaviour 10: orders already in force (made at a gate / from the trust receipt).
+            if isinstance(body.get("standing_seed"), list):
+                with state_lock:
+                    STANDING["orders"] = json.loads(json.dumps(body["standing_seed"]))
             if body.get("reset_learn"):
                 with learned_lock:
                     learned_themes.clear()
@@ -4579,6 +4657,32 @@ class W2Handler(SimpleHTTPRequestHandler):
         # (CREW-UX-3: 400 on an unknown id, crew routes.ts:588); then a REAL
         # launch when project_dto is on (the run rides GET /runs with its
         # project_id echo — atomic filing), else slice V's plain 201.
+        # Behaviour 10: the parse (a deterministic 'seat') and the confirmed create.
+        with state_lock:
+            standing_on = state["standing_orders"]
+        # Switch off: /parse is an unknown route; the create falls through to the ideas 7/8/13 handler.
+        if path == "/api/v1/standing-orders/parse" and not standing_on:
+            return self._json(404, {"error": f"Route POST:{path} not found"})
+        if path in ("/api/v1/standing-orders/parse", "/api/v1/standing-orders") and standing_on:
+            text = body.get("text") if isinstance(body, dict) else None
+            if not isinstance(text, str) or not text.strip():
+                return self._json(400, {"error": "Invalid request body"})
+            if path.endswith("/parse"):
+                rule, refused = standing_parse(text)
+                return self._json(200, {"rule": rule, "seat": "claude",
+                                        **({"refused": refused} if refused else {})})
+            rule = body.get("rule")
+            if not isinstance(rule, dict):
+                return self._json(400, {"error": "Invalid request body"})
+            if rule.get("action") == "approve" and rule.get("trigger", {}).get("phase") in ("deliver", "plan_approval"):
+                return self._json(400, {"error": "an order never answers the deliver gate — it always waits for you",
+                                        "code": "order_refused"})
+            with state_lock:
+                order = {"id": f"o{len(STANDING['orders']) + 1}", "text": text.strip(), "rule": rule,
+                         "createdAt": int(time.time() * 1000)}
+                STANDING["orders"].append(order)
+                standing_sweep()
+            return self._json(201, {"order": order})
         # T9: POST /plans/preview — the launch's own decision, persisting nothing.
         if path == "/api/v1/plans/preview":
             with state_lock:
@@ -4982,6 +5086,20 @@ class W2Handler(SimpleHTTPRequestHandler):
     def do_PUT(self):  # noqa: N802 (stdlib naming)
         path = urllib.parse.urlparse(self.path).path
         body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
+        # Behaviour 10: PUT /standing-orders/away — turning it on sweeps the open gates.
+        if path == "/api/v1/standing-orders/away":
+            with state_lock:
+                on = state["standing_orders"]
+                if on and isinstance(body, dict) and isinstance(body.get("away"), bool):
+                    if STANDING["away"] != body["away"]:
+                        STANDING["away"] = body["away"]
+                        STANDING["awaySince"] = int(time.time() * 1000) if body["away"] else None
+                        if body["away"]:
+                            standing_sweep()
+                snap = json.loads(json.dumps(STANDING))
+            if not on:
+                return self._json(404, {"error": f"Route PUT:{path} not found"})
+            return self._json(200, snap)
         # PUT /api/v1/settings — merge the body's top-level keys, answer the
         # merged store (the daemon's contract; studio.appearance replaces whole).
         if path == "/api/v1/settings":
@@ -5052,6 +5170,14 @@ class W2Handler(SimpleHTTPRequestHandler):
 
     def do_DELETE(self):  # noqa: N802 (stdlib naming)
         path = urllib.parse.urlparse(self.path).path
+        m = re.match(r"^/api/v1/standing-orders/([^/]+)$", path)
+        if m:
+            oid = urllib.parse.unquote(m.group(1))
+            with state_lock:
+                before = len(STANDING["orders"])
+                STANDING["orders"] = [o for o in STANDING["orders"] if o["id"] != oid]
+                removed = len(STANDING["orders"]) < before
+            return self._json(200, {"removed": True}) if removed else self._json(404, {"error": "Standing order not found"})
         if path.startswith("/api/v1/chats/"):
             # Slice AB (§7.9-5): the teardown is real — the chat leaves the
             # live listing, exactly as the daemon reaps a closed pool entry.

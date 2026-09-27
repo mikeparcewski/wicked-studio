@@ -21,6 +21,20 @@ npm publish dates. Every version listed here exists on
   still drains the outbox, instead of "the daemon refused this — not found".
 
 ### Added
+- **Standing orders: the Away switch says what it will do (Studio OS behaviour 10, on the Wave A–C
+  pattern).** Home's Standing-orders strip carries the away switch with its consequence first: a
+  preview built from the orders in force ("While you are away: 3 orders active: will approve band
+  0-19 (LOW) unit reviews on Northwind; …; deliver gates always wait"), beside crew's invariant (no
+  order answers a deliver gate or a high-risk plan approval; a message an order writes is queued,
+  never sent). The list is the ONE list: orders made at a gate ("make it a rule", #356) and by the
+  trust receipt (#360) appear with the ones typed in words, each saying where it came from, and the
+  rule words read band and preset orders. Add an order in plain words, **Read it back** (crew's seat
+  parses it, the rule is said back), **Keep this order**; a rule the invariant refuses cannot be
+  kept. The handover gets a "What your standing orders did" section (only when an order acted),
+  naming the order behind each approve, hold or queued message. The order types are the ones
+  `src/api/gateHistory.ts` already declares; the rest of the wire is hand-declared until studio's
+  `wicked-crew-api-types` pin carries it. Journey: `e2e/standing_orders_test.py`, now in the
+  behaviour set.
 - **Home's elements carry their own next move (Wave A, lane home: ideas 3, 5 and 14).**
   *Collapse clones*: two or more never-indexed repos fold into ONE Needs You row whose line states
   the consequence ("Launches 9 onboarding runs · ~N min each (median of K past onboards)", or "time

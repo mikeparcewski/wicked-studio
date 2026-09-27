@@ -34,6 +34,7 @@ import { HandoverPanel } from './HandoverPanel.js';
 import { FocusLockToggle, NeedsQueueSurface } from './NeedsYouQueue.js';
 import { AgeStamp } from './AgeStamp.js';
 import { ACTIVE_CARD_H, ProjectCard, QUIET_CARD_H } from './ProjectCard.js';
+import { StandingOrdersPanel } from './StandingOrdersPanel.js';
 import { humanTitle } from './runIdentity.js';
 import { ProjectSparkline } from './ProjectSparkline.js';
 
@@ -419,6 +420,8 @@ export function HomeBoard({ runs, navigate, onOpenAsk }: Props): React.ReactElem
       {!fresh && !loading && error === null && (
         <>
           <HandoverPanel handover={handover} navigate={navigate} now={now} />
+          {/* Behaviour 10: the while-I'm-away rules and the away switch. */}
+          <StandingOrdersPanel />
           {/* ── The KPI ribbon: the hero, full-width — FLOW / ATTENTION / TRUST&SPEND on the real
                  created_at clock (the command-deck redesign). ── */}
           <div style={{ flexShrink: 0, padding: '0 var(--space-6)' }}>
