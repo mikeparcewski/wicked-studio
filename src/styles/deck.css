@@ -131,9 +131,10 @@ a.deck-stat:hover, button.deck-stat:hover { transform: translateY(-1px); border-
 .deck-tile-host { flex: 1; min-width: 0; position: relative; display: flex; flex-direction: column; }
 .deck-tile-host.lead { flex: 1.15; }
 .deck-tile-host > .deck-tile { flex: none; }
-/* Beside the value, top-right of the tile: the move adds no height to the ribbon. */
+/* Its own line under the tile's rows: a tile is ~95px wide, so beside the value the chip covered
+   a two-digit value's delta badge or unit (verify, live rig at 1440). */
 .deck-repair {
-  position: absolute; top: 22px; right: 0; padding: 1px 7px; cursor: pointer; white-space: nowrap;
+  align-self: flex-start; margin-top: 6px; padding: 1px 7px; cursor: pointer; white-space: nowrap;
   font: inherit; font-size: var(--text-2xs); font-family: var(--font-mono); font-weight: var(--weight-semi);
   color: var(--accent); background: var(--surface-card); border: 1px solid var(--surface-raised); border-radius: var(--radius-md);
 }

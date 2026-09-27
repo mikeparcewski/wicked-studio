@@ -109,6 +109,20 @@ with sync_playwright() as p:
         check("replay-count-shown", "128+ governance events dead-lettered" in tile.inner_text())
         repair = page.locator('[data-testid="kpi-repair"][data-repair="replay"]')
         check("replay-move-on-tile", repair.count() == 1)
+        # The move must not sit on the tile's own rows (label, value, sub): at 1440 a two-digit value,
+        # its delta badge or its unit ran under the chip. Checked on every tile carrying a move.
+        overlaps = page.evaluate("""() => {
+          const hit = (a, b) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+          const out = [];
+          for (const chip of document.querySelectorAll('[data-testid="kpi-repair"]')) {
+            const c = chip.getBoundingClientRect();
+            for (const row of chip.parentElement.querySelectorAll('.deck-lab, .deck-val, .deck-sub, .deck-bar')) {
+              if (hit(c, row.getBoundingClientRect())) out.push(chip.dataset.repair + ' over ' + row.className);
+            }
+          }
+          return out;
+        }""")
+        check("repair-move-clear-of-tile-rows", overlaps == [], overlaps=overlaps)
         repair.click()
         preview = page.get_by_test_id("kpi-repair-preview")
         preview.wait_for(state="visible")

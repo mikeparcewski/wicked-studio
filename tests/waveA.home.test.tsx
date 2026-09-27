@@ -25,6 +25,7 @@ vi.mock('../src/api/client.js', async (orig) => {
 const { replayGovernanceDeadletters } = vi.hoisted(() => ({ replayGovernanceDeadletters: vi.fn() }));
 vi.mock('../src/api/governanceReplay.js', () => ({ replayGovernanceDeadletters }));
 
+import { ApiError } from '../src/api/errors.js';
 import { ageVerdict, CLOCK_FLOOR_MS } from '../src/board/ageHonesty.js';
 import { groupAlike } from '../src/board/needsQueue.js';
 import { needsYouRows, type NeedsYouInputs } from '../src/board/needsYou.js';
@@ -143,6 +144,16 @@ describe('idea 5 — the dead-letter count carries Replay, dry run first', () =>
     expect(screen.getByTestId('kpi-repair-confirm')).toBeDisabled();
   });
 
+  it('a daemon without the replay route (404) is named as too old, with the CLI that still works', async () => {
+    replayGovernanceDeadletters.mockRejectedValue(new ApiError(404, 'not found'));
+    render(<DeckKpiRibbon runs={[]} claims={CLAIMS} governance={GOVERNANCE_DEADLETTERS} needCount={0} navigate={() => {}} now={NOW} />);
+    await userEvent.click(screen.getByTestId('kpi-repair'));
+    const preview = await screen.findByTestId('kpi-repair-preview');
+    await waitFor(() => expect(preview).toHaveTextContent('This daemon predates dead-letter replay'));
+    expect(preview).toHaveTextContent('wicked-crew governance replay');
+    expect(preview).not.toHaveTextContent('the daemon refused this — not found');
+  });
+
   it('a healthy governance block carries no repair move', () => {
     render(<DeckKpiRibbon runs={[]} claims={CLAIMS} governance={null} needCount={0} navigate={() => {}} now={NOW} />);
     expect(screen.queryByTestId('kpi-repair')).toBeNull();
@@ -214,6 +225,14 @@ describe('idea 14 — the broken-clock pill', () => {
     render(<AgeStamp at={NOW - 5 * 60_000} now={NOW} testId="age" />);
     expect(screen.getByTestId('age')).toHaveTextContent('5m');
     expect(screen.getByTestId('age')).not.toHaveAttribute('data-age-pill');
+  });
+
+  it('a failed run with no ended_at ages by its engine terminal clock (finished_at, millis), not "age unknown"', () => {
+    const finished = NOW - 2 * HOUR;
+    const v = makeView({ id: 'f1', status: 'failed', finished_at: finished });
+    const rows = needsYouRows(inputs({ runs: [v] }));
+    const row = rows.find((r) => r.kind === 'failed-run');
+    expect(row?.at).toBe(finished);
   });
 
   it('a Needs You row with a broken clock shows the pill linking to its record; a group ignores it for its age', () => {
