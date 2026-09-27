@@ -125,9 +125,14 @@ export function fetchWorkflowsCached(): void {
 export function isSystemWorkflowIn(
   defs: readonly WorkflowDef[] | null,
   id: string,
+  presetSystem?: (id: string) => boolean | undefined,
 ): boolean | undefined {
   const def = defs?.find((w) => w.id === id);
-  return def === undefined ? undefined : def.is_system === true;
+  // No def of that name: a PRESET may carry it (`chat` and `onboarding` are the engine's built-in
+  // presets since DES-TEAMING-002 M3/M4, with no def on `GET /workflows`) — its `system` flag is
+  // the same name-keyed classification the def's `is_system` was.
+  if (def === undefined) return presetSystem?.(id);
+  return def.is_system === true;
 }
 
 /** The cached defs, subscribed — and the one fetch, if nobody has made it. */

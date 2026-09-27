@@ -92,6 +92,20 @@ export function presetFor(
   return list.find((p) => p.name === name) ?? null;
 }
 
+/**
+ * A preset's `system` flag by NAME, from whichever scope has loaded a row of that name — the daemon
+ * keys the flag by name, so every scope answers alike. `undefined` when no loaded list names it.
+ */
+export function presetSystemFlag(presets: PlanCatalogStore['presets'], name: string): boolean | undefined {
+  if (name === '') return undefined;
+  for (const list of Object.values(presets)) {
+    if (!Array.isArray(list)) continue;
+    const row = list.find((p) => p.name === name);
+    if (row !== undefined && typeof row.system === 'boolean') return row.system;
+  }
+  return undefined;
+}
+
 /** A stable key for a preview body. */
 export function previewKey(body: PlanPreviewBody): string {
   return JSON.stringify(body);

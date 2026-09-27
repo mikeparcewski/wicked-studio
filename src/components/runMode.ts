@@ -45,9 +45,10 @@ export type IsSystemWorkflow = (id: string) => boolean | undefined;
  *
  *  - `''`/absent ⇒ 'freeform'. `deliver` without `workflow` is a 400, so it never carries one.
  *  - a positively-known `is_system: true` ⇒ 'system'.
- *  - anything else ⇒ 'build'. A preset launched by name has no def in `GET /workflows`, and the
- *    default launch is one, so an unknown id is build work; the daemon's own deliver default and
- *    `run_identity` on the launched run are what classify it from then on.
+ *  - anything else ⇒ 'build'. A preset launched by name has no def in `GET /workflows`: the lookup
+ *    then reads the preset's own `system` flag (`chat`, `onboarding` — DES-TEAMING-002 M3/M4), and
+ *    an id neither names is build work; the daemon's own deliver default and `run_identity` on the
+ *    launched run are what classify it from then on.
  */
 export function deliverKindOf(
   workflowId: string | null | undefined,

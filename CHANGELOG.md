@@ -13,6 +13,12 @@ npm publish dates. Every version listed here exists on
 ## [Unreleased]
 
 ### Added
+- **Chat stays off delivery when it is an engine preset (DES-TEAMING-002 M3, crew api-types 0.48.0).**
+  `chat` and `onboarding` are now the engine's built-in presets: `GET /workflows` no longer lists
+  them and `GET /presets` carries `system: true` on them. The run-kind lookup
+  (`isSystemWorkflowIn`) reads a preset's `system` flag when no def has the name, so the chat
+  surface's `workflowOverride: 'chat'` launch is unchanged: no `deliver` key, no deliver notice,
+  and no launch preview for a system preset. On an older daemon the def still answers first.
 - **The plan UI for team runs (DES-TEAMING-002 T9).** The composer's **Phases** picker lists the
   engine's catalog (`GET /catalog`), not a list of our own; a composed plan launches as `plan`
   (with an optional touch set), never `workflow`. Before Send, a **launch preview**

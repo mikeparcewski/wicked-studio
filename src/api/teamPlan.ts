@@ -132,6 +132,12 @@ export interface Preset {
   steps: Array<{ catalog: string; id: string; [k: string]: unknown }>;
   created_by: string;
   updated_at: number;
+  /**
+   * A machine-owned preset (`chat`, `onboarding`): keep it off delivery and the work-mode selector.
+   * The daemon stamps it from the same name-keyed list as `WorkflowDef.is_system` (api-types
+   * 0.48.0, DES-TEAMING-002 M3/M4); absent from an older daemon.
+   */
+  system?: boolean;
 }
 
 // ── Calls ─────────────────────────────────────────────────────────────────────────────────────

@@ -14,6 +14,7 @@ import { clearSteerPrefill, peekSteerPrefill } from '../store/steerPrefill.js';
 import { setCachedRoster } from '../store/rosterCache.js';
 import { seatStandingWord } from './HealthRailSection.js';
 import { isSystemWorkflowIn, setCachedWorkflows } from '../store/workflowCache.js';
+import { presetSystemFlag, usePlanCatalog } from '../store/planCatalog.js';
 import { ContextPopover } from './ContextPopover.js';
 import { describeGate, normalizeRepoRefs, repoSlugOf, resolveLaunchTarget } from './launchTarget.js';
 import type { ConfirmMode } from './ContextPopover.js';
@@ -204,9 +205,11 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
    * positively-known `is_system` DEMOTES to 'system', a missing def (workflows
    * still loading, or the fetch failed) never promotes.
    */
+  const presets = usePlanCatalog((s) => s.presets);
   const deliverKind = useCallback(
-    (id: string): RunKind => deliverKindOf(id, (wf) => isSystemWorkflowIn(workflows, wf)),
-    [workflows],
+    (id: string): RunKind =>
+      deliverKindOf(id, (wf) => isSystemWorkflowIn(workflows, wf, (name) => presetSystemFlag(presets, name))),
+    [workflows, presets],
   );
 
   const selectableWorkflows = useMemo(
