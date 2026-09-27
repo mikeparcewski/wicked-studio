@@ -31,7 +31,7 @@ import { DeckSectionDoors, type SectionDoor } from './DeckSectionDoors.js';
 import { DeckBurnChart } from './DeckBurnChart.js';
 import { listEvalRuns } from '../api/testing.js';
 import { HandoverPanel } from './HandoverPanel.js';
-import { NeedsQueueSurface } from './NeedsYouQueue.js';
+import { FocusLockToggle, NeedsQueueSurface } from './NeedsYouQueue.js';
 import { AgeStamp } from './AgeStamp.js';
 import { ACTIVE_CARD_H, ProjectCard, QUIET_CARD_H } from './ProjectCard.js';
 import { humanTitle } from './runIdentity.js';
@@ -365,14 +365,18 @@ export function HomeBoard({ runs, navigate, onOpenAsk }: Props): React.ReactElem
         }}
       >
         <div style={{ minWidth: 0 }}>
-          <h1
-            style={{
-              fontSize: 'var(--text-md)', fontWeight: 'var(--weight-bold)',
-              color: 'var(--ink-high)', margin: 0,
-            }}
-          >
-            Home
-          </h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <h1
+              style={{
+                fontSize: 'var(--text-md)', fontWeight: 'var(--weight-bold)',
+                color: 'var(--ink-high)', margin: 0,
+              }}
+            >
+              Home
+            </h1>
+            {/* Idea 10: hold just the highest-consequence item; the rest return when it clears. */}
+            {!fresh && <FocusLockToggle items={needRows.length} />}
+          </div>
           <p style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-muted)', margin: 0 }}>
             What needs you, across everything.
           </p>

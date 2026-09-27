@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { groupAlike, needCount, queueEntries, type QueueEntry } from '../board/needsQueue.js';
+import { focusLockView, groupAlike, needCount, queueEntries, topItem, type QueueEntry } from '../board/needsQueue.js';
 import type { NeedAction, NeedRow } from '../board/needsYou.js';
+import { useFocusLockStore } from '../store/focusLock.js';
 import { useNotificationStore } from '../store/notifications.js';
 import { setRetryPrefill } from '../store/retryPrefill.js';
 import { useGlobalShortcuts, type ShortcutEntry } from './useGlobalShortcuts.js';
@@ -60,10 +61,26 @@ export interface NeedsQueue {
   /** Each expanded group's member page (a proposal group shows a few at a time). */
   pages: Readonly<Record<string, number>>;
   setPage: (groupKey: string, page: number) => void;
+  /** Just the top one (Wave C, idea 10): while `on`, `rows` is the one held item and `hidden`
+   *  counts the rest — hidden, never dropped. */
+  focus: { on: boolean; hidden: number };
 }
 
 export function useNeedsQueue(flat: NeedRow[], navigate: Navigate, now: number): NeedsQueue {
-  const rows = useMemo(() => groupAlike(flat, now), [flat, now]);
+  const grouped = useMemo(() => groupAlike(flat, now), [flat, now]);
+  // Just the top one (idea 10): the lock holds the item that was on top when it went on. It lets
+  // go by itself once that item leaves the fold (resolved), so the hidden items come back.
+  const lockOn = useFocusLockStore((s) => s.on);
+  const pinnedKey = useFocusLockStore((s) => s.pinnedKey);
+  const heldKey = lockOn ? (pinnedKey ?? topItem(grouped)?.key ?? null) : null;
+  const lock = useMemo(() => focusLockView(flat, heldKey), [flat, heldKey]);
+  useEffect(() => {
+    if (!lockOn) return;
+    const store = useFocusLockStore.getState();
+    if (heldKey === null || lock === null) store.setOn(false);
+    else if (pinnedKey === null) store.pin(heldKey);
+  }, [lockOn, heldKey, pinnedKey, lock]);
+  const rows = lock?.rows ?? grouped;
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set());
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [root, setRoot] = useState<HTMLElement | null>(null);
@@ -111,8 +128,8 @@ export function useNeedsQueue(flat: NeedRow[], navigate: Navigate, now: number):
   const runBatch = batch.run;
   const accept = useAcceptMemory();
   const openAccept = accept.open;
-  const rowsRef = useRef(rows);
-  rowsRef.current = rows;
+  const rowsRef = useRef(grouped);
+  rowsRef.current = grouped;
   const act = useCallback(
     (a: NeedAction) => {
       if (a.kind === 'accept-memory') {
@@ -220,6 +237,6 @@ export function useNeedsQueue(flat: NeedRow[], navigate: Navigate, now: number):
 
   return {
     rows, entries, count: needCount(rows), expanded, toggle, selectedKey, rootRef, act, batch: batch.state,
-    accept, pages, setPage,
+    accept, pages, setPage, focus: { on: lock !== null, hidden: lock?.hidden ?? 0 },
   };
 }

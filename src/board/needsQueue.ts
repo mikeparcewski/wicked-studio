@@ -176,3 +176,41 @@ export function queueEntries(
   }
   return out;
 }
+
+// ── Just the top one (Wave C, idea 10) ─────────────────────────────────────────────────────────
+
+/**
+ * The single highest-consequence ITEM in the queue: the top-ranked row, or — when that row is a
+ * folded group — the group's own lead member (its members are ranked, a proposal group's by
+ * consequence). `null` on an empty queue.
+ */
+export function topItem(rows: readonly NeedRow[]): NeedRow | null {
+  const first = rows[0];
+  if (first === undefined) return null;
+  return first.members?.[0] ?? first;
+}
+
+/** What the queue shows while the focus lock holds an item. */
+export interface FocusLockView {
+  /** Exactly the pinned item, as the fold answers it now. */
+  rows: NeedRow[];
+  /** How many items are hidden (never dropped: they return when the lock lets go). */
+  hidden: number;
+}
+
+/**
+ * The focus lock's view over the queue: only the pinned item, and how many are hidden. `null` —
+ * show everything — when nothing is pinned or the pinned item has left the fold (it was resolved),
+ * which is how the hidden items come back on their own.
+ */
+export function focusLockView(flat: readonly NeedRow[], pinnedKey: string | null): FocusLockView | null {
+  if (pinnedKey === null) return null;
+  const pinned = flat.find((r) => r.key === pinnedKey);
+  if (pinned === undefined) return null;
+  return { rows: [pinned], hidden: Math.max(0, flat.length - 1) };
+}
+
+/** "39 hidden, back when this clears". */
+export function focusLockNote(hidden: number): string {
+  return `${hidden} hidden, back when this clears`;
+}

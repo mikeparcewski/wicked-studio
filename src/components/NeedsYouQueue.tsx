@@ -1,8 +1,9 @@
 import type { SessionView } from '../api/types.js';
 import { calmCopy, type NeedRow } from '../board/needsYou.js';
-import { memberPage, visibleMembers } from '../board/needsQueue.js';
+import { focusLockNote, memberPage, visibleMembers } from '../board/needsQueue.js';
 import { acceptMemoryPreview } from '../board/proposalTriage.js';
 import { useNeedsQueue, type NeedsQueue } from '../hooks/useNeedsQueue.js';
+import { useFocusLockStore } from '../store/focusLock.js';
 import type { Navigate } from '../hooks/useRoute.js';
 import type { SkinVariants } from '../theming/skins.js';
 import { TONE_COLOR, TONE_GLYPH } from './narrator.js';
@@ -281,6 +282,7 @@ export function NeedsYouQueue({ queue, runs, navigate, now, variant = 'inline' }
       aria-label="Needs you — focus, then j/k to move and Enter to act"
       data-testid="needs-you-queue"
       data-count={queue.count}
+      data-focus-lock={queue.focus.on ? 'on' : 'off'}
       data-skin-variant={variant}
       style={{
         flex: variant === 'rail' ? '1 1 auto' : '1.4 1 0', minWidth: 0, display: 'flex', flexDirection: 'column',
@@ -298,6 +300,25 @@ export function NeedsYouQueue({ queue, runs, navigate, now, variant = 'inline' }
       >
         Needs you{queue.count > 0 ? ` (${queue.count})` : ''}
       </p>
+      {/* Just the top one (idea 10): the rest are hidden, never dropped — they come back when the
+          held item clears, or at once with "Show all". */}
+      {queue.focus.on && (
+        <p
+          data-testid="need-focus-note"
+          data-hidden={queue.focus.hidden}
+          style={{ ...CSS.row, margin: 0, borderBottom: 'none', paddingTop: 0, color: 'var(--ink-muted)', fontSize: 'var(--text-2xs)', fontFamily: 'var(--font-mono)' }}
+        >
+          <span style={{ flex: 1, minWidth: 0 }}>{focusLockNote(queue.focus.hidden)}</span>
+          <button
+            type="button"
+            data-testid="need-focus-show-all"
+            onClick={() => useFocusLockStore.getState().setOn(false)}
+            style={CSS.act}
+          >
+            Show all
+          </button>
+        </p>
+      )}
       {queue.rows.length === 0 ? (
         // The ONLY calm copy on the page — same fold, one branch (§3).
         <p
@@ -346,4 +367,35 @@ export function NeedsQueueSurface({ rows, runs, navigate, now, variant = 'inline
 }): React.ReactElement {
   const queue = useNeedsQueue(rows, navigate, now);
   return <NeedsYouQueue queue={queue} runs={runs} navigate={navigate} now={now} variant={variant} />;
+}
+
+/**
+ * Just the top one (Wave C, idea 10) — Home's header toggle for the focus lock. While on, the
+ * queue (inline or in the rail) shows only the highest-consequence item and says how many are
+ * hidden; the rest come back when that item clears or the toggle goes off. Drawn only when there
+ * is something to hide (two or more items), or while the lock is on.
+ */
+export function FocusLockToggle({ items }: { items: number }): React.ReactElement | null {
+  const on = useFocusLockStore((s) => s.on);
+  if (!on && items < 2) return null;
+  return (
+    <button
+      type="button"
+      data-testid="home-focus-toggle"
+      aria-pressed={on}
+      title={on
+        ? 'Show every Needs You item again'
+        : 'Hide every Needs You item except the highest-consequence one; the rest come back when it clears'}
+      onClick={() => useFocusLockStore.getState().setOn(!on)}
+      style={{
+        fontSize: 'var(--text-xs)', fontFamily: 'var(--font-mono)', flexShrink: 0, cursor: 'pointer',
+        padding: '2px 8px', borderRadius: 'var(--radius-md)',
+        border: `1px solid ${on ? 'var(--accent)' : 'var(--surface-raised)'}`,
+        background: on ? 'var(--surface-raised)' : 'none',
+        color: on ? 'var(--ink-high)' : 'var(--ink-muted)',
+      }}
+    >
+      {on ? '◉ Just the top one' : '○ Just the top one'}
+    </button>
+  );
 }

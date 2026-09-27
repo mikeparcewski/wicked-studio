@@ -11,6 +11,8 @@ import { useProjectsStore } from '../store/projects.js';
 import { useRunsPanelStore } from '../store/runsPanel.js';
 import { useRuntimeStore } from '../store/runtime.js';
 import { prefersReducedMotion } from './LiveEdge.js';
+import { DeliveryFreezeSwitch } from './DeliveryFreezeSwitch.js';
+import { useDeliveryFreezeStore } from '../store/deliveryFreeze.js';
 import { runTitle, runWhenWord, WHEN_TITLE } from './runIdentity.js';
 import { phaseWord, recentRuns, RUN_DOT } from './RunsSection.js';
 
@@ -97,6 +99,8 @@ interface Props {
 
 export function RunsBottomPanel({ runs, runPath, navigate, immersive, scopeProjectId }: Props): React.ReactElement {
   const expanded = useRunsPanelStore((s) => s.expanded);
+  // Idea 15: while deliveries are frozen the bar's top edge says so on every route.
+  const frozen = useDeliveryFreezeStore((s) => s.state?.frozen === true);
   const gates = useGateStore((s) => s.gates);
   const logs = useRuntimeStore((s) => s.logs);
   const projectNameByRun = useMembershipStore((s) => s.projectNameByRun);
@@ -260,12 +264,13 @@ export function RunsBottomPanel({ runs, runPath, navigate, immersive, scopeProje
         data-gates={stats.gates}
         data-gates-elsewhere={gatesElsewhere}
         data-failed={stats.failed}
+        data-deliveries-frozen={String(frozen)}
         className="fixed bottom-0 left-0 right-0 flex items-center font-mono"
         style={{
           height: RUNS_BAR_PX,
           zIndex: 40, // above surface content; below the palette/modals/toasts (z-50)
           background: 'var(--surface-rail)',
-          borderTop: '1px solid var(--surface-raised)',
+          borderTop: frozen ? '1px solid var(--status-fail)' : '1px solid var(--surface-raised)',
           fontSize: 'var(--text-2xs)',
         }}
       >
@@ -286,6 +291,8 @@ export function RunsBottomPanel({ runs, runPath, navigate, immersive, scopeProje
             summary
           )}
         </button>
+        {/* Idea 15: the one switch that holds every deliver gate, and its banner while on. */}
+        <DeliveryFreezeSwitch />
         <div className="px-3">{allRuns('runs-bar-all')}</div>
       </div>
 
