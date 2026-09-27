@@ -1,6 +1,7 @@
 import { plausibleClock } from './ageHonesty.js';
 import { rankNeeds, type NeedAction, type NeedGroupKey, type NeedRow } from './needsYou.js';
 import { batchOnboardConsequence, batchOnboardLabel } from './repairMoves.js';
+import { acceptMemoryLabel, consequenceRank, PROPOSAL_PAGE, type ProposalConsequence } from './proposalTriage.js';
 
 /**
  * The needs-you QUEUE's shape over the fold (studio wave 2b): alike SIMPLE items fold
@@ -44,7 +45,67 @@ function groupMove(key: NeedGroupKey, ranked: readonly NeedRow[]): { action: Nee
       text: batchOnboardConsequence(repoIds.length, estimate),
     };
   }
+  if (key === 'proposal') {
+    // Triage by consequence (Wave B, idea 4): the line counts what an accept DOES, and the move
+    // accepts exactly the memory-only members; the enforcement-changing ones stay for review.
+    const of = (c: ProposalConsequence): NeedRow[] => ranked.filter((m) => m.proposal?.consequence === c);
+    const harmless = of('memory');
+    const enforcing = of('enforcement').length;
+    const unknown = of('unknown').length;
+    const parts: string[] = [];
+    if (harmless.length > 0) parts.push(`${harmless.length} memory-only`);
+    if (enforcing > 0) parts.push(`${enforcing} change${enforcing === 1 ? 's' : ''} enforcement`);
+    if (unknown > 0) parts.push(`${unknown} of unknown kind`);
+    return {
+      action: harmless.length > 0
+        ? { kind: 'accept-memory', ids: harmless.map((m) => m.proposal!.id), label: acceptMemoryLabel(harmless.length) }
+        : lead.action,
+      text: parts.length > 0 ? parts.join(' · ') : GROUP_WORDS[key].line,
+    };
+  }
   return { action: lead.action, text: GROUP_WORDS[key].line };
+}
+
+/** A proposal group lists what changes enforcement first (then unknown kinds, then memories);
+ *  within a class, the one ranking's order holds. */
+function orderMembers(key: NeedGroupKey, ranked: NeedRow[]): NeedRow[] {
+  if (key !== 'proposal') return ranked;
+  const rank = (r: NeedRow): number => consequenceRank(r.proposal?.consequence ?? 'unknown');
+  return ranked.map((r, i) => ({ r, i })).sort((a, b) => rank(a.r) - rank(b.r) || a.i - b.i).map((x) => x.r);
+}
+
+/** How many members an expanded group shows at a time: a proposal group pages by
+ *  {@link PROPOSAL_PAGE} so the ones to review stay few enough to read; others show all. */
+export function memberPageSize(key: NeedGroupKey | undefined): number {
+  return key === 'proposal' ? PROPOSAL_PAGE : Infinity;
+}
+
+/** One page of an expanded group's members: which show, and where they sit in the whole. */
+export interface MemberPage {
+  items: NeedRow[];
+  /** The page actually shown (the asked-for page, clamped). */
+  page: number;
+  pages: number;
+  /** 1-based position of the first shown member, and of the last. */
+  from: number;
+  to: number;
+  total: number;
+}
+
+/** The members an expanded group shows on `page` (clamped to the pages that exist). */
+export function memberPage(row: NeedRow, page = 0): MemberPage {
+  const members = row.members ?? [];
+  const total = members.length;
+  const size = Math.min(memberPageSize(row.groupKey), Math.max(1, total));
+  const pages = Math.max(1, Math.ceil(total / size));
+  const at = Math.min(Math.max(0, page), pages - 1);
+  const items = members.slice(at * size, at * size + size);
+  return { items, page: at, pages, from: total === 0 ? 0 : at * size + 1, to: at * size + items.length, total };
+}
+
+/** The members an expanded group shows on `page`. */
+export function visibleMembers(row: NeedRow, page = 0): NeedRow[] {
+  return memberPage(row, page).items;
 }
 
 export function groupLabel(key: NeedGroupKey, n: number): string {
@@ -63,7 +124,7 @@ export function groupAlike(rows: readonly NeedRow[], now: number): NeedRow[] {
   const folded = new Set<string>();
   for (const [key, members] of byGroup) {
     if (members.length < 2) continue;
-    const ranked = rankNeeds([...members], now);
+    const ranked = orderMembers(key, rankNeeds([...members], now));
     for (const m of ranked) folded.add(m.key);
     const lead = ranked[0]!;
     // Only plausible clocks age a group: one broken member must not read as the oldest (idea 14).
@@ -100,13 +161,17 @@ export interface QueueEntry {
   parentKey: string | null;
 }
 
-/** The flat order the cursor walks: each row, then — when its group is expanded — its members. */
-export function queueEntries(rows: readonly NeedRow[], expanded: ReadonlySet<string>): QueueEntry[] {
+/** The flat order the cursor walks: each row, then — when its group is expanded — its visible members. */
+export function queueEntries(
+  rows: readonly NeedRow[],
+  expanded: ReadonlySet<string>,
+  pages: Readonly<Record<string, number>> = {},
+): QueueEntry[] {
   const out: QueueEntry[] = [];
   for (const row of rows) {
     out.push({ row, parentKey: null });
     if (row.members !== undefined && expanded.has(row.key)) {
-      for (const m of row.members) out.push({ row: m, parentKey: row.key });
+      for (const m of visibleMembers(row, pages[row.key] ?? 0)) out.push({ row: m, parentKey: row.key });
     }
   }
   return out;

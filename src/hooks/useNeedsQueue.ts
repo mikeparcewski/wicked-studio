@@ -5,6 +5,7 @@ import { useNotificationStore } from '../store/notifications.js';
 import { setRetryPrefill } from '../store/retryPrefill.js';
 import { useGlobalShortcuts, type ShortcutEntry } from './useGlobalShortcuts.js';
 import { useBatchOnboard, type BatchState } from './useRepairMoves.js';
+import { useAcceptMemory, type AcceptMemory } from './useAcceptMemory.js';
 import type { Navigate } from './useRoute.js';
 
 /**
@@ -54,6 +55,11 @@ export interface NeedsQueue {
   act: (action: NeedAction) => void;
   /** The batch onboard's progress (idea 3) — the group row renders it in place of its verb. */
   batch: BatchState;
+  /** The proposal group's "Accept N memory-only" (Wave B, idea 4): preview, undo window, send. */
+  accept: AcceptMemory;
+  /** Each expanded group's member page (a proposal group shows a few at a time). */
+  pages: Readonly<Record<string, number>>;
+  setPage: (groupKey: string, page: number) => void;
 }
 
 export function useNeedsQueue(flat: NeedRow[], navigate: Navigate, now: number): NeedsQueue {
@@ -88,7 +94,9 @@ export function useNeedsQueue(flat: NeedRow[], navigate: Navigate, now: number):
     };
   }, [root]);
 
-  const entries = useMemo(() => queueEntries(rows, expanded), [rows, expanded]);
+  const [pages, setPages] = useState<Readonly<Record<string, number>>>({});
+  const setPage = useCallback((key: string, page: number) => setPages((prev) => ({ ...prev, [key]: page })), []);
+  const entries = useMemo(() => queueEntries(rows, expanded, pages), [rows, expanded, pages]);
 
   const toggle = useCallback((key: string) => {
     setExpanded((prev) => {
@@ -101,8 +109,24 @@ export function useNeedsQueue(flat: NeedRow[], navigate: Navigate, now: number):
 
   const batch = useBatchOnboard();
   const runBatch = batch.run;
+  const accept = useAcceptMemory();
+  const openAccept = accept.open;
+  const rowsRef = useRef(rows);
+  rowsRef.current = rows;
   const act = useCallback(
     (a: NeedAction) => {
+      if (a.kind === 'accept-memory') {
+        // Posts NOTHING: opens the preview of exactly these proposals; the send waits for the
+        // confirm and then the undo window.
+        const group = rowsRef.current.find((r) => r.groupKey === 'proposal' && r.members !== undefined);
+        const members = group?.members ?? [];
+        const items = a.ids.map((id) => ({
+          id,
+          subject: members.find((m) => m.proposal?.id === id)?.subject ?? id,
+        }));
+        openAccept(items, Math.max(0, members.length - items.length));
+        return;
+      }
       if (a.kind === 'batch-onboard') {
         // The one queue verb that POSTS: its consequence is the group row's own line.
         void runBatch(a.repoIds);
@@ -120,7 +144,7 @@ export function useNeedsQueue(flat: NeedRow[], navigate: Navigate, now: number):
       setRetryPrefill(a.prefill);
       navigate('/runs/new');
     },
-    [navigate, runBatch],
+    [navigate, runBatch, openAccept],
   );
 
   // A selection whose row left the queue (resolved, collapsed away) clears.
@@ -194,5 +218,8 @@ export function useNeedsQueue(flat: NeedRow[], navigate: Navigate, now: number):
   }, []);
   useGlobalShortcuts(shortcuts);
 
-  return { rows, entries, count: needCount(rows), expanded, toggle, selectedKey, rootRef, act, batch: batch.state };
+  return {
+    rows, entries, count: needCount(rows), expanded, toggle, selectedKey, rootRef, act, batch: batch.state,
+    accept, pages, setPage,
+  };
 }

@@ -41,7 +41,7 @@ export function useUndoToasts(): UndoToastView[] {
     verb: p.verb,
     headline: undoHeadline(p, Math.min(now, p.dueAt)),
     preview: p.preview,
-    closeNote: CLOSE_NOTE,
+    closeNote: p.closeNote ?? CLOSE_NOTE,
     undo: () => undoDecision(p.id),
   }));
 }

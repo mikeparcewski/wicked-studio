@@ -581,6 +581,9 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          # proposals — None: GET /proposals answers the standing unknown-route 404 (a daemon
          #   predating the proposal queue). A list: the pending governed-knowledge proposals
          #   the route serves (`{proposals: [...]}`, the crew wire), filtered by `?state=`.
+         #   POST /proposals/<id>/approve (crew's route) flips a pending one to `approved` and answers
+         #   crew's outcome (memory → promoted, policy → handed_off); receipts at
+         #   GET /__fixture/approve-posts, cleared by `reset_repairs`.
          "proposals": None,
          # ── Team-plan UI (DES-TEAMING-002 T9, e2e/t9_plan_ui_test.py) ──
          # team_plan — GET /catalog, GET /presets, POST /plans/preview and POST /runs/:id/plan
@@ -2167,6 +2170,7 @@ def repo_entry_wire(findings_on: bool) -> dict:
 
 onboard_posts: list = []  # POST /repos/<id>/onboard receipts (studio#251's remedy, tapped by the rig)
 replay_posts: list = []  # POST /governance/deadletters/replay bodies (Wave A idea 5, tapped by the rig)
+approve_posts: list = []  # POST /proposals/<id>/approve ids (Wave B idea 4, tapped by the rig)
 
 
 def never_indexed_repos(n: int, broken: bool) -> list:
@@ -4119,6 +4123,10 @@ class W2Handler(SimpleHTTPRequestHandler):
             with state_lock:
                 posts = list(replay_posts)
             return self._json(200, {"posts": posts})
+        if path == "/__fixture/approve-posts":
+            with state_lock:
+                posts = list(approve_posts)
+            return self._json(200, {"posts": posts})
         if path == "/__fixture/plan-posts":
             with state_lock:
                 posts = list(plan_post_log)
@@ -4140,6 +4148,7 @@ class W2Handler(SimpleHTTPRequestHandler):
                     onboard_posts.clear()
                 with state_lock:
                     replay_posts.clear()
+                    approve_posts.clear()
             if body.get("reset_gate_posts"):
                 with state_lock:
                     gate_post_log.clear()
@@ -4497,6 +4506,24 @@ class W2Handler(SimpleHTTPRequestHandler):
                 state["governance"] = "healthy"
             return self._json(200, {**base, "archive": GOV_OUTBOX + ".replayed-w2", "replayed": block["count"] - 8,
                                     "alreadyPresent": 0, "failed": 8, "dryRun": False})
+        # Wave B (idea 4): crew's POST /proposals/<id>/approve over the `proposals` switch.
+        m = re.match(r"^/api/v1/proposals/([^/]+)/approve$", path)
+        if m:
+            pid = urllib.parse.unquote(m.group(1))
+            with state_lock:
+                approve_posts.append(pid)
+                rows = state["proposals"]
+                row = next((r for r in (rows or []) if r.get("id") == pid and r.get("state") == "pending"), None)
+                if row is not None:
+                    state["proposals"] = [dict(r, state="approved") if r is row else r for r in rows]
+            if rows is None:
+                return self._json(404, {"error": f"w2 fixture: no such endpoint {path}"})
+            if row is None:
+                return self._json(502, {"error": f"proposal {pid} is not pending"})
+            if row.get("kind_type") == "memory":
+                return self._json(200, {"outcome": "promoted", "active_id": f"mem-active-{pid}"})
+            return self._json(200, {"outcome": "handed_off", "payload": row.get("payload"),
+                                    "landing": {"outcome": "landed", "ruleId": f"proposal:{pid}"}})
         # Wave 2 (studio#251): the re-onboard remedy's wire, POST /repos/<id>/onboard → {runId}.
         m = re.match(r"^/api/v1/repos/([^/]+)/onboard$", path)
         if m:

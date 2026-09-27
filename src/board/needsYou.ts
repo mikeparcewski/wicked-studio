@@ -1,5 +1,5 @@
 import type { Campaign } from '../api/campaigns.js';
-import { memoryPayload, policyPayload, policySteeringType, proposalKind, type Proposal } from '../api/proposals.js';
+import { memoryPayload, policyPayload, proposalKind, type Proposal } from '../api/proposals.js';
 import type { RepoEntry, SessionView } from '../api/types.js';
 import { deliveryOf } from '../components/delivery.js';
 import { narrate, narrateStranded, type NarrationTone } from '../components/narrator.js';
@@ -12,6 +12,7 @@ import { outcomeOf, runStats } from './metrics.js';
 import { repoOnboard } from './repoStats.js';
 import { onboardEstimate, type OnboardEstimate } from './repairMoves.js';
 import { plausibleClock } from './ageHonesty.js';
+import { proposalConsequence, proposalConsequenceLine, type ProposalConsequence } from './proposalTriage.js';
 
 /**
  * THE needs-you queue fold (DES-HOME-COMMAND-CENTER §3) — the home page's spine.
@@ -74,7 +75,10 @@ export type NeedAction =
   | { kind: 'reindex-prefill'; prefill: RetryPrefill; repoId: string; label: string }
   /** A folded group's batch move: one onboarding run per repo through `POST /repos/:id/onboard`.
    *  The group row's line states the consequence before the click. */
-  | { kind: 'batch-onboard'; repoIds: string[]; label: string };
+  | { kind: 'batch-onboard'; repoIds: string[]; label: string }
+  /** A proposal group's batch move (Wave B, idea 4): accept exactly the memory-only proposals
+   *  named here, after a preview and an undo window, through `POST /proposals/:id/approve`. */
+  | { kind: 'accept-memory'; ids: string[]; label: string };
 
 export interface NeedRow {
   /** Dedupe identity — one row per subject, ever. */
@@ -91,6 +95,8 @@ export interface NeedRow {
   members?: NeedRow[];
   /** A never-indexed repo row's repo, and how long an onboard takes here (the batch's consequence). */
   batch?: { repoId: string; estimate: OnboardEstimate };
+  /** A proposal row's proposal and what accepting it does (Wave B, idea 4). */
+  proposal?: { id: string; consequence: ProposalConsequence };
   /** The row's subject (run title, repo name, campaign, chat id). */
   subject: string;
   /** The narrated one-liner (narrator vocabulary — gate rows via `narrate()`). */
@@ -590,15 +596,16 @@ export function needsYouRows(inputs: NeedsYouInputs): NeedRow[] {
     if (p.state !== 'pending') continue;
     const kind = proposalKind(p);
     const body = kind === 'memory' ? memoryPayload(p).content : kind === 'policy' ? policyPayload(p).rule : null;
-    const typeWord = kind === 'policy' ? `Policy proposal${policySteeringType(p) !== null ? ` (${policySteeringType(p)})` : ''}` : kind === 'memory' ? 'Memory proposal' : 'Proposal';
     rows.push({
       key: `proposal:${p.id}`,
       kind: 'proposal',
       severity: SEVERITY.proposal,
       stakes: 1,
       groupKey: 'proposal',
+      proposal: { id: p.id, consequence: proposalConsequence(p) },
       subject: body !== null && body !== '' ? clipLine(body, 80) : p.id,
-      text: `${typeWord} — review to land it`,
+      // The consequence of accepting comes first (Wave B, idea 4).
+      text: proposalConsequenceLine(p),
       tone: 'gate',
       at: typeof p.created_at === 'number' ? p.created_at * 1000 : null,
       subjectPath: '/steering/dashboard',
