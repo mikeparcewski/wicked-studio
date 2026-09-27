@@ -11,8 +11,8 @@
   "studioVersion": "0.5.14",
   "counts": {
     "files": 161,
-    "occurrences": 1485,
-    "static": 1280,
+    "occurrences": 1503,
+    "static": 1297,
     "dynamic": 68,
     "computed": 7
   },
@@ -6664,6 +6664,108 @@
       "testId": "switcher-dashboard-row",
       "files": [
         "src/components/ProjectSwitcher.tsx"
+      ]
+    },
+    {
+      "testId": "take-header",
+      "files": [
+        "src/components/DocumentCanvas.tsx"
+      ]
+    },
+    {
+      "testId": "take-label",
+      "files": [
+        "src/components/DocumentCanvas.tsx"
+      ]
+    },
+    {
+      "testId": "take-pick",
+      "files": [
+        "src/components/DocumentCanvas.tsx"
+      ]
+    },
+    {
+      "testId": "take-pick-cancel",
+      "files": [
+        "src/components/DocumentCanvas.tsx"
+      ]
+    },
+    {
+      "testId": "take-pick-confirm",
+      "files": [
+        "src/components/DocumentCanvas.tsx"
+      ]
+    },
+    {
+      "testId": "take-pick-consequence",
+      "files": [
+        "src/components/DocumentCanvas.tsx"
+      ]
+    },
+    {
+      "testId": "take-pick-preview",
+      "files": [
+        "src/components/DocumentCanvas.tsx"
+      ]
+    },
+    {
+      "testId": "takes-receipt",
+      "files": [
+        "src/components/DocPanel.tsx"
+      ]
+    },
+    {
+      "testId": "takes-receipt-proposal",
+      "files": [
+        "src/components/DocPanel.tsx"
+      ]
+    },
+    {
+      "testId": "takes-receipt-review",
+      "files": [
+        "src/components/DocPanel.tsx"
+      ]
+    },
+    {
+      "testId": "takes-receipt-working",
+      "files": [
+        "src/components/DocPanel.tsx"
+      ]
+    },
+    {
+      "testId": "takes-remix",
+      "files": [
+        "src/components/DocPanel.tsx"
+      ]
+    },
+    {
+      "testId": "takes-remix-base",
+      "files": [
+        "src/components/DocPanel.tsx"
+      ]
+    },
+    {
+      "testId": "takes-remix-error",
+      "files": [
+        "src/components/DocPanel.tsx"
+      ]
+    },
+    {
+      "testId": "takes-remix-keep",
+      "files": [
+        "src/components/DocPanel.tsx"
+      ]
+    },
+    {
+      "testId": "takes-remix-send",
+      "files": [
+        "src/components/DocPanel.tsx"
+      ]
+    },
+    {
+      "testId": "takes-remix-steer",
+      "files": [
+        "src/components/DocPanel.tsx"
       ]
     },
     {
