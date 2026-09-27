@@ -214,11 +214,13 @@ describe('SteeringGate — escalation gate layout (#299)', () => {
       });
     }
 
-    it('renders Retry, Request changes, Reject, Cancel run — not the standard Approve layout', () => {
+    it('recommends sending it back (the Request changes arm, named) above Retry, Reject, Cancel run — not the standard Approve layout', () => {
       seedEvaluatorVerdictEvent();
       render(<SteeringGate runId={RUN} ord={4} prompt={VERDICT_NOT_PASS_PROMPT} />);
       expect(screen.getByTestId('steering-retry')).toBeInTheDocument();
-      expect(screen.getByTestId('steering-request-changes')).toBeInTheDocument();
+      // Brainstorm idea 1: the recommended move IS the request-changes arm, so it is not repeated.
+      expect(screen.getByTestId('gate-recommended')).toHaveTextContent('Send back to the creator: Evaluator judged this NOT PASS');
+      expect(screen.queryByTestId('steering-request-changes')).toBeNull();
       expect(screen.getByTestId('steering-reject')).toBeInTheDocument();
       expect(screen.getByTestId('steering-cancel')).toBeInTheDocument();
       expect(screen.queryByTestId('steering-approve')).toBeNull();
@@ -229,8 +231,11 @@ describe('SteeringGate — escalation gate layout (#299)', () => {
       seedEvaluatorVerdictEvent();
       const user = userEvent.setup();
       render(<SteeringGate runId={RUN} ord={4} prompt={VERDICT_NOT_PASS_PROMPT} />);
+      // The note arrives pre-filled with the reviewer's line; the operator's own words replace it.
+      expect(screen.getByTestId('steering-amend')).toHaveValue("Fix the reviewer's failing items:\n- Evaluator judged this NOT PASS");
+      await user.clear(screen.getByTestId('steering-amend'));
       await user.type(screen.getByTestId('steering-amend'), 'address the evaluator feedback');
-      await user.click(screen.getByTestId('steering-request-changes'));
+      await user.click(screen.getByTestId('gate-recommended'));
       expect(client.api.confirmGate).toHaveBeenCalledWith(RUN, {
         approve: false,
         action: 'request_changes',

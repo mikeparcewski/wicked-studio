@@ -599,6 +599,10 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          #   (the stale-graph fail-closed score, the floor's additions). Pair with team_plan
          #   for GET /catalog (the plan edit's picker).
          "plan_gate": False,
+         # gate_move — brainstorm-actionable ideas 1+2 (e2e/gate_move_test.py): r-review, paused at an
+         #   evaluator NOT PASS escalation (the engine's recorded `VERDICT: FAIL` frames), rides GET
+         #   /runs; its events, gate and the creator phase's transcript are served for the card.
+         "gate_move": False,
          }
 state_lock = threading.Lock()
 # Wave 2a: every POST /runs/:id/gate the fixture received (read over GET /__fixture/gate-posts).
@@ -851,6 +855,67 @@ PLAN_GATE_TEAM = {
                 "high_risk": True, "mode": "manual", "reason": "manual_mode", "reviewing_ord": 1,
                 "diff": {"from_rev": 1, "added": ["test_plan", "architecture", "security_review"]}}}]},
     ],
+}
+
+
+# ── Brainstorm-actionable ideas 1+2: the gate's recommended move (switch `gate_move`) ──
+# An evaluator unit whose own output ends `VERDICT: FAIL` — the frames wicked-core b190f63 emits
+# (wicked-crew tests/fixtures/engine-frames-0.38.0.json gateEscalatedEvaluatorVerdict /
+# gateEvaluatedEvaluatorVerdict), renamed onto r-review's critique (ord 2) after its produce (ord 1).
+GATE_MOVE_REASON = ("the evaluator's verdict is FAIL\nReviewed the fix.\n"
+                    "- the regression test is missing\n- src/app.ts still reads `buggy`\nVERDICT: FAIL")
+GATE_MOVE_PROMPT = ("Unit 2 verdict is NOT PASS — the evaluator's verdict is FAIL. confirm to retry the "
+                    "phase, request changes to send the review back to the creator phase, or reject to "
+                    "cancel the run.")
+GATE_MOVE_CREATOR_OUTPUT = ("Implemented the fix.\n- added a regression test for the buggy path\n"
+                            "- src/app.ts now reads `fixed` instead of `buggy`\n- updated the changelog")
+GATE_MOVE_T0 = NOW0 - 30 * MIN
+
+
+def _gate_move_unit(key: str, ord_: int, stage: str, role: str, status: str, cli) -> dict:
+    return {"id": f"r-review:{key}", "session_id": "r-review", "ord": ord_,
+            "description": f"{key} — fix the buggy reader", "stage": stage, "role": role,
+            "assigned_cli": cli, "assigned_invocation": None, "council_task_ref": None, "routing": None,
+            "denial_reason": GATE_MOVE_REASON if key == "critique" else None, "phase_ref": None,
+            "conformance_ref": None, "phase_status": None, "collection_scope": None, "status": status}
+
+
+GATE_MOVE_RUN = session("r-review", "awaiting_human", "fix the buggy reader", "fix the buggy reader")
+GATE_MOVE_RUN["units"] = [
+    _gate_move_unit("produce", 1, "build", "creator", "done", "claude"),
+    _gate_move_unit("critique", 2, "review", "evaluator", "rejected", "codex"),
+    _gate_move_unit("deliver", 3, "build", "neutral", "pending", None),
+]
+GATE_MOVE_RUN["session"]["unit_ix"] = 1
+GATE_MOVE_RUN["session"]["clis"] = ["claude", "codex"]
+GATE_MOVE_EVENTS = [
+    {"type": "sessionStarted", "session": "r-review", "problem": "fix the buggy reader",
+     "workflowId": "wf-w2", "cliCount": 2, "governed": True, "entityMode": "shared",
+     "ts": GATE_MOVE_T0, "seq": 1},
+    {"type": "unitDispatched", "session": "r-review", "ord": 1, "attempt": 0, "ts": GATE_MOVE_T0 + SEC, "seq": 2},
+    {"type": "gateEvaluated", "session": "r-review", "ord": 1, "ts": GATE_MOVE_T0 + 5 * MIN, "seq": 3,
+     "criterion": None, "hasDeterministicFloor": False, "deterministicPass": True, "agentVerdict": None,
+     "agentReasoning": None, "evaluatorPass": True, "evaluatorPolicies": [], "denialReason": None,
+     "denial": None, "combined": True, "judgeCli": None, "judgeDistinct": None},
+    {"type": "unitDone", "session": "r-review", "ord": 1, "ts": GATE_MOVE_T0 + 5 * MIN, "seq": 4},
+    {"type": "unitDispatched", "session": "r-review", "ord": 2, "attempt": 0, "ts": GATE_MOVE_T0 + 6 * MIN, "seq": 5},
+    {"type": "gateEvaluated", "session": "r-review", "ord": 2, "ts": GATE_MOVE_T0 + 9 * MIN, "seq": 6,
+     "agentReasoning": None, "agentVerdict": None, "combined": False, "criterion": None,
+     "denial": {"claimId": None, "deniedTool": None, "phase": "unit-2", "reason": GATE_MOVE_REASON,
+                "ruleIds": [], "source": "evaluator_verdict"},
+     "denialReason": GATE_MOVE_REASON, "deterministicPass": True, "evaluatorPass": True,
+     "evaluatorPolicies": [], "evaluatorVerdict": "FAIL", "hasDeterministicFloor": False,
+     "judgeCli": None, "judgeDistinct": None, "judgeSkippedReason": None},
+    {"type": "gateEscalated", "session": "r-review", "ord": 2, "ts": GATE_MOVE_T0 + 9 * MIN, "seq": 7,
+     "attempt": 0, "condition": "verdict_not_pass", "defGate": False, "denialSource": "evaluator_verdict",
+     "discarded": [], "outputCaptured": True, "restored": False, "suggestionRef": None,
+     "verdictSummary": GATE_MOVE_REASON},
+    {"type": "awaitingHuman", "session": "r-review", "ord": 2, "ts": GATE_MOVE_T0 + 9 * MIN + SEC, "seq": 8,
+     "prompt": GATE_MOVE_PROMPT, "reviewingOrd": 2},
+]
+GATE_MOVE_OUTPUTS = {
+    "produce": {"output": GATE_MOVE_CREATOR_OUTPUT},
+    "critique": {"output": GATE_MOVE_REASON},
 }
 
 
@@ -2381,6 +2446,8 @@ def assemble_runs() -> list:
             runs = runs + json.loads(json.dumps(TEAM_RUNS))
         if state["plan_gate"] and not state["no_runs"]:
             runs = runs + [json.loads(json.dumps(PLAN_GATE_RUN))]
+        if state["gate_move"] and not state["no_runs"]:
+            runs = runs + [json.loads(json.dumps(GATE_MOVE_RUN))]
     if viewer_on or repo_refs_on or forensics_on or provenance_on or project_dto_on \
             or chronicle_on or nerve_on or gate_now or guidance or wire433_on:
         runs = json.loads(json.dumps(runs))
@@ -3226,6 +3293,12 @@ class W2Handler(SimpleHTTPRequestHandler):
             rid = urllib.parse.unquote(parts[4])
             with state_lock:
                 plan_gate_on = state["plan_gate"]
+            with state_lock:
+                gate_move_on = state["gate_move"]
+            if rid == "r-review" and gate_move_on:
+                self._json(200, {"runId": rid, "ord": 2, "lifecycle": "open", "prompt": GATE_MOVE_PROMPT,
+                                 "receivedAt": iso(GATE_MOVE_T0 + 9 * MIN + SEC), "options": None})
+                return True
             if rid == "r-plan-gate" and plan_gate_on:
                 self._json(200, {"runId": rid, "ord": 2, "lifecycle": "open", "prompt": PLAN_GATE_PROMPT,
                                  "receivedAt": iso(NOW0), "options": None})
@@ -3341,6 +3414,9 @@ class W2Handler(SimpleHTTPRequestHandler):
                 events = list(WIRE433_API_EVENTS)
             if wire433_on and rid == "r-auth":
                 events = list(WIRE433_AUTH_EVENTS)
+            with state_lock:
+                if state["gate_move"] and rid == "r-review":
+                    events = list(GATE_MOVE_EVENTS)
             # Wave 6: the completed governed test's recorded trail — degraded council, the
             # remote-write fence, the UNGATED gate.
             with state_lock:
@@ -3364,6 +3440,10 @@ class W2Handler(SimpleHTTPRequestHandler):
             key = urllib.parse.unquote(m.group(2))
             with state_lock:
                 forensics_on = state["forensics"]
+                gate_move_on = state["gate_move"]
+            if gate_move_on and rid == "r-review" and key in GATE_MOVE_OUTPUTS:
+                self._json(200, GATE_MOVE_OUTPUTS[key])
+                return True
             if not forensics_on or rid != "r-auth":
                 self._json(404, {"error": "Run not found"})
                 return True

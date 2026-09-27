@@ -23,6 +23,8 @@ import { usePhaseSelection } from '../hooks/useLaunchPlan.js';
 import { usePlanGate } from '../store/planGates.js';
 import { PhasePicker } from './PhasePicker.js';
 import { PlanGateSummary } from './PlanGateSummary.js';
+import { escalationSummaryFor, isDeliverGate, recommendGateMove, type GateMove } from './gateMoveModel.js';
+import { VerdictDiff } from './VerdictDiff.js';
 
 interface Props {
   runId: string;
@@ -50,6 +52,20 @@ interface Props {
 
 const EMPTY_EVENTS: CoreEvent[] = [];
 const EMPTY_UNITS: WorkUnit[] = [];
+/** A secondary answer's look while the card recommends a move (brainstorm idea 1). */
+const SECONDARY: React.CSSProperties = {
+  background: 'var(--surface-raised)', border: '1px solid var(--ink-dim)', color: 'var(--ink-body)',
+};
+/** Which existing answer each recommended move IS — that button is not repeated as a secondary. */
+function duplicateOf(move: GateMove | null, escalationGate: boolean): string | null {
+  switch (move?.kind) {
+    case 'send-back': return 'steering-request-changes';
+    case 'retry-findings': return escalationGate ? 'steering-retry' : 'steering-approve-steer';
+    case 'approve-plan':
+    case 'deliver': return 'steering-approve';
+    default: return null;
+  }
+}
 /** Past this many characters a gate prompt renders clamped to four lines, with a toggle. */
 export const PROMPT_CLAMP_CHARS = 320;
 
@@ -241,14 +257,54 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
   // Deliver gate diffstat (#300): when the gate is on the deliver unit (lift !== null), fetch the
   // run's merge-base diff so the operator sees what approve will push before committing.
   const hasLift = lift !== null;
+  // The pre-run gate on the deliver unit reads the same diff: its recommended move is "Review the
+  // diff, then deliver", and the consequence line names what the approve pushes.
+  const deliverGate = !isPlanGate && !escalationGate && isDeliverGate(runId, units ?? EMPTY_UNITS, ord);
+  const wantsDiff = hasLift || deliverGate;
   useEffect(() => {
-    if (!hasLift) return;
+    if (!wantsDiff) return;
     let cancelled = false;
     api.getRunDiff(runId, undefined, 'merge-base')
       .then((d) => { if (!cancelled) setRunDiff(d); })
       .catch(() => { /* diff unavailable — the card still renders without it */ });
     return () => { cancelled = true; };
-  }, [runId, hasLift]);
+  }, [runId, wantsDiff]);
+
+  // Brainstorm idea 1 — the ONE recommended move, from the gate's kind and its verdict: the primary
+  // button names it, the consequence line above says what it does, the note arrives pre-filled.
+  const verdictSummary = useMemo(() => escalationSummaryFor(events, verdict?.ord ?? ord), [events, verdict, ord]);
+  const move = useMemo(
+    () => recommendGateMove({
+      runId, ord, units: units ?? EMPTY_UNITS, verdict, verdictSummary, escalationGate,
+      hasLift, restoredRetry, isPlanGate, planView: planGate.view,
+      diffstat: runDiff !== null ? diffstatLabel(runDiff.diff) : null,
+    }),
+    [runId, ord, units, verdict, verdictSummary, escalationGate, hasLift, restoredRetry, isPlanGate, planGate.view, runDiff],
+  );
+  const hidden = duplicateOf(move, escalationGate);
+  const secondary = (style: React.CSSProperties): React.CSSProperties => (move !== null ? SECONDARY : style);
+  // The deliver move is two steps: the first press opens the diff, the second delivers.
+  const [diffOpen, setDiffOpen] = useState(false);
+  // Pre-fill (never over the operator's own words): the reviewer's failing lines land in the note
+  // when nothing else did — no session draft, no durable guidance, no edit yet. Local state only:
+  // a derived note is not a draft, so it never follows the run to its next gate.
+  // The card may stay mounted across gates (the dock reuses it per run): an untouched pre-fill is
+  // REPLACED when the move changes, so a previous gate's findings never ride the next answer.
+  const edited = useRef(false);
+  const autoText = useRef<string | null>(null);
+  const [prefilled, setPrefilled] = useState(false);
+  const prefill = move?.prefill ?? null;
+  // A new gate on the same card starts untouched: the operator's edit belonged to the previous gate
+  // (their text itself stays — only an untouched pre-fill is ever replaced). Declared BEFORE the
+  // pre-fill effect so it runs first in the same commit.
+  useEffect(() => { edited.current = false; }, [runId, ord]);
+  useEffect(() => {
+    if (prepopulated || edited.current) return;
+    const previous = autoText.current;
+    autoText.current = prefill;
+    setAmend((cur) => (cur === '' || cur === previous ? prefill ?? '' : cur));
+    setPrefilled(prefill !== null);
+  }, [prefill, prepopulated]);
 
   async function run(
     action: () => Promise<unknown>,
@@ -334,6 +390,22 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
       ...(text !== '' ? { amend: text } : {}),
     });
   };
+
+  // The recommended move, taken (brainstorm idea 1). Each arm is an answer the card already sends.
+  const takeMove = (): Promise<void> => {
+    switch (move?.kind) {
+      case 'send-back': return requestChanges();
+      case 'retry-findings':
+        if (escalationGate) return retry();
+        return amend.trim() !== '' ? approveWithSteer() : approve();
+      case 'approve-plan': return approve();
+      case 'deliver':
+        if (!diffOpen && runDiff !== null) { setDiffOpen(true); return Promise.resolve(); }
+        return approve();
+      default: return Promise.resolve();
+    }
+  };
+  const moveLabel = move?.kind === 'deliver' && (diffOpen || runDiff === null) ? 'Deliver' : move?.label ?? '';
 
   const cancel = (): Promise<void> =>
     run(() => api.cancelRun(runId), { kind: 'cancel' });
@@ -500,12 +572,21 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
         <GateVerdict view={verdict} phase={phaseLabel(runId, units ?? EMPTY_UNITS, verdict.ord)} />
       )}
 
+      {/* Brainstorm idea 2 — the verdict diff: the reviewer's failing criteria beside the creator's claims. */}
+      {move !== null && move.items.length > 0 && verdict !== null && (
+        <VerdictDiff runId={runId} units={units ?? EMPTY_UNITS} reviewedOrd={verdict.ord} items={move.items} />
+      )}
+
       {/* The deliver lift + the engine's refusal for a gate on the deliver unit (wicked-core#431). */}
       {lift !== null && <DeliverLift view={lift} omitFailure={liftOmitsFailure} />}
 
       {/* Deliver gate diffstat (#300): the diff of what this approve will push (GET /runs/:id/diff?base=merge-base). */}
-      {lift !== null && runDiff !== null && (
-        <details className="mb-2">
+      {(lift !== null || deliverGate) && runDiff !== null && (
+        <details
+          className="mb-2"
+          open={diffOpen}
+          onToggle={(e) => setDiffOpen((e.currentTarget as HTMLDetailsElement).open)}
+        >
           <summary
             className="text-xs font-mono cursor-pointer select-none"
             style={{ color: 'var(--ink-dim)' }}
@@ -565,6 +646,7 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
           ref={steerRef}
           data-testid={prepopulated ? 'amend-prepopulated' : 'steering-amend'}
           data-run-id={runId}
+          {...(prefilled ? { 'data-prefill': 'verdict' } : {})}
           className="w-full rounded-lg p-2 text-xs mb-3 resize-none font-mono"
           style={{
             background: 'var(--surface-rail)',
@@ -579,7 +661,7 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
               : 'Optional note — rides "Approve + steer" as guidance, or "Reject" as the recorded reason'
           }
           value={amend}
-          onChange={(e) => applyAmend(e.target.value)}
+          onChange={(e) => { edited.current = true; applyAmend(e.target.value); }}
           disabled={locked}
         />}
 
@@ -609,26 +691,49 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
           />
         )}
 
+        {/* Brainstorm idea 1 — the ONE recommended move: its consequence first, then the primary
+            button that takes it. The other answers stay below as secondary buttons. */}
+        {move !== null && (
+          <div data-testid="gate-move" data-move={move.kind} className="mb-2">
+            <p data-testid="gate-move-consequence" className="text-[10px] font-mono mb-1" style={{ color: 'var(--ink-muted)', overflowWrap: 'anywhere' }}>
+              {move.consequence}
+            </p>
+            <button
+              type="button"
+              data-testid="gate-recommended"
+              data-move={move.kind}
+              onClick={() => void takeMove()}
+              disabled={locked || (move.kind === 'send-back' && !amend.trim()) || (move.kind === 'retry-findings' && !escalationGate && planGate.pending)}
+              className="w-full rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity text-left"
+              style={{ background: 'var(--status-run)', color: 'var(--surface-base)', overflowWrap: 'anywhere' }}
+            >
+              {moveLabel}
+            </button>
+          </div>
+        )}
+
         {isPlanGate ? (
           /* D11: a plan gate — approve, approve with an edited plan, reject. No steer: the daemon
            * refuses amend text on a plan gate ("takes an edited plan, not amend text"). */
           <div className="grid grid-cols-2 gap-2" data-testid="plan-gate-actions">
+            {hidden !== 'steering-approve' && (
             <button
               data-testid="steering-approve"
               onClick={() => void approve()}
               disabled={locked}
               className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
-              style={{ background: 'var(--status-run)', color: 'var(--surface-base)' }}
+              style={secondary({ background: 'var(--status-run)', color: 'var(--surface-base)' })}
             >
               Approve the plan
             </button>
+            )}
             {editingPlan ? (
               <button
                 data-testid="plan-gate-approve-edited"
                 onClick={() => void approveEditedPlan()}
                 disabled={locked || planEdit.plan === null}
                 className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
-                style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
+                style={secondary({ background: 'var(--accent)', color: 'var(--accent-fg)' })}
               >
                 Approve the edited plan
               </button>
@@ -638,7 +743,7 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
                 onClick={openPlanEdit}
                 disabled={locked}
                 className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
-                style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
+                style={secondary({ background: 'var(--accent)', color: 'var(--accent-fg)' })}
               >
                 Edit the plan…
               </button>
@@ -668,26 +773,30 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
            * build/recon/verify unit failed. Deliver-unit escalations (lift !== null) suppress it
            * because rewinding the creator cannot fix a git-push or rebase-conflict failure. */
           <div className="grid grid-cols-2 gap-2">
+            {hidden !== 'steering-retry' && (
             <button
               data-testid="steering-retry"
               onClick={() => void retry()}
               disabled={locked}
               className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
-              style={{ background: 'var(--status-run)', color: 'var(--surface-base)' }}
+              style={secondary({ background: 'var(--status-run)', color: 'var(--surface-base)' })}
               title="Re-dispatches the failed unit (carries your note as guidance if typed)"
             >
               Retry
             </button>
+            )}
+            {hidden !== 'steering-request-changes' && (
             <button
               data-testid="steering-request-changes"
               onClick={() => void requestChanges()}
               disabled={locked || !amend.trim()}
               className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
-              style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
+              style={secondary({ background: 'var(--accent)', color: 'var(--accent-fg)' })}
               title="Rewinds to the last creator phase and re-dispatches with your note (note required)"
             >
               Request changes
             </button>
+            )}
             <button
               data-testid="steering-reject"
               onClick={() => void reject()}
@@ -713,16 +822,18 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
            * failure; the daemon prompt says "Approve to retry (optionally amend), reject to fail the
            * run". Retry spans the full row so the note is visually paired with the primary action. */
           <div className="grid grid-cols-2 gap-2">
+            {hidden !== 'steering-retry' && (
             <button
               data-testid="steering-retry"
               onClick={() => void retry()}
               disabled={locked}
               className="col-span-2 rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
-              style={{ background: 'var(--status-run)', color: 'var(--surface-base)' }}
+              style={secondary({ background: 'var(--status-run)', color: 'var(--surface-base)' })}
               title="Re-dispatches the deliver unit (carries your note as guidance if typed)"
             >
               Retry
             </button>
+            )}
             <button
               data-testid="steering-reject"
               onClick={() => void reject()}
@@ -745,26 +856,30 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
         ) : (
           /* Standard layout: Approve / Approve+steer / Reject / Cancel run */
           <div className="grid grid-cols-2 gap-2">
+            {hidden !== 'steering-approve' && (
             <button
               data-testid="steering-approve"
               onClick={() => void approve()}
               disabled={locked}
               className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
-              style={{ background: 'var(--status-run)', color: 'var(--surface-base)' }}
+              style={secondary({ background: 'var(--status-run)', color: 'var(--surface-base)' })}
               {...(restoredRetry ? { title: "the evaluator's edit was discarded; the phase re-runs against the creator's verified tree" } : {})}
             >
               {restoredRetry ? 'Retry against the restored tree' : 'Approve'}
             </button>
+            )}
+            {hidden !== 'steering-approve-steer' && (
             <button
               data-testid="steering-approve-steer"
               onClick={() => void approveWithSteer()}
               disabled={locked || !amend.trim() || planGate.pending}
               {...(planGate.pending ? { title: 'Reading which kind of gate this is…' } : {})}
               className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
-              style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
+              style={secondary({ background: 'var(--accent)', color: 'var(--accent-fg)' })}
             >
               {restoredRetry ? 'Retry + steer' : 'Approve + steer'}
             </button>
+            )}
             <button
               data-testid="steering-reject"
               onClick={() => void reject()}
@@ -793,7 +908,9 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
           </p>
         ) : escalationGate && lift === null ? (
           <p className="text-[10px] font-mono mt-2" style={{ color: 'var(--ink-dim)' }}>
-            Retry re-runs the failed unit · Request changes rewinds to the last creator phase (note required) · Reject cancels the run · Cancel run stops the run without a gate decision
+            {move?.kind === 'send-back'
+              ? 'Send back rewinds to the last creator phase with the note · Retry re-runs the failed unit · Reject cancels the run · Cancel run stops the run without a gate decision'
+              : 'Retry re-runs the failed unit · Request changes rewinds to the last creator phase (note required) · Reject cancels the run · Cancel run stops the run without a gate decision'}
           </p>
         ) : escalationGate && lift !== null ? (
           <p className="text-[10px] font-mono mt-2" style={{ color: 'var(--ink-dim)' }}>
