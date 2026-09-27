@@ -617,6 +617,12 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          #   plus GET /gates/decided (the decided-gate history, crew#691) and GET/POST
          #   /standing-orders (crew#686; POSTs tapped at /__fixture/standing-order-posts).
          "trust_rules": False,
+         # run_page — brainstorm-actionable ideas 6+13 (e2e/wavec_runpage_test.py): northwind runs
+         #   launched from the `bugfix` preset — r-rerun (band 0-19, paused at a NOT PASS escalation on
+         #   review; its event log carries each phase's recorded times), r-rerun-done (the same run,
+         #   completed) and r-rerun-mid (band 40-69) — plus GET/POST /standing-orders (POSTs tapped at
+         #   /__fixture/standing-order-posts; the create route mirrors crew#693's plan-trust refusal).
+         "run_page": False,
          }
 state_lock = threading.Lock()
 # Idea 9: every POST /governance/rules body the fixture received (GET /__fixture/rule-posts).
@@ -1006,6 +1012,66 @@ TRUST_HISTORY = sorted([
     _decided(17, 2.5, gateKind="plan_approval", phase="intake", orderApprovable=False, creator=None),
     _decided(18, 9, byOrder=True, actor="standing-order:old"),
 ], key=lambda r: -r["decidedAt"])
+
+
+# ── Brainstorm-actionable ideas 6+13: the run page (switch `run_page`) ────────────────────────
+# r-rerun: understand (2 min) → build (6 min, its second attempt) → review (3 min, NOT PASS) → deliver
+# (never ran), paused at the escalation on review. A request_changes there rewinds to build (the
+# newest creator before the gate): keeps understand, redoes build → review → deliver, ~9 min.
+RUN_PAGE_T0 = NOW0 - 40 * MIN
+RUN_PAGE_PROMPT = ("Unit 3 verdict is NOT PASS — confirm to retry the phase, request changes to send the "
+                   "review back to the creator phase, or reject to cancel the run")
+
+
+def _run_page_run(rid: str, status: str, band: str) -> dict:
+    run = session(rid, status, "fix the northwind importer's date parsing", "fix the date parsing")
+    run["session"]["project_id"] = "northwind"
+    run["session"]["workflow_id"] = "bugfix"
+    run["session"]["clis"] = ["claude", "codex"]
+    run["session"]["unit_ix"] = 2
+    run["session"]["team_plan"] = {"rev": 1, "accepted_rev": 1, "preset": "bugfix",
+                                   "accepted": {"rev": 1, "by": "engine", "band": band, "high_risk": False}}
+    done = status == "completed"
+
+    def unit(key: str, ord_: int, stage: str, role: str, st: str, cli) -> dict:
+        return {"id": f"{rid}:{key}", "session_id": rid, "ord": ord_, "description": f"{key} — fix the date parsing",
+                "stage": stage, "role": role, "assigned_cli": cli, "assigned_invocation": None,
+                "council_task_ref": None, "routing": None, "denial_reason": None, "phase_ref": key,
+                "conformance_ref": None, "phase_status": None, "collection_scope": None, "status": st}
+    run["units"] = [
+        unit("understand", 1, "recon", "neutral", "done", "claude"),
+        unit("build", 2, "build", "creator", "done", "claude"),
+        unit("review", 3, "review", "evaluator", "done" if done else "rejected", "codex"),
+        unit("deliver", 4, "build", "neutral", "done" if done else "pending", None),
+    ]
+    return run
+
+
+RUN_PAGE_RUNS = [_run_page_run("r-rerun", "awaiting_human", "0-19"),
+                 _run_page_run("r-rerun-done", "completed", "0-19"),
+                 _run_page_run("r-rerun-mid", "executing", "40-69")]
+
+
+def _run_page_events(rid: str) -> list:
+    t = RUN_PAGE_T0
+    seq = iter(range(1, 100))
+
+    def e(kind: str, ord_: int, at: int, **extra) -> dict:
+        return {"type": kind, "session": rid, "ord": ord_, "ts": t + at, "seq": next(seq), **extra}
+    events = [
+        {"type": "sessionStarted", "session": rid, "problem": "fix the date parsing", "workflowId": "bugfix",
+         "cliCount": 2, "governed": True, "entityMode": "shared", "ts": t, "seq": 0},
+        e("unitDispatched", 1, SEC, attempt=0), e("unitOutputCaptured", 1, 2 * MIN + SEC, stepStatus="done"),
+        e("unitDone", 1, 2 * MIN + 2 * SEC),
+        e("unitDispatched", 2, 3 * MIN, attempt=0), e("unitOutputCaptured", 2, 20 * MIN, stepStatus="done"),
+        e("unitDispatched", 2, 21 * MIN, attempt=1), e("unitOutputCaptured", 2, 27 * MIN, stepStatus="done"),
+        e("unitDone", 2, 27 * MIN + SEC),
+        e("unitDispatched", 3, 28 * MIN, attempt=0), e("unitOutputCaptured", 3, 31 * MIN, stepStatus="done"),
+        e("unitDenied", 3, 31 * MIN + SEC),
+    ]
+    if rid == "r-rerun":
+        events.append(e("awaitingHuman", 3, 31 * MIN + 2 * SEC, prompt=RUN_PAGE_PROMPT, gateKind="escalation"))
+    return events
 
 
 # ── Fix slice J4/J5: the outcome-partition corpus, behind `j5_runs` ───────────
@@ -2564,6 +2630,8 @@ def assemble_runs() -> list:
             runs = runs + [json.loads(json.dumps(GATE_MOVE_RUN))]
         if state["trust_rules"] and not state["no_runs"]:
             runs = runs + json.loads(json.dumps(TRUST_RUNS))
+        if state["run_page"] and not state["no_runs"]:
+            runs = runs + json.loads(json.dumps(RUN_PAGE_RUNS))
     if viewer_on or repo_refs_on or forensics_on or provenance_on or project_dto_on \
             or chronicle_on or nerve_on or gate_now or guidance or wire433_on:
         runs = json.loads(json.dumps(runs))
@@ -3098,7 +3166,7 @@ class W2Handler(SimpleHTTPRequestHandler):
             return True
         if path in ("/api/v1/gates/decided", "/api/v1/standing-orders"):
             with state_lock:
-                trust_on = state["trust_rules"]
+                trust_on = state["trust_rules"] or (state["run_page"] and path == "/api/v1/standing-orders")
                 orders = json.loads(json.dumps(trust_orders))
             if not trust_on:
                 self._json(404, {"error": f"w2 fixture: no such endpoint {path}"})
@@ -3226,7 +3294,7 @@ class W2Handler(SimpleHTTPRequestHandler):
             with state_lock:
                 if state["wave1"]:
                     rows = list(WAVE1_PROJECTS)
-                if state["trust_rules"]:
+                if state["trust_rules"] or state["run_page"]:
                     rows = rows + [TRUST_PROJECT]
             # C6 fix: the stale-clock reproduction — upload-endpoint's project
             # clock reads 15 HOURS old while its run executes NOW.
@@ -3454,6 +3522,12 @@ class W2Handler(SimpleHTTPRequestHandler):
                 return True
             with state_lock:
                 trust_on = state["trust_rules"]
+            with state_lock:
+                run_page_on = state["run_page"]
+            if run_page_on and rid == "r-rerun":
+                self._json(200, {"runId": rid, "ord": 3, "lifecycle": "open", "prompt": RUN_PAGE_PROMPT,
+                                 "receivedAt": iso(RUN_PAGE_T0 + 31 * MIN + 2 * SEC), "options": None})
+                return True
             if trust_on and rid in TRUST_GATES:
                 self._json(200, {"runId": rid, "ord": TRUST_GATES[rid][0], "lifecycle": "open",
                                  "prompt": TRUST_GATES[rid][2], "receivedAt": iso(TRUST_T0 + 5 * MIN + SEC),
@@ -3579,6 +3653,8 @@ class W2Handler(SimpleHTTPRequestHandler):
                     events = list(GATE_MOVE_EVENTS)
                 if state["trust_rules"] and rid in TRUST_GATES:
                     events = _trust_events(rid)
+                if state["run_page"] and rid in ("r-rerun", "r-rerun-done"):
+                    events = _run_page_events(rid)
             # Wave 6: the completed governed test's recorded trail — degraded council, the
             # remote-write fence, the UNGATED gate.
             with state_lock:
@@ -4680,10 +4756,11 @@ class W2Handler(SimpleHTTPRequestHandler):
                 return self._json(404, {"error": f"w2 fixture: no such endpoint {path}"})
             return self._json(200, {"status": "ok"})
         # crew#686: POST /standing-orders {text, rule} — the invariant refuses an approve of the
-        # deliver gate, a plan approval or a finding (400 order_refused); 201 {order}.
+        # deliver gate or a finding, and (crew#693) a plan approval unless it is the trust receipt:
+        # band 0-19, a preset and a project scope (400 order_refused); 201 {order}.
         if path == "/api/v1/standing-orders":
             with state_lock:
-                trust_on = state["trust_rules"]
+                trust_on = state["trust_rules"] or state["run_page"]
                 standing_order_posts.append(body)
             if not trust_on:
                 return self._json(404, {"error": f"w2 fixture: no such endpoint {path}"})
@@ -4691,8 +4768,11 @@ class W2Handler(SimpleHTTPRequestHandler):
             trigger = rule.get("trigger") or {}
             if not str(body.get("text") or "").strip() or rule.get("action") not in ("approve", "hold", "notify"):
                 return self._json(400, {"error": "Invalid request body"})
+            receipt = (trigger.get("phase") == "plan_approval" and trigger.get("band") == "0-19"
+                       and bool(trigger.get("preset")) and (rule.get("scope") or {}).get("kind") == "project")
             if rule.get("action") == "approve" and (trigger.get("kind") == "finding"
-                                                   or trigger.get("phase") in ("deliver", "plan_approval")):
+                                                   or trigger.get("phase") == "deliver"
+                                                   or (trigger.get("phase") == "plan_approval" and not receipt)):
                 return self._json(400, {"error": "an order never answers that gate — it always waits for you",
                                         "code": "order_refused"})
             order = {"id": f"so-{len(trust_orders) + 1}", "text": body["text"], "rule": rule, "createdAt": NOW0}

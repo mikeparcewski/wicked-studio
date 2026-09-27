@@ -8,7 +8,7 @@
  *
  * ── INTEGRATION POINT ─────────────────────────────────────────────────────────────────────────
  * The shapes below mirror `DecidedGate` / `DecidedGatesResponse` (api-types 0.53.0) and
- * `StandingOrderRule` / `StandingOrder` / `StandingOrdersState` (0.50.0, `band` 0.53.0), which
+ * `StandingOrderRule` / `StandingOrder` / `StandingOrdersState` (0.50.0, `band` 0.53.0, `preset` 0.56.0), which
  * studio's installed contract predates. Delete this block and re-export from the contract package
  * the moment studio bumps to the api-types version that carries them.
  */
@@ -35,7 +35,10 @@ export interface DecidedGate {
 
 export interface StandingOrderRule {
   scope: { kind: 'all' } | { kind: 'project'; projectId: string };
-  trigger: { kind: 'gate'; phase: string; band?: string } | { kind: 'finding'; severity: 'high' | 'medium' | '*' };
+  /** `preset` (api-types 0.56.0, wicked-crew#693): only a run launched from that preset. An approve
+   *  on `phase: 'plan_approval'` is the trust receipt: crew accepts it only with band `0-19`, a
+   *  preset and a project scope, and it never covers the deliver gate. */
+  trigger: { kind: 'gate'; phase: string; band?: string; preset?: string } | { kind: 'finding'; severity: 'high' | 'medium' | '*' };
   action: 'approve' | 'hold' | 'notify';
   activeWhen: 'away' | 'always';
 }

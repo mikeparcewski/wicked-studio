@@ -19,6 +19,8 @@ import { FollowUpComposer } from './FollowUpComposer.js';
 import { Markdown } from './Markdown.js';
 import { NarratorFeed, phaseName, unitKey } from './NarratorFeed.js';
 import { NowBar } from './NowBar.js';
+import { RerunPreview } from './RerunPreview.js';
+import { useRerunFromHere, type RerunFromHere } from '../hooks/useRerunFromHere.js';
 import { RunDegradedNote } from './RunDegradedNote.js';
 import { deriveArtifacts, lastNarration, type NarratorContext } from './narrator.js';
 import { runTitle } from './runIdentity.js';
@@ -141,17 +143,23 @@ const STEP_STYLE: Record<StepState, { color: string; background: string; border:
  * column of tall empty "Not started" blocks. Routing provenance and live council chatter for
  * a queued phase live here, in the phase's tooltip, until the phase starts.
  */
-function ProcessStepper({
+export function ProcessStepper({
   runId,
   units,
   executingUnitOrd,
+  rerun,
 }: {
   runId: string;
   /** Already ord-sorted (the caller's memoized `ordered`). */
   units: WorkUnit[];
   executingUnitOrd: number | null;
+  /** Brainstorm idea 6: the one phase the open gate can rewind to carries "Rerun from here". */
+  rerun?: RerunFromHere;
 }): React.ReactElement | null {
   const councilStatus = useRuntimeStore((s) => s.councilStatus);
+  const [rerunOpen, setRerunOpen] = useState(false);
+  const offerOrd = rerun?.offer?.ord;
+  useEffect(() => setRerunOpen(false), [runId, offerOrd]);
   if (units.length === 0) return null;
   return (
     <div
@@ -180,6 +188,8 @@ function ProcessStepper({
           .filter((line): line is string => line !== null && line.length > 0)
           .join('\n');
         const s = STEP_STYLE[state];
+        const offered = rerun?.offer != null && rerun.offer.ord === unit.ord;
+        const Pill = offered ? 'button' : 'span';
         return (
           <Fragment key={unit.id}>
             {i > 0 && (
@@ -187,12 +197,20 @@ function ProcessStepper({
                 ›
               </span>
             )}
-            <span
+            <Pill
               data-testid={`stepper-phase-${unit.ord}`}
               data-state={state}
-              title={tooltip}
+              {...(offered
+                ? {
+                    type: 'button' as const,
+                    'data-rerun': 'offered',
+                    'aria-expanded': rerunOpen,
+                    onClick: () => setRerunOpen((o) => !o),
+                  }
+                : {})}
+              title={offered ? `${tooltip}\nRerun from here: ${rerun!.offer!.consequence}` : tooltip}
               className="rounded-full px-2.5 py-0.5 flex items-center gap-1.5 whitespace-nowrap relative"
-              style={{ background: s.background, border: s.border, color: s.color }}
+              style={{ background: s.background, border: s.border, color: s.color, ...(offered ? { cursor: 'pointer' } : {}) }}
             >
               {state === 'done' && <span aria-hidden="true">✓</span>}
               {state === 'rejected' && <span aria-hidden="true">✗</span>}
@@ -203,10 +221,16 @@ function ProcessStepper({
                 <span className="inline-block w-1.5 h-1.5 rounded-full shrink-0" style={{ background: 'var(--status-run)' }} />
               )}
               {phaseName(runId, unit)}
-            </span>
+              {offered && (
+                <span data-testid="stepper-rerun" style={{ color: 'var(--ink-muted)' }}>· ↻ rerun from here</span>
+              )}
+            </Pill>
           </Fragment>
         );
       })}
+      {rerun !== undefined && (rerunOpen || rerun.state.kind === 'sent') && (
+        <RerunPreview rerun={rerun} onClose={() => setRerunOpen(false)} />
+      )}
     </div>
   );
 }
@@ -811,6 +835,8 @@ function RunChat({
   const executingUnitOrd = useMemo(() => executingOrd(session, units), [session, units]);
   const log = useRuntimeStore((s) => s.logs[session.id]) ?? [];
   const events = useRunEventStore((s) => s.byRun[session.id]) ?? EMPTY_EVENTS_FOR_NARRATOR;
+  // Brainstorm idea 6: "Rerun from here" on the breadcrumb, while the run is paused at a gate.
+  const rerun = useRerunFromHere(view);
 
   /** "all" broadcasts; any other value is a CLI key (set by clicking an agent card). */
   const [injectTarget, setInjectTarget] = useState<string>('all');
@@ -999,7 +1025,7 @@ function RunChat({
       <RunDegradedNote events={events} />
 
       {/* Process stepper — the run's map: every phase, in order, with its state at a glance. */}
-      <ProcessStepper runId={session.id} units={ordered} executingUnitOrd={executingUnitOrd} />
+      <ProcessStepper runId={session.id} units={ordered} executingUnitOrd={executingUnitOrd} rerun={rerun} />
 
       {/* The sticky now-bar (DES-RUN-NARRATOR §2): what is happening RIGHT NOW —
           always visible, outside the scroll region, with the artifacts chip and

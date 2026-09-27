@@ -10,9 +10,9 @@
   "version": 1,
   "studioVersion": "0.5.14",
   "counts": {
-    "files": 161,
-    "occurrences": 1503,
-    "static": 1297,
+    "files": 163,
+    "occurrences": 1516,
+    "static": 1311,
     "dynamic": 68,
     "computed": 7
   },
@@ -4944,6 +4944,42 @@
       ]
     },
     {
+      "testId": "rerun-cancel",
+      "files": [
+        "src/components/RerunPreview.tsx"
+      ]
+    },
+    {
+      "testId": "rerun-confirm",
+      "files": [
+        "src/components/RerunPreview.tsx"
+      ]
+    },
+    {
+      "testId": "rerun-consequence",
+      "files": [
+        "src/components/RerunPreview.tsx"
+      ]
+    },
+    {
+      "testId": "rerun-error",
+      "files": [
+        "src/components/RerunPreview.tsx"
+      ]
+    },
+    {
+      "testId": "rerun-preview",
+      "files": [
+        "src/components/RerunPreview.tsx"
+      ]
+    },
+    {
+      "testId": "rerun-sent",
+      "files": [
+        "src/components/RerunPreview.tsx"
+      ]
+    },
+    {
       "testId": "retry-link",
       "files": [
         "src/components/RunTimeline.tsx"
@@ -6655,6 +6691,12 @@
       ]
     },
     {
+      "testId": "stepper-rerun",
+      "files": [
+        "src/components/ChatPanel.tsx"
+      ]
+    },
+    {
       "testId": "strip-sensor",
       "files": [
         "src/components/ThreadDrawer.tsx"
@@ -7363,6 +7405,48 @@
       "testId": "triage-hint",
       "files": [
         "src/components/HomeBoard.tsx"
+      ]
+    },
+    {
+      "testId": "trust-receipt",
+      "files": [
+        "src/components/TrustReceipt.tsx"
+      ]
+    },
+    {
+      "testId": "trust-receipt-consequence",
+      "files": [
+        "src/components/TrustReceipt.tsx"
+      ]
+    },
+    {
+      "testId": "trust-receipt-error",
+      "files": [
+        "src/components/TrustReceipt.tsx"
+      ]
+    },
+    {
+      "testId": "trust-receipt-in-force",
+      "files": [
+        "src/components/TrustReceipt.tsx"
+      ]
+    },
+    {
+      "testId": "trust-receipt-made",
+      "files": [
+        "src/components/TrustReceipt.tsx"
+      ]
+    },
+    {
+      "testId": "trust-receipt-make",
+      "files": [
+        "src/components/TrustReceipt.tsx"
+      ]
+    },
+    {
+      "testId": "trust-receipt-question",
+      "files": [
+        "src/components/TrustReceipt.tsx"
       ]
     },
     {
