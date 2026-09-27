@@ -176,6 +176,24 @@ export function approveProposal(id: string): Promise<ProposalApproveOutcome> {
   });
 }
 
+/** `POST /proposals` body (crew api-types 0.54.0): ONE preference a person files — the daemon
+ *  files it as a `memory` proposal with `payload.capture: "preference"`; the kind is never ours. */
+export interface FileProposalBody {
+  content: string;
+  /** Becomes the `project` facet — the preference is recalled on that project only. */
+  project?: string;
+  /** Where the pick was made (`doc:<docId>@v<N>`). */
+  source?: string;
+}
+
+/** `POST /proposals` — file one preference into the review queue; answers the pending id. */
+export function fileProposal(body: FileProposalBody): Promise<{ id: string }> {
+  return apiFetch<{ id: string }>('/proposals', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
 /** `POST /proposals/:id/reject` — reject a pending proposal; nothing is written to the store. */
 export function rejectProposal(id: string): Promise<{ ok: boolean }> {
   return apiFetch<{ ok: boolean }>(`/proposals/${encodeURIComponent(id)}/reject`, {

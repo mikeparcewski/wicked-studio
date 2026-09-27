@@ -2257,6 +2257,7 @@ def repo_entry_wire(findings_on: bool) -> dict:
 onboard_posts: list = []  # POST /repos/<id>/onboard receipts (studio#251's remedy, tapped by the rig)
 replay_posts: list = []  # POST /governance/deadletters/replay bodies (Wave A idea 5, tapped by the rig)
 approve_posts: list = []  # POST /proposals/<id>/approve ids (Wave B idea 4, tapped by the rig)
+proposal_posts: list = []  # POST /proposals bodies (Wave C idea 12, takes: the filed preference)
 
 
 def never_indexed_repos(n: int, broken: bool) -> list:
@@ -3968,6 +3969,11 @@ class W2Handler(SimpleHTTPRequestHandler):
                 versions.append(
                     {"version": v, "parent": frm, "feedback_file": None,
                      "html_file": f"v{v}.html", "created_at": iso(NOW0 + v * SEC)})
+                # A fork is a byte copy of the version it branches from, as the real bridge's
+                # is — so a picked take (Wave C) shows the take's own content as the new head.
+                if frm > 0:
+                    doc_html_overrides[(pid, doc, v)] = (
+                        doc_html_overrides.get((pid, doc, frm)) or doc_html(doc, frm))
             self._json(200, {"version": v, "parent": frm})
             return True
         # Issue #65: the invented POST /api/theme/learn 404s, exactly as the real
@@ -4284,6 +4290,10 @@ class W2Handler(SimpleHTTPRequestHandler):
             with state_lock:
                 posts = list(approve_posts)
             return self._json(200, {"posts": posts})
+        if path == "/__fixture/proposal-posts":
+            with state_lock:
+                posts = list(proposal_posts)
+            return self._json(200, {"posts": posts})
         if path == "/__fixture/plan-posts":
             with state_lock:
                 posts = list(plan_post_log)
@@ -4314,6 +4324,7 @@ class W2Handler(SimpleHTTPRequestHandler):
                 with state_lock:
                     replay_posts.clear()
                     approve_posts.clear()
+                    proposal_posts.clear()
             if body.get("reset_gate_posts"):
                 with state_lock:
                     gate_post_log.clear()
@@ -4705,6 +4716,29 @@ class W2Handler(SimpleHTTPRequestHandler):
                 state["governance"] = "healthy"
             return self._json(200, {**base, "archive": GOV_OUTBOX + ".replayed-w2", "replayed": block["count"] - 8,
                                     "alreadyPresent": 0, "failed": 8, "dryRun": False})
+        # Wave C (idea 12): crew's POST /proposals {content, project?, source?} (api-types 0.54.0)
+        # files ONE preference as a pending memory proposal — it joins the `proposals` queue, so
+        # GET /proposals lists it. None ⇒ the unknown-route 404 of a daemon predating the route.
+        if path == "/api/v1/proposals":
+            allowed = {"content", "project", "source"}
+            content = body.get("content") if isinstance(body, dict) else None
+            with state_lock:
+                proposal_posts.append(body)
+                rows = state["proposals"]
+                if rows is None:
+                    return self._json(404, {"error": f"w2 fixture: no such endpoint {path}"})
+                if (not isinstance(content, str) or not content.strip()
+                        or any(k not in allowed for k in body)):
+                    return self._json(400, {"error": "Invalid proposal body"})
+                pid = f"pref-{len(proposal_posts)}"
+                payload = {"content": content.strip(), "tier": "semantic", "capture": "preference"}
+                if body.get("source"):
+                    payload["source"] = body["source"]
+                state["proposals"] = list(rows) + [{
+                    "id": pid, "kind_type": "memory", "payload": payload,
+                    "facets": {"project": body["project"]} if body.get("project") else {},
+                    "provenance": {}, "state": "pending", "created_at": int(time.time())}]
+            return self._json(201, {"id": pid})
         # Wave B (idea 4): crew's POST /proposals/<id>/approve over the `proposals` switch.
         m = re.match(r"^/api/v1/proposals/([^/]+)/approve$", path)
         if m:

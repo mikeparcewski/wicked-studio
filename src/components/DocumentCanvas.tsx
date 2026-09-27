@@ -6,6 +6,7 @@ import { useDocsCache } from '../store/docsCache.js';
 import { anyModalOpen, useLayerStore } from '../store/layers.js';
 import type { DocSummary, ForkResult, VersionManifest } from '../api/interactive.js';
 import { useGlobalShortcuts, type ShortcutEntry } from '../hooks/useGlobalShortcuts.js';
+import { useTakes, type TakesControl } from '../hooks/useTakes.js';
 import { modePath, versionPath, type Navigate } from '../hooks/useRoute.js';
 import { threadKey, useDocThreadStore } from '../store/docThread.js';
 import { hasInstrumentBridge, instrumentDocHtml } from '../interactive/instrumented.js';
@@ -193,6 +194,98 @@ function PaneHeader({ label, accent }: { label: string; accent: boolean }): Reac
   );
 }
 
+/** A split pane's header as a TAKE (Wave C, idea 12): "Take N · v3 (selected)" and its
+ *  Pick move. Without takes (the overlay, or no manifest) it is the plain pane header. */
+function TakeHeader({ takes, n, label, accent }: {
+  takes: TakesControl; n: 1 | 2; label: string; accent: boolean;
+}): React.ReactElement {
+  if (takes.takes === null) return <PaneHeader label={label} accent={accent} />;
+  const busy = takes.pick.phase !== 'idle';
+  const previewing = takes.pick.phase !== 'idle' && takes.pick.picked.n === n;
+  return (
+    <div data-testid="take-header" data-take={n} style={{ alignItems: 'center', display: 'flex', gap: '2px' }}>
+      <span data-testid="take-label" style={{
+        color: accent ? 'var(--ink-high)' : 'var(--ink-muted)', flexShrink: 0, fontFamily: 'var(--font-sans)',
+        fontSize: 'var(--text-2xs)', fontWeight: 600, paddingLeft: '8px',
+      }}>
+        Take {n}
+      </span>
+      <PaneHeader label={label} accent={accent} />
+      <button
+        type="button"
+        data-testid="take-pick"
+        data-take={n}
+        aria-pressed={previewing}
+        disabled={busy}
+        onClick={() => takes.previewPick(n)}
+        title={`Pick take ${n}: see what it does before anything is sent`}
+        style={{
+          background: previewing ? 'var(--accent-subtle)' : 'transparent',
+          border: '1px solid var(--surface-raised)', borderRadius: 'var(--radius-sm)',
+          color: 'var(--accent)', cursor: busy ? 'default' : 'pointer',
+          fontFamily: 'var(--font-sans)', fontSize: 'var(--text-2xs)', lineHeight: 1.6,
+          opacity: busy && !previewing ? 0.5 : 1, padding: '0 7px',
+        }}
+      >
+        Pick take {n}
+      </button>
+    </div>
+  );
+}
+
+/** The pick's consequence, shown before anything is sent, with its confirm (Wave C, idea 12). */
+function TakePickPreview({ takes }: { takes: TakesControl }): React.ReactElement | null {
+  const { pick } = takes;
+  if (pick.phase === 'idle') return null;
+  const sending = pick.phase === 'sending';
+  return (
+    <div
+      data-testid="take-pick-preview"
+      data-take={pick.picked.n}
+      style={{
+        alignItems: 'center', background: 'var(--surface-rail)',
+        borderBottom: '1px solid var(--surface-raised)', display: 'flex', flexShrink: 0,
+        gap: '8px', padding: '5px 10px',
+      }}
+    >
+      <span data-testid="take-pick-consequence" style={{
+        color: 'var(--ink-body)', flex: 1, fontFamily: 'var(--font-sans)',
+        fontSize: 'var(--text-xs)', lineHeight: 1.35, minWidth: 0,
+      }}>
+        <b style={{ color: 'var(--ink-high)' }}>Pick take {pick.picked.n}:</b> {pick.consequence}
+      </span>
+      <button
+        type="button"
+        data-testid="take-pick-confirm"
+        disabled={sending}
+        onClick={() => void takes.confirmPick()}
+        style={{
+          background: 'var(--accent)', border: 'none', borderRadius: 'var(--radius-sm)',
+          color: 'var(--surface-base)', cursor: sending ? 'default' : 'pointer', flexShrink: 0,
+          fontFamily: 'var(--font-sans)', fontSize: 'var(--text-2xs)', fontWeight: 600,
+          lineHeight: 1.6, opacity: sending ? 0.6 : 1, padding: '1px 9px',
+        }}
+      >
+        {sending ? 'Picking…' : `Pick v${pick.picked.version}`}
+      </button>
+      <button
+        type="button"
+        data-testid="take-pick-cancel"
+        disabled={sending}
+        onClick={takes.cancelPick}
+        style={{
+          background: 'transparent', border: '1px solid var(--surface-raised)',
+          borderRadius: 'var(--radius-sm)', color: 'var(--ink-muted)', cursor: 'pointer',
+          flexShrink: 0, fontFamily: 'var(--font-sans)', fontSize: 'var(--text-2xs)',
+          lineHeight: 1.6, padding: '0 7px',
+        }}
+      >
+        Cancel
+      </button>
+    </div>
+  );
+}
+
 /** The right panel's lifted state — owned by DocumentCanvas so it survives
  *  picker→doc navigation AND a DocFrame remount on doc change. */
 interface PanelState {
@@ -312,6 +405,40 @@ function DocFrame({
   }], []);
   useGlobalShortcuts(compareShortcuts);
 
+  // The comparand the panes actually use, DERIVED each render: clicking a strip
+  // entry while comparing re-points the LEFT pane and keeps the comparand
+  // (§7.2) — unless the navigation lands ON the comparand (or a manifest
+  // re-read dropped it), where the default (lineage parent) stands in rather
+  // than comparing a version with itself.
+  const comparand = manifest === null || resolvedShown === null || cmp === null
+    ? null
+    : cmp !== resolvedShown && manifest.versions.some((v) => v.version === cmp)
+      ? cmp
+      : defaultComparand(manifest, resolvedShown);
+
+  // A fork is committed by the service, so the strip re-reads the manifest (`retry`
+  // is that same one load) and routes to the version the service reports — the UI
+  // never invents the new version number or its parent.
+  const onForked = (result: ForkResult): void => {
+    retry();
+    navigate(versionPath(projectId, docId, result.version));
+  };
+
+  // Wave C (idea 12): the side-by-side split's two versions are TAKES — each pane can be
+  // picked (a preference proposal + the working version) and the pair remixed (a steer).
+  const takes = useTakes({
+    projectId,
+    docId,
+    manifest,
+    split: comparand !== null && !overlayOn && resolvedShown !== null
+      ? { left: resolvedShown, right: comparand }
+      : null,
+    navigate,
+    onForked,
+    exitCompare,
+    onShowChat: () => panel.onExpand('chat'),
+  });
+
   const subject = `“${docId}”`;
   // Failure / loading occupy the CANVAS pane only — the thread beside them stays up
   // (§1.2: the one conversation is always present), and with no manifest there is no
@@ -336,29 +463,12 @@ function DocFrame({
   // Version-addressed: the VersionStrip swaps this number through the route, nothing else.
   const src = interactiveDocUrl(projectId, docId, shown);
 
-  // The comparand the panes actually use, DERIVED each render: clicking a strip
-  // entry while comparing re-points the LEFT pane and keeps the comparand
-  // (§7.2) — unless the navigation lands ON the comparand (or a manifest
-  // re-read dropped it), where the default (lineage parent) stands in rather
-  // than comparing a version with itself.
-  const comparand = cmp === null
-    ? null
-    : cmp !== shown && manifest.versions.some((v) => v.version === cmp)
-      ? cmp
-      : defaultComparand(manifest, shown);
   const comparing = comparand !== null;
   // §7.5's disabled-with-reason: a v1-only document has nothing to compare.
   const compareDisabledReason =
     manifest.versions.length < 2 ? 'only one version exists' : null;
   const parentOfShown = manifest.versions.find((v) => v.version === shown)?.parent ?? null;
 
-  // A fork is committed by the service, so the strip re-reads the manifest (`retry`
-  // is that same one load) and routes to the version the service reports — the UI
-  // never invents the new version number or its parent.
-  const onForked = (result: ForkResult): void => {
-    retry();
-    navigate(versionPath(projectId, docId, result.version));
-  };
 
   return (
     <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
@@ -436,9 +546,11 @@ function DocFrame({
               </div>
             </>
           ) : (
+            <>
+            <TakePickPreview takes={takes} />
             <div data-testid="compare-panes" style={{ display: 'flex', flex: 1, minHeight: 0 }}>
               <div style={{ display: 'flex', flex: 1, flexDirection: 'column', minWidth: 0 }}>
-                <PaneHeader label={`v${shown} (selected)`} accent />
+                <TakeHeader takes={takes} n={1} label={`v${shown} (selected)`} accent />
                 <iframe
                   key={`left-${shown}`}
                   data-testid="compare-pane"
@@ -452,7 +564,9 @@ function DocFrame({
               {/* §7.4 divider between the panes. */}
               <div style={{ background: 'var(--surface-raised)', flexShrink: 0, width: '1px' }} />
               <div style={{ display: 'flex', flex: 1, flexDirection: 'column', minWidth: 0 }}>
-                <PaneHeader
+                <TakeHeader
+                  takes={takes}
+                  n={2}
                   label={`v${comparand} (${comparand === parentOfShown ? 'parent' : 'vs'})`}
                   accent={false}
                 />
@@ -467,6 +581,7 @@ function DocFrame({
                 />
               </div>
             </div>
+            </>
           )}
         </div>
       ) : (
@@ -564,6 +679,7 @@ function DocFrame({
             onComparand: setCmp,
             onOverlay: setOverlayOn,
             onExit: exitCompare,
+            takes,
           },
         }}
       >

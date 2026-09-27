@@ -3,6 +3,8 @@ import { postFork } from '../api/interactive.js';
 import type { ForkResult, VersionEntry, VersionManifest } from '../api/interactive.js';
 import { modePath, versionPath, type Navigate } from '../hooks/useRoute.js';
 import { threadKey, useDocThreadStore, type DocMsg } from '../store/docThread.js';
+import { proposalsPath } from '../api/proposals.js';
+import type { TakesControl } from '../hooks/useTakes.js';
 import { DeleteDocButton } from './DocDelete.js';
 import { ExportMenu } from './ExportMenu.js';
 import { ThemesMenu } from './ThemesMenu.js';
@@ -78,6 +80,9 @@ export interface CompareControl {
   onComparand: (version: number) => void;
   onOverlay: (on: boolean) => void;
   onExit: () => void;
+  /** Wave C (idea 12): the split's two versions as TAKES — pick and remix. Absent on surfaces
+   *  that do not offer takes (Video). */
+  takes?: TakesControl;
 }
 
 /** Everything the doc-scoped tabs need. Null on the picker and while the
@@ -248,6 +253,130 @@ function CompareTab({ doc, subject }: { doc: DocPanelDoc; subject: 'document' | 
           </div>
         </div>
       )}
+      {c.takes !== undefined && c.takes.takes !== null && <TakesRemix takes={c.takes} />}
+      {c.takes !== undefined && c.takes.receipt !== null && <TakesReceipt takes={c.takes} navigate={doc.navigate} />}
+    </div>
+  );
+}
+
+// ── Takes (Wave C, idea 12): the pick's receipt and the remix steer ──────────
+
+function TakesReceipt({ takes, navigate }: { takes: TakesControl; navigate: Navigate }): React.ReactElement | null {
+  const r = takes.receipt;
+  if (r === null) return null;
+  const v = r.picked.version;
+  const working = 'error' in r.working
+    ? `v${v} did not become the working version: ${r.working.error}`
+    : r.working.forked
+      ? `It is now the working version, as v${r.working.version ?? v} (v${r.other.version} stays in the history).`
+      : `v${v} was already the latest version, so it stays the working one.`;
+  return (
+    <div
+      data-testid="takes-receipt"
+      data-proposal={'id' in r.proposal ? r.proposal.id : ''}
+      className="flex flex-col gap-1"
+      style={{ border: `1px solid ${S.border}`, borderRadius: 'var(--radius-md)', padding: '8px 10px' }}
+    >
+      <span style={{ color: S.ink, fontFamily: 'var(--font-sans)', fontSize: 'var(--text-xs)', fontWeight: 600 }}>
+        Picked take {r.picked.n} (v{v})
+      </span>
+      <span data-testid="takes-receipt-working" style={{
+        color: 'error' in r.working ? S.danger : S.body, fontFamily: 'var(--font-sans)', fontSize: 'var(--text-2xs)',
+      }}>
+        {working}
+      </span>
+      {'id' in r.proposal ? (
+        <span data-testid="takes-receipt-proposal" style={{ color: S.body, fontFamily: 'var(--font-sans)', fontSize: 'var(--text-2xs)' }}>
+          “Prefers takes like v{v}” is filed for your review.{' '}
+          <button
+            type="button"
+            data-testid="takes-receipt-review"
+            onClick={() => navigate(proposalsPath('memory'))}
+            style={{ background: 'none', border: 'none', color: S.accent, cursor: 'pointer', font: 'inherit', padding: 0 }}
+          >
+            Review ›
+          </button>
+        </span>
+      ) : (
+        <span data-testid="takes-receipt-proposal" data-failed="true" style={{
+          color: S.danger, fontFamily: 'var(--font-sans)', fontSize: 'var(--text-2xs)',
+        }}>
+          The preference was not filed: {r.proposal.error}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function TakesRemix({ takes }: { takes: TakesControl }): React.ReactElement | null {
+  if (takes.takes === null) return null;
+  const { remix } = takes;
+  const keepFrom = remix.buildOn === 1 ? 2 : 1;
+  return (
+    <div
+      data-testid="takes-remix"
+      className="flex flex-col gap-1.5"
+      style={{ border: `1px solid ${S.border}`, borderRadius: 'var(--radius-md)', padding: '8px 10px' }}
+    >
+      <span style={{ color: S.ink, fontFamily: 'var(--font-sans)', fontSize: 'var(--text-xs)', fontWeight: 600 }}>
+        Remix the takes
+      </span>
+      <div className="flex items-center gap-1.5" style={{ color: S.faint, fontFamily: 'var(--font-sans)', fontSize: 'var(--text-2xs)' }}>
+        Build on
+        {takes.takes.map((t) => (
+          <button
+            key={t.n}
+            type="button"
+            data-testid="takes-remix-base"
+            data-take={t.n}
+            aria-pressed={remix.buildOn === t.n}
+            onClick={() => takes.setRemixBuildOn(t.n)}
+            style={{
+              ...SEGMENT, border: `1px solid ${S.border}`,
+              background: remix.buildOn === t.n ? 'var(--surface-raised)' : 'transparent',
+              color: remix.buildOn === t.n ? S.ink : S.muted,
+            }}
+          >
+            take {t.n} · v{t.version}
+          </button>
+        ))}
+      </div>
+      <input
+        data-testid="takes-remix-keep"
+        value={remix.keep}
+        onChange={(e) => takes.setRemixKeep(e.target.value)}
+        onKeyDown={(e) => { if (e.key === 'Enter') void takes.sendRemix(); }}
+        placeholder={`What to keep from take ${keepFrom} (e.g. its headline)`}
+        aria-label={`What to keep from take ${keepFrom}`}
+        style={{
+          background: 'var(--surface-raised)', border: `1px solid ${S.border}`, borderRadius: 'var(--radius-sm)',
+          color: S.ink, fontFamily: 'var(--font-sans)', fontSize: 'var(--text-xs)', padding: '3px 6px',
+        }}
+      />
+      <span data-testid="takes-remix-steer" style={{
+        color: remix.steer === null ? S.faint : S.body, fontFamily: 'var(--font-sans)',
+        fontSize: 'var(--text-2xs)', lineHeight: 1.4,
+      }}>
+        {remix.steer === null ? remix.blocked : <>Sends to the document agent: “{remix.steer}”</>}
+      </span>
+      {remix.error !== null && (
+        <span data-testid="takes-remix-error" style={{ color: S.danger, fontFamily: 'var(--font-sans)', fontSize: 'var(--text-2xs)' }}>
+          The remix was not sent: {remix.error}
+        </span>
+      )}
+      <button
+        type="button"
+        data-testid="takes-remix-send"
+        disabled={remix.steer === null || remix.sending}
+        title={remix.blocked ?? 'Send this steer to the document agent'}
+        onClick={() => void takes.sendRemix()}
+        style={{
+          ...ACTION, alignSelf: 'flex-start', color: S.accent, padding: '3px 10px',
+          cursor: remix.steer === null ? 'not-allowed' : 'pointer', opacity: remix.steer === null ? 0.45 : 1,
+        }}
+      >
+        {remix.sending ? 'Sending…' : 'Remix ›'}
+      </button>
     </div>
   );
 }
