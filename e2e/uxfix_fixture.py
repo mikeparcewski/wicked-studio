@@ -297,6 +297,17 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          #   chat_scope_501 — POST /chats answers crew's 501 "engine predates chat
          #                   scope" for any SCOPED open (default False).
          "repo_findings": False, "governance": None, "chat_scope": False, "chat_scope_501": False,
+         # Studio Wave A (lane home):
+         #   never_indexed — GET /repos appends N registered repos with NO onboarding run on record
+         #                   (`idx-0`…), registered hours apart (epoch SECONDS, the real wire), and
+         #                   POST /repos/<id>/onboard accepts them (201 {runId}, receipts tapped at
+         #                   GET /__fixture/onboard-posts). Default 0.
+         #   broken_clock  — the first never-indexed repo's registered_at is 1 (1970 — the D6 unit
+         #                   slip), so its age is impossible. Default False.
+         #   POST /governance/deadletters/replay (crew#689) answers over the `deadletters` block:
+         #   a dry run folds it, a real replay lands all but 8 and flips the block to what remains;
+         #   receipts at GET /__fixture/replay-posts.
+         "never_indexed": 0, "broken_clock": False,
          #   chat_admit_subset — with `clis` omitted on a scoped open the pre-filter admits ONLY
          #                   claude (a strict subset of the chat-capable set), so a rig can prove
          #                   the header shows exactly the admitted seats (W3S-253-09). Default False.
@@ -2090,6 +2101,17 @@ def repo_entry_wire(findings_on: bool) -> dict:
 
 
 onboard_posts: list = []  # POST /repos/<id>/onboard receipts (studio#251's remedy, tapped by the rig)
+replay_posts: list = []  # POST /governance/deadletters/replay bodies (Wave A idea 5, tapped by the rig)
+
+
+def never_indexed_repos(n: int, broken: bool) -> list:
+    """Wave A: N registered repos with no onboarding run on record (the D6 "Never indexed" pile)."""
+    rows = []
+    for i in range(n):
+        registered = 1 if (broken and i == 0) else (NOW0 - (i + 1) * HOUR) // 1000
+        rows.append({"id": f"idx-{i}", "name": f"wicked-idx-{i}", "root_path": f"/tmp/w2/repos/idx-{i}",
+                     "default_branch": "main", "registered_at": registered})
+    return rows
 
 GOV_STORE = "/tmp/w2/state/core.db.governance/governance.db"
 GOV_OUTBOX = "/tmp/w2/state/core.db.governance/emit-outbox.ndjson"
@@ -3009,7 +3031,8 @@ class W2Handler(SimpleHTTPRequestHandler):
             with state_lock:
                 repo_on = state["repo"]
                 findings_on = state["repo_findings"]
-            self._json(200, {"repos": [repo_entry_wire(findings_on)] if repo_on else []})
+                extra = never_indexed_repos(state["never_indexed"], state["broken_clock"])
+            self._json(200, {"repos": ([repo_entry_wire(findings_on)] if repo_on else []) + extra})
             return True
         # Wave 2 (studio#246): GET /diagnostics — ABSENT (the unknown-route 404 a daemon
         # predating the route answers) unless the `governance` switch names a block.
@@ -4008,6 +4031,14 @@ class W2Handler(SimpleHTTPRequestHandler):
             with state_lock:
                 posts = list(gate_post_log)
             return self._json(200, {"posts": posts})
+        if path == "/__fixture/onboard-posts":
+            with chat_state_lock:
+                posts = list(onboard_posts)
+            return self._json(200, {"posts": posts})
+        if path == "/__fixture/replay-posts":
+            with state_lock:
+                posts = list(replay_posts)
+            return self._json(200, {"posts": posts})
         if path == "/__fixture/plan-posts":
             with state_lock:
                 posts = list(plan_post_log)
@@ -4024,6 +4055,11 @@ class W2Handler(SimpleHTTPRequestHandler):
         if path == "/__fixture":
             # `reset_learn` clears the learned-theme readback state between page
             # loads (the brand-learn rig re-runs the flow from a clean 404).
+            if body.get("reset_repairs"):
+                with chat_state_lock:
+                    onboard_posts.clear()
+                with state_lock:
+                    replay_posts.clear()
             if body.get("reset_gate_posts"):
                 with state_lock:
                     gate_post_log.clear()
@@ -4363,12 +4399,35 @@ class W2Handler(SimpleHTTPRequestHandler):
             if scope is not None:
                 opened["scope"] = scope
             return self._json(201, opened)
+        # Wave A (crew#689): the dead-letter replay over the `deadletters` block — dry run first.
+        if path == "/api/v1/governance/deadletters/replay":
+            dry = body.get("dryRun") is True
+            with state_lock:
+                replay_posts.append({"dryRun": dry})
+                gov = state["governance"]
+            if gov != "deadletters":
+                return self._json(409, {"error": "this daemon resolved no governance store — there is nothing to replay into"})
+            block = GOVERNANCE_BLOCKS["deadletters"]["deadletters"]
+            fold = {k: v for k, v in block.items() if k != "legacyOutbox"}
+            base = {"outbox": GOV_OUTBOX, "store": {"path": GOV_STORE, "source": "flag"}, "read": block["count"],
+                    "alreadyPresent": None, "note": None, "blocker": None}
+            if dry:
+                return self._json(200, {**base, "archive": None, "replayed": 0, "failed": 0, "dryRun": True, "fold": fold})
+            with state_lock:
+                state["governance"] = "healthy"
+            return self._json(200, {**base, "archive": GOV_OUTBOX + ".replayed-w2", "replayed": block["count"] - 8,
+                                    "alreadyPresent": 0, "failed": 8, "dryRun": False})
         # Wave 2 (studio#251): the re-onboard remedy's wire, POST /repos/<id>/onboard → {runId}.
         m = re.match(r"^/api/v1/repos/([^/]+)/onboard$", path)
         if m:
             with state_lock:
                 findings_on = state["repo_findings"]
+                idx_ids = {r["id"] for r in never_indexed_repos(state["never_indexed"], False)}
             rid = urllib.parse.unquote(m.group(1))
+            if rid in idx_ids:
+                with chat_state_lock:
+                    onboard_posts.append(rid)
+                return self._json(201, {"runId": f"r-onboard-{rid}"})
             if not findings_on or rid != REPO_ID:
                 return self._json(404, {"error": f"Repo {rid} not found"})
             with chat_state_lock:

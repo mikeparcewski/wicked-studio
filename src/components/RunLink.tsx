@@ -1,6 +1,8 @@
 import type { SessionStatus, SessionView } from '../api/types.js';
 import { useMembershipStore } from '../store/membership.js';
 import { MODE_SPECS } from './ModeSwitcher.js';
+import { ageVerdict } from '../board/ageHonesty.js';
+import { AgeStamp } from './AgeStamp.js';
 import { runTitle, runWhenWord, WHEN_TITLE } from './runIdentity.js';
 
 interface Props {
@@ -30,6 +32,11 @@ export function RunLink({ view, selectedRunId, onSelect }: Props): React.ReactEl
   // clock (the membership mirror — a store read, never a fetch).
   const title = runTitle(session, TITLE_MAX);
   const attachedAt = useMembershipStore((s) => s.attachedAtByRun[session.id]);
+  // The clock `runWhenWord` reads: the run's own launch clock (unix seconds), else the attach clock.
+  const now = Date.now();
+  const runClockMs = typeof session.created_at === 'number' && Number.isFinite(session.created_at)
+    ? session.created_at * 1000
+    : attachedAt;
   const unitCount = units.length;
   const pulse = session.status === 'awaiting_human' || session.status === 'executing'
     || session.status === 'distributing' || session.status === 'planning';
@@ -70,7 +77,10 @@ export function RunLink({ view, selectedRunId, onSelect }: Props): React.ReactEl
       </div>
       <p className="text-[10px] mt-0.5 font-mono" style={{ color: 'var(--ink-dim)' }}>
         {spec.label} · {unitCount} task{unitCount === 1 ? '' : 's'} ·{' '}
-        <span data-testid="run-when" title={WHEN_TITLE}>{runWhenWord(attachedAt, Date.now(), session.created_at)}</span>
+        {/* Idea 14: an absent or impossible clock is a pill that says so (the row itself opens the run). */}
+        {ageVerdict(runClockMs, now).kind === 'ok'
+          ? <span data-testid="run-when" title={WHEN_TITLE}>{runWhenWord(attachedAt, now, session.created_at)}</span>
+          : <AgeStamp at={runClockMs} now={now} testId="run-when" />}
       </p>
     </button>
   );

@@ -4,6 +4,7 @@ import type { NeedAction, NeedRow } from '../board/needsYou.js';
 import { useNotificationStore } from '../store/notifications.js';
 import { setRetryPrefill } from '../store/retryPrefill.js';
 import { useGlobalShortcuts, type ShortcutEntry } from './useGlobalShortcuts.js';
+import { useBatchOnboard, type BatchState } from './useRepairMoves.js';
 import type { Navigate } from './useRoute.js';
 
 /**
@@ -51,6 +52,8 @@ export interface NeedsQueue {
   rootRef: (el: HTMLElement | null) => void;
   /** Do a row's verb — the same thing a click on its act does. */
   act: (action: NeedAction) => void;
+  /** The batch onboard's progress (idea 3) — the group row renders it in place of its verb. */
+  batch: BatchState;
 }
 
 export function useNeedsQueue(flat: NeedRow[], navigate: Navigate, now: number): NeedsQueue {
@@ -96,8 +99,15 @@ export function useNeedsQueue(flat: NeedRow[], navigate: Navigate, now: number):
     });
   }, []);
 
+  const batch = useBatchOnboard();
+  const runBatch = batch.run;
   const act = useCallback(
     (a: NeedAction) => {
+      if (a.kind === 'batch-onboard') {
+        // The one queue verb that POSTS: its consequence is the group row's own line.
+        void runBatch(a.repoIds);
+        return;
+      }
       if (a.kind === 'open') {
         if (a.ack !== undefined) {
           const { markRead } = useNotificationStore.getState();
@@ -110,7 +120,7 @@ export function useNeedsQueue(flat: NeedRow[], navigate: Navigate, now: number):
       setRetryPrefill(a.prefill);
       navigate('/runs/new');
     },
-    [navigate],
+    [navigate, runBatch],
   );
 
   // A selection whose row left the queue (resolved, collapsed away) clears.
@@ -184,5 +194,5 @@ export function useNeedsQueue(flat: NeedRow[], navigate: Navigate, now: number):
   }, []);
   useGlobalShortcuts(shortcuts);
 
-  return { rows, entries, count: needCount(rows), expanded, toggle, selectedKey, rootRef, act };
+  return { rows, entries, count: needCount(rows), expanded, toggle, selectedKey, rootRef, act, batch: batch.state };
 }

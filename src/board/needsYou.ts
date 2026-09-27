@@ -9,6 +9,8 @@ import { STALLED_IDLE_SECS, stalledLiveChats, type LiveChatSnapshot } from './ch
 import { gateOpenPath } from './gateActions.js';
 import { outcomeOf, runStats } from './metrics.js';
 import { repoOnboard } from './repoStats.js';
+import { onboardEstimate, type OnboardEstimate } from './repairMoves.js';
+import { plausibleClock } from './ageHonesty.js';
 
 /**
  * THE needs-you queue fold (DES-HOME-COMMAND-CENTER §3) — the home page's spine.
@@ -59,15 +61,19 @@ export type NeedKind =
   | 'gate' | 'elicitation' | 'stall-escalated' | 'steer-request' | 'failed-run' | 'stalled-run'
   | 'stranded-run' | 'campaign' | 'repo-graph' | 'proposal' | 'stalled-chat';
 
-/** Alike SIMPLE items the queue folds into one expandable row ("2 approvals"). */
-export type NeedGroupKey = 'approval' | 'proposal';
+/** Alike SIMPLE items the queue folds into one expandable row ("2 approvals"); `reindex` folds
+ *  never-indexed repos into one row carrying the batch onboard (studio Wave A, idea 3). */
+export type NeedGroupKey = 'approval' | 'proposal' | 'reindex';
 
 /** The act-in-place affordance a row carries — the component wires the verbs. */
 export type NeedAction =
   /** `ack`: notification ids the open acknowledges (a steer request is read once opened). */
   | { kind: 'open'; path: string; label: string; ack?: string[] }
   | { kind: 'retry-prefill'; prefill: RetryPrefill; label: string }
-  | { kind: 'reindex-prefill'; prefill: RetryPrefill; repoId: string; label: string };
+  | { kind: 'reindex-prefill'; prefill: RetryPrefill; repoId: string; label: string }
+  /** A folded group's batch move: one onboarding run per repo through `POST /repos/:id/onboard`.
+   *  The group row's line states the consequence before the click. */
+  | { kind: 'batch-onboard'; repoIds: string[]; label: string };
 
 export interface NeedRow {
   /** Dedupe identity — one row per subject, ever. */
@@ -82,6 +88,8 @@ export interface NeedRow {
   groupKey?: NeedGroupKey;
   /** A folded group's members, ranked — present only on a group row. */
   members?: NeedRow[];
+  /** A never-indexed repo row's repo, and how long an onboard takes here (the batch's consequence). */
+  batch?: { repoId: string; estimate: OnboardEstimate };
   /** The row's subject (run title, repo name, campaign, chat id). */
   subject: string;
   /** The narrated one-liner (narrator vocabulary — gate rows via `narrate()`). */
@@ -296,6 +304,7 @@ export function needsYouRows(inputs: NeedsYouInputs): NeedRow[] {
 
   // ── Repo graph rows FIRST: their onboard-run ids suppress failed-run twins ──
   const suppressed = new Set<string>();
+  const estimate = onboardEstimate(live);
   for (const repo of repos) {
     const mine = live.filter((v) => v.session.repo_ref === repo.id);
     const onboard = repoOnboard(mine, repo.id);
@@ -325,6 +334,8 @@ export function needsYouRows(inputs: NeedsYouInputs): NeedRow[] {
         kind: 'repo-graph',
         severity: 30,
         stakes: 1,
+        groupKey: 'reindex',
+        batch: { repoId: repo.id, estimate },
         subject: repo.name,
         text: 'Never indexed — no onboarding run on record',
         tone: 'gate',
@@ -627,10 +638,12 @@ export function newestFailedRun(
 }
 
 /** The queue's oldest waiting clock — the KPI tile's context line. */
-export function oldestNeedAt(rows: readonly NeedRow[]): number | null {
+export function oldestNeedAt(rows: readonly NeedRow[], now: number = Date.now()): number | null {
   let oldest: number | null = null;
   for (const r of rows) {
-    if (r.at !== null && (oldest === null || r.at < oldest)) oldest = r.at;
+    // A broken clock is not the oldest wait (idea 14): only plausible clocks count.
+    const at = plausibleClock(r.at, now);
+    if (at !== null && (oldest === null || at < oldest)) oldest = at;
   }
   return oldest;
 }
