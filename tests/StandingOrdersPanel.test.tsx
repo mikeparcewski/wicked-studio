@@ -97,6 +97,25 @@ describe('StandingOrdersPanel (behaviour 10)', () => {
     expect(api.setAway).toHaveBeenCalledWith(true);
   });
 
+  it('the Away switch says what it will do BEFORE it is flipped, from every order in force', async () => {
+    state.orders = [
+      { id: 'g1', text: 'Always approve band 0-19 unit reviews on Alpha', createdAt: 1,
+        rule: { scope: { kind: 'project', projectId: 'alpha' }, trigger: { kind: 'gate', phase: '*', band: '0-19' }, action: 'approve', activeWhen: 'always' } },
+      { id: 'r1', text: 'Trust bugfix runs on Alpha at band 0-19', createdAt: 2,
+        rule: { scope: { kind: 'project', projectId: 'alpha' }, trigger: { kind: 'gate', phase: 'plan_approval', band: '0-19', preset: 'bugfix' }, action: 'approve', activeWhen: 'always' } },
+    ];
+    render(<StandingOrdersPanel />);
+    const preview = await screen.findByTestId('standing-orders-preview');
+    expect(preview).toHaveTextContent('While you are away: 2 orders active: will approve band 0-19 (LOW) unit reviews on Alpha;');
+    expect(preview).toHaveTextContent(/deliver gates always wait$/);
+    expect(screen.getByTestId('standing-orders-invariant')).toHaveTextContent(/No order answers a deliver gate or a high-risk plan approval/);
+    expect(api.setAway).not.toHaveBeenCalled();
+    // The orders made at a gate and from the trust receipt are in the same list, saying so.
+    fireEvent.click(screen.getByTestId('standing-orders-toggle'));
+    const origins = screen.getAllByTestId('standing-order-origin').map((e) => e.textContent);
+    expect(origins).toEqual(['made at a gate', 'trust receipt']);
+  });
+
   it('a refused write stays said after the re-read (codex on #347)', async () => {
     state.orders = [{ id: 'o1', text: 'hold delivers', rule: { ...intakeOnAlpha, action: 'hold' }, createdAt: 1 }];
     const { ApiError } = await import('../src/api/errors.js');

@@ -1,28 +1,19 @@
 /**
- * The standing-orders wire (Studio OS behaviour 10).
+ * The standing-orders wire (Studio OS behaviour 10): the away switch, the plain-words parse, the
+ * create / retire, and the outbox of queued messages.
  *
- * ── TEMPORARY: hand-declared from wicked-crew-api-types 0.48.0 ─────────────────────────────────
- * crew's repo carries 0.48.0 (`packages/crew-api-types/index.d.ts`), studio pins 0.39.0. Same
- * pattern as `./teamPlan.ts`: every declaration below is a verbatim subset of 0.48.0. Delete this
- * block and import from `wicked-crew-api-types` once studio bumps to a published version that
- * carries `StandingOrdersState`. Crew bundles this dist, so the two always ship together.
+ * ── INTEGRATION POINT ─────────────────────────────────────────────────────────────────────────
+ * Hand-declared from `wicked-crew-api-types` (`StandingOrdersState` 0.50.0, `ParsedStandingOrder`
+ * 0.48.0), which studio's installed contract predates. The rule and the order are THE ones the gate
+ * card and the trust receipt already speak (`./gateHistory.ts`, with `band` and `preset`), so an
+ * order made at a gate or from Insights is the same row this list shows. Delete this block and
+ * re-export from the contract package once studio bumps to the version that carries them.
  */
 
 import { apiFetch } from './client.js';
+import type { StandingOrder, StandingOrderRule } from './gateHistory.js';
 
-export interface StandingOrderRule {
-  scope: { kind: 'all' } | { kind: 'project'; projectId: string };
-  trigger: { kind: 'gate'; phase: string } | { kind: 'finding'; severity: 'high' | 'medium' | '*' };
-  action: 'approve' | 'hold' | 'notify';
-  activeWhen: 'away' | 'always';
-}
-
-export interface StandingOrder {
-  id: string;
-  text: string;
-  rule: StandingOrderRule;
-  createdAt: number;
-}
+export type { StandingOrder, StandingOrderRule };
 
 export interface QueuedStandingMessage {
   id: string;

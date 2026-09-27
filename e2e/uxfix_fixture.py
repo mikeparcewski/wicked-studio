@@ -1213,6 +1213,10 @@ def standing_sweep() -> None:
         rule = order["rule"]
         if rule["action"] != "approve" or (rule["activeWhen"] == "away" and not STANDING["away"]):
             continue
+        # A band- or preset-scoped order matches only a run scored into that band / launched from
+        # that preset (crew's evaluator); the wave-2b gated runs are neither.
+        if rule["trigger"].get("band") is not None or rule["trigger"].get("preset") is not None:
+            continue
         for rid in list(state["simple_gates"]):
             if rid not in WAVE2B_GATE_PHASE:
                 continue
@@ -4536,6 +4540,10 @@ class W2Handler(SimpleHTTPRequestHandler):
                 with state_lock:
                     STANDING.update({"away": False, "awaySince": None, "orders": [], "outbox": []})
                     STANDING_AUDIT.clear()
+            # Behaviour 10: orders already in force (made at a gate / from the trust receipt).
+            if isinstance(body.get("standing_seed"), list):
+                with state_lock:
+                    STANDING["orders"] = json.loads(json.dumps(body["standing_seed"]))
             if body.get("reset_learn"):
                 with learned_lock:
                     learned_themes.clear()

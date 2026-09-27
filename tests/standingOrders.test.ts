@@ -4,8 +4,10 @@
 import { describe, expect, it } from 'vitest';
 import type { AuditEntry } from '../src/api/types.js';
 import { handoverSections } from '../src/board/handover.js';
-import { ruleWords, standingOrderActionText } from '../src/board/standingOrders.js';
-import type { StandingOrderRule } from '../src/api/standingOrders.js';
+import {
+  awayPreview, bandWords, ORDER_INVARIANT, orderOrigin, ruleWords, standingOrderActionText,
+} from '../src/board/standingOrders.js';
+import type { StandingOrder, StandingOrderRule } from '../src/api/standingOrders.js';
 
 const names = (id: string): string | undefined => ({ alpha: 'Alpha' } as Record<string, string>)[id];
 
@@ -47,12 +49,76 @@ describe('standingOrderActionText — the handover names the order', () => {
     expect(standingOrderActionText(entry('run.stall.escalated', {}, 'stall-watchdog'))).toBeUndefined();
   });
 
-  it('the handover\'s system section lists the order\'s action in its words', () => {
+  it('the handover says what orders did in their own section, apart from the rest of the system', () => {
     const sections = handoverSections({
       runs: [], gates: {}, elicitations: {}, failedAt: {}, projectIds: {}, since: 0,
-      audit: [entry('gate.decided', { approve: true, ord: 1, standingOrder: order })],
+      audit: [
+        entry('gate.decided', { approve: true, ord: 1, standingOrder: order }),
+        entry('run.stall.detected', {}, 'stall-watchdog'),
+      ],
     });
-    const system = sections.find((s) => s.key === 'system')!;
-    expect(system.items.map((i) => i.text)).toEqual(['Standing order "Auto-approve intake on alpha" approved a gate for you']);
+    expect(sections.map((s) => s.key)).toEqual(['decisions', 'broke', 'finished', 'orders', 'system']);
+    const orders = sections.find((s) => s.key === 'orders')!;
+    expect(orders.title).toBe('What your standing orders did');
+    expect(orders.items.map((i) => i.text)).toEqual(['Standing order "Auto-approve intake on alpha" approved a gate for you']);
+    expect(sections.find((s) => s.key === 'system')!.items.map((i) => i.text)).toEqual(['The stall watchdog noticed a silent worker']);
+  });
+
+  it('with no order action the handover keeps its four sections', () => {
+    const sections = handoverSections({
+      runs: [], gates: {}, elicitations: {}, failedAt: {}, projectIds: {}, since: 0, audit: [],
+    });
+    expect(sections.map((s) => s.key)).toEqual(['decisions', 'broke', 'finished', 'system']);
+  });
+});
+
+const northwind = (id: string): string | undefined => ({ nw: 'Northwind' } as Record<string, string>)[id];
+const made = (id: string, rule: StandingOrderRule, text = id): StandingOrder => ({ id, text, rule, createdAt: 1 });
+/** The order the gate card's "make it a rule" makes (idea 8). */
+const atGate = made('g1', { scope: { kind: 'project', projectId: 'nw' }, trigger: { kind: 'gate', phase: '*', band: '0-19' }, action: 'approve', activeWhen: 'always' });
+/** The trust receipt's order (idea 13). */
+const receipt = made('r1', { scope: { kind: 'project', projectId: 'nw' }, trigger: { kind: 'gate', phase: 'plan_approval', band: '0-19', preset: 'bugfix' }, action: 'approve', activeWhen: 'always' });
+const hold = made('h1', { scope: { kind: 'all' }, trigger: { kind: 'gate', phase: 'deliver' }, action: 'hold', activeWhen: 'away' });
+const notify = made('n1', { scope: { kind: 'all' }, trigger: { kind: 'finding', severity: 'high' }, action: 'notify', activeWhen: 'away' });
+
+describe('band and preset orders, said in words (ideas 8 and 13 share the list)', () => {
+  it('a make-it-a-rule order names the band as LOW unit reviews', () => {
+    expect(ruleWords(atGate.rule, northwind)).toBe('Always: approve band 0-19 (LOW) unit reviews on project Northwind');
+  });
+  it('a trust receipt names the preset and the band of the plan it approves', () => {
+    expect(ruleWords(receipt.rule, northwind)).toBe('Always: approve the plan of runs from the bugfix preset scoring band 0-19 (LOW) on project Northwind');
+  });
+  it('a high band keeps its bare name', () => {
+    expect(bandWords('40-69')).toBe('band 40-69');
+  });
+  it('an approve on every gate says unit reviews, never "every gate"', () => {
+    const r: StandingOrderRule = { scope: { kind: 'all' }, trigger: { kind: 'gate', phase: '*' }, action: 'approve', activeWhen: 'away' };
+    expect(ruleWords(r, northwind)).toBe('While you are away: approve every unit review on every project');
+  });
+  it('each order says where it came from', () => {
+    expect([atGate, receipt, hold].map(orderOrigin)).toEqual(['gate', 'receipt', 'words']);
+  });
+});
+
+describe('awayPreview — what the Away switch will do, before it is flipped', () => {
+  it('lists every order in force and ends on the deliver gate', () => {
+    expect(awayPreview([atGate, receipt, hold], northwind)).toBe(
+      '3 orders active: will approve band 0-19 (LOW) unit reviews on Northwind; '
+      + 'will approve the plan of runs from the bugfix preset scoring band 0-19 (LOW) on Northwind; '
+      + 'will hold the deliver gate on every project; deliver gates always wait',
+    );
+  });
+  it('a notify order says the message is queued, never sent', () => {
+    expect(awayPreview([notify], northwind)).toBe(
+      '1 order active: will queue a message on a HIGH finding on every project; messages are queued, never sent; deliver gates always wait',
+    );
+  });
+  it('with no orders every gate waits', () => {
+    expect(awayPreview([], northwind)).toBe('No orders: every gate waits for you while you are away');
+  });
+  it('the invariant is stated in words', () => {
+    expect(ORDER_INVARIANT).toMatch(/deliver gate/);
+    expect(ORDER_INVARIANT).toMatch(/high-risk plan approval/);
+    expect(ORDER_INVARIANT).toMatch(/queued, never sent/);
   });
 });

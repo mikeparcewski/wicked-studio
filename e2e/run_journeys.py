@@ -35,6 +35,7 @@ BEHAVIOUR = [
     "wave2b_handover", "wave2b_queue", "wave2b_switch",
     "skin_contract", "needs_shell", "t9_plan_ui", "dogfood_fixes", "wavea_home", "gate_move",
     "waveb_proposals", "agent_1on1", "gate_trust", "wavec_takes", "wavec_runpage", "wavec_home_runs",
+    "standing_orders",
 ]
 
 # Journeys that need a live daemon or bridge: a real wicked-crew daemon (seed_surfaces,

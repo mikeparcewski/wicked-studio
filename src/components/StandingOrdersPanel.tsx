@@ -1,10 +1,15 @@
 import { useState } from 'react';
+import { ORDER_INVARIANT, ORIGIN_LABEL, orderOrigin } from '../board/standingOrders.js';
 import { useStandingOrders } from '../hooks/useStandingOrders.js';
+import { clockTime } from '../board/handover.js';
 
 /**
  * STANDING ORDERS (Studio OS behaviour 10) — a skin over `useStandingOrders`. One strip on
- * Home: the away switch and the count of orders, opening to the orders, the add flow (words →
- * the rule said back → confirm) and the outbox of queued messages. No behaviour lives here.
+ * Home: the away switch with what it will do while you are away (previewed from the orders in
+ * force, before you flip it), crew's invariant beside it, and Manage — the orders (every one,
+ * including those made at a gate or from the trust receipt, each saying where it came from), the
+ * add flow (words → the rule said back → confirm) and the outbox of queued messages. No behaviour
+ * lives here.
  */
 
 const chip = {
@@ -26,7 +31,7 @@ export function StandingOrdersPanel(): React.ReactElement | null {
       </p>
     );
   }
-  const { away, orders, outbox } = so.state;
+  const { away, awaySince, orders, outbox } = so.state;
   const d = so.draft;
   return (
     <section
@@ -60,6 +65,16 @@ export function StandingOrdersPanel(): React.ReactElement | null {
           {open ? 'Hide' : 'Manage'}
         </button>
       </div>
+      {/* The consequence first: what going away does, from the orders in force, and what never changes. */}
+      <p style={{ margin: '2px 0 0', fontSize: 'var(--text-xs)', lineHeight: 1.4 }}>
+        <span data-testid="standing-orders-preview" style={{ color: 'var(--ink-body)' }}>
+          {away ? `Away${awaySince !== null ? ` since ${clockTime(awaySince)}` : ''}. ` : 'While you are away: '}
+          {so.preview}
+        </span>
+        <span data-testid="standing-orders-invariant" style={{ color: 'var(--ink-dim)' }}>
+          {' · '}{ORDER_INVARIANT}
+        </span>
+      </p>
       {so.error !== null && (
         <p data-testid="standing-orders-error" role="alert" style={{ margin: '4px 0 0', fontSize: 'var(--text-xs)', color: 'var(--status-fail)' }}>
           {so.error}
@@ -72,7 +87,10 @@ export function StandingOrdersPanel(): React.ReactElement | null {
               <li style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-dim)' }}>No standing orders. Add one in plain words below.</li>
             )}
             {orders.map((o) => (
-              <li key={o.id} data-testid="standing-order-row" data-order-id={o.id} style={{ display: 'flex', gap: '8px', alignItems: 'baseline', fontSize: 'var(--text-xs)', minWidth: 0 }}>
+              <li key={o.id} data-testid="standing-order-row" data-order-id={o.id} data-origin={orderOrigin(o)} style={{ display: 'flex', gap: '8px', alignItems: 'baseline', fontSize: 'var(--text-xs)', minWidth: 0 }}>
+                <span data-testid="standing-order-origin" style={{ ...chip, cursor: 'default', padding: '0 6px', flexShrink: 0 }}>
+                  {ORIGIN_LABEL[orderOrigin(o)]}
+                </span>
                 <span style={{ color: 'var(--ink-high)', fontWeight: 'var(--weight-semi)' }}>{o.text}</span>
                 <span style={{ color: 'var(--ink-muted)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {so.words(o.rule)}
