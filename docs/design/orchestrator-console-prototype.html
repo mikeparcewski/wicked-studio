@@ -1,0 +1,932 @@
+<title>Orchestrator Console</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Sans+Condensed:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+:root{
+  --ground:#E6E9EE; --panel:#F5F6F8; --panel2:#ECEFF3; --raise:#FFFFFF;
+  --ink:#111826; --ink2:#465163; --ink3:#788396; --line:#CAD1DB; --line2:#DDE2E9;
+  --accent:#0E6A78; --accent-ink:#FFFFFF; --accent-soft:#D3E9EC;
+  --wait:#A85A00; --wait-soft:#F6E5CC; --bad:#B1261B; --bad-soft:#F6DAD6; --ok:#2B7446; --ok-soft:#D5EBDC;
+  --ghost:#6B4FC0; --ghost-soft:#E6E0F6;
+  --dim:.36; --shadow:0 10px 30px rgba(17,24,38,.18);
+  --ui:"IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --cond:"IBM Plex Sans Condensed", "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --mono:"IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --ground:#0E1217; --panel:#151A21; --panel2:#1B2129; --raise:#20272F;
+    --ink:#E3E8EF; --ink2:#A7B1BF; --ink3:#748091; --line:#2D3642; --line2:#232A34;
+    --accent:#5BC2CF; --accent-ink:#0E1217; --accent-soft:#143B41;
+    --wait:#E7A547; --wait-soft:#3A2A12; --bad:#F2857A; --bad-soft:#401C19; --ok:#6CC28C; --ok-soft:#153322;
+    --ghost:#B4A1F2; --ghost-soft:#2B2446;
+    --dim:.34; --shadow:0 12px 32px rgba(0,0,0,.55);
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#0E1217; --panel:#151A21; --panel2:#1B2129; --raise:#20272F;
+  --ink:#E3E8EF; --ink2:#A7B1BF; --ink3:#748091; --line:#2D3642; --line2:#232A34;
+  --accent:#5BC2CF; --accent-ink:#0E1217; --accent-soft:#143B41;
+  --wait:#E7A547; --wait-soft:#3A2A12; --bad:#F2857A; --bad-soft:#401C19; --ok:#6CC28C; --ok-soft:#153322;
+  --ghost:#B4A1F2; --ghost-soft:#2B2446;
+  --dim:.34; --shadow:0 12px 32px rgba(0,0,0,.55);
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+.ebar,.board,.cmd,.drawer{flex:none}
+body{margin:0;background:var(--ground);color:var(--ink);font:14px/1.45 var(--ui);-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit;cursor:pointer}
+input,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+@media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
+.mono{font-family:var(--mono);font-size:11.5px}
+.k{font-family:var(--mono);font-size:10.5px;padding:0 5px;border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;color:var(--ink2);background:var(--panel);white-space:nowrap;line-height:1.5}
+.muted{color:var(--ink3)} .ink2{color:var(--ink2)}
+.tab{font-variant-numeric:tabular-nums}
+.c-wait{color:var(--wait)} .c-bad{color:var(--bad)} .c-ok{color:var(--ok)} .c-acc{color:var(--accent)} .c-ghost{color:var(--ghost)}
+b,strong{font-weight:600}
+
+/* ---------- walk-through header ---------- */
+.walk{padding-inline:16px;padding-block:10px 8px;display:grid;gap:7px;border-bottom:1px solid var(--line)}
+.walk>*{min-width:0}
+.wtop{display:flex;gap:10px 14px;align-items:baseline;flex-wrap:wrap}
+.wtop h1{margin:0;font:700 15px/1.2 var(--cond);letter-spacing:.02em;text-transform:uppercase}
+.wtop .sub{color:var(--ink3);font-size:12.5px}
+.wtop .sp{flex:1}
+.navb{border:1px solid var(--line);background:var(--panel);border-radius:6px;padding:2px 9px;font-size:12px}
+.moments{display:flex;gap:4px;overflow-x:auto;padding-bottom:3px;scrollbar-width:thin}
+.mchip{flex:none;border:1px solid var(--line);background:var(--panel);border-radius:5px;padding:3px 8px;font:500 12px/1.3 var(--cond);display:flex;gap:6px;align-items:baseline}
+.mchip .t{font-family:var(--mono);font-size:10px;color:var(--ink3)}
+.mchip[aria-current="true"]{background:var(--ink);color:var(--ground);border-color:var(--ink)}
+.mchip[aria-current="true"] .t{color:var(--ground);opacity:.7}
+.cap{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;font-size:12.5px;max-width:150ch}
+.cap dt{font:600 10.5px/1.7 var(--cond);text-transform:uppercase;letter-spacing:.08em;color:var(--ink3)}
+.cap dd{margin:0;color:var(--ink2)}
+.cap dd b{color:var(--ink)}
+
+/* ---------- console ---------- */
+.console{display:flex;flex-direction:column;gap:6px;padding-inline:16px;padding-block:8px 10px}
+.console>*{min-width:0}
+.ebar{display:flex;align-items:center;gap:2px;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:6px}
+.etab{border:1px solid transparent;background:transparent;border-radius:6px;padding:4px 10px;display:flex;align-items:center;gap:6px;font:600 13px var(--cond);color:var(--ink2)}
+.etab[aria-current="true"]{background:var(--raise);border-color:var(--line);color:var(--ink)}
+.etab .g{font-size:9px}
+.ebar .grow{flex:1}
+.posture{display:flex;border:1px solid var(--line);border-radius:6px;overflow:hidden;background:var(--panel)}
+.posture button{border:0;background:transparent;padding:3px 10px;font:500 12px var(--cond);color:var(--ink2)}
+.posture button[aria-pressed="true"]{background:var(--ink);color:var(--ground)}
+.tray{display:flex;gap:10px;align-items:center;font:12px var(--cond);color:var(--ink3);padding-inline:8px;flex-wrap:wrap}
+.tray .lit{color:var(--wait);font-weight:600}
+
+/* strip board */
+.board{border:1px solid var(--line);background:var(--panel);border-radius:8px;overflow:hidden}
+.bhead{display:flex;gap:10px;align-items:center;padding:4px 10px;font:600 10.5px var(--cond);letter-spacing:.09em;text-transform:uppercase;color:var(--ink3);border-bottom:1px solid var(--line2)}
+.bhead .r{margin-left:auto;text-transform:none;letter-spacing:0;font-weight:500;font-size:11.5px}
+.strip{display:grid;grid-template-columns:128px 92px minmax(0,1.5fr) minmax(0,1fr) 118px 186px;gap:10px;align-items:center;padding:3px 10px;min-height:27px;border-bottom:1px solid var(--line2);font:13px/1.3 var(--cond);width:100%;text-align:left;background:transparent;border-left:0;border-right:0;border-top:0;position:relative;transition:opacity .4s, transform .4s, background .2s}
+.strip:last-child{border-bottom:0}
+.strip:hover{background:var(--panel2)}
+.strip[aria-selected="true"]{background:var(--accent-soft)}
+.strip>*{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.clock{font-family:var(--mono);font-size:11px;font-weight:600;display:flex;gap:6px;align-items:center}
+.clock .g{font-size:9px}
+.s-bad .clock{color:var(--bad)} .s-wait .clock{color:var(--wait)} .s-low .clock{color:var(--ink3)}
+.strip .eng{color:var(--ink2);font-weight:600}
+.strip .dec{font-weight:600}
+.strip .eff{color:var(--ink2)}
+.strip .who{color:var(--ink3);font-size:12px}
+.strip .keys{display:flex;gap:4px;justify-content:flex-end;align-items:center}
+.strip.grey{opacity:.42}
+.strip.grey .dec{text-decoration:line-through}
+.strip.group .dec::before{content:"▤ ";color:var(--ink3)}
+.moved{position:absolute;right:196px;top:-1px;font:600 10px var(--mono);color:var(--accent);background:var(--panel);padding:0 4px}
+.divider{display:flex;align-items:center;gap:8px;padding:2px 10px;font:600 10.5px var(--mono);color:var(--accent);border-bottom:1px solid var(--line2);background:var(--accent-soft)}
+.more{padding:4px 10px;font:12px var(--cond);color:var(--ink3)}
+.held{display:flex;gap:10px;align-items:center;padding:6px 10px;font:13px var(--cond);color:var(--ink2);flex-wrap:wrap}
+.held b{font-family:var(--mono);font-size:12px}
+.sbtn{border:1px solid var(--line);background:var(--raise);border-radius:4px;padding:0 6px;font:500 11.5px/1.6 var(--cond)}
+.sbtn.pri{background:var(--ink);color:var(--ground);border-color:var(--ink)}
+
+/* main */
+.main{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:8px;min-height:0}
+.main.noinsp{grid-template-columns:minmax(0,1fr)}
+.pane{background:var(--panel);border:1px solid var(--line);border-radius:8px;min-height:0;display:flex;flex-direction:column;overflow:hidden;position:relative}
+.pane-h{display:flex;align-items:center;gap:8px;padding:6px 12px;border-bottom:1px solid var(--line2);flex-wrap:wrap}
+.crumb{font-family:var(--mono);font-size:11px;color:var(--ink3);display:flex;gap:5px;flex-wrap:wrap}
+.crumb b{color:var(--ink);font-weight:500}
+.pane-h .r{margin-left:auto;display:flex;gap:6px;align-items:center}
+.pane-b{overflow:auto;padding:12px 14px;display:grid;gap:12px;align-content:start;min-height:0;flex:1}
+.pane-b>*{min-width:0}
+.lbl{font:600 10.5px var(--cond);letter-spacing:.09em;text-transform:uppercase;color:var(--ink3)}
+.itabs{display:flex;gap:2px}
+.itabs button{border:0;background:transparent;border-radius:4px;padding:2px 8px;font:600 11px var(--cond);letter-spacing:.06em;text-transform:uppercase;color:var(--ink3)}
+.itabs button[aria-pressed="true"]{background:var(--raise);color:var(--ink);box-shadow:0 0 0 1px var(--line)}
+
+/* facts / verbs */
+.facts{display:grid;grid-template-columns:auto 1fr;gap:3px 12px;font-size:12.5px;margin:0}
+.facts dt{color:var(--ink3);font-family:var(--cond)}
+.facts dd{margin:0}
+.verbs{display:grid;gap:3px}
+.verb{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;border:1px solid var(--line2);background:var(--raise);border-radius:5px;padding:4px 8px;text-align:left;font:500 13px var(--cond);width:100%}
+.verb:hover{border-color:var(--ink3)}
+.verb.pri{background:var(--ink);color:var(--ground);border-color:var(--ink)}
+.verb.pri .k{background:transparent;color:var(--ground);border-color:var(--ground)}
+.verb[disabled]{opacity:1;cursor:not-allowed;background:transparent;border-style:dashed;color:var(--ink3)}
+.verb .why{grid-column:1/-1;font:400 11.5px var(--ui);color:var(--ink3)}
+.verb .why b{color:var(--wait)}
+
+/* fleet */
+.lane{display:grid;gap:1px}
+.lane-h{display:flex;gap:10px;align-items:baseline;font:13px var(--cond);padding-block:2px}
+.lane-h b{font-weight:700;font-size:13.5px}
+.lane-h .clk{font-family:var(--mono);font-size:10.5px;color:var(--ink3)}
+.run{display:grid;grid-template-columns:30px minmax(110px,200px) minmax(150px,1fr) minmax(110px,190px) 44px;gap:10px;align-items:center;padding:3px 6px;border-radius:5px;border:1px solid transparent;text-align:left;background:transparent;width:100%;font:13px var(--cond);transition:opacity .3s}
+.run:hover{background:var(--panel2)}
+.run[aria-selected="true"]{border-color:var(--accent);background:var(--accent-soft);opacity:1}
+.run.dark{opacity:var(--dim)}
+.run.dark:hover{opacity:1}
+.run .id{font-family:var(--mono);font-size:11px;color:var(--ink3)}
+.run .nm{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.run .st{color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.run .st.bad{color:var(--bad);font-weight:600} .run .st.wait{color:var(--wait);font-weight:600}
+.run .who{font-family:var(--mono);font-size:10.5px;color:var(--ink3);text-align:right}
+.run.term .nm{font-family:var(--mono);font-weight:500;font-size:11.5px}
+.dep{font-family:var(--mono);font-size:10px;color:var(--ink3);padding-left:46px}
+.dep.lit{color:var(--wait);font-weight:600}
+.lane-sep{height:1px;background:var(--line2);margin-block:5px}
+.bracket{border-left:2px solid var(--ghost);margin-left:2px;padding-left:4px}
+.bracket-l{font:600 10px var(--mono);color:var(--ghost);padding-left:8px}
+
+/* mini rail */
+.mr{display:flex;align-items:center;height:16px;min-width:0}
+.mr .sg{flex:1;height:2px;background:var(--line);min-width:5px}
+.mr .sg.d{background:var(--ink2)}
+.nd{width:9px;height:9px;border-radius:50%;border:2px solid var(--ink3);background:var(--panel);flex:none}
+.nd.d{background:var(--ink2);border-color:var(--ink2)}
+.nd.a{background:var(--accent);border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.nd.f{background:var(--bad);border-color:var(--bad)}
+.nd.s{border-color:var(--bad);border-style:dashed}
+.dm{width:9px;height:9px;transform:rotate(45deg);border:2px solid var(--ink3);background:var(--panel);flex:none;margin-inline:1px}
+.dm.w{background:var(--wait);border-color:var(--wait)}
+.dm.p{background:var(--ok);border-color:var(--ok)}
+.dm.x{background:var(--bad);border-color:var(--bad)}
+.mk{font-size:10px;margin-left:4px}
+.mk.w{color:var(--wait)} .mk.x{color:var(--bad)}
+
+/* plan graph */
+.meter{display:flex;gap:10px 18px;align-items:center;flex-wrap:wrap;padding:8px 12px;border:1px solid var(--line2);border-radius:7px;background:var(--raise)}
+.score{font-family:var(--mono);font-size:26px;font-weight:600;line-height:1;font-variant-numeric:tabular-nums}
+.score small{font-size:11px;color:var(--ink3);font-weight:400}
+.band{display:flex;height:6px;width:180px;border-radius:3px;overflow:hidden;position:relative;background:var(--line2)}
+.band i{display:block;height:100%}
+.band .pin{position:absolute;top:-4px;width:2px;height:14px;background:var(--ink)}
+.band .pin.g{background:var(--ghost)}
+.reasons{font-size:12px;color:var(--ink2);flex:1;min-width:200px}
+.pill{display:inline-flex;align-items:center;gap:4px;border:1px solid var(--line);border-radius:10px;padding:0 7px;font:600 11px/1.6 var(--cond);background:var(--panel);white-space:nowrap}
+.pill.bad{color:var(--bad);border-color:var(--bad);background:var(--bad-soft)}
+.pill.wait{color:var(--wait);border-color:var(--wait);background:var(--wait-soft)}
+.pill.ok{color:var(--ok);border-color:var(--ok);background:var(--ok-soft)}
+.pill.ghost{color:var(--ghost);border-color:var(--ghost);background:var(--ghost-soft)}
+.pill.acc{color:var(--accent);border-color:var(--accent);background:var(--accent-soft)}
+.chips{display:flex;gap:5px;flex-wrap:wrap;align-items:center}
+.chip{border:1px solid var(--line);background:var(--raise);border-radius:5px;padding:1px 8px;font:12px var(--cond)}
+.chip b{font-weight:600}
+.pgwrap{overflow-x:auto;padding-bottom:4px}
+.pg{display:flex;align-items:flex-start;gap:0;min-width:max-content}
+.mon{display:flex;gap:8px;flex-wrap:wrap;font:12px var(--cond);color:var(--ink2);margin-bottom:6px}
+.mon span{border:1px dashed var(--line);border-radius:12px;padding:0 8px;background:var(--panel)}
+.ph{width:160px;display:grid;gap:5px}
+.ph-h{display:flex;gap:6px;align-items:center;font:600 12px var(--cond);text-transform:uppercase;letter-spacing:.06em;border-bottom:2px solid var(--line);padding-bottom:3px}
+.ph-h .lock{font-size:10px;color:var(--ink3)}
+.ph.done .ph-h{border-color:var(--ink2)} .ph.act .ph-h{border-color:var(--accent);color:var(--accent)}
+.ph.ghost .ph-h{border-color:var(--ghost);color:var(--ghost);border-bottom-style:dashed}
+.ph .late{font:600 9.5px var(--mono);color:var(--ghost)}
+.car{border:1px solid var(--line2);background:var(--raise);border-radius:5px;padding:4px 7px;font:12px/1.35 var(--cond);display:grid;gap:1px;text-align:left;width:100%}
+.car .o{font-family:var(--mono);font-size:10.5px;color:var(--ink3);display:flex;gap:6px;justify-content:space-between}
+.car.act{border-color:var(--accent)}
+.car.stall{border-color:var(--bad);border-style:dashed}
+.car.ghost{border-color:var(--ghost);border-style:dashed;background:var(--ghost-soft)}
+.car.q{color:var(--ink3)}
+.car[aria-selected="true"]{box-shadow:0 0 0 2px var(--accent)}
+.flag{font:600 11px var(--cond);color:var(--bad)}
+.flag.w{color:var(--wait)}
+.gcol{width:42px;display:grid;justify-items:center;gap:2px;padding-top:2px}
+.gd{width:14px;height:14px;transform:rotate(45deg);border:2px solid var(--ink3);background:var(--panel)}
+.gd.w{background:var(--wait);border-color:var(--wait)}
+.gd.p{background:var(--ok);border-color:var(--ok)}
+.gd.x{background:var(--bad);border-color:var(--bad)}
+.gd.g{border-color:var(--ghost);border-style:dashed}
+.gcol .gk{font:9.5px var(--mono);color:var(--ink3);text-align:center;line-height:1.1}
+.comms{font:12.5px var(--cond);color:var(--ink2);border-top:1px dashed var(--line);padding-top:6px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+
+/* generic blocks */
+.card{border:1px solid var(--line2);background:var(--raise);border-radius:7px;padding:10px 12px;display:grid;gap:6px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.btn{border:1px solid var(--line);background:var(--raise);border-radius:5px;padding:3px 10px;font:600 12.5px var(--cond)}
+.btn.pri{background:var(--ink);color:var(--ground);border-color:var(--ink)}
+.btn.acc{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn[disabled]{opacity:.5;cursor:not-allowed}
+.note{font-size:12px;color:var(--ink3)}
+.split{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:12px}
+.cmp{display:grid;grid-template-columns:minmax(150px,190px) minmax(0,1fr);gap:12px}
+.tbl-wrap{overflow-x:auto}
+table.t{border-collapse:collapse;width:100%;font:12.5px var(--cond)}
+table.t th{font:600 10.5px var(--cond);letter-spacing:.08em;text-transform:uppercase;color:var(--ink3);text-align:left;padding:4px 8px;border-bottom:1px solid var(--line)}
+table.t td{padding:4px 8px;border-bottom:1px solid var(--line2);white-space:nowrap}
+table.t td.w{white-space:normal}
+table.t tr.grey td{opacity:.45;text-decoration:line-through}
+.overlay{position:absolute;inset:0;background:color-mix(in srgb,var(--ground) 55%,transparent);display:grid;place-items:start center;padding:18px 12px;overflow:auto;z-index:3}
+.sheet{background:var(--raise);border:1px solid var(--line);border-radius:9px;box-shadow:var(--shadow);width:min(720px,100%);padding:14px 16px;display:grid;gap:10px}
+.sheet h2{margin:0;font:700 17px var(--cond)}
+.hsec{display:grid;grid-template-columns:96px 1fr;gap:4px 10px;font-size:13px}
+.hsec dt{font:600 10.5px/1.9 var(--cond);letter-spacing:.08em;text-transform:uppercase;color:var(--ink3)}
+.hsec dd{margin:0}
+.hsec dd .a{font-family:var(--mono);font-size:10.5px;color:var(--accent)}
+.bt{display:flex;gap:10px;align-items:center;padding:8px 12px;border-radius:7px;background:var(--bad-soft);border:1px solid var(--bad);font:13px var(--cond);flex-wrap:wrap;animation:slide .35s ease-out}
+@keyframes slide{from{transform:translateY(-8px);opacity:.3}to{transform:none;opacity:1}}
+.bt .s{flex:1;min-width:220px}
+.doc{font:15px/1.65 Georgia, "Times New Roman", serif;max-width:68ch;color:var(--ink)}
+.doc h3{font:700 16px var(--ui);margin:0 0 6px}
+.doc p{margin:0 0 10px}
+.doc .cur{background:var(--accent-soft);box-shadow:-3px 0 0 var(--accent)}
+.claim{border-bottom:1px dotted var(--ok)}
+.claim.bad{border-bottom:2px solid var(--bad);background:var(--bad-soft)}
+.cid{font:600 10px var(--mono);color:var(--ok);vertical-align:super}
+.say{border:1px solid var(--line2);border-radius:6px;padding:6px 8px;background:var(--raise);font:12.5px/1.4 var(--cond);display:grid;gap:2px}
+.say .h{display:flex;gap:6px;align-items:center;font-size:11.5px;color:var(--ink3);flex-wrap:wrap}
+.say .h b{color:var(--ink)}
+.murmur{font:12px var(--mono);color:var(--ink3);border:1px dashed var(--line);border-radius:6px;padding:5px 8px;display:grid;gap:2px}
+.term{background:#0B0F14;color:#CFE3D6;font:12px/1.5 var(--mono);border-radius:6px;padding:8px 10px;overflow-x:auto;white-space:pre}
+.term .p{color:#7FD3DF}
+.term .dim{color:#6E7A86}
+.ev{font:11px/1.55 var(--mono);display:grid;gap:1px}
+.ev div{display:grid;grid-template-columns:62px 1fr;gap:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ev .ts{color:var(--ink3)}
+.cols{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.col{border:1px solid var(--line2);border-radius:6px;padding:6px 8px;background:var(--raise);font:12.5px/1.4 var(--cond);display:grid;gap:3px;align-content:start}
+.col .seat{font:600 11px var(--mono);color:var(--accent)}
+.tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:8px}
+.tile{border:1px solid var(--line2);border-radius:6px;padding:7px 9px;background:var(--raise);display:grid;gap:2px;font:12.5px var(--cond)}
+.tile .v{font:600 20px var(--mono)}
+.tile.ghost{border-color:var(--ghost);border-style:dashed;background:var(--ghost-soft)}
+.tile.dark{opacity:.6}
+.tile.lit{border-color:var(--wait)}
+.dag{width:100%;height:auto;max-width:640px}
+.strike{text-decoration:line-through;color:var(--bad)}
+.log{display:grid;gap:6px}
+.log .day{font:600 10.5px var(--mono);color:var(--ink3);padding-top:6px}
+.le{display:grid;grid-template-columns:48px 70px 1fr;gap:8px;font:12.5px/1.4 var(--cond);align-items:baseline}
+.le .ts{font:10.5px var(--mono);color:var(--ink3)}
+.le .ty{font:600 10px var(--mono);text-transform:uppercase;color:var(--ink3)}
+.le .ty.say{color:var(--accent)}
+
+/* talk drawer + command line */
+.drawer{border:1px solid var(--line);background:var(--raise);border-radius:8px;max-height:260px;overflow:auto;padding:8px 12px;display:grid;gap:8px;box-shadow:var(--shadow)}
+.dh{display:flex;gap:8px;align-items:center;font:600 10.5px var(--cond);letter-spacing:.09em;text-transform:uppercase;color:var(--ink3)}
+.dh .r{margin-left:auto;text-transform:none;letter-spacing:0;font-weight:500}
+.msg{display:grid;grid-template-columns:70px 1fr;gap:8px;font:13px/1.4 var(--cond)}
+.msg .w{font:600 11px var(--mono);color:var(--ink3);padding-top:2px}
+.msg.me .w{color:var(--ink)}
+.oc{display:inline-flex;gap:4px;align-items:center;font:600 10px var(--mono);text-transform:uppercase;letter-spacing:.05em;border-radius:3px;padding:0 5px;border:1px solid}
+.oc.answer{color:var(--ink2);border-color:var(--line)}
+.oc.intent{color:var(--accent);border-color:var(--accent)}
+.oc.compose{color:var(--ghost);border-color:var(--ghost)}
+.oc.steer{color:var(--wait);border-color:var(--wait)}
+.prop{border:1px dashed var(--ghost);background:var(--ghost-soft);border-radius:6px;padding:6px 8px;display:grid;gap:4px;font:12.5px var(--cond)}
+.cmd{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:center;border:1px solid var(--ink);background:var(--raise);border-radius:8px;padding:6px 10px}
+.prompt{font:600 13px var(--mono);color:var(--accent);white-space:nowrap;max-width:46vw;overflow:hidden;text-overflow:ellipsis}
+.cmd input{border:0;background:transparent;outline:none;font:13px var(--mono);width:100%;min-width:0}
+.cmd .side{display:flex;gap:8px;align-items:center;font:12px var(--cond);color:var(--ink3);flex-wrap:wrap;justify-content:flex-end}
+.undo{display:flex;gap:6px;align-items:center;font:600 12px var(--cond);color:var(--ink)}
+.undo .bar{width:60px;height:4px;background:var(--line2);border-radius:2px;overflow:hidden}
+.undo .bar i{display:block;height:100%;background:var(--accent);transition:width 1s linear}
+.status{font:12px var(--cond);color:var(--ok)}
+
+/* ---------- desktop: one-screen app ---------- */
+@media (min-width:960px){
+  html,body{height:100%}
+  .app{height:100%;display:flex;flex-direction:column}
+  .console{flex:1;min-height:0;overflow-y:auto}
+  .main{flex:1;min-height:240px}
+  .drawer{flex:none;max-height:200px}
+}
+@media (max-width:959px){
+  .main{grid-template-columns:minmax(0,1fr)}
+  .pane{max-height:none}
+  .pane-b{overflow:visible}
+  .main .pane.canvas .pane-b{overflow-x:auto}
+  .split,.cmp{grid-template-columns:minmax(0,1fr)}
+  .overlay{position:static;background:none;padding:0 0 12px;order:-1}
+  .strip{grid-template-columns:minmax(0,auto) minmax(0,1fr) auto;grid-template-areas:"clock eng keys" "dec dec dec";row-gap:1px;padding-block:5px}
+  .strip .clock{grid-area:clock} .strip .eng{grid-area:eng} .strip .keys{grid-area:keys} .strip .dec{grid-area:dec;white-space:normal}
+  .strip .eff,.strip .who{display:none}
+  .moved{right:8px;top:auto;bottom:-1px}
+  .run{grid-template-columns:28px minmax(0,1fr) auto;grid-template-areas:"id nm who" "rail rail rail" "st st st"}
+  .run .id{grid-area:id} .run .nm{grid-area:nm} .run .mr{grid-area:rail} .run .st{grid-area:st} .run .who{grid-area:who}
+  .dep{padding-left:32px}
+  .cols{grid-template-columns:minmax(0,1fr)}
+  .cmd{grid-template-columns:auto minmax(0,1fr);position:sticky;bottom:0;z-index:5}
+  .cmd .side{grid-column:1/-1;justify-content:flex-start}
+  .prompt{max-width:52vw}
+  .hsec{grid-template-columns:minmax(0,1fr)}
+  .tray{padding-inline:0}
+}
+</style>
+
+<div class="app">
+  <header class="walk">
+    <div class="wtop">
+      <h1>Orchestrator Console</h1>
+      <span class="sub">wicked-studio, final design · a walk-through of one FDE day, Thu 26 Sep</span>
+      <span class="sp"></span>
+      <button class="navb" id="prev" type="button">‹ prev <span class="k">[</span></button>
+      <button class="navb" id="next" type="button">next <span class="k">]</span> ›</button>
+    </div>
+    <nav class="moments" id="moments" aria-label="Moments"></nav>
+    <dl class="cap" id="cap"></dl>
+  </header>
+
+  <main class="console" id="console">
+    <div class="ebar" id="ebar"></div>
+    <section class="board" id="board" aria-label="Strip board"></section>
+    <div class="main" id="mainz">
+      <section class="pane canvas" id="canvas" aria-label="Canvas"></section>
+      <aside class="pane" id="insp" aria-label="Inspector"></aside>
+    </div>
+    <section class="drawer" id="drawer" aria-label="Talk drawer" hidden></section>
+    <div class="cmd" id="cmd">
+      <span class="prompt" id="prompt">fleet ›</span>
+      <input id="talk" type="text" autocomplete="off" aria-label="Talk, : for verbs, > for raw" placeholder="talk to the selection · : verb · > raw">
+      <div class="side" id="cmdside"></div>
+    </div>
+  </main>
+</div>
+
+<script>
+(function(){
+"use strict";
+const $=s=>document.querySelector(s);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+/* ---------------- shared data ---------------- */
+function rail(spec){
+  const t=spec.split(" ");let h='<span class="mr" aria-hidden="true">';
+  t.forEach((x,i)=>{
+    if(i>0){const prev=t[i-1];h+='<i class="sg'+(prev==="d"||prev==="+"?" d":"")+'"></i>';}
+    if(x==="d")h+='<i class="nd d"></i>';else if(x==="a")h+='<i class="nd a"></i>';else if(x==="f")h+='<i class="nd f"></i>';
+    else if(x==="s")h+='<i class="nd s"></i>';else if(x==="o")h+='<i class="nd"></i>';
+    else if(x==="!")h+='<i class="dm w"></i>';else if(x==="+")h+='<i class="dm p"></i>';else if(x==="x")h+='<i class="dm x"></i>';else if(x==="<")h+='<i class="dm"></i>';
+  });
+  return h+'</span>';
+}
+const LANES=[
+ {eng:"Northwind Bank",key:"northwind",clk:"RFP due Fri 17:00 · 2d 8h",runs:[
+  {id:"N1",nm:"§4 Security & Resilience",rail:"d d + d ! o",st:"unit review · waits on you",cls:"wait",who:"cl cx",mark:"w",alike:false,kind:"unit_review"},
+  {id:"N2",nm:"§5 Data residency",rail:"d d + d ! o",st:"unit review · LOW · pass",cls:"low",who:"cl cx",mark:"w",alike:true,kind:"unit_review"},
+  {id:"N3",nm:"Compliance matrix",rail:"d a o o <",st:"working · on pace",dark:true,who:"cx",dep:"◂ waits on N1 §4 review",deplit:true},
+  {id:"N4",nm:"§7 Operational resilience",rail:"! o o o o",st:"plan approval · 41",cls:"wait",who:"pa",mark:"w",kind:"plan_approval"}]},
+ {eng:"Helix Payments",key:"helix",clk:"change freeze 17:00",runs:[
+  {id:"H1",nm:"ledger-migration",rail:"d d a o o <",st:"HIGH finding · council NO 3–1",cls:"bad",who:"cx pi cp",mark:"x",kind:"team_dispute"},
+  {id:"H2",nm:"PostEntry contract tests",rail:"o o o <",st:"queued",dark:true,who:"cp",dep:"◂ waits on H1 build",deplit:true},
+  {id:"H3",nm:"settlement rounding fix",rail:"d d d + d !",st:"deliver gate",cls:"wait",who:"cx",mark:"w",kind:"deliver"},
+  {id:"H4",nm:"refund idempotency",rail:"d d + d ! o",st:"unit review · LOW · pass",cls:"low",who:"cx cl",mark:"w",alike:true,kind:"unit_review"},
+  {id:"H5",nm:"fee schedule parser",rail:"d d + d ! o",st:"unit review · LOW · pass",cls:"low",who:"oc cl",mark:"w",alike:true,kind:"unit_review"},
+  {id:"T1",nm:"term · helix-core/H1 · zsh",term:true,st:"shell in worktree · opened 2h ago",dark:true,who:"you"}]},
+ {eng:"Orbital Retail",key:"orbital",clk:"COO demo Thu 14:00",runs:[
+  {id:"O1",nm:"returns-triage exec demo",rail:"d a s o o <",st:"stalled 22m · opencode benched",cls:"bad",who:"oc cl",mark:"x",kind:"escalation"},
+  {id:"O2",nm:"seed catalog fixtures",rail:"d d + d ! o",st:"unit review · LOW · pass",cls:"low",who:"cx cl",mark:"w",alike:true,kind:"unit_review"}]},
+ {eng:"House",key:"house",clk:"",collapsed:"House · 1 run · on pace (POV paper “Evaluators you can’t bribe”)",runs:[
+  {id:"P1",nm:"POV paper",rail:"d d a o o",st:"working",dark:true,who:"cl"}]}
+];
+const RUNS={};LANES.forEach(l=>l.runs.forEach(r=>{r.eng=l.eng;r.key=l.key;RUNS[r.id]=r;}));
+
+function fleet(o){
+  o=o||{};const sel=o.sel||[];let h="";
+  LANES.forEach((l,i)=>{
+    if(i)h+='<div class="lane-sep"></div>';
+    if(l.collapsed&&!o.expandHouse){h+='<div class="lane"><div class="lane-h"><span class="muted">'+esc(l.collapsed)+'</span></div></div>';return;}
+    h+='<div class="lane"><div class="lane-h"><b>'+esc(l.eng)+'</b><span class="clk">'+esc(l.clk)+'</span></div>';
+    const inCamp=o.campaign&&l.key==="helix";
+    l.runs.forEach(r=>{
+      if(inCamp&&r.id==="H2")h+='<div class="bracket-l">campaign “PostEntry consumers” · 4 plans · human_gate_on_failure · concurrency 2</div><div class="bracket">';
+      const dark=r.dark&&!sel.includes(r.id);
+      const grey=o.grey&&o.grey.includes(r.id);
+      let st=r.st,cls=r.cls||"";
+      if(o.focusMarks&&r.mark){st=r.mark==="x"?st:"held";cls=r.mark==="x"?"bad":"";}
+      h+='<button type="button" class="run'+(dark?" dark":"")+(r.term?" term":"")+'" data-act="sel" data-id="'+r.id+'" aria-selected="'+sel.includes(r.id)+'"'+(grey?' style="opacity:.35"':'')+'>'
+        +'<span class="id">'+r.id+'</span><span class="nm">'+esc(r.nm)+'</span>'
+        +(r.term?'<span class="mr"><span class="mono muted">› cargo test -p ledger</span></span>':rail(r.rail))
+        +'<span class="st '+(cls==="low"?"":cls)+'">'+esc(st)+((o.marks||o.focusMarks)&&r.mark?'<span class="mk '+r.mark+'">◆</span>':'')+'</span>'
+        +'<span class="who">'+esc(r.who||"")+'</span></button>';
+      if(r.dep)h+='<div class="dep'+(r.deplit?" lit":"")+'">'+esc(r.dep)+(r.deplit?" · upstream waits on you":"")+'</div>';
+      if(inCamp&&r.id==="H2")h+='<button type="button" class="run dark"><span class="id">C2</span><span class="nm">settlements consumer tests</span>'+rail("o o o <")+'<span class="st">queued</span><span class="who">cp</span></button><button type="button" class="run dark"><span class="id">C3</span><span class="nm">refunds consumer tests</span>'+rail("o o o <")+'<span class="st">queued</span><span class="who">pi</span></button><button type="button" class="run dark"><span class="id">C4</span><span class="nm">reporting consumer tests</span>'+rail("o o o <")+'<span class="st">queued</span><span class="who">oc</span></button></div>';
+    });
+    h+='</div>';
+  });
+  return h;
+}
+
+/* strips */
+const S={
+ H1:{id:"H1",sev:"bad",g:"▲",clock:"blocks 2 runs",eng:"Helix",dec:"H1 dispute: council NO 3–1 on pi’s tenant_id finding",eff:"side / accept / re-convene",who:"PA claude · pi",keys:[["side","c"]]},
+ N1:{id:"N1",sev:"wait",g:"◆",clock:"Fri 17:00 · 2d",eng:"Northwind",dec:"N1 §4 unit review · 41/42 claims anchored",eff:"approve → unblocks N3",who:"eval codex ≠ claude",keys:[["approve","a"]]},
+ O1:{id:"O1",sev:"bad",g:"▲",clock:"quiet 22m",eng:"Orbital",dec:"O1 seed step stalled · opencode benched",eff:"reassign → restarts step 3",who:"PA claude",keys:[["reassign","s"]]},
+ N4:{id:"N4",sev:"wait",g:"◆",clock:"waiting 3h",eng:"Northwind",dec:"N4 plan approval · score 41 · 6 phases",eff:"approve → starts design",who:"PA claude",keys:[["approve","a"],["delegate","d"]]},
+ G4:{id:"G4",sev:"low",g:"◆",clock:"LOW ×4",eng:"4 runs",dec:"4 unit reviews · evaluator pass · no findings",eff:"approve alike (N2 H4 H5 O2)",who:"4 evaluators",keys:[["approve all","a"]],group:true},
+ H3:{id:"H3",sev:"wait",g:"◆",clock:"leaves machine",eng:"Helix",dec:"H3 deliver gate · PR into settlement/main",eff:"deliver → push + PR",who:"eval claude",keys:[["deliver","d"]]},
+ PR:{id:"PR",sev:"low",g:"◆",clock:"evening",eng:"House",dec:"Proposal: RTO/RPO claims must cite a control ID",eff:"approve → steering rule",who:"from Northwind capture",keys:[["approve","a"]]}
+};
+function stripHtml(s,o){
+  o=o||{};
+  return '<button type="button" class="strip s-'+s.sev+(s.group?" group":"")+(o.grey?" grey":"")+'" data-act="strip" data-id="'+s.id+'" aria-selected="'+(!!o.sel)+'">'
+   +(o.moved?'<span class="moved">'+esc(o.moved)+'</span>':'')
+   +'<span class="clock"><span class="g">'+s.g+'</span>'+esc(s.clock)+'</span><span class="eng">'+esc(s.eng)+'</span><span class="dec">'+esc(s.dec)+'</span><span class="eff">'+esc(s.eff)+'</span><span class="who">'+esc(s.who)+'</span>'
+   +'<span class="keys">'+(o.grey?'<span class="mono muted">undo u</span>':s.keys.map(k=>'<span class="sbtn" data-act="skey" data-id="'+s.id+'" data-k="'+k[1]+'">'+esc(k[0])+' <span class="k">'+k[1]+'</span></span>').join(""))+'</span></button>';
+}
+function boardHtml(list,o){
+  o=o||{};
+  let h='<div class="bhead">Needs you · ranked by consequence<span class="r">'+(o.right||'<span class="k">j</span> <span class="k">k</span> move · <span class="k">Space</span> peek · <span class="k">⏎</span> open')+'</span></div>';
+  list.forEach(x=>{
+    if(x==="--new")h+='<div class="divider">'+esc(o.newLabel||"2 new, ranked")+' · joins the rank when your cursor leaves · <span class="k">.</span></div>';
+    else h+=stripHtml(S[x.id||x],x.id?x:{});
+  });
+  if(o.more)h+='<div class="more">'+esc(o.more)+'</div>';
+  return h;
+}
+
+/* inspector helpers */
+function verb(label,key,o){
+  o=o||{};
+  return '<button type="button" class="verb'+(o.pri?" pri":"")+'"'+(o.dis?" disabled":"")+(o.act?' data-act="'+o.act+'"':"")+(o.arg?' data-arg="'+esc(o.arg)+'"':"")+'><span>'+label+'</span>'+(key?'<span class="k">'+key+'</span>':'<span></span>')+(o.why?'<span class="why">'+o.why+'</span>':'')+'</button>';
+}
+const notYet=(what,instead)=>'<b>crew: not yet</b> · '+what+' · instead: '+instead;
+function insp(title,body,tabs){
+  return '<div class="pane-h"><span class="lbl">'+title+'</span><span class="r">'+(tabs||'<span class="itabs"><button type="button" aria-pressed="true">Facts</button><button type="button" data-act="goraw">Raw <span class="k">R</span></button></span>')+'</span></div><div class="pane-b">'+body+'</div>';
+}
+function facts(rows){return '<dl class="facts">'+rows.map(r=>'<dt>'+r[0]+'</dt><dd>'+r[1]+'</dd>').join("")+'</dl>';}
+function canvasHead(crumb,right){return '<div class="pane-h"><span class="crumb">'+crumb+'</span><span class="r">'+(right||"")+'</span></div>';}
+function meter(score,band,reasons,o){
+  o=o||{};
+  const pinL=Math.min(score,100);
+  return '<div class="meter"><div class="score tab">'+(o.from!=null?'<small>'+o.from+' → </small>':'')+score+' <small>/100</small></div>'
+   +'<div style="display:grid;gap:4px"><div class="band"><i style="width:20%;background:var(--ok-soft)"></i><i style="width:20%;background:var(--accent-soft)"></i><i style="width:30%;background:var(--wait-soft)"></i><i style="width:30%;background:var(--bad-soft)"></i><span class="pin'+(o.ghost?" g":"")+'" style="left:'+pinL+'%"></span></div><span class="mono muted">'+band+'</span></div>'
+   +'<div class="reasons">'+reasons+'</div></div>';
+}
+
+/* ---------------- state ---------------- */
+let cur=0, st={}, undoT=null;
+function reset(){st={};if(undoT){clearInterval(undoT);undoT=null;}}
+function startUndo(label,after){
+  if(undoT)clearInterval(undoT);
+  st.undo={label:label,n:10};
+  undoT=setInterval(()=>{
+    if(!st.undo){clearInterval(undoT);undoT=null;return;}
+    st.undo.n--;
+    if(st.undo.n<=0){clearInterval(undoT);undoT=null;const l=st.undo.label;st.undo=null;st.sent=l;if(after)after();render();return;}
+    renderCmd();
+  },1000);
+}
+
+/* ---------------- moments ---------------- */
+const M=[];
+
+/* M1 Arriving */
+M.push({id:"arrive",t:"08:40",name:"Arriving",eng:"fleet",posture:"open",
+ why:"You were away 14 hours. You need to know what changed on the map before you touch anything.",
+ see:"The Fleet under the <b>handover</b>: fixed sections, every line anchored to its rail, and what your standing orders did overnight.",
+ doo:"Press <b>Take top strip</b> to start deciding, or <b>Dismiss</b>: the lines stay behind as marks on the rails.",
+ prompt:()=>"fleet ›",
+ board:()=>boardHtml(["H1","N1","O1","N4","G4"],{more:"+3 ranked below · H3 deliver gate · 1 proposal · 1 queued draft"}),
+ canvas:s=>canvasHead("<b>fleet</b> · 11 runs · 3 engagements + House","<span class='mono muted'>last visit Thu 18:28</span>")
+   +'<div class="pane-b">'+fleet({marks:!!s.dismissed})+'</div>'
+   +(s.dismissed?"":'<div class="overlay"><div class="sheet" role="dialog" aria-label="Handover"><div class="row"><h2>Since Thu 18:28 · away 14 h 12 m</h2><span class="sp" style="flex:1"></span><span class="pill wait">5 decisions</span><span class="pill bad">1 broke</span></div>'
+   +'<dl class="hsec"><dt>Decisions</dt><dd>Helix H1: council ruled <b>NO 3–1</b> on pi’s tenant_id finding; the dispute waits on you. <span class="a">→ H1 rail</span><br>Northwind N1 §4 is at review; N3 waits on it; submission Fri 17:00. <span class="a">→ N1</span><br>Northwind N4 plan proposed, score 41, paused by Gate by risk. <span class="a">→ N4</span><br>4 LOW unit reviews, evaluator pass, no findings. <span class="a">→ group</span></dd>'
+   +'<dt>Broke</dt><dd>Orbital O1: opencode quiet 22 min on “seed returns data”, escalated dead_seat, benched at 07:58. <span class="a">→ O1</span></dd>'
+   +'<dt>Finished</dt><dd>Helix H6 fee-schedule docs delivered, PR #412 merged. Northwind N0 pricing appendix exported to the bid folder. House citation check finished.</dd>'
+   +'<dt>System</dt><dd>5 seats signed in, opencode benched. 0 dead letters. Overnight spend $11.20.</dd>'
+   +'<dt>Orders</dt><dd>“LOW reviews on Helix” approved 2 unit reviews (H6, H7). “Northwind status at 17:00” queued 1 draft to Priya Raman: <b>sent 0</b>.</dd></dl>'
+   +'<div class="row"><button type="button" class="btn pri" data-act="take">Take top strip <span class="k">⏎</span></button><button type="button" class="btn" data-act="dismiss">Dismiss <span class="k">Esc</span></button><span class="note">Northwind brief: <span class="k">i</span> on its tab</span></div></div></div>'),
+ insp:null,
+ acts:{dismiss:s=>{s.dismissed=true;},take:()=>go("collide")}
+});
+
+/* M2 Supervising */
+M.push({id:"fleet",t:"09:05",name:"Supervising the fleet",eng:"fleet",posture:"open",
+ why:"Eleven runs across four lanes. You want to see which are fine, which wait on you, and which are about to block each other.",
+ see:"Healthy rails are dark. Lit rails have a gate, a finding or a stall. Amber connectors show N3 waiting on N1 and H2 waiting on H1. Your terminal from last night is a row in the Helix lane.",
+ doo:"Click rails to build a selection (click again to remove). The prompt and the inspector follow it. Try H1 + N2 + H4, then <b>&gt;ps</b>.",
+ prompt:s=>{const n=(s.sel||[]).length;if(!n)return "fleet ›";if(n===1){const r=RUNS[s.sel[0]];return r.key+"/"+r.id+" ›";}return n+" selected ›";},
+ board:()=>boardHtml(["H1","N1","O1","N4","G4"],{more:"+3 ranked below"}),
+ canvas:s=>canvasHead("<b>fleet</b> · lanes by engagement · dark = working on pace",'<button class="btn" type="button" data-act="ps">'+(s.ps?"Fleet map":"&gt;ps table")+'</button>')
+   +'<div class="pane-b">'+(s.ps?psTable():fleet({sel:s.sel||[]}))+'</div>',
+ insp:s=>{
+  const sel=s.sel||[];
+  if(!sel.length)return insp("Selection",'<p class="note">Nothing selected. Click a rail; click more to add. Talk goes to <span class="mono">fleet ›</span>, which answers across engagements with patterns only.</p>'+facts([["Runs","11 · 7 dark"],["Waiting","5 decisions"],["Seats","4/5 ready · opencode benched"],["Spend today","$18.40"]]));
+  if(sel.length===1){const r=RUNS[sel[0]];
+    if(r.term)return insp("Terminal "+r.id,facts([["cwd","~/.wicked-worker/wt/helix-core-H1"],["linked to","H1 build.2 (codex)"],["opened","Thu 22:14"]])+'<div class="verbs">'+verb("Attach","⏎",{pri:true})+verb("Close","k")+verb("Link to step","")+'</div>');
+    return insp(r.id+" · "+esc(r.nm),facts([["Engagement",r.eng],["State",esc(r.st)],["Seats",esc(r.who)]])+'<div class="verbs">'+verb("Open plan","⏎",{pri:true,act:"open",arg:r.id})+verb("Peek","Space")+verb("Resume","u",{dis:true,why:"not paused"})+verb("Hold at next boundary","h",{dis:true,why:notYet("hold","the next gate holds it, or cancel k")})+verb("Cancel","k",{why:"typed confirm · can’t be undone"})+verb("Archive","A",{dis:true,why:"only finished runs"})+'</div>');}
+  const rs=sel.map(id=>RUNS[id]);
+  const blockers=rs.filter(r=>!r.alike).map(r=>r.id);
+  const allAlike=!blockers.length;
+  return insp(sel.length+" selected · "+(allAlike?"alike":"mixed"),
+   '<p class="note">'+rs.map(r=>r.id).join(", ")+(allAlike?" share gate kind unit_review, band LOW, evaluator pass, no findings.":" are not alike.")+'</p>'
+   +'<div class="verbs">'+verb("Approve alike ("+sel.length+")","a",allAlike?{pri:true,act:"gobulk"}:{dis:true,why:"<b>"+blockers.join(", ")+"</b> block it: "+blockers.map(b=>RUNS[b].kind==="team_dispute"?b+" has an open HIGH finding":RUNS[b].kind==="plan_approval"?b+" is a plan approval, not a unit review":RUNS[b].kind==="deliver"?b+" is a deliver gate":b+" has no open review").join("; ")})
+   +verb("Cancel "+sel.length+" runs","k",{why:"typed confirm"})+verb("Archive","A",{dis:true,why:"only finished runs can be archived"})
+   +verb("Save selection as board","B")+verb("Hold all","h",{dis:true,why:notYet("hold","steer in Talk")})+'</div>');
+ },
+ acts:{sel:(s,el)=>{s.sel=s.sel||[];const id=el.dataset.id;const i=s.sel.indexOf(id);if(i>=0)s.sel.splice(i,1);else s.sel.push(id);},ps:s=>{s.ps=!s.ps;},open:(s,el)=>{go(el.dataset.arg==="O1"?"agents":"edit");},gobulk:()=>go("bulk")}
+});
+function psTable(){
+  const rows=[["H1","helix","run","ledger-migration","claude","build.2 codex","1h 52m","▲ finding"],["T1","helix","term","~/wt/helix-core-H1","you","zsh","2h 04m","attached 0"],["N1","northwind","run","§4 Security & Resilience","claude","review","3h 10m","◆ gate"],["N3","northwind","run","Compliance matrix","claude","build codex","48m","working"],["N4","northwind","run","§7 Operational resilience","claude","plan","3h 02m","◆ plan"],["O1","orbital","run","returns-triage exec demo","claude","seed.3 opencode","2h 40m","▲ stalled"],["T2","orbital","term","opencode login PTY","system","sign-in","7m","waiting"],["P1","house","run","POV paper","claude","draft claude","35m","working"]];
+  return '<div class="tbl-wrap"><table class="t"><thead><tr><th>id</th><th>engagement</th><th>kind</th><th>intent / cwd</th><th>lead</th><th>step</th><th>age</th><th>state</th></tr></thead><tbody>'+rows.map(r=>'<tr>'+r.map((c,i)=>'<td'+(i===3?' class="w"':'')+'>'+esc(c)+'</td>').join("")+'</tr>').join("")+'</tbody></table></div><p class="note">&gt;ps lists runs and terminals together, so a shell you opened last night is findable. <span class="k">⏎</span> attaches or opens.</p>';
+}
+
+/* M3 Compose */
+M.push({id:"compose",t:"09:20",name:"Composing a plan",eng:"northwind",posture:"open",
+ why:"Northwind wants §7 Operational Resilience drafted today. You say it once and shape the plan before anything runs.",
+ see:"Talk at <span class='mono'>northwind ›</span>. The PA classified your sentence as an <b>intent</b> and proposed the Write › rfp-section preset. The Parts tray starts with the launcher row. Floor phases are locked.",
+ doo:"Click <b>security review</b> in the catalog to add it and watch the meter. Then <b>Save as preset</b> or <b>Launch</b> (10 s undo).",
+ prompt:()=>"northwind/draft ›",
+ board:()=>boardHtml(["H1","N1","O1"],{more:"+5 ranked below"}),
+ drawer:s=>'<div class="dh">Talk · northwind › filed in the Northwind Log<span class="r"><span class="k">↑</span> drawer</span></div>'
+   +'<div class="msg me"><span class="w">you</span><span>Draft §7 Operational Resilience from the controls library and last year’s answers, 1,800 words. Priya wants the BCP evidence cited.</span></div>'
+   +'<div class="msg"><span class="w">PA · claude</span><span><span class="oc intent">intent</span> Preset <b>Write › rfp-section</b>. No repo, so I scored from content: regulated resilience claims and named RTO/RPO figures. <b>'+(s.sec?41:34)+'</b>, band 20–39'+(s.sec?"→40–69":"")+'. Floor adds <b>review</b>. The plan is on the canvas.</span></div>',
+ canvas:s=>canvasHead("fleet › <b>northwind</b> › draft plan · §7 Operational Resilience",'<span class="pill ghost">draft</span>')
+  +'<div class="pane-b"><div class="cmp">'
+  +'<div style="display:grid;gap:8px;align-content:start"><span class="lbl">Parts › Presets</span><div class="chips">'+["Write","Design","Rethink","Solve","Build","Demo","Test"].map((p,i)=>'<span class="chip"'+(i===0?' style="border-color:var(--accent);color:var(--accent)"':'')+'><b>'+p+'</b> <span class="k">'+(i+1)+'</span></span>').join("")+'</div>'
+  +'<span class="lbl">Parts › Phases</span><div class="verbs">'+verb("security review","+",{act:"addsec",dis:!!s.sec,why:s.sec?"added":""})+verb("scrub (client terms)","+")+verb("claims check","+")+verb("council on ‘RTO 4h’","+")+'</div>'
+  +'<span class="lbl">Seats</span><div class="chips"><span class="chip">claude</span><span class="chip">codex</span><span class="chip">pi</span><span class="chip">copilot</span><span class="chip muted">opencode · benched</span></div></div>'
+  +'<div style="display:grid;gap:10px;align-content:start">'
+  +'<div class="chips"><span class="chip">engagement <b>Northwind Bank</b></span><span class="chip">lead <b>claude</b></span><span class="chip">pool <b>claude codex pi</b></span><span class="chip">posture <b>Gate by risk ≥30</b></span><span class="chip">delivery <b>none · export</b></span><span class="chip">campaign <b>RFP Nov</b></span></div>'
+  +meter(s.sec?41:34,s.sec?"band 40–69 · pauses for plan approval":"band 20–39 · pauses (≥ your threshold 30)",s.sec?"+7 security review: <b>names third-party processors</b> · floor unchanged":"regulated claims (RTO/RPO), last year’s answers reused, no repo → judged from content",{from:s.sec?34:null,ghost:true})
+  +'<div class="pgwrap"><div class="pg">'
+  +phase("understand","",[car("pa","scope sources","controls-lib v12, 2025 RFP answers")])+gate("","intake")
+  +phase("draft","",[car("claude","draft §7.1–7.4","1,800 words")])
+  +(s.sec?gate("g","")+phase("security review","ghost",[car("pi","review processor claims","added by you",{ghost:true})],{late:""}):"")
+  +gate("","unit_review")+phase("review","",[car("codex","check claims vs controls","evaluator ≠ creator")],{lock:true})+gate("","")
+  +phase("export","",[car("pa","portal format","Ariba .docx")])
+  +'</div></div>'
+  +'<div class="row"><button type="button" class="btn" data-act="save">Save as preset <span class="k">S</span></button><button type="button" class="btn pri" data-act="launch"'+(s.launched?" disabled":"")+'>Launch <span class="k">L</span> <span class="k">⏎</span></button><button type="button" class="btn" data-act="camp">Launch as campaign <span class="k">N</span></button>'+(s.saved?'<span class="status">Saved preset “rfp-section + security” · PUT /presets/rfp-section-sec</span>':'')+'</div>'
+  +'</div></div></div>',
+ insp:null,
+ acts:{addsec:s=>{s.sec=true;},save:s=>{s.saved=true;},launch:s=>{s.launched=true;startUndo("Launched N5 §7 · rail added to the Northwind lane");},camp:()=>go("campaign")}
+});
+function phase(name,cls,cars,o){o=o||{};return '<div class="ph '+cls+'"><div class="ph-h">'+esc(name)+(o.lock?'<span class="lock" title="floor phase">🔒 floor</span>':'')+(o.late!=null&&o.late!==""?'<span class="late">'+o.late+'</span>':'')+'</div>'+cars.join("")+'</div>';}
+function car(owner,title,sub,o){o=o||{};return '<div class="car'+(o.act?" act":"")+(o.stall?" stall":"")+(o.ghost?" ghost":"")+(o.q?" q":"")+'"'+(o.id?' data-act="step" data-id="'+o.id+'"':'')+(o.sel?' aria-selected="true"':'')+'><span class="o"><span>'+esc(owner)+'</span><span>'+esc(o.state||"")+'</span></span><span>'+esc(title)+'</span>'+(sub?'<span class="muted" style="font-size:11px">'+sub+'</span>':'')+(o.flag?'<span class="flag'+(o.flagw?" w":"")+'">'+o.flag+'</span>':'')+'</div>';}
+function gate(cls,kind){return '<div class="gcol"><i class="gd '+cls+'"></i><span class="gk">'+esc(kind)+'</span></div>';}
+
+/* M4 Campaign */
+M.push({id:"campaign",t:"09:35",name:"Launching a campaign",eng:"helix",posture:"open",
+ why:"H1 changes <span class='mono'>PostEntry</span>. Four consumers need contract tests after H1’s build, and you don’t want to fire them by hand.",
+ see:"The campaign canvas: four plans drafted from the Test preset, each depending on H1 build. Failure policy and concurrency are on the header.",
+ doo:"Change the policy or concurrency, then <b>Launch campaign</b>. It commits one <span class='mono'>POST /campaigns</span> and appears as a bracket on the Fleet.",
+ prompt:()=>"helix/campaign draft ›",
+ board:()=>boardHtml(["H1","N1","O1"],{more:"+5 ranked below"}),
+ canvas:s=>{
+  const pol=s.pol||"human_gate_on_failure",c=s.conc||2;
+  return canvasHead("fleet › <b>helix</b> › campaign draft · PostEntry consumers",'<span class="pill ghost">draft</span>')
+  +'<div class="pane-b">'+(s.done?'<div class="card"><b>Campaign launched.</b><span class="note">POST /campaigns · 4 plans · the bracket is on the Helix lane. Cancel <span class="k">k</span> or resume <span class="k">u</span> from the bracket.</span></div>'+fleet({campaign:true}):
+  '<div class="chips"><span class="lbl">Failure policy</span>'+["fail_fast","continue_independent","human_gate_on_failure"].map(p=>'<button type="button" class="chip" data-act="pol" data-arg="'+p+'"'+(p===pol?' style="border-color:var(--accent);color:var(--accent);font-weight:600"':'')+'>'+p+'</button>').join("")+'<span class="lbl" style="margin-left:12px">Concurrency</span><button type="button" class="chip" data-act="conc" data-arg="-1">−</button><span class="mono">'+c+'</span><button type="button" class="chip" data-act="conc" data-arg="1">+</button></div>'
+  +'<svg class="dag" viewBox="0 0 640 230" role="img" aria-label="Campaign dependency graph">'
+  +'<g font-family="IBM Plex Mono, monospace" font-size="11">'
+  +'<rect x="16" y="92" width="150" height="46" rx="6" fill="var(--raise)" stroke="var(--ink2)"/><text x="28" y="111" fill="var(--ink)">H1 ledger-migration</text><text x="28" y="127" fill="var(--ink3)">build · running</text>'
+  +[["C1","ledger-api consumer",14,"38"],["C2","settlements",68,"22"],["C3","refunds",122,"31"],["C4","reporting",176,"18"]].map((n,i)=>'<path d="M166 115 C 260 115, 260 '+(n[2]+20)+', 330 '+(n[2]+20)+'" fill="none" stroke="'+(i===3&&s.dep4?"var(--ghost)":"var(--ink3)")+'" stroke-width="1.5"'+(i===3&&s.dep4?' stroke-dasharray="4 3"':'')+'/><rect x="330" y="'+n[2]+'" width="200" height="40" rx="6" fill="var(--panel)" stroke="var(--line)"/><text x="342" y="'+(n[2]+17)+'" fill="var(--ink)">'+n[0]+' '+n[1]+'</text><text x="342" y="'+(n[2]+32)+'" fill="var(--ink3)">Test › contract · score '+n[3]+'</text>').join("")
+  +'<text x="540" y="'+(176+25)+'" fill="var(--ink3)">auto</text><text x="540" y="'+(14+25)+'" fill="var(--wait)">pauses</text><text x="540" y="'+(68+25)+'" fill="var(--ink3)">auto</text><text x="540" y="'+(122+25)+'" fill="var(--ink3)">auto</text>'
+  +'</g></svg>'
+  +'<div class="card"><span class="lbl">Preview</span><span>4 plans after H1 build passes. At most <b>'+c+'</b> run at once. '+(pol==="fail_fast"?"The first failure cancels the rest.":pol==="continue_independent"?"A failure stops only the plans that depend on it.":"A failure opens a gate for you; the others keep going.")+' C1 pauses for plan approval (score 38 ≥ Helix threshold 30).</span><div class="row"><button type="button" class="btn pri" data-act="launchc">Launch campaign <span class="k">⏎</span></button><span class="note">POST /campaigns</span></div></div>')+'</div>';},
+ insp:null,
+ acts:{pol:(s,el)=>{s.pol=el.dataset.arg;},conc:(s,el)=>{s.conc=Math.max(1,Math.min(4,(s.conc||2)+Number(el.dataset.arg)));},launchc:s=>{s.done=true;startUndo("Campaign “PostEntry consumers” launched");}}
+});
+
+/* M5 Edit live plan */
+M.push({id:"edit",t:"09:50",name:"Editing a live plan",eng:"helix",posture:"open",
+ why:"H1 now touches the auth token scope. You want a security review in the plan before it reaches test, without stopping the team.",
+ see:"H1’s plan graph, live: codex on build.2, copilot queued on test, pi watching contracts, a HIGH flag on build.2. The team comms line is folded under the rail.",
+ doo:"Press <b>+ add phase</b> after test and pick security review. Read the ratchet preview, then <b>Commit</b>.",
+ prompt:s=>s.ghost?"helix/H1#plan ›":"helix/H1 ›",
+ board:()=>boardHtml(["H1","N1","O1","N4","G4"],{more:"+3 ranked below"}),
+ canvas:s=>canvasHead("fleet › helix › <b>H1 ledger-migration</b> · rev "+(s.done?"3 pending":"2"),'<span class="pill bad">HIGH finding</span>')
+  +'<div class="pane-b">'
+  +meter(s.ghost?76:58,s.ghost?"band 70–100 · HIGH · pauses":"band 40–69",s.ghost?"<b>+18</b> security review reads the auth token scope → high risk. Floor adds <b>deliver gate: human</b>.":"41 dependents · contract_change on <span class='mono'>PostEntry</span> · floor: test + review",{from:s.ghost?58:null,ghost:s.ghost})
+  +'<div class="mon"><span>monitor <b>pi</b> → contracts (build)</span><span>monitor <b>copilot</b> → tests</span><span class="muted">◂ from N/A · ▸ unblocks H2, campaign C1–C4</span></div>'
+  +'<div class="pgwrap"><div class="pg">'
+  +phase("understand","done",[car("pa","read ledger module","",{state:"done"})])+gate("p","plan")
+  +phase("design","done",[car("claude","idempotent writer sketch","",{state:"done"})])+gate("p","intake")
+  +phase("build","act",[car("codex","build.1 writer trait","",{state:"done"}),car("codex","build.2 migrate posting","editing ledger/writer.rs",{act:true,state:"checkpoint 4",flag:"▲ HIGH: key drops tenant_id"})])
+  +gate("","unit_review")+phase("test","",[car("copilot","contract + property tests","",{q:true,state:"queued"})],{lock:true})
+  +(s.ghost?gate("g","plan_approval")+phase("security review","ghost",[car("pi","token scope review","added by you",{ghost:true})],{late:s.done?"rev 3":""}):"")
+  +gate("","unit_review")+phase("review","",[car("claude","evaluator","≠ creator codex",{q:true,state:"queued"})],{lock:true})
+  +gate(s.ghost?"g":"","deliver")+phase("deliver","",[car("pa","PR into helix-core/main","",{q:true})],{lock:s.ghost})
+  +'</div></div>'
+  +'<div class="comms"><b>team comms</b> 14 murmurs · 2 advice · 1 help · last: codex claimed build.2 <button type="button" class="sbtn">open <span class="k">m</span></button></div>'
+  +(s.ghost&&!s.done?'<div class="card" style="border-color:var(--ghost)"><span class="lbl c-ghost">Preview · POST /runs/:id/plan · requestId pe-7f21</span><span>Adds <b>security review</b> (pi) after test. Score <b>58 → 76 HIGH</b>. Moving into HIGH <b>pauses for plan approval at the next step boundary</b> (after build.2). Floor adds a human deliver gate. The team keeps working until the boundary.</span><div class="row"><button type="button" class="btn pri" data-act="commit">Commit <span class="k">⏎</span></button><button type="button" class="btn" data-act="cancelghost">Discard <span class="k">Esc</span></button></div></div>':'')
+  +(s.done?'<div class="card"><span class="status">plan.revised rev 3 · floor_raised · from_band 40–69 → to_band 70–100</span><span class="note">A plan_approval diamond now sits before security review. It opens as a strip when build.2 finishes.</span></div>':'')
+  +'</div>',
+ insp:s=>insp("H1 · plan",facts([["Lead","claude (PA)"],["Seats","codex · copilot · pi · claude"],["Posture","Gate every step (Helix)"],["Score",(s.ghost?"76 HIGH (preview)":"58")],["Parts used","skill rust-migrate · rule SEC-014"]])
+  +'<div class="verbs">'+verb("+ add phase","+",{pri:!s.ghost,act:"plus"})+verb("Raise floor","!")+verb("Reassign step","s")+verb("Retry step","r")+verb("Guidance note","G")+verb("Save as preset","S")+verb("Fork","f")+verb("Hold at next boundary","h",{dis:true,why:notYet("hold","the next gate holds it")})+verb("Cap spend","",{dis:true,why:notYet("caps","a spend tile with needs_me")})+'</div>'),
+ acts:{plus:s=>{s.ghost=true;},commit:s=>{s.done=true;startUndo("Plan rev 3 sent to H1");},cancelghost:s=>{s.ghost=false;}}
+});
+
+/* M6 Focus */
+M.push({id:"focus",t:"10:40",name:"Deep work, interrupted",eng:"northwind",posture:"focus",
+ why:"You are writing §4 yourself. Everything that can wait should wait, and only what can’t should reach you.",
+ see:"Focus is on. The strip board is one held line; held decisions are marks on the Fleet. One item breaks through (HIGH, blocks 2 runs) as a single bar. Nothing else moves.",
+ doo:"<b>Hold 30 min</b> keeps writing (the bar folds into the held count). <b>Open</b> jumps to the finding; <span class='k'>b</span> brings you back to the same paragraph.",
+ prompt:()=>"northwind/§4-draft ›",
+ board:s=>'<div class="held"><span class="c-acc">● Focus</span><b>'+(s.held?6:5)+' held</b><span>nothing urgent'+(s.held?" · H1 returns at 11:12":"")+'</span><span class="muted">breaks through: HIGH or a deadline within 2 h</span><button type="button" class="sbtn" data-act="showheld">show held</button></div>'+(s.showheld?boardHtml(["N1","O1","N4","G4","H3"],{right:"held · marks on the Fleet"}):""),
+ canvas:s=>canvasHead("fleet › northwind › N1 › <b>§4 Security & Resilience</b> · draft v7 · you are editing","<span class='mono muted'>1,412 / 1,500 words</span>")
+  +'<div class="pane-b">'+(s.held?"":'<div class="bt" role="alert"><b class="c-bad">▲ Helix H1</b><span class="s">HIGH finding from pi: the idempotency key drops <span class="mono">tenant_id</span> in <span class="mono">ledger/writer.rs:212</span>. Council called. Blocks H2 and the campaign.</span><button type="button" class="btn pri" data-act="open">Open <span class="k">⏎</span></button><button type="button" class="btn" data-act="hold">Hold 30 min <span class="k">z</span></button></div>')
+  +'<div class="doc"><h3>4.3 Recovery objectives</h3><p>Core payment services are deployed active-active across two regions. Recovery time objective (RTO) for Tier 1 services is four hours<span class="cid">BCP-07</span>, and recovery point objective (RPO) is fifteen minutes<span class="cid">BCP-09</span>, tested twice a year with results reported to the Board Risk Committee.</p><p class="cur">Failover is initiated by the incident commander and executed through automated runbooks. The last full regional failover test on 14 June completed in 2 h 41 m<span class="cid">TST-2025-06</span>, within objective.▍</p><p class="muted">4.4 Third-party resilience · not started</p></div>'
+  +'</div>',
+ insp:()=>'<div class="pane-h"><span class="lbl">Fleet · held as marks</span></div><div class="pane-b" style="font-size:12px">'+fleetMini()+'</div>',
+ acts:{hold:s=>{s.held=true;},open:()=>go("collide"),showheld:s=>{s.showheld=!s.showheld;}}
+});
+function fleetMini(){
+  let h='<div style="display:grid;gap:4px">';
+  LANES.forEach(l=>{h+='<div class="lbl" style="margin-top:4px">'+esc(l.eng)+'</div>';l.runs.forEach(r=>{if(r.term)return;h+='<div style="display:grid;grid-template-columns:24px 1fr 16px;gap:6px;align-items:center'+(r.mark?"":";opacity:.36")+'"><span class="mono muted">'+r.id+'</span>'+rail(r.rail)+(r.mark?'<span class="mk '+r.mark+'">◆</span>':'<span></span>')+'</div>';});});
+  return h+'</div>';
+}
+
+/* M7 Collision */
+M.push({id:"collide",t:"11:05",name:"Many things colliding",eng:"helix",posture:"open",
+ why:"Three things landed in one minute: a dispute on H1, a stall on O1, a plan waiting on N4. You need one order to handle them in, and a reason for it.",
+ see:"The board re-ranked and says why. H1’s finding, advice and dispute folded into one strip. Two new arrivals wait below the divider, so the row under your cursor didn’t move. The canvas shows the council node with positions.",
+ doo:"<b>Side with the finding</b> (the amend is pre-filled), accept the ruling, or re-convene. On the N4 strip press <b>delegate d</b> to turn this kind of decision into an order.",
+ prompt:()=>"helix/H1#gate ›",
+ board:s=>boardHtml([{id:"H1",sel:true,moved:"moved up: dispute blocks 2 runs",grey:!!s.sided},"N1","O1","--new","N4","H3"],{more:"+2 ranked below"}),
+ drawer:s=>s.order?'<div class="dh">Talk · northwind › · compose<span class="r">from <span class="k">d</span> on N4</span></div><div class="msg"><span class="w">PA · claude</span><span><span class="oc compose">compose</span> Draft standing order:</span></div><div class="prop"><b>“Approve Northwind plan approvals under band 40 when the floor adds nothing.”</b><span class="mono muted">rule: gate.kind=plan_approval ∧ engagement=northwind ∧ score&lt;40 ∧ floor_added=[] → approve · expires Fri 18:00</span><span>Would have approved <b>3</b> this week (N2, N0, N5). Would not have touched N4 (score 41).</span><div class="row"><button type="button" class="btn pri" data-act="ordok">Commit order <span class="k">⏎</span></button><button type="button" class="btn">Edit in Talk</button></div></div>'+(s.ordok?'<span class="status">Order saved · shows in the tray (orders 4) and the Away sheet.</span>':''):"",
+ canvas:s=>canvasHead("fleet › helix › H1 › build.2 › <b>team_dispute gate</b>",'<span class="pill bad">HIGH</span><span class="pill wait">gate open 4 min</span>')
+  +'<div class="pane-b"><div class="split"><div style="display:grid;gap:8px;align-content:start">'
+  +'<div class="say"><span class="h"><b>pi</b> monitor · finding.raised · HIGH · 10:58</span><span>The idempotency key is <span class="mono">(entry_id)</span>. Two tenants can post the same entry_id in the same second and the second post is swallowed. <span class="mono">ledger/writer.rs:212</span></span></div>'
+  +'<div class="say"><span class="h"><b>claude</b> PA · advice.answered · declined · 11:00</span><span>Covered by the v2 adapter, which prefixes entry_id with the tenant.</span></div>'
+  +'<div class="say"><span class="h"><b>pi</b> · 11:01</span><span>The adapter is bypassed by the batch path (<span class="mono">batch/post.rs:88</span>).</span></div>'
+  +'<div class="murmur">6 murmurs folded · codex checkpoint 4 · copilot waiting on build · <u>show</u></div></div>'
+  +'<div class="card"><span class="lbl">Council · called on the dispute · 11:02</span>'
+  +'<div class="tbl-wrap"><table class="t"><tbody><tr><td>claude</td><td class="c-bad">NO</td><td class="w">adapter covers the online path</td></tr><tr><td>codex</td><td class="c-bad">NO</td><td class="w">batch path is behind a flag, off in prod</td></tr><tr><td>opencode</td><td class="c-bad">NO</td><td class="w">agree with codex</td></tr><tr><td>copilot</td><td class="c-ok">YES</td><td class="w">flag is on in staging; key it properly</td></tr><tr><td>pi</td><td class="muted">excluded</td><td class="muted">raiser</td></tr></tbody></table></div>'
+  +'<span>Ruling <b>NO 3–1</b> → team_dispute gate. The evaluator seat (copilot) differs from the creator (codex).</span></div></div>'
+  +(s.sided?'<div class="card" style="border-color:var(--ghost)"><span class="lbl c-ghost">Preview · request changes</span><span class="mono">amend: “Key on (tenant_id, entry_id) in writer and batch path. Add a property test for two tenants posting the same entry_id.”</span><span class="note">Scoped to creator codex, cursor build.2. Rework 1 of 2. Unblocks nothing until it passes.</span></div>':'')
+  +'</div>',
+ insp:s=>insp("Gate · team_dispute",facts([["Run","H1 ledger-migration"],["Kind","team_dispute (after council NO 3–1)"],["Blocks","H2, campaign C1–C4"],["Clock","freeze 17:00 · 5h 55m"]])
+  +'<div class="verbs">'+verb("Side with the finding","c",{pri:true,act:"side",why:"request changes · amend pre-filled from the finding"})+verb("Accept the ruling","a",{why:"finding dismissed with the council’s reason"})+verb("Re-convene with evidence","v",{why:"adds batch/post.rs:88 to the brief"})+verb("Override (records dissent)","")+verb("Peek H2","Space")+'</div>'),
+ acts:{side:s=>{s.sided=true;startUndo("Request changes sent to H1 (side with pi)");},skey:(s,el)=>{if(el.dataset.k==="d")s.order=true;else if(el.dataset.id==="H1")s.sided=true,startUndo("Request changes sent to H1");},ordok:s=>{s.ordok=true;}}
+});
+
+/* M8 Agents and steps */
+M.push({id:"agents",t:"11:20",name:"Acting on agents and steps",eng:"orbital",posture:"open",
+ why:"O1’s seed step has been quiet 22 minutes. The COO demo is at 14:00 tomorrow. You need the step moving again, not a lecture about why it stopped.",
+ see:"O1’s plan with the stalled step selected. The inspector lists seats with their standing. opencode is benched; the evaluator seat can’t take the creator’s step.",
+ doo:"Pick <b>codex</b>, read the preview, <b>Reassign</b>. Note that un-bench is greyed with the working alternative.",
+ prompt:()=>"orbital/O1#seed.3 ›",
+ board:s=>boardHtml([s.done?{id:"O1",grey:true}:{id:"O1",sel:true},"H1","N1","N4","G4"],{more:"+2 ranked below"}),
+ canvas:s=>canvasHead("fleet › orbital › O1 returns-triage exec demo › <b>seed.3</b>",'<span class="pill '+(s.done?"acc":"bad")+'">'+(s.done?"reassigned":"stalled 22m · dead_seat")+'</span>')
+  +'<div class="pane-b">'+meter(22,"band 20–39 · auto under 40","Demo preset · read-only scope step first · seed data is synthetic")
+  +'<div class="pgwrap"><div class="pg">'+phase("scope","done",[car("pa","read-only scope","",{state:"done"})])+gate("p","")
+  +phase("script","done",[car("claude","6-min script","COO: returns cost",{state:"done"})])+gate("p","")
+  +phase("seed","act",[car("codex","seed.1 SKUs","",{state:"done"}),car("codex","seed.2 customers","",{state:"done"}),car(s.done?"codex":"opencode","seed.3 returns data",s.done?"restarting from checkpoint 4":"last output 11:19 − 22m",{stall:!s.done,act:!!s.done,sel:true,state:s.done?"claimed":"quiet",flag:s.done?"":"▲ escalated dead_seat"})])
+  +gate("","")+phase("record","",[car("claude","Playwright record","",{q:true})])+gate("","unit_review")+phase("review","",[car("pi","evaluator","",{q:true})],{lock:true})
+  +'</div></div>'
+  +(s.pick&&!s.done?'<div class="card" style="border-color:var(--ghost)"><span class="lbl c-ghost">Preview · POST /runs/O1/reassign</span><span>Move seed.3 from opencode to <b>'+s.pick+'</b>. Restarts from checkpoint 4 (1,200 of 3,000 returns written). Evaluator stays <b>pi</b>. codex’s other work: none.</span><div class="row"><button type="button" class="btn pri" data-act="commit">Reassign <span class="k">⏎</span></button></div></div>':'')
+  +'<div class="comms"><b>team comms</b> talk to the member: type at <span class="mono">orbital/O1#seed.3 ›</span> · <span class="oc steer">steer</span> becomes an inject to that seat</div></div>',
+ insp:s=>insp("Step seed.3 · seats",
+  '<div class="verbs">'
+  +verb("codex · ready · 0 failures today","",{act:"pick",arg:"codex",pri:s.pick==="codex"})
+  +verb("copilot · busy on H2, C2","",{act:"pick",arg:"copilot",pri:s.pick==="copilot",why:"would queue behind 2 steps"})
+  +verb("pi · evaluator of this run","",{dis:true,why:"the evaluator can’t be the creator"})
+  +verb("claude · PA","",{dis:true,why:"PA owns the plan; pick a member seat"})
+  +verb("opencode · benched (2 failures, 07:58)","",{dis:true,why:"benched"})
+  +'</div><span class="lbl">Member opencode</span><div class="verbs">'+verb("Un-bench opencode","",{dis:true,why:notYet("un-bench","reassign its steps s")})+verb("Sign in again","",{why:"opens its login PTY in Raw › Terminal"})+verb("Retry step (PA rework)","r")+verb("Open output","O")+'</div>'),
+ acts:{pick:(s,el)=>{s.pick=el.dataset.arg;},commit:s=>{s.done=true;startUndo("seed.3 reassigned to "+s.pick);}}
+});
+
+/* M9 Bulk */
+M.push({id:"bulk",t:"11:35",name:"Bulk actions",eng:"fleet",posture:"open",
+ why:"Four reviews are alike and yesterday left five finished runs on the map. Deciding each one alone is the fatigue this console exists to remove.",
+ see:"The group strip is a ready-made alike selection. The preview lists each answer with evaluator ≠ creator and what it unblocks. Below, five finished runs are selected for archive.",
+ doo:"<b>Approve all 4</b>: the strips grey and slide down during the 10 s undo. Then <b>Archive 5</b> in one call.",
+ prompt:()=>"4 selected ›",
+ board:s=>boardHtml(s.appr?["H1","N1","N4",{id:"G4",grey:true}]:[{id:"G4",sel:true},"H1","N1","N4"],{more:"+3 ranked below"}),
+ canvas:s=>canvasHead("fleet › <b>selection</b> · 4 unit reviews · alike","")
+  +'<div class="pane-b"><span class="lbl">Approve alike · preview</span><div class="tbl-wrap"><table class="t"><thead><tr><th>run</th><th>step</th><th>creator</th><th>evaluator</th><th>verdict</th><th>unblocks</th></tr></thead><tbody>'
+  +[["N2","§5 draft","claude","codex","pass","§5 export"],["H4","refund key","codex","claude","pass","H4 deliver gate"],["H5","parser","opencode","claude","pass","H5 test"],["O2","fixtures","codex","claude","pass","O1 record"]].map(r=>'<tr'+(s.appr?' class="grey"':'')+'>'+r.map(c=>'<td>'+c+'</td>').join("")+'</tr>').join("")
+  +'</tbody></table></div><div class="row"><button type="button" class="btn pri" data-act="appr"'+(s.appr?" disabled":"")+'>Approve all 4 <span class="k">a</span> <span class="k">⏎</span></button><span class="note">4 × POST /runs/:id/gate with ord · undo 10 s, or <span class="k">u</span> on one row</span></div>'
+  +'<span class="lbl" style="margin-top:8px">Finished yesterday · selected for archive</span><div class="tbl-wrap"><table class="t"><thead><tr><th></th><th>run</th><th>engagement</th><th>ended</th><th>delivery</th></tr></thead><tbody>'
+  +[["H6","Helix","Thu 21:10","delivered · PR #412"],["H7","Helix","Thu 23:02","vacuous"],["N0","Northwind","Thu 19:40","exported"],["P0","House","Thu 22:30","none"],["O0","Orbital","Wed 17:05","delivered"]].map(r=>'<tr'+(s.arch?' class="grey"':'')+'><td>☑</td>'+r.map(c=>'<td>'+c+'</td>').join("")+'</tr>').join("")
+  +'</tbody></table></div><div class="row"><button type="button" class="btn" data-act="arch"'+(s.arch?" disabled":"")+'>Archive 5 <span class="k">A</span></button><span class="note">one POST /runs/archive with 5 ids</span></div></div>',
+ insp:s=>insp("4 selected · alike",facts([["Gate kind","unit_review ×4"],["Band","LOW"],["Findings","none open"],["Boundary","3 engagements, no client data moves"]])+'<div class="verbs">'+verb("Approve alike","a",{pri:true,act:"appr"})+verb("Request changes on all","c",{why:"one amend, sent to each"})+verb("Delegate to an order","d",{why:"“approve LOW unit reviews with no findings”"})+'</div>'),
+ acts:{appr:s=>{s.appr=true;startUndo("Approved 4 unit reviews");},arch:s=>{s.arch=true;startUndo("Archived 5 runs");},skey:s=>{s.appr=true;startUndo("Approved 4 unit reviews");}}
+});
+
+/* M10 Review */
+M.push({id:"review",t:"13:10",name:"Reviewing a team run",eng:"northwind",posture:"open",
+ why:"N1 §4 is at review. You need the outcome and what the team said to each other, and you want to push back without rewriting what the monitor already wrote.",
+ see:"Outcomes on the left (claims anchored to control IDs, one flagged). Team comms on the right: Say items in full, Murmur folded. The evaluator (codex) is not the creator (claude).",
+ doo:"Tick the held findings, then <b>Request changes</b>: the amend is composed from them and lands in Talk at the gate’s address. Or <b>Approve</b>.",
+ prompt:s=>"northwind/N1#gate ›",
+ board:s=>boardHtml([s.sent?{id:"N1",grey:true}:{id:"N1",sel:true},"N4","H3"],{more:"+2 ranked below"}),
+ prefill:s=>s.amend||"",
+ canvas:s=>canvasHead("fleet › northwind › N1 §4 › <b>unit_review</b>",'<span class="pill">creator claude</span><span class="pill acc">evaluator codex</span><span class="pill ok">pass · 1 note</span>')
+  +'<div class="pane-b"><div class="split"><div style="display:grid;gap:8px;align-content:start"><span class="lbl">Outcomes · 41 of 42 claims anchored · 1,488 words</span><div class="doc" style="font-size:14px"><p>Tier 1 services recover within <span class="claim">four hours<span class="cid">BCP-07</span></span> with data loss bounded to <span class="claim">fifteen minutes<span class="cid">BCP-09</span></span>.</p><p>Critical card authorisation fails over in <span class="claim bad">under 15 minutes</span>, verified in the June regional test.</p><p>Third-party processors are assessed annually against <span class="claim">EBA outsourcing guidelines<span class="cid">TPR-02</span></span>.</p></div></div>'
+  +'<div style="display:grid;gap:6px;align-content:start"><span class="lbl">Team comms · Say</span>'
+  +'<label class="say"><span class="h"><input type="checkbox" data-act="tick" data-arg="f1"'+((s.ticks||{}).f1?" checked":"")+'> <b>codex</b> finding · held · “RTO 15 min” has no control; June test shows 2 h 41 m</span></label>'
+  +'<div class="say"><span class="h"><b>claude</b> PA · advice.answered · accepted</span><span>Will soften to “restored within the four-hour RTO”.</span></div>'
+  +'<label class="say"><span class="h"><input type="checkbox" data-act="tick" data-arg="f2"'+((s.ticks||{}).f2?" checked":"")+'> <b>pi</b> monitor · held · “EBA guidelines” should name the 2019 revision</span></label>'
+  +'<div class="say"><span class="h"><b>pi</b> finding.settled · superseded</span><span>Processor list now cites TPR-02.</span></div>'
+  +'<div class="murmur">'+(s.mur?"10:02 claude claimed draft.2 · 10:14 checkpoint “4.1 done” · 10:20 help.requested claude→codex “which BCP id for RPO?” · 10:21 help.answered BCP-09 · 10:40 checkpoint · 10:51 step.completed · 10:52 codex claimed review · 11:03 step.reviewed rework 0/2":"11 murmurs folded · 1 help · rework 0 of 2")+' <button type="button" class="sbtn" data-act="mur">'+(s.mur?"fold":"show all")+' <span class="k">m</span></button></div></div></div>'
+  +(s.amend?'<div class="card" style="border-color:var(--ghost)"><span class="lbl c-ghost">Request changes · amend composed from '+Object.values(s.ticks||{}).filter(Boolean).length+' held findings</span><span class="mono">'+esc(s.amend)+'</span><span class="note">Edit it in Talk below; ⏎ commits with a 10 s undo.</span><div class="row"><button type="button" class="btn pri" data-act="send">Send request changes <span class="k">⏎</span></button></div></div>':'')
+  +'</div>',
+ insp:s=>insp("Gate · unit_review",facts([["Run","N1 §4 Security & Resilience"],["Unblocks","N3 compliance matrix"],["Clock","submission Fri 17:00"],["Rules applied","SEC-014 · CLM-003"],["Eval corpus","fin-claims-v4"]])+'<div class="verbs">'+verb("Approve","a",{act:"approve"})+verb("Request changes","c",{pri:true,act:"rc",why:"composes the amend from ticked findings"})+verb("Approve and steer","A")+verb("Reject","x")+verb("Capture the RTO exchange","y",{act:"cap"})+'</div>'),
+ acts:{tick:(s,el)=>{s.ticks=s.ticks||{};s.ticks[el.dataset.arg]=el.checked;},mur:s=>{s.mur=!s.mur;},
+  rc:s=>{s.ticks=s.ticks||{};if(!s.ticks.f1&&!s.ticks.f2){s.ticks.f1=true;s.ticks.f2=true;}const parts=[];if(s.ticks.f1)parts.push("Remove “under 15 minutes” or cite a control; the June test shows 2 h 41 m.");if(s.ticks.f2)parts.push("Name the 2019 EBA outsourcing guidelines revision.");s.amend=parts.join(" ");},
+  send:s=>{s.sent=true;s.amend="";startUndo("Request changes sent to N1 (2 findings)");},approve:s=>{s.sent=true;startUndo("Approved N1 §4 · N3 unblocked");},cap:()=>go("capture"),skey:s=>{s.sent=true;startUndo("Approved N1 §4");}}
+});
+
+/* M11 Talk and Log */
+M.push({id:"talk",t:"14:30",name:"Talk and the Log",eng:"house",posture:"open",
+ why:"A question for your own paper, not for any client. You want several seats’ views at once, and you want to find this again next month.",
+ see:"The prompt reads <span class='mono'>house ›</span>. <span class='mono'>@team</span> fanned out and came back as one message in columns. The canvas is House’s Log: every thread, filed.",
+ doo:"Press <b>Pin tile</b> to see a <b>compose</b> outcome become a ghost tile, then commit it. Try the outcome legend: answer, intent, compose, steer.",
+ prompt:()=>"house ›",
+ board:()=>boardHtml(["H1","N4","H3"],{more:"+1 ranked below"}),
+ drawer:s=>'<div class="dh">Talk · house › · filed in the House Log<span class="r"><span class="oc answer">answer</span> <span class="oc intent">intent</span> <span class="oc compose">compose</span> <span class="oc steer">steer</span></span></div>'
+  +'<div class="msg me"><span class="w">you</span><span>@team What’s the strongest counterargument to “evaluators you can’t bribe”?</span></div>'
+  +'<div class="msg"><span class="w">@team</span><div class="cols"><div class="col"><span class="seat">claude</span>Separation of seats isn’t independence if every seat shares training data. Collusion by correlation, not by intent.</div><div class="col"><span class="seat">codex</span>The rubric is the bribe. Whoever writes the acceptance criteria decides what “pass” means.</div><div class="col"><span class="seat">pi</span>Evaluators drift toward the PA’s framing once they read team comms. Blind the evaluator to advice threads.</div></div></div>'
+  +'<div class="msg me"><span class="w">you</span><span>Pin a tile: disputed findings this week, by engagement.</span></div>'
+  +(s.pin?'<div class="msg"><span class="w">PA · claude</span><div class="prop"><span><span class="oc compose">compose</span> Tile for the House board. Patterns only: engagement names shown, no client detail.</span><div class="tiles"><div class="tile ghost"><span class="muted">disputed findings · 7 days</span><span class="v">5</span><span class="mono muted">Helix 3 · Northwind 1 · Orbital 1</span></div></div><div class="row"><button type="button" class="btn pri" data-act="pinok"'+(s.pinok?" disabled":"")+'>Add to House board <span class="k">⏎</span></button>'+(s.pinok?'<span class="status">Added · PUT /settings studio.boards</span>':'')+'</div></div></div>':'<div class="row"><button type="button" class="btn" data-act="pin">Send “pin a tile” ⏎</button></div>'),
+ canvas:()=>canvasHead("fleet › house › <b>Log</b> · one history for this engagement","<span class='mono muted'>:log &lt;text&gt; searches every Log</span>")
+  +'<div class="pane-b"><div class="log"><span class="day">TODAY</span>'
+  +'<div class="le"><span class="ts">14:30</span><span class="ty">talk</span><span>@team counterarguments to “evaluators you can’t bribe” · 3 seats</span></div>'
+  +'<div class="le"><span class="ts">13:55</span><span class="ty say">say</span><span>P1 POV paper: draft 2 of 4 sections done · scrub removed 6 client terms</span></div>'
+  +'<div class="le"><span class="ts">09:12</span><span class="ty">talk</span><span>“What did we learn about flaky contract tests at Helix?” · answer (pattern only)</span></div>'
+  +'<span class="day">THU 25 SEP</span>'
+  +'<div class="le"><span class="ts">22:30</span><span class="ty say">say</span><span>Citation check finished · 2 dead links fixed</span></div>'
+  +'<div class="le"><span class="ts">18:10</span><span class="ty">order</span><span>Order “draft House newsletter Fridays” expired and was not renewed</span></div>'
+  +'<div class="le"><span class="ts">16:44</span><span class="ty">capture</span><span>Pattern “RTO claims must cite a control ID” proposed from Northwind (client detail stayed there)</span></div>'
+  +'<div class="le"><span class="ts">11:02</span><span class="ty">talk</span><span>Outline for “Evaluators you can’t bribe” → <span class="oc intent">intent</span> launched P1 (Write › pov-paper, 18)</span></div>'
+  +'</div></div>',
+ insp:null,
+ acts:{pin:s=>{s.pin=true;},pinok:s=>{s.pinok=true;}}
+});
+
+/* M12 Raw */
+M.push({id:"raw",t:"15:10",name:"Going raw",eng:"helix",posture:"open",
+ why:"codex says the fix is in. You want to see it yourself: the events, the files, a shell in the worktree.",
+ see:"The inspector’s Raw tab for H1 build.2, with Events, Worktree, Terminal, Config and Source. The canvas shows a Board tile with <span class='mono'>&gt; source</span> and the per-run worktree list.",
+ doo:"Switch Raw tabs. Click <b>&gt; source</b> on the tile. Note <b>sweep</b> is greyed until crew has a worktree route.",
+ prompt:s=>">"+(s.tab||"term")+" helix/H1#build.2",
+ board:()=>boardHtml(["N4","H3","O1"],{more:"+1 ranked below"}),
+ canvas:s=>canvasHead("fleet › helix › H1 › <b>build.2</b>","")
+  +'<div class="pane-b"><span class="lbl">Helix board</span><div class="tiles"><div class="tile"><span class="muted">claims anchored · N1</span><span class="v">41/42</span><button type="button" class="sbtn" data-act="tab" data-arg="source">&gt; source</button></div><div class="tile dark"><span class="muted">H1 contract tests</span><span class="v">212 ✓</span><span class="mono muted">on pace</span></div><div class="tile lit"><span class="muted">findings open · Helix</span><span class="v c-wait">2</span><span class="mono muted">needs_me ≥ 1 HIGH</span></div></div>'
+  +'<span class="lbl">&gt;worktrees</span><div class="tbl-wrap"><table class="t"><thead><tr><th>run</th><th>path</th><th>files changed</th><th>state</th></tr></thead><tbody><tr><td>H1</td><td>~/.wicked-worker/wt/helix-core-H1</td><td>9</td><td>running</td></tr><tr><td>H3</td><td>~/.wicked-worker/wt/helix-core-H3</td><td>4</td><td>deliver gate</td></tr><tr><td>H6</td><td>~/.wicked-worker/wt/helix-docs-H6</td><td>2</td><td>delivered</td></tr></tbody></table></div>'
+  +'<div class="verbs" style="max-width:420px">'+verb("Sweep finished worktrees","",{dis:true,why:notYet("worktree list + sweep","sweep runs automatically after delivery")})+'</div></div>',
+ insp:s=>{
+  const t=s.tab||"term";
+  const tabs='<span class="itabs">'+[["events","Events"],["files","Worktree"],["term","Terminal"],["config","Config"],["source","Source"]].map(x=>'<button type="button" data-act="tab" data-arg="'+x[0]+'" aria-pressed="'+(t===x[0])+'">'+x[1]+'</button>').join("")+'</span>';
+  let b="";
+  if(t==="events")b='<div class="ev">'+[["15:02:11","wicked.team.step.claimed build.2 codex"],["15:02:40","wicked.team.advice.delivered pi→pa"],["15:03:05","wicked.team.checkpoint build.2 “key on tenant”"],["15:06:52","wicked.team.finding.settled f-212 fixed"],["15:07:01","wicked.team.step.completed build.2"],["15:07:02","wicked.team.plan.proposed rev 3"],["15:07:03","wicked.run.gate.opened plan_approval"]].map(e=>'<div><span class="ts">'+e[0]+'</span><span>'+esc(e[1])+'</span></div>').join("")+'</div><p class="note">&gt;bus shows the live tail across runs. History needs crew (not yet).</p>';
+  else if(t==="files")b='<div class="ev">'+["M ledger/writer.rs  +38 −9","M ledger/batch/post.rs  +12 −4","A ledger/tests/two_tenants.rs  +54","M ledger/Cargo.toml  +1"].map(f=>'<div><span class="ts">diff</span><span>'+esc(f)+'</span></div>').join("")+'</div><div class="row"><button type="button" class="btn">Open in Finder</button><button type="button" class="btn">Full diff</button></div>';
+  else if(t==="term")b='<div class="term"><span class="dim">~/.wicked-worker/wt/helix-core-H1</span>\n<span class="p">$</span> cargo test -p ledger two_tenants\n   Compiling ledger v0.9.3\n    Finished test [unoptimized] in 8.41s\n     Running tests/two_tenants.rs\ntest same_entry_id_two_tenants ... <span class="p">ok</span>\ntest batch_path_keys_on_tenant ... <span class="p">ok</span>\n\ntest result: ok. 2 passed; 0 failed\n<span class="p">$</span> ▍</div><div class="row"><button type="button" class="btn">Attach codex PTY (read-only)</button><span class="note">listed in &gt;ps as T3</span></div>';
+  else if(t==="config")b='<div class="term">{\n  "run": "H1", "plan_rev": 3,\n  "preset": "feature", "primary": "claude",\n  "clis": ["codex","copilot","pi","claude"],\n  "humanConfirm": "all", "deliver": "pr",\n  "deliverGate": "human", "floor": ["test","review","deliver"]\n}</div>';
+  else b='<p class="note">Tile “claims anchored · N1”</p><div class="term">lens: engagement=northwind run=N1\nfold: claims.anchored / claims.total\nthreshold: warn &lt; 40/42, needs_me: false\nrows (GET /runs/N1/events · wicked.team.checkpoint):\n  4.1  12/12\n  4.2  11/11\n  4.3  10/11   ← RTO 15 min unanchored\n  4.4   8/8</div>';
+  return '<div class="pane-h"><span class="lbl">Raw · build.2</span><span class="r">'+tabs+'</span></div><div class="pane-b">'+b+'</div>';},
+ acts:{tab:(s,el)=>{s.tab=el.dataset.arg;}}
+});
+
+/* M13 Capture */
+M.push({id:"capture",t:"16:20",name:"Capturing",eng:"northwind",posture:"open",
+ why:"The RTO exchange taught something every bank RFP needs. The lesson should travel; the client’s names and numbers must not.",
+ see:"A capture card split into <b>Pattern</b> (crosses engagements) and <b>Client detail</b> (stays in Northwind). Client terms from the engagement boundary are struck through.",
+ doo:"Choose a target and <b>Propose</b>. It becomes a proposal that reaches you as an evening strip.",
+ prompt:()=>"northwind/N1#finding f1 ›",
+ board:s=>boardHtml(s.done?["N4","H3",{id:"PR"}]:["N4","H3"],{more:s.done?"proposal lands at 17:30 in the evening lane":"+1 ranked below"}),
+ canvas:s=>canvasHead("fleet › northwind › N1 › finding f1 › <b>capture</b>","")
+  +'<div class="pane-b"><div class="split"><div class="card"><span class="lbl">Pattern · crosses engagements</span><p style="margin:0">RTO/RPO claims in a resilience answer must cite a control ID, or be removed. Test results quoted must match the most recent test report.</p><p class="muted" style="margin:0;font-size:12.5px">Source text: “<span class="strike">Northwind</span>’s <span class="strike">card authorisation</span> fails over in <span class="strike">under 15 minutes</span>, verified in the <span class="strike">June regional test</span>” · raised by codex, confirmed by <span class="strike">Priya Raman (CISO)</span> in <span class="strike">INC-40213</span>.</p></div>'
+  +'<div class="card"><span class="lbl">Client detail · stays in Northwind</span><ul style="margin:0;padding-left:18px;font-size:13px"><li>Northwind Bank, card authorisation service</li><li>June regional failover: 2 h 41 m</li><li>Priya Raman, CISO</li><li>INC-40213</li></ul><span class="note">Boundary: 14 client terms · patterns may be shared</span></div></div>'
+  +'<div class="chips"><span class="lbl">Target</span>'+["steering rule · compliance","memory · pattern","preset step · rfp-section","eval sample · fin-claims-v4"].map((t,i)=>'<button type="button" class="chip" data-act="tgt" data-arg="'+i+'"'+((s.tgt||0)===i?' style="border-color:var(--accent);color:var(--accent);font-weight:600"':'')+'>'+t+'</button>').join("")+'</div>'
+  +'<div class="row"><button type="button" class="btn pri" data-act="prop"'+(s.done?" disabled":"")+'>Propose <span class="k">⏎</span></button>'+(s.done?'<span class="status">Proposal P-118 created · POST /proposals · appears as a strip at 17:30</span>':'<span class="note">Nothing is written until the proposal is approved.</span>')+'</div></div>',
+ insp:null,
+ acts:{tgt:(s,el)=>{s.tgt=Number(el.dataset.arg);},prop:s=>{s.done=true;}}
+});
+
+/* M14 Deliver */
+M.push({id:"deliver",t:"16:45",name:"Delivering and outbound",eng:"helix",posture:"open",
+ why:"H3 is ready to leave the machine. A push can’t be undone, and the platform lead wants a note.",
+ see:"The deliver gate: diffstat, target, acceptance verdict. The outbound draft is written from the work. Mail and Message are shown but wait for the first integration.",
+ doo:"Type <span class='mono'>deliver H3</span> to enable <b>Deliver</b>. Press <b>Copy</b> on the draft.",
+ prompt:()=>"helix/H3#deliver ›",
+ board:s=>boardHtml([s.done?{id:"H3",grey:true}:{id:"H3",sel:true},"N4","O1"],{more:""}),
+ canvas:s=>canvasHead("fleet › helix › H3 settlement rounding fix › <b>deliver gate</b>",'<span class="pill ok">acceptance pass</span>')
+  +'<div class="pane-b">'+facts([["Target","PR into helix/settlement · main"],["Diffstat","4 files · +61 −18"],["Evaluator","claude ≠ creator codex"],["Acceptance","6 of 6 items with evidence"]])
+  +'<div class="ev">'+["M settlement/round.rs  +22 −11","M settlement/fx.rs  +9 −4","A settlement/tests/banker_rounding.rs  +28","M CHANGELOG.md  +2 −3"].map(f=>'<div><span class="ts">diff</span><span>'+esc(f)+'</span></div>').join("")+'</div>'
+  +'<div class="card"><span class="lbl">Typed confirm · a push can’t be undone</span><div class="row"><input id="dconf" type="text" aria-label="Type deliver H3" placeholder="type: deliver H3" style="border:1px solid var(--line);border-radius:5px;padding:3px 8px;background:var(--panel);font:13px var(--mono)" value="'+esc(s.typed||"")+'"><button type="button" class="btn pri" data-act="deliver"'+(s.typed==="deliver H3"&&!s.done?"":" disabled")+'>Deliver <span class="k">d</span></button>'+(s.done?'<span class="status">Pushed · PR #418 opened</span>':'')+'</div></div></div>',
+ insp:s=>insp("Outbound draft · from H3",'<div class="card" id="odraft" style="font-size:13px">Hi Marco, the settlement rounding fix is up for review as PR #418 into settlement/main. It switches FX conversion to banker’s rounding, which removes the 1-cent drift you saw on EUR→SEK batches. 28 new tests cover the edge cases; acceptance passed 6 of 6. No API changes. We can merge before tonight’s 17:00 freeze if your team signs off.</div>'
+  +'<div class="verbs">'+verb("Copy","",{pri:true,act:"copy"})+verb("Send by mail","",{dis:true,why:"arrives with the first integration"})+verb("Send as message","",{dis:true,why:"arrives with the first integration"})+'</div>'+(s.copied?'<span class="status">'+esc(s.copied)+'</span>':''),'<span class="itabs"><button type="button" aria-pressed="true">Draft</button></span>'),
+ acts:{deliver:s=>{s.done=true;},copy:s=>{const t=$("#odraft").textContent;s.copied="Copied to clipboard";try{navigator.clipboard.writeText(t).catch(()=>{s.copied="Select the text to copy";render();});}catch(e){s.copied="Select the text to copy";}}}
+});
+
+/* M15 Away */
+M.push({id:"away",t:"18:05",name:"Leaving with standing orders",eng:"fleet",posture:"away",
+ why:"You are leaving. The fleet keeps running. You decide now what it may do without you, and for how long.",
+ see:"The overnight sheet: what keeps running, what will wait for you, and each order with its rule, expiry and what it would have done today. Outbound is queued, never sent.",
+ doo:"Press <b>Add order</b> to see a Talk sentence become a parsed order with a preview, then commit.",
+ prompt:()=>"fleet · away ›",
+ board:()=>'<div class="held"><span class="c-ghost">● Away</span><b>4 held</b><span>marks stay on the rails · orders act on LOW items only</span></div>',
+ drawer:s=>s.add?'<div class="dh">Talk · fleet › · compose</div><div class="msg me"><span class="w">you</span><span>While I’m away, approve LOW unit reviews on Helix with no findings until Friday; wake me for any HIGH; draft the Northwind status at 17:00 tomorrow.</span></div><div class="msg"><span class="w">PA · claude</span><div class="prop"><span><span class="oc compose">compose</span> 3 orders</span><span class="mono" style="font-size:11.5px">1 gate.kind=unit_review ∧ band=LOW ∧ findings=0 ∧ engagement=helix → approve · expires Fri 18:00 · would have approved 4 today<br>2 finding.severity=high → desktop notify · expires on return<br>3 at Fri 17:00 → draft status to Priya Raman from N1–N4 · <b>queued, not sent</b> (no send policy)</span><div class="row"><button type="button" class="btn pri" data-act="addok"'+(s.addok?" disabled":"")+'>Commit 3 orders <span class="k">⏎</span></button>'+(s.addok?'<span class="status">Orders in force: 5 · tomorrow’s handover reports what each did</span>':'')+'</div></div></div>':"",
+ canvas:s=>canvasHead("<b>away</b> · overnight sheet · Thu 18:05 → Fri 08:30","")
+  +'<div class="pane-b"><div class="split"><div class="card"><span class="lbl">Keeps running</span><span>H1 security review (pi) · campaign “PostEntry consumers” C2–C4 · N3 compliance matrix · O1 record · P1 POV paper</span><span class="lbl">Will wait for you</span><span>N4 plan approval · C1 plan approval · any deliver gate · H1 plan_approval (rev 3) · anything HIGH</span><span class="note">Orders never answer plan approval or deliver gates.</span></div>'
+  +'<div class="card"><span class="lbl">Orders in force</span>'
+  +'<div class="say"><span class="h"><b>Northwind docs under band 40</b> · expires Fri 18:00</span><span class="mono" style="font-size:11px">plan_approval? no · unit_review ∧ band&lt;40 ∧ findings=0 → approve</span><span class="muted">would have approved 2 today</span></div>'
+  +'<div class="say"><span class="h"><b>Orbital outbound</b> · expires Sun</span><span class="mono" style="font-size:11px">outbound → queue, never send</span><span class="muted">would have queued 1 draft</span></div>'
+  +'<button type="button" class="btn" data-act="add">Add order</button></div></div>'
+  +fleet({focusMarks:true})+'</div>',
+ insp:null,
+ acts:{add:s=>{s.add=true;},addok:s=>{s.addok=true;}}
+});
+
+/* ---------------- rendering ---------------- */
+const ENGS=[["fleet","Fleet",""],["northwind","Northwind Bank","◆"],["helix","Helix Payments","▲"],["orbital","Orbital Retail","▲"],["house","House",""]];
+function renderEbar(m){
+  const g={"◆":"c-wait","▲":"c-bad"};
+  let h=ENGS.map(e=>'<button type="button" class="etab" aria-current="'+(m.eng===e[0])+'" data-act="eng" data-arg="'+e[0]+'">'+e[1]+(e[2]?'<span class="g '+g[e[2]]+'">'+e[2]+'</span>':'')+'</button>').join("")+'<button type="button" class="etab" title="New engagement asks for its confidentiality boundary">+</button>';
+  h+='<span class="grow"></span><div class="posture" role="group" aria-label="Posture">'+[["open","Open"],["focus","Focus"],["away","Away"]].map(p=>'<button type="button" aria-pressed="'+(m.posture===p[0])+'" data-act="posture" data-arg="'+p[0]+'">'+p[1]+'</button>').join("")+'</div>';
+  h+='<div class="tray"><span class="lit">seats 4/5</span><span>bus ok</span><span>dead letters 0</span><span class="tab">$18.40 today</span><span>orders 3</span></div>';
+  $("#ebar").innerHTML=h;
+}
+function renderCmd(){
+  const m=M[cur];
+  $("#prompt").textContent=m.prompt(st);
+  let side="";
+  if(st.undo)side+='<span class="undo">'+esc(st.undo.label)+' <span class="bar"><i style="width:'+(st.undo.n*10)+'%"></i></span><span class="tab">'+st.undo.n+'s</span><button type="button" class="sbtn" data-act="undo">undo <span class="k">u</span></button></span>';
+  else if(st.sent)side+='<span class="status">✓ '+esc(st.sent)+'</span>';
+  if(m.drawer)side+='<span><span class="k">↑</span> Talk drawer</span>';
+  side+='<span><span class="k">:</span> verb</span><span><span class="k">&gt;</span> raw</span><span><span class="k">⌘K</span></span>';
+  $("#cmdside").innerHTML=side;
+}
+function render(){
+  const m=M[cur];
+  $("#moments").innerHTML=M.map((x,i)=>'<button type="button" class="mchip" data-go="'+i+'" aria-current="'+(i===cur)+'"><span class="t">'+x.t+'</span>'+(i+1)+'. '+x.name+'</button>').join("");
+  $("#cap").innerHTML='<dt>Why</dt><dd>'+m.why+'</dd><dt>See</dt><dd>'+m.see+'</dd><dt>Do</dt><dd>'+m.doo+'</dd>';
+  renderEbar(m);
+  $("#board").innerHTML=m.board(st);
+  $("#canvas").innerHTML=m.canvas(st);
+  const ih=m.insp?m.insp(st):null;
+  $("#insp").hidden=!ih; if(ih)$("#insp").innerHTML=ih;
+  $("#mainz").classList.toggle("noinsp",!ih);
+  const dh=m.drawer?m.drawer(st):"";
+  $("#drawer").hidden=!dh; if(dh)$("#drawer").innerHTML=dh;
+  const inp=$("#talk");
+  if(m.prefill){const v=m.prefill(st);if(v)inp.value=v;}
+  renderCmd();
+  const chip=document.querySelector('.mchip[aria-current="true"]');
+  if(chip&&chip.scrollIntoView)try{chip.scrollIntoView({block:"nearest",inline:"nearest"});}catch(e){}
+}
+function go(id){
+  const i=typeof id==="number"?id:M.findIndex(m=>m.id===id);
+  if(i<0||i>=M.length)return;
+  cur=i;reset();$("#talk").value="";
+  try{history.replaceState(null,"","#"+M[cur].id);}catch(e){}
+  render();
+}
+
+document.addEventListener("click",e=>{
+  const g=e.target.closest("[data-go]");if(g){go(Number(g.dataset.go));return;}
+  const a=e.target.closest("[data-act]");if(!a)return;
+  const act=a.dataset.act,m=M[cur];
+  if(act==="undo"){if(undoT){clearInterval(undoT);undoT=null;}go(cur);return;}
+  if(act==="posture"){const p=a.dataset.arg;if(p==="focus")go("focus");else if(p==="away")go("away");else if(m.posture!=="open")go("fleet");return;}
+  if(act==="eng"){const k=a.dataset.arg;const map={fleet:"fleet",northwind:"review",helix:"edit",orbital:"agents",house:"talk"};if(m.eng!==k)go(map[k]);return;}
+  if(act==="goraw"){go("raw");return;}
+  if(act==="strip"&&!e.target.closest("[data-act='skey']")){
+    const id=a.dataset.id;const map={H1:"collide",N1:"review",O1:"agents",N4:"edit",G4:"bulk",H3:"deliver",PR:"capture"};
+    if(m.acts&&m.acts.strip){m.acts.strip(st,a);render();return;}
+    if(map[id]&&M[cur].id!==map[id])go(map[id]);return;}
+  if(m.acts&&m.acts[act]){m.acts[act](st,a);render();return;}
+  if(act==="skey"){const map={H1:"collide",N1:"review",O1:"agents",N4:"collide",G4:"bulk",H3:"deliver",PR:"capture"};const t=map[a.dataset.id];if(t&&t!==m.id)go(t);}
+});
+document.addEventListener("input",e=>{
+  if(e.target.id==="dconf"){st.typed=e.target.value;const b=document.querySelector('[data-act="deliver"]');if(b)b.disabled=!(st.typed==="deliver H3"&&!st.done);}
+});
+$("#talk").addEventListener("keydown",e=>{
+  if(e.key!=="Enter")return;
+  const v=e.target.value.trim();if(!v)return;
+  const m=M[cur];
+  if(m.id==="review"&&st.amend){m.acts.send(st);e.target.value="";render();return;}
+  st.sent=(v[0]===":"?"Verb "+v+" runs on the selection in the live console":v[0]===">"?"Raw target "+v+" opens in the inspector":"Sent to "+m.prompt(st).replace(" ›","")+" · the PA returns answer, intent, compose or steer")+" (scripted in this walk-through)";
+  e.target.value="";renderCmd();
+});
+document.addEventListener("keydown",e=>{
+  if(e.target.closest&&e.target.closest("input,textarea"))return;
+  if(e.key==="]")go(Math.min(M.length-1,cur+1));
+  else if(e.key==="[")go(Math.max(0,cur-1));
+  else if(e.key==="u"&&st.undo){document.querySelector('[data-act="undo"]').click();}
+  else if(e.key==="Escape"&&M[cur].id==="arrive"&&!st.dismissed){st.dismissed=true;render();}
+});
+$("#prev").addEventListener("click",()=>go(Math.max(0,cur-1)));
+$("#next").addEventListener("click",()=>go(Math.min(M.length-1,cur+1)));
+let start=0;try{const h=(location.hash||"").slice(1);const i=M.findIndex(m=>m.id===h);if(i>=0)start=i;}catch(e){}
+go(start);
+})();
+</script>
