@@ -140,6 +140,17 @@ npm publish dates. Every version listed here exists on
   a machine-owned run's worktree line (a fact), never the "no deliver phase" claim.
 
 ### Fixed
+- **Dogfood fixes on the launch screen and the plan gate (2026-09-27 findings D1-D4, D6, D10,
+  D11, D15).** A `plan_approval` gate now shows why the plan scored as it did (score, band, the
+  score's reasons from `GET /runs/:id/team`, what the floor added and why), hides the scope
+  step's verdict and the doubled "manual mode", and offers approve, approve with an edited plan
+  (the T9 picker, seeded from the held plan) and reject; "Approve + steer" and the steering
+  composer are gone there (the daemon refuses amend text), and the bottom composer sends a team
+  message instead. The launch screen says the team model in one line, shows the no-PR notice only
+  for a build launch without a repo, gains a repo picker beside Project, hides `deliver` in the
+  phase picker when the launch delivers, reads the roster's `auth` for "sign in needed", and drops
+  the file-attach control that never sent its files (a launch cannot carry files to its run).
+  Home's "Never indexed" age reads the wire's epoch seconds (was "20702d").
 - **Back after opening a gate.** The thread's gate card consumed the `#gate` hash with
   `history.replaceState(null, …)`, which wiped wave 1's in-app mark from the history entry, so a
   later Back from that entry went to a fallback page instead of the previous one. The entry's

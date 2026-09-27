@@ -123,7 +123,7 @@ with sync_playwright() as p:
                intentPlaceholder: q('[data-testid="launch-problem"]')?.placeholder ?? null,
                // EC7 preserved: the surface says what it is for, in one line.
                teachesItself: (document.body.innerText || '').includes(
-                 'Describe your goal. The council elects a CLI'),
+                 'Describe your goal. The PA scores and plans it, you approve the plan, and the team works it.'),
                // DES-UX-001 §7.8 (slice AC re-scope): the gate control sits at
                // top level and its SHIPPED default is not "none" — human_confirm
                // before the first gate-bearing unit (§13's adopted position).

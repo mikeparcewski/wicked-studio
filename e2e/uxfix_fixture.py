@@ -582,6 +582,12 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          # gate_moved — run ids whose POST /runs/:id/gate answers crew's 409 gate_changed
          #   (openOrd 4); from then on that run's cached gate GET serves the ord-4 gate.
          "team_plan": False, "plan_edit_fail_once": False, "gate_moved": [],
+         # plan_gate — dogfood D10/D11 (e2e/dogfood_fixes_test.py): r-plan-gate, a user-plan run
+         #   paused at a HIGH-RISK plan_approval gate, rides GET /runs; its GET /runs/:id/gate
+         #   serves the engine's plan prompt and GET /runs/:id/team the rows that explain it
+         #   (the stale-graph fail-closed score, the floor's additions). Pair with team_plan
+         #   for GET /catalog (the plan edit's picker).
+         "plan_gate": False,
          }
 state_lock = threading.Lock()
 # Wave 2a: every POST /runs/:id/gate the fixture received (read over GET /__fixture/gate-posts).
@@ -796,6 +802,45 @@ TEAM_RUNS = [
               workflow_id="wf-r-team-sys", workdir="/w9/team-sys"),
 ]
 TEAM_MEMBER_REFS = [r["session"]["id"] for r in TEAM_RUNS]
+
+# ── Dogfood D10/D11 plan gate (switch `plan_gate`) ─────────────────────────────
+# The rig's run 1a22f803 at its plan gate, trimmed: the PA scoped the plan, the stale code graph
+# failed the score closed at 100, and the floor added three phases for band 70-100.
+PLAN_GATE_RUN = _team_run(
+    "r-plan-gate", "awaiting_human", "produce the studio redesign spec and prototype",
+    {"kind": "user_plan", "name": None, "user_plan": True, "system": False},
+    workflow_id="r-plan-gate:plan-1", unit_ix=1, human_confirm="all")
+PLAN_GATE_PROMPT = ("Approve plan rev 2 before unit 2 runs (manual mode; band 70-100; manual mode): "
+                    "understand → test_plan → design → architecture → produce → critique → review → "
+                    "security_review → deliver. Approve, approve with an edited plan, or reject.")
+_SHA_A = "3071a7632882ade840e3c73772eaf44288c6b4c3"
+_SHA_B = "e9d64e746433a8db220597d6030772163ce984b9"
+PLAN_GATE_TEAM = {
+    "runId": "r-plan-gate", "transport": "bus", "reason": None, "planRev": 2, "pending": None,
+    "ended": False,
+    "rows": [
+        {"event_id": 617, "event_type": "wicked.team.plan.proposed", "payload": {
+            "kind": "initial", "by": "claude", "steps": [
+                {"catalog": "understand", "id": "pa-scope"}, {"catalog": "understand", "id": "understand"},
+                {"catalog": "design", "id": "design"}, {"catalog": "build", "id": "build"},
+                {"catalog": "review", "id": "review"}, {"catalog": "deliver", "id": "deliver"}]}},
+        {"event_id": 618, "event_type": "wicked.team.path.scored", "payload": {
+            "score": 100, "deterministic": 100, "basis": "intent",
+            "reasons": [f"fail closed at 100: graph indexed at {_SHA_A} is not the run base {_SHA_B}"]}},
+    ],
+    "units": [
+        {"ord": 1, "rows": [
+            {"event_id": 600, "event_type": "wicked.team.gate.opened",
+             "payload": {"kind": "unit_review", "gate_id": "g-pg-1", "ord": 1}},
+            {"event_id": 601, "event_type": "wicked.team.gate.decided",
+             "payload": {"kind": "unit_review", "gate_id": "g-pg-1", "ord": 1, "decision": "allow"}}]},
+        {"ord": 2, "rows": [
+            {"event_id": 619, "event_type": "wicked.team.gate.opened", "payload": {
+                "kind": "plan_approval", "gate_id": "g-pg-3", "ord": 2, "plan_rev": 2, "band": "70-100",
+                "high_risk": True, "mode": "manual", "reason": "manual_mode", "reviewing_ord": 1,
+                "diff": {"from_rev": 1, "added": ["test_plan", "architecture", "security_review"]}}}]},
+    ],
+}
 
 
 # ── Fix slice J4/J5: the outcome-partition corpus, behind `j5_runs` ───────────
@@ -2312,6 +2357,8 @@ def assemble_runs() -> list:
         # T9: the team corpus rides BOTH wires (list + detail).
         if state["team_plan"] and not state["no_runs"]:
             runs = runs + json.loads(json.dumps(TEAM_RUNS))
+        if state["plan_gate"] and not state["no_runs"]:
+            runs = runs + [json.loads(json.dumps(PLAN_GATE_RUN))]
     if viewer_on or repo_refs_on or forensics_on or provenance_on or project_dto_on \
             or chronicle_on or nerve_on or gate_now or guidance or wire433_on:
         runs = json.loads(json.dumps(runs))
@@ -3141,9 +3188,25 @@ class W2Handler(SimpleHTTPRequestHandler):
         # The rest of the interactive surface the Document journey reads (slice 6).
         if self._interactive_get(path):
             return True
+        # Dogfood D10/D11: GET /api/v1/runs/<id>/team — the plan gate's rows (plan_gate switch).
+        if len(parts) == 6 and parts[3] == "runs" and parts[5] == "team":
+            rid = urllib.parse.unquote(parts[4])
+            with state_lock:
+                on = state["plan_gate"]
+            if on and rid == "r-plan-gate":
+                self._json(200, PLAN_GATE_TEAM)
+            else:
+                self._json(404, {"error": f"w2 fixture: no team state for {rid}"})
+            return True
         # /api/v1/runs/<id>/gate
         if len(parts) == 6 and parts[3] == "runs" and parts[5] == "gate":
             rid = urllib.parse.unquote(parts[4])
+            with state_lock:
+                plan_gate_on = state["plan_gate"]
+            if rid == "r-plan-gate" and plan_gate_on:
+                self._json(200, {"runId": rid, "ord": 2, "lifecycle": "open", "prompt": PLAN_GATE_PROMPT,
+                                 "receivedAt": iso(NOW0), "options": None})
+                return True
             if rid == "r-q3":
                 with state_lock:
                     age = state["q3_gate_age_ms"]

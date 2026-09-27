@@ -10,9 +10,9 @@
   "version": 1,
   "studioVersion": "0.5.14",
   "counts": {
-    "files": 158,
-    "occurrences": 1427,
-    "static": 1230,
+    "files": 159,
+    "occurrences": 1443,
+    "static": 1242,
     "dynamic": 68,
     "computed": 7
   },
@@ -2328,6 +2328,12 @@
       ]
     },
     {
+      "testId": "gate-composer",
+      "files": [
+        "src/components/ChatInput.tsx"
+      ]
+    },
+    {
       "testId": "gate-inbox",
       "files": [
         "src/components/CenterDashboard.tsx"
@@ -3019,6 +3025,12 @@
     },
     {
       "testId": "launch-project-row",
+      "files": [
+        "src/components/ChatInput.tsx"
+      ]
+    },
+    {
+      "testId": "launch-repo-picker",
       "files": [
         "src/components/ChatInput.tsx"
       ]
@@ -3913,6 +3925,66 @@
       "testId": "plan-edit-unavailable",
       "files": [
         "src/components/PlanEditPanel.tsx"
+      ]
+    },
+    {
+      "testId": "plan-gate-actions",
+      "files": [
+        "src/components/SteeringGate.tsx"
+      ]
+    },
+    {
+      "testId": "plan-gate-approve-edited",
+      "files": [
+        "src/components/SteeringGate.tsx"
+      ]
+    },
+    {
+      "testId": "plan-gate-edit",
+      "files": [
+        "src/components/SteeringGate.tsx"
+      ]
+    },
+    {
+      "testId": "plan-gate-edit-open",
+      "files": [
+        "src/components/SteeringGate.tsx"
+      ]
+    },
+    {
+      "testId": "plan-gate-floor",
+      "files": [
+        "src/components/PlanGateSummary.tsx"
+      ]
+    },
+    {
+      "testId": "plan-gate-reason",
+      "files": [
+        "src/components/PlanGateSummary.tsx"
+      ]
+    },
+    {
+      "testId": "plan-gate-reasons",
+      "files": [
+        "src/components/PlanGateSummary.tsx"
+      ]
+    },
+    {
+      "testId": "plan-gate-score",
+      "files": [
+        "src/components/PlanGateSummary.tsx"
+      ]
+    },
+    {
+      "testId": "plan-gate-summary",
+      "files": [
+        "src/components/PlanGateSummary.tsx"
+      ]
+    },
+    {
+      "testId": "plan-gate-why",
+      "files": [
+        "src/components/PlanGateSummary.tsx"
       ]
     },
     {

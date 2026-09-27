@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { api } from '../api/client.js';
 import { ApiError } from '../api/errors.js';
 import type { GateDecision } from '../api/types.js';
+import type { LaunchPlan } from '../api/teamPlan.js';
 import { modePath } from '../hooks/useRoute.js';
 import { choicesOf, useGateStore } from '../store/gates.js';
 import { useMembershipStore } from '../store/membership.js';
@@ -15,7 +16,14 @@ import {
  * it cannot tell. Crew bundles this dist, so the two ship together: the key is always sent when
  * the gate is known. Local until studio pins api-types ≥ 0.44.0 — then this is plain `GateDecision`.
  */
-type GateDecisionWire = GateDecision & { ord?: number };
+type GateDecisionWire = GateAnswer & { ord?: number };
+
+/**
+ * A gate decision as studio composes it: the pinned `GateDecision`, plus `plan` — approve a
+ * `plan_approval` gate WITH AN EDITED PLAN (api-types 0.47.0, DES-TEAMING-002 T3; D11). Local
+ * until studio pins an api-types that carries `GateDecision.plan`.
+ */
+export type GateAnswer = GateDecision & { plan?: LaunchPlan };
 
 /**
  * The ONE gate-decision implementation (DES-FEEDBACK-002 §2.3, slice H): the
@@ -173,7 +181,7 @@ const PAST: Record<string, string> = { approve: 'Approved', reject: 'Rejected', 
  * error line. Side effects that assume the decision landed belong behind
  * `outcome === 'sent'`.
  */
-export function commitGateDecision(runId: string, decision: GateDecision): Promise<DecisionOutcome> {
+export function commitGateDecision(runId: string, decision: GateAnswer): Promise<DecisionOutcome> {
   const cur = useGateActionStore.getState().byGate[runId] ?? IDLE_GATE_ACTION;
   if (cur.queued || cur.busy || cur.answered !== null) {
     reportDecision('not-sent', dropNotice(runId, cur));

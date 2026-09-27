@@ -26,7 +26,8 @@ const MIN = 60_000;
 const HOUR = 3_600_000;
 
 function repo(id: string, name = id): RepoEntry {
-  return { id, name, root_path: `/repos/${id}`, default_branch: 'main', registered_at: NOW - 10 * HOUR };
+  // The wire's `registered_at` is epoch SECONDS (crew's repo registry; RepositoriesPanel reads it so).
+  return { id, name, root_path: `/repos/${id}`, default_branch: 'main', registered_at: Math.floor((NOW - 10 * HOUR) / 1000) };
 }
 
 /** An engine campaign (the REAL `GET /campaigns` shape) with one node per status entry;
@@ -149,6 +150,11 @@ describe('needsYouRows — dedupe', () => {
     expect(rows[0]!.kind).toBe('repo-graph');
     expect(rows[0]!.severity).toBe(30);
     expect(rows[0]!.action).toEqual({ kind: 'open', path: '/repo-detail/repo-x', label: 'Open repo ›' });
+  });
+
+  it('D6: a never-indexed row is dated in ms off the wire\'s epoch-seconds registered_at (never "20702d")', () => {
+    const rows = needsYouRows(inputs({ repos: [repo('repo-x')] }));
+    expect(rows[0]!.at).toBe(NOW - 10 * HOUR);
   });
 
   it('a repo with a READY graph contributes no row', () => {

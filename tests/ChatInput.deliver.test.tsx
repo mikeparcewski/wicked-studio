@@ -206,14 +206,14 @@ describe('ChatInput delivery (#123)', () => {
     expect(body.deliverGate).toBeUndefined();
   });
 
-  it('GUARD — no workflow: launches WITHOUT deliver (crew would 400), and names the guard', async () => {
+  it('GUARD — no workflow: launches WITHOUT deliver (crew would 400), and says nothing before anything is chosen (D2)', async () => {
     const user = userEvent.setup();
     render(<ChatInput runId={null} runStatus={null} onLaunched={vi.fn()} />);
     await bind(user, { repo: 'studio-api' });
 
-    const notice = screen.getByTestId('deliver-notice');
-    expect(notice.dataset.deliverState).toBe('no-workflow');
-    expect(notice.textContent).toMatch(/needs a workflow/i);
+    // D2 (dogfood 2026-09-27): the "needs a workflow" notice showed before anything was chosen.
+    // The no-PR notice is for a build launch without a repo only.
+    expect(screen.queryByTestId('deliver-notice')).toBeNull();
 
     // A non-code-shaped intent, so the §7.8 preflight is not what stops us here.
     await send(user, 'summarise the roster');

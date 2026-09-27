@@ -25,6 +25,9 @@ export interface OpenGate {
    * vocabulary `ElicitationInfo` already uses on this wire).
    */
   choices?: string[] | null;
+  /** The engine's gate kind off the live `awaitingHuman` frame (`plan_approval`, …); absent on a
+   *  late join (`GET /runs/:id/gate` does not carry it — the plan-gate read covers that). */
+  gateKind?: string;
 }
 
 /**
@@ -43,6 +46,12 @@ export function choicesOf(bag: Record<string, unknown>): string[] | null | undef
     if (value === null) return null;
   }
   return bag.freeText === true ? null : undefined;
+}
+
+/** The engine's gate kind off an `awaitingHuman` frame, when it names one. */
+function gateKindOf(event: CoreEvent): { gateKind?: string } {
+  const kind = (event as unknown as Record<string, unknown>)['gateKind'];
+  return typeof kind === 'string' ? { gateKind: kind } : {};
 }
 
 /**
@@ -149,6 +158,7 @@ export const useGateStore = create<GateStore>((set) => ({
                   receivedAt: Date.now(),
                   // Omitted rather than set to `undefined`: `exactOptionalPropertyTypes`.
                   ...(choices !== undefined ? { choices } : {}),
+                  ...gateKindOf(event),
                 },
               },
             };

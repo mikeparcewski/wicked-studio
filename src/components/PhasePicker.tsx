@@ -6,8 +6,10 @@ import { entryMarks } from '../board/planModel.js';
  * person's ordered selection, and the files the work will touch. A skin over `usePhaseSelection` —
  * the options are whatever the catalog serves, never a list of our own.
  */
-export function PhasePicker({ model, touch = true, emptyText }: {
+export function PhasePicker({ model, touch = true, emptyText, hide }: {
   model: PhaseSelection;
+  /** Catalog ids not to offer here — `deliver` when the launch (or run) already delivers (D4). */
+  hide?: readonly string[];
   /** Offer the touch field (a launch); a mid-run edit carries no touch set. */
   touch?: boolean;
   emptyText?: string;
@@ -37,7 +39,7 @@ export function PhasePicker({ model, touch = true, emptyText }: {
             Could not load the phase catalog.
           </span>
         )}
-        {catalog === 'ready' && entries.map((e) => {
+        {catalog === 'ready' && entries.filter((e) => !(hide ?? []).includes(e.id)).map((e) => {
           const marks = entryMarks(e);
           return (
             <button

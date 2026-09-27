@@ -1,0 +1,188 @@
+#!/usr/bin/env python3
+"""
+dogfood_fixes_test.py — the dogfood findings of 2026-09-27 on the launch screen and a plan gate
+(1440x700).
+
+  launch  /runs/new — D1 the header says the team model in one line (the PA scores and plans it,
+          you approve the plan, the team works it); D2 no "No PR" notice before anything is
+          chosen, and a repo picker sits beside Project on the composer row; D15 the launch
+          options offer no file upload (a launch cannot carry files to its run); D4 the phase
+          picker offers `deliver` with no repo, and not once a repo is picked (the launch
+          delivers, so it adds its own deliver step).
+  gate    /runs/r-plan-gate, paused at a high-risk plan_approval gate — D10 the card shows the
+          score, band, the score's reason (the stale graph, commits shortened), what the floor
+          added and why, "manual mode" once, and no evaluator verdict; D11 it offers approve,
+          edit the plan, reject (no "Approve + steer", no note box), the bottom composer is a team
+          message, and approving an edited plan POSTs {approve: true, plan} with no amend.
+
+Captures (e2e/shots/): dogfood-<skin>-launch.png, dogfood-<skin>-launch-picker.png,
+dogfood-<skin>-plan-gate.png, dogfood-<skin>-plan-edit.png.
+Env: FEEDBACK_PORT (default 4391), STUDIO_SKIN. JSON report; exit 0/1.
+"""
+
+import json
+import os
+import sys
+import time
+import urllib.request
+
+from uxfix_fixture import (DEFAULT_APPEARANCE, HIDE_GATE_TOASTS, REPO, STUDIO_SKIN, ensure_build,
+                           set_fixture, start_server)
+
+PORT = int(os.environ.get("FEEDBACK_PORT", "4391"))
+W, H = 1440, 700
+SHOTS = REPO / "e2e" / "shots"
+SKIN = STUDIO_SKIN
+
+report: dict = {"ok": False, "skin": SKIN, "steps": {}}
+
+
+class SectionFailed(Exception):
+    pass
+
+
+def fail(step: str, why: str) -> None:
+    report["steps"][step] = {"ok": False, "error": why}
+    print(json.dumps(report, indent=2))
+    sys.exit(1)
+
+
+def check(step: str, ok: bool, **detail) -> None:
+    report["steps"][step] = {"ok": bool(ok), **detail}
+    if not ok:
+        raise SectionFailed(step)
+
+
+def get_json(origin: str, path: str):
+    with urllib.request.urlopen(f"{origin}{path}", timeout=10) as res:
+        return json.loads(res.read())
+
+
+def gate_posts(origin: str, rid: str) -> list:
+    return [p for p in get_json(origin, "/__fixture/gate-posts")["posts"] if p["runId"] == rid]
+
+
+def reset(origin: str) -> None:
+    set_fixture(origin, **{"team_plan": True, "plan_gate": True, "repo": True, "reset_gate_posts": True,
+                           "appearance": {**DEFAULT_APPEARANCE, "skin": SKIN}})
+
+
+def wait_attr(page, testid: str, name: str, value: str, timeout: int = 8000) -> None:
+    page.wait_for_function(
+        """([t, n, v]) => { const el = document.querySelector(`[data-testid="${t}"]`);
+                          return !!el && el.getAttribute(n) === v; }""",
+        arg=[testid, name, value], timeout=timeout)
+
+
+def offered(page) -> list:
+    wait_attr(page, "phase-picker", "data-catalog-state", "ready")
+    return page.evaluate("""() => [...document.querySelectorAll('[data-testid="phase-option"]')]
+      .map(e => e.dataset.catalog)""")
+
+
+dist = ensure_build(fail)
+origin = start_server(PORT, dist)
+
+from playwright.sync_api import sync_playwright  # noqa: E402
+
+SHOTS.mkdir(parents=True, exist_ok=True)
+with sync_playwright() as p:
+    browser = p.chromium.launch()
+    page = browser.new_page(viewport={"width": W, "height": H}, device_scale_factor=1)
+    page.set_default_timeout(12000)
+    page.add_init_script(
+        "document.addEventListener('DOMContentLoaded', () => { const s = document.createElement('style'); "
+        f"s.textContent = {json.dumps(HIDE_GATE_TOASTS)}; document.head.appendChild(s); }});")
+
+    def section_launch() -> None:
+        reset(origin)
+        page.goto(f"{origin}/runs/new", wait_until="networkidle")
+        page.get_by_test_id("launch-problem").wait_for(state="visible", timeout=15000)
+        body = page.evaluate("() => document.body.innerText || ''")
+        check("d1-team-model-line",
+              "The PA scores and plans it, you approve the plan, and the team works it." in body
+              and "council elects" not in body)
+        check("d2-no-notice-before-a-choice", page.get_by_test_id("deliver-notice").count() == 0)
+        picker = page.locator('[data-testid="launch-project-row"] [data-testid="launch-repo-picker"]')
+        check("d2-repo-picker-beside-project", picker.count() == 1 and picker.is_visible())
+        page.get_by_role("button", name="Open launch options").click()
+        dialog = page.get_by_role("dialog", name="Launch options")
+        dialog.wait_for(state="visible")
+        check("d15-no-upload", dialog.locator('input[type="file"]').count() == 0
+              and "Upload files" not in (dialog.text_content() or ""))
+        page.get_by_role("button", name="Open launch options").click()
+        page.get_by_test_id("launch-problem").fill("add a rate limiter to the upload endpoint")
+        page.screenshot(path=str(SHOTS / f"dogfood-{SKIN}-launch.png"))
+
+        page.get_by_test_id("phase-picker-toggle").click()
+        check("d4-deliver-offered-without-a-repo", "deliver" in offered(page), offered=offered(page))
+        repo_id = page.evaluate("""() => [...document.querySelectorAll('[data-testid="launch-repo-picker"] option')]
+          .map(o => o.value).find(v => v && v !== '__several__') || ''""")
+        check("d2-a-repo-to-pick", repo_id != "", repo=repo_id)
+        picker.select_option(repo_id)
+        page.wait_for_function("""() => ![...document.querySelectorAll('[data-testid="phase-option"]')]
+          .some(e => e.dataset.catalog === 'deliver')""", timeout=8000)
+        check("d4-deliver-hidden-when-the-launch-delivers", "deliver" not in offered(page), offered=offered(page))
+        check("d2-notice-names-the-pr", page.get_by_test_id("deliver-notice").count() == 0
+              or page.get_by_test_id("deliver-notice").get_attribute("data-deliver-state") in ("on", None))
+        page.screenshot(path=str(SHOTS / f"dogfood-{SKIN}-launch-picker.png"))
+
+    def section_gate() -> None:
+        reset(origin)
+        page.goto(f"{origin}/runs/r-plan-gate", wait_until="networkidle")
+        wait_attr(page, "steering-gate", "data-gate-kind", "plan_approval", timeout=15000)
+        wait_attr(page, "plan-gate-summary", "data-state", "ready")
+        score = (page.get_by_test_id("plan-gate-score").text_content() or "").strip()
+        check("d10-score-band", score == "Score 100 · band 70-100 · high risk", score=score)
+        reason = page.get_by_test_id("plan-gate-reason").first.text_content() or ""
+        check("d10-reason-stale-graph", "graph indexed at 3071a76 is not the run base e9d64e7" in reason, reason=reason)
+        floor = page.get_by_test_id("plan-gate-floor").text_content() or ""
+        check("d10-floor-and-why", "test_plan, architecture, security_review" in floor
+              and "band 70-100 requires them" in floor, floor=floor)
+        prompt = page.get_by_test_id("steering-prompt").text_content() or ""
+        check("d10-manual-mode-once", prompt.count("manual mode") == 1, prompt=prompt)
+        check("d10-no-verdict-wall", page.get_by_test_id("gate-verdict").count() == 0)
+        check("d11-no-steer", page.get_by_test_id("steering-approve-steer").count() == 0
+              and page.get_by_test_id("steering-amend").count() == 0
+              and page.get_by_test_id("amend-prepopulated").count() == 0)
+        check("d11-plan-actions", page.get_by_test_id("steering-approve").is_visible()
+              and page.get_by_test_id("plan-gate-edit-open").is_visible()
+              and page.get_by_test_id("steering-reject").is_visible())
+        composer = page.get_by_test_id("gate-composer")
+        check("d11-composer-is-a-team-message", composer.get_attribute("data-mode") == "team-message"
+              and "approves gate" not in (composer.get_attribute("placeholder") or ""))
+        page.screenshot(path=str(SHOTS / f"dogfood-{SKIN}-plan-gate.png"))
+
+        page.get_by_test_id("plan-gate-edit-open").click()
+        page.wait_for_function("""() => document.querySelector('[data-testid="plan-gate-edit"] [data-testid="phase-picker"]')
+          ?.getAttribute('data-catalog-state') === 'ready'""", timeout=8000)
+        seeded = page.evaluate("""() => [...document.querySelectorAll('[data-testid="plan-gate-edit"] [data-testid="phase-selected"]')]
+          .map(e => e.dataset.catalog)""")
+        check("d11-edit-seeded-from-the-held-plan", seeded == ["understand", "design", "build", "review"], seeded=seeded)
+        in_edit = page.evaluate("""() => [...document.querySelectorAll('[data-testid="plan-gate-edit"] [data-testid="phase-option"]')]
+          .map(e => e.dataset.catalog)""")
+        check("d11-edit-never-authors-deliver", "deliver" not in in_edit and len(in_edit) > 0, offered=in_edit)
+        page.locator('[data-testid="plan-gate-edit"] [data-testid="phase-option"][data-catalog="test"]').click()
+        page.screenshot(path=str(SHOTS / f"dogfood-{SKIN}-plan-edit.png"))
+        page.get_by_test_id("plan-gate-approve-edited").click()
+        deadline = time.monotonic() + 15
+        while not gate_posts(origin, "r-plan-gate") and time.monotonic() < deadline:
+            page.wait_for_timeout(200)
+        posts = gate_posts(origin, "r-plan-gate")
+        body = posts[0]["body"] if posts else {}
+        steps = [st.get("catalog") for st in (body.get("plan") or {}).get("steps", [])]
+        check("d11-edited-plan-posted", len(posts) == 1 and body.get("approve") is True and "amend" not in body
+              and steps == ["understand", "design", "build", "review", "test"], body=body)
+
+    for section in (section_launch, section_gate):
+        try:
+            section()
+        except SectionFailed:
+            pass
+        except Exception as exc:  # noqa: BLE001 — every failure lands in the report
+            report["steps"][f"{section.__name__}-error"] = {"ok": False, "error": repr(exc)[:500]}
+    browser.close()
+
+report["ok"] = all(s.get("ok") for s in report["steps"].values())
+print(json.dumps(report, indent=2))
+sys.exit(0 if report["ok"] else 1)

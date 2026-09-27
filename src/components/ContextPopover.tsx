@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { seatStandingWord } from './HealthRailSection.js';
 import type { EntityMode, RepoEntry, RosterSeat, WorkflowDef } from '../api/types.js';
 
 export type ConfirmMode = 'none' | 'all' | 'before';
@@ -19,8 +19,6 @@ interface Props {
   repos: RepoEntry[];
   repoRefs: string[];
   onRepoRefsChange: (refs: string[]) => void;
-  attachedFiles: File[];
-  onFilesChange: (files: File[]) => void;
 }
 
 const WORKFLOW_LABELS: Record<string, string> = {
@@ -72,22 +70,7 @@ export function ContextPopover({
   repos,
   repoRefs,
   onRepoRefsChange,
-  attachedFiles,
-  onFilesChange,
 }: Props): React.ReactElement {
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>): void {
-    const picked = Array.from(e.target.files ?? []);
-    onFilesChange([...attachedFiles, ...picked]);
-    // Reset so the same file can be re-selected after removal
-    e.target.value = '';
-  }
-
-  function removeFile(idx: number): void {
-    onFilesChange(attachedFiles.filter((_, i) => i !== idx));
-  }
-
   return (
     <div
       role="dialog"
@@ -101,59 +84,8 @@ export function ContextPopover({
         maxHeight: '460px',
       }}
     >
-      {/* ── Upload files ─────────────────────────────────────────── */}
-      <div className="px-4 py-3">
-        <SectionHead>Upload files</SectionHead>
-        <button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          className="rounded-lg px-3 py-1.5 font-semibold transition-opacity hover:opacity-80"
-          style={{
-            background: 'var(--surface-raised)',
-            color: 'var(--ink-high)',
-            border: '1px solid var(--surface-raised)',
-          }}
-        >
-          Choose file(s)…
-        </button>
-        {/* TODO: ingest attached files via api.ingestKnowledge(title, chunks) on launch */}
-        <input
-          ref={fileInputRef}
-          type="file"
-          multiple
-          className="hidden"
-          onChange={handleFileChange}
-          aria-label="Upload files for knowledge context"
-        />
-        {attachedFiles.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 mt-2">
-            {attachedFiles.map((f, i) => (
-              <span
-                key={i}
-                className="flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px]"
-                style={{
-                  background: 'var(--accent-subtle)',
-                  color: 'var(--accent)',
-                  border: '1px solid var(--accent-subtle)',
-                }}
-              >
-                {f.name}
-                <button
-                  type="button"
-                  onClick={() => removeFile(i)}
-                  aria-label={`Remove ${f.name}`}
-                  className="opacity-60 hover:opacity-100 leading-none"
-                >
-                  ×
-                </button>
-              </span>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <Divider />
-
+      {/* D15: no "Upload files" here. A launch has no way to carry files to its run (POST /runs
+          takes none), so a picker that showed "N files attached" and dropped them is gone. */}
       {/* ── CLIs on/off ──────────────────────────────────────────── */}
       <div className="px-4 py-3">
         <SectionHead>CLIs on/off</SectionHead>
@@ -184,7 +116,9 @@ export function ContextPopover({
                     inactive
                   </span>
                 )}
-                {seat.signed_in === false && (
+                {/* D3: the roster's own word (`auth`, `council_eligible`) — the Health rail's fold, so
+                    a seat the daemon marks `auth: not_required` never reads "sign in needed". */}
+                {seatStandingWord(seat).kind === 'signed-out' && (
                   <span
                     className="rounded-full border px-1.5 text-[10px] font-mono"
                     style={{ color: 'var(--status-fail)', borderColor: 'var(--status-fail-dim)' }}

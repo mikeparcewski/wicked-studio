@@ -25,6 +25,8 @@ import { HOME_FRESH_MS, useNeedsSources } from '../store/needsSources.js';
 import { useLaunchPreview, usePhaseSelection } from '../hooks/useLaunchPlan.js';
 import { LaunchPreview } from './LaunchPreview.js';
 import { PhasePicker } from './PhasePicker.js';
+import { usePlanGate } from '../store/planGates.js';
+import { DELIVER_STEP } from '../board/planModel.js';
 
 interface Props {
   /** If set, we're in "run selected" mode — steer if gated, inject if executing, placeholder otherwise. */
@@ -67,6 +69,8 @@ interface Props {
 }
 
 const INJECT_STATUSES = new Set(['executing', 'distributing', 'planning']);
+/** The repo picker's placeholder value while several repos are attached and none is the target. */
+const SEVERAL_REPOS = '__several__';
 
 function detectWorkflow(text: string): string | null {
   const lower = text.toLowerCase();
@@ -118,6 +122,9 @@ function ActivePill({
 
 export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOverride, mode, injectTarget, onClearInjectTarget, navigate, lockedProjectId = null }: Props): React.ReactElement {
   const clearGate = useGateStore((s) => s.clearGate);
+  // D11: at a PLAN gate the bottom composer is a plain team message (inject), never a gate answer —
+  // the daemon refuses amend text there; the gate card above answers the plan.
+  const planGate = usePlanGate(runId, runStatus === 'awaiting_human');
 
   // Retry-as-prefill (DES-UX-001 §4.3): the LAUNCH-FORM composer consumes a
   // pending retry prefill ONCE at mount. PEEK in the lazy initializer (which
@@ -231,7 +238,6 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   const [beforeOrd, setBeforeOrd] = useState(
     prefill !== null ? prefillGate.beforeOrd : COMPOSER_DEFAULT_GATE_POSTURE.beforeOrd,
   );
-  const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
 
   // Delivery (studio#123, reworked by crew#393): the persisted `studio.composer`
   // preference SEEDS the default (it ships ON), and the per-launch "Open a PR
@@ -318,6 +324,21 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     setRepoRefs(next);
   }
 
+  /**
+   * The composer row's repo picker (D2): picking a repo attaches it (an explicit tick, as the
+   * launch options' list does) and makes it the target; "no repo" detaches every repo.
+   */
+  function pickRepo(id: string): void {
+    if (id === SEVERAL_REPOS) return;
+    if (id === '') {
+      onPopoverRepoRefs([]);
+      return;
+    }
+    const cur = repoRefsRef.current;
+    onPopoverRepoRefs(cur.includes(id) ? cur : [...cur, id]);
+    setTargetChoice(id);
+  }
+
   /** A chip's × — removing an auto-attached chip is the operator speaking (§7.8). */
   function removeRepoRef(rid: string): void {
     reposTouched.current = true;
@@ -351,6 +372,9 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   const targetRequired = launchKind === 'build' && target.kind === 'ambiguous';
   /** "No repository attached" — the resolver's verdict, the same one the wire body reads. */
   const noRepoAttached = target.kind === 'none';
+  /** The composer row's repo picker shows the resolved target (D2). */
+  const repoPickerValue =
+    target.kind === 'resolved' ? target.repoRef : target.kind === 'ambiguous' ? SEVERAL_REPOS : '';
 
   // ── Project binding (DES-FEEDBACK-001 §5, slice B) ─────────────────────────
   // `null` = Unfiled (§5.1): no `projectId` key in the POST body, the backend
@@ -590,9 +614,6 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     setSubmitting(true);
     setError(null);
 
-    // TODO: ingest attachedFiles via api.ingestKnowledge(title, chunks) before launching
-    // (api.ingestKnowledge does not yet exist on the client surface)
-
     // The steer prefill rides the problem body as a labelled trailing
     // paragraph (see the steer field's own caption) — LaunchRunBody carries
     // no guidance key until CREW-UX-4 lands (DES-UX-002 §7.2).
@@ -692,6 +713,12 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     setSteering(true);
     setSteerError(null);
     try {
+      if (planGate.isPlanGate) {
+        // D11: a plain message to the team; the plan gate stays open for the card to answer.
+        await api.injectMessage(runId, text, 'all');
+        setSteerText('');
+        return;
+      }
       const outcome = await commitGateDecision(runId, { approve: true, amend: text });
       if (outcome !== 'sent') return; // undone: the text stays for another go
       setSteerText('');
@@ -747,7 +774,9 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
               ref={steerRef}
               className="flex-1 resize-none text-base outline-none border-0 bg-transparent leading-6"
               style={{ minHeight: '28px', color: 'var(--ink-high)', fontFamily: 'inherit' }}
-              placeholder="Send steering guidance… (approves gate)"
+              data-testid="gate-composer"
+              data-mode={planGate.isPlanGate ? 'team-message' : 'steer'}
+              placeholder={planGate.isPlanGate ? 'Message the team… (the plan gate stays open)' : 'Send steering guidance… (approves gate)'}
               value={steerText}
               onChange={(e) => setSteerText(e.target.value)}
               onKeyDown={(e) => {
@@ -766,14 +795,16 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
               className="shrink-0 rounded-xl px-4 py-2 text-sm font-semibold transition-opacity disabled:opacity-40"
               style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
             >
-              {steering ? '…' : 'Steer →'}
+              {steering ? '…' : planGate.isPlanGate ? 'Send →' : 'Steer →'}
             </button>
           </div>
           <p
             className="text-[10px] font-mono text-center"
             style={{ color: 'var(--ink-dim)' }}
           >
-            Approve + steer · Cmd+Enter · Use the gate panel above to approve/reject without steering
+            {planGate.isPlanGate
+              ? 'Message the team · Cmd+Enter · Approve, edit or reject the plan on the gate card above'
+              : 'Approve + steer · Cmd+Enter · Use the gate panel above to approve/reject without steering'}
           </p>
         </div>
       );
@@ -930,19 +961,20 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   // repo-less, freeform and system launches never carry the key, so a control
   // there would promise a choice the body cannot honor.
   const deliverToggleVisible = launchKind === 'build' && targetRepoRef !== null;
+  /**
+   * A composed plan launch carries `deliver: 'pr'` — it adds its own deliver step (D4). Read for
+   * the picker, where any pick makes the launch build work: so a repo target and "Open a PR" on
+   * decide it, before the first pick as after.
+   */
+  const launchDelivers = targetRepoRef !== null && deliverOn;
   const deliverNotice: { state: string; text: string } | null = ((): { state: string; text: string } | null => {
     switch (launchKind) {
       case 'system':
         return null;
       case 'freeform':
-        // With delivery off there was nothing to warn about — the guard notices
-        // only matter to an operator who expected a PR.
-        return deliverOn
-          ? {
-              state: 'no-workflow',
-              text: 'No PR when this finishes — a run needs a workflow to deliver one. Pick one in launch options.',
-            }
-          : null;
+        // D2: nothing is chosen yet — no workflow, no plan — so there is no PR to promise or to
+        // warn about. The no-PR notice is for a BUILD launch without a repo (below), only.
+        return null;
       case 'build':
         // The SAME resolution the submit site puts on the wire (`targetRepoRef`)
         // — the notice's whole contract is that it cannot disagree with the body.
@@ -1033,12 +1065,6 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
       },
     });
   }
-  if (attachedFiles.length > 0) {
-    activePills.push({
-      label: `${attachedFiles.length} file${attachedFiles.length !== 1 ? 's' : ''} attached`,
-      onClear: () => setAttachedFiles([]),
-    });
-  }
   if (confirmMode !== 'none') {
     activePills.push({
       label: confirmMode === 'all' ? 'Gate: every unit' : `Gate: before #${beforeOrd}`,
@@ -1125,6 +1151,37 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
           // Docked (non-embedded) forms sit at the pane's bottom edge — open up.
           dropUp={!embedded}
         />
+
+        {/* ── D2: the repo, beside the project — attaching one is what makes a PR possible, so
+            it is not buried in the launch options (which keep their tick list too). ── */}
+        <span
+          className="text-[11px] font-mono uppercase tracking-widest"
+          style={{ color: 'var(--ink-dim)' }}
+        >
+          Repo
+        </span>
+        <select
+          data-testid="launch-repo-picker"
+          aria-label="Repository"
+          title="The repository this run works in and opens its PR on"
+          className="rounded-lg px-2 py-1 text-[11px] font-mono"
+          style={{
+            background: 'var(--surface-card)',
+            border: '1px solid var(--surface-raised)',
+            color: 'var(--ink-high)',
+            maxWidth: '150px',
+          }}
+          value={repoPickerValue}
+          onChange={(e) => pickRepo(e.target.value)}
+        >
+          <option value="">{repos.length === 0 ? 'none registered' : 'no repo'}</option>
+          {target.kind === 'ambiguous' && (
+            <option value={SEVERAL_REPOS} disabled>{`${attachedRefs.length} attached: choose one`}</option>
+          )}
+          {repos.map((r) => (
+            <option key={r.id} value={r.id}>{repoSlugOf(r)}</option>
+          ))}
+        </select>
 
         {/* ── Ad-hoc grouping (wicked-studio#27, api-types 0.19.0): file this
             launch under an existing campaign, an existing group label, or a
@@ -1236,7 +1293,9 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
         </select>
       </div>
 
-      {pickerOpen && <PhasePicker model={selection} />}
+      {/* D4: a launch that delivers (a repo attached, "Open a PR" on) adds its own deliver step,
+          so the picker does not offer a second one the preview would refuse. */}
+      {pickerOpen && <PhasePicker model={selection} {...(launchDelivers ? { hide: [DELIVER_STEP] } : {})} />}
       <LaunchPreview model={launchPreview} />
 
       {showNewProject && (
@@ -1577,8 +1636,6 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
                 repos={repos}
                 repoRefs={repoRefs}
                 onRepoRefsChange={onPopoverRepoRefs}
-                attachedFiles={attachedFiles}
-                onFilesChange={setAttachedFiles}
               />
             </div>
           )}

@@ -14,7 +14,9 @@ import type {
   EditPlanResponse,
   LaunchPlan,
   PlanPreviewResponse,
+  RunTeamResponse,
   TeamPlanStep,
+  TeamRow,
 } from '../api/teamPlan.js';
 
 /** The PA's read-only scope step (wicked-core X1): ord 1 of a scoped launch. */
@@ -231,4 +233,105 @@ export function planEditAvailability(session: { status: string; run_identity?: u
     return { show: true, editable: false, reason: 'The run is waiting at a gate: answer the gate first, then add phases.' };
   }
   return { show: true, editable: true };
+}
+
+// ── The plan gate (D10 / D11) ───────────────────────────────────────────────────────────────
+
+/** The catalog id of the launch's own deliver step: never authored in a plan edit. */
+export const DELIVER_STEP = 'deliver';
+
+/** What the person decides at a `plan_approval` gate, read off `GET /runs/:id/team`. */
+export interface PlanGateView {
+  gateId: string;
+  /** The unit the gate pauses before. */
+  ord: number;
+  planRev: number;
+  band: string;
+  highRisk: boolean;
+  /** Why the gate opened: `manual_mode`, `high_risk`, `into_high_risk`, `override`. */
+  reason: string;
+  /** The score behind the band (`path.scored` before the gate); `null` when none was published. */
+  score: number | null;
+  /** The score's reasons, as the engine wrote them (40-hex commits shortened to 7). */
+  reasons: string[];
+  /** The phases the floor added to the plan at this rev (`gate.opened.diff.added`). */
+  floorAdded: string[];
+  /** The held plan's authored phases (catalog ids), for an edit: no `pa-scope`, no deliver step. */
+  editSeed: string[];
+}
+
+function str(v: unknown): string | null {
+  return typeof v === 'string' ? v : null;
+}
+
+const SHA40 = /\b([0-9a-f]{7})[0-9a-f]{33}\b/g;
+
+/**
+ * The OPEN plan gate of a run: the newest `gate.opened{kind:"plan_approval"}` no `gate.decided`
+ * answered. `null` when the run is not waiting on its plan (a unit gate, or nothing open).
+ */
+export function planGateOf(team: RunTeamResponse): PlanGateView | null {
+  const all: TeamRow[] = [...(team.rows ?? []), ...(team.units ?? []).flatMap((u) => u.rows ?? [])]
+    .sort((a, b) => a.event_id - b.event_id);
+  const decided = new Set(
+    all.filter((r) => r.event_type === 'wicked.team.gate.decided').map((r) => str(r.payload['gate_id'])),
+  );
+  const open = all
+    .filter((r) => r.event_type === 'wicked.team.gate.opened' && r.payload['kind'] === 'plan_approval')
+    .filter((r) => !decided.has(str(r.payload['gate_id'])))
+    .pop();
+  if (open === undefined) return null;
+  const p = open.payload;
+  const before = all.filter((r) => r.event_id < open.event_id);
+  const scored = before.filter((r) => r.event_type === 'wicked.team.path.scored').pop();
+  const proposed = before.filter((r) => r.event_type === 'wicked.team.plan.proposed').pop();
+  const diff = p['diff'] as { added?: unknown } | undefined;
+  const reasons = Array.isArray(scored?.payload['reasons'])
+    ? (scored.payload['reasons'] as unknown[]).filter((x): x is string => typeof x === 'string')
+    : [];
+  const steps = Array.isArray(proposed?.payload['steps'])
+    ? (proposed.payload['steps'] as Array<{ catalog?: unknown; id?: unknown }>)
+    : [];
+  return {
+    gateId: str(p['gate_id']) ?? '',
+    ord: typeof p['ord'] === 'number' ? p['ord'] : 0,
+    planRev: typeof p['plan_rev'] === 'number' ? p['plan_rev'] : 0,
+    band: str(p['band']) ?? '',
+    highRisk: p['high_risk'] === true,
+    reason: str(p['reason']) ?? '',
+    score: typeof scored?.payload['score'] === 'number' ? scored.payload['score'] : null,
+    reasons: reasons.map((r) => r.replace(SHA40, '$1')),
+    floorAdded: Array.isArray(diff?.added) ? diff.added.filter((x): x is string => typeof x === 'string') : [],
+    editSeed: steps
+      .filter((st) => st.id !== PA_SCOPE_STEP && st.catalog !== DELIVER_STEP && typeof st.catalog === 'string')
+      .map((st) => st.catalog as string),
+  };
+}
+
+/** Why the plan gate stopped the run, in words (the gate's `reason`, with its band). */
+export function planGateReasonText(v: PlanGateView): string {
+  if (v.reason === 'into_high_risk') return `the plan moved into high risk (band ${v.band}): it needs your approval`;
+  return pauseReasonText(v.reason === '' ? null : v.reason, v.highRisk ? v.band : null);
+}
+
+/** What the floor added and why: a band's floor requires those phases. */
+export function floorAddedText(v: PlanGateView): string {
+  if (v.floorAdded.length === 0) return 'The floor added nothing to this plan.';
+  return `The floor added ${v.floorAdded.join(', ')}: band ${v.band} requires ${v.floorAdded.length === 1 ? 'it' : 'them'}.`;
+}
+
+/**
+ * A gate prompt with each repeated clause said once: the engine's plan gate prompt reads
+ * "(manual mode; band 0-19; manual mode)" — its mode and its reason are both "manual mode".
+ */
+export function dedupePromptClauses(prompt: string): string {
+  return prompt.replace(/\(([^()]*)\)/g, (_m, inner: string) => {
+    const seen = new Set<string>();
+    const kept = inner.split(';').map((c) => c.trim()).filter((c) => {
+      if (c === '' || seen.has(c)) return false;
+      seen.add(c);
+      return true;
+    });
+    return `(${kept.join('; ')})`;
+  });
 }

@@ -328,7 +328,8 @@ export function needsYouRows(inputs: NeedsYouInputs): NeedRow[] {
         subject: repo.name,
         text: 'Never indexed — no onboarding run on record',
         tone: 'gate',
-        at: repo.registered_at ?? null,
+        // The wire's `registered_at` is epoch SECONDS; every `at` here is ms (D6: "20702d").
+        at: typeof repo.registered_at === 'number' ? repo.registered_at * 1000 : null,
         subjectPath: `/repo-detail/${encodeURIComponent(repo.id)}`,
         action: {
           kind: 'open',

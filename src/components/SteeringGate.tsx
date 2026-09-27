@@ -18,6 +18,11 @@ import { GateVerdict } from './GateVerdict.js';
 import { failedSeatOf, gateVerdictFor, isEscalationGate, isFailureEscalation, isSeatFailure, isRestoredRetry, phaseLabel } from './gateVerdictModel.js';
 import { IntakePlan, isIntakeGate } from './IntakePlan.js';
 import { ReassignControl } from './ReassignControl.js';
+import { DELIVER_STEP, dedupePromptClauses } from '../board/planModel.js';
+import { usePhaseSelection } from '../hooks/useLaunchPlan.js';
+import { usePlanGate } from '../store/planGates.js';
+import { PhasePicker } from './PhasePicker.js';
+import { PlanGateSummary } from './PlanGateSummary.js';
 
 interface Props {
   runId: string;
@@ -90,9 +95,16 @@ function coverageLabel(r: CoverageReport): string {
 export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, clis, workflow, onResolved, autoDeliver }: Props): React.ReactElement {
   const clearGate = useGateStore((s) => s.clearGate);
   const recordSteering = useSteeringStore((s) => s.record);
+  // D10 / D11: a PLAN gate (`plan_approval`) decides the plan, not a unit. The daemon takes an
+  // approve, a reject, or an approve with an EDITED plan there — never amend text — and the card
+  // shows why the plan scored as it did, not the scope step's verdict.
+  const planGate = usePlanGate(runId, true);
+  const isPlanGate = planGate.isPlanGate;
+  const [editingPlan, setEditingPlan] = useState(false);
+  const planEdit = usePhaseSelection(editingPlan);
   // F-7R2-008: the intake gate — the engine's pre-run gate on the run's FIRST unit — renders the
   // planned phases + seats above the prompt, so "approve" is an informed act over the plan.
-  const intake = isIntakeGate(prompt, ord, units ?? EMPTY_UNITS);
+  const intake = !isPlanGate && isIntakeGate(prompt, ord, units ?? EMPTY_UNITS);
   // The evaluator's record for THIS gate (wicked-studio#250, F-3R2-006): a pure view over the
   // run's event log — already hydrated by the run page and fed live by /ws — so the card states
   // what the operator is approving (the fix phase's verdict, criterion, the checks that ran) or
@@ -105,7 +117,10 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
   const events = useRunEventStore((s) => s.byRun[runId]) ?? EMPTY_EVENTS;
   // F-7R2-018: an ESCALATION gate about unit N shows only unit N's own evaluation — never the
   // previous phase's pass under a card about the unit that failed (`gateVerdictFor`).
-  const verdict = useMemo(() => gateVerdictFor(events, ord, prompt), [events, ord, prompt]);
+  const verdict = useMemo(
+    () => (isPlanGate ? null : gateVerdictFor(events, ord, prompt)),
+    [events, ord, prompt, isPlanGate],
+  );
   // F-7R2-007: a failure-escalation gate offers to move the unit to another seat — plain Approve
   // re-dispatches the seat that just failed. Not on a deliver-lift escalation (a LIFT-CONFLICT or
   // a refused lift is the engine's story, told by the lift block below — another seat cannot fix
@@ -277,6 +292,17 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
   const approve = (): Promise<void> =>
     run(() => commitGateDecision(runId, { approve: true }), { kind: 'approve' });
 
+  // D11: approve the plan gate WITH the edited plan (T9's picker, seeded from the held plan).
+  const approveEditedPlan = (): Promise<void> => {
+    const plan = planEdit.plan;
+    if (plan === null) return Promise.resolve();
+    return run(() => commitGateDecision(runId, { approve: true, plan: { steps: plan.steps } }), { kind: 'approve' });
+  };
+  const openPlanEdit = (): void => {
+    planEdit.replace(planGate.view?.editSeed ?? []);
+    setEditingPlan(true);
+  };
+
   // Escalation Retry: re-dispatches the failed unit. Optionally carries the amend note — the
   // deliver-unit prompt says "Approve to retry (optionally amend)" and other escalation shapes
   // also accept amend on a plain approve; the daemon records it durably in the gate audit trail.
@@ -299,7 +325,8 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
   // the daemon's gate audit durably records the note on the decision. An empty
   // textarea still sends the bare reject.
   const reject = (): Promise<void> => {
-    const text = amend.trim();
+    // A plan gate takes no note (D11): its reject is the bare reject, whatever a draft holds.
+    const text = isPlanGate ? '' : amend.trim();
     const decision: GateDecision = text === '' ? { approve: false } : { approve: false, amend: text };
     return run(() => commitGateDecision(runId, decision), {
       kind: 'reject',
@@ -366,7 +393,10 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
   // full cause appears in the headline (F-E2E-014). Non-escalation prompts carry a genuine
   // architectural footnote that belongs collapsed.
   const rawPrompt = prompt ?? 'Prompt unavailable (daemon restarted) — you can still approve or reject.';
-  const { headline, footnote } = escalationGate ? { headline: rawPrompt.trim(), footnote: null } : cleanPrompt(rawPrompt);
+  const cleaned = escalationGate ? { headline: rawPrompt.trim(), footnote: null } : cleanPrompt(rawPrompt);
+  // A plan gate's prompt names "manual mode" twice (its mode and its reason): once is enough (D10).
+  const headline = isPlanGate ? dedupePromptClauses(cleaned.headline) : cleaned.headline;
+  const footnote = cleaned.footnote;
 
   // Both mutation-gate prompts the engine has shipped — the pre-0.33.0 retry-or-reject wording and
   // wicked-core#431's "… Approve to retry the phase against the restored tree …" — carry
@@ -393,6 +423,7 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
       }}
       data-testid="steering-gate"
       data-run-id={runId}
+      data-gate-kind={isPlanGate ? 'plan_approval' : 'unit'}
       {...(restoredRetry ? { 'data-retry-restored': 'true' } : {})}
     >
       <div className="flex items-center gap-2 mb-2">
@@ -440,6 +471,17 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
         >
           {promptOpen ? 'show less' : 'show the full prompt'}
         </button>
+      )}
+
+      {/* D10: why the plan scored as it did — score, band, reasons, the floor's additions. */}
+      {isPlanGate && <PlanGateSummary view={planGate.view} />}
+
+      {/* D11: the edited plan — T9's picker, seeded with the held plan's authored phases. The
+          launch's deliver step is the engine's to place; it is never authored in an edit. */}
+      {isPlanGate && editingPlan && (
+        <div data-testid="plan-gate-edit" className="mb-2">
+          <PhasePicker model={planEdit} touch={false} hide={[DELIVER_STEP]} emptyText="Pick the phases the plan should run." />
+        </div>
       )}
 
       {/* The intake gate's PLAN (F-7R2-008): on the pre-run gate for the run's FIRST unit, every
@@ -518,7 +560,7 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
             the doc per the operator steer recorded there). Edits sync BACK to
             the draft store so a remount before the decision keeps the newest
             text; the decision clears it (see run()). */}
-        <textarea
+        {!isPlanGate && <textarea
           ref={steerRef}
           data-testid={prepopulated ? 'amend-prepopulated' : 'steering-amend'}
           data-run-id={runId}
@@ -538,7 +580,7 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
           value={amend}
           onChange={(e) => applyAmend(e.target.value)}
           disabled={locked}
-        />
+        />}
 
         {error && (
           <p className="text-xs mb-3 font-mono" style={{ color: 'var(--status-fail)' }} data-testid="steering-error">
@@ -566,7 +608,60 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
           />
         )}
 
-        {escalationGate && lift === null ? (
+        {isPlanGate ? (
+          /* D11: a plan gate — approve, approve with an edited plan, reject. No steer: the daemon
+           * refuses amend text on a plan gate ("takes an edited plan, not amend text"). */
+          <div className="grid grid-cols-2 gap-2" data-testid="plan-gate-actions">
+            <button
+              data-testid="steering-approve"
+              onClick={() => void approve()}
+              disabled={locked}
+              className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
+              style={{ background: 'var(--status-run)', color: 'var(--surface-base)' }}
+            >
+              Approve the plan
+            </button>
+            {editingPlan ? (
+              <button
+                data-testid="plan-gate-approve-edited"
+                onClick={() => void approveEditedPlan()}
+                disabled={locked || planEdit.plan === null}
+                className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
+                style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
+              >
+                Approve the edited plan
+              </button>
+            ) : (
+              <button
+                data-testid="plan-gate-edit-open"
+                onClick={openPlanEdit}
+                disabled={locked}
+                className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
+                style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
+              >
+                Edit the plan…
+              </button>
+            )}
+            <button
+              data-testid="steering-reject"
+              onClick={() => void reject()}
+              disabled={locked}
+              className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
+              style={{ background: 'var(--status-fail-dim)', border: '1px solid var(--status-fail-dim)', color: 'var(--status-fail)' }}
+            >
+              Reject
+            </button>
+            <button
+              data-testid="steering-cancel"
+              onClick={() => void cancel()}
+              disabled={locked}
+              className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
+              style={{ background: 'var(--surface-raised)', border: '1px solid var(--ink-dim)', color: 'var(--ink-muted)' }}
+            >
+              Cancel run
+            </button>
+          </div>
+        ) : escalationGate && lift === null ? (
           /* Non-deliver escalation (#299): Retry / Request changes / Reject / Cancel run.
            * "Request changes" rewinds to the last creator phase — semantically correct when a
            * build/recon/verify unit failed. Deliver-unit escalations (lift !== null) suppress it
@@ -690,7 +785,11 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
         )}
 
         {/* Mode-selector note / action hint */}
-        {escalationGate && lift === null ? (
+        {isPlanGate ? (
+          <p className="text-[10px] font-mono mt-2" style={{ color: 'var(--ink-dim)' }}>
+            Plan gate — approve runs the plan as shown · edit changes its phases (the floor still adds what its band requires) · reject cancels the run
+          </p>
+        ) : escalationGate && lift === null ? (
           <p className="text-[10px] font-mono mt-2" style={{ color: 'var(--ink-dim)' }}>
             Retry re-runs the failed unit · Request changes rewinds to the last creator phase (note required) · Reject cancels the run · Cancel run stops the run without a gate decision
           </p>
