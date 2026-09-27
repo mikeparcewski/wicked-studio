@@ -10,9 +10,9 @@
   "version": 1,
   "studioVersion": "0.5.14",
   "counts": {
-    "files": 160,
-    "occurrences": 1453,
-    "static": 1248,
+    "files": 161,
+    "occurrences": 1462,
+    "static": 1257,
     "dynamic": 68,
     "computed": 7
   },
@@ -2358,6 +2358,18 @@
       ]
     },
     {
+      "testId": "gate-move",
+      "files": [
+        "src/components/SteeringGate.tsx"
+      ]
+    },
+    {
+      "testId": "gate-move-consequence",
+      "files": [
+        "src/components/SteeringGate.tsx"
+      ]
+    },
+    {
       "testId": "gate-notification",
       "files": [
         "src/components/GateNotifications.tsx"
@@ -2373,6 +2385,12 @@
       "testId": "gate-posture",
       "files": [
         "src/components/ChatInput.tsx"
+      ]
+    },
+    {
+      "testId": "gate-recommended",
+      "files": [
+        "src/components/SteeringGate.tsx"
       ]
     },
     {
@@ -7213,6 +7231,42 @@
       "testId": "verdict-detail",
       "files": [
         "src/components/VerdictDetail.tsx"
+      ]
+    },
+    {
+      "testId": "verdict-diff",
+      "files": [
+        "src/components/VerdictDiff.tsx"
+      ]
+    },
+    {
+      "testId": "verdict-diff-claim",
+      "files": [
+        "src/components/VerdictDiff.tsx"
+      ]
+    },
+    {
+      "testId": "verdict-diff-criterion",
+      "files": [
+        "src/components/VerdictDiff.tsx"
+      ]
+    },
+    {
+      "testId": "verdict-diff-note",
+      "files": [
+        "src/components/VerdictDiff.tsx"
+      ]
+    },
+    {
+      "testId": "verdict-diff-row",
+      "files": [
+        "src/components/VerdictDiff.tsx"
+      ]
+    },
+    {
+      "testId": "verdict-diff-toggle",
+      "files": [
+        "src/components/VerdictDiff.tsx"
       ]
     },
     {

@@ -7,6 +7,7 @@ import type { RetryPrefill } from '../store/retryPrefill.js';
 import { campaignCounts, campaignMemberRunIds } from './campaignStats.js';
 import { STALLED_IDLE_SECS, stalledLiveChats, type LiveChatSnapshot } from './chatStats.js';
 import { gateOpenPath } from './gateActions.js';
+import { gateRowVerb } from '../components/gateMoveModel.js';
 import { outcomeOf, runStats } from './metrics.js';
 import { repoOnboard } from './repoStats.js';
 import { onboardEstimate, type OnboardEstimate } from './repairMoves.js';
@@ -183,6 +184,8 @@ export interface GateLite {
   ord: number;
   /** The gate store's answer shape — `null` = free text (complex); see `isSimpleGate`. */
   choices?: string[] | null;
+  /** The live frame's gate kind (`plan_approval`, …) — names the row's verb (`gateRowVerb`). */
+  gateKind?: string;
 }
 
 /** A gate is SIMPLE iff it offers ≤2 answers and needs no free text — the gate
@@ -380,7 +383,9 @@ export function needsYouRows(inputs: NeedsYouInputs): NeedRow[] {
         action: {
           kind: 'open',
           path: projectId !== undefined ? gateOpenPath(projectId, s.id) : `/runs/${encodeURIComponent(s.id)}`,
-          label: 'Open gate ›',
+          // The gate card's recommended move, named on the row (brainstorm idea 1): the row still
+          // OPENS the gate — the ellipsis says the answer is given there.
+          label: gateRowVerb(gate?.prompt, gate?.gateKind) ?? 'Open gate ›',
         },
       });
     } else if (s.status === 'failed' && windowIds.has(s.id) && !suppressed.has(s.id)) {

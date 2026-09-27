@@ -209,7 +209,9 @@ describe('SteeringGate — Approve means "retry against the restored tree" exact
     // the ord-4 PASS (no mutation on that fold), so the button is the ordinary Approve.
     mount([...G5R_EVENTS, ...G6_EVENTS.slice(G5_EVENTS.length)], G6_GATE);
     expect(screen.getByTestId('gate-verdict')).toHaveAttribute('data-verdict', 'pass');
-    expect(screen.getByTestId('steering-approve')).toHaveTextContent('Approve');
+    // The gate before the deliver unit recommends the deliver move (brainstorm idea 1) — never a retry.
+    expect(screen.getByTestId('gate-recommended')).toHaveAttribute('data-move', 'deliver');
+    expect(screen.getByTestId('gate-recommended')).not.toHaveTextContent('Retry');
     expect(screen.queryByTestId('gate-verdict-restored')).toBeNull();
   });
 
