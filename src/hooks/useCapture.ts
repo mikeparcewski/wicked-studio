@@ -35,6 +35,13 @@ export interface CaptureState {
 
 const errText = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 
+/**
+ * The ONE poller: Home's verb and the Ask dock can both be mounted, and two pollers would race
+ * each other's deposits. Every mounted drop ticks, but only the owner reads; when the owner
+ * unmounts it lets go and the next tick of any other drop takes over. (codex on #348)
+ */
+let owner: symbol | null = null;
+
 export function useCapture(runs: readonly SessionView[], pollMs = 3000): CaptureState {
   const last = useCaptureStore((s) => s.last);
   const seenIds = useCaptureStore((s) => s.seenIds);
@@ -75,23 +82,31 @@ export function useCapture(runs: readonly SessionView[], pollMs = 3000): Capture
   const startedAt = last?.at ?? 0;
   useEffect(() => {
     if (runId === null) return;
+    const me = Symbol('capture-poller');
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const read = async (): Promise<void> => {
-      try {
-        const rows = await listProposals({ state: 'pending' });
-        if (cancelled) return;
-        useNeedsSources.getState().depositProposals(rows);
-        useCaptureStore.getState().see(rows.filter((p) => p.provenance.run_id === runId).map((p) => p.id));
-      } catch {
-        /* a failed read is retried on the next tick; the queue keeps its last answer */
+    const tick = async (): Promise<void> => {
+      if (owner === null) owner = me;
+      if (owner === me) {
+        const readStart = Date.now();
+        try {
+          const rows = await listProposals({ state: 'pending' });
+          if (cancelled) return;
+          // Never overwrite a newer answer another surface deposited while this read was in flight.
+          const newer = (useNeedsSources.getState().readAt.proposals ?? 0) > readStart;
+          if (!newer) useNeedsSources.getState().depositProposals(rows);
+          useCaptureStore.getState().see(rows.filter((p) => p.provenance.run_id === runId).map((p) => p.id));
+        } catch {
+          /* a failed read is retried on the next tick; the queue keeps its last answer */
+        }
       }
-      if (!cancelled && !done && Date.now() - startedAt < MAX_POLL_MS) timer = setTimeout(() => void read(), pollMs);
+      if (!cancelled && !done && Date.now() - startedAt < MAX_POLL_MS) timer = setTimeout(() => void tick(), pollMs);
     };
-    void read();
+    void tick();
     return () => {
       cancelled = true;
       if (timer !== undefined) clearTimeout(timer);
+      if (owner === me) owner = null;
     };
   }, [runId, startedAt, done, pollMs]);
 

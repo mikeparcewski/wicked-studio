@@ -74,6 +74,24 @@ describe('useCapture (behaviour 8)', () => {
     expect(wire.rejectProposal).not.toHaveBeenCalled();
   });
 
+  it('two mounted drops (Home and the Ask dock) poll as ONE (codex on #348)', async () => {
+    wire.listProposals.mockResolvedValue([filed('a')]);
+    const a = renderHook(() => useCapture([run('executing')], 20));
+    await act(async () => { await a.result.current.send('p1', 'P One', 'notes', []); });
+    const b = renderHook(() => useCapture([run('executing')], 20));
+    await waitFor(() => expect(b.result.current.filed?.seen).toBe(1));
+    wire.listProposals.mockClear();
+    await new Promise((r) => setTimeout(r, 110));
+    // One reader at 20 ms: ~5 reads in 110 ms; two readers would make ~10.
+    expect(wire.listProposals.mock.calls.length).toBeLessThanOrEqual(7);
+    // The owner leaves: the other drop takes over.
+    a.unmount();
+    wire.listProposals.mockClear();
+    await new Promise((r) => setTimeout(r, 80));
+    expect(wire.listProposals.mock.calls.length).toBeGreaterThan(0);
+    b.unmount();
+  });
+
   it('a refused capture is said and starts nothing', async () => {
     wire.postCapture.mockRejectedValueOnce(new Error('a capture needs notes or at least one file'));
     const { result } = renderHook(() => useCapture([], 10));
