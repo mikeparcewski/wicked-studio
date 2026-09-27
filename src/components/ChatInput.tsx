@@ -25,7 +25,7 @@ import { HOME_FRESH_MS, useNeedsSources } from '../store/needsSources.js';
 import { useLaunchPreview, usePhaseSelection } from '../hooks/useLaunchPlan.js';
 import { LaunchPreview } from './LaunchPreview.js';
 import { PhasePicker } from './PhasePicker.js';
-import { usePlanGate } from '../store/planGates.js';
+import { isPlanGateNow, usePlanGate } from '../store/planGates.js';
 import { DELIVER_STEP } from '../board/planModel.js';
 
 interface Props {
@@ -713,7 +713,8 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     setSteering(true);
     setSteerError(null);
     try {
-      if (planGate.isPlanGate) {
+      // A late join may not know the gate's kind yet: decide it before sending (codex on #352).
+      if (planGate.isPlanGate || (planGate.pending && (await isPlanGateNow(runId)))) {
         // D11: a plain message to the team; the plan gate stays open for the card to answer.
         await api.injectMessage(runId, text, 'all');
         setSteerText('');
@@ -803,7 +804,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
             style={{ color: 'var(--ink-dim)' }}
           >
             {planGate.isPlanGate
-              ? 'Message the team · Cmd+Enter · Approve, edit or reject the plan on the gate card above'
+              ? 'Message the team · it reaches the next step · Cmd+Enter · Approve, edit or reject the plan on the gate card above'
               : 'Approve + steer · Cmd+Enter · Use the gate panel above to approve/reject without steering'}
           </p>
         </div>

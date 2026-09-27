@@ -318,6 +318,8 @@ interface GateCardProps {
   ready: boolean;
   onApprove: (runId: string, amend?: string) => Promise<void>;
   onReject: (runId: string) => Promise<void>;
+  /** Open the run page — where a plan gate's edited-plan answer lives (D11). */
+  onOpenRun: (runId: string) => void;
 }
 
 function GateActionCard({
@@ -331,6 +333,7 @@ function GateActionCard({
   ready,
   onApprove,
   onReject,
+  onOpenRun,
 }: GateCardProps): React.ReactElement {
   const [amend, setAmend] = useState('');
   const [loading, setLoading] = useState(false);
@@ -338,7 +341,7 @@ function GateActionCard({
   const clearGate = useGateStore((s) => s.clearGate);
   // D11: a plan gate takes approve / reject / an edited plan (on the run page's card) — never
   // steer text — and shows no unit verdict (D10).
-  const { isPlanGate } = usePlanGate(runId, true);
+  const { isPlanGate, pending: kindPending } = usePlanGate(runId, true);
   // The same verdict block the run page's gate card renders (F-3R2-006): a gate answered from
   // this inbox must show what it is approving too. Bounded on the gate's ord — with none known,
   // no block, never an unbounded historical evaluation dressed as this gate's — and only once
@@ -476,7 +479,7 @@ function GateActionCard({
       )}
 
       {/* Steer textarea — visible only when "Approve + steer" is toggled */}
-      {steerOpen && !isPlanGate && (
+      {steerOpen && !isPlanGate && !kindPending && (
         <textarea
           style={{
             width: '100%',
@@ -529,9 +532,30 @@ function GateActionCard({
         >
           {restoredRetry ? 'Retry against the restored tree' : escalation && typeof failedCli === 'string' ? `Approve (retry on ${failedCli})` : 'Approve'}
         </button>
+        {isPlanGate && (
+          <button
+            type="button"
+            data-testid="gate-inbox-edit-plan"
+            onClick={() => onOpenRun(runId)}
+            title="Approve with an edited plan on the run page"
+            style={{
+              background: 'var(--surface-raised)',
+              color: 'var(--ink-high)',
+              border: '1px solid var(--surface-raised)',
+              borderRadius: 'var(--radius-sm)',
+              padding: '5px 12px',
+              fontSize: 'var(--text-xs)',
+              fontWeight: 600,
+              ...sans,
+              cursor: 'pointer',
+            }}
+          >
+            Edit the plan ›
+          </button>
+        )}
         {!isPlanGate && <button
           type="button"
-          disabled={loading}
+          disabled={loading || kindPending}
           onClick={() => {
             if (!steerOpen) {
               setSteerOpen(true);
@@ -1233,6 +1257,7 @@ export function CenterDashboard({
                     ready={gateReady.has(gateInstanceKey(gate))}
                     onApprove={handleApprove}
                     onReject={handleReject}
+                    onOpenRun={onSelectRun}
                   />
                 );
               })}

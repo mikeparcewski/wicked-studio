@@ -315,7 +315,8 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
 
   const approveWithSteer = (): Promise<void> => {
     const text = amend.trim();
-    if (!text) return Promise.resolve();
+    // Never steer a gate whose kind is still unknown: it may be a plan gate (codex on #352).
+    if (!text || planGate.pending || isPlanGate) return Promise.resolve();
     const decision: GateDecision = { approve: true, amend: text };
     return run(() => commitGateDecision(runId, decision), { kind: 'approve-with-steer', amend: text });
   };
@@ -757,7 +758,8 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
             <button
               data-testid="steering-approve-steer"
               onClick={() => void approveWithSteer()}
-              disabled={locked || !amend.trim()}
+              disabled={locked || !amend.trim() || planGate.pending}
+              {...(planGate.pending ? { title: 'Reading which kind of gate this is…' } : {})}
               className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
               style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
             >

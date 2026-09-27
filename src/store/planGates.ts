@@ -34,6 +34,11 @@ export async function loadPlanGate(runId: string): Promise<void> {
  */
 export function usePlanGate(runId: string | null | undefined, active: boolean): {
   isPlanGate: boolean;
+  /**
+   * The gate's kind is not known yet: no live frame named it (a reload, a late join) and the team
+   * read has not answered. Callers fail CLOSED on it — no steer path — until it resolves.
+   */
+  pending: boolean;
   view: PlanGateView | null;
 } {
   const gate = useGateStore((s) => (runId ? s.gates[runId] : undefined));
@@ -43,9 +48,23 @@ export function usePlanGate(runId: string | null | undefined, active: boolean): 
     if (!runId || !active) return;
     void loadPlanGate(runId);
   }, [runId, active, gateKey]);
-  if (!runId || !active) return { isPlanGate: false, view: null };
+  if (!runId || !active) return { isPlanGate: false, pending: false, view: null };
   return {
     isPlanGate: gate?.gateKind === 'plan_approval' || (view !== undefined && view !== null),
+    pending: gate?.gateKind === undefined && view === undefined,
     view: view ?? null,
   };
+}
+
+/**
+ * Whether a run's open gate is a plan gate, decided NOW: the live frame's kind, else the team
+ * read (awaited when it has not answered yet). For a send that must not answer a plan gate with
+ * steer text while its kind is still unknown.
+ */
+export async function isPlanGateNow(runId: string): Promise<boolean> {
+  const kind = useGateStore.getState().gates[runId]?.gateKind;
+  if (kind !== undefined) return kind === 'plan_approval';
+  if (usePlanGateStore.getState().byRun[runId] === undefined) await loadPlanGate(runId);
+  const view = usePlanGateStore.getState().byRun[runId];
+  return view !== undefined && view !== null;
 }

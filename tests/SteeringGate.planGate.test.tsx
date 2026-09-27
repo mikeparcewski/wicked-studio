@@ -171,3 +171,35 @@ describe('the bottom composer at a plan gate', () => {
     expect(screen.getByTestId('gate-composer').dataset.mode).toBe('steer');
   });
 });
+
+// codex on #352: a reload or late join knows no gate kind until the team read answers. Until then
+// nothing may steer the gate — it may be a plan gate, whose daemon refuses amend text.
+describe('a gate whose kind is not known yet fails closed', () => {
+  it('the card keeps Approve + steer disabled while the team read is pending', async () => {
+    let answer: (t: RunTeamResponse) => void = () => undefined;
+    vi.spyOn(teamPlanApi, 'team').mockReturnValue(new Promise((res) => { answer = res; }));
+    const user = userEvent.setup();
+    render(<SteeringGate runId="run-kind-pending" ord={2} prompt="Approve unit 2?" />);
+    await user.type(screen.getByTestId('steering-amend'), 'focus on the API');
+    expect(screen.getByTestId('steering-approve-steer')).toBeDisabled();
+    answer({ rows: [], units: [] });
+    await waitFor(() => expect(screen.getByTestId('steering-approve-steer')).toBeEnabled());
+  });
+
+  it('the bottom composer decides the kind before it sends: a plan gate gets a team message', async () => {
+    let answer: (t: RunTeamResponse) => void = () => undefined;
+    vi.spyOn(teamPlanApi, 'team').mockReturnValue(new Promise((res) => { answer = res; }));
+    vi.spyOn(client.api, 'getRoster').mockResolvedValue({ roster: [] });
+    vi.spyOn(client.api, 'listRepos').mockResolvedValue({ repos: [] });
+    vi.spyOn(client.api, 'listWorkflows').mockResolvedValue({ workflows: [] });
+    const inject = vi.spyOn(client.api, 'injectMessage').mockResolvedValue({ status: 'ok' });
+    const confirm = vi.spyOn(client.api, 'confirmGate').mockResolvedValue({ ok: true } as never);
+    const user = userEvent.setup();
+    render(<ChatInput runId="run-kind-late" runStatus="awaiting_human" onLaunched={vi.fn()} />);
+    await user.type(screen.getByTestId('gate-composer'), 'keep the API stable');
+    await user.keyboard('{Meta>}{Enter}{/Meta}');
+    answer(highRiskTeam());
+    await waitFor(() => expect(inject).toHaveBeenCalledWith('run-kind-late', 'keep the API stable', 'all'));
+    expect(confirm).not.toHaveBeenCalled();
+  });
+});
