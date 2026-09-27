@@ -623,6 +623,13 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          #   completed) and r-rerun-mid (band 40-69) — plus GET/POST /standing-orders (POSTs tapped at
          #   /__fixture/standing-order-posts; the create route mirrors crew#693's plan-trust refusal).
          "run_page": False,
+         # home_runs — brainstorm-actionable ideas 10, 11, 15 (e2e/wavec_home_runs_test.py): r-reuse, a
+         #   completed user-plan run whose units carry their catalog steps, rides GET /runs; GET /presets
+         #   serves TEAM_PRESETS and PUT /presets/:name is recorded (GET /__fixture/preset-puts); GET/PUT
+         #   /deliveries/freeze (crew#694) hold the switch, and while it is on POST /runs/:id/gate answers
+         #   crew's 409 deliveries_frozen for an approve of a DELIVER gate (r-trust-deliver; pair with
+         #   trust_rules). Off: those routes answer the unknown-route 404 an older daemon gives.
+         "home_runs": False,
          }
 state_lock = threading.Lock()
 # Idea 9: every POST /governance/rules body the fixture received (GET /__fixture/rule-posts).
@@ -638,6 +645,10 @@ gate_moved_done: set = set()
 # Ideas 7+8: the standing orders made this lifetime, and every POST /standing-orders body.
 trust_orders: list = []
 standing_order_posts: list = []
+# Ideas 11+15: every PUT /presets/:name (GET /__fixture/preset-puts) and the delivery freeze switch.
+preset_put_log: list = []
+FREEZE_THAWED = {"frozen": False, "since": None, "by": None, "reason": None}
+delivery_freeze: dict = dict(FREEZE_THAWED)
 
 # ── The crew settings store (DES-VISION-001 §3.3, vision slice 7) ──────────────
 #
@@ -998,6 +1009,22 @@ def _decided(i: int, days: float, seat: str = "claude", decision: str = "approve
            "band": "0-19", "creator": {"seat": seat, "phase": "build", "ord": 1}, "orderApprovable": True}
     row.update(over)
     return row
+
+
+# ── Brainstorm-actionable idea 11: a finished run's next use (switch `home_runs`) ──
+def _reuse_unit(key: str, ord_: int, catalog: str) -> dict:
+    return {"id": f"r-reuse:{key}", "session_id": "r-reuse", "ord": ord_, "description": f"{key} — tidy the upload handler",
+            "stage": "build", "assigned_cli": "claude", "assigned_invocation": None, "council_task_ref": None,
+            "routing": None, "denial_reason": None, "phase_ref": key, "conformance_ref": None, "phase_status": None,
+            "collection_scope": None, "status": "done", "catalog": catalog}
+
+
+REUSE_RUN = _team_run("r-reuse", "completed", "tidy the upload handler",
+                      {"kind": "user_plan", "name": None, "user_plan": True, "system": False},
+                      workflow_id="r-reuse:plan-2", ended_at=int((NOW0 - 30 * MIN) / 1000))
+REUSE_RUN["units"] = [_reuse_unit("pa-scope", 0, "understand"), _reuse_unit("understand", 1, "understand"),
+                      _reuse_unit("build", 2, "build"), _reuse_unit("review", 3, "review"),
+                      _reuse_unit("deliver", 4, "deliver")]
 
 
 TRUST_HISTORY = sorted([
@@ -2632,6 +2659,8 @@ def assemble_runs() -> list:
             runs = runs + json.loads(json.dumps(TRUST_RUNS))
         if state["run_page"] and not state["no_runs"]:
             runs = runs + json.loads(json.dumps(RUN_PAGE_RUNS))
+        if state["home_runs"] and not state["no_runs"]:
+            runs = runs + [json.loads(json.dumps(REUSE_RUN))]
     if viewer_on or repo_refs_on or forensics_on or provenance_on or project_dto_on \
             or chronicle_on or nerve_on or gate_now or guidance or wire433_on:
         runs = json.loads(json.dumps(runs))
@@ -3154,6 +3183,16 @@ class W2Handler(SimpleHTTPRequestHandler):
         if path == "/api/v1/health":
             self._json(200, {"status": "ok", "version": "w2-fixture", "ping": "pong"})
             return True
+        # Idea 15: the delivery freeze switch (crew#694).
+        if path == "/api/v1/deliveries/freeze":
+            with state_lock:
+                on = state["home_runs"]
+                snapshot = dict(delivery_freeze)
+            if not on:
+                self._json(404, {"error": f"w2 fixture: no such endpoint {path}"})
+            else:
+                self._json(200, snapshot)
+            return True
         # Ideas 7+8: the decided-gate history (crew#691) and the standing orders (crew#686); the card
         # reads GET /whoami so only YOUR decisions make the offer (auth off: the `local` actor).
         if path == "/api/v1/whoami":
@@ -3197,7 +3236,7 @@ class W2Handler(SimpleHTTPRequestHandler):
         # T9: the engine's phase catalog and the presets (crew 0.47.0), switch-gated.
         if path in ("/api/v1/catalog", "/api/v1/presets"):
             with state_lock:
-                on = state["team_plan"]
+                on = state["team_plan"] or (state["home_runs"] and path == "/api/v1/presets")
             if not on:
                 self._json(404, {"error": f"w2 fixture: no such endpoint {path}"})
             elif path == "/api/v1/catalog":
@@ -4374,6 +4413,10 @@ class W2Handler(SimpleHTTPRequestHandler):
             with state_lock:
                 posts = list(plan_post_log)
             return self._json(200, {"posts": posts})
+        if path == "/__fixture/preset-puts":
+            with state_lock:
+                puts = list(preset_put_log)
+            return self._json(200, {"puts": puts})
         if path == "/__fixture/rule-posts":
             with state_lock:
                 posts = list(rule_post_log)
@@ -4407,6 +4450,12 @@ class W2Handler(SimpleHTTPRequestHandler):
             if body.get("reset_rule_posts"):
                 with state_lock:
                     rule_post_log.clear()
+            if body.get("reset_home_runs"):
+                with state_lock:
+                    preset_put_log.clear()
+                    gate_post_log.clear()
+                    delivery_freeze.clear()
+                    delivery_freeze.update(FREEZE_THAWED)
             if body.get("reset_orders"):
                 with state_lock:
                     trust_orders.clear()
@@ -4610,6 +4659,17 @@ class W2Handler(SimpleHTTPRequestHandler):
                 gate_post_log.append({"runId": rid, "body": body, "at": time.time()})
                 if moved:
                     gate_moved_done.add(rid)
+                held = (state["home_runs"] and delivery_freeze["frozen"] and body.get("approve") is True
+                        and rid in TRUST_GATES and TRUST_GATES[rid][1] == "deliver")
+                freeze_now = dict(delivery_freeze)
+            if held:
+                # Idea 15: crew's refusal for an approve of a deliver gate while frozen (crew#694).
+                why = f" ({freeze_now['reason']})" if freeze_now.get("reason") else ""
+                return self._json(409, {
+                    "error": f"Deliveries are frozen by {freeze_now['by']} since {freeze_now['since']}{why}: "
+                             "nothing is pushed while the freeze is on. The gate stays open — unfreeze "
+                             "deliveries, then approve again.",
+                    "code": "deliveries_frozen"})
             if moved:
                 # T9: crew's real 409 for a decision that outlived its gate (routes.ts, api-types 0.44.0).
                 return self._json(409, {
@@ -4930,6 +4990,41 @@ class W2Handler(SimpleHTTPRequestHandler):
                     settings_store.update(body)
                 snapshot = json.loads(json.dumps(settings_store))
             return self._json(200, {"settings": snapshot})
+        # Idea 15: PUT /deliveries/freeze {frozen, reason?} — crew#694's strict body, audited there.
+        if path == "/api/v1/deliveries/freeze":
+            with state_lock:
+                on = state["home_runs"]
+            if not on:
+                return self._json(404, {"error": f"w2 fixture: no such endpoint {path}"})
+            if not isinstance(body, dict) or not isinstance(body.get("frozen"), bool) \
+                    or set(body) - {"frozen", "reason"}:
+                return self._json(400, {"error": "Invalid request body: expected {frozen: boolean, reason?: string}"})
+            with state_lock:
+                if body["frozen"] and not delivery_freeze["frozen"]:
+                    delivery_freeze.update({"frozen": True, "since": iso(NOW0), "by": "local",
+                                            "reason": body.get("reason") or None})
+                elif not body["frozen"]:
+                    delivery_freeze.clear()
+                    delivery_freeze.update(FREEZE_THAWED)
+                snapshot = dict(delivery_freeze)
+            return self._json(200, snapshot)
+        # Idea 11: PUT /presets/:name {steps, projectId?} — crew's preset save (0.47.0), recorded.
+        m = re.match(r"^/api/v1/presets/([^/]+)$", path)
+        if m:
+            with state_lock:
+                on = state["home_runs"] or state["team_plan"]
+            if not on:
+                return self._json(404, {"error": f"w2 fixture: no such endpoint {path}"})
+            name = urllib.parse.unquote(m.group(1))
+            steps = body.get("steps") if isinstance(body, dict) else None
+            if not isinstance(steps, list) or not steps or set(body) - {"steps", "projectId"}:
+                return self._json(400, {"error": "Invalid request body"})
+            if any(p["name"] == name and p["created_by"] == "builtin" for p in TEAM_PRESETS) and not body.get("projectId"):
+                return self._json(409, {"error": f"preset_builtin_readonly: `{name}` is a built-in preset"})
+            with state_lock:
+                preset_put_log.append({"name": name, "body": body})
+            return self._json(200, {"preset": {"name": name, "scope": "global", "steps": steps,
+                                               "created_by": "api", "updated_at": NOW0}})
         # Slice BE: PUT /runs/:id/guidance — the CREW-UX-7 upsert (crew#312),
         # mirrored verbatim: strict {text} body; the 8KB cap answers a 400
         # NAMING the limit (the daemon's exact sentence); an unknown run is the

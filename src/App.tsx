@@ -71,6 +71,7 @@ import { api } from './api/client.js';
 import { useAppearanceStore } from './theming/appearance.js';
 import { useNotifPrefsStore } from './store/notifPrefs.js';
 import { useComposerPrefsStore } from './store/composerPrefs.js';
+import { useDeliveryFreezeStore } from './store/deliveryFreeze.js';
 import { notifyGateIfUnfocused } from './board/desktopNotify.js';
 
 /** Frames that change run-list / unit state → trigger a `GET /runs` reconcile. */
@@ -167,6 +168,9 @@ export function App(): React.ReactElement {
     // at startup; the default (open a PR when a build run finishes) stands if
     // the surface, or the key, is absent.
     void useComposerPrefsStore.getState().load();
+    // Idea 15: the delivery freeze — read once at startup (and again when an approve comes back
+    // `deliveries_frozen`); a daemon without the route draws no switch.
+    void useDeliveryFreezeStore.getState().load();
   }, []);
 
   // Pre-merge bookmarks (`/runs/:id`, `/projects/:id`) redirect into the shell (§1.5).

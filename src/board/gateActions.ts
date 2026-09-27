@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import { api } from '../api/client.js';
 import { ApiError } from '../api/errors.js';
+import { isDeliveriesFrozen } from '../api/deliveryFreeze.js';
+import { useDeliveryFreezeStore } from '../store/deliveryFreeze.js';
 import type { GateDecision } from '../api/types.js';
 import type { LaunchPlan } from '../api/teamPlan.js';
 import { modePath } from '../hooks/useRoute.js';
@@ -259,6 +261,9 @@ export async function sendGateDecision(runId: string, decision: GateDecisionWire
       patch(runId, { error: GATE_MOVED_TEXT });
       return GATE_MOVED_TEXT;
     }
+    // Idea 15: a frozen deliver approve is refused and the gate stays open — re-read the switch
+    // so the status bar's banner shows who froze it, even when someone else did.
+    if (isDeliveriesFrozen(e)) void useDeliveryFreezeStore.getState().load();
     const error = e instanceof Error ? e.message : String(e);
     patch(runId, { error });
     return error;

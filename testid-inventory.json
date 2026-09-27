@@ -10,9 +10,9 @@
   "version": 1,
   "studioVersion": "0.5.14",
   "counts": {
-    "files": 163,
-    "occurrences": 1516,
-    "static": 1311,
+    "files": 165,
+    "occurrences": 1532,
+    "static": 1330,
     "dynamic": 68,
     "computed": 7
   },
@@ -1584,6 +1584,48 @@
       ]
     },
     {
+      "testId": "delivery-freeze-banner",
+      "files": [
+        "src/components/DeliveryFreezeSwitch.tsx"
+      ]
+    },
+    {
+      "testId": "delivery-freeze-confirm",
+      "files": [
+        "src/components/DeliveryFreezeSwitch.tsx"
+      ]
+    },
+    {
+      "testId": "delivery-freeze-confirm-btn",
+      "files": [
+        "src/components/DeliveryFreezeSwitch.tsx"
+      ]
+    },
+    {
+      "testId": "delivery-freeze-consequence",
+      "files": [
+        "src/components/DeliveryFreezeSwitch.tsx"
+      ]
+    },
+    {
+      "testId": "delivery-freeze-error",
+      "files": [
+        "src/components/DeliveryFreezeSwitch.tsx"
+      ]
+    },
+    {
+      "testId": "delivery-freeze-open",
+      "files": [
+        "src/components/DeliveryFreezeSwitch.tsx"
+      ]
+    },
+    {
+      "testId": "delivery-freeze-reason",
+      "files": [
+        "src/components/DeliveryFreezeSwitch.tsx"
+      ]
+    },
+    {
       "testId": "demo-clis-row",
       "files": [
         "src/components/DemoWizard.tsx"
@@ -2856,6 +2898,12 @@
       ]
     },
     {
+      "testId": "home-focus-toggle",
+      "files": [
+        "src/components/NeedsYouQueue.tsx"
+      ]
+    },
+    {
       "testId": "home-kpis",
       "files": [
         "src/components/DeckKpiRibbon.tsx"
@@ -3616,6 +3664,18 @@
     },
     {
       "testId": "need-batch-act",
+      "files": [
+        "src/components/NeedsYouQueue.tsx"
+      ]
+    },
+    {
+      "testId": "need-focus-note",
+      "files": [
+        "src/components/NeedsYouQueue.tsx"
+      ]
+    },
+    {
+      "testId": "need-focus-show-all",
       "files": [
         "src/components/NeedsYouQueue.tsx"
       ]
@@ -5030,7 +5090,7 @@
     {
       "testId": "run-archive-row",
       "files": [
-        "src/components/WorkPage.tsx"
+        "src/components/FinishedRunRow.tsx"
       ]
     },
     {
@@ -5160,6 +5220,18 @@
       ]
     },
     {
+      "testId": "run-draft-update-row",
+      "files": [
+        "src/components/FinishedRunRow.tsx"
+      ]
+    },
+    {
+      "testId": "run-finished-row",
+      "files": [
+        "src/components/FinishedRunRow.tsx"
+      ]
+    },
+    {
       "testId": "run-header",
       "files": [
         "src/components/ChatPanel.tsx"
@@ -5211,6 +5283,48 @@
       "testId": "run-retry",
       "files": [
         "src/components/ChatPanel.tsx"
+      ]
+    },
+    {
+      "testId": "run-reuse-consequence",
+      "files": [
+        "src/components/FinishedRunRow.tsx"
+      ]
+    },
+    {
+      "testId": "run-reuse-error",
+      "files": [
+        "src/components/FinishedRunRow.tsx"
+      ]
+    },
+    {
+      "testId": "run-reuse-name",
+      "files": [
+        "src/components/FinishedRunRow.tsx"
+      ]
+    },
+    {
+      "testId": "run-reuse-panel",
+      "files": [
+        "src/components/FinishedRunRow.tsx"
+      ]
+    },
+    {
+      "testId": "run-reuse-preset",
+      "files": [
+        "src/components/FinishedRunRow.tsx"
+      ]
+    },
+    {
+      "testId": "run-reuse-save",
+      "files": [
+        "src/components/FinishedRunRow.tsx"
+      ]
+    },
+    {
+      "testId": "run-reuse-saved",
+      "files": [
+        "src/components/FinishedRunRow.tsx"
       ]
     },
     {

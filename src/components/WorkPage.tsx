@@ -3,6 +3,7 @@ import { api } from '../api/client.js';
 import type { SessionView } from '../api/types.js';
 import { outcomeOf } from '../board/metrics.js';
 import { RunLink } from './RunLink.js';
+import { FinishedRunRow } from './FinishedRunRow.js';
 import { rangeWord, useTimeRange } from '../hooks/useTimeRange.js';
 import { TimeRangeSelector } from './TimeRangeSelector.js';
 
@@ -381,20 +382,7 @@ export function WorkPage({ runs, selectedRunId, onSelect, navigate, search = '',
               <>
                 <GroupLabel>Completed</GroupLabel>
                 {completedGroup.map(v => (
-                  <div key={v.session.id} className="flex items-center gap-2">
-                    <div className="flex-1 min-w-0">
-                      <RunLink view={v} selectedRunId={selectedRunId} onSelect={onSelect} />
-                    </div>
-                    <button
-                      type="button"
-                      data-testid="run-archive-row"
-                      onClick={() => void archive(v.session.id)}
-                      className="rounded-lg px-2 py-1 text-[11px] font-mono shrink-0"
-                      style={{ color: 'var(--ink-muted)', border: '1px solid var(--surface-raised)' }}
-                    >
-                      Archive
-                    </button>
-                  </div>
+                  <FinishedRunRow key={v.session.id} view={v} selectedRunId={selectedRunId} onSelect={onSelect} onArchive={(id) => void archive(id)} />
                 ))}
               </>
             )}
@@ -402,20 +390,7 @@ export function WorkPage({ runs, selectedRunId, onSelect, navigate, search = '',
               <>
                 <GroupLabel>Failed</GroupLabel>
                 {failedGroup.map(v => (
-                  <div key={v.session.id} className="flex items-center gap-2">
-                    <div className="flex-1 min-w-0">
-                      <RunLink view={v} selectedRunId={selectedRunId} onSelect={onSelect} />
-                    </div>
-                    <button
-                      type="button"
-                      data-testid="run-archive-row"
-                      onClick={() => void archive(v.session.id)}
-                      className="rounded-lg px-2 py-1 text-[11px] font-mono shrink-0"
-                      style={{ color: 'var(--ink-muted)', border: '1px solid var(--surface-raised)' }}
-                    >
-                      Archive
-                    </button>
-                  </div>
+                  <FinishedRunRow key={v.session.id} view={v} selectedRunId={selectedRunId} onSelect={onSelect} onArchive={(id) => void archive(id)} />
                 ))}
               </>
             )}
@@ -423,20 +398,7 @@ export function WorkPage({ runs, selectedRunId, onSelect, navigate, search = '',
               <>
                 <GroupLabel>Cancelled</GroupLabel>
                 {cancelledGroup.map(v => (
-                  <div key={v.session.id} className="flex items-center gap-2">
-                    <div className="flex-1 min-w-0">
-                      <RunLink view={v} selectedRunId={selectedRunId} onSelect={onSelect} />
-                    </div>
-                    <button
-                      type="button"
-                      data-testid="run-archive-row"
-                      onClick={() => void archive(v.session.id)}
-                      className="rounded-lg px-2 py-1 text-[11px] font-mono shrink-0"
-                      style={{ color: 'var(--ink-muted)', border: '1px solid var(--surface-raised)' }}
-                    >
-                      Archive
-                    </button>
-                  </div>
+                  <FinishedRunRow key={v.session.id} view={v} selectedRunId={selectedRunId} onSelect={onSelect} onArchive={(id) => void archive(id)} />
                 ))}
               </>
             )}
@@ -451,20 +413,7 @@ export function WorkPage({ runs, selectedRunId, onSelect, navigate, search = '',
                 tab === 'active' ? (
                   <RunLink key={v.session.id} view={v} selectedRunId={selectedRunId} onSelect={onSelect} />
                 ) : (
-                  <div key={v.session.id} className="flex items-center gap-2">
-                    <div className="flex-1 min-w-0">
-                      <RunLink view={v} selectedRunId={selectedRunId} onSelect={onSelect} />
-                    </div>
-                    <button
-                      type="button"
-                      data-testid="run-archive-row"
-                      onClick={() => void archive(v.session.id)}
-                      className="rounded-lg px-2 py-1 text-[11px] font-mono shrink-0"
-                      style={{ color: 'var(--ink-muted)', border: '1px solid var(--surface-raised)' }}
-                    >
-                      Archive
-                    </button>
-                  </div>
+                  <FinishedRunRow key={v.session.id} view={v} selectedRunId={selectedRunId} onSelect={onSelect} onArchive={(id) => void archive(id)} />
                 )
               )
             )}

@@ -168,6 +168,9 @@ export const teamPlanApi = {
       body: JSON.stringify(body),
     }),
   team: (runId: string) => apiFetch<RunTeamResponse>(`/runs/${encodeURIComponent(runId)}/team`),
+  /** Save a preset (`PUT /presets/:name`, crew 0.47.0): global when `projectId` is absent. */
+  putPreset: (name: string, body: { steps: Array<{ catalog: string; id: string }>; projectId?: string }) =>
+    apiFetch<{ preset: Preset }>(`/presets/${encodeURIComponent(name)}`, { method: 'PUT', body: JSON.stringify(body) }),
   presets: (projectId?: string | null) =>
     apiFetch<{ presets: Preset[] }>(
       projectId ? `/presets?projectId=${encodeURIComponent(projectId)}` : '/presets',
