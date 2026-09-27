@@ -23,7 +23,10 @@ import { usePhaseSelection } from '../hooks/useLaunchPlan.js';
 import { usePlanGate } from '../store/planGates.js';
 import { PhasePicker } from './PhasePicker.js';
 import { PlanGateSummary } from './PlanGateSummary.js';
-import { escalationSummaryFor, isDeliverGate, recommendGateMove, type GateMove } from './gateMoveModel.js';
+import { creatorUnitBefore, escalationSummaryFor, isDeliverGate, recommendGateMove, type GateMove } from './gateMoveModel.js';
+import { recordLabel, ruleOffer, seatRecord } from './gateTrustModel.js';
+import { useGateTrust } from '../hooks/useGateTrust.js';
+import { useProjectsStore } from '../store/projects.js';
 import { VerdictDiff } from './VerdictDiff.js';
 
 interface Props {
@@ -47,6 +50,10 @@ interface Props {
   /** The run's deliver posture (`session.auto_deliver`, F-E2E-030) for the intake plan's deliver
    *  row; `null`/absent = the engine predates the deliver gate. */
   autoDeliver?: boolean | null;
+  /** The run's project and accepted plan band, and the gate's engine kind (brainstorm ideas 7, 8).
+   *  A host that passes `trust` gets the creator seat's track record on the button and the
+   *  "make it a rule" offer; without it the card reads no history. */
+  trust?: { projectId: string | null; band: string | null; gateKind: string | null; landsDoctrine: boolean };
   onResolved?: () => void;
 }
 
@@ -108,7 +115,7 @@ function coverageLabel(r: CoverageReport): string {
   return `Coverage: ${pct} · ${r.behavior_bearing.toLocaleString()} nodes · ${r.unaccounted} unaccounted${resolvedPct}`;
 }
 
-export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, clis, workflow, onResolved, autoDeliver }: Props): React.ReactElement {
+export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, clis, workflow, onResolved, autoDeliver, trust }: Props): React.ReactElement {
   const clearGate = useGateStore((s) => s.clearGate);
   const recordSteering = useSteeringStore((s) => s.record);
   // D10 / D11: a PLAN gate (`plan_approval`) decides the plan, not a unit. The daemon takes an
@@ -282,6 +289,41 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
     [runId, ord, units, verdict, verdictSummary, escalationGate, hasLift, restoredRetry, isPlanGate, planGate.view, runDiff],
   );
   const hidden = duplicateOf(move, escalationGate);
+
+  // Brainstorm ideas 7 and 8 — trust at the gate. The creator seat's recent record on this kind of
+  // step rides the button the card leads with, as neutral text (it never changes the move); and
+  // after the same approval on the last 3 alike gates the card offers to make it a standing order,
+  // with what that order would have done over the last 14 days shown before it is made.
+  const gateTrust = useGateTrust(runId, ord, trust !== undefined);
+  const projectName = useProjectsStore((s) => (trust?.projectId == null ? null : s.projects.find((p) => p.id === trust.projectId)?.name ?? null));
+  const creator = useMemo(
+    () => (isPlanGate || typeof ord !== 'number' ? null : creatorUnitBefore(units ?? EMPTY_UNITS, ord)),
+    [isPlanGate, ord, units],
+  );
+  const record = useMemo(() => {
+    if (gateTrust.gates === null || creator === null || typeof creator.assigned_cli !== 'string' || creator.assigned_cli === '') return null;
+    const r = seatRecord(gateTrust.gates, creator.assigned_cli, creator.phase_ref ?? null);
+    return r === null ? null : recordLabel(r);
+  }, [gateTrust.gates, creator]);
+  const offer = useMemo(() => {
+    if (trust === undefined || gateTrust.gates === null || gateTrust.orders === null || gateTrust.me === undefined || planGate.pending) return null;
+    return ruleOffer(gateTrust.gates, gateTrust.orders, {
+      projectId: trust.projectId, projectName, band: trust.band, gateKind: trust.gateKind,
+      isPlanGate, isDeliverGate: deliverGate || hasLift, isEscalation: escalationGate || restoredRetry,
+      landsDoctrine: trust.landsDoctrine,
+    }, Date.now(), gateTrust.me);
+  }, [trust, projectName, gateTrust.gates, gateTrust.orders, gateTrust.me, planGate.pending, isPlanGate, deliverGate, hasLift, escalationGate, restoredRetry]);
+  // The record rides the button the card leads with: the recommended move, else Approve, else Retry.
+  const recordOn = move !== null ? 'gate-recommended'
+    : isPlanGate ? null
+      : escalationGate ? (hidden !== 'steering-retry' ? 'steering-retry' : null)
+        : hidden !== 'steering-approve' ? 'steering-approve' : null;
+  const recordSpan = (on: string): React.ReactNode =>
+    record !== null && recordOn === on ? (
+      <span data-testid="gate-track-record" className="block text-[10px] font-normal mt-0.5" style={{ opacity: 0.85 }}>
+        {record}
+      </span>
+    ) : null;
   const secondary = (style: React.CSSProperties): React.CSSProperties => (move !== null ? SECONDARY : style);
   // The deliver move is two steps: the first press opens the diff, the second delivers.
   const [diffOpen, setDiffOpen] = useState(false);
@@ -708,6 +750,7 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
               style={{ background: 'var(--status-run)', color: 'var(--surface-base)', overflowWrap: 'anywhere' }}
             >
               {moveLabel}
+              {recordSpan('gate-recommended')}
             </button>
           </div>
         )}
@@ -783,6 +826,7 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
               title="Re-dispatches the failed unit (carries your note as guidance if typed)"
             >
               Retry
+              {recordSpan('steering-retry')}
             </button>
             )}
             {hidden !== 'steering-request-changes' && (
@@ -866,6 +910,7 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
               {...(restoredRetry ? { title: "the evaluator's edit was discarded; the phase re-runs against the creator's verified tree" } : {})}
             >
               {restoredRetry ? 'Retry against the restored tree' : 'Approve'}
+              {recordSpan('steering-approve')}
             </button>
             )}
             {hidden !== 'steering-approve-steer' && (
@@ -899,6 +944,43 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
               Cancel run
             </button>
           </div>
+        )}
+
+        {/* Brainstorm idea 8 — make it a rule: the question, why, and what the order would have
+            done, all before the one button that makes it (crew's POST /standing-orders). */}
+        {offer !== null && gateTrust.made === null && (
+          <div data-testid="gate-rule-offer" className="mt-2 rounded-lg px-3 py-2" style={{ border: '1px solid var(--surface-raised)' }}>
+            <p className="text-[10px] font-mono" style={{ color: 'var(--ink-muted)' }}>{offer.because}</p>
+            <p data-testid="gate-rule-question" className="text-xs font-mono font-semibold" style={{ color: 'var(--ink-body)' }}>{offer.question}</p>
+            <p
+              data-testid="gate-rule-preview"
+              data-would-approve={offer.preview.wouldApprove}
+              data-you-approved={offer.preview.youApproved}
+              data-you-sent-back={offer.preview.youSentBack}
+              className="text-[10px] font-mono mt-1"
+              style={{ color: 'var(--ink-muted)', overflowWrap: 'anywhere' }}
+            >
+              {offer.previewText}
+            </p>
+            <button
+              type="button"
+              data-testid="gate-rule-make"
+              onClick={() => void gateTrust.makeRule(offer)}
+              disabled={locked || gateTrust.busy}
+              className="mt-2 rounded-lg px-3 py-1 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
+              style={SECONDARY}
+            >
+              Make it a rule
+            </button>
+            {gateTrust.error !== null && (
+              <p data-testid="gate-rule-error" className="text-[10px] font-mono mt-1" style={{ color: 'var(--status-fail)' }}>{gateTrust.error}</p>
+            )}
+          </div>
+        )}
+        {gateTrust.made !== null && (
+          <p data-testid="gate-rule-made" className="text-[10px] font-mono mt-2" style={{ color: 'var(--ink-muted)' }}>
+            Standing order made: {gateTrust.made.text}. It answers this gate and the next alike ones.
+          </p>
         )}
 
         {/* Mode-selector note / action hint */}

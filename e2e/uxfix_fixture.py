@@ -611,6 +611,12 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          #   /governance/rules is recorded (GET /__fixture/rule-posts). Off: /roster/record answers
          #   Fastify's bare unknown-route 404, a daemon predating crew#690.
          "seat_week": False,
+         # trust_rules — brainstorm-actionable ideas 7+8 (e2e/gate_trust_test.py): three runs on
+         #   project northwind (band 0-19) paused at gates — r-trust (a review of claude's build),
+         #   r-trust-codex (the same gate on codex's build) and r-trust-deliver (the deliver gate) —
+         #   plus GET /gates/decided (the decided-gate history, crew#691) and GET/POST
+         #   /standing-orders (crew#686; POSTs tapped at /__fixture/standing-order-posts).
+         "trust_rules": False,
          }
 state_lock = threading.Lock()
 # Idea 9: every POST /governance/rules body the fixture received (GET /__fixture/rule-posts).
@@ -623,6 +629,9 @@ plan_post_log: list = []
 plan_edit_taken: dict = {}
 plan_edit_failed_once: list = []
 gate_moved_done: set = set()
+# Ideas 7+8: the standing orders made this lifetime, and every POST /standing-orders body.
+trust_orders: list = []
+standing_order_posts: list = []
 
 # ── The crew settings store (DES-VISION-001 §3.3, vision slice 7) ──────────────
 #
@@ -927,6 +936,76 @@ GATE_MOVE_OUTPUTS = {
     "produce": {"output": GATE_MOVE_CREATOR_OUTPUT},
     "critique": {"output": GATE_MOVE_REASON},
 }
+
+
+# ── Brainstorm-actionable ideas 7+8: trust at the gate (switch `trust_rules`) ──
+# Three northwind runs (accepted plan band 0-19) paused at gates, and the decided-gate history on
+# crew's GET /gates/decided wire (wicked-crew#691): claude's build 8/10 approved (2 sent back),
+# codex's build 1/5 (3 sent back, 1 rejected), the last three alike review gates approved.
+TRUST_PROJECT = project("northwind", "Northwind", NOW0 - 5 * MIN)
+TRUST_T0 = NOW0 - 20 * MIN
+
+
+def _trust_run(rid: str, seat: str, gate_ord: int) -> dict:
+    run = session(rid, "awaiting_human", f"tidy the {seat} importer", f"tidy the {seat} importer")
+    run["session"]["project_id"] = "northwind"
+    run["session"]["clis"] = ["claude", "codex"]
+    run["session"]["unit_ix"] = gate_ord - 1
+    run["session"]["team_plan"] = {"rev": 1, "accepted_rev": 1,
+                                   "accepted": {"rev": 1, "by": "engine", "band": "0-19", "high_risk": False}}
+
+    def unit(key: str, ord_: int, stage: str, role: str, status: str, cli) -> dict:
+        return {"id": f"{rid}:{key}", "session_id": rid, "ord": ord_, "description": f"{key} — tidy the importer",
+                "stage": stage, "role": role, "assigned_cli": cli, "assigned_invocation": None,
+                "council_task_ref": None, "routing": None, "denial_reason": None, "phase_ref": key,
+                "conformance_ref": None, "phase_status": None, "collection_scope": None, "status": status}
+    run["units"] = [
+        unit("build", 1, "build", "creator", "done", seat),
+        unit("review", 2, "review", "evaluator", "done" if gate_ord > 2 else "pending", "codex" if seat == "claude" else "claude"),
+        unit("deliver", 3, "build", "neutral", "pending", None),
+    ]
+    return run
+
+
+TRUST_GATES = {"r-trust": (2, "def", "Approve unit 2 before it runs: review"),
+               "r-trust-codex": (2, "def", "Approve unit 2 before it runs: review"),
+               "r-trust-deliver": (3, "deliver", "Approve unit 3 before it runs: deliver — push the run branch")}
+TRUST_RUNS = [_trust_run("r-trust", "claude", 2), _trust_run("r-trust-codex", "codex", 2),
+              _trust_run("r-trust-deliver", "claude", 3)]
+
+
+def _trust_events(rid: str) -> list:
+    ord_, kind, prompt = TRUST_GATES[rid]
+    return [
+        {"type": "sessionStarted", "session": rid, "problem": "tidy the importer", "workflowId": "wf-w2",
+         "cliCount": 2, "governed": True, "entityMode": "shared", "ts": TRUST_T0, "seq": 1},
+        {"type": "unitDispatched", "session": rid, "ord": 1, "attempt": 0, "ts": TRUST_T0 + SEC, "seq": 2},
+        {"type": "unitDone", "session": rid, "ord": 1, "ts": TRUST_T0 + 5 * MIN, "seq": 3},
+        {"type": "awaitingHuman", "session": rid, "ord": ord_, "ts": TRUST_T0 + 5 * MIN + SEC, "seq": 4,
+         "prompt": prompt, "reviewingOrd": ord_ - 1, "gateKind": kind},
+    ]
+
+
+def _decided(i: int, days: float, seat: str = "claude", decision: str = "approve", **over) -> dict:
+    row = {"runId": f"r-hist-{i}", "ord": 2, "decidedAt": int(NOW0 - days * DAY), "decision": decision,
+           "actor": "local", "byOrder": False, "gateKind": "def", "phase": "build", "projectId": "northwind",
+           "band": "0-19", "creator": {"seat": seat, "phase": "build", "ord": 1}, "orderApprovable": True}
+    row.update(over)
+    return row
+
+
+TRUST_HISTORY = sorted([
+    _decided(1, 1), _decided(2, 2), _decided(3, 3), _decided(4, 4, decision="request_changes"),
+    _decided(5, 5), _decided(6, 6), _decided(7, 8, decision="request_changes"),
+    _decided(8, 16), _decided(9, 17), _decided(10, 18),
+    _decided(11, 20, "codex"), _decided(12, 21, "codex", "request_changes"),
+    _decided(13, 22, "codex", "request_changes"), _decided(14, 23, "codex", "request_changes"),
+    _decided(15, 24, "codex", "reject"),
+    # Never alike: an approved deliver gate and a plan approval; and an order's own approval.
+    _decided(16, 1.5, gateKind="deliver", phase="deliver", orderApprovable=False),
+    _decided(17, 2.5, gateKind="plan_approval", phase="intake", orderApprovable=False, creator=None),
+    _decided(18, 9, byOrder=True, actor="standing-order:old"),
+], key=lambda r: -r["decidedAt"])
 
 
 # ── Fix slice J4/J5: the outcome-partition corpus, behind `j5_runs` ───────────
@@ -2482,6 +2561,8 @@ def assemble_runs() -> list:
             runs = runs + [json.loads(json.dumps(PLAN_GATE_RUN))]
         if state["gate_move"] and not state["no_runs"]:
             runs = runs + [json.loads(json.dumps(GATE_MOVE_RUN))]
+        if state["trust_rules"] and not state["no_runs"]:
+            runs = runs + json.loads(json.dumps(TRUST_RUNS))
     if viewer_on or repo_refs_on or forensics_on or provenance_on or project_dto_on \
             or chronicle_on or nerve_on or gate_now or guidance or wire433_on:
         runs = json.loads(json.dumps(runs))
@@ -3004,6 +3085,29 @@ class W2Handler(SimpleHTTPRequestHandler):
         if path == "/api/v1/health":
             self._json(200, {"status": "ok", "version": "w2-fixture", "ping": "pong"})
             return True
+        # Ideas 7+8: the decided-gate history (crew#691) and the standing orders (crew#686); the card
+        # reads GET /whoami so only YOUR decisions make the offer (auth off: the `local` actor).
+        if path == "/api/v1/whoami":
+            with state_lock:
+                trust_on = state["trust_rules"]
+            if not trust_on:
+                self._json(404, {"error": f"w2 fixture: no such endpoint {path}"})
+            else:
+                self._json(200, {"actor": {"id": "local", "kind": "human", "trust": "admin"}, "authMode": "off"})
+            return True
+        if path in ("/api/v1/gates/decided", "/api/v1/standing-orders"):
+            with state_lock:
+                trust_on = state["trust_rules"]
+                orders = json.loads(json.dumps(trust_orders))
+            if not trust_on:
+                self._json(404, {"error": f"w2 fixture: no such endpoint {path}"})
+            elif path == "/api/v1/gates/decided":
+                q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+                since = int((q.get("since") or ["0"])[0])
+                self._json(200, {"gates": [g for g in TRUST_HISTORY if g["decidedAt"] >= since]})
+            else:
+                self._json(200, {"away": False, "awaySince": None, "orders": orders, "outbox": []})
+            return True
         # The settings store (§3.3): every page boot GETs it for studio.appearance.
         if path == "/api/v1/settings":
             with state_lock:
@@ -3121,6 +3225,8 @@ class W2Handler(SimpleHTTPRequestHandler):
             with state_lock:
                 if state["wave1"]:
                     rows = list(WAVE1_PROJECTS)
+                if state["trust_rules"]:
+                    rows = rows + [TRUST_PROJECT]
             # C6 fix: the stale-clock reproduction — upload-endpoint's project
             # clock reads 15 HOURS old while its run executes NOW.
             if c6_on:
@@ -3345,6 +3451,13 @@ class W2Handler(SimpleHTTPRequestHandler):
                 self._json(200, {"runId": rid, "ord": 2, "lifecycle": "open", "prompt": GATE_MOVE_PROMPT,
                                  "receivedAt": iso(GATE_MOVE_T0 + 9 * MIN + SEC), "options": None})
                 return True
+            with state_lock:
+                trust_on = state["trust_rules"]
+            if trust_on and rid in TRUST_GATES:
+                self._json(200, {"runId": rid, "ord": TRUST_GATES[rid][0], "lifecycle": "open",
+                                 "prompt": TRUST_GATES[rid][2], "receivedAt": iso(TRUST_T0 + 5 * MIN + SEC),
+                                 "options": None})
+                return True
             if rid == "r-plan-gate" and plan_gate_on:
                 self._json(200, {"runId": rid, "ord": 2, "lifecycle": "open", "prompt": PLAN_GATE_PROMPT,
                                  "receivedAt": iso(NOW0), "options": None})
@@ -3463,6 +3576,8 @@ class W2Handler(SimpleHTTPRequestHandler):
             with state_lock:
                 if state["gate_move"] and rid == "r-review":
                     events = list(GATE_MOVE_EVENTS)
+                if state["trust_rules"] and rid in TRUST_GATES:
+                    events = _trust_events(rid)
             # Wave 6: the completed governed test's recorded trail — degraded council, the
             # remote-write fence, the UNGATED gate.
             with state_lock:
@@ -4177,6 +4292,10 @@ class W2Handler(SimpleHTTPRequestHandler):
             with state_lock:
                 posts = list(rule_post_log)
             return self._json(200, {"posts": posts})
+        if path == "/__fixture/standing-order-posts":
+            with state_lock:
+                posts = list(standing_order_posts)
+            return self._json(200, {"posts": posts})
         if self._api(path):
             return None
         if not Path(self.translate_path(self.path)).is_file():
@@ -4201,6 +4320,10 @@ class W2Handler(SimpleHTTPRequestHandler):
             if body.get("reset_rule_posts"):
                 with state_lock:
                     rule_post_log.clear()
+            if body.get("reset_orders"):
+                with state_lock:
+                    trust_orders.clear()
+                    standing_order_posts.clear()
             if body.get("reset_plan"):
                 with state_lock:
                     plan_post_log.clear()
@@ -4545,6 +4668,26 @@ class W2Handler(SimpleHTTPRequestHandler):
             if not week:
                 return self._json(404, {"error": f"w2 fixture: no such endpoint {path}"})
             return self._json(200, {"status": "ok"})
+        # crew#686: POST /standing-orders {text, rule} — the invariant refuses an approve of the
+        # deliver gate, a plan approval or a finding (400 order_refused); 201 {order}.
+        if path == "/api/v1/standing-orders":
+            with state_lock:
+                trust_on = state["trust_rules"]
+                standing_order_posts.append(body)
+            if not trust_on:
+                return self._json(404, {"error": f"w2 fixture: no such endpoint {path}"})
+            rule = body.get("rule") or {}
+            trigger = rule.get("trigger") or {}
+            if not str(body.get("text") or "").strip() or rule.get("action") not in ("approve", "hold", "notify"):
+                return self._json(400, {"error": "Invalid request body"})
+            if rule.get("action") == "approve" and (trigger.get("kind") == "finding"
+                                                   or trigger.get("phase") in ("deliver", "plan_approval")):
+                return self._json(400, {"error": "an order never answers that gate — it always waits for you",
+                                        "code": "order_refused"})
+            order = {"id": f"so-{len(trust_orders) + 1}", "text": body["text"], "rule": rule, "createdAt": NOW0}
+            with state_lock:
+                trust_orders.append(order)
+            return self._json(201, {"order": order})
         if path == "/api/v1/governance/deadletters/replay":
             dry = body.get("dryRun") is True
             with state_lock:

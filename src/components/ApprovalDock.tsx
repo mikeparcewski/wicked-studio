@@ -5,6 +5,7 @@ import { useGateStore } from '../store/gates.js';
 import { ElicitationPrompt } from './ElicitationPrompt.js';
 import { autoDeliverOf } from './IntakePlan.js';
 import { SteeringGate } from './SteeringGate.js';
+import { runBandOf } from './gateTrustModel.js';
 
 /**
  * The pinned approval dock (DES-RUN-NARRATOR §2, §11.5): anything awaiting the
@@ -79,7 +80,16 @@ export function ApprovalDock({
           {...(ord !== undefined ? { ord } : {})}
           {...(gate ? { prompt: gate.prompt } : {})}
           {...(view !== undefined
-            ? { units: view.units, clis: view.session.clis, autoDeliver: autoDeliverOf(view.session) }
+            ? {
+                units: view.units, clis: view.session.clis, autoDeliver: autoDeliverOf(view.session),
+                // Brainstorm ideas 7 and 8: what the card needs to read the seat's record and offer a rule.
+                trust: {
+                  projectId: typeof view.session.project_id === 'string' && view.session.project_id !== 'default' ? view.session.project_id : null,
+                  band: runBandOf(view.session),
+                  gateKind: gate?.gateKind ?? null,
+                  landsDoctrine: view.session.workflow_id === 'steering-author',
+                },
+              }
             : {})}
           onResolved={onResolved}
         />

@@ -11,8 +11,8 @@
   "studioVersion": "0.5.14",
   "counts": {
     "files": 161,
-    "occurrences": 1478,
-    "static": 1273,
+    "occurrences": 1485,
+    "static": 1280,
     "dynamic": 68,
     "computed": 7
   },
@@ -2406,6 +2406,42 @@
       ]
     },
     {
+      "testId": "gate-rule-error",
+      "files": [
+        "src/components/SteeringGate.tsx"
+      ]
+    },
+    {
+      "testId": "gate-rule-made",
+      "files": [
+        "src/components/SteeringGate.tsx"
+      ]
+    },
+    {
+      "testId": "gate-rule-make",
+      "files": [
+        "src/components/SteeringGate.tsx"
+      ]
+    },
+    {
+      "testId": "gate-rule-offer",
+      "files": [
+        "src/components/SteeringGate.tsx"
+      ]
+    },
+    {
+      "testId": "gate-rule-preview",
+      "files": [
+        "src/components/SteeringGate.tsx"
+      ]
+    },
+    {
+      "testId": "gate-rule-question",
+      "files": [
+        "src/components/SteeringGate.tsx"
+      ]
+    },
+    {
       "testId": "gate-toast",
       "files": [
         "src/components/GateNotifications.tsx"
@@ -2415,6 +2451,12 @@
       "testId": "gate-toast-overflow",
       "files": [
         "src/components/GateNotifications.tsx"
+      ]
+    },
+    {
+      "testId": "gate-track-record",
+      "files": [
+        "src/components/SteeringGate.tsx"
       ]
     },
     {
