@@ -140,7 +140,10 @@ with sync_playwright() as p:
         open_picker(page)
         offered = page.evaluate("""() => [...document.querySelectorAll('[data-testid="phase-option"]')]
           .map(e => e.dataset.catalog)""")
-        check("picker-lists-the-catalog", offered == catalog_ids, offered=offered, catalog=catalog_ids)
+        # D4 (dogfood 2026-09-27): this project's repo rides the launch and "Open a PR" is on, so
+        # the launch delivers and adds its own deliver step — the picker offers every OTHER entry.
+        check("picker-lists-the-catalog", offered == [c for c in catalog_ids if c != "deliver"],
+              offered=offered, catalog=catalog_ids)
         pick(page, "build")
         check("picked-build", page.evaluate("""() => [...document.querySelectorAll('[data-testid="phase-selected"]')]
           .map(e => e.dataset.catalog)""") == ["build"])

@@ -247,6 +247,10 @@ export function decisionPreview(verb: DecisionVerb, count: number, withNote = fa
  */
 export function describeDecision(decision: GateDecision, count = 1): { verb: DecisionVerb; preview: string } {
   const note = (decision.amend ?? '').trim() !== '';
+  if (decision.approve && (decision as { plan?: unknown }).plan !== undefined) {
+    // D11: the plan gate's approve WITH an edited plan — the edit is the answer.
+    return { verb: 'approve', preview: 'The run takes your edited plan (the floor still adds what its band requires).' };
+  }
   if (decision.approve) {
     const base = decisionPreview('approve', count);
     return { verb: 'approve', preview: note ? `${base.slice(0, -1)}, carrying your note as guidance.` : base };

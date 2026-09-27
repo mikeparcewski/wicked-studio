@@ -140,6 +140,22 @@ export interface Preset {
   system?: boolean;
 }
 
+/** One `wicked.team.*` bus row of `GET /runs/:id/team` (a subset of crew's `TeamRow`). */
+export interface TeamRow {
+  event_id: number;
+  event_type: string;
+  payload: Record<string, unknown>;
+}
+
+/**
+ * `GET /runs/:id/team` (a subset of crew's `RunTeamResponse`): the run's `wicked.team.*` rows —
+ * run-level ones (`plan.*`, `path.scored`) under `rows`, unit-level ones (`gate.*`) under each unit.
+ */
+export interface RunTeamResponse {
+  rows: TeamRow[];
+  units: Array<{ ord: number; rows: TeamRow[] }>;
+}
+
 // ── Calls ─────────────────────────────────────────────────────────────────────────────────────
 
 export const teamPlanApi = {
@@ -151,6 +167,7 @@ export const teamPlanApi = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+  team: (runId: string) => apiFetch<RunTeamResponse>(`/runs/${encodeURIComponent(runId)}/team`),
   presets: (projectId?: string | null) =>
     apiFetch<{ presets: Preset[] }>(
       projectId ? `/presets?projectId=${encodeURIComponent(projectId)}` : '/presets',

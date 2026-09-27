@@ -23,15 +23,16 @@ describe('SteeringGate pre-population (slice BD)', () => {
     vi.spyOn(client.api, 'cancelRun').mockResolvedValue({ status: 'cancelled' } as never);
   });
 
-  it('a standing draft pre-populates as amend-prepopulated, auto-expanded, steer armed', () => {
+  it('a standing draft pre-populates as amend-prepopulated, auto-expanded, steer armed', async () => {
     useAnnotationStore.getState().setDraft('r-1', 'Focus: burst budget\nSkip: docs\nContext: v2');
     render(<SteeringGate runId="r-1" ord={1} prompt="Proceed?" />);
     const ta = screen.getByTestId('amend-prepopulated') as HTMLTextAreaElement;
     expect(ta.value).toBe('Focus: burst budget\nSkip: docs\nContext: v2');
     expect(ta.rows).toBe(3); // auto-expand: one row per draft line (min 2)
     expect(screen.queryByTestId('steering-amend')).toBeNull();
-    // Pre-populated text arms Approve+steer without any extra click (§4.3).
-    expect(screen.getByTestId('steering-approve-steer')).toBeEnabled();
+    // Pre-populated text arms Approve+steer without any extra click (§4.3) — once the gate is
+    // known not to be a plan gate (the team read answers; codex on #352: fail closed until then).
+    await waitFor(() => expect(screen.getByTestId('steering-approve-steer')).toBeEnabled());
   });
 
   it('no draft ⇒ blank as today, under the standing steering-amend testid', () => {

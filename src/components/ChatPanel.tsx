@@ -1214,7 +1214,8 @@ function NewRunView({
     : 'What do you need built?';
   const sub = chatMode
     ? 'Ask about your repos, get answers, run searches, analyse patterns — without kicking off a full build.'
-    : 'Describe your goal. The council elects a CLI, decomposes the plan, and executes it — you approve each gate.';
+    // D1: the team model in one line — the PA scores and plans, you approve the plan, the team works it.
+    : 'Describe your goal. The PA scores and plans it, you approve the plan, and the team works it.';
 
   return (
     <div className="flex flex-col h-full items-center justify-center">

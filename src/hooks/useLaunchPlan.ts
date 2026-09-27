@@ -30,6 +30,8 @@ export interface PhaseSelection {
   add: (catalog: string) => void;
   remove: (index: number) => void;
   clear: () => void;
+  /** Replace the selection (a plan gate's edit starts from the held plan, D11). */
+  replace: (catalogs: readonly string[]) => void;
   touchText: string;
   setTouchText: (t: string) => void;
   /** A composed plan is in hand: the launch sends `plan`, not `workflow`. */
@@ -86,6 +88,7 @@ export function usePhaseSelection(pickerOpen: boolean): PhaseSelection {
     add: useCallback((c: string) => setPicked((cur) => [...cur, { catalog: c }]), []),
     remove: useCallback((i: number) => setPicked((cur) => cur.filter((_, j) => j !== i)), []),
     clear: useCallback(() => setPicked([]), []),
+    replace: useCallback((cs: readonly string[]) => setPicked(cs.map((c) => ({ catalog: c }))), []),
     touchText,
     setTouchText,
     composing,
