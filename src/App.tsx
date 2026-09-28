@@ -11,7 +11,7 @@ import { ProjectCampaignsView } from './components/ProjectCampaignsView.js';
 import { LeftSidebar } from './components/LeftSidebar.js';
 import { DocumentCanvas } from './components/DocumentCanvas.js';
 import { DocumentThread } from './components/DocumentThread.js';
-import { VideoStoryboard } from './components/VideoStoryboard.js';
+import { DemoMode } from './components/DemoMode.js';
 import { NotFoundPage } from './components/NotFoundPage.js';
 import { ProjectDashboard } from './components/ProjectDashboard.js';
 import { SkipLink } from './components/SkipLink.js';
@@ -466,27 +466,10 @@ export function App(): React.ReactElement {
         </DocumentCanvas>
       );
     }
-    // Video is the same canvas-first shape as Document (DES-FEEDBACK-001 §7.4): the
-    // storyboard HTML frames in the canvas, and the SAME thread passes through as the
-    // drawer's children — a demo is a document whose manifest says `kind: "demo"`, so
-    // its conversation is the project's one conversation (§1.3 rule 1).
+    // The Demo mode (wicked-studio#373): a demo of a real local app, made by a governed run of the
+    // `demo` preset (plan gate → record → review gate → watch). The artifact is the demo RUN.
     if (m === 'video') {
-      return (
-        <VideoStoryboard
-          projectId={pid}
-          demoId={artifactId}
-          version={routedVersion(search)}
-          navigate={navigate}
-        >
-          <DocumentThread
-            projectId={pid}
-            docId={artifactId}
-            selectedVersion={null}
-            navigate={navigate}
-            mode="video"
-          />
-        </VideoStoryboard>
-      );
+      return <DemoMode projectId={pid} runId={artifactId} runs={runs} navigate={navigate} />;
     }
     if (m === 'chat' && !artifactId) return groupChatSurface(null, pid);
     // `showLaunch` here is `/p/:pid/build/new` — the §4.3 pre-bound launch form.

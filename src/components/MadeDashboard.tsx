@@ -8,7 +8,8 @@ import {
   attachSeries, deltaWord, orderByAttention, statusCounts, windowBuckets, windowDelta,
 } from '../board/windowStats.js';
 import { useDismissable } from '../hooks/useDismissable.js';
-import { versionPath, type Mode } from '../hooks/useRoute.js';
+import { modePath, versionPath, type Mode } from '../hooks/useRoute.js';
+import { isDemoRun } from '../api/demo.js';
 import { rangeWord, useTimeRange } from '../hooks/useTimeRange.js';
 import { useDocsCache } from '../store/docsCache.js';
 import { useMembershipStore } from '../store/membership.js';
@@ -62,7 +63,130 @@ interface Props {
 
 export function MadeDashboard({ mode, runs, navigate, runPath, pathname = '', search = '' }: Props): React.ReactElement {
   if (mode === 'execute') return <ExecuteDashboard runs={runs} navigate={navigate} runPath={runPath} />;
+  if (mode === 'demo') return <DemoDashboard runs={runs} navigate={navigate} runPath={runPath} />;
   return <CorpusDashboard mode={mode} navigate={navigate} pathname={pathname} search={search} />;
+}
+
+// ── Demo — the demo RUNS (wicked-studio#373) ────────────────────────────────────
+
+/**
+ * `/demo` lists the demo runs — each a governed run of the `demo` preset (plan gate → record →
+ * review gate → watch) — newest first, with the ones waiting on a gate on top. A row opens the run
+ * in its project's Demo mode; the header's ＋ opens a project picker locked to Demo mode, where the
+ * start form lives. Nothing here reads the interactive service: a demo is a run, not a document.
+ */
+function DemoDashboard({ runs, navigate, runPath }: {
+  runs: SessionView[];
+  navigate: (path: string) => void;
+  runPath: (id: string) => string;
+}): React.ReactElement {
+  const projectNameByRun = useMembershipStore((s) => s.projectNameByRun);
+  const projectIdByRun = useMembershipStore((s) => s.projectIdByRun);
+  const attachedAt = useMembershipStore((s) => s.attachedAtByRun);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const demos = useMemo(
+    () => orderByAttention(runs.filter((v) => isDemoRun(v) && v.session.archived_at == null)),
+    [runs],
+  );
+  const now = Date.now();
+  const projectOf = (v: SessionView): string | null => {
+    const pid = projectIdByRun[v.session.id] ?? v.session.project_id;
+    return typeof pid === 'string' && pid !== '' ? pid : null;
+  };
+  const open = (v: SessionView): void => {
+    const pid = projectOf(v);
+    navigate(pid !== null ? modePath(pid, 'video', v.session.id) : runPath(v.session.id));
+  };
+  const waiting = demos.filter((v) => v.session.status === 'awaiting_human').length;
+  const done = demos.filter((v) => v.session.status === 'completed').length;
+  return (
+    <div className="flex flex-col" style={{ color: 'var(--ink-high)', padding: '0 var(--space-8) var(--space-8)', gap: 'var(--space-4)' }}>
+      <div className="pt-8 flex items-center justify-between gap-4">
+        <div className="flex items-baseline gap-4 min-w-0">
+          <h1 className="text-2xl font-semibold font-mono" style={{ margin: 0 }}>Demo</h1>
+          <p style={{ margin: 0, fontSize: 'var(--text-2xs)', color: 'var(--ink-dim)', fontFamily: 'var(--font-sans)' }}>
+            demos of your running apps · plan, record, review, watch
+          </p>
+        </div>
+        <div className="relative shrink-0">
+          <button
+            type="button"
+            data-testid="demo-new"
+            aria-expanded={pickerOpen}
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={() => setPickerOpen((v) => !v)}
+            style={{
+              background: 'var(--accent)', color: 'var(--accent-fg)', border: 'none',
+              borderRadius: 'var(--radius-md)', padding: '6px 14px',
+              fontSize: 'var(--text-xs)', fontWeight: 'var(--weight-bold)', cursor: 'pointer',
+            }}
+          >
+            ＋ Demo
+          </button>
+          {pickerOpen && (
+            <ProjectModePicker
+              mode="video"
+              navigate={(p) => { setPickerOpen(false); navigate(p); }}
+              onClose={() => setPickerOpen(false)}
+            />
+          )}
+        </div>
+      </div>
+
+      <KpiBand testId="demo-kpis">
+        <KpiGroup label="Demos" grow={1}>
+          <StatTile testId="stat-demo-items" label="Demos" value={demos.length} context="every project" />
+          <StatTile testId="stat-demo-waiting" label="Waiting on you" value={waiting} context="a plan or review gate" />
+          <StatTile testId="stat-demo-done" label="Ready to watch" value={done} context="finished" />
+        </KpiGroup>
+      </KpiBand>
+
+      {demos.length === 0 ? (
+        <p data-testid="demo-runs-empty" style={{ margin: 0, fontSize: 'var(--text-xs)', color: 'var(--ink-dim)', fontStyle: 'italic' }}>
+          No demos yet. ＋ Demo picks a project, then you say who the demo is for, what to show and the app&rsquo;s URL.
+        </p>
+      ) : (
+        <DashboardGrid testId="demo-runs-grid" min={340}>
+          {demos.map((view) => {
+            const { session } = view;
+            const id = session.id;
+            return (
+              <div
+                key={id}
+                data-testid="demo-run-row"
+                data-run-id={id}
+                data-status={session.status}
+                role="link"
+                tabIndex={0}
+                onClick={() => open(view)}
+                onKeyDown={(e) => { if (e.key === 'Enter') open(view); }}
+                className="transition-colors hover:bg-surface-raised"
+                style={CARD}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+                  <span aria-hidden className="w-2 h-2 rounded-full shrink-0" style={{ background: RUN_DOT[session.status] ?? 'var(--ink-dim)' }} />
+                  <span
+                    data-testid="demo-run-title"
+                    title={session.problem}
+                    style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 'var(--text-xs)', color: 'var(--ink-body)' }}
+                  >
+                    {humanTitle(session.problem)}
+                  </span>
+                  <span className="shrink-0" style={{ fontSize: 'var(--text-2xs)', color: session.status === 'awaiting_human' ? 'var(--status-gate)' : 'var(--ink-dim)', fontFamily: 'var(--font-mono)' }}>
+                    {session.status === 'awaiting_human' ? 'needs you' : phaseWord(view)}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+                  <span style={CARD_META}>{runShortId(id)} · {runWhenWord(attachedAt[id], now)}</span>
+                  <span style={{ ...CARD_META, color: 'var(--ink-muted)' }}>{projectNameByRun[id] ?? 'Unfiled'}</span>
+                </div>
+              </div>
+            );
+          })}
+        </DashboardGrid>
+      )}
+    </div>
+  );
 }
 
 // ── Execute — the run half ──────────────────────────────────────────────────────
@@ -718,7 +842,8 @@ function CorpusDashboard({ mode, navigate, pathname, search }: {
         {visibleDocs.length > 0 && (
           <DashboardGrid testId={`${mode}-grid`} min={300}>
             {visibleDocs.map(({ doc, projectId, projectName }) => {
-              const docMode: Mode = doc.kind === 'demo' ? 'video' : 'document';
+              // A demo DOCUMENT opens in Document mode: Demo mode shows demo runs (studio#373).
+              const docMode: Mode = 'document';
               const path = versionPath(projectId, doc.name, null, docMode);
               const updated = doc.updated_at === null ? NaN : Date.parse(doc.updated_at);
               return (

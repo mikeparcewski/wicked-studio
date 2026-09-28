@@ -42,11 +42,11 @@ vi.mock('../src/api/client.js', async (importOriginal) => {
   };
 });
 
-function mount(projectId = PROJECT, mode: 'document' | 'video' = 'document'): { rerender: (projectId: string) => void } {
-  const view = render(<DocumentThread projectId={projectId} docId={null} selectedVersion={null} navigate={vi.fn()} mode={mode} />);
+function mount(projectId = PROJECT): { rerender: (projectId: string) => void } {
+  const view = render(<DocumentThread projectId={projectId} docId={null} selectedVersion={null} navigate={vi.fn()} />);
   return {
     rerender: (next: string) =>
-      view.rerender(<DocumentThread projectId={next} docId={null} selectedVersion={null} navigate={vi.fn()} mode={mode} />),
+      view.rerender(<DocumentThread projectId={next} docId={null} selectedVersion={null} navigate={vi.fn()} />),
   };
 }
 
@@ -244,7 +244,7 @@ describe('the create-time binding (F-045, codex on #241 / r3): a bare frame that
       let resolveCreate: (v: unknown) => void = () => undefined;
       createDoc.mockReturnValue(new Promise((r) => { resolveCreate = r; }));
       const navigate = vi.fn();
-      const view = render(<DocumentThread projectId={PROJECT} docId={null} selectedVersion={null} navigate={navigate} mode="document" />);
+      const view = render(<DocumentThread projectId={PROJECT} docId={null} selectedVersion={null} navigate={navigate} />);
       // The picker's discovery resolves; flush it under fake timers.
       await act(async () => { await Promise.resolve(); await Promise.resolve(); });
       expect(screen.getAllByTestId('doc-subject-repo')).toHaveLength(2);
@@ -276,7 +276,7 @@ describe('the create-time binding (F-045, codex on #241 / r3): a bare frame that
       resolveCreate({ name: slug, head: 0, generating: true });
       await act(async () => { await Promise.resolve(); await Promise.resolve(); });
       expect(navigate).toHaveBeenCalled();
-      view.rerender(<DocumentThread projectId={PROJECT} docId={slug} selectedVersion={null} navigate={navigate} mode="document" />);
+      view.rerender(<DocumentThread projectId={PROJECT} docId={slug} selectedVersion={null} navigate={navigate} />);
       await act(async () => { await Promise.resolve(); });
       // The mount ADOPTED the pending claim: one registration, mounted.
       expect(useDocThreadStore.getState().bindings[slug]).toEqual([{ projectId: PROJECT, pending: false }]);
@@ -305,41 +305,5 @@ describe('the create-time binding (F-045, codex on #241 / r3): a bare frame that
     const sentName = (createDoc.mock.calls[0]![1] as { name: string }).name;
     expect(useDocThreadStore.getState().bindings[sentName]).toBeUndefined();
     expect(Object.keys(useDocThreadStore.getState().bindings)).toEqual([]);
-  });
-});
-
-describe('the video (demo) launch composer picks the app\'s repositories too (codex on #241)', () => {
-  it('renders the repository toggles AND the format select — a demo carries its format on the create like a document (codex on #241)', async () => {
-    mount(PROJECT, 'video');
-    await waitFor(() => expect(screen.getAllByTestId('doc-subject-repo')).toHaveLength(2));
-    expect(screen.getByTestId('doc-format')).toBeTruthy();
-  });
-
-  it('UI → wire: a format picked on the Video composer (and a repository) rides the wizard\'s create as style + repo_refs (codex r3 on #241)', async () => {
-    mount(PROJECT, 'video');
-    await waitFor(() => expect(screen.getAllByTestId('doc-subject-repo')).toHaveLength(2));
-    fireEvent.change(screen.getByTestId('doc-format'), { target: { value: 'ppt' } });
-    fireEvent.click(screen.getAllByTestId('doc-subject-repo')[1]!); // wicked-studio
-    const user = userEvent.setup();
-    await user.type(screen.getByTestId('doc-composer'), 'a walkthrough of the checkout flow');
-    await user.click(screen.getByTestId('doc-composer-submit'));
-    await screen.findByTestId('demo-wizard');
-    await user.type(screen.getByTestId('wizard-target'), 'https://shop.example/');
-    createDoc.mockResolvedValue({ name: 'a-walkthrough-of-the-checkout-flow', head: 0, kind: 'demo', learning: true });
-    await user.click(screen.getByTestId('wizard-create'));
-    await waitFor(() => expect(createDoc).toHaveBeenCalledTimes(1));
-    const body = createDoc.mock.calls[0]![1] as Record<string, unknown>;
-    expect(body.kind).toBe('demo');
-    expect(body.url).toBe('https://shop.example/');
-    expect(body.style).toBe('ppt');
-    expect(body.repo_refs).toEqual(['repo-studio']);
-  });
-
-  it('a failed discovery blocks the demo launch the same way', async () => {
-    listProjectMembers.mockRejectedValue(new Error('nope'));
-    mount(PROJECT, 'video');
-    await waitFor(() => expect(screen.getByTestId('doc-subject-error')).toBeTruthy());
-    await type('a demo of the checkout');
-    expect(submitButton().disabled).toBe(true);
   });
 });

@@ -9,7 +9,7 @@ import { makeView } from './factories.js';
  * half), Vibe (`/vibe`, the DOCUMENT corpus), Demo (`/demo`, the DEMO corpus) — ONE parameterized
  * MadeDashboard. Pinned here: Execute is the verbatim ChatsPage complement (build runs only, no
  * docs) with the needs-you gate jump + the inline Retry-as-prefill; Vibe lists only non-demo docs
- * and Demo only demos; each header's ＋ does the right create gesture.
+ * and Demo lists the demo RUNS (studio#373); each header's ＋ does the right create gesture.
  */
 
 const { MadeDashboard } = await import('../src/components/MadeDashboard.js');
@@ -117,22 +117,44 @@ describe('Vibe (the document corpus)', () => {
   });
 });
 
-describe('Demo (the demo corpus)', () => {
+describe('Demo (the demo runs, studio#373)', () => {
+  const DEMO_RUNS = [
+    ...RUNS,
+    makeView({ id: 'r-demo-1', workflow_id: 'demo', status: 'awaiting_human', problem: 'Make a demo of http://127.0.0.1:5173/', project_id: 'p-notes', team_plan: { preset: 'demo' } } as never),
+    makeView({ id: 'r-demo-2', workflow_id: 'demo', status: 'completed', problem: 'Make a demo of http://127.0.0.1:4000/', team_plan: { preset: 'demo' } } as never),
+  ];
   beforeEach(() => {
     useDocsCache.setState({ byProject: { 'p-notes': DOCS }, fanoutDone: false, fanoutProgress: null });
   });
 
-  it('lists only demos', () => {
-    made('demo');
+  it('lists the demo runs, the one waiting on a gate first — never a demo document', () => {
+    render(<MadeDashboard mode="demo" runs={DEMO_RUNS} navigate={() => {}} runPath={flatRunPath} />);
     expect(screen.getByRole('heading', { name: 'Demo' })).toBeInTheDocument();
-    const rows = screen.getAllByTestId('demo-doc-row');
-    expect(rows).toHaveLength(1);
-    expect(rows[0]!.dataset.docKind).toBe('demo');
-    expect(within(rows[0]!).getByText('launch-demo')).toBeInTheDocument();
-    expect(screen.queryByText('roadmap')).toBeNull();
+    const rows = screen.getAllByTestId('demo-run-row');
+    expect(rows.map((r) => r.dataset.runId)).toEqual(['r-demo-1', 'r-demo-2']);
+    expect(within(rows[0]!).getByText('needs you')).toBeInTheDocument();
+    expect(screen.getByTestId('stat-demo-items')).toHaveTextContent('2');
+    expect(screen.getByTestId('stat-demo-waiting')).toHaveTextContent('1');
+    expect(screen.queryByTestId('demo-doc-row')).toBeNull();
+    expect(screen.queryByText('launch-demo')).toBeNull();
   });
 
-  it('＋ Demo opens a project-picker locked to Video', () => {
+  it('a row opens the run in its project\'s Demo mode; an unfiled one on the run page', () => {
+    const navigate = vi.fn();
+    render(<MadeDashboard mode="demo" runs={DEMO_RUNS} navigate={navigate} runPath={flatRunPath} />);
+    const [filed, unfiled] = screen.getAllByTestId('demo-run-row');
+    fireEvent.click(filed!);
+    expect(navigate).toHaveBeenCalledWith('/p/p-notes/video/r-demo-1');
+    fireEvent.click(unfiled!);
+    expect(navigate).toHaveBeenCalledWith('/runs/r-demo-2');
+  });
+
+  it('with no demo runs it says how to start one', () => {
+    made('demo');
+    expect(screen.getByTestId('demo-runs-empty')).toBeInTheDocument();
+  });
+
+  it('＋ Demo opens a project-picker locked to Demo mode', () => {
     made('demo');
     fireEvent.click(screen.getByTestId('demo-new'));
     expect(screen.getByTestId('project-mode-picker').dataset.mode).toBe('video');

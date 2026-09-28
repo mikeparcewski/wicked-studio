@@ -12,6 +12,12 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+### Added
+- **Demo mode makes a real demo of your running app: plan gate → record → review gate → watch (#373).** Demo mode (the former Video mode) is a governed run of wicked-core's `demo` preset, the wicked-garden demo skill's plan, record and review, on the crew api-types 0.61.0 wire (`src/api/demo.ts`, hand-mirrored until studio's contract pin reaches it). **Start:** say who the demo is for, what to show and the app's URL; nothing launches until all three are filled, and the launch is `POST /projects/:id/demo`. **Plan gate:** the presenter script and the chapter list are the deliverable; approve, edit the script (a PUT at the gate only) or send the plan back with a note. A held team plan (`team_gate`) is approved first. **Record:** each chapter shows recorded, recording or waiting. **Review gate:** the three contact sheets and the reviewer's per-issue verdicts (re-encode, re-record one chapter, fix the app); accept, or "Re-record this chapter" sends `request_changes` naming that chapter only. A review the engine failed offers no Accept, only Review it again or re-record. **Watch:** the stitched MP4 with chapter markers that seek it, Download, and Draft update. Governance is stated where it is true: the recorder and reviewer seats (evaluator ≠ creator), whether the recording was read-only, and whether the script labels synthetic data. `/demo` lists the demo runs, the ones waiting on a gate first. The mode is labelled Demo everywhere.
+
+### Removed
+- **The old demo storyboard and wizard (M9b).** `VideoStoryboard`, `DemoWizard`, `demoWire` and `demoHtml` are gone with crew's interactive-demo pipeline; a demo document opens in Document mode.
+
 ### Fixed
 - **Retire on a memory row removes that one memory (#206).** The row's Retire now calls crew's
   `POST /memory/retire-item` and erases exactly that memory; its confirm says the rest of the scope

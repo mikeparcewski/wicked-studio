@@ -10,9 +10,9 @@
   "version": 1,
   "studioVersion": "0.5.14",
   "counts": {
-    "files": 171,
-    "occurrences": 1620,
-    "static": 1403,
+    "files": 170,
+    "occurrences": 1637,
+    "static": 1423,
     "dynamic": 72,
     "computed": 7
   },
@@ -1252,8 +1252,7 @@
     {
       "testId": "compare-overlay",
       "files": [
-        "src/components/DocumentCanvas.tsx",
-        "src/components/VideoStoryboard.tsx"
+        "src/components/DocumentCanvas.tsx"
       ]
     },
     {
@@ -1265,28 +1264,19 @@
     {
       "testId": "compare-pane",
       "files": [
-        "src/components/DocumentCanvas.tsx",
-        "src/components/VideoStoryboard.tsx"
-      ]
-    },
-    {
-      "testId": "compare-pane-loading",
-      "files": [
-        "src/components/VideoStoryboard.tsx"
+        "src/components/DocumentCanvas.tsx"
       ]
     },
     {
       "testId": "compare-panes",
       "files": [
-        "src/components/DocumentCanvas.tsx",
-        "src/components/VideoStoryboard.tsx"
+        "src/components/DocumentCanvas.tsx"
       ]
     },
     {
       "testId": "compare-split",
       "files": [
-        "src/components/DocumentCanvas.tsx",
-        "src/components/VideoStoryboard.tsx"
+        "src/components/DocumentCanvas.tsx"
       ]
     },
     {
@@ -1722,57 +1712,177 @@
       ]
     },
     {
-      "testId": "demo-clis-row",
+      "testId": "demo-accept",
       "files": [
-        "src/components/DemoWizard.tsx"
+        "src/components/DemoMode.tsx"
       ]
     },
     {
-      "testId": "demo-picker",
+      "testId": "demo-answered",
       "files": [
-        "src/components/VideoStoryboard.tsx"
+        "src/components/DemoMode.tsx"
       ]
     },
     {
-      "testId": "demo-picker-empty",
+      "testId": "demo-approve-plan",
       "files": [
-        "src/components/VideoStoryboard.tsx"
+        "src/components/DemoMode.tsx"
       ]
     },
     {
-      "testId": "demo-picker-row",
+      "testId": "demo-approve-team",
       "files": [
-        "src/components/VideoStoryboard.tsx"
+        "src/components/DemoMode.tsx"
       ]
     },
     {
-      "testId": "demo-player",
+      "testId": "demo-audience",
       "files": [
-        "src/components/VideoStoryboard.tsx"
+        "src/components/DemoMode.tsx"
       ]
     },
     {
-      "testId": "demo-recording-failed",
+      "testId": "demo-chapter",
       "files": [
-        "src/components/VideoStoryboard.tsx"
+        "src/components/DemoMode.tsx"
       ]
     },
     {
-      "testId": "demo-recording-failed-reason",
+      "testId": "demo-chapters",
       "files": [
-        "src/components/VideoStoryboard.tsx"
+        "src/components/DemoMode.tsx"
       ]
     },
     {
-      "testId": "demo-recording-failed-remedy",
+      "testId": "demo-download",
       "files": [
-        "src/components/VideoStoryboard.tsx"
+        "src/components/DemoMode.tsx"
       ]
     },
     {
-      "testId": "demo-recording-failed-step",
+      "testId": "demo-draft-update",
       "files": [
-        "src/components/VideoStoryboard.tsx"
+        "src/components/DemoMode.tsx"
+      ]
+    },
+    {
+      "testId": "demo-edit-script",
+      "files": [
+        "src/components/DemoMode.tsx"
+      ]
+    },
+    {
+      "testId": "demo-error",
+      "files": [
+        "src/components/DemoMode.tsx"
+      ]
+    },
+    {
+      "testId": "demo-finding",
+      "files": [
+        "src/components/DemoMode.tsx"
+      ]
+    },
+    {
+      "testId": "demo-findings",
+      "files": [
+        "src/components/DemoMode.tsx"
+      ]
+    },
+    {
+      "testId": "demo-governance",
+      "files": [
+        "src/components/DemoMode.tsx"
+      ]
+    },
+    {
+      "testId": "demo-launch",
+      "files": [
+        "src/components/DemoMode.tsx"
+      ]
+    },
+    {
+      "testId": "demo-list",
+      "files": [
+        "src/components/DemoMode.tsx"
+      ]
+    },
+    {
+      "testId": "demo-list-row",
+      "files": [
+        "src/components/DemoMode.tsx"
+      ]
+    },
+    {
+      "testId": "demo-loading",
+      "files": [
+        "src/components/DemoMode.tsx"
+      ]
+    },
+    {
+      "testId": "demo-marker",
+      "files": [
+        "src/components/DemoMode.tsx"
+      ]
+    },
+    {
+      "testId": "demo-markers",
+      "files": [
+        "src/components/DemoMode.tsx"
+      ]
+    },
+    {
+      "testId": "demo-mode",
+      "files": [
+        "src/components/DemoMode.tsx"
+      ]
+    },
+    {
+      "testId": "demo-new",
+      "files": [
+        "src/components/MadeDashboard.tsx"
+      ]
+    },
+    {
+      "testId": "demo-open-run",
+      "files": [
+        "src/components/DemoMode.tsx"
+      ]
+    },
+    {
+      "testId": "demo-plan",
+      "files": [
+        "src/components/DemoMode.tsx"
+      ]
+    },
+    {
+      "testId": "demo-record-progress",
+      "files": [
+        "src/components/DemoMode.tsx"
+      ]
+    },
+    {
+      "testId": "demo-rerecord",
+      "files": [
+        "src/components/DemoMode.tsx"
+      ]
+    },
+    {
+      "testId": "demo-review",
+      "files": [
+        "src/components/DemoMode.tsx"
+      ]
+    },
+    {
+      "testId": "demo-review-again",
+      "files": [
+        "src/components/DemoMode.tsx"
+      ]
+    },
+    {
+      "testId": "demo-review-verdict",
+      "files": [
+        "src/components/DemoMode.tsx"
       ]
     },
     {
@@ -1782,9 +1892,117 @@
       ]
     },
     {
-      "testId": "demo-wizard",
+      "testId": "demo-run",
       "files": [
-        "src/components/DemoWizard.tsx"
+        "src/components/DemoMode.tsx"
+      ]
+    },
+    {
+      "testId": "demo-run-row",
+      "files": [
+        "src/components/MadeDashboard.tsx"
+      ]
+    },
+    {
+      "testId": "demo-run-title",
+      "files": [
+        "src/components/MadeDashboard.tsx"
+      ]
+    },
+    {
+      "testId": "demo-runs-empty",
+      "files": [
+        "src/components/MadeDashboard.tsx"
+      ]
+    },
+    {
+      "testId": "demo-save-script",
+      "files": [
+        "src/components/DemoMode.tsx"
+      ]
+    },
+    {
+      "testId": "demo-script",
+      "files": [
+        "src/components/DemoMode.tsx"
+      ]
+    },
+    {
+      "testId": "demo-script-editor",
+      "files": [
+        "src/components/DemoMode.tsx"
+      ]
+    },
+    {
+      "testId": "demo-send-back",
+      "files": [
+        "src/components/DemoMode.tsx"
+      ]
+    },
+    {
+      "testId": "demo-send-back-note",
+      "files": [
+        "src/components/DemoMode.tsx"
+      ]
+    },
+    {
+      "testId": "demo-send-back-submit",
+      "files": [
+        "src/components/DemoMode.tsx"
+      ]
+    },
+    {
+      "testId": "demo-sheet",
+      "files": [
+        "src/components/DemoMode.tsx"
+      ]
+    },
+    {
+      "testId": "demo-show",
+      "files": [
+        "src/components/DemoMode.tsx"
+      ]
+    },
+    {
+      "testId": "demo-stage-line",
+      "files": [
+        "src/components/DemoMode.tsx"
+      ]
+    },
+    {
+      "testId": "demo-start",
+      "files": [
+        "src/components/DemoMode.tsx"
+      ]
+    },
+    {
+      "testId": "demo-step",
+      "files": [
+        "src/components/DemoMode.tsx"
+      ]
+    },
+    {
+      "testId": "demo-stepper",
+      "files": [
+        "src/components/DemoMode.tsx"
+      ]
+    },
+    {
+      "testId": "demo-url",
+      "files": [
+        "src/components/DemoMode.tsx"
+      ]
+    },
+    {
+      "testId": "demo-video",
+      "files": [
+        "src/components/DemoMode.tsx"
+      ]
+    },
+    {
+      "testId": "demo-watch",
+      "files": [
+        "src/components/DemoMode.tsx"
       ]
     },
     {
@@ -4169,8 +4387,7 @@
     {
       "testId": "overlay-slider",
       "files": [
-        "src/components/DocumentCanvas.tsx",
-        "src/components/VideoStoryboard.tsx"
+        "src/components/DocumentCanvas.tsx"
       ]
     },
     {
@@ -7884,12 +8101,6 @@
       ]
     },
     {
-      "testId": "thread-record",
-      "files": [
-        "src/components/DocumentThread.tsx"
-      ]
-    },
-    {
       "testId": "thread-send-failed",
       "files": [
         "src/components/DocumentThread.tsx"
@@ -8271,24 +8482,6 @@
       ]
     },
     {
-      "testId": "video-canvas",
-      "files": [
-        "src/components/VideoStoryboard.tsx"
-      ]
-    },
-    {
-      "testId": "video-record",
-      "files": [
-        "src/components/VideoStoryboard.tsx"
-      ]
-    },
-    {
-      "testId": "video-record-error",
-      "files": [
-        "src/components/VideoStoryboard.tsx"
-      ]
-    },
-    {
       "testId": "view-timeline",
       "files": [
         "src/components/WorkChronicle.tsx"
@@ -8334,84 +8527,6 @@
       "testId": "what-where",
       "files": [
         "src/components/WhatWhere.tsx"
-      ]
-    },
-    {
-      "testId": "wizard-cancel",
-      "files": [
-        "src/components/DemoWizard.tsx"
-      ]
-    },
-    {
-      "testId": "wizard-create",
-      "files": [
-        "src/components/DemoWizard.tsx"
-      ]
-    },
-    {
-      "testId": "wizard-description",
-      "files": [
-        "src/components/DemoWizard.tsx"
-      ]
-    },
-    {
-      "testId": "wizard-error",
-      "files": [
-        "src/components/DemoWizard.tsx"
-      ]
-    },
-    {
-      "testId": "wizard-pipeline-note",
-      "files": [
-        "src/components/DemoWizard.tsx"
-      ]
-    },
-    {
-      "testId": "wizard-step",
-      "files": [
-        "src/components/DemoWizard.tsx"
-      ]
-    },
-    {
-      "testId": "wizard-step-action",
-      "files": [
-        "src/components/DemoWizard.tsx"
-      ]
-    },
-    {
-      "testId": "wizard-step-add",
-      "files": [
-        "src/components/DemoWizard.tsx"
-      ]
-    },
-    {
-      "testId": "wizard-step-remove",
-      "files": [
-        "src/components/DemoWizard.tsx"
-      ]
-    },
-    {
-      "testId": "wizard-step-subject",
-      "files": [
-        "src/components/DemoWizard.tsx"
-      ]
-    },
-    {
-      "testId": "wizard-steps",
-      "files": [
-        "src/components/DemoWizard.tsx"
-      ]
-    },
-    {
-      "testId": "wizard-steps-hint",
-      "files": [
-        "src/components/DemoWizard.tsx"
-      ]
-    },
-    {
-      "testId": "wizard-target",
-      "files": [
-        "src/components/DemoWizard.tsx"
       ]
     },
     {
@@ -8929,6 +9044,7 @@
         "src/components/ChatPanel.tsx",
         "src/components/DashboardTiles.tsx",
         "src/components/DeckKpiRibbon.tsx",
+        "src/components/DemoMode.tsx",
         "src/components/FacetAutocomplete.tsx",
         "src/components/HealthRailSection.tsx",
         "src/components/HomeCommand.tsx",

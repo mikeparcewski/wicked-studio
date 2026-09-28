@@ -7,7 +7,7 @@
 // AC-1 (wicked-studio#234): on document open and every version change, probe each
 // deterministic filename at the doc-mounted path through crew's interactive proxy
 // using a 1-byte Range GET. HEAD would false-positive on any HTML fallback. This
-// guard is not equivalent to VideoStoryboard's recording probe, whose
+// guard is not equivalent to the former Video storyboard's recording probe, whose
 // `type.startsWith('video/')` test an HTML fallback can never satisfy, whereas this
 // module's expected type for html IS `text/html`. 200/206 alone is insufficient — an
 // HTML fallback from an unmapped path also answers 200. The content type is validated

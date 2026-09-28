@@ -59,11 +59,11 @@ export const MODE_SPECS: Record<Mode, ModeSpec> = {
     sublabel: 'a deck, page, or report',
   },
   video: {
-    label: 'Video',
+    label: 'Demo',
     glyph: '▶',
     summary:
-      'Video mode is the demo storyboard and player: chapters derived from the spec’s steps, '
-      + 'recorded and re-recorded from the same thread.',
+      'Demo mode makes a demo of your running app: the team plans and rehearses it, you approve the '
+      + 'script, it records each chapter, and a different seat reviews it before you watch.',
     sublabel: 'record a demo',
   },
 };

@@ -783,7 +783,8 @@ export function ProjectDashboard({ projectId, runs, navigate }: Props): React.Re
         ) : (
           <DashboardGrid testId="dashboard-docs-grid" min={280}>
             {visibleDocs.map((d) => {
-              const path = modePath(projectId, d.kind === 'demo' ? 'video' : 'document', d.name);
+              // A demo DOCUMENT opens in Document mode: Demo mode shows demo runs (studio#373).
+              const path = modePath(projectId, 'document', d.name);
               return (
                 <div
                   key={d.name}

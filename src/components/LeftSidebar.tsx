@@ -284,7 +284,8 @@ function EmptyRow({ label, href, navigate }: { label: string; href: string; navi
 function DocRow({ doc, projectId, projectName, navigate }: {
   doc: DocSummary; projectId: string; projectName: string; navigate: (p: string) => void;
 }): React.ReactElement {
-  const mode: Mode = doc.kind === 'demo' ? 'video' : 'document';
+  // A demo DOCUMENT opens in Document mode: Demo mode shows demo runs (studio#373).
+  const mode: Mode = 'document';
   return (
     <button
       type="button"
