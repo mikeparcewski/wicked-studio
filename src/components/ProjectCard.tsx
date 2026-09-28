@@ -583,7 +583,8 @@ export function ProjectCard({
               // the run link, and beside it a chip carrying its own controls. Nesting
               // buttons inside the link would be neither valid nor operable.
               <Fragment key={session.id}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              {/* Wraps: the answer controls drop under the chip before its words truncate. */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
                 {/* Slice L (§9.2): the selection slot — checkbox for a simple
                     gate, the ↗ needs-the-thread marker for a complex one;
                     renders only once ≥1 gate is selected anywhere. */}
@@ -596,7 +597,7 @@ export function ProjectCard({
                   data-run-id={session.id}
                   data-status={session.status}
                   style={{
-                    ...CSS.chip, flex: 1, minWidth: 0, overflow: 'hidden', position: 'relative',
+                    ...CSS.chip, flex: '1 1 150px', minWidth: 0, overflow: 'hidden', position: 'relative',
                     // Clears the strip so a phase label never sits on top of it.
                     paddingLeft: '10px',
                     // A waiting gate is amber-status furniture (§5.1): dim fill, full-token text.
@@ -609,7 +610,7 @@ export function ProjectCard({
                   {/* Elapsed exists only where the wire carries a timestamp: `AgentSession`
                       has no `started_at`, so a gate's daemon-cached `receivedAt` is the one
                       honest clock on this surface. */}
-                  <span style={{ marginLeft: 'auto', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  <span style={{ marginLeft: 'auto', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {waiting ? (gate ? `waiting ${ago(gate.receivedAt)}` : 'needs you') : style?.label ?? session.status}
                   </span>
                 </a>

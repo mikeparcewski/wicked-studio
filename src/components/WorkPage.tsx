@@ -341,7 +341,7 @@ export function WorkPage({ runs, selectedRunId, onSelect, navigate, search = '',
         id={`work-panel-${tab}`}
         role="tabpanel"
         aria-labelledby={`work-tab-${tab}`}
-        className="flex-1 overflow-y-auto px-5 pb-8 flex flex-col"
+        className="wk-scroll-fab flex-1 overflow-y-auto px-5 pb-8 flex flex-col"
       >
         {hiddenByRange > 0 && (
           <p

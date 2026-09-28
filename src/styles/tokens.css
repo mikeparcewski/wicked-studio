@@ -153,6 +153,11 @@
      small accent-tinted drop. */
   --shadow-primary: var(--shadow-button), 0 3px 10px -3px color-mix(in oklab, var(--accent) 55%, transparent);
 
+  /* A pressed secondary: the drop turns inward. */
+  --shadow-pressed: inset 0 1px 2px rgba(0, 0, 0, 0.18);
+  /* The native select's chevron (components.css restyles <select> with appearance: none). */
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23888fa3' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+
   /* ── Controls — one height and padding scale for every button-like control ── */
   --control-h:    30px;
   --control-h-sm: 24px;   /* the WCAG 2.5.8 floor: no target is smaller */
