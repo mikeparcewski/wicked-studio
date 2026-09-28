@@ -10,9 +10,9 @@
   "version": 1,
   "studioVersion": "0.5.14",
   "counts": {
-    "files": 167,
-    "occurrences": 1569,
-    "static": 1364,
+    "files": 168,
+    "occurrences": 1576,
+    "static": 1370,
     "dynamic": 69,
     "computed": 7
   },
@@ -3807,9 +3807,45 @@
       ]
     },
     {
+      "testId": "needs-you-card",
+      "files": [
+        "src/components/NeedsYouCard.tsx"
+      ]
+    },
+    {
+      "testId": "needs-you-command",
+      "files": [
+        "src/components/NeedsYouCard.tsx"
+      ]
+    },
+    {
+      "testId": "needs-you-headline",
+      "files": [
+        "src/components/NeedsYouCard.tsx"
+      ]
+    },
+    {
+      "testId": "needs-you-note",
+      "files": [
+        "src/components/NeedsYouCard.tsx"
+      ]
+    },
+    {
+      "testId": "needs-you-nudge",
+      "files": [
+        "src/components/NeedsYouCard.tsx"
+      ]
+    },
+    {
       "testId": "needs-you-queue",
       "files": [
         "src/components/NeedsYouQueue.tsx"
+      ]
+    },
+    {
+      "testId": "needs-you-reassign",
+      "files": [
+        "src/components/NeedsYouCard.tsx"
       ]
     },
     {

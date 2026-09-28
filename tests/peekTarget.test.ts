@@ -63,4 +63,32 @@ describe('peekTarget reads the ranked queue', () => {
     expect(t?.runId).toBe('b');
     expect(peekTarget({ rows: ranked, gates, runs, projectIdByRun: {}, decided: () => true })).toBeNull();
   });
+
+  // studio#369: the gate store is fed by the live `awaitingHuman` frame; the queue's gate rows by
+  // the run list's `awaiting_human` status, one list refresh later. P in that window must not read
+  // "Nothing needs you".
+  it('a live gate the queue has not folded yet is the peek target, never an all-clear', () => {
+    const runs = [run('g', 'executing', { project_id: 'p' })];
+    const gates = { g: gate('g', NOW - 1_000) };
+    const ranked = rows({ runs, gates });
+    expect(ranked.some((r) => r.kind === 'gate')).toBe(false);
+    const t = peekTarget({ rows: ranked, gates, runs, projectIdByRun: {} });
+    expect(t).toMatchObject({ kind: 'gate', runId: 'g', prompt: 'gate g', ord: 2, projectId: 'p' });
+    expect(t?.path).toBe('/p/p/build/g#gate');
+  });
+
+  it('a live not-yet-folded gate outranks a non-gate top item, but not a decided one', () => {
+    const runs = [run('f', 'failed'), run('g', 'executing')];
+    const gates = { g: gate('g', NOW - 1_000) };
+    const ranked = rows({ runs, gates, failedAt: { f: NOW - 60 * MIN } });
+    expect(peekTarget({ rows: ranked, gates, runs, projectIdByRun: {} })?.runId).toBe('g');
+    const t = peekTarget({ rows: ranked, gates, runs, projectIdByRun: {}, decided: (id) => id === 'g' });
+    expect(t?.kind).toBe('failed-run');
+  });
+
+  it('a cached gate on a run the list already calls terminal is not resurrected', () => {
+    const runs = [run('g', 'completed')];
+    const gates = { g: gate('g', NOW - 1_000) };
+    expect(peekTarget({ rows: rows({ runs, gates }), gates, runs, projectIdByRun: {} })).toBeNull();
+  });
 });

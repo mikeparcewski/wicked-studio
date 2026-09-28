@@ -123,7 +123,7 @@ const WAVE6_DECLS = [
   'detectError?: string | null;',
   // unitDistributed — camelCase
   'export interface UnitDistributedEvent {',
-  "routingMethod: 'council' | 'degraded' | 'evaluator_distinct' | 'tool';",
+  "routingMethod: 'council' | 'degraded' | 'evaluator_distinct' | 'tool' | 'teamed';",
   'agreementPct: number | null;',
   'seated: number | null;',
   'degradedReason: string | null;',

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { SteeringGrid, draftRule, fmtWeight } from '../src/components/SteeringGrid.js';
@@ -55,10 +55,10 @@ function rule(over: Partial<SteeringRule> = {}): SteeringRule {
 }
 
 interface Handlers {
-  onCommit: ReturnType<typeof vi.fn>;
-  onCreate: ReturnType<typeof vi.fn>;
-  onRetired: ReturnType<typeof vi.fn>;
-  onSelect: ReturnType<typeof vi.fn>;
+  onCommit: Mock<(...args: unknown[]) => unknown>;
+  onCreate: Mock<(...args: unknown[]) => Promise<void>>;
+  onRetired: Mock<(...args: unknown[]) => unknown>;
+  onSelect: Mock<(...args: unknown[]) => unknown>;
 }
 
 function grid(rules: SteeringRule[], over: Partial<{ addRequestTick: number }> = {}): Handlers {
