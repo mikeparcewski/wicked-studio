@@ -596,7 +596,7 @@ function DemoSurface({
                   <b>Fix:</b> {failedRecording.remedy}
                 </span>
               )}
-              <span style={{ color: 'var(--ink-low)' }}>
+              <span style={{ color: 'var(--ink-muted)' }}>
                 Say what to change in the chat and crew authors a new spec from it. Re-record replays the same steps.
               </span>
             </div>
