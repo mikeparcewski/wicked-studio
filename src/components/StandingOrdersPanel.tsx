@@ -40,7 +40,9 @@ export function StandingOrdersPanel(): React.ReactElement | null {
   }
   const { away, awaySince, orders, outbox } = so.state;
   const d = so.draft;
-  const none = orders.length === 0 && !away && outbox.length === 0;
+  // No orders (and nothing queued) stays the small chip whether or not you are away: going away
+  // with no orders changes nothing, and the chip must not claim otherwise (codex on #376).
+  const none = orders.length === 0 && outbox.length === 0;
   const whileAway = away ? `away${awaySince !== null ? ` since ${clockTime(awaySince)}` : ''}` : 'while away';
   const full = `${away ? `Away${awaySince !== null ? ` since ${clockTime(awaySince)}` : ''}. ` : 'While you are away: '}${so.preview ?? ''}`;
   const awayButton = (
@@ -52,7 +54,7 @@ export function StandingOrdersPanel(): React.ReactElement | null {
       className="wk-orders-act"
       data-on={away ? 'true' : undefined}
     >
-      {away ? 'Away — orders active' : 'Mark me away'}
+      {!away ? 'Mark me away' : orders.length > 0 ? 'Away — orders active' : 'Away — every gate waits'}
     </button>
   );
   const manageButton = (label: string): React.ReactElement => (

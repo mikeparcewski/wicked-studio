@@ -155,6 +155,15 @@ describe('StandingOrdersPanel (behaviour 10)', () => {
     expect(screen.getByTestId('standing-orders-invariant')).toBeInTheDocument();
   });
 
+  it('away with no orders stays the chip and never claims orders are active (codex on #376)', async () => {
+    render(<StandingOrdersPanel />);
+    fireEvent.click(await screen.findByTestId('standing-orders-away'));
+    await waitFor(() => expect(screen.getByTestId('standing-orders-away')).toHaveAttribute('aria-pressed', 'true'));
+    expect(screen.getByTestId('standing-orders-panel')).toHaveAttribute('data-variant', 'chip');
+    expect(screen.getByTestId('standing-orders-away')).toHaveTextContent('Away — every gate waits');
+    expect(screen.getByTestId('standing-orders-panel').textContent).not.toMatch(/orders active/);
+  });
+
   it('Manage is an overlay: Escape closes it and focus returns to Manage', async () => {
     render(<StandingOrdersPanel />);
     const toggle = await screen.findByTestId('standing-orders-toggle');
