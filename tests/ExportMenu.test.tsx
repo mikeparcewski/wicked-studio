@@ -8,6 +8,7 @@ import { cleanup, render, screen, waitFor, within } from '@testing-library/react
 import userEvent from '@testing-library/user-event';
 import { ProjectCard } from '../src/components/ProjectCard.js';
 import { VersionStrip } from '../src/components/VersionStrip.js';
+import { ExportMenu } from '../src/components/ExportMenu.js';
 import type { BoardProject } from '../src/hooks/useBoardModel.js';
 import type { CoreEvent } from '../src/api/types.js';
 import { threadKey, useDocThreadStore, type DocMsg } from '../src/store/docThread.js';
@@ -375,5 +376,28 @@ describe('export hydration on document open and version change (wicked-studio#23
     expect(messages().some((m) => m.kind === 'agent' && m.author === 'export')).toBe(true);
     // ...but exportAnswers MUST remain empty — hydrate seeds it via probe, not WS frames.
     expect(useExportAnswers.getState().answers[key] ?? []).toHaveLength(0);
+  });
+});
+
+describe('studio#236: the v0 placeholder offers no export', () => {
+  it('renders nothing at v0, and the formats from v1', () => {
+    const { container, rerender } = render(<ExportMenu projectId={PROJECT} docId={DOC} version={0} />);
+    expect(container.querySelector('[data-testid="export-menu"]')).toBeNull();
+    rerender(<ExportMenu projectId={PROJECT} docId={DOC} version={1} />);
+    expect(container.querySelectorAll('[data-testid="export-format"]').length).toBeGreaterThan(0);
+  });
+
+  it('at v0 a recording offers nothing, and an answer owed for v1 stays without the formats', () => {
+    const rec = { href: '/d/x/api/demo/recording/_v0.webm', file: 'x_v0.webm' };
+    const { container, rerender } = render(<ExportMenu projectId={PROJECT} docId={DOC} version={0} recording={rec} />);
+    expect(container.querySelector('[data-testid="export-menu"]')).toBeNull();
+    useExportAnswers.getState().settle(exportKey(PROJECT, DOC),
+      { state: 'ready', version: 1, format: 'html', href: '/a.html', file: 'a.html', report: null });
+    rerender(<ExportMenu projectId={PROJECT} docId={DOC} version={0} recording={rec} />);
+    expect(container.querySelector('[data-testid="export-menu"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="export-ready"]')?.getAttribute('data-version')).toBe('1');
+    expect(container.querySelectorAll('[data-testid="export-format"]').length).toBe(0);
+    expect(container.querySelector('[data-testid="export-recording"]')).toBeNull();
+    expect(container.textContent).not.toContain('Export v0');
   });
 });

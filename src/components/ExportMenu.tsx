@@ -81,7 +81,7 @@ export interface ExportMenuProps {
 
 export function ExportMenu({
   projectId, docId, version, compact = false, onHold, recording = null,
-}: ExportMenuProps): React.ReactElement {
+}: ExportMenuProps): React.ReactElement | null {
   const key = exportKey(projectId, docId);
   const answers = useExportAnswers((s) => s.answers[key] ?? NO_ANSWERS);
 
@@ -110,6 +110,12 @@ export function ExportMenu({
     onHold(true);
     return () => { onHold(false); };
   }, [answering, onHold]);
+
+  // studio#236: v0 is the bridge's "Building…" placeholder, not the document — there is nothing
+  // to export yet, so no format and no recording is offered for it. Only an answer still owed for
+  // ANOTHER version of this doc stays at the click site (round-3 J3); with none, nothing renders.
+  const placeholder = version < 1;
+  if (placeholder && answers.every((a) => a.version === version)) return null;
 
   function run(format: ExportFormat): void {
     const store = useExportAnswers.getState();
@@ -168,13 +174,13 @@ export function ExportMenu({
                flexShrink: 0, gap: '2px', maxWidth: '220px', minWidth: 0 }}
     >
       <div style={{ alignItems: 'center', display: 'flex', flexWrap: 'wrap', gap: compact ? '7px' : '5px' }}>
-        {!compact && (
+        {!compact && !placeholder && (
           <span style={{ color: S.faint, fontSize: 'var(--text-2xs)', letterSpacing: '0.06em',
                          fontFamily: 'var(--font-mono)', textTransform: 'uppercase' }}>
             Export v{version}
           </span>
         )}
-        {EXPORT_FORMATS.map((format) => {
+        {!placeholder && EXPORT_FORMATS.map((format) => {
           // §7.2 READY: the control that was clicked IS the download now — a real
           // anchor with the artifact's name, at the click site. The thread message
           // remains; this is the click site answering (EC37). Per format (F-4R2-016).
@@ -205,7 +211,7 @@ export function ExportMenu({
         })}
         {/* VIDEO-FB: the recording is already an artifact — no render step, so it
             is a download from the start, same-origin through the project proxy. */}
-        {recording !== null && (
+        {recording !== null && !placeholder && (
           <a
             data-testid="export-recording"
             data-version={String(version)}
@@ -232,7 +238,7 @@ export function ExportMenu({
       {/* interactive#219 (F-4R2-016): what the finished export actually printed — "PDF ready —
           2 pages · A4 portrait" — under the row, where the download is. Only when the bridge
           reported it; an older bridge renders nothing here. Compact controls carry it on hover. */}
-      {!compact && readyHereAll.map((a) => {
+      {!compact && !placeholder && readyHereAll.map((a) => {
         const phrase = describeExportReport(a.report ?? null);
         if (phrase === null) return null;
         return (
@@ -251,7 +257,7 @@ export function ExportMenu({
       })}
       {/* §7.2 FAILED, §3.3: the reason is stated and the control that retries it is the
           row above — adjacent, not a toast that takes the fix away with it when it fades. */}
-      {[...failedHere, ...failedElsewhere].map((a) => (
+      {[...(placeholder ? [] : failedHere), ...failedElsewhere].map((a) => (
         <span
           key={`hint-${a.format}-${a.version}`}
           data-testid="export-hint"

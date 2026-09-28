@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { RosterSeat } from '../api/types.js';
 import { apiStatus } from '../api/errors.js';
 import { api } from '../api/client.js';
@@ -10,6 +10,7 @@ import { useRunEventStore } from '../store/events.js';
 import { ComposerContext } from './ComposerContext.js';
 import { DemoWizard } from './DemoWizard.js';
 import { DocSubjectPicker, NO_GROUNDING_NARRATION, type DocFormat, type SubjectStatus } from './DocSubjectPicker.js';
+import { defaultDocSeats, docClisJson, type DocSeatDefault } from './docSeats.js';
 import { recordFromThread } from '../interactive/demoWire.js';
 import { runExport } from '../interactive/exportWire.js';
 import { retryBatchInject, submitFeedbackBatch } from '../interactive/feedbackBatch.js';
@@ -733,8 +734,28 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
   // repository grounding, which the thread then records.
   const [subjectStatus, setSubjectStatus] = useState<SubjectStatus>('loading');
   const [noGrounding, setNoGrounding] = useState(false);
-  // #302: show CLIs chip row (disabled — crew schema has no clisJson on doc APIs yet)
+  // #302: the roster, for the launch composer's seat chips. A Document create sends the chosen
+  // seats as `clisJson` (crew#631); the Video wizard's create does not carry them yet.
   const [docRoster, setDocRoster] = useState<RosterSeat[] | null>(() => getCachedRoster());
+  // studio#302: the Document council — defaulted once the roster is known (docSeats.ts), then
+  // the user's to change. `null` until then: a create before the roster loads sends no seats
+  // and crew convenes its own default.
+  // The pick belongs to ONE launch context (codex on #380): it is stored with the context it was
+  // made in. In any other project/doc/mode — and before the first toggle — the council is the
+  // default, derived in the same render (never a render with a roster but no pick).
+  const seatContext = `${projectId}|${docId ?? ''}|${mode}`;
+  const [docSeatPick, setDocSeatPick] = useState<{ context: string; seats: DocSeatDefault } | null>(null);
+  // `seatContext` is a dependency on purpose: a new launch context re-reads the stored default.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const defaultSeats = useMemo(() => (docRoster === null ? null : defaultDocSeats(docRoster)), [docRoster, seatContext]);
+  const docSeats = docSeatPick !== null && docSeatPick.context === seatContext ? docSeatPick.seats : defaultSeats;
+  const toggleDocSeat = (key: string): void => {
+    if (docSeats === null) return;
+    const selected = new Set(docSeats.selected);
+    if (selected.has(key)) selected.delete(key);
+    else selected.add(key);
+    setDocSeatPick({ context: seatContext, seats: { ...docSeats, selected } });
+  };
   useEffect(() => {
     const unsubscribe = subscribeRoster(setDocRoster);
     if (getCachedRoster() !== null) return unsubscribe;
@@ -765,6 +786,13 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
   const shownName = nameEdited ? nameDraft : derivedName;
   /** The launch composer refuses to send while the repositories are unknown, except by explicit choice. */
   const subjectBlocks = launching && (subjectStatus === 'loading' || (subjectStatus === 'error' && !noGrounding));
+  /** studio#302: a Document launch with every seat unchecked has no council — refused, not guessed. */
+  // Counted against the CURRENT roster (codex on #380): a pick whose seats a roster refresh dropped
+  // would otherwise enable Create and send `clisJson: []`.
+  const chosenSeatCount = docSeats === null || docRoster === null
+    ? 0
+    : docRoster.filter((s) => docSeats.selected.has(s.key)).length;
+  const seatBlocks = launching && mode === 'document' && docSeats !== null && chosenSeatCount === 0;
   /** The thread line a no-grounding create leaves — only when discovery FAILED and the user chose to go on. */
   const noteNoGrounding = (threadKeyOf: string): void => {
     if (subjectStatus === 'error' && noGrounding) useDocThreadStore.getState().addNarration(threadKeyOf, NO_GROUNDING_NARRATION);
@@ -808,7 +836,7 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
 
   async function submit(): Promise<void> {
     const body = text.trim();
-    if (body === '' || busy || subjectBlocks) return;
+    if (body === '' || busy || subjectBlocks || seatBlocks) return;
     const store = useDocThreadStore.getState();
     const msgId = nextMsgId();
     setBusy(true);
@@ -854,6 +882,8 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
             // F-046: the subject repos and the format ride the create; both omitted when unset.
             ...(repoRefs.length > 0 ? { repo_refs: repoRefs } : {}),
             ...(format !== '' ? { style: format } : {}),
+            // studio#302: the council the composer shows — the run convenes exactly these seats.
+            ...(docSeats !== null && docRoster !== null ? { clisJson: docClisJson(docRoster, docSeats.selected) } : {}),
           });
         } catch (e) {
           releasePending();
@@ -1332,9 +1362,54 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
             onStatus={setSubjectStatus}
           />
         )}
+        {/* studio#302: the Document council, chosen before Create — one toggle per roster seat,
+            defaulted like the Build composer's minus the seats the roster says will not answer
+            (named below), sent as the create's `clisJson` so the draft run convenes exactly these. */}
+        {launching && mode === 'document' && docRoster !== null && docRoster.length > 0 && docSeats !== null && (
+          <div data-testid="doc-clis-row" className="flex flex-col gap-1" style={{ paddingLeft: 2 }}>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-[10px]" style={{ color: 'var(--ink-dim)' }}>Council</span>
+              {docRoster.map((s) => {
+                const on = docSeats.selected.has(s.key);
+                return (
+                  <button
+                    key={s.key}
+                    type="button"
+                    data-testid={`doc-seat-${s.key}`}
+                    aria-pressed={on}
+                    onClick={() => toggleDocSeat(s.key)}
+                    disabled={busy}
+                    className="rounded-full px-2 py-0.5 text-[10px] font-mono"
+                    style={{
+                      background: on ? 'var(--accent-subtle)' : 'var(--surface-raised)',
+                      color: on ? 'var(--ink-high)' : 'var(--ink-dim)',
+                      border: `1px solid ${on ? 'var(--accent-dim)' : 'var(--surface-overlay)'}`,
+                      cursor: 'pointer',
+                      textDecoration: on ? 'none' : 'line-through',
+                    }}
+                    title={on ? `${s.key} sits on this document's council — click to leave it out` : `${s.key} is left out — click to add it`}
+                  >
+                    {s.key}
+                  </button>
+                );
+              })}
+            </div>
+            <span data-testid="doc-council-line" className="text-[10px]" style={{ color: seatBlocks ? 'var(--status-gate)' : 'var(--ink-dim)' }}>
+              {seatBlocks
+                ? 'Choose at least one seat — a document run needs a council.'
+                : `council: ${docRoster.filter((s) => docSeats.selected.has(s.key)).map((s) => s.key).join(' · ')}`}
+              {docSeats.leftOut.filter((x) => !docSeats.selected.has(x.key)).length > 0 && (
+                <span data-testid="doc-council-left-out">
+                  {' — left out: '}
+                  {docSeats.leftOut.filter((x) => !docSeats.selected.has(x.key)).map((x) => `${x.key} (${x.detail})`).join(', ')}
+                </span>
+              )}
+            </span>
+          </div>
+        )}
         {/* #302: CLIs chip row — same visual as Build composer; schema is strict (no clisJson
             on InteractiveDocCreateRequest) so chips are disabled pending a crew schema update. */}
-        {launching && docRoster !== null && docRoster.length > 0 && (
+        {launching && mode === 'video' && docRoster !== null && docRoster.length > 0 && (
           <div
             data-testid="doc-clis-row"
             className="flex flex-wrap items-center gap-1.5"
@@ -1389,8 +1464,8 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
             type="button"
             data-testid="doc-composer-submit"
             onClick={() => void submit()}
-            disabled={busy || wizard !== null || text.trim() === '' || subjectBlocks}
-            title={subjectBlocks
+            disabled={busy || wizard !== null || text.trim() === '' || subjectBlocks || seatBlocks}
+            title={seatBlocks ? 'choose at least one seat for this document’s council' : subjectBlocks
               ? (subjectStatus === 'loading'
                 ? 'waiting for the project’s repositories'
                 : 'the repositories could not be listed — retry, or choose to create without repository grounding')

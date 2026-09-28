@@ -31,6 +31,17 @@ npm publish dates. Every version listed here exists on
 - **A judge the engine skipped reads as "judge skipped — reason", never as a verdict (#306).** `agentVerdict: "skipped"` (wicked-core#539: the only eligible judge seat was the creator's) is read as no judge verdict on the gate card, the decisions ledger and the verdict detail, each of which shows the engine's `judgeSkippedReason` and `judgeDistinct: false` instead of a verdict chip or "agent judge". Typed locally (`judgeVerdictOf`, `judgeSkippedOf` in `src/api/wave6-wire.ts`). A `"pass"` verdict is unchanged.
 - **A steer at a pre-run gate can target the fix phase (wicked-core#465, studio half).** When the unit about to run is not the creator and a creator phase follows (the intake gate before triage), the card asks where "Approve + steer" goes: the creator phase (the default, sent as `amendScope: "creator"`) or the unit about to run. An intake steer written for the fix no longer lands on triage.
 - **Gate card follow-ups from #308 (#310).** R6: every failure escalation (the dead-seat, never-seated and promptless worker-failure gates) renders the escalation layout. R7: the reassign-absent assertions now seed a seated failed unit and check `steering-reassign-row`, so they can fail. R8: the Revise seed scans back to the last evaluation that said something instead of stopping at a delivered run's clean deliver evaluation. R9: a host that does not hydrate events (the steering-author and testing panels) still reads the floor-failed prompt and the request-changes verdict prompt as escalations; the legacy worktree-guard prompt keeps Approve. R10: correcting the #299 bullet below, the floor-failed layout keys on the `repo_checks` denial alone, not on the prompt.
+- **The Document composer chooses its council (#302).** The launch composer's seat chips are
+  toggles now, not an inert row: defaulted like the Build composer's (the stored default seats,
+  else every seat enabled for councils) minus the seats the roster says will not answer (not
+  council-eligible, or signed out), which are named on a "council: claude · pi — left out: …"
+  line. The choice rides the create as `clisJson` (crew#631), so the draft run convenes exactly
+  those seats; with every seat unchecked, Create is refused. The Video wizard is unchanged.
+- **No export on the v0 placeholder, and the collapsed panel says what it holds (#236).** The
+  export bar is not offered on v0 (the bridge's "Building…" placeholder) in the panel, the
+  version strip or the board tile. The collapsed rail labels its tabs, and Chat reads
+  "Chat · Export", so a document opened directly shows where the conversation and the downloads
+  live.
 - **Studio no longer offers levers that cannot work (#315).** With every selected seat benched or
   not council-eligible, Send is disabled and a line names each seat's reason (Cmd+Enter posts
   nothing either), instead of a "Ready to send" beside the composer's own warning and a launch that
