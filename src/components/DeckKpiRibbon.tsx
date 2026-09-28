@@ -152,7 +152,7 @@ export function DeckKpiRibbon({ runs, claims, governance = null, needCount, navi
           <Tile testId="home-kpi-active" label="Active" value={String(model.activeNow)}
             href="/work?filter=active" onGo={go('/work?filter=active')} sub="moving now" />
           <Tile testId="home-kpi-success" label="Success" value={model.successWord} unit=""
-            valueColor={healthColor(model.health)} href="/work?filter=completed" onGo={go('/work?filter=completed')}
+            valueColor={model.health === 'warn' ? 'var(--ink-high)' : healthColor(model.health)} href="/work?filter=completed" onGo={go('/work?filter=completed')}
             sub={model.counts.terminal === 0 ? 'no finished runs' : `${model.counts.done}/${model.counts.terminal} passed`} />
         </div>
       </div>

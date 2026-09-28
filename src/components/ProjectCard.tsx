@@ -147,11 +147,10 @@ const CSS = {
     fontSize: 'var(--text-xs)', fontFamily: 'var(--font-mono)', color: 'var(--ink-muted)',
     borderRadius: 'var(--radius-sm)', padding: '3px 7px',
   },
+  // The door's look is `.wk-chip` (styles/components.css); only its layout rides here.
   quick: {
-    display: 'flex', alignItems: 'center', gap: '5px', textDecoration: 'none',
-    background: 'var(--surface-raised)', border: 'none',
-    borderRadius: 'var(--radius-md)', color: 'var(--ink-high)', fontSize: 'var(--text-xs)',
-    overflow: 'hidden', whiteSpace: 'nowrap', minWidth: 0,
+    display: 'flex', alignItems: 'center', gap: '5px',
+    borderRadius: 'var(--radius-md)', overflow: 'hidden', whiteSpace: 'nowrap', minWidth: 0,
   },
   // Narration is DATA: it reads in the mono face at body ink (§1.5 rule 3, §1.4).
   line: {
@@ -194,7 +193,8 @@ function QuickActions({ projectId, link, detail }: {
       data-detail={detail ? 'true' : undefined}
       style={{
         marginTop: 'auto', display: 'grid', gap: detail ? '4px' : '6px',
-        gridTemplateColumns: detail ? '1fr 1fr' : 'repeat(4, minmax(0,1fr))',
+        // auto-fit: the doors wrap to a second row before a label would truncate ("Documen").
+        gridTemplateColumns: detail ? '1fr 1fr' : 'repeat(auto-fit, minmax(96px, 1fr))',
       }}
     >
       {MODES.map((m) => {
@@ -206,6 +206,7 @@ function QuickActions({ projectId, link, detail }: {
             data-testid="quick-action"
             data-mode={m}
             title={`${spec.label} — ${spec.sublabel}`}
+            className="wk-chip"
             style={{
               ...CSS.quick,
               justifyContent: detail ? 'flex-start' : 'center',
@@ -413,10 +414,10 @@ export function ProjectCard({
     <span
       data-testid="project-status-dot"
       aria-hidden
-      style={{
-        width: '8px', height: '8px', borderRadius: 'var(--radius-full)',
-        background: ATTENTION_DOT[attention], flexShrink: 0,
-      }}
+      // A shape per state as well as a hue (ring = gate, cross = failing): WCAG 1.4.1.
+      className="wk-status-dot"
+      data-status={attention}
+      style={{ '--dot': ATTENTION_DOT[attention] } as React.CSSProperties}
     />
   );
   // The name leads to the project DASHBOARD (DES-FEEDBACK-001 §4.1, W6): context
@@ -488,6 +489,10 @@ export function ProjectCard({
       {...(kbdSelected ? { 'data-kbd-selected': 'true' } : {})}
       style={{
         ...CSS.card,
+        // The card FILLS its windowing slot (design council M13): the wall reserves
+        // ACTIVE_CARD_H per row, so a card shorter than the slot left a dead band under the
+        // row that read as the end of the page.
+        minHeight: `${ACTIVE_CARD_H}px`,
         maxHeight: `${ACTIVE_CARD_H}px`,
         // The 2px status bar (DES-VISION-001 §1.4/§5.1): the card's leading
         // signal kind, as color, along the whole top edge — glanceable from
@@ -578,7 +583,8 @@ export function ProjectCard({
               // the run link, and beside it a chip carrying its own controls. Nesting
               // buttons inside the link would be neither valid nor operable.
               <Fragment key={session.id}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              {/* Wraps: the answer controls drop under the chip before its words truncate. */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
                 {/* Slice L (§9.2): the selection slot — checkbox for a simple
                     gate, the ↗ needs-the-thread marker for a complex one;
                     renders only once ≥1 gate is selected anywhere. */}
@@ -591,7 +597,7 @@ export function ProjectCard({
                   data-run-id={session.id}
                   data-status={session.status}
                   style={{
-                    ...CSS.chip, flex: 1, minWidth: 0, overflow: 'hidden', position: 'relative',
+                    ...CSS.chip, flex: '1 1 150px', minWidth: 0, overflow: 'hidden', position: 'relative',
                     // Clears the strip so a phase label never sits on top of it.
                     paddingLeft: '10px',
                     // A waiting gate is amber-status furniture (§5.1): dim fill, full-token text.
@@ -604,7 +610,7 @@ export function ProjectCard({
                   {/* Elapsed exists only where the wire carries a timestamp: `AgentSession`
                       has no `started_at`, so a gate's daemon-cached `receivedAt` is the one
                       honest clock on this surface. */}
-                  <span style={{ marginLeft: 'auto', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  <span style={{ marginLeft: 'auto', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {waiting ? (gate ? `waiting ${ago(gate.receivedAt)}` : 'needs you') : style?.label ?? session.status}
                   </span>
                 </a>

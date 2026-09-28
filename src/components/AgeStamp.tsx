@@ -24,8 +24,10 @@ export function AgeStamp({ at, now, href, onOpen, suffix = '', testId, style }: 
   }
   const pill: React.CSSProperties = {
     fontSize: 'var(--text-2xs)', fontFamily: 'var(--font-mono)', fontWeight: 'var(--weight-semi)',
-    color: 'var(--status-fail)', background: 'var(--status-fail-dim)',
-    border: '1px solid color-mix(in oklab, var(--status-fail) 45%, transparent)',
+    // A data-quality note, not a failure: muted ink on a dashed hairline — red stays reserved for
+    // failed runs (design council C3).
+    color: 'var(--ink-muted)', background: 'transparent',
+    border: '1px dashed var(--border-strong)',
     borderRadius: '999px', padding: '0 7px', whiteSpace: 'nowrap', flexShrink: 0, textDecoration: 'none',
   };
   const common = {

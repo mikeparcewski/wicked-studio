@@ -38,6 +38,15 @@ export default {
           'run-dim': 'var(--status-run-dim)',
           done: 'var(--status-done)',
           'done-dim': 'var(--status-done-dim)',
+          warn: 'var(--status-warn)',
+          'warn-dim': 'var(--status-warn-dim)',
+          ok: 'var(--status-ok)',
+          'ok-dim': 'var(--status-ok-dim)',
+        },
+        line: {
+          subtle: 'var(--border-subtle)',
+          DEFAULT: 'var(--border)',
+          strong: 'var(--border-strong)',
         },
         // The inherited `wk` shell palette retired with DES-VISION-001 slice 6 —
         // its last consumers moved onto the semantic aliases above.

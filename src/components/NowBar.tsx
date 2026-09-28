@@ -78,7 +78,9 @@ export function NowBar({
       : status === 'awaiting_human'
         ? 'Waiting on your decision below'
         : `Run ${statusText}`);
-  const nowColor = lastLine !== null ? TONE_COLOR[lastLine.tone] : 'var(--ink-muted)';
+  // Amber is the "waiting on you" SIGNAL (the status word and dot carry it) — a gate line of
+  // narration reads in body ink, not as a long run of yellow text (design council M15).
+  const nowColor = lastLine !== null && lastLine.tone !== 'gate' ? TONE_COLOR[lastLine.tone] : lastLine !== null ? 'var(--ink-body)' : 'var(--ink-muted)';
 
   const [artifactsOpen, setArtifactsOpen] = useState(false);
   const popRef = useRef<HTMLDivElement>(null);
@@ -113,7 +115,8 @@ export function NowBar({
       <span
         data-testid="now-bar-narration"
         className="flex-1 min-w-0 truncate"
-        style={{ color: nowColor }}
+        // Prose in the sans; the bar's status word and phase stay mono (machine words).
+        style={{ color: nowColor, fontFamily: 'var(--font-sans)', fontSize: '13px' }}
         title={nowText}
       >
         {nowText}

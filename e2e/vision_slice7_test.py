@@ -21,7 +21,7 @@ shared frozen-NOW0 W2 fixture (whose settings store now serves GET/PUT
   4. THE PREVIEW STRIP SPEAKS TOKENS (EC15) and the accent stays DISTINCT
      from the fixed status trio (EC12) — probed computed-vs-computed, no hex
      in this rig;
-  5. RESET (§3.5): restores 258/72/62 inline AND persists it; the logo is
+  5. RESET (§3.5): restores 230/84/72 inline AND persists it; the logo is
      untouched by design (asserted in the unit suite; here reset runs while
      no logo is set);
   6. LOGO (§3.1/EC16): applying a same-origin CUSTOM URL (a deliberately
@@ -247,15 +247,15 @@ with sync_playwright() as p:
         pass
     page.screenshot(path=str(SHOT_SETTINGS))
 
-    # AC 4 — reset restores 258/72/62 inline AND persists it (§3.5).
+    # AC 4 — reset restores 230/74/68 inline AND persists it (§3.5).
     with page.expect_request(is_settings_put, timeout=8000) as put3:
         page.locator('[data-testid="accent-reset"]').click()
     reset_put = put_appearance(put3.value)
     inline_r = page.evaluate(INLINE)
     report["steps"]["reset"] = {
-        "ok": (inline_r["h"] == "258" and inline_r["s"] == "72%" and inline_r["l"] == "62%"
-               and reset_put.get("accent_h") == 258 and reset_put.get("accent_s") == 72
-               and reset_put.get("accent_l") == 62),
+        "ok": (inline_r["h"] == "230" and inline_r["s"] == "74%" and inline_r["l"] == "68%"
+               and reset_put.get("accent_h") == 230 and reset_put.get("accent_s") == 74
+               and reset_put.get("accent_l") == 68),
         "inline": inline_r, "put_studio_appearance": reset_put,
     }
 
@@ -284,7 +284,7 @@ with sync_playwright() as p:
         "wicked_mark_absent": logo_state["markCount"] == 0,
         "remove_offered": logo_state["removeShown"],
         "put_carries_logo_url": logo_put.get("logo_url") == LOGO_URL,
-        "logo_independent_of_accent": logo_put.get("accent_h") == 258,
+        "logo_independent_of_accent": logo_put.get("accent_h") == 230,
     }
     report["steps"]["logo"] = {"ok": all(logo_checks.values()), **logo_checks, "computed": logo_state}
 
@@ -299,7 +299,7 @@ with sync_playwright() as p:
     })""")
     report["steps"]["logo_remove"] = {
         "ok": (after_remove["inlineLogo"] == "" and after_remove["markCount"] >= 1
-               and remove_put.get("logo_url") is None and remove_put.get("accent_h") == 258),
+               and remove_put.get("logo_url") is None and remove_put.get("accent_h") == 230),
         "computed": after_remove, "put_studio_appearance": remove_put,
     }
 

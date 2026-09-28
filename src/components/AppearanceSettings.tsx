@@ -231,8 +231,7 @@ export function AppearanceSettings(): React.ReactElement {
       style={{ background: 'var(--surface-card)', border: '1px solid var(--surface-raised)' }}
     >
       <h2
-        className="text-xs font-semibold uppercase tracking-wide pt-4 pb-2 font-mono"
-        style={{ color: 'var(--ink-dim)' }}
+        className="wk-eyebrow pt-4 pb-2"
       >
         Appearance
       </h2>
@@ -263,8 +262,7 @@ export function AppearanceSettings(): React.ReactElement {
               type="button"
               data-testid="logo-upload"
               onClick={() => fileRef.current?.click()}
-              className="px-2.5 py-1 rounded-lg text-xs font-medium"
-              style={{ background: 'var(--surface-raised)', color: 'var(--ink-body)' }}
+              className="wk-btn wk-btn--secondary wk-btn--sm"
             >
               Upload…
             </button>
@@ -276,15 +274,13 @@ export function AppearanceSettings(): React.ReactElement {
               value={logoDraft}
               onChange={(e) => setLogoDraft(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') applyLogoUrl(); }}
-              className="w-52 rounded px-2 py-1 text-xs font-mono focus:outline-none"
-              style={{ background: 'var(--surface-rail)', border: '1px solid var(--surface-raised)', color: 'var(--ink-high)' }}
+              className="wk-field w-52 px-2 font-mono"
             />
             <button
               type="button"
               data-testid="logo-url-apply"
               onClick={applyLogoUrl}
-              className="px-2.5 py-1 rounded-lg text-xs font-medium"
-              style={{ background: 'var(--surface-raised)', color: 'var(--ink-body)' }}
+              className="wk-btn wk-btn--secondary wk-btn--sm"
             >
               Use URL
             </button>
@@ -293,8 +289,7 @@ export function AppearanceSettings(): React.ReactElement {
                 type="button"
                 data-testid="logo-remove"
                 onClick={() => { setLogoError(null); removeLogo(); }}
-                className="px-2.5 py-1 rounded-lg text-xs font-medium"
-                style={{ background: 'transparent', color: 'var(--ink-muted)', border: '1px solid var(--surface-raised)' }}
+                className="wk-btn wk-btn--quiet wk-btn--sm"
               >
                 Remove
               </button>
@@ -321,8 +316,7 @@ export function AppearanceSettings(): React.ReactElement {
             placeholder={DEFAULT_SITE_NAME}
             value={appearance.site_name ?? ''}
             onChange={(e) => update({ site_name: e.target.value.trim() === '' ? null : e.target.value })}
-            className="w-64 rounded px-2 py-1 text-xs font-mono focus:outline-none"
-            style={{ background: 'var(--surface-rail)', border: '1px solid var(--surface-raised)', color: 'var(--ink-high)' }}
+            className="wk-field w-64 px-2 font-mono"
           />
         </div>
       </div>
@@ -409,8 +403,7 @@ export function AppearanceSettings(): React.ReactElement {
                 type="button"
                 data-testid="accent-reset"
                 onClick={resetAccent}
-                className="px-2.5 py-1 rounded-lg text-xs font-medium"
-                style={{ background: 'var(--surface-raised)', color: 'var(--ink-body)' }}
+                className="wk-btn wk-btn--secondary wk-btn--sm"
               >
                 Reset to default
               </button>

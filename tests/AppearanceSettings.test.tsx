@@ -39,7 +39,7 @@ describe('AppearanceSettings (DES-VISION-001 §3.2)', () => {
 
     const wheel = screen.getByTestId('hue-wheel');
     expect(wheel).toHaveAttribute('role', 'slider');
-    expect(wheel).toHaveAttribute('aria-valuenow', '258');
+    expect(wheel).toHaveAttribute('aria-valuenow', '230');
     expect(screen.getByTestId('hue-handle')).toBeInTheDocument();
     expect(screen.getByTestId('accent-sat')).toHaveValue('60');
     expect(screen.getByTestId('accent-lgt')).toHaveValue('55');
@@ -69,9 +69,9 @@ describe('AppearanceSettings (DES-VISION-001 §3.2)', () => {
   it('the wheel moves the hue from the keyboard too', () => {
     render(<AppearanceSettings />);
     fireEvent.keyDown(screen.getByTestId('hue-wheel'), { key: 'ArrowRight' });
-    expect(useAppearanceStore.getState().appearance.accent_h).toBe(259);
+    expect(useAppearanceStore.getState().appearance.accent_h).toBe(231);
     fireEvent.keyDown(screen.getByTestId('hue-wheel'), { key: 'ArrowLeft' });
-    expect(useAppearanceStore.getState().appearance.accent_h).toBe(258);
+    expect(useAppearanceStore.getState().appearance.accent_h).toBe(230);
   });
 
   it('reset restores the accent primitives and leaves the logo alone (§3.5)', () => {
@@ -82,9 +82,9 @@ describe('AppearanceSettings (DES-VISION-001 §3.2)', () => {
     render(<AppearanceSettings />);
     fireEvent.click(screen.getByTestId('accent-reset'));
     const a = useAppearanceStore.getState().appearance;
-    expect([a.accent_h, a.accent_s, a.accent_l]).toEqual([258, 72, 62]);
+    expect([a.accent_h, a.accent_s, a.accent_l]).toEqual([230, 74, 68]);
     expect(a.logo_url).toBe('/l.png');
-    expect(root().style.getPropertyValue('--_accent-h')).toBe('258');
+    expect(root().style.getPropertyValue('--_accent-h')).toBe('230');
   });
 
   it('logo by URL: apply sets --logo-url; Remove reverts to the default mark', () => {

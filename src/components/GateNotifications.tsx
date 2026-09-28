@@ -167,10 +167,10 @@ export function GateNotifications({ onSelect, runId, projectId = null, runs = []
       {visible.length > cards.length && (
         <p
           data-testid="gate-toast-overflow"
-          className="text-[11px] font-mono px-1"
+          className="wk-toast wk-toast--gate wk-toast-line"
           // Inert by design: the overflow line is a pointer, not a control —
           // the runs bar's gate count is the actionable record.
-          style={{ color: 'var(--ink-dim)', pointerEvents: 'none' }}
+          style={{ pointerEvents: 'none', margin: 0 }}
         >
           +{visible.length - cards.length} more waiting — see the runs bar
         </p>

@@ -86,9 +86,9 @@ with sync_playwright() as p:
     page.wait_for_function(
         "() => document.querySelectorAll('[data-testid=\"band-working\"] [data-testid=\"project-card\"]').length === 3",
         timeout=10000)
-    page.evaluate(f"() => {{ document.querySelector('[data-testid=\"project-board\"]').scrollTop = {SCROLL_TO}; }}")
+    page.evaluate(f"() => {{ document.querySelector('[data-place-scroll=\"home-board\"]').scrollTop = {SCROLL_TO}; }}")
     page.wait_for_timeout(300)
-    before = page.evaluate("() => document.querySelector('[data-testid=\"project-board\"]').scrollTop")
+    before = page.evaluate("() => document.querySelector('[data-place-scroll=\"home-board\"]').scrollTop")
     check("board-scrolled", before >= SCROLL_TO - 2, scroll_top=before)
 
     # ── >events r1 → the raw JSON event list ────────────────────────────────────
@@ -111,12 +111,12 @@ with sync_playwright() as p:
           expanded=band.get_attribute("data-expanded"))
     try:
         page.wait_for_function(
-            f"() => Math.abs(document.querySelector('[data-testid=\"project-board\"]').scrollTop - {before}) <= 2",
+            f"() => Math.abs(document.querySelector('[data-place-scroll=\"home-board\"]').scrollTop - {before}) <= 2",
             timeout=5000)
         restored = True
     except Exception:  # noqa: BLE001 — reported below
         restored = False
-    after = page.evaluate("() => document.querySelector('[data-testid=\"project-board\"]').scrollTop")
+    after = page.evaluate("() => document.querySelector('[data-place-scroll=\"home-board\"]').scrollTop")
     page.screenshot(path=str(SHOTS / "wave1-raw-back.png"))
     check("back-scroll-restored", restored, before=before, after=after)
 

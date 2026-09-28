@@ -12,6 +12,7 @@
 @import './themes/dark.css';
 @import './themes/light.css';
 @import './deck.css';
+@import './components.css';
 
 @tailwind base;
 @tailwind components;
@@ -147,7 +148,7 @@ code, pre, .font-mono {
 
 .wk-composer:focus,
 .wk-composer:focus-within {
-  outline: none;
+  outline: 2px solid transparent;
   box-shadow: 0 0 0 2px var(--accent-dim);
 }
 

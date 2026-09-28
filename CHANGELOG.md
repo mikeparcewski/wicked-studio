@@ -27,12 +27,36 @@ npm publish dates. Every version listed here exists on
   renders "Routed <seat> (team model, no council)" in the assumptions panel and "Routed: <seat>"
   in routing provenance. `wicked-crew-api-types` moves to 0.40.0 (the `teamed` arm); the wave-6
   and skills mirrors are re-vendored to it (line ranges; the `routingMethod` union gains `teamed`).
+- **Home scrolls.** At 1440x700 the landing's own column was `overflow: hidden`, so the portfolio
+  wall, the Quiet band and Unfiled runs sat below the fold with no way to reach them. The Home pane
+  is now the one scroller (the rail and the status bar stay put) and the wall windows its rows
+  against it; a run page whose gate card outgrows the pane scrolls too. New journey `main_scroll`
+  (in the behaviour set) wheels to the last Home section and checks every top-level page for a
+  clipped pane.
 - **Wave A home, verified on the live rig at 1440x700.** The tile repair moves ("Retry", "Replay")
   sat over the tile's value row and covered a two-digit value's delta badge or unit; they now take
   their own line under the tile. A failed run with no `ended_at` (the daemon booted after it ended)
   now ages by the engine's terminal clock `finished_at` instead of showing "age unknown". A daemon
   without the replay route (404, crew before #689) is named as too old, with the host CLI that
   still drains the outbox, instead of "the daemon refused this — not found".
+
+### Changed
+- **Palette and controls polish (tokens and CSS, no layout changes).** A slate-ink surface ramp
+  with a cool bias, tinted ink, hairline border tokens, an iris-blue default accent (230/74/68,
+  replacing the stock violet 258/72/62; "Reset to default" on Theme picks it up) with dark text on
+  it, a warn-orange status, and a light theme whose text, accent and status colours all clear
+  WCAG AA (the old light theme's amber measured 1.2:1). One button vocabulary (`wk-btn` primary /
+  secondary / danger / quiet, with hover, active, focus-visible and disabled states) on the gate
+  card, Home's verbs, the Needs You rows, the run header and the undo toasts; the gate card's
+  recommended move is the single primary; status fills are washes rather than slabs.
+- **Design-council pass on the polish (wicked-studio#370).** The Ask bubble reserves room instead
+  of covering the composer, the Home tail and the toast pointer; disabled controls are a dashed,
+  unfilled structure rather than a faded copy; focus draws a ring plus a transparent outline so it
+  survives forced-colors mode; the gate card reads its consequence before its verb and keeps its
+  answers in fixed slots (Reject is always the right column); status dots carry a shape per state;
+  every control is a 24px target; field edges clear 3:1 (`--border-input`); amber means only
+  "waiting on you"; one page-title token. `tests/tokens.contrast.test.ts` measures every ink step
+  (4.5:1) and the field edge (3:1) on every surface in both themes.
 
 ### Added
 - **Capture anything, where you already are (Studio OS behaviour 8, on the Wave A–C pattern).**

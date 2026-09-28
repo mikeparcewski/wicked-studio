@@ -293,8 +293,7 @@ function RunCancelControl({ runId, onCancelled }: {
         data-testid="run-cancel"
         onClick={() => setConfirming(true)}
         title="Cancel this run — stops its workers now; the worktree stays on disk"
-        className="shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold font-mono transition-opacity hover:opacity-80"
-        style={{ background: 'var(--status-fail-dim)', border: '1px solid var(--status-fail-dim)', color: 'var(--status-fail)' }}
+        className="wk-btn wk-btn--danger shrink-0"
       >
         Cancel run
       </button>
@@ -998,8 +997,7 @@ function RunChat({
           data-testid="run-draft-update"
           onClick={() => setDraftKind(outboundKindFor(session.status))}
           title="Draft an update about this run from its record — editable, then copy it out"
-          className="shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold font-mono transition-opacity hover:opacity-80"
-          style={{ background: 'var(--surface-raised)', color: 'var(--ink-body)' }}
+          className="wk-btn wk-btn--secondary shrink-0"
         >
           Draft update
         </button>
@@ -1247,10 +1245,10 @@ function NewRunView({
     <div className="flex flex-col h-full items-center justify-center">
       <div className="w-full max-w-2xl px-8 flex flex-col gap-5">
         <div className="flex flex-col gap-2 text-center">
-          <h1 className="text-3xl font-bold tracking-tight" style={{ color: 'var(--ink-high)' }}>
+          <h1 className="wk-page-title">
             {heading}
           </h1>
-          <p className="text-base leading-relaxed" style={{ color: 'var(--ink-muted)' }}>
+          <p className="text-sm leading-relaxed" style={{ color: 'var(--ink-muted)' }}>
             {sub}
           </p>
         </div>

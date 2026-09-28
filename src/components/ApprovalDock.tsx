@@ -70,7 +70,7 @@ export function ApprovalDock({
   return (
     <div
       data-testid="approval-dock"
-      className="shrink-0 px-4 pt-2 pb-1 flex flex-col gap-2 max-w-3xl w-full mx-auto"
+      className="shrink-0 px-4 pt-2 pb-1 flex flex-col gap-4 max-w-3xl w-full mx-auto"
     >
       {/* An open MCP elicitation suspends the agent's turn, so it leads the dock (DES-002).
           `key` is REQUIRED: React reuses the instance across prop changes, so without it a

@@ -1,28 +1,54 @@
 /* themes/light.css — the light theme as a THEME INSTANCE (DES-VISION-001 §2.14):
  * applied via [data-theme="light"] on <html>, not a separate stylesheet tree.
- * Exactly the surface and ink ramp overrides, plus the status `-dim` re-tints —
- * the dark values (near-black tints the full-status text reads against) are
- * unreadable as backgrounds on a light surface, so each gets a high-lightness
- * override here (§2.14, in scope for slice 1). Accent, full status colors,
- * spacing, type, radius, and motion tokens are theme-invariant and stay in
- * tokens.css. Nothing sets this attribute yet — the file is inert until a
- * later slice offers the switch. */
+ * It overrides the surface and ink ramps, the hairlines and shadows, and re-tints the
+ * accent and status colours for a light ground: the dark theme's light accent and bright
+ * status hues fall under 3:1 on a near-white surface, so each is darkened here (same
+ * hues — the accent keeps the user's customized hue and saturation, only its lightness
+ * moves). Spacing, type, radius and motion tokens are theme-invariant and stay in
+ * tokens.css. Every text token clears WCAG AA (4.5:1) on base, rail, card and raised. */
 
 [data-theme="light"] {
-  --_surface-0: #f4f4f8;
-  --_surface-1: #eeeef4;
-  --_surface-2: #e5e5ef;
-  --_surface-3: #d8d8e8;
-  --_surface-4: #ccccdc;
+  /* Cool paper: the page sits a shade below white cards, the rail a shade below the page. */
+  --_surface-0: #f4f6fa;
+  --_surface-1: #eceff5;
+  --_surface-2: #ffffff;
+  --_surface-3: #e4e8f0;
+  --_surface-4: #d7dce6;
 
-  --_ink-a35: rgba(0, 0, 0, 0.30);
-  --_ink-a55: rgba(0, 0, 0, 0.52);
-  --_ink-a80: rgba(0, 0, 0, 0.78);
-  --_ink-100: #080810;
+  --_ink-faint:  rgba(13, 18, 32, 0.62);
+  --_ink-soft:   rgba(13, 18, 32, 0.72);
+  --_ink-strong: rgba(13, 18, 32, 0.86);
+  --_ink-max:    #0b0f1a;
 
-  /* Status pill backgrounds on a light surface: same fixed hues, lifted
-     lightness (§2.14's gate example, applied to all three signals). */
-  --status-gate-dim: hsl(var(--_sg-h) 80% 88%);
-  --status-fail-dim: hsl(var(--_sf-h) 75% 91%);
-  --status-run-dim:  hsl(var(--_sr-h) 55% 88%);
+  --border-subtle: rgba(15, 23, 42, 0.07);
+  --border:        rgba(15, 23, 42, 0.12);
+  --border-strong: rgba(15, 23, 42, 0.22);
+  --border-input:  rgba(15, 23, 42, 0.50);   /* a field's edge: 3.25–3.41 on every surface */
+
+  --shadow-card:    0 1px 2px rgba(15, 23, 42, 0.06), 0 0 0 1px var(--border-subtle);
+  --shadow-raised:  0 6px 16px -6px rgba(15, 23, 42, 0.16), 0 0 0 1px var(--border);
+  --shadow-overlay: 0 18px 40px -10px rgba(15, 23, 42, 0.24), 0 0 0 1px var(--border-strong);
+
+  --shadow-button:  inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 1px 2px rgba(15, 23, 42, 0.18);
+
+  --scrim: rgba(15, 23, 42, 0.36);
+
+  /* The accent, 24 points darker and a fifth less saturated: text-grade on white, white text
+     on it, and not a neon slab on paper. */
+  --accent:        hsl(var(--_accent-h) calc(var(--_accent-s) * 0.8) calc(var(--_accent-l) - 24%));
+  --accent-dim:    hsl(var(--_accent-h) calc(var(--_accent-s) * 0.8) calc(var(--_accent-l) - 8%));
+  --accent-subtle: hsl(var(--_accent-h) calc(var(--_accent-s) * 0.6) calc(var(--_accent-l) + 16%));
+  --accent-hover:  hsl(var(--_accent-h) calc(var(--_accent-s) * 0.8) calc(var(--_accent-l) - 30%));
+  --accent-fg:     hsl(var(--_accent-h) 30% clamp(8%, calc((82% - var(--_accent-l)) * 100), 98%));
+
+  /* Status text on a light surface: same fixed hues, deep enough for 4.5:1; the -dim pill
+     backgrounds lift to high-lightness tints (§2.14's gate example, applied to all four). */
+  --status-gate:     hsl(var(--_sg-h) 92% 25%);
+  --status-gate-dim: hsl(var(--_sg-h) 85% 90%);
+  --status-fail:     hsl(var(--_sf-h) 74% 44%);
+  --status-fail-dim: hsl(var(--_sf-h) 80% 94%);
+  --status-run:      hsl(var(--_sr-h) 70% 26%);
+  --status-run-dim:  hsl(var(--_sr-h) 50% 90%);
+  --status-warn:     hsl(var(--_sw-h) 90% 34%);
+  --status-warn-dim: hsl(var(--_sw-h) 90% 92%);
 }

@@ -37,6 +37,7 @@ BEHAVIOUR = [
     "waveb_proposals", "agent_1on1", "gate_trust", "wavec_takes", "wavec_runpage", "wavec_home_runs",
     "standing_orders",
     "capture",
+    "main_scroll",
 ]
 
 # Journeys that need a live daemon or bridge: a real wicked-crew daemon (seed_surfaces,

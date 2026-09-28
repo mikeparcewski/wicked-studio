@@ -195,7 +195,7 @@ export function WorkPage({ runs, selectedRunId, onSelect, navigate, search = '',
     <div className="flex flex-col h-full" style={{ color: 'var(--ink-high)' }}>
       {/* Header */}
       <div className="px-8 pt-8 pb-4 flex items-center gap-4">
-        <h1 className="text-xl font-semibold font-mono">Work</h1>
+        <h1 className="wk-page-title">Work</h1>
         <div className="flex-1" />
         <TimeRangeSelector value={range} onChange={setRange} />
         <input
@@ -203,19 +203,13 @@ export function WorkPage({ runs, selectedRunId, onSelect, navigate, search = '',
           placeholder="Search work…"
           value={query}
           onChange={e => setQuery(e.target.value)}
-          className="rounded-xl px-4 py-2 text-sm font-mono outline-none"
-          style={{
-            background: 'var(--surface-card)',
-            border: '1px solid var(--surface-raised)',
-            color: 'var(--ink-high)',
-            width: '240px',
-          }}
+          className="wk-field px-3"
+          style={{ width: '240px' }}
         />
         <button
           type="button"
           onClick={() => navigate('/runs/new')}
-          className="rounded-lg px-4 py-2 text-sm font-semibold font-mono shrink-0"
-          style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
+          className="wk-btn wk-btn--primary shrink-0"
         >
           Do Work
         </button>
@@ -233,7 +227,9 @@ export function WorkPage({ runs, selectedRunId, onSelect, navigate, search = '',
             value: metrics.successRate,
             accent:
               metrics.successHealth === 'good' ? 'var(--status-done)'
-              : metrics.successHealth === 'warn' ? 'var(--status-gate)'
+              // Amber means "waiting on you" and nothing else (design council M15): a middling
+              // success rate reads in plain ink.
+              : metrics.successHealth === 'warn' ? 'var(--ink-high)'
               : metrics.successHealth === 'bad' ? 'var(--status-fail)'
               : undefined,
             testid: 'work-success-rate',
@@ -249,8 +245,8 @@ export function WorkPage({ runs, selectedRunId, onSelect, navigate, search = '',
             style={{ background: 'var(--surface-card)', border: '1px solid var(--surface-raised)' }}
           >
             <p
-              className="text-[10px] font-mono uppercase tracking-widest"
-              style={{ color: 'var(--ink-dim)', margin: 0 }}
+              className="wk-eyebrow"
+              style={{ color: 'var(--ink-dim)' }}
             >
               {s.label}
             </p>
@@ -298,7 +294,7 @@ export function WorkPage({ runs, selectedRunId, onSelect, navigate, search = '',
             aria-controls={`work-panel-${t.id}`}
             tabIndex={tab === t.id ? 0 : -1}
             onClick={() => setTab(t.id)}
-            className="rounded-full px-3 py-1 text-xs font-mono"
+            className="rounded-full px-3 py-1 text-xs inline-flex items-center min-h-[24px]"
             style={
               tab === t.id
                 ? { background: 'var(--surface-raised)', color: 'var(--ink-high)' }
@@ -316,8 +312,8 @@ export function WorkPage({ runs, selectedRunId, onSelect, navigate, search = '',
             data-testid="work-hidden-chip"
             data-hidden={hiddenTotal}
             onClick={() => setRange('all')}
-            className="rounded-full px-3 py-1 text-xs font-mono"
-            style={{ color: 'var(--ink-muted)', border: '1px solid var(--surface-raised)' }}
+            className="rounded-full px-3 py-1 text-xs inline-flex items-center min-h-[24px]"
+            style={{ color: 'var(--ink-muted)', border: '1px solid var(--border)' }}
             title={`the ${rangeWord(range)} window holds back ${hiddenTotal} older run${hiddenTotal === 1 ? '' : 's'} — click to show all`}
           >
             +{hiddenTotal} older · show all
@@ -329,7 +325,7 @@ export function WorkPage({ runs, selectedRunId, onSelect, navigate, search = '',
           type="button"
           aria-pressed={showArchived}
           onClick={() => setShowArchived(s => !s)}
-          className="rounded-full px-3 py-1 text-xs font-mono"
+          className="rounded-full px-3 py-1 text-xs inline-flex items-center min-h-[24px]"
           style={
             showArchived
               ? { background: 'var(--surface-raised)', color: 'var(--ink-high)', border: '1px dashed var(--ink-dim)' }
@@ -345,7 +341,7 @@ export function WorkPage({ runs, selectedRunId, onSelect, navigate, search = '',
         id={`work-panel-${tab}`}
         role="tabpanel"
         aria-labelledby={`work-tab-${tab}`}
-        className="flex-1 overflow-y-auto px-5 pb-8 flex flex-col"
+        className="wk-scroll-fab flex-1 overflow-y-auto px-5 pb-8 flex flex-col"
       >
         {hiddenByRange > 0 && (
           <p

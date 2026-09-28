@@ -1156,7 +1156,7 @@ export function CenterDashboard({
       <div style={{ maxWidth: '1100px', margin: '0 auto', padding: '28px 32px' }}>
 
         {/* ── 1. Header + purpose statement (the F7 fix; also the empty state) ── */}
-        <h1 style={{ fontSize: 'var(--text-xl)', fontWeight: 600, color: 'var(--ink-high)', margin: 0, ...sans }}>
+        <h1 className="wk-page-title">
           Build
         </h1>
         {/* Purpose: prose — `--ink-body --text-sm` in the sans (§5.4 token usage). */}

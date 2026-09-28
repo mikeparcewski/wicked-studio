@@ -40,8 +40,6 @@ import {
  */
 export function GateVerdict({ view, phase }: { view: GateVerdictView; phase: string }): React.ReactElement {
   const { outcome } = view;
-  const tone = outcome === 'fail' ? 'var(--status-fail)' : outcome === 'pass' ? 'var(--status-done)' : 'var(--ink-muted)';
-  const toneDim = outcome === 'fail' ? 'var(--status-fail-dim)' : outcome === 'pass' ? 'var(--status-done-dim)' : 'var(--surface-raised)';
   const word = outcome === 'fail' ? 'DENIED' : outcome === 'pass' ? 'PASS' : 'UNGATED';
   const vacuous = view.evaluatorPolicies.length === 0 && view.evaluatorPass === true;
 
@@ -52,10 +50,10 @@ export function GateVerdict({ view, phase }: { view: GateVerdictView; phase: str
       {...(view.ord !== null ? { 'data-phase-ord': view.ord } : {})}
       {...(view.attempt !== null ? { 'data-phase-attempt': view.attempt } : {})}
       {...(view.denial !== null && view.denial.source !== null ? { 'data-denial-source': view.denial.source } : {})}
-      className="rounded-lg p-2.5 mb-3 flex flex-col gap-1 font-mono"
-      style={{ background: toneDim, border: `1px solid ${toneDim}` }}
+      // wk-verdict: a wash with a status rule on the left; only the heading takes the tone.
+      className={`wk-verdict wk-verdict--${outcome} rounded-lg p-3 mb-3 flex flex-col gap-1 font-mono`}
     >
-      <p className="text-xs font-semibold" style={{ color: tone }}>
+      <p className="wk-verdict-head text-xs font-semibold">
         Evaluator verdict — {phase} · {word}
         {view.judgeCli !== null && (
           <span
@@ -99,13 +97,14 @@ export function GateVerdict({ view, phase }: { view: GateVerdictView; phase: str
 
       {view.denial !== null && (
         <p
-          className="text-[11px]"
+          className="wk-verdict-denial text-[11px]"
           data-testid="gate-verdict-denial"
           // The recorded remedy carries a 40-hex tree id inside one <code> span — an unbreakable
-          // token that overflows a narrow dock unless it may wrap anywhere.
-          style={{ color: 'var(--status-fail)', overflowWrap: 'anywhere' }}
+          // token that overflows a narrow dock unless it may wrap anywhere. Body ink; the
+          // "denied by" label alone carries the fail colour (wk-verdict-label).
+          style={{ overflowWrap: 'anywhere' }}
         >
-          <span className="font-semibold">denied by {denialSourceLabel(view.denial.source)}: </span>
+          <span className="wk-verdict-label font-semibold">denied by {denialSourceLabel(view.denial.source)}: </span>
           {splitBackticks(view.denial.reason).map((part, i) =>
             i % 2 === 1 ? (
               <code key={i} className="px-1 rounded" style={{ background: 'var(--surface-rail)', color: 'var(--ink-high)' }}>

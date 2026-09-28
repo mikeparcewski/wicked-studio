@@ -357,7 +357,8 @@ function RailHeading({ path, open, onToggle, onNew, navigate, children, extra }:
             color: open ? S.high : S.muted,
             fontSize: 'var(--text-sm)',
             fontFamily: 'var(--font-sans)',
-            fontWeight: 'var(--weight-semi)',
+            // A closed section reads quieter than the open one (design council S10).
+            fontWeight: open ? 'var(--weight-semi)' : 450,
             outlineColor: S.accent,
           }}
         >

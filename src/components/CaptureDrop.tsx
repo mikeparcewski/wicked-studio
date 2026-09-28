@@ -14,12 +14,6 @@ import { useProjectsStore } from '../store/projects.js';
  */
 
 const S = {
-  verb: {
-    background: 'transparent', color: 'var(--ink-muted)',
-    border: '1px solid var(--surface-raised)', borderRadius: 'var(--radius-md)',
-    padding: '6px 12px', fontSize: 'var(--text-xs)', fontWeight: 'var(--weight-semi)',
-    cursor: 'pointer', whiteSpace: 'nowrap', font: 'inherit',
-  },
   panel: {
     display: 'flex', flexDirection: 'column', gap: '8px', padding: '10px 12px',
     background: 'var(--surface-card)', border: '1px solid var(--surface-raised)',
@@ -188,7 +182,8 @@ export function CaptureDrop({ runs, pathname = '/', inline = false, onReview }: 
         data-testid="capture-open"
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
-        style={{ ...S.verb, ...(inline ? { alignSelf: 'flex-start', padding: '3px 10px' } : {}) }}
+        className={inline ? 'wk-btn wk-btn--secondary wk-btn--sm' : 'wk-btn wk-btn--secondary'}
+        style={inline ? { alignSelf: 'flex-start' } : undefined}
         title="Drop notes, a transcript or a whiteboard photo; the team files what they say as proposals"
       >
         Capture

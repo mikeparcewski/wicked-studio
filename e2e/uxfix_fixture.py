@@ -709,7 +709,7 @@ def capture_rows(run_id: str, project_id: str) -> list:
 # so `STUDIO_SKIN=compact-rail python3 e2e/wave2b_queue_test.py` runs a behaviour journey
 # under the proof skin with no rig change. Unset = `studio`, the current look.
 STUDIO_SKIN = os.environ.get("STUDIO_SKIN", "studio")
-DEFAULT_APPEARANCE = {"accent_h": 258, "accent_s": 72, "accent_l": 62,
+DEFAULT_APPEARANCE = {"accent_h": 230, "accent_s": 74, "accent_l": 68,
                       "logo_url": None, "theme": "dark", "skin": STUDIO_SKIN}
 settings_store: dict = {"graphNodeLimit": 150,
                         "studio.appearance": dict(DEFAULT_APPEARANCE)}

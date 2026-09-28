@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import { testDoorWord } from '../board/campaignStats.js';
 import { getDiagnostics, type Diagnostics } from '../api/diagnostics.js';
@@ -61,7 +61,8 @@ import { ProjectSparkline } from './ProjectSparkline.js';
  *
  * Layout: full width; the command center (queue + right column) is capped so
  * the queue and the KPI band are BOTH visible without scrolling at 1440×700;
- * the wall keeps its own windowed scroller below (boardWindow.ts, unchanged).
+ * the page itself scrolls — ONE scroller, the Home pane — and the wall windows its rows against
+ * it, offset by where the wall starts in the pane (boardWindow.ts, unchanged).
  *
  * Wire honesty: the section wires (`/governance/*`, wiki scoreboard,
  * `/diagnostics`, evals) are read once per mount, failure-tolerant: a daemon
@@ -93,12 +94,8 @@ const CSS = {
     background: 'none', border: 'none', cursor: 'pointer', padding: 0,
     fontSize: 'var(--text-xs)', fontFamily: 'var(--font-mono)', color: 'var(--ink-muted)',
   },
-  chip: {
-    display: 'inline-flex', alignItems: 'center', gap: '6px', textDecoration: 'none',
-    fontSize: 'var(--text-xs)', color: 'var(--ink-muted)',
-    border: '1px solid var(--surface-raised)', borderRadius: 'var(--radius-md)',
-    padding: '4px 10px', whiteSpace: 'nowrap',
-  },
+  // The chip's look is `.wk-chip` (styles/components.css); only its layout rides here.
+  chip: { whiteSpace: 'nowrap' },
 } as const satisfies Record<string, React.CSSProperties>;
 
 interface Props {
@@ -162,9 +159,13 @@ const NO_WIRES: HomeWires = { claims: null, rules: null, perRule: null, diag: nu
 
 export function HomeBoard({ runs, navigate, onOpenAsk }: Props): React.ReactElement {
   const { items, unfiled, failedAt, repos, loading, error } = useBoardModel(runs);
+  // The Home pane is the scroller; `wall` is the portfolio wall inside it. The wall's rows window
+  // against the pane's scroll, offset by the wall's top within the pane (`wallTop`).
   const scroller = useRef<HTMLDivElement>(null);
+  const wall = useRef<HTMLDivElement>(null);
   const [box, setBox] = useState({ w: 0, h: 0 });
   const [scrollTop, setScrollTop] = useState(0);
+  const [wallTop, setWallTop] = useState(0);
   // Dark when healthy (wave 1): only exception bands open by default. The operator's
   // expand/collapse and the board's scroll belong to the history entry, so Back restores them.
   const [quietOpen, setQuietOpen] = useHistoryState('home.quietOpen', bandExpandsByDefault('quiet'));
@@ -235,6 +236,17 @@ export function HomeBoard({ runs, navigate, onOpenAsk }: Props): React.ReactElem
     setScrollTop(e.currentTarget.scrollTop);
   }, []);
 
+  // Where the wall starts inside the pane moves whenever a band above it changes height (the
+  // queue, the handover banner, the standing orders); re-read it after every render.
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- every render on purpose (a band above moved); the >1px guard ends the chain
+  useLayoutEffect(() => {
+    const pane = scroller.current;
+    const w = wall.current;
+    if (pane === null || w === null) return;
+    const top = w.getBoundingClientRect().top - pane.getBoundingClientRect().top + pane.scrollTop;
+    if (Math.abs(top - wallTop) > 1) setWallTop(top);
+  });
+
   const needsYou = items.filter((i) => i.band === 'needs-you');
   const working = items.filter((i) => i.band === 'working');
   const quiet = items.filter((i) => i.band === 'quiet');
@@ -292,10 +304,10 @@ export function HomeBoard({ runs, navigate, onOpenAsk }: Props): React.ReactElem
   const workingH = workingShown === 0 ? 0 : Math.ceil(workingShown / columns) * activeRowH;
   const quietGridTop = workingTop + (working.length === 0 ? 0 : workingH + BAND_H);
 
-  const needsWin = windowRows(needsYou.length, columns, activeRowH, scrollTop, viewH, needsTop);
-  const workingWin = windowRows(workingShown, columns, activeRowH, scrollTop, viewH, workingTop);
+  const needsWin = windowRows(needsYou.length, columns, activeRowH, scrollTop, viewH, wallTop + needsTop);
+  const workingWin = windowRows(workingShown, columns, activeRowH, scrollTop, viewH, wallTop + workingTop);
   const quietWin = quietOpen
-    ? windowRows(quiet.length, columns, quietRowH, scrollTop, viewH, quietGridTop)
+    ? windowRows(quiet.length, columns, quietRowH, scrollTop, viewH, wallTop + quietGridTop)
     : null;
 
   const mounted =
@@ -357,7 +369,16 @@ export function HomeBoard({ runs, navigate, onOpenAsk }: Props): React.ReactElem
   const fresh = !loading && error === null && isFreshInstall(items.length, runs, repos);
 
   return (
-    <div className="flex flex-1 flex-col overflow-hidden" style={{ background: 'var(--surface-base)' }}>
+    // The Home pane scrolls — the main pane, not the window, so the rail and the status bar stay
+    // put. It is the ONE scroller: every band keeps its natural height and nothing is clipped below
+    // the fold (an overflow-hidden column here once hid the wall's tail at 1440x700).
+    <div
+      ref={scroller}
+      onScroll={onScroll}
+      data-place-scroll="home-board"
+      className="flex flex-1 flex-col overflow-y-auto"
+      style={{ background: 'var(--surface-base)' }}
+    >
       {/* ── Header: the page name, the creation verbs, Ask, the escape hatch ── */}
       <header
         style={{
@@ -367,12 +388,7 @@ export function HomeBoard({ runs, navigate, onOpenAsk }: Props): React.ReactElem
       >
         <div style={{ minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <h1
-              style={{
-                fontSize: 'var(--text-md)', fontWeight: 'var(--weight-bold)',
-                color: 'var(--ink-high)', margin: 0,
-              }}
-            >
+            <h1 className="wk-page-title">
               Home
             </h1>
             {/* Idea 10: hold just the highest-consequence item; the rest return when it clears. */}
@@ -465,18 +481,16 @@ export function HomeBoard({ runs, navigate, onOpenAsk }: Props): React.ReactElem
           <BatchGateBar navigate={navigate} />
 
           {/* ── The PORTFOLIO wall — DES-VISION-001's many-projects-at-once cards,
-                 windowed against its own scroller exactly as before. ── */}
+                 windowed against the Home pane's scroll (offset by wallTop). ── */}
           <div
-            ref={scroller}
-            onScroll={onScroll}
+            ref={wall}
             data-testid="project-board"
-            data-place-scroll="home-board"
             data-total={items.length}
             data-needs-you={needsYou.length}
             data-working={working.length}
             data-quiet={quiet.length}
             data-rendered={mounted}
-            style={{ flex: 1, overflowY: 'auto', padding: '0 var(--space-6) var(--space-6)', minHeight: '120px' }}
+            style={{ flex: '0 0 auto', padding: '0 var(--space-6) var(--space-6)' }}
           >
             {items.length === 0 && (
               <div style={{ padding: 'var(--space-6) 0' }}>
@@ -496,7 +510,9 @@ export function HomeBoard({ runs, navigate, onOpenAsk }: Props): React.ReactElem
                 calm copy has exactly one owner now — the queue above (§3). */}
             {needsYou.length > 0 && (
               <section data-testid="band-needs-you" data-count={needsYou.length}>
-                <p style={{ ...CSS.bandLabel, color: 'var(--status-gate)' }} title={bandHint('needs-you')}>{bandLabel('needs-you')}</p>
+                {/* "By project": the queue above already owns the NEEDS YOU heading — the same
+                    bare label twice with two different counts read as a contradiction. */}
+                <p className="wk-eyebrow" style={{ margin: '0 0 10px' }} title={bandHint('needs-you')}>By project · {bandLabel('needs-you')}</p>
                 <BandGrid
                   items={needsYou}
                   columns={columns}
@@ -595,6 +611,7 @@ export function HomeBoard({ runs, navigate, onOpenAsk }: Props): React.ReactElem
                         data-testid="quiet-chip"
                         data-project-id={i.project.id}
                         data-score={i.score.toFixed(2)}
+                        className="wk-chip"
                         style={CSS.chip}
                       >
                         <span aria-hidden style={{ color: 'var(--ink-dim)' }}>○</span>
@@ -651,6 +668,7 @@ export function HomeBoard({ runs, navigate, onOpenAsk }: Props): React.ReactElem
                         data-testid="unfiled-run"
                         data-run-id={v.session.id}
                         title={v.session.problem}
+                        className="wk-chip"
                         style={{ ...CSS.chip, alignSelf: 'flex-start', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis' }}
                       >
                         {humanTitle(v.session.problem)}

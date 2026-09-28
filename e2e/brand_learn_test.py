@@ -163,18 +163,18 @@ with sync_playwright() as p:
     accent_preview = accent_h(page)
     adjustments = page.locator('[data-testid="mapper-adjustments"]').inner_text()
     report["steps"]["preview_is_real"] = {
-        "ok": (accent_before == "258" and accent_preview == "217"
+        "ok": (accent_before == "230" and accent_preview == "217"
                and "contrast-floor" in adjustments and "lightness-clamp" in adjustments),
         "accent_before": accent_before,
         "accent_preview": accent_preview,
         "adjustments_excerpt": adjustments[:300],
     }
 
-    # Nothing persisted before Apply: the fixture settings store still holds 258.
+    # Nothing persisted before Apply: the fixture settings store still holds 230.
     with urllib.request.urlopen(f"{ORIGIN}/api/v1/settings", timeout=10) as res:
         stored = json.loads(res.read())["settings"]["studio.appearance"]
     report["steps"]["nothing_persisted_before_apply"] = {
-        "ok": stored["accent_h"] == 258, "stored": stored,
+        "ok": stored["accent_h"] == 230, "stored": stored,
     }
 
     # AC 4 — Apply persists through the EXISTING appearance store (debounced PUT).
@@ -185,7 +185,7 @@ with sync_playwright() as p:
     accent_applied = accent_h(page)
     report["steps"]["apply_persists"] = {
         "ok": (stored["accent_h"] == 217 and stored["accent_s"] == 81
-               and stored["accent_l"] == 59 and stored["logo_url"] is None
+               and stored["accent_l"] == 58 and stored["logo_url"] is None
                and accent_applied == "217"),
         "stored": stored,
         "accent_applied": accent_applied,
