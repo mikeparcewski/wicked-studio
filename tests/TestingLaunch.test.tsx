@@ -1183,3 +1183,13 @@ describe('the landing header verbs — the Harness, folded in', () => {
     expect(screen.queryByTestId('steering-author-panel')).toBeNull();
   });
 });
+
+// crew#473: the recon framing says what the engine does — one sentence (core#393 turns each
+// sentence into a unit), and no promise of a plan gate the engine never opens.
+describe('RECON_PROBLEM_PREFIX (crew#473)', () => {
+  it('is one sentence and promises no plan approval at the intake gate', () => {
+    expect(RECON_PROBLEM_PREFIX).not.toMatch(/[.!?;](?=\s)|\n/);
+    expect(RECON_PROBLEM_PREFIX).not.toMatch(/intake gate|until it is approved/i);
+    expect(RECON_PROBLEM_PREFIX).toMatch(/without launching any runs\.$/);
+  });
+});

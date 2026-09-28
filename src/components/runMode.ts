@@ -59,3 +59,43 @@ export function deliverKindOf(
   if (fallback !== 'build') return fallback;
   return isSystemWorkflow?.(wf) === true ? 'system' : 'build';
 }
+
+/** The row word for a registered workflow the operator will recognise by name (studio#230). */
+const WORKFLOW_ROW_WORDS: Readonly<Record<string, string>> = {
+  bug: 'Bug fix',
+  feature: 'Feature',
+  migration: 'Migration',
+  onboarding: 'Onboarding',
+  'domain-extraction': 'Domain extraction',
+  'qe-author-tests': 'Test',
+};
+
+/** What a run-list row names a run as: the surface it belongs to, and the word it reads as. */
+export interface RunRowKind {
+  /** The surface: `chat`, `document`, or `build` (governed work, onboarding included). */
+  kind: 'chat' | 'build' | 'document';
+  /** The row word: `Chat`, `Document`, `Onboarding`, `Bug fix`, … — `Build` for any other work. */
+  label: string;
+}
+
+/**
+ * The run-list row's kind word (studio#230: every onboarding, document and bug run read "Build").
+ * The daemon's `run_identity.name` (api-types 0.46.0) names the preset or workflow the run drove;
+ * a daemon before it leaves only `workflow_id`, which for a per-run registered def is `wf-<id>` and
+ * so reads as plain Build. A run that answered an interactive document (`document_id`) is a
+ * Document whatever it drove. No workflow, or `chat`, is a Chat.
+ */
+export function runRowKind(session: {
+  workflow_id?: string | null;
+  run_identity?: unknown;
+  document_id?: string | null;
+}): RunRowKind {
+  if (typeof session.document_id === 'string' && session.document_id !== '') return { kind: 'document', label: 'Document' };
+  const id = session.run_identity;
+  const named = typeof id === 'object' && id !== null && typeof (id as { name?: unknown }).name === 'string'
+    ? (id as { name: string }).name
+    : null;
+  const wf = named ?? session.workflow_id?.trim() ?? '';
+  if (wf === '' || wf === 'chat') return { kind: 'chat', label: 'Chat' };
+  return { kind: 'build', label: WORKFLOW_ROW_WORDS[wf] ?? 'Build' };
+}

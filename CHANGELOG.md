@@ -13,6 +13,19 @@ npm publish dates. Every version listed here exists on
 ## [Unreleased]
 
 ### Fixed
+- **Retire on a memory row removes that one memory (#206).** The row's Retire now calls crew's
+  `POST /memory/retire-item` and erases exactly that memory; its confirm says the rest of the scope
+  stays. The subtree erase is a separate, quieter "Retire scope…" whose confirm names the whole
+  subtree and its count. A daemon that cannot erase one memory (crew before the route, or a
+  wicked-estate before erase-by-id) is named in the note. Nothing is deleted then, and nothing
+  falls back to the subtree.
+- **Run rows name what the run is (#230).** A row reads Onboarding, Document, Bug fix, Feature, … from
+  the daemon's `run_identity` (a run that answered a document reads Document), not "Build" for every
+  run. A one-word label before a colon ("Runs: …", "Recon: …") no longer becomes the whole title. A
+  delivered run shows its delivery chip on the row.
+- **The recon launch copy says what recon does (crew#473).** The intake gate comes before the survey
+  and approves the survey itself; the plan is the run's output and nothing is launched from it. The
+  problem framing is now one sentence, because the planner turns each sentence into a unit.
 - **Chat replies show the answer (#237).** A collapsed reply's teaser is its first heading or first
   real sentence, not a leading `---` or the seat narrating its own tool use ("I'll explore…"); the
   now-bar uses the same teaser. claude's "Compacting... Compacting completed." session notice is

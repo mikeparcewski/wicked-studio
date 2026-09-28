@@ -11,8 +11,8 @@
   "studioVersion": "0.5.14",
   "counts": {
     "files": 171,
-    "occurrences": 1619,
-    "static": 1402,
+    "occurrences": 1620,
+    "static": 1403,
     "dynamic": 72,
     "computed": 7
   },
@@ -3802,6 +3802,12 @@
     },
     {
       "testId": "memory-retire-confirm-banner",
+      "files": [
+        "src/components/MemoriesPanel.tsx"
+      ]
+    },
+    {
+      "testId": "memory-retire-one",
       "files": [
         "src/components/MemoriesPanel.tsx"
       ]

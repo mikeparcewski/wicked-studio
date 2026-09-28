@@ -48,11 +48,14 @@ import { SteeringGate } from './SteeringGate.js';
 
 // ── The two intents' problem framings (exported so the composition is contract-visible) ──────
 
-/** The recon framing — what "Run recon" sends is this prefix, a blank line, then the brief. */
+/** The recon framing — what "Run recon" sends is this prefix, a blank line, then the brief.
+ *  crew#473: it says what the engine does. The intake gate fires BEFORE the survey runs (the
+ *  operator approves the survey), and the plan is the run's output; nothing presents it at a gate
+ *  or launches from it. ONE sentence on purpose: the free-text planner turns each sentence into
+ *  a unit (wicked-core#393), so the old three-sentence framing added units to every recon. */
 export const RECON_PROBLEM_PREFIX =
-  'Recon: survey the target and propose a test plan — the scenarios, their ' +
-  'dependencies, and which are deterministic tool checks vs governed agent runs. Present the ' +
-  'proposed plan at the intake gate and launch nothing until it is approved.';
+  'Recon: survey the target and write a proposed test plan (the scenarios, their dependencies, ' +
+  'and which are deterministic tool checks vs governed agent runs) as this run’s output, without launching any runs.';
 
 /** The test-kickoff framing — "New test" sends this prefix + blank line + brief. Under the governed
  *  workflow the phases are the def's; the prefix states the operator's intent for them. */
@@ -70,9 +73,9 @@ const INTENT_COPY: Record<LaunchIntent, { title: string; blurb: string; governed
   recon: {
     title: 'Run recon',
     blurb:
-      'Launches a governed recon run: it surveys the attached codebases, drafts a test plan ' +
-      '— the scenarios and their dependencies — and stops at its intake gate. ' +
-      'Nothing runs until you approve the gate here.',
+      'Launches a governed recon run. It pauses at its intake gate before the survey starts — ' +
+      'approve it here to let the survey run. The survey reads the attached codebases and writes a ' +
+      'test plan (the scenarios and their dependencies) as the run’s output; it launches nothing.',
     governedBlurb: '',
     cta: 'Launch recon',
     prefix: RECON_PROBLEM_PREFIX,

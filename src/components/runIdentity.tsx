@@ -56,7 +56,7 @@ export function runShortId(id: string): string {
  * on the characters they name.
  */
 export function humanTitle(intent: string, max: number = HUMAN_TITLE_MAX): string {
-  const stop = intent.search(/[.!?:;](?=\s)|\n/);
+  const stop = clauseEnd(intent);
   let clause = (stop === -1 ? intent : intent.slice(0, stop)).trimEnd();
   if (clause === '') clause = intent.trimEnd();
   if (clause.length <= max) return clause;
@@ -64,6 +64,21 @@ export function humanTitle(intent: string, max: number = HUMAN_TITLE_MAX): strin
   const atWord = cut.lastIndexOf(' ');
   const head = (atWord > 0 ? cut.slice(0, atWord) : cut.slice(0, max)).replace(/[\s,;:·—-]+$/, '');
   return `${head}…`;
+}
+
+/**
+ * Where the title clause ends: the first `.`/`!`/`?`/`:`/`;` followed by whitespace, or a line
+ * break. A colon right after a ONE-word label is not the end (studio#230: `Runs: …` titled the run
+ * "Runs", `Recon: survey …` titled every recon "Recon") — the label and what follows it are one
+ * headline, cut later by the length budget. `-1` = no stop.
+ */
+function clauseEnd(intent: string): number {
+  const stops = /[.!?:;](?=\s)|\n/g;
+  for (let m = stops.exec(intent); m !== null; m = stops.exec(intent)) {
+    if (m[0] === ':' && !/\s/.test(intent.slice(0, m.index).trim())) continue;
+    return m.index;
+  }
+  return -1;
 }
 
 /**
