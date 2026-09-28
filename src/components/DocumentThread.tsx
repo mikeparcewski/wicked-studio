@@ -8,16 +8,14 @@ import { parseCreateAsk } from '../interactive/createAsk.js';
 import { docSlug } from '../interactive/docSlug.js';
 import { useRunEventStore } from '../store/events.js';
 import { ComposerContext } from './ComposerContext.js';
-import { DemoWizard } from './DemoWizard.js';
 import { DocSubjectPicker, NO_GROUNDING_NARRATION, type DocFormat, type SubjectStatus } from './DocSubjectPicker.js';
 import { defaultDocSeats, docClisJson, type DocSeatDefault } from './docSeats.js';
-import { recordFromThread } from '../interactive/demoWire.js';
 import { runExport } from '../interactive/exportWire.js';
 import { retryBatchInject, submitFeedbackBatch } from '../interactive/feedbackBatch.js';
 import { seamRetry, seamWayBack } from '../interactive/runFailure.js';
 import { scrollToWid } from '../interactive/widScroller.js';
 import { scrollStripToVersion } from './threadAnchor.js';
-import { modePath, runTimelinePath, versionPath, type Navigate } from '../hooks/useRoute.js';
+import { runTimelinePath, versionPath, type Navigate } from '../hooks/useRoute.js';
 import {
   GENERATING_SILENCE_BUDGET_MS, LIVE_RUN, nextMsgId, threadKey, useDocThreadStore,
   type DocMsg, type FeedbackItem, type GenState,
@@ -638,16 +636,9 @@ export interface DocumentThreadProps {
   /** The routed `?v=N`; `null` means the head, which fork resolves from the manifest. */
   selectedVersion: number | null;
   navigate: Navigate;
-  /**
-   * Which artifact this thread's composer is launching (§6.4 slice 14). A demo IS a
-   * document, so this is the SAME thread with the same four states — what differs is
-   * only case 1: a demo's steps are ordered, so the launch discloses the wizard (§4.1)
-   * instead of taking the message as a brief. Default keeps Document mode untouched.
-   */
-  mode?: 'document' | 'video';
 }
 
-export function DocumentThread({ projectId, docId, selectedVersion, navigate, mode = 'document' }: DocumentThreadProps): React.ReactElement {
+export function DocumentThread({ projectId, docId, selectedVersion, navigate }: DocumentThreadProps): React.ReactElement {
   const key = docId === null ? null : threadKey(projectId, docId);
   // F-045: while this thread shows a doc, the store knows which project it is mounted under, so a
   // relayed frame that names the doc but no project files HERE — never guessed from retained
@@ -735,7 +726,7 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
   const [subjectStatus, setSubjectStatus] = useState<SubjectStatus>('loading');
   const [noGrounding, setNoGrounding] = useState(false);
   // #302: the roster, for the launch composer's seat chips. A Document create sends the chosen
-  // seats as `clisJson` (crew#631); the Video wizard's create does not carry them yet.
+  // seats as `clisJson` (crew#631).
   const [docRoster, setDocRoster] = useState<RosterSeat[] | null>(() => getCachedRoster());
   // studio#302: the Document council — defaulted once the roster is known (docSeats.ts), then
   // the user's to change. `null` until then: a create before the roster loads sends no seats
@@ -743,7 +734,7 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
   // The pick belongs to ONE launch context (codex on #380): it is stored with the context it was
   // made in. In any other project/doc/mode — and before the first toggle — the council is the
   // default, derived in the same render (never a render with a roster but no pick).
-  const seatContext = `${projectId}|${docId ?? ''}|${mode}`;
+  const seatContext = `${projectId}|${docId ?? ''}`;
   const [docSeatPick, setDocSeatPick] = useState<{ context: string; seats: DocSeatDefault } | null>(null);
   // `seatContext` is a dependency on purpose: a new launch context re-reads the stored default.
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -777,10 +768,10 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
     setNameDraft('');
     setNameEdited(false);
     setCollision(null);
-  }, [projectId, docId, mode]);
+  }, [projectId, docId]);
   const launching = docId === null || key === null;
   /** The launch composer's parse of the ask — a quoted name (§7.3) or null. */
-  const parsedAsk = launching && mode !== 'video' ? parseCreateAsk(text) : null;
+  const parsedAsk = launching ? parseCreateAsk(text) : null;
   /** The id the bridge WILL mint for this brief — what the name field shows until edited. */
   const derivedName = text.trim() === '' ? '' : docSlug(parsedAsk?.name ?? docName(text));
   const shownName = nameEdited ? nameDraft : derivedName;
@@ -792,16 +783,11 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
   const chosenSeatCount = docSeats === null || docRoster === null
     ? 0
     : docRoster.filter((s) => docSeats.selected.has(s.key)).length;
-  const seatBlocks = launching && mode === 'document' && docSeats !== null && chosenSeatCount === 0;
+  const seatBlocks = launching && docSeats !== null && chosenSeatCount === 0;
   /** The thread line a no-grounding create leaves — only when discovery FAILED and the user chose to go on. */
   const noteNoGrounding = (threadKeyOf: string): void => {
     if (subjectStatus === 'error' && noGrounding) useDocThreadStore.getState().addNarration(threadKeyOf, NO_GROUNDING_NARRATION);
   };
-  // The demo path's ordered disclosure (§4.1), seeded by the message that opened it. The
-  // anchor id is minted BEFORE the wizard so the version it lands tags the same message
-  // the transcript shows (§7.6) — the wizard is a longer way to write case 1, not a
-  // different case.
-  const [wizard, setWizard] = useState<{ seed: string; msgId: string } | null>(null);
   const bottom = useRef<HTMLDivElement>(null);
   // The growing composer (operator feedback): re-measured on every text change —
   // including the programmatic clears a submit makes — so it always fits what it
@@ -843,14 +829,6 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
     setError(null);
     setCollision(null);
     try {
-      // 1 — LAUNCH, the demo path (§4.5): the ask names the demo, and the wizard collects
-      // the steps it is made of, in order. Nothing is created until the wizard submits.
-      if ((docId === null || key === null) && mode === 'video') {
-        setWizard({ seed: body, msgId });
-        setText('');
-        return;
-      }
-
       // 1 — LAUNCH. The message IS the brief; the doc's generation run opens with
       // it. §7.3 (slice X2): a QUOTED name in the ask becomes the doc's name and
       // the remainder stays the brief (the parse the composer previewed) — no
@@ -1104,15 +1082,8 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
   }
 
   const { placeholder, submit: label } = COMPOSER[state];
-  // The surface's own noun (VIDEO-FB copy): a demo surface never says "document".
-  const noun = mode === 'video' ? 'demo' : 'document';
-  // Case 1 is the only state whose words differ by artifact — what the composer DOES is
-  // the same function of run state either way (§2.2), it just says what it will make.
-  const prompt = mode === 'video'
-    ? state === 'idle'
-      ? 'Describe the demo you want to record…'
-      : state === 'generating' ? 'Steer the demo agent…' : placeholder
-    : placeholder;
+  const noun = 'document';
+  const prompt = placeholder;
   // Honesty for the working chip (VIDEO-FB: "steering the live demo run" showed
   // with nothing running anywhere): claiming a LIVE run requires having heard
   // one — any interactive frame for this thread, or the runs wire's own record of
@@ -1142,25 +1113,6 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
       style={{ width: '100%', minHeight: 0, flex: 1, background: S.panel,
                borderLeft: `1px solid ${S.border}`, fontFamily: 'var(--font-sans)' }}
     >
-      {wizard !== null && (
-        <DemoWizard
-          projectId={projectId}
-          seed={wizard.seed}
-          msgId={wizard.msgId}
-          repoRefs={repoRefs}
-          {...(format !== '' ? { style: format } : {})}
-          onCancel={() => setWizard(null)}
-          onCreated={(name) => {
-            setWizard(null);
-            noteNoGrounding(threadKey(projectId, name));
-            setRepoRefs([]);
-            setNoGrounding(false);
-            // The demo exists with its spec and no recording — so the surface it opens on
-            // is the one that OFFERS to record it (§3.3: the control beside the statement).
-            navigate(modePath(projectId, 'video', name));
-          }}
-        />
-      )}
       <div className="flex-1 overflow-y-auto px-3.5 py-4 flex flex-col gap-3">
         {/* §6.3's stopgap note, scoped to the ONE gap the wire still has: the thread's
             TEXT is back from `GET /d/:doc/api/conversation` (BRIDGE-UX-1 probe 2 — a
@@ -1184,12 +1136,7 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
         {messages.length === 0 && (
           <p className="leading-relaxed" style={{ color: S.body, fontSize: 'var(--text-sm)' }}>
             {docId === null
-              ? mode === 'video'
-                // VIDEO-FB copy truth (CREW-UX-9): the description IS authored — a
-                // governed run turns it into the demo's spec. Manual Subject/Action
-                // steps survive in the wizard as the advanced path, not the promise.
-                ? 'Describe the demo you want — “a walkthrough of the checkout flow”. A governed run authors your description into the demo’s spec; the wizard can also pin exact steps by hand.'
-                : 'Describe the document you want — “a deck for the Q3 review”, “write this up as a report” — and it is created from that message.'
+              ? 'Describe the document you want — “a deck for the Q3 review”, “write this up as a report” — and it is created from that message.'
               : `Ask for a change and it lands as a new version. Everything the agent says about this ${noun} appears here.`}
           </p>
         )}
@@ -1227,35 +1174,10 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
 
       <div className="shrink-0 px-3.5 py-3 flex flex-col gap-2"
            style={{ borderTop: `1px solid ${S.border}`, background: S.footer }}>
-        {/* §2.3: asking for a recording is an input like any other, so it is a MESSAGE —
-            the same demo.requested wire the surface's own Record button speaks, offered
-            here because the composer is where the user already is when they decide to
-            re-run it. VIDEO-FB copy truth: recording RE-RECORDS the authored steps; it
-            never edits the spec (that is what a chat ask does). */}
-        {mode === 'video' && docId !== null && state !== 'generating' && (
-          <button
-            type="button"
-            data-testid="thread-record"
-            disabled={busy}
-            title={`Runs “${docId}”’s authored steps in a real browser and lands the result as a new version — it re-records, it does not change the steps`}
-            onClick={() => {
-              setBusy(true);
-              setError(null);
-              void recordFromThread({ projectId, demoId: docId, ask: `Record “${docId}”.` })
-                .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))
-                .finally(() => setBusy(false));
-            }}
-            className="self-start rounded-full px-2.5 py-0.5 text-[10px] font-mono disabled:opacity-40"
-            style={{ background: 'transparent', color: S.accent,
-                     border: '1px solid var(--accent-subtle)', cursor: 'pointer' }}
-          >
-            {busy ? 'queuing the re-record…' : 're-record this demo'}
-          </button>
-        )}
         {/* §4.6/§4.9: what the next generation is MADE OF — the learned theme in effect and
             the folders the service reads in place — stated where the message is composed.
-            Document mode only: a demo's look comes from the site it records (§4.5). */}
-        {mode === 'document' && <ComposerContext projectId={projectId} docId={docId} />}
+            */}
+        <ComposerContext projectId={projectId} docId={docId} />
         {state === 'generating' && !stalled && (
           <span
             data-testid="steering-chip"
@@ -1310,8 +1232,8 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
         )}
         {/* F-4R2-003: the document's NAME, before Create — the id the bridge will mint (derived
             from the brief, live) until the operator edits it. Visible on the launch composer
-            only; a demo's name rides the wizard. */}
-        {launching && mode !== 'video' && (
+            only. */}
+        {launching && (
           <label
             data-testid="doc-name-row"
             data-derived={!nameEdited}
@@ -1352,7 +1274,7 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
         {launching && (
           <DocSubjectPicker
             projectId={projectId}
-            mode={mode}
+            mode="document"
             repoRefs={repoRefs}
             onRepoRefs={setRepoRefs}
             format={format}
@@ -1365,7 +1287,7 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
         {/* studio#302: the Document council, chosen before Create — one toggle per roster seat,
             defaulted like the Build composer's minus the seats the roster says will not answer
             (named below), sent as the create's `clisJson` so the draft run convenes exactly these. */}
-        {launching && mode === 'document' && docRoster !== null && docRoster.length > 0 && docSeats !== null && (
+        {launching && docRoster !== null && docRoster.length > 0 && docSeats !== null && (
           <div data-testid="doc-clis-row" className="flex flex-col gap-1" style={{ paddingLeft: 2 }}>
             <div className="flex flex-wrap items-center gap-1.5">
               <span className="text-[10px]" style={{ color: 'var(--ink-dim)' }}>Council</span>
@@ -1407,29 +1329,6 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
             </span>
           </div>
         )}
-        {/* #302: CLIs chip row — same visual as Build composer; schema is strict (no clisJson
-            on InteractiveDocCreateRequest) so chips are disabled pending a crew schema update. */}
-        {launching && mode === 'video' && docRoster !== null && docRoster.length > 0 && (
-          <div
-            data-testid="doc-clis-row"
-            className="flex flex-wrap items-center gap-1.5"
-            style={{ paddingLeft: 2 }}
-          >
-            {docRoster.map((s) => (
-              <span
-                key={s.key}
-                className="rounded-full px-2 py-0.5 text-[10px] font-mono opacity-40 cursor-not-allowed select-none"
-                style={{ background: 'var(--surface-raised)', color: 'var(--ink-body)', border: '1px solid var(--surface-overlay)' }}
-                title="CLIs selection not yet available for Document mode"
-              >
-                {s.key}
-              </span>
-            ))}
-            <span className="text-[10px]" style={{ color: 'var(--ink-dim)' }}>
-              CLIs not yet configurable here — pending crew#631
-            </span>
-          </div>
-        )}
         {/* §5.3's composer contract, worn by every mode: --surface-raised at
             --radius-xl, the wk-composer focus ring (--accent-dim via
             :focus-within — never the full accent), an accent-filled submit. */}
@@ -1446,15 +1345,10 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
             // cap, then scrolls — the height itself is set imperatively so it can
             // be measured, not guessed from newline counts.
             style={{ color: S.ink, fontFamily: 'var(--font-sans)', minHeight: `${COMPOSER_LINE_PX}px` }}
-            // VIDEO-FB: while the wizard is collecting, the composer is VISIBLY
-            // disabled with the reason as its words — never silently covered by
-            // an overlay's hit target (the pointer-trap the cold operator hit).
-            placeholder={wizard !== null
-              ? 'Finish or cancel the demo wizard above — it is collecting this demo…'
-              : prompt}
+            placeholder={prompt}
             value={text}
             rows={1}
-            disabled={busy || wizard !== null}
+            disabled={busy}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void submit(); }
@@ -1464,7 +1358,7 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
             type="button"
             data-testid="doc-composer-submit"
             onClick={() => void submit()}
-            disabled={busy || wizard !== null || text.trim() === '' || subjectBlocks || seatBlocks}
+            disabled={busy || text.trim() === '' || subjectBlocks || seatBlocks}
             title={seatBlocks ? 'choose at least one seat for this document’s council' : subjectBlocks
               ? (subjectStatus === 'loading'
                 ? 'waiting for the project’s repositories'

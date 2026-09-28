@@ -90,7 +90,7 @@ describe('ProjectShell (DES-MERGE-001 §1.2)', () => {
   // ── The project-context header (DES-FEEDBACK-001 §4.2, slice D) ────────────
 
   const MODE_WORD: Record<Mode, string> = {
-    chat: 'Chat', build: 'Build', document: 'Document', video: 'Video',
+    chat: 'Chat', build: 'Build', document: 'Document', video: 'Demo',
   };
 
   it.each(MODES.map((m) => [m] as const))(

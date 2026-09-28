@@ -11,7 +11,6 @@ import { describe, expect, it, vi } from 'vitest';
  */
 import { docBinding, UNFILED_MOUNT } from '../src/api/interactive.js';
 import { ensureScratchDoc } from '../src/theming/scratchDoc.js';
-import { demoDraftBody } from '../src/interactive/demoWire.js';
 
 describe('docBinding (§6.2 slice U)', () => {
   it('omits `project` on the Unfiled mount — unbound is the native shape', () => {
@@ -22,15 +21,6 @@ describe('docBinding (§6.2 slice U)', () => {
 
   it('binds real projects exactly as before — registration stays the authority', () => {
     expect(docBinding('q3-review-deck')).toEqual({ project: 'q3-review-deck' });
-  });
-
-  it('a demo draft through the default mount carries no binding field', () => {
-    const body = demoDraftBody(UNFILED_MOUNT, {
-      name: 'unfiled-demo', targetUrl: 'https://example.com', description: '',
-      steps: [{ subject: 'the storefront', action: 'open it' }],
-    }, 'msg-1');
-    expect(body.project).toBeUndefined();
-    expect(body.kind).toBe('demo');
   });
 
   it('the scratch doc on the default mount is created unbound', async () => {

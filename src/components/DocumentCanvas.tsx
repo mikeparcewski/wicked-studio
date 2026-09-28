@@ -307,7 +307,7 @@ function DocFrame({
 }): React.ReactElement {
   // §2.6 rule 3: a landing version re-reads the manifest, so the strip advances and the
   // canvas swaps the moment the stream lands one — the newcomer watches a message produce
-  // a version produce a canvas change, left to right, without a reload. (VideoStoryboard
+  // a version produce a canvas change, left to right, without a reload. (the former Video storyboard
   // already keys its own re-read to the same `landed` fact.)
   const landed = useDocThreadStore((s) => s.landed[threadKey(projectId, docId)]);
   const [fresh, failure, retry] = useLoad(

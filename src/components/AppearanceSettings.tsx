@@ -140,7 +140,7 @@ function PreviewStrip(): React.ReactElement {
         className="flex items-center gap-0.5 rounded-lg p-0.5"
         style={{ background: 'var(--surface-rail)' }}
       >
-        {(['Chat', 'Build', 'Document', 'Video'] as const).map((m) => (
+        {(['Chat', 'Build', 'Document', 'Demo'] as const).map((m) => (
           <span
             key={m}
             data-testid={m === 'Build' ? 'preview-mode-active' : undefined}

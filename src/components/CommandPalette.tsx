@@ -509,7 +509,7 @@ export function CommandPalette({
         },
       },
       {
-        name: 'New Video',
+        name: 'New Demo',
         action: () => {
           if (projectId !== null) navigate(modePath(projectId, 'video'));
           else {
@@ -883,7 +883,7 @@ export function CommandPalette({
           project-picker stage (§3.4/§8.4): pick a project, land in its mode. */}
       {pickProjectFor !== null && (
         <Modal
-          title={pickProjectFor === 'video' ? 'New video' : 'New document'}
+          title={pickProjectFor === 'video' ? 'New demo' : 'New document'}
           onClose={() => setPickProjectFor(null)}
         >
           <div className="flex flex-col gap-2" data-testid="palette-project-stage">

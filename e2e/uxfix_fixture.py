@@ -657,6 +657,15 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          #   Home's Wave B triage decides them over its own approve route. Off: the unknown-route
          #   404. Every capture POST lands in capture_post_log (GET /__fixture/capture-posts).
          "capture": False,
+         # ── The Demo experience (wicked-studio#373, e2e/demo_mode_test.py) ──
+         # demo_runs — POST /projects/:id/demo answers on the crew api-types 0.59.0 wire (201 {runId})
+         #   and mints a demo run of the `demo` preset that rides GET /runs. GET /runs/:id/demo walks
+         #   it plan → plan gate → record (one chapter at a time) → review gate → done on the clock and
+         #   on POST /runs/:id/gate (approve, or request_changes whose note re-plans or re-records one
+         #   chapter); PUT /runs/:id/demo/script edits the script at the plan gate only (409 after);
+         #   GET /runs/:id/demo/file serves the contact sheets and the video with Range. Off: the
+         #   unknown-route 404. Every demo write lands in demo_post_log (GET /__fixture/demo-posts).
+         "demo_runs": False,
          }
 state_lock = threading.Lock()
 # Idea 9: every POST /governance/rules body the fixture received (GET /__fixture/rule-posts).
@@ -683,6 +692,124 @@ delivery_freeze: dict = dict(FREEZE_THAWED)
 capture_post_log: list = []
 capture_seq = [0]
 CAPTURE_IMAGE_TYPES = {"image/png", "image/jpeg", "image/gif", "image/webp"}
+
+# The Demo experience (switch `demo_runs`): the demo runs launched this lifetime, keyed by run id.
+# Their own lock: assemble_runs reads them while it holds state_lock.
+demo_lock = threading.Lock()
+demo_runs: dict = {}
+demo_post_log: list = []
+demo_seq = [0]
+DEMO_CHAPTERS = [
+    {"key": "01-intake", "title": "A request arrives", "blurb": "Where new work lands and who sees it first.",
+     "tags": ["intake"], "resets": []},
+    {"key": "02-approve", "title": "Someone approves it", "blurb": "The gate, shown but never pressed.",
+     "tags": ["gates"], "resets": []},
+    {"key": "03-done", "title": "It ships", "blurb": "The finished work and its evidence.",
+     "tags": ["delivery"], "resets": []},
+]
+DEMO_PLAN_S = 1.2
+DEMO_CHAPTER_S = 0.9
+DEMO_ROUND1_FINDINGS = [
+    {"at": "0:41", "chapter": "02-approve", "issue": "The caption says approved before the gate card is on screen",
+     "verdict": "re-record"},
+    {"at": "1:10", "chapter": "03-done", "issue": "The join cuts the closing card 0.4 s early", "verdict": "re-encode"},
+]
+
+
+def demo_script(d: dict) -> str:
+    extra = f"\n\n> Revised for: {d['plan_note']}" if d.get("plan_note") else ""
+    return (f"# Demo: {d['url']}\n\n**For:** {d['audience']}\n\n**Pitch:** {d['show']}\n\n"
+            "## Run of show\n\n1. A request arrives (0:00 to 0:35)\n2. Someone approves it (0:35 to 1:05)\n"
+            "3. It ships (1:05 to 1:40)\n\nThe requests on screen are synthetic data, labelled as such; "
+            "timings were measured on the rehearsal.") + extra
+
+
+def demo_tick(d: dict) -> None:
+    """Advance a demo run on the clock (caller holds demo_lock)."""
+    now = time.time()
+    if d["stage"] == "planning" and now >= d["ready_at"]:
+        d["stage"] = "plan_gate"
+        if d.get("script_override") is None:
+            d["script"] = demo_script(d)
+    if d["stage"] == "recording":
+        todo = [c for c in DEMO_CHAPTERS if c["key"] not in d["recorded"]]
+        while todo and now >= d["next_at"]:
+            d["recorded"].append(todo.pop(0)["key"])
+            d["next_at"] += DEMO_CHAPTER_S
+        if not todo and now >= d["next_at"]:
+            d["stage"] = "review_gate"
+            d["round"] += 1
+
+
+def demo_session(rid: str, d: dict) -> dict:
+    stage = d["stage"]
+    status = {"planning": "executing", "plan_gate": "awaiting_human", "recording": "executing",
+              "review_gate": "awaiting_human", "done": "completed"}[stage]
+    # The engine's shape (wicked-core awaitingHuman{ord: 3, reviewingOrd: 2}): a step's gate opens once
+    # it is done, with the cursor already on the next unit; the review gate is the last unit, done.
+    cursor = {"planning": 1, "plan_gate": 2, "recording": 2, "review_gate": 3, "done": 3}[stage]
+    units = []
+    for i, (step, cli) in enumerate([("pa-scope", "claude"), ("plan", "claude"), ("record", "claude"),
+                                     ("review", "codex")]):
+        st = "done" if i < cursor or stage == "done" or (stage == "review_gate" and i == cursor) \
+            else "running" if i == cursor and status == "executing" else "pending"
+        units.append({"id": f"{rid}:{step}", "session_id": rid, "ord": i + 1, "description": f"demo: {step}",
+                      "stage": "critique" if step == "review" else "produce", "assigned_cli": cli,
+                      "assigned_invocation": None, "council_task_ref": None, "routing": None,
+                      "denial_reason": None, "phase_ref": None, "conformance_ref": None, "phase_status": None,
+                      "collection_scope": None, "status": st})
+    run = session(rid, status, f"Make a demo of {d['url']} with the wicked-garden-demo skill", "demo")
+    run["session"].update({"workflow_id": f"{rid}:plan-2", "project_id": d["pid"], "unit_ix": cursor,
+                           "team_plan": {"rev": 2, "accepted_rev": 2, "preset": "demo"},
+                           "human_confirm": "all"})
+    run["units"] = units
+    return run
+
+
+_sheet_pngs: dict = {}
+
+
+def sheet_png(i: int) -> bytes:
+    """A contact sheet stand-in: a plain 320x180 PNG, built with zlib alone (CI has no Pillow)."""
+    if i not in _sheet_pngs:
+        import struct
+        import zlib
+        w, h = 320, 180
+        rgb = [(27, 98, 74), (60, 90, 160), (150, 110, 40)][i % 3]
+        raw = b"".join(b"\x00" + bytes(rgb) * w for _ in range(h))
+
+        def chunk(tag: bytes, data: bytes) -> bytes:
+            return struct.pack(">I", len(data)) + tag + data + struct.pack(">I", zlib.crc32(tag + data) & 0xFFFFFFFF)
+        _sheet_pngs[i] = (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0))
+                          + chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b""))
+    return _sheet_pngs[i]
+
+
+def demo_view(rid: str, d: dict) -> dict:
+    stage = d["stage"]
+    planned = d["script"] is not None
+    recorded_all = len(d["recorded"]) == len(DEMO_CHAPTERS)
+    reviewed = stage in ("review_gate", "done")
+    findings = DEMO_ROUND1_FINDINGS if reviewed and d["round"] == 1 else []
+    has_video = d["round"] >= 1
+    return {
+        "runId": rid, "url": d["url"], "audience": d["audience"], "stage": stage,
+        "script": d["script"] if planned else None,
+        "chapters": [dict(c, recorded=c["key"] in d["recorded"]) for c in DEMO_CHAPTERS] if planned else [],
+        "markers": [{"at": "0:00", "sec": 0, "title": "A request arrives"},
+                    {"at": "0:35", "sec": 35, "title": "Someone approves it"},
+                    {"at": "1:05", "sec": 65, "title": "It ships"}] if has_video else [],
+        "sheets": [{"name": n, "path": f"review/{n}.png"} for n in ("chapters", "joins", "end")] if has_video else [],
+        "video": {"path": "demo-video/demo.mp4", "bytes": len(tiny_webm())} if has_video else None,
+        "recording": {"readOnly": True if has_video and recorded_all else None},
+        # Round 1 is the engine's NOT PASS: the review unit is rejected and its gate is the escalation gate.
+        "review": {"verdict": ("changes" if d["round"] == 1 else "accept") if reviewed else None,
+                   "rejected": reviewed and d["round"] == 1,
+                   "findings": findings,
+                   "text": ("0:41 · 02-approve · the caption is early · re-record" if findings else "Clean.") if reviewed else None},
+        "seats": {"recorder": "claude", "reviewer": "codex" if reviewed else None},
+        "syntheticLabelled": planned and "synthetic" in (d["script"] or "").lower(),
+    }
 
 
 def capture_rows(run_id: str, project_id: str) -> list:
@@ -2929,6 +3056,11 @@ def assemble_runs() -> list:
             runs = runs + json.loads(json.dumps(RUN_PAGE_RUNS))
         if state["home_runs"] and not state["no_runs"]:
             runs = runs + [json.loads(json.dumps(REUSE_RUN))]
+        if state["demo_runs"] and not state["no_runs"]:
+            with demo_lock:
+                for d in demo_runs.values():
+                    demo_tick(d)
+                runs = runs + [demo_session(rid, d) for rid, d in demo_runs.items()]
     if viewer_on or repo_refs_on or forensics_on or provenance_on or project_dto_on \
             or chronicle_on or nerve_on or gate_now or guidance or wire433_on:
         runs = json.loads(json.dumps(runs))
@@ -4732,6 +4864,125 @@ class W2Handler(SimpleHTTPRequestHandler):
             return True
         return False
 
+    def _demo_route(self, method: str, body: dict) -> bool:
+        """The Demo experience (wicked-studio#373) on the crew api-types 0.59.0 wire."""
+        url = urllib.parse.urlparse(self.path)
+        path = url.path
+        launch = re.fullmatch(r"/api/v1/projects/([^/]+)/demo", path)
+        one = re.fullmatch(r"/api/v1/runs/([^/]+)/(demo|demo/file|demo/script|gate)", path)
+        if not launch and not one:
+            return False
+        with state_lock:
+            on = state["demo_runs"]
+        if one and one.group(2) == "gate":
+            with demo_lock:
+                mine = urllib.parse.unquote(one.group(1)) in demo_runs
+            if not (on and mine and method in ("GET", "POST")):
+                return False
+        if not on:
+            self._json(404, {"error": f"w2 fixture: no such endpoint {path}"})
+            return True
+        if launch and method == "POST":
+            pid = urllib.parse.unquote(launch.group(1))
+            url_ = (body.get("url") or "").strip()
+            if not re.match(r"^https?://", url_) or not (body.get("audience") or "").strip() \
+                    or not (body.get("show") or "").strip():
+                self._json(400, {"error": "Invalid demo body"})
+                return True
+            if pid not in {p["id"] for p in PROJECTS}:
+                self._json(404, {"error": f"Project {pid} not found"})
+                return True
+            with demo_lock:
+                demo_seq[0] += 1
+                rid = f"r-demo-{demo_seq[0]}"
+                demo_runs[rid] = {"pid": pid, "url": url_, "audience": body["audience"].strip(),
+                                  "show": body["show"].strip(), "stage": "planning",
+                                  "ready_at": time.time() + DEMO_PLAN_S, "script": None,
+                                  "script_override": None, "plan_note": None, "recorded": [],
+                                  "next_at": 0.0, "round": 0}
+                demo_post_log.append({"route": "launch", "projectId": pid, "body": body, "runId": rid})
+            self._json(201, {"runId": rid})
+            return True
+        if not one:
+            return False
+        rid, what = urllib.parse.unquote(one.group(1)), one.group(2)
+        with demo_lock:
+            d = demo_runs.get(rid)
+            if d is None:
+                self._json(404, {"error": "no demo run with that id"})
+                return True
+            demo_tick(d)
+            if what == "demo" and method == "GET":
+                view = demo_view(rid, d)
+                self._json(200, view)
+                return True
+            if what == "demo/script" and method == "PUT":
+                content = body.get("content")
+                if not isinstance(content, str) or content == "":
+                    self._json(400, {"error": "Invalid script body"})
+                    return True
+                if d["stage"] != "plan_gate":
+                    self._json(409, {"error": "the script can be edited only while the plan gate is open"})
+                    return True
+                d["script"] = content
+                d["script_override"] = content
+                demo_post_log.append({"route": "script", "runId": rid, "content": content})
+                self._json(200, {"bytes": len(content.encode())})
+                return True
+            if what == "gate" and method == "GET":
+                ords = {"plan_gate": 3, "review_gate": 4}
+                if d["stage"] not in ords:
+                    self._json(404, {"error": "no gate is open on this run"})
+                    return True
+                self._json(200, {"runId": rid, "ord": ords[d["stage"]], "lifecycle": "open",
+                                 "prompt": "Approve the script" if d["stage"] == "plan_gate" else "Accept the recording",
+                                 "receivedAt": iso(int(time.time() * 1000))})
+                return True
+            if what == "gate" and method == "POST":
+                demo_post_log.append({"route": "gate", "runId": rid, "stage": d["stage"], "body": body})
+                if d["stage"] not in ("plan_gate", "review_gate"):
+                    self._json(409, {"error": "no gate is open on this run"})
+                    return True
+                # crew's gate_changed (api-types 0.44.0): a decision must name the open gate's ord.
+                want = {"plan_gate": 3, "review_gate": 4}[d["stage"]]
+                if body.get("ord") != want:
+                    self._json(409, {"error": f"Gate changed: this decision names gate {body.get('ord')}, the open one is {want}",
+                                     "code": "gate_changed"})
+                    return True
+                changes = body.get("approve") is False and body.get("action") == "request_changes"
+                if d["stage"] == "plan_gate":
+                    if body.get("approve") is True:
+                        d.update(stage="recording", next_at=time.time() + DEMO_CHAPTER_S)
+                    elif changes:
+                        d.update(stage="planning", ready_at=time.time() + DEMO_PLAN_S,
+                                 plan_note=body.get("amend"), script_override=None)
+                else:
+                    if body.get("approve") is True:
+                        d["stage"] = "done"
+                    elif changes:
+                        m = re.search(r"Re-record only chapter ([a-z0-9-]+)", body.get("amend") or "")
+                        if m and m.group(1) in d["recorded"]:
+                            d["recorded"].remove(m.group(1))
+                        d.update(stage="recording", next_at=time.time() + DEMO_CHAPTER_S)
+                self._json(200, {"status": "ok"})
+                return True
+            if what == "demo/file" and method == "GET":
+                rel = (urllib.parse.parse_qs(url.query).get("path") or [""])[0]
+                if d["round"] < 1:
+                    self._json(404, {"error": f"no such demo file: {rel}"})
+                    return True
+                if rel == "demo-video/demo.mp4":
+                    self._media(tiny_webm(), "video/webm")
+                    return True
+                sheet = {"review/chapters.png": 0, "review/joins.png": 1, "review/end.png": 2}.get(rel)
+                if sheet is None:
+                    self._json(404, {"error": f"no such demo file: {rel}"})
+                    return True
+                self._media(sheet_png(sheet), "image/png")
+                return True
+        self._json(405, {"error": f"w2 fixture: {method} {path}"})
+        return True
+
     def do_GET(self):  # noqa: N802 (stdlib naming)
         if self.headers.get("Upgrade", "").lower() == "websocket":
             return self._ws()
@@ -4778,6 +5029,12 @@ class W2Handler(SimpleHTTPRequestHandler):
             with state_lock:
                 posts = list(standing_order_posts)
             return self._json(200, {"posts": posts})
+        if path == "/__fixture/demo-posts":
+            with demo_lock:
+                posts = list(demo_post_log)
+            return self._json(200, {"posts": posts})
+        if self._demo_route("GET", {}):
+            return None
         if path == "/__fixture/capture-posts":
             with state_lock:
                 posts = list(capture_post_log)
@@ -4832,6 +5089,11 @@ class W2Handler(SimpleHTTPRequestHandler):
             if isinstance(body.get("standing_seed"), list):
                 with state_lock:
                     STANDING["orders"] = json.loads(json.dumps(body["standing_seed"]))
+            if body.get("reset_demo"):
+                with demo_lock:
+                    demo_runs.clear()
+                    demo_post_log.clear()
+                    demo_seq[0] = 0
             if body.get("reset_capture"):
                 with state_lock:
                     capture_post_log.clear()
@@ -4877,6 +5139,8 @@ class W2Handler(SimpleHTTPRequestHandler):
                 snapshot = dict(state)
             return self._json(200, {"ok": True, "state": snapshot})
         if self._capture_post(path, body if isinstance(body, dict) else {}):
+            return None
+        if self._demo_route("POST", body if isinstance(body, dict) else {}):
             return None
         # The slice-6 document journey's writes (create / fork / bus emit).
         if self._interactive_post(path, body if isinstance(body, dict) else {}):
@@ -5398,6 +5662,8 @@ class W2Handler(SimpleHTTPRequestHandler):
     def do_PUT(self):  # noqa: N802 (stdlib naming)
         path = urllib.parse.urlparse(self.path).path
         body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
+        if self._demo_route("PUT", body if isinstance(body, dict) else {}):
+            return None
         # Behaviour 10: PUT /standing-orders/away — turning it on sweeps the open gates.
         if path == "/api/v1/standing-orders/away":
             with state_lock:

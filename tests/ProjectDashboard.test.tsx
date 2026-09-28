@@ -242,8 +242,8 @@ describe('ProjectDashboard — the full-width project command surface', () => {
 
     const rows = screen.getAllByTestId('dashboard-doc');
     expect(rows[0]!.querySelector('a')).toHaveAttribute('href', '/p/proj-1/document/spec');
-    // A demo doc opens in Video mode — a demo is a doc whose manifest says so.
-    expect(rows[2]!.querySelector('a')).toHaveAttribute('href', '/p/proj-1/video/walkthrough');
+    // A demo DOCUMENT opens in Document mode: Demo mode shows demo runs (studio#373).
+    expect(rows[2]!.querySelector('a')).toHaveAttribute('href', '/p/proj-1/document/walkthrough');
     fireEvent.click(rows[0]!);
     expect(navigate).toHaveBeenCalledWith('/p/proj-1/document/spec');
   });

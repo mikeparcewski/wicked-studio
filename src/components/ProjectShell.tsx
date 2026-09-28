@@ -31,7 +31,7 @@ export const MODE_LABEL: Record<Mode, string> = {
   chat: 'Chat',
   build: 'Build',
   document: 'Document',
-  video: 'Video',
+  video: 'Demo',
 };
 
 /** §4.2's type spec, shared by both breadcrumb segments: sans, sm, medium. */

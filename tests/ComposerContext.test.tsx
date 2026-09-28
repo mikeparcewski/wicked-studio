@@ -246,9 +246,4 @@ describe('learn-a-theme in the thread (the corrected doc-scoped wire, #65)', () 
     expect(screen.getByTestId('learn-submit')).toBeEnabled();
   });
 
-  it('the context row is Document mode only — a demo looks like the site it records', () => {
-    render(<DocumentThread projectId={PROJECT} docId={DOC} selectedVersion={null}
-                           navigate={navigate} mode="video" />);
-    expect(screen.queryByTestId('thread-context')).toBeNull();
-  });
 });

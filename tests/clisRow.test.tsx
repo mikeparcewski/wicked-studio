@@ -1,6 +1,6 @@
 /**
  * CLIs chip row (#302). DocumentThread: real seat toggles whose choice rides the create as
- * `clisJson` (crew#631). DemoWizard and TestingLaunchPanel: still disabled chips — no
+ * `clisJson` (crew#631). TestingLaunchPanel: still disabled chips — no
  * clis/clisJson key enters those bodies yet.
  */
 
@@ -50,7 +50,6 @@ vi.mock('../src/api/client.js', () => ({
 
 // Dynamic imports so the mocks above are applied before module code runs.
 const { DocumentThread } = await import('../src/components/DocumentThread.js');
-const { DemoWizard } = await import('../src/components/DemoWizard.js');
 const { TestingLaunchPanel } = await import('../src/components/TestingLaunchPanel.js');
 
 // ── DocumentThread ────────────────────────────────────────────────────────────
@@ -89,7 +88,7 @@ describe('doc-clis-row (DocumentThread in launching mode) — studio#302 seat co
   it('unchecking seats sends only the chosen council as clisJson', async () => {
     setCachedRoster(FOUR);
     const user = userEvent.setup();
-    render(<DocumentThread projectId="default" docId={null} selectedVersion={null} navigate={vi.fn()} mode="document" />);
+    render(<DocumentThread projectId="default" docId={null} selectedVersion={null} navigate={vi.fn()} />);
     // Default: the council-enabled seats minus the one the roster says a council would bench.
     expect(screen.getByTestId('doc-seat-claude').getAttribute('aria-pressed')).toBe('true');
     expect(screen.getByTestId('doc-seat-copilot').getAttribute('aria-pressed')).toBe('false');
@@ -107,14 +106,14 @@ describe('doc-clis-row (DocumentThread in launching mode) — studio#302 seat co
   it('a stored Build default wins over enabled_for_council', async () => {
     localStorage.setItem('wicked_default_clis', JSON.stringify(['pi']));
     setCachedRoster(FOUR);
-    render(<DocumentThread projectId="default" docId={null} selectedVersion={null} navigate={vi.fn()} mode="document" />);
+    render(<DocumentThread projectId="default" docId={null} selectedVersion={null} navigate={vi.fn()} />);
     expect(screen.getByTestId('doc-council-line').textContent).toBe('council: pi');
   });
 
   it('with every seat unchecked, Create is refused and nothing is sent', async () => {
     setCachedRoster([SEAT]);
     const user = userEvent.setup();
-    render(<DocumentThread projectId="default" docId={null} selectedVersion={null} navigate={vi.fn()} mode="document" />);
+    render(<DocumentThread projectId="default" docId={null} selectedVersion={null} navigate={vi.fn()} />);
     await user.click(screen.getByTestId('doc-seat-claude'));
     await user.type(screen.getByTestId('doc-composer'), 'a deck for the product');
     expect((screen.getByTestId('doc-composer-submit') as HTMLButtonElement).disabled).toBe(true);
@@ -127,7 +126,7 @@ describe('doc-clis-row (DocumentThread in launching mode) — studio#302 seat co
     const PI: RosterSeat = { ...SEAT, key: 'pi', display_name: 'Pi', binary: 'pi' };
     setCachedRoster([SEAT, PI]);
     const user = userEvent.setup();
-    render(<DocumentThread projectId="default" docId={null} selectedVersion={null} navigate={vi.fn()} mode="document" />);
+    render(<DocumentThread projectId="default" docId={null} selectedVersion={null} navigate={vi.fn()} />);
     // The user's pick: claude only. A refresh then drops claude from the roster.
     await user.click(screen.getByTestId('doc-seat-pi'));
     expect(screen.getByTestId('doc-seat-claude').getAttribute('aria-pressed')).toBe('true');
@@ -142,57 +141,18 @@ describe('doc-clis-row (DocumentThread in launching mode) — studio#302 seat co
   it('a new launch context re-defaults the council', async () => {
     setCachedRoster(FOUR);
     const user = userEvent.setup();
-    const { rerender } = render(<DocumentThread projectId="default" docId={null} selectedVersion={null} navigate={vi.fn()} mode="document" />);
+    const { rerender } = render(<DocumentThread projectId="default" docId={null} selectedVersion={null} navigate={vi.fn()} />);
     await user.click(screen.getByTestId('doc-seat-opencode'));
     expect(screen.getByTestId('doc-seat-opencode').getAttribute('aria-pressed')).toBe('false');
-    rerender(<DocumentThread projectId="other" docId={null} selectedVersion={null} navigate={vi.fn()} mode="document" />);
+    rerender(<DocumentThread projectId="other" docId={null} selectedVersion={null} navigate={vi.fn()} />);
     // Same render as the switch — no frame with a roster but no council.
     expect(screen.getByTestId('doc-seat-opencode').getAttribute('aria-pressed')).toBe('true');
   });
 
   it('cold cache: the chips appear after api.getRoster resolves', async () => {
-    render(<DocumentThread projectId="default" docId={null} selectedVersion={null} navigate={vi.fn()} mode="document" />);
+    render(<DocumentThread projectId="default" docId={null} selectedVersion={null} navigate={vi.fn()} />);
     expect(screen.queryByTestId('doc-clis-row')).toBeNull();
     await waitFor(() => expect(screen.queryByTestId('doc-seat-claude')).not.toBeNull());
-    expect(getRoster).toHaveBeenCalledTimes(1);
-  });
-});
-
-// ── DemoWizard ────────────────────────────────────────────────────────────────
-
-describe('demo-clis-row (DemoWizard)', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    clearCachedRoster();
-    useDocThreadStore.setState({ messages: {}, genState: {}, pending: {}, hydrated: {}, bindings: {}, held: {} });
-    createDoc.mockResolvedValue({ name: 'demo-out', head: 0, generating: true });
-    getRoster.mockResolvedValue({ roster: ROSTER });
-    apiFetch.mockRejectedValue(new Error('not wired'));
-  });
-  afterEach(cleanup);
-
-  it('warm cache: renders one disabled chip per seat, note contains crew#631; create body carries no clis/clisJson', async () => {
-    setCachedRoster(ROSTER);
-    const user = userEvent.setup();
-    render(<DemoWizard projectId="proj" seed="test demo" msgId="msg-1" onCancel={vi.fn()} onCreated={vi.fn()} />);
-    const row = screen.getByTestId('demo-clis-row');
-    expect(row.querySelectorAll('span[title]')).toHaveLength(ROSTER.length);
-    expect(row.querySelectorAll('span[title]')[0]!.textContent).toBe(SEAT.key);
-    expect(row.textContent).toContain('crew#631');
-    // fill in targetUrl to satisfy draftReady (the seed provides name + description)
-    await user.type(screen.getByTestId('wizard-target'), 'https://example.com');
-    await user.click(screen.getByTestId('wizard-create'));
-    await waitFor(() => expect(createDoc).toHaveBeenCalledTimes(1));
-    // createDemoFromDraft → demoDraftBody → createDoc; no clis/clisJson in that body
-    const body = createDoc.mock.calls[0]![1] as Record<string, unknown>;
-    expect('clis' in body).toBe(false);
-    expect('clisJson' in body).toBe(false);
-  });
-
-  it('cold cache: chip row appears after api.getRoster resolves', async () => {
-    render(<DemoWizard projectId="proj" seed="test demo" msgId="msg-1" onCancel={vi.fn()} onCreated={vi.fn()} />);
-    expect(screen.queryByTestId('demo-clis-row')).toBeNull();
-    await waitFor(() => expect(screen.queryByTestId('demo-clis-row')).not.toBeNull());
     expect(getRoster).toHaveBeenCalledTimes(1);
   });
 });

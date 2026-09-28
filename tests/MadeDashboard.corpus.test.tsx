@@ -96,8 +96,8 @@ describe('no fan-out on mount (F-1)', () => {
     made('vibe');
     await waitFor(() => expect(listAllDocs).toHaveBeenCalledTimes(1));
     cleanup();
-    made('demo');
-    await waitFor(() => expect(screen.getByTestId('stat-demo-items')).toBeInTheDocument());
+    made('vibe');
+    await waitFor(() => expect(screen.getByTestId('stat-vibe-items')).toBeInTheDocument());
     expect(listAllDocs).toHaveBeenCalledTimes(1);
   });
 });
@@ -213,14 +213,5 @@ describe('ordering and filtering (F-A45-008 / F-12)', () => {
     made('vibe', '/vibe');
     const rows = await screen.findAllByTestId('vibe-doc-row');
     expect(rows.map((r) => within(r).getByRole('link').textContent)).toEqual(['brief', 'ideas', 'todo']);
-  });
-
-  it('/demo shares the census and lists only demos', async () => {
-    listAllDocs.mockResolvedValue(INDEX_ROWS);
-    made('demo');
-    const rows = await screen.findAllByTestId('demo-doc-row');
-    expect(rows).toHaveLength(1);
-    expect(rows[0]!.dataset.docKind).toBe('demo');
-    expect(screen.getByTestId('stat-demo-items')).toHaveTextContent('all 3 projects');
   });
 });
