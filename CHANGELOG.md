@@ -63,6 +63,21 @@ npm publish dates. Every version listed here exists on
   still drains the outbox, instead of "the daemon refused this — not found".
 
 ### Changed
+- **"While you were away" is one line that never holds the page.** The handover was a four-column
+  panel that grew with its items and pushed every Home section down (with ~3 items per column, the
+  Needs You queue started 552 px down at 1440x700). It is now one fixed-height strip: "Since 21:11 ·
+  3h ago — [2 decisions due] [1 broke] [1 finished] [1 done for you] · Got it". *Decisions due* and
+  *broke* scroll to and briefly highlight their rows in the Needs You queue, where Open gate and
+  Retry already live. *Finished* opens an overlay listing each finished run with Open, Draft update
+  and Reuse as preset (the Runs list's next-use model). *Done for you* opens an overlay of what your
+  standing orders and the system did, each with Open and its audit entry. Overlays float over the
+  page, so opening one moves nothing. Escape or an outside click closes them, and focus returns to
+  the chip. "Got it" records the visit, and the handover also clears itself once every item it
+  listed has been acted on or resolved.
+- **Standing orders no longer take a permanent row.** With none in force they are a small header
+  chip ("Orders: none · Mark me away"). With some, they are one header line ("3 orders active ·
+  while away: will approve … · Manage · Mark me away"), and the full preview and crew's invariant
+  sit in its tooltip and at the head of Manage, which is now an overlay.
 - **Palette and controls polish (tokens and CSS, no layout changes).** A slate-ink surface ramp
   with a cool bias, tinted ink, hairline border tokens, an iris-blue default accent (230/74/68,
   replacing the stock violet 258/72/62; "Reset to default" on Theme picks it up) with dark text on

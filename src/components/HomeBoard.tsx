@@ -399,15 +399,20 @@ export function HomeBoard({ runs, navigate, onOpenAsk }: Props): React.ReactElem
           </p>
         </div>
         {!fresh && <HomeVerbs navigate={navigate} onOpenAsk={onOpenAsk} runs={runs} />}
-        {/* The flat run list stays reachable (§1.5 escape hatch) — at /work. */}
-        <a
-          href="/work"
-          onClick={(e) => { e.preventDefault(); navigate('/work'); }}
-          data-testid="all-runs-link"
-          style={{ marginLeft: 'auto', fontSize: 'var(--text-xs)', color: 'var(--ink-muted)', flexShrink: 0 }}
-        >
-          All runs ›
-        </a>
+        {/* The right edge: the flat run list (§1.5 escape hatch, at /work) and, beneath it, the
+            standing orders (behaviour 10) — a chip with none in force, one line with some; never
+            a row of their own. */}
+        <div className="wk-home-header-end">
+          <a
+            href="/work"
+            onClick={(e) => { e.preventDefault(); navigate('/work'); }}
+            data-testid="all-runs-link"
+            style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-muted)', flexShrink: 0 }}
+          >
+            All runs ›
+          </a>
+          {!fresh && !loading && error === null && <StandingOrdersPanel />}
+        </div>
       </header>
 
       {loading && (
@@ -435,9 +440,8 @@ export function HomeBoard({ runs, navigate, onOpenAsk }: Props): React.ReactElem
 
       {!fresh && !loading && error === null && (
         <>
-          <HandoverPanel handover={handover} navigate={navigate} now={now} />
-          {/* Behaviour 10: the while-I'm-away rules and the away switch. */}
-          <StandingOrdersPanel />
+          {/* Handover on arrival: ONE line of chips that never holds the page (overlays, not rows). */}
+          <HandoverPanel handover={handover} navigate={navigate} now={now} runs={runs} />
           {/* ── The KPI ribbon: the hero, full-width — FLOW / ATTENTION / TRUST&SPEND on the real
                  created_at clock (the command-deck redesign). ── */}
           <div style={{ flexShrink: 0, padding: '0 var(--space-6)' }}>

@@ -8,6 +8,7 @@ import { useGlobalShortcuts, type ShortcutEntry } from './useGlobalShortcuts.js'
 import { useBatchOnboard, type BatchState } from './useRepairMoves.js';
 import { useAcceptMemory, type AcceptMemory } from './useAcceptMemory.js';
 import type { Navigate } from './useRoute.js';
+import { useHandoverProgress } from '../store/visit.js';
 
 /**
  * The needs-you queue's BEHAVIOUR (studio wave 2b): grouping, expansion, the keyboard
@@ -53,7 +54,9 @@ export interface NeedsQueue {
   /** Attach to the queue's root (a callback ref): the keys act only while focus is inside it. */
   rootRef: (el: HTMLElement | null) => void;
   /** Do a row's verb — the same thing a click on its act does. */
-  act: (action: NeedAction) => void;
+  /** Do a row's verb. `rowKey` names the row it was pressed on: an item the handover listed
+   *  counts as acted on (the handover clears once every item it listed is acted on or resolved). */
+  act: (action: NeedAction, rowKey?: string) => void;
   /** The batch onboard's progress (idea 3) — the group row renders it in place of its verb. */
   batch: BatchState;
   /** The proposal group's "Accept N memory-only" (Wave B, idea 4): preview, undo window, send. */
@@ -131,7 +134,8 @@ export function useNeedsQueue(flat: NeedRow[], navigate: Navigate, now: number):
   const rowsRef = useRef(grouped);
   rowsRef.current = grouped;
   const act = useCallback(
-    (a: NeedAction) => {
+    (a: NeedAction, rowKey?: string) => {
+      if (rowKey !== undefined) useHandoverProgress.getState().markActed(rowKey);
       if (a.kind === 'accept-memory') {
         // Posts NOTHING: opens the preview of exactly these proposals; the send waits for the
         // confirm and then the undo window.
@@ -232,7 +236,7 @@ export function useNeedsQueue(flat: NeedRow[], navigate: Navigate, now: number):
           if (entry === undefined) return;
           e.preventDefault();
           if (entry.row.members !== undefined) toggleRef.current(entry.row.key);
-          else actRef.current(entry.row.action);
+          else actRef.current(entry.row.action, entry.row.key);
         },
       },
     ];

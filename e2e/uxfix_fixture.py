@@ -569,6 +569,12 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          # audit_delay_ms — GET /audit answers only after this delay (the handover's
          #   in-flight state is observable).
          "wave2b": False, "simple_gates": [], "audit_delay_ms": 0,
+         # handover_many — ADDS to wave2b (turn all three on): a handover with about three items
+         #   per chip — g3 (gamma, a third simple gate: pair with simple_gates), f2/f3 failed and
+         #   d2/d3 completed inside the last three hours (d3's units carry catalog steps, so it can
+         #   be reused as a preset), and two more system-actor audit lines (a turn timeout on f2,
+         #   a delivery on d2). Default False: no other journey's corpus changes.
+         "handover_many": False,
          # ── Studio behaviour 10 (e2e/standing_orders_test.py) ──
          # standing_orders — the crew standing-orders surface (GET/PUT/POST/DELETE
          #   /standing-orders, POST /standing-orders/parse). False = a daemon predating
@@ -1242,7 +1248,8 @@ WAVE2B_ATTACHED_AT = {"g1": NOW0 - 3 * MIN, "g2": NOW0 - 3 * MIN, "e1": NOW0 - 5
                       "f1": NOW0 - 4 * HOUR, "d1": NOW0 - 5 * HOUR}
 # The simple gates' cached records: g1 has waited longer than g2.
 WAVE2B_GATES = {"g1": ("Approve the schema change?", 20 * MIN),
-                "g2": ("Approve the TTL bump?", 10 * MIN)}
+                "g2": ("Approve the TTL bump?", 10 * MIN),
+                "g3": ("Approve the retention policy?", 5 * MIN)}
 WAVE2B_AUDIT = [
     {"ts": NOW0 - 40 * MIN, "action": "gate.decided",
      "actor": {"id": "local", "kind": "human", "trust": "admin"},
@@ -1257,7 +1264,38 @@ WAVE2B_AUDIT = [
 STANDING = {"away": False, "awaySince": None, "orders": [], "outbox": []}
 STANDING_AUDIT: list = []
 WAVE2B_GATE_PHASE = {"g1": "intake", "g2": "intake"}
-WAVE2B_RUN_PROJECT = {"g1": "alpha", "g2": "beta"}
+WAVE2B_RUN_PROJECT = {"g1": "alpha", "g2": "beta", "g3": "gamma"}
+
+# Studio handover rework: a handover with about three items per chip (switch `handover_many`).
+HANDOVER_MANY_RUNS = [
+    session("g3", "executing", "approve gamma's retention policy", "apply the retention policy"),
+    session("f2", "failed", "upgrade alpha's ORM", "upgrade the ORM"),
+    session("f3", "failed", "split gamma's worker pool", "split the worker pool"),
+    session("d2", "completed", "add beta's health endpoint", "add the health endpoint"),
+    session("d3", "completed", "tidy gamma's logging", "tidy the logging"),
+]
+HANDOVER_MANY_RUNS[1]["session"]["ended_at"] = (NOW0 - 90 * MIN) // 1000
+HANDOVER_MANY_RUNS[2]["session"]["ended_at"] = (NOW0 - 25 * MIN) // 1000
+HANDOVER_MANY_RUNS[3]["session"]["ended_at"] = (NOW0 - 150 * MIN) // 1000
+HANDOVER_MANY_RUNS[3]["units"][0]["status"] = "done"
+HANDOVER_MANY_RUNS[4]["session"]["ended_at"] = (NOW0 - 45 * MIN) // 1000
+# d3 ran a catalog plan, so "Reuse as preset" has steps to save.
+HANDOVER_MANY_RUNS[4]["units"] = [
+    {**HANDOVER_MANY_RUNS[4]["units"][0], "id": f"d3:{k}", "ord": i, "description": f"{k} — tidy the logging",
+     "status": "done", "catalog": k, "phase_ref": k}
+    for i, k in enumerate(["understand", "build", "review"])
+]
+HANDOVER_MANY_MEMBERS = {"alpha": ["f2"], "beta": ["d2"], "gamma": ["g3", "f3", "d3"]}
+HANDOVER_MANY_ATTACHED_AT = {"g3": NOW0 - 6 * MIN, "f2": NOW0 - 4 * HOUR, "f3": NOW0 - 4 * HOUR,
+                             "d2": NOW0 - 5 * HOUR, "d3": NOW0 - 5 * HOUR}
+HANDOVER_MANY_AUDIT = [
+    {"ts": NOW0 - 95 * MIN, "action": "run.turn.timedout",
+     "actor": {"id": "crew.daemon", "kind": "system", "trust": "admin"},
+     "runId": "f2", "detail": {"ord": 0}},
+    {"ts": NOW0 - 140 * MIN, "action": "run.delivered",
+     "actor": {"id": "crew.daemon", "kind": "system", "trust": "admin"},
+     "runId": "d2", "detail": {}},
+]
 
 
 def standing_parse(text: str):
@@ -2735,7 +2773,8 @@ def assemble_runs() -> list:
         if state["no_runs"]:
             runs = []
         elif state["wave1"]:
-            runs = list(WAVE1_RUNS) + (list(WAVE2B_RUNS) if state["wave2b"] else [])
+            runs = list(WAVE1_RUNS) + (list(WAVE2B_RUNS) if state["wave2b"] else []) \
+                + (json.loads(json.dumps(HANDOVER_MANY_RUNS)) if state["wave2b"] and state["handover_many"] else [])
         else:
             runs = RUNS + ([ORPHAN] if state["orphan"] else []) \
                 + ([LONG_RUN] if state["long_prompt"] else []) \
@@ -3444,12 +3483,13 @@ class W2Handler(SimpleHTTPRequestHandler):
             # Wave 2b: the handover's trail — `?since=` (crew#677, unix millis, inclusive).
             with state_lock:
                 wave2b_on = state["wave2b"]
+                many_on = state["handover_many"]
                 audit_delay = state["audit_delay_ms"]
             if audit_delay:
                 time.sleep(audit_delay / 1000)
             if wave2b_on:
                 with state_lock:
-                    trail = WAVE2B_AUDIT + list(STANDING_AUDIT)
+                    trail = WAVE2B_AUDIT + list(STANDING_AUDIT) + (HANDOVER_MANY_AUDIT if many_on else [])
                 entries = [e for e in trail if not run_id or e.get("runId") == run_id]
             since = (q.get("since") or [""])[0]
             if since:
@@ -3591,10 +3631,12 @@ class W2Handler(SimpleHTTPRequestHandler):
             with state_lock:
                 wave1_on = state["wave1"]
                 wave2b_on = state["wave2b"]
+                many_on = state["handover_many"]
             if wave1_on:
                 refs = list(WAVE1_MEMBERS.get(pid, [])) \
-                    + (WAVE2B_MEMBERS.get(pid, []) if wave2b_on else [])
-                clocks = {**WAVE1_ATTACHED_AT, **WAVE2B_ATTACHED_AT}
+                    + (WAVE2B_MEMBERS.get(pid, []) if wave2b_on else []) \
+                    + (HANDOVER_MANY_MEMBERS.get(pid, []) if wave2b_on and many_on else [])
+                clocks = {**WAVE1_ATTACHED_AT, **WAVE2B_ATTACHED_AT, **HANDOVER_MANY_ATTACHED_AT}
                 self._json(200, {"members": [
                     {"id": f"{pid}:crew.run:{ref}", "project_id": pid,
                      "member_kind": "crew.run", "member_ref": ref, "meta": None,

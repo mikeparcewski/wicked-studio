@@ -9,18 +9,20 @@ order answers a matching open gate and writes crew's `gate.decided` line with th
 
   0. Two orders are already in force: one made at a gate ("make it a rule", idea 8: band 0-19
      unit reviews on alpha) and one trust receipt (idea 13: plan approval of bugfix runs at band
-     0-19). Home's Standing-orders strip previews what the Away switch will do BEFORE it is
-     flipped ("2 orders active: will approve band 0-19 (LOW) unit reviews on alpha; …; deliver
-     gates always wait") beside crew's invariant (no order answers a deliver gate or a high-risk
-     plan approval; messages are queued, never sent). Manage lists both, each saying its origin.
+     0-19). Home's header carries ONE orders line ("2 orders active · while away: will approve
+     band 0-19 (LOW) unit reviews on alpha; … · Manage · Mark me away") — never a banner row.
+     Manage opens an overlay that previews what the Away switch will do BEFORE it is flipped
+     ("2 orders active: …; deliver gates always wait") above crew's invariant (no order answers a
+     deliver gate or a high-risk plan approval; messages are queued, never sent), and lists both
+     orders, each saying its origin.
   1. Manage → type "Auto-approve intake on project alpha" → "Read it back" → the rule is SAID
      BACK in plain words; nothing is stored yet.
   2. Keep it → the order is listed, and the preview now counts 3 orders.
   3. An order that would approve the deliver gate is refused in words and cannot be kept.
   4. Mark yourself away → the intake gate on alpha (g1) clears within 5 s (beta's g2 stays; the
      band-scoped orders never touch the unscored runs).
-  5. The handover after the absence has a "What your standing orders did" section listing the
-     order's action, NAMING the order, linking to g1.
+  5. The handover after the absence: its "done for you" overlay has a "What your standing orders
+     did" group listing the order's action, NAMING the order, opening g1.
 
 Capture: e2e/shots/standing-orders-<skin>.png. Skin: STUDIO_SKIN (studio | compact-rail).
 
@@ -102,7 +104,23 @@ with sync_playwright() as p:
         fail("panel-shows", "no standing-orders panel on Home")
     check("panel-shows", True)
 
-    # ── 0. the Away switch's consequence, before it is flipped ───────────────
+    # ── 0. one line in the header; the Away switch's consequence, before it is flipped ──
+    line = page.evaluate("""() => { const e = document.querySelector('[data-testid="standing-orders-panel"]');
+        const r = e.getBoundingClientRect();
+        return { inHeader: !!e.closest('header'), variant: e.dataset.variant, height: r.height,
+                 count: e.querySelector('[data-testid="standing-orders-count"]').innerText,
+                 summary: e.querySelector('[data-testid="standing-orders-summary"]').textContent,
+                 title: e.getAttribute('title') }; }""")
+    check("one-line-in-the-header",
+          line["inHeader"] and line["variant"] == "line" and line["height"] <= 32
+          and line["count"] == "2 orders active"
+          and line["summary"].startswith("while away: will approve band 0-19 (LOW) unit reviews on alpha;")
+          and "No order answers a deliver gate" in (line["title"] or ""), **line)
+    page.get_by_test_id("standing-orders-toggle").click()
+    try:
+        page.get_by_test_id("standing-orders-manage").wait_for(state="visible", timeout=3000)
+    except Exception:
+        fail("manage-overlay", "Manage did not open")
     preview = page.get_by_test_id("standing-orders-preview").inner_text()
     check("away-preview-before-flip",
           preview.startswith("While you are away: 2 orders active: will approve band 0-19 (LOW) unit reviews on alpha;")
@@ -114,7 +132,6 @@ with sync_playwright() as p:
     check("invariant-visible",
           "No order answers a deliver gate or a high-risk plan approval" in invariant
           and "queued, never sent" in invariant, invariant=invariant)
-    page.get_by_test_id("standing-orders-toggle").click()
     origins = page.evaluate("""() => [...document.querySelectorAll('[data-testid="standing-order-row"]')]
         .map(r => [r.dataset.origin, r.querySelector('[data-testid="standing-order-origin"]').innerText])""")
     check("gate-and-receipt-orders-in-the-list",
@@ -128,7 +145,7 @@ with sync_playwright() as p:
     try:
         words_el.wait_for(state="visible", timeout=5000)
     except Exception:
-        fail("rule-said-back", page.get_by_test_id("standing-orders-panel").inner_text())
+        fail("rule-said-back", page.get_by_test_id("standing-orders-manage").inner_text())
     words = words_el.inner_text()
     check("rule-said-back", words == "While you are away: approve the intake gate on project alpha", words=words)
     with urllib.request.urlopen(f"{origin}/api/v1/standing-orders") as r:
@@ -141,7 +158,7 @@ with sync_playwright() as p:
     try:
         page.get_by_test_id("standing-order-row").nth(2).wait_for(state="visible", timeout=5000)
     except Exception:
-        fail("order-listed", page.get_by_test_id("standing-orders-panel").inner_text())
+        fail("order-listed", page.get_by_test_id("standing-orders-manage").inner_text())
     mine = page.get_by_test_id("standing-order-row").nth(2)
     check("order-listed", ORDER in mine.inner_text() and mine.get_attribute("data-origin") == "words")
     preview = page.get_by_test_id("standing-orders-preview").inner_text()
@@ -185,17 +202,23 @@ with sync_playwright() as p:
     try:
         page.get_by_test_id("handover-panel").wait_for(state="visible", timeout=15000)
         page.wait_for_function(
-            """() => { const s = document.querySelector('[data-testid="handover-section"][data-section="orders"]');
-                       return s && s.dataset.state === 'ready'; }""", timeout=10000)
+            """() => { const c = document.querySelector('[data-testid="handover-chip"][data-section="done"]');
+                       return c && c.dataset.state === 'ready' && Number(c.dataset.count) >= 1; }""", timeout=10000)
     except Exception:
         page.screenshot(path=str(SHOTS / f"standing-orders-handover-missing-{STUDIO_SKIN}.png"))
         fail("handover", "no handover after the absence")
+    page.locator('[data-testid="handover-chip"][data-section="done"]').click()
+    group = page.locator('[data-testid="handover-overlay-group"][data-group="orders"]')
+    try:
+        group.wait_for(state="visible", timeout=3000)
+    except Exception:
+        fail("handover-says-what-orders-did", page.locator('[data-testid="handover-overlay"]').all_inner_texts())
     rows = page.evaluate("""() => [...document.querySelectorAll(
-        '[data-testid="handover-section"][data-section="orders"] [data-testid="handover-row"]')]
-        .map(r => ({ text: r.innerText, href: r.getAttribute('href') }))""")
+        '[data-testid="handover-overlay-group"][data-group="orders"] [data-testid="handover-item"]')]
+        .map(r => ({ text: r.innerText, href: r.querySelector('[data-testid="handover-item-open"]')?.getAttribute('href') }))""")
     named = [r for r in rows if f'Standing order "{ORDER}" approved a gate for you' in r["text"]]
     check("handover-names-the-order", len(named) == 1 and "g1" in (named[0]["href"] or ""), rows=rows)
-    title = page.locator('[data-testid="handover-section"][data-section="orders"]').inner_text()
+    title = group.inner_text()
     check("handover-says-what-orders-did", "what your standing orders did" in title.lower(), title=title)
     page.screenshot(path=str(SHOTS / f"standing-orders-handover-{STUDIO_SKIN}.png"))
     browser.close()

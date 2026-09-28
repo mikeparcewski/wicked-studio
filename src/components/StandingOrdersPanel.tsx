@@ -1,15 +1,20 @@
-import { useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { ORDER_INVARIANT, ORIGIN_LABEL, orderOrigin } from '../board/standingOrders.js';
 import { useStandingOrders } from '../hooks/useStandingOrders.js';
 import { clockTime } from '../board/handover.js';
+import { AnchoredOverlay } from './AnchoredOverlay.js';
 
 /**
- * STANDING ORDERS (Studio OS behaviour 10) — a skin over `useStandingOrders`. One strip on
- * Home: the away switch with what it will do while you are away (previewed from the orders in
- * force, before you flip it), crew's invariant beside it, and Manage — the orders (every one,
- * including those made at a gate or from the trust receipt, each saying where it came from), the
- * add flow (words → the rule said back → confirm) and the outbox of queued messages. No behaviour
- * lives here.
+ * STANDING ORDERS (Studio OS behaviour 10) — a skin over `useStandingOrders`. It lives in Home's
+ * header and never takes a row of its own:
+ *
+ *   no orders  — a small chip: "Orders: none · Mark me away";
+ *   orders     — ONE line: "3 orders active · while away: will approve … · Manage · Mark me away".
+ *
+ * The full Away preview and crew's invariant are the line's tooltip and the head of Manage — an
+ * overlay holding the orders (every one, including those made at a gate or from the trust receipt,
+ * each saying where it came from), the add flow (words → the rule said back → confirm) and the
+ * outbox of queued messages. No behaviour lives here.
  */
 
 const chip = {
@@ -22,66 +27,100 @@ export function StandingOrdersPanel(): React.ReactElement | null {
   const so = useStandingOrders();
   const [open, setOpen] = useState(false);
   const [text, setText] = useState('');
+  const manageEl = useRef<HTMLButtonElement | null>(null);
+  const close = useCallback(() => setOpen(false), []);
   if (so.state === 'unavailable') return null;
   if (so.state === null) {
     // A read that failed is said, never shown as "no orders" (a 404 — no surface — renders nothing).
     return so.error === null ? null : (
-      <p data-testid="standing-orders-error" role="alert" style={{ margin: '0 var(--space-6) var(--space-3)', fontSize: 'var(--text-xs)', color: 'var(--status-fail)' }}>
+      <p data-testid="standing-orders-error" role="alert" className="wk-orders-error">
         Standing orders: this daemon could not say ({so.error}).
       </p>
     );
   }
   const { away, awaySince, orders, outbox } = so.state;
   const d = so.draft;
-  return (
-    <section
-      data-testid="standing-orders-panel"
-      data-away={away ? 'true' : 'false'}
-      aria-label="Standing orders"
-      style={{
-        margin: '0 var(--space-6) var(--space-3)', flexShrink: 0,
-        background: 'var(--surface-card)', border: '1px solid var(--surface-raised)',
-        borderRadius: 'var(--radius-lg)', padding: 'var(--space-2) var(--space-4)',
-      }}
+  const none = orders.length === 0 && !away && outbox.length === 0;
+  const whileAway = away ? `away${awaySince !== null ? ` since ${clockTime(awaySince)}` : ''}` : 'while away';
+  const full = `${away ? `Away${awaySince !== null ? ` since ${clockTime(awaySince)}` : ''}. ` : 'While you are away: '}${so.preview ?? ''}`;
+  const awayButton = (
+    <button
+      type="button"
+      data-testid="standing-orders-away"
+      aria-pressed={away}
+      onClick={() => void so.setAway(!away)}
+      className="wk-orders-act"
+      data-on={away ? 'true' : undefined}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-        <h2 style={{ margin: 0, fontSize: 'var(--text-sm)', fontWeight: 'var(--weight-bold)', color: 'var(--ink-high)' }}>
-          Standing orders
-        </h2>
-        <span data-testid="standing-orders-count" style={{ fontSize: 'var(--text-xs)', fontFamily: 'var(--font-mono)', color: 'var(--ink-muted)' }}>
-          {orders.length} {orders.length === 1 ? 'order' : 'orders'}
-          {outbox.length > 0 ? ` · ${outbox.length} queued` : ''}
-        </span>
-        <button
-          type="button"
-          data-testid="standing-orders-away"
-          aria-pressed={away}
-          onClick={() => void so.setAway(!away)}
-          style={{ ...chip, marginLeft: 'auto', color: away ? 'var(--accent)' : 'var(--ink-muted)', borderColor: away ? 'var(--accent)' : 'var(--surface-raised)' }}
-        >
-          {away ? 'Away — orders active' : 'Mark me away'}
-        </button>
-        <button type="button" data-testid="standing-orders-toggle" aria-expanded={open} onClick={() => setOpen(!open)} style={chip}>
-          {open ? 'Hide' : 'Manage'}
-        </button>
-      </div>
-      {/* The consequence first: what going away does, from the orders in force, and what never changes. */}
-      <p style={{ margin: '2px 0 0', fontSize: 'var(--text-xs)', lineHeight: 1.4 }}>
-        <span data-testid="standing-orders-preview" style={{ color: 'var(--ink-body)' }}>
-          {away ? `Away${awaySince !== null ? ` since ${clockTime(awaySince)}` : ''}. ` : 'While you are away: '}
-          {so.preview}
-        </span>
-        <span data-testid="standing-orders-invariant" style={{ color: 'var(--ink-dim)' }}>
-          {' · '}{ORDER_INVARIANT}
-        </span>
-      </p>
-      {so.error !== null && (
-        <p data-testid="standing-orders-error" role="alert" style={{ margin: '4px 0 0', fontSize: 'var(--text-xs)', color: 'var(--status-fail)' }}>
+      {away ? 'Away — orders active' : 'Mark me away'}
+    </button>
+  );
+  const manageButton = (label: string): React.ReactElement => (
+    <button
+      ref={manageEl}
+      type="button"
+      data-testid="standing-orders-toggle"
+      aria-haspopup="dialog"
+      aria-expanded={open}
+      onClick={() => setOpen(!open)}
+      className="wk-orders-act"
+      title="Manage standing orders"
+    >
+      {label}
+    </button>
+  );
+  return (
+    <div
+      data-testid="standing-orders-panel"
+      data-variant={none ? 'chip' : 'line'}
+      data-away={away ? 'true' : 'false'}
+      role="group"
+      aria-label="Standing orders"
+      className={none ? 'wk-orders wk-orders--chip' : 'wk-orders wk-orders--line'}
+      title={`${full} · ${ORDER_INVARIANT}`}
+    >
+      {none ? (
+        <>
+          {manageButton('Orders: none')}
+          <span aria-hidden className="wk-orders-sep">·</span>
+          {awayButton}
+        </>
+      ) : (
+        <>
+          <span data-testid="standing-orders-count" className="wk-orders-count">
+            {so.line?.count ?? `${orders.length} orders`}
+            {outbox.length > 0 ? ` · ${outbox.length} queued` : ''}
+          </span>
+          <span aria-hidden className="wk-orders-sep">·</span>
+          <span data-testid="standing-orders-summary" className="wk-orders-will">
+            {whileAway}: {so.line?.will ?? ''}
+          </span>
+          <span aria-hidden className="wk-orders-sep">·</span>
+          {manageButton('Manage')}
+          <span aria-hidden className="wk-orders-sep">·</span>
+          {awayButton}
+        </>
+      )}
+      {so.error !== null && !open && (
+        <span data-testid="standing-orders-error" role="alert" className="wk-orders-error" title={so.error}>
           {so.error}
-        </p>
+        </span>
       )}
       {open && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)', marginTop: 'var(--space-2)' }}>
+        <AnchoredOverlay anchor={manageEl.current} onClose={close} label="Standing orders" testId="standing-orders-manage" width={600}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
+          {/* The consequence first: what going away does, from the orders in force, and what never changes. */}
+          <p style={{ margin: 0, fontSize: 'var(--text-xs)', lineHeight: 1.45 }}>
+            <span data-testid="standing-orders-preview" style={{ color: 'var(--ink-body)' }}>{full}</span>
+          </p>
+          <p data-testid="standing-orders-invariant" style={{ margin: 0, fontSize: 'var(--text-xs)', lineHeight: 1.45, color: 'var(--ink-muted)' }}>
+            {ORDER_INVARIANT}
+          </p>
+          {so.error !== null && (
+            <p data-testid="standing-orders-error" role="alert" style={{ margin: 0, fontSize: 'var(--text-xs)', color: 'var(--status-fail)' }}>
+              {so.error}
+            </p>
+          )}
           <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: '2px' }}>
             {orders.length === 0 && (
               <li style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-dim)' }}>No standing orders. Add one in plain words below.</li>
@@ -173,7 +212,8 @@ export function StandingOrdersPanel(): React.ReactElement | null {
             </div>
           )}
         </div>
+        </AnchoredOverlay>
       )}
-    </section>
+    </div>
   );
 }

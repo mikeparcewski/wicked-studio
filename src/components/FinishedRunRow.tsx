@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { SessionView } from '../api/types.js';
 import { OUTBOUND_TITLE, outboundKindFor } from '../api/outbound.js';
-import { useReusePreset } from '../hooks/useReusePreset.js';
+import { useReusePreset, type ReusePreset } from '../hooks/useReusePreset.js';
 import { Modal } from './Modal.js';
 import { OutboundDraft } from './OutboundDraft.js';
 import { RunLink } from './RunLink.js';
@@ -74,55 +74,65 @@ export function FinishedRunRow({ view, selectedRunId, onSelect, onArchive }: {
           Archive
         </button>
       </div>
-      {panelOpen && reuse.consequence !== null && (
-        <div
-          data-testid="run-reuse-panel"
-          className="flex flex-col gap-2 px-3 py-2 mb-1 rounded-lg"
-          style={{ border: '1px solid var(--surface-raised)', background: 'var(--surface-card)' }}
-        >
-          <p
-            data-testid="run-reuse-consequence"
-            data-blocked={String(reuse.consequence.blocked)}
-            className="text-[11px] font-mono"
-            style={{ margin: 0, color: reuse.consequence.blocked && reuse.consequence.waiting !== true ? 'var(--status-fail)' : 'var(--ink-body)' }}
-          >
-            {reuse.consequence.text}
-          </p>
-          <span className="flex items-center gap-2">
-            <input
-              data-testid="run-reuse-name"
-              aria-label="Preset name"
-              value={s.name}
-              maxLength={64}
-              onChange={(e) => reuse.setName(e.target.value)}
-              className="rounded-md px-2 py-1 text-[11px] font-mono"
-              style={{ minWidth: '16rem', background: 'var(--surface-base)', color: 'var(--ink-body)', border: '1px solid var(--surface-raised)' }}
-            />
-            <button
-              type="button"
-              data-testid="run-reuse-save"
-              disabled={reuse.consequence.blocked || s.phase === 'saving'}
-              onClick={() => void reuse.save()}
-              className={BTN}
-              style={NEXT}
-            >
-              {s.phase === 'saving' ? 'Saving…' : 'Save preset'}
-            </button>
-            <button type="button" onClick={reuse.close} className={BTN} style={QUIET}>
-              Cancel
-            </button>
-          </span>
-          {s.phase === 'error' && (
-            <p role="alert" data-testid="run-reuse-error" className="text-[11px] font-mono" style={{ margin: 0, color: 'var(--status-fail)' }}>
-              {`Not saved: ${s.message}`}
-            </p>
-          )}
-        </div>
-      )}
+      {panelOpen && <ReusePresetPanel reuse={reuse} />}
       {drafting && (
         <Modal title={OUTBOUND_TITLE[kind]} onClose={() => setDrafting(false)}>
           <OutboundDraft kind={kind} runId={id} />
         </Modal>
+      )}
+    </div>
+  );
+}
+
+/**
+ * "Reuse as preset", opened: the save's consequence said first, the name, Save / Cancel. Shared by
+ * the Runs list's finished rows and the handover's "finished" overlay — one model (`useReusePreset`).
+ */
+export function ReusePresetPanel({ reuse }: { reuse: ReusePreset }): React.ReactElement | null {
+  const s = reuse.state;
+  if (reuse.consequence === null || s.phase === 'closed' || s.phase === 'saved') return null;
+  return (
+    <div
+      data-testid="run-reuse-panel"
+      className="flex flex-col gap-2 px-3 py-2 mb-1 rounded-lg"
+      style={{ border: '1px solid var(--surface-raised)', background: 'var(--surface-card)' }}
+    >
+      <p
+        data-testid="run-reuse-consequence"
+        data-blocked={String(reuse.consequence.blocked)}
+        className="text-[11px] font-mono"
+        style={{ margin: 0, color: reuse.consequence.blocked && reuse.consequence.waiting !== true ? 'var(--status-fail)' : 'var(--ink-body)' }}
+      >
+        {reuse.consequence.text}
+      </p>
+      <span className="flex items-center gap-2">
+        <input
+          data-testid="run-reuse-name"
+          aria-label="Preset name"
+          value={s.name}
+          maxLength={64}
+          onChange={(e) => reuse.setName(e.target.value)}
+          className="rounded-md px-2 py-1 text-[11px] font-mono"
+          style={{ minWidth: '16rem', background: 'var(--surface-base)', color: 'var(--ink-body)', border: '1px solid var(--surface-raised)' }}
+        />
+        <button
+          type="button"
+          data-testid="run-reuse-save"
+          disabled={reuse.consequence.blocked || s.phase === 'saving'}
+          onClick={() => void reuse.save()}
+          className={BTN}
+          style={NEXT}
+        >
+          {s.phase === 'saving' ? 'Saving…' : 'Save preset'}
+        </button>
+        <button type="button" onClick={reuse.close} className={BTN} style={QUIET}>
+          Cancel
+        </button>
+      </span>
+      {s.phase === 'error' && (
+        <p role="alert" data-testid="run-reuse-error" className="text-[11px] font-mono" style={{ margin: 0, color: 'var(--status-fail)' }}>
+          {`Not saved: ${s.message}`}
+        </p>
       )}
     </div>
   );

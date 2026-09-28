@@ -1,9 +1,11 @@
+import { useEffect, useRef, useState } from 'react';
 import type { SessionView } from '../api/types.js';
 import { calmCopy, type NeedRow } from '../board/needsYou.js';
 import { focusLockNote, memberPage, visibleMembers } from '../board/needsQueue.js';
 import { acceptMemoryPreview } from '../board/proposalTriage.js';
 import { useNeedsQueue, type NeedsQueue } from '../hooks/useNeedsQueue.js';
 import { useFocusLockStore } from '../store/focusLock.js';
+import { REVEAL_FRESH_MS, REVEAL_MS, useQueueReveal } from '../store/queueReveal.js';
 import type { Navigate } from '../hooks/useRoute.js';
 import type { SkinVariants } from '../theming/skins.js';
 import { TONE_COLOR, TONE_GLYPH } from './narrator.js';
@@ -68,6 +70,8 @@ export function NeedsYouQueue({ queue, runs, navigate, now, variant = 'inline' }
   variant?: SkinVariants['needsQueue'];
 }): React.ReactElement {
   const at = now ?? Date.now();
+  const sectionEl = useRef<HTMLElement | null>(null);
+  const revealed = useRevealed(queue, sectionEl);
   const link = (path: string): { href: string; onClick: (e: React.MouseEvent) => void } => ({
     href: path,
     onClick: (e) => { e.preventDefault(); navigate(path); },
@@ -80,7 +84,7 @@ export function NeedsYouQueue({ queue, runs, navigate, now, variant = 'inline' }
       return (
         <a
           href={a.path}
-          onClick={(e) => { e.preventDefault(); queue.act(a); }}
+          onClick={(e) => { e.preventDefault(); queue.act(a, row.key); }}
           data-testid="need-act"
           data-act="open"
           className="wk-need-act"
@@ -90,7 +94,7 @@ export function NeedsYouQueue({ queue, runs, navigate, now, variant = 'inline' }
       );
     }
     return (
-      <button type="button" data-testid="need-act" data-act={a.kind} onClick={() => queue.act(a)} className="wk-need-act">
+      <button type="button" data-testid="need-act" data-act={a.kind} onClick={() => queue.act(a, row.key)} className="wk-need-act">
         {a.label}
       </button>
     );
@@ -211,8 +215,9 @@ export function NeedsYouQueue({ queue, runs, navigate, now, variant = 'inline' }
         data-count={row.members?.length ?? 1}
         data-queue-item={row.key}
         data-kbd-selected={selected ? 'true' : undefined}
+        data-reveal={revealed.has(row.key) ? 'true' : undefined}
         tabIndex={-1}
-        className={`wk-need-row wk-need-row--${row.tone}`}
+        className={`wk-need-row wk-need-row--${row.tone}${revealed.has(row.key) ? ' wk-need-row--reveal' : ''}`}
         // Severity stripe (command-deck redesign): a left edge colored by the row's tone, so what
         // needs you reads by color at a glance (gate/failed/stranded/…); the glyph repeats it.
         style={{
@@ -273,7 +278,7 @@ export function NeedsYouQueue({ queue, runs, navigate, now, variant = 'inline' }
 
   return (
     <section
-      ref={queue.rootRef}
+      ref={(el) => { sectionEl.current = el; queue.rootRef(el); }}
       tabIndex={0}
       aria-label="Needs you — focus, then j/k to move and Enter to act"
       data-testid="needs-you-queue"
@@ -344,6 +349,42 @@ export function NeedsYouQueue({ queue, runs, navigate, now, variant = 'inline' }
       )}
     </section>
   );
+}
+
+/**
+ * Answers a reveal request (the handover's "decisions due" / "broke" chips): opens any folded
+ * group holding a requested row, marks the requested rows for a brief highlight, and scrolls the
+ * first one into view. Returns the keys highlighted right now.
+ */
+function useRevealed(queue: NeedsQueue, rootEl: React.RefObject<HTMLElement | null>): ReadonlySet<string> {
+  const nonce = useQueueReveal((s) => s.nonce);
+  const [revealed, setRevealed] = useState<ReadonlySet<string>>(() => new Set());
+  const queueRef = useRef(queue);
+  queueRef.current = queue;
+
+  useEffect(() => {
+    const { keys, at } = useQueueReveal.getState();
+    if (nonce === 0 || keys.length === 0 || Date.now() - at > REVEAL_FRESH_MS) return;
+    const want = new Set(keys);
+    const q = queueRef.current;
+    for (const row of q.rows) {
+      if (row.members?.some((m) => want.has(m.key)) === true && !q.expanded.has(row.key)) q.toggle(row.key);
+    }
+    setRevealed(want);
+    const t = setTimeout(() => setRevealed(new Set()), REVEAL_MS);
+    return () => clearTimeout(t);
+  }, [nonce]);
+
+  // After the rows (and any group just opened) render: bring the first revealed row into view.
+  useEffect(() => {
+    if (revealed.size === 0) return;
+    const root = rootEl.current;
+    const first = root?.querySelector<HTMLElement>('[data-reveal="true"]');
+    const reduce = typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    first?.scrollIntoView?.({ block: 'center', behavior: reduce ? 'auto' : 'smooth' });
+  }, [revealed, rootEl]);
+
+  return revealed;
 }
 
 /**

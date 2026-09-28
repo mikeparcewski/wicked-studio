@@ -83,6 +83,8 @@ export interface HandoverItem {
   at: number | null;
   /** Where the row links — the run's own surface. */
   path: string;
+  /** The audit-trail line behind an item the system or an order did — shown as its receipt. */
+  audit?: { action: string; actor: string; ts: number; detail?: Record<string, unknown> };
 }
 
 /** A section's wire: `loading` while its read is in flight, `failed` when the daemon
@@ -207,6 +209,12 @@ export function handoverSections(inp: HandoverInputs): HandoverSection[] {
       text: byOrder ?? systemText(e),
       at: e.ts,
       path: e.runId !== undefined ? runPath(e.runId, v !== undefined ? pidOf(v) : projectIds[e.runId]) : '/system',
+      audit: {
+        action: e.action,
+        actor: typeof e.actor?.id === 'string' ? e.actor.id : 'system',
+        ts: e.ts,
+        ...(e.detail != null && typeof e.detail === 'object' ? { detail: e.detail as Record<string, unknown> } : {}),
+      },
     });
   }
 
@@ -227,4 +235,84 @@ export function handoverSections(inp: HandoverInputs): HandoverSection[] {
     items: items[key],
     state: key !== 'system' || Array.isArray(audit) ? 'ready' : audit === 'loading' ? 'loading' : 'failed',
   }));
+}
+
+/**
+ * THE STRIP (operator feedback: the four-column panel pushed every section off the page). The
+ * handover is shown as ONE line of chips, each of which does something:
+ *
+ *   decisions — reveals those rows in the Needs You queue (their Open gate verb lives there);
+ *   broke     — reveals those rows in the Needs You queue (their Retry verb lives there);
+ *   finished  — an overlay of each finished run with its next use (Open, Draft update, Reuse);
+ *   done      — an overlay of what your standing orders and the system did (orders + system),
+ *               each with Open and its audit entry.
+ */
+export type HandoverChipKey = 'decisions' | 'broke' | 'finished' | 'done';
+
+export const HANDOVER_CHIP_ORDER: readonly HandoverChipKey[] = ['decisions', 'broke', 'finished', 'done'];
+
+/** How a chip reads: "3 decisions due", "1 broke", "2 finished", "3 done for you". */
+export const HANDOVER_CHIP_NOUN: Record<HandoverChipKey, (n: number) => string> = {
+  decisions: (n) => (n === 1 ? 'decision due' : 'decisions due'),
+  broke: () => 'broke',
+  finished: () => 'finished',
+  done: () => 'done for you',
+};
+
+/** What a chip does when pressed: reveal rows in the queue, or open an overlay. */
+export const HANDOVER_CHIP_ACTION: Record<HandoverChipKey, 'reveal' | 'overlay'> = {
+  decisions: 'reveal',
+  broke: 'reveal',
+  finished: 'overlay',
+  done: 'overlay',
+};
+
+export interface HandoverChip {
+  key: HandoverChipKey;
+  items: HandoverItem[];
+  /** "done for you" keeps who acted: what your standing orders did, then what the system did. */
+  groups: { key: HandoverSectionKey; title: string; items: HandoverItem[] }[];
+  /** `loading` while any section behind it is in flight; `failed` when one cannot say. */
+  state: HandoverSectionState;
+}
+
+/** The sections folded into the strip's four chips (orders + system → "done for you", newest first). */
+export function handoverChips(sections: readonly HandoverSection[]): HandoverChip[] {
+  const of = (keys: readonly HandoverSectionKey[]): HandoverSection[] => sections.filter((s) => keys.includes(s.key));
+  const fold = (key: HandoverChipKey, secs: HandoverSection[]): HandoverChip => ({
+    key,
+    items: key === 'done'
+      ? secs.flatMap((s) => s.items).sort((a, b) => (b.at ?? -Infinity) - (a.at ?? -Infinity) || a.key.localeCompare(b.key))
+      : secs.flatMap((s) => s.items),
+    groups: secs.filter((s) => s.items.length > 0).map((s) => ({ key: s.key, title: s.title, items: s.items })),
+    state: secs.some((s) => s.state === 'loading') ? 'loading' : secs.some((s) => s.state === 'failed') ? 'failed' : 'ready',
+  });
+  return [
+    fold('decisions', of(['decisions'])),
+    fold('broke', of(['broke'])),
+    fold('finished', of(['finished'])),
+    fold('done', of(['orders', 'system'])),
+  ];
+}
+
+/** Every item the handover lists right now, by key. */
+export function listedKeys(sections: readonly HandoverSection[]): string[] {
+  return sections.flatMap((s) => s.items.map((i) => i.key));
+}
+
+/**
+ * Clearing on its own: once every item the handover has listed has been ACTED on (a verb pressed —
+ * its Open gate or Retry in the queue, Open / Draft update / Reuse in an overlay, an audit entry
+ * read) or RESOLVED (it is no longer listed — the gate was answered, the run archived), the
+ * handover has nothing left to hand over. Never while a section is still being read, and never
+ * before it has listed anything (an empty first fold may only mean the runs have not loaded).
+ */
+export function handoverSettled(
+  sections: readonly HandoverSection[],
+  everListed: readonly string[],
+  acted: readonly string[],
+): boolean {
+  if (everListed.length === 0 || sections.some((s) => s.state === 'loading')) return false;
+  const done = new Set(acted);
+  return listedKeys(sections).every((k) => done.has(k));
 }

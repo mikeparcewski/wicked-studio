@@ -428,9 +428,160 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
   color: var(--ink-muted);
 }
 
+/* ── The handover strip (Home, after an absence): ONE fixed-height line of chips. It never grows
+   with its items — what they are opens in an overlay or is revealed in the Needs You queue. ── */
+.wk-handover {
+  display: flex;
+  align-items: center;
+  gap: 6px 8px;
+  flex-wrap: nowrap;
+  min-width: 0;
+  margin: 0 var(--space-6) var(--space-3);
+  padding: 4px 6px 4px var(--space-3);
+  min-height: 36px;
+  flex-shrink: 0;
+  background: var(--surface-card);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-lg);
+  font-size: var(--text-xs);
+  color: var(--ink-muted);
+  white-space: nowrap;
+  overflow: hidden;
+}
+.wk-handover-label { color: var(--ink-high); font-weight: var(--weight-semi); flex-shrink: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.wk-handover-since { font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--ink-muted); flex-shrink: 0; }
+.wk-handover-sep { color: var(--ink-dim); flex-shrink: 0; }
+.wk-handover-quiet { color: var(--ink-dim); }
+.wk-handover-chip { flex-shrink: 0; padding: 2px 10px; }
+.wk-handover-chip[aria-expanded="true"] { background: var(--accent-wash); border-color: color-mix(in oklab, var(--accent) 45%, transparent); color: var(--ink-high); }
+.wk-handover-chip:disabled { cursor: default; color: var(--ink-dim); border-style: dashed; }
+.wk-handover-count { font-family: var(--font-mono); font-weight: var(--weight-bold); font-variant-numeric: tabular-nums; }
+.wk-handover-dismiss { margin-left: auto; flex-shrink: 0; }
+/* Narrow panes: the label gives way first (it shrinks to nothing), so the chips and
+   Got it keep their line. */
+@media (max-width: 1100px) { .wk-handover-label { display: none; } }
+
+/* ── An anchored overlay: floats over the page (position: fixed, measured from its anchor), so
+   opening it moves nothing. ── */
+.wk-overlay {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  overflow-y: auto;
+  padding: var(--space-3);
+  background: var(--surface-overlay);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-overlay);
+  color: var(--ink-body);
+  font-size: var(--text-xs);
+  --focus-gap: var(--surface-overlay);
+}
+.wk-overlay:focus { outline: none; }
+.wk-overlay:focus-visible { outline: 2px solid transparent; box-shadow: var(--focus-ring), var(--shadow-overlay); }
+.wk-overlay-head {
+  margin: 0;
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-bold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+.wk-overlay-group { display: flex; flex-direction: column; gap: 2px; }
+.wk-overlay-group + .wk-overlay-group { margin-top: var(--space-2); }
+.wk-overlay-subhead { margin: 0; font-size: var(--text-2xs); font-weight: var(--weight-bold); letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-dim); }
+.wk-overlay-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.wk-overlay-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 0;
+  border-top: 1px solid var(--border-subtle);
+  min-width: 0;
+}
+.wk-overlay-item:first-child { border-top: none; padding-top: 2px; }
+.wk-overlay-item-head { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.wk-overlay-item-title { color: var(--ink-high); font-weight: var(--weight-semi); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 1; min-width: 60px; }
+.wk-overlay-item-text { color: var(--ink-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
+.wk-overlay-item-age { color: var(--ink-dim); font-family: var(--font-mono); font-size: var(--text-2xs); flex-shrink: 0; }
+.wk-overlay-item-acts { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.wk-overlay-note { font-family: var(--font-mono); font-size: var(--text-2xs); }
+.wk-overlay-audit {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 2px 10px;
+  margin: 0;
+  padding: 6px 8px;
+  background: var(--surface-base);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+}
+.wk-overlay-audit dt { color: var(--ink-dim); }
+.wk-overlay-audit dd { margin: 0; color: var(--ink-body); overflow-wrap: anywhere; }
+
+/* ── Home header's right edge: All runs, and the standing orders beneath it. ── */
+.wk-home-header-end {
+  margin-left: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  min-width: 0;
+  max-width: 100%;
+}
+/* With orders in force their line is too long to sit beside the verbs: the right edge takes a full
+   header row of its own and holds the line and All runs side by side — one line, not two. */
+.wk-home-header-end:has(.wk-orders--line) {
+  flex: 1 1 100%;
+  flex-direction: row-reverse;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--space-4);
+}
+.wk-orders {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+  font-size: var(--text-2xs);
+  color: var(--ink-muted);
+  white-space: nowrap;
+}
+.wk-orders--line { flex: 1 1 auto; margin-right: auto; }
+.wk-orders-count { color: var(--ink-body); font-weight: var(--weight-semi); flex-shrink: 0; }
+.wk-orders-will { overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 0 1 auto; }
+.wk-orders-sep { color: var(--ink-dim); flex-shrink: 0; }
+.wk-orders-act {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  padding: 2px 0;
+  min-height: var(--control-h-sm);
+  font: inherit;
+  color: var(--accent);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+.wk-orders-act:hover { text-decoration: underline; }
+.wk-orders-act:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-shadow: var(--focus-ring); }
+.wk-orders-act[data-on="true"] { color: var(--status-gate); font-weight: var(--weight-semi); }
+.wk-orders-error { margin: 0; color: var(--status-fail); font-size: var(--text-2xs); overflow: hidden; text-overflow: ellipsis; max-width: 240px; }
+
+/* ── A Needs You row the handover pointed at: a brief accent wash that fades. ── */
+@keyframes wk-reveal {
+  0%, 55% { background: var(--accent-wash); box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--accent) 55%, transparent); }
+  100% { background: transparent; box-shadow: none; }
+}
+.wk-need-row--reveal { animation: wk-reveal 1.8s var(--ease-out) both; }
+
 /* Calm motion only: no press transform, no transitions, for users who ask for less motion. */
 @media (prefers-reduced-motion: reduce) {
   .wk-btn, .wk-chip, .wk-need-act, .wk-need-row, .wk-gate-card { transition: none; }
+  .wk-need-row--reveal { animation: none; background: var(--accent-wash); }
   .wk-btn:active:not(:disabled), .wk-need-act:active:not(:disabled) { transform: none; }
 }
 

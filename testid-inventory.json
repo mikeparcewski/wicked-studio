@@ -10,9 +10,9 @@
   "version": 1,
   "studioVersion": "0.5.14",
   "counts": {
-    "files": 169,
-    "occurrences": 1585,
-    "static": 1378,
+    "files": 170,
+    "occurrences": 1596,
+    "static": 1384,
     "dynamic": 69,
     "computed": 7
   },
@@ -2934,7 +2934,7 @@
       ]
     },
     {
-      "testId": "handover-count",
+      "testId": "handover-chip",
       "files": [
         "src/components/HandoverPanel.tsx"
       ]
@@ -2946,19 +2946,49 @@
       ]
     },
     {
+      "testId": "handover-item",
+      "files": [
+        "src/components/HandoverPanel.tsx"
+      ]
+    },
+    {
+      "testId": "handover-item-audit",
+      "files": [
+        "src/components/HandoverPanel.tsx"
+      ]
+    },
+    {
+      "testId": "handover-item-audit-entry",
+      "files": [
+        "src/components/HandoverPanel.tsx"
+      ]
+    },
+    {
+      "testId": "handover-item-draft",
+      "files": [
+        "src/components/HandoverPanel.tsx"
+      ]
+    },
+    {
+      "testId": "handover-item-open",
+      "files": [
+        "src/components/HandoverPanel.tsx"
+      ]
+    },
+    {
+      "testId": "handover-item-reuse",
+      "files": [
+        "src/components/HandoverPanel.tsx"
+      ]
+    },
+    {
+      "testId": "handover-overlay-group",
+      "files": [
+        "src/components/HandoverPanel.tsx"
+      ]
+    },
+    {
       "testId": "handover-panel",
-      "files": [
-        "src/components/HandoverPanel.tsx"
-      ]
-    },
-    {
-      "testId": "handover-row",
-      "files": [
-        "src/components/HandoverPanel.tsx"
-      ]
-    },
-    {
-      "testId": "handover-section",
       "files": [
         "src/components/HandoverPanel.tsx"
       ]
@@ -5486,7 +5516,8 @@
     {
       "testId": "run-reuse-saved",
       "files": [
-        "src/components/FinishedRunRow.tsx"
+        "src/components/FinishedRunRow.tsx",
+        "src/components/HandoverPanel.tsx"
       ]
     },
     {
@@ -6432,6 +6463,12 @@
     },
     {
       "testId": "standing-orders-preview",
+      "files": [
+        "src/components/StandingOrdersPanel.tsx"
+      ]
+    },
+    {
+      "testId": "standing-orders-summary",
       "files": [
         "src/components/StandingOrdersPanel.tsx"
       ]
@@ -8754,6 +8791,7 @@
       "expression": "testId",
       "files": [
         "src/components/AgeStamp.tsx",
+        "src/components/AnchoredOverlay.tsx",
         "src/components/AppearanceSettings.tsx",
         "src/components/CaptureDrop.tsx",
         "src/components/ChatPanel.tsx",

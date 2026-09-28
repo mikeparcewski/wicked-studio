@@ -5,7 +5,7 @@ import {
   type ParsedStandingOrder,
   type StandingOrdersState,
 } from '../api/standingOrders.js';
-import { awayPreview, ruleWords } from '../board/standingOrders.js';
+import { awayLine, awayPreview, ruleWords } from '../board/standingOrders.js';
 import { useProjectsStore } from '../store/projects.js';
 
 /** The add flow: words → the seat's parse → the person confirms the rule said back. */
@@ -24,6 +24,8 @@ export interface StandingOrders {
   words: (rule: ParsedStandingOrder['rule']) => string;
   /** What the Away switch will do, from the orders in force — shown before it is flipped. */
   preview: string | null;
+  /** The same, in one line's worth: the count and the "will …" clauses. */
+  line: { count: string; will: string } | null;
   setAway: (away: boolean) => Promise<void>;
   parse: (text: string) => Promise<void>;
   confirm: () => Promise<void>;
@@ -47,6 +49,7 @@ export function useStandingOrders(): StandingOrders {
   const words = useCallback((rule: ParsedStandingOrder['rule']) => ruleWords(rule, projectName), [projectName]);
   const orders = state !== null && state !== 'unavailable' ? state.orders : null;
   const preview = useMemo(() => (orders === null ? null : awayPreview(orders, projectName)), [orders, projectName]);
+  const line = useMemo(() => (orders === null ? null : awayLine(orders, projectName)), [orders, projectName]);
 
   /** Re-read the daemon's answer. `keepError`: a write just failed — the read must not erase it. */
   const refresh = useCallback(async (keepError = false) => {
@@ -112,6 +115,7 @@ export function useStandingOrders(): StandingOrders {
     draft,
     words,
     preview,
+    line,
     setAway: (away) => act(() => standingOrdersApi.setAway(away)),
     parse,
     confirm,

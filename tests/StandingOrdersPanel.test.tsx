@@ -110,13 +110,20 @@ describe('StandingOrdersPanel (behaviour 10)', () => {
         rule: { scope: { kind: 'project', projectId: 'alpha' }, trigger: { kind: 'gate', phase: 'plan_approval', band: '0-19', preset: 'bugfix' }, action: 'approve', activeWhen: 'always' } },
     ];
     render(<StandingOrdersPanel />);
+    // ONE line: the count, then what going away does; the full preview + invariant are its tooltip.
+    const panel = await screen.findByTestId('standing-orders-panel');
+    expect(panel).toHaveAttribute('data-variant', 'line');
+    expect(screen.getByTestId('standing-orders-count')).toHaveTextContent('2 orders active');
+    expect(screen.getByTestId('standing-orders-summary')).toHaveTextContent(/^while away: will approve band 0-19 \(LOW\) unit reviews on Alpha;/);
+    expect(panel.getAttribute('title')).toMatch(/No order answers a deliver gate or a high-risk plan approval/);
+    expect(screen.queryByTestId('standing-orders-preview')).toBeNull();
+    // Manage: the full preview, crew's invariant, and every order saying where it came from.
+    fireEvent.click(screen.getByTestId('standing-orders-toggle'));
     const preview = await screen.findByTestId('standing-orders-preview');
     expect(preview).toHaveTextContent('While you are away: 2 orders active: will approve band 0-19 (LOW) unit reviews on Alpha;');
     expect(preview).toHaveTextContent(/deliver gates always wait$/);
     expect(screen.getByTestId('standing-orders-invariant')).toHaveTextContent(/No order answers a deliver gate or a high-risk plan approval/);
     expect(api.setAway).not.toHaveBeenCalled();
-    // The orders made at a gate and from the trust receipt are in the same list, saying so.
-    fireEvent.click(screen.getByTestId('standing-orders-toggle'));
     const origins = screen.getAllByTestId('standing-order-origin').map((e) => e.textContent);
     expect(origins).toEqual(['made at a gate', 'trust receipt']);
   });
@@ -136,6 +143,26 @@ describe('StandingOrdersPanel (behaviour 10)', () => {
     await openPanel();
     expect(await screen.findByTestId('standing-orders-outbox')).toHaveTextContent(/Queued, not sent/i);
     expect(screen.getByTestId('standing-order-queued')).toHaveTextContent('HIGH finding on r1');
+  });
+
+  it('with no orders it is a small chip — "Orders: none · Mark me away" — and Manage opens from it', async () => {
+    render(<StandingOrdersPanel />);
+    const panel = await screen.findByTestId('standing-orders-panel');
+    expect(panel).toHaveAttribute('data-variant', 'chip');
+    expect(panel.textContent).toMatch(/^Orders: none\s*·\s*Mark me away$/);
+    fireEvent.click(screen.getByTestId('standing-orders-toggle'));
+    expect(await screen.findByTestId('standing-orders-manage')).toHaveTextContent(/No standing orders\. Add one in plain words below\./);
+    expect(screen.getByTestId('standing-orders-invariant')).toBeInTheDocument();
+  });
+
+  it('Manage is an overlay: Escape closes it and focus returns to Manage', async () => {
+    render(<StandingOrdersPanel />);
+    const toggle = await screen.findByTestId('standing-orders-toggle');
+    fireEvent.click(toggle);
+    expect(await screen.findByTestId('standing-orders-manage')).toBeInTheDocument();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByTestId('standing-orders-manage')).toBeNull());
+    expect(document.activeElement).toBe(screen.getByTestId('standing-orders-toggle'));
   });
 
   it('a failed read (not a 404) is said, never shown as "no orders"', async () => {
