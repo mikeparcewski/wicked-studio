@@ -13,6 +13,7 @@ import { clearRetryPrefill, confirmModeOf, peekRetryPrefill, type RetryPrefill }
 import { clearSteerPrefill, peekSteerPrefill } from '../store/steerPrefill.js';
 import { setCachedRoster } from '../store/rosterCache.js';
 import { seatStandingWord } from './HealthRailSection.js';
+import { noCarryingSeatReason } from './gateVerdictModel.js';
 import { isSystemWorkflowIn, setCachedWorkflows } from '../store/workflowCache.js';
 import { presetSystemFlag, usePlanCatalog } from '../store/planCatalog.js';
 import { ContextPopover } from './ContextPopover.js';
@@ -118,7 +119,16 @@ function ActivePill({
   );
 }
 
-
+/**
+ * studio#367: the receipt for a message sent to the team at a plan gate — what was sent (clipped)
+ * and where it goes: crew queues an operator inject for the workers' next turn, and the plan gate
+ * stays open for its card to answer.
+ */
+export function teamReceiptLine(text: string): string {
+  const flat = text.replace(/\s+/g, ' ').trim();
+  const clipped = flat.length > 60 ? `${flat.slice(0, 59).trimEnd()}…` : flat;
+  return `✓ Sent to the team: "${clipped}" · queued for their next turn · the plan gate stays open`;
+}
 
 export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOverride, mode, injectTarget, onClearInjectTarget, navigate, lockedProjectId = null }: Props): React.ReactElement {
   const clearGate = useGateStore((s) => s.clearGate);
@@ -154,6 +164,8 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   const [steerText, setSteerText] = useState('');
   const [steering, setSteering] = useState(false);
   const [steerError, setSteerError] = useState<string | null>(null);
+  /** studio#367: the receipt for a team message sent at a plan gate — a cleared box alone read as lost. */
+  const [teamReceipt, setTeamReceipt] = useState<string | null>(null);
   const steerRef = useRef<HTMLTextAreaElement>(null);
 
   // ── Inject mode state ─────────────────────────────────────────────────────
@@ -597,6 +609,8 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   // ── Submit ─────────────────────────────────────────────────────────────────
   async function submit(preflightOverride = false): Promise<void> {
     if (!problem.trim() || selectedClis.size === 0 || submitting) return;
+    // studio#315: Cmd+Enter takes the same refusal as the disabled Send — zero POST /runs.
+    if (noCarryingSeatReason(selectedClis, roster) !== null) return;
     // §7.8 preflight (EC43): a code-shaped intent — an explicit workflow, or
     // the detector reading one from the text — launched with no repo attached
     // cannot produce reviewable work. Warn-and-block: ZERO POST /runs until a
@@ -712,12 +726,14 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     if (!text || !runId) return;
     setSteering(true);
     setSteerError(null);
+    setTeamReceipt(null);
     try {
       // A late join may not know the gate's kind yet: decide it before sending (codex on #352).
       if (planGate.isPlanGate || (planGate.pending && (await isPlanGateNow(runId)))) {
         // D11: a plain message to the team; the plan gate stays open for the card to answer.
         await api.injectMessage(runId, text, 'all');
         setSteerText('');
+        setTeamReceipt(teamReceiptLine(text));
         return;
       }
       const outcome = await commitGateDecision(runId, { approve: true, amend: text });
@@ -778,9 +794,13 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
               style={{ minHeight: '28px', color: 'var(--ink-high)', fontFamily: 'inherit' }}
               data-testid="gate-composer"
               data-mode={planGate.isPlanGate ? 'team-message' : 'steer'}
-              placeholder={planGate.isPlanGate ? 'Message the team… (the plan gate stays open)' : 'Send steering guidance… (approves gate)'}
+              // studio#367: the emptied box carries the receipt where the eye already is (a tall
+              // gate card can push the hint line below the fold); typing replaces it.
+              placeholder={planGate.isPlanGate
+                ? (teamReceipt ?? 'Message the team… (the plan gate stays open)')
+                : 'Send steering guidance… (approves gate)'}
               value={steerText}
-              onChange={(e) => setSteerText(e.target.value)}
+              onChange={(e) => { setSteerText(e.target.value); setTeamReceipt(null); }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
                   e.preventDefault();
@@ -801,14 +821,28 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
               {steering ? '…' : planGate.isPlanGate ? 'Send →' : 'Steer →'}
             </button>
           </div>
-          <p
-            className="text-[10px] font-mono text-center"
-            style={{ color: 'var(--ink-dim)' }}
-          >
-            {planGate.isPlanGate
-              ? 'Message the team · it reaches the next step · Cmd+Enter · Approve, edit or reject the plan on the gate card above'
-              : 'Approve + steer · Cmd+Enter · Use the gate panel above to approve/reject without steering'}
-          </p>
+          {/* studio#367: the receipt takes the hint's own line — the composer never grows, so its
+              box stays on screen under a tall gate card. */}
+          {teamReceipt !== null && planGate.isPlanGate ? (
+            <p
+              data-testid="team-message-receipt"
+              role="status"
+              title={teamReceipt}
+              className="text-[10px] font-mono text-center truncate"
+              style={{ color: 'var(--status-run)' }}
+            >
+              {teamReceipt}
+            </p>
+          ) : (
+            <p
+              className="text-[10px] font-mono text-center"
+              style={{ color: 'var(--ink-dim)' }}
+            >
+              {planGate.isPlanGate
+                ? 'Message the team · it reaches the next step · Cmd+Enter · Approve, edit or reject the plan on the gate card above'
+                : 'Approve + steer · Cmd+Enter · Use the gate panel above to approve/reject without steering'}
+            </p>
+          )}
         </div>
       );
     }
@@ -922,7 +956,11 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
 
   // F-028: an unresolved target on build-kind work disables Send — the reason
   // renders beside the Target-repo control (`launch-target-reason`).
-  const canSubmit = problem.trim().length > 0 && selectedClis.size > 0 && !submitting && !targetRequired;
+  // studio#315 (F-RC2-041): the roster SAYS no selected seat can take the work — every one benched
+  // or not council-eligible. Such a launch fails at distribution ("no eligible seat"), so Send
+  // refuses and names why; a cold roster or an unknown seat is never a refusal.
+  const noSeatReason = noCarryingSeatReason(selectedClis, roster);
+  const canSubmit = problem.trim().length > 0 && selectedClis.size > 0 && !submitting && !targetRequired && noSeatReason === null;
   // A composed plan replaces the workflow, so a detected workflow is no suggestion while one is in hand.
   const showDetection =
     detectedWorkflow !== null && !workflowDismissed && !workflow && !workflowOverride && !selection.composing;
@@ -1343,7 +1381,18 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
       )}
 
       {/* F-A45-006: the daemon SAYS a council would not seat these — its reason, the rail's words. */}
-      {ineligibleSelected.length > 0 && (
+      {noSeatReason !== null && (
+        <p
+          data-testid="launch-no-seat"
+          role="alert"
+          className="text-xs rounded-xl px-4 py-2 font-mono"
+          style={{ background: 'var(--status-fail-dim)', border: '1px solid var(--status-fail)', color: 'var(--status-fail)', margin: 0 }}
+        >
+          Send is off: no selected seat can take this run — {noSeatReason}. Sign a seat in from Settings or select another
+          seat, then send.
+        </p>
+      )}
+      {noSeatReason === null && ineligibleSelected.length > 0 && (
         <div
           data-testid="ineligible-warning"
           className="flex items-center gap-2 text-xs rounded-xl px-4 py-2 font-mono"
@@ -1542,7 +1591,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
         >
           {/* F-089 / F-E2E-035: ONE predicate — the same `canSubmit` that disables Send — so the
               line and the button can never disagree ("Send enabled but Not ready to send"). */}
-          {canSubmit ? 'Ready to send: ' : 'Not ready to send: '}
+          {canSubmit ? 'Ready to send: ' : noSeatReason !== null ? 'Not ready to send (no seat can take it): ' : 'Not ready to send: '}
           <span data-testid="launch-confirm-workflow" style={{ color: 'var(--ink-high)' }}>
             {selection.plan === null
               ? launchWorkflow
@@ -1696,6 +1745,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
           data-testid="launch-submit"
           onClick={() => void submit()}
           disabled={!canSubmit}
+          {...(noSeatReason !== null ? { title: `No selected seat can take this run — ${noSeatReason}` } : {})}
           aria-label="Send"
           className="wk-btn wk-btn--primary wk-btn--lg shrink-0"
         >

@@ -11,8 +11,8 @@
   "studioVersion": "0.5.14",
   "counts": {
     "files": 169,
-    "occurrences": 1582,
-    "static": 1376,
+    "occurrences": 1585,
+    "static": 1378,
     "dynamic": 69,
     "computed": 7
   },
@@ -3255,6 +3255,12 @@
       "testId": "launch-gate",
       "files": [
         "src/components/ContextPopover.tsx"
+      ]
+    },
+    {
+      "testId": "launch-no-seat",
+      "files": [
+        "src/components/ChatInput.tsx"
       ]
     },
     {
@@ -6833,12 +6839,6 @@
       ]
     },
     {
-      "testId": "steering-reassign-benched",
-      "files": [
-        "src/components/ReassignControl.tsx"
-      ]
-    },
-    {
       "testId": "steering-reassign-error",
       "files": [
         "src/components/ReassignControl.tsx"
@@ -6847,7 +6847,8 @@
     {
       "testId": "steering-reassign-none",
       "files": [
-        "src/components/ReassignControl.tsx"
+        "src/components/ReassignControl.tsx",
+        "src/components/SteeringGate.tsx"
       ]
     },
     {
@@ -6876,6 +6877,12 @@
     },
     {
       "testId": "steering-reassign-status",
+      "files": [
+        "src/components/ReassignControl.tsx"
+      ]
+    },
+    {
+      "testId": "steering-reassign-withheld",
       "files": [
         "src/components/ReassignControl.tsx"
       ]
@@ -7198,6 +7205,12 @@
       "testId": "takes-remix-steer",
       "files": [
         "src/components/DocPanel.tsx"
+      ]
+    },
+    {
+      "testId": "team-message-receipt",
+      "files": [
+        "src/components/ChatInput.tsx"
       ]
     },
     {

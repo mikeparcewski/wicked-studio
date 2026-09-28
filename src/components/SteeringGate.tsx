@@ -15,7 +15,7 @@ import { DeliverLift } from './DeliverLift.js';
 import { deliverLift, textCarriesFailure } from './deliverLiftModel.js';
 import { GATE_HASH } from './GateChip.js';
 import { GateVerdict } from './GateVerdict.js';
-import { failedSeatOf, gateVerdictFor, isEscalationGate, isFailureEscalation, isSeatFailure, isRestoredRetry, phaseLabel } from './gateVerdictModel.js';
+import { failedSeatOf, gateVerdictFor, isEscalationGate, isFailureEscalation, isLaunchRefusal, isSeatFailure, isRestoredRetry, phaseLabel } from './gateVerdictModel.js';
 import { IntakePlan, isIntakeGate } from './IntakePlan.js';
 import { ReassignControl } from './ReassignControl.js';
 import { DELIVER_STEP, dedupePromptClauses } from '../board/planModel.js';
@@ -54,6 +54,9 @@ interface Props {
    *  A host that passes `trust` gets the creator seat's track record on the button and the
    *  "make it a rule" offer; without it the card reads no history. */
   trust?: { projectId: string | null; band: string | null; gateKind: string | null; landsDoctrine: boolean };
+  /** Where a deliver approve pushes (studio#368): the run branch (`session.run_branch`) and the
+   *  repository's name, when the host knows them. Absent ⇒ the toast says "the run branch". */
+  delivery?: { branch: string | null; repo: string | null };
   onResolved?: () => void;
 }
 
@@ -122,7 +125,7 @@ function coverageLabel(r: CoverageReport): string {
   return `Coverage: ${pct} · ${r.behavior_bearing.toLocaleString()} nodes · ${r.unaccounted} unaccounted${resolvedPct}`;
 }
 
-export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, clis, workflow, onResolved, autoDeliver, trust }: Props): React.ReactElement {
+export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, clis, workflow, onResolved, autoDeliver, trust, delivery }: Props): React.ReactElement {
   const clearGate = useGateStore((s) => s.clearGate);
   const recordSteering = useSteeringStore((s) => s.record);
   // D10 / D11: a PLAN gate (`plan_approval`) decides the plan, not a unit. The daemon takes an
@@ -156,6 +159,8 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
   // a refused lift is the engine's story, told by the lift block below — another seat cannot fix
   // a rebase conflict), which is why the control is also gated on `lift === null` at the render.
   const escalation = isFailureEscalation(prompt, verdict);
+  // studio#315: a refusal before any work ran is not the seat's — no seat-shaped remedy for it.
+  const launchRefused = useMemo(() => !isPlanGate && isLaunchRefusal(prompt, events, ord), [isPlanGate, prompt, events, ord]);
   // All engine escalation gates that render the four-verb layout (#299 AC1): triage-escalated,
   // floor_failed (repo_checks), and verdict_not_pass (evaluator_verdict). Keyed on
   // `isEscalationGate`; `escalation` (isFailureEscalation) is kept ONLY for the seat-reassign
@@ -396,8 +401,14 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
     }
   }
 
+  // studio#368: an approve here that PUSHES (the deliver unit's gate, or a deliver-lift retry) says
+  // so in its undo toast — the branch (the diff's own, else the run's) and the repository.
+  const pushes = deliverGate || hasLift || trust?.gateKind === 'deliver';
+  const deliverTarget = pushes
+    ? { branch: runDiff?.branch ?? delivery?.branch ?? null, repo: delivery?.repo ?? null }
+    : null;
   const approve = (): Promise<void> =>
-    run(() => commitGateDecision(runId, { approve: true }), { kind: 'approve' });
+    run(() => commitGateDecision(runId, { approve: true }, { deliver: deliverTarget }), { kind: 'approve' });
 
   // D11: approve the plan gate WITH the edited plan (T9's picker, seeded from the held plan).
   const approveEditedPlan = (): Promise<void> => {
@@ -417,7 +428,7 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
   const retry = (): Promise<void> => {
     const text = amend.trim();
     const decision: GateDecision = text === '' ? { approve: true } : { approve: true, amend: text };
-    return run(() => commitGateDecision(runId, decision), { kind: 'approve', ...(text !== '' ? { amend: text } : {}) });
+    return run(() => commitGateDecision(runId, decision, { deliver: deliverTarget }), { kind: 'approve', ...(text !== '' ? { amend: text } : {}) });
   };
 
   const approveWithSteer = (): Promise<void> => {
@@ -425,7 +436,7 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
     // Never steer a gate whose kind is still unknown: it may be a plan gate (codex on #352).
     if (!text || planGate.pending || isPlanGate) return Promise.resolve();
     const decision: GateDecision = { approve: true, amend: text };
-    return run(() => commitGateDecision(runId, decision), { kind: 'approve-with-steer', amend: text });
+    return run(() => commitGateDecision(runId, decision, { deliver: deliverTarget }), { kind: 'approve-with-steer', amend: text });
   };
 
   // The steer text rides REJECT too (DES-RUN-NARRATOR §7 — the reject-note gap):
@@ -717,7 +728,15 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
             seatless / tool-only escalation (failedCli === null) suppresses this lever entirely
             (F-E2E-014): signing a seat in cannot fix a failure no seat was involved in. The steer
             text rides the approve here too. */}
-        {isSeatFailure(escalation, failedCli) && pool !== null && lift === null && (
+        {/* studio#315: a LAUNCH refusal (the environment refused the worker before any work ran)
+            has no seat remedy — the next seat meets the same environment. Say so instead of the row. */}
+        {launchRefused && lift === null && (
+          <p data-testid="steering-reassign-none" data-reason="launch-refusal" className="wk-gate-hint" style={{ margin: '0 0 12px' }}>
+            reassign: not offered — the unit&apos;s launch was refused by its environment before any work ran, and another seat
+            meets the same environment. Fix the cause, then Retry.
+          </p>
+        )}
+        {isSeatFailure(escalation, failedCli) && !launchRefused && pool !== null && lift === null && (
           <ReassignControl
             runId={runId}
             ord={ord}

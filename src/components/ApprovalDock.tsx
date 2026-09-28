@@ -7,6 +7,15 @@ import { autoDeliverOf } from './IntakePlan.js';
 import { NeedsYouCard, useNeedsYouState } from './NeedsYouCard.js';
 import { SteeringGate } from './SteeringGate.js';
 import { runBandOf } from './gateTrustModel.js';
+import { getCachedRepos } from '../store/repoCache.js';
+
+/** The run branch and the repository's name a deliver approve pushes to (studio#368). The repo
+ *  list is read from the session cache only (a gesture fetches it), else the ref stands as said. */
+function deliveryTargetOf(session: { run_branch?: string; repo_ref: string | null }): { branch: string | null; repo: string | null } {
+  const ref = session.repo_ref;
+  const repo = ref === null || ref === '' ? null : getCachedRepos()?.find((r) => r.id === ref || r.name === ref)?.name ?? ref;
+  return { branch: session.run_branch ?? null, repo };
+}
 
 /**
  * The pinned approval dock (DES-RUN-NARRATOR §2, §11.5): anything awaiting the
@@ -88,6 +97,8 @@ export function ApprovalDock({
           {...(view !== undefined
             ? {
                 units: view.units, clis: view.session.clis, autoDeliver: autoDeliverOf(view.session),
+                // studio#368: what a deliver approve pushes, named in its undo toast.
+                delivery: deliveryTargetOf(view.session),
                 // Brainstorm ideas 7 and 8: what the card needs to read the seat's record and offer a rule.
                 trust: {
                   projectId: typeof view.session.project_id === 'string' && view.session.project_id !== 'default' ? view.session.project_id : null,

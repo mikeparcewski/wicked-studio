@@ -3905,7 +3905,8 @@ class W2Handler(SimpleHTTPRequestHandler):
         with state_lock:
             trust_on = state["trust_rules"]
         if trust_on and rid == "r-trust-deliver" and leaf == "diff":
-            self._json(200, {"diff": TRUST_DELIVER_DIFF, "truncated": False, "source": "branch"})
+            self._json(200, {"diff": TRUST_DELIVER_DIFF, "truncated": False, "source": "branch",
+                             "branch": "wicked/r-trust-deliver"})
             return
         # Wave 6 (F-7R2-013): the completed governed test's worktree is GONE, and the wave-6
         # daemon serves the RUN BRANCH vs its base — 200 with `source: "branch"` — instead of the

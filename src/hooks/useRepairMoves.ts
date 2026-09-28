@@ -4,7 +4,7 @@ import { ApiError } from '../api/errors.js';
 import { replayGovernanceDeadletters, type GovernanceReplayOutcome } from '../api/governanceReplay.js';
 import type { RosterSeat, SessionView } from '../api/types.js';
 import { getCachedRoster, setCachedRoster } from '../store/rosterCache.js';
-import { retryLaunchOf } from '../board/repairMoves.js';
+import { retryBlocker, retryLaunchOf } from '../board/repairMoves.js';
 
 /**
  * The repair moves' BEHAVIOUR (studio Wave A, ideas 3 and 5). Every move is two-step where the
@@ -155,6 +155,14 @@ export function useRetryFailed(runs: readonly SessionView[]): {
       }
     }
     for (const [i, v] of list.entries()) {
+      // studio#315: a run no seat can take is named with the reason, never relaunched into the
+      // same distribution failure.
+      const blocked = retryBlocker(v, roster);
+      if (blocked !== null) {
+        failures.push({ id: v.session.id, error: blocked });
+        setState({ phase: 'running', done: i + 1, total: list.length });
+        continue;
+      }
       const plan = retryLaunchOf(v, roster);
       try {
         if (plan.via === 'onboard') await api.rerunOnboarding(plan.repoId);
