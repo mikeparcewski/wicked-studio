@@ -4,6 +4,8 @@ import { MODE_SPECS } from './ModeSwitcher.js';
 import { ageVerdict } from '../board/ageHonesty.js';
 import { AgeStamp } from './AgeStamp.js';
 import { runTitle, runWhenWord, WHEN_TITLE } from './runIdentity.js';
+import { runRowKind } from './runMode.js';
+import { DeliveryChip } from './RunDelivery.js';
 
 interface Props {
   view: SessionView;
@@ -42,8 +44,10 @@ export function RunLink({ view, selectedRunId, onSelect }: Props): React.ReactEl
     || session.status === 'distributing' || session.status === 'planning';
   // A run item names its MODE (DES-UXFIX-001 §1 spine, slice 3 — the F4 fix for
   // "visually identical truncated work items"): `workflow_id` stays internal
-  // (V5) — what the user reads is the spine word + glyph, Chat or Build.
-  const kind = !session.workflow_id || session.workflow_id === 'chat' ? 'chat' : 'build';
+  // (V5) — what the user reads is the spine glyph plus the run's own kind word (studio#230:
+  // Onboarding, Document, Bug fix — not "Build" for every one of them).
+  const rowKind = runRowKind(session);
+  const kind = rowKind.kind;
   const spec = MODE_SPECS[kind];
 
   return (
@@ -59,7 +63,7 @@ export function RunLink({ view, selectedRunId, onSelect }: Props): React.ReactEl
       }`}
     >
       <div className="flex items-center gap-2">
-        <span aria-hidden className="shrink-0 text-[11px]" title={spec.label}>
+        <span aria-hidden className="shrink-0 text-[11px]" title={rowKind.label}>
           {spec.glyph}
         </span>
         {/* The status sits beside the name it describes, and takes a SHAPE per state (a ring
@@ -78,9 +82,11 @@ export function RunLink({ view, selectedRunId, onSelect }: Props): React.ReactEl
         >
           {title}
         </span>
+        {/* studio#230: a delivered run says so on the row, not only on its run page. */}
+        <DeliveryChip view={view} />
       </div>
       <p className="text-[11px] mt-0.5 font-mono" style={{ color: 'var(--ink-dim)' }}>
-        {spec.label} · {unitCount} task{unitCount === 1 ? '' : 's'} ·{' '}
+        {rowKind.label} · {unitCount} task{unitCount === 1 ? '' : 's'} ·{' '}
         {/* Idea 14: an absent or impossible clock is a pill that says so (the row itself opens the run). */}
         {ageVerdict(runClockMs, now).kind === 'ok'
           ? <span data-testid="run-when" title={WHEN_TITLE}>{runWhenWord(attachedAt, now, session.created_at)}</span>

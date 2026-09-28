@@ -99,14 +99,35 @@ export function memoryCoverage(query: { scope_prefix?: string } = {}): Promise<M
 
 /**
  * `POST /memory/retire` — erase a scope SUBTREE (everything filed at or under `scope_prefix`) and
- * report how many rows were removed. Retire is by prefix: there is no single-item delete on the
- * wire, so the caller must be honest that this reaches the whole subtree.
+ * report how many rows were removed. This reaches the whole subtree, so the caller must say so;
+ * to remove ONE row use {@link retireMemoryItem}.
  */
 export function retireMemory(body: { scope_prefix: string }): Promise<{ erased: number }> {
   return apiFetch<{ erased: number }>('/memory/retire', {
     method: 'POST',
     body: JSON.stringify(body),
   });
+}
+
+/**
+ * `POST /memory/retire-item` (studio#206; crew api-types 0.59.0) — erase exactly ONE memory by its
+ * id. 404 = no memory with that id; 501 with `code: "estate_upgrade_required"` = the daemon's estate
+ * cannot erase by id yet (nothing was deleted — see {@link isEraseByIdUnsupported}).
+ */
+export function retireMemoryItem(body: { memory_id: string }): Promise<{ erased: number }> {
+  return apiFetch<{ erased: number }>('/memory/retire-item', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
+/**
+ * True when a one-memory retire was refused because this daemon cannot do it: its estate predates
+ * erase-by-id (a 501), or the crew predates the route (Fastify's bare unknown-route 404). Nothing
+ * was deleted either way — the panel says so and never falls back to a subtree erase.
+ */
+export function isEraseByIdUnsupported(e: unknown): boolean {
+  return (e instanceof ApiError && e.status === 501) || isRouteAbsent(e);
 }
 
 // ── The adoption seam ─────────────────────────────────────────────────────────────────────────

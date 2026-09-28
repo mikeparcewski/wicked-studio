@@ -20,6 +20,8 @@ const {
   listMemories,
   memoryCoverage,
   retireMemory,
+  retireMemoryItem,
+  isEraseByIdUnsupported,
 } = await import('../src/api/memory.js');
 const { ApiError } = await import('../src/api/errors.js');
 type MemoryItem = import('../src/api/memory.js').MemoryItem;
@@ -84,6 +86,20 @@ describe('memoryCoverage + retireMemory', () => {
       method: 'POST',
       body: JSON.stringify({ scope_prefix: 'brain:wicked/doc:ops' }),
     });
+  });
+});
+
+describe('retireMemoryItem (studio#206)', () => {
+  it('POSTs /memory/retire-item with only the memory_id', async () => {
+    apiFetch.mockResolvedValue({ erased: 1 });
+    await expect(retireMemoryItem({ memory_id: 'm1' })).resolves.toEqual({ erased: 1 });
+    expect(apiFetch).toHaveBeenCalledWith('/memory/retire-item', { method: 'POST', body: JSON.stringify({ memory_id: 'm1' }) });
+  });
+
+  it('isEraseByIdUnsupported: the 501 and a crew without the route; a named 404 is a real answer', () => {
+    expect(isEraseByIdUnsupported(new ApiError(501, 'estate_upgrade_required'))).toBe(true);
+    expect(isEraseByIdUnsupported(new ApiError(404, 'Not Found'))).toBe(true);
+    expect(isEraseByIdUnsupported(new ApiError(404, 'no memory m1'))).toBe(false);
   });
 });
 

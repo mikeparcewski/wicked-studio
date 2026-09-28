@@ -46,6 +46,12 @@ function wire(initial: MemoryItem[]): { calls: string[] } {
     const s = String(path);
     calls.push(s);
     if (s === '/memory/coverage') return Promise.resolve({ total: rows.length });
+    if (s === '/memory/retire-item') {
+      const body = JSON.parse(init?.body ?? '{}') as { memory_id: string };
+      const before = rows.length;
+      rows = rows.filter((m) => m.id !== body.memory_id);
+      return before === rows.length ? Promise.reject(new ApiError(404, `no memory ${body.memory_id}`)) : Promise.resolve({ erased: 1 });
+    }
     if (s === '/memory/retire') {
       const body = JSON.parse(init?.body ?? '{}') as { scope_prefix: string };
       const before = rows.length;
@@ -270,5 +276,55 @@ describe('MemoriesPanel — retire is a SUBTREE erase (honest granularity)', () 
     await user.click(within(rows[0]!).getByTestId('memory-retire'));
     await act(async () => { await new Promise<void>((r) => setTimeout(r, 0)); });
     expect(screen.getByTestId('memory-retire-confirm-banner')).toHaveTextContent(/3\s+memor/i);
+  });
+});
+
+// studio#206: the row's Retire removes exactly that memory; its scope siblings survive.
+describe('MemoriesPanel — Retire removes ONE memory (studio#206)', () => {
+  const SIB: MemoryItem = { ...M1, id: 'm1b', content: 'a sibling in the same scope' };
+
+  it('confirms one row, POSTs only its memory_id to /memory/retire-item, and the sibling survives', async () => {
+    const { calls } = wire([M1, SIB, M2]);
+    render(<MemoriesPanel />);
+    const user = userEvent.setup();
+
+    const rows = await screen.findAllByTestId('memory-row');
+    await user.click(within(rows[0]!).getByTestId('memory-retire-one'));
+    const confirm = await screen.findByTestId('memory-retire-confirm-banner');
+    expect(confirm).toHaveTextContent(/Only this one row is erased/);
+    expect(confirm).not.toHaveTextContent(/SUBTREE/);
+    // A one-memory confirm never asks for the scope's count.
+    expect(calls.filter((c) => c.startsWith('/memory/coverage?'))).toEqual([]);
+
+    await user.click(screen.getByTestId('memory-retire-confirm'));
+    await waitFor(() => expect(calls).toContain('/memory/retire-item'));
+    const call = apiFetch.mock.calls.find((c) => c[0] === '/memory/retire-item')!;
+    expect(JSON.parse((call[1] as { body: string }).body)).toEqual({ memory_id: 'm1' });
+    expect(calls).not.toContain('/memory/retire');
+    expect(await screen.findByTestId('memories-note')).toHaveTextContent(/Retired 1 memory from brain:wicked\/doc:ops/);
+    await waitFor(() => {
+      const ids = screen.getAllByTestId('memory-row').map((r) => r.getAttribute('data-memory-id'));
+      expect(ids).toEqual(['m1b', 'm2']);
+    });
+  });
+
+  it('a daemon that cannot erase by id says so, deletes nothing, and never falls back to the subtree', async () => {
+    const { calls } = wire([M1, SIB]);
+    const base = apiFetch.getMockImplementation()!;
+    apiFetch.mockImplementation((path: unknown, init?: { body?: string }) =>
+      String(path) === '/memory/retire-item'
+        ? (calls.push('/memory/retire-item'), Promise.reject(new ApiError(501, 'estate_upgrade_required')))
+        : base(path, init),
+    );
+    render(<MemoriesPanel />);
+    const user = userEvent.setup();
+
+    const rows = await screen.findAllByTestId('memory-row');
+    await user.click(within(rows[0]!).getByTestId('memory-retire-one'));
+    await user.click(await screen.findByTestId('memory-retire-confirm'));
+
+    expect(await screen.findByTestId('memories-note')).toHaveTextContent(/cannot retire a single memory yet.*Nothing was deleted/);
+    expect(calls).not.toContain('/memory/retire');
+    expect(screen.getAllByTestId('memory-row')).toHaveLength(2);
   });
 });

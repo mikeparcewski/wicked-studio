@@ -5,6 +5,8 @@ import {
   memoryCoverage,
   MEMORY_UNSUPPORTED_COPY,
   retireMemory,
+  retireMemoryItem,
+  isEraseByIdUnsupported,
   type MemoryCoverage,
   type MemoryItem,
 } from '../api/memory.js';
@@ -22,9 +24,11 @@ import { KpiBand, KpiGroup, StatTile } from './dashboardKit.js';
  *    wire and a client-side FACET filter — the facet `key=value` TYPEAHEAD (FacetAutocomplete),
  *    whose vocabulary is derived from the loaded set. Each row shows content, tier, scope, and
  *    facets, with a RETIRE action.
- *  - RETIRE is honest about granularity: the wire erases a scope SUBTREE (`POST /memory/retire`
- *    with `scope_prefix`), so retiring a memory reaches everything filed at or under its scope — the
- *    confirm says so, and the note reports how many rows the server erased.
+ *  - RETIRE comes in two widths, each named for what it erases (studio#206: the one row action used
+ *    to erase the row's whole scope subtree). "Retire" removes exactly this memory
+ *    (`POST /memory/retire-item`); "Retire scope…" erases the SUBTREE (`POST /memory/retire` with
+ *    `scope_prefix`) — everything filed at or under the scope — and its confirm says so. A daemon
+ *    that cannot erase one memory is said to, and nothing falls back to the subtree.
  *
  * Every write goes through crew's API (the governed operator path) — estate MCP stays read-only.
  */
@@ -42,6 +46,8 @@ export function MemoriesPanel(): React.ReactElement {
   const [facet, setFacet] = useState<string | null>(null);
   /** The memory a retire confirm is open for, or null. */
   const [retiring, setRetiring] = useState<MemoryItem | null>(null);
+  /** What that confirm erases: this one memory, or its whole scope subtree. */
+  const [retireWidth, setRetireWidth] = useState<'item' | 'scope'>('item');
   /** Scoped memory count for the retire confirm (null = not yet loaded or unavailable). */
   const [retireCount, setRetireCount] = useState<number | null>(null);
   const [retireBusy, setRetireBusy] = useState(false);
@@ -49,7 +55,8 @@ export function MemoriesPanel(): React.ReactElement {
 
   // Keyed on the SCOPE STRING, not the row object: re-selecting the same row (or another row
   // with the same scope) must neither drop the count nor refetch it (studio#324 D1).
-  const retiringScope = retiring?.scope ?? null;
+  // Only a SUBTREE confirm needs the scope's count; a one-memory confirm erases exactly one.
+  const retiringScope = retireWidth === 'scope' ? (retiring?.scope ?? null) : null;
   // Fetch the scoped coverage count whenever the retiring scope changes.
   // The `active` flag discards stale resolutions from a prior scope's in-flight request
   // (two rapid retire clicks would otherwise let the first request's late resolution
@@ -117,6 +124,23 @@ export function MemoriesPanel(): React.ReactElement {
     const target = retiring;
     setRetireBusy(true);
     setNote(null);
+    if (retireWidth === 'item') {
+      void retireMemoryItem({ memory_id: target.id })
+        .then(() => {
+          setRetiring(null);
+          setNote(`Retired 1 memory from ${target.scope === '' ? 'the root scope' : target.scope}. Nothing else in the scope was touched.`);
+          void load(query);
+        })
+        .catch((e: unknown) => {
+          setNote(
+            isEraseByIdUnsupported(e)
+              ? 'This daemon cannot retire a single memory yet (its wicked-estate predates erase-by-id). Nothing was deleted. Upgrade wicked-estate, or use Retire scope… to erase the whole scope.'
+              : `Could not retire the memory: ${e instanceof Error ? e.message : String(e)}`,
+          );
+        })
+        .finally(() => setRetireBusy(false));
+      return;
+    }
     void retireMemory({ scope_prefix: target.scope })
       .then(({ erased }) => {
         setRetiring(null);
@@ -151,7 +175,7 @@ export function MemoriesPanel(): React.ReactElement {
         <div>
           <h2 className="text-sm font-semibold" style={{ color: 'var(--ink-high)' }}>Steering · Memories</h2>
           <p className="mt-1 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
-            The agent memory store — browse and filter what has been remembered, and retire a scope.
+            The agent memory store — browse and filter what has been remembered, and retire a memory or a whole scope.
             Agent-proposed memories are reviewed in the governed-knowledge dashboard.
             {coverageTotal !== null && (
               <span data-testid="memories-coverage" className="ml-1 font-mono" style={{ color: 'var(--ink-dim)' }}>
@@ -252,14 +276,21 @@ export function MemoriesPanel(): React.ReactElement {
           className="flex flex-col gap-2 rounded p-3"
           style={{ background: 'var(--status-fail-dim)', border: '1px solid var(--status-fail)' }}
         >
-          <p className="text-[11px]" style={{ color: 'var(--ink-high)' }}>
-            Retire the scope <span className="font-mono">{retiring.scope}</span>?{' '}
-            {retireCount !== null
-              ? <>{retireCount} {retireCount === 1 ? 'memory' : 'memories'} will be erased — retire covers the whole</>
-              : <>Retire erases the whole</>
-            }{' '}
-            SUBTREE — every memory filed at or under this scope — not just this one row. This cannot be undone.
-          </p>
+          {retireWidth === 'item' ? (
+            <p className="text-[11px]" style={{ color: 'var(--ink-high)' }}>
+              Retire this memory? Only this one row is erased; the rest of{' '}
+              <span className="font-mono">{retiring.scope === '' ? 'the root scope' : retiring.scope}</span> stays. This cannot be undone.
+            </p>
+          ) : (
+            <p className="text-[11px]" style={{ color: 'var(--ink-high)' }}>
+              Retire the scope <span className="font-mono">{retiring.scope}</span>?{' '}
+              {retireCount !== null
+                ? <>{retireCount} {retireCount === 1 ? 'memory' : 'memories'} will be erased — retire covers the whole</>
+                : <>Retire erases the whole</>
+              }{' '}
+              SUBTREE — every memory filed at or under this scope — not just this one row. This cannot be undone.
+            </p>
+          )}
           <div className="flex items-center gap-2">
             <button
               type="button"
@@ -269,7 +300,7 @@ export function MemoriesPanel(): React.ReactElement {
               className="rounded px-2 py-1 text-[10px] font-semibold disabled:opacity-50"
               style={{ color: 'var(--status-fail)', border: '1px solid var(--status-fail)' }}
             >
-              {retireBusy ? 'Retiring…' : `Retire ${retiring.scope}`}
+              {retireBusy ? 'Retiring…' : retireWidth === 'item' ? 'Retire this memory' : `Retire ${retiring.scope}`}
             </button>
             <button
               type="button"
@@ -314,18 +345,32 @@ export function MemoriesPanel(): React.ReactElement {
                 </span>
                 <button
                   type="button"
+                  data-testid="memory-retire-one"
+                  onClick={() => {
+                    setRetireWidth('item');
+                    setRetiring(m);
+                  }}
+                  title="Retire this memory (only this row)"
+                  className="shrink-0 rounded px-2 py-0.5 text-[10px] font-semibold focus:outline-none focus-visible:ring-1"
+                  style={{ color: 'var(--status-fail)', border: '1px solid var(--status-fail-dim)' }}
+                >
+                  Retire
+                </button>
+                <button
+                  type="button"
                   data-testid="memory-retire"
                   onClick={() => {
                     // Clear the count only when the scope actually changes — otherwise the
                     // effect (keyed on the scope) does not re-fire and nothing would refill it.
                     if (retiringScope !== m.scope) setRetireCount(null);
+                    setRetireWidth('scope');
                     setRetiring(m);
                   }}
                   title={`Retire the scope ${m.scope} (erases the whole subtree)`}
-                  className="shrink-0 rounded px-2 py-0.5 text-[10px] font-semibold focus:outline-none focus-visible:ring-1"
-                  style={{ color: 'var(--status-fail)', border: '1px solid var(--status-fail-dim)' }}
+                  className="shrink-0 rounded px-2 py-0.5 text-[10px] focus:outline-none focus-visible:ring-1"
+                  style={{ color: 'var(--ink-dim)', border: '1px solid var(--surface-raised)' }}
                 >
-                  Retire…
+                  Retire scope…
                 </button>
               </div>
               <div className="flex flex-wrap items-center gap-2 text-[10px]">
