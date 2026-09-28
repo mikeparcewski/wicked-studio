@@ -651,6 +651,8 @@ state_lock = threading.Lock()
 rule_post_log: list = []
 # Wave 2a: every POST /runs/:id/gate the fixture received (read over GET /__fixture/gate-posts).
 gate_post_log: list = []
+# Every POST /runs/:id/inject (a message to the team on a live run; GET /__fixture/inject-posts).
+inject_post_log: list = []
 # T9: every POST /plans/preview and POST /runs/:id/plan body (GET /__fixture/plan-posts), the
 # requestIds the "engine" has taken (requestId -> proposal_id), and the runs whose gate moved.
 plan_post_log: list = []
@@ -4542,6 +4544,10 @@ class W2Handler(SimpleHTTPRequestHandler):
             with state_lock:
                 posts = list(gate_post_log)
             return self._json(200, {"posts": posts})
+        if path == "/__fixture/inject-posts":
+            with state_lock:
+                posts = list(inject_post_log)
+            return self._json(200, {"posts": posts})
         if path == "/__fixture/onboard-posts":
             with chat_state_lock:
                 posts = list(onboard_posts)
@@ -4600,6 +4606,7 @@ class W2Handler(SimpleHTTPRequestHandler):
             if body.get("reset_gate_posts"):
                 with state_lock:
                     gate_post_log.clear()
+                    inject_post_log.clear()
             if body.get("reset_rule_posts"):
                 with state_lock:
                     rule_post_log.clear()
@@ -4839,6 +4846,19 @@ class W2Handler(SimpleHTTPRequestHandler):
             if project_dto_on:
                 return self._json(200, {"runId": rid})
             return self._json(201, {"runId": "r-new"})
+        # POST /api/v1/runs/<id>/inject — a message to the team on a live run (crew's route: 400 on a
+        # bad body, 404 for an unknown run, {status: "ok"} once the workers have it).
+        parts = path.split("/")
+        if len(parts) == 6 and parts[3] == "runs" and parts[5] == "inject":
+            rid = urllib.parse.unquote(parts[4])
+            msg, target = body.get("message"), body.get("target")
+            if not isinstance(msg, str) or msg == "" or not isinstance(target, str) or target == "":
+                return self._json(400, {"error": "Invalid request body"})
+            if rid not in {r["session"]["id"] for r in assemble_runs()}:
+                return self._json(404, {"error": "Run not found"})
+            with state_lock:
+                inject_post_log.append({"runId": rid, "body": {"message": msg, "target": target}})
+            return self._json(200, {"status": "ok"})
         # POST /api/v1/runs/<id>/gate — the steering-gate decision (slice H,
         # DES-FEEDBACK-002 §2.3). The fixture accepts it so the answered state
         # ("approved · advancing…") renders truthfully after a triage key or a

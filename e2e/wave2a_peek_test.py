@@ -29,6 +29,7 @@ Env: FEEDBACK_PORT (default 4351). Prints a JSON report; exit 0/1.
 import json
 import os
 import sys
+import urllib.request
 
 from uxfix_fixture import GATE_NOW_PROMPT, HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server
 
@@ -159,6 +160,20 @@ with sync_playwright() as p:
                                   "Jump to the top item that needs you",
                                   "Back to exactly where you were")), text=text[-600:])
     page.keyboard.press("Escape")
+
+    # ── a message to the team on the live run: crew's POST /runs/:id/inject answers ok ──
+    note = "Keep the 5 GB cap from standup"
+    composer = page.get_by_placeholder("Send message to all agents…")
+    composer.fill(note)
+    page.keyboard.press("Control+Enter")
+    check("team-message-sent", wait_ok(
+        page, "() => (document.querySelector('textarea[placeholder=\"Send message to all agents…\"]')?.value ?? 'x') === ''",
+        5000) and "refused" not in (page.evaluate("() => document.body.innerText") or ""),
+        body=page.evaluate("() => document.body.innerText")[-300:])
+    with urllib.request.urlopen(f"{origin}/__fixture/inject-posts", timeout=10) as res:
+        injected = json.loads(res.read())["posts"]
+    check("team-message-on-the-wire", injected == [{"runId": "r1", "body": {"message": note, "target": "all"}}],
+          injected=injected)
 
     # ── the ranked queue (wave 2b) holds focus: P peeks the QUEUE's top item ────
     set_fixture(origin, wave1=True, wave2a_feed=False, wave2b=True, simple_gates=["g1", "g2"],
