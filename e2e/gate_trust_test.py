@@ -128,6 +128,23 @@ with sync_playwright() as p:
         check("deliver-record-on-the-recommended-move", inside and move == "deliver", move=move)
         page.wait_for_timeout(800)
         check("no-offer-for-deliver", page.get_by_test_id("gate-rule-offer").count() == 0)
+        # The deliver gate reads the run branch's diff before anything is pushed (#300): the diffstat
+        # names what the approve pushes, the move says to review it, and the first press only opens it.
+        page.get_by_test_id("deliver-gate-diffstat").wait_for(state="visible", timeout=10000)
+        stat = text(page, "deliver-gate-diffstat")
+        consequence = text(page, "gate-move-consequence")
+        label = text(page, "gate-recommended")
+        check("deliver-diffstat", stat == "2 files changed, +14, −2"
+              and consequence == "Deliver pushes the run branch: 2 files changed, +14, −2"
+              and label.startswith("Review the diff, then deliver"),
+              stat=stat, consequence=consequence, label=label)
+        page.get_by_test_id("gate-recommended").click()
+        page.get_by_test_id("deliver-gate-full-diff").wait_for(state="visible", timeout=5000)
+        page.wait_for_timeout(600)
+        full = page.get_by_test_id("deliver-gate-full-diff").text_content() or ""
+        check("first-press-opens-the-diff", "src/importer/dates.ts" in full
+              and text(page, "gate-recommended").startswith("Deliver")
+              and fixture_posts(origin, "gate-posts") == [], label=text(page, "gate-recommended"))
         page.screenshot(path=str(SHOTS / f"gate-trust-{SKIN}-deliver.png"))
 
     for section in (section_offer, section_codex, section_deliver):

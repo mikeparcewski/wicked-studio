@@ -1031,6 +1031,38 @@ TRUST_GATES = {"r-trust": (2, "def", "Approve unit 2 before it runs: review"),
 TRUST_RUNS = [_trust_run("r-trust", "claude", 2), _trust_run("r-trust-codex", "codex", 2),
               _trust_run("r-trust-deliver", "claude", 3)]
 
+# What r-trust-deliver's deliver gate would push: the run branch against its merge base (crew#305's
+# GET /runs/:id/diff?base=merge-base, `source: "branch"`), so the gate card has a diff to read (#300).
+TRUST_DELIVER_DIFF = """diff --git a/src/importer/dates.ts b/src/importer/dates.ts
+index 3b1c2a0..9f4e7d1 100644
+--- a/src/importer/dates.ts
++++ b/src/importer/dates.ts
+@@ -1,4 +1,7 @@
+ export function parseDate(raw: string): Date {
+-  return new Date(raw);
++  const m = /^(\\d{2})\\/(\\d{2})\\/(\\d{4})$/.exec(raw.trim());
++  if (m) return new Date(Date.UTC(+m[3], +m[2] - 1, +m[1]));
++  const d = new Date(raw);
++  if (Number.isNaN(d.getTime())) throw new Error(`unparseable date: ${raw}`);
++  return d;
+ }
+-
+diff --git a/test/importer/dates.test.ts b/test/importer/dates.test.ts
+new file mode 100644
+--- /dev/null
++++ b/test/importer/dates.test.ts
+@@ -0,0 +1,9 @@
++import { parseDate } from '../../src/importer/dates';
++
++test('reads Northwind day-first dates', () => {
++  expect(parseDate('03/04/2026').toISOString()).toBe('2026-04-03T00:00:00.000Z');
++});
++
++test('refuses a date it cannot read', () => {
++  expect(() => parseDate('soon')).toThrow('unparseable date: soon');
++});
+"""
+
 
 def _trust_events(rid: str) -> list:
     ord_, kind, prompt = TRUST_GATES[rid]
@@ -3866,6 +3898,12 @@ class W2Handler(SimpleHTTPRequestHandler):
             wave1_on = state["wave1"]
         if wave1_on and rid == "r1" and leaf == "diff":
             self._json(200, {"diff": WAVE1_R1_DIFF, "truncated": False, "source": "worktree"})
+            return
+        # Trust at the gate: r-trust-deliver's deliver gate reads the run branch it would push.
+        with state_lock:
+            trust_on = state["trust_rules"]
+        if trust_on and rid == "r-trust-deliver" and leaf == "diff":
+            self._json(200, {"diff": TRUST_DELIVER_DIFF, "truncated": False, "source": "branch"})
             return
         # Wave 6 (F-7R2-013): the completed governed test's worktree is GONE, and the wave-6
         # daemon serves the RUN BRANCH vs its base — 200 with `source: "branch"` — instead of the
