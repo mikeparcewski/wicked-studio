@@ -1,5 +1,5 @@
 import type { CoreEvent, RepoCheckRun, RosterSeat, UnitDenial, WorkUnit, WorktreeChangedPath } from '../api/types.js';
-import { gateUngated, gateUngatedReason } from '../api/wave6-wire.js';
+import { gateUngated, gateUngatedReason, judgeSkippedOf, judgeVerdictOf, type EscalationAction } from '../api/wave6-wire.js';
 import { parseDenial } from './denialCopy.js';
 
 /**
@@ -137,7 +137,12 @@ export interface GateVerdictView {
   criterion: string | null;
   hasDeterministicFloor: boolean;
   deterministicPass: boolean;
+  /** The judge's verdict — `null` when no judge ran, INCLUDING the engine's `"skipped"` token
+   *  (studio#306), which is read into {@link judgeSkipped} instead. */
   agentVerdict: string | null;
+  /** studio#306: the engine SAYS it deliberately ran no judge (`agentVerdict: "skipped"`, the only
+   *  eligible judge seat was the creator's) — and why. `null` otherwise. */
+  judgeSkipped: string | null;
   agentReasoning: string | null;
   evaluatorPass: boolean | null;
   evaluatorPolicies: string[];
@@ -318,7 +323,8 @@ export function gateVerdict(events: readonly CoreEvent[], gateOrd?: number): Gat
   const ord = typeof ev.ord === 'number' ? ev.ord : null;
 
   const hasDeterministicFloor = ev.hasDeterministicFloor === true;
-  const agentVerdict = str(ev.agentVerdict);
+  const agentVerdict = judgeVerdictOf(ev as Record<string, unknown>);
+  const judgeSkipped = judgeSkippedOf(ev as Record<string, unknown>);
   const evaluatorPolicies = strings(ev.evaluatorPolicies);
   const denial = denialOf(ev);
   const combined = ev.combined === true;
@@ -348,6 +354,7 @@ export function gateVerdict(events: readonly CoreEvent[], gateOrd?: number): Gat
     hasDeterministicFloor,
     deterministicPass: ev.deterministicPass === true,
     agentVerdict,
+    judgeSkipped,
     agentReasoning: str(ev.agentReasoning),
     evaluatorPass: typeof ev.evaluatorPass === 'boolean' ? ev.evaluatorPass : null,
     evaluatorPolicies,
@@ -428,16 +435,143 @@ export function isFailureEscalation(prompt: string | undefined, view: GateVerdic
  * (F-7R2-007 / F-E2E-014). `isFailureEscalation` must not widen.
  */
 export function isEscalationGate(prompt: string | undefined, view: GateVerdictView | null): boolean {
-  // Triage spelling (prompt-based — unique across all engine versions)
-  if (prompt !== undefined && /^\s*Unit\s+\d+\s+failed and triage escalated/i.test(prompt)) return true;
+  // Every failure escalation is an escalation (#310 R6): the dead-seat, never-seated and
+  // promptless worker-failure gates render the escalation layout too, one layout per escalation.
+  if (isFailureEscalation(prompt, view)) return true;
   // floor_failed (repo_checks) and verdict_not_pass (evaluator_verdict) — denial-source is
   // authoritative. The same denial source covers the promptless daemon-restart fallback:
   // `gateEvaluated` is emitted before `awaitingHuman`, so the event log always carries the denial
   // when the gate card renders. We do NOT match on the "confirm to retry the phase" prompt text
   // alone — the legacy worktree-guard prompt (pre-wicked-core#431) uses identical wording.
   if (view?.denial?.source === 'repo_checks') return true;
+  // core#469: a floor that did not FINISH is the same escalation, with its own three arms.
+  if (view?.denial?.source === 'repo_checks_timeout') return true;
   if (view?.denial?.source === 'evaluator_verdict') return true;
+  // #310 R9: a host that does not hydrate the run's events (the steering-author and testing panels)
+  // still reads the two escalation prompts no other gate shares. The floor prompt names its floor;
+  // the verdict prompt names the request-changes arm, which the legacy worktree-guard prompt
+  // ("… confirm to retry the phase, or reject …") never does.
+  if (prompt !== undefined) {
+    if (/^\s*Unit\s+\d+\s+failed its deterministic floor\b/i.test(prompt)) return true;
+    if (/^\s*Unit\s+\d+\s+verdict is NOT PASS\b[^]*\brequest\s+changes\b/i.test(prompt)) return true;
+  }
   return false;
+}
+
+/** One escalation arm the card may offer, with what it does said first (core#469 / core#467). */
+export interface EscalationOffer {
+  action: EscalationAction;
+  label: string;
+  consequence: string;
+}
+
+/**
+ * The escalation arms (crew#699, api-types 0.57.0) the engine ACCEPTS at this gate, mirroring its
+ * own refusal checks (`floor_rerun_request` / `adoptable_suggestion` in wicked-core `actor.rs`), so
+ * the card never offers a button the daemon answers with a 409:
+ *  - `extend` / `targeted` / `accept_partial` — the gate's unit was denied because its repo-checks
+ *    floor did not FINISH (`denial.source: 'repo_checks_timeout'`); `accept_partial` only when the
+ *    floor report names a check to waive (one that did not pass, or one that never ran).
+ *  - `accept_suggestion` — an EVALUATOR unit the worktree guard denied, whose edit the engine
+ *    restored and pinned (`worktreeRestored.suggestionRef`), with a creator phase to hand it to.
+ * Empty on every other gate, and when the log that proves the condition is not hydrated.
+ */
+export function escalationOffers(
+  view: GateVerdictView | null,
+  gateOrd: number | undefined,
+  units: readonly WorkUnit[] | undefined,
+  runId: string,
+): EscalationOffer[] {
+  if (view === null || typeof gateOrd !== 'number' || view.ord !== gateOrd || view.outcome !== 'fail') return [];
+  if (view.denial?.source === 'repo_checks_timeout') {
+    const offers: EscalationOffer[] = [
+      {
+        action: 'extend',
+        label: 'Re-run the checks with twice the time',
+        consequence: 'Re-runs every check on the tree as it stands, each under twice its time bound. The seat does not run again; the result goes through the ordinary gate.',
+      },
+      {
+        action: 'targeted',
+        label: 'Re-run with the targeted tests',
+        consequence: "Re-runs the checks with the repo's declared targeted test command in place of the full test set (with none declared, the test set is waived and the floor note says so). The seat does not run again.",
+      },
+    ];
+    const waive = view.floor === null
+      ? []
+      : [...view.floor.checks.filter((c) => !checkOutcome(c).ok).map((c) => c.name), ...view.floor.skipped];
+    if (waive.length > 0) {
+      offers.push({
+        action: 'accept_partial',
+        label: 'Accept what passed',
+        consequence: `Re-runs the checks that passed and waives ${waive.join(', ')} (the checks that did not pass or did not run). The waiver is named in the gate's floor note, so the record shows what was not verified.`,
+      });
+    }
+    return offers;
+  }
+  if (!isRestoredRetry(view, gateOrd)) return [];
+  const ref = view.restore?.suggestionRef ?? null;
+  if (ref === null || view.mutation === null || view.mutation.afterTree === '' || units === undefined) return [];
+  const unit = units.find((u) => u.ord === gateOrd);
+  if (unit === undefined || unit.role !== 'evaluator') return [];
+  const creator = units.filter((u) => u.ord < gateOrd && u.role === 'creator').sort((a, b) => b.ord - a.ord)[0];
+  if (creator === undefined) return [];
+  const paths = (view.restore?.discarded.length ? view.restore.discarded : view.mutation.changed).map((c) => c.path);
+  return [{
+    action: 'accept_suggestion',
+    label: "Adopt the evaluator's edit",
+    consequence: `Applies the evaluator's discarded edit (${paths.length > 0 ? paths.join(', ') : 'the pinned tree'}; ${ref}) to the worktree and sends the run back to ${phaseLabel(runId, units, creator.ord)}, which owns and reworks it; that phase's floor judges the result.`,
+  }];
+}
+
+/**
+ * Where the gate came from (studio#232), in the engine's own word (`awaitingHuman.gateKind`,
+ * wicked-core#456 F7) — never inferred from the prompt. `null` for a kind this card does not
+ * attribute (escalations have their own hint line) and for an engine that names none.
+ */
+export function gateSourceLine(kind: string | null | undefined): string | null {
+  switch (kind) {
+    case 'run_level': return "Run-level gate: the launch's human-confirm setting paused the run before this unit.";
+    case 'def': return 'Workflow-declared gate: the workflow gates this phase, whatever the run-level human-confirm setting says.';
+    case 'deliver': return "Deliver gate: the engine asks before it pushes the run branch.";
+    case 'terminal': return 'Final gate: the workflow always gates its last phase.';
+    default: return null;
+  }
+}
+
+/** The run's latest `awaitingHuman` for `ord`: the engine's gate kind and the unit it reviews. */
+export function gateFrameFor(events: readonly CoreEvent[], ord: number | undefined): { gateKind: string | null; reviewingOrd: number | null } | null {
+  if (typeof ord !== 'number') return null;
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i] as unknown as Record<string, unknown>;
+    if (e['type'] !== 'awaitingHuman' || e['ord'] !== ord) continue;
+    const kind = e['gateKind'];
+    const reviewing = e['reviewingOrd'];
+    return { gateKind: typeof kind === 'string' && kind !== '' ? kind : null, reviewingOrd: typeof reviewing === 'number' ? reviewing : null };
+  }
+  return null;
+}
+
+/**
+ * The finished unit a pre-run gate before `ord` asks the operator to approve (studio#232): the
+ * engine's `reviewingOrd` when it names one, else the latest done unit before `ord`. `null` when
+ * nothing ran before the gate (the intake gate) or the host holds no units.
+ */
+export function reviewedUnitFor(units: readonly WorkUnit[] | undefined, ord: number | undefined, reviewingOrd: number | null): WorkUnit | null {
+  if (units === undefined || typeof ord !== 'number') return null;
+  if (reviewingOrd !== null) return units.find((u) => u.ord === reviewingOrd) ?? null;
+  return units.filter((u) => u.ord < ord && u.status === 'done').sort((a, b) => b.ord - a.ord)[0] ?? null;
+}
+
+/**
+ * The creator phase an approve's steer may target instead of the unit about to run (core#465):
+ * the first creator at or after `ord`, when the unit about to run is NOT itself a creator — the
+ * engine's `amendScope: "creator"` arm. `null` when the choice would not change anything.
+ */
+export function steerScopeTarget(units: readonly WorkUnit[] | undefined, ord: number | undefined): WorkUnit | null {
+  if (units === undefined || typeof ord !== 'number') return null;
+  const cursor = units.find((u) => u.ord === ord);
+  if (cursor === undefined || cursor.role === 'creator') return null;
+  return units.filter((u) => u.ord >= ord && u.role === 'creator').sort((a, b) => a.ord - b.ord)[0] ?? null;
 }
 
 /**

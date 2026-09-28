@@ -10,7 +10,10 @@ import type {
   SessionView,
   StageKind,
   UnitStatus,
+  WorkUnit,
 } from '../api/types.js';
+import { executingOrd } from '../api/run-state.js';
+import { judgeSkippedOf, judgeVerdictOf } from '../api/wave6-wire.js';
 import { useRunEventStore } from '../store/events.js';
 
 /**
@@ -62,7 +65,10 @@ export interface GateEvalRecord {
   criterion: string | null;
   hasDeterministicFloor: boolean;
   deterministicPass: boolean;
+  /** The judge's verdict; `null` when no judge ran — including the engine's `"skipped"` (studio#306). */
   agentVerdict: string | null;
+  /** studio#306: why the engine deliberately ran no judge (`agentVerdict: "skipped"`); `null` otherwise. */
+  judgeSkipped: string | null;
   agentReasoning: string | null;
   evaluatorPass: boolean | null;
   /**
@@ -232,6 +238,7 @@ function gateEvalKey(g: GateEvalRecord): string {
     g.hasDeterministicFloor,
     g.deterministicPass,
     g.agentVerdict,
+    g.judgeSkipped,
     g.agentReasoning,
     g.evaluatorPass,
     g.evaluatorPolicies,
@@ -450,7 +457,8 @@ export function mergeRunModel(snapshot: SessionView, events: readonly CoreEvent[
             criterion: ev.criterion ?? null,
             hasDeterministicFloor: ev.hasDeterministicFloor === true,
             deterministicPass: ev.deterministicPass === true,
-            agentVerdict: ev.agentVerdict ?? null,
+            agentVerdict: judgeVerdictOf(ev as unknown as Record<string, unknown>),
+            judgeSkipped: judgeSkippedOf(ev as unknown as Record<string, unknown>),
             agentReasoning: ev.agentReasoning ?? null,
             evaluatorPass: typeof ev.evaluatorPass === 'boolean' ? ev.evaluatorPass : null,
             // Absent/malformed ⇒ `[]` (reads as ungated). Never infer governance we were not told about.
@@ -803,6 +811,25 @@ const EMPTY_EVENTS: CoreEvent[] = [];
  * @param initial an optional already-fetched snapshot (e.g. the run-list entry) to hydrate
  *   immediately and avoid a loading flash; the hook still re-fetches for authority.
  */
+/**
+ * The unit the run is working on NOW (studio#232, F-034), read off the live log: the latest
+ * `unitExecuting` whose unit has not since finished, been denied, failed, or gated. The snapshot's
+ * `session.unit_ix` lags the feed (the header read "index — unit 1 of 2" while the feed already said
+ * index was done and annotate's output was streaming). An unhydrated log (no `unitExecuting` at
+ * all) falls back to the snapshot cursor.
+ */
+export function liveExecutingOrd(session: AgentSession, units: WorkUnit[], events: readonly CoreEvent[]): number | null {
+  if (session.status !== 'executing') return null;
+  let seen = false;
+  let ord: number | null = null;
+  for (const e of events) {
+    if (typeof e.ord !== 'number') continue;
+    if (e.type === 'unitExecuting') { seen = true; ord = e.ord; continue; }
+    if (e.ord === ord && (e.type === 'unitDone' || e.type === 'unitDenied' || e.type === 'stepFailed' || e.type === 'awaitingHuman')) ord = null;
+  }
+  return seen ? ord : executingOrd(session, units);
+}
+
 export function useRunModel(runId: string, initial?: SessionView): RunModel | null {
   const events = useRunEventStore((s) => s.byRun[runId]) ?? EMPTY_EVENTS;
   const [snapshot, setSnapshot] = useState<SessionView | null>(initial ?? null);

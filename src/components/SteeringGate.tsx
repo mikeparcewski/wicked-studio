@@ -15,7 +15,9 @@ import { DeliverLift } from './DeliverLift.js';
 import { deliverLift, textCarriesFailure } from './deliverLiftModel.js';
 import { GATE_HASH } from './GateChip.js';
 import { GateVerdict } from './GateVerdict.js';
-import { failedSeatOf, gateVerdictFor, isEscalationGate, isFailureEscalation, isLaunchRefusal, isSeatFailure, isRestoredRetry, phaseLabel } from './gateVerdictModel.js';
+import { escalationOffers, failedSeatOf, gateFrameFor, gateSourceLine, gateVerdictFor, isEscalationGate, isFailureEscalation, isLaunchRefusal, isSeatFailure, isRestoredRetry, phaseLabel, reviewedUnitFor, steerScopeTarget, type EscalationOffer } from './gateVerdictModel.js';
+import { GateUnderReview } from './GateUnderReview.js';
+import type { EscalationDecision } from '../api/wave6-wire.js';
 import { IntakePlan, isIntakeGate } from './IntakePlan.js';
 import { ReassignControl } from './ReassignControl.js';
 import { DELIVER_STEP, dedupePromptClauses } from '../board/planModel.js';
@@ -166,6 +168,18 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
   // `isEscalationGate`; `escalation` (isFailureEscalation) is kept ONLY for the seat-reassign
   // lever (F-7R2-007 / F-E2E-014) — that predicate must not widen.
   const escalationGate = isEscalationGate(prompt, verdict);
+  // core#469 / core#467 (crew#699): the escalation arms the engine accepts at THIS gate — the
+  // floor-timeout trio, or adopting a guard-denied evaluator's pinned edit. Empty elsewhere.
+  const offers = useMemo(
+    () => (isPlanGate ? [] : escalationOffers(verdict, ord, units, runId)),
+    [isPlanGate, verdict, ord, units, runId],
+  );
+  // studio#232: the engine's own word on where this gate came from, and which unit it reviews —
+  // off the run's `awaitingHuman` frame, else the live gate record, else the host's trust prop.
+  const storedKind = useGateStore((s) => s.gates[runId]?.gateKind);
+  const frame = useMemo(() => gateFrameFor(events, ord), [events, ord]);
+  const gateKind = frame?.gateKind ?? storedKind ?? trust?.gateKind ?? null;
+  const sourceLine = gateSourceLine(gateKind);
   // Tri-state (#274): a seat, `null` = the unit provably had none, `undefined` = this host cannot
   // tell (no `units` — the steering-author / testing-launch panels) and must not read it as seatless.
   const failedCli = failedSeatOf(units, ord);
@@ -301,6 +315,21 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
     [runId, ord, units, verdict, verdictSummary, escalationGate, hasLift, restoredRetry, isPlanGate, planGate.view, runDiff],
   );
   const hidden = duplicateOf(move, escalationGate);
+  // studio#232: a pre-run gate leads with the finished phase it asks the operator to approve.
+  const reviewed = useMemo(
+    () => (isPlanGate || escalationGate || lift !== null ? null : reviewedUnitFor(units, ord, frame?.reviewingOrd ?? null)),
+    [isPlanGate, escalationGate, lift, units, ord, frame],
+  );
+  const nextUnit = useMemo(() => (typeof ord === 'number' ? (units ?? EMPTY_UNITS).find((u) => u.ord === ord) ?? null : null), [units, ord]);
+  // core#465: at a pre-run gate whose unit is not the creator, the steer may target the creator
+  // phase instead (`amendScope: "creator"`) — the default, so an intake steer reaches the fix.
+  const scopeTarget = useMemo(
+    () => (isPlanGate || escalationGate ? null : steerScopeTarget(units, ord)),
+    [isPlanGate, escalationGate, units, ord],
+  );
+  const [steerScope, setSteerScope] = useState<'creator' | 'cursor'>('creator');
+  // A new gate on the same mounted card starts at the default scope again.
+  useEffect(() => setSteerScope('creator'), [runId, ord]);
 
   // Brainstorm ideas 7 and 8 — trust at the gate. The creator seat's recent record on this kind of
   // step rides the button the card leads with, as neutral text (it never changes the move); and
@@ -435,8 +464,17 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
     const text = amend.trim();
     // Never steer a gate whose kind is still unknown: it may be a plan gate (codex on #352).
     if (!text || planGate.pending || isPlanGate) return Promise.resolve();
-    const decision: GateDecision = { approve: true, amend: text };
+    const decision: GateDecision = scopeTarget !== null && steerScope === 'creator'
+      ? { approve: true, amend: text, amendScope: 'creator' }
+      : { approve: true, amend: text };
     return run(() => commitGateDecision(runId, decision, { deliver: deliverTarget }), { kind: 'approve-with-steer', amend: text });
+  };
+
+  // core#469 / core#467: an escalation arm is approve-shaped and carries nothing else — no note,
+  // no scope (crew#699 answers 400 otherwise). The engine re-checks that it answers this gate.
+  const takeOffer = (offer: EscalationOffer): Promise<void> => {
+    const decision: EscalationDecision = { approve: true, action: offer.action };
+    return run(() => commitGateDecision(runId, decision as unknown as GateDecision), { kind: 'approve' });
   };
 
   // The steer text rides REJECT too (DES-RUN-NARRATOR §7 — the reject-note gap):
@@ -570,6 +608,11 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
         <p data-testid="steering-queued" className="text-xs font-mono mb-2" style={{ color: 'var(--ink-muted)' }}>
           {shared.queued ? 'queued · undo in toast' : shared.busy ? 'answering…' : `${shared.answered} · advancing…`}
         </p>
+      )}
+
+      {/* studio#232: the artifact under review leads the card, then what runs next. */}
+      {reviewed !== null && (
+        <GateUnderReview runId={runId} units={units ?? EMPTY_UNITS} reviewed={reviewed} next={nextUnit} />
       )}
 
       {/* Headline prompt — the actionable part only */}
@@ -717,6 +760,35 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
           disabled={locked}
         />}
 
+        {/* core#465: where "Approve + steer" lands — the fix phase by default, or the unit about to run. */}
+        {scopeTarget !== null && typeof ord === 'number' && (
+          <fieldset data-testid="steer-scope" className="wk-gate-hint mb-3" style={{ border: 'none', padding: 0, margin: '0 0 12px' }}>
+            <legend className="mb-1">The steer goes to:</legend>
+            <label className="mr-3 inline-flex items-center gap-1">
+              <input
+                type="radio"
+                name={`steer-scope-${runId}`}
+                data-testid="steer-scope-creator"
+                checked={steerScope === 'creator'}
+                onChange={() => setSteerScope('creator')}
+                disabled={locked}
+              />
+              {phaseLabel(runId, units ?? EMPTY_UNITS, scopeTarget.ord)} (the creator phase, unit #{scopeTarget.ord})
+            </label>
+            <label className="inline-flex items-center gap-1">
+              <input
+                type="radio"
+                name={`steer-scope-${runId}`}
+                data-testid="steer-scope-cursor"
+                checked={steerScope === 'cursor'}
+                onChange={() => setSteerScope('cursor')}
+                disabled={locked}
+              />
+              {phaseLabel(runId, units ?? EMPTY_UNITS, ord)} (the unit about to run)
+            </label>
+          </fieldset>
+        )}
+
         {error && (
           <p className="text-xs mb-3 font-mono" style={{ color: 'var(--status-fail)' }} data-testid="steering-error">
             {error}
@@ -770,6 +842,28 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
               {moveLabel}
               {recordSpan('gate-recommended')}
             </button>
+          </div>
+        )}
+
+        {/* core#469 / core#467: the escalation arms this gate accepts, each consequence first. */}
+        {offers.length > 0 && (
+          <div data-testid="gate-escalation-offers" className="mb-3 flex flex-col gap-2">
+            {offers.map((o) => (
+              <div key={o.action}>
+                <p data-testid={`gate-escalation-consequence-${o.action}`} className="wk-gate-consequence" style={{ overflowWrap: 'anywhere' }}>
+                  {o.consequence}
+                </p>
+                <button
+                  type="button"
+                  data-testid={`gate-escalation-${o.action}`}
+                  onClick={() => void takeOffer(o)}
+                  disabled={locked}
+                  className="wk-btn wk-btn--secondary"
+                >
+                  {o.label}
+                </button>
+              </div>
+            ))}
           </div>
         )}
 
@@ -1001,8 +1095,10 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
           </p>
         ) : (
           <p className="wk-gate-hint">
-            Workflow-declared gate — run-level human_confirm setting does not apply here.
-            {' '}· a {restoredRetry ? 'retry' : 'approve'} · r reject while this card holds focus
+            {sourceLine !== null && (
+              <span data-testid="gate-source" data-gate-source={gateKind ?? ''}>{sourceLine} · </span>
+            )}
+            a {restoredRetry ? 'retry' : 'approve'} · r reject while this card holds focus
           </p>
         )}
       </div>

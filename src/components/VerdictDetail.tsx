@@ -1,6 +1,6 @@
 import type { CoreEvent, WorkUnit } from '../api/types.js';
 import { useRunEventStore } from '../store/events.js';
-import { gateUngated, gateUngatedReason } from '../api/wave6-wire.js';
+import { gateUngated, gateUngatedReason, judgeSkippedOf, judgeVerdictOf } from '../api/wave6-wire.js';
 import { phaseLabel } from './gateVerdictModel.js';
 
 /**
@@ -40,7 +40,12 @@ interface GateEvalView {
   criterion: string | null;
   hasDeterministicFloor: boolean;
   deterministicPass: boolean;
+  /** `null` when no judge ran — including the engine's `"skipped"` (studio#306). */
   agentVerdict: string | null;
+  /** studio#306: why the engine deliberately ran no judge; `null` otherwise. */
+  judgeSkipped: string | null;
+  /** Whether the judge seat was identity-distinct from the creator; `null` when the frame does not say. */
+  judgeDistinct: boolean | null;
   agentReasoning: string | null;
   evaluatorPass: boolean | null;
   evaluatorPolicies: string[];
@@ -59,7 +64,9 @@ function toView(ev: CoreEvent): GateEvalView {
     criterion: typeof ev.criterion === 'string' ? ev.criterion : null,
     hasDeterministicFloor: ev.hasDeterministicFloor === true,
     deterministicPass: ev.deterministicPass === true,
-    agentVerdict: typeof ev.agentVerdict === 'string' ? ev.agentVerdict : null,
+    agentVerdict: judgeVerdictOf(ev as unknown as Record<string, unknown>),
+    judgeSkipped: judgeSkippedOf(ev as unknown as Record<string, unknown>),
+    judgeDistinct: typeof (ev as unknown as Record<string, unknown>)['judgeDistinct'] === 'boolean' ? ((ev as unknown as Record<string, unknown>)['judgeDistinct'] as boolean) : null,
     agentReasoning: typeof ev.agentReasoning === 'string' ? ev.agentReasoning : null,
     evaluatorPass: typeof ev.evaluatorPass === 'boolean' ? ev.evaluatorPass : null,
     evaluatorPolicies: Array.isArray(ev.evaluatorPolicies)
@@ -135,6 +142,17 @@ export function VerdictDetail({ runId, units }: Props): React.ReactElement {
         <p className="text-xs" style={{ color: 'var(--ink-body)' }}>
           <span className="font-mono font-semibold">{deciding.agentVerdict}</span>
           {deciding.agentReasoning !== null && <span> — {deciding.agentReasoning}</span>}
+        </p>
+      )}
+      {deciding.judgeSkipped !== null && (
+        <p
+          className="text-xs font-mono"
+          data-testid="verdict-judge-skipped"
+          data-judge-distinct={deciding.judgeDistinct === null ? 'unknown' : String(deciding.judgeDistinct)}
+          style={{ color: 'var(--status-gate)' }}
+        >
+          judge skipped — {deciding.judgeSkipped}
+          {deciding.judgeDistinct === false ? ' · judgeDistinct: false' : ''}
         </p>
       )}
       {deciding.agentVerdict === null && deciding.agentReasoning !== null && (

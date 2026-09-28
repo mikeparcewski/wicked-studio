@@ -10,10 +10,10 @@
   "version": 1,
   "studioVersion": "0.5.14",
   "counts": {
-    "files": 170,
-    "occurrences": 1599,
-    "static": 1386,
-    "dynamic": 69,
+    "files": 171,
+    "occurrences": 1614,
+    "static": 1399,
+    "dynamic": 71,
     "computed": 7
   },
   "static": [
@@ -2502,6 +2502,12 @@
       ]
     },
     {
+      "testId": "gate-escalation-offers",
+      "files": [
+        "src/components/SteeringGate.tsx"
+      ]
+    },
+    {
       "testId": "gate-inbox",
       "files": [
         "src/components/CenterDashboard.tsx"
@@ -2535,6 +2541,12 @@
       "testId": "gate-move-consequence",
       "files": [
         "src/components/SteeringGate.tsx"
+      ]
+    },
+    {
+      "testId": "gate-next",
+      "files": [
+        "src/components/GateUnderReview.tsx"
       ]
     },
     {
@@ -2610,6 +2622,12 @@
       ]
     },
     {
+      "testId": "gate-source",
+      "files": [
+        "src/components/SteeringGate.tsx"
+      ]
+    },
+    {
       "testId": "gate-toast",
       "files": [
         "src/components/GateNotifications.tsx"
@@ -2625,6 +2643,30 @@
       "testId": "gate-track-record",
       "files": [
         "src/components/SteeringGate.tsx"
+      ]
+    },
+    {
+      "testId": "gate-under-review",
+      "files": [
+        "src/components/GateUnderReview.tsx"
+      ]
+    },
+    {
+      "testId": "gate-under-review-note",
+      "files": [
+        "src/components/GateUnderReview.tsx"
+      ]
+    },
+    {
+      "testId": "gate-under-review-output",
+      "files": [
+        "src/components/GateUnderReview.tsx"
+      ]
+    },
+    {
+      "testId": "gate-under-review-toggle",
+      "files": [
+        "src/components/GateUnderReview.tsx"
       ]
     },
     {
@@ -2677,6 +2719,12 @@
     },
     {
       "testId": "gate-verdict-judge-seat",
+      "files": [
+        "src/components/GateVerdict.tsx"
+      ]
+    },
+    {
+      "testId": "gate-verdict-judge-skipped",
       "files": [
         "src/components/GateVerdict.tsx"
       ]
@@ -3483,6 +3531,12 @@
     },
     {
       "testId": "ledger-denial",
+      "files": [
+        "src/components/DecisionsLedger.tsx"
+      ]
+    },
+    {
+      "testId": "ledger-judge-skipped",
       "files": [
         "src/components/DecisionsLedger.tsx"
       ]
@@ -6516,6 +6570,24 @@
       ]
     },
     {
+      "testId": "steer-scope",
+      "files": [
+        "src/components/SteeringGate.tsx"
+      ]
+    },
+    {
+      "testId": "steer-scope-creator",
+      "files": [
+        "src/components/SteeringGate.tsx"
+      ]
+    },
+    {
+      "testId": "steer-scope-cursor",
+      "files": [
+        "src/components/SteeringGate.tsx"
+      ]
+    },
+    {
       "testId": "steering-actions",
       "files": [
         "src/components/SteeringGate.tsx"
@@ -8046,6 +8118,12 @@
       ]
     },
     {
+      "testId": "verdict-judge-skipped",
+      "files": [
+        "src/components/VerdictDetail.tsx"
+      ]
+    },
+    {
       "testId": "verdict-ungated",
       "files": [
         "src/components/VerdictDetail.tsx"
@@ -8614,6 +8692,18 @@
       "pattern": "gate-error-*",
       "files": [
         "src/components/GateChip.tsx"
+      ]
+    },
+    {
+      "pattern": "gate-escalation-*",
+      "files": [
+        "src/components/SteeringGate.tsx"
+      ]
+    },
+    {
+      "pattern": "gate-escalation-consequence-*",
+      "files": [
+        "src/components/SteeringGate.tsx"
       ]
     },
     {

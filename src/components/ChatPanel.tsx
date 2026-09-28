@@ -4,7 +4,7 @@ import { api, downloadRunEvidence } from '../api/client.js';
 import { useGlobalShortcuts, type ShortcutEntry } from '../hooks/useGlobalShortcuts.js';
 import { usePlacePanel } from '../hooks/usePlacePanel.js';
 import type { SessionView, WorkUnit } from '../api/types.js';
-import { executingOrd } from '../api/run-state.js';
+import { liveExecutingOrd } from '../hooks/useRunModel.js';
 import { useRunEventStore } from '../store/events.js';
 import { useRuntimeStore, type CouncilStatus } from '../store/runtime.js';
 import { setRetryPrefill } from '../store/retryPrefill.js';
@@ -831,9 +831,10 @@ function RunChat({
   // `ord` order is what `unit_ix` indexes into, so both the render order and the cursor derive from
   // it. Memoized so neither reruns while `units` is unchanged (PR #179 review).
   const ordered = useMemo(() => [...units].sort((a, b) => a.ord - b.ord), [units]);
-  const executingUnitOrd = useMemo(() => executingOrd(session, units), [session, units]);
   const log = useRuntimeStore((s) => s.logs[session.id]) ?? [];
   const events = useRunEventStore((s) => s.byRun[session.id]) ?? EMPTY_EVENTS_FOR_NARRATOR;
+  // studio#232: the working unit is the live log's, not the lagging snapshot cursor's.
+  const executingUnitOrd = useMemo(() => liveExecutingOrd(session, units, events), [session, units, events]);
   // Brainstorm idea 6: "Rerun from here" on the breadcrumb, while the run is paused at a gate.
   const rerun = useRerunFromHere(view);
 
