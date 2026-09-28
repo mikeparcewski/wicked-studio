@@ -31,15 +31,31 @@ export function consequenceRank(c: ProposalConsequence): number {
   return ORDER[c];
 }
 
-/** A member row's line: the consequence of accepting it, first. */
+/** What a capture run filed a row as (behaviour 8, crew's capture brief: `payload.capture`): an
+ *  intent, a decision or a memory is a memory proposal; a rule is a policy proposal. */
+export type CaptureClass = 'intent' | 'decision' | 'memory' | 'rule';
+
+export function captureClass(p: Proposal): CaptureClass | null {
+  const cls = typeof p.payload === 'object' && p.payload !== null ? (p.payload as Record<string, unknown>).capture : undefined;
+  if (p.kind_type.startsWith('policy:')) return cls === 'rule' ? 'rule' : null;
+  return cls === 'intent' || cls === 'decision' || cls === 'memory' ? cls : null;
+}
+
+/** A member row's line: the consequence of accepting it, first — and, for a row a capture filed,
+ *  what the team filed it as. */
 export function proposalConsequenceLine(p: Proposal): string {
   const c = proposalConsequence(p);
-  if (c === 'memory') return 'Memory only — adds a memory; enforcement unchanged';
+  const captured = captureClass(p);
+  if (c === 'memory') {
+    return captured !== null && captured !== 'rule'
+      ? `Memory only — a captured ${captured}: adds a memory; enforcement unchanged`
+      : 'Memory only — adds a memory; enforcement unchanged';
+  }
   if (c === 'enforcement') {
     const type = policySteeringType(p);
     const sev = policyPayload(p).severity;
     const what = `${type !== null ? `a ${type} rule` : 'a steering rule'}${sev !== null ? ` (${sev})` : ''}`;
-    return `Changes enforcement — lands ${what}`;
+    return `Changes enforcement — lands ${what}${captured === 'rule' ? ' from your capture' : ''}`;
   }
   return `Unknown kind "${p.kind_type}" — review it`;
 }

@@ -137,10 +137,14 @@ export function useNeedsQueue(flat: NeedRow[], navigate: Navigate, now: number):
         // confirm and then the undo window.
         const group = rowsRef.current.find((r) => r.groupKey === 'proposal' && r.members !== undefined);
         const members = group?.members ?? [];
-        const items = a.ids.map((id) => ({
-          id,
-          subject: members.find((m) => m.proposal?.id === id)?.subject ?? id,
-        }));
+        const items = a.ids.map((id) => {
+          const m = members.find((mm) => mm.proposal?.id === id);
+          return {
+            id,
+            subject: m?.subject ?? id,
+            captured: m?.proposal?.captured === true,
+          };
+        });
         openAccept(items, Math.max(0, members.length - items.length));
         return;
       }
