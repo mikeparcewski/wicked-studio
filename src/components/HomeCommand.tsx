@@ -45,12 +45,10 @@ import { humanTitle } from './runIdentity.js';
 
 // ── The creation verbs + Ask ──────────────────────────────────────────────────
 
-const VERB_CSS: React.CSSProperties = {
-  background: 'transparent', color: 'var(--ink-muted)',
-  border: '1px solid var(--surface-raised)', borderRadius: 'var(--radius-md)',
-  padding: '6px 12px', fontSize: 'var(--text-xs)', fontWeight: 'var(--weight-semi)',
-  cursor: 'pointer', whiteSpace: 'nowrap', textDecoration: 'none', font: 'inherit',
-};
+/** The creation verbs (styles/components.css): Do Work is the page's one primary, the other
+ *  verbs are secondary, Ask is an accent door. The welcome's `prominent` verbs are the large size. */
+const verbClass = (variant: 'primary' | 'secondary' | 'link', prominent: boolean): string =>
+  `wk-btn wk-btn--${variant}${prominent ? ' wk-btn--lg' : ''}`;
 
 export function HomeVerbs({ navigate, onOpenAsk, prominent = false, runs }: {
   navigate: Navigate;
@@ -61,13 +59,13 @@ export function HomeVerbs({ navigate, onOpenAsk, prominent = false, runs }: {
   prominent?: boolean;
 }): React.ReactElement {
   const [showCreate, setShowCreate] = useState(false);
-  const verb = (label: string, path: string, testId: string): React.ReactElement => (
+  const verb = (label: string, path: string, testId: string, variant: 'primary' | 'secondary' = 'secondary'): React.ReactElement => (
     <a
       key={testId}
       href={path}
       data-testid={testId}
       onClick={(e) => { e.preventDefault(); navigate(path); }}
-      style={{ ...VERB_CSS, ...(prominent ? { padding: '10px 16px', fontSize: 'var(--text-sm)' } : {}) }}
+      className={verbClass(variant, prominent)}
     >
       {label}
     </a>
@@ -77,14 +75,14 @@ export function HomeVerbs({ navigate, onOpenAsk, prominent = false, runs }: {
       data-testid="home-verbs"
       style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}
     >
-      {verb('Do Work', '/runs/new', 'home-verb-work')}
+      {verb('Do Work', '/runs/new', 'home-verb-work', 'primary')}
       {/* Behaviour 8: capture where you already are — what it files lands in Needs You below. */}
       {runs !== undefined && !prominent && <CaptureDrop runs={runs} />}
       <button
         type="button"
         data-testid="home-verb-project"
         onClick={() => setShowCreate(true)}
-        style={{ ...VERB_CSS, ...(prominent ? { padding: '10px 16px', fontSize: 'var(--text-sm)' } : {}) }}
+        className={verbClass('secondary', prominent)}
       >
         New project
       </button>
@@ -100,11 +98,7 @@ export function HomeVerbs({ navigate, onOpenAsk, prominent = false, runs }: {
         type="button"
         data-testid="home-ask"
         onClick={onOpenAsk}
-        style={{
-          ...VERB_CSS,
-          color: 'var(--accent)', borderColor: 'var(--accent-subtle)',
-          ...(prominent ? { padding: '10px 16px', fontSize: 'var(--text-sm)' } : {}),
-        }}
+        className={verbClass('link', prominent)}
         title="Ask across your runs, repos and stores — agents with estate access answer (Ctrl/⌘+Shift+A)"
       >
         Ask about your work…

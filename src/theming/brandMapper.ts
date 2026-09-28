@@ -94,8 +94,8 @@ export interface Rgb {
 // because §2.11 bans raw color strings outside the token files. If tokens.css
 // moves these, move them here (the unit suite pins the pairing).
 
-/** `--_surface-2` — the dark card surface (#1a1a26 in tokens.css §2.3). */
-export const SURFACE_CARD_RGB: Rgb = { r: 26, g: 26, b: 38 };
+/** `--_surface-2` — the dark card surface (#151922 in tokens.css §2.3). */
+export const SURFACE_CARD_RGB: Rgb = { r: 21, g: 25, b: 34 };
 
 /** §2.6's status trio: full (not -dim) variants, as HSL numbers. */
 export const STATUS_COLORS = [
@@ -326,10 +326,10 @@ export function mapBrandTheme(theme: BrandPalette): BrandTokenOverrides {
     adjustments.push({
       constraint: 'source-fallback',
       original: `primary=${String(theme.primary ?? null)}, secondary=${String(theme.secondary ?? null)}`,
-      adjusted: 'accent 258 72% 62% (default)',
+      adjusted: 'accent 230 84% 72% (default)',
       reason: 'No usable brand color was extracted from the source — the default accent stands.',
     });
-    return { accent_h: 258, accent_s: 72, accent_l: 62, logo_url: logoRaw, adjustments };
+    return { accent_h: 230, accent_s: 84, accent_l: 72, logo_url: logoRaw, adjustments };
   }
 
   let { h, s, l } = rgbToHsl(src);

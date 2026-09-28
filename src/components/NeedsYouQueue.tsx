@@ -37,7 +37,7 @@ const CSS = {
   row: {
     display: 'flex', alignItems: 'baseline', gap: '8px', minWidth: 0,
     padding: '7px 10px',
-    borderBottom: '1px solid var(--surface-raised)',
+    borderBottom: '1px solid var(--border-subtle)',
   },
   subject: {
     fontSize: 'var(--text-xs)', fontWeight: 'var(--weight-semi)', color: 'var(--ink-high)',
@@ -51,12 +51,6 @@ const CSS = {
   age: {
     fontSize: 'var(--text-2xs)', fontFamily: 'var(--font-mono)', color: 'var(--ink-dim)',
     flexShrink: 0,
-  },
-  act: {
-    fontSize: 'var(--text-2xs)', fontFamily: 'var(--font-mono)', fontWeight: 'var(--weight-semi)',
-    color: 'var(--accent)', textDecoration: 'none', whiteSpace: 'nowrap', flexShrink: 0,
-    border: '1px solid var(--surface-raised)', borderRadius: 'var(--radius-md)',
-    padding: '2px 8px', background: 'none', cursor: 'pointer', font: 'inherit',
   },
 } as const satisfies Record<string, React.CSSProperties>;
 
@@ -87,14 +81,14 @@ export function NeedsYouQueue({ queue, runs, navigate, now, variant = 'inline' }
           onClick={(e) => { e.preventDefault(); queue.act(a); }}
           data-testid="need-act"
           data-act="open"
-          style={CSS.act}
+          className="wk-need-act"
         >
           {a.label}
         </a>
       );
     }
     return (
-      <button type="button" data-testid="need-act" data-act={a.kind} onClick={() => queue.act(a)} style={CSS.act}>
+      <button type="button" data-testid="need-act" data-act={a.kind} onClick={() => queue.act(a)} className="wk-need-act">
         {a.label}
       </button>
     );
@@ -118,7 +112,7 @@ export function NeedsYouQueue({ queue, runs, navigate, now, variant = 'inline' }
           ? b.failures.map((f) => `${f.id}: ${f.error}`).join('\n')
           : b.phase === 'idle' ? `${consequence} — one run per repo, each builds that repo's code graph` : undefined}
         onClick={() => queue.act(a)}
-        style={{ ...CSS.act, ...(b.phase !== 'idle' ? { cursor: 'default', color: 'var(--ink-muted)' } : {}) }}
+        className="wk-need-act"
       >
         {label}
       </button>
@@ -141,7 +135,7 @@ export function NeedsYouQueue({ queue, runs, navigate, now, variant = 'inline' }
         disabled={s.phase === 'sending'}
         title={s.phase === 'idle' ? 'Preview exactly which memory proposals would be accepted' : undefined}
         onClick={() => (s.phase === 'queued' ? queue.accept.undo() : queue.act(a))}
-        style={{ ...CSS.act, ...(s.phase === 'sending' ? { cursor: 'default', color: 'var(--ink-muted)' } : {}) }}
+        className="wk-need-act"
       >
         {label}
       </button>
@@ -169,10 +163,10 @@ export function NeedsYouQueue({ queue, runs, navigate, now, variant = 'inline' }
           ))}
         </ul>
         <span style={{ display: 'flex', gap: '6px' }}>
-          <button type="button" data-testid="need-accept-confirm" onClick={queue.accept.confirm} style={CSS.act}>
+          <button type="button" data-testid="need-accept-confirm" onClick={queue.accept.confirm} className="wk-need-act">
             {`Accept these ${s.items.length}`}
           </button>
-          <button type="button" data-testid="need-accept-cancel" onClick={queue.accept.cancel} style={{ ...CSS.act, color: 'var(--ink-muted)' }}>
+          <button type="button" data-testid="need-accept-cancel" onClick={queue.accept.cancel} className="wk-need-act" style={{ color: 'var(--ink-muted)' }}>
             Cancel
           </button>
         </span>
@@ -189,12 +183,12 @@ export function NeedsYouQueue({ queue, runs, navigate, now, variant = 'inline' }
       <div data-testid="need-members-pager" data-page={m.page} style={{ ...CSS.row, paddingLeft: '27px' }}>
         <span style={{ ...CSS.age, flex: 1 }}>{`Showing ${m.from}–${m.to} of ${m.total}`}</span>
         {m.page > 0 && (
-          <button type="button" data-testid="need-page-prev" onClick={() => queue.setPage(row.key, m.page - 1)} style={CSS.act}>
+          <button type="button" data-testid="need-page-prev" onClick={() => queue.setPage(row.key, m.page - 1)} className="wk-need-act">
             ‹ Previous
           </button>
         )}
         {m.page < m.pages - 1 && (
-          <button type="button" data-testid="need-page-next" onClick={() => queue.setPage(row.key, m.page + 1)} style={CSS.act}>
+          <button type="button" data-testid="need-page-next" onClick={() => queue.setPage(row.key, m.page + 1)} className="wk-need-act">
             {`Next ${next} ›`}
           </button>
         )}
@@ -216,13 +210,13 @@ export function NeedsYouQueue({ queue, runs, navigate, now, variant = 'inline' }
         data-queue-item={row.key}
         data-kbd-selected={selected ? 'true' : undefined}
         tabIndex={-1}
-        // Severity stripe (command-deck redesign): a glowing left edge colored by the row's
-        // tone, so what needs you reads by color at a glance (gate/failed/stranded/…).
+        className="wk-need-row"
+        // Severity stripe (command-deck redesign): a left edge colored by the row's tone, so what
+        // needs you reads by color at a glance (gate/failed/stranded/…); the glyph repeats it.
         style={{
           ...CSS.row,
-          borderLeft: `3px solid ${TONE_COLOR[row.tone]}`,
-          paddingLeft: testId === 'need-member' ? '27px' : '9px',
-          boxShadow: `inset 4px 0 10px -6px ${TONE_COLOR[row.tone]}`,
+          borderLeft: `2px solid ${TONE_COLOR[row.tone]}`,
+          paddingLeft: testId === 'need-member' ? '28px' : '10px',
           outline: selected ? '1px solid var(--accent)' : 'none',
           outlineOffset: '-1px',
           background: selected ? 'var(--surface-raised)' : undefined,
@@ -243,7 +237,7 @@ export function NeedsYouQueue({ queue, runs, navigate, now, variant = 'inline' }
         )}
         {/* A batch move's line IS its consequence: it wraps rather than truncate (idea 3). */}
         <span data-testid="need-line" title={row.text} style={{
-          ...CSS.line, color: TONE_COLOR[row.tone],
+          ...CSS.line,
           ...(row.action.kind === 'batch-onboard' || row.action.kind === 'accept-memory' ? { whiteSpace: 'normal' } : {}),
         }}>
           {row.text}
@@ -264,7 +258,7 @@ export function NeedsYouQueue({ queue, runs, navigate, now, variant = 'inline' }
             data-testid="need-group-toggle"
             aria-expanded={open}
             onClick={() => queue.toggle(row.key)}
-            style={CSS.act}
+            className="wk-need-act"
           >
             {open ? 'Collapse ▴' : 'Expand ▾'}
           </button>
@@ -286,7 +280,7 @@ export function NeedsYouQueue({ queue, runs, navigate, now, variant = 'inline' }
       data-skin-variant={variant}
       style={{
         flex: variant === 'rail' ? '1 1 auto' : '1.4 1 0', minWidth: 0, display: 'flex', flexDirection: 'column',
-        background: 'var(--surface-card)', border: '1px solid var(--surface-raised)',
+        background: 'var(--surface-card)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-card)',
         borderRadius: 'var(--radius-lg)', overflow: 'hidden', outline: 'none',
       }}
     >
@@ -313,7 +307,7 @@ export function NeedsYouQueue({ queue, runs, navigate, now, variant = 'inline' }
             type="button"
             data-testid="need-focus-show-all"
             onClick={() => useFocusLockStore.getState().setOn(false)}
-            style={CSS.act}
+            className="wk-need-act"
           >
             Show all
           </button>

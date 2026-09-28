@@ -11,14 +11,15 @@
  */
 
 :root {
-  /* ── Surface ramp (§2.3) — cold blue undertone (hue ≈ 240°): a serious tool,
-     a base the violet/indigo accent sits on without fighting. Pure #000 was
-     rejected — it collapses depth cues and hides the 2px status bar. */
-  --_surface-0: #09090f;   /* deepest — page background */
-  --_surface-1: #11111a;   /* rail, sidebar backgrounds */
-  --_surface-2: #1a1a26;   /* card backgrounds */
-  --_surface-3: #242433;   /* raised elements, dropdowns */
-  --_surface-4: #2e2e40;   /* overlays, popovers */
+  /* ── Surface ramp (§2.3) — a slate-ink ramp with a cool blue bias (hue ≈ 222°), not flat
+     grey: each step lifts ~5% lightness so page → rail → card → raised → overlay read as
+     layers even before borders and shadows. Pure #000 was rejected — it collapses depth cues
+     and hides the 2px status bar. (brandMapper.ts mirrors --_surface-2 numerically.) */
+  --_surface-0: #0a0c11;   /* deepest — page background */
+  --_surface-1: #0f1218;   /* rail, sidebar backgrounds */
+  --_surface-2: #151922;   /* card backgrounds */
+  --_surface-3: #1c212c;   /* raised elements, dropdowns, hairline borders */
+  --_surface-4: #252b38;   /* overlays, popovers */
 
   --surface-base:    var(--_surface-0);  /* page bg */
   --surface-rail:    var(--_surface-1);  /* rail, chrome */
@@ -26,45 +27,68 @@
   --surface-raised:  var(--_surface-3);  /* dropdowns, chip popups */
   --surface-overlay: var(--_surface-4);  /* modals, tooltips */
 
-  /* ── Ink ramp (§2.4) ── */
-  --_ink-a35: rgba(255, 255, 255, 0.35);
-  --_ink-a55: rgba(255, 255, 255, 0.55);
-  --_ink-a80: rgba(255, 255, 255, 0.80);
-  --_ink-100: #ffffff;
+  /* ── Ink ramp (§2.4) — a cool paper-white (#e4e9f4) at four strengths, so text picks up the
+     surface's hue instead of reading as neutral grey. Every step clears WCAG AA (4.5:1) as body
+     text on base, rail, card and raised (the PR that set these carries the measured ratios). */
+  --_ink-faint:  rgba(228, 233, 244, 0.54);
+  --_ink-soft:   rgba(228, 233, 244, 0.66);
+  --_ink-strong: rgba(228, 233, 244, 0.86);
+  --_ink-max:    #f4f6fb;
 
-  --ink-dim:   var(--_ink-a35);   /* timestamps, secondary labels */
-  --ink-muted: var(--_ink-a55);   /* quiet-band project names, sublabels */
-  --ink-body:  var(--_ink-a80);   /* default prose, narration */
-  --ink-high:  var(--_ink-100);   /* NEEDS YOU names, gate text, primary actions */
+  --ink-dim:   var(--_ink-faint);    /* timestamps, secondary labels */
+  --ink-muted: var(--_ink-soft);     /* quiet-band project names, sublabels */
+  --ink-body:  var(--_ink-strong);   /* default prose, narration */
+  --ink-high:  var(--_ink-max);      /* NEEDS YOU names, gate text, primary actions */
+
+  /* ── Lines and focus — hairlines tinted like the ink, three strengths. Elevation is a border
+     plus a shadow, never a heavy fill. */
+  --border-subtle: rgba(170, 186, 222, 0.08);
+  --border:        rgba(170, 186, 222, 0.14);
+  --border-strong: rgba(170, 186, 222, 0.24);
 
   /* ── Accent system (§2.5) — ONE hue, three HSL primitives, so customization
-     (§3) only overwrites three numbers and the semantics recompute. Appears on:
-     active mode segment fill, gate chip confirm-state, primary action
-     backgrounds, the logo slot border, focus rings. NOT on status indicators,
-     narration text, or surface backgrounds. */
-  --_accent-h: 258;    /* hue: violet-indigo default */
-  --_accent-s: 72%;    /* saturation */
-  --_accent-l: 62%;    /* lightness */
+     (§3) only overwrites three numbers and the semantics recompute. The default is an
+     iris blue (230°): cool, apart from every status and section hue, and light enough to
+     carry dark text. Appears on: active mode segment fill, gate chip confirm-state, primary
+     action backgrounds, the logo slot border, focus rings. NOT on status indicators,
+     narration text, or surface backgrounds. (appearance.ts holds the same default.) */
+  --_accent-h: 230;    /* hue: iris blue default */
+  --_accent-s: 84%;    /* saturation */
+  --_accent-l: 72%;    /* lightness */
 
   --accent:        hsl(var(--_accent-h) var(--_accent-s) var(--_accent-l));
   --accent-dim:    hsl(var(--_accent-h) var(--_accent-s) calc(var(--_accent-l) - 18%));
   --accent-subtle: hsl(var(--_accent-h) calc(var(--_accent-s) * 0.35) calc(var(--_accent-l) - 30%));
-  --accent-fg:     var(--ink-high);   /* text ON accent — always white in dark theme */
+  /* Text ON the accent: dark ink when the accent is light, near-white when it is dark — the
+     lightness clamps to one end or the other around 58%, so a customized accent stays legible. */
+  --accent-fg:     hsl(var(--_accent-h) 30% clamp(8%, calc((58% - var(--_accent-l)) * 100), 98%));
+  --accent-hover:  hsl(var(--_accent-h) var(--_accent-s) calc(var(--_accent-l) + 5%));
+  --accent-wash:   color-mix(in oklab, var(--accent) 12%, transparent);   /* selected / tinted fills */
+
+  /* The keyboard focus ring: a gap in the page colour, then the accent. */
+  --focus-ring: 0 0 0 2px var(--surface-base), 0 0 0 4px var(--accent);
 
   /* ── Status colors (§2.6) — NOT the accent, NOT customizable. Semantic
-     signals: amber = blocked, red = failed, emerald = running. Full token for
-     the 2px status bar / pill text; `-dim` for pill backgrounds. */
+     signals: amber = gate (waiting on you), red = failed, emerald = running / ok,
+     orange = warning. Full token for the 2px status bar / pill text; `-dim` for pill
+     backgrounds — a low-chroma tint one step off the card, a wash rather than a slab. Each
+     full colour clears 4.5:1 on card, raised AND its own -dim. */
   --_sg-h: 45;    /* gate: amber hue */
   --_sf-h: 4;     /* failing: red hue */
   --_sr-h: 148;   /* running: emerald hue */
+  --_sw-h: 24;    /* warning: orange hue */
 
   --status-gate:      hsl(var(--_sg-h) 90% 68%);
-  --status-gate-dim:  hsl(var(--_sg-h) 55% 22%);
+  --status-gate-dim:  hsl(var(--_sg-h) 40% 14%);
   --status-fail:      hsl(var(--_sf-h) 88% 62%);
-  --status-fail-dim:  hsl(var(--_sf-h) 45% 18%);
+  --status-fail-dim:  hsl(var(--_sf-h) 40% 14%);
   --status-run:       hsl(var(--_sr-h) 58% 58%);
-  --status-run-dim:   hsl(var(--_sr-h) 38% 16%);
-  --status-done:      var(--_ink-a35);
+  --status-run-dim:   hsl(var(--_sr-h) 40% 14%);
+  --status-warn:      hsl(var(--_sw-h) 94% 62%);
+  --status-warn-dim:  hsl(var(--_sw-h) 40% 14%);
+  --status-ok:        var(--status-run);
+  --status-ok-dim:    var(--status-run-dim);
+  --status-done:      var(--_ink-faint);
   --status-done-dim:  transparent;
 
   /* ── Section-identity accents (§2.6b) — the landing's section doors + rail glyphs. Distinct
@@ -103,17 +127,20 @@
   --leading-body:   1.5;
   --leading-loose:  1.75;
 
-  /* ── Radius and shadow (§2.9) — shadows encode elevation, not decoration;
-     the 1px inset ring keeps cards from vanishing into the dark background. */
+  /* ── Radius and shadow (§2.9) — one radius per job: sm for chips and pills' inner parts,
+     md for buttons and inputs, lg for cards, xl for hero panels. Shadows encode elevation,
+     not decoration; the 1px ring keeps a card from vanishing into the dark background. */
   --radius-sm:   4px;
   --radius-md:   8px;
   --radius-lg:  12px;
   --radius-xl:  16px;
   --radius-full: 9999px;   /* pills, dots */
 
-  --shadow-card:    0 1px 3px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.05);
-  --shadow-raised:  0 4px 12px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.08);
-  --shadow-overlay: 0 8px 24px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.10);
+  --shadow-card:    0 1px 2px rgba(0,0,0,0.30), 0 0 0 1px var(--border-subtle);
+  --shadow-raised:  0 6px 16px -4px rgba(0,0,0,0.50), 0 0 0 1px var(--border);
+  --shadow-overlay: 0 18px 40px -8px rgba(0,0,0,0.60), 0 0 0 1px var(--border-strong);
+  /* A filled button: a top highlight and a one-pixel drop, so it reads as pressable. */
+  --shadow-button:  inset 0 1px 0 rgba(255,255,255,0.22), 0 1px 2px rgba(0,0,0,0.28);
 
   /* Modal/backdrop scrim — the one translucent fill that must stay translucent
      (content behind a backdrop is context, not noise). Semantic, theme-owned:

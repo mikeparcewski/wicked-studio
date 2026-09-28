@@ -1,0 +1,171 @@
+/* components.css — the shared control vocabulary: buttons, chips, the gate card shell, the
+ * needs-you row's verb and the toasts. Built only on semantic tokens (tokens.css), so both
+ * themes, both skins and a customized accent restyle these with zero component changes.
+ *
+ * One hierarchy everywhere:
+ *   primary   — THE move on a surface (accent fill, dark-on-light ink); one per group.
+ *   secondary — the other answers (raised surface, hairline border).
+ *   danger    — destructive (red text and hairline, red wash on hover — never a red slab).
+ *   quiet     — ghost: no chrome until hovered (cancel, dismiss, toggles).
+ * Every variant has hover, active, focus-visible and disabled states. */
+
+.wk-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 6px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semi);
+  line-height: 1.25;
+  letter-spacing: 0.005em;
+  white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+  user-select: none;
+  transition:
+    background-color var(--dur-instant) var(--ease-out),
+    border-color var(--dur-instant) var(--ease-out),
+    color var(--dur-instant) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out),
+    transform var(--dur-instant) var(--ease-out);
+}
+.wk-btn:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.wk-btn:active:not(:disabled) { transform: translateY(1px); }
+.wk-btn:disabled,
+.wk-btn[aria-disabled="true"] { opacity: 0.45; cursor: not-allowed; }
+
+/* Sizes: default fits a card's answer row; --lg is a hero verb; --sm sits inline in a row. */
+.wk-btn--lg { min-height: 38px; padding: 9px 16px; font-size: var(--text-sm); }
+.wk-btn--sm { min-height: 24px; padding: 3px 9px; font-size: var(--text-2xs); border-radius: var(--radius-sm); }
+/* A long, sentence-like label (the recommended move) wraps and reads left-aligned. */
+.wk-btn--block { display: flex; width: 100%; white-space: normal; text-align: left; justify-content: flex-start; }
+
+.wk-btn--primary {
+  background: var(--accent);
+  color: var(--accent-fg);
+  box-shadow: var(--shadow-button);
+}
+.wk-btn--primary:hover:not(:disabled) { background: var(--accent-hover); }
+.wk-btn--primary:focus-visible { box-shadow: var(--focus-ring); }
+
+.wk-btn--secondary {
+  background: var(--surface-raised);
+  border-color: var(--border);
+  color: var(--ink-body);
+}
+.wk-btn--secondary:hover:not(:disabled) {
+  background: color-mix(in oklab, var(--surface-raised), var(--ink-high) 6%);
+  border-color: var(--border-strong);
+  color: var(--ink-high);
+}
+
+.wk-btn--danger {
+  background: transparent;
+  border-color: color-mix(in oklab, var(--status-fail) 38%, transparent);
+  color: var(--status-fail);
+}
+.wk-btn--danger:hover:not(:disabled) {
+  background: var(--status-fail-dim);
+  border-color: color-mix(in oklab, var(--status-fail) 60%, transparent);
+}
+
+.wk-btn--quiet {
+  background: transparent;
+  color: var(--ink-muted);
+}
+.wk-btn--quiet:hover:not(:disabled) { background: var(--surface-raised); color: var(--ink-high); }
+
+/* An accent-text ghost: a door, not a commitment (Ask, "Open gate ›"). */
+.wk-btn--link {
+  background: transparent;
+  border-color: var(--border);
+  color: var(--accent);
+}
+.wk-btn--link:hover:not(:disabled) { background: var(--accent-wash); border-color: color-mix(in oklab, var(--accent) 45%, transparent); }
+
+/* ── Chips: filters, tags, the quiet band's project chips ── */
+.wk-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border);
+  background: var(--surface-card);
+  color: var(--ink-body);
+  font-size: var(--text-xs);
+  line-height: 1.4;
+  text-decoration: none;
+  transition: border-color var(--dur-instant) var(--ease-out), color var(--dur-instant) var(--ease-out), background-color var(--dur-instant) var(--ease-out);
+}
+a.wk-chip:hover, button.wk-chip:hover { border-color: var(--border-strong); color: var(--ink-high); background: var(--surface-raised); }
+.wk-chip:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+
+/* ── The gate card: a raised panel with an amber hairline and a faint amber halo, never an
+   amber slab. `:focus-within` strengthens the hairline while the card holds the a/r keys. ── */
+.wk-gate-card {
+  position: relative;
+  background: var(--surface-card);
+  border: 1px solid color-mix(in oklab, var(--status-gate) 30%, var(--border));
+  border-radius: var(--radius-xl);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--status-gate) 7%, transparent), var(--shadow-raised);
+  transition: border-color var(--dur-fast) var(--ease-out);
+}
+.wk-gate-card:focus-within { border-color: color-mix(in oklab, var(--status-gate) 48%, var(--border)); }
+.wk-gate-title {
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semi);
+  letter-spacing: 0.005em;
+  color: var(--ink-high);
+}
+.wk-gate-note {
+  background: var(--surface-base);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  transition: border-color var(--dur-instant) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
+}
+.wk-gate-note:focus { outline: none; border-color: var(--accent-dim); box-shadow: 0 0 0 3px var(--accent-wash); }
+
+/* ── The needs-you queue: rows lift on hover; the verb is a compact accent door ── */
+.wk-need-row { transition: background-color var(--dur-instant) var(--ease-out); }
+.wk-need-row:hover { background: color-mix(in oklab, var(--surface-raised) 55%, transparent); }
+.wk-need-act {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 2px 9px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--accent);
+  font-family: var(--font-sans);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semi);
+  line-height: 1.6;
+  white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color var(--dur-instant) var(--ease-out), border-color var(--dur-instant) var(--ease-out);
+}
+.wk-need-act:hover:not(:disabled) { background: var(--accent-wash); border-color: color-mix(in oklab, var(--accent) 45%, transparent); }
+.wk-need-act:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.wk-need-act:disabled { cursor: default; color: var(--ink-muted); }
+
+/* ── Toasts: an overlay card with a status rule on the left ── */
+.wk-toast {
+  background: var(--surface-overlay);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-overlay);
+}
+.wk-toast--approve { box-shadow: inset 3px 0 0 var(--status-run), var(--shadow-overlay); }
+.wk-toast--reject  { box-shadow: inset 3px 0 0 var(--status-fail), var(--shadow-overlay); }
+
+/* Figures line up: every number in a tile, a count or a delta uses tabular digits. */
+.wk-num { font-variant-numeric: tabular-nums; }

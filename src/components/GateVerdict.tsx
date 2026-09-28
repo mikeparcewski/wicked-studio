@@ -53,7 +53,7 @@ export function GateVerdict({ view, phase }: { view: GateVerdictView; phase: str
       {...(view.attempt !== null ? { 'data-phase-attempt': view.attempt } : {})}
       {...(view.denial !== null && view.denial.source !== null ? { 'data-denial-source': view.denial.source } : {})}
       className="rounded-lg p-2.5 mb-3 flex flex-col gap-1 font-mono"
-      style={{ background: toneDim, border: `1px solid ${toneDim}` }}
+      style={{ background: toneDim, border: `1px solid color-mix(in oklab, ${tone} 24%, transparent)` }}
     >
       <p className="text-xs font-semibold" style={{ color: tone }}>
         Evaluator verdict — {phase} · {word}

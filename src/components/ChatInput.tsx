@@ -1365,10 +1365,11 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
         <div
           data-testid="signin-warning"
           className="flex items-center gap-2 text-xs rounded-xl px-4 py-2 font-mono"
+          // A warning, not a failure: the run still launches (and falls back), so it speaks warn-orange.
           style={{
-            background: 'var(--status-fail-dim)',
-            border: '1px solid var(--status-fail-dim)',
-            color: 'var(--status-fail)',
+            background: 'var(--status-warn-dim)',
+            border: '1px solid color-mix(in oklab, var(--status-warn) 30%, transparent)',
+            color: 'var(--status-warn)',
           }}
         >
           <span className="flex-1">
@@ -1379,8 +1380,8 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
           <button
             type="button"
             onClick={() => navigate?.('/system')}
-            className="rounded-lg px-3 py-1 font-semibold text-xs shrink-0"
-            style={{ background: 'var(--status-fail-dim)', color: 'var(--status-fail)', border: '1px solid var(--status-fail-dim)' }}
+            className="wk-btn wk-btn--sm shrink-0"
+            style={{ color: 'var(--status-warn)', borderColor: 'color-mix(in oklab, var(--status-warn) 40%, transparent)' }}
           >
             Open Settings
           </button>

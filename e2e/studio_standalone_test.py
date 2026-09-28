@@ -726,7 +726,7 @@ try:
         a_before = page.evaluate(CARD_INDEX, live_a)
         b_before = page.evaluate(CARD_INDEX, live_b)
         board_scroll_before = page.evaluate(
-            """() => document.querySelector('[data-testid="project-board"]').scrollTop""")
+            """() => document.querySelector('[data-place-scroll="home-board"]').scrollTop""")
 
         # ── AC: a gate arrival re-sorts the board, no navigation, no reload ────
         # The run is launched and filed while the page watches; the board has to pick
@@ -816,7 +816,7 @@ try:
                  .map(c => `${c.dataset.projectId}:${c.scrollHeight}>${c.clientHeight}`)""")
         same_page = page.evaluate("() => window.__slice6 === 'same page'")
         board_scroll_after = page.evaluate(
-            """() => document.querySelector('[data-testid="project-board"]').scrollTop""")
+            """() => document.querySelector('[data-place-scroll="home-board"]').scrollTop""")
         page.screenshot(path=str(SHOTS / "slice6-board-doc-activity.png"), full_page=True)
         browser.close()
 

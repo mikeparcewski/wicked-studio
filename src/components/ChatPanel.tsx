@@ -293,8 +293,7 @@ function RunCancelControl({ runId, onCancelled }: {
         data-testid="run-cancel"
         onClick={() => setConfirming(true)}
         title="Cancel this run — stops its workers now; the worktree stays on disk"
-        className="shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold font-mono transition-opacity hover:opacity-80"
-        style={{ background: 'var(--status-fail-dim)', border: '1px solid var(--status-fail-dim)', color: 'var(--status-fail)' }}
+        className="wk-btn wk-btn--danger shrink-0"
       >
         Cancel run
       </button>
@@ -998,8 +997,7 @@ function RunChat({
           data-testid="run-draft-update"
           onClick={() => setDraftKind(outboundKindFor(session.status))}
           title="Draft an update about this run from its record — editable, then copy it out"
-          className="shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold font-mono transition-opacity hover:opacity-80"
-          style={{ background: 'var(--surface-raised)', color: 'var(--ink-body)' }}
+          className="wk-btn wk-btn--secondary shrink-0"
         >
           Draft update
         </button>

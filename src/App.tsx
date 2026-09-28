@@ -410,8 +410,10 @@ export function App(): React.ReactElement {
   // project; the flat `/runs/new` stays unbound (Unfiled default, §5.1).
   const launchProjectId = projectId !== null && mode === 'build' && showLaunch ? projectId : null;
 
+  // overflow-y-auto, not hidden: at 1440x700 a tall gate card plus the composer outgrow the pane,
+  // and a hidden overflow left the run header unreachable above the fold.
   const runSurface = (): React.ReactElement => (
-    <div className="flex-1 overflow-hidden">
+    <div className="flex-1 overflow-y-auto">
       <ChatPanel
         view={selected}
         chatMode={chatMode}

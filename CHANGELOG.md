@@ -13,6 +13,22 @@ npm publish dates. Every version listed here exists on
 ## [Unreleased]
 
 ### Fixed
+- **Home scrolls.** At 1440x700 the landing's own column was `overflow: hidden`, so the portfolio
+  wall, the Quiet band and Unfiled runs sat below the fold with no way to reach them. The Home pane
+  is now the one scroller (the rail and the status bar stay put) and the wall windows its rows
+  against it; a run page whose gate card outgrows the pane scrolls too. New journey `main_scroll`
+  (in the behaviour set) wheels to the last Home section and checks every top-level page for a
+  clipped pane.
+
+### Changed
+- **Palette and controls polish (tokens and CSS, no layout changes).** A slate-ink surface ramp
+  with a cool bias, tinted ink, hairline border tokens, an iris-blue default accent (230/84/72,
+  replacing the stock violet 258/72/62; "Reset to default" on Theme picks it up) with dark text on
+  it, a warn-orange status, and a light theme whose text, accent and status colours all clear
+  WCAG AA (the old light theme's amber measured 1.2:1). One button vocabulary (`wk-btn` primary /
+  secondary / danger / quiet, with hover, active, focus-visible and disabled states) on the gate
+  card, Home's verbs, the Needs You rows, the run header and the undo toasts; the gate card's
+  recommended move is the single primary; status fills are washes rather than slabs.
 - **Wave A home, verified on the live rig at 1440x700.** The tile repair moves ("Retry", "Replay")
   sat over the tile's value row and covered a two-digit value's delta badge or unit; they now take
   their own line under the tile. A failed run with no `ended_at` (the daemon booted after it ended)

@@ -59,10 +59,14 @@ interface Props {
 
 const EMPTY_EVENTS: CoreEvent[] = [];
 const EMPTY_UNITS: WorkUnit[] = [];
-/** A secondary answer's look while the card recommends a move (brainstorm idea 1). */
-const SECONDARY: React.CSSProperties = {
-  background: 'var(--surface-raised)', border: '1px solid var(--ink-dim)', color: 'var(--ink-body)',
-};
+/** The answer buttons' looks (styles/components.css): the recommended move or the lead answer is
+ *  the ONE primary; the other answers are secondary; reject is danger; cancel is quiet. */
+const BTN = {
+  primary: 'wk-btn wk-btn--primary',
+  secondary: 'wk-btn wk-btn--secondary',
+  danger: 'wk-btn wk-btn--danger',
+  quiet: 'wk-btn wk-btn--quiet',
+} as const;
 /** Which existing answer each recommended move IS — that button is not repeated as a secondary. */
 function duplicateOf(move: GateMove | null, escalationGate: boolean): string | null {
   switch (move?.kind) {
@@ -324,7 +328,9 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
         {record}
       </span>
     ) : null;
-  const secondary = (style: React.CSSProperties): React.CSSProperties => (move !== null ? SECONDARY : style);
+  // While the card recommends a move (brainstorm idea 1) that move is the one primary; every
+  // other answer drops to secondary.
+  const lead = (primary: boolean): string => (move === null && primary ? BTN.primary : BTN.secondary);
   // The deliver move is two steps: the first press opens the diff, the second delivers.
   const [diffOpen, setDiffOpen] = useState(false);
   // Pre-fill (never over the operator's own words): the reviewer's failing lines land in the note
@@ -529,13 +535,8 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
       // Programmatically/click focusable, not a tab stop: clicking anywhere on
       // the card arms the a/r keys (§7.7) without adding a tab-order entry.
       tabIndex={-1}
-      className="rounded-xl p-4"
-      style={{
-        background: 'var(--surface-rail)',
-        border: '1px solid var(--status-gate-dim)',
-        boxShadow: '0 0 0 1px var(--status-gate-dim)',
-        outline: 'none',
-      }}
+      className="wk-gate-card p-4"
+      style={{ outline: 'none' }}
       data-testid="steering-gate"
       data-run-id={runId}
       data-gate-kind={isPlanGate ? 'plan_approval' : 'unit'}
@@ -543,7 +544,7 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
     >
       <div className="flex items-center gap-2 mb-2">
         <span className="w-2 h-2 rounded-full animate-pulse" style={{ background: 'var(--status-gate)' }} />
-        <p className="font-semibold text-sm font-mono" style={{ color: 'var(--status-gate)' }}>
+        <p className="wk-gate-title">
           Awaiting human decision
         </p>
       </div>
@@ -674,7 +675,7 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
       <div
         data-testid="steering-actions"
         className="sticky bottom-0 -mx-4 -mb-4 px-4 pt-3 pb-4 rounded-b-xl"
-        style={{ background: 'var(--surface-rail)', borderTop: '1px solid var(--surface-raised)', zIndex: 1 }}
+        style={{ background: 'var(--surface-card)', borderTop: '1px solid var(--border-subtle)', zIndex: 1 }}
       >
         {/* Steer textarea — guide the re-run. Slice BD: pre-populated from the
             session draft when one existed at mount (`amend-prepopulated`, §4.5),
@@ -689,13 +690,8 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
           data-testid={prepopulated ? 'amend-prepopulated' : 'steering-amend'}
           data-run-id={runId}
           {...(prefilled ? { 'data-prefill': 'verdict' } : {})}
-          className="w-full rounded-lg p-2 text-xs mb-3 resize-none font-mono"
-          style={{
-            background: 'var(--surface-rail)',
-            border: '1px solid var(--surface-raised)',
-            color: 'var(--ink-high)',
-            outline: 'none',
-          }}
+          className="wk-gate-note w-full p-2 text-xs mb-3 resize-none font-mono"
+          style={{ color: 'var(--ink-high)' }}
           rows={Math.min(8, Math.max(2, amend.split('\n').length))}
           placeholder={
             isCoverageFail && coverage && coverage.unaccounted > 0
@@ -746,8 +742,8 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
               data-move={move.kind}
               onClick={() => void takeMove()}
               disabled={locked || (move.kind === 'send-back' && !amend.trim()) || (move.kind === 'retry-findings' && !escalationGate && planGate.pending)}
-              className="w-full rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity text-left"
-              style={{ background: 'var(--status-run)', color: 'var(--surface-base)', overflowWrap: 'anywhere' }}
+              className="wk-btn wk-btn--primary wk-btn--block"
+              style={{ overflowWrap: 'anywhere', flexDirection: 'column', alignItems: 'flex-start', gap: 0 }}
             >
               {moveLabel}
               {recordSpan('gate-recommended')}
@@ -764,8 +760,7 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
               data-testid="steering-approve"
               onClick={() => void approve()}
               disabled={locked}
-              className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
-              style={secondary({ background: 'var(--status-run)', color: 'var(--surface-base)' })}
+              className={lead(!editingPlan)}
             >
               Approve the plan
             </button>
@@ -775,8 +770,7 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
                 data-testid="plan-gate-approve-edited"
                 onClick={() => void approveEditedPlan()}
                 disabled={locked || planEdit.plan === null}
-                className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
-                style={secondary({ background: 'var(--accent)', color: 'var(--accent-fg)' })}
+                className={lead(true)}
               >
                 Approve the edited plan
               </button>
@@ -785,8 +779,7 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
                 data-testid="plan-gate-edit-open"
                 onClick={openPlanEdit}
                 disabled={locked}
-                className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
-                style={secondary({ background: 'var(--accent)', color: 'var(--accent-fg)' })}
+                className={BTN.secondary}
               >
                 Edit the plan…
               </button>
@@ -795,8 +788,7 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
               data-testid="steering-reject"
               onClick={() => void reject()}
               disabled={locked}
-              className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
-              style={{ background: 'var(--status-fail-dim)', border: '1px solid var(--status-fail-dim)', color: 'var(--status-fail)' }}
+              className={BTN.danger}
             >
               Reject
             </button>
@@ -804,8 +796,7 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
               data-testid="steering-cancel"
               onClick={() => void cancel()}
               disabled={locked}
-              className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
-              style={{ background: 'var(--surface-raised)', border: '1px solid var(--ink-dim)', color: 'var(--ink-muted)' }}
+              className={BTN.quiet}
             >
               Cancel run
             </button>
@@ -821,8 +812,7 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
               data-testid="steering-retry"
               onClick={() => void retry()}
               disabled={locked}
-              className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
-              style={secondary({ background: 'var(--status-run)', color: 'var(--surface-base)' })}
+              className={lead(true)}
               title="Re-dispatches the failed unit (carries your note as guidance if typed)"
             >
               Retry
@@ -834,8 +824,7 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
               data-testid="steering-request-changes"
               onClick={() => void requestChanges()}
               disabled={locked || !amend.trim()}
-              className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
-              style={secondary({ background: 'var(--accent)', color: 'var(--accent-fg)' })}
+              className={BTN.secondary}
               title="Rewinds to the last creator phase and re-dispatches with your note (note required)"
             >
               Request changes
@@ -845,8 +834,7 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
               data-testid="steering-reject"
               onClick={() => void reject()}
               disabled={locked}
-              className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
-              style={{ background: 'var(--status-fail-dim)', border: '1px solid var(--status-fail-dim)', color: 'var(--status-fail)' }}
+              className={BTN.danger}
             >
               Reject
             </button>
@@ -854,8 +842,7 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
               data-testid="steering-cancel"
               onClick={() => void cancel()}
               disabled={locked}
-              className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
-              style={{ background: 'var(--surface-raised)', border: '1px solid var(--ink-dim)', color: 'var(--ink-muted)' }}
+              className={BTN.quiet}
             >
               Cancel run
             </button>
@@ -871,8 +858,7 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
               data-testid="steering-retry"
               onClick={() => void retry()}
               disabled={locked}
-              className="col-span-2 rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
-              style={secondary({ background: 'var(--status-run)', color: 'var(--surface-base)' })}
+              className={`col-span-2 ${lead(true)}`}
               title="Re-dispatches the deliver unit (carries your note as guidance if typed)"
             >
               Retry
@@ -882,8 +868,7 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
               data-testid="steering-reject"
               onClick={() => void reject()}
               disabled={locked}
-              className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
-              style={{ background: 'var(--status-fail-dim)', border: '1px solid var(--status-fail-dim)', color: 'var(--status-fail)' }}
+              className={BTN.danger}
             >
               Reject
             </button>
@@ -891,8 +876,7 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
               data-testid="steering-cancel"
               onClick={() => void cancel()}
               disabled={locked}
-              className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
-              style={{ background: 'var(--surface-raised)', border: '1px solid var(--ink-dim)', color: 'var(--ink-muted)' }}
+              className={BTN.quiet}
             >
               Cancel run
             </button>
@@ -905,8 +889,7 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
               data-testid="steering-approve"
               onClick={() => void approve()}
               disabled={locked}
-              className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
-              style={secondary({ background: 'var(--status-run)', color: 'var(--surface-base)' })}
+              className={lead(true)}
               {...(restoredRetry ? { title: "the evaluator's edit was discarded; the phase re-runs against the creator's verified tree" } : {})}
             >
               {restoredRetry ? 'Retry against the restored tree' : 'Approve'}
@@ -919,8 +902,7 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
               onClick={() => void approveWithSteer()}
               disabled={locked || !amend.trim() || planGate.pending}
               {...(planGate.pending ? { title: 'Reading which kind of gate this is…' } : {})}
-              className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
-              style={secondary({ background: 'var(--accent)', color: 'var(--accent-fg)' })}
+              className={BTN.secondary}
             >
               {restoredRetry ? 'Retry + steer' : 'Approve + steer'}
             </button>
@@ -929,8 +911,7 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
               data-testid="steering-reject"
               onClick={() => void reject()}
               disabled={locked}
-              className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
-              style={{ background: 'var(--status-fail-dim)', border: '1px solid var(--status-fail-dim)', color: 'var(--status-fail)' }}
+              className={BTN.danger}
             >
               Reject
             </button>
@@ -938,8 +919,7 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
               data-testid="steering-cancel"
               onClick={() => void cancel()}
               disabled={locked}
-              className="rounded-lg px-3 py-2 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
-              style={{ background: 'var(--surface-raised)', border: '1px solid var(--ink-dim)', color: 'var(--ink-muted)' }}
+              className={BTN.quiet}
             >
               Cancel run
             </button>
@@ -967,8 +947,7 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
               data-testid="gate-rule-make"
               onClick={() => void gateTrust.makeRule(offer)}
               disabled={locked || gateTrust.busy}
-              className="mt-2 rounded-lg px-3 py-1 text-xs font-semibold font-mono disabled:opacity-50 transition-opacity"
-              style={SECONDARY}
+              className="mt-2 wk-btn wk-btn--secondary wk-btn--sm"
             >
               Make it a rule
             </button>

@@ -25,11 +25,8 @@ export function UndoToasts(): React.ReactElement | null {
           aria-live="polite"
           data-testid="undo-result"
           data-kind={r.kind}
-          style={{
-            margin: 0, maxWidth: 480, padding: '6px 12px', borderRadius: 'var(--radius-lg)',
-            background: 'var(--surface-overlay)', boxShadow: 'var(--shadow-overlay)',
-            fontSize: 'var(--text-xs)', color: RESULT_COLOR[r.kind],
-          }}
+          className="wk-toast"
+          style={{ margin: 0, maxWidth: 480, padding: '7px 12px', fontSize: 'var(--text-xs)', color: RESULT_COLOR[r.kind] }}
         >
           {r.text}
         </p>
@@ -41,14 +38,8 @@ export function UndoToasts(): React.ReactElement | null {
           aria-live="polite"
           data-testid="undo-toast"
           data-verb={t.verb}
-          className="flex items-start gap-3"
-          style={{
-            background: 'var(--surface-overlay)',
-            boxShadow: 'var(--shadow-overlay)',
-            borderRadius: 'var(--radius-lg)',
-            padding: '10px 14px',
-            maxWidth: 480,
-          }}
+          className={`wk-toast wk-toast--${t.verb === 'approve' ? 'approve' : 'reject'} flex items-center gap-3`}
+          style={{ padding: '10px 12px 10px 16px', maxWidth: 480 }}
         >
           <div className="flex flex-col gap-0.5 min-w-0">
             <p
@@ -71,11 +62,8 @@ export function UndoToasts(): React.ReactElement | null {
             type="button"
             data-testid="undo-button"
             onClick={t.undo}
-            style={{
-              flexShrink: 0, border: 'none', cursor: 'pointer', borderRadius: 'var(--radius-md)',
-              background: 'var(--surface-raised)', color: 'var(--ink-high)',
-              fontSize: 'var(--text-xs)', fontWeight: 'var(--weight-semi)', padding: '4px 10px',
-            }}
+            className="wk-btn wk-btn--secondary"
+            style={{ flexShrink: 0 }}
           >
             Undo
           </button>

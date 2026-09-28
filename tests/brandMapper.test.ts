@@ -76,10 +76,10 @@ describe('color math', () => {
     expect(hueDistance(45, 45)).toBe(0);
   });
 
-  it('SURFACE_CARD_RGB mirrors tokens.css --_surface-2 (#1a1a26)', () => {
+  it('SURFACE_CARD_RGB mirrors tokens.css --_surface-2 (#151922)', () => {
     // The mapper measures guarantee 1 against the REAL card surface; if
     // tokens.css moves, this pairing must move with it (§4.5 g1).
-    expect(SURFACE_CARD_RGB).toEqual(parseCssColor('#1a1a26'));
+    expect(SURFACE_CARD_RGB).toEqual(parseCssColor('#151922'));
   });
 });
 
@@ -231,14 +231,14 @@ describe('mapBrandTheme — the whole-gamut property (§4.5: all four at once)',
 describe('mapBrandTheme — degenerate palettes (§4.4 tolerant reading)', () => {
   it('no colors at all → the default accent stands, disclosed as a source fallback', () => {
     const m = mapBrandTheme({ name: 'empty' });
-    expect(m).toMatchObject({ accent_h: 258, accent_s: 72, accent_l: 62, logo_url: null });
+    expect(m).toMatchObject({ accent_h: 230, accent_s: 84, accent_l: 72, logo_url: null });
     expect(m.adjustments).toHaveLength(1);
     expect(m.adjustments[0]?.constraint).toBe('source-fallback');
   });
 
   it('an unparseable primary is treated as absent', () => {
     const m = mapBrandTheme({ name: 'junk', primary: 'linear-gradient(red, blue)' });
-    expect(m.accent_h).toBe(258);
+    expect(m.accent_h).toBe(230);
     expect(m.adjustments.some((a) => a.constraint === 'source-fallback')).toBe(true);
   });
 
@@ -269,7 +269,7 @@ describe('mapBrandTheme — logo passthrough and purity (§4.5)', () => {
   it('the logo survives a palette with no usable color', () => {
     const m = mapBrandTheme({ name: 'logo-only', logo_url: '/api/brand/logo.svg' });
     expect(m.logo_url).toBe('/api/brand/logo.svg');
-    expect(m.accent_h).toBe(258);
+    expect(m.accent_h).toBe(230);
   });
 
   it('is pure: same input → deep-equal output, input never mutated', () => {

@@ -64,7 +64,7 @@ function scratchSummary() {
   return { name: SCRATCH_DOC_NAME, kind: 'doc', head: 1, versions: 1, updated_at: null };
 }
 
-// The fixture navy: #0a2a5e → the mapper lands (217, 81%, 59%) with a
+// The fixture navy: #0a2a5e → the mapper lands (217, 81%, 58%) with a
 // lightness-clamp + a contrast-floor adjustment (pinned in brandMapper.test.ts).
 const LEARNED = {
   document_id: SCRATCH_DOC_NAME,
@@ -176,10 +176,10 @@ describe('BrandLearn — the restored /theme extraction flow', () => {
     // Preview via the slice-7 machinery: inline overrides on <html>…
     expect(root().style.getPropertyValue('--_accent-h')).toBe('217');
     expect(root().style.getPropertyValue('--_accent-s')).toBe('81%');
-    expect(root().style.getPropertyValue('--_accent-l')).toBe('59%');
+    expect(root().style.getPropertyValue('--_accent-l')).toBe('58%');
     expect(root().style.getPropertyValue('--logo-url')).toBe(''); // logo NEVER touched
     // …but NOTHING persisted: the store still holds the defaults, no PUT fired.
-    expect(useAppearanceStore.getState().appearance.accent_h).toBe(258);
+    expect(useAppearanceStore.getState().appearance.accent_h).toBe(230);
     await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
     expect(api.putAppearanceSettings).not.toHaveBeenCalled();
     expect(screen.getByTestId('learn-preview-chip').textContent).toContain('217');
@@ -204,7 +204,7 @@ describe('BrandLearn — the restored /theme extraction flow', () => {
     const a = useAppearanceStore.getState().appearance;
     expect(a.accent_h).toBe(217);
     expect(a.accent_s).toBe(81);
-    expect(a.accent_l).toBe(59);
+    expect(a.accent_l).toBe(58);
     expect(a.logo_url).toBeNull(); // the manual choice stands — no logo in the learned shape
     await act(async () => { await vi.advanceTimersByTimeAsync(400); }); // the store's debounce
     expect(api.putAppearanceSettings).toHaveBeenCalledExactlyOnceWith(a);
@@ -216,8 +216,8 @@ describe('BrandLearn — the restored /theme extraction flow', () => {
     await learnFrom();
     expect(root().style.getPropertyValue('--_accent-h')).toBe('217');
     fireEvent.click(screen.getByTestId('learn-discard'));
-    expect(root().style.getPropertyValue('--_accent-h')).toBe('258');
-    expect(useAppearanceStore.getState().appearance.accent_h).toBe(258);
+    expect(root().style.getPropertyValue('--_accent-h')).toBe('230');
+    expect(useAppearanceStore.getState().appearance.accent_h).toBe(230);
     await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
     expect(api.putAppearanceSettings).not.toHaveBeenCalled();
     expect(screen.queryByTestId('learn-apply')).toBeNull();

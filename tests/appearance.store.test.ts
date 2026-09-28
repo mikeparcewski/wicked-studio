@@ -62,9 +62,9 @@ describe('load (§3.3 startup)', () => {
     expect(putApp).not.toHaveBeenCalled();
   });
 
-  it('a store without the key applies the defaults (dark, no logo, 258/72/62)', async () => {
+  it('a store without the key applies the defaults (dark, no logo, 230/84/72)', async () => {
     await useAppearanceStore.getState().load();
-    expect(root().style.getPropertyValue('--_accent-h')).toBe('258');
+    expect(root().style.getPropertyValue('--_accent-h')).toBe('230');
     expect(root().style.getPropertyValue('--logo-url')).toBe('');
     expect(root().hasAttribute('data-theme')).toBe(false);
   });
@@ -80,7 +80,7 @@ describe('load (§3.3 startup)', () => {
 describe('sanitizeAppearance (external store — never trusted)', () => {
   it('clamps channels, defaults junk, and empties logo/theme correctly', () => {
     expect(sanitizeAppearance({ accent_h: 999, accent_s: -4, accent_l: 'x', logo_url: '', theme: 'sepia' }))
-      .toEqual({ accent_h: 359, accent_s: 0, accent_l: 62, logo_url: null, theme: 'dark', site_name: null, skin: 'studio' });
+      .toEqual({ accent_h: 359, accent_s: 0, accent_l: 72, logo_url: null, theme: 'dark', site_name: null, skin: 'studio' });
     expect(sanitizeAppearance(null)).toEqual(DEFAULT_APPEARANCE);
     expect(sanitizeAppearance({ accent_h: 179.6 }).accent_h).toBe(180);
     // site_name: a blank/whitespace value is the default (null); a real name is kept.
@@ -139,16 +139,16 @@ describe('update (§3.4 live preview + §3.3 debounced persistence)', () => {
 });
 
 describe('resets (§3.5 — two, independent)', () => {
-  it('resetAccent restores 258/72/62, persists, and never touches the logo', () => {
+  it('resetAccent restores 230/84/72, persists, and never touches the logo', () => {
     useAppearanceStore.getState().update({ accent_h: 10, accent_s: 20, accent_l: 30, logo_url: '/l.png' });
     vi.advanceTimersByTime(400);
     putApp.mockClear();
 
     useAppearanceStore.getState().resetAccent();
     const a = useAppearanceStore.getState().appearance;
-    expect([a.accent_h, a.accent_s, a.accent_l]).toEqual([258, 72, 62]);
+    expect([a.accent_h, a.accent_s, a.accent_l]).toEqual([230, 84, 72]);
     expect(a.logo_url).toBe('/l.png');
-    expect(root().style.getPropertyValue('--_accent-h')).toBe('258');
+    expect(root().style.getPropertyValue('--_accent-h')).toBe('230');
 
     vi.advanceTimersByTime(400);
     expect(putApp).toHaveBeenCalledTimes(1);
