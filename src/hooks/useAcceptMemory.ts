@@ -17,6 +17,9 @@ export interface AcceptItem {
   id: string;
   /** The proposal's body line, as the queue row shows it. */
   subject: string;
+  /** A capture filed it: accepted with `reach: "project"`, so a batch accept never lets a captured
+   *  memory cross projects (crossing is only ever the person's explicit, per-item choice). */
+  captured?: boolean;
 }
 
 export type AcceptMemoryState =
@@ -44,14 +47,14 @@ export const ACCEPT_CLOSE_NOTE = 'Close this tab before then and nothing is sent
 
 /** Accept each proposal in turn through the existing approve route; a refusal names its id. */
 export async function acceptProposals(
-  ids: readonly string[],
+  items: readonly Pick<AcceptItem, 'id' | 'captured'>[],
   onProgress?: (done: number) => void,
 ): Promise<{ accepted: number; failures: Array<{ id: string; error: string }> }> {
   const failures: Array<{ id: string; error: string }> = [];
   let accepted = 0;
-  for (const [i, id] of ids.entries()) {
+  for (const [i, { id, captured }] of items.entries()) {
     try {
-      await approveProposal(id);
+      await approveProposal(id, captured === true ? { reach: 'project' } : undefined);
       accepted += 1;
     } catch (err) {
       failures.push({ id, error: errText(err) });
@@ -79,8 +82,8 @@ export function useAcceptMemory(): AcceptMemory {
   const confirm = useCallback(() => {
     const s = stateRef.current;
     if (s.phase !== 'preview') return;
-    const ids = s.items.map((i) => i.id);
-    const n = ids.length;
+    const picked = s.items.map((i) => ({ id: i.id, captured: i.captured === true }));
+    const n = picked.length;
     const undoId = queueDecision({
       verb: 'approve',
       runIds: [],
@@ -89,7 +92,7 @@ export function useAcceptMemory(): AcceptMemory {
       closeNote: ACCEPT_CLOSE_NOTE,
       commit: async () => {
         setState({ phase: 'sending', done: 0, total: n });
-        const { accepted, failures } = await acceptProposals(ids, (done) => setState({ phase: 'sending', done, total: n }));
+        const { accepted, failures } = await acceptProposals(picked, (done) => setState({ phase: 'sending', done, total: n }));
         if (failures.length === 0) {
           reportDecision('sent', `Accepted ${accepted} memory-only proposal${accepted === 1 ? '' : 's'}.`);
         } else {

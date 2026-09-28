@@ -170,9 +170,10 @@ export function listProposals(
 
 /** `POST /proposals/:id/approve` — approve a pending proposal; the engine writes the
  *  governed-knowledge item and returns its outcome. */
-export function approveProposal(id: string): Promise<ProposalApproveOutcome> {
+export function approveProposal(id: string, body?: { reach: 'project' }): Promise<ProposalApproveOutcome> {
   return apiFetch<ProposalApproveOutcome>(`/proposals/${encodeURIComponent(id)}/approve`, {
     method: 'POST',
+    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
   });
 }
 

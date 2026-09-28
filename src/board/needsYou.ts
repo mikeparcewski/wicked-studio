@@ -12,7 +12,7 @@ import { outcomeOf, runStats } from './metrics.js';
 import { repoOnboard } from './repoStats.js';
 import { onboardEstimate, type OnboardEstimate } from './repairMoves.js';
 import { plausibleClock } from './ageHonesty.js';
-import { proposalConsequence, proposalConsequenceLine, type ProposalConsequence } from './proposalTriage.js';
+import { captureClass, proposalConsequence, proposalConsequenceLine, type ProposalConsequence } from './proposalTriage.js';
 
 /**
  * THE needs-you queue fold (DES-HOME-COMMAND-CENTER §3) — the home page's spine.
@@ -96,7 +96,8 @@ export interface NeedRow {
   /** A never-indexed repo row's repo, and how long an onboard takes here (the batch's consequence). */
   batch?: { repoId: string; estimate: OnboardEstimate };
   /** A proposal row's proposal and what accepting it does (Wave B, idea 4). */
-  proposal?: { id: string; consequence: ProposalConsequence };
+  /** `captured`: a capture filed it, so a batch accept scopes it to its project. */
+  proposal?: { id: string; consequence: ProposalConsequence; captured?: boolean };
   /** The row's subject (run title, repo name, campaign, chat id). */
   subject: string;
   /** The narrated one-liner (narrator vocabulary — gate rows via `narrate()`). */
@@ -602,7 +603,7 @@ export function needsYouRows(inputs: NeedsYouInputs): NeedRow[] {
       severity: SEVERITY.proposal,
       stakes: 1,
       groupKey: 'proposal',
-      proposal: { id: p.id, consequence: proposalConsequence(p) },
+      proposal: { id: p.id, consequence: proposalConsequence(p), captured: captureClass(p) !== null },
       subject: body !== null && body !== '' ? clipLine(body, 80) : p.id,
       // The consequence of accepting comes first (Wave B, idea 4).
       text: proposalConsequenceLine(p),
