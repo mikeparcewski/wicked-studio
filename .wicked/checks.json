@@ -1,3 +1,4 @@
 {
-  "test_targeted": ["npx", "--no-install", "vitest", "related", "--run", "--passWithNoTests", "{files}"]
+  "test_targeted": ["npx", "--no-install", "vitest", "related", "--run", "--passWithNoTests", "{files}"],
+  "full": true
 }
