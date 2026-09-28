@@ -4852,11 +4852,13 @@ class W2Handler(SimpleHTTPRequestHandler):
         if path == "/api/v1/runs":
             retry_of = body.get("retryOf")
             if retry_of is not None:
+                # Crew validates lineage against the runs it has: here, every run GET /runs lists
+                # under the current switches (assemble_runs takes the lock itself) plus this
+                # lifetime's launches — not the base W2 list alone, which refused a retry of any
+                # wave-1 / wave-2b failure (f1) the Home "Retry failed" move offers.
+                known = {r["session"]["id"] for r in assemble_runs()}
                 with state_lock:
-                    provenance_on = state["provenance"]
-                known = {r["session"]["id"] for r in RUNS} \
-                    | ({RETRY_RUN["session"]["id"]} if provenance_on else set()) \
-                    | {r["session"]["id"] for r in launched_runs}
+                    known |= {r["session"]["id"] for r in launched_runs}
                 if retry_of not in known:
                     return self._json(400, {
                         "error": f"retryOf names an unknown run: {retry_of} — "

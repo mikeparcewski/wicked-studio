@@ -164,8 +164,30 @@ with sync_playwright() as p:
         page.wait_for_function("() => window.location.pathname === '/repo-detail/idx-0'")
         check("pill-opens-record", True)
 
+    def section_retry() -> None:
+        # Idea 5's other repair move: the Failed tile's "Retry failed" relaunches f1 (wave 2b: failed an
+        # hour ago) with `retryOf` lineage. The preview posts nothing; the confirm launches once.
+        reset(origin, wave1=True, wave2b=True, simple_gates=[], project_dto=True)
+        launches: list = []
+        page.on("request", lambda r: launches.append(json.loads(r.post_data or "{}"))
+                if r.method == "POST" and r.url.endswith("/api/v1/runs") else None)
+        home()
+        repair = page.locator('[data-testid="kpi-repair"][data-repair="retry"]')
+        repair.wait_for(state="visible")
+        repair.click()
+        preview = page.locator('[data-testid="kpi-repair-preview"][data-repair="retry"]')
+        preview.wait_for(state="visible")
+        check("retry-preview-first", preview.inner_text().startswith("Relaunches 1 run with the same brief")
+              and launches == [], text=preview.inner_text())
+        preview.get_by_test_id("kpi-repair-confirm").click()
+        result = preview.get_by_test_id("kpi-repair-result")
+        result.wait_for(state="visible")
+        check("retry-relaunched", result.inner_text().startswith("Relaunched 1")
+              and len(launches) == 1 and launches[0].get("retryOf") == "f1", result=result.inner_text(), launches=launches)
+        page.screenshot(path=str(SHOTS / f"wavea-{SKIN}-retry.png"))
+
     ok = True
-    for section in (section_clones, section_replay, section_pill):
+    for section in (section_clones, section_replay, section_pill, section_retry):
         try:
             section()
         except SectionFailed:
