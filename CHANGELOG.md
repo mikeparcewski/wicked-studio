@@ -13,6 +13,20 @@ npm publish dates. Every version listed here exists on
 ## [Unreleased]
 
 ### Fixed
+- **A run the stall watchdog handed to you survives a reload (#284).** After the watchdog spent its
+  automatic recoveries, a reloaded run page showed an executing run with nothing but Cancel. Crew
+  now serves the watchdog's frames in `GET /runs/:id/events`; studio folds them back when it
+  hydrates the run's log, so the run page shows a needs-you card ("Needs you: unit 5 (deliver)
+  silent 30 min; 2 automatic recoveries spent (bash → claude → codex)") with **Reassign the unit**
+  and, for an agent unit, **Nudge the worker**, and the needs-you queue counts the run again. A
+  replayed watchdog frame no longer duplicates its live copy in the run log.
+- **P never shows "Nothing needs you" while a gate is up (#369).** The queue builds its gate rows
+  from the run list, which trails the live gate frame by a refresh; a gate the live store holds but
+  the queue has not folded yet is now the peek target.
+- **Team-model routing reads as a routing, not "degraded: undefined" (#332).** A `teamed` unit
+  renders "Routed <seat> (team model, no council)" in the assumptions panel and "Routed: <seat>"
+  in routing provenance. `wicked-crew-api-types` moves to 0.40.0 (the `teamed` arm); the wave-6
+  and skills mirrors are re-vendored to it (line ranges; the `routingMethod` union gains `teamed`).
 - **Wave A home, verified on the live rig at 1440x700.** The tile repair moves ("Retry", "Replay")
   sat over the tile's value row and covered a two-digit value's delta badge or unit; they now take
   their own line under the tile. A failed run with no `ended_at` (the daemon booted after it ended)

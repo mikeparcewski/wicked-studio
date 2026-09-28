@@ -4,12 +4,13 @@ import { useElicitationStore } from '../store/elicitations.js';
 import { useGateStore } from '../store/gates.js';
 import { ElicitationPrompt } from './ElicitationPrompt.js';
 import { autoDeliverOf } from './IntakePlan.js';
+import { NeedsYouCard, useNeedsYouState } from './NeedsYouCard.js';
 import { SteeringGate } from './SteeringGate.js';
 import { runBandOf } from './gateTrustModel.js';
 
 /**
  * The pinned approval dock (DES-RUN-NARRATOR §2, §11.5): anything awaiting the
- * HUMAN — the steering gate, an MCP elicitation — renders here, as a sibling of
+ * HUMAN — the steering gate, an MCP elicitation, the stall watchdog's needs-you card — renders here, as a sibling of
  * the scrolling feed, between it and the composer. It can NEVER scroll away:
  * the directive's "approvals go direct to user" surface. The feed still records
  * the gate moment inline as history; this dock is the action.
@@ -37,13 +38,17 @@ export function ApprovalDock({
   const id = session?.id ?? chatId ?? null;
   const gate = useGateStore((s) => (id === null ? undefined : s.gates[id]));
   const elicitation = useElicitationStore((s) => (id === null ? undefined : s.elicitations[id]));
+  // studio#284: the stall watchdog handed an executing run to a human (reload-safe: the fold reads
+  // the run's hydrated log). Run page only — a chat has no watchdog.
+  const needsYou = useNeedsYouState(view);
   if (id === null) return null;
   const isTerminal = session !== undefined && ['completed', 'cancelled', 'failed'].includes(session.status);
 
   const showGate =
     !isTerminal && (session?.status === 'awaiting_human' || gate !== undefined);
   const showElicitation = !isTerminal && elicitation !== undefined;
-  if (!showGate && !showElicitation) return null;
+  const showNeedsYou = !isTerminal && needsYou !== null && view !== undefined;
+  if (!showGate && !showElicitation && !showNeedsYou) return null;
 
   const guidance = session === undefined ? undefined : sessionGuidance(session);
 
@@ -73,6 +78,7 @@ export function ApprovalDock({
       {showElicitation && elicitation !== undefined && (
         <ElicitationPrompt key={elicitation.elicitationId} e={elicitation} />
       )}
+      {showNeedsYou && view !== undefined && needsYou !== null && <NeedsYouCard view={view} state={needsYou} />}
       {showGate && (
         <SteeringGate
           runId={id}

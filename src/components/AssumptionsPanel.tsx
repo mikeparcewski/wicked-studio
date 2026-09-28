@@ -20,7 +20,12 @@ function routingSummary(r: NonNullable<UnitModel['routing']>): string {
   }
   if (r.method === 'evaluator_distinct') return `evaluator≠creator: ${r.winner} (was ${r.was})`;
   if (r.method === 'tool') return 'tool: direct command (no council)';
-  return `degraded: ${r.reason}`;
+  // studio#332: the team model (core#590 S5) routes deterministically — the first eligible seat,
+  // no council, so no agreement language.
+  if (r.method === 'teamed') return `Routed ${r.winner} (team model, no council)`;
+  if (r.method === 'degraded') return `degraded: ${r.reason}`;
+  // A method this studio does not know yet: name it, never "undefined".
+  return `routed (${String((r as { method?: unknown }).method)})`;
 }
 
 export function AssumptionsPanel({ model }: Props): React.ReactElement {

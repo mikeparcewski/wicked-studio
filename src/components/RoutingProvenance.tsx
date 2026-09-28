@@ -45,9 +45,22 @@ export function RoutingProvenance({ routing }: Props): React.ReactElement | null
     );
   }
 
-  return (
-    <p className="text-[11px] font-mono" style={{ color: 'var(--accent)' }} data-testid="routing-provenance">
-      <span className="font-medium">Evaluator-distinct:</span> {routing.winner} (was {routing.was})
-    </p>
-  );
+  // studio#332: the team model routes deterministically (core#590 S5) — no council, no vote.
+  if (routing.method === 'teamed') {
+    return (
+      <p className="text-[11px] font-mono" style={{ color: 'var(--ink-muted)' }} data-testid="routing-provenance" data-method="teamed">
+        <span className="font-medium">Routed:</span> {routing.winner} — team model, no council
+      </p>
+    );
+  }
+
+  if (routing.method === 'evaluator_distinct') {
+    return (
+      <p className="text-[11px] font-mono" style={{ color: 'var(--accent)' }} data-testid="routing-provenance">
+        <span className="font-medium">Evaluator-distinct:</span> {routing.winner} (was {routing.was})
+      </p>
+    );
+  }
+
+  return null;
 }
