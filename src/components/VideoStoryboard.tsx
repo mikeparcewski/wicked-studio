@@ -8,6 +8,7 @@ import { readAnchors, readExports, readSendStates } from '../interactive/threadS
 import { modePath, versionPath, type Navigate } from '../hooks/useRoute.js';
 import { threadKey, useDocThreadStore, type DocMsg } from '../store/docThread.js';
 import { DeleteDocButton } from './DocDelete.js';
+import { RecordingFailedBadge, recordingFailure, recordingFailureLine, recordingStep } from './demoRecordingState.js';
 import { defaultComparand } from './DocumentCanvas.js';
 import { DocPanel, type DocPanelTab } from './DocPanel.js';
 import { StripSensor, useStripAutoHide } from './ThreadDrawer.js';
@@ -103,6 +104,7 @@ function DemoPicker({ projectId, navigate }: { projectId: string; navigate: Navi
               <span style={{ color: S.muted, flexShrink: 0, fontSize: 'var(--text-xs)', fontFamily: 'var(--font-mono)' }}>
                 v{demo.head}
               </span>
+              <RecordingFailedBadge projectId={projectId} demoId={demo.name} />
             </button>
             <DeleteDocButton
               projectId={projectId}
@@ -369,9 +371,15 @@ function DemoSurface({
       .finally(() => { setRecBusy(false); });
   }
 
-  const recordingLabel = inFlight && demoStatus !== undefined && demoStatus !== null && demoStatus.step !== undefined
-    ? `Recording — step ${demoStatus.step}: ${demoStatus.label ?? '…'}`
+  // The bridge sends the step as `{index, label}` (recordingStep reads either shape).
+  const liveStep = inFlight ? recordingStep(demoStatus) : null;
+  const recordingLabel = liveStep !== null
+    ? `Recording — step ${liveStep.index}: ${liveStep.label !== '' ? liveStep.label : '…'}`
     : 'Recording — running the authored steps…';
+  // studio#278: the last recording FAILED — read off the bridge's status (persisted across a
+  // reload and a bridge restart), so the storyboard names the step, the reason and the remedy
+  // instead of an idle Re-record that says nothing happened.
+  const failedRecording = recBusy || inFlight ? null : recordingFailure(demoStatus);
 
   // ── Compare lens (Document's §7 grammar, on the storyboard) ─────────────────
   const [cmp, setCmp] = useState<number | null>(null);
@@ -566,7 +574,34 @@ function DemoSurface({
               {recErrorIsRemedy ? recError : `${recError} — nothing was queued; try again.`}
             </span>
           )}
-          {threadError !== null && recError === null && !recBusy && !inFlight && (
+          {failedRecording !== null && recError === null && (
+            <div
+              data-testid="demo-recording-failed"
+              data-code={failedRecording.code}
+              role="alert"
+              style={{
+                background: 'var(--surface-raised)', border: '1px solid var(--status-fail)',
+                borderRadius: 'var(--radius-sm)', color: 'var(--ink-high)',
+                display: 'flex', flexDirection: 'column', gap: '4px',
+                fontFamily: 'var(--font-sans)', fontSize: 'var(--text-xs)',
+                maxWidth: '380px', padding: '8px 10px',
+              }}
+            >
+              <strong data-testid="demo-recording-failed-step" style={{ color: 'var(--status-fail)' }}>
+                {recordingFailureLine(failedRecording).replace(/^r/, 'R')}
+              </strong>
+              <span data-testid="demo-recording-failed-reason">{failedRecording.reason}</span>
+              {failedRecording.remedy !== null && (
+                <span data-testid="demo-recording-failed-remedy">
+                  <b>Fix:</b> {failedRecording.remedy}
+                </span>
+              )}
+              <span style={{ color: 'var(--ink-muted)' }}>
+                Say what to change in the chat and crew authors a new spec from it. Re-record replays the same steps.
+              </span>
+            </div>
+          )}
+          {threadError !== null && failedRecording === null && recError === null && !recBusy && !inFlight && (
             <span
               data-testid="video-record-error"
               data-source="thread"

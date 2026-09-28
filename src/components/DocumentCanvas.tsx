@@ -11,6 +11,7 @@ import { modePath, versionPath, type Navigate } from '../hooks/useRoute.js';
 import { threadKey, useDocThreadStore } from '../store/docThread.js';
 import { hasInstrumentBridge, instrumentDocHtml } from '../interactive/instrumented.js';
 import { DeleteDocButton } from './DocDelete.js';
+import { RecordingFailedBadge } from './demoRecordingState.js';
 import { DocPanel, type DocPanelTab } from './DocPanel.js';
 import { FeedbackOverlay } from './FeedbackOverlay.js';
 import { StripSensor, useStripAutoHide } from './ThreadDrawer.js';
@@ -111,6 +112,7 @@ function DocPicker({ projectId, navigate }: { projectId: string; navigate: Navig
               <span style={{ color: S.muted, flexShrink: 0, fontSize: 'var(--text-xs)', fontFamily: 'var(--font-mono)' }}>
                 {doc.kind} · v{doc.head}
               </span>
+              {doc.kind === 'demo' && <RecordingFailedBadge projectId={projectId} demoId={doc.name} />}
             </button>
             {/* Delete where the docs live (studio#119): confirm-gated, and the
                 settled delete re-runs the same one list load the picker owns. */}
