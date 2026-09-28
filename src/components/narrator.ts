@@ -668,6 +668,8 @@ export interface ChatSeatView {
   text: string;
   pending: boolean;
   ok: boolean;
+  /** The send ordinal this reply answers (GroupChat's `SeatMsg.turn`) — groups a multi-seat round. */
+  turn?: number;
 }
 export interface ChatUserView {
   kind: 'user';
@@ -707,6 +709,47 @@ export function chatSizeLabel(text: string): string {
 }
 
 /**
+ * A seat's own session notices that are not part of its answer (studio#237 b): claude's context
+ * compaction prints "Compacting... Compacting completed." into the reply stream. Dropped whole-line
+ * only, so a sentence that merely mentions compaction is untouched.
+ */
+const SEAT_NOTICE_LINE = /^[ \t]*(?:Compacting(?:\.{3}|…)[ \t]*)?(?:Compacting completed\.?)?[ \t]*$/;
+
+/** The reply text as the thread shows it: the seat's session notices removed (studio#237 b). */
+export function cleanChatReply(text: string): string {
+  if (!text.includes('Compacting')) return text;
+  return text
+    .split('\n')
+    .filter((line) => line.trim() === '' || !SEAT_NOTICE_LINE.test(line))
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n');
+}
+
+/** A markdown rule (`---`, `***`, `___`) or a code fence — never a headline. */
+const NOT_A_HEADLINE = /^(?:(?:[-*_][ \t]*){3,}|```.*|~~~.*|\|.*)$/;
+/** An agent narrating its own tool use before answering ("Let me explore…", "I'll now spawn…"). */
+const MONOLOGUE = /^(?:let me|let's|i'll|i will|i'm going to|i am going to|now i|first,? i|okay|ok,)\b/i;
+
+/**
+ * The one-line teaser a collapsed reply wears (studio#237 a): the reply's first heading, else its
+ * first line that is neither markup (a rule, a fence, a table row) nor the seat narrating its own
+ * tool use — cut at the first sentence. Falls back to the first non-markup line, so a reply never
+ * loses its teaser to the filter.
+ */
+export function replyTeaser(text: string, max = 100): string {
+  const lines = cleanChatReply(text)
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l !== '' && !NOT_A_HEADLINE.test(l));
+  const heading = lines.find((l) => /^#{1,6}\s/.test(l));
+  if (heading !== undefined) return clip(heading.replace(/^#+\s*/, ''), max);
+  const pick = lines.find((l) => !MONOLOGUE.test(l)) ?? lines[0] ?? '';
+  const plain = pick.replace(/^(?:[-*+]|\d+\.)\s+/, '').replace(/^>\s*/, '');
+  const sentence = /^(.+?[.!?])(?:\s|$)/.exec(plain);
+  return clip(sentence?.[1] ?? plain, max);
+}
+
+/**
  * One seat message → its narration, or `null` when the message stays a
  * first-class conversational turn (§11.1). The seat's identity is NOT in the
  * text — the renderer wears it as a chip on the line.
@@ -721,11 +764,10 @@ export function narrateChatSeat(m: ChatSeatView): { text: string; tone: Narratio
     const head = clip(m.text.trim(), 120);
     return { text: `failed${head ? ` — ${head}` : ''}`, tone: 'fail' };
   }
-  if (isConversationalReply(m.text)) return null;
-  // The headline drops a leading markdown heading marker — "## Root cause"
-  // reads as syntax, not narration.
-  const firstLine = clip(m.text.trim().replace(/^#+\s*/, ''), 100);
-  return { text: `replied (${chatSizeLabel(m.text)})${firstLine ? ` — ${firstLine}` : ''}`, tone: 'work' };
+  const text = cleanChatReply(m.text);
+  if (isConversationalReply(text)) return null;
+  const teaser = replyTeaser(text);
+  return { text: `replied (${chatSizeLabel(text)})${teaser ? ` — ${teaser}` : ''}`, tone: 'work' };
 }
 
 /** A seat's turn posture, derived from the message log (see {@link seatLogPosture}). */
@@ -835,6 +877,8 @@ export interface ChatNarrationItem {
   seat: string | null;
   text: string;
   tone: NarrationTone;
+  /** `seats-disagree`: the line that follows a round several seats answered separately (studio#238). */
+  marker?: 'seats-disagree';
 }
 export interface ChatArtifactItem {
   kind: 'artifact';
@@ -851,9 +895,35 @@ export type ChatFeedItem = ChatTurnItem | ChatNarrationItem | ChatArtifactItem;
  * riding behind it (deduped across the transcript, capped inline like the run
  * feed). Pure — the renderer maps over the result.
  */
+/**
+ * studio#238: every question fans out to each seat and each answers ALONE — nothing reconciles them,
+ * and on the same evidence they contradict each other. Studio cannot tell agreement from
+ * disagreement without a judge, so it never claims either: a round two or more seats answered
+ * gets one line saying the answers are separate and unreconciled, after the round's last reply.
+ * Only once no seat of that round is still replying, so the count is final.
+ */
+function unreconciledRounds(messages: readonly ChatMsgView[]): Map<number, number> {
+  const rounds = new Map<number, { last: number; seats: Set<string>; pending: boolean }>();
+  messages.forEach((m, i) => {
+    if (m.kind !== 'seat' || m.turn === undefined) return;
+    const r = rounds.get(m.turn) ?? { last: i, seats: new Set<string>(), pending: false };
+    r.last = i;
+    if (m.pending) r.pending = true;
+    else if (m.ok) r.seats.add(m.cliKey);
+    rounds.set(m.turn, r);
+  });
+  // Keyed by the index of the round's last seat message → how many seats answered it.
+  const out = new Map<number, number>();
+  for (const r of rounds.values()) {
+    if (!r.pending && r.seats.size >= 2) out.set(r.last, r.seats.size);
+  }
+  return out;
+}
+
 export function buildChatFeed(messages: readonly ChatMsgView[]): ChatFeedItem[] {
   const items: ChatFeedItem[] = [];
   const seenArtifacts = new Set<string>();
+  const unreconciled = unreconciledRounds(messages);
   messages.forEach((m, i) => {
     if (m.kind === 'user') {
       items.push({ kind: 'turn', key: `m${i}`, index: i });
@@ -878,6 +948,18 @@ export function buildChatFeed(messages: readonly ChatMsgView[]): ChatFeedItem[] 
         inlined += 1;
         items.push({ kind: 'artifact', key: `a${i}:${a.ref}`, artifact: { ...a, phase: m.cliKey } });
       }
+    }
+    const answered = unreconciled.get(i);
+    if (answered !== undefined) {
+      items.push({
+        kind: 'narration',
+        key: `d${i}`,
+        index: null,
+        seat: null,
+        text: `${answered} seats answered separately and nothing reconciled them — they may disagree; compare before acting`,
+        tone: 'gate',
+        marker: 'seats-disagree',
+      });
     }
   });
   return items;
@@ -919,14 +1001,16 @@ export function newestChatNow(
 ): { text: string; tone: NarrationTone } | null {
   for (let i = items.length - 1; i >= 0; i--) {
     const it = items[i]!;
-    if (it.kind === 'artifact') continue;
+    // The unreconciled-round marker is a note on the thread, not a happening: the bar keeps
+    // saying who replied.
+    if (it.kind === 'artifact' || (it.kind === 'narration' && it.marker !== undefined)) continue;
     if (it.kind === 'narration') {
       return { text: it.seat !== null ? `${it.seat} ${it.text}` : it.text, tone: it.tone };
     }
     const m = messages[it.index];
     if (m === undefined) continue;
     if (m.kind === 'user') return { text: `You: ${clip(m.text, 100)}`, tone: 'human' };
-    if (m.kind === 'seat') return { text: `${m.cliKey} replied — ${clip(m.text.trim(), 100)}`, tone: 'work' };
+    if (m.kind === 'seat') return { text: `${m.cliKey} replied — ${replyTeaser(m.text)}`, tone: 'work' };
   }
   return null;
 }

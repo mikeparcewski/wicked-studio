@@ -3,6 +3,7 @@ import type { ChatTranscriptRecord, ChatUsage } from '../api/types.js';
 import { Markdown } from './Markdown.js';
 import { ArtifactCard } from './ArtifactCard.js';
 import {
+  cleanChatReply,
   TONE_COLOR,
   TONE_GLYPH,
   type ChatFeedItem,
@@ -88,6 +89,45 @@ function compactTokens(n: number): string {
 export function usageLabel(u: ChatUsage): string {
   const parts = [`${compactTokens(u.inputTokens)} in`, `${compactTokens(u.outputTokens)} out`];
   if (u.costUsd !== null) parts.push(`$${u.costUsd.toFixed(2)}`);
+  return parts.join(' · ');
+}
+
+/** What a chat's finished replies cost (studio#277): the priced sum, and what it leaves out. */
+export interface ChatCost {
+  /** Finished seat replies counted. */
+  replies: number;
+  /** Sum of the replies' `costUsd` where the engine knew a price. */
+  usd: number;
+  /** Replies that carried a price. */
+  priced: number;
+  /** Answers with no usage at all (`usage: null`, `ok`) — the seat reported nothing. */
+  unmetered: number;
+}
+
+export function chatCost(messages: readonly Msg[]): ChatCost {
+  const out: ChatCost = { replies: 0, usd: 0, priced: 0, unmetered: 0 };
+  for (const m of messages) {
+    if (m.kind !== 'seat' || m.pending || m.usage === undefined) continue;
+    // A failed turn counts only when it reported usage — it spent that; with none it is a failure,
+    // not an unmetered answer.
+    if (m.usage === null && !m.ok) continue;
+    out.replies += 1;
+    if (m.usage === null) out.unmetered += 1;
+    else if (m.usage.costUsd !== null) {
+      out.usd += m.usage.costUsd;
+      out.priced += 1;
+    }
+  }
+  return out;
+}
+
+/** The chat header's total: `$0.12 so far · 2 unmetered`, or `unmetered` when nothing was priced. */
+export function chatCostLabel(c: ChatCost): string {
+  const parts: string[] = [];
+  if (c.priced > 0) parts.push(`$${c.usd.toFixed(2)} so far`);
+  const unpriced = c.replies - c.priced - c.unmetered;
+  if (unpriced > 0) parts.push(`${unpriced} unpriced`);
+  if (c.unmetered > 0) parts.push(c.priced === 0 && unpriced === 0 ? 'unmetered' : `${c.unmetered} unmetered`);
   return parts.join(' · ');
 }
 
@@ -256,7 +296,21 @@ function bubbleBody(m: SeatMsg): React.ReactElement {
       {m.pending && m.text === '' ? (
         <span className="opacity-50 font-mono text-[11px] animate-pulse">thinking…</span>
       ) : (
-        <Markdown>{m.text}</Markdown>
+        <Markdown>{cleanChatReply(m.text)}</Markdown>
+      )}
+      {!m.pending && m.ok && m.usage === null && (
+        // studio#277: an answer whose seat reports no usage (pi, agy — or a daemon predating the
+        // field) says so. A blank footer would read as "free"; "unmetered" is what is known. A
+        // failed turn already says it failed and claims nothing about cost.
+        <div
+          data-testid="seat-usage"
+          data-metered="false"
+          className="mt-1.5 font-mono text-[10px]"
+          style={{ color: 'var(--ink-dim)' }}
+          title="This seat reported no token usage for the turn, so its cost is not known"
+        >
+          unmetered
+        </div>
       )}
       {!m.pending && m.usage !== undefined && m.usage !== null && (
         // DES-L5 §4: what the turn cost, on the bubble that cost it — mono, dim,
@@ -264,6 +318,7 @@ function bubbleBody(m: SeatMsg): React.ReactElement {
         // never shows a number it does not have yet.
         <div
           data-testid="seat-usage"
+          data-metered="true"
           className="mt-1.5 font-mono text-[10px]"
           style={{ color: 'var(--ink-dim)' }}
           title={`cache read ${m.usage.cacheReadTokens} · cache creation ${m.usage.cacheCreationTokens}`}
@@ -340,6 +395,7 @@ export function ChatThread({ messages, view, layout, seatOrder, items }: Props):
         <div
           data-testid="chat-narration-line"
           data-tone={item.tone}
+          {...(item.marker !== undefined ? { 'data-marker': item.marker } : {})}
           {...(item.seat !== null ? { 'data-agent': item.seat } : {})}
           className="flex items-center gap-2 px-1"
         >

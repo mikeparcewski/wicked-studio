@@ -11,8 +11,8 @@
   "studioVersion": "0.5.14",
   "counts": {
     "files": 170,
-    "occurrences": 1596,
-    "static": 1384,
+    "occurrences": 1599,
+    "static": 1386,
     "dynamic": 69,
     "computed": 7
   },
@@ -909,6 +909,12 @@
     },
     {
       "testId": "chat-composer",
+      "files": [
+        "src/components/GroupChat.tsx"
+      ]
+    },
+    {
+      "testId": "chat-cost-total",
       "files": [
         "src/components/GroupChat.tsx"
       ]
@@ -5652,6 +5658,12 @@
     },
     {
       "testId": "seat-chip",
+      "files": [
+        "src/components/GroupChat.tsx"
+      ]
+    },
+    {
+      "testId": "seat-grounding",
       "files": [
         "src/components/GroupChat.tsx"
       ]

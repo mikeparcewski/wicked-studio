@@ -442,7 +442,7 @@ describe('DES-L5 §5-i — a rejoin replays the persisted transcript (F-RC1-115 
     expect(seatBubbles.length).toBe(3);
     for (const b of Array.from(seatBubbles)) expect((b as HTMLElement).dataset['pending']).toBe('false');
     // A restored reply carries its usage footer.
-    expect(screen.getByTestId('seat-usage').textContent).toBe('12.3k in · 800 out · $0.04');
+    expect(document.querySelector('[data-testid="seat-usage"][data-metered="true"]')?.textContent).toBe('12.3k in · 800 out · $0.04');
     expect(openChat).not.toHaveBeenCalled();
   });
 
