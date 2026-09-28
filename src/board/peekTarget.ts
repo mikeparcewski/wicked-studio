@@ -64,7 +64,9 @@ const TERMINAL: ReadonlySet<string> = new Set(['completed', 'failed', 'cancelled
  * builds its gate rows off the run list's `awaiting_human` status, which trails the `/ws`
  * `awaitingHuman` frame by a list refresh (~1 s); in that window a P press read "Nothing needs
  * you" while the gate's toast was on screen. Gates are the queue's top severity class, so such a
- * gate outranks any non-gate top item. The oldest one wins, as the queue's age band would rank it.
+ * gate outranks any non-gate top item; among several not-yet-folded gates the oldest wins. A gate
+ * row already at the queue top stands: a not-yet-folded gate is at most one refresh old, and the
+ * queue's own ranking (age band, then stakes) takes it over on the next fold.
  */
 function liveGateNotQueued(
   flat: readonly NeedRow[],
