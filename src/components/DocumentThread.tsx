@@ -740,17 +740,21 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
   // studio#302: the Document council — defaulted once the roster is known (docSeats.ts), then
   // the user's to change. `null` until then: a create before the roster loads sends no seats
   // and crew convenes its own default.
-  const [docSeats, setDocSeats] = useState<DocSeatDefault | null>(null);
+  // The pick belongs to ONE launch context (codex on #380): it is stored with the context it was
+  // made in, and a different project/doc/mode reads as "not chosen yet" and re-defaults.
+  const seatContext = `${projectId}\u0000${docId ?? ''}\u0000${mode}`;
+  const [docSeatPick, setDocSeatPick] = useState<{ context: string; seats: DocSeatDefault } | null>(null);
+  const docSeats = docSeatPick !== null && docSeatPick.context === seatContext ? docSeatPick.seats : null;
   useEffect(() => {
-    if (docRoster !== null && docSeats === null) setDocSeats(defaultDocSeats(docRoster));
-  }, [docRoster, docSeats]);
+    if (docRoster !== null && docSeats === null) setDocSeatPick({ context: seatContext, seats: defaultDocSeats(docRoster) });
+  }, [docRoster, docSeats, seatContext]);
   const toggleDocSeat = (key: string): void => {
-    setDocSeats((prev) => {
-      if (prev === null) return prev;
-      const selected = new Set(prev.selected);
+    setDocSeatPick((prev) => {
+      if (prev === null || prev.context !== seatContext) return prev;
+      const selected = new Set(prev.seats.selected);
       if (selected.has(key)) selected.delete(key);
       else selected.add(key);
-      return { ...prev, selected };
+      return { context: prev.context, seats: { ...prev.seats, selected } };
     });
   };
   useEffect(() => {
@@ -774,8 +778,6 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
     setNameDraft('');
     setNameEdited(false);
     setCollision(null);
-    // studio#302 (codex on #380): the council is a pick for this launch context too — re-default it.
-    setDocSeats(null);
   }, [projectId, docId, mode]);
   const launching = docId === null || key === null;
   /** The launch composer's parse of the ask — a quoted name (§7.3) or null. */

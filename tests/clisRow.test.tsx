@@ -142,7 +142,7 @@ describe('doc-clis-row (DocumentThread in launching mode) — studio#302 seat co
     const user = userEvent.setup();
     const { rerender } = render(<DocumentThread projectId="default" docId={null} selectedVersion={null} navigate={vi.fn()} mode="document" />);
     await user.click(screen.getByTestId('doc-seat-opencode'));
-    expect(screen.getByTestId('doc-council-line').textContent).toBe('council: claude · pi');
+    expect(screen.getByTestId('doc-seat-opencode').getAttribute('aria-pressed')).toBe('false');
     rerender(<DocumentThread projectId="other" docId={null} selectedVersion={null} navigate={vi.fn()} mode="document" />);
     await waitFor(() => expect(screen.getByTestId('doc-seat-opencode').getAttribute('aria-pressed')).toBe('true'));
   });
