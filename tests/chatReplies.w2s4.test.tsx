@@ -4,7 +4,7 @@
 import { describe, expect, it } from 'vitest';
 import { render } from '@testing-library/react';
 import { Markdown } from '../src/components/Markdown.js';
-import { ChatThread, type Msg } from '../src/components/ChatThread.js';
+import { ChatThread, chatCost, chatCostLabel, type Msg } from '../src/components/ChatThread.js';
 import { buildChatFeed, narrateChatSeat, newestChatNow, type ChatMsgView } from '../src/components/narrator.js';
 
 const long = (head: string): string => `${head}\n${'body line\n'.repeat(30)}`;
@@ -71,6 +71,18 @@ describe('studio#237 (d) — GFM tables render as tables', () => {
     expect(container.textContent).toContain("I'll list them.");
   });
 
+  it('a pipe inside inline code is never taken for a glued header', () => {
+    const { container } = render(<Markdown>{'Use `a|b` literally\n| --- |'}</Markdown>);
+    expect(container.querySelector('code')?.textContent).toBe('a|b');
+  });
+
+  it('a tilde line inside a backtick fence does not close it', () => {
+    const md = '```\n~~~\nnot a table | inside code\n| --- | --- |\n```';
+    const { container } = render(<Markdown>{md}</Markdown>);
+    expect(container.querySelector('table')).toBeNull();
+    expect(container.querySelector('code')?.textContent).toBe('~~~\nnot a table | inside code\n| --- | --- |\n');
+  });
+
   it('a pipe inside fenced code is left alone', () => {
     const { container } = render(<Markdown>{'```\nfoo | bar\n|---|---|\n```'}</Markdown>);
     expect(container.querySelector('table')).toBeNull();
@@ -110,17 +122,35 @@ describe('studio#238 — a round several seats answered says the answers are not
 });
 
 describe('studio#277 — a reply with no usage says "unmetered", never a blank', () => {
-  it('usage: null renders "unmetered"; a pending bubble renders no footer', () => {
+  it('usage: null on an answer renders "unmetered"; a pending or failed bubble renders no footer', () => {
     const messages: Msg[] = [
       { kind: 'user', text: 'q', turn: 1 },
       { kind: 'seat', cliKey: 'pi', text: 'answer', pending: false, ok: true, turn: 1, usage: null },
       { kind: 'seat', cliKey: 'claude', text: 'still going', pending: true, ok: false, turn: 1 },
+      { kind: 'seat', cliKey: 'codex', text: 'released: turn budget', pending: false, ok: false, turn: 1, usage: null },
     ];
     const { container } = render(
-      <ChatThread messages={messages} view="full" layout="list" seatOrder={['pi', 'claude']} items={[]} />,
+      <ChatThread messages={messages} view="full" layout="list" seatOrder={['pi', 'claude', 'codex']} items={[]} />,
     );
     const footers = container.querySelectorAll('[data-testid="seat-usage"]');
     expect(footers).toHaveLength(1);
     expect(footers[0]!.textContent).toBe('unmetered');
+  });
+
+  it('the chat total counts unmetered answers and priced turns, never an unpriced failure', () => {
+    const u = (costUsd: number | null) => ({ inputTokens: 1, outputTokens: 1, cacheReadTokens: 0, cacheCreationTokens: 0, costUsd });
+    const messages: Msg[] = [
+      { kind: 'seat', cliKey: 'claude', text: 'a', pending: false, ok: true, turn: 1, usage: u(0.1) },
+      { kind: 'seat', cliKey: 'claude', text: 'cut', pending: false, ok: false, turn: 2, usage: u(0.05) },
+      { kind: 'seat', cliKey: 'pi', text: 'b', pending: false, ok: true, turn: 1, usage: null },
+      { kind: 'seat', cliKey: 'codex', text: 'failed', pending: false, ok: false, turn: 1, usage: null },
+      { kind: 'seat', cliKey: 'agy', text: 'c', pending: false, ok: true, turn: 1, usage: u(null) },
+      { kind: 'seat', cliKey: 'opencode', text: '', pending: true, ok: false, turn: 3 },
+    ];
+    const c = chatCost(messages);
+    expect({ ...c, usd: 0 }).toEqual({ replies: 4, usd: 0, priced: 2, unmetered: 1 });
+    expect(c.usd).toBeCloseTo(0.15);
+    expect(chatCostLabel(c)).toBe('$0.15 so far · 1 unpriced · 1 unmetered');
+    expect(chatCostLabel(chatCost([messages[2]!]))).toBe('unmetered');
   });
 });

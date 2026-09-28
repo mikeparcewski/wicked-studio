@@ -16,29 +16,60 @@ function isFileRef(href: string): boolean {
 
 /** A GFM table delimiter row: `|---|:--:|`, `--- | ---` — at least one pipe, only dashes/colons in cells. */
 const DELIMITER_ROW = /^\s*\|?\s*:?-+:?\s*(?:\|\s*:?-+:?\s*)+\|?\s*$|^\s*\|\s*:?-+:?\s*\|\s*$/;
-const FENCE = /^\s*(?:```|~~~)/;
+/** A fence opener/closer: up to 3 spaces, then 3+ backticks or tildes. */
+const FENCE = /^ {0,3}(`{3,}|~{3,})/;
+
+/** The cell count of a pipe-bounded row (`| a | b |` → 2). */
+function cellCount(row: string): number {
+  return row.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').length;
+}
+
+/**
+ * Where a header row glued to the text before it starts: the first pipe OUTSIDE inline code whose
+ * remainder is a whole pipe-bounded row with the delimiter's column count. `-1` when there is none.
+ */
+function gluedHeaderStart(line: string, delimiter: string): number {
+  const columns = cellCount(delimiter);
+  let ticks = 0;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (c === '`') ticks += 1;
+    if (c !== '|' || i === 0 || ticks % 2 === 1 || line.slice(0, i).trim() === '') continue;
+    const rest = line.slice(i).trimEnd();
+    if (rest.endsWith('|') && rest.length > 1 && cellCount(rest) === columns) return i;
+  }
+  return -1;
+}
 
 /**
  * studio#237 (d): a table whose header row does not start its own line never parses — a streamed
  * reply that joined two blocks with no newline ("…I'll list them.| File | What |") left the header
  * glued to the sentence before it, and the whole table rendered as one fused paragraph. When the
- * line above a delimiter row carries text before its first pipe while the delimiter row itself
- * starts with a pipe, the header is split onto its own line behind a blank one. Fenced code is
+ * line above a pipe-led delimiter row ends in a whole header row (outside inline code, the
+ * delimiter's column count), that row moves onto its own line behind a blank one. Fenced code is
  * left alone.
  */
 export function normaliseTables(md: string): string {
   if (!md.includes('|')) return md;
   const lines = md.split('\n');
   const out: string[] = [];
-  let inFence = false;
+  let fence: { char: string; len: number } | null = null;
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]!;
-    if (FENCE.test(line)) inFence = !inFence;
+    const f = FENCE.exec(line);
+    if (f !== null) {
+      const marker = f[1]!;
+      if (fence === null) fence = { char: marker[0]!, len: marker.length };
+      else if (marker[0] === fence.char && marker.length >= fence.len && line.trim() === marker) fence = null;
+      out.push(line);
+      continue;
+    }
     const next = lines[i + 1];
-    if (!inFence && next !== undefined && next.trimStart().startsWith('|') && DELIMITER_ROW.test(next)) {
-      const pipe = line.indexOf('|');
-      if (pipe > 0 && line.slice(0, pipe).trim() !== '' && !line.trimStart().startsWith('|')) {
-        out.push(line.slice(0, pipe).trimEnd(), '', line.slice(pipe));
+    if (fence === null && next !== undefined && next.trimStart().startsWith('|') && DELIMITER_ROW.test(next)
+      && !line.trimStart().startsWith('|')) {
+      const at = gluedHeaderStart(line, next);
+      if (at > 0) {
+        out.push(line.slice(0, at).trimEnd(), '', line.slice(at));
         continue;
       }
     }

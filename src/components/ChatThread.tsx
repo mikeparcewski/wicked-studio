@@ -100,7 +100,7 @@ export interface ChatCost {
   usd: number;
   /** Replies that carried a price. */
   priced: number;
-  /** Replies with no usage at all (`usage: null`) — the seat reported nothing. */
+  /** Answers with no usage at all (`usage: null`, `ok`) — the seat reported nothing. */
   unmetered: number;
 }
 
@@ -108,6 +108,9 @@ export function chatCost(messages: readonly Msg[]): ChatCost {
   const out: ChatCost = { replies: 0, usd: 0, priced: 0, unmetered: 0 };
   for (const m of messages) {
     if (m.kind !== 'seat' || m.pending || m.usage === undefined) continue;
+    // A failed turn counts only when it reported usage — it spent that; with none it is a failure,
+    // not an unmetered answer.
+    if (m.usage === null && !m.ok) continue;
     out.replies += 1;
     if (m.usage === null) out.unmetered += 1;
     else if (m.usage.costUsd !== null) {
@@ -295,9 +298,10 @@ function bubbleBody(m: SeatMsg): React.ReactElement {
       ) : (
         <Markdown>{cleanChatReply(m.text)}</Markdown>
       )}
-      {!m.pending && m.usage === null && (
-        // studio#277: a seat whose bridge reports no usage (pi, agy — or a daemon predating the
-        // field) says so. A blank footer would read as "free"; "unmetered" is what is known.
+      {!m.pending && m.ok && m.usage === null && (
+        // studio#277: an answer whose seat reports no usage (pi, agy — or a daemon predating the
+        // field) says so. A blank footer would read as "free"; "unmetered" is what is known. A
+        // failed turn already says it failed and claims nothing about cost.
         <div
           data-testid="seat-usage"
           data-metered="false"
