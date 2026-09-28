@@ -51,7 +51,10 @@ beforeEach(() => {
   vi.restoreAllMocks();
   clearCachedWorkflows();
   vi.spyOn(client.api, 'listWorkflows').mockResolvedValue({ workflows: LIVE_WORKFLOWS });
-  gate.mockClear();
+  // mockReset (not mockClear): drops the previous test's mockReturnValue(false)
+  // and restores the wrapped real canDeliver. vitest 5's restoreAllMocks no
+  // longer resets vi.fn() implementations, so mockClear alone leaked it.
+  gate.mockReset();
 });
 afterEach(cleanup);
 
