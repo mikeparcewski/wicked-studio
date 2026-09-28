@@ -11,8 +11,8 @@
   "studioVersion": "0.5.14",
   "counts": {
     "files": 168,
-    "occurrences": 1576,
-    "static": 1370,
+    "occurrences": 1577,
+    "static": 1371,
     "dynamic": 69,
     "computed": 7
   },
@@ -1299,6 +1299,12 @@
       "testId": "conformance-rule-citation",
       "files": [
         "src/components/GovernanceAudit.tsx"
+      ]
+    },
+    {
+      "testId": "connection-remedy",
+      "files": [
+        "src/components/ConnectionStatus.tsx"
       ]
     },
     {

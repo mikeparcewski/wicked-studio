@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import { ConnectionStatus } from '../src/components/ConnectionStatus.js';
 import { useConnectionStore } from '../src/store/connection.js';
 
@@ -8,29 +8,30 @@ function renderWithStatus(status: 'connecting' | 'connected' | 'disconnected') {
   return render(<ConnectionStatus />);
 }
 
-describe('ConnectionStatus', () => {
-  it('shows "connecting" aria-label when connecting', () => {
-    renderWithStatus('connecting');
-    expect(screen.getByTestId('connection-status')).toHaveAttribute('aria-label', 'connecting');
-  });
-
-  it('shows "connected" aria-label when connected', () => {
-    renderWithStatus('connected');
-    expect(screen.getByTestId('connection-status')).toHaveAttribute('aria-label', 'connected');
-  });
-
-  it('shows "disconnected" aria-label when disconnected (SC-S05)', () => {
-    renderWithStatus('disconnected');
-    const el = screen.getByTestId('connection-status');
-    expect(el).toBeInTheDocument();
-    expect(el).toHaveAttribute('aria-label', 'disconnected');
-  });
-
-  it('renders without throwing in any state', () => {
-    for (const status of ['connecting', 'connected', 'disconnected'] as const) {
+describe('ConnectionStatus — the lost-connection banner (crew#551)', () => {
+  it('renders nothing while connecting or connected (the health rail pill owns those)', () => {
+    for (const status of ['connecting', 'connected'] as const) {
       const { unmount } = renderWithStatus(status);
-      expect(screen.getByTestId('connection-status')).toBeInTheDocument();
+      expect(screen.queryByTestId('connection-status')).toBeNull();
       unmount();
     }
+  });
+
+  it('when disconnected: an alert that names the same one-line fix `wicked-crew status` prints (SC-S05)', () => {
+    renderWithStatus('disconnected');
+    const el = screen.getByTestId('connection-status');
+    expect(el).toHaveAttribute('role', 'alert');
+    expect(el).toHaveAttribute('aria-label', 'disconnected');
+    const remedy = screen.getByTestId('connection-remedy').textContent ?? '';
+    expect(remedy).toContain('wicked-crew serve');
+    expect(remedy).toContain('wicked-crew serve --install-service');
+    expect(remedy).toContain('wicked-crew status');
+  });
+
+  it('goes away when the socket reconnects', () => {
+    renderWithStatus('disconnected');
+    expect(screen.getByTestId('connection-status')).toBeInTheDocument();
+    act(() => useConnectionStore.setState({ status: 'connected' }));
+    expect(screen.queryByTestId('connection-status')).toBeNull();
   });
 });
