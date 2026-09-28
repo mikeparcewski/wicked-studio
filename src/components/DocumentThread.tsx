@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { RosterSeat } from '../api/types.js';
 import { apiStatus } from '../api/errors.js';
 import { api } from '../api/client.js';
@@ -741,21 +741,20 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
   // the user's to change. `null` until then: a create before the roster loads sends no seats
   // and crew convenes its own default.
   // The pick belongs to ONE launch context (codex on #380): it is stored with the context it was
-  // made in, and a different project/doc/mode reads as "not chosen yet" and re-defaults.
-  const seatContext = `${projectId}\u0000${docId ?? ''}\u0000${mode}`;
+  // made in. In any other project/doc/mode — and before the first toggle — the council is the
+  // default, derived in the same render (never a render with a roster but no pick).
+  const seatContext = `${projectId}|${docId ?? ''}|${mode}`;
   const [docSeatPick, setDocSeatPick] = useState<{ context: string; seats: DocSeatDefault } | null>(null);
-  const docSeats = docSeatPick !== null && docSeatPick.context === seatContext ? docSeatPick.seats : null;
-  useEffect(() => {
-    if (docRoster !== null && docSeats === null) setDocSeatPick({ context: seatContext, seats: defaultDocSeats(docRoster) });
-  }, [docRoster, docSeats, seatContext]);
+  // `seatContext` is a dependency on purpose: a new launch context re-reads the stored default.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const defaultSeats = useMemo(() => (docRoster === null ? null : defaultDocSeats(docRoster)), [docRoster, seatContext]);
+  const docSeats = docSeatPick !== null && docSeatPick.context === seatContext ? docSeatPick.seats : defaultSeats;
   const toggleDocSeat = (key: string): void => {
-    setDocSeatPick((prev) => {
-      if (prev === null || prev.context !== seatContext) return prev;
-      const selected = new Set(prev.seats.selected);
-      if (selected.has(key)) selected.delete(key);
-      else selected.add(key);
-      return { context: prev.context, seats: { ...prev.seats, selected } };
-    });
+    if (docSeats === null) return;
+    const selected = new Set(docSeats.selected);
+    if (selected.has(key)) selected.delete(key);
+    else selected.add(key);
+    setDocSeatPick({ context: seatContext, seats: { ...docSeats, selected } });
   };
   useEffect(() => {
     const unsubscribe = subscribeRoster(setDocRoster);

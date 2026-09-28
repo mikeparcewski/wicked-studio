@@ -124,11 +124,13 @@ describe('doc-clis-row (DocumentThread in launching mode) — studio#302 seat co
   });
 
   it('a roster refresh that drops every chosen seat refuses Create, never sends an empty council', async () => {
-    setCachedRoster([SEAT]);
+    const PI: RosterSeat = { ...SEAT, key: 'pi', display_name: 'Pi', binary: 'pi' };
+    setCachedRoster([SEAT, PI]);
     const user = userEvent.setup();
     render(<DocumentThread projectId="default" docId={null} selectedVersion={null} navigate={vi.fn()} mode="document" />);
+    // The user's pick: claude only. A refresh then drops claude from the roster.
+    await user.click(screen.getByTestId('doc-seat-pi'));
     expect(screen.getByTestId('doc-seat-claude').getAttribute('aria-pressed')).toBe('true');
-    const PI: RosterSeat = { ...SEAT, key: 'pi', display_name: 'Pi', binary: 'pi' };
     act(() => { setCachedRoster([PI]); });
     await user.type(screen.getByTestId('doc-composer'), 'a deck for the product');
     expect((screen.getByTestId('doc-composer-submit') as HTMLButtonElement).disabled).toBe(true);
@@ -144,7 +146,8 @@ describe('doc-clis-row (DocumentThread in launching mode) — studio#302 seat co
     await user.click(screen.getByTestId('doc-seat-opencode'));
     expect(screen.getByTestId('doc-seat-opencode').getAttribute('aria-pressed')).toBe('false');
     rerender(<DocumentThread projectId="other" docId={null} selectedVersion={null} navigate={vi.fn()} mode="document" />);
-    await waitFor(() => expect(screen.getByTestId('doc-seat-opencode').getAttribute('aria-pressed')).toBe('true'));
+    // Same render as the switch — no frame with a roster but no council.
+    expect(screen.getByTestId('doc-seat-opencode').getAttribute('aria-pressed')).toBe('true');
   });
 
   it('cold cache: the chips appear after api.getRoster resolves', async () => {
