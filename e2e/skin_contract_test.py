@@ -135,7 +135,7 @@ NAV_DESTS = """() => [...document.querySelectorAll('[data-testid="left-rail"] [d
                name: (el.getAttribute('aria-label') || el.innerText || '').trim()}))"""
 EXPECTED_DESTS = sorted([
     "section:projects", "section:execute", "section:test", "section:vibe", "section:demo",
-    "section:chat", "section:repos", "section:skills", "section:steering", "section:testing",
+    "section:chat", "section:repos", "section:skills", "section:mcp", "section:steering", "section:testing",
     "settings:/theme", "settings:/workflows", "settings:/system", "notifications", "health",
 ])
 

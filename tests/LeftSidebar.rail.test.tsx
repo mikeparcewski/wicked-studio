@@ -57,8 +57,9 @@ const W2_ORDERED = [
   bp('scratch', 'quiet', 0),
 ];
 
-// Skills (the skills keystone) joined the system block BEFORE Steering — eleven headings.
-const HEADING_KEYS = ['projects', 'execute', 'test', 'vibe', 'demo', 'chat', 'repos', 'skills', 'steering', 'testing', 'settings'] as const;
+// Skills (the skills keystone) joined the system block BEFORE Steering, and MCP tools sits between
+// them (DES-MCP-TOOLS-001 §7) — twelve headings.
+const HEADING_KEYS = ['projects', 'execute', 'test', 'vibe', 'demo', 'chat', 'repos', 'skills', 'mcp', 'steering', 'testing', 'settings'] as const;
 
 function rail(props: Partial<{ pathname: string; navigate: (p: string) => void; runs: ReturnType<typeof makeView>[] }> = {}): ReturnType<typeof render> {
   return render(
@@ -124,6 +125,7 @@ describe('the route→heading map (§3.2)', () => {
     for (const p of ['/skills', '/skills/', '/skills/wicked-garden-repo-learn']) {
       expect(headingForPath(p)).toBe('skills');
     }
+    for (const p of ['/mcp', '/mcp/']) expect(headingForPath(p)).toBe('mcp');
     expect(headingForPath('/')).toBeNull();
     expect(headingForPath('/runs')).toBeNull();
     expect(headingForPath('/runs/r-1')).toBeNull();
@@ -149,7 +151,7 @@ describe('the eleven heading rows (§3.1 + nav-reorg + usability wave + skills)'
     // Skills, Steering AND Evals carry ▦ (the Dashboard) but NO ＋ — system sections, not create
     // surfaces (usability wave: Evals lost its ＋, it only opens its dashboard; Skills adds from its
     // own page verb, behind the daemon's guards).
-    for (const k of ['skills', 'steering', 'testing']) {
+    for (const k of ['skills', 'mcp', 'steering', 'testing']) {
       const h = screen.getByTestId(`rail-heading-${k}`);
       expect(within(h).getByTestId('heading-dashboard')).toBeInTheDocument();
       expect(within(h).queryByTestId('heading-new')).toBeNull();
@@ -170,7 +172,7 @@ describe('the eleven heading rows (§3.1 + nav-reorg + usability wave + skills)'
     // Dividers now sit between the work sections, Skills/Steering/Evals and Settings, so check
     // DOCUMENT order (compareDocumentPosition) rather than nextElementSibling — Test below
     // Execute, Skills before Steering, Evals beside Steering.
-    const order = ['projects', 'execute', 'test', 'vibe', 'demo', 'chat', 'repos', 'skills', 'steering', 'testing', 'settings'];
+    const order = ['projects', 'execute', 'test', 'vibe', 'demo', 'chat', 'repos', 'skills', 'mcp', 'steering', 'testing', 'settings'];
     for (let i = 0; i < order.length - 1; i += 1) {
       const rel = el(order[i]!).compareDocumentPosition(el(order[i + 1]!));
       expect(rel & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -214,6 +216,7 @@ describe('the eleven heading rows (§3.1 + nav-reorg + usability wave + skills)'
     expect(hrefOf('chat')).toBe('/chats');
     expect(hrefOf('repos')).toBe('/repos');
     expect(hrefOf('skills')).toBe('/skills');
+    expect(hrefOf('mcp')).toBe('/mcp');
     expect(hrefOf('steering')).toBe('/steering/dashboard');
 
     fireEvent.click(within(screen.getByTestId('rail-heading-execute')).getByTestId('heading-dashboard'));
@@ -514,15 +517,15 @@ describe('accordion contents (§3.3)', () => {
 });
 
 describe('the collapsed rail (§3.2)', () => {
-  it('shows ten glyph links (Skills → /skills, Evals → its runner, Steering → its Dashboard) and a Settings icon flyout', async () => {
+  it('shows eleven glyph links (Skills → /skills, MCP tools → /mcp, Evals → its runner, Steering → its Dashboard) and a Settings icon flyout', async () => {
     rail();
     await screen.findByRole('button', { name: 'wicked-studio' });
 
     fireEvent.click(screen.getByRole('button', { name: 'Collapse sidebar' }));
     const glyphs = screen.getAllByTestId('rail-collapsed-glyph');
-    expect(glyphs).toHaveLength(10);
+    expect(glyphs).toHaveLength(11);
     expect(glyphs.map((g) => g.getAttribute('href'))).toEqual([
-      '/projects', '/execute', '/testing/campaigns', '/vibe', '/demo', '/chats', '/repos', '/skills', '/steering/dashboard', '/testing/evals',
+      '/projects', '/execute', '/testing/campaigns', '/vibe', '/demo', '/chats', '/repos', '/skills', '/mcp', '/steering/dashboard', '/testing/evals',
     ]);
     // Settings keeps all three of its pages reachable at icon width (the skin rule: every
     // destination the full rail exposes is reachable from the icon column).
@@ -532,6 +535,8 @@ describe('the collapsed rail (§3.2)', () => {
     const skillsGlyph = glyphs[7]!;
     expect(skillsGlyph).toHaveAttribute('aria-label', 'Skills');
     expect(skillsGlyph).toHaveTextContent('◆');
+    // MCP tools sits between Skills and Steering (DES-MCP-TOOLS-001 §7).
+    expect(glyphs[8]!).toHaveAttribute('aria-label', 'MCP tools');
     expect(screen.queryByTestId('rail-heading-projects')).toBeNull();
   });
 });

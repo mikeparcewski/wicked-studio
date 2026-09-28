@@ -10,9 +10,9 @@
   "version": 1,
   "studioVersion": "0.5.14",
   "counts": {
-    "files": 170,
-    "occurrences": 1637,
-    "static": 1423,
+    "files": 172,
+    "occurrences": 1703,
+    "static": 1487,
     "dynamic": 72,
     "computed": 7
   },
@@ -3929,6 +3929,288 @@
       ]
     },
     {
+      "testId": "mcp-add-auth-into",
+      "files": [
+        "src/components/McpToolsPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-add-auth-ref",
+      "files": [
+        "src/components/McpToolsPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-add-cancel",
+      "files": [
+        "src/components/McpToolsPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-add-error",
+      "files": [
+        "src/components/McpToolsPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-add-kind",
+      "files": [
+        "src/components/McpToolsPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-add-name",
+      "files": [
+        "src/components/McpToolsPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-add-no-matrix",
+      "files": [
+        "src/components/McpToolsPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-add-open",
+      "files": [
+        "src/components/McpToolsPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-add-panel",
+      "files": [
+        "src/components/McpToolsPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-add-preview",
+      "files": [
+        "src/components/McpToolsPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-add-preview-result",
+      "files": [
+        "src/components/McpToolsPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-add-preview-tool",
+      "files": [
+        "src/components/McpToolsPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-add-save",
+      "files": [
+        "src/components/McpToolsPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-add-target",
+      "files": [
+        "src/components/McpToolsPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-add-withdraw",
+      "files": [
+        "src/components/McpToolsPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-cell-decision",
+      "files": [
+        "src/components/McpToolsPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-cell-rule",
+      "files": [
+        "src/components/McpToolsPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-discovered",
+      "files": [
+        "src/components/McpToolsPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-empty",
+      "files": [
+        "src/components/McpToolsPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-error",
+      "files": [
+        "src/components/McpToolsPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-loading",
+      "files": [
+        "src/components/McpToolsPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-matrix-cell",
+      "files": [
+        "src/components/McpToolsPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-matrix-row",
+      "files": [
+        "src/components/McpToolsPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-mode",
+      "files": [
+        "src/components/McpToolsPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-mode-option",
+      "files": [
+        "src/components/McpToolsPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-no-policies",
+      "files": [
+        "src/components/McpToolsPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-note",
+      "files": [
+        "src/components/McpToolsPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-pending",
+      "files": [
+        "src/components/McpToolsPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-policy-matrix",
+      "files": [
+        "src/components/McpToolsPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-server-approve",
+      "files": [
+        "src/components/McpToolsPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-server-posture",
+      "files": [
+        "src/components/McpToolsPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-server-remove",
+      "files": [
+        "src/components/McpToolsPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-server-remove-confirm",
+      "files": [
+        "src/components/McpToolsPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-server-remove-consequence",
+      "files": [
+        "src/components/McpToolsPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-server-revoke",
+      "files": [
+        "src/components/McpToolsPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-server-row",
+      "files": [
+        "src/components/McpToolsPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-server-test",
+      "files": [
+        "src/components/McpToolsPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-server-toggle",
+      "files": [
+        "src/components/McpToolsPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-servers",
+      "files": [
+        "src/components/McpToolsPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-steering-link",
+      "files": [
+        "src/components/McpToolsPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-tool-approve",
+      "files": [
+        "src/components/McpToolsPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-tool-enabled",
+      "files": [
+        "src/components/McpToolsPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-tool-policies",
+      "files": [
+        "src/components/McpToolsPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-tool-revoke",
+      "files": [
+        "src/components/McpToolsPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-tool-row",
+      "files": [
+        "src/components/McpToolsPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-tools-page",
+      "files": [
+        "src/components/McpToolsPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-unsupported",
+      "files": [
+        "src/components/McpToolsPage.tsx"
+      ]
+    },
+    {
       "testId": "memories-coverage",
       "files": [
         "src/components/MemoriesPanel.tsx"
@@ -5263,6 +5545,12 @@
     },
     {
       "testId": "rail-live-chat",
+      "files": [
+        "src/components/LeftSidebar.tsx"
+      ]
+    },
+    {
+      "testId": "rail-mcp-servers",
       "files": [
         "src/components/LeftSidebar.tsx"
       ]
@@ -7063,6 +7351,12 @@
       ]
     },
     {
+      "testId": "steering-form-scope-issue",
+      "files": [
+        "src/components/SteeringRuleForm.tsx"
+      ]
+    },
+    {
       "testId": "steering-form-severity",
       "files": [
         "src/components/SteeringRuleForm.tsx"
@@ -7156,6 +7450,96 @@
       "testId": "steering-live-chip",
       "files": [
         "src/components/ChatInput.tsx"
+      ]
+    },
+    {
+      "testId": "steering-mcp-add-subject",
+      "files": [
+        "src/components/SteeringMcpBuilder.tsx"
+      ]
+    },
+    {
+      "testId": "steering-mcp-args",
+      "files": [
+        "src/components/SteeringMcpBuilder.tsx"
+      ]
+    },
+    {
+      "testId": "steering-mcp-builder",
+      "files": [
+        "src/components/SteeringMcpBuilder.tsx"
+      ]
+    },
+    {
+      "testId": "steering-mcp-chip",
+      "files": [
+        "src/components/SteeringTypeFilter.tsx"
+      ]
+    },
+    {
+      "testId": "steering-mcp-class",
+      "files": [
+        "src/components/SteeringMcpBuilder.tsx"
+      ]
+    },
+    {
+      "testId": "steering-mcp-compiled",
+      "files": [
+        "src/components/SteeringMcpBuilder.tsx"
+      ]
+    },
+    {
+      "testId": "steering-mcp-registry-error",
+      "files": [
+        "src/components/SteeringMcpBuilder.tsx"
+      ]
+    },
+    {
+      "testId": "steering-mcp-role",
+      "files": [
+        "src/components/SteeringMcpBuilder.tsx"
+      ]
+    },
+    {
+      "testId": "steering-mcp-seat",
+      "files": [
+        "src/components/SteeringMcpBuilder.tsx"
+      ]
+    },
+    {
+      "testId": "steering-mcp-server",
+      "files": [
+        "src/components/SteeringMcpBuilder.tsx"
+      ]
+    },
+    {
+      "testId": "steering-mcp-tool",
+      "files": [
+        "src/components/SteeringMcpBuilder.tsx"
+      ]
+    },
+    {
+      "testId": "steering-mcp-use-when",
+      "files": [
+        "src/components/SteeringMcpBuilder.tsx"
+      ]
+    },
+    {
+      "testId": "steering-mcp-when-classes",
+      "files": [
+        "src/components/SteeringMcpBuilder.tsx"
+      ]
+    },
+    {
+      "testId": "steering-mcp-when-roles",
+      "files": [
+        "src/components/SteeringMcpBuilder.tsx"
+      ]
+    },
+    {
+      "testId": "steering-mcp-when-seats",
+      "files": [
+        "src/components/SteeringMcpBuilder.tsx"
       ]
     },
     {
@@ -9066,6 +9450,7 @@
       "files": [
         "src/components/CampaignScoreboard.tsx",
         "src/components/GroupChat.tsx",
+        "src/components/McpToolsPage.tsx",
         "src/components/ProposalChips.tsx",
         "src/components/ProposalsList.tsx",
         "src/components/SteeringAddMenu.tsx",

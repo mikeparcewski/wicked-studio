@@ -7,6 +7,7 @@ import {
   importEntryOutcome,
   isSteeringUnsupported,
   policiesPath,
+  readMcpFilter,
   STEERING_TYPE_LABELS,
   STEERING_UNSUPPORTED_COPY,
   steeringTypeOf,
@@ -24,6 +25,7 @@ import {
 } from '../api/wiki.js';
 import type { SessionView } from '../api/types.js';
 import { ruleUsage } from '../board/steeringUsage.js';
+import { isMcpRule, MCP_POLICY_TEMPLATE, nextMcpPolicyId } from '../api/mcp.js';
 import { AssistDock, useAssistDockOpen, type AssistNote, type AssistVerbs } from './AssistDock.js';
 import { SteeringAddMenu } from './SteeringAddMenu.js';
 import { SteeringUsageBand } from './SteeringUsageBand.js';
@@ -75,6 +77,8 @@ export function SteeringPage({ type, navigate, search = '', runs = [] }: {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   /** The rule the edit modal is open for, or null. */
   const [editing, setEditing] = useState<SteeringRule | null>(null);
+  /** The new MCP policy the create modal is open for (Add ▾ → Add MCP policy), or null. */
+  const [creatingMcp, setCreatingMcp] = useState<SteeringRule | null>(null);
   const [retiredNote, setRetiredNote] = useState<{ id: string; reason: string } | null>(null);
   /** The post-save honesty note: where the SERVER actually filed the rule. */
   const [savedNote, setSavedNote] = useState<string | null>(null);
@@ -269,6 +273,12 @@ export function SteeringPage({ type, navigate, search = '', runs = [] }: {
     usageFilterAsked && scoreboard.kind === 'loaded'
       ? ruleUsage(rules, scoreboard.scoreboard.evidence.per_rule).unusedIds
       : null;
+  // `?mcp=1` (the MCP chip, DES-MCP-TOOLS-001 §4.7): only the rules that govern MCP calls,
+  // composed with the usage filter.
+  const mcpOnly = readMcpFilter(search);
+  const mcpIds = mcpOnly ? rules.filter(isMcpRule).map((r) => r.id) : null;
+  const gridIds =
+    mcpIds === null ? unusedIds : unusedIds === null ? mcpIds : mcpIds.filter((id) => unusedIds.includes(id));
 
   /** Where the `Show all` link in the usage-filter note points — the current filter, usage cleared. */
   const clearUsageHref = policiesPath(type);
@@ -303,7 +313,7 @@ export function SteeringPage({ type, navigate, search = '', runs = [] }: {
 
         {/* The type FILTER — `All` + the seven types, the collapse of the old seven cards/pages. */}
         {rulesError === null && (
-          <SteeringTypeFilter rules={rules} activeType={type} navigate={navigate} />
+          <SteeringTypeFilter rules={rules} activeType={type} navigate={navigate} mcp={mcpOnly} />
         )}
 
         {rulesLoading && rules.length === 0 ? (
@@ -361,6 +371,7 @@ export function SteeringPage({ type, navigate, search = '', runs = [] }: {
               key={`add-${type ?? 'all'}`}
               onAddRow={() => setAddTick((t) => t + 1)}
               onOpenAssistant={() => setDockOpen(true)}
+              onAddMcpPolicy={() => setCreatingMcp({ ...MCP_POLICY_TEMPLATE, id: nextMcpPolicyId(rules) })}
             />
 
             {usageFilterAsked && (
@@ -436,7 +447,7 @@ export function SteeringPage({ type, navigate, search = '', runs = [] }: {
               onCreate={createRule}
               onRetired={onRetired}
               addRequestTick={addTick}
-              idFilter={unusedIds}
+              idFilter={gridIds}
               unseeded={unseeded}
             />
           </>
@@ -467,6 +478,17 @@ export function SteeringPage({ type, navigate, search = '', runs = [] }: {
           onClose={() => setSelectedId(null)}
           onEdit={setEditing}
           onRetired={onRetired}
+        />
+      )}
+
+      {creatingMcp !== null && (
+        <SteeringRuleFormModal
+          type="security"
+          initial={creatingMcp}
+          create
+          existingIds={rules.map((r) => r.id)}
+          onClose={() => setCreatingMcp(null)}
+          onSaved={(id) => { setCreatingMcp(null); afterSaved(id, 'security'); }}
         />
       )}
 

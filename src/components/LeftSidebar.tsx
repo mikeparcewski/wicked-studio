@@ -11,6 +11,7 @@ import { useSkinVariant } from '../hooks/useSkin.js';
 import { useDismissable } from '../hooks/useDismissable.js';
 import { memoriesPath, policiesPath, steeringDashboardPath, STEERING_SECTIONS, STEERING_SECTION_LABELS, type SteeringSection } from '../api/steering.js';
 import { skillsPath } from '../api/skills.js';
+import { mcpPath } from '../api/mcp.js';
 import { testingLaunchPath, testingPath } from '../api/testing.js';
 import { AppChrome } from './AppChrome.js';
 import { isChatRun } from './ChatsPage.js';
@@ -72,7 +73,7 @@ const S = {
 
 // ── The five paths (§2.1) ─────────────────────────────────────────────────────
 
-export type PathKey = 'projects' | 'execute' | 'test' | 'vibe' | 'demo' | 'chat' | 'repos' | 'testing' | 'skills' | 'steering' | 'settings';
+export type PathKey = 'projects' | 'execute' | 'test' | 'vibe' | 'demo' | 'chat' | 'repos' | 'testing' | 'skills' | 'mcp' | 'steering' | 'settings';
 
 /** Heading word, collapsed-rail glyph (§3.2), ▦ target (§2.1; Settings' glyph
  *  links `/system` in the collapsed column — it has no dashboard). `noun` is
@@ -110,11 +111,15 @@ const P_TESTING: PathSpec  = { key: 'testing',  title: 'Evals',        noun: 'Ev
 // Steering/Evals grammar: ▦ (the catalog) and NO ＋ — a skill is added from the page's own verb,
 // with the daemon's guards, never from a bare rail affordance.
 const P_SKILLS: PathSpec   = { key: 'skills',   title: 'Skills',       noun: 'Skill',      glyph: '◆', dash: skillsPath(), collapsedHref: skillsPath() };
+// MCP tools (DES-MCP-TOOLS-001 §7): the registered MCP servers and what policy lets each unit do with
+// their tools. A SYSTEM section between Skills and Steering, in the same grammar: ▦ and NO ＋ (a
+// server is added from the page's own verb, bound to a preview).
+const P_MCP: PathSpec      = { key: 'mcp',      title: 'MCP tools',    noun: 'MCP server', glyph: '⧉', dash: mcpPath(), collapsedHref: mcpPath() };
 const P_STEERING: PathSpec = { key: 'steering', title: 'Steering',     noun: 'Rule',       glyph: '☸', dash: steeringDashboardPath(), collapsedHref: steeringDashboardPath() };
 const P_SETTINGS: PathSpec = { key: 'settings', title: 'Settings',     noun: 'Setting',    glyph: '⚙', dash: null,        collapsedHref: '/system' };
 // Order (nav-reorg): Execute / Vibe / Demo replace Make and sit before Evals; Chat / Repos /
 // Skills / Steering / Settings tail.
-const PATHS: PathSpec[] = [P_PROJECTS, P_EXECUTE, P_TEST, P_VIBE, P_DEMO, P_CHAT, P_REPOS, P_SKILLS, P_STEERING, P_TESTING, P_SETTINGS];
+const PATHS: PathSpec[] = [P_PROJECTS, P_EXECUTE, P_TEST, P_VIBE, P_DEMO, P_CHAT, P_REPOS, P_SKILLS, P_MCP, P_STEERING, P_TESTING, P_SETTINGS];
 
 // `wiki`, `rules` and `policies` retired into Steering (they redirect to /steering); the
 // retired `coverage` and `domain` panels redirect to /system — kept mapped here so the rail
@@ -148,6 +153,8 @@ export function headingForPath(pathname: string): PathKey | null {
   if (first === 'testing') return second === 'evals' ? 'testing' : 'test';
   // `/skills` (+ any sub-address) is the skills file manager — a system section beside Steering.
   if (first === 'skills') return 'skills';
+  // `/mcp` is MCP tools — a system section between Skills and Steering.
+  if (first === 'mcp') return 'mcp';
   // The retired `/wiki` + `/rules` + `/policies` panels AND the retired standalone `/proposals`
   // queue redirect into Steering (proposals now live inside its two sub-sections) — map them
   // there too, so the rail never flashes Settings open on the pre-redirect tick.
@@ -551,6 +558,23 @@ function SkillsRailRows({ navigate }: { navigate: (p: string) => void }): React.
   );
 }
 
+function McpRailRows({ navigate }: { navigate: (p: string) => void }): React.ReactElement {
+  return (
+    <div role="menu" className="flex flex-col pt-0.5">
+      <button
+        type="button"
+        role="menuitem"
+        data-testid="rail-mcp-servers"
+        onClick={() => navigate(mcpPath())}
+        className="w-full text-left px-6 py-1.5 rounded text-xs font-mono transition-colors hover:bg-surface-raised hover:text-ink-body focus-visible:outline-none focus-visible:bg-surface-raised focus-visible:text-ink-body"
+        style={{ color: 'var(--ink-muted)' }}
+      >
+        Servers
+      </button>
+    </div>
+  );
+}
+
 /** The Steering accordion's rows: one per MANAGEMENT sub-section (Policies / Memories), each a
  *  navigate() shortcut to its page — the SettingsShortcutRows grammar. The nav-reorg moved the
  *  Dashboard from a sub-row to the heading's ▦ (same affordance Projects/Execute/Chat/Repos use),
@@ -929,6 +953,17 @@ export function LeftSidebar({ runs, navigate, pathname, runPath = flatRunPath, i
             navigate={navigate}
           >
             <SkillsRailRows navigate={navigate} />
+          </RailHeading>
+
+          {/* ── MCP tools — the registered MCP servers, their tools and the policy matrix. Between
+                Skills and Steering. ── */}
+          <RailHeading
+            path={P_MCP}
+            open={openHeading === 'mcp'}
+            onToggle={() => toggle('mcp')}
+            navigate={navigate}
+          >
+            <McpRailRows navigate={navigate} />
           </RailHeading>
 
           {/* ── Steering — the governed-knowledge home. Its three rows: Dashboard (the review-forward

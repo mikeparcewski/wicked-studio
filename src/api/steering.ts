@@ -100,8 +100,18 @@ export function steeringDashboardPath(): string {
 
 /** The Policies sub-section's route — bare for the All view, `?type=<type>` for a filtered one
  *  (deep-linkable, back-button-correct; shared by the page's chips and every deep link into it). */
-export function policiesPath(type?: SteeringType | null): string {
-  return type == null ? '/steering/policies' : `/steering/policies?type=${type}`;
+export function policiesPath(type?: SteeringType | null, mcp = false): string {
+  const q = new URLSearchParams();
+  if (type != null) q.set('type', type);
+  if (mcp) q.set('mcp', '1');
+  const qs = q.toString();
+  return qs === '' ? '/steering/policies' : `/steering/policies?${qs}`;
+}
+
+/** The Policies view's MCP filter (`?mcp=1`, DES-MCP-TOOLS-001 §4.7): only the rules that govern
+ *  MCP calls (they name an `mcp` token, or ship in the `mcp-defaults` pack). */
+export function readMcpFilter(search: string): boolean {
+  return new URLSearchParams(search).get('mcp') === '1';
 }
 
 /** The Memories sub-section's route. */
