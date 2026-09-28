@@ -1526,7 +1526,7 @@ export function GroupChat({
       bound: scope.graph.bound,
       title: scope.graph.bound
         ? 'This chat binds a read-only code graph and hands every seat the estate command to query it'
-        : `No code graph for this chat — ${humanizeGraphReason(scope.graph.reason, scope.repos.length)}. The seats answer from the files alone.`,
+        : `No code graph for this chat — ${humanizeGraphReason(scope.graph.reason, scope.repos.length).replace(/\.+$/, '')}`,
     };
   const seatChip = (cliKey: string, st: SeatState, reason?: string): React.ReactElement => (
     // wk-disclose: the roster disclosure animates in at --dur-base ease-out
