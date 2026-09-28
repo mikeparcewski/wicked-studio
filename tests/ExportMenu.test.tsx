@@ -386,4 +386,18 @@ describe('studio#236: the v0 placeholder offers no export', () => {
     rerender(<ExportMenu projectId={PROJECT} docId={DOC} version={1} />);
     expect(container.querySelectorAll('[data-testid="export-format"]').length).toBeGreaterThan(0);
   });
+
+  it('at v0 a recording offers nothing, and an answer owed for v1 stays without the formats', () => {
+    const rec = { href: '/d/x/api/demo/recording/_v0.webm', file: 'x_v0.webm' };
+    const { container, rerender } = render(<ExportMenu projectId={PROJECT} docId={DOC} version={0} recording={rec} />);
+    expect(container.querySelector('[data-testid="export-menu"]')).toBeNull();
+    useExportAnswers.getState().settle(exportKey(PROJECT, DOC),
+      { state: 'ready', version: 1, format: 'html', href: '/a.html', file: 'a.html', report: null });
+    rerender(<ExportMenu projectId={PROJECT} docId={DOC} version={0} recording={rec} />);
+    expect(container.querySelector('[data-testid="export-menu"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="export-ready"]')?.getAttribute('data-version')).toBe('1');
+    expect(container.querySelectorAll('[data-testid="export-format"]').length).toBe(0);
+    expect(container.querySelector('[data-testid="export-recording"]')).toBeNull();
+    expect(container.textContent).not.toContain('Export v0');
+  });
 });

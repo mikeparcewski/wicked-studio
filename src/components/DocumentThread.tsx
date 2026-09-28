@@ -774,6 +774,8 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
     setNameDraft('');
     setNameEdited(false);
     setCollision(null);
+    // studio#302 (codex on #380): the council is a pick for this launch context too — re-default it.
+    setDocSeats(null);
   }, [projectId, docId, mode]);
   const launching = docId === null || key === null;
   /** The launch composer's parse of the ask — a quoted name (§7.3) or null. */
@@ -784,7 +786,12 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate, mo
   /** The launch composer refuses to send while the repositories are unknown, except by explicit choice. */
   const subjectBlocks = launching && (subjectStatus === 'loading' || (subjectStatus === 'error' && !noGrounding));
   /** studio#302: a Document launch with every seat unchecked has no council — refused, not guessed. */
-  const seatBlocks = launching && mode === 'document' && docSeats !== null && docSeats.selected.size === 0;
+  // Counted against the CURRENT roster (codex on #380): a pick whose seats a roster refresh dropped
+  // would otherwise enable Create and send `clisJson: []`.
+  const chosenSeatCount = docSeats === null || docRoster === null
+    ? 0
+    : docRoster.filter((s) => docSeats.selected.has(s.key)).length;
+  const seatBlocks = launching && mode === 'document' && docSeats !== null && chosenSeatCount === 0;
   /** The thread line a no-grounding create leaves — only when discovery FAILED and the user chose to go on. */
   const noteNoGrounding = (threadKeyOf: string): void => {
     if (subjectStatus === 'error' && noGrounding) useDocThreadStore.getState().addNarration(threadKeyOf, NO_GROUNDING_NARRATION);

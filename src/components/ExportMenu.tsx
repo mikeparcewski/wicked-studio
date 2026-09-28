@@ -112,8 +112,10 @@ export function ExportMenu({
   }, [answering, onHold]);
 
   // studio#236: v0 is the bridge's "Building…" placeholder, not the document — there is nothing
-  // to export yet, so the control is not offered (an answer still owed for another version stays).
-  if (version < 1 && answers.length === 0 && recording === null) return null;
+  // to export yet, so no format and no recording is offered for it. Only an answer still owed for
+  // ANOTHER version of this doc stays at the click site (round-3 J3); with none, nothing renders.
+  const placeholder = version < 1;
+  if (placeholder && answers.every((a) => a.version === version)) return null;
 
   function run(format: ExportFormat): void {
     const store = useExportAnswers.getState();
@@ -172,13 +174,13 @@ export function ExportMenu({
                flexShrink: 0, gap: '2px', maxWidth: '220px', minWidth: 0 }}
     >
       <div style={{ alignItems: 'center', display: 'flex', flexWrap: 'wrap', gap: compact ? '7px' : '5px' }}>
-        {!compact && (
+        {!compact && !placeholder && (
           <span style={{ color: S.faint, fontSize: 'var(--text-2xs)', letterSpacing: '0.06em',
                          fontFamily: 'var(--font-mono)', textTransform: 'uppercase' }}>
             Export v{version}
           </span>
         )}
-        {EXPORT_FORMATS.map((format) => {
+        {!placeholder && EXPORT_FORMATS.map((format) => {
           // §7.2 READY: the control that was clicked IS the download now — a real
           // anchor with the artifact's name, at the click site. The thread message
           // remains; this is the click site answering (EC37). Per format (F-4R2-016).
@@ -209,7 +211,7 @@ export function ExportMenu({
         })}
         {/* VIDEO-FB: the recording is already an artifact — no render step, so it
             is a download from the start, same-origin through the project proxy. */}
-        {recording !== null && (
+        {recording !== null && !placeholder && (
           <a
             data-testid="export-recording"
             data-version={String(version)}
