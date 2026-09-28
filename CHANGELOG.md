@@ -13,6 +13,12 @@ npm publish dates. Every version listed here exists on
 ## [Unreleased]
 
 ### Fixed
+- **Losing the daemon now says how to get it back (crew#551).** The lost-connection banner was
+  written but never mounted, so a studio whose daemon had gone (a reboot, a crash) showed only a red
+  pill in the health rail. `ConnectionStatus` is now a banner that App mounts: while `/ws` is down it
+  says the connection to the wicked-crew daemon is lost and reconnecting, and names the same one-line
+  fix `wicked-crew status` prints (`wicked-crew serve`, or at every login `wicked-crew serve
+  --install-service`). It renders nothing while connecting or connected.
 - **A run the stall watchdog handed to you survives a reload (#284).** After the watchdog spent its
   automatic recoveries, a reloaded run page showed an executing run with nothing but Cancel. Crew
   now serves the watchdog's frames in `GET /runs/:id/events`; studio folds them back when it

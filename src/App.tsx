@@ -36,6 +36,7 @@ import { WorkPage } from './components/WorkPage.js';
 import { ShortcutOverlay } from './components/ShortcutOverlay.js';
 import { PeekCard } from './components/PeekCard.js';
 import { UndoToasts } from './components/UndoToasts.js';
+import { ConnectionStatus } from './components/ConnectionStatus.js';
 import { SystemSettings } from './components/SystemSettings.js';
 import { ThemePage } from './components/ThemePage.js';
 import { SkinRightRail } from './components/SkinRightRail.js';
@@ -823,6 +824,9 @@ export function App(): React.ReactElement {
           usePeekJump and board/undoQueue. */}
       <PeekCard view={peek} />
       <UndoToasts />
+
+      {/* The lost-connection banner (crew#551): names the one-line fix while /ws is down. */}
+      <ConnectionStatus />
 
       {/* Repo graph modal — opened from RepoDetailPage */}
       {graphModalRepo !== null && (
