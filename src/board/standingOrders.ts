@@ -103,6 +103,20 @@ export function awayPreview(orders: readonly StandingOrder[], projectName: Proje
   return `${n} ${n === 1 ? 'order' : 'orders'} active: ${clauses.join('; ')}${queued}; deliver gates always wait`;
 }
 
+/**
+ * The ONE-LINE form of the Away preview (Home's orders line): the count, then what going away does —
+ * "3 orders active" + "will approve band 0-19 (LOW) unit reviews on Northwind; will hold …". The
+ * full preview and crew's invariant stay reachable (the line's tooltip, and Manage).
+ */
+export function awayLine(orders: readonly StandingOrder[], projectName: ProjectName): { count: string; will: string } {
+  const n = orders.length;
+  if (n === 0) return { count: 'No orders', will: 'every gate waits for you' };
+  return {
+    count: `${n} ${n === 1 ? 'order' : 'orders'} active`,
+    will: orders.map((o) => willWords(o.rule, projectName)).join('; '),
+  };
+}
+
 function orderOf(e: AuditEntry): { id: string; text: string } | undefined {
   if (e.actor?.kind !== 'system' || typeof e.actor.id !== 'string' || !e.actor.id.startsWith('standing-order:')) return undefined;
   const o = (e.detail ?? {})['standingOrder'] as { id?: unknown; text?: unknown } | undefined;
