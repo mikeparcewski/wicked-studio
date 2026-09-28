@@ -81,7 +81,7 @@ export interface ExportMenuProps {
 
 export function ExportMenu({
   projectId, docId, version, compact = false, onHold, recording = null,
-}: ExportMenuProps): React.ReactElement {
+}: ExportMenuProps): React.ReactElement | null {
   const key = exportKey(projectId, docId);
   const answers = useExportAnswers((s) => s.answers[key] ?? NO_ANSWERS);
 
@@ -110,6 +110,10 @@ export function ExportMenu({
     onHold(true);
     return () => { onHold(false); };
   }, [answering, onHold]);
+
+  // studio#236: v0 is the bridge's "Building…" placeholder, not the document — there is nothing
+  // to export yet, so the control is not offered (an answer still owed for another version stays).
+  if (version < 1 && answers.length === 0 && recording === null) return null;
 
   function run(format: ExportFormat): void {
     const store = useExportAnswers.getState();

@@ -579,13 +579,16 @@ export function DocPanel({
   // Collapsed: the RAIL — the panel's own expand affordance, always on screen
   // (the strip carries no toggle any more). Each tab button expands straight
   // onto its tab; doc-scoped tabs are disabled with the stated reason.
+  // studio#236: each tab is LABELLED, and Chat says it carries the exports too — a returning
+  // user who opens a document directly sees where the conversation and the downloads live,
+  // not four bare icons.
   if (!open) {
     return (
       <div
         data-testid="doc-panel-rail"
         className="flex flex-col items-center gap-1"
         style={{ background: S.bar, borderLeft: `1px solid ${S.border}`,
-                 flexShrink: 0, padding: '8px 0', width: '38px' }}
+                 flexShrink: 0, padding: '8px 0', width: '60px' }}
       >
         <button
           type="button"
@@ -601,6 +604,7 @@ export function DocPanel({
         </button>
         {PANEL_TABS.map((t) => {
           const needsDoc = t.id !== 'chat' && doc === null;
+          const label = t.id === 'chat' && doc !== null ? 'Chat · Export' : t.label;
           return (
             <button
               key={t.id}
@@ -608,14 +612,19 @@ export function DocPanel({
               data-testid="panel-rail-tab"
               data-tab={t.id}
               disabled={needsDoc}
-              title={needsDoc ? NO_DOC_REASON : t.title}
+              title={needsDoc ? NO_DOC_REASON : t.id === 'chat' && doc !== null ? `${t.title} — and its exports` : t.title}
               onClick={() => onExpand(t.id)}
+              className="flex flex-col items-center"
               style={{ background: 'transparent', border: 'none', color: S.muted,
                        cursor: needsDoc ? 'not-allowed' : 'pointer',
-                       fontSize: 'var(--text-sm)', opacity: needsDoc ? 0.35 : 1,
-                       padding: '5px 0' }}
+                       fontSize: 'var(--text-sm)', gap: '1px', opacity: needsDoc ? 0.35 : 1,
+                       padding: '5px 2px', width: '100%' }}
             >
-              {t.icon}
+              <span aria-hidden="true">{t.icon}</span>
+              <span data-testid="panel-rail-label"
+                    style={{ fontSize: '9px', lineHeight: 1.2, textAlign: 'center' }}>
+                {label}
+              </span>
             </button>
           );
         })}
@@ -691,7 +700,8 @@ export function DocPanel({
             chat box in right panel". The slice-X point-of-action contract rides
             along unchanged (same testids: export-format / export-pending /
             export-ready / export-hint) — the click site simply lives here now. */}
-        {doc !== null && (
+        {/* studio#236: not on the v0 placeholder — there is nothing to export yet. */}
+        {doc !== null && (doc.selected >= 1 || (doc.recording ?? null) !== null) && (
           <div
             data-testid="chat-export"
             style={{ background: S.bar, borderTop: `1px solid ${S.border}`,

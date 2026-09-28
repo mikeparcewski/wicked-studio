@@ -11,9 +11,9 @@
   "studioVersion": "0.5.14",
   "counts": {
     "files": 171,
-    "occurrences": 1614,
-    "static": 1399,
-    "dynamic": 71,
+    "occurrences": 1619,
+    "static": 1402,
+    "dynamic": 72,
     "computed": 7
   },
   "static": [
@@ -1891,6 +1891,18 @@
     },
     {
       "testId": "doc-composer-submit",
+      "files": [
+        "src/components/DocumentThread.tsx"
+      ]
+    },
+    {
+      "testId": "doc-council-left-out",
+      "files": [
+        "src/components/DocumentThread.tsx"
+      ]
+    },
+    {
+      "testId": "doc-council-line",
       "files": [
         "src/components/DocumentThread.tsx"
       ]
@@ -4193,6 +4205,12 @@
     },
     {
       "testId": "panel-needs-doc",
+      "files": [
+        "src/components/DocPanel.tsx"
+      ]
+    },
+    {
+      "testId": "panel-rail-label",
       "files": [
         "src/components/DocPanel.tsx"
       ]
@@ -8654,6 +8672,12 @@
     },
     {
       "pattern": "doc-*",
+      "files": [
+        "src/components/DocumentThread.tsx"
+      ]
+    },
+    {
+      "pattern": "doc-seat-*",
       "files": [
         "src/components/DocumentThread.tsx"
       ]

@@ -387,6 +387,36 @@ describe('DocumentCanvas — canvas-first: right panel + slim strip (doc-feedbac
     expect(screen.getByTestId('doc-panel-rail')).toBeInTheDocument();
   });
 
+  it('studio#236: opened directly, the collapsed rail names what it holds — Chat carries the exports too', async () => {
+    stubFetch({ '/api/versions': { body: MANIFEST } });
+    render(
+      <DocumentCanvas projectId={PROJECT} docId={DOC} navigate={() => {}}>
+        {thread}
+      </DocumentCanvas>,
+    );
+    await screen.findByTestId('doc-canvas');
+    const labels = Array.from(screen.getByTestId('doc-panel-rail').querySelectorAll('[data-testid="panel-rail-label"]'))
+      .map((l) => l.textContent);
+    expect(labels).toEqual(['Chat · Export', 'Compare', 'Theme', 'Versions']);
+  });
+
+  it('studio#236: on the v0 placeholder nothing offers an export', async () => {
+    stubFetch({ '/api/versions': { body: {
+      head: 0,
+      versions: [{ version: 0, parent: null, feedback_file: null, html_file: '_v0.html', created_at: '2026-08-16T09:00:00Z' }],
+    } } });
+    render(
+      <DocumentCanvas projectId={PROJECT} docId={DOC} navigate={() => {}}>
+        {thread}
+      </DocumentCanvas>,
+    );
+    await screen.findByTestId('doc-canvas');
+    await userEvent.click(screen.getByTestId('panel-expand'));
+    expect(screen.getByTestId('fake-thread')).toBeInTheDocument();
+    expect(screen.queryByTestId('chat-export')).toBeNull();
+    expect(screen.queryByTestId('export-menu')).toBeNull();
+  });
+
   it('the band is VERSIONS ONLY: no chiclets, no toolbar, no toggle, no caption — pills with stamps', async () => {
     stubFetch({ '/api/versions': { body: MANIFEST } });
     render(<DocumentCanvas projectId={PROJECT} docId={DOC} navigate={() => {}} />);

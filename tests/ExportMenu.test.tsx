@@ -8,6 +8,7 @@ import { cleanup, render, screen, waitFor, within } from '@testing-library/react
 import userEvent from '@testing-library/user-event';
 import { ProjectCard } from '../src/components/ProjectCard.js';
 import { VersionStrip } from '../src/components/VersionStrip.js';
+import { ExportMenu } from '../src/components/ExportMenu.js';
 import type { BoardProject } from '../src/hooks/useBoardModel.js';
 import type { CoreEvent } from '../src/api/types.js';
 import { threadKey, useDocThreadStore, type DocMsg } from '../src/store/docThread.js';
@@ -375,5 +376,14 @@ describe('export hydration on document open and version change (wicked-studio#23
     expect(messages().some((m) => m.kind === 'agent' && m.author === 'export')).toBe(true);
     // ...but exportAnswers MUST remain empty — hydrate seeds it via probe, not WS frames.
     expect(useExportAnswers.getState().answers[key] ?? []).toHaveLength(0);
+  });
+});
+
+describe('studio#236: the v0 placeholder offers no export', () => {
+  it('renders nothing at v0, and the formats from v1', () => {
+    const { container, rerender } = render(<ExportMenu projectId={PROJECT} docId={DOC} version={0} />);
+    expect(container.querySelector('[data-testid="export-menu"]')).toBeNull();
+    rerender(<ExportMenu projectId={PROJECT} docId={DOC} version={1} />);
+    expect(container.querySelectorAll('[data-testid="export-format"]').length).toBeGreaterThan(0);
   });
 });
