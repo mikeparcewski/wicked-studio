@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ageOf,
   canApprove,
@@ -376,7 +376,9 @@ function AddServerPanel({ onSaved, onClose, mode, navigate }: {
   const [target, setTarget] = useState('');
   const [authRef, setAuthRef] = useState('');
   const [authEnv, setAuthEnv] = useState('');
-  const [preview, setPreview] = useState<McpPreviewResponse | null>(null);
+  /** The preview, bound to the exact request it answered (`key`): only shown and saved while the
+   *  form still says the same thing, so a late answer to an older request can never be saved. */
+  const [held, setHeld] = useState<{ key: string; preview: McpPreviewResponse } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -391,12 +393,20 @@ function AddServerPanel({ onSaved, onClose, mode, navigate }: {
       : { name, kind, url: target.trim(), auth };
   };
 
+  const previewSeq = useRef(0);
+  const formKey = JSON.stringify(body());
+  const preview = held !== null && held.key === formKey ? held.preview : null;
+  const setPreview = (p: null): void => { setHeld(p); };
+
   const doPreview = async (): Promise<void> => {
     setBusy(true);
     setError(null);
-    setPreview(null);
+    setHeld(null);
+    const key = formKey;
+    const seq = ++previewSeq.current;
     try {
-      setPreview(await mcpApi.preview(body()));
+      const answer = await mcpApi.preview(JSON.parse(key) as ReturnType<typeof body>);
+      if (seq === previewSeq.current) setHeld({ key, preview: answer });
     } catch (e) {
       setError(msg(e));
     } finally {
@@ -517,7 +527,10 @@ export function McpToolsPage({ navigate, search }: { navigate: (p: string) => vo
   const deepLinked = readMcpServerDeepLink(search);
   const [openServers, setOpenServers] = useState<Set<string>>(() => new Set(deepLinked !== null ? [deepLinked] : []));
 
+  // Only the latest load may land: an older, slower answer never overwrites a newer one.
+  const loadSeq = useRef(0);
   const load = useCallback(async (): Promise<void> => {
+    const seq = ++loadSeq.current;
     try {
       const servers = await mcpApi.servers();
       // The matrix and the approvals are S6; a daemon with the registry but not them still lists servers.
@@ -525,8 +538,10 @@ export function McpToolsPage({ navigate, search }: { navigate: (p: string) => vo
         mcpApi.policies({}).catch(() => null),
         mcpApi.approvals().catch(() => null),
       ]);
+      if (seq !== loadSeq.current) return;
       setState({ kind: 'loaded', servers, policies, approvals });
     } catch (e) {
+      if (seq !== loadSeq.current) return;
       setState(isMcpUnsupported(e) ? { kind: 'unsupported' } : { kind: 'failed', message: msg(e) });
     }
   }, []);
@@ -542,7 +557,9 @@ export function McpToolsPage({ navigate, search }: { navigate: (p: string) => vo
     void fn()
       .then(() => setNote({ ok: true, text: `${label}.` }))
       .catch((e: unknown) => setNote({ ok: false, text: `${label} failed: ${msg(e)}` }))
-      .finally(() => { setBusy(false); void load(); });
+      // Actions stay disabled until the server's answer is on screen, so no control acts on the
+      // pre-action state.
+      .finally(() => { void load().finally(() => setBusy(false)); });
   }, [load]);
 
   const loaded = state.kind === 'loaded' ? state : null;

@@ -171,6 +171,24 @@ describe('MCP tools: add an existing server', () => {
     expect(screen.queryByTestId('mcp-add-panel')).toBeNull();
   });
 
+  it('a late preview answer for an older form is never shown or saved', async () => {
+    wire();
+    const base = apiFetch.getMockImplementation() as (p: string, i?: RequestInit) => Promise<unknown>;
+    let release: (v: unknown) => void = () => undefined;
+    apiFetch.mockImplementation((p: string, i?: RequestInit) =>
+      p === '/mcp/servers/preview' ? new Promise((r) => { release = r; }) : base(p, i));
+    render(<McpToolsPage navigate={navigate} search="" />);
+    fireEvent.click(await screen.findByTestId('mcp-add-open'));
+    const panel = screen.getByTestId('mcp-add-panel');
+    fireEvent.change(within(panel).getByTestId('mcp-add-name'), { target: { value: 'jira' } });
+    fireEvent.change(within(panel).getByTestId('mcp-add-target'), { target: { value: 'old-cmd' } });
+    fireEvent.click(within(panel).getByTestId('mcp-add-preview'));
+    fireEvent.change(within(panel).getByTestId('mcp-add-target'), { target: { value: 'new-cmd' } });
+    release(preview('jira'));
+    await waitFor(() => expect(within(panel).getByTestId('mcp-add-preview').textContent).toBe('Preview'));
+    expect(within(panel).queryByTestId('mcp-add-save')).toBeNull();
+  });
+
   it('editing the form after a preview drops it, so Save can only send what was shown', async () => {
     wire();
     render(<McpToolsPage navigate={navigate} search="" />);
