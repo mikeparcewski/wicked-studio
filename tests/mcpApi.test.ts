@@ -12,6 +12,7 @@ import {
   mcpApi,
   nextMcpPolicyId,
   postureSummary,
+  triggerIssue,
   type McpPolicyCell,
   type McpPolicyPreviewTool,
 } from '../src/api/mcp.js';
@@ -100,6 +101,17 @@ describe('compileWhen: the When builder compiles to a trigger the engine would m
     const t = compileWhen({ ...EMPTY_WHEN, seats: ['a.b'] });
     expect(fires(t, ctx({ role: 'creator', seat: 'axb', cls: 'write' }))).toBe(false);
     expect(fires(t, ctx({ role: 'creator', seat: 'a.b', cls: 'write' }))).toBe(true);
+  });
+});
+
+describe('triggerIssue: what the engine regex cannot compile is refused before a save', () => {
+  it('refuses lookaround, backreferences and unparsable patterns; passes what compileWhen makes', () => {
+    expect(triggerIssue('')).toBeNull();
+    expect(triggerIssue(compileWhen({ roles: ['evaluator'], seats: ['codex'], classes: ['write'], argPattern: '"to":"[^"]*@x\\.com"' }))).toBeNull();
+    expect(triggerIssue('"to":"(?!ourco)')).toMatch(/lookaround/);
+    expect(triggerIssue('(?<=a)b')).toMatch(/lookaround/);
+    expect(triggerIssue('(a)\\1')).toMatch(/backreferences/);
+    expect(triggerIssue('("unclosed')).toMatch(/not a valid regex/);
   });
 });
 

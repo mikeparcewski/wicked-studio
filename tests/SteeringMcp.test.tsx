@@ -120,6 +120,21 @@ describe('Add MCP policy: Subject and When builders', () => {
     });
   });
 
+  it('a When the engine regex cannot compile cannot become the trigger, and a typed one blocks the save', async () => {
+    render(<SteeringPage type={null} navigate={vi.fn()} search="" />);
+    fireEvent.click(await screen.findByTestId('steering-add-menu'));
+    fireEvent.click(screen.getByTestId('steering-add-mcp'));
+    const form = screen.getByTestId('steering-rule-form');
+    fireEvent.change(within(form).getByTestId('steering-mcp-args'), { target: { value: '"to":"(?!ourco)' } });
+    expect((within(form).getByTestId('steering-mcp-use-when') as HTMLButtonElement).disabled).toBe(true);
+    expect(within(form).getByTestId('steering-mcp-when-issue').textContent).toMatch(/lookaround/);
+    fireEvent.change(within(form).getByTestId('steering-form-statement'), { target: { value: 's' } });
+    fireEvent.click(within(form).getByTestId('steering-mcp-add-subject'));
+    fireEvent.change(within(form).getByTestId('steering-form-trigger'), { target: { value: '(?<=a)b' } });
+    expect((within(form).getByTestId('steering-form-save') as HTMLButtonElement).disabled).toBe(true);
+    expect(within(form).getByTestId('steering-form-trigger-issue')).toBeTruthy();
+  });
+
   it('a deny with no Applies to cannot be saved (INV-S3), and a taken id is refused', async () => {
     render(<SteeringPage type={null} navigate={vi.fn()} search="" />);
     fireEvent.click(await screen.findByTestId('steering-add-menu'));

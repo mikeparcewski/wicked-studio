@@ -6,6 +6,7 @@ import {
   mcpApi,
   ROLE_LABELS,
   subjectTokens,
+  triggerIssue,
   type McpPhaseRole,
   type McpServer,
   type McpToolClass,
@@ -57,6 +58,7 @@ export function SteeringMcpBuilder({ appliesTo, onAppliesTo, onTrigger }: {
     onAppliesTo([...appliesTo, ...tokens.filter((t) => !appliesTo.includes(t))]);
   };
   const compiled = compileWhen(when);
+  const issue = triggerIssue(compiled);
   const box = 'flex items-center gap-1 text-[10px]';
   const subjects = appliesTo.filter(isMcpToken);
 
@@ -160,12 +162,16 @@ export function SteeringMcpBuilder({ appliesTo, onAppliesTo, onTrigger }: {
           <button
             type="button"
             data-testid="steering-mcp-use-when"
+            disabled={issue !== null}
             onClick={() => onTrigger(compiled)}
-            className="rounded px-2 py-1 text-[11px] font-semibold"
+            className="rounded px-2 py-1 text-[11px] font-semibold disabled:opacity-40"
             style={{ color: 'var(--accent)', border: '1px solid var(--surface-raised)' }}
           >
             Use as trigger
           </button>
+          {issue !== null && (
+            <span data-testid="steering-mcp-when-issue" className="text-[10px]" style={{ color: 'var(--status-fail)' }}>{issue}</span>
+          )}
         </div>
       </div>
     </fieldset>

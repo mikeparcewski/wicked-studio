@@ -8,7 +8,7 @@ import {
   type SteeringType,
 } from '../api/steering.js';
 import { useModalEscape } from './Modal.js';
-import { isMcpRule } from '../api/mcp.js';
+import { isMcpRule, triggerIssue } from '../api/mcp.js';
 import { SteeringMcpBuilder } from './SteeringMcpBuilder.js';
 
 /**
@@ -127,8 +127,10 @@ export function SteeringRuleFormModal({ type, initial, onClose, onSaved, create 
   const showMcp = isMcpRule(initial) || isMcpRule({ id: form.id, applies_to: form.applies_to, excludes: form.excludes });
   // INV-S3: an effect-bearing rule needs a non-empty applies_to (the engine refuses one without).
   const scopeOk = form.effect === '' || form.applies_to.length > 0;
+  // A trigger the engine's regex cannot compile is refused before it is saved.
+  const triggerProblem = form.effect === '' ? null : triggerIssue(form.triggerContains.trim());
   const valid =
-    idOk && scopeOk && form.statement.trim() !== '' && Number.isFinite(weightNum) && weightNum >= 0;
+    idOk && scopeOk && triggerProblem === null && form.statement.trim() !== '' && Number.isFinite(weightNum) && weightNum >= 0;
 
   const save = async (): Promise<void> => {
     if (!valid || busy) return;
@@ -343,6 +345,11 @@ export function SteeringRuleFormModal({ type, initial, onClose, onSaved, create 
           >
             {busy ? 'Saving…' : create ? 'Create rule' : 'Save changes'}
           </button>
+          {triggerProblem !== null && (
+            <span data-testid="steering-form-trigger-issue" className="text-[10px]" style={{ color: 'var(--status-fail)' }}>
+              trigger: {triggerProblem}
+            </span>
+          )}
           {!scopeOk && (
             <span data-testid="steering-form-scope-issue" className="text-[10px]" style={{ color: 'var(--status-fail)' }}>
               a rule with an effect needs at least one Applies to token

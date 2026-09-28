@@ -178,10 +178,29 @@ const reEscape = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 export function compileWhen(w: WhenSpec): string {
   const parts: string[] = [];
   if (w.argPattern.trim() !== '') parts.push(`"args":.*${w.argPattern.trim()}`);
+  // `annotations` is flat (the engine's `McpAnnotations` holds four optional booleans), so
+  // `[^{}]*` spans it exactly; the same shape the `mcp-defaults` posture triggers use.
   if (w.classes.length > 0) parts.push(`"mcp":\\{"annotations":\\{[^{}]*\\},"class":"${alt(w.classes)}"`);
   if (w.roles.length > 0) parts.push(`"phase_role":"${alt([...new Set(w.roles.map((r) => ROLE_WIRE[r]))])}"`);
   if (w.seats.length > 0) parts.push(`"seat":"${alt(w.seats.map(reEscape))}"`);
   return parts.join('.*');
+}
+
+/**
+ * Why a trigger regex would not compile in the engine, or `null`. The engine's regex (the Rust
+ * `regex` crate) has no lookaround and no backreferences, so those are refused here, before an
+ * operator saves a rule the engine cannot use; anything JS cannot parse is refused too.
+ */
+export function triggerIssue(pattern: string): string | null {
+  if (pattern === '') return null;
+  if (/\(\?<?[=!]/.test(pattern)) return 'lookaround ((?=, (?!, (?<=, (?<!) is not supported by the engine';
+  if (/\\[1-9]/.test(pattern)) return 'backreferences (\\1 …) are not supported by the engine';
+  try {
+    new RegExp(pattern);
+  } catch (e) {
+    return `not a valid regex: ${e instanceof Error ? e.message : String(e)}`;
+  }
+  return null;
 }
 
 /** The `applies_to` tokens a Subject pick fills: a server, or one tool of it. */

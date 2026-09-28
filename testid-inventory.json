@@ -11,8 +11,8 @@
   "studioVersion": "0.5.14",
   "counts": {
     "files": 172,
-    "occurrences": 1703,
-    "static": 1487,
+    "occurrences": 1705,
+    "static": 1489,
     "dynamic": 72,
     "computed": 7
   },
@@ -7375,6 +7375,12 @@
       ]
     },
     {
+      "testId": "steering-form-trigger-issue",
+      "files": [
+        "src/components/SteeringRuleForm.tsx"
+      ]
+    },
+    {
       "testId": "steering-form-weight",
       "files": [
         "src/components/SteeringRuleForm.tsx"
@@ -7526,6 +7532,12 @@
     },
     {
       "testId": "steering-mcp-when-classes",
+      "files": [
+        "src/components/SteeringMcpBuilder.tsx"
+      ]
+    },
+    {
+      "testId": "steering-mcp-when-issue",
       "files": [
         "src/components/SteeringMcpBuilder.tsx"
       ]
