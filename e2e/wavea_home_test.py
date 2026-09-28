@@ -185,6 +185,16 @@ with sync_playwright() as p:
         check("retry-relaunched", result.inner_text().startswith("Relaunched 1")
               and len(launches) == 1 and launches[0].get("retryOf") == "f1", result=result.inner_text(), launches=launches)
         page.screenshot(path=str(SHOTS / f"wavea-{SKIN}-retry.png"))
+        # The relaunch echoes `retry_of` on the runs wire (api-types 0.8.0), so a retried failure has its answer:
+        # after a reload the Failed tile no longer offers Retry for it.
+        runs = get_json(origin, "/api/v1/runs")
+        rows = runs if isinstance(runs, list) else runs.get("runs", [])
+        echoed = [r["session"].get("retry_of") for r in rows if r["session"]["id"].startswith("r-launched-")]
+        home()
+        page.wait_for_timeout(800)
+        check("retried-failure-has-its-answer", echoed == ["f1"]
+              and page.locator('[data-testid="kpi-repair"][data-repair="retry"]').count() == 0, echoed=echoed,
+              retry_chips=page.locator('[data-testid="kpi-repair"][data-repair="retry"]').count())
 
     ok = True
     for section in (section_clones, section_replay, section_pill, section_retry):

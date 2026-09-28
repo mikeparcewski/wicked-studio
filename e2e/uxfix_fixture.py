@@ -4879,6 +4879,9 @@ class W2Handler(SimpleHTTPRequestHandler):
                     run = session(rid, "executing", body.get("problem", ""),
                                   body.get("problem", ""))
                     run["session"]["project_id"] = pid if pid else None
+                    if retry_of is not None:
+                        # api-types 0.8.0: a relaunch echoes its lineage on the run DTO, as crew's does.
+                        run["session"]["retry_of"] = retry_of
                     launched_runs.append(run)
                     if pid:
                         launched_members.setdefault(pid, []).append(rid)
