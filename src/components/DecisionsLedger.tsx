@@ -149,6 +149,12 @@ export function DecisionsLedger({ model }: Props): React.ReactElement {
                       {g.agentReasoning ? ` — ${g.agentReasoning}` : ''}
                     </p>
                   )}
+                  {/* studio#306: a judge the engine deliberately did not run is no verdict. */}
+                  {g.judgeSkipped !== null && (
+                    <p data-testid="ledger-judge-skipped" className="text-[10px] font-mono" style={{ color: 'var(--status-gate)' }}>
+                      judge skipped — {g.judgeSkipped}
+                    </p>
+                  )}
                   {/* A vacuous pass (true with zero policies) renders NO evaluator line:
                       the headline above already says "allowed — no policy applied", and
                       repeating it dressed as an evaluator verdict is the theater review

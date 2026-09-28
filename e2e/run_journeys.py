@@ -38,6 +38,7 @@ BEHAVIOUR = [
     "standing_orders",
     "capture",
     "main_scroll",
+    "escalation_arms",
 ]
 
 # Journeys that need a live daemon or bridge: a real wicked-crew daemon (seed_surfaces,

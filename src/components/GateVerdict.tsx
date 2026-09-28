@@ -95,6 +95,19 @@ export function GateVerdict({ view, phase }: { view: GateVerdictView; phase: str
         </p>
       )}
 
+      {/* studio#306: the engine deliberately ran no judge — say so, never as a verdict chip. */}
+      {view.judgeSkipped !== null && (
+        <p
+          className="text-[11px]"
+          data-testid="gate-verdict-judge-skipped"
+          data-judge-distinct={view.judgeDistinct === null ? 'unknown' : String(view.judgeDistinct)}
+          style={{ color: 'var(--status-gate)' }}
+        >
+          judge skipped — {view.judgeSkipped}
+          {view.judgeDistinct === false ? ' (judgeDistinct: false — evaluator ≠ creator was not held)' : ''}
+        </p>
+      )}
+
       {view.denial !== null && (
         <p
           className="wk-verdict-denial text-[11px]"

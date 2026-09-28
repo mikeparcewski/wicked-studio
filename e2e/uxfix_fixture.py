@@ -620,6 +620,12 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          #   evaluator NOT PASS escalation (the engine's recorded `VERDICT: FAIL` frames), rides GET
          #   /runs; its events, gate and the creator phase's transcript are served for the card.
          "gate_move": False,
+         # escalation_arms — batch W2-S3 (e2e/escalation_arms_test.py): three paused runs on GET /runs
+         #   — r-timeout (a repo-checks floor that did not finish: extend / targeted / accept_partial),
+         #   r-suggest (a guard-denied evaluator whose edit was pinned: accept_suggestion) and
+         #   r-prerun (a run-level pre-run gate: the phase under review, the steer scope picker) —
+         #   with their events, gates and the reviewed phase's transcript.
+         "escalation_arms": False,
          # seat_week — brainstorm-actionable idea 9 (e2e/agent_1on1_test.py): GET /roster/record
          #   serves SEAT_WEEK (crew#690's shape) and pi carries a sign-in line; POST
          #   /governance/rules is recorded (GET /__fixture/rule-posts). Off: /roster/record answers
@@ -1002,6 +1008,101 @@ GATE_MOVE_OUTPUTS = {
     "produce": {"output": GATE_MOVE_CREATOR_OUTPUT},
     "critique": {"output": GATE_MOVE_REASON},
 }
+
+
+# ── Batch W2-S3: the gate card's escalation arms, source and artifact (switch `escalation_arms`) ──
+# Frames as wicked-core 83d8f36 (#652) emits them: a floor whose test check hit its bound
+# (`denial.source: repo_checks_timeout`), a verify evaluator's edit restored and pinned under
+# refs/wicked/suggestions, and a run-level pre-run gate (`gateKind: run_level`, `reviewingOrd`).
+ESC_T0 = NOW0 - 25 * MIN
+
+
+def _esc_unit(rid: str, key: str, ord_: int, stage: str, role: str, status: str, cli) -> dict:
+    return {"id": f"{rid}:{key}", "session_id": rid, "ord": ord_,
+            "description": f"{key} — fix the flaky importer", "stage": stage, "role": role,
+            "assigned_cli": cli, "assigned_invocation": None, "council_task_ref": None, "routing": None,
+            "denial_reason": None, "phase_ref": None, "conformance_ref": None, "phase_status": None,
+            "collection_scope": None, "status": status}
+
+
+def _esc_run(rid: str, unit_ix: int, units: list) -> dict:
+    run = session(rid, "awaiting_human", "fix the flaky importer", "fix the flaky importer")
+    run["units"] = units
+    run["session"]["unit_ix"] = unit_ix
+    run["session"]["clis"] = ["claude", "codex"]
+    return run
+
+
+ESC_TIMEOUT_PROMPT = ("Unit 1 failed its deterministic floor (repo_checks_timeout): Repository checks did not "
+                      "finish: test timed out after 600.0s — confirm to retry the phase, or reject to cancel the run")
+ESC_SUGGEST_PROMPT = ("Unit 2 verdict is NOT PASS — the read-only `verify` phase changed the tree under review "
+                      "(M src/importer.ts); its edit was discarded and the creator's verified tree restored. "
+                      "Approve to retry the phase against the restored tree, or reject to cancel the run")
+ESC_PRERUN_PROMPT = ("Approve unit 2 before it runs: triage — Fix the flaky importer: the nightly import drops "
+                     "the last row when the file ends without a newline. PHASE SCOPE: triage only.")
+ESC_RUNS = [
+    _esc_run("r-timeout", 0, [_esc_unit("r-timeout", "fix", 1, "build", "creator", "rejected", "claude"),
+                              _esc_unit("r-timeout", "verify", 2, "review", "evaluator", "pending", "codex")]),
+    _esc_run("r-suggest", 1, [_esc_unit("r-suggest", "fix", 1, "build", "creator", "done", "claude"),
+                              _esc_unit("r-suggest", "verify", 2, "review", "evaluator", "rejected", "codex")]),
+    _esc_run("r-prerun", 1, [_esc_unit("r-prerun", "recon", 1, "recon", "neutral", "done", "claude"),
+                             _esc_unit("r-prerun", "triage", 2, "recon", "neutral", "pending", "codex"),
+                             _esc_unit("r-prerun", "fix", 3, "build", "creator", "pending", "claude")]),
+]
+ESC_GATES = {"r-timeout": (1, ESC_TIMEOUT_PROMPT), "r-suggest": (2, ESC_SUGGEST_PROMPT), "r-prerun": (2, ESC_PRERUN_PROMPT)}
+ESC_EVENTS = {
+    "r-timeout": [
+        {"type": "unitDispatched", "session": "r-timeout", "ord": 1, "attempt": 0, "ts": ESC_T0, "seq": 1},
+        {"type": "repoChecksEvaluated", "session": "r-timeout", "ord": 1, "attempt": 0, "ts": ESC_T0 + 12 * MIN,
+         "seq": 2, "passed": False, "criterion": "repository checks pass on the head", "skipped": [],
+         "checks": [
+             {"name": "lint", "argv": ["npm", "run", "lint"], "source": "declared", "exitCode": 0,
+              "timedOut": False, "spawnError": None, "durationMs": 21400},
+             {"name": "test", "argv": ["npm", "test"], "source": "declared", "exitCode": None,
+              "timedOut": True, "spawnError": None, "durationMs": 600000}]},
+        {"type": "gateEvaluated", "session": "r-timeout", "ord": 1, "ts": ESC_T0 + 12 * MIN, "seq": 3,
+         "criterion": "repository checks pass on the head", "hasDeterministicFloor": True, "deterministicPass": False,
+         "agentVerdict": None, "agentReasoning": None, "evaluatorPass": None, "evaluatorPolicies": [],
+         "denialReason": "Repository checks did not finish: test timed out after 600.0s",
+         "denial": {"source": "repo_checks_timeout", "reason": "Repository checks did not finish: test timed out after 600.0s",
+                    "claimId": None, "ruleIds": [], "deniedTool": None, "phase": "fix"},
+         "combined": False, "judgeCli": None, "judgeDistinct": None},
+        {"type": "gateEscalated", "session": "r-timeout", "ord": 1, "ts": ESC_T0 + 12 * MIN, "seq": 4, "attempt": 0,
+         "condition": "floor_failed", "defGate": False, "denialSource": "repo_checks_timeout", "discarded": [],
+         "outputCaptured": True, "restored": False, "suggestionRef": None, "verdictSummary": None},
+        {"type": "awaitingHuman", "session": "r-timeout", "ord": 1, "ts": ESC_T0 + 12 * MIN + SEC, "seq": 5,
+         "prompt": ESC_TIMEOUT_PROMPT, "reviewingOrd": 1, "gateKind": "escalation"},
+    ],
+    "r-suggest": [
+        {"type": "unitDispatched", "session": "r-suggest", "ord": 1, "attempt": 0, "ts": ESC_T0, "seq": 1},
+        {"type": "unitDone", "session": "r-suggest", "ord": 1, "ts": ESC_T0 + 6 * MIN, "seq": 2},
+        {"type": "unitDispatched", "session": "r-suggest", "ord": 2, "attempt": 0, "ts": ESC_T0 + 7 * MIN, "seq": 3},
+        {"type": "evaluatorMutatedWorktree", "session": "r-suggest", "ord": 2, "ts": ESC_T0 + 10 * MIN, "seq": 4,
+         "cli": "codex", "phase": "verify", "beforeTree": "4b1c9e0a7d2f5e8c1a3b", "afterTree": "9f8e7d6c5b4a39281706",
+         "headMoved": False, "changed": [{"status": "M", "path": "src/importer.ts"}], "restored": True, "restoreError": None},
+        {"type": "worktreeRestored", "session": "r-suggest", "ord": 2, "ts": ESC_T0 + 10 * MIN, "seq": 5,
+         "tree": "4b1c9e0a7d2f5e8c1a3b", "head": None, "discarded": [{"status": "M", "path": "src/importer.ts"}],
+         "suggestionRef": "refs/wicked/suggestions/r-suggest/2/0"},
+        {"type": "gateEvaluated", "session": "r-suggest", "ord": 2, "ts": ESC_T0 + 10 * MIN, "seq": 6,
+         "criterion": None, "hasDeterministicFloor": False, "deterministicPass": True, "agentVerdict": None,
+         "agentReasoning": None, "evaluatorPass": True, "evaluatorPolicies": [],
+         "denialReason": "the read-only verify phase changed the tree under review",
+         "denial": {"source": "worktree_guard", "reason": "the read-only verify phase changed the tree under review",
+                    "claimId": None, "ruleIds": [], "deniedTool": None, "phase": "verify"},
+         "combined": False, "judgeCli": None, "judgeDistinct": None},
+        {"type": "awaitingHuman", "session": "r-suggest", "ord": 2, "ts": ESC_T0 + 10 * MIN + SEC, "seq": 7,
+         "prompt": ESC_SUGGEST_PROMPT, "reviewingOrd": 2, "gateKind": "escalation"},
+    ],
+    "r-prerun": [
+        {"type": "unitDispatched", "session": "r-prerun", "ord": 1, "attempt": 0, "ts": ESC_T0, "seq": 1},
+        {"type": "unitExecuting", "session": "r-prerun", "ord": 1, "ts": ESC_T0 + SEC, "seq": 2},
+        {"type": "unitDone", "session": "r-prerun", "ord": 1, "ts": ESC_T0 + 4 * MIN, "seq": 3},
+        {"type": "awaitingHuman", "session": "r-prerun", "ord": 2, "ts": ESC_T0 + 4 * MIN + SEC, "seq": 4,
+         "prompt": ESC_PRERUN_PROMPT, "reviewingOrd": 1, "gateKind": "run_level"},
+    ],
+}
+ESC_OUTPUTS = {("r-prerun", "recon"): {"output": "Recon: the importer reads with split('\\n') and drops a trailing "
+                                                 "row with no newline (src/importer.ts:41). Two call sites."}}
 
 
 # ── Brainstorm-actionable ideas 7+8: trust at the gate (switch `trust_rules`) ──
@@ -2820,6 +2921,8 @@ def assemble_runs() -> list:
             runs = runs + [json.loads(json.dumps(PLAN_GATE_RUN))]
         if state["gate_move"] and not state["no_runs"]:
             runs = runs + [json.loads(json.dumps(GATE_MOVE_RUN))]
+        if state["escalation_arms"] and not state["no_runs"]:
+            runs = runs + json.loads(json.dumps(ESC_RUNS))
         if state["trust_rules"] and not state["no_runs"]:
             runs = runs + json.loads(json.dumps(TRUST_RUNS))
         if state["run_page"] and not state["no_runs"]:
@@ -3743,6 +3846,13 @@ class W2Handler(SimpleHTTPRequestHandler):
                                  "receivedAt": iso(GATE_MOVE_T0 + 9 * MIN + SEC), "options": None})
                 return True
             with state_lock:
+                esc_on = state["escalation_arms"]
+            if esc_on and rid in ESC_GATES:
+                g_ord, g_prompt = ESC_GATES[rid]
+                self._json(200, {"runId": rid, "ord": g_ord, "lifecycle": "open", "prompt": g_prompt,
+                                 "receivedAt": iso(ESC_T0 + 12 * MIN + SEC), "options": None})
+                return True
+            with state_lock:
                 trust_on = state["trust_rules"]
             with state_lock:
                 run_page_on = state["run_page"]
@@ -3873,6 +3983,8 @@ class W2Handler(SimpleHTTPRequestHandler):
             with state_lock:
                 if state["gate_move"] and rid == "r-review":
                     events = list(GATE_MOVE_EVENTS)
+                if state["escalation_arms"] and rid in ESC_EVENTS:
+                    events = list(ESC_EVENTS[rid])
                 if state["trust_rules"] and rid in TRUST_GATES:
                     events = _trust_events(rid)
                 if state["run_page"] and rid in ("r-rerun", "r-rerun-done"):
@@ -3903,6 +4015,11 @@ class W2Handler(SimpleHTTPRequestHandler):
                 gate_move_on = state["gate_move"]
             if gate_move_on and rid == "r-review" and key in GATE_MOVE_OUTPUTS:
                 self._json(200, GATE_MOVE_OUTPUTS[key])
+                return True
+            with state_lock:
+                esc_on = state["escalation_arms"]
+            if esc_on and (rid, key) in ESC_OUTPUTS:
+                self._json(200, ESC_OUTPUTS[(rid, key)])
                 return True
             if not forensics_on or rid != "r-auth":
                 self._json(404, {"error": "Run not found"})

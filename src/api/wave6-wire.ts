@@ -1159,3 +1159,49 @@ export async function setProjectInteractiveRoot(projectId: string, root: string 
   const { project } = await api.updateProject(projectId, { interactiveRoot: trimmed === '' ? null : trimmed });
   return project;
 }
+
+// ── core#469 / core#467 (crew#699, api-types 0.57.0): the escalation arms of POST /runs/:id/gate ──
+
+/**
+ * The four escalation arms crew#699 added to `GateDecision.action` (api-types 0.57.0), typed here
+ * because studio pins an older contract. Each is approve-shaped (`approve: true`) and takes no
+ * `amend`, `amendScope` or `plan`; the engine refuses each (409) at a gate it does not answer.
+ *  - `extend` | `targeted` | `accept_partial`: a repo-checks floor that did not finish
+ *    (`denial.source: 'repo_checks_timeout'`) re-runs on the tree as it stands, with 2x bounds,
+ *    with the repo's `test_targeted` in place of the full test set, or with the unfinished checks
+ *    waived.
+ *  - `accept_suggestion`: an evaluator the worktree guard denied, whose edit was restored and
+ *    pinned (`worktreeRestored.suggestionRef`): the engine applies that edit and rewinds to the
+ *    creator.
+ */
+export type EscalationAction = 'extend' | 'targeted' | 'accept_partial' | 'accept_suggestion';
+
+/** The wire body of one escalation arm: `{approve: true, action}` and nothing else. */
+export interface EscalationDecision {
+  approve: true;
+  action: EscalationAction;
+}
+
+// ── studio#306 (wicked-core#539): `agentVerdict: "skipped"`, a judge that was deliberately not run ──
+
+/**
+ * `gateEvaluated.agentVerdict` with the `"skipped"` token read as NO judge verdict. The engine
+ * sends `"skipped"` (with `judgeDistinct: false` and a `judgeSkippedReason`) when the only
+ * eligible judge seat was the creator's own, so no judge ran; the pinned contract still types
+ * `string | null`. Every surface that asks "did a judge decide" reads this, never the raw field.
+ */
+export function judgeVerdictOf(ev: Record<string, unknown>): string | null {
+  const v = ev['agentVerdict'];
+  if (typeof v !== 'string' || v === 'skipped') return null;
+  return v;
+}
+
+/**
+ * Why the judge was skipped, when the frame says it was (`agentVerdict: "skipped"`): the engine's
+ * `judgeSkippedReason`, or a plain default when the frame carries none. `null` when a judge ran, or
+ * none was expected.
+ */
+export function judgeSkippedOf(ev: Record<string, unknown>): string | null {
+  if (ev['agentVerdict'] !== 'skipped') return null;
+  return str(ev['judgeSkippedReason']) ?? 'the only eligible judge seat was the creator';
+}

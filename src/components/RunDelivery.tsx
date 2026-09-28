@@ -21,6 +21,28 @@ import { compactPath } from './WhatWhere.js';
 const EMPTY_EVENTS: CoreEvent[] = [];
 
 /**
+ * The revise seed's context (#301, #310 R8): the LAST `gateEvaluated` that said something — its
+ * `evaluatorVerdict` (api-types 0.38.0), else its `denial.reason`. A frame that carries neither (a
+ * delivered run's last frame is the deliver gate's clean evaluation) is skipped, not the end of
+ * the search. `null` when no evaluation in the log said anything.
+ */
+export function reviseContextOf(events: readonly CoreEvent[]): string | null {
+  for (let i = events.length - 1; i >= 0; i--) {
+    const ev = events[i]!;
+    if (ev.type !== 'gateEvaluated') continue;
+    const raw = ev as Record<string, unknown>;
+    const evaluatorVerdict = raw['evaluatorVerdict'];
+    if (typeof evaluatorVerdict === 'string' && evaluatorVerdict.trim()) return evaluatorVerdict.trim();
+    const denial = raw['denial'];
+    if (typeof denial === 'object' && denial !== null) {
+      const dr = (denial as Record<string, unknown>)['reason'];
+      if (typeof dr === 'string' && dr.trim()) return dr.trim();
+    }
+  }
+  return null;
+}
+
+/**
  * The Delivery views (wicked-studio#122, slice DA) — what a run PRODUCED, in the
  * three places an operator looks for it. Every one of them goes through
  * {@link deliveryOf} and then {@link resolveDelivery}, so none of them can
@@ -281,22 +303,7 @@ export function RunDelivery({ view, navigate }: Props): React.ReactElement {
   // Revise prefill context (#301): the last gateEvaluated's evaluatorVerdict (api-types 0.38.0)
   // wins over denial.reason — appended after " — " in the seeded problem statement. The 0.7.38
   // daemon serves no PR-review-thread route, so the run's own event log is the only source.
-  const reviseContext = useMemo(() => {
-    for (let i = events.length - 1; i >= 0; i--) {
-      const ev = events[i]!;
-      if (ev.type !== 'gateEvaluated') continue;
-      const raw = ev as Record<string, unknown>;
-      const evaluatorVerdict = raw['evaluatorVerdict'];
-      if (typeof evaluatorVerdict === 'string' && evaluatorVerdict.trim()) return evaluatorVerdict.trim();
-      const denial = raw['denial'];
-      if (typeof denial === 'object' && denial !== null) {
-        const dr = (denial as Record<string, unknown>)['reason'];
-        if (typeof dr === 'string' && dr.trim()) return dr.trim();
-      }
-      return null;
-    }
-    return null;
-  }, [events]);
+  const reviseContext = useMemo(() => reviseContextOf(events), [events]);
   // A rejected deliver unit's `denial_reason` (rendered VERBATIM below) carries the engine's refusal
   // the lift view also holds as `failure` — FRAMED (`Worker FAILED on unit N: …`) and excerpted
   // differently from `stepFailed.detail` (actor.rs: 300/500 vs 150/250 head+tail) — so the lift block

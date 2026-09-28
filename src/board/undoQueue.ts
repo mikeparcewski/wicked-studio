@@ -268,6 +268,14 @@ export function deliverPreview(t: DeliverTarget): string {
  * with a steer note, reject (with or without a note), request changes — so every caller of the
  * shared decision path gets an honest toast without spelling its own copy.
  */
+/** The undo toast's line for each escalation arm (`GateDecision.action`, api-types 0.57.0). */
+const ESCALATION_PREVIEW: Record<string, string> = {
+  extend: 'The checks re-run on the tree as it stands, each under twice its time bound.',
+  targeted: "The checks re-run with the repo's targeted tests in place of the full test set.",
+  accept_partial: 'The checks that finished re-run; the ones that did not are waived and named in the floor note.',
+  accept_suggestion: "The evaluator's edit is applied and the run goes back to the creator phase to rework it.",
+};
+
 export function describeDecision(
   decision: GateDecision, count = 1, deliver: DeliverTarget | null = null,
 ): { verb: DecisionVerb; preview: string } {
@@ -276,6 +284,9 @@ export function describeDecision(
     // D11: the plan gate's approve WITH an edited plan — the edit is the answer.
     return { verb: 'approve', preview: 'The run takes your edited plan (the floor still adds what its band requires).' };
   }
+  // core#469 / core#467 (crew#699): the escalation arms say what they do, not "resumes".
+  const arm = ESCALATION_PREVIEW[(decision as { action?: string }).action ?? ''];
+  if (decision.approve && arm !== undefined) return { verb: 'approve', preview: arm };
   if (decision.approve) {
     // studio#368: approving a deliver gate pushes and opens a PR — the toast says so, not "resumes".
     const base = deliver !== null && count === 1 ? deliverPreview(deliver) : decisionPreview('approve', count);

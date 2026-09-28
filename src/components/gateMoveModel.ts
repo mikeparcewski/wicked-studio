@@ -198,6 +198,9 @@ export function recommendGateMove(input: GateMoveInput): GateMove | null {
   // Only a judgement of the WORK recommends a move: a worktree-guard, governance or worker-failure
   // denial is about how the phase ran, and the card's own remedy for it stands.
   const judged = source !== null && (EVALUATOR_SOURCES.has(source) || VALIDATOR_SOURCES.has(source));
+  // core#469: a floor that did not FINISH judged nothing — "retry with its findings" would re-run the
+  // seat over a timeout. The card's extend / targeted / accept arms are that gate's moves.
+  if (own && source === 'repo_checks_timeout') return null;
   if (own && judged) {
     const items = failingItems(verdict, verdictSummary);
     if (items.length === 0) return null;
