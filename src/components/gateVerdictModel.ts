@@ -502,8 +502,8 @@ export function escalationOffers(
     if (waive.length > 0) {
       offers.push({
         action: 'accept_partial',
-        label: 'Accept what finished',
-        consequence: `Re-runs the checks that finished and waives ${waive.join(', ')}. The waiver is named in the gate's floor note, so the record shows what was not verified.`,
+        label: 'Accept what passed',
+        consequence: `Re-runs the checks that passed and waives ${waive.join(', ')} (the checks that did not pass or did not run). The waiver is named in the gate's floor note, so the record shows what was not verified.`,
       });
     }
     return offers;

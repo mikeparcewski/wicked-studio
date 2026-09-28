@@ -5,7 +5,7 @@ work under review, at 1440x700.
 
   timeout  /runs/r-timeout, paused at a repo-checks floor that did not finish (the test check hit
            its bound): the card offers "Re-run the checks with twice the time" (extend), "Re-run with
-           the targeted tests" (targeted) and "Accept what finished" (accept_partial, naming the
+           the targeted tests" (targeted) and "Accept what passed" (accept_partial, naming the
            waived `test`), each consequence ABOVE its button, and no suggestion arm. Taking extend
            POSTs {approve: true, action: "extend"} and nothing else.
   suggest  /runs/r-suggest, a verify evaluator the worktree guard denied, its edit pinned: the card
