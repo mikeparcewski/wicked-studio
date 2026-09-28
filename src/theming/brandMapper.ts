@@ -326,10 +326,10 @@ export function mapBrandTheme(theme: BrandPalette): BrandTokenOverrides {
     adjustments.push({
       constraint: 'source-fallback',
       original: `primary=${String(theme.primary ?? null)}, secondary=${String(theme.secondary ?? null)}`,
-      adjusted: 'accent 230 84% 72% (default)',
+      adjusted: 'accent 230 74% 68% (default)',
       reason: 'No usable brand color was extracted from the source — the default accent stands.',
     });
-    return { accent_h: 230, accent_s: 84, accent_l: 72, logo_url: logoRaw, adjustments };
+    return { accent_h: 230, accent_s: 74, accent_l: 68, logo_url: logoRaw, adjustments };
   }
 
   let { h, s, l } = rgbToHsl(src);

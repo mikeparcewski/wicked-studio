@@ -388,12 +388,7 @@ export function HomeBoard({ runs, navigate, onOpenAsk }: Props): React.ReactElem
       >
         <div style={{ minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <h1
-              style={{
-                fontSize: 'var(--text-md)', fontWeight: 'var(--weight-bold)',
-                color: 'var(--ink-high)', margin: 0,
-              }}
-            >
+            <h1 className="wk-page-title">
               Home
             </h1>
             {/* Idea 10: hold just the highest-consequence item; the rest return when it clears. */}
@@ -495,7 +490,7 @@ export function HomeBoard({ runs, navigate, onOpenAsk }: Props): React.ReactElem
             data-working={working.length}
             data-quiet={quiet.length}
             data-rendered={mounted}
-            style={{ flex: '1 0 auto', padding: '0 var(--space-6) var(--space-6)', minHeight: '120px' }}
+            style={{ flex: '0 0 auto', padding: '0 var(--space-6) var(--space-6)' }}
           >
             {items.length === 0 && (
               <div style={{ padding: 'var(--space-6) 0' }}>
@@ -515,7 +510,9 @@ export function HomeBoard({ runs, navigate, onOpenAsk }: Props): React.ReactElem
                 calm copy has exactly one owner now — the queue above (§3). */}
             {needsYou.length > 0 && (
               <section data-testid="band-needs-you" data-count={needsYou.length}>
-                <p style={{ ...CSS.bandLabel, color: 'var(--status-gate)' }} title={bandHint('needs-you')}>{bandLabel('needs-you')}</p>
+                {/* "By project": the queue above already owns the NEEDS YOU heading — the same
+                    bare label twice with two different counts read as a contradiction. */}
+                <p className="wk-eyebrow" style={{ margin: '0 0 10px' }} title={bandHint('needs-you')}>By project · {bandLabel('needs-you')}</p>
                 <BandGrid
                   items={needsYou}
                   columns={columns}

@@ -82,7 +82,7 @@ describe('AppearanceSettings (DES-VISION-001 §3.2)', () => {
     render(<AppearanceSettings />);
     fireEvent.click(screen.getByTestId('accent-reset'));
     const a = useAppearanceStore.getState().appearance;
-    expect([a.accent_h, a.accent_s, a.accent_l]).toEqual([230, 84, 72]);
+    expect([a.accent_h, a.accent_s, a.accent_l]).toEqual([230, 74, 68]);
     expect(a.logo_url).toBe('/l.png');
     expect(root().style.getPropertyValue('--_accent-h')).toBe('230');
   });

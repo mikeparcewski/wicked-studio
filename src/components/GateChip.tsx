@@ -34,31 +34,21 @@ import { isSimpleGate, type OpenGate } from '../store/gates.js';
  *  module — and this re-export keeps the chip's old importers working.) */
 export { GATE_HASH };
 
-// DES-VISION-001 §5.1: the gate chip is STATUS furniture, not accent — amber
-// `--status-gate` on `--status-gate-dim`, with the answer buttons in the run
-// (emerald) and fail (red) status pairs. Every color is a semantic token (§2.11).
-const BTN: React.CSSProperties = {
-  fontSize: 'var(--text-2xs)', fontFamily: 'var(--font-mono)', borderRadius: 'var(--radius-sm)',
-  padding: '2px 6px', border: '1px solid transparent', cursor: 'pointer', flexShrink: 0,
-};
+// DES-VISION-001 §5.1: the gate chip's LABEL is status furniture (amber `--status-gate`).
+// Its answers speak the one button vocabulary (styles/components.css, design council M9):
+// Approve is the primary, Reject the danger hairline, "Answer ›" an accent door — the same
+// controls the gate card uses, at the small size.
+const BTN_CLASS = {
+  approve: 'wk-btn wk-btn--primary wk-btn--sm',
+  reject: 'wk-btn wk-btn--danger wk-btn--sm',
+  open: 'wk-btn wk-btn--link wk-btn--sm',
+} as const;
 
 const CSS = {
-  wrap: { display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0, flexWrap: 'nowrap' },
+  wrap: { display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0, flexWrap: 'wrap' },
   label: {
     fontSize: 'var(--text-2xs)', fontFamily: 'var(--font-mono)',
     color: 'var(--status-gate)', fontWeight: 'var(--weight-bold)',
-  },
-  approve: {
-    ...BTN, background: 'var(--status-run-dim)',
-    borderColor: 'var(--status-run-dim)', color: 'var(--status-run)',
-  },
-  reject: {
-    ...BTN, background: 'var(--status-fail-dim)',
-    borderColor: 'var(--status-fail-dim)', color: 'var(--status-fail)',
-  },
-  open: {
-    ...BTN, textDecoration: 'none', background: 'var(--status-gate-dim)',
-    borderColor: 'var(--status-gate-dim)', color: 'var(--status-gate)',
   },
   error: {
     fontSize: 'var(--text-2xs)', fontFamily: 'var(--font-mono)', color: 'var(--status-fail)',
@@ -94,7 +84,7 @@ export function GateChip({ runId, projectId, gate, navigate }: Props): React.Rea
           onClick={(e) => { e.preventDefault(); navigate(path); }}
           data-testid={`gate-open-${runId}`}
           title={gate?.prompt ?? 'Open this gate in the thread'}
-          style={CSS.open}
+          className={BTN_CLASS.open}
         >
           Answer ›
         </a>
@@ -139,7 +129,7 @@ export function GateChip({ runId, projectId, gate, navigate }: Props): React.Rea
         onClick={() => answer(true)}
         disabled={busy}
         title={error !== null ? 'Retry approve' : `${gate?.prompt ?? 'Approve this gate'} — ${decisionPreview('approve', 1)}`}
-        style={{ ...CSS.approve, opacity: busy ? 0.5 : 1 }}
+        className={BTN_CLASS.approve}
       >
         Approve
       </button>
@@ -149,7 +139,7 @@ export function GateChip({ runId, projectId, gate, navigate }: Props): React.Rea
         onClick={() => answer(false)}
         disabled={busy}
         title={error !== null ? 'Retry reject' : `Reject this gate — ${decisionPreview('reject', 1)}`}
-        style={{ ...CSS.reject, opacity: busy ? 0.5 : 1 }}
+        className={BTN_CLASS.reject}
       >
         Reject
       </button>

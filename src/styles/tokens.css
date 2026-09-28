@@ -43,8 +43,12 @@
   /* ── Lines and focus — hairlines tinted like the ink, three strengths. Elevation is a border
      plus a shadow, never a heavy fill. */
   --border-subtle: rgba(170, 186, 222, 0.08);
-  --border:        rgba(170, 186, 222, 0.14);
+  --border:        rgba(170, 186, 222, 0.16);
   --border-strong: rgba(170, 186, 222, 0.24);
+  /* The edge of a field (input, select, textarea, the gate note) — where the border is the
+     ONLY thing that says "type here" it must clear 3:1 against every surface (WCAG 1.4.11):
+     3.13–3.26 on base, rail, card and raised. `--border` stays for decorative hairlines. */
+  --border-input:  rgba(170, 186, 222, 0.50);
 
   /* ── Accent system (§2.5) — ONE hue, three HSL primitives, so customization
      (§3) only overwrites three numbers and the semantics recompute. The default is an
@@ -53,8 +57,8 @@
      action backgrounds, the logo slot border, focus rings. NOT on status indicators,
      narration text, or surface backgrounds. (appearance.ts holds the same default.) */
   --_accent-h: 230;    /* hue: iris blue default */
-  --_accent-s: 84%;    /* saturation */
-  --_accent-l: 72%;    /* lightness */
+  --_accent-s: 74%;    /* saturation — deepened from 84/72 (design council): less pastel */
+  --_accent-l: 68%;    /* lightness — accent-fg on it 5.63:1, as text on card 5.24:1 */
 
   --accent:        hsl(var(--_accent-h) var(--_accent-s) var(--_accent-l));
   --accent-dim:    hsl(var(--_accent-h) var(--_accent-s) calc(var(--_accent-l) - 18%));
@@ -65,8 +69,12 @@
   --accent-hover:  hsl(var(--_accent-h) var(--_accent-s) calc(var(--_accent-l) + 5%));
   --accent-wash:   color-mix(in oklab, var(--accent) 12%, transparent);   /* selected / tinted fills */
 
-  /* The keyboard focus ring: a gap in the page colour, then the accent. */
-  --focus-ring: 0 0 0 2px var(--surface-base), 0 0 0 4px var(--accent);
+  /* The keyboard focus ring: a gap in the colour UNDER the control, then the accent. A panel
+     that is not the page (the gate card) re-points --focus-gap at its own surface, so the gap
+     never reads as a dark notch. Every focus-visible rule ALSO sets a transparent outline, so
+     forced-colors mode (which drops box-shadow) still draws one — see components.css. */
+  --focus-gap: var(--surface-base);
+  --focus-ring: 0 0 0 2px var(--focus-gap), 0 0 0 4px var(--accent);
 
   /* ── Status colors (§2.6) — NOT the accent, NOT customizable. Semantic
      signals: amber = gate (waiting on you), red = failed, emerald = running / ok,
@@ -76,7 +84,7 @@
   --_sg-h: 45;    /* gate: amber hue */
   --_sf-h: 4;     /* failing: red hue */
   --_sr-h: 148;   /* running: emerald hue */
-  --_sw-h: 24;    /* warning: orange hue */
+  --_sw-h: 16;    /* warning: red-orange hue — apart from gate amber by lightness, not only hue */
 
   --status-gate:      hsl(var(--_sg-h) 90% 68%);
   --status-gate-dim:  hsl(var(--_sg-h) 40% 14%);
@@ -84,7 +92,7 @@
   --status-fail-dim:  hsl(var(--_sf-h) 40% 14%);
   --status-run:       hsl(var(--_sr-h) 58% 58%);
   --status-run-dim:   hsl(var(--_sr-h) 40% 14%);
-  --status-warn:      hsl(var(--_sw-h) 94% 62%);
+  --status-warn:      hsl(var(--_sw-h) 90% 58%);   /* 2.10:1 apart from gate amber; 5.25+ on raised */
   --status-warn-dim:  hsl(var(--_sw-h) 40% 14%);
   --status-ok:        var(--status-run);
   --status-ok-dim:    var(--status-run-dim);
@@ -110,7 +118,7 @@
   --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
   --font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
 
-  --text-2xs: 10px;
+  --text-2xs: 11px;   /* the floor: nothing on a decision surface is smaller (was 10px) */
   --text-xs:  11px;
   --text-sm:  13px;
   --text-md:  15px;
@@ -141,6 +149,24 @@
   --shadow-overlay: 0 18px 40px -8px rgba(0,0,0,0.60), 0 0 0 1px var(--border-strong);
   /* A filled button: a top highlight and a one-pixel drop, so it reads as pressable. */
   --shadow-button:  inset 0 1px 0 rgba(255,255,255,0.22), 0 1px 2px rgba(0,0,0,0.28);
+  /* THE primary on a surface sits one step above the secondaries: the button shadow plus a
+     small accent-tinted drop. */
+  --shadow-primary: var(--shadow-button), 0 3px 10px -3px color-mix(in oklab, var(--accent) 55%, transparent);
+
+  /* ── Controls — one height and padding scale for every button-like control ── */
+  --control-h:    30px;
+  --control-h-sm: 24px;   /* the WCAG 2.5.8 floor: no target is smaller */
+  --control-px:   12px;
+
+  /* ── The floating Ask bubble (AskLauncher.tsx: ASK_BUBBLE_PX / ASK_GUTTER_PX) — a surface
+     that ends under it reserves this much room, so the bubble never covers an action. ── */
+  --fab-size:   48px;
+  --fab-gutter: 16px;
+  --fab-clear:  calc(var(--fab-size) + var(--fab-gutter) + 8px);
+
+  /* How long a queued gate decision can be undone — equals board/undoQueue.ts UNDO_WINDOW_MS;
+     the Undo toast's drain bar runs for exactly this long. */
+  --undo-window: 10s;
 
   /* Modal/backdrop scrim — the one translucent fill that must stay translucent
      (content behind a backdrop is context, not noise). Semantic, theme-owned:

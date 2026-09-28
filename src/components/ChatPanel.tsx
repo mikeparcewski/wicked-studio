@@ -1245,10 +1245,10 @@ function NewRunView({
     <div className="flex flex-col h-full items-center justify-center">
       <div className="w-full max-w-2xl px-8 flex flex-col gap-5">
         <div className="flex flex-col gap-2 text-center">
-          <h1 className="text-3xl font-bold tracking-tight" style={{ color: 'var(--ink-high)' }}>
+          <h1 className="wk-page-title">
             {heading}
           </h1>
-          <p className="text-base leading-relaxed" style={{ color: 'var(--ink-muted)' }}>
+          <p className="text-sm leading-relaxed" style={{ color: 'var(--ink-muted)' }}>
             {sub}
           </p>
         </div>

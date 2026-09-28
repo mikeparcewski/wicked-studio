@@ -39,18 +39,20 @@ const CSS = {
     padding: '7px 10px',
     borderBottom: '1px solid var(--border-subtle)',
   },
+  // The queue scans as a table (design council M12): a bold title column, a dimmer sans
+  // rationale, the age in a fixed right-aligned tabular cell.
   subject: {
-    fontSize: 'var(--text-xs)', fontWeight: 'var(--weight-semi)', color: 'var(--ink-high)',
+    fontSize: 'var(--text-xs)', fontWeight: 650, color: 'var(--ink-high)',
     textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
     flexShrink: 1, minWidth: '80px',
   },
   line: {
-    fontSize: 'var(--text-xs)', fontFamily: 'var(--font-mono)', color: 'var(--ink-muted)',
+    fontSize: 'var(--text-xs)',
     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0,
   },
   age: {
     fontSize: 'var(--text-2xs)', fontFamily: 'var(--font-mono)', color: 'var(--ink-dim)',
-    flexShrink: 0,
+    flexShrink: 0, minWidth: '3.5em', textAlign: 'right', fontVariantNumeric: 'tabular-nums',
   },
 } as const satisfies Record<string, React.CSSProperties>;
 
@@ -210,7 +212,7 @@ export function NeedsYouQueue({ queue, runs, navigate, now, variant = 'inline' }
         data-queue-item={row.key}
         data-kbd-selected={selected ? 'true' : undefined}
         tabIndex={-1}
-        className="wk-need-row"
+        className={`wk-need-row wk-need-row--${row.tone}`}
         // Severity stripe (command-deck redesign): a left edge colored by the row's tone, so what
         // needs you reads by color at a glance (gate/failed/stranded/…); the glyph repeats it.
         style={{
@@ -236,7 +238,7 @@ export function NeedsYouQueue({ queue, runs, navigate, now, variant = 'inline' }
           </a>
         )}
         {/* A batch move's line IS its consequence: it wraps rather than truncate (idea 3). */}
-        <span data-testid="need-line" title={row.text} style={{
+        <span data-testid="need-line" className="wk-need-line" title={row.text} style={{
           ...CSS.line,
           ...(row.action.kind === 'batch-onboard' || row.action.kind === 'accept-memory' ? { whiteSpace: 'normal' } : {}),
         }}>

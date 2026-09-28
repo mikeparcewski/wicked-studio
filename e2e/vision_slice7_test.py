@@ -247,15 +247,15 @@ with sync_playwright() as p:
         pass
     page.screenshot(path=str(SHOT_SETTINGS))
 
-    # AC 4 — reset restores 230/84/72 inline AND persists it (§3.5).
+    # AC 4 — reset restores 230/74/68 inline AND persists it (§3.5).
     with page.expect_request(is_settings_put, timeout=8000) as put3:
         page.locator('[data-testid="accent-reset"]').click()
     reset_put = put_appearance(put3.value)
     inline_r = page.evaluate(INLINE)
     report["steps"]["reset"] = {
-        "ok": (inline_r["h"] == "230" and inline_r["s"] == "84%" and inline_r["l"] == "72%"
-               and reset_put.get("accent_h") == 230 and reset_put.get("accent_s") == 84
-               and reset_put.get("accent_l") == 72),
+        "ok": (inline_r["h"] == "230" and inline_r["s"] == "74%" and inline_r["l"] == "68%"
+               and reset_put.get("accent_h") == 230 and reset_put.get("accent_s") == 74
+               and reset_put.get("accent_l") == 68),
         "inline": inline_r, "put_studio_appearance": reset_put,
     }
 

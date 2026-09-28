@@ -48,7 +48,7 @@
 }
 .deck-tile.lead { flex: 1.15; }
 .deck-tile:hover { transform: translateY(-1px); }
-.deck-tile:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.deck-tile:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-shadow: var(--focus-ring); }
 .deck-lab {
   font-size: var(--text-xs); color: var(--ink-muted); font-weight: var(--weight-medium);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -99,7 +99,7 @@
   transition: transform var(--dur-instant, 80ms) var(--ease-out), border-color var(--dur-fast, 120ms);
 }
 .deck-door:hover { border-color: color-mix(in oklab, var(--door-col, var(--accent)) 55%, transparent); transform: translateY(-1px); }
-.deck-door:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.deck-door:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-shadow: var(--focus-ring); }
 .deck-door-glyph {
   width: 30px; height: 30px; border-radius: var(--radius-md); display: grid; place-items: center;
   font-size: 14px; color: var(--door-col, var(--accent)); flex-shrink: 0;
@@ -138,7 +138,7 @@ a.deck-stat:hover, button.deck-stat:hover { transform: translateY(-1px); border-
   transition: background-color var(--dur-instant) var(--ease-out), border-color var(--dur-instant) var(--ease-out);
 }
 .deck-repair:hover, .deck-repair[aria-expanded="true"] { background: var(--accent-wash); border-color: color-mix(in oklab, var(--accent) 45%, transparent); }
-.deck-repair:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.deck-repair:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-shadow: var(--focus-ring); }
 .deck-repair-pop {
   position: fixed; z-index: 60; max-width: 80vw;
   padding: 10px 12px; border-radius: var(--radius-md); background: var(--surface-card);

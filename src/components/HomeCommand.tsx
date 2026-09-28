@@ -98,7 +98,7 @@ export function HomeVerbs({ navigate, onOpenAsk, prominent = false, runs }: {
         type="button"
         data-testid="home-ask"
         onClick={onOpenAsk}
-        className={verbClass('link', prominent)}
+        className={`${verbClass('link', prominent)} wk-btn--shrink`}
         title="Ask across your runs, repos and stores — agents with estate access answer (Ctrl/⌘+Shift+A)"
       >
         Ask about your work…

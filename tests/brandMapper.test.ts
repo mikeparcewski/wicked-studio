@@ -231,7 +231,7 @@ describe('mapBrandTheme — the whole-gamut property (§4.5: all four at once)',
 describe('mapBrandTheme — degenerate palettes (§4.4 tolerant reading)', () => {
   it('no colors at all → the default accent stands, disclosed as a source fallback', () => {
     const m = mapBrandTheme({ name: 'empty' });
-    expect(m).toMatchObject({ accent_h: 230, accent_s: 84, accent_l: 72, logo_url: null });
+    expect(m).toMatchObject({ accent_h: 230, accent_s: 74, accent_l: 68, logo_url: null });
     expect(m.adjustments).toHaveLength(1);
     expect(m.adjustments[0]?.constraint).toBe('source-fallback');
   });

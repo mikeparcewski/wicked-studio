@@ -41,8 +41,8 @@ export const DEFAULT_SITE_NAME = 'wicked-studio';
  *  the default wordmark (no custom site name). */
 export const DEFAULT_APPEARANCE: StudioAppearance = {
   accent_h: 230,
-  accent_s: 84,
-  accent_l: 72,
+  accent_s: 74,
+  accent_l: 68,
   logo_url: null,
   theme: 'dark',
   site_name: null,

@@ -179,7 +179,7 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
   return (
     <div className="max-w-2xl mx-auto">
       <div className="mb-6">
-        <h1 className="text-lg font-semibold" style={{ color: 'var(--ink-high)' }}>System</h1>
+        <h1 className="wk-page-title">System</h1>
         <p className="text-sm mt-1" style={{ color: 'var(--ink-muted)' }}>
           Settings are saved to{' '}
           <code

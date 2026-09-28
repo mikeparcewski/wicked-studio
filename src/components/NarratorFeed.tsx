@@ -306,8 +306,11 @@ export function NarratorFeed({
               </div>
             )}
             {unit.status === 'rejected' && (
-              <div className="text-sm font-medium font-mono" style={{ color: 'var(--status-fail)' }}>
-                Rejected{unit.denial_reason ? `: ${unit.denial_reason}` : ''}
+              // The reason reads in body ink; only the small label carries the fail colour (a red
+              // mono paragraph was the loudest, least readable text on the page).
+              <div className="text-sm" style={{ color: 'var(--ink-body)' }}>
+                <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--status-fail)' }}>Rejected</span>
+                {unit.denial_reason ? `: ${unit.denial_reason}` : ''}
               </div>
             )}
           </div>

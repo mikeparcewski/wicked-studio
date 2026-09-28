@@ -62,20 +62,24 @@ export function RunLink({ view, selectedRunId, onSelect }: Props): React.ReactEl
         <span aria-hidden className="shrink-0 text-[11px]" title={spec.label}>
           {spec.glyph}
         </span>
+        {/* The status sits beside the name it describes, and takes a SHAPE per state (a ring
+            for a gate, a cross for a failure) so it never relies on hue alone (WCAG 1.4.1). */}
+        <span
+          aria-hidden
+          data-status={session.status}
+          className={`wk-status-dot ${pulse ? 'animate-pulse' : ''}`}
+          style={{ '--dot': statusColor(session.status) } as React.CSSProperties}
+        />
         <span
           data-testid="run-title"
-          className="flex-1 truncate text-xs leading-tight font-mono"
-          style={{ color: isActive ? 'var(--ink-high)' : 'var(--ink-muted)' }}
+          className="flex-1 truncate text-[13px] leading-tight"
+          style={{ color: isActive ? 'var(--ink-high)' : 'var(--ink-body)' }}
           title={session.problem}
         >
           {title}
         </span>
-        <span
-          className={`w-2 h-2 rounded-full shrink-0 ${pulse ? 'animate-pulse' : ''}`}
-          style={{ background: statusColor(session.status) }}
-        />
       </div>
-      <p className="text-[10px] mt-0.5 font-mono" style={{ color: 'var(--ink-dim)' }}>
+      <p className="text-[11px] mt-0.5 font-mono" style={{ color: 'var(--ink-dim)' }}>
         {spec.label} · {unitCount} task{unitCount === 1 ? '' : 's'} ·{' '}
         {/* Idea 14: an absent or impossible clock is a pill that says so (the row itself opens the run). */}
         {ageVerdict(runClockMs, now).kind === 'ok'

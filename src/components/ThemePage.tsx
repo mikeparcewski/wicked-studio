@@ -19,7 +19,7 @@ export function ThemePage(): React.ReactElement {
   return (
     <div className="max-w-2xl mx-auto">
       <div className="mb-6">
-        <h1 className="text-lg font-semibold" style={{ color: 'var(--ink-high)' }}>Theme</h1>
+        <h1 className="wk-page-title">Theme</h1>
         <p className="text-sm mt-1" style={{ color: 'var(--ink-muted)' }}>
           Appearance, accent, and brand identity — persisted per-install.
         </p>

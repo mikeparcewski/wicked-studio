@@ -61,11 +61,14 @@ const EMPTY_EVENTS: CoreEvent[] = [];
 const EMPTY_UNITS: WorkUnit[] = [];
 /** The answer buttons' looks (styles/components.css): the recommended move or the lead answer is
  *  the ONE primary; the other answers are secondary; reject is danger; cancel is quiet. */
+/** The answer buttons, each in its FIXED slot of `.wk-gate-actions` (styles/components.css):
+ *  primary alone on a row, then [secondary] [danger], then Cancel run small and right-aligned —
+ *  the same places on every gate kind, so Reject never moves. */
 const BTN = {
-  primary: 'wk-btn wk-btn--primary',
-  secondary: 'wk-btn wk-btn--secondary',
-  danger: 'wk-btn wk-btn--danger',
-  quiet: 'wk-btn wk-btn--quiet',
+  primary: 'wk-btn wk-btn--primary wk-gate-slot-primary',
+  secondary: 'wk-btn wk-btn--secondary wk-gate-slot-secondary',
+  danger: 'wk-btn wk-btn--danger wk-gate-slot-danger',
+  quiet: 'wk-btn wk-btn--quiet wk-btn--sm wk-gate-slot-cancel',
 } as const;
 /** Which existing answer each recommended move IS — that button is not repeated as a secondary. */
 function duplicateOf(move: GateMove | null, escalationGate: boolean): string | null {
@@ -324,7 +327,7 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
         : hidden !== 'steering-approve' ? 'steering-approve' : null;
   const recordSpan = (on: string): React.ReactNode =>
     record !== null && recordOn === on ? (
-      <span data-testid="gate-track-record" className="block text-[10px] font-normal mt-0.5" style={{ opacity: 0.85 }}>
+      <span data-testid="gate-track-record" className="block text-[11px] font-normal mt-0.5" style={{ opacity: 0.85 }}>
         {record}
       </span>
     ) : null;
@@ -535,7 +538,7 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
       // Programmatically/click focusable, not a tab stop: clicking anywhere on
       // the card arms the a/r keys (§7.7) without adding a tab-order entry.
       tabIndex={-1}
-      className="wk-gate-card p-4"
+      className="wk-gate-card p-5"
       style={{ outline: 'none' }}
       data-testid="steering-gate"
       data-run-id={runId}
@@ -563,7 +566,7 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
         ref={message}
         // Focusable only programmatically: the deep-link target, never a tab stop.
         tabIndex={-1}
-        className="text-xs mb-1 leading-relaxed font-mono"
+        className="text-sm mb-1 leading-relaxed"
         data-testid="steering-prompt"
         {...(longPrompt ? { 'data-clamped': String(!promptOpen) } : {})}
         style={{
@@ -582,7 +585,7 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
           type="button"
           data-testid="steering-prompt-toggle"
           onClick={() => setPromptOpen((o) => !o)}
-          className="text-[10px] font-mono mb-2"
+          className="text-[11px] font-mono mb-2"
           style={{ color: 'var(--ink-dim)' }}
         >
           {promptOpen ? 'show less' : 'show the full prompt'}
@@ -640,7 +643,7 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
           </summary>
           <pre
             data-testid="deliver-gate-full-diff"
-            className="text-[10px] font-mono overflow-auto max-h-64 mt-1 p-2 rounded"
+            className="text-[11px] font-mono overflow-auto max-h-64 mt-1 p-2 rounded"
             style={{ background: 'var(--surface-base)', color: 'var(--ink-body)', whiteSpace: 'pre' }}
           >
             {runDiff.diff || '(empty diff)'}
@@ -659,12 +662,12 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
       {footnote && (
         <details className="mb-3">
           <summary
-            className="text-[10px] font-mono cursor-pointer select-none"
+            className="text-[11px] font-mono cursor-pointer select-none"
             style={{ color: 'var(--ink-dim)' }}
           >
             why this gate fired
           </summary>
-          <p className="text-[10px] font-mono mt-1 leading-relaxed" style={{ color: 'var(--ink-dim)' }}>
+          <p className="text-[11px] font-mono mt-1 leading-relaxed" style={{ color: 'var(--ink-dim)' }}>
             {footnote}
           </p>
         </details>
@@ -674,7 +677,7 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
           verdict, plan or diff above it, the note and the decision buttons stay on screen. */}
       <div
         data-testid="steering-actions"
-        className="sticky bottom-0 -mx-4 -mb-4 px-4 pt-3 pb-4 rounded-b-xl"
+        className="sticky bottom-0 -mx-5 -mb-5 px-5 pt-3 pb-5 rounded-b-xl"
         style={{ background: 'var(--surface-card)', borderTop: '1px solid var(--border-subtle)', zIndex: 1 }}
       >
         {/* Steer textarea — guide the re-run. Slice BD: pre-populated from the
@@ -690,7 +693,7 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
           data-testid={prepopulated ? 'amend-prepopulated' : 'steering-amend'}
           data-run-id={runId}
           {...(prefilled ? { 'data-prefill': 'verdict' } : {})}
-          className="wk-gate-note w-full p-2 text-xs mb-3 resize-none font-mono"
+          className="wk-gate-note w-full p-2 text-sm mb-3 resize-none"
           style={{ color: 'var(--ink-high)' }}
           rows={Math.min(8, Math.max(2, amend.split('\n').length))}
           placeholder={
@@ -733,7 +736,7 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
             button that takes it. The other answers stay below as secondary buttons. */}
         {move !== null && (
           <div data-testid="gate-move" data-move={move.kind} className="mb-2">
-            <p data-testid="gate-move-consequence" className="text-[10px] font-mono mb-1" style={{ color: 'var(--ink-muted)', overflowWrap: 'anywhere' }}>
+            <p data-testid="gate-move-consequence" className="wk-gate-consequence" style={{ overflowWrap: 'anywhere' }}>
               {move.consequence}
             </p>
             <button
@@ -754,7 +757,7 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
         {isPlanGate ? (
           /* D11: a plan gate — approve, approve with an edited plan, reject. No steer: the daemon
            * refuses amend text on a plan gate ("takes an edited plan, not amend text"). */
-          <div className="grid grid-cols-2 gap-2" data-testid="plan-gate-actions">
+          <div className="wk-gate-actions" data-testid="plan-gate-actions">
             {hidden !== 'steering-approve' && (
             <button
               data-testid="steering-approve"
@@ -806,7 +809,7 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
            * "Request changes" rewinds to the last creator phase — semantically correct when a
            * build/recon/verify unit failed. Deliver-unit escalations (lift !== null) suppress it
            * because rewinding the creator cannot fix a git-push or rebase-conflict failure. */
-          <div className="grid grid-cols-2 gap-2">
+          <div className="wk-gate-actions">
             {hidden !== 'steering-retry' && (
             <button
               data-testid="steering-retry"
@@ -852,13 +855,13 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
            * No "Request changes" — rewinding to the creator cannot fix a git-push or rebase-conflict
            * failure; the daemon prompt says "Approve to retry (optionally amend), reject to fail the
            * run". Retry spans the full row so the note is visually paired with the primary action. */
-          <div className="grid grid-cols-2 gap-2">
+          <div className="wk-gate-actions">
             {hidden !== 'steering-retry' && (
             <button
               data-testid="steering-retry"
               onClick={() => void retry()}
               disabled={locked}
-              className={`col-span-2 ${lead(true)}`}
+              className={lead(true)}
               title="Re-dispatches the deliver unit (carries your note as guidance if typed)"
             >
               Retry
@@ -883,7 +886,7 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
           </div>
         ) : (
           /* Standard layout: Approve / Approve+steer / Reject / Cancel run */
-          <div className="grid grid-cols-2 gap-2">
+          <div className="wk-gate-actions">
             {hidden !== 'steering-approve' && (
             <button
               data-testid="steering-approve"
@@ -930,14 +933,14 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
             done, all before the one button that makes it (crew's POST /standing-orders). */}
         {offer !== null && gateTrust.made === null && (
           <div data-testid="gate-rule-offer" className="mt-2 rounded-lg px-3 py-2" style={{ border: '1px solid var(--surface-raised)' }}>
-            <p className="text-[10px] font-mono" style={{ color: 'var(--ink-muted)' }}>{offer.because}</p>
+            <p className="text-[11px] font-mono" style={{ color: 'var(--ink-muted)' }}>{offer.because}</p>
             <p data-testid="gate-rule-question" className="text-xs font-mono font-semibold" style={{ color: 'var(--ink-body)' }}>{offer.question}</p>
             <p
               data-testid="gate-rule-preview"
               data-would-approve={offer.preview.wouldApprove}
               data-you-approved={offer.preview.youApproved}
               data-you-sent-back={offer.preview.youSentBack}
-              className="text-[10px] font-mono mt-1"
+              className="text-[11px] font-mono mt-1"
               style={{ color: 'var(--ink-muted)', overflowWrap: 'anywhere' }}
             >
               {offer.previewText}
@@ -952,33 +955,33 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
               Make it a rule
             </button>
             {gateTrust.error !== null && (
-              <p data-testid="gate-rule-error" className="text-[10px] font-mono mt-1" style={{ color: 'var(--status-fail)' }}>{gateTrust.error}</p>
+              <p data-testid="gate-rule-error" className="text-[11px] font-mono mt-1" style={{ color: 'var(--status-fail)' }}>{gateTrust.error}</p>
             )}
           </div>
         )}
         {gateTrust.made !== null && (
-          <p data-testid="gate-rule-made" className="text-[10px] font-mono mt-2" style={{ color: 'var(--ink-muted)' }}>
+          <p data-testid="gate-rule-made" className="text-[11px] font-mono mt-2" style={{ color: 'var(--ink-muted)' }}>
             Standing order made: {gateTrust.made.text}. It answers this gate and the next alike ones.
           </p>
         )}
 
         {/* Mode-selector note / action hint */}
         {isPlanGate ? (
-          <p className="text-[10px] font-mono mt-2" style={{ color: 'var(--ink-dim)' }}>
+          <p className="wk-gate-hint">
             Plan gate — approve runs the plan as shown · edit changes its phases (the floor still adds what its band requires) · reject cancels the run
           </p>
         ) : escalationGate && lift === null ? (
-          <p className="text-[10px] font-mono mt-2" style={{ color: 'var(--ink-dim)' }}>
+          <p className="wk-gate-hint">
             {move?.kind === 'send-back'
               ? 'Send back rewinds to the last creator phase with the note · Retry re-runs the failed unit · Reject cancels the run · Cancel run stops the run without a gate decision'
               : 'Retry re-runs the failed unit · Request changes rewinds to the last creator phase (note required) · Reject cancels the run · Cancel run stops the run without a gate decision'}
           </p>
         ) : escalationGate && lift !== null ? (
-          <p className="text-[10px] font-mono mt-2" style={{ color: 'var(--ink-dim)' }}>
+          <p className="wk-gate-hint">
             Retry re-dispatches the deliver unit (optionally with a note) · Reject fails the run
           </p>
         ) : (
-          <p className="text-[10px] font-mono mt-2" style={{ color: 'var(--ink-dim)' }}>
+          <p className="wk-gate-hint">
             Workflow-declared gate — run-level human_confirm setting does not apply here.
             {' '}· a {restoredRetry ? 'retry' : 'approve'} · r reject while this card holds focus
           </p>

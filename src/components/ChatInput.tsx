@@ -759,7 +759,8 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
       const canSteer = steerText.trim().length > 0 && !steering;
       return (
         <div
-          className="px-5 py-4 flex flex-col gap-2 shrink-0"
+          // wk-run-composer: a right gutter the Ask bubble sits in, never over Send/Steer.
+          className="wk-run-composer px-5 py-4 flex flex-col gap-2 shrink-0"
           style={{ borderTop: '1px solid var(--surface-raised)', background: 'var(--surface-rail)' }}
         >
           {steerError && (
@@ -789,12 +790,13 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
               disabled={steering}
               rows={1}
             />
+            {/* A SECONDARY while the gate is open: the gate card's primary is the one filled
+                action in view — two identical filled buttons must not do opposite things. */}
             <button
               type="button"
               onClick={() => void submitSteer()}
               disabled={!canSteer}
-              className="shrink-0 rounded-xl px-4 py-2 text-sm font-semibold transition-opacity disabled:opacity-40"
-              style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
+              className="wk-btn wk-btn--secondary wk-btn--lg shrink-0"
             >
               {steering ? '…' : planGate.isPlanGate ? 'Send →' : 'Steer →'}
             </button>
@@ -819,7 +821,8 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
       const targetLabel = isTargeted ? normalizedTarget : 'all agents';
       return (
         <div
-          className="px-5 py-4 flex flex-col gap-2 shrink-0"
+          // wk-run-composer: a right gutter the Ask bubble sits in, never over Send/Steer.
+          className="wk-run-composer px-5 py-4 flex flex-col gap-2 shrink-0"
           style={{ borderTop: '1px solid var(--surface-raised)', background: 'var(--surface-rail)' }}
         >
           {injectError && (
@@ -850,8 +853,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
               type="button"
               onClick={() => void submitInject()}
               disabled={!canInject}
-              className="shrink-0 rounded-xl px-4 py-2 text-sm font-semibold transition-opacity disabled:opacity-40"
-              style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
+              className="wk-btn wk-btn--primary wk-btn--lg shrink-0"
             >
               {injecting ? '…' : 'Send →'}
             </button>
@@ -1325,8 +1327,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
               setWorkflow(detectedWorkflow!);
               setWorkflowDismissed(true);
             }}
-            className="rounded-lg px-3 py-1 font-semibold text-xs"
-            style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
+            className="wk-btn wk-btn--primary wk-btn--sm"
           >
             Apply
           </button>
@@ -1409,8 +1410,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
             type="button"
             data-testid="preflight-attach"
             onClick={() => setPopoverOpen(true)}
-            className="rounded-lg px-3 py-1 font-semibold text-xs shrink-0"
-            style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
+            className="wk-btn wk-btn--primary wk-btn--sm shrink-0"
           >
             Attach a repo
           </button>
@@ -1697,8 +1697,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
           onClick={() => void submit()}
           disabled={!canSubmit}
           aria-label="Send"
-          className="shrink-0 rounded-xl px-5 py-2.5 text-sm font-semibold font-mono disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
-          style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
+          className="wk-btn wk-btn--primary wk-btn--lg shrink-0"
         >
           {submitting ? `${elapsedSecs}s` : 'Send'}
         </button>

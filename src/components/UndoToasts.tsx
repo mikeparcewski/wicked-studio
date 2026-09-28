@@ -62,7 +62,9 @@ export function UndoToasts(): React.ReactElement | null {
             type="button"
             data-testid="undo-button"
             onClick={t.undo}
-            className="wk-btn wk-btn--secondary"
+            // The obvious action on the toast (design council S4); the bar along the toast's
+            // foot drains over the undo window (--undo-window, styles/components.css).
+            className="wk-btn wk-btn--link"
             style={{ flexShrink: 0 }}
           >
             Undo

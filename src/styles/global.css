@@ -148,7 +148,7 @@ code, pre, .font-mono {
 
 .wk-composer:focus,
 .wk-composer:focus-within {
-  outline: none;
+  outline: 2px solid transparent;
   box-shadow: 0 0 0 2px var(--accent-dim);
 }
 

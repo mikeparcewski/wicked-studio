@@ -7,8 +7,6 @@
 import type { TimeRange } from '../hooks/useTimeRange.js';
 import { TIME_RANGE_OPTIONS } from '../hooks/useTimeRange.js';
 
-const mono = { fontFamily: 'monospace' } as const;
-
 interface Props {
   value: TimeRange;
   onChange: (r: TimeRange) => void;
@@ -24,19 +22,9 @@ export function TimeRangeSelector({ value, onChange }: Props): React.ReactElemen
           data-range={r}
           aria-pressed={value === r}
           onClick={() => onChange(r)}
-          style={{
-            padding: '3px 8px',
-            borderRadius: '5px',
-            fontSize: '10px',
-            fontWeight: 600,
-            ...mono,
-            cursor: 'pointer',
-            border: '1px solid',
-            borderColor: value === r ? 'var(--accent)' : 'var(--surface-raised)',
-            background: value === r ? 'var(--accent-subtle)' : 'transparent',
-            color: value === r ? 'var(--accent)' : 'var(--ink-dim)',
-            transition: 'all 0.15s',
-          }}
+          // The shared chip (styles/components.css): a 24px target, sans label, the pressed
+          // period in the accent wash — one control vocabulary with the rest of the app.
+          className="wk-chip"
         >
           {label}
         </button>
