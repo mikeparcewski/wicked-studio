@@ -3282,7 +3282,11 @@ class W2Handler(SimpleHTTPRequestHandler):
                 self._json(200, snap)
                 return True
         if path == "/api/v1/health":
-            self._json(200, {"status": "ok", "version": "w2-fixture", "ping": "pong"})
+            # The capabilities crew 0.7.40 answers: without them the composer (rightly) warns that
+            # the daemon predates the deliver gate (crew < 0.7.33), which no current daemon does.
+            self._json(200, {"status": "ok", "version": "w2-fixture", "ping": "pong",
+                             "capabilities": {"deliverGate": True, "revisesPr": True,
+                                              "chatIdOnLaunch": True, "seatChipOnCreate": True}})
             return True
         # Idea 15: the delivery freeze switch (crew#694).
         if path == "/api/v1/deliveries/freeze":
