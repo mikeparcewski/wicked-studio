@@ -506,8 +506,6 @@ export interface ReassignCandidate {
   note: string;
 }
 
-const SIGNED_OUT_STILL_ELIGIBLE = 'no sign-in observed — still council-eligible';
-
 const CANDIDATE_RANK: Record<ReassignCandidate['state'], number> = { ready: 0, unknown: 1, 'signed-out': 2, inactive: 3, ineligible: 4 };
 
 /**
@@ -537,20 +535,19 @@ export function seatStanding(seat: RosterSeat | undefined): { state: ReassignCan
   }
   if (auth === 'signed_in' || seat.signed_in === true) return { state: 'ready', note: '' };
   if (auth === 'signed_out' || seat.signed_in === false) {
-    return { state: 'signed-out', note: eligible === true ? SIGNED_OUT_STILL_ELIGIBLE : 'no sign-in observed — may fail or be benched' };
+    return { state: 'signed-out', note: eligible === true ? 'no sign-in observed — still council-eligible' : 'no sign-in observed — may fail or be benched' };
   }
   return { state: 'unknown', note: '' };
 }
 
 /**
- * Whether a reassign may OFFER this seat (studio#315): a seat the roster reads as ready, or cannot
- * vouch for either way, is offered; a seat that is benched (`inactive`), that the daemon says a
- * council would not seat, or that has no sign-in observed (unless the daemon still calls it
- * council-eligible) is not — run `db708484` took a signed-out seat off this list and lost the run.
+ * Whether a reassign may OFFER this seat (studio#315): a seat the roster reads as ready (signed in,
+ * or no sign-in needed), or cannot vouch for either way, is offered; a seat that is benched
+ * (`inactive`), that the daemon says a council would not seat, or that has no sign-in observed is
+ * not — run `db708484` took a signed-out seat off this list and lost the run.
  */
 export function isOfferable(c: ReassignCandidate): boolean {
-  if (c.state === 'ready' || c.state === 'unknown') return true;
-  return c.state === 'signed-out' && c.note === SIGNED_OUT_STILL_ELIGIBLE;
+  return c.state === 'ready' || c.state === 'unknown';
 }
 
 /**

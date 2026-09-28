@@ -165,7 +165,7 @@ describe('studio#315 — no seat-shaped remedy for a failure no seat can fix', (
   it('a seat-attributable failure lists only usable seats, and names the rest with their reason', () => {
     setCachedRoster([
       seat('codex', { signed_in: true }),
-      seat('pi', { signed_in: false }),
+      seat('pi', { signed_in: false, ...bag({ auth: 'signed_out', council_eligible: true }) }),
       BENCHED('opencode', 'quota exhausted'),
       INELIGIBLE('agy', 'no council credential'),
     ]);
@@ -176,9 +176,10 @@ describe('studio#315 — no seat-shaped remedy for a failure no seat can fix', (
     const options = within(row).getAllByTestId('steering-reassign-option');
     expect(options.map((o) => o.getAttribute('value'))).toEqual(['codex']);
     const withheld = screen.getByTestId('steering-reassign-withheld');
-    expect(withheld).toHaveTextContent('pi (no sign-in observed — may fail or be benched)');
     expect(withheld).toHaveTextContent('opencode (inactive: quota exhausted)');
     expect(withheld).toHaveTextContent('agy (no council credential)');
+    // Signed out is not offered even when the daemon still calls the seat council-eligible (codex on #375).
+    expect(withheld).toHaveTextContent('pi (no sign-in observed — still council-eligible)');
   });
 
   it('when no other seat can take the retry there is no button, only the reasons', () => {
