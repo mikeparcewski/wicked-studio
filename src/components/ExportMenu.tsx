@@ -238,7 +238,7 @@ export function ExportMenu({
       {/* interactive#219 (F-4R2-016): what the finished export actually printed — "PDF ready —
           2 pages · A4 portrait" — under the row, where the download is. Only when the bridge
           reported it; an older bridge renders nothing here. Compact controls carry it on hover. */}
-      {!compact && readyHereAll.map((a) => {
+      {!compact && !placeholder && readyHereAll.map((a) => {
         const phrase = describeExportReport(a.report ?? null);
         if (phrase === null) return null;
         return (
@@ -257,7 +257,7 @@ export function ExportMenu({
       })}
       {/* §7.2 FAILED, §3.3: the reason is stated and the control that retries it is the
           row above — adjacent, not a toast that takes the fix away with it when it fades. */}
-      {[...failedHere, ...failedElsewhere].map((a) => (
+      {[...(placeholder ? [] : failedHere), ...failedElsewhere].map((a) => (
         <span
           key={`hint-${a.format}-${a.version}`}
           data-testid="export-hint"
