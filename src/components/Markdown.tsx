@@ -14,6 +14,39 @@ function isFileRef(href: string): boolean {
   return !/^[a-z][a-z0-9+.-]*:/i.test(href) && !href.startsWith('//') && !href.startsWith('#');
 }
 
+/** A GFM table delimiter row: `|---|:--:|`, `--- | ---` — at least one pipe, only dashes/colons in cells. */
+const DELIMITER_ROW = /^\s*\|?\s*:?-+:?\s*(?:\|\s*:?-+:?\s*)+\|?\s*$|^\s*\|\s*:?-+:?\s*\|\s*$/;
+const FENCE = /^\s*(?:```|~~~)/;
+
+/**
+ * studio#237 (d): a table whose header row does not start its own line never parses — a streamed
+ * reply that joined two blocks with no newline ("…I'll list them.| File | What |") left the header
+ * glued to the sentence before it, and the whole table rendered as one fused paragraph. When the
+ * line above a delimiter row carries text before its first pipe while the delimiter row itself
+ * starts with a pipe, the header is split onto its own line behind a blank one. Fenced code is
+ * left alone.
+ */
+export function normaliseTables(md: string): string {
+  if (!md.includes('|')) return md;
+  const lines = md.split('\n');
+  const out: string[] = [];
+  let inFence = false;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!;
+    if (FENCE.test(line)) inFence = !inFence;
+    const next = lines[i + 1];
+    if (!inFence && next !== undefined && next.trimStart().startsWith('|') && DELIMITER_ROW.test(next)) {
+      const pipe = line.indexOf('|');
+      if (pipe > 0 && line.slice(0, pipe).trim() !== '' && !line.trimStart().startsWith('|')) {
+        out.push(line.slice(0, pipe).trimEnd(), '', line.slice(pipe));
+        continue;
+      }
+    }
+    out.push(line);
+  }
+  return out.join('\n');
+}
+
 const components: Components = {
   h1: ({ children }) => <h1 className="text-lg font-bold mt-4 mb-2" style={{ color: 'var(--ink-high)' }}>{children}</h1>,
   h2: ({ children }) => <h2 className="text-base font-bold mt-3 mb-1.5" style={{ color: 'var(--ink-high)' }}>{children}</h2>,
@@ -136,7 +169,7 @@ export function Markdown({ children, className, onOpenFile }: Props): React.Reac
       style={{ color: 'var(--ink-high)' }}
     >
       <ReactMarkdown remarkPlugins={[remarkGfm]} components={resolved}>
-        {children}
+        {normaliseTables(children)}
       </ReactMarkdown>
     </div>
   );

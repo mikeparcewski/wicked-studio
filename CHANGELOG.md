@@ -13,6 +13,19 @@ npm publish dates. Every version listed here exists on
 ## [Unreleased]
 
 ### Fixed
+- **Chat replies show the answer (#237).** A collapsed reply's teaser is its first heading or first
+  real sentence, not a leading `---` or the seat narrating its own tool use ("I'll explore…"); the
+  now-bar uses the same teaser. claude's "Compacting... Compacting completed." session notice is
+  dropped from the reply. A GFM table whose header row was glued to the sentence before it (a
+  stream that joined two blocks) renders as a table instead of one fused paragraph.
+- **A question several seats answered says the answers are unreconciled (#238).** Once every seat
+  of a round has replied and two or more answered, the thread adds "N seats answered separately
+  and nothing reconciled them — they may disagree; compare before acting". Continue in Build now
+  carries the whole conversation instead of its last 6000 characters.
+- **Each chat seat states its grounding, and every reply its cost (#277).** Warm seat chips read
+  "grounded" or "ungrounded" from the chat's code-graph binding, with the daemon's reason on
+  hover. A reply whose seat reported no usage reads "unmetered" instead of a blank, and the chat
+  header totals the priced replies and counts the unmetered ones.
 - **Studio no longer offers levers that cannot work (#315).** With every selected seat benched or
   not council-eligible, Send is disabled and a line names each seat's reason (Cmd+Enter posts
   nothing either), instead of a "Ready to send" beside the composer's own warning and a launch that

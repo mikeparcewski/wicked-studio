@@ -15,6 +15,8 @@ import { setRetryPrefill } from '../store/retryPrefill.js';
 import { ApprovalDock } from './ApprovalDock.js';
 import {
   ChatThread,
+  chatCost,
+  chatCostLabel,
   SEAT_CHIP,
   readStoredLayout,
   readStoredView,
@@ -34,6 +36,7 @@ import { NowBar } from './NowBar.js';
 import { humanizeGraphReason, ProjectGraphAction, reasonWantsProjectGraph } from './ProjectGraphAction.js';
 import {
   buildChatFeed,
+  cleanChatReply,
   deriveChatArtifacts,
   narrateSeatLifecycle,
   newestChatNow,
@@ -1463,14 +1466,16 @@ export function GroupChat({
       .trimEnd();
     const transcript = messages
       .filter((m) => m.kind === 'user' || (m.kind === 'seat' && !m.pending))
-      .map((m) => (m.kind === 'user' ? `operator: ${m.text}` : `${(m as { cliKey: string }).cliKey}: ${m.text}`))
+      .map((m) => (m.kind === 'user' ? `operator: ${m.text}` : `${(m as { cliKey: string }).cliKey}: ${cleanChatReply(m.text)}`))
       .join('\n');
-    const MAX = 6000; // keep the prefill a context, not a payload
-    const clipped = transcript.length > MAX ? `…${transcript.slice(-MAX)}` : transcript;
+    // studio#238: the WHOLE conversation rides into Build. The old 6000-char tail clip dropped the
+    // question and the first answers of any real multi-seat chat (~57 KB over five questions), so
+    // the build started from the last reply alone. The launch schema bounds `problem` by nothing
+    // but the request size, and the operator still edits the prefill before sending it.
     const ambient = projectId ?? selectedProjectRef.current;
     setRetryPrefill({
       retryOf: null,
-      problem: `${headline}\n\n---\n${clipped}`,
+      problem: `${headline}\n\n---\n${transcript}`,
       clis: (() => {
         const answered = Object.entries(seats).filter(([, st]) => st === 'replied').map(([k]) => k);
         return answered.length > 0 ? answered : selectedAgentsRef.current;
@@ -1513,6 +1518,16 @@ export function GroupChat({
   // (the daemon's open-time answer, the chatSessionFailed frame, or the failed
   // turn's own head), truncated in CSS with the full text on the title. No
   // unlabeled "working" anywhere.
+  // studio#277: the grounding every warm seat of this chat was handed — `null` until the daemon
+  // states the scope (an older daemon, or mid-open), when a chip claims nothing.
+  const grounding = scope === null
+    ? null
+    : {
+      bound: scope.graph.bound,
+      title: scope.graph.bound
+        ? 'This chat binds a read-only code graph and hands every seat the estate command to query it'
+        : `No code graph for this chat — ${humanizeGraphReason(scope.graph.reason, scope.repos.length)}. The seats answer from the files alone.`,
+    };
   const seatChip = (cliKey: string, st: SeatState, reason?: string): React.ReactElement => (
     // wk-disclose: the roster disclosure animates in at --dur-base ease-out
     // (§5.3 motion) — once per chip mount, never a loop (§1.6).
@@ -1530,6 +1545,19 @@ export function GroupChat({
         style={{ background: SEAT_DOT[st] }}
       />
       {cliKey}
+      {grounding !== null && WARM_STATES.has(st) && (
+        // studio#277: each seat states its grounding. The graph binding is decided per chat at open
+        // (`scope.graph`) and handed to every seat, so every warm seat wears the same answer — with
+        // the daemon's reason on hover.
+        <span
+          data-testid="seat-grounding"
+          data-grounded={grounding.bound}
+          title={grounding.title}
+          style={{ color: grounding.bound ? 'var(--status-run)' : 'var(--status-gate)' }}
+        >
+          {grounding.bound ? 'grounded' : 'ungrounded'}
+        </span>
+      )}
       <span
         data-testid="seat-state"
         className="truncate"
@@ -1564,6 +1592,7 @@ export function GroupChat({
   // CONNECTION axis (connecting; the session itself failed) stays with the
   // frame-driven `seats` record — the log carries no bubbles for it yet.
   const posture = useMemo(() => seatLogPosture(messages), [messages]);
+  const cost = useMemo(() => chatCost(messages), [messages]);
   const displaySeat = (cliKey: string, st: SeatState): { st: SeatState; reason?: string } => {
     if (st === 'connecting' || st === 'failed') {
       return { st, ...(seatErrors[cliKey] !== undefined ? { reason: seatErrors[cliKey] } : {}) };
@@ -1765,6 +1794,18 @@ export function GroupChat({
           </div>
         )}
         <div className="flex-1" />
+        {cost.replies > 0 && (
+          // studio#277: what the chat has cost so far, from each finished reply's `usage` — and how
+          // many replies reported none, so an unpriced total is never read as the whole bill.
+          <span
+            data-testid="chat-cost-total"
+            className="text-[11px] font-mono shrink-0"
+            style={{ color: 'var(--ink-dim)' }}
+            title="Summed from each reply's reported usage; unmetered replies report none"
+          >
+            {chatCostLabel(cost)}
+          </span>
+        )}
         {/* §7.9 conversation→action: visible once there is a transcript to carry. */}
         {messages.length > 0 && navigate !== undefined && !ended && (
           <button

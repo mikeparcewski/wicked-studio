@@ -127,7 +127,7 @@ describe('collapse retention — expanding restores every streamed byte', () => 
     });
     // The bubble is the ANSWER — a short conversational turn, first-class, with no "Let me…" prefix.
     const bubble = document.querySelector('[data-testid="seat-bubble"][data-agent="claude"]') as HTMLElement;
-    expect(bubble.textContent).toBe(parts[2]);
+    expect(bubble.firstElementChild!.textContent, 'the reply body, above its usage footer').toBe(parts[2]);
     expect(bubble.closest('[data-testid^="chat-narration-raw-"]'), 'a short answer is a turn, not collapsed narration').toBeNull();
     expect(chip('claude').dataset['state']).toBe('replied');
   });
@@ -147,7 +147,7 @@ describe('collapse retention — expanding restores every streamed byte', () => 
       emit!({ type: 'chatReply', chat: chatId(), cliKey: 'claude', text: streamed.slice(-40), ok: true });
     });
     const bubble = document.querySelector('[data-testid="seat-bubble"][data-agent="claude"]') as HTMLElement;
-    expect(bubble.textContent, 'the longer streamed text stands on a pre-0.7.27 engine').toBe(streamed);
+    expect(bubble.firstElementChild!.textContent, 'the longer streamed text stands on a pre-0.7.27 engine').toBe(streamed);
   });
 
   it('a NOT-ok reply (an eviction) keeps the longer streamed text — nothing said before the cut is lost (E4); collapse → expand is byte-equal', async () => {
@@ -178,11 +178,11 @@ describe('collapse retention — expanding restores every streamed byte', () => 
     const toggle = (): Promise<void> => user.click(screen.getByTestId(`chat-narration-toggle-${index}`));
     await toggle();
     expect(wrapper.style.display).not.toBe('none');
-    expect(bubble.textContent).toBe(streamed);
+    expect(bubble.firstElementChild!.textContent, 'the reply body, above its usage footer').toBe(streamed);
     await toggle();
     expect(wrapper.style.display).toBe('none');
     await toggle();
-    expect(bubble.textContent).toBe(streamed);
+    expect(bubble.firstElementChild!.textContent, 'the reply body, above its usage footer').toBe(streamed);
     expect(chip('claude').dataset['state']).toBe('failed');
   });
 
@@ -335,7 +335,7 @@ describe('DES-L5 R16b — the send targets what the chips say, minus the seats r
 });
 
 describe('DES-L5 §4 — `chatReply.usage` renders as the bubble’s footer', () => {
-  it('a reply with usage shows `in · out · $`; `costUsd: null` drops the price; `usage: null` shows nothing', async () => {
+  it('a reply with usage shows `in · out · $`; `usage: null` says "unmetered" (studio#277), never a blank', async () => {
     const user = userEvent.setup();
     render(<GroupChat repoId={null} onBack={() => undefined} />);
     fireEvent.click(screen.getByTestId('chat-scope-system'));
@@ -348,11 +348,11 @@ describe('DES-L5 §4 — `chatReply.usage` renders as the bubble’s footer', ()
       emit!({ type: 'chatReply', chat: chatId(), cliKey: 'codex', text: 'also sure', ok: true, usage: null });
     });
     const footers = screen.getAllByTestId('seat-usage');
-    expect(footers).toHaveLength(1);
+    expect(footers).toHaveLength(2);
     expect(footers[0]!.textContent).toBe('12.3k in · 800 out · $0.04');
     expect(footers[0]!.title).toContain('cache read 5000');
     const codexBubble = document.querySelector('[data-testid="seat-bubble"][data-agent="codex"]') as HTMLElement;
-    expect(codexBubble.querySelector('[data-testid="seat-usage"]')).toBeNull();
+    expect(codexBubble.querySelector('[data-testid="seat-usage"]')?.textContent).toBe('unmetered');
   });
 });
 
