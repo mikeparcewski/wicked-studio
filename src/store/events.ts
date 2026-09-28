@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { CoreEvent } from '../api/types.js';
+import { useStallEscalationStore } from './stallEscalations.js';
 
 /**
  * The raw per-run append log the {@link import('../hooks/useRunModel.js').useRunModel}
@@ -35,7 +36,8 @@ const IGNORED: ReadonlySet<string> = new Set(['cliOutputDelta', 'unitOutputDelta
 function fingerprint(event: CoreEvent): string {
   const bag: Record<string, unknown> = {};
   for (const key of Object.keys(event).sort()) {
-    if (key === 'ts' || key === 'seq') continue;
+    // `daemon` marks a watchdog frame crew replays from its trail (studio#284) — the live copy lacks it.
+    if (key === 'ts' || key === 'seq' || key === 'daemon') continue;
     bag[key] = (event as Record<string, unknown>)[key];
   }
   return JSON.stringify(bag);
@@ -61,7 +63,7 @@ interface RunEventStore {
   clear: (runId: string) => void;
 }
 
-export const useRunEventStore = create<RunEventStore>((set) => ({
+export const useRunEventStore = create<RunEventStore>((set, get) => ({
   byRun: {},
 
   ingest: (event) => {
@@ -76,7 +78,7 @@ export const useRunEventStore = create<RunEventStore>((set) => ({
     });
   },
 
-  hydrate: (runId, events) =>
+  hydrate: (runId, events) => {
     set((s) => {
       const recorded = events
         .filter((e) => e.session === runId && !IGNORED.has(e.type))
@@ -107,7 +109,12 @@ export const useRunEventStore = create<RunEventStore>((set) => ({
       const merged = [...recorded, ...tail];
       if (merged.length > CAP) merged.splice(0, merged.length - CAP);
       return { byRun: { ...s.byRun, [runId]: merged } };
-    }),
+    });
+    // studio#284: the watchdog's needs-you state lives in the recorded trail too — a reload
+    // re-derives it, so the run page and the needs-you queue show what the live socket showed.
+    const log = get().byRun[runId];
+    if (log !== undefined) useStallEscalationStore.getState().replay(runId, log);
+  },
 
   clear: (runId) =>
     set((s) => {

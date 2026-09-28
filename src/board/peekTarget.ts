@@ -1,5 +1,6 @@
 import type { SessionView } from '../api/types.js';
 import type { OpenGate } from '../store/gates.js';
+import { gateOpenPath } from './gateActions.js';
 import type { NeedKind, NeedRow } from './needsYou.js';
 
 /**
@@ -56,15 +57,62 @@ function runOf(row: NeedRow): string | null {
   return i < 0 ? null : row.key.slice(i + 1);
 }
 
-export function peekTarget({ rows, gates, runs, projectIdByRun, decided }: PeekInputs): PeekTarget | null {
+const TERMINAL: ReadonlySet<string> = new Set(['completed', 'failed', 'cancelled']);
+
+/**
+ * A gate the live gate store holds but the ranked queue does not show yet (studio#369). The queue
+ * builds its gate rows off the run list's `awaiting_human` status, which trails the `/ws`
+ * `awaitingHuman` frame by a list refresh (~1 s); in that window a P press read "Nothing needs
+ * you" while the gate's toast was on screen. Gates are the queue's top severity class, so such a
+ * gate outranks any non-gate top item; among several not-yet-folded gates the oldest wins. A gate
+ * row already at the queue top stands: a not-yet-folded gate is at most one refresh old, and the
+ * queue's own ranking (age band, then stakes) takes it over on the next fold.
+ */
+function liveGateNotQueued(
+  flat: readonly NeedRow[],
+  { gates, runs, projectIdByRun, decided }: PeekInputs,
+): PeekTarget | null {
+  const queued = new Set(flat.filter((r) => r.kind === 'gate').map(runOf));
+  const pending = Object.values(gates)
+    .filter((g) => !queued.has(g.runId) && (decided === undefined || !decided(g.runId)))
+    .filter((g) => {
+      const status = runs.find((v) => v.session.id === g.runId)?.session.status;
+      return status === undefined || !TERMINAL.has(status);
+    })
+    .sort((a, b) => a.receivedAt - b.receivedAt);
+  const g = pending[0];
+  if (g === undefined) return null;
+  const run = runs.find((v) => v.session.id === g.runId);
+  const dto = run?.session.project_id;
+  const projectId = typeof dto === 'string' ? dto : projectIdByRun[g.runId] ?? null;
+  const runPath = `/runs/${encodeURIComponent(g.runId)}`;
+  return {
+    key: `gate:${g.runId}`,
+    kind: 'gate',
+    runId: g.runId,
+    projectId,
+    subject: run?.session.problem ?? g.runId,
+    text: 'Gate: waiting on you',
+    prompt: g.prompt,
+    ord: g.ord,
+    at: g.receivedAt,
+    path: projectId !== null ? gateOpenPath(projectId, g.runId) : runPath,
+  };
+}
+
+export function peekTarget(inputs: PeekInputs): PeekTarget | null {
+  const { rows, gates, runs, projectIdByRun, decided } = inputs;
   // The queue's order, flattened (a group's members in their ranked order), minus every gate that
   // already carries a decision.
-  const top = rows
-    .flatMap((r) => r.members ?? [r])
-    .find((r) => {
-      const id = r.kind === 'gate' ? runOf(r) : null;
-      return id === null || decided === undefined || !decided(id);
-    });
+  const flat = rows.flatMap((r) => r.members ?? [r]);
+  const top = flat.find((r) => {
+    const id = r.kind === 'gate' ? runOf(r) : null;
+    return id === null || decided === undefined || !decided(id);
+  });
+  if (top === undefined || top.kind !== 'gate') {
+    const live = liveGateNotQueued(flat, inputs);
+    if (live !== null) return live;
+  }
   if (top === undefined) return null;
   const runId = runOf(top);
   const run = runId === null ? undefined : runs.find((v) => v.session.id === runId);

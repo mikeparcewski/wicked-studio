@@ -269,8 +269,8 @@ export function narrate(event: CoreEvent, ctx: NarratorContext): NarrationLine |
     case 'workerStallEscalated': {
       // studio #284 / F-BM-006 (minimal render): the watchdog's frame — what it did, how it ended,
       // whether a human is needed. `quietForMs` is this frame's clock (the engine's `workerStalled`
-      // carries `stalledSecs`). Live-only today: crew never appends these frames to the run log, so
-      // a reload cannot replay them (the crew companion is the coordinator's to place).
+      // carries `stalledSecs`). Reload-safe: crew serves these frames in `GET /runs/:id/events`
+      // (`daemon: true`), and the run page's needs-you card folds the same frames (NeedsYouCard).
       const quiet = num(event.quietForMs);
       const mins = quiet !== null ? Math.max(1, Math.round(quiet / 60_000)) : null;
       const needsYou = event.needsYou === true;
