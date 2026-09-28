@@ -10,6 +10,7 @@ import { choicesOf, useGateStore } from '../store/gates.js';
 import { useMembershipStore } from '../store/membership.js';
 import {
   cancelDecision, describeDecision, onDecisionTestReset, queueDecision, reportDecision, restoreNote,
+  type DeliverTarget,
 } from './undoQueue.js';
 
 /**
@@ -183,14 +184,19 @@ const PAST: Record<string, string> = { approve: 'Approved', reject: 'Rejected', 
  * error line. Side effects that assume the decision landed belong behind
  * `outcome === 'sent'`.
  */
-export function commitGateDecision(runId: string, decision: GateAnswer): Promise<DecisionOutcome> {
+export function commitGateDecision(
+  runId: string, decision: GateAnswer, opts: { deliver?: DeliverTarget | null } = {},
+): Promise<DecisionOutcome> {
   const cur = useGateActionStore.getState().byGate[runId] ?? IDLE_GATE_ACTION;
   if (cur.queued || cur.busy || cur.answered !== null) {
     reportDecision('not-sent', dropNotice(runId, cur));
     return Promise.resolve('dropped');
   }
   patch(runId, { queued: true, error: null });
-  const { verb, preview } = describeDecision(decision);
+  // studio#368: a deliver gate's approve pushes — the host names the branch and repo when it knows
+  // them; any other caller (palette, triage keys) still gets the push line off the gate's kind.
+  const deliver = opts.deliver ?? (useGateStore.getState().gates[runId]?.gateKind === 'deliver' ? { branch: null, repo: null } : null);
+  const { verb, preview } = describeDecision(decision, 1, deliver);
   const label = gateLabel(runId);
   const amend = decision.amend ?? null;
   // The gate this decision was made on — watched while queued, and sent so the daemon can refuse

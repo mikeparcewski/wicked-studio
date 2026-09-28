@@ -106,7 +106,9 @@ describe('the inbox gate card on a failure escalation', () => {
     dash();
     const card = await screen.findByTestId('gate-inbox-card');
     const row = await within(card).findByTestId('steering-reassign-row');
-    expect(within(row).getAllByTestId('steering-reassign-option').map((o) => o.getAttribute('value'))).toEqual(['claude', 'pi']);
+    // studio#315: the signed-out seat (pi) is not offered; it is named under the picker instead.
+    expect(within(row).getAllByTestId('steering-reassign-option').map((o) => o.getAttribute('value'))).toEqual(['claude']);
+    expect(within(row).getByTestId('steering-reassign-withheld')).toHaveTextContent('not offered: pi (no sign-in observed');
     expect(within(card).getByRole('button', { name: 'Approve (retry on codex)' })).toBeInTheDocument();
 
     fireEvent.click(within(row).getByTestId('steering-reassign'));

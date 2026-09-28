@@ -71,14 +71,16 @@ describe('F-7R2-018: the verdict block is about THIS unit', () => {
 });
 
 describe('F-7R2-007: Reassign to <seat> + retry', () => {
-  it('lists the run\'s other seats with the roster\'s word, signed-in first; Approve names the dead seat it retries', () => {
+  it('offers only the run\'s other seats that can take the retry, and names the rest with the roster\'s word (studio#315); Approve names the dead seat it retries', () => {
     mount();
     const row = screen.getByTestId('steering-reassign-row');
     const options = within(row).getAllByTestId('steering-reassign-option');
-    expect(options.map((o) => o.getAttribute('value'))).toEqual(['claude', 'pi', 'opencode']);
+    expect(options.map((o) => o.getAttribute('value'))).toEqual(['claude']);
     expect(options[0]!.textContent).toBe('Claude Code');
-    expect(options[1]!.textContent).toBe('pi — no sign-in observed — may fail or be benched');
-    expect(options[1]).toHaveAttribute('data-state', 'signed-out');
+    // studio#315: a signed-out seat is not offered (run db708484 took one and lost the run) — named, not hidden.
+    expect(screen.getByTestId('steering-reassign-withheld')).toHaveTextContent(
+      'not offered: pi (no sign-in observed — may fail or be benched) · OpenCode (no sign-in observed — may fail or be benched)',
+    );
     expect(screen.getByTestId('steering-reassign')).toHaveTextContent('Reassign to Claude Code + retry');
     expect(screen.getByTestId('steering-retry')).toHaveTextContent('Retry');
     expect(screen.getByTestId('steering-retry').getAttribute('title')).toContain('Re-dispatches the failed unit');
@@ -108,13 +110,10 @@ describe('F-7R2-007: Reassign to <seat> + retry', () => {
   it('a refused reassign leaves the approve standing, shows the daemon\'s sentence and offers the reassign alone again', async () => {
     vi.spyOn(client.api, 'getRun').mockResolvedValue({ run: makeView({ id: RUN, status: 'executing', clis: POOL }, UNITS) });
     vi.spyOn(client.api, 'reassignRun')
-      .mockRejectedValueOnce(new Error('the daemon refused this — cli "pi" is not in this run\'s seat pool'))
-      .mockResolvedValueOnce({ status: 'ok', ord: 3, cli: 'pi' });
+      .mockRejectedValueOnce(new Error('the daemon refused this — cli "claude" is not in this run\'s seat pool'))
+      .mockResolvedValueOnce({ status: 'ok', ord: 3, cli: 'claude' });
     const onResolved = mount();
-    fireEvent.change(screen.getByTestId('steering-reassign-seat'), { target: { value: 'pi' } });
-    // Hedged: the roster carries no council-eligibility field, and the rig saw a "signed out" seat answer.
-    expect(screen.getByTestId('steering-reassign-benched')).toHaveTextContent('pi: no sign-in observed — the retry may fail at spawn or be benched there');
-    expect(screen.getByTestId('steering-reassign-benched').textContent).not.toMatch(/benches it|will be benched/);
+    fireEvent.change(screen.getByTestId('steering-reassign-seat'), { target: { value: 'claude' } });
     fireEvent.click(screen.getByTestId('steering-reassign'));
 
     const err = await screen.findByTestId('steering-reassign-error');
@@ -158,7 +157,7 @@ describe('F-7R2-007: Reassign to <seat> + retry', () => {
     const row = await screen.findByTestId('steering-reassign-row');
     expect(getRun).toHaveBeenCalledTimes(1);
     expect(getRun).toHaveBeenCalledWith(RUN);
-    expect(within(row).getAllByTestId('steering-reassign-option').map((o) => o.getAttribute('value'))).toEqual(['claude', 'pi', 'opencode']);
+    expect(within(row).getAllByTestId('steering-reassign-option').map((o) => o.getAttribute('value'))).toEqual(['claude']);
     cleanup();
     vi.spyOn(client.api, 'getRun').mockRejectedValue(new Error('offline'));
     render(<SteeringGate runId={RUN} ord={3} prompt={PROMPT} units={UNITS} />);

@@ -5,7 +5,7 @@ import {
   IDLE_GATE_ACTION,
   useGateActionStore,
 } from '../board/gateActions.js';
-import { decisionPreview } from '../board/undoQueue.js';
+import { decisionPreview, deliverPreview } from '../board/undoQueue.js';
 import type { Navigate } from '../hooks/useRoute.js';
 import { isSimpleGate, type OpenGate } from '../store/gates.js';
 
@@ -128,7 +128,7 @@ export function GateChip({ runId, projectId, gate, navigate }: Props): React.Rea
         data-testid={`gate-approve-${runId}`}
         onClick={() => answer(true)}
         disabled={busy}
-        title={error !== null ? 'Retry approve' : `${gate?.prompt ?? 'Approve this gate'} — ${decisionPreview('approve', 1)}`}
+        title={error !== null ? 'Retry approve' : `${gate?.prompt ?? 'Approve this gate'} — ${gate?.gateKind === 'deliver' ? deliverPreview({ branch: null, repo: null }) : decisionPreview('approve', 1)}`}
         className={BTN_CLASS.approve}
       >
         Approve

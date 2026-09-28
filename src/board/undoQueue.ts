@@ -246,18 +246,39 @@ export function decisionPreview(verb: DecisionVerb, count: number, withNote = fa
 }
 
 /**
+ * What a DELIVER gate's approve sends off the machine (studio#368): the run branch it pushes and the
+ * repository it opens the pull request on, when the host knows them. The push identity is not on
+ * the wire (crew pushes with the GitHub account its host is signed in to), so the line names that
+ * account by where it comes from rather than inventing a login.
+ */
+export interface DeliverTarget {
+  branch: string | null;
+  repo: string | null;
+}
+
+/** The deliver approve's preview: "Pushes branch `wicked/abc` and opens a PR on wicked-crew, as …". */
+export function deliverPreview(t: DeliverTarget): string {
+  const branch = t.branch !== null && t.branch !== '' ? `branch ${t.branch}` : 'the run branch';
+  const repo = t.repo !== null && t.repo !== '' ? ` on ${t.repo}` : '';
+  return `Pushes ${branch} and opens a pull request${repo}, under the daemon's GitHub sign-in.`;
+}
+
+/**
  * Verb + "what will happen" for ANY gate decision the wire can carry — plain approve, approve
  * with a steer note, reject (with or without a note), request changes — so every caller of the
  * shared decision path gets an honest toast without spelling its own copy.
  */
-export function describeDecision(decision: GateDecision, count = 1): { verb: DecisionVerb; preview: string } {
+export function describeDecision(
+  decision: GateDecision, count = 1, deliver: DeliverTarget | null = null,
+): { verb: DecisionVerb; preview: string } {
   const note = (decision.amend ?? '').trim() !== '';
   if (decision.approve && (decision as { plan?: unknown }).plan !== undefined) {
     // D11: the plan gate's approve WITH an edited plan — the edit is the answer.
     return { verb: 'approve', preview: 'The run takes your edited plan (the floor still adds what its band requires).' };
   }
   if (decision.approve) {
-    const base = decisionPreview('approve', count);
+    // studio#368: approving a deliver gate pushes and opens a PR — the toast says so, not "resumes".
+    const base = deliver !== null && count === 1 ? deliverPreview(deliver) : decisionPreview('approve', count);
     return { verb: 'approve', preview: note ? `${base.slice(0, -1)}, carrying your note as guidance.` : base };
   }
   if ((decision as { action?: string }).action === 'request_changes') {

@@ -4,7 +4,7 @@ import { api } from '../api/client.js';
 import type { RosterSeat } from '../api/types.js';
 import { getCachedRoster, setCachedRoster, subscribeRoster } from '../store/rosterCache.js';
 import { useSteeringStore } from '../store/steering.js';
-import { reassignCandidates } from './gateVerdictModel.js';
+import { isOfferable, reassignCandidates } from './gateVerdictModel.js';
 
 /**
  * "Reassign to <seat> + retry" on a FAILURE-ESCALATION gate (acceptance finding F-7R2-007).
@@ -23,11 +23,12 @@ import { reassignCandidates } from './gateVerdictModel.js';
  *
  * Every step is stated on the card as it happens; a reassign that the daemon refuses leaves the
  * approve standing (it already happened — said so), shows the daemon's sentence and offers the
- * reassign alone again. The seat list is the run's OWN pool minus the failed seat, each with the
- * roster's word (signed in first; a seat with no sign-in observed says "may fail or be benched" —
- * hedged, because today's roster carries no council-eligibility field and the phase2-r2 rig saw a
- * "signed out" seat answer on a free tier; crew#533's `council_eligible` / `auth` are read when a
- * daemon sends them — `seatStanding`).
+ * reassign alone again. The seat list is the run's OWN pool minus the failed seat, and only the
+ * seats that can take the retry (studio#315 — `isOfferable`: signed in, no sign-in needed, or
+ * unknown to the roster). A benched, signed-out or not-council-eligible seat is not offered; it is
+ * named under the picker with the roster's reason (crew#533's `council_eligible` / `auth` are read
+ * when a daemon sends them — `seatStanding`). Run `db708484` took a signed-out seat off this list
+ * and the retry refused identically.
  *
  * Wire gap, recorded: the reassign route only targets an `executing` run, so the approve must
  * precede it and the window between the two is the engine's re-dispatch — crew letting
@@ -81,7 +82,14 @@ export function ReassignControl({
     return () => { cancelled = true; unsubscribe(); };
   }, []);
 
-  const candidates = useMemo(() => reassignCandidates(pool, failedCli, roster), [pool, failedCli, roster]);
+  // studio#315: only seats that can take the retry are offered; the others are NAMED with the
+  // roster's reason, so a seat never vanishes from the choice without a word.
+  const all = useMemo(() => reassignCandidates(pool, failedCli, roster), [pool, failedCli, roster]);
+  const candidates = useMemo(() => all.filter(isOfferable), [all]);
+  const withheld = useMemo(() => all.filter((c) => !isOfferable(c)), [all]);
+  const withheldLine = withheld.length === 0
+    ? null
+    : `not offered: ${withheld.map((c) => `${c.label} (${c.note !== '' ? c.note : c.state})`).join(' · ')}`;
   const [seat, setSeat] = useState<string>('');
   const chosen = candidates.find((c) => c.cli === seat) ?? candidates[0];
   const [phase, setPhase] = useState<Phase>('idle');
@@ -91,10 +99,12 @@ export function ReassignControl({
 
   if (candidates.length === 0) {
     return (
-      <p data-testid="steering-reassign-none" className="text-[10px] font-mono mb-3" style={{ color: 'var(--ink-dim)', margin: '0 0 12px' }}>
+      <p data-testid="steering-reassign-none" className="wk-gate-hint" style={{ margin: '0 0 12px' }}>
         {pool.length === 0
           ? 'reassign: this run\'s seat pool is not on the wire, so no other seat can be offered'
-          : `reassign: no other seat in this run's pool${failedCli !== null ? ` (only ${failedCli}, which failed)` : ''}`}
+          : withheldLine !== null
+            ? `reassign: no other seat can take the retry — ${withheldLine}`
+            : `reassign: no other seat in this run's pool${failedCli !== null ? ` (only ${failedCli}, which failed)` : ''}`}
       </p>
     );
   }
@@ -188,17 +198,14 @@ export function ReassignControl({
           disabled={busy || phase === 'done'}
           onClick={() => void go()}
           title="Approve the retry, then move this unit to the chosen seat (POST /runs/:id/reassign) once the run resumes"
-          className="rounded-lg px-3 py-1.5 font-semibold disabled:opacity-50 transition-opacity"
-          style={{ ...mono, background: 'var(--status-gate)', color: 'var(--surface-base)', border: 'none', cursor: busy ? 'default' : 'pointer' }}
+          className="wk-btn wk-btn--secondary wk-btn--sm"
         >
           {busy ? 'Reassigning…' : `Reassign to ${chosen?.label ?? seat} + retry`}
         </button>
       </div>
-      {chosen !== undefined && (chosen.state === 'signed-out' || chosen.state === 'ineligible') && phase === 'idle' && (
-        <p data-testid="steering-reassign-benched" data-state={chosen.state} style={{ ...mono, color: 'var(--status-gate)', margin: 0 }}>
-          {chosen.state === 'ineligible'
-            ? `${chosen.label}: the daemon says a council would not seat it (${chosen.note}) — the retry may be refused there.`
-            : `${chosen.label}: no sign-in observed — the retry may fail at spawn or be benched there; a provider free tier may still answer (the roster cannot tell yet).`}
+      {withheldLine !== null && phase === 'idle' && (
+        <p data-testid="steering-reassign-withheld" className="wk-gate-hint" style={{ margin: 0 }}>
+          {withheldLine}
         </p>
       )}
       {statusWord[phase] !== null && (

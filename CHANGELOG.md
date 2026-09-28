@@ -13,6 +13,22 @@ npm publish dates. Every version listed here exists on
 ## [Unreleased]
 
 ### Fixed
+- **Studio no longer offers levers that cannot work (#315).** With every selected seat benched or
+  not council-eligible, Send is disabled and a line names each seat's reason (Cmd+Enter posts
+  nothing either), instead of a "Ready to send" beside the composer's own warning and a launch that
+  fails at distribution. A gate whose unit's launch was refused by its environment (the engine's
+  "refused its environment" or "failed again … before its work was judged", or a `stepFailed` of
+  kind `environmentRefused`) shows no reassign row and says why; a seat-attributable failure offers
+  only seats that can take the retry and names the rest with the roster's reason. Retry failed
+  relaunches no run whose pool the roster says no seat can take, and a relaunch carries only the
+  seats that can.
+- **A team message at a plan gate gets a receipt (#367).** After the inject lands, the emptied
+  composer and its hint line say what was sent and that it is queued for the team's next turn while
+  the plan gate stays open; typing again clears it. A failed send still shows the error.
+- **Approving the deliver gate says what leaves the machine (#368).** Its undo toast (and the gate
+  chip's title) now reads "Pushes branch `wicked/<id>` and opens a pull request on `<repo>`, under
+  the daemon's GitHub sign-in" instead of "The run resumes past this gate". Other gates keep the old
+  line.
 - **Losing the daemon now says how to get it back (crew#551).** The lost-connection banner was
   written but never mounted, so a studio whose daemon had gone (a reboot, a crash) showed only a red
   pill in the health rail. `ConnectionStatus` is now a banner that App mounts: while `/ws` is down it

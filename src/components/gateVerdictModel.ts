@@ -441,6 +441,31 @@ export function isEscalationGate(prompt: string | undefined, view: GateVerdictVi
 }
 
 /**
+ * Whether this gate's failure is one NO seat can fix (studio#315, F-RC2-003): the unit's LAUNCH was
+ * refused before any work ran — the engine's environment-refusal arm (`stepFailed.failureKind:
+ * environmentRefused` on the gate's unit, or its prompt "Unit N (cli) refused its environment…"),
+ * or a retried attempt that failed again before its work was judged (core#556: fence, snapshot,
+ * environment, permission). Another seat meets the same environment: on run `db708484` the
+ * reassigned retry refused byte-for-byte identically and the run was lost. Read off the engine's
+ * own words and events only — never a guess over the failure text.
+ */
+export function isLaunchRefusal(prompt: string | undefined, events: readonly CoreEvent[], ord: number | undefined): boolean {
+  if (prompt !== undefined) {
+    if (/^\s*Unit\s+\d+\s+\([^)]*\)\s+refused its environment\b/i.test(prompt)) return true;
+    if (/^\s*Unit\s+\d+\s+failed again on attempt\s+\d+\s+before its work was judged/i.test(prompt)) return true;
+  }
+  if (typeof ord !== 'number') return false;
+  // The LATEST step failure of the gate's unit decides: an earlier refusal that a later real
+  // failure superseded is not this gate's cause.
+  for (let i = events.length - 1; i >= 0; i -= 1) {
+    const e = events[i] as unknown as Record<string, unknown>;
+    if (e['type'] !== 'stepFailed' || e['ord'] !== ord) continue;
+    return e['failureKind'] === 'environmentRefused';
+  }
+  return false;
+}
+
+/**
  * The failed unit's seat, TRI-STATE (#274 — the F-E2E-014 fix collapsed two of these into one):
  *  - a `string` — the unit is known and had that seat;
  *  - `null` — the unit is known and PROVABLY had no seat (a tool-only / seatless unit);
@@ -516,10 +541,49 @@ export function seatStanding(seat: RosterSeat | undefined): { state: ReassignCan
 }
 
 /**
+ * Whether a reassign may OFFER this seat (studio#315): a seat the roster reads as ready (signed in,
+ * or no sign-in needed), or cannot vouch for either way, is offered; a seat that is benched
+ * (`inactive`), that the daemon says a council would not seat, or that has no sign-in observed is
+ * not — run `db708484` took a signed-out seat off this list and lost the run.
+ */
+export function isOfferable(c: ReassignCandidate): boolean {
+  return c.state === 'ready' || c.state === 'unknown';
+}
+
+/**
+ * Whether the wire says this seat can take work at all (studio#315, the composer and Retry-failed
+ * half): `false` only when the roster SAYS so — benched (`health.status: inactive`) or not
+ * council-eligible. A signed-out reading stays a warning here: an older daemon's `signed_in` is a
+ * file/env heuristic, and a launch still has the seats' fallbacks. An unknown seat is no refusal.
+ */
+export function seatCanCarry(seat: RosterSeat | undefined): boolean {
+  const { state } = seatStanding(seat);
+  return state !== 'inactive' && state !== 'ineligible';
+}
+
+/**
+ * Why none of `keys` can take the work, in the roster's words — or `null` when at least one can,
+ * or when the roster cannot tell (cold, or none of the keys on it): the refusal is the wire's,
+ * never a guess. "claude: benched — quota · pi: not council-eligible — 401".
+ */
+export function noCarryingSeatReason(keys: Iterable<string>, roster: readonly RosterSeat[] | null): string | null {
+  if (roster === null || roster.length === 0) return null;
+  const reasons: string[] = [];
+  for (const key of new Set(keys)) {
+    const seat = roster.find((s) => s.key === key);
+    if (seat === undefined || seatCanCarry(seat)) return null;
+    const { state, note } = seatStanding(seat);
+    reasons.push(`${key}: ${state === 'inactive' ? `benched — ${note.replace(/^inactive:?\s*/, '') || 'inactive'}` : `not council-eligible — ${note}`}`);
+  }
+  return reasons.length === 0 ? null : reasons.join(' · ');
+}
+
+/**
  * The run's OTHER seats, ordered by what the roster says: signed-in seats first, then seats the
  * roster cannot vouch for, then seats with no sign-in observed (hedged — see `seatStanding`), then
  * inactive, then seats the daemon says a council would not seat. The failed seat is excluded:
- * re-dispatching to it is what plain Approve does.
+ * re-dispatching to it is what plain Approve does. The picker offers only {@link isOfferable}
+ * ones and names the rest with their reason.
  */
 export function reassignCandidates(
   pool: readonly string[],

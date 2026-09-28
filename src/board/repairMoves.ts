@@ -1,6 +1,7 @@
 import type { LaunchBodyWithDeliver, RosterSeat, SessionView } from '../api/types.js';
 import type { GovernanceReplayOutcome } from '../api/governanceReplay.js';
 import { ONBOARDING_WORKFLOW_ID } from './repoStats.js';
+import { noCarryingSeatReason, seatCanCarry } from '../components/gateVerdictModel.js';
 
 /**
  * Repair moves (studio Wave A, ideas 3 and 5): a number or a pile of alike rows that signals
@@ -100,7 +101,8 @@ export function retryLaunchOf(v: SessionView, roster: readonly RosterSeat[] | nu
     return { via: 'onboard', repoId: s.repo_ref };
   }
   const body: LaunchBodyWithDeliver = { problem: s.problem, retryOf: s.id };
-  const seats = (roster ?? []).filter((seat) => s.clis.includes(seat.key));
+  // studio#315: a seat the roster says cannot take work (benched, not council-eligible) does not ride.
+  const seats = (roster ?? []).filter((seat) => s.clis.includes(seat.key) && seatCanCarry(seat));
   if (seats.length > 0) body.clisJson = JSON.stringify(seats);
   if (s.entity_mode !== undefined) body.entityMode = s.entity_mode;
   const hc = confirmWire(s.human_confirm);
@@ -110,6 +112,18 @@ export function retryLaunchOf(v: SessionView, roster: readonly RosterSeat[] | nu
   if (typeof s.project_id === 'string' && s.project_id !== '') body.projectId = s.project_id;
   if (body.repoRef !== undefined && body.workflow !== undefined) body.deliver = 'none';
   return { via: 'runs', body };
+}
+
+/**
+ * Why a failed run must NOT be relaunched as-is (studio#315, F-RC2-041): the roster says no seat in
+ * its pool can take the work, so the relaunch would fail at distribution exactly as the original
+ * did ("council distribution failed: no eligible seat"). `null` when a seat can, or when the roster
+ * cannot tell. An onboarding run goes through its repo's route, which picks its own seats.
+ */
+export function retryBlocker(v: SessionView, roster: readonly RosterSeat[] | null): string | null {
+  if (v.session.workflow_id === ONBOARDING_WORKFLOW_ID) return null;
+  const reason = noCarryingSeatReason(v.session.clis, roster);
+  return reason === null ? null : `not relaunched: no seat in its pool can take it (${reason})`;
 }
 
 /** The Retry-failed preview's consequence line. */
