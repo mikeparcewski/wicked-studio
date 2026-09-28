@@ -73,6 +73,7 @@ export function useRecordingFailure(projectId: string, demoId: string): Recordin
   const [failure, setFailure] = useState<RecordingFailure | null>(null);
   useEffect(() => {
     let cancelled = false;
+    setFailure(null); // a row reused for another demo never shows the previous one's failure
     getDemoStatus(projectId, demoId)
       .then((s) => { if (!cancelled) setFailure(recordingFailure(s)); })
       .catch(() => { /* bridge down or route absent — a row without a badge, never a wrong one */ });
