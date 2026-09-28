@@ -125,6 +125,16 @@ with sync_playwright() as p:
         check("d4-deliver-hidden-when-the-launch-delivers", "deliver" not in offered(page), offered=offered(page))
         check("d2-notice-names-the-pr", page.get_by_test_id("deliver-notice").count() == 0
               or page.get_by_test_id("deliver-notice").get_attribute("data-deliver-state") in ("on", None))
+        # The fixture's /health answers crew 0.7.40's capabilities (deliverGate: true), so with a repo
+        # picked, a phase making it a build launch and "First gate", the composer promises the deliver
+        # gate, never the pre-0.7.33 warning.
+        page.locator('[data-testid="phase-option"][data-catalog="build"]').click()
+        page.wait_for_function("""() => (document.querySelector('[data-testid="deliver-notice"]')?.textContent || '')
+          .includes('pauses at the deliver gate')""", timeout=8000)
+        notice = page.get_by_test_id("deliver-notice").text_content() or ""
+        check("d2-deliver-gate-promised", "WITHOUT a deliver gate" not in notice
+              and page.get_by_test_id("launch-confirm-deliver").get_attribute("data-deliver-gate") == "human",
+              notice=notice)
         page.screenshot(path=str(SHOTS / f"dogfood-{SKIN}-launch-picker.png"))
 
     def section_gate() -> None:
