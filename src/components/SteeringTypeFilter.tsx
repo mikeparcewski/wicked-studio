@@ -1,3 +1,4 @@
+import { isMcpRule } from '../api/mcp.js';
 import {
   policiesPath,
   STEERING_TYPE_LABELS,
@@ -39,12 +40,15 @@ export function activeCount(rules: SteeringRule[]): number {
   return rules.reduce((n, r) => (r.retired === true ? n : n + 1), 0);
 }
 
-export function SteeringTypeFilter({ rules, activeType, navigate }: {
+export function SteeringTypeFilter({ rules, activeType, navigate, mcp = false }: {
   rules: SteeringRule[];
   /** The active filter — `null` is the `All` view. */
   activeType: SteeringType | null;
   navigate: (path: string) => void;
+  /** The MCP filter (`?mcp=1`): kept across type chips, toggled by its own chip. */
+  mcp?: boolean;
 }): React.ReactElement {
+  const mcpCount = rules.filter((r) => r.retired !== true && isMcpRule(r)).length;
   const counts = countByType(rules);
   const chip = (type: SteeringType | null, label: string, count: number): React.ReactElement => {
     const active = activeType === type;
@@ -57,7 +61,7 @@ export function SteeringTypeFilter({ rules, activeType, navigate }: {
         data-testid="steering-type-chip"
         data-type={type ?? 'all'}
         data-active={active}
-        onClick={() => navigate(policiesPath(type))}
+        onClick={() => navigate(policiesPath(type, mcp))}
         className="rounded px-2 py-1 text-[11px] font-semibold transition-colors"
         style={{
           background: active ? 'var(--surface-raised)' : 'transparent',
@@ -78,6 +82,24 @@ export function SteeringTypeFilter({ rules, activeType, navigate }: {
     >
       {chip(null, 'All', activeCount(rules))}
       {STEERING_TYPES.map((t) => chip(t, STEERING_TYPE_LABELS[t], counts[t].active))}
+      <span aria-hidden className="mx-1 self-stretch" style={{ borderLeft: '1px solid var(--surface-raised)' }} />
+      <button
+        type="button"
+        role="switch"
+        aria-checked={mcp}
+        data-testid="steering-mcp-chip"
+        data-active={mcp}
+        title="Only the rules that govern MCP calls (they name an mcp token)"
+        onClick={() => navigate(policiesPath(activeType, !mcp))}
+        className="rounded px-2 py-1 text-[11px] font-semibold transition-colors"
+        style={{
+          background: mcp ? 'var(--surface-raised)' : 'transparent',
+          color: mcp ? 'var(--ink-high)' : 'var(--ink-muted)',
+          border: '1px solid var(--surface-raised)',
+        }}
+      >
+        MCP <span style={{ color: 'var(--ink-dim)' }}>({mcpCount})</span>
+      </button>
     </div>
   );
 }

@@ -24,6 +24,7 @@ import { RepoGraphModal } from './components/RepoGraphModal.js';
 import { RightPanel } from './components/RightPanel.js';
 import { RunRawView } from './components/RunRawView.js';
 import { SkillsPage } from './components/SkillsPage.js';
+import { McpToolsPage } from './components/McpToolsPage.js';
 import { SteeringPage } from './components/SteeringPage.js';
 import { MemoriesPanel } from './components/MemoriesPanel.js';
 import { GovernanceDashboard } from './components/GovernanceDashboard.js';
@@ -583,6 +584,15 @@ export function App(): React.ReactElement {
       return (
         <div className="flex flex-1 overflow-hidden">
           <SkillsPage navigate={navigate} search={search} />
+        </div>
+      );
+    }
+    // `/mcp` — MCP tools (DES-MCP-TOOLS-001 §7): the registered servers, their tools, the policy
+    // matrix and Approve / Revoke. `?server=<name>` deep-links a server row open.
+    if (panel === 'mcp') {
+      return (
+        <div className="flex flex-1 overflow-hidden">
+          <McpToolsPage navigate={navigate} search={search} />
         </div>
       );
     }

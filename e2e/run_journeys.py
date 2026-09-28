@@ -40,6 +40,7 @@ BEHAVIOUR = [
     "main_scroll",
     "escalation_arms",
     "demo_mode",
+    "mcp_tools",
 ]
 
 # Journeys that need a live daemon or bridge: a real wicked-crew daemon (seed_surfaces,

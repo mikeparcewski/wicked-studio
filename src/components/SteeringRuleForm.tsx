@@ -8,6 +8,8 @@ import {
   type SteeringType,
 } from '../api/steering.js';
 import { useModalEscape } from './Modal.js';
+import { isMcpRule, triggerIssue } from '../api/mcp.js';
+import { SteeringMcpBuilder } from './SteeringMcpBuilder.js';
 
 /**
  * The rule EDIT form — a MODAL opened from the drawer's Edit (the spreadsheet wave made this
@@ -102,11 +104,16 @@ function formFromRule(rule: SteeringRule): FormState {
  * The modal wrapper + the form: EDIT of one existing rule (id fixed, provenance carried
  * through untouched).
  */
-export function SteeringRuleFormModal({ type, initial, onClose, onSaved }: {
+export function SteeringRuleFormModal({ type, initial, onClose, onSaved, create = false, existingIds = [] }: {
   type: SteeringType;
   initial: SteeringRule;
   onClose: () => void;
   onSaved: (id: string) => void;
+  /** CREATE a new rule from `initial` (the Add ▾ menu's "Add MCP policy"): the id is editable and
+   *  must not collide with an existing rule. Default = edit `initial` in place. */
+  create?: boolean;
+  /** The loaded rule ids, for the create-mode collision check. */
+  existingIds?: readonly string[];
 }): React.ReactElement {
   const [form, setForm] = useState<FormState>(() => formFromRule(initial));
   const [busy, setBusy] = useState(false);
@@ -116,9 +123,14 @@ export function SteeringRuleFormModal({ type, initial, onClose, onSaved }: {
   const weightNum = Number(form.weight);
   // The STEERING-scoped INV-C1 (the id is read-only here, but a migrated policy's custom id
   // must never block its own edit — the strict PAT/POL echo would).
-  const idOk = ruleIdIssue(form.id, form.rule_type) === null;
+  const idOk = ruleIdIssue(form.id, form.rule_type) === null && !(create && existingIds.includes(form.id.trim()));
+  const showMcp = isMcpRule(initial) || isMcpRule({ id: form.id, applies_to: form.applies_to, excludes: form.excludes });
+  // INV-S3: an effect-bearing rule needs a non-empty applies_to (the engine refuses one without).
+  const scopeOk = form.effect === '' || form.applies_to.length > 0;
+  // A trigger the engine's regex cannot compile is refused before it is saved.
+  const triggerProblem = form.effect === '' ? null : triggerIssue(form.triggerContains.trim());
   const valid =
-    idOk && form.statement.trim() !== '' && Number.isFinite(weightNum) && weightNum >= 0;
+    idOk && scopeOk && triggerProblem === null && form.statement.trim() !== '' && Number.isFinite(weightNum) && weightNum >= 0;
 
   const save = async (): Promise<void> => {
     if (!valid || busy) return;
@@ -163,16 +175,16 @@ export function SteeringRuleFormModal({ type, initial, onClose, onSaved }: {
         data-testid="steering-rule-form"
         role="dialog"
         aria-modal="true"
-        aria-label={`Edit ${form.base.id}`}
+        aria-label={create ? 'New rule' : `Edit ${form.base.id}`}
         className="flex max-h-[86vh] w-[34rem] max-w-[92vw] flex-col gap-2 overflow-y-auto rounded-xl p-4 shadow-2xl"
         style={{ border: '1px solid var(--surface-raised)', background: 'var(--surface-card)' }}
       >
         <div className="flex items-center gap-2">
           <span className="text-[11px] font-semibold" style={{ color: 'var(--ink-high)' }}>
-            {`Edit ${form.base.id}`}
+            {create ? 'New MCP policy' : `Edit ${form.base.id}`}
           </span>
           <span className="text-[10px]" style={{ color: 'var(--ink-dim)' }}>
-            type: {STEERING_TYPE_LABELS[type]} (this page)
+            type: {STEERING_TYPE_LABELS[type]}{create ? '' : ' (this page)'}
           </span>
           <button
             data-testid="steering-form-cancel"
@@ -207,7 +219,7 @@ export function SteeringRuleFormModal({ type, initial, onClose, onSaved }: {
               data-testid="steering-form-id"
               type="text"
               value={form.id}
-              readOnly
+              readOnly={!create}
               spellCheck={false}
               onChange={(e) => onChange({ ...form, id: e.target.value })}
               className="w-28 rounded px-2 py-1 font-mono text-[11px] focus:outline-none"
@@ -276,6 +288,14 @@ export function SteeringRuleFormModal({ type, initial, onClose, onSaved }: {
           placeholder="add and press Enter"
         />
 
+        {showMcp && (
+          <SteeringMcpBuilder
+            appliesTo={form.applies_to}
+            onAppliesTo={(v) => onChange({ ...form, applies_to: v })}
+            onTrigger={(t) => onChange({ ...form, triggerContains: t, effect: form.effect === '' ? 'deny' : form.effect })}
+          />
+        )}
+
         <div className="flex flex-wrap items-end gap-2">
           <label className="flex flex-col gap-1 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
             Effect (optional — none = recall-only)
@@ -323,11 +343,21 @@ export function SteeringRuleFormModal({ type, initial, onClose, onSaved }: {
             className="rounded px-3 py-1 text-[11px] font-semibold disabled:opacity-40"
             style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
           >
-            {busy ? 'Saving…' : 'Save changes'}
+            {busy ? 'Saving…' : create ? 'Create rule' : 'Save changes'}
           </button>
+          {triggerProblem !== null && (
+            <span data-testid="steering-form-trigger-issue" className="text-[10px]" style={{ color: 'var(--status-fail)' }}>
+              trigger: {triggerProblem}
+            </span>
+          )}
+          {!scopeOk && (
+            <span data-testid="steering-form-scope-issue" className="text-[10px]" style={{ color: 'var(--status-fail)' }}>
+              a rule with an effect needs at least one Applies to token
+            </span>
+          )}
           {!idOk && (
             <span className="text-[10px]" style={{ color: 'var(--status-fail)' }}>
-              id must match {form.rule_type === 'pattern' ? 'PAT' : 'POL'}-&lt;3–6 digits&gt;
+              {create && existingIds.includes(form.id.trim()) ? 'that id is taken' : <>id must match {form.rule_type === 'pattern' ? 'PAT' : 'POL'}-&lt;3–6 digits&gt;</>}
             </span>
           )}
         </div>

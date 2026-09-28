@@ -12,9 +12,11 @@ import { useDismissable } from '../hooks/useDismissable.js';
  *  - "Open assistant" is the way into the dock when it is collapsed (and a no-op focus
  *    otherwise) — import and add-with-chat live THERE now.
  */
-export function SteeringAddMenu({ onAddRow, onOpenAssistant }: {
+export function SteeringAddMenu({ onAddRow, onOpenAssistant, onAddMcpPolicy }: {
   /** Opens the grid's editable draft row. */
   onAddRow: () => void;
+  /** Opens the new-MCP-policy form (Subject + When builders; DES-MCP-TOOLS-001 §4.7). */
+  onAddMcpPolicy?: () => void;
   /** Expands the assist dock (import / author live there). */
   onOpenAssistant: () => void;
 }): React.ReactElement {
@@ -72,6 +74,7 @@ export function SteeringAddMenu({ onAddRow, onOpenAssistant }: {
           }}
         >
           {item('steering-add-open', 'Add row', 'An editable draft row in the grid — manual id, saved on commit', onAddRow)}
+          {onAddMcpPolicy !== undefined && item('steering-add-mcp', 'Add MCP policy', 'Pick a server or tool, say when it applies, choose the effect', onAddMcpPolicy)}
           {item('steering-assist-open', 'Open assistant', 'Chat, analyze docs, or import rule files directly', onOpenAssistant)}
         </div>
       )}

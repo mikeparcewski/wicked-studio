@@ -101,10 +101,10 @@ describe('the nav rail variant', () => {
 });
 
 describe('every nav destination is reachable under every skin', () => {
-  /** What the full nav exposes: 10 section dashboards, 3 settings pages, notifications, health. */
+  /** What the full nav exposes: 11 section dashboards, 3 settings pages, notifications, health. */
   const EXPECTED = [
     'section:projects', 'section:execute', 'section:test', 'section:vibe', 'section:demo',
-    'section:chat', 'section:repos', 'section:skills', 'section:steering', 'section:testing',
+    'section:chat', 'section:repos', 'section:skills', 'section:mcp', 'section:steering', 'section:testing',
     'settings:/theme', 'settings:/workflows', 'settings:/system', 'notifications', 'health',
   ].sort();
   const reachable = (): string[] =>
