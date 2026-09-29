@@ -364,7 +364,10 @@ function ServerRow({ server, policies, open, onToggle, mode, busy, onAct, naviga
   );
 }
 
-/** Add existing: paste a command or URL → preview (tools + decisions if saved now) → save that preview. */
+/**
+ * Add existing / Wrap an API: paste a command or URL (or a REST API's base URL and its OpenAPI URL)
+ * → preview (tools + decisions if saved now) → save that preview.
+ */
 function AddServerPanel({ onSaved, onClose, mode, navigate }: {
   onSaved: (name: string) => void;
   onClose: () => void;
@@ -374,6 +377,8 @@ function AddServerPanel({ onSaved, onClose, mode, navigate }: {
   const [name, setName] = useState('');
   const [kind, setKind] = useState<McpUpstreamKind>('mcp-stdio');
   const [target, setTarget] = useState('');
+  /** `rest` only: where crew fetches the API's OpenAPI document. */
+  const [openapiUrl, setOpenapiUrl] = useState('');
   const [authRef, setAuthRef] = useState('');
   const [authEnv, setAuthEnv] = useState('');
   /** The preview, bound to the exact request it answered (`key`): only shown and saved while the
@@ -383,14 +388,14 @@ function AddServerPanel({ onSaved, onClose, mode, navigate }: {
   const [error, setError] = useState<string | null>(null);
 
   const nameOk = /^[a-z0-9_-]{1,63}$/.test(name);
-  const ready = nameOk && target.trim() !== '' && (authRef.trim() === '' || /^(env|keychain):/.test(authRef.trim()));
+  const ready = nameOk && target.trim() !== '' && (kind !== 'rest' || openapiUrl.trim() !== '') && (authRef.trim() === '' || /^(env|keychain):/.test(authRef.trim()));
 
   const body = () => {
     const parts = target.trim().split(/\s+/);
     const auth = authRef.trim() === '' ? null : { ref: authRef.trim(), ...(authEnv.trim() !== '' ? (kind === 'mcp-stdio' ? { env: authEnv.trim() } : { header: authEnv.trim() }) : {}) };
-    return kind === 'mcp-stdio'
-      ? { name, kind, command: parts[0] ?? '', args: parts.slice(1), auth }
-      : { name, kind, url: target.trim(), auth };
+    if (kind === 'mcp-stdio') return { name, kind, command: parts[0] ?? '', args: parts.slice(1), auth };
+    if (kind === 'rest') return { name, kind, url: target.trim(), openapiUrl: openapiUrl.trim(), auth };
+    return { name, kind, url: target.trim(), auth };
   };
 
   const previewSeq = useRef(0);
@@ -433,7 +438,7 @@ function AddServerPanel({ onSaved, onClose, mode, navigate }: {
   return (
     <section data-testid="mcp-add-panel" className="flex flex-col gap-2 rounded p-3" style={{ border: BORDER, background: 'var(--surface-rail)' }}>
       <div className="flex items-center gap-2">
-        <h3 className="text-xs font-semibold" style={{ color: 'var(--ink-high)' }}>Add an existing MCP server</h3>
+        <h3 className="text-xs font-semibold" style={{ color: 'var(--ink-high)' }}>{kind === 'rest' ? 'Wrap a REST API' : 'Add an existing MCP server'}</h3>
         <button type="button" data-testid="mcp-add-cancel" onClick={onClose} className="ml-auto text-[10px] hover:underline" style={{ color: 'var(--ink-dim)' }}>Cancel</button>
       </div>
       <p className="text-[10px]" style={{ color: 'var(--ink-muted)' }}>
@@ -449,13 +454,25 @@ function AddServerPanel({ onSaved, onClose, mode, navigate }: {
           <select data-testid="mcp-add-kind" value={kind} onChange={(e) => { setKind(e.target.value as McpUpstreamKind); setPreview(null); }} className={input} style={inputStyle}>
             <option value="mcp-stdio">stdio command</option>
             <option value="mcp-http">http URL</option>
+            <option value="rest">REST API (OpenAPI)</option>
           </select>
         </label>
         <label className="flex min-w-[16rem] flex-1 flex-col gap-1 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
-          {kind === 'mcp-stdio' ? 'Command (with its arguments)' : 'URL'}
-          <input data-testid="mcp-add-target" value={target} onChange={(e) => { setTarget(e.target.value); setPreview(null); }} placeholder={kind === 'mcp-stdio' ? 'npx -y @acme/jira-mcp' : 'https://mcp.example.com/mcp'} spellCheck={false} className={input} style={inputStyle} />
+          {kind === 'mcp-stdio' ? 'Command (with its arguments)' : kind === 'rest' ? 'Base URL (every call is pinned to it)' : 'URL'}
+          <input data-testid="mcp-add-target" value={target} onChange={(e) => { setTarget(e.target.value); setPreview(null); }} placeholder={kind === 'mcp-stdio' ? 'npx -y @acme/jira-mcp' : kind === 'rest' ? 'https://api.example.com/v1' : 'https://mcp.example.com/mcp'} spellCheck={false} className={input} style={inputStyle} />
         </label>
+        {kind === 'rest' && (
+          <label className="flex min-w-[16rem] flex-1 flex-col gap-1 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
+            OpenAPI document URL
+            <input data-testid="mcp-add-openapi-url" value={openapiUrl} onChange={(e) => { setOpenapiUrl(e.target.value); setPreview(null); }} placeholder="https://api.example.com/openapi.json" spellCheck={false} className={input} style={inputStyle} />
+          </label>
+        )}
       </div>
+      {kind === 'rest' && (
+        <p data-testid="mcp-add-rest-note" className="text-[10px]" style={{ color: 'var(--ink-dim)' }}>
+          Each operation becomes a tool: GET reads, POST writes, PUT, PATCH and DELETE are destructive. A call sends only the arguments its operation declares, and only to the base URL; a request or redirect that would leave it is refused and recorded.
+        </p>
+      )}
       <div className="flex flex-wrap items-end gap-2">
         <label className="flex flex-col gap-1 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
           Secret reference (optional)
@@ -482,6 +499,11 @@ function AddServerPanel({ onSaved, onClose, mode, navigate }: {
             {preview.tools.length} tool{preview.tools.length === 1 ? '' : 's'}
             {preview.diff !== null && ` · replaces the saved ${name}: ${preview.diff.added.length} added, ${preview.diff.changed.length} changed, ${preview.diff.removed.length} removed`}
           </p>
+          {preview.skipped !== undefined && preview.skipped.length > 0 && (
+            <p data-testid="mcp-add-skipped" className="text-[10px]" style={{ color: 'var(--status-warn)' }}>
+              Not wrapped: {preview.skipped.join('; ')}
+            </p>
+          )}
           <div className="flex items-center gap-2">
             <button type="button" data-testid="mcp-add-save" disabled={busy} onClick={() => void doSave()} className="rounded px-3 py-1 text-[11px] font-semibold disabled:opacity-40" style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}>
               {busy ? 'Saving…' : `Save ${preview.tools.length} tool${preview.tools.length === 1 ? '' : 's'}`}

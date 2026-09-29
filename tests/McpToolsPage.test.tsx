@@ -224,6 +224,35 @@ describe('MCP tools: add an existing server', () => {
     expect(screen.queryByTestId('mcp-add-panel')).toBeNull();
   });
 
+  it('wrap a REST API: base URL + OpenAPI URL + header secret; the preview discloses what was not wrapped', async () => {
+    wire();
+    const base = apiFetch.getMockImplementation() as (p: string, i?: RequestInit) => Promise<unknown>;
+    apiFetch.mockImplementation((p: string, i?: RequestInit) =>
+      p === '/mcp/servers/preview'
+        ? base(p, i).then((r) => ({ ...(r as object), skipped: ['PUT /files: its request body is not JSON'] }))
+        : base(p, i));
+    render(<McpToolsPage navigate={navigate} search="" />);
+    fireEvent.click(await screen.findByTestId('mcp-add-open'));
+    const panel = screen.getByTestId('mcp-add-panel');
+    fireEvent.change(within(panel).getByTestId('mcp-add-kind'), { target: { value: 'rest' } });
+    expect(within(panel).getByRole('heading').textContent).toBe('Wrap a REST API');
+    within(panel).getByTestId('mcp-add-rest-note');
+    fireEvent.change(within(panel).getByTestId('mcp-add-name'), { target: { value: 'tracker' } });
+    fireEvent.change(within(panel).getByTestId('mcp-add-target'), { target: { value: 'https://api.example.com/v1' } });
+    const previewBtn = within(panel).getByTestId('mcp-add-preview') as HTMLButtonElement;
+    expect(previewBtn.disabled).toBe(true); // no OpenAPI URL yet
+    fireEvent.change(within(panel).getByTestId('mcp-add-openapi-url'), { target: { value: 'https://api.example.com/openapi.json' } });
+    fireEvent.change(within(panel).getByTestId('mcp-add-auth-ref'), { target: { value: 'env:TRACKER_TOKEN' } });
+    fireEvent.change(within(panel).getByTestId('mcp-add-auth-into'), { target: { value: 'Authorization' } });
+    expect(previewBtn.disabled).toBe(false);
+    fireEvent.click(previewBtn);
+    const result = await within(panel).findByTestId('mcp-add-preview-result');
+    expect(calls.find((c) => c.path === '/mcp/servers/preview')?.body).toEqual({
+      name: 'tracker', kind: 'rest', url: 'https://api.example.com/v1', openapiUrl: 'https://api.example.com/openapi.json', auth: { ref: 'env:TRACKER_TOKEN', header: 'Authorization' },
+    });
+    expect(within(result).getByTestId('mcp-add-skipped').textContent).toContain('PUT /files: its request body is not JSON');
+  });
+
   it('a late preview answer for an older form is never shown or saved', async () => {
     wire();
     const base = apiFetch.getMockImplementation() as (p: string, i?: RequestInit) => Promise<unknown>;
