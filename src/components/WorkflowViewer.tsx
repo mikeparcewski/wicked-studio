@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import type { GateSpec, PhaseDef, PhaseExecutor, WorkflowDef } from '../api/types.js';
 import { setCachedWorkflows } from '../store/workflowCache.js';
+import { refusedWorkflowsOf, type RefusedWorkflow } from '../api/wave6-wire.js';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -587,6 +588,10 @@ function WorkflowBuilder({
 
 export function WorkflowViewer(): React.ReactElement {
   const [workflows, setWorkflows] = useState<WorkflowDef[]>([]);
+  /** (wicked-crew#718) The drop-in defs the ENGINE refused, with its reason. They are NOT in
+   *  `workflows` — nothing can launch one — so without this row their author sees no trace of the
+   *  file they wrote, and used to learn about the refusal only from a 400 `unknown workflow`. */
+  const [refused, setRefused] = useState<RefusedWorkflow[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -602,7 +607,9 @@ export function WorkflowViewer(): React.ReactElement {
     setLoading(true);
     setError(null);
     try {
-      const { workflows: wfs } = await api.listWorkflows();
+      const answer = await api.listWorkflows();
+      const wfs = answer.workflows;
+      setRefused(refusedWorkflowsOf(answer));
       // Deposit for the app (studio#122 D-1): this surface RE-loads after every
       // create/delete, so the shared `is_system` cache the delivery surfaces
       // read stays current with the edits made here — and costs no extra GET.
@@ -658,6 +665,23 @@ export function WorkflowViewer(): React.ReactElement {
       </div>
 
       {loading && <p className="text-xs" style={{ color: 'var(--ink-dim)' }}>Loading workflows…</p>}
+      {refused.length > 0 && (
+        <div
+          data-testid="workflows-refused"
+          data-count={refused.length}
+          className="flex flex-col gap-1 rounded px-3 py-2"
+          style={{ background: 'var(--surface-rail)', border: '1px solid var(--status-gate)' }}
+        >
+          <p className="text-[11px] font-semibold" style={{ color: 'var(--status-gate)' }}>
+            {refused.length === 1 ? 'A drop-in definition cannot be launched' : `${refused.length} drop-in definitions cannot be launched`} — the engine refused {refused.length === 1 ? 'it' : 'them'} at boot.
+          </p>
+          {refused.map((w) => (
+            <p key={w.id} data-testid="workflows-refused-row" data-workflow={w.id} className="text-[10px]" style={{ color: 'var(--ink-muted)', overflowWrap: 'anywhere' }}>
+              <span className="font-mono font-semibold">{w.id}</span> — {w.reason}
+            </p>
+          ))}
+        </div>
+      )}
       {error && (
         <p className="rounded px-2 py-1 text-xs" style={{ background: 'var(--status-fail-dim)', color: 'var(--status-fail)' }}>
           {error}

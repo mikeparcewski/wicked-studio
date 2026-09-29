@@ -126,6 +126,8 @@ function catalog(opts: {
   plugin_version?: string;
   /** The verified published snapshot `current` resolves to; `null` before the first publish. */
   current?: { gen: number; path: string } | null;
+  /** (studio#388) The plugin installed on the daemon host; `undefined` = a daemon predating it. */
+  installed?: SkillsCatalog['installed'];
 } = {}): SkillsCatalog {
   const revision = opts.revision ?? REV_1;
   const current = opts.current === undefined ? { gen: 3, path: SNAPSHOT_PATH } : opts.current;
@@ -170,6 +172,7 @@ function catalog(opts: {
     revision,
     root: '/state/skills',
     current,
+    ...(opts.installed === undefined ? {} : { installed: opts.installed }),
   };
 }
 
@@ -2195,5 +2198,98 @@ describe('SkillsPage — a contradictory `portability` verdict is made visible, 
     expect(within(row(EXTRACTOR)).getByTestId('skills-claude-only-badge').dataset.contradiction).toBeUndefined();
     const drawer = await openDrawer(EXTRACTOR);
     expect(within(drawer).queryByTestId('skills-drawer-portability-hint')).toBeNull();
+  });
+});
+
+// studio#388 — the page says when workers are running something older than this host's plugin.
+//
+// MCP S8 dogfood: the published snapshot was generation 5, captured before wicked-garden#1192 added
+// `scripts/mcp/shim.py`, so the first governed run failed INSIDE a worker with `scripts/mcp/shim.py:
+// not found under the plugin root …/snapshots/000005`. Refresh baseline → Publish fixed it, and
+// nothing on this page had said the root was behind the install — for two independent reasons.
+describe('studio#388: a root behind the installed plugin, and unpublished support files', () => {
+  const installed = (over: Partial<NonNullable<SkillsCatalog['installed']>> = {}) => ({
+    source: { kind: 'checkout' as const, path: '/garden', plugin_version: '12.38.1' },
+    git_sha: 'abcdef0123456789',
+    baseline: 'x'.repeat(16),
+    unreadable: null,
+    ...over,
+  });
+
+  it('names the consequence first, then offers Refresh baseline and Publish', async () => {
+    wire({ 'GET /skills': () => Promise.resolve(catalog({ installed: installed() })) });
+    render(<Harness />);
+    const row = await screen.findByTestId('skills-behind');
+    expect(row.dataset.drift).toBe('behind');
+    // Consequence, not mechanism: what is wrong with the RUNS, before the verb to fix it.
+    expect(row.textContent).toMatch(/^Workers are running skills older than the plugin installed on this host\./);
+    expect(row.textContent).toMatch(/fails inside the worker/);
+    expect(row.textContent).toMatch(/Refresh baseline picks up the install/);
+    // The version alone is not the evidence: this fixture's install declares 12.38.1 against a
+    // 12.32.0 baseline, so no same-version note. The dogfood's case is the next assertion.
+    expect(row.textContent).not.toMatch(/same version number/);
+    // The install's identity, and the baseline it is not.
+    expect(within(row).getByTestId('skills-behind-detail').textContent).toContain('installed 12.38.1');
+    expect(within(row).getByTestId('skills-behind-detail').textContent).toContain('baseline 12.32.0');
+    // The next move is HERE, on the row.
+    within(row).getByTestId('skills-behind-refresh');
+    within(row).getByTestId('skills-behind-publish');
+  });
+
+  it("says so when the install's VERSION matches — the dogfood's case", async () => {
+    // Naming the version alone read as a contradiction: "is not the installed wicked-garden
+    // 12.32.0" beside a header line saying "baseline 12.32.0". The difference is in the files.
+    wire({ 'GET /skills': () => Promise.resolve(catalog({ installed: installed({ source: { kind: 'checkout', path: '/garden', plugin_version: '12.32.0' } }) })) });
+    render(<Harness />);
+    const row = await screen.findByTestId('skills-behind');
+    expect(row.textContent).toMatch(/12\.32\.0 — the same version number, different files/);
+  });
+
+  it('a matching install shows no row at all', async () => {
+    wire({ 'GET /skills': () => Promise.resolve(catalog({ installed: installed({ baseline: BASELINE }) })) });
+    render(<Harness />);
+    await screen.findByTestId('skills-page');
+    await waitFor(() => expect(screen.queryByTestId('skills-loading')).toBeNull());
+    expect(screen.queryByTestId('skills-behind')).toBeNull();
+    expect(screen.queryByTestId('skills-drift-unknown')).toBeNull();
+  });
+
+  it('a comparison the daemon could not make is stated, never read as current', async () => {
+    wire({ 'GET /skills': () => Promise.resolve(catalog({ installed: installed({ baseline: null, unreadable: 'a symlink stands in for scripts/' }) })) });
+    render(<Harness />);
+    expect((await screen.findByTestId('skills-drift-unknown')).textContent).toMatch(/a symlink stands in for scripts\//);
+    expect(screen.queryByTestId('skills-behind')).toBeNull();
+  });
+
+  it('an older daemon (no `installed`) says nothing — the page reads as it always did', async () => {
+    wire({ 'GET /skills': () => Promise.resolve(catalog()) });
+    render(<Harness />);
+    await screen.findByTestId('skills-page');
+    await waitFor(() => expect(screen.queryByTestId('skills-loading')).toBeNull());
+    expect(screen.queryByTestId('skills-behind')).toBeNull();
+    expect(screen.queryByTestId('skills-drift-unknown')).toBeNull();
+  });
+
+  it('names unpublished SUPPORT files, which no skill row can show', async () => {
+    // The dogfood's file. Under `scripts/`, so no skill owns it and `unpublished` — judged per
+    // skill over the files that skill owns — is structurally blind to it.
+    wire({
+      'GET /skills': () => Promise.resolve(catalog({
+        installed: installed({ baseline: BASELINE }),
+        files: { 'scripts/mcp/shim.py': record({ effectiveHash: 'z'.repeat(8), lastPublishedHash: null }) },
+      })),
+    });
+    render(<Harness />);
+    const row = await screen.findByTestId('skills-behind');
+    expect(row.dataset.drift, 'the baseline itself is current here').toBe('match');
+    expect(row.dataset.unpublishedSupport).toBe('1');
+    expect(row.textContent).toMatch(/^Workers are running support files older than the ones in this root\./);
+    expect(within(row).getByTestId('skills-behind-support').textContent).toContain('scripts/mcp/shim.py');
+    // The install is current here, so Refresh baseline is NOT the move and must not be the
+    // primary verb — nor may the copy tell the operator to run it.
+    expect(row.textContent).toMatch(/Publish hands this root to workers\./);
+    expect(row.textContent).not.toMatch(/Refresh baseline picks up the install/);
+    // No markdown left as literal text (caught by looking at it, not by measuring it).
+    expect(row.textContent).not.toContain('`');
   });
 });

@@ -18,6 +18,8 @@ import {
   SKILLS_ENGINE_STATE_COPY,
   SKILLS_UNSUPPORTED_COPY,
   supportFiles,
+  baselineDrift,
+  unpublishedSupport,
   type DiagnosticsSkills,
   type SkillAnalyzeResult,
   type SkillGuardResult,
@@ -214,6 +216,15 @@ export function SkillsPage({ navigate, search = '' }: {
   const counts = skillCounts(rows);
   const unpublished = rows.filter((r) => r.unpublished).length;
   const support = useMemo(() => (catalog === null ? [] : supportFiles(catalog.manifest)), [catalog]);
+  /** (studio#388) The two things that make the PUBLISHED snapshot not what a worker needs: the
+   *  baseline is behind the installed plugin, and support files (`scripts/**` — where the MCP shim
+   *  lives) whose content no publish carries. Neither was visible: the per-skill `unpublished`
+   *  badge cannot see a file no skill owns, and nothing compared the root with the install. */
+  const drift = useMemo(() => (catalog === null ? null : baselineDrift(catalog)), [catalog]);
+  const unpublishedSupportFiles = useMemo(
+    () => (catalog === null ? [] : unpublishedSupport(catalog.manifest)),
+    [catalog],
+  );
 
   // The drawer's address: `?skill=<name>`. A name the manifest does not carry renders a note,
   // never a silent swap onto the bare catalog (the dead-address contract, review #4).
@@ -648,6 +659,62 @@ export function SkillsPage({ navigate, search = '' }: {
           </p>
         ) : (
           <>
+            {/* (studio#388) CONSEQUENCE FIRST, then the move. A published snapshot behind the
+                installed plugin, or unpublished support files, breaks a run INSIDE a worker — the
+                MCP S8 dogfood's first run died on `scripts/mcp/shim.py: not found under the plugin
+                root …/snapshots/000005` — and the page said nothing about either. This row does,
+                with Refresh baseline and Publish right here. */}
+            {(drift?.state === 'behind' || unpublishedSupportFiles.length > 0) && (
+              <div
+                data-testid="skills-behind"
+                data-drift={drift?.state ?? 'unknown'}
+                data-unpublished-support={unpublishedSupportFiles.length}
+                className="flex flex-col gap-2 rounded p-3"
+                style={{ background: 'var(--surface-rail)', border: '1px solid var(--status-gate)' }}
+              >
+                <p className="text-xs font-semibold" style={{ color: 'var(--status-gate)' }}>
+                  {drift?.state === 'behind'
+                    ? 'Workers are running skills older than the plugin installed on this host.'
+                    : 'Workers are running support files older than the ones in this root.'}
+                </p>
+                <p className="text-[11px]" style={{ color: 'var(--ink-muted)' }}>
+                  {drift?.state === 'behind'
+                    // The version number is deliberately NOT the evidence: the dogfood's install
+                    // carried the SAME version as the baseline, so naming it alone reads as a
+                    // contradiction ("it is not 12.32.0" beside "baseline 12.32.0"). Say when the
+                    // difference is in the files.
+                    ? `The baseline this root publishes from is not the installed wicked-garden ${drift.installed.source.plugin_version}${drift.installed.source.plugin_version === baseline?.plugin_version ? ' — the same version number, different files' : ''}, so neither is the snapshot workers spawn with. A run that needs a skill, script or schema only the install has fails inside the worker, naming the file and the snapshot it looked in. Refresh baseline picks up the install (your edits are kept, conflicts flagged), then Publish hands it to workers.`
+                    // The install is current here, so Refresh baseline is not the move — Publish is.
+                    : 'A publish carries the whole root, so files no skill owns — scripts, schemas, the plugin manifest — are part of what a worker runs. These differ from the published snapshot, and the per-skill badges cannot show them: they are judged over the files a SKILL owns. Publish hands this root to workers.'}
+                </p>
+                {drift?.state === 'behind' && (
+                  <p data-testid="skills-behind-detail" className="font-mono text-[10px]" style={{ color: 'var(--ink-dim)' }} title={drift.installed.source.path}>
+                    installed {drift.installed.source.plugin_version} · {drift.installed.source.kind} · {(drift.installed.baseline ?? '').slice(0, 12)}
+                    {drift.installed.git_sha !== null && ` · ${drift.installed.git_sha.slice(0, 10)}`}
+                    {baseline !== null && ` · baseline ${baseline.plugin_version} · ${baseline.hash.slice(0, 12)}`}
+                  </p>
+                )}
+                {unpublishedSupportFiles.length > 0 && (
+                  <p data-testid="skills-behind-support" className="font-mono text-[10px]" style={{ color: 'var(--ink-dim)' }}>
+                    {unpublishedSupportFiles.length} unpublished support {unpublishedSupportFiles.length === 1 ? 'file' : 'files'}:{' '}
+                    {unpublishedSupportFiles.slice(0, 3).map(({ path }) => path).join(', ')}
+                    {unpublishedSupportFiles.length > 3 && `, +${unpublishedSupportFiles.length - 3} more`}
+                  </p>
+                )}
+                {/* The PRIMARY verb is the one this state actually needs: Refresh baseline when the
+                    install has moved, Publish when only the snapshot is behind this root. */}
+                <div className="flex flex-wrap items-center gap-2">
+                  {verbButton('refresh', 'skills-behind-refresh', 'Capture the installed plugin as a new baseline and merge it three-way per file — your edits are kept, conflicts flagged', drift?.state === 'behind')}
+                  {verbButton('publish', 'skills-behind-publish', 'Write the immutable snapshot generation workers spawn with (enabled skills only) — the whole root, support files included', drift?.state !== 'behind')}
+                </div>
+              </div>
+            )}
+            {/* A comparison the daemon could not make is STATED, never read as "current". */}
+            {drift?.state === 'unknown' && drift.reason !== null && (
+              <p data-testid="skills-drift-unknown" className="text-[11px]" style={{ color: 'var(--ink-dim)' }}>
+                Whether this root is behind the installed plugin could not be determined — {drift.reason}.
+              </p>
+            )}
             <KpiBand testId="skills-kpis">
               <KpiGroup label="Catalog" grow={2}>
                 <StatTile

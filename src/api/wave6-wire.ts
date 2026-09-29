@@ -1205,3 +1205,32 @@ export function judgeSkippedOf(ev: Record<string, unknown>): string | null {
   if (ev['agentVerdict'] !== 'skipped') return null;
   return str(ev['judgeSkippedReason']) ?? 'the only eligible judge seat was the creator';
 }
+
+// ── wicked-crew#718: `GET /workflows` names the drop-ins the engine refused ──────────────────
+
+/**
+ * One drop-in workflow definition wicked-core refused, with the engine's own reason
+ * (`WorkflowsResponse.unavailable`; `wicked-crew-api-types` `RefusedWorkflow`, newer than the
+ * pinned contract so it is typed here).
+ *
+ * crew used to list a def the engine had skipped at boot — `readOverlayWorkflows` checked only a
+ * `{id, phases[]}` shape — so studio offered an unlaunchable option and the launch 400'd `unknown
+ * workflow`. crew now serves only what the engine accepted, and names the rest here, so the
+ * operator who authored the drop-in learns WHY from the page instead of from a failed launch.
+ */
+export interface RefusedWorkflow {
+  id: string;
+  /**
+   * wicked-core's refusal, verbatim — e.g. `gate evaluates nothing: write-a-note — the phase
+   * declares executes_code but pins no validator and has no human gate, so its gate would approve
+   * with nothing checked.`
+   */
+  reason: string;
+}
+
+/** The refused defs a `GET /workflows` body carries, or `[]` on a daemon older than the field. */
+export function refusedWorkflowsOf(body: { unavailable?: RefusedWorkflow[] }): RefusedWorkflow[] {
+  const list = body.unavailable;
+  if (!Array.isArray(list)) return [];
+  return list.filter((w): w is RefusedWorkflow => typeof w?.id === 'string' && typeof w?.reason === 'string');
+}

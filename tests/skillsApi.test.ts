@@ -17,6 +17,9 @@ import {
   isSkillsUnavailable,
   isSkillsUnsupported,
   isUnpublished,
+  baselineDrift,
+  unpublishedSupport,
+  type SkillsCatalog,
   listSkillFiles,
   parseFilesMap,
   publishSkills,
@@ -231,6 +234,71 @@ describe('readCatalogBody — exactly SkillsManifestResponse, never a silent emp
     expect(() => readCatalogBody({ ...CATALOG, root: undefined })).toThrow(/no catalog/);
     expect(() => readCatalogBody({ ...CATALOG, current: { gen: '3' } })).toThrow(/no catalog/);
     expect(() => readCatalogBody({ ...CATALOG, current: undefined })).toThrow(/no catalog/);
+  });
+});
+
+// studio#388 — the two things that made the MCP S8 dogfood's stale snapshot invisible.
+//
+// Run 1 of the dogfood failed inside a worker with `scripts/mcp/shim.py: not found under the plugin
+// root …/snapshots/000005`: the published snapshot predated wicked-garden#1192, which added that
+// file. Nothing on the page said so, for two independent reasons — and every MCP call a worker
+// makes goes through that shim.
+describe('unpublishedSupport — the publish gap no skill row can show', () => {
+  it('names support files the current snapshot does not carry', () => {
+    // The dogfood's file, exactly: under `scripts/`, so `fileOwnership` files it as support and
+    // `isUnpublished` (judged per SKILL, over the files a skill owns) is blind to it.
+    const withShim: SkillManifest = {
+      ...MANIFEST,
+      files: {
+        ...MANIFEST.files,
+        'scripts/mcp/shim.py': record({ effectiveHash: 'z'.repeat(8), lastPublishedHash: null }),
+      },
+    };
+    expect(unpublishedSupport(withShim).map(({ path }) => path)).toEqual(['scripts/mcp/shim.py']);
+    // No skill owns it, so no row lights up — which is why the page needs this list.
+    expect(skillRows(withShim).filter((r) => r.unpublished).map((r) => r.name).sort()).toEqual([
+      'my-team-skill',
+      'wicked-garden-domain-extractor',
+    ]);
+    // A support tree the publish carries reports nothing.
+    expect(unpublishedSupport(MANIFEST)).toEqual([]);
+  });
+});
+
+describe('baselineDrift — is this root the plugin installed on the host?', () => {
+  const installed = (over: Partial<NonNullable<SkillsCatalog['installed']>> = {}) => ({
+    ...CATALOG,
+    installed: {
+      source: { kind: 'checkout' as const, path: '/garden', plugin_version: '12.38.1' },
+      git_sha: 'deadbeefcafe',
+      baseline: BASELINE,
+      unreadable: null,
+      ...over,
+    },
+  });
+
+  it('match when the installed bundle hashes to the baseline', () => {
+    expect(baselineDrift(installed())).toEqual({ state: 'match' });
+  });
+
+  it('behind when it does not — the dogfood, where the VERSION had not moved', () => {
+    const drifted = installed({ baseline: 'x'.repeat(16), source: { kind: 'checkout', path: '/garden', plugin_version: '12.32.0' } });
+    const verdict = baselineDrift(drifted);
+    expect(verdict.state).toBe('behind');
+    // A version comparison would have said "match" here: same declared version, different bytes.
+    expect(drifted.installed.source.plugin_version).toBe(MANIFEST.baselines[BASELINE]?.plugin_version);
+  });
+
+  it('unknown — never "match" — for an older daemon, no install, or a bundle it could not read', () => {
+    // An older daemon omits the field: say nothing (`reason: null` renders nothing).
+    expect(baselineDrift(CATALOG)).toEqual({ state: 'unknown', reason: null });
+    expect(baselineDrift({ ...CATALOG, installed: null })).toMatchObject({ state: 'unknown' });
+    expect(baselineDrift(installed({ baseline: null, unreadable: 'a symlink stands in for scripts/' }))).toEqual({
+      state: 'unknown',
+      reason: 'a symlink stands in for scripts/',
+    });
+    // A hash the daemon did not spell as one is not a comparison either.
+    expect(baselineDrift(installed({ baseline: '' })).state).toBe('unknown');
   });
 });
 

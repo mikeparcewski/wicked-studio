@@ -23,7 +23,6 @@ import type {
   McpPolicyPreviewTool,
   McpPreviewResponse,
   McpRunMode,
-  McpSecretResponse,
   McpServer,
   McpServerConfigBody,
   McpServersResponse,
@@ -68,8 +67,6 @@ export const mcpApi = {
   test: (name: string) => apiFetch<McpServerTestResponse>(`/mcp/servers/${encodeURIComponent(name)}/test`, { method: 'POST' }),
   setTool: (subject: string, body: { enabled?: boolean; classOverride?: McpToolClass | null }) =>
     apiFetch<McpTool>(`/mcp/tools/${encodeURIComponent(subject)}`, { method: 'PATCH', body: JSON.stringify(body) }),
-  putSecret: (name: string, value: string) =>
-    apiFetch<McpSecretResponse>(`/mcp/servers/${encodeURIComponent(name)}/secret`, { method: 'PUT', body: JSON.stringify({ value }) }),
   policies: (body: McpPolicyPreviewBody) => apiFetch<McpPolicyPreviewResponse>('/mcp/policies/preview', j(body)),
   approvals: () => apiFetch<McpApprovalsResponse>('/mcp/approvals'),
   approve: (subject: string) => apiFetch<McpApprovalResponse>('/mcp/approvals', j({ subject })),

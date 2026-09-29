@@ -440,7 +440,10 @@ export const api = {
   // ── Workflow viewer + domain-model browser (crew#44) ─────────────────────────
 
   /** All registered workflow definitions (built-ins + any loaded drop-ins). */
-  listWorkflows: () => apiFetch<{ workflows: import('./types.js').WorkflowDef[] }>('/workflows'),
+  // (wicked-crew#718) `unavailable` names the drop-ins the ENGINE refused, with its reason. It is
+  // absent on an older daemon; `refusedWorkflowsOf` reads either shape.
+  listWorkflows: () =>
+    apiFetch<{ workflows: import('./types.js').WorkflowDef[]; unavailable?: import('./wave6-wire.js').RefusedWorkflow[] }>('/workflows'),
 
   /** One workflow definition by id; 404 if unknown. */
   getWorkflow: (id: string) => apiFetch<{ workflow: import('./types.js').WorkflowDef }>(`/workflows/${encodeURIComponent(id)}`),
