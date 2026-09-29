@@ -11,8 +11,8 @@
   "studioVersion": "0.5.14",
   "counts": {
     "files": 173,
-    "occurrences": 1738,
-    "static": 1520,
+    "occurrences": 1741,
+    "static": 1523,
     "dynamic": 73,
     "computed": 7
   },
@@ -3935,7 +3935,19 @@
       ]
     },
     {
+      "testId": "mcp-add-auth-prefix",
+      "files": [
+        "src/components/McpToolsPage.tsx"
+      ]
+    },
+    {
       "testId": "mcp-add-auth-ref",
+      "files": [
+        "src/components/McpToolsPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-add-auth-value",
       "files": [
         "src/components/McpToolsPage.tsx"
       ]
@@ -4014,6 +4026,12 @@
     },
     {
       "testId": "mcp-add-save",
+      "files": [
+        "src/components/McpToolsPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-add-secret-note",
       "files": [
         "src/components/McpToolsPage.tsx"
       ]

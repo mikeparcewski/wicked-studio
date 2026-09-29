@@ -399,6 +399,20 @@ function AddServerPanel({ onSaved, onClose, mode, navigate }: {
   const [openapiUrl, setOpenapiUrl] = useState('');
   const [authRef, setAuthRef] = useState('');
   const [authEnv, setAuthEnv] = useState('');
+  /**
+   * The scheme a header-injected secret rides behind (`McpAuthConfig.prefix`, honoured by the
+   * broker as `${prefix}${secret}`). Without it every `Authorization: Bearer <token>` API was
+   * sent the bare token and answered 401.
+   */
+  const [authPrefix, setAuthPrefix] = useState('');
+  /**
+   * A pasted secret VALUE (§7: "Paste a command, URL or OpenAPI URL and a secret"). It is written
+   * to the OS keychain by `PUT /mcp/servers/:name/secret` before the preview and then dropped from
+   * this form: crew refuses to probe an authenticated server unauthenticated, so a `keychain:`
+   * reference that resolves to nothing cannot be previewed, let alone saved.
+   */
+  const [authValue, setAuthValue] = useState('');
+  const [secretNote, setSecretNote] = useState<string | null>(null);
   /** The preview, bound to the exact request it answered (`key`): only shown and saved while the
    *  form still says the same thing, so a late answer to an older request can never be saved. */
   const [held, setHeld] = useState<{ key: string; preview: McpPreviewResponse } | null>(null);
@@ -408,13 +422,18 @@ function AddServerPanel({ onSaved, onClose, mode, navigate }: {
   const nameOk = /^[a-z0-9_-]{1,63}$/.test(name);
   const ready = nameOk && target.trim() !== '' && (kind !== 'rest' || openapiUrl.trim() !== '') && (authRef.trim() === '' || /^(env|keychain):/.test(authRef.trim()));
 
-  const body = () => {
+  /** The request for one secret reference — the state's, or the one the keychain write just gave. */
+  const bodyWith = (ref: string) => {
     const parts = target.trim().split(/\s+/);
-    const auth = authRef.trim() === '' ? null : { ref: authRef.trim(), ...(authEnv.trim() !== '' ? (kind === 'mcp-stdio' ? { env: authEnv.trim() } : { header: authEnv.trim() }) : {}) };
+    const into = authEnv.trim() !== '' ? (kind === 'mcp-stdio' ? { env: authEnv.trim() } : { header: authEnv.trim() }) : {};
+    // A prefix belongs to a HEADER injection only; an env-injected secret is the value itself.
+    const scheme = kind !== 'mcp-stdio' && authPrefix !== '' ? { prefix: authPrefix } : {};
+    const auth = ref === '' ? null : { ref, ...into, ...scheme };
     if (kind === 'mcp-stdio') return { name, kind, command: parts[0] ?? '', args: parts.slice(1), auth };
     if (kind === 'rest') return { name, kind, url: target.trim(), openapiUrl: openapiUrl.trim(), auth };
     return { name, kind, url: target.trim(), auth };
   };
+  const body = () => bodyWith(authRef.trim());
 
   const previewSeq = useRef(0);
   const formKey = JSON.stringify(body());
@@ -425,9 +444,20 @@ function AddServerPanel({ onSaved, onClose, mode, navigate }: {
     setBusy(true);
     setError(null);
     setHeld(null);
-    const key = formKey;
     const seq = ++previewSeq.current;
     try {
+      let ref = authRef.trim();
+      if (authValue !== '') {
+        // The keychain write comes FIRST and its failure stops here: crew probes with the secret
+        // and refuses to probe an authenticated server without one, so previewing before the
+        // value is stored can only fail. The value is never logged, echoed or kept in the form.
+        const put = await mcpApi.putSecret(name, authValue);
+        ref = put.ref;
+        setAuthRef(put.ref);
+        setAuthValue('');
+        setSecretNote(`Stored the secret for ${name}. The registry keeps only ${put.ref}; no worker ever sees the value.`);
+      }
+      const key = JSON.stringify(bodyWith(ref));
       const answer = await mcpApi.preview(JSON.parse(key) as ReturnType<typeof body>);
       if (seq === previewSeq.current) setHeld({ key, preview: answer });
     } catch (e) {
@@ -497,16 +527,39 @@ function AddServerPanel({ onSaved, onClose, mode, navigate }: {
           <input data-testid="mcp-add-auth-ref" value={authRef} onChange={(e) => { setAuthRef(e.target.value); setPreview(null); }} placeholder="env:JIRA_TOKEN" spellCheck={false} className={`${input} w-48`} style={inputStyle} />
         </label>
         <label className="flex flex-col gap-1 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
+          Secret value (optional)
+          <input
+            data-testid="mcp-add-auth-value"
+            type="password"
+            autoComplete="off"
+            value={authValue}
+            onChange={(e) => { setAuthValue(e.target.value); setSecretNote(null); setPreview(null); }}
+            placeholder="paste it once"
+            spellCheck={false}
+            className={`${input} w-44`}
+            style={inputStyle}
+          />
+        </label>
+        <label className="flex flex-col gap-1 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
           {kind === 'mcp-stdio' ? 'Injected as env var' : 'Injected as header'}
           <input data-testid="mcp-add-auth-into" value={authEnv} onChange={(e) => { setAuthEnv(e.target.value); setPreview(null); }} placeholder={kind === 'mcp-stdio' ? 'JIRA_TOKEN' : 'Authorization'} spellCheck={false} className={`${input} w-40`} style={inputStyle} />
         </label>
+        {kind !== 'mcp-stdio' && (
+          <label className="flex flex-col gap-1 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
+            Behind scheme
+            <input data-testid="mcp-add-auth-prefix" value={authPrefix} onChange={(e) => { setAuthPrefix(e.target.value); setPreview(null); }} placeholder="Bearer " spellCheck={false} className={`${input} w-28`} style={inputStyle} />
+          </label>
+        )}
         <p className="max-w-[22rem] text-[10px]" style={{ color: 'var(--ink-dim)' }}>
-          The registry keeps the reference only. The broker resolves it on each call and no worker ever sees the value.
+          A pasted value is written to the OS keychain when you preview, and the registry keeps the reference only. The broker resolves it on each call, sends it {kind === 'mcp-stdio' ? 'in that env var' : 'in that header behind that scheme'}, and no worker ever sees the value.
         </p>
         <button type="button" data-testid="mcp-add-preview" disabled={!ready || busy} onClick={() => void doPreview()} className="ml-auto rounded px-3 py-1 text-[11px] font-semibold disabled:opacity-40" style={{ color: 'var(--accent)', border: BORDER }}>
           {busy && preview === null ? 'Probing…' : 'Preview'}
         </button>
       </div>
+      {secretNote !== null && (
+        <p data-testid="mcp-add-secret-note" className="text-[10px]" style={{ color: 'var(--status-done)' }}>{secretNote}</p>
+      )}
       {error !== null && (
         <p data-testid="mcp-add-error" className="rounded px-2 py-1 text-[10px]" style={{ background: 'var(--status-fail-dim)', color: 'var(--status-fail)' }}>{error}</p>
       )}

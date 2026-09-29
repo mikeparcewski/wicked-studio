@@ -20,6 +20,18 @@ npm publish dates. Every version listed here exists on
 - **The old demo storyboard and wizard (M9b).** `VideoStoryboard`, `DemoWizard`, `demoWire` and `demoHtml` are gone with crew's interactive-demo pipeline; a demo document opens in Document mode.
 
 ### Fixed
+- **An authenticated MCP server can be added at all, and a bearer API is sent its scheme
+  (DES-MCP-TOOLS-001 §7, found by the S8 dogfood).** The add panel takes the secret's **value**, not
+  only a reference: pasting one writes it to the OS keychain (`PUT /mcp/servers/:name/secret`) before
+  the preview, then the field clears and the panel names the reference crew stored. Previously the
+  panel could only offer a `keychain:` reference it had no way to fill, and crew refuses to probe an
+  authenticated server unauthenticated ("auth.ref … resolves to no secret: set it, then try again"),
+  so **every** authenticated server failed at Preview; `mcpApi.putSecret` existed and had no caller.
+  A refused write (a secret under 8 characters, no OS store) stops before the preview and says why.
+  A header-injected secret also gains its **scheme** (`McpAuthConfig.prefix`, which the broker
+  already honoured as `${prefix}${secret}`): without a field for it, an `Authorization: Bearer
+  <token>` API was sent the bare token and answered 401. stdio servers, whose secret is the env
+  var's whole value, are offered no scheme.
 - **Retire on a memory row removes that one memory (#206).** The row's Retire now calls crew's
   `POST /memory/retire-item` and erases exactly that memory; its confirm says the rest of the scope
   stays. The subtree erase is a separate, quieter "Retire scope…" whose confirm names the whole
