@@ -159,7 +159,7 @@ describe('MCP tools: Approve and Revoke are audited policy edits crew makes', ()
     // The approval answered but the reload has not: no control may act on the pre-action state.
     const plainRow = (): HTMLElement => screen.getAllByTestId('mcp-tool-row').find((r) => r.dataset['subject'] === 'mcp:fx/wt_plain') as HTMLElement;
     expect((within(plainRow()).getByTestId('mcp-tool-approve') as HTMLButtonElement).disabled).toBe(true);
-    expect((within(row).getByTestId('mcp-server-remove') as HTMLButtonElement).disabled).toBe(true);
+    expect((within(screen.getByTestId('mcp-server-row')).getByTestId('mcp-server-remove') as HTMLButtonElement).disabled).toBe(true);
     release();
     await waitFor(() => expect((within(plainRow()).getByTestId('mcp-tool-approve') as HTMLButtonElement).disabled).toBe(false));
   });
@@ -190,7 +190,8 @@ describe('MCP tools: Approve and Revoke are audited policy edits crew makes', ()
     fireEvent.click(within(result).getByTestId('mcp-add-save')); // load #3 answers with jira
     await waitFor(() => expect(screen.getAllByTestId('mcp-server-row').map((r) => r.dataset['server'])).toEqual(['fx', 'jira']));
     releaseStale();
-    await waitFor(() => expect((within(row).getByTestId('mcp-server-remove') as HTMLButtonElement).disabled).toBe(false));
+    const fxRow = (): HTMLElement => screen.getAllByTestId('mcp-server-row').find((r) => r.dataset['server'] === 'fx') as HTMLElement;
+    await waitFor(() => expect((within(fxRow()).getByTestId('mcp-server-remove') as HTMLButtonElement).disabled).toBe(false));
     expect(screen.getAllByTestId('mcp-server-row').map((r) => r.dataset['server'])).toEqual(['fx', 'jira']);
   });
 });
