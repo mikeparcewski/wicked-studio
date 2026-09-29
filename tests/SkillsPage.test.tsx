@@ -2225,12 +2225,24 @@ describe('studio#388: a root behind the installed plugin, and unpublished suppor
     expect(row.textContent).toMatch(/^Workers are running skills older than the plugin installed on this host\./);
     expect(row.textContent).toMatch(/fails inside the worker/);
     expect(row.textContent).toMatch(/Refresh baseline picks up the install/);
+    // The version alone is not the evidence: this fixture's install declares 12.38.1 against a
+    // 12.32.0 baseline, so no same-version note. The dogfood's case is the next assertion.
+    expect(row.textContent).not.toMatch(/same version number/);
     // The install's identity, and the baseline it is not.
     expect(within(row).getByTestId('skills-behind-detail').textContent).toContain('installed 12.38.1');
     expect(within(row).getByTestId('skills-behind-detail').textContent).toContain('baseline 12.32.0');
     // The next move is HERE, on the row.
     within(row).getByTestId('skills-behind-refresh');
     within(row).getByTestId('skills-behind-publish');
+  });
+
+  it("says so when the install's VERSION matches — the dogfood's case", async () => {
+    // Naming the version alone read as a contradiction: "is not the installed wicked-garden
+    // 12.32.0" beside a header line saying "baseline 12.32.0". The difference is in the files.
+    wire({ 'GET /skills': () => Promise.resolve(catalog({ installed: installed({ source: { kind: 'checkout', path: '/garden', plugin_version: '12.32.0' } }) })) });
+    render(<Harness />);
+    const row = await screen.findByTestId('skills-behind');
+    expect(row.textContent).toMatch(/12\.32\.0 — the same version number, different files/);
   });
 
   it('a matching install shows no row at all', async () => {
@@ -2273,5 +2285,11 @@ describe('studio#388: a root behind the installed plugin, and unpublished suppor
     expect(row.dataset.unpublishedSupport).toBe('1');
     expect(row.textContent).toMatch(/^Workers are running support files older than the ones in this root\./);
     expect(within(row).getByTestId('skills-behind-support').textContent).toContain('scripts/mcp/shim.py');
+    // The install is current here, so Refresh baseline is NOT the move and must not be the
+    // primary verb — nor may the copy tell the operator to run it.
+    expect(row.textContent).toMatch(/Publish hands this root to workers\./);
+    expect(row.textContent).not.toMatch(/Refresh baseline picks up the install/);
+    // No markdown left as literal text (caught by looking at it, not by measuring it).
+    expect(row.textContent).not.toContain('`');
   });
 });

@@ -679,9 +679,13 @@ export function SkillsPage({ navigate, search = '' }: {
                 </p>
                 <p className="text-[11px]" style={{ color: 'var(--ink-muted)' }}>
                   {drift?.state === 'behind'
-                    ? `The baseline this root publishes from is not the installed wicked-garden ${drift.installed.source.plugin_version} — so neither is the snapshot workers spawn with. A run that needs a skill, script or schema only the install has fails inside the worker, naming the file and the snapshot it looked in.`
-                    : 'A publish carries the whole root, so files no skill owns — `scripts/`, `schemas/`, `.claude-plugin/` — are part of what a worker runs. These differ from the published snapshot, and the per-skill badges cannot show them.'}
-                  {' '}Refresh baseline picks up the install (your edits are kept, conflicts flagged), then Publish hands it to workers.
+                    // The version number is deliberately NOT the evidence: the dogfood's install
+                    // carried the SAME version as the baseline, so naming it alone reads as a
+                    // contradiction ("it is not 12.32.0" beside "baseline 12.32.0"). Say when the
+                    // difference is in the files.
+                    ? `The baseline this root publishes from is not the installed wicked-garden ${drift.installed.source.plugin_version}${drift.installed.source.plugin_version === baseline?.plugin_version ? ' — the same version number, different files' : ''}, so neither is the snapshot workers spawn with. A run that needs a skill, script or schema only the install has fails inside the worker, naming the file and the snapshot it looked in. Refresh baseline picks up the install (your edits are kept, conflicts flagged), then Publish hands it to workers.`
+                    // The install is current here, so Refresh baseline is not the move — Publish is.
+                    : 'A publish carries the whole root, so files no skill owns — scripts, schemas, the plugin manifest — are part of what a worker runs. These differ from the published snapshot, and the per-skill badges cannot show them: they are judged over the files a SKILL owns. Publish hands this root to workers.'}
                 </p>
                 {drift?.state === 'behind' && (
                   <p data-testid="skills-behind-detail" className="font-mono text-[10px]" style={{ color: 'var(--ink-dim)' }} title={drift.installed.source.path}>
@@ -697,9 +701,11 @@ export function SkillsPage({ navigate, search = '' }: {
                     {unpublishedSupportFiles.length > 3 && `, +${unpublishedSupportFiles.length - 3} more`}
                   </p>
                 )}
+                {/* The PRIMARY verb is the one this state actually needs: Refresh baseline when the
+                    install has moved, Publish when only the snapshot is behind this root. */}
                 <div className="flex flex-wrap items-center gap-2">
-                  {verbButton('refresh', 'skills-behind-refresh', 'Capture the installed plugin as a new baseline and merge it three-way per file — your edits are kept, conflicts flagged', true)}
-                  {verbButton('publish', 'skills-behind-publish', 'Write the immutable snapshot generation workers spawn with — the second half of the remedy', false)}
+                  {verbButton('refresh', 'skills-behind-refresh', 'Capture the installed plugin as a new baseline and merge it three-way per file — your edits are kept, conflicts flagged', drift?.state === 'behind')}
+                  {verbButton('publish', 'skills-behind-publish', 'Write the immutable snapshot generation workers spawn with (enabled skills only) — the whole root, support files included', drift?.state !== 'behind')}
                 </div>
               </div>
             )}
