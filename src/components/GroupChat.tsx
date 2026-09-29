@@ -5,6 +5,7 @@ import { apiStatus, apiWire } from '../api/errors.js';
 import type {
   ChatOpenBody, ChatScope, ChatSeatRefusal, ChatTranscriptRecord, ChatUsage, Project, RepoEntry, RosterSeat,
 } from '../api/types.js';
+import type { ChatCitationsFrame } from '../api/chat-wire.js';
 import { launchPath } from '../hooks/ambientProject.js';
 import { useEventStream } from '../hooks/useEventStream.js';
 import { pinAwaiting } from '../store/awaitingPins.js';
@@ -374,6 +375,10 @@ interface Props {
   reflectUrl?: boolean;
 }
 
+/** How many early citation frames (verdicts that outran the send naming their turn) are parked at
+ *  once — crew#561. Small on purpose: this is a millisecond race, not a queue. */
+const PARKED_CITATIONS_MAX = 8;
+
 export function GroupChat({
   repoId, onBack, projectId = null, navigate, routedChatId = null, reflectUrl = false, onComposerResize,
 }: Props): React.ReactElement {
@@ -548,6 +553,13 @@ export function GroupChat({
   const [sendFailed, setSendFailed] = useState<{ text: string; reason: string } | null>(null);
   // §7.9-3: the send ordinal — every bubble is stamped with the turn it belongs to.
   const turnRef = useRef(0);
+  // crew#561: the daemon's `turn_id` → that send ordinal. A `chatCitations` frame is stamped with
+  // the turn it verified, and two turns can be in flight, so the verdicts are matched by TURN and
+  // not by "the newest reply" — marking the wrong reply would be a fabricated mark of our own.
+  const turnOfDaemonId = useRef(new Map<string, number>());
+  // Verdicts that named a turn this surface has not learned the id of YET (the send's answer is
+  // still in flight). Bounded: the newest few, dropped on a chat change.
+  const parkedCitations = useRef<ChatCitationsFrame[]>([]);
   // [+ Add] opens the roster picker; ITS roster read is allowed to fetch —
   // opening the picker is a user action, not a mount (§2.4).
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -793,6 +805,8 @@ export function GroupChat({
     chipsTouchedRef.current = false;
     setSendFailed(null);
     turnRef.current = 0;
+    turnOfDaemonId.current = new Map();
+    parkedCitations.current = [];
     announcedRef.current = new Map();
     refusedRef.current = new Set();
     setPickerOpen(false);
@@ -893,6 +907,7 @@ export function GroupChat({
           const replayed = replayTranscript(probe.messages);
           setMessages(replayed.messages);
           turnRef.current = replayed.turns;
+          turnOfDaemonId.current = replayed.turnIds;
           // A seat that SPOKE in the transcript but is not warm any more was
           // evicted (a turn over budget, a dropped session): it keeps a chip —
           // greyed, wearing its last reason — so it is visibly part of this chat
@@ -1022,6 +1037,15 @@ export function GroupChat({
           setSeats((s) => (s[frame.cliKey!] === 'failed' ? s : { ...s, [frame.cliKey!]: 'replied' }));
         }
         break;
+      case 'chatCitations': {
+        // crew#561: the daemon's verdicts on the citations in a reply it has already sent — one
+        // frame per reply, so it lands on that seat's NEWEST finished bubble (the same per-seat
+        // FIFO the chunks use: reply, then its frame, then the next reply). A daemon predating the
+        // frame simply never sends one, and the bubble stays unmarked.
+        const cited = ev as unknown as ChatCitationsFrame;
+        if (typeof cited.cliKey === 'string' && Array.isArray(cited.items)) attachCitations(cited.cliKey, cited);
+        break;
+      }
       default:
         break;
     }
@@ -1075,6 +1099,61 @@ export function GroupChat({
       }
       next.push({ kind: 'seat', cliKey, text, pending: false, ok, turn: turnRef.current, usage });
       return next;
+    });
+  }
+
+  /**
+   * crew#561: the citation verdicts land on the seat's newest FINISHED reply — the one the frame
+   * answers. Nothing is invented if no bubble matches (a frame for a turn this client did not
+   * watch): the log is left exactly as it was.
+   */
+  function attachCitations(cliKey: string, frame: ChatCitationsFrame): void {
+    // The turn the frame NAMES, when this surface knows it (it stamped the send, or read it out of
+    // a replayed transcript). A STAMPED frame whose turn is unknown here marks NOTHING — silence is
+    // right, and guessing "the newest reply" would put an UNVERIFIED on an innocent turn, the false
+    // mark this feature exists to prevent (independent review of #390) — but it may simply be
+    // EARLY: the id is carried by the send's own answer, and verdicts do not wait for that promise.
+    // So while a send of ours is in flight the frame is PARKED, bounded, and flushed the moment its
+    // turn is named; a frame whose turn is never named (another tab's send) ages out of the park.
+    // Only an UNSTAMPED frame (a daemon that does not stamp turns) falls back to that seat's newest
+    // finished reply, which is the frame that immediately precedes it.
+    if (frame.turn_id !== undefined) {
+      const known = turnOfDaemonId.current.get(frame.turn_id);
+      if (known === undefined) {
+        if (sendingRef.current) {
+          parkedCitations.current = [...parkedCitations.current, frame].slice(-PARKED_CITATIONS_MAX);
+        }
+        return;
+      }
+      applyCitations(cliKey, known, frame);
+      return;
+    }
+    applyCitations(cliKey, undefined, frame);
+  }
+
+  /** Put one frame's verdicts on the reply it answers: the named turn, or (unstamped) the seat's
+   *  newest finished reply. Never double-marks, and never invents a bubble. */
+  function applyCitations(cliKey: string, turn: number | undefined, frame: ChatCitationsFrame): void {
+    setMessages((prev) => {
+      for (let i = prev.length - 1; i >= 0; i--) {
+        const m = prev[i];
+        if (m === undefined || m.kind !== 'seat' || m.cliKey !== cliKey || m.pending) continue;
+        if (turn !== undefined && m.turn !== turn) continue;
+        if (m.citations !== undefined) return prev; // already answered — never double-mark
+        const next = [...prev];
+        next[i] = {
+          ...m,
+          citations: {
+            verified: frame.verified,
+            unverifiable: frame.unverifiable,
+            corrected: frame.corrected,
+            unchecked: frame.unchecked,
+            items: frame.items,
+          },
+        };
+        return next;
+      }
+      return prev;
     });
   }
 
@@ -1421,7 +1500,18 @@ export function GroupChat({
         ...Object.fromEntries(audience.map((k) => [k, 'working' as SeatState])),
       }));
       try {
-        await api.sendChatMessage(id, text, audience);
+        const sent = await api.sendChatMessage(id, text, audience);
+        // crew#561: remember which daemon turn this send is, so its citation verdicts land on it —
+        // and apply any that already arrived while this promise was in flight.
+        if (typeof sent?.turnId === 'string') {
+          const daemonTurn = sent.turnId;
+          turnOfDaemonId.current.set(daemonTurn, turn);
+          const early = parkedCitations.current.filter((f) => f.turn_id === daemonTurn);
+          if (early.length > 0) {
+            parkedCitations.current = parkedCitations.current.filter((f) => f.turn_id !== daemonTurn);
+            for (const f of early) applyCitations(f.cliKey, turn, f);
+          }
+        }
         // studio#323 R2: the first question is the session's handle on /chats
         // (fill-only — a later send never renames it).
         if (id in useLiveChatsStore.getState().sessions) useLiveChatsStore.getState().upsert(id, [], { title: text });

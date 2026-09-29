@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import type { ChatTranscriptRecord, ChatUsage } from '../api/types.js';
+import type { ChatCitations, ChatCitationsRecord } from '../api/chat-wire.js';
+import { CitationStrip, citationMarks } from './citations.js';
 import { Markdown } from './Markdown.js';
 import { ArtifactCard } from './ArtifactCard.js';
 import {
@@ -49,6 +51,13 @@ export interface SeatMsg {
    * the bubble's footer — never a run-keyed `cliUsage` claim.
    */
   usage?: ChatUsage | null;
+  /**
+   * What the daemon made of this reply's citations (crew#561 — the `chatCitations` frame). Absent
+   * while the reply streams, for a reply that cited nothing, for a chat with no read roots to
+   * verify against, and on a daemon predating the frame — all of which read as "not stated", never
+   * as "verified".
+   */
+  citations?: ChatCitations;
 }
 /** A surface-recorded moment (§11.1: seat joined / could not join) — already
  *  narration; it never renders as a bubble in either view. */
@@ -139,7 +148,9 @@ export function chatCostLabel(c: ChatCost): string {
  * FIRST-SEEN `turnId` so a later send continues the count (§7.9-3 turn
  * identity survives a reload). Pure: no request, no dedup beyond the ordinal.
  */
-export function replayTranscript(records: readonly ChatTranscriptRecord[]): { messages: Msg[]; turns: number } {
+export function replayTranscript(
+  records: readonly (ChatTranscriptRecord | ChatCitationsRecord)[],
+): { messages: Msg[]; turns: number; turnIds: Map<string, number> } {
   const ordinal = new Map<string, number>();
   const messages: Msg[] = [];
   for (const r of records) {
@@ -150,11 +161,33 @@ export function replayTranscript(records: readonly ChatTranscriptRecord[]): { me
     }
     if (r.kind === 'user') {
       messages.push({ kind: 'user', text: r.text, turn });
+    } else if (r.kind === 'citations') {
+      // crew#561 (api-types 0.68.0): the verdicts of an earlier reply, appended after it — the
+      // transcript is append-only and verification finishes after the reply is stored. FOLD it onto
+      // that reply (same turn + seat), which is what keeps a fabricated SHA marked across a reload.
+      // A record with no reply to fold onto (a torn transcript) is dropped, never rendered alone.
+      for (let i = messages.length - 1; i >= 0; i--) {
+        const m = messages[i];
+        if (m === undefined || m.kind !== 'seat' || m.cliKey !== r.cliKey || m.turn !== turn) continue;
+        messages[i] = {
+          ...m,
+          citations: {
+            verified: r.verified,
+            unverifiable: r.unverifiable,
+            corrected: r.corrected,
+            unchecked: r.unchecked,
+            items: r.items,
+          },
+        };
+        break;
+      }
     } else {
       messages.push({ kind: 'seat', cliKey: r.cliKey, text: r.text, pending: false, ok: r.ok, turn, usage: r.usage });
     }
   }
-  return { messages, turns: ordinal.size };
+  // The daemon's `turnId` → the local ordinal, so a frame stamped with a turn this surface only
+  // ever saw in the transcript (a reload, a second tab) still finds its reply (crew#561).
+  return { messages, turns: ordinal.size, turnIds: ordinal };
 }
 
 /**
@@ -296,8 +329,11 @@ function bubbleBody(m: SeatMsg): React.ReactElement {
       {m.pending && m.text === '' ? (
         <span className="opacity-50 font-mono text-[11px] animate-pulse">thinking…</span>
       ) : (
-        <Markdown>{cleanChatReply(m.text)}</Markdown>
+        // crew#561: the seat's text, unedited — with the daemon's verdicts marked ON the citations
+        // it backticked (`marks`), so a fabricated SHA cannot be read as a confirmed one.
+        <Markdown marks={citationMarks(m.citations)}>{cleanChatReply(m.text)}</Markdown>
       )}
+      {!m.pending && m.citations !== undefined && <CitationStrip citations={m.citations} />}
       {!m.pending && m.ok && m.usage === null && (
         // studio#277: an answer whose seat reports no usage (pi, agy — or a daemon predating the
         // field) says so. A blank footer would read as "free"; "unmetered" is what is known. A

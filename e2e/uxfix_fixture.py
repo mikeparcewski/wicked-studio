@@ -190,6 +190,10 @@ Mutable switches (flipped over POST /__fixture between page loads):
                     500 {error} — the roster-unreachable branch, where a
                     pristine first send must FAIL INLINE with nothing on the
                     wire (the trio never ships). Default False.
+  chat_frames     — crew#561: a list of chat frames broadcast VERBATIM on POST
+                    /__fixture — how a rig lands a daemon-synthetic frame the
+                    fixture cannot derive (`chatCitations`). Not a switch: the
+                    frames are sent once, in order, and nothing is stored.
   chat_deltas     — slice AB (§7.9-3): sends BUFFER interleaved chatDelta
                     chunks + a chatReply per live seat; POST /__fixture
                     {"chat_flush": true} broadcasts the buffered rounds in
@@ -5119,6 +5123,11 @@ class W2Handler(SimpleHTTPRequestHandler):
                 for frames in rounds:
                     for frame in frames:
                         broadcast_chat(frame)
+            # crew#561: push VERBATIM chat frames onto the socket — the daemon-synthetic ones a
+            # fixture cannot derive (`chatCitations`, the citation verdicts). The rig decides the
+            # frame and when it arrives; the fixture adds nothing to it.
+            for frame in body.get("chat_frames") or []:
+                broadcast_chat(frame)
             with state_lock:
                 # `appearance` rides the same control channel but lands in the
                 # settings store: a dict replaces studio.appearance wholesale,
@@ -5635,7 +5644,7 @@ class W2Handler(SimpleHTTPRequestHandler):
                         frames.append({"type": "chatReply", "chat": chat_id,
                                        "cliKey": k, "ok": True, "text": line})
                     chat_round_buffer.append(frames)
-                return self._json(200, {"seats": live})
+                return self._json(200, {"seats": live, "turnId": f"t-{round_n}"})
             if replies_on:
                 chat_id = urllib.parse.unquote(parts[4])
                 with chat_state_lock:
@@ -5656,7 +5665,14 @@ class W2Handler(SimpleHTTPRequestHandler):
                     broadcast_chat({"type": "chatSessionFailed", "chat": chat_id,
                                     "cliKey": kill,
                                     "reason": "session exited unexpectedly (fixture)"})
-            return self._json(200, {"seats": []})
+            # `turnId` (api-types 0.38.0) the way the daemon answers a send: `t-<n>` per chat, so a
+            # rig can land a turn-stamped frame (`chatCitations`, crew#561) that resolves to it.
+            chat_id = urllib.parse.unquote(parts[4])
+            with chat_state_lock:
+                if not replies_on:
+                    chat_send_count[chat_id] = chat_send_count.get(chat_id, 0) + 1
+                turn_n = chat_send_count.get(chat_id, 1)
+            return self._json(200, {"seats": [], "turnId": f"t-{turn_n}"})
         return self._json(404, {"error": f"w2 fixture: no such endpoint {path}"})
 
     def do_PUT(self):  # noqa: N802 (stdlib naming)

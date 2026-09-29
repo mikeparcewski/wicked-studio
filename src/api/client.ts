@@ -258,8 +258,12 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     }),
+  // `turnId` (api-types 0.38.0) is the daemon's id for the turn this send opened: every
+  // `chatDelta` / `chatReply` / `chatCitations` frame that answers it is stamped with it, so a
+  // verdict can be matched to the reply it belongs to rather than to the newest one. Absent on a
+  // daemon predating the turn index.
   sendChatMessage: (chatId: string, text: string, targets?: string[]) =>
-    apiFetch<{ seats: string[] }>(`/chats/${encodeURIComponent(chatId)}/messages`, {
+    apiFetch<{ seats: string[]; turnId?: string }>(`/chats/${encodeURIComponent(chatId)}/messages`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(targets === undefined ? { text } : { text, targets }),

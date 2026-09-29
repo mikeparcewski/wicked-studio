@@ -10,9 +10,9 @@
   "version": 1,
   "studioVersion": "0.5.14",
   "counts": {
-    "files": 173,
-    "occurrences": 1744,
-    "static": 1526,
+    "files": 174,
+    "occurrences": 1748,
+    "static": 1530,
     "dynamic": 73,
     "computed": 7
   },
@@ -1211,6 +1211,24 @@
       "testId": "chronicle-state-evidence",
       "files": [
         "src/components/WorkChronicle.tsx"
+      ]
+    },
+    {
+      "testId": "citation-count",
+      "files": [
+        "src/components/citations.tsx"
+      ]
+    },
+    {
+      "testId": "citation-flag",
+      "files": [
+        "src/components/citations.tsx"
+      ]
+    },
+    {
+      "testId": "citation-mark",
+      "files": [
+        "src/components/citations.tsx"
       ]
     },
     {
@@ -6465,6 +6483,12 @@
       "testId": "seat-chip",
       "files": [
         "src/components/GroupChat.tsx"
+      ]
+    },
+    {
+      "testId": "seat-citations",
+      "files": [
+        "src/components/citations.tsx"
       ]
     },
     {

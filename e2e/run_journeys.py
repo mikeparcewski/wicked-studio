@@ -39,6 +39,7 @@ BEHAVIOUR = [
     "capture",
     "main_scroll",
     "escalation_arms",
+    "chat_citations",
     "demo_mode",
     "mcp_tools",
 ]

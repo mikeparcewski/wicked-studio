@@ -2,6 +2,8 @@ import { useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { Components } from 'react-markdown';
+import type { ChatCitationItem } from '../api/chat-wire.js';
+import { CitationBadge } from './citations.js';
 
 /**
  * A file reference, as agents write them into transcripts: any href that is not
@@ -78,6 +80,40 @@ export function normaliseTables(md: string): string {
   return out.join('\n');
 }
 
+/** Is this `code` node a fenced BLOCK? Block fences always include a trailing \n or a language. */
+function isCodeBlock(className: string | undefined, children: React.ReactNode): boolean {
+  return !!className?.startsWith('language-') || (typeof children === 'string' && children.includes('\n'));
+}
+
+/** The `code` renderer, extracted so the citation-marking pass (crew#561) can wrap its output
+ *  instead of re-implementing the dress. */
+function codeElement({
+  className,
+  children,
+}: {
+  className?: string | undefined;
+  children?: React.ReactNode | undefined;
+}): React.ReactElement {
+  if (isCodeBlock(className, children)) {
+    return (
+      <code
+        className={`block overflow-auto rounded-lg px-4 py-3 text-xs leading-5 font-mono my-2 ${className ?? ''}`}
+        style={{ background: 'var(--surface-base)', color: 'var(--ink-high)' }}
+      >
+        {children}
+      </code>
+    );
+  }
+  return (
+    <code
+      className="rounded px-1.5 py-0.5 text-xs font-mono"
+      style={{ background: 'var(--surface-raised)', color: 'var(--ink-high)' }}
+    >
+      {children}
+    </code>
+  );
+}
+
 const components: Components = {
   h1: ({ children }) => <h1 className="text-lg font-bold mt-4 mb-2" style={{ color: 'var(--ink-high)' }}>{children}</h1>,
   h2: ({ children }) => <h2 className="text-base font-bold mt-3 mb-1.5" style={{ color: 'var(--ink-high)' }}>{children}</h2>,
@@ -93,28 +129,7 @@ const components: Components = {
       [image{alt ? `: ${alt}` : ''}]
     </span>
   ),
-  code: ({ className, children }) => {
-    // Block fences always include a trailing \n; inline code never does.
-    const isBlock = !!className?.startsWith('language-') || (typeof children === 'string' && children.includes('\n'));
-    if (isBlock) {
-      return (
-        <code
-          className={`block overflow-auto rounded-lg px-4 py-3 text-xs leading-5 font-mono my-2 ${className ?? ''}`}
-          style={{ background: 'var(--surface-base)', color: 'var(--ink-high)' }}
-        >
-          {children}
-        </code>
-      );
-    }
-    return (
-      <code
-        className="rounded px-1.5 py-0.5 text-xs font-mono"
-        style={{ background: 'var(--surface-raised)', color: 'var(--ink-high)' }}
-      >
-        {children}
-      </code>
-    );
-  },
+  code: codeElement,
   pre: ({ children }) => <pre className="my-2">{children}</pre>,
   blockquote: ({ children }) => (
     <blockquote
@@ -154,6 +169,13 @@ interface Props {
   children: string;
   className?: string;
   /**
+   * Citation verdicts to mark IN PLACE (crew#561): raw token → the daemon's item. An inline-code
+   * token that is a flagged citation renders inside a {@link CitationBadge} — struck through and
+   * `UNVERIFIED` for a fabrication, `→ the real place` for a corrected line ref. The text itself is
+   * never rewritten; `undefined` (the default) renders exactly as before.
+   */
+  marks?: ReadonlyMap<string, ChatCitationItem> | undefined;
+  /**
    * Evidence-reference wiring (DES-UX-001 §1.3-4c): when provided, a link whose
    * href is a FILE reference (not an external URL) resolves through this
    * callback — the run view opens it in the slice-I FileViewer via
@@ -163,11 +185,26 @@ interface Props {
   onOpenFile?: (path: string) => void;
 }
 
-export function Markdown({ children, className, onOpenFile }: Props): React.ReactElement {
+export function Markdown({ children, className, onOpenFile, marks }: Props): React.ReactElement {
   const resolved = useMemo<Components>(() => {
-    if (onOpenFile === undefined) return components;
+    // crew#561: an inline-code token that IS a flagged citation wears the daemon's verdict. Block
+    // fences are left alone — a code sample is not a citation, and striking through a line of a
+    // diff would corrupt what the reader came to read.
+    const marked: Components =
+      marks === undefined || marks.size === 0
+        ? components
+        : {
+            ...components,
+            code: ({ className: codeClass, children: codeChildren }) => {
+              const rendered = codeElement({ className: codeClass, children: codeChildren });
+              const raw = typeof codeChildren === 'string' ? codeChildren.trim() : '';
+              const item = raw === '' || isCodeBlock(codeClass, codeChildren) ? undefined : marks.get(raw);
+              return item === undefined ? rendered : <CitationBadge item={item}>{rendered}</CitationBadge>;
+            },
+          };
+    if (onOpenFile === undefined) return marked;
     return {
-      ...components,
+      ...marked,
       a: ({ href, children: linkChildren }) => {
         if (typeof href === 'string' && isFileRef(href)) {
           return (
@@ -192,7 +229,7 @@ export function Markdown({ children, className, onOpenFile }: Props): React.Reac
         );
       },
     };
-  }, [onOpenFile]);
+  }, [onOpenFile, marks]);
 
   return (
     <div
