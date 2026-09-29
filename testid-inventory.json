@@ -10,9 +10,9 @@
   "version": 1,
   "studioVersion": "0.5.14",
   "counts": {
-    "files": 175,
-    "occurrences": 1753,
-    "static": 1535,
+    "files": 176,
+    "occurrences": 1760,
+    "static": 1541,
     "dynamic": 73,
     "computed": 7
   },
@@ -1583,6 +1583,24 @@
       "testId": "deliver-gate-full-diff",
       "files": [
         "src/components/SteeringGate.tsx"
+      ]
+    },
+    {
+      "testId": "deliver-identity",
+      "files": [
+        "src/components/SystemSettings.tsx"
+      ]
+    },
+    {
+      "testId": "deliver-identity-error",
+      "files": [
+        "src/components/SystemSettings.tsx"
+      ]
+    },
+    {
+      "testId": "deliver-identity-invalid",
+      "files": [
+        "src/components/SystemSettings.tsx"
       ]
     },
     {
@@ -6265,6 +6283,18 @@
       ]
     },
     {
+      "testId": "run-intent-amendment",
+      "files": [
+        "src/components/RunIntentAmendments.tsx"
+      ]
+    },
+    {
+      "testId": "run-intent-amendments",
+      "files": [
+        "src/components/RunIntentAmendments.tsx"
+      ]
+    },
+    {
       "testId": "run-link",
       "files": [
         "src/components/RunLink.tsx"
@@ -7400,6 +7430,12 @@
     },
     {
       "testId": "steering-amend",
+      "files": [
+        "src/components/SteeringGate.tsx"
+      ]
+    },
+    {
+      "testId": "steering-amend-intent",
       "files": [
         "src/components/SteeringGate.tsx"
       ]
