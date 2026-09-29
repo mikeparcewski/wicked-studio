@@ -498,7 +498,11 @@ function AddServerPanel({ onSaved, onClose, mode, navigate, saved }: {
         // The value never enters `formKey`, so it is added here, at the send.
         ...(askedValue !== '' ? { secret: askedValue } : {}),
       });
-      if (seq === previewSeq.current) setHeld({ key: asked, preview: answer });
+      // (review of PR #391, HIGH) The SUCCESS path needs the same guard as the failure path. The
+      // secret value is not in `formKey`, so a preview probed with a typo would otherwise be shown
+      // — and saved by its `previewHash`, committing that typo — beside a form already showing the
+      // correction. `stillMine()` reads the value too.
+      if (stillMine()) setHeld({ key: asked, preview: answer });
     } catch (e) {
       // A rejection belongs to the form it was asked about (codex review round 3 on #387): "a
       // secret is at least 8 characters" must not land on a form whose secret the operator has

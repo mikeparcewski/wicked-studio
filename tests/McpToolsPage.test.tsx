@@ -320,13 +320,62 @@ describe('MCP tools: add an existing server', () => {
     fireEvent.click(within(panel).getByTestId('mcp-add-preview'));
     await within(panel).findByTestId('mcp-add-preview-result');
 
-    // Only the value changes — the form key is identical, and the held preview is dropped anyway
-    // because the value it was probed with is no longer the one in the form.
+    // Only the value changes — the form key is identical.
     fireEvent.change(within(panel).getByTestId('mcp-add-auth-value'), { target: { value: 'the-correct-secret' } });
     expect((within(panel).getByTestId('mcp-add-auth-value') as HTMLInputElement).value).toBe('the-correct-secret');
     fireEvent.click(within(panel).getByTestId('mcp-add-preview'));
     await within(panel).findByTestId('mcp-add-preview-result');
     expect(staged).toEqual(['the-typo-secret', 'the-correct-secret']);
+  });
+
+  it('a preview that answers after the secret was corrected is never shown or saved', async () => {
+    // review of PR #391, HIGH: the secret value is deliberately NOT in the form key, so the
+    // success path needs the value guard the failure path already had. Without it, a preview
+    // staged with the TYPO was displayed beside a form showing the correction — and Save posts
+    // only its `previewHash`, committing the typo.
+    wire();
+    const base = apiFetch.getMockImplementation() as (p: string, i?: RequestInit) => Promise<unknown>;
+    let release: () => void = () => undefined;
+    let started = false;
+    const staged: Array<string | undefined> = [];
+    apiFetch.mockImplementation((p: string, i?: RequestInit) => {
+      if (p === '/mcp/servers/preview') {
+        staged.push((JSON.parse(i?.body as string) as { secret?: string }).secret);
+        if (!started) {
+          started = true;
+          return new Promise((r) => { release = () => { void base(p, i).then(r); }; });
+        }
+      }
+      return base(p, i);
+    });
+    render(<McpToolsPage navigate={navigate} search="" />);
+    fireEvent.click(await screen.findByTestId('mcp-add-open'));
+    const panel = screen.getByTestId('mcp-add-panel');
+    fireEvent.change(within(panel).getByTestId('mcp-add-kind'), { target: { value: 'rest' } });
+    fireEvent.change(within(panel).getByTestId('mcp-add-name'), { target: { value: 'tracker' } });
+    fireEvent.change(within(panel).getByTestId('mcp-add-target'), { target: { value: 'https://api.example.com/v1' } });
+    fireEvent.change(within(panel).getByTestId('mcp-add-openapi-url'), { target: { value: 'https://api.example.com/openapi.json' } });
+    fireEvent.change(within(panel).getByTestId('mcp-add-auth-into'), { target: { value: 'Authorization' } });
+    fireEvent.change(within(panel).getByTestId('mcp-add-auth-value'), { target: { value: 'the-typo-secret' } });
+    fireEvent.click(within(panel).getByTestId('mcp-add-preview'));
+    await waitFor(() => expect(started).toBe(true));
+
+    // The operator corrects the value before the slow preview answers.
+    fireEvent.change(within(panel).getByTestId('mcp-add-auth-value'), { target: { value: 'the-correct-secret' } });
+    release();
+    await waitFor(() => expect((within(panel).getByTestId('mcp-add-preview') as HTMLButtonElement).disabled).toBe(false));
+
+    // Nothing to save: the answer belonged to the typo.
+    expect(within(panel).queryByTestId('mcp-add-preview-result')).toBeNull();
+    expect((within(panel).getByTestId('mcp-add-auth-value') as HTMLInputElement).value).toBe('the-correct-secret');
+    expect(calls.some((c) => c.method === 'POST' && c.path === '/mcp/servers')).toBe(false);
+
+    // Previewing again stages the correction, and THAT is what can be saved.
+    fireEvent.click(within(panel).getByTestId('mcp-add-preview'));
+    const result = await within(panel).findByTestId('mcp-add-preview-result');
+    expect(staged).toEqual(['the-typo-secret', 'the-correct-secret']);
+    fireEvent.click(within(result).getByTestId('mcp-add-save'));
+    await waitFor(() => expect(screen.queryByTestId('mcp-add-panel')).toBeNull());
   });
 
   it("replacing a registered server's live secret is consented, and nothing is written until the save", async () => {
