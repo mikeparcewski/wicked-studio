@@ -282,6 +282,49 @@ describe('a chatCitations frame lands on the reply it answers', () => {
     expect(screen.getByTestId('seat-citations').textContent).toContain('1 verified · 1 unverifiable');
   });
 
+  it('verdicts that outran the send naming their turn are parked, then applied', async () => {
+    // The turn id is carried by the SEND's answer, and verification does not wait for that promise:
+    // a stamped frame can arrive first. Dropping it would leave a fabricated SHA unmarked
+    // (independent review of #390, round 3).
+    let release: (() => void) | null = null;
+    sendChatMessage.mockImplementation(
+      () => new Promise((res) => {
+        release = () => res({ seats: [], turnId: 't-1' });
+      }),
+    );
+    render(<GroupChat repoId="repo-4" onBack={() => {}} />);
+    const composer = screen.getByPlaceholderText(/Describe what you want/);
+    await userEvent.type(composer, 'early question');
+    await userEvent.keyboard('{Enter}');
+    await waitFor(() => expect(sendChatMessage).toHaveBeenCalled());
+    const chat = (openChat.mock.calls[0]?.[0] as { chatId: string }).chatId;
+
+    // The reply AND its verdicts, both before the POST resolves.
+    act(() => {
+      streamHandler?.({ type: 'chatReply', chat, cliKey: 'opencode', ok: true, text: 'cites `6d77153`.' });
+      streamHandler?.({
+        type: 'chatCitations',
+        chat,
+        cliKey: 'opencode',
+        turn_id: 't-1',
+        verified: 0,
+        unverifiable: 1,
+        corrected: 0,
+        unchecked: 0,
+        items: [{ raw: '6d77153', kind: 'sha', status: 'unverified' }],
+      });
+    });
+    expect(screen.queryByTestId('seat-citations')).toBeNull(); // parked, not yet placed
+
+    await act(async () => {
+      release?.();
+      await Promise.resolve();
+    });
+    const strip = await screen.findByTestId('seat-citations');
+    expect(strip.textContent).toContain('0 verified · 1 unverifiable');
+    expect(screen.getByTestId('citation-mark').getAttribute('data-raw')).toBe('6d77153');
+  });
+
   it('a frame for a turn this client never saw marks nothing at all', async () => {
     // Another tab's send: the id means nothing here, and "the newest reply" would be a guess that
     // brands an innocent turn (independent review of #390).
