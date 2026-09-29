@@ -341,6 +341,49 @@ describe('MCP tools: add an existing server', () => {
     });
   });
 
+  it('a corrected secret is not thrown away by the write it replaced', async () => {
+    // codex review round 2 on #387: the secret VALUE is deliberately not in the form key (the key
+    // is what gets sent, and the value never is), so fixing a typo in the value alone left the
+    // stale write looking current — it stored the typo, cleared the corrected value and previewed
+    // against the wrong keychain entry.
+    wire();
+    const base = apiFetch.getMockImplementation() as (p: string, i?: RequestInit) => Promise<unknown>;
+    let releaseWrite: () => void = () => undefined;
+    let started = false;
+    const values: string[] = [];
+    apiFetch.mockImplementation((p: string, i?: RequestInit) => {
+      if (p === '/mcp/servers/tracker/secret') {
+        values.push((JSON.parse(i?.body as string) as { value: string }).value);
+        if (!started) { started = true; return new Promise((r) => { releaseWrite = () => r({ ref: 'keychain:wicked-mcp/tracker', set: true }); }); }
+      }
+      return base(p, i);
+    });
+    render(<McpToolsPage navigate={navigate} search="" />);
+    fireEvent.click(await screen.findByTestId('mcp-add-open'));
+    const panel = screen.getByTestId('mcp-add-panel');
+    fireEvent.change(within(panel).getByTestId('mcp-add-kind'), { target: { value: 'rest' } });
+    fireEvent.change(within(panel).getByTestId('mcp-add-name'), { target: { value: 'tracker' } });
+    fireEvent.change(within(panel).getByTestId('mcp-add-target'), { target: { value: 'https://api.example.com/v1' } });
+    fireEvent.change(within(panel).getByTestId('mcp-add-openapi-url'), { target: { value: 'https://api.example.com/openapi.json' } });
+    fireEvent.change(within(panel).getByTestId('mcp-add-auth-into'), { target: { value: 'Authorization' } });
+    fireEvent.change(within(panel).getByTestId('mcp-add-auth-value'), { target: { value: 'the-typo-secret' } });
+    fireEvent.click(within(panel).getByTestId('mcp-add-preview'));
+    await waitFor(() => expect(started).toBe(true));
+
+    // Only the value changes — the form key is identical.
+    fireEvent.change(within(panel).getByTestId('mcp-add-auth-value'), { target: { value: 'the-correct-secret' } });
+    releaseWrite();
+    await waitFor(() => expect((within(panel).getByTestId('mcp-add-preview') as HTMLButtonElement).disabled).toBe(false));
+    expect((within(panel).getByTestId('mcp-add-auth-value') as HTMLInputElement).value).toBe('the-correct-secret');
+    expect((within(panel).getByTestId('mcp-add-auth-ref') as HTMLInputElement).value).toBe('');
+    expect(calls.some((c) => c.path === '/mcp/servers/preview')).toBe(false);
+
+    // Previewing now stores the corrected value, and that is the only one the preview stands on.
+    fireEvent.click(within(panel).getByTestId('mcp-add-preview'));
+    await within(panel).findByTestId('mcp-add-preview-result');
+    expect(values).toEqual(['the-typo-secret', 'the-correct-secret']);
+  });
+
   it('a bearer API carries its scheme prefix, so the header is not the bare secret', async () => {
     // `McpAuthConfig.prefix` is in the wire contract and the broker honours it
     // (crew mcp/rest.ts authHeaders: `${prefix ?? ''}${secret}`). With no field for it every

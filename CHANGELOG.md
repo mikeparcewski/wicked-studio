@@ -30,7 +30,8 @@ npm publish dates. Every version listed here exists on
   A refused write (a secret under 8 characters, no OS store) stops before the preview and says why.
   A secret write that outlives the form it was started from is not written back: the value is in
   the keychain, but the reference never lands on a panel the operator has since retargeted at
-  another server (codex review on #387). A header-injected secret also gains its **scheme** (`McpAuthConfig.prefix`, which the broker
+  another server, and correcting a typed secret while its predecessor is still being written keeps
+  the correction (codex review rounds 1-2 on #387). A header-injected secret also gains its **scheme** (`McpAuthConfig.prefix`, which the broker
   already honoured as `${prefix}${secret}`): without a field for it, an `Authorization: Bearer
   <token>` API was sent the bare token and answered 401. stdio servers, whose secret is the env
   var's whole value, are offered no scheme.

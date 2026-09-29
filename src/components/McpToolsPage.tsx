@@ -440,6 +440,10 @@ function AddServerPanel({ onSaved, onClose, mode, navigate }: {
   /** The LIVE form key, readable after an await (the closure's copy is the one it started with). */
   const formKeyRef = useRef(formKey);
   formKeyRef.current = formKey;
+  /** The LIVE secret value. It is deliberately NOT in `formKey` — the key is what gets sent, and
+   *  the value never is — so the stale-write guard has to read it separately. */
+  const authValueRef = useRef(authValue);
+  authValueRef.current = authValue;
   const preview = held !== null && held.key === formKey ? held.preview : null;
   const setPreview = (p: null): void => { setHeld(p); };
 
@@ -452,7 +456,9 @@ function AddServerPanel({ onSaved, onClose, mode, navigate }: {
     // dropped by key, not by freezing the form), so anything written back after an await must
     // check that the form still says the same thing.
     const asked = formKey;
-    const stillMine = (): boolean => seq === previewSeq.current && formKeyRef.current === asked;
+    const askedValue = authValue;
+    const stillMine = (): boolean =>
+      seq === previewSeq.current && formKeyRef.current === asked && authValueRef.current === askedValue;
     try {
       let ref = authRef.trim();
       if (authValue !== '') {
