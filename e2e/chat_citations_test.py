@@ -125,7 +125,9 @@ with sync_playwright() as p:
           marks=page.locator(TID("citation-mark")).count())
 
     # The daemon's verdicts.
-    set_fixture(origin, chat_frames=[{**CITATIONS, "chat": chat_id, "cliKey": seat, "turn_id": "t1"}])
+    # Stamped with the turn the send opened (the fixture answers `t-<n>`, as the daemon does): a
+    # frame for a turn this client never saw is DELIBERATELY ignored, so the stamp must be right.
+    set_fixture(origin, chat_frames=[{**CITATIONS, "chat": chat_id, "cliKey": seat, "turn_id": "t-1"}])
     page.locator(TID("seat-citations")).wait_for(timeout=15000)
     page.wait_for_timeout(300)
     page.screenshot(path=str(SHOTS / "chat-citations-marked.png"))

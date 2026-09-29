@@ -1101,9 +1101,16 @@ export function GroupChat({
    */
   function attachCitations(cliKey: string, frame: ChatCitationsFrame): void {
     // The turn the frame NAMES, when this surface knows it (it stamped the send, or read it out of
-    // a replayed transcript). Unknown ⇒ the newest finished reply of that seat: a daemon that does
-    // not stamp turns, or a chat this client joined mid-flight.
-    const turn = frame.turn_id === undefined ? undefined : turnOfDaemonId.current.get(frame.turn_id);
+    // a replayed transcript). A STAMPED frame whose turn is unknown here — a send from another tab
+    // this client never saw — marks NOTHING: silence is right, and guessing "the newest reply"
+    // would put an UNVERIFIED on an innocent turn, the false mark this feature exists to prevent
+    // (independent review of #390). Only an UNSTAMPED frame (a daemon that does not stamp turns)
+    // falls back to that seat's newest finished reply, which is the frame that follows it.
+    let turn: number | undefined;
+    if (frame.turn_id !== undefined) {
+      turn = turnOfDaemonId.current.get(frame.turn_id);
+      if (turn === undefined) return;
+    }
     setMessages((prev) => {
       for (let i = prev.length - 1; i >= 0; i--) {
         const m = prev[i];

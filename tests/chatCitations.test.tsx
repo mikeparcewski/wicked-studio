@@ -222,6 +222,7 @@ describe('a chatCitations frame lands on the reply it answers', () => {
   afterEach(cleanup);
 
   it('marks the reply it arrives after, and never a later one', async () => {
+    sendChatMessage.mockImplementation(() => Promise.resolve({ seats: [], turnId: 't1' }));
     render(<GroupChat repoId="repo-1" onBack={() => {}} />);
     const composer = screen.getByPlaceholderText(/Describe what you want/);
     await userEvent.type(composer, 'release notes');
@@ -279,6 +280,38 @@ describe('a chatCitations frame lands on the reply it answers', () => {
     });
     expect(screen.getAllByTestId('seat-citations')).toHaveLength(1);
     expect(screen.getByTestId('seat-citations').textContent).toContain('1 verified · 1 unverifiable');
+  });
+
+  it('a frame for a turn this client never saw marks nothing at all', async () => {
+    // Another tab's send: the id means nothing here, and "the newest reply" would be a guess that
+    // brands an innocent turn (independent review of #390).
+    sendChatMessage.mockImplementation(() => Promise.resolve({ seats: [], turnId: 'mine' }));
+    render(<GroupChat repoId="repo-3" onBack={() => {}} />);
+    const composer = screen.getByPlaceholderText(/Describe what you want/);
+    await userEvent.type(composer, 'my question');
+    await userEvent.keyboard('{Enter}');
+    await waitFor(() => expect(sendChatMessage).toHaveBeenCalled());
+    const chat = (openChat.mock.calls[0]?.[0] as { chatId: string }).chatId;
+    act(() => {
+      streamHandler?.({ type: 'chatReply', chat, cliKey: 'opencode', ok: true, text: 'mine cites `dd621c0`.' });
+    });
+    await waitFor(() => expect(screen.getAllByTestId('seat-bubble')).toHaveLength(1));
+    act(() => {
+      streamHandler?.({
+        type: 'chatCitations',
+        chat,
+        cliKey: 'opencode',
+        turn_id: 'someone-elses-turn',
+        verified: 0,
+        unverifiable: 1,
+        corrected: 0,
+        unchecked: 0,
+        items: [{ raw: '6d77153', kind: 'sha', status: 'unverified' }],
+      });
+    });
+    await new Promise((r) => setTimeout(r, 50));
+    expect(screen.queryByTestId('seat-citations')).toBeNull();
+    expect(screen.queryByTestId('citation-mark')).toBeNull();
   });
 
   it('marks the turn the frame NAMES, even when a later reply already landed', async () => {

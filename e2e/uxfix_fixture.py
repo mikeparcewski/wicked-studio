@@ -5644,7 +5644,7 @@ class W2Handler(SimpleHTTPRequestHandler):
                         frames.append({"type": "chatReply", "chat": chat_id,
                                        "cliKey": k, "ok": True, "text": line})
                     chat_round_buffer.append(frames)
-                return self._json(200, {"seats": live})
+                return self._json(200, {"seats": live, "turnId": f"t-{round_n}"})
             if replies_on:
                 chat_id = urllib.parse.unquote(parts[4])
                 with chat_state_lock:
@@ -5665,7 +5665,14 @@ class W2Handler(SimpleHTTPRequestHandler):
                     broadcast_chat({"type": "chatSessionFailed", "chat": chat_id,
                                     "cliKey": kill,
                                     "reason": "session exited unexpectedly (fixture)"})
-            return self._json(200, {"seats": []})
+            # `turnId` (api-types 0.38.0) the way the daemon answers a send: `t-<n>` per chat, so a
+            # rig can land a turn-stamped frame (`chatCitations`, crew#561) that resolves to it.
+            chat_id = urllib.parse.unquote(parts[4])
+            with chat_state_lock:
+                if not replies_on:
+                    chat_send_count[chat_id] = chat_send_count.get(chat_id, 0) + 1
+                turn_n = chat_send_count.get(chat_id, 1)
+            return self._json(200, {"seats": [], "turnId": f"t-{turn_n}"})
         return self._json(404, {"error": f"w2 fixture: no such endpoint {path}"})
 
     def do_PUT(self):  # noqa: N802 (stdlib naming)
