@@ -80,6 +80,19 @@ describe('useLegacyRedirect (DES-MERGE-001 §1.5 — no bookmark breaks)', () =>
     await waitFor(() => expect(navigate).toHaveBeenCalledWith('/p/proj-1/build/run-9', { replace: true }));
   });
 
+  it('keeps the fragment: /runs/:id#governance opens the Governance panel at the project path', async () => {
+    listProjects.mockResolvedValue({ projects: [project('proj-1')] });
+    listProjectMembers.mockResolvedValue({ members: [member('proj-1', 'crew.run', 'run-9')] });
+    const navigate = vi.fn();
+    window.history.replaceState(null, '', '/runs/run-9#governance');
+    try {
+      renderHook(() => useLegacyRedirect(legacy.runs('run-9'), navigate));
+      await waitFor(() => expect(navigate).toHaveBeenCalledWith('/p/proj-1/build/run-9#governance', { replace: true }));
+    } finally {
+      window.history.replaceState(null, '', '/');
+    }
+  });
+
   it('leaves an unfiled run on the existing run view', async () => {
     listProjects.mockResolvedValue({ projects: [project('proj-1')] });
     listProjectMembers.mockResolvedValue({ members: [] });

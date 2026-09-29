@@ -7,6 +7,8 @@ import {
   DEFAULT_USAGE_FILTER,
   isMcpUnsupported,
   mcpApi,
+  mcpPath,
+  mcpUsagePath,
   MODE_LABELS,
   postureSummary,
   readMcpServerDeepLink,
@@ -665,7 +667,7 @@ export function McpToolsPage({ navigate, search }: { navigate: (p: string) => vo
               aria-selected={view === v}
               data-testid="mcp-view-tab"
               data-view={v}
-              onClick={() => navigate(v === 'usage' ? '/mcp?view=usage' : '/mcp')}
+              onClick={() => navigate(v === 'usage' ? mcpUsagePath() : mcpPath())}
               className="-mb-px px-3 py-1.5 text-[11px] font-semibold"
               style={{ color: view === v ? 'var(--ink-high)' : 'var(--ink-muted)', borderBottom: view === v ? '2px solid var(--accent)' : '2px solid transparent' }}
             >

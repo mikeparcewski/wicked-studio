@@ -24,8 +24,12 @@ an unapproved write, Auto runs).
      the operations that could not be wrapped.
   5. Steering → Policies: the MCP chip filters to the MCP rules; Add ▾ → Add MCP policy lists the
      registered server in its Subject picker.
+  6. Usage (slice S7): the server row says its calls over 7 days; MCP tools → Usage shows the calls,
+     the decision split allow / ask / deny, p50/p95 and the chain, as crew's fold answers them for
+     the rig's call records (hand-computed below); a tool drills down to seat × run, and a run opens
+     its Governance panel. No horizontal overflow at 1440x700.
 
-Captures: e2e/shots/mcp-tools-{preview,approved,rest,steering}-<skin>.png. Skin: STUDIO_SKIN.
+Captures: e2e/shots/mcp-tools-{preview,approved,rest,steering,usage}-<skin>.png. Skin: STUDIO_SKIN.
 Env: FEEDBACK_PORT (default 4512). Prints a JSON report; exit 0/1.
 """
 
@@ -55,7 +59,7 @@ REST_TOOLS = [
 ]
 
 report: dict = {"ok": False, "skin": STUDIO_SKIN, "steps": {}}
-mcp = {"servers": [], "approved": set(), "posts": []}
+mcp = {"servers": [], "approved": set(), "posts": [], "usage_queries": []}
 RULES = [
     {"id": "PAT-001", "rule_type": "pattern", "statement": "Pin the fetch boundary", "severity": "warn",
      "confidence": 0.9, "targets": {}, "provenance": {"source": "ui", "source_kinds": ["doc"]}},
@@ -189,10 +193,51 @@ def handle_mcp(route) -> None:
         return ok({"approved": [], "pending": pending,
                    "ledgers": {"firstUse": {"id": "MCP-FIRST-USE", "present": True, "retired": False},
                                "write": {"id": "MCP-POSTURE-WRITE", "present": True, "retired": False}}})
+    if path == "/mcp/usage" and method == "GET":
+        mcp["usage_queries"].append(urllib.parse.urlparse(req.url).query)
+        if not mcp["servers"]:
+            return ok(usage_view({}) | {"totals": {"calls": 0, "decisions": dc(0, 0, 0), "ran": 0, "errors": 0, "errorRate": None,
+                                                   "p50Ms": None, "p95Ms": None, "p99Ms": None}, "tools": [], "servers": [], "chains": []})
+        return ok(usage_view(urllib.parse.parse_qs(urllib.parse.urlparse(req.url).query)))
     if path == "/mcp/approvals" and method == "POST":
         mcp["approved"].add(body["subject"])
         return ok({"subject": body["subject"], "approved": True, "rulesChanged": ["MCP-FIRST-USE"]})
     return ok({"error": f"mcp rig: no route {method} {path}"}, 404)
+
+
+# Slice S7: the rig's call records, as crew's `GET /mcp/usage` folds them (crew tests/mcp-usage.test.ts
+# pins that fold). c1 unit 1:1 (codex): wt_echo allow 12 ms → wt_note allow 48 ms; unit 2:1
+# (claude, an evaluator): wt_echo allow 20 ms → wt_note denied by engine:mcp-phase-role; r-other (codex):
+# wt_note asks. So 5 calls = 3 allowed, 1 asked, 1 denied; the 3 that ran sort 12 20 48, so nearest-rank
+# p50 = 2nd = 20 ms and p95 = 3rd = 48 ms; the one chain is wt_echo → wt_note, twice, in one run.
+def dc(a, k, d, g=0):
+    return {"allow": a, "ask": k, "deny": d, "guard_error": g}
+
+
+def usage_view(query: dict) -> dict:
+    subject = (query.get("subject") or [None])[0]
+    days = int((query.get("days") or ["7"])[0])
+    echo = {"subject": "mcp:jira/wt_echo", "server": "jira", "tool": "wt_echo", "class": "read", "seats": ["claude", "codex"],
+            "lastCall": "2026-09-28T17:00:00.000Z", "calls": 2, "decisions": dc(2, 0, 0), "ran": 2, "errors": 0,
+            "errorRate": 0, "p50Ms": 12, "p95Ms": 20, "p99Ms": 20}
+    note = {"subject": "mcp:jira/wt_note", "server": "jira", "tool": "wt_note", "class": "destructive", "seats": ["claude", "codex"],
+            "lastCall": "2026-09-28T17:30:00.000Z", "calls": 3, "decisions": dc(1, 1, 1), "ran": 1, "errors": 0,
+            "errorRate": 0, "p50Ms": 48, "p95Ms": 48, "p99Ms": 48}
+    runs = [
+        {"subject": "mcp:jira/wt_note", "seat": "codex", "runId": "r-other", "calls": 1, "decisions": dc(0, 1, 0), "errors": 0, "lastCall": "2026-09-28T17:30:00.000Z"},
+        {"subject": "mcp:jira/wt_note", "seat": "claude", "runId": "c1", "calls": 1, "decisions": dc(0, 0, 1), "errors": 0, "lastCall": "2026-09-28T17:00:01.000Z"},
+        {"subject": "mcp:jira/wt_note", "seat": "codex", "runId": "c1", "calls": 1, "decisions": dc(1, 0, 0), "errors": 0, "lastCall": "2026-09-28T16:00:01.000Z"},
+    ]
+    tools = [note] if subject == "mcp:jira/wt_note" else [echo, note]
+    totals = ({k: note[k] for k in ("calls", "decisions", "ran", "errors", "errorRate", "p50Ms", "p95Ms", "p99Ms")} if tools == [note]
+              else {"calls": 5, "decisions": dc(3, 1, 1), "ran": 3, "errors": 0, "errorRate": 0, "p50Ms": 20, "p95Ms": 48, "p99Ms": 48})
+    daily = [{"day": f"2026-09-{d}", "calls": 0, "decisions": dc(0, 0, 0)} for d in range(21, 28)]
+    daily.append({"day": "2026-09-28", "calls": totals["calls"], "decisions": totals["decisions"]})
+    return {"days": days, "since": "2026-09-21T18:00:00.000Z", "until": "2026-09-28T18:00:00.000Z",
+            "filters": {"subject": subject, "seat": None, "decision": None}, "totals": totals, "tools": tools,
+            "servers": [{"server": "jira", "calls": totals["calls"], "decisions": totals["decisions"], "lastCall": "2026-09-28T17:30:00.000Z"}],
+            "runs": runs if subject is not None else [], "chains": [{"from": "mcp:jira/wt_echo", "to": "mcp:jira/wt_note", "count": 2, "runs": 1}],
+            "daily": daily if days == 7 else daily, "seats": ["claude", "codex"], "skipped": 0}
 
 
 def handle_rules(route) -> None:
@@ -354,6 +399,53 @@ with sync_playwright() as p:
     chips = page.evaluate("() => [...document.querySelectorAll('[data-testid=\"steering-form-applies-chip\"]')].map(c => c.textContent.replace('×', ''))")
     check("subject-picker-fills-applies-to", chips == ["mcp:jira/wt_note"], chips=chips)
     page.screenshot(path=str(SHOTS / f"mcp-tools-steering-{STUDIO_SKIN}.png"))
+
+    # ── 6. Usage (slice S7) ──────────────────────────────────────────────────────
+    page.goto(f"{origin}/mcp", wait_until="domcontentloaded")
+    try:
+        page.wait_for_function("() => (document.querySelector('[data-testid=\"mcp-server-usage\"]')?.textContent ?? '').startsWith('5 calls in 7 d · last used ')", timeout=15000)
+    except Exception:
+        fail("server-row-usage", page.locator("body").inner_text()[:2000])
+    check("server-row-usage", True)
+    page.locator('[data-testid="mcp-view-tab"][data-view="usage"]').click()
+    try:
+        page.get_by_test_id("mcp-usage-tools").wait_for(state="visible", timeout=5000)
+    except Exception:
+        fail("usage-view", page.locator("body").inner_text()[:2000])
+    tiles = page.evaluate("""() => Object.fromEntries(['calls', 'decisions', 'error-rate', 'p50', 'p95'].map(k =>
+        [k, document.querySelector(`[data-testid="mcp-usage-${k}-value"]`)?.textContent]))""")
+    split = page.evaluate("""() => [...document.querySelectorAll('[data-testid="mcp-usage-split"]')].map(s => s.dataset.decision + '=' + s.dataset.count)""")
+    chains = page.evaluate("""() => [...document.querySelectorAll('[data-testid="mcp-usage-chain"]')].map(c => c.dataset.from + '>' + c.dataset.to + ':' + c.dataset.count)""")
+    check("usage-tiles-split-chains",
+          page.url.endswith("/mcp?view=usage")
+          and tiles == {"calls": "5", "decisions": "60%", "error-rate": "0%", "p50": "20 ms", "p95": "48 ms"}
+          and split == ["allow=3", "ask=1", "deny=1", "guard_error=0"]
+          and chains == ["mcp:jira/wt_echo>mcp:jira/wt_note:2"],
+          tiles=tiles, split=split, chains=chains)
+    ov = no_overflow(page)
+    check("usage-no-horizontal-overflow", ov["docW"] <= ov["winW"] and ov["main"] is not None and ov["main"]["sw"] <= ov["main"]["cw"], **ov)
+    page.locator('[data-testid="mcp-usage-tool"][data-subject="mcp:jira/wt_note"] [data-testid="mcp-usage-tool-drill"]').click()
+    try:
+        page.get_by_test_id("mcp-usage-runs").wait_for(state="visible", timeout=5000)
+    except Exception:
+        fail("usage-drill-down", page.get_by_test_id("mcp-usage").inner_text())
+    runs = page.evaluate("""() => [...document.querySelectorAll('[data-testid="mcp-usage-run"]')].map(r => r.dataset.seat + '@' + r.dataset.run)""")
+    check("usage-drill-down", runs == ["codex@r-other", "claude@c1", "codex@c1"]
+          and any("subject=mcp%3Ajira%2Fwt_note" in q for q in mcp["usage_queries"]), runs=runs, queries=mcp["usage_queries"])
+    page.screenshot(path=str(SHOTS / f"mcp-tools-usage-{STUDIO_SKIN}.png"))
+    page.locator('[data-testid="mcp-usage-run"][data-seat="claude"] [data-testid="mcp-usage-run-link"]').click()
+    try:
+        # /runs/c1 is the legacy address; it redirects to the run's project path, keeping the fragment.
+        page.wait_for_function("() => location.pathname.endsWith('/c1') && location.hash === '#governance'", timeout=8000)
+    except Exception:
+        fail("usage-run-link", page.url)
+    gov = page.locator('[data-testid="rail-accordion-governance"]')
+    try:
+        gov.wait_for(state="visible", timeout=8000)
+        expanded = gov.get_attribute("aria-expanded")
+    except Exception:
+        expanded = None
+    check("usage-run-opens-governance", expanded == "true", url=page.url, expanded=expanded)
     browser.close()
 
 report["ok"] = True

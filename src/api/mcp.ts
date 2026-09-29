@@ -41,6 +41,11 @@ export function mcpPath(server?: string | null): string {
   return server ? `/mcp?server=${encodeURIComponent(server)}` : '/mcp';
 }
 
+/** MCP tools → Usage (slice S7). */
+export function mcpUsagePath(): string {
+  return '/mcp?view=usage';
+}
+
 /** `?view=usage` opens the Usage view; anything else is the Servers view. */
 export type McpView = 'servers' | 'usage';
 export function readMcpView(search: string): McpView {

@@ -11,7 +11,7 @@ import { useSkinVariant } from '../hooks/useSkin.js';
 import { useDismissable } from '../hooks/useDismissable.js';
 import { memoriesPath, policiesPath, steeringDashboardPath, STEERING_SECTIONS, STEERING_SECTION_LABELS, type SteeringSection } from '../api/steering.js';
 import { skillsPath } from '../api/skills.js';
-import { mcpPath } from '../api/mcp.js';
+import { mcpPath, mcpUsagePath } from '../api/mcp.js';
 import { testingLaunchPath, testingPath } from '../api/testing.js';
 import { AppChrome } from './AppChrome.js';
 import { isChatRun } from './ChatsPage.js';
@@ -570,6 +570,16 @@ function McpRailRows({ navigate }: { navigate: (p: string) => void }): React.Rea
         style={{ color: 'var(--ink-muted)' }}
       >
         Servers
+      </button>
+      <button
+        type="button"
+        role="menuitem"
+        data-testid="rail-mcp-usage"
+        onClick={() => navigate(mcpUsagePath())}
+        className="w-full text-left px-6 py-1.5 rounded text-xs font-mono transition-colors hover:bg-surface-raised hover:text-ink-body focus-visible:outline-none focus-visible:bg-surface-raised focus-visible:text-ink-body"
+        style={{ color: 'var(--ink-muted)' }}
+      >
+        Usage
       </button>
     </div>
   );

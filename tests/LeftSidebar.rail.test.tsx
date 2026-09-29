@@ -501,6 +501,20 @@ describe('accordion contents (§3.3)', () => {
     expect(expandedKeys()).toEqual(['skills']);
   });
 
+  it('MCP tools expands to its Servers and Usage rows (DES-MCP-TOOLS-001 §7, slice S7)', async () => {
+    const navigate = vi.fn();
+    rail({ pathname: '/mcp', navigate });
+    await screen.findByRole('button', { name: 'wicked-studio' });
+
+    const mcp = screen.getByTestId('rail-heading-mcp');
+    expect(mcp.getAttribute('aria-expanded')).toBe('true');
+    expect(within(mcp).getAllByRole('menuitem').map((r) => r.textContent)).toEqual(['Servers', 'Usage']);
+    fireEvent.click(within(mcp).getByTestId('rail-mcp-usage'));
+    expect(navigate).toHaveBeenCalledWith('/mcp?view=usage');
+    fireEvent.click(within(mcp).getByTestId('rail-mcp-servers'));
+    expect(navigate).toHaveBeenLastCalledWith('/mcp');
+  });
+
   it('Evals expands to the "Run evals" shortcut row, navigating to the runner; the route expands it', async () => {
     const navigate = vi.fn();
     rail({ pathname: '/testing/evals', navigate });
