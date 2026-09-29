@@ -455,8 +455,11 @@ function AddServerPanel({ onSaved, onClose, mode, navigate }: {
     // What the operator asked about. The form stays editable while this runs (a late answer is
     // dropped by key, not by freezing the form), so anything written back after an await must
     // check that the form still says the same thing.
-    const asked = formKey;
-    const askedValue = authValue;
+    // `asked` is re-pointed after a successful secret write, because that write deliberately
+    // changes the form (it fills `auth.ref` and clears the value) — from then on THAT is the
+    // form this request speaks for.
+    let asked = formKey;
+    let askedValue = authValue;
     const stillMine = (): boolean =>
       seq === previewSeq.current && formKeyRef.current === asked && authValueRef.current === askedValue;
     try {
@@ -477,11 +480,15 @@ function AddServerPanel({ onSaved, onClose, mode, navigate }: {
         setSecretNote(`Stored the secret for ${name}. The registry keeps only ${put.ref}; no worker ever sees the value.`);
       }
       const key = JSON.stringify(bodyWith(ref));
+      asked = key;
+      if (authValue !== '') askedValue = '';
       const answer = await mcpApi.preview(JSON.parse(key) as ReturnType<typeof body>);
       if (seq === previewSeq.current) setHeld({ key, preview: answer });
     } catch (e) {
-      // Same rule for the failure: a stale request's error is not this form's error.
-      if (seq === previewSeq.current) setError(msg(e));
+      // Same rule for the failure (codex review round 3 on #387): a rejection belongs to the form
+      // it was asked about. "a secret is at least 8 characters" must not land on a form whose
+      // secret the operator has already lengthened, or on another server entirely.
+      if (stillMine()) setError(msg(e));
     } finally {
       if (seq === previewSeq.current) setBusy(false);
     }

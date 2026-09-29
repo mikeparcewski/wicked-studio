@@ -439,6 +439,41 @@ describe('MCP tools: add an existing server', () => {
     expect(within(panel).queryByTestId('mcp-add-preview-result')).toBeNull();
   });
 
+  it("a refused write's message does not land on a form the operator already fixed", async () => {
+    // codex review round 3 on #387: the success path dropped stale writes but the FAILURE path
+    // only checked the sequence, so a slow rejection painted "a secret is at least 8 characters"
+    // onto a form whose secret had already been lengthened.
+    wire();
+    const base = apiFetch.getMockImplementation() as (p: string, i?: RequestInit) => Promise<unknown>;
+    let rejectWrite: () => void = () => undefined;
+    let started = false;
+    apiFetch.mockImplementation((p: string, i?: RequestInit) => {
+      if (p === '/mcp/servers/tracker/secret' && !started) {
+        started = true;
+        return new Promise((_res, rej) => { rejectWrite = () => rej(new ApiError(400, 'a secret is at least 8 characters', 'invalid_body')); });
+      }
+      return base(p, i);
+    });
+    render(<McpToolsPage navigate={navigate} search="" />);
+    fireEvent.click(await screen.findByTestId('mcp-add-open'));
+    const panel = screen.getByTestId('mcp-add-panel');
+    fireEvent.change(within(panel).getByTestId('mcp-add-kind'), { target: { value: 'rest' } });
+    fireEvent.change(within(panel).getByTestId('mcp-add-name'), { target: { value: 'tracker' } });
+    fireEvent.change(within(panel).getByTestId('mcp-add-target'), { target: { value: 'https://api.example.com/v1' } });
+    fireEvent.change(within(panel).getByTestId('mcp-add-openapi-url'), { target: { value: 'https://api.example.com/openapi.json' } });
+    fireEvent.change(within(panel).getByTestId('mcp-add-auth-into'), { target: { value: 'Authorization' } });
+    fireEvent.change(within(panel).getByTestId('mcp-add-auth-value'), { target: { value: 'short' } });
+    fireEvent.click(within(panel).getByTestId('mcp-add-preview'));
+    await waitFor(() => expect(started).toBe(true));
+
+    // The operator lengthens the secret before the rejection arrives.
+    fireEvent.change(within(panel).getByTestId('mcp-add-auth-value'), { target: { value: 'a-long-enough-secret' } });
+    rejectWrite();
+    await waitFor(() => expect((within(panel).getByTestId('mcp-add-preview') as HTMLButtonElement).disabled).toBe(false));
+    expect(within(panel).queryByTestId('mcp-add-error')).toBeNull();
+    expect((within(panel).getByTestId('mcp-add-auth-value') as HTMLInputElement).value).toBe('a-long-enough-secret');
+  });
+
   it('a late preview answer for an older form is never shown or saved', async () => {
     wire();
     const base = apiFetch.getMockImplementation() as (p: string, i?: RequestInit) => Promise<unknown>;
