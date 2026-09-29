@@ -388,6 +388,17 @@ npm publish dates. Every version listed here exists on
   screen and the panel's height never goes negative on a short viewport. The Chat empty-state helper
   now names the #327 scope vocabulary (System / Everything / Project repos / Choose repos) instead
   of "a repo list, or unscoped".
+- **Registry lag no longer costs the release its GitHub Release page (#331).** On `v0.5.14` npm
+  accepted the publish, the post-publish "The registry can actually serve it" probe 404'd through
+  its whole 60 s window, and `Create the GitHub Release from CHANGELOG` was skipped — then the
+  same version resolved about a minute later and the release had to be cut by hand. The probe now
+  backs off over ~6 minutes (10+15+20+30+45+60+60+60+60 s across 10 attempts) and, if the registry
+  is still lagging, emits a `::warning::` and exits 0 instead of failing the job: the publish is
+  what gates the release page, and the probe reports whether the version was servable yet.
+  `tests/releaseWorkflow.test.ts` pins the order of publish → probe → release, that the probe
+  carries no non-zero exit and no `if:` guard on the release step, and that the backoff covers at
+  least five minutes. Checked for the same shape in wicked-ci's reusable `node-release.yml`: it has
+  no serve probe and no GitHub Release step, so nothing to fix there.
 
 ## [0.5.14] — 2026-09-23
 

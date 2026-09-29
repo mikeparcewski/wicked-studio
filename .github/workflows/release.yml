@@ -66,24 +66,40 @@ jobs:
       - name: Publish to npm (trusted publisher + provenance)
         run: npm publish --access public --provenance
 
+      # Registry lag is not a publish failure (studio#331): on v0.5.14 `npm publish` succeeded, this
+      # probe 404'd through its 60 s window, and the GitHub Release was skipped — then the same
+      # version resolved a minute later and the release had to be cut by hand. So the probe now
+      # backs off over ~6 minutes and, if the registry is still lagging, reports a WARNING and
+      # exits 0. The release page is advertised for a version npm accepted; the probe says whether
+      # it was servable yet.
       - name: The registry can actually serve it
+        id: serve_probe
         run: |
           TAG_VERSION="${GITHUB_REF_NAME#v}"
-          for i in 1 2 3 4 5 6; do
+          # ~6 min total: 10+15+20+30+45+60+60+60+60 = 360 s of waiting across 10 attempts.
+          BACKOFF="10 15 20 30 45 60 60 60 60"
+          attempt=1
+          for wait in $BACKOFF ""; do
             if npm view "wicked-studio@${TAG_VERSION}" version; then
-              echo "  ok — obtainable from the registry"
+              echo "  ok — obtainable from the registry (attempt ${attempt})"
+              echo "served=true" >> "$GITHUB_OUTPUT"
               exit 0
             fi
-            echo "  not visible yet (attempt $i), waiting…"
-            sleep 10
+            if [ -z "$wait" ]; then
+              break
+            fi
+            echo "  not visible yet (attempt ${attempt}), waiting ${wait}s…"
+            sleep "$wait"
+            attempt=$((attempt + 1))
           done
-          echo "::error::wicked-studio@${TAG_VERSION} is still not resolvable after publish (FINDING-096)."
-          exit 1
+          echo "served=false" >> "$GITHUB_OUTPUT"
+          echo "::warning::wicked-studio@${TAG_VERSION} was published but is still not resolvable after ~6 min of retries (FINDING-096 registry lag). The GitHub Release is still cut; verify \`npm view wicked-studio@${TAG_VERSION} version\` before announcing."
 
-      # Cut the GitHub Release only after npm publish AND the registry-serve check pass — so a
-      # release is advertised only for a version the registry can actually serve, never a tag whose
-      # publish failed. This is the step studio lacked: it published to npm every release but never
-      # created a GitHub Release, so the Releases page stayed empty while npm shipped through
+      # Cut the GitHub Release after npm publish succeeds. The registry-serve probe above is a
+      # report, not a gate (studio#331): a publish npm accepted but serves late must not leave the
+      # Releases page empty. A failed *publish* still stops here, because the step before this one
+      # is the publish itself. This is the step studio lacked: it published to npm every release but
+      # never created a GitHub Release, so the Releases page stayed empty while npm shipped through
       # v0.4.14. Idempotent — an existing release (e.g. a hand-backfilled one) is updated in place.
       - name: Create the GitHub Release from CHANGELOG
         env:
