@@ -109,7 +109,7 @@ describe('the Amend intent lever', () => {
 
 describe('the run head carries the amendment (the run record, not an event fold)', () => {
   const session = (rows: unknown): AgentSession =>
-    ({ ...makeView(RUN, 'executing').session, intent_amendments: rows } as unknown as AgentSession);
+    ({ ...makeView({ id: RUN, status: 'executing' }).session, intent_amendments: rows } as unknown as AgentSession);
 
   it('renders each amendment with its unit and time', () => {
     render(
@@ -128,7 +128,7 @@ describe('the run head carries the amendment (the run record, not an event fold)
     const { container } = render(<RunIntentAmendments session={session([])} />);
     expect(container.firstChild).toBeNull();
     cleanup();
-    const older = render(<RunIntentAmendments session={makeView(RUN, 'executing').session} />);
+    const older = render(<RunIntentAmendments session={makeView({ id: RUN, status: 'executing' }).session} />);
     expect(older.container.firstChild).toBeNull();
   });
 

@@ -1123,8 +1123,8 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
         ) : escalationGate && lift === null ? (
           <p className="wk-gate-hint">
             {move?.kind === 'send-back'
-              ? 'Send back rewinds to the last creator phase with the note · Retry re-runs the failed unit · Reject cancels the run · Cancel run stops the run without a gate decision'
-              : 'Retry re-runs the failed unit · Request changes rewinds to the last creator phase (note required) · Reject cancels the run · Cancel run stops the run without a gate decision'}
+              ? 'Send back rewinds to the last creator phase with the note · Retry re-runs the failed unit · Amend intent approves and changes what every later phase is judged against (note required) · Reject cancels the run · Cancel run stops the run without a gate decision'
+              : 'Retry re-runs the failed unit · Request changes rewinds to the last creator phase (note required) · Amend intent approves and changes what every later phase is judged against (note required) · Reject cancels the run · Cancel run stops the run without a gate decision'}
           </p>
         ) : escalationGate && lift !== null ? (
           <p className="wk-gate-hint">
