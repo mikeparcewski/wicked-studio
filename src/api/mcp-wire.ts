@@ -1,13 +1,16 @@
 /**
  * The MCP tools wire (DES-MCP-TOOLS-001 §5, §8; crew slices S2 + S6, `wicked-crew-api-types`
- * 0.58.0 + 0.63.0), hand-mirrored VERBATIM from the contract package because studio's installed
+ * 0.58.0 + 0.63.0 + 0.64.0), hand-mirrored VERBATIM from the contract package because studio's installed
  * `wicked-crew-api-types` (0.40.0) predates it. TEMPORARY, like `./skills-wire.ts`: delete this
- * file and re-export from `wicked-crew-api-types` the moment studio bumps to >= 0.63.0.
+ * file and re-export from `wicked-crew-api-types` the moment studio bumps to >= 0.64.0.
  * Types only: nothing here runs.
  */
 
-/** How crew reaches an upstream MCP server. */
-export type McpUpstreamKind = 'mcp-stdio' | 'mcp-http';
+/**
+ * How crew reaches an upstream: an MCP server over stdio or streamable HTTP, or a plain REST API
+ * wrapped as tools from its OpenAPI document (`rest`, api-types 0.64.0).
+ */
+export type McpUpstreamKind = 'mcp-stdio' | 'mcp-http' | 'rest';
 /**
  * A tool's class, from its own `tools/list` annotations (never from a carrier): `read` when
  * `readOnlyHint` is true; else `destructive` unless `destructiveHint` is false; else `write`. A tool
@@ -39,7 +42,7 @@ export interface McpToolAnnotations {
  * Where a server's secret comes from and where crew injects it. The registry stores this
  * reference only, never a value. `ref` is `keychain:wicked-mcp/<name>` (written by
  * `PUT /mcp/servers/:name/secret`) or `env:<NAME>` (the daemon's env). An `mcp-stdio` server gets
- * the value in env variable `env`; an `mcp-http` server in header `header`, after `prefix`.
+ * the value in env variable `env`; an `mcp-http` or `rest` server in header `header`, after `prefix`.
  */
 export interface McpAuthConfig {
   ref: string;
@@ -48,7 +51,13 @@ export interface McpAuthConfig {
   prefix?: string;
 }
 
-/** `POST /mcp/servers/preview`. `mcp-stdio` takes `command` (+ `args`); `mcp-http` takes `url`. */
+/**
+ * `POST /mcp/servers/preview`. `mcp-stdio` takes `command` (+ `args`); `mcp-http` takes `url`.
+ * `rest` takes `url`, the base URL every call of the API is pinned to (its scheme, host and port,
+ * and its path as a prefix), plus its OpenAPI 3 document: `openapiUrl` (fetched by crew) or
+ * `openapi` (the document itself, pasted), never both. `operations` picks which operations become
+ * tools (by `operationId` or tool name); absent = all of them.
+ */
 export interface McpServerConfigBody {
   /** 1–63 of `a-z 0-9 _ -`; the `<server>` of the subject `mcp:<server>/<tool>`. */
   name: string;
@@ -57,6 +66,38 @@ export interface McpServerConfigBody {
   args?: string[];
   url?: string;
   auth?: McpAuthConfig | null;
+  /** `rest` only: where crew fetches the OpenAPI 3 document (JSON or YAML). */
+  openapiUrl?: string;
+  /** `rest` only: the OpenAPI 3 document itself (instead of `openapiUrl`); at most 1 MB as JSON. */
+  openapi?: Record<string, unknown>;
+  /** `rest` only: the operations to wrap, by `operationId` or tool name; absent = all. */
+  operations?: string[];
+}
+
+/**
+ * How a `rest` tool turns its arguments into one HTTP request (api-types 0.64.0). The arguments are
+ * an ALLOWLIST: an argument that no map names is dropped, never sent (its name is disclosed in the
+ * result's `_meta["wicked/rest"].droppedArgs`). The request goes only to the server's base URL: a
+ * request that would leave its scheme, host, port or base path, or a redirect to another host, is
+ * refused before (or instead of) being followed, and recorded as a `guard_error`.
+ */
+export interface McpRestMapping {
+  method: 'GET' | 'HEAD' | 'OPTIONS' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+  /** The OpenAPI path, e.g. `/issues/{id}`; joined onto the base URL's path. */
+  pathTemplate: string;
+  /** argument → `{variable}` of `pathTemplate`. */
+  pathMap: Record<string, string>;
+  /** argument → query parameter. */
+  queryMap: Record<string, string>;
+  /** argument → request header (never the auth header, `Host`, `Cookie` or a hop-by-hop header). */
+  headerMap: Record<string, string>;
+  /** argument → top-level key of the JSON request body; `null` when the body is one argument or none. */
+  bodyMap: Record<string, string> | null;
+  /** The argument that is the whole JSON request body; `null` when the body is mapped by key or absent. */
+  bodyArg: string | null;
+  /** Every argument that is sent: the union of the maps and `bodyArg`. */
+  argAllowlist: string[];
+  timeoutMs: number;
 }
 
 export interface McpHealth {
@@ -69,6 +110,8 @@ export interface McpHealth {
 
 export interface McpTool {
   name: string;
+  /** A `rest` tool's request mapping (api-types 0.64.0); `null` for an MCP server's tool. */
+  rest?: McpRestMapping | null;
   /** The policy token: `mcp:<server>/<tool>`. */
   subject: string;
   description: string | null;
@@ -93,6 +136,10 @@ export interface McpServer {
   args: string[];
   url: string | null;
   auth: McpAuthConfig | null;
+  /** `rest` only (api-types 0.64.0): the OpenAPI URL, `null` when the document was pasted. */
+  openapiUrl?: string | null;
+  /** `rest` only: the operations that were picked; `null` = all. */
+  operations?: string[] | null;
   authState: McpAuthState;
   enabled: boolean;
   health: McpHealth;
@@ -133,6 +180,8 @@ export interface McpToolDiff {
 
 export interface McpPreviewTool {
   name: string;
+  /** A `rest` tool's request mapping (api-types 0.64.0); `null` for an MCP server's tool. */
+  rest?: McpRestMapping | null;
   subject: string;
   description: string | null;
   annotations: McpToolAnnotations | null;
@@ -149,10 +198,21 @@ export interface McpPreviewTool {
 export interface McpPreviewResponse {
   previewHash: string;
   expiresAt: string;
-  server: { name: string; kind: McpUpstreamKind; command: string | null; args: string[]; url: string | null; auth: McpAuthConfig | null };
+  server: {
+    name: string;
+    kind: McpUpstreamKind;
+    command: string | null;
+    args: string[];
+    url: string | null;
+    auth: McpAuthConfig | null;
+    openapiUrl?: string | null;
+    operations?: string[] | null;
+  };
   serverInfo: { name: string; version: string } | null;
   tools: McpPreviewTool[];
   diff: McpToolDiff | null;
+  /** `rest` only (api-types 0.64.0): operations that could not be wrapped, each with why. */
+  skipped?: string[];
   /**
    * Each tool's decision per phase role × seat × mode under the current policies and approvals,
    * judged as if this preview were saved now (api-types 0.63.0); see `withdrawOnSave`. `null` when

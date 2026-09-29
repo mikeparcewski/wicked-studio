@@ -11,8 +11,8 @@
   "studioVersion": "0.5.14",
   "counts": {
     "files": 172,
-    "occurrences": 1705,
-    "static": 1489,
+    "occurrences": 1708,
+    "static": 1492,
     "dynamic": 72,
     "computed": 7
   },
@@ -3977,6 +3977,12 @@
       ]
     },
     {
+      "testId": "mcp-add-openapi-url",
+      "files": [
+        "src/components/McpToolsPage.tsx"
+      ]
+    },
+    {
       "testId": "mcp-add-panel",
       "files": [
         "src/components/McpToolsPage.tsx"
@@ -4001,7 +4007,19 @@
       ]
     },
     {
+      "testId": "mcp-add-rest-note",
+      "files": [
+        "src/components/McpToolsPage.tsx"
+      ]
+    },
+    {
       "testId": "mcp-add-save",
+      "files": [
+        "src/components/McpToolsPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-add-skipped",
       "files": [
         "src/components/McpToolsPage.tsx"
       ]
