@@ -386,11 +386,27 @@ function ServerRow({ server, policies, usage, open, onToggle, mode, busy, onAct,
  * Add existing / Wrap an API: paste a command or URL (or a REST API's base URL and its OpenAPI URL)
  * → preview (tools + decisions if saved now) → save that preview.
  */
-function AddServerPanel({ onSaved, onClose, mode, navigate }: {
+/**
+ * What a typed header scheme sends. The broker builds the header as `${prefix}${secret}`, and a
+ * scheme is separated from its credential by ONE space — but a trailing space in a text box is
+ * invisible, so typing the natural `Bearer` would send `Bearertoken` and the API would still 401
+ * (codex review round 4 on #387). A scheme is therefore trimmed and given exactly one space,
+ * unless it ends in a separator that takes none (`token=abc`, `x:abc`).
+ */
+export function schemePrefix(raw: string): string {
+  const scheme = raw.trim();
+  if (scheme === '') return '';
+  return /[=:]$/.test(scheme) ? scheme : `${scheme} `;
+}
+
+function AddServerPanel({ onSaved, onClose, mode, navigate, saved }: {
   onSaved: (name: string) => void;
   onClose: () => void;
   mode: McpRunMode;
   navigate: (p: string) => void;
+  /** The servers already registered — a pasted secret for one of these REPLACES its live
+   *  credential, which its running calls use from the next call, so it needs consent. */
+  saved: ReadonlyArray<string>;
 }): React.ReactElement {
   const [name, setName] = useState('');
   const [kind, setKind] = useState<McpUpstreamKind>('mcp-stdio');
@@ -399,6 +415,21 @@ function AddServerPanel({ onSaved, onClose, mode, navigate }: {
   const [openapiUrl, setOpenapiUrl] = useState('');
   const [authRef, setAuthRef] = useState('');
   const [authEnv, setAuthEnv] = useState('');
+  /**
+   * The scheme a header-injected secret rides behind (`McpAuthConfig.prefix`, honoured by the
+   * broker as `${prefix}${secret}`). Without it every `Authorization: Bearer <token>` API was
+   * sent the bare token and answered 401.
+   */
+  const [authPrefix, setAuthPrefix] = useState('');
+  /**
+   * A pasted secret VALUE (§7: "Paste a command, URL or OpenAPI URL and a secret"). It is written
+   * to the OS keychain by `PUT /mcp/servers/:name/secret` before the preview and then dropped from
+   * this form: crew refuses to probe an authenticated server unauthenticated, so a `keychain:`
+   * reference that resolves to nothing cannot be previewed, let alone saved.
+   */
+  const [authValue, setAuthValue] = useState('');
+  const [secretNote, setSecretNote] = useState<string | null>(null);
+  const [replaceOk, setReplaceOk] = useState(false);
   /** The preview, bound to the exact request it answered (`key`): only shown and saved while the
    *  form still says the same thing, so a late answer to an older request can never be saved. */
   const [held, setHeld] = useState<{ key: string; preview: McpPreviewResponse } | null>(null);
@@ -406,34 +437,84 @@ function AddServerPanel({ onSaved, onClose, mode, navigate }: {
   const [error, setError] = useState<string | null>(null);
 
   const nameOk = /^[a-z0-9_-]{1,63}$/.test(name);
-  const ready = nameOk && target.trim() !== '' && (kind !== 'rest' || openapiUrl.trim() !== '') && (authRef.trim() === '' || /^(env|keychain):/.test(authRef.trim()));
+  /** A pasted secret for a name already registered overwrites THAT server's live credential. */
+  const replacesLiveSecret = authValue !== '' && saved.includes(name);
+  const ready = nameOk && target.trim() !== '' && (kind !== 'rest' || openapiUrl.trim() !== '')
+    // A pasted value decides the reference (crew answers it), so a half-typed reference must not
+    // block the secret that replaces it (codex review round 6 on #387).
+    && (authValue !== '' || authRef.trim() === '' || /^(env|keychain):/.test(authRef.trim()))
+    && (!replacesLiveSecret || replaceOk);
 
-  const body = () => {
+  /** The request for one secret reference — the state's, or the one the keychain write just gave. */
+  const bodyWith = (ref: string) => {
     const parts = target.trim().split(/\s+/);
-    const auth = authRef.trim() === '' ? null : { ref: authRef.trim(), ...(authEnv.trim() !== '' ? (kind === 'mcp-stdio' ? { env: authEnv.trim() } : { header: authEnv.trim() }) : {}) };
+    const into = authEnv.trim() !== '' ? (kind === 'mcp-stdio' ? { env: authEnv.trim() } : { header: authEnv.trim() }) : {};
+    // A prefix belongs to a HEADER injection only; an env-injected secret is the value itself.
+    const scheme = kind !== 'mcp-stdio' && authPrefix.trim() !== '' ? { prefix: schemePrefix(authPrefix) } : {};
+    const auth = ref === '' ? null : { ref, ...into, ...scheme };
     if (kind === 'mcp-stdio') return { name, kind, command: parts[0] ?? '', args: parts.slice(1), auth };
     if (kind === 'rest') return { name, kind, url: target.trim(), openapiUrl: openapiUrl.trim(), auth };
     return { name, kind, url: target.trim(), auth };
   };
+  const body = () => bodyWith(authRef.trim());
 
   const previewSeq = useRef(0);
   const formKey = JSON.stringify(body());
+  /** The LIVE form key, readable after an await (the closure's copy is the one it started with). */
+  const formKeyRef = useRef(formKey);
+  formKeyRef.current = formKey;
+  /** The LIVE secret value. It is deliberately NOT in `formKey` — the key is what gets sent, and
+   *  the value never is — so the stale-write guard has to read it separately. */
+  const authValueRef = useRef(authValue);
+  authValueRef.current = authValue;
   const preview = held !== null && held.key === formKey ? held.preview : null;
-  const setPreview = (p: null): void => { setHeld(p); };
+  /** Any edit drops the held preview AND the last failure: neither speaks for the form now. */
+  const setPreview = (p: null): void => { setHeld(p); setError(null); };
 
   const doPreview = async (): Promise<void> => {
     setBusy(true);
     setError(null);
     setHeld(null);
-    const key = formKey;
     const seq = ++previewSeq.current;
+    // What the operator asked about. The form stays editable while this runs (a late answer is
+    // dropped by key, not by freezing the form), so anything written back after an await must
+    // check that the form still says the same thing.
+    // `asked` is re-pointed after a successful secret write, because that write deliberately
+    // changes the form (it fills `auth.ref` and clears the value) — from then on THAT is the
+    // form this request speaks for.
+    let asked = formKey;
+    let askedValue = authValue;
+    const stillMine = (): boolean =>
+      seq === previewSeq.current && formKeyRef.current === asked && authValueRef.current === askedValue;
     try {
+      let ref = authRef.trim();
+      if (authValue !== '') {
+        // The keychain write comes FIRST and its failure stops here: crew probes with the secret
+        // and refuses to probe an authenticated server without one, so previewing before the
+        // value is stored can only fail. The value is never logged, echoed or kept in the form.
+        const put = await mcpApi.putSecret(name, authValue);
+        // The form moved on while the keychain was written (codex review on #387). The secret IS
+        // stored — that is what the operator asked for — but stamping ITS reference onto a form
+        // now pointing at another server would send one server's credential to another. Nothing
+        // is written back, and the retargeted form previews on its own terms.
+        if (!stillMine()) return;
+        ref = put.ref;
+        setAuthRef(put.ref);
+        setAuthValue('');
+        setSecretNote(`Stored the secret for ${name}. The registry keeps only ${put.ref}; no worker ever sees the value.`);
+      }
+      const key = JSON.stringify(bodyWith(ref));
+      asked = key;
+      if (authValue !== '') askedValue = '';
       const answer = await mcpApi.preview(JSON.parse(key) as ReturnType<typeof body>);
       if (seq === previewSeq.current) setHeld({ key, preview: answer });
     } catch (e) {
-      setError(msg(e));
+      // Same rule for the failure (codex review round 3 on #387): a rejection belongs to the form
+      // it was asked about. "a secret is at least 8 characters" must not land on a form whose
+      // secret the operator has already lengthened, or on another server entirely.
+      if (stillMine()) setError(msg(e));
     } finally {
-      setBusy(false);
+      if (seq === previewSeq.current) setBusy(false);
     }
   };
 
@@ -465,7 +546,7 @@ function AddServerPanel({ onSaved, onClose, mode, navigate }: {
       <div className="flex flex-wrap items-end gap-2">
         <label className="flex flex-col gap-1 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
           Name
-          <input data-testid="mcp-add-name" value={name} onChange={(e) => { setName(e.target.value); setPreview(null); }} placeholder="jira" spellCheck={false} className={`${input} w-32`} style={{ ...inputStyle, borderColor: name === '' || nameOk ? undefined : 'var(--status-fail)' }} />
+          <input data-testid="mcp-add-name" value={name} onChange={(e) => { setName(e.target.value); setReplaceOk(false); setPreview(null); }} placeholder="jira" spellCheck={false} className={`${input} w-32`} style={{ ...inputStyle, borderColor: name === '' || nameOk ? undefined : 'var(--status-fail)' }} />
         </label>
         <label className="flex flex-col gap-1 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
           Kind
@@ -497,16 +578,59 @@ function AddServerPanel({ onSaved, onClose, mode, navigate }: {
           <input data-testid="mcp-add-auth-ref" value={authRef} onChange={(e) => { setAuthRef(e.target.value); setPreview(null); }} placeholder="env:JIRA_TOKEN" spellCheck={false} className={`${input} w-48`} style={inputStyle} />
         </label>
         <label className="flex flex-col gap-1 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
+          Secret value (optional)
+          <input
+            data-testid="mcp-add-auth-value"
+            type="password"
+            autoComplete="off"
+            value={authValue}
+            onChange={(e) => { setAuthValue(e.target.value); setReplaceOk(false); setSecretNote(null); setPreview(null); }}
+            placeholder="paste it once"
+            spellCheck={false}
+            className={`${input} w-44`}
+            style={inputStyle}
+          />
+        </label>
+        <label className="flex flex-col gap-1 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
           {kind === 'mcp-stdio' ? 'Injected as env var' : 'Injected as header'}
           <input data-testid="mcp-add-auth-into" value={authEnv} onChange={(e) => { setAuthEnv(e.target.value); setPreview(null); }} placeholder={kind === 'mcp-stdio' ? 'JIRA_TOKEN' : 'Authorization'} spellCheck={false} className={`${input} w-40`} style={inputStyle} />
         </label>
+        {kind !== 'mcp-stdio' && (
+          <label className="flex flex-col gap-1 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
+            Behind scheme
+            <input data-testid="mcp-add-auth-prefix" value={authPrefix} onChange={(e) => { setAuthPrefix(e.target.value); setPreview(null); }} placeholder="Bearer" spellCheck={false} className={`${input} w-28`} style={inputStyle} />
+          </label>
+        )}
+        {kind !== 'mcp-stdio' && authEnv.trim() !== '' && (
+          // The header as it will be sent, spacing included — a trailing space is invisible in
+          // the box, and `Bearertoken` 401s exactly like no header at all.
+          <p data-testid="mcp-add-auth-shape" className="font-mono text-[10px]" style={{ color: 'var(--ink-dim)' }}>
+            {authEnv.trim()}: {schemePrefix(authPrefix)}&lt;the secret&gt;
+          </p>
+        )}
         <p className="max-w-[22rem] text-[10px]" style={{ color: 'var(--ink-dim)' }}>
-          The registry keeps the reference only. The broker resolves it on each call and no worker ever sees the value.
+          A pasted value is written to the OS keychain when you preview, and the registry keeps the reference only. The broker resolves it on each call, sends it {kind === 'mcp-stdio' ? 'in that env var' : 'in that header behind that scheme'}, and no worker ever sees the value.
         </p>
         <button type="button" data-testid="mcp-add-preview" disabled={!ready || busy} onClick={() => void doPreview()} className="ml-auto rounded px-3 py-1 text-[11px] font-semibold disabled:opacity-40" style={{ color: 'var(--accent)', border: BORDER }}>
           {busy && preview === null ? 'Probing…' : 'Preview'}
         </button>
       </div>
+      {replacesLiveSecret && (
+        // "Nothing is registered until you save that exact preview" is true of the REGISTRY, not
+        // of the keychain: the secret is written when you preview, and `s8notes`'s running calls
+        // use the new one from their next call. Said before it happens, not after.
+        <label data-testid="mcp-add-replace-secret" className="flex items-start gap-2 rounded px-2 py-1 text-[10px]" style={{ background: 'var(--status-gate-dim)', color: 'var(--status-gate)' }}>
+          <input type="checkbox" data-testid="mcp-add-replace-secret-ok" checked={replaceOk} onChange={(e) => setReplaceOk(e.target.checked)} />
+          <span>
+            {name} is already registered. Previewing writes this secret over the one {name} uses now,
+            before anything is saved — its next call, and any run in flight, uses the new value. The old
+            value cannot be recovered.
+          </span>
+        </label>
+      )}
+      {secretNote !== null && (
+        <p data-testid="mcp-add-secret-note" className="text-[10px]" style={{ color: 'var(--status-done)' }}>{secretNote}</p>
+      )}
       {error !== null && (
         <p data-testid="mcp-add-error" className="rounded px-2 py-1 text-[10px]" style={{ background: 'var(--status-fail-dim)', color: 'var(--status-fail)' }}>{error}</p>
       )}
@@ -698,6 +822,7 @@ export function McpToolsPage({ navigate, search }: { navigate: (p: string) => vo
           <AddServerPanel
             mode={mode}
             navigate={navigate}
+            saved={loaded.servers.servers.map((sv) => sv.name)}
             onClose={() => setAdding(false)}
             onSaved={(name) => {
               setAdding(false);

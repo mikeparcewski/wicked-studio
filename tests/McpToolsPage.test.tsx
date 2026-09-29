@@ -5,7 +5,7 @@ const apiFetch = vi.fn();
 vi.mock('../src/api/client.js', () => ({ apiFetch: (...a: unknown[]) => apiFetch(...a) }));
 
 import { ApiError } from '../src/api/errors.js';
-import { McpToolsPage } from '../src/components/McpToolsPage.js';
+import { McpToolsPage, schemePrefix } from '../src/components/McpToolsPage.js';
 import { approvals, policies, preview, server, serversResponse } from './mcpFixtures.js';
 
 /**
@@ -43,6 +43,10 @@ function wire(over: { servers?: () => Promise<unknown> } = {}): void {
     }
     if (path === '/mcp/servers/preview') return Promise.resolve(preview((body as { name: string }).name));
     if (path === '/mcp/servers' && method === 'POST') return Promise.resolve({ ...serversResponse().servers[0], name: 'jira' });
+    if (path.startsWith('/mcp/servers/') && path.endsWith('/secret') && method === 'PUT') {
+      const name = path.slice('/mcp/servers/'.length, -'/secret'.length);
+      return Promise.resolve({ ref: `keychain:wicked-mcp/${name}`, set: true });
+    }
     if (path.startsWith('/mcp/servers/') && method === 'DELETE') return Promise.resolve({ removed: 'fx' });
     return Promise.reject(new Error(`unexpected ${method} ${path}`));
   });
@@ -251,6 +255,321 @@ describe('MCP tools: add an existing server', () => {
       name: 'tracker', kind: 'rest', url: 'https://api.example.com/v1', openapiUrl: 'https://api.example.com/openapi.json', auth: { ref: 'env:TRACKER_TOKEN', header: 'Authorization' },
     });
     expect(within(result).getByTestId('mcp-add-skipped').textContent).toContain('PUT /files: its request body is not JSON');
+  });
+
+  it('a pasted secret is stored in the keychain BEFORE the preview, so a first-time server can be previewed at all', async () => {
+    // Crew refuses to probe an authenticated server unauthenticated (registry.ts: "auth.ref …
+    // resolves to no secret: set it, then try again"), and `PUT /mcp/servers/:name/secret` is the
+    // only way to set a `keychain:` reference. Without a value field the panel could offer a
+    // reference it had no way to fill, so every authenticated server failed at Preview.
+    wire();
+    render(<McpToolsPage navigate={navigate} search="" />);
+    fireEvent.click(await screen.findByTestId('mcp-add-open'));
+    const panel = screen.getByTestId('mcp-add-panel');
+    fireEvent.change(within(panel).getByTestId('mcp-add-kind'), { target: { value: 'rest' } });
+    fireEvent.change(within(panel).getByTestId('mcp-add-name'), { target: { value: 'tracker' } });
+    fireEvent.change(within(panel).getByTestId('mcp-add-target'), { target: { value: 'https://api.example.com/v1' } });
+    fireEvent.change(within(panel).getByTestId('mcp-add-openapi-url'), { target: { value: 'https://api.example.com/openapi.json' } });
+    const value = within(panel).getByTestId('mcp-add-auth-value') as HTMLInputElement;
+    expect(value.type).toBe('password'); // never rendered as text
+    fireEvent.change(value, { target: { value: 'a-throwaway-secret' } });
+    fireEvent.change(within(panel).getByTestId('mcp-add-auth-into'), { target: { value: 'Authorization' } });
+    fireEvent.click(within(panel).getByTestId('mcp-add-preview'));
+    await within(panel).findByTestId('mcp-add-preview-result');
+
+    // The secret went to the keychain first, and the preview carried the reference crew answered.
+    const put = calls.find((c) => c.path === '/mcp/servers/tracker/secret');
+    expect(put).toEqual({ path: '/mcp/servers/tracker/secret', method: 'PUT', body: { value: 'a-throwaway-secret' } });
+    expect(calls.indexOf(put!)).toBeLessThan(calls.findIndex((c) => c.path === '/mcp/servers/preview'));
+    expect(calls.find((c) => c.path === '/mcp/servers/preview')?.body).toEqual({
+      name: 'tracker', kind: 'rest', url: 'https://api.example.com/v1', openapiUrl: 'https://api.example.com/openapi.json',
+      auth: { ref: 'keychain:wicked-mcp/tracker', header: 'Authorization' },
+    });
+    // The value is not kept in the form, and the stored reference is what the operator now sees.
+    expect((within(panel).getByTestId('mcp-add-auth-value') as HTMLInputElement).value).toBe('');
+    expect((within(panel).getByTestId('mcp-add-auth-ref') as HTMLInputElement).value).toBe('keychain:wicked-mcp/tracker');
+    expect(within(panel).getByTestId('mcp-add-secret-note').textContent).toMatch(/keychain:wicked-mcp\/tracker/);
+  });
+
+  it('a slow keychain write never poisons a form the operator has moved on from', async () => {
+    // codex review on #387: the preview ANSWER was already dropped by form key, but the secret
+    // write stamped `auth.ref` and cleared the value unconditionally. The form stays editable
+    // while a preview runs (that is this panel's contract), so a slow write could put one
+    // server's credential reference onto the form now pointing at another server — and the next
+    // preview would send it there.
+    wire();
+    const base = apiFetch.getMockImplementation() as (p: string, i?: RequestInit) => Promise<unknown>;
+    let releaseWrite: () => void = () => undefined;
+    let firstWriteStarted = false;
+    apiFetch.mockImplementation((p: string, i?: RequestInit) => {
+      if (p === '/mcp/servers/first/secret') {
+        firstWriteStarted = true;
+        return new Promise((r) => { releaseWrite = () => r({ ref: 'keychain:wicked-mcp/first', set: true }); });
+      }
+      return base(p, i);
+    });
+    render(<McpToolsPage navigate={navigate} search="" />);
+    fireEvent.click(await screen.findByTestId('mcp-add-open'));
+    const panel = screen.getByTestId('mcp-add-panel');
+    fireEvent.change(within(panel).getByTestId('mcp-add-kind'), { target: { value: 'rest' } });
+    fireEvent.change(within(panel).getByTestId('mcp-add-name'), { target: { value: 'first' } });
+    fireEvent.change(within(panel).getByTestId('mcp-add-target'), { target: { value: 'https://first.example.com' } });
+    fireEvent.change(within(panel).getByTestId('mcp-add-openapi-url'), { target: { value: 'https://first.example.com/openapi.json' } });
+    fireEvent.change(within(panel).getByTestId('mcp-add-auth-into'), { target: { value: 'Authorization' } });
+    fireEvent.change(within(panel).getByTestId('mcp-add-auth-value'), { target: { value: 'first-secret-value' } });
+    fireEvent.click(within(panel).getByTestId('mcp-add-preview'));
+    await waitFor(() => expect(firstWriteStarted).toBe(true));
+
+    // The operator retargets the panel at another server while that write is in flight.
+    fireEvent.change(within(panel).getByTestId('mcp-add-name'), { target: { value: 'second' } });
+    fireEvent.change(within(panel).getByTestId('mcp-add-target'), { target: { value: 'https://second.example.com' } });
+    releaseWrite();
+    await waitFor(() => expect((within(panel).getByTestId('mcp-add-preview') as HTMLButtonElement).disabled).toBe(false));
+
+    // Nothing of the first server landed on the second server's form, and no preview was sent.
+    expect((within(panel).getByTestId('mcp-add-auth-ref') as HTMLInputElement).value).toBe('');
+    expect((within(panel).getByTestId('mcp-add-auth-value') as HTMLInputElement).value).toBe('first-secret-value');
+    expect(within(panel).queryByTestId('mcp-add-secret-note')).toBeNull();
+    expect(calls.some((c) => c.path === '/mcp/servers/preview')).toBe(false);
+    expect(within(panel).queryByTestId('mcp-add-preview-result')).toBeNull();
+
+    // Previewing now writes the SECOND server's secret and sends the second server's reference.
+    fireEvent.click(within(panel).getByTestId('mcp-add-preview'));
+    await within(panel).findByTestId('mcp-add-preview-result');
+    expect(calls.find((c) => c.path === '/mcp/servers/preview')?.body).toMatchObject({
+      name: 'second', auth: { ref: 'keychain:wicked-mcp/second', header: 'Authorization' },
+    });
+  });
+
+  it('a corrected secret is not thrown away by the write it replaced', async () => {
+    // codex review round 2 on #387: the secret VALUE is deliberately not in the form key (the key
+    // is what gets sent, and the value never is), so fixing a typo in the value alone left the
+    // stale write looking current — it stored the typo, cleared the corrected value and previewed
+    // against the wrong keychain entry.
+    wire();
+    const base = apiFetch.getMockImplementation() as (p: string, i?: RequestInit) => Promise<unknown>;
+    let releaseWrite: () => void = () => undefined;
+    let started = false;
+    const values: string[] = [];
+    apiFetch.mockImplementation((p: string, i?: RequestInit) => {
+      if (p === '/mcp/servers/tracker/secret') {
+        values.push((JSON.parse(i?.body as string) as { value: string }).value);
+        if (!started) { started = true; return new Promise((r) => { releaseWrite = () => r({ ref: 'keychain:wicked-mcp/tracker', set: true }); }); }
+      }
+      return base(p, i);
+    });
+    render(<McpToolsPage navigate={navigate} search="" />);
+    fireEvent.click(await screen.findByTestId('mcp-add-open'));
+    const panel = screen.getByTestId('mcp-add-panel');
+    fireEvent.change(within(panel).getByTestId('mcp-add-kind'), { target: { value: 'rest' } });
+    fireEvent.change(within(panel).getByTestId('mcp-add-name'), { target: { value: 'tracker' } });
+    fireEvent.change(within(panel).getByTestId('mcp-add-target'), { target: { value: 'https://api.example.com/v1' } });
+    fireEvent.change(within(panel).getByTestId('mcp-add-openapi-url'), { target: { value: 'https://api.example.com/openapi.json' } });
+    fireEvent.change(within(panel).getByTestId('mcp-add-auth-into'), { target: { value: 'Authorization' } });
+    fireEvent.change(within(panel).getByTestId('mcp-add-auth-value'), { target: { value: 'the-typo-secret' } });
+    fireEvent.click(within(panel).getByTestId('mcp-add-preview'));
+    await waitFor(() => expect(started).toBe(true));
+
+    // Only the value changes — the form key is identical.
+    fireEvent.change(within(panel).getByTestId('mcp-add-auth-value'), { target: { value: 'the-correct-secret' } });
+    releaseWrite();
+    await waitFor(() => expect((within(panel).getByTestId('mcp-add-preview') as HTMLButtonElement).disabled).toBe(false));
+    expect((within(panel).getByTestId('mcp-add-auth-value') as HTMLInputElement).value).toBe('the-correct-secret');
+    expect((within(panel).getByTestId('mcp-add-auth-ref') as HTMLInputElement).value).toBe('');
+    expect(calls.some((c) => c.path === '/mcp/servers/preview')).toBe(false);
+
+    // Previewing now stores the corrected value, and that is the only one the preview stands on.
+    fireEvent.click(within(panel).getByTestId('mcp-add-preview'));
+    await within(panel).findByTestId('mcp-add-preview-result');
+    expect(values).toEqual(['the-typo-secret', 'the-correct-secret']);
+  });
+
+  it("replacing a registered server's live secret is said before it happens, and consented", async () => {
+    // codex review round 5 on #387: "Nothing is registered until you save that exact preview" is
+    // true of the REGISTRY, not of the keychain. Previewing a name that is already registered
+    // overwrites the credential its running calls use, before anything is saved.
+    wire();
+    render(<McpToolsPage navigate={navigate} search="" />);
+    fireEvent.click(await screen.findByTestId('mcp-add-open'));
+    const panel = screen.getByTestId('mcp-add-panel');
+    fireEvent.change(within(panel).getByTestId('mcp-add-name'), { target: { value: 'fx' } }); // the registered one
+    fireEvent.change(within(panel).getByTestId('mcp-add-target'), { target: { value: 'npx -y @acme/fx' } });
+    const previewBtn = within(panel).getByTestId('mcp-add-preview') as HTMLButtonElement;
+    expect(previewBtn.disabled).toBe(false);
+    expect(within(panel).queryByTestId('mcp-add-replace-secret')).toBeNull(); // no value yet: nothing is overwritten
+
+    fireEvent.change(within(panel).getByTestId('mcp-add-auth-value'), { target: { value: 'a-new-secret-value' } });
+    expect(within(panel).getByTestId('mcp-add-replace-secret').textContent).toMatch(/already registered/);
+    expect(previewBtn.disabled).toBe(true); // the write cannot happen unconsented
+    expect(calls.some((c) => c.path.endsWith('/secret'))).toBe(false);
+
+    fireEvent.click(within(panel).getByTestId('mcp-add-replace-secret-ok'));
+    expect(previewBtn.disabled).toBe(false);
+    fireEvent.click(previewBtn);
+    await within(panel).findByTestId('mcp-add-preview-result');
+    expect(calls.find((c) => c.path === '/mcp/servers/fx/secret')?.body).toEqual({ value: 'a-new-secret-value' });
+
+    // Retyping the name or the value takes the consent back.
+    fireEvent.change(within(panel).getByTestId('mcp-add-auth-value'), { target: { value: 'another-secret-value' } });
+    expect((within(panel).getByTestId('mcp-add-replace-secret-ok') as HTMLInputElement).checked).toBe(false);
+    expect((within(panel).getByTestId('mcp-add-preview') as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('a half-typed reference does not block the secret that replaces it, and a fixed field clears the error', async () => {
+    // codex review round 6 on #387: a pasted value decides the reference, so validating the
+    // typed one kept a valid secret from ever being written; and a stale failure stayed on
+    // screen after the field it complained about was fixed.
+    wire();
+    const base = apiFetch.getMockImplementation() as (p: string, i?: RequestInit) => Promise<unknown>;
+    let fail = true;
+    apiFetch.mockImplementation((p: string, i?: RequestInit) =>
+      p === '/mcp/servers/tracker/secret' && fail
+        ? Promise.reject(new ApiError(400, 'a secret is at least 8 characters', 'invalid_body'))
+        : base(p, i));
+    render(<McpToolsPage navigate={navigate} search="" />);
+    fireEvent.click(await screen.findByTestId('mcp-add-open'));
+    const panel = screen.getByTestId('mcp-add-panel');
+    fireEvent.change(within(panel).getByTestId('mcp-add-kind'), { target: { value: 'rest' } });
+    fireEvent.change(within(panel).getByTestId('mcp-add-name'), { target: { value: 'tracker' } });
+    fireEvent.change(within(panel).getByTestId('mcp-add-target'), { target: { value: 'https://api.example.com/v1' } });
+    fireEvent.change(within(panel).getByTestId('mcp-add-openapi-url'), { target: { value: 'https://api.example.com/openapi.json' } });
+    fireEvent.change(within(panel).getByTestId('mcp-add-auth-into'), { target: { value: 'Authorization' } });
+    fireEvent.change(within(panel).getByTestId('mcp-add-auth-ref'), { target: { value: 'keychain' } }); // half-typed
+    expect((within(panel).getByTestId('mcp-add-preview') as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.change(within(panel).getByTestId('mcp-add-auth-value'), { target: { value: 'short' } });
+    expect((within(panel).getByTestId('mcp-add-preview') as HTMLButtonElement).disabled).toBe(false);
+
+    fireEvent.click(within(panel).getByTestId('mcp-add-preview'));
+    await waitFor(() => expect(within(panel).getByTestId('mcp-add-error').textContent).toMatch(/at least 8 characters/));
+    fail = false;
+    fireEvent.change(within(panel).getByTestId('mcp-add-auth-value'), { target: { value: 'a-long-enough-secret' } });
+    expect(within(panel).queryByTestId('mcp-add-error')).toBeNull();
+
+    fireEvent.click(within(panel).getByTestId('mcp-add-preview'));
+    await within(panel).findByTestId('mcp-add-preview-result');
+    expect(calls.find((c) => c.path === '/mcp/servers/preview')?.body).toMatchObject({
+      auth: { ref: 'keychain:wicked-mcp/tracker', header: 'Authorization' },
+    });
+  });
+
+  it('a bearer API carries its scheme prefix, so the header is not the bare secret', async () => {
+    // `McpAuthConfig.prefix` is in the wire contract and the broker honours it
+    // (crew mcp/rest.ts authHeaders: `${prefix ?? ''}${secret}`). With no field for it every
+    // `Authorization: Bearer <token>` API got `Authorization: <token>` and answered 401.
+    wire();
+    render(<McpToolsPage navigate={navigate} search="" />);
+    fireEvent.click(await screen.findByTestId('mcp-add-open'));
+    const panel = screen.getByTestId('mcp-add-panel');
+    fireEvent.change(within(panel).getByTestId('mcp-add-kind'), { target: { value: 'rest' } });
+    fireEvent.change(within(panel).getByTestId('mcp-add-name'), { target: { value: 'tracker' } });
+    fireEvent.change(within(panel).getByTestId('mcp-add-target'), { target: { value: 'https://api.example.com/v1' } });
+    fireEvent.change(within(panel).getByTestId('mcp-add-openapi-url'), { target: { value: 'https://api.example.com/openapi.json' } });
+    fireEvent.change(within(panel).getByTestId('mcp-add-auth-ref'), { target: { value: 'env:TRACKER_TOKEN' } });
+    fireEvent.change(within(panel).getByTestId('mcp-add-auth-into'), { target: { value: 'Authorization' } });
+    fireEvent.change(within(panel).getByTestId('mcp-add-auth-prefix'), { target: { value: 'Bearer ' } });
+    fireEvent.click(within(panel).getByTestId('mcp-add-preview'));
+    await within(panel).findByTestId('mcp-add-preview-result');
+    expect(calls.find((c) => c.path === '/mcp/servers/preview')?.body).toEqual({
+      name: 'tracker', kind: 'rest', url: 'https://api.example.com/v1', openapiUrl: 'https://api.example.com/openapi.json',
+      auth: { ref: 'env:TRACKER_TOKEN', header: 'Authorization', prefix: 'Bearer ' },
+    });
+  });
+
+  it('a typed scheme is sent with the one space a header needs, and the panel shows the shape', async () => {
+    // codex review round 4 on #387: the broker builds `${prefix}${secret}`, so the natural typed
+    // value `Bearer` (no invisible trailing space) sent `Bearertoken` and the API still 401'd.
+    wire();
+    render(<McpToolsPage navigate={navigate} search="" />);
+    fireEvent.click(await screen.findByTestId('mcp-add-open'));
+    const panel = screen.getByTestId('mcp-add-panel');
+    fireEvent.change(within(panel).getByTestId('mcp-add-kind'), { target: { value: 'rest' } });
+    fireEvent.change(within(panel).getByTestId('mcp-add-name'), { target: { value: 'tracker' } });
+    fireEvent.change(within(panel).getByTestId('mcp-add-target'), { target: { value: 'https://api.example.com/v1' } });
+    fireEvent.change(within(panel).getByTestId('mcp-add-openapi-url'), { target: { value: 'https://api.example.com/openapi.json' } });
+    fireEvent.change(within(panel).getByTestId('mcp-add-auth-ref'), { target: { value: 'env:TRACKER_TOKEN' } });
+    fireEvent.change(within(panel).getByTestId('mcp-add-auth-into'), { target: { value: 'Authorization' } });
+    fireEvent.change(within(panel).getByTestId('mcp-add-auth-prefix'), { target: { value: 'Bearer' } });
+    expect(within(panel).getByTestId('mcp-add-auth-shape').textContent).toBe('Authorization: Bearer <the secret>');
+    fireEvent.click(within(panel).getByTestId('mcp-add-preview'));
+    await within(panel).findByTestId('mcp-add-preview-result');
+    expect((calls.find((c) => c.path === '/mcp/servers/preview')?.body as { auth: { prefix: string } }).auth.prefix).toBe('Bearer ');
+  });
+
+  it('a scheme that ends in its own separator is left alone', async () => {
+    expect(schemePrefix('Bearer')).toBe('Bearer ');
+    expect(schemePrefix('Bearer ')).toBe('Bearer ');
+    expect(schemePrefix('  Bearer  ')).toBe('Bearer ');
+    expect(schemePrefix('token=')).toBe('token=');
+    expect(schemePrefix('x:')).toBe('x:');
+    expect(schemePrefix('')).toBe('');
+    expect(schemePrefix('   ')).toBe('');
+  });
+
+  it('a stdio server is given its secret in an env var and is offered no header prefix', async () => {
+    wire();
+    render(<McpToolsPage navigate={navigate} search="" />);
+    fireEvent.click(await screen.findByTestId('mcp-add-open'));
+    const panel = screen.getByTestId('mcp-add-panel');
+    expect(within(panel).queryByTestId('mcp-add-auth-prefix')).toBeNull();
+    fireEvent.change(within(panel).getByTestId('mcp-add-kind'), { target: { value: 'rest' } });
+    within(panel).getByTestId('mcp-add-auth-prefix');
+  });
+
+  it('a refused secret write stops the preview and says why', async () => {
+    wire();
+    const base = apiFetch.getMockImplementation() as (p: string, i?: RequestInit) => Promise<unknown>;
+    apiFetch.mockImplementation((p: string, i?: RequestInit) =>
+      p === '/mcp/servers/tracker/secret'
+        ? Promise.reject(new ApiError(400, 'a secret is at least 8 characters', 'invalid_body'))
+        : base(p, i));
+    render(<McpToolsPage navigate={navigate} search="" />);
+    fireEvent.click(await screen.findByTestId('mcp-add-open'));
+    const panel = screen.getByTestId('mcp-add-panel');
+    fireEvent.change(within(panel).getByTestId('mcp-add-kind'), { target: { value: 'rest' } });
+    fireEvent.change(within(panel).getByTestId('mcp-add-name'), { target: { value: 'tracker' } });
+    fireEvent.change(within(panel).getByTestId('mcp-add-target'), { target: { value: 'https://api.example.com/v1' } });
+    fireEvent.change(within(panel).getByTestId('mcp-add-openapi-url'), { target: { value: 'https://api.example.com/openapi.json' } });
+    fireEvent.change(within(panel).getByTestId('mcp-add-auth-value'), { target: { value: 'short' } });
+    fireEvent.change(within(panel).getByTestId('mcp-add-auth-into'), { target: { value: 'Authorization' } });
+    fireEvent.click(within(panel).getByTestId('mcp-add-preview'));
+    await waitFor(() => expect(within(panel).getByTestId('mcp-add-error').textContent).toMatch(/at least 8 characters/));
+    expect(calls.some((c) => c.path === '/mcp/servers/preview')).toBe(false);
+    expect(within(panel).queryByTestId('mcp-add-preview-result')).toBeNull();
+  });
+
+  it("a refused write's message does not land on a form the operator already fixed", async () => {
+    // codex review round 3 on #387: the success path dropped stale writes but the FAILURE path
+    // only checked the sequence, so a slow rejection painted "a secret is at least 8 characters"
+    // onto a form whose secret had already been lengthened.
+    wire();
+    const base = apiFetch.getMockImplementation() as (p: string, i?: RequestInit) => Promise<unknown>;
+    let rejectWrite: () => void = () => undefined;
+    let started = false;
+    apiFetch.mockImplementation((p: string, i?: RequestInit) => {
+      if (p === '/mcp/servers/tracker/secret' && !started) {
+        started = true;
+        return new Promise((_res, rej) => { rejectWrite = () => rej(new ApiError(400, 'a secret is at least 8 characters', 'invalid_body')); });
+      }
+      return base(p, i);
+    });
+    render(<McpToolsPage navigate={navigate} search="" />);
+    fireEvent.click(await screen.findByTestId('mcp-add-open'));
+    const panel = screen.getByTestId('mcp-add-panel');
+    fireEvent.change(within(panel).getByTestId('mcp-add-kind'), { target: { value: 'rest' } });
+    fireEvent.change(within(panel).getByTestId('mcp-add-name'), { target: { value: 'tracker' } });
+    fireEvent.change(within(panel).getByTestId('mcp-add-target'), { target: { value: 'https://api.example.com/v1' } });
+    fireEvent.change(within(panel).getByTestId('mcp-add-openapi-url'), { target: { value: 'https://api.example.com/openapi.json' } });
+    fireEvent.change(within(panel).getByTestId('mcp-add-auth-into'), { target: { value: 'Authorization' } });
+    fireEvent.change(within(panel).getByTestId('mcp-add-auth-value'), { target: { value: 'short' } });
+    fireEvent.click(within(panel).getByTestId('mcp-add-preview'));
+    await waitFor(() => expect(started).toBe(true));
+
+    // The operator lengthens the secret before the rejection arrives.
+    fireEvent.change(within(panel).getByTestId('mcp-add-auth-value'), { target: { value: 'a-long-enough-secret' } });
+    rejectWrite();
+    await waitFor(() => expect((within(panel).getByTestId('mcp-add-preview') as HTMLButtonElement).disabled).toBe(false));
+    expect(within(panel).queryByTestId('mcp-add-error')).toBeNull();
+    expect((within(panel).getByTestId('mcp-add-auth-value') as HTMLInputElement).value).toBe('a-long-enough-secret');
   });
 
   it('a late preview answer for an older form is never shown or saved', async () => {
