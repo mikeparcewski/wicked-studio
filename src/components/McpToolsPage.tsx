@@ -437,6 +437,9 @@ function AddServerPanel({ onSaved, onClose, mode, navigate }: {
 
   const previewSeq = useRef(0);
   const formKey = JSON.stringify(body());
+  /** The LIVE form key, readable after an await (the closure's copy is the one it started with). */
+  const formKeyRef = useRef(formKey);
+  formKeyRef.current = formKey;
   const preview = held !== null && held.key === formKey ? held.preview : null;
   const setPreview = (p: null): void => { setHeld(p); };
 
@@ -445,6 +448,11 @@ function AddServerPanel({ onSaved, onClose, mode, navigate }: {
     setError(null);
     setHeld(null);
     const seq = ++previewSeq.current;
+    // What the operator asked about. The form stays editable while this runs (a late answer is
+    // dropped by key, not by freezing the form), so anything written back after an await must
+    // check that the form still says the same thing.
+    const asked = formKey;
+    const stillMine = (): boolean => seq === previewSeq.current && formKeyRef.current === asked;
     try {
       let ref = authRef.trim();
       if (authValue !== '') {
@@ -452,6 +460,11 @@ function AddServerPanel({ onSaved, onClose, mode, navigate }: {
         // and refuses to probe an authenticated server without one, so previewing before the
         // value is stored can only fail. The value is never logged, echoed or kept in the form.
         const put = await mcpApi.putSecret(name, authValue);
+        // The form moved on while the keychain was written (codex review on #387). The secret IS
+        // stored — that is what the operator asked for — but stamping ITS reference onto a form
+        // now pointing at another server would send one server's credential to another. Nothing
+        // is written back, and the retargeted form previews on its own terms.
+        if (!stillMine()) return;
         ref = put.ref;
         setAuthRef(put.ref);
         setAuthValue('');
@@ -461,9 +474,10 @@ function AddServerPanel({ onSaved, onClose, mode, navigate }: {
       const answer = await mcpApi.preview(JSON.parse(key) as ReturnType<typeof body>);
       if (seq === previewSeq.current) setHeld({ key, preview: answer });
     } catch (e) {
-      setError(msg(e));
+      // Same rule for the failure: a stale request's error is not this form's error.
+      if (seq === previewSeq.current) setError(msg(e));
     } finally {
-      setBusy(false);
+      if (seq === previewSeq.current) setBusy(false);
     }
   };
 
