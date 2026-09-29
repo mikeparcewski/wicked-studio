@@ -14,6 +14,7 @@ import { ApiError, isRouteUnsupported } from './errors.js';
 import type {
   McpApprovalResponse,
   McpApprovalsResponse,
+  McpCallDecision,
   McpDecision,
   McpPhaseRole,
   McpPolicyCell,
@@ -29,6 +30,7 @@ import type {
   McpServerTestResponse,
   McpTool,
   McpToolClass,
+  McpUsageResponse,
 } from './mcp-wire.js';
 import type { SteeringRule } from './steering.js';
 
@@ -37,6 +39,12 @@ export type * from './mcp-wire.js';
 /** The page's address: `/mcp` (the rail heading between Skills and Steering). */
 export function mcpPath(server?: string | null): string {
   return server ? `/mcp?server=${encodeURIComponent(server)}` : '/mcp';
+}
+
+/** `?view=usage` opens the Usage view; anything else is the Servers view. */
+export type McpView = 'servers' | 'usage';
+export function readMcpView(search: string): McpView {
+  return new URLSearchParams(search).get('view') === 'usage' ? 'usage' : 'servers';
 }
 
 /** `?server=<name>` deep-links a server row open. */
@@ -61,7 +69,59 @@ export const mcpApi = {
   approvals: () => apiFetch<McpApprovalsResponse>('/mcp/approvals'),
   approve: (subject: string) => apiFetch<McpApprovalResponse>('/mcp/approvals', j({ subject })),
   revoke: (subject: string) => apiFetch<McpApprovalResponse>(`/mcp/approvals/${encodeURIComponent(subject)}`, { method: 'DELETE' }),
+  usage: (q: McpUsageFilter) => apiFetch<McpUsageResponse>(`/mcp/usage${usageQuery(q)}`),
 };
+
+// ── the usage view (slice S7) ────────────────────────────────────────────────────────────────
+
+/** What the Usage view asks `GET /mcp/usage` for. `null` = no filter. */
+export interface McpUsageFilter {
+  days: 7 | 30;
+  subject: string | null;
+  seat: string | null;
+  decision: McpCallDecision | null;
+}
+
+export const DEFAULT_USAGE_FILTER: McpUsageFilter = { days: 7, subject: null, seat: null, decision: null };
+
+export const CALL_DECISIONS: McpCallDecision[] = ['allow', 'ask', 'deny', 'guard_error'];
+export const CALL_DECISION_LABELS: Record<McpCallDecision, string> = { allow: 'allowed', ask: 'asked', deny: 'denied', guard_error: 'guard error' };
+
+/** The query string for a filter; the unset filters are left out. */
+export function usageQuery(q: McpUsageFilter): string {
+  const p = new URLSearchParams({ days: String(q.days) });
+  if (q.subject !== null) p.set('subject', q.subject);
+  if (q.seat !== null) p.set('seat', q.seat);
+  if (q.decision !== null) p.set('decision', q.decision);
+  return `?${p.toString()}`;
+}
+
+/** `12 ms`, `1.4 s`; `—` when no call ran. */
+export function formatMs(ms: number | null): string {
+  if (ms === null) return '—';
+  if (ms < 1000) return `${Math.round(ms)} ms`;
+  return `${(ms / 1000).toFixed(ms < 10_000 ? 1 : 0)} s`;
+}
+
+/** `14%`, `0.5%`; `—` when no call ran. */
+export function formatRate(rate: number | null): string {
+  if (rate === null) return '—';
+  const pct = rate * 100;
+  if (pct === 0 || pct >= 10) return `${Math.round(pct)}%`;
+  return `${pct.toFixed(1)}%`;
+}
+
+/** Each decision's share of `calls`, in {@link CALL_DECISIONS} order, zero shares left out. */
+export function decisionShares(d: Record<McpCallDecision, number>, calls: number): Array<{ decision: McpCallDecision; count: number; share: number }> {
+  if (calls === 0) return [];
+  return CALL_DECISIONS.filter((k) => d[k] > 0).map((k) => ({ decision: k, count: d[k], share: d[k] / calls }));
+}
+
+/** A server row's usage line: `12 calls in 7 d · last used 3 h ago`, or that it has none. */
+export function serverUsageText(u: { calls: number; lastCall: string } | undefined, days: number, now: number = Date.now()): string {
+  if (u === undefined || u.calls === 0) return `no calls in ${days} d`;
+  return `${u.calls} call${u.calls === 1 ? '' : 's'} in ${days} d · last used ${ageOf(u.lastCall, now)}`;
+}
 
 /**
  * "This daemon has no MCP tools surface": the route is absent (crew predates S2), a 501 (the

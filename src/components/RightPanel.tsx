@@ -489,7 +489,11 @@ function FilesPanel({ model }: { model: RunModel }): React.ReactElement {
 
 export function RightPanel({ view, runs, onSelectRun, navigate }: Props): React.ReactElement {
   const [collapsed, setCollapsed] = useState(false);
-  const [openAccordion, setOpenAccordion] = useState<AccordionId | null>('whatwhere');
+  // `#governance` on the run's address opens the Governance section (MCP tools → Usage links a
+  // run there, where each brokered call's claim is shown; DES-MCP-TOOLS-001 §7).
+  const [openAccordion, setOpenAccordion] = useState<AccordionId | null>(() =>
+    typeof window !== 'undefined' && window.location.hash === '#governance' ? 'governance' : 'whatwhere',
+  );
 
   // Provenance rides the run-detail load: ONE `GET /audit?runId=` per detail
   // view, cached per run id (DES-UX-001 §3.3 — the sanctioned exception,

@@ -6,13 +6,20 @@ vi.mock('../src/api/client.js', () => ({ apiFetch: (...a: unknown[]) => apiFetch
 import { ApiError } from '../src/api/errors.js';
 import {
   compileWhen,
+  decisionShares,
+  DEFAULT_USAGE_FILTER,
   EMPTY_WHEN,
+  formatMs,
+  formatRate,
   isMcpRule,
   isMcpUnsupported,
   mcpApi,
   nextMcpPolicyId,
   postureSummary,
+  readMcpView,
+  serverUsageText,
   triggerIssue,
+  usageQuery,
   type McpPolicyCell,
   type McpPolicyPreviewTool,
 } from '../src/api/mcp.js';
@@ -186,5 +193,46 @@ describe('the calls', () => {
     expect(isMcpUnsupported(new ApiError(503, 'x', { code: 'mcp_unavailable' }))).toBe(true);
     expect(isMcpUnsupported(new ApiError(503, 'x', { code: 'ledger_missing' }))).toBe(false);
     expect(isMcpUnsupported(new ApiError(404, 'no MCP server named fx'))).toBe(false);
+  });
+});
+
+describe('the usage view helpers (slice S7)', () => {
+  it('usageQuery leaves unset filters out and encodes the subject', () => {
+    expect(usageQuery(DEFAULT_USAGE_FILTER)).toBe('?days=7');
+    expect(usageQuery({ days: 30, subject: 'mcp:fx/wt_note', seat: 'codex', decision: 'guard_error' })).toBe('?days=30&subject=mcp%3Afx%2Fwt_note&seat=codex&decision=guard_error');
+  });
+
+  it('mcpApi.usage rides GET /mcp/usage', async () => {
+    apiFetch.mockResolvedValueOnce({});
+    await mcpApi.usage({ ...DEFAULT_USAGE_FILTER, seat: 'pi' });
+    expect(apiFetch).toHaveBeenCalledWith('/mcp/usage?days=7&seat=pi');
+  });
+
+  it('formatMs and formatRate: a dash when nothing ran', () => {
+    expect(formatMs(null)).toBe('—');
+    expect(formatMs(40)).toBe('40 ms');
+    expect(formatMs(1400)).toBe('1.4 s');
+    expect(formatMs(12_345)).toBe('12 s');
+    expect(formatRate(null)).toBe('—');
+    expect(formatRate(0)).toBe('0%');
+    expect(formatRate(1 / 7)).toBe('14%');
+    expect(formatRate(0.005)).toBe('0.5%');
+  });
+
+  it('decisionShares drops zero shares and keeps the allow / ask / deny / guard_error order', () => {
+    expect(decisionShares({ allow: 7, ask: 1, deny: 0, guard_error: 2 }, 10)).toEqual([
+      { decision: 'allow', count: 7, share: 0.7 },
+      { decision: 'ask', count: 1, share: 0.1 },
+      { decision: 'guard_error', count: 2, share: 0.2 },
+    ]);
+    expect(decisionShares({ allow: 0, ask: 0, deny: 0, guard_error: 0 }, 0)).toEqual([]);
+  });
+
+  it('serverUsageText and readMcpView', () => {
+    const now = Date.parse('2026-09-28T12:00:00.000Z');
+    expect(serverUsageText(undefined, 7, now)).toBe('no calls in 7 d');
+    expect(serverUsageText({ calls: 1, lastCall: '2026-09-28T09:00:00.000Z' }, 7, now)).toBe('1 call in 7 d · last used 3 h ago');
+    expect(readMcpView('?view=usage')).toBe('usage');
+    expect(readMcpView('?server=fx')).toBe('servers');
   });
 });
