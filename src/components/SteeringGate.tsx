@@ -18,6 +18,10 @@ import { GateVerdict } from './GateVerdict.js';
 import { escalationOffers, failedSeatOf, gateFrameFor, gateSourceLine, gateVerdictFor, isEscalationGate, isFailureEscalation, isLaunchRefusal, isSeatFailure, isRestoredRetry, phaseLabel, reviewedUnitFor, steerScopeTarget, type EscalationOffer } from './gateVerdictModel.js';
 import { GateUnderReview } from './GateUnderReview.js';
 import type { AmendIntentDecision, EscalationDecision } from '../api/wave6-wire.js';
+
+/** (wicked-core#555) The gate kinds a TEAM PAUSE opens: they take approve, request changes or
+ *  reject, and the engine refuses an intent amendment at either — so the lever is not offered. */
+const TEAM_PAUSE_GATES: ReadonlySet<string> = new Set(['team_dispute', 'team_transport']);
 import { IntakePlan, isIntakeGate } from './IntakePlan.js';
 import { ReassignControl } from './ReassignControl.js';
 import { DELIVER_STEP, dedupePromptClauses } from '../board/planModel.js';
@@ -473,11 +477,13 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
   // (wicked-core#555) AMEND THE RUN'S INTENT: approve this gate and change the acceptance list
   // every LATER phase — the evaluator above all — is judged against. The note IS the amendment, so
   // it is required; the arm carries no scope (the scope is every unit from the cursor on, which is
-  // what makes it reach the evaluator). Refused by the engine at a plan gate or a team pause, so
-  // the button is hidden there rather than offering an answer the daemon will 409.
+  // what makes it reach the evaluator). The ENGINE refuses it at a plan gate AND at a team pause
+  // (`team_dispute` / `team_transport` take approve, request changes or reject), so the lever is
+  // hidden on both rather than offering an answer the daemon will 409 (codex review on #392).
+  const canAmendIntent = !isPlanGate && !TEAM_PAUSE_GATES.has(gateKind ?? '');
   const amendIntent = (): Promise<void> => {
     const text = amend.trim();
-    if (!text || planGate.pending || isPlanGate) return Promise.resolve();
+    if (!text || planGate.pending || !canAmendIntent) return Promise.resolve();
     const decision: AmendIntentDecision = { approve: true, action: 'amend_intent', amend: text };
     return run(() => commitGateDecision(runId, decision as unknown as GateDecision), {
       kind: 'approve-with-steer',
@@ -961,7 +967,7 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
               Request changes
             </button>
             )}
-            {hidden !== 'steering-amend-intent' && !isPlanGate && (
+            {hidden !== 'steering-amend-intent' && canAmendIntent && (
             <button
               data-testid="steering-amend-intent"
               onClick={() => void amendIntent()}
@@ -1049,7 +1055,7 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
               {restoredRetry ? 'Retry + steer' : 'Approve + steer'}
             </button>
             )}
-            {hidden !== 'steering-amend-intent' && !isPlanGate && (
+            {hidden !== 'steering-amend-intent' && canAmendIntent && (
             <button
               data-testid="steering-amend-intent"
               onClick={() => void amendIntent()}

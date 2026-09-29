@@ -94,6 +94,19 @@ describe('the Amend intent lever', () => {
     });
   });
 
+  it('is NOT offered on a plan gate or a team pause — the engine refuses it there', () => {
+    // A team pause takes approve, request changes or reject; offering the lever would hand the
+    // operator a 409 instead of hiding an impossible action (codex review on #392).
+    for (const gateKind of ['team_dispute', 'team_transport', 'plan_approval']) {
+      useGateStore.setState({
+        gates: { [RUN]: { runId: RUN, ord: 2, prompt: 'The team is blocked.', lifecycle: 'open', receivedAt: 1, gateKind } },
+      });
+      render(<SteeringGate runId={RUN} ord={2} prompt="The team is blocked." units={UNITS} clis={['claude']} />);
+      expect(screen.queryByTestId('steering-amend-intent'), gateKind).toBeNull();
+      cleanup();
+    }
+  });
+
   it("the preview says the acceptance list changes — not 'the run resumes'", () => {
     const { verb, preview } = describeDecision({
       approve: true,
