@@ -621,3 +621,37 @@ export interface DiagnosticsPhaseSkillGap {
   remedy: string;
 }
 // <<< VERBATIM
+
+// ── studio#388: the plugin INSTALLED on the daemon host (newer than the pinned 0.40.0 contract) ──
+//
+// Declared OUTSIDE the mirrored blocks above, exactly as `BaseSkillPosture` is: `skillsWire.test.ts`
+// pins those regions byte-for-byte against the vendored fixture, so a field crew added after 0.40.0
+// cannot live inside one. At the release swap this moves into the `export type { … } from
+// 'wicked-crew-api-types'` list (`InstalledPlugin`) and `SkillsCatalog` drops the intersection.
+
+/** `SkillsManifestResponse.installed` — the live plugin's identity (wicked-crew `InstalledPlugin`). */
+export interface InstalledPlugin {
+  source: { kind: SkillSourceKind; path: string; plugin_version: string };
+  /** HEAD sha for a `checkout` source; `null` otherwise (or when git could not answer). */
+  git_sha: string | null;
+  /**
+   * The content hash of the INSTALLED bundle, comparable with `SkillManifest.baseline` — the same
+   * identity `POST /skills/refresh-baseline` decides on, never the version string (two installs of
+   * one version with different bytes are two baselines). `null` when the bundle could not be read,
+   * and then `unreadable` says why: a comparison crew could not make is stated, not reported as
+   * agreement.
+   */
+  baseline: string | null;
+  unreadable: string | null;
+}
+
+/**
+ * `GET /skills` as the daemon answers it TODAY: the mirrored 0.40.0 body plus `installed` — the
+ * wicked-garden plugin installed on the daemon host (studio#388). ABSENT on an older daemon, which
+ * is why every reader treats `undefined` as "cannot tell", never as "current"; `null` = no plugin
+ * is installed. Compare `installed.baseline` with `manifest.baseline`: different = the root, and
+ * every snapshot published from it, is behind the install.
+ */
+export type SkillsManifestResponseWithInstalled = SkillsManifestResponse & {
+  installed?: InstalledPlugin | null;
+};

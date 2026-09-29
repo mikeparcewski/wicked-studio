@@ -41,6 +41,7 @@ import { apiFetch } from './client.js';
 import { ApiError, isRouteUnsupported } from './errors.js';
 import type {
   DiagnosticsSkillsState,
+  InstalledPlugin,
   SkillAnalyzeResult,
   SkillBaselineRecord,
   SkillEntry,
@@ -55,7 +56,7 @@ import type {
   SkillPublishResult,
   SkillReadResult,
   SkillRefreshResult,
-  SkillsManifestResponse,
+  SkillsManifestResponseWithInstalled,
 } from './skills-wire.js';
 
 // The contract, re-exported for every component so the release swap touches ONE file.
@@ -69,6 +70,7 @@ export type {
   SkillAnalyzeResult,
   SkillBaselineRecord,
   SkillConflictFinding,
+  InstalledPlugin,
   SkillEntry,
   SkillFileEntry,
   SkillFileRecord,
@@ -89,6 +91,7 @@ export type {
   SkillRevisionConflict,
   SkillSourceKind,
   SkillsManifestResponse,
+  SkillsManifestResponseWithInstalled,
   SkillVenvState,
   SkillVerdict,
 } from './skills-wire.js';
@@ -228,8 +231,10 @@ export const SKILLS_ENGINE_STATE_COPY: Record<DiagnosticsSkillsState, string> = 
 
 // ── The catalog (`GET /skills` — manifest + revision + root + current) ────────────────────────
 
-/** `GET /skills` 200 body — the contract's name, kept under the page's word for it. */
-export type SkillsCatalog = SkillsManifestResponse;
+/** `GET /skills` 200 body — the contract's name, kept under the page's word for it. Carries
+ *  `installed` (studio#388), which is newer than the pinned contract and therefore declared beside
+ *  the mirror rather than inside it. */
+export type SkillsCatalog = SkillsManifestResponseWithInstalled;
 
 /** The envelope every mutation answers with on 2xx (`SkillAnalyzeResult` is the base of every
  *  mutation result: `{verdict, findings, revision}`) — the shape every findings renderer takes. */
@@ -261,7 +266,7 @@ const CATALOG_SHAPE = '{manifest: {skills, files, …}, revision: number, root, 
  */
 export function readCatalogBody(body: unknown): SkillsCatalog {
   if (isPlainObject(body)) {
-    const { manifest, revision, root, current } = body;
+    const { manifest, revision, root, current, installed } = body;
     if (
       isPlainObject(manifest)
       && isPlainObject(manifest.skills)
@@ -270,7 +275,18 @@ export function readCatalogBody(body: unknown): SkillsCatalog {
       && typeof root === 'string'
       && (current === null || (isPlainObject(current) && isCounter(current.gen) && typeof current.path === 'string'))
     ) {
-      return { manifest: manifest as unknown as SkillManifest, revision, root, current: current as SkillsCatalog['current'] };
+      const read = {
+        manifest: manifest as unknown as SkillManifest,
+        revision,
+        root,
+        current: current as SkillsCatalog['current'],
+      };
+      // (studio#388) Carried through NARROWED: only an object or `null` becomes a comparison —
+      // anything else is left ABSENT, which `baselineDrift` reads as "cannot tell". It is an
+      // optional field, so a mis-shaped one must degrade that one row, not the whole catalog.
+      if (installed === null) return { ...read, installed: null };
+      if (isPlainObject(installed)) return { ...read, installed: installed as unknown as InstalledPlugin };
+      return read;
     }
   }
   throw new Error(`the daemon answered /skills with no catalog (expected ${CATALOG_SHAPE})`);
@@ -415,6 +431,51 @@ export async function listSkillFiles(name: string): Promise<SkillTreeRow[]> {
  *  route; `GET|PUT /skills/support/*path` addresses one file). Path-sorted, no sizes. */
 export function supportFiles(manifest: SkillManifest): SkillTreeRow[] {
   return fileOwnership(manifest).support.map(({ path, record }) => ({ path, size: null, record }));
+}
+
+/**
+ * SUPPORT files the current snapshot does not carry — `scripts/`, `schemas/`, `.claude-plugin/`,
+ * `pyproject.toml`, `uv.lock`: everything no skill directory owns (studio#388).
+ *
+ * {@link isUnpublished} is judged per SKILL over the files that skill owns, so it is blind to this
+ * whole tree. That is where the MCP S8 dogfood's gap lived: the missing file was
+ * `scripts/mcp/shim.py` — the only way a governed worker reaches MCP — and no skill row could have
+ * lit up for it. Same rule as a skill's: `effectiveHash` differs from the hash the last publish
+ * recorded (`lastPublishedHash`, `null` = never published).
+ */
+export function unpublishedSupport(manifest: SkillManifest): OwnedFile[] {
+  return fileOwnership(manifest).support.filter(({ record }) => record.effectiveHash !== record.lastPublishedHash);
+}
+
+/**
+ * Whether the daemon's BASELINE is the wicked-garden plugin installed on its host (studio#388).
+ *
+ * The root publishes snapshots from its baseline, so a baseline behind the install means every
+ * snapshot is too — and the first run that needs a file only the install has fails inside a worker
+ * (`scripts/mcp/shim.py: not found under the plugin root …/snapshots/000005`, the MCP S8 dogfood).
+ *
+ * The comparison is the CONTENT HASH crew reports, the same identity `refresh-baseline` decides on.
+ * `unknown` is deliberately distinct from `match`: an older daemon omits the field and a bundle
+ * crew could not read answers `baseline: null`, and neither is evidence that the root is current.
+ */
+export type BaselineDrift =
+  | { state: 'match' }
+  | { state: 'behind'; installed: InstalledPlugin }
+  | { state: 'unknown'; reason: string | null };
+
+export function baselineDrift(catalog: SkillsCatalog): BaselineDrift {
+  const installed = catalog.installed;
+  // A daemon older than the field: say nothing rather than guess (`reason: null` renders nothing).
+  if (installed === undefined) return { state: 'unknown', reason: null };
+  if (installed === null) {
+    return { state: 'unknown', reason: 'no wicked-garden plugin is installed on the daemon host, so there is nothing to compare the baseline with' };
+  }
+  // A hash the daemon did not spell as one is NOT a comparison. Guarded here rather than in the
+  // catalog's shape check so a mis-shaped optional field degrades this one row, not the page.
+  if (typeof installed.baseline !== 'string' || installed.baseline === '') {
+    return { state: 'unknown', reason: installed.unreadable ?? 'the installed plugin could not be read' };
+  }
+  return installed.baseline === catalog.manifest.baseline ? { state: 'match' } : { state: 'behind', installed };
 }
 
 /** Which copy of a file to read: the effective root (the default) or the baseline — the "new side"

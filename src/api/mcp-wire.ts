@@ -73,6 +73,16 @@ export interface McpServerConfigBody {
   openapi?: Record<string, unknown>;
   /** `rest` only: the operations to wrap, by `operationId` or tool name; absent = all. */
   operations?: string[];
+  /**
+   * The secret VALUE this server's keychain entry will hold (wicked-crew#719). The preview is
+   * probed with it and crew holds it with the preview; `POST /mcp/servers` writes it to the OS
+   * store as part of the save, so the secret and the registry row commit together. Studio used to
+   * write the keychain itself first, and a failure between the two writes left a keychain entry
+   * with no server, or a server whose secret never landed. Requires `auth.ref` =
+   * `keychain:wicked-mcp/<name>`; 501 where the platform has no OS secret store. It is in no
+   * response, log, audit entry or file.
+   */
+  secret?: string;
 }
 
 /**

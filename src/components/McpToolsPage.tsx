@@ -422,13 +422,13 @@ function AddServerPanel({ onSaved, onClose, mode, navigate, saved }: {
    */
   const [authPrefix, setAuthPrefix] = useState('');
   /**
-   * A pasted secret VALUE (§7: "Paste a command, URL or OpenAPI URL and a secret"). It is written
-   * to the OS keychain by `PUT /mcp/servers/:name/secret` before the preview and then dropped from
-   * this form: crew refuses to probe an authenticated server unauthenticated, so a `keychain:`
-   * reference that resolves to nothing cannot be previewed, let alone saved.
+   * A pasted secret VALUE (§7: "Paste a command, URL or OpenAPI URL and a secret"). It STAYS in
+   * this form and rides the preview body (`secret`, wicked-crew#719): crew probes with it and
+   * writes it to the OS keychain as part of the save, so the secret and the registry row commit
+   * together. It used to be written by `PUT /mcp/servers/:name/secret` BEFORE the preview — which
+   * is what left a keychain entry with no server whenever the save never happened.
    */
   const [authValue, setAuthValue] = useState('');
-  const [secretNote, setSecretNote] = useState<string | null>(null);
   const [replaceOk, setReplaceOk] = useState(false);
   /** The preview, bound to the exact request it answered (`key`): only shown and saved while the
    *  form still says the same thing, so a late answer to an older request can never be saved. */
@@ -445,7 +445,11 @@ function AddServerPanel({ onSaved, onClose, mode, navigate, saved }: {
     && (authValue !== '' || authRef.trim() === '' || /^(env|keychain):/.test(authRef.trim()))
     && (!replacesLiveSecret || replaceOk);
 
-  /** The request for one secret reference — the state's, or the one the keychain write just gave. */
+  /** (crew#719) The keychain entry a pasted value goes into: this server's own. Studio names it up
+   *  front — it is derivable — instead of learning it from a pre-write it no longer makes. */
+  const impliedRef = (): string => (authValue !== '' ? `keychain:wicked-mcp/${name}` : authRef.trim());
+
+  /** The request for one secret reference — the state's, or the one a pasted value implies. */
   const bodyWith = (ref: string) => {
     const parts = target.trim().split(/\s+/);
     const into = authEnv.trim() !== '' ? (kind === 'mcp-stdio' ? { env: authEnv.trim() } : { header: authEnv.trim() }) : {};
@@ -456,15 +460,15 @@ function AddServerPanel({ onSaved, onClose, mode, navigate, saved }: {
     if (kind === 'rest') return { name, kind, url: target.trim(), openapiUrl: openapiUrl.trim(), auth };
     return { name, kind, url: target.trim(), auth };
   };
-  const body = () => bodyWith(authRef.trim());
+  const body = () => bodyWith(impliedRef());
 
   const previewSeq = useRef(0);
   const formKey = JSON.stringify(body());
   /** The LIVE form key, readable after an await (the closure's copy is the one it started with). */
   const formKeyRef = useRef(formKey);
   formKeyRef.current = formKey;
-  /** The LIVE secret value. It is deliberately NOT in `formKey` — the key is what gets sent, and
-   *  the value never is — so the stale-write guard has to read it separately. */
+  /** The LIVE secret value. It is deliberately NOT in `formKey`: the key identifies the server
+   *  being asked about, and a late answer must not be shown for another one. */
   const authValueRef = useRef(authValue);
   authValueRef.current = authValue;
   const preview = held !== null && held.key === formKey ? held.preview : null;
@@ -479,39 +483,26 @@ function AddServerPanel({ onSaved, onClose, mode, navigate, saved }: {
     // What the operator asked about. The form stays editable while this runs (a late answer is
     // dropped by key, not by freezing the form), so anything written back after an await must
     // check that the form still says the same thing.
-    // `asked` is re-pointed after a successful secret write, because that write deliberately
-    // changes the form (it fills `auth.ref` and clears the value) — from then on THAT is the
-    // form this request speaks for.
-    let asked = formKey;
-    let askedValue = authValue;
+    //
+    // (crew#719) ONE request now: the secret is STAGED with the preview, and crew writes it to the
+    // keychain only when the save commits. Nothing is written before the operator saves, so this
+    // no longer re-points `asked` half way through — and the two-step it replaces is exactly what
+    // could leave a keychain entry with no server.
+    const asked = formKey;
+    const askedValue = authValue;
     const stillMine = (): boolean =>
       seq === previewSeq.current && formKeyRef.current === asked && authValueRef.current === askedValue;
     try {
-      let ref = authRef.trim();
-      if (authValue !== '') {
-        // The keychain write comes FIRST and its failure stops here: crew probes with the secret
-        // and refuses to probe an authenticated server without one, so previewing before the
-        // value is stored can only fail. The value is never logged, echoed or kept in the form.
-        const put = await mcpApi.putSecret(name, authValue);
-        // The form moved on while the keychain was written (codex review on #387). The secret IS
-        // stored — that is what the operator asked for — but stamping ITS reference onto a form
-        // now pointing at another server would send one server's credential to another. Nothing
-        // is written back, and the retargeted form previews on its own terms.
-        if (!stillMine()) return;
-        ref = put.ref;
-        setAuthRef(put.ref);
-        setAuthValue('');
-        setSecretNote(`Stored the secret for ${name}. The registry keeps only ${put.ref}; no worker ever sees the value.`);
-      }
-      const key = JSON.stringify(bodyWith(ref));
-      asked = key;
-      if (authValue !== '') askedValue = '';
-      const answer = await mcpApi.preview(JSON.parse(key) as ReturnType<typeof body>);
-      if (seq === previewSeq.current) setHeld({ key, preview: answer });
+      const answer = await mcpApi.preview({
+        ...(JSON.parse(asked) as ReturnType<typeof body>),
+        // The value never enters `formKey`, so it is added here, at the send.
+        ...(askedValue !== '' ? { secret: askedValue } : {}),
+      });
+      if (seq === previewSeq.current) setHeld({ key: asked, preview: answer });
     } catch (e) {
-      // Same rule for the failure (codex review round 3 on #387): a rejection belongs to the form
-      // it was asked about. "a secret is at least 8 characters" must not land on a form whose
-      // secret the operator has already lengthened, or on another server entirely.
+      // A rejection belongs to the form it was asked about (codex review round 3 on #387): "a
+      // secret is at least 8 characters" must not land on a form whose secret the operator has
+      // already lengthened, or on another server entirely.
       if (stillMine()) setError(msg(e));
     } finally {
       if (seq === previewSeq.current) setBusy(false);
@@ -584,7 +575,7 @@ function AddServerPanel({ onSaved, onClose, mode, navigate, saved }: {
             type="password"
             autoComplete="off"
             value={authValue}
-            onChange={(e) => { setAuthValue(e.target.value); setReplaceOk(false); setSecretNote(null); setPreview(null); }}
+            onChange={(e) => { setAuthValue(e.target.value); setReplaceOk(false); setPreview(null); }}
             placeholder="paste it once"
             spellCheck={false}
             className={`${input} w-44`}
@@ -609,27 +600,24 @@ function AddServerPanel({ onSaved, onClose, mode, navigate, saved }: {
           </p>
         )}
         <p className="max-w-[22rem] text-[10px]" style={{ color: 'var(--ink-dim)' }}>
-          A pasted value is written to the OS keychain when you preview, and the registry keeps the reference only. The broker resolves it on each call, sends it {kind === 'mcp-stdio' ? 'in that env var' : 'in that header behind that scheme'}, and no worker ever sees the value.
+          A pasted value is probed with, then written to the OS keychain when you SAVE — together with the server, so neither can land without the other. The registry keeps the reference only. The broker resolves it on each call, sends it {kind === 'mcp-stdio' ? 'in that env var' : 'in that header behind that scheme'}, and no worker ever sees the value.
         </p>
         <button type="button" data-testid="mcp-add-preview" disabled={!ready || busy} onClick={() => void doPreview()} className="ml-auto rounded px-3 py-1 text-[11px] font-semibold disabled:opacity-40" style={{ color: 'var(--accent)', border: BORDER }}>
           {busy && preview === null ? 'Probing…' : 'Preview'}
         </button>
       </div>
       {replacesLiveSecret && (
-        // "Nothing is registered until you save that exact preview" is true of the REGISTRY, not
-        // of the keychain: the secret is written when you preview, and `s8notes`'s running calls
-        // use the new one from their next call. Said before it happens, not after.
+        // The consent line said "Previewing writes this secret over the one X uses now", which was
+        // true of the pre-write ordering crew#719 removed. Saving is now the one write, and the
+        // effect on a LIVE server is the same either way: its next call uses the new value.
         <label data-testid="mcp-add-replace-secret" className="flex items-start gap-2 rounded px-2 py-1 text-[10px]" style={{ background: 'var(--status-gate-dim)', color: 'var(--status-gate)' }}>
           <input type="checkbox" data-testid="mcp-add-replace-secret-ok" checked={replaceOk} onChange={(e) => setReplaceOk(e.target.checked)} />
           <span>
-            {name} is already registered. Previewing writes this secret over the one {name} uses now,
-            before anything is saved — its next call, and any run in flight, uses the new value. The old
-            value cannot be recovered.
+            {name} is already registered. Saving writes this secret over the one {name} uses now — its
+            next call, and any run in flight, uses the new value. The old value cannot be recovered.
+            Previewing only probes with it; nothing is written until you save.
           </span>
         </label>
-      )}
-      {secretNote !== null && (
-        <p data-testid="mcp-add-secret-note" className="text-[10px]" style={{ color: 'var(--status-done)' }}>{secretNote}</p>
       )}
       {error !== null && (
         <p data-testid="mcp-add-error" className="rounded px-2 py-1 text-[10px]" style={{ background: 'var(--status-fail-dim)', color: 'var(--status-fail)' }}>{error}</p>

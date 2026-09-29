@@ -10,9 +10,9 @@
   "version": 1,
   "studioVersion": "0.5.14",
   "counts": {
-    "files": 174,
-    "occurrences": 1748,
-    "static": 1530,
+    "files": 175,
+    "occurrences": 1753,
+    "static": 1535,
     "dynamic": 73,
     "computed": 7
   },
@@ -4067,12 +4067,6 @@
       ]
     },
     {
-      "testId": "mcp-add-secret-note",
-      "files": [
-        "src/components/McpToolsPage.tsx"
-      ]
-    },
-    {
       "testId": "mcp-add-skipped",
       "files": [
         "src/components/McpToolsPage.tsx"
@@ -6582,6 +6576,24 @@
       ]
     },
     {
+      "testId": "skills-behind",
+      "files": [
+        "src/components/SkillsPage.tsx"
+      ]
+    },
+    {
+      "testId": "skills-behind-detail",
+      "files": [
+        "src/components/SkillsPage.tsx"
+      ]
+    },
+    {
+      "testId": "skills-behind-support",
+      "files": [
+        "src/components/SkillsPage.tsx"
+      ]
+    },
+    {
       "testId": "skills-claude-only-badge",
       "files": [
         "src/components/SkillChips.tsx"
@@ -6729,6 +6741,12 @@
       "testId": "skills-drawer-upstream",
       "files": [
         "src/components/SkillDrawer.tsx"
+      ]
+    },
+    {
+      "testId": "skills-drift-unknown",
+      "files": [
+        "src/components/SkillsPage.tsx"
       ]
     },
     {
@@ -9211,6 +9229,18 @@
       "testId": "worker-root-invalid",
       "files": [
         "src/components/SystemSettings.tsx"
+      ]
+    },
+    {
+      "testId": "workflows-refused",
+      "files": [
+        "src/components/WorkflowViewer.tsx"
+      ]
+    },
+    {
+      "testId": "workflows-refused-row",
+      "files": [
+        "src/components/WorkflowViewer.tsx"
       ]
     },
     {
