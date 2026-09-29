@@ -7,8 +7,12 @@
 #
 # Self-contained rather than a wicked-ci caller for the same reason release-api-types.yml is:
 # tokenless OIDC trusted publishing with `--provenance`, tag/manifest agreement guarded, and a
-# post-publish registry probe (FINDING-096: a green publish for something no operator can
-# install is not a release).
+# post-publish registry probe.
+#
+# What gates the GitHub Release is the PUBLISH; the registry probe is advisory (studio#331). The
+# probe still exists for FINDING-096 ("a green publish for something no operator can install is
+# not a release") and it still reports — but registry lag is not a publish failure, and on v0.5.14
+# it cost a good release its Release page. So it backs off over ~6 min and then WARNS.
 
 name: Release
 
