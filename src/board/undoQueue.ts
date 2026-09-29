@@ -274,6 +274,10 @@ const ESCALATION_PREVIEW: Record<string, string> = {
   targeted: "The checks re-run with the repo's targeted tests in place of the full test set.",
   accept_partial: 'The checks that passed re-run; the ones that did not pass or did not run are waived and named in the floor note.',
   accept_suggestion: "The evaluator's edit is applied and the run goes back to the creator phase to rework it.",
+  // wicked-core#555: the amendment changes what the run is JUDGED against, from here on. Say that
+  // — an operator pressing this is descoping, and "the run resumes" would hide it.
+  amend_intent:
+    "The run's acceptance list changes: every phase from here on — the evaluator included — is judged against your amendment instead of the withdrawn launch item. It is recorded on the run.",
 };
 
 export function describeDecision(

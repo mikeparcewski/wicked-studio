@@ -1182,6 +1182,57 @@ export interface EscalationDecision {
   action: EscalationAction;
 }
 
+// ── wicked-core#555 (crew, api-types 0.67.0): amend the run's intent at a gate ────────────────
+
+/**
+ * The `amend_intent` arm of `POST /runs/:id/gate` (typed here because studio pins an older
+ * contract). `request_changes` reaches the CREATOR and an approve's `amend` reaches ONE unit's
+ * instruction; nothing amended the acceptance list an EVALUATOR is handed — the launch intent —
+ * so a mid-run descope could only end in a relaunch, and the evaluator kept failing a withdrawn
+ * item (inconsistently: the same tree passed on one attempt and failed on the next).
+ *
+ * Approve-shaped, the text required and non-empty, and NO `amendScope`: the scope is every unit at
+ * or after the cursor, which is what makes it reach the later evaluator. The engine appends the
+ * text to those units, records it on the run ({@link IntentAmendment}) and emits `intentAmended`;
+ * it refuses the arm at a plan gate or a team pause (409, the gate stays open).
+ */
+export interface AmendIntentDecision {
+  approve: true;
+  action: 'amend_intent';
+  amend: string;
+}
+
+/** One approved intent amendment on the run record (`AgentSession.intent_amendments`). */
+export interface IntentAmendment {
+  /** What the run's acceptance list now says — the operator's own words. */
+  text: string;
+  /** The gate's cursor unit `ord`: the first unit the amendment reached. */
+  ord: number;
+  /** When it was decided, unix millis. */
+  at: number;
+}
+
+/**
+ * The run's approved intent amendments, read off the session record. ABSENT on an unamended run
+ * and on a daemon/engine before the field, so an empty array means "none", never "unknown".
+ * Rows that are not well-formed are dropped rather than rendered half-read.
+ */
+export function intentAmendmentsOf(session: unknown): IntentAmendment[] {
+  const raw = (session as { intent_amendments?: unknown } | null)?.intent_amendments;
+  if (!Array.isArray(raw)) return [];
+  const out: IntentAmendment[] = [];
+  for (const row of raw) {
+    const r = row as { text?: unknown; ord?: unknown; at?: unknown };
+    if (typeof r.text !== 'string' || r.text.trim() === '') continue;
+    out.push({
+      text: r.text,
+      ord: typeof r.ord === 'number' ? r.ord : 0,
+      at: typeof r.at === 'number' ? r.at : 0,
+    });
+  }
+  return out;
+}
+
 // ── studio#306 (wicked-core#539): `agentVerdict: "skipped"`, a judge that was deliberately not run ──
 
 /**

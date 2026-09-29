@@ -17,7 +17,7 @@ import { GATE_HASH } from './GateChip.js';
 import { GateVerdict } from './GateVerdict.js';
 import { escalationOffers, failedSeatOf, gateFrameFor, gateSourceLine, gateVerdictFor, isEscalationGate, isFailureEscalation, isLaunchRefusal, isSeatFailure, isRestoredRetry, phaseLabel, reviewedUnitFor, steerScopeTarget, type EscalationOffer } from './gateVerdictModel.js';
 import { GateUnderReview } from './GateUnderReview.js';
-import type { EscalationDecision } from '../api/wave6-wire.js';
+import type { AmendIntentDecision, EscalationDecision } from '../api/wave6-wire.js';
 import { IntakePlan, isIntakeGate } from './IntakePlan.js';
 import { ReassignControl } from './ReassignControl.js';
 import { DELIVER_STEP, dedupePromptClauses } from '../board/planModel.js';
@@ -468,6 +468,21 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
       ? { approve: true, amend: text, amendScope: 'creator' }
       : { approve: true, amend: text };
     return run(() => commitGateDecision(runId, decision, { deliver: deliverTarget }), { kind: 'approve-with-steer', amend: text });
+  };
+
+  // (wicked-core#555) AMEND THE RUN'S INTENT: approve this gate and change the acceptance list
+  // every LATER phase — the evaluator above all — is judged against. The note IS the amendment, so
+  // it is required; the arm carries no scope (the scope is every unit from the cursor on, which is
+  // what makes it reach the evaluator). Refused by the engine at a plan gate or a team pause, so
+  // the button is hidden there rather than offering an answer the daemon will 409.
+  const amendIntent = (): Promise<void> => {
+    const text = amend.trim();
+    if (!text || planGate.pending || isPlanGate) return Promise.resolve();
+    const decision: AmendIntentDecision = { approve: true, action: 'amend_intent', amend: text };
+    return run(() => commitGateDecision(runId, decision as unknown as GateDecision), {
+      kind: 'approve-with-steer',
+      amend: text,
+    });
   };
 
   // core#469 / core#467: an escalation arm is approve-shaped and carries nothing else — no note,
@@ -946,6 +961,17 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
               Request changes
             </button>
             )}
+            {hidden !== 'steering-amend-intent' && !isPlanGate && (
+            <button
+              data-testid="steering-amend-intent"
+              onClick={() => void amendIntent()}
+              disabled={locked || !amend.trim() || planGate.pending}
+              className={BTN.secondary}
+              title="Approves this gate AND amends the run's acceptance list: every later phase, the evaluator included, is judged against your note instead of the withdrawn launch item (note required)"
+            >
+              Amend intent
+            </button>
+            )}
             <button
               data-testid="steering-reject"
               onClick={() => void reject()}
@@ -1021,6 +1047,17 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
               className={BTN.secondary}
             >
               {restoredRetry ? 'Retry + steer' : 'Approve + steer'}
+            </button>
+            )}
+            {hidden !== 'steering-amend-intent' && !isPlanGate && (
+            <button
+              data-testid="steering-amend-intent"
+              onClick={() => void amendIntent()}
+              disabled={locked || !amend.trim() || planGate.pending}
+              className={BTN.secondary}
+              title="Approves this gate AND amends the run's acceptance list: every later phase, the evaluator included, is judged against your note instead of the withdrawn launch item (note required)"
+            >
+              Amend intent
             </button>
             )}
             <button

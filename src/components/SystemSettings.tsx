@@ -19,6 +19,22 @@ function isAbsolutePathLike(p: string): boolean {
 }
 
 /**
+ * The daemon's settings plus the keys studio's pinned `wicked-crew-api-types` does not carry yet
+ * (crew#549 `deliverIdentityLogin`, in api-types 0.67.0). Delete the extension the moment studio
+ * bumps its pin — the same TODO shape `api/types.ts` uses for the delivery wire.
+ */
+type LocalSettings = Settings & { deliverIdentityLogin?: string };
+
+/**
+ * Client-side mirror of the daemon's deliver-identity rule (crew#549): a GitHub login — letters,
+ * digits and single hyphens, up to 39 — or empty. The daemon stays authoritative (its 400 renders
+ * inline); this only pre-warns, because a bad login there refuses EVERY delivery.
+ */
+function isGitHubLoginLike(login: string): boolean {
+  return /^[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}$/.test(login);
+}
+
+/**
  * Derive a seat's logout shell line from its engine-owned `login_invocation` by
  * swapping the trailing login verb → `logout` (`codex auth login` → `codex auth
  * logout`; `XDG_CONFIG_HOME=… opencode auth login` → `… opencode auth logout`).
@@ -70,7 +86,7 @@ interface SystemSettingsProps {
 
 export function SystemSettings({ navigate = (p) => { history.pushState(null, '', p); window.dispatchEvent(new PopStateEvent('popstate')); } }: SystemSettingsProps): React.ReactElement {
   const [settings, setSettings] = useState<Settings | null>(null);
-  const [dirty, setDirty] = useState<Partial<Settings>>({});
+  const [dirty, setDirty] = useState<Partial<LocalSettings>>({});
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -87,6 +103,7 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
   >(null);
   /** Daemon 400 from a save whose patch included worker_config_root — rendered inline at the field. */
   const [workerRootError, setWorkerRootError] = useState<string | null>(null);
+  const [deliverIdentityError, setDeliverIdentityError] = useState<string | null>(null);
 
   // Runs (studio#123): `studio.composer` on the crew settings wire — the
   // `useNotifPrefsStore` pattern, self-saving, outside the `dirty` patch.
@@ -143,7 +160,7 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
 
   useEffect(() => () => { if (savedTimerRef.current) clearTimeout(savedTimerRef.current); }, []);
 
-  function patch<K extends keyof Settings>(key: K, value: Settings[K]): void {
+  function patch<K extends keyof LocalSettings>(key: K, value: LocalSettings[K]): void {
     setDirty((d) => ({ ...d, [key]: value }));
     setSaved(false);
   }
@@ -153,8 +170,9 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
     setSaving(true);
     setError(null);
     setWorkerRootError(null);
+    setDeliverIdentityError(null);
     try {
-      const { settings: next } = await api.updateSettings(dirty);
+      const { settings: next } = await api.updateSettings(dirty as Partial<Settings>);
       setSettings(next);
       setDirty({});
       setSaved(true);
@@ -165,16 +183,19 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
       // non-absolute path) belongs at the field, not the page banner.
       const msg = e instanceof Error ? e.message : String(e);
       if ('worker_config_root' in dirty) setWorkerRootError(msg);
+      else if ('deliverIdentityLogin' in dirty) setDeliverIdentityError(msg);
       else setError(msg);
     } finally {
       setSaving(false);
     }
   }
 
-  const merged: Settings = { graphNodeLimit: 150, ...settings, ...dirty };
+  const merged: LocalSettings = { graphNodeLimit: 150, ...settings, ...dirty };
   const hasDirty = Object.keys(dirty).length > 0;
   const workerRoot = merged.worker_config_root ?? '';
   const workerRootInvalid = workerRoot !== '' && !isAbsolutePathLike(workerRoot);
+  const deliverIdentity = merged.deliverIdentityLogin ?? '';
+  const deliverIdentityInvalid = deliverIdentity !== '' && !isGitHubLoginLike(deliverIdentity.trim());
 
   return (
     <div className="max-w-2xl mx-auto">
@@ -269,6 +290,45 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
                 data-testid="deliver-pr-unsaved"
               >
                 Not stored by this daemon — applies to this session only.
+              </p>
+            )}
+          </div>
+        </SettingRow>
+
+        {/* crew#549 — the identity the deliver phase pushes as. A LOGIN, never a token: the
+            credential stays in the daemon's gh keyring or its GH_TOKEN, and the daemon serves this
+            login and no secret. The phase refuses before it stages anything when gh's active
+            login, or the credential git would use for the remote, differs from this one. */}
+        <SettingRow
+          label="Deliver identity (GitHub login)"
+          description="The account the deliver phase must push as. Before anything is staged, the phase checks gh's active login AND the credential git would use for the remote's host, and refuses — naming both — if either disagrees. Empty = the daemon's GH_ACCOUNT environment variable, and if that is unset too it pushes as whatever login gh holds. A login, never a token: the credential stays in gh's keyring or GH_TOKEN."
+        >
+          <div className="flex flex-col items-end gap-1">
+            <input
+              type="text"
+              aria-label="Deliver identity (GitHub login)"
+              placeholder="not pinned"
+              data-testid="deliver-identity"
+              value={deliverIdentity}
+              onChange={(e) => {
+                setDeliverIdentityError(null);
+                patch('deliverIdentityLogin', e.target.value);
+              }}
+              className="w-56 rounded px-2 py-1 text-sm font-mono focus:outline-none"
+              style={{
+                background: 'var(--surface-rail)',
+                border: `1px solid ${deliverIdentityInvalid || deliverIdentityError ? 'var(--status-fail-dim)' : 'var(--surface-raised)'}`,
+                color: 'var(--ink-high)',
+              }}
+            />
+            {deliverIdentityInvalid && (
+              <p className="text-xs" style={{ color: 'var(--status-fail)' }} data-testid="deliver-identity-invalid">
+                Must be empty or a GitHub login (letters, digits and single hyphens).
+              </p>
+            )}
+            {deliverIdentityError !== null && (
+              <p className="text-xs" style={{ color: 'var(--status-fail)' }} data-testid="deliver-identity-error">
+                {deliverIdentityError}
               </p>
             )}
           </div>

@@ -22,6 +22,7 @@ import { NowBar } from './NowBar.js';
 import { RerunPreview } from './RerunPreview.js';
 import { useRerunFromHere, type RerunFromHere } from '../hooks/useRerunFromHere.js';
 import { RunDegradedNote } from './RunDegradedNote.js';
+import { RunIntentAmendments } from './RunIntentAmendments.js';
 import { deriveArtifacts, lastNarration, type NarratorContext } from './narrator.js';
 import { runTitle } from './runIdentity.js';
 import { RunTimeline } from './RunTimeline.js';
@@ -1022,6 +1023,11 @@ function RunChat({
       {/* Wave 6 (F-7R2-006 studio half): the council seated fewer seats than configured — said on
           the run head, once, off `unitDistributed.degradedReason`; nothing on a full council. */}
       <RunDegradedNote events={events} />
+
+      {/* wicked-core#555: a human amended this run's acceptance list at a gate — said on the run
+          head, beside the intent it changed, so a later verdict is read against what the run is
+          ACTUALLY judged on. Nothing on an unamended run. */}
+      <RunIntentAmendments session={session} />
 
       {/* Process stepper — the run's map: every phase, in order, with its state at a glance. */}
       <ProcessStepper runId={session.id} units={ordered} executingUnitOrd={executingUnitOrd} rerun={rerun} />
