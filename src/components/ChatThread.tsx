@@ -148,7 +148,9 @@ export function chatCostLabel(c: ChatCost): string {
  * FIRST-SEEN `turnId` so a later send continues the count (§7.9-3 turn
  * identity survives a reload). Pure: no request, no dedup beyond the ordinal.
  */
-export function replayTranscript(records: readonly ChatTranscriptRecord[]): { messages: Msg[]; turns: number } {
+export function replayTranscript(
+  records: readonly ChatTranscriptRecord[],
+): { messages: Msg[]; turns: number; turnIds: Map<string, number> } {
   const ordinal = new Map<string, number>();
   const messages: Msg[] = [];
   for (const r of records) {
@@ -163,7 +165,9 @@ export function replayTranscript(records: readonly ChatTranscriptRecord[]): { me
       messages.push({ kind: 'seat', cliKey: r.cliKey, text: r.text, pending: false, ok: r.ok, turn, usage: r.usage });
     }
   }
-  return { messages, turns: ordinal.size };
+  // The daemon's `turnId` → the local ordinal, so a frame stamped with a turn this surface only
+  // ever saw in the transcript (a reload, a second tab) still finds its reply (crew#561).
+  return { messages, turns: ordinal.size, turnIds: ordinal };
 }
 
 /**

@@ -280,4 +280,50 @@ describe('a chatCitations frame lands on the reply it answers', () => {
     expect(screen.getAllByTestId('seat-citations')).toHaveLength(1);
     expect(screen.getByTestId('seat-citations').textContent).toContain('1 verified · 1 unverifiable');
   });
+
+  it('marks the turn the frame NAMES, even when a later reply already landed', async () => {
+    // Verification runs off the reply's path, so turn 2 can answer before turn 1's verdicts
+    // arrive. Marking "the newest reply" would then brand turn 2 with turn 1's fabrication and
+    // leave the real one plain — a fabricated mark of our own (independent review of #390, HIGH).
+    let nextTurn = 0;
+    sendChatMessage.mockImplementation(() => Promise.resolve({ seats: [], turnId: `t${++nextTurn}` }));
+    render(<GroupChat repoId="repo-2" onBack={() => {}} />);
+    const composer = screen.getByPlaceholderText(/Describe what you want/);
+    await userEvent.type(composer, 'first question');
+    await userEvent.keyboard('{Enter}');
+    await waitFor(() => expect(sendChatMessage).toHaveBeenCalledTimes(1));
+    const chat = (openChat.mock.calls[0]?.[0] as { chatId: string }).chatId;
+    act(() => {
+      streamHandler?.({ type: 'chatReply', chat, cliKey: 'opencode', ok: true, text: 'turn one cites `6d77153`.' });
+    });
+    await userEvent.type(composer, 'second question');
+    await userEvent.keyboard('{Enter}');
+    await waitFor(() => expect(sendChatMessage).toHaveBeenCalledTimes(2));
+    act(() => {
+      streamHandler?.({ type: 'chatReply', chat, cliKey: 'opencode', ok: true, text: 'turn two cites nothing.' });
+    });
+    await waitFor(() => expect(screen.getAllByTestId('seat-bubble')).toHaveLength(2));
+
+    // Turn 1's verdicts, arriving AFTER turn 2's reply.
+    act(() => {
+      streamHandler?.({
+        type: 'chatCitations',
+        chat,
+        cliKey: 'opencode',
+        turn_id: 't1',
+        verified: 0,
+        unverifiable: 1,
+        corrected: 0,
+        unchecked: 0,
+        items: [{ raw: '6d77153', kind: 'sha', status: 'unverified' }],
+      });
+    });
+
+    const strips = await screen.findAllByTestId('seat-citations');
+    expect(strips).toHaveLength(1);
+    const bubbles = screen.getAllByTestId('seat-bubble');
+    expect(bubbles[0]!.textContent).toContain('1 unverifiable'); // the turn that cited it
+    expect(bubbles[1]!.textContent).not.toContain('unverifiable'); // the innocent later turn
+    expect(bubbles[0]!.querySelector('[data-testid="citation-mark"]')).not.toBeNull();
+  });
 });

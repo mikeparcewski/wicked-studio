@@ -27,8 +27,18 @@ describe('replayTranscript — records → the log this surface would have built
     ]);
   });
 
-  it('an empty transcript replays to an empty log and zero turns', () => {
-    expect(replayTranscript([])).toEqual({ messages: [], turns: 0 });
+  it('an empty transcript replays to an empty log, zero turns and no turn mapping', () => {
+    // `turnIds` (crew#561) is the daemon-turn → ordinal map a citation frame is matched through.
+    expect(replayTranscript([])).toEqual({ messages: [], turns: 0, turnIds: new Map() });
+  });
+
+  it('keeps the daemon turn id of every replayed turn, so a citation frame finds its reply', () => {
+    const { turnIds } = replayTranscript([
+      { at: 1, turnId: 'd-1', kind: 'user', text: 'q', seats: ['claude'] },
+      { at: 2, turnId: 'd-1', kind: 'seat', cliKey: 'claude', text: 'a', ok: true, usage: null },
+      { at: 3, turnId: 'd-2', kind: 'user', text: 'q2', seats: ['claude'] },
+    ]);
+    expect([...turnIds.entries()]).toEqual([['d-1', 1], ['d-2', 2]]);
   });
 });
 

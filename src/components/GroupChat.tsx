@@ -549,6 +549,10 @@ export function GroupChat({
   const [sendFailed, setSendFailed] = useState<{ text: string; reason: string } | null>(null);
   // §7.9-3: the send ordinal — every bubble is stamped with the turn it belongs to.
   const turnRef = useRef(0);
+  // crew#561: the daemon's `turn_id` → that send ordinal. A `chatCitations` frame is stamped with
+  // the turn it verified, and two turns can be in flight, so the verdicts are matched by TURN and
+  // not by "the newest reply" — marking the wrong reply would be a fabricated mark of our own.
+  const turnOfDaemonId = useRef(new Map<string, number>());
   // [+ Add] opens the roster picker; ITS roster read is allowed to fetch —
   // opening the picker is a user action, not a mount (§2.4).
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -794,6 +798,7 @@ export function GroupChat({
     chipsTouchedRef.current = false;
     setSendFailed(null);
     turnRef.current = 0;
+    turnOfDaemonId.current = new Map();
     announcedRef.current = new Map();
     refusedRef.current = new Set();
     setPickerOpen(false);
@@ -894,6 +899,7 @@ export function GroupChat({
           const replayed = replayTranscript(probe.messages);
           setMessages(replayed.messages);
           turnRef.current = replayed.turns;
+          turnOfDaemonId.current = replayed.turnIds;
           // A seat that SPOKE in the transcript but is not warm any more was
           // evicted (a turn over budget, a dropped session): it keeps a chip —
           // greyed, wearing its last reason — so it is visibly part of this chat
@@ -1094,10 +1100,15 @@ export function GroupChat({
    * watch): the log is left exactly as it was.
    */
   function attachCitations(cliKey: string, frame: ChatCitationsFrame): void {
+    // The turn the frame NAMES, when this surface knows it (it stamped the send, or read it out of
+    // a replayed transcript). Unknown ⇒ the newest finished reply of that seat: a daemon that does
+    // not stamp turns, or a chat this client joined mid-flight.
+    const turn = frame.turn_id === undefined ? undefined : turnOfDaemonId.current.get(frame.turn_id);
     setMessages((prev) => {
       for (let i = prev.length - 1; i >= 0; i--) {
         const m = prev[i];
         if (m === undefined || m.kind !== 'seat' || m.cliKey !== cliKey || m.pending) continue;
+        if (turn !== undefined && m.turn !== turn) continue;
         if (m.citations !== undefined) return prev; // already answered — never double-mark
         const next = [...prev];
         next[i] = {
@@ -1459,7 +1470,9 @@ export function GroupChat({
         ...Object.fromEntries(audience.map((k) => [k, 'working' as SeatState])),
       }));
       try {
-        await api.sendChatMessage(id, text, audience);
+        const sent = await api.sendChatMessage(id, text, audience);
+        // crew#561: remember which daemon turn this send is, so its citation verdicts land on it.
+        if (typeof sent?.turnId === 'string') turnOfDaemonId.current.set(sent.turnId, turn);
         // studio#323 R2: the first question is the session's handle on /chats
         // (fill-only — a later send never renames it).
         if (id in useLiveChatsStore.getState().sessions) useLiveChatsStore.getState().upsert(id, [], { title: text });
