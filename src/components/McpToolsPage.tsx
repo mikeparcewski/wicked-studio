@@ -386,6 +386,19 @@ function ServerRow({ server, policies, usage, open, onToggle, mode, busy, onAct,
  * Add existing / Wrap an API: paste a command or URL (or a REST API's base URL and its OpenAPI URL)
  * → preview (tools + decisions if saved now) → save that preview.
  */
+/**
+ * What a typed header scheme sends. The broker builds the header as `${prefix}${secret}`, and a
+ * scheme is separated from its credential by ONE space — but a trailing space in a text box is
+ * invisible, so typing the natural `Bearer` would send `Bearertoken` and the API would still 401
+ * (codex review round 4 on #387). A scheme is therefore trimmed and given exactly one space,
+ * unless it ends in a separator that takes none (`token=abc`, `x:abc`).
+ */
+export function schemePrefix(raw: string): string {
+  const scheme = raw.trim();
+  if (scheme === '') return '';
+  return /[=:]$/.test(scheme) ? scheme : `${scheme} `;
+}
+
 function AddServerPanel({ onSaved, onClose, mode, navigate }: {
   onSaved: (name: string) => void;
   onClose: () => void;
@@ -427,7 +440,7 @@ function AddServerPanel({ onSaved, onClose, mode, navigate }: {
     const parts = target.trim().split(/\s+/);
     const into = authEnv.trim() !== '' ? (kind === 'mcp-stdio' ? { env: authEnv.trim() } : { header: authEnv.trim() }) : {};
     // A prefix belongs to a HEADER injection only; an env-injected secret is the value itself.
-    const scheme = kind !== 'mcp-stdio' && authPrefix !== '' ? { prefix: authPrefix } : {};
+    const scheme = kind !== 'mcp-stdio' && authPrefix.trim() !== '' ? { prefix: schemePrefix(authPrefix) } : {};
     const auth = ref === '' ? null : { ref, ...into, ...scheme };
     if (kind === 'mcp-stdio') return { name, kind, command: parts[0] ?? '', args: parts.slice(1), auth };
     if (kind === 'rest') return { name, kind, url: target.trim(), openapiUrl: openapiUrl.trim(), auth };
@@ -574,8 +587,15 @@ function AddServerPanel({ onSaved, onClose, mode, navigate }: {
         {kind !== 'mcp-stdio' && (
           <label className="flex flex-col gap-1 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
             Behind scheme
-            <input data-testid="mcp-add-auth-prefix" value={authPrefix} onChange={(e) => { setAuthPrefix(e.target.value); setPreview(null); }} placeholder="Bearer " spellCheck={false} className={`${input} w-28`} style={inputStyle} />
+            <input data-testid="mcp-add-auth-prefix" value={authPrefix} onChange={(e) => { setAuthPrefix(e.target.value); setPreview(null); }} placeholder="Bearer" spellCheck={false} className={`${input} w-28`} style={inputStyle} />
           </label>
+        )}
+        {kind !== 'mcp-stdio' && authEnv.trim() !== '' && (
+          // The header as it will be sent, spacing included — a trailing space is invisible in
+          // the box, and `Bearertoken` 401s exactly like no header at all.
+          <p data-testid="mcp-add-auth-shape" className="font-mono text-[10px]" style={{ color: 'var(--ink-dim)' }}>
+            {authEnv.trim()}: {schemePrefix(authPrefix)}&lt;the secret&gt;
+          </p>
         )}
         <p className="max-w-[22rem] text-[10px]" style={{ color: 'var(--ink-dim)' }}>
           A pasted value is written to the OS keychain when you preview, and the registry keeps the reference only. The broker resolves it on each call, sends it {kind === 'mcp-stdio' ? 'in that env var' : 'in that header behind that scheme'}, and no worker ever sees the value.

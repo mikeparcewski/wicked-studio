@@ -5,7 +5,7 @@ const apiFetch = vi.fn();
 vi.mock('../src/api/client.js', () => ({ apiFetch: (...a: unknown[]) => apiFetch(...a) }));
 
 import { ApiError } from '../src/api/errors.js';
-import { McpToolsPage } from '../src/components/McpToolsPage.js';
+import { McpToolsPage, schemePrefix } from '../src/components/McpToolsPage.js';
 import { approvals, policies, preview, server, serversResponse } from './mcpFixtures.js';
 
 /**
@@ -405,6 +405,36 @@ describe('MCP tools: add an existing server', () => {
       name: 'tracker', kind: 'rest', url: 'https://api.example.com/v1', openapiUrl: 'https://api.example.com/openapi.json',
       auth: { ref: 'env:TRACKER_TOKEN', header: 'Authorization', prefix: 'Bearer ' },
     });
+  });
+
+  it('a typed scheme is sent with the one space a header needs, and the panel shows the shape', async () => {
+    // codex review round 4 on #387: the broker builds `${prefix}${secret}`, so the natural typed
+    // value `Bearer` (no invisible trailing space) sent `Bearertoken` and the API still 401'd.
+    wire();
+    render(<McpToolsPage navigate={navigate} search="" />);
+    fireEvent.click(await screen.findByTestId('mcp-add-open'));
+    const panel = screen.getByTestId('mcp-add-panel');
+    fireEvent.change(within(panel).getByTestId('mcp-add-kind'), { target: { value: 'rest' } });
+    fireEvent.change(within(panel).getByTestId('mcp-add-name'), { target: { value: 'tracker' } });
+    fireEvent.change(within(panel).getByTestId('mcp-add-target'), { target: { value: 'https://api.example.com/v1' } });
+    fireEvent.change(within(panel).getByTestId('mcp-add-openapi-url'), { target: { value: 'https://api.example.com/openapi.json' } });
+    fireEvent.change(within(panel).getByTestId('mcp-add-auth-ref'), { target: { value: 'env:TRACKER_TOKEN' } });
+    fireEvent.change(within(panel).getByTestId('mcp-add-auth-into'), { target: { value: 'Authorization' } });
+    fireEvent.change(within(panel).getByTestId('mcp-add-auth-prefix'), { target: { value: 'Bearer' } });
+    expect(within(panel).getByTestId('mcp-add-auth-shape').textContent).toBe('Authorization: Bearer <the secret>');
+    fireEvent.click(within(panel).getByTestId('mcp-add-preview'));
+    await within(panel).findByTestId('mcp-add-preview-result');
+    expect((calls.find((c) => c.path === '/mcp/servers/preview')?.body as { auth: { prefix: string } }).auth.prefix).toBe('Bearer ');
+  });
+
+  it('a scheme that ends in its own separator is left alone', async () => {
+    expect(schemePrefix('Bearer')).toBe('Bearer ');
+    expect(schemePrefix('Bearer ')).toBe('Bearer ');
+    expect(schemePrefix('  Bearer  ')).toBe('Bearer ');
+    expect(schemePrefix('token=')).toBe('token=');
+    expect(schemePrefix('x:')).toBe('x:');
+    expect(schemePrefix('')).toBe('');
+    expect(schemePrefix('   ')).toBe('');
   });
 
   it('a stdio server is given its secret in an env var and is offered no header prefix', async () => {

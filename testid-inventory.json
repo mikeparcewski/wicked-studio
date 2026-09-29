@@ -11,8 +11,8 @@
   "studioVersion": "0.5.14",
   "counts": {
     "files": 173,
-    "occurrences": 1741,
-    "static": 1523,
+    "occurrences": 1742,
+    "static": 1524,
     "dynamic": 73,
     "computed": 7
   },
@@ -3942,6 +3942,12 @@
     },
     {
       "testId": "mcp-add-auth-ref",
+      "files": [
+        "src/components/McpToolsPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-add-auth-shape",
       "files": [
         "src/components/McpToolsPage.tsx"
       ]

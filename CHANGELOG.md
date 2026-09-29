@@ -34,7 +34,10 @@ npm publish dates. Every version listed here exists on
   the correction (codex review rounds 1-2 on #387). A header-injected secret also gains its **scheme** (`McpAuthConfig.prefix`, which the broker
   already honoured as `${prefix}${secret}`): without a field for it, an `Authorization: Bearer
   <token>` API was sent the bare token and answered 401. stdio servers, whose secret is the env
-  var's whole value, are offered no scheme.
+  var's whole value, are offered no scheme. A typed scheme is sent with the one space a header
+  needs — `Bearer` and `Bearer ` both send `Bearer <secret>`, a separator scheme like `token=`
+  is left alone — and the panel shows the header it will send, spacing included, because a
+  trailing space in a text box is invisible and `Bearertoken` 401s exactly like no header.
 - **Retire on a memory row removes that one memory (#206).** The row's Retire now calls crew's
   `POST /memory/retire-item` and erases exactly that memory; its confirm says the rest of the scope
   stays. The subtree erase is a separate, quieter "Retire scope…" whose confirm names the whole
