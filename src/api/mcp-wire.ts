@@ -387,7 +387,7 @@ export interface McpApprovalResponse {
 /** The broker's decision on one call (api-types 0.62.0). */
 export type McpCallDecision = 'allow' | 'ask' | 'deny' | 'guard_error';
 
-// ── MCP usage: the fold over the call records (DES-MCP-TOOLS-001 §7 Usage, §8 `GET /mcp/usage`; slice S7; api-types 0.64.0) ──
+// ── MCP usage: the fold over the call records (DES-MCP-TOOLS-001 §7 Usage, §8 `GET /mcp/usage`; slice S7; api-types 0.65.0) ──
 
 /** Every call record in a window, split by the broker's decision. */
 export interface McpDecisionCounts {

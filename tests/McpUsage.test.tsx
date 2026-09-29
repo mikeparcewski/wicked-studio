@@ -10,7 +10,7 @@ import { approvals, NOTE_RUNS, policies, serversResponse, usage } from './mcpFix
 
 /**
  * MCP tools → Usage (`/mcp?view=usage`, DES-MCP-TOOLS-001 §7, slice S7) over a mocked
- * `GET /mcp/usage` shaped exactly like crew's answer (api-types 0.64.0), with the numbers crew's
+ * `GET /mcp/usage` shaped exactly like crew's answer (api-types 0.65.0), with the numbers crew's
  * own proving test hand-computes (crew tests/mcp-usage.test.ts):
  *  - the tiles show calls, the decision split allow / ask / deny / guard error, error rate, p50/p95;
  *  - the per-tool table and the common tool chains render as answered;
