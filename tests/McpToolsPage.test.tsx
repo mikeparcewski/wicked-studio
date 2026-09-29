@@ -6,7 +6,7 @@ vi.mock('../src/api/client.js', () => ({ apiFetch: (...a: unknown[]) => apiFetch
 
 import { ApiError } from '../src/api/errors.js';
 import { McpToolsPage } from '../src/components/McpToolsPage.js';
-import { approvals, policies, preview, serversResponse } from './mcpFixtures.js';
+import { approvals, policies, preview, server, serversResponse } from './mcpFixtures.js';
 
 /**
  * MCP tools (`/mcp`, DES-MCP-TOOLS-001 §7, slice S6) over a mocked `/mcp/*` wire shaped exactly
@@ -140,6 +140,59 @@ describe('MCP tools: Approve and Revoke are audited policy edits crew makes', ()
     fireEvent.click(await within(row).findByTestId('mcp-server-approve'));
     await waitFor(() => expect(screen.getByTestId('mcp-note').dataset['ok']).toBe('false'));
     expect(screen.getByTestId('mcp-note').textContent).toMatch(/Approved the first use of fx failed: .*MCP-FIRST-USE/);
+  });
+
+  it('actions stay disabled until the reload after an action lands', async () => {
+    let gets = 0;
+    let release: () => void = () => undefined;
+    wire({
+      servers: () => {
+        gets += 1;
+        if (gets === 1) return Promise.resolve(serversResponse());
+        return new Promise((r) => { release = () => r(serversResponse()); });
+      },
+    });
+    render(<McpToolsPage navigate={navigate} search="" />);
+    const row = await openServer();
+    fireEvent.click(await within(row).findByTestId('mcp-server-approve'));
+    await waitFor(() => expect(screen.getByTestId('mcp-note').textContent).toBe('Approved the first use of fx.'));
+    // The approval answered but the reload has not: no control may act on the pre-action state.
+    const plainRow = (): HTMLElement => screen.getAllByTestId('mcp-tool-row').find((r) => r.dataset['subject'] === 'mcp:fx/wt_plain') as HTMLElement;
+    expect((within(plainRow()).getByTestId('mcp-tool-approve') as HTMLButtonElement).disabled).toBe(true);
+    expect((within(screen.getByTestId('mcp-server-row')).getByTestId('mcp-server-remove') as HTMLButtonElement).disabled).toBe(true);
+    release();
+    await waitFor(() => expect((within(plainRow()).getByTestId('mcp-tool-approve') as HTMLButtonElement).disabled).toBe(false));
+  });
+
+  it('an older, slower load never overwrites a newer one', async () => {
+    const withJira = serversResponse({ servers: [server(), server({ name: 'jira' })] });
+    let gets = 0;
+    let releaseStale: () => void = () => undefined;
+    wire({
+      servers: () => {
+        gets += 1;
+        if (gets === 1) return Promise.resolve(serversResponse());
+        // The reload after Approve is slow and answers the world before jira was saved.
+        if (gets === 2) return new Promise((r) => { releaseStale = () => r(serversResponse()); });
+        return Promise.resolve(withJira);
+      },
+    });
+    render(<McpToolsPage navigate={navigate} search="" />);
+    fireEvent.click(await screen.findByTestId('mcp-add-open'));
+    const panel = screen.getByTestId('mcp-add-panel');
+    fireEvent.change(within(panel).getByTestId('mcp-add-name'), { target: { value: 'jira' } });
+    fireEvent.change(within(panel).getByTestId('mcp-add-target'), { target: { value: 'npx jira-mcp' } });
+    fireEvent.click(within(panel).getByTestId('mcp-add-preview'));
+    const result = await within(panel).findByTestId('mcp-add-preview-result');
+    const row = await openServer();
+    fireEvent.click(await within(row).findByTestId('mcp-server-approve')); // load #2 starts and hangs
+    await waitFor(() => expect(gets).toBe(2));
+    fireEvent.click(within(result).getByTestId('mcp-add-save')); // load #3 answers with jira
+    await waitFor(() => expect(screen.getAllByTestId('mcp-server-row').map((r) => r.dataset['server'])).toEqual(['fx', 'jira']));
+    releaseStale();
+    const fxRow = (): HTMLElement => screen.getAllByTestId('mcp-server-row').find((r) => r.dataset['server'] === 'fx') as HTMLElement;
+    await waitFor(() => expect((within(fxRow()).getByTestId('mcp-server-remove') as HTMLButtonElement).disabled).toBe(false));
+    expect(screen.getAllByTestId('mcp-server-row').map((r) => r.dataset['server'])).toEqual(['fx', 'jira']);
   });
 });
 
