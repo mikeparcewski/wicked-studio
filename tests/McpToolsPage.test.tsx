@@ -384,6 +384,37 @@ describe('MCP tools: add an existing server', () => {
     expect(values).toEqual(['the-typo-secret', 'the-correct-secret']);
   });
 
+  it("replacing a registered server's live secret is said before it happens, and consented", async () => {
+    // codex review round 5 on #387: "Nothing is registered until you save that exact preview" is
+    // true of the REGISTRY, not of the keychain. Previewing a name that is already registered
+    // overwrites the credential its running calls use, before anything is saved.
+    wire();
+    render(<McpToolsPage navigate={navigate} search="" />);
+    fireEvent.click(await screen.findByTestId('mcp-add-open'));
+    const panel = screen.getByTestId('mcp-add-panel');
+    fireEvent.change(within(panel).getByTestId('mcp-add-name'), { target: { value: 'fx' } }); // the registered one
+    fireEvent.change(within(panel).getByTestId('mcp-add-target'), { target: { value: 'npx -y @acme/fx' } });
+    const previewBtn = within(panel).getByTestId('mcp-add-preview') as HTMLButtonElement;
+    expect(previewBtn.disabled).toBe(false);
+    expect(within(panel).queryByTestId('mcp-add-replace-secret')).toBeNull(); // no value yet: nothing is overwritten
+
+    fireEvent.change(within(panel).getByTestId('mcp-add-auth-value'), { target: { value: 'a-new-secret-value' } });
+    expect(within(panel).getByTestId('mcp-add-replace-secret').textContent).toMatch(/already registered/);
+    expect(previewBtn.disabled).toBe(true); // the write cannot happen unconsented
+    expect(calls.some((c) => c.path.endsWith('/secret'))).toBe(false);
+
+    fireEvent.click(within(panel).getByTestId('mcp-add-replace-secret-ok'));
+    expect(previewBtn.disabled).toBe(false);
+    fireEvent.click(previewBtn);
+    await within(panel).findByTestId('mcp-add-preview-result');
+    expect(calls.find((c) => c.path === '/mcp/servers/fx/secret')?.body).toEqual({ value: 'a-new-secret-value' });
+
+    // Retyping the name or the value takes the consent back.
+    fireEvent.change(within(panel).getByTestId('mcp-add-auth-value'), { target: { value: 'another-secret-value' } });
+    expect((within(panel).getByTestId('mcp-add-replace-secret-ok') as HTMLInputElement).checked).toBe(false);
+    expect((within(panel).getByTestId('mcp-add-preview') as HTMLButtonElement).disabled).toBe(true);
+  });
+
   it('a bearer API carries its scheme prefix, so the header is not the bare secret', async () => {
     // `McpAuthConfig.prefix` is in the wire contract and the broker honours it
     // (crew mcp/rest.ts authHeaders: `${prefix ?? ''}${secret}`). With no field for it every

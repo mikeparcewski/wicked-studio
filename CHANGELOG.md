@@ -38,6 +38,11 @@ npm publish dates. Every version listed here exists on
   needs — `Bearer` and `Bearer ` both send `Bearer <secret>`, a separator scheme like `token=`
   is left alone — and the panel shows the header it will send, spacing included, because a
   trailing space in a text box is invisible and `Bearertoken` 401s exactly like no header.
+  Pasting a secret for a name that is **already registered** replaces the credential that server's
+  running calls use, before anything is saved — so the panel says exactly that and will not
+  preview until the operator ticks it, and retyping the name or the value takes the consent back.
+  (The keychain write is still not atomic with the save: crew has no staged-secret route, so an
+  abandoned replacement leaves the new value in place. Named where it happens.)
 - **Retire on a memory row removes that one memory (#206).** The row's Retire now calls crew's
   `POST /memory/retire-item` and erases exactly that memory; its confirm says the rest of the scope
   stays. The subtree erase is a separate, quieter "Retire scope…" whose confirm names the whole

@@ -399,11 +399,14 @@ export function schemePrefix(raw: string): string {
   return /[=:]$/.test(scheme) ? scheme : `${scheme} `;
 }
 
-function AddServerPanel({ onSaved, onClose, mode, navigate }: {
+function AddServerPanel({ onSaved, onClose, mode, navigate, saved }: {
   onSaved: (name: string) => void;
   onClose: () => void;
   mode: McpRunMode;
   navigate: (p: string) => void;
+  /** The servers already registered — a pasted secret for one of these REPLACES its live
+   *  credential, which its running calls use from the next call, so it needs consent. */
+  saved: ReadonlyArray<string>;
 }): React.ReactElement {
   const [name, setName] = useState('');
   const [kind, setKind] = useState<McpUpstreamKind>('mcp-stdio');
@@ -426,6 +429,7 @@ function AddServerPanel({ onSaved, onClose, mode, navigate }: {
    */
   const [authValue, setAuthValue] = useState('');
   const [secretNote, setSecretNote] = useState<string | null>(null);
+  const [replaceOk, setReplaceOk] = useState(false);
   /** The preview, bound to the exact request it answered (`key`): only shown and saved while the
    *  form still says the same thing, so a late answer to an older request can never be saved. */
   const [held, setHeld] = useState<{ key: string; preview: McpPreviewResponse } | null>(null);
@@ -433,7 +437,11 @@ function AddServerPanel({ onSaved, onClose, mode, navigate }: {
   const [error, setError] = useState<string | null>(null);
 
   const nameOk = /^[a-z0-9_-]{1,63}$/.test(name);
-  const ready = nameOk && target.trim() !== '' && (kind !== 'rest' || openapiUrl.trim() !== '') && (authRef.trim() === '' || /^(env|keychain):/.test(authRef.trim()));
+  /** A pasted secret for a name already registered overwrites THAT server's live credential. */
+  const replacesLiveSecret = authValue !== '' && saved.includes(name);
+  const ready = nameOk && target.trim() !== '' && (kind !== 'rest' || openapiUrl.trim() !== '')
+    && (authRef.trim() === '' || /^(env|keychain):/.test(authRef.trim()))
+    && (!replacesLiveSecret || replaceOk);
 
   /** The request for one secret reference — the state's, or the one the keychain write just gave. */
   const bodyWith = (ref: string) => {
@@ -535,7 +543,7 @@ function AddServerPanel({ onSaved, onClose, mode, navigate }: {
       <div className="flex flex-wrap items-end gap-2">
         <label className="flex flex-col gap-1 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
           Name
-          <input data-testid="mcp-add-name" value={name} onChange={(e) => { setName(e.target.value); setPreview(null); }} placeholder="jira" spellCheck={false} className={`${input} w-32`} style={{ ...inputStyle, borderColor: name === '' || nameOk ? undefined : 'var(--status-fail)' }} />
+          <input data-testid="mcp-add-name" value={name} onChange={(e) => { setName(e.target.value); setReplaceOk(false); setPreview(null); }} placeholder="jira" spellCheck={false} className={`${input} w-32`} style={{ ...inputStyle, borderColor: name === '' || nameOk ? undefined : 'var(--status-fail)' }} />
         </label>
         <label className="flex flex-col gap-1 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
           Kind
@@ -573,7 +581,7 @@ function AddServerPanel({ onSaved, onClose, mode, navigate }: {
             type="password"
             autoComplete="off"
             value={authValue}
-            onChange={(e) => { setAuthValue(e.target.value); setSecretNote(null); setPreview(null); }}
+            onChange={(e) => { setAuthValue(e.target.value); setReplaceOk(false); setSecretNote(null); setPreview(null); }}
             placeholder="paste it once"
             spellCheck={false}
             className={`${input} w-44`}
@@ -604,6 +612,19 @@ function AddServerPanel({ onSaved, onClose, mode, navigate }: {
           {busy && preview === null ? 'Probing…' : 'Preview'}
         </button>
       </div>
+      {replacesLiveSecret && (
+        // "Nothing is registered until you save that exact preview" is true of the REGISTRY, not
+        // of the keychain: the secret is written when you preview, and `s8notes`'s running calls
+        // use the new one from their next call. Said before it happens, not after.
+        <label data-testid="mcp-add-replace-secret" className="flex items-start gap-2 rounded px-2 py-1 text-[10px]" style={{ background: 'var(--status-gate-dim)', color: 'var(--status-gate)' }}>
+          <input type="checkbox" data-testid="mcp-add-replace-secret-ok" checked={replaceOk} onChange={(e) => setReplaceOk(e.target.checked)} />
+          <span>
+            {name} is already registered. Previewing writes this secret over the one {name} uses now,
+            before anything is saved — its next call, and any run in flight, uses the new value. The old
+            value cannot be recovered.
+          </span>
+        </label>
+      )}
       {secretNote !== null && (
         <p data-testid="mcp-add-secret-note" className="text-[10px]" style={{ color: 'var(--status-done)' }}>{secretNote}</p>
       )}
@@ -798,6 +819,7 @@ export function McpToolsPage({ navigate, search }: { navigate: (p: string) => vo
           <AddServerPanel
             mode={mode}
             navigate={navigate}
+            saved={loaded.servers.servers.map((sv) => sv.name)}
             onClose={() => setAdding(false)}
             onSaved={(name) => {
               setAdding(false);
