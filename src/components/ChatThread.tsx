@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { ChatTranscriptRecord, ChatUsage } from '../api/types.js';
-import type { ChatCitations } from '../api/chat-wire.js';
+import type { ChatCitations, ChatCitationsRecord } from '../api/chat-wire.js';
 import { CitationStrip, citationMarks } from './citations.js';
 import { Markdown } from './Markdown.js';
 import { ArtifactCard } from './ArtifactCard.js';
@@ -149,7 +149,7 @@ export function chatCostLabel(c: ChatCost): string {
  * identity survives a reload). Pure: no request, no dedup beyond the ordinal.
  */
 export function replayTranscript(
-  records: readonly ChatTranscriptRecord[],
+  records: readonly (ChatTranscriptRecord | ChatCitationsRecord)[],
 ): { messages: Msg[]; turns: number; turnIds: Map<string, number> } {
   const ordinal = new Map<string, number>();
   const messages: Msg[] = [];
@@ -161,6 +161,26 @@ export function replayTranscript(
     }
     if (r.kind === 'user') {
       messages.push({ kind: 'user', text: r.text, turn });
+    } else if (r.kind === 'citations') {
+      // crew#561 (api-types 0.68.0): the verdicts of an earlier reply, appended after it — the
+      // transcript is append-only and verification finishes after the reply is stored. FOLD it onto
+      // that reply (same turn + seat), which is what keeps a fabricated SHA marked across a reload.
+      // A record with no reply to fold onto (a torn transcript) is dropped, never rendered alone.
+      for (let i = messages.length - 1; i >= 0; i--) {
+        const m = messages[i];
+        if (m === undefined || m.kind !== 'seat' || m.cliKey !== r.cliKey || m.turn !== turn) continue;
+        messages[i] = {
+          ...m,
+          citations: {
+            verified: r.verified,
+            unverifiable: r.unverifiable,
+            corrected: r.corrected,
+            unchecked: r.unchecked,
+            items: r.items,
+          },
+        };
+        break;
+      }
     } else {
       messages.push({ kind: 'seat', cliKey: r.cliKey, text: r.text, pending: false, ok: r.ok, turn, usage: r.usage });
     }

@@ -50,6 +50,24 @@ export interface ChatCitationsFrame {
   project_id?: string;
 }
 
+/**
+ * The transcript's third record kind (api-types 0.68.0): the verdicts of the `seat` record with the
+ * same `turnId` + `cliKey`, appended after it because verification finishes after the reply is
+ * stored. This is what keeps a fabricated SHA marked across a reload — the live frame is gone by
+ * then, and `/ws` replays nothing.
+ */
+export interface ChatCitationsRecord {
+  at: number;
+  turnId: string;
+  kind: 'citations';
+  cliKey: string;
+  verified: number;
+  unverifiable: number;
+  corrected: number;
+  unchecked: number;
+  items: ChatCitationItem[];
+}
+
 /** What a reply carries once its frame arrived — the frame minus its routing fields. */
 export interface ChatCitations {
   verified: number;

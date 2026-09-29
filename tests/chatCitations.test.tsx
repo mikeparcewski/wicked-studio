@@ -16,7 +16,7 @@ import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { Markdown } from '../src/components/Markdown.js';
-import { ChatThread, type Msg } from '../src/components/ChatThread.js';
+import { ChatThread, replayTranscript, type Msg } from '../src/components/ChatThread.js';
 import { citationLabel, citationMarks, flaggedCitations } from '../src/components/citations.js';
 import type { ChatCitationItem, ChatCitations } from '../src/api/chat-wire.js';
 import { GroupChat } from '../src/components/GroupChat.js';
@@ -169,6 +169,52 @@ describe('the bubble: the strip, and the inline mark on the citation itself', ()
     );
     expect(container.querySelector('[data-testid="citation-mark"]')).toBeNull();
     expect(container.textContent).toContain('git show 6d77153');
+  });
+});
+
+// ── The fold (a reload: the transcript's own record) ────────────────────────
+
+describe('a reload keeps the marks — the transcript carries the verdicts', () => {
+  it('folds a citations record onto the reply it belongs to', () => {
+    const { messages } = replayTranscript([
+      { at: 1, turnId: 'd-1', kind: 'user', text: 'release notes', seats: ['opencode'] },
+      { at: 2, turnId: 'd-1', kind: 'seat', cliKey: 'opencode', text: 'cites `6d77153`', ok: true, usage: null },
+      { at: 3, turnId: 'd-1', kind: 'seat', cliKey: 'claude', text: 'cites nothing', ok: true, usage: null },
+      {
+        at: 4,
+        turnId: 'd-1',
+        kind: 'citations',
+        cliKey: 'opencode',
+        verified: 1,
+        unverifiable: 1,
+        corrected: 0,
+        unchecked: 0,
+        items: [item()],
+      },
+    ]);
+    // Three bubbles, not four: the verdicts are not a message.
+    expect(messages).toHaveLength(3);
+    const opencode = messages[1] as Extract<Msg, { kind: 'seat' }>;
+    const claude = messages[2] as Extract<Msg, { kind: 'seat' }>;
+    expect(opencode.citations).toMatchObject({ verified: 1, unverifiable: 1 });
+    expect(claude.citations).toBeUndefined(); // the other seat's reply is untouched
+  });
+
+  it('drops a record with no reply to fold onto instead of rendering it', () => {
+    const { messages } = replayTranscript([
+      {
+        at: 1,
+        turnId: 'd-9',
+        kind: 'citations',
+        cliKey: 'opencode',
+        verified: 0,
+        unverifiable: 1,
+        corrected: 0,
+        unchecked: 0,
+        items: [item()],
+      },
+    ]);
+    expect(messages).toEqual([]);
   });
 });
 
