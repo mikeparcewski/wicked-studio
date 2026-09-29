@@ -494,6 +494,10 @@ export function RightPanel({ view, runs, onSelectRun, navigate }: Props): React.
   const [openAccordion, setOpenAccordion] = useState<AccordionId | null>(() =>
     typeof window !== 'undefined' && window.location.hash === '#governance' ? 'governance' : 'whatwhere',
   );
+  // The panel does not remount between runs: a run selected with `#governance` opens it too.
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.location.hash === '#governance') setOpenAccordion('governance');
+  }, [view.session.id]);
 
   // Provenance rides the run-detail load: ONE `GET /audit?runId=` per detail
   // view, cached per run id (DES-UX-001 §3.3 — the sanctioned exception,
