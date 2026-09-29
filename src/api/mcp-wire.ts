@@ -1,9 +1,9 @@
 /**
  * The MCP tools wire (DES-MCP-TOOLS-001 §5, §8; crew slices S2 + S6, `wicked-crew-api-types`
- * 0.58.0 + 0.63.0 + 0.64.0; the usage fold, slice S7, 0.65.0), hand-mirrored VERBATIM from the
+ * 0.58.0 + 0.63.0 + 0.64.0; the usage fold, slice S7, 0.66.0), hand-mirrored VERBATIM from the
  * contract package because studio's installed `wicked-crew-api-types` (0.40.0) predates it.
  * TEMPORARY, like `./skills-wire.ts`: delete this file and re-export from `wicked-crew-api-types`
- * the moment studio bumps to >= 0.65.0.
+ * the moment studio bumps to >= 0.66.0.
  * Types only: nothing here runs.
  */
 
@@ -387,7 +387,7 @@ export interface McpApprovalResponse {
 /** The broker's decision on one call (api-types 0.62.0). */
 export type McpCallDecision = 'allow' | 'ask' | 'deny' | 'guard_error';
 
-// ── MCP usage: the fold over the call records (DES-MCP-TOOLS-001 §7 Usage, §8 `GET /mcp/usage`; slice S7; api-types 0.65.0) ──
+// ── MCP usage: the fold over the call records (DES-MCP-TOOLS-001 §7 Usage, §8 `GET /mcp/usage`; slice S7; api-types 0.66.0) ──
 
 /** Every call record in a window, split by the broker's decision. */
 export interface McpDecisionCounts {
