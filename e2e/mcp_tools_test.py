@@ -19,10 +19,13 @@ an unapproved write, Auto runs).
      shows creator ask by MCP-POSTURE-WRITE and evaluator deny by engine:mcp-phase-role.
   4. Approve the tool → creator runs, evaluator is still denied (an approval never lifts D-1);
      the page has no horizontal overflow at 1440x700.
+  4b. Wrap a REST API (slice S5a): kind "REST API (OpenAPI)" takes a base URL, the OpenAPI URL and
+     a header secret; the preview lists each operation as a tool classed by its method and names
+     the operations that could not be wrapped.
   5. Steering → Policies: the MCP chip filters to the MCP rules; Add ▾ → Add MCP policy lists the
      registered server in its Subject picker.
 
-Captures: e2e/shots/mcp-tools-{preview,approved,steering}-<skin>.png. Skin: STUDIO_SKIN.
+Captures: e2e/shots/mcp-tools-{preview,approved,rest,steering}-<skin>.png. Skin: STUDIO_SKIN.
 Env: FEEDBACK_PORT (default 4512). Prints a JSON report; exit 0/1.
 """
 
@@ -43,6 +46,12 @@ TOOLS = [
     {"name": "wt_echo", "annotations": {"readOnlyHint": True}, "class": "read"},
     {"name": "wt_note", "annotations": {"destructiveHint": True}, "class": "destructive"},
     {"name": "wt_plain", "annotations": None, "class": "write"},
+]
+
+REST_TOOLS = [
+    {"name": "getIssue", "annotations": {"readOnlyHint": True, "destructiveHint": False}, "class": "read"},
+    {"name": "createIssue", "annotations": {"readOnlyHint": False, "destructiveHint": False}, "class": "write"},
+    {"name": "deleteIssue", "annotations": {"readOnlyHint": False, "destructiveHint": True}, "class": "destructive"},
 ]
 
 report: dict = {"ok": False, "skin": STUDIO_SKIN, "steps": {}}
@@ -135,6 +144,18 @@ def handle_mcp(route) -> None:
 
     if path == "/mcp/servers" and method == "GET":
         return ok({"servers": [server_view(n) for n in mcp["servers"]], "discovered": []})
+    if path == "/mcp/servers/preview" and body.get("kind") == "rest":
+        name = body["name"]
+        tools = [{**{k: v for k, v in tool_view(name, t).items() if k in ("name", "subject", "description", "annotations", "inputSchema", "class", "schemaHash")},
+                  "rest": {"method": "GET", "pathTemplate": "/issues/{id}", "pathMap": {"id": "id"}, "queryMap": {}, "headerMap": {},
+                           "bodyMap": None, "bodyArg": None, "argAllowlist": ["id"], "timeoutMs": 30000}} for t in REST_TOOLS]
+        pol = {"roles": ROLES, "seats": SEATS, "modes": MODES, "phaseId": None, "withdrawOnSave": [],
+               "tools": [policy_tool(name, t) for t in REST_TOOLS]}
+        return ok({"previewHash": f"ph-{name}", "expiresAt": "2099-01-01T00:00:00.000Z",
+                   "server": {"name": name, "kind": "rest", "command": None, "args": [], "url": body.get("url"),
+                              "auth": body.get("auth"), "openapiUrl": body.get("openapiUrl"), "operations": None},
+                   "serverInfo": {"name": "Tracker API", "version": "1.2.0"}, "tools": tools, "diff": None,
+                   "skipped": ["PUT /files: its request body is not JSON"], "policies": pol})
     if path == "/mcp/servers/preview":
         name = body["name"]
         tools = [{k: v for k, v in tool_view(name, t).items() if k in ("name", "subject", "description", "annotations", "inputSchema", "class", "schemaHash")} for t in TOOLS]
@@ -279,6 +300,34 @@ with sync_playwright() as p:
     ov = no_overflow(page)
     check("no-horizontal-overflow", ov["docW"] <= ov["winW"] and ov["main"] is not None and ov["main"]["sw"] <= ov["main"]["cw"], **ov)
     page.screenshot(path=str(SHOTS / f"mcp-tools-approved-{STUDIO_SKIN}.png"))
+
+    # ── 4b. wrap a REST API (S5a) ────────────────────────────────────────────────
+    page.get_by_test_id("mcp-add-open").click()
+    page.get_by_test_id("mcp-add-kind").select_option("rest")
+    page.get_by_test_id("mcp-add-name").fill("tracker")
+    page.get_by_test_id("mcp-add-target").fill("https://api.example.com/v1")
+    page.get_by_test_id("mcp-add-openapi-url").fill("https://api.example.com/openapi.json")
+    page.get_by_test_id("mcp-add-auth-ref").fill("env:TRACKER_TOKEN")
+    page.get_by_test_id("mcp-add-auth-into").fill("Authorization")
+    page.get_by_test_id("mcp-add-preview").click()
+    try:
+        page.get_by_test_id("mcp-add-skipped").wait_for(state="visible", timeout=5000)
+    except Exception:
+        fail("rest-preview", page.get_by_test_id("mcp-add-panel").inner_text())
+    sent = [x["body"] for x in mcp["posts"] if x["path"] == "/mcp/servers/preview"][-1]
+    rest_prev = page.evaluate("() => [...document.querySelectorAll('[data-testid=\"mcp-add-preview-tool\"]')].map(t => [t.dataset.subject, t.dataset.class])")
+    check("rest-preview-classes-by-method",
+          sent == {"name": "tracker", "kind": "rest", "url": "https://api.example.com/v1", "openapiUrl": "https://api.example.com/openapi.json",
+                   "auth": {"ref": "env:TRACKER_TOKEN", "header": "Authorization"}}
+          and rest_prev == [["mcp:tracker/getIssue", "read"], ["mcp:tracker/createIssue", "write"], ["mcp:tracker/deleteIssue", "destructive"]]
+          and "PUT /files" in page.get_by_test_id("mcp-add-skipped").inner_text()
+          and page.get_by_test_id("mcp-add-panel").locator("h3").inner_text() == "Wrap a REST API",
+          sent=sent, preview=rest_prev)
+    ov = no_overflow(page)
+    check("rest-no-horizontal-overflow", ov["docW"] <= ov["winW"], **ov)
+    page.get_by_test_id("mcp-add-panel").scroll_into_view_if_needed()
+    page.screenshot(path=str(SHOTS / f"mcp-tools-rest-{STUDIO_SKIN}.png"))
+    page.get_by_test_id("mcp-add-cancel").click()
 
     # ── 5. Steering: the MCP filter and the Subject picker ───────────────────────
     page.goto(f"{origin}/steering/policies?mcp=1", wait_until="domcontentloaded")
