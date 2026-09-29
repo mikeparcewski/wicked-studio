@@ -49,9 +49,9 @@ TOOLS = [
 ]
 
 REST_TOOLS = [
-    {"name": "getIssue", "annotations": {"readOnlyHint": True, "destructiveHint": False}, "class": "read"},
-    {"name": "createIssue", "annotations": {"readOnlyHint": False, "destructiveHint": False}, "class": "write"},
-    {"name": "deleteIssue", "annotations": {"readOnlyHint": False, "destructiveHint": True}, "class": "destructive"},
+    {"name": "getIssue", "method": "GET", "path": "/issues/{id}", "annotations": {"readOnlyHint": True, "destructiveHint": False}, "class": "read"},
+    {"name": "createIssue", "method": "POST", "path": "/issues", "annotations": {"readOnlyHint": False, "destructiveHint": False}, "class": "write"},
+    {"name": "deleteIssue", "method": "DELETE", "path": "/issues/{id}", "annotations": {"readOnlyHint": False, "destructiveHint": True}, "class": "destructive"},
 ]
 
 report: dict = {"ok": False, "skin": STUDIO_SKIN, "steps": {}}
@@ -147,8 +147,11 @@ def handle_mcp(route) -> None:
     if path == "/mcp/servers/preview" and body.get("kind") == "rest":
         name = body["name"]
         tools = [{**{k: v for k, v in tool_view(name, t).items() if k in ("name", "subject", "description", "annotations", "inputSchema", "class", "schemaHash")},
-                  "rest": {"method": "GET", "pathTemplate": "/issues/{id}", "pathMap": {"id": "id"}, "queryMap": {}, "headerMap": {},
-                           "bodyMap": None, "bodyArg": None, "argAllowlist": ["id"], "timeoutMs": 30000}} for t in REST_TOOLS]
+                  # crew classes a REST tool by its method (GET read, POST write, DELETE destructive);
+                  # the rig answers the class crew would, and the page shows what it is given.
+                  "rest": {"method": t["method"], "pathTemplate": t["path"], "pathMap": {"id": "id"} if "{id}" in t["path"] else {},
+                           "queryMap": {}, "headerMap": {}, "bodyMap": {"title": "title"} if t["method"] == "POST" else None, "bodyArg": None,
+                           "argAllowlist": ["id"] if "{id}" in t["path"] else ["title"], "timeoutMs": 30000}} for t in REST_TOOLS]
         pol = {"roles": ROLES, "seats": SEATS, "modes": MODES, "phaseId": None, "withdrawOnSave": [],
                "tools": [policy_tool(name, t) for t in REST_TOOLS]}
         return ok({"previewHash": f"ph-{name}", "expiresAt": "2099-01-01T00:00:00.000Z",
@@ -316,7 +319,7 @@ with sync_playwright() as p:
         fail("rest-preview", page.get_by_test_id("mcp-add-panel").inner_text())
     sent = [x["body"] for x in mcp["posts"] if x["path"] == "/mcp/servers/preview"][-1]
     rest_prev = page.evaluate("() => [...document.querySelectorAll('[data-testid=\"mcp-add-preview-tool\"]')].map(t => [t.dataset.subject, t.dataset.class])")
-    check("rest-preview-classes-by-method",
+    check("rest-preview-shows-each-operation-and-class",
           sent == {"name": "tracker", "kind": "rest", "url": "https://api.example.com/v1", "openapiUrl": "https://api.example.com/openapi.json",
                    "auth": {"ref": "env:TRACKER_TOKEN", "header": "Authorization"}}
           and rest_prev == [["mcp:tracker/getIssue", "read"], ["mcp:tracker/createIssue", "write"], ["mcp:tracker/deleteIssue", "destructive"]]
