@@ -415,6 +415,43 @@ describe('MCP tools: add an existing server', () => {
     expect((within(panel).getByTestId('mcp-add-preview') as HTMLButtonElement).disabled).toBe(true);
   });
 
+  it('a half-typed reference does not block the secret that replaces it, and a fixed field clears the error', async () => {
+    // codex review round 6 on #387: a pasted value decides the reference, so validating the
+    // typed one kept a valid secret from ever being written; and a stale failure stayed on
+    // screen after the field it complained about was fixed.
+    wire();
+    const base = apiFetch.getMockImplementation() as (p: string, i?: RequestInit) => Promise<unknown>;
+    let fail = true;
+    apiFetch.mockImplementation((p: string, i?: RequestInit) =>
+      p === '/mcp/servers/tracker/secret' && fail
+        ? Promise.reject(new ApiError(400, 'a secret is at least 8 characters', 'invalid_body'))
+        : base(p, i));
+    render(<McpToolsPage navigate={navigate} search="" />);
+    fireEvent.click(await screen.findByTestId('mcp-add-open'));
+    const panel = screen.getByTestId('mcp-add-panel');
+    fireEvent.change(within(panel).getByTestId('mcp-add-kind'), { target: { value: 'rest' } });
+    fireEvent.change(within(panel).getByTestId('mcp-add-name'), { target: { value: 'tracker' } });
+    fireEvent.change(within(panel).getByTestId('mcp-add-target'), { target: { value: 'https://api.example.com/v1' } });
+    fireEvent.change(within(panel).getByTestId('mcp-add-openapi-url'), { target: { value: 'https://api.example.com/openapi.json' } });
+    fireEvent.change(within(panel).getByTestId('mcp-add-auth-into'), { target: { value: 'Authorization' } });
+    fireEvent.change(within(panel).getByTestId('mcp-add-auth-ref'), { target: { value: 'keychain' } }); // half-typed
+    expect((within(panel).getByTestId('mcp-add-preview') as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.change(within(panel).getByTestId('mcp-add-auth-value'), { target: { value: 'short' } });
+    expect((within(panel).getByTestId('mcp-add-preview') as HTMLButtonElement).disabled).toBe(false);
+
+    fireEvent.click(within(panel).getByTestId('mcp-add-preview'));
+    await waitFor(() => expect(within(panel).getByTestId('mcp-add-error').textContent).toMatch(/at least 8 characters/));
+    fail = false;
+    fireEvent.change(within(panel).getByTestId('mcp-add-auth-value'), { target: { value: 'a-long-enough-secret' } });
+    expect(within(panel).queryByTestId('mcp-add-error')).toBeNull();
+
+    fireEvent.click(within(panel).getByTestId('mcp-add-preview'));
+    await within(panel).findByTestId('mcp-add-preview-result');
+    expect(calls.find((c) => c.path === '/mcp/servers/preview')?.body).toMatchObject({
+      auth: { ref: 'keychain:wicked-mcp/tracker', header: 'Authorization' },
+    });
+  });
+
   it('a bearer API carries its scheme prefix, so the header is not the bare secret', async () => {
     // `McpAuthConfig.prefix` is in the wire contract and the broker honours it
     // (crew mcp/rest.ts authHeaders: `${prefix ?? ''}${secret}`). With no field for it every

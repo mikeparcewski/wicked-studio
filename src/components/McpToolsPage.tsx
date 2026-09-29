@@ -440,7 +440,9 @@ function AddServerPanel({ onSaved, onClose, mode, navigate, saved }: {
   /** A pasted secret for a name already registered overwrites THAT server's live credential. */
   const replacesLiveSecret = authValue !== '' && saved.includes(name);
   const ready = nameOk && target.trim() !== '' && (kind !== 'rest' || openapiUrl.trim() !== '')
-    && (authRef.trim() === '' || /^(env|keychain):/.test(authRef.trim()))
+    // A pasted value decides the reference (crew answers it), so a half-typed reference must not
+    // block the secret that replaces it (codex review round 6 on #387).
+    && (authValue !== '' || authRef.trim() === '' || /^(env|keychain):/.test(authRef.trim()))
     && (!replacesLiveSecret || replaceOk);
 
   /** The request for one secret reference — the state's, or the one the keychain write just gave. */
@@ -466,7 +468,8 @@ function AddServerPanel({ onSaved, onClose, mode, navigate, saved }: {
   const authValueRef = useRef(authValue);
   authValueRef.current = authValue;
   const preview = held !== null && held.key === formKey ? held.preview : null;
-  const setPreview = (p: null): void => { setHeld(p); };
+  /** Any edit drops the held preview AND the last failure: neither speaks for the form now. */
+  const setPreview = (p: null): void => { setHeld(p); setError(null); };
 
   const doPreview = async (): Promise<void> => {
     setBusy(true);

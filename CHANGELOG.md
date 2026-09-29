@@ -42,7 +42,9 @@ npm publish dates. Every version listed here exists on
   running calls use, before anything is saved — so the panel says exactly that and will not
   preview until the operator ticks it, and retyping the name or the value takes the consent back.
   (The keychain write is still not atomic with the save: crew has no staged-secret route, so an
-  abandoned replacement leaves the new value in place. Named where it happens.)
+  abandoned replacement leaves the new value in place. Named where it happens.) A pasted value
+  decides the reference, so a half-typed one no longer blocks it, and any edit clears the last
+  failure along with the held preview.
 - **Retire on a memory row removes that one memory (#206).** The row's Retire now calls crew's
   `POST /memory/retire-item` and erases exactly that memory; its confirm says the rest of the scope
   stays. The subtree erase is a separate, quieter "Retire scope…" whose confirm names the whole
