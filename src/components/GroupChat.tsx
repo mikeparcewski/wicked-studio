@@ -5,6 +5,7 @@ import { apiStatus, apiWire } from '../api/errors.js';
 import type {
   ChatOpenBody, ChatScope, ChatSeatRefusal, ChatTranscriptRecord, ChatUsage, Project, RepoEntry, RosterSeat,
 } from '../api/types.js';
+import type { ChatCitationsFrame } from '../api/chat-wire.js';
 import { launchPath } from '../hooks/ambientProject.js';
 import { useEventStream } from '../hooks/useEventStream.js';
 import { pinAwaiting } from '../store/awaitingPins.js';
@@ -1022,6 +1023,15 @@ export function GroupChat({
           setSeats((s) => (s[frame.cliKey!] === 'failed' ? s : { ...s, [frame.cliKey!]: 'replied' }));
         }
         break;
+      case 'chatCitations': {
+        // crew#561: the daemon's verdicts on the citations in a reply it has already sent — one
+        // frame per reply, so it lands on that seat's NEWEST finished bubble (the same per-seat
+        // FIFO the chunks use: reply, then its frame, then the next reply). A daemon predating the
+        // frame simply never sends one, and the bubble stays unmarked.
+        const cited = ev as unknown as ChatCitationsFrame;
+        if (typeof cited.cliKey === 'string' && Array.isArray(cited.items)) attachCitations(cited.cliKey, cited);
+        break;
+      }
       default:
         break;
     }
@@ -1075,6 +1085,34 @@ export function GroupChat({
       }
       next.push({ kind: 'seat', cliKey, text, pending: false, ok, turn: turnRef.current, usage });
       return next;
+    });
+  }
+
+  /**
+   * crew#561: the citation verdicts land on the seat's newest FINISHED reply — the one the frame
+   * answers. Nothing is invented if no bubble matches (a frame for a turn this client did not
+   * watch): the log is left exactly as it was.
+   */
+  function attachCitations(cliKey: string, frame: ChatCitationsFrame): void {
+    setMessages((prev) => {
+      for (let i = prev.length - 1; i >= 0; i--) {
+        const m = prev[i];
+        if (m === undefined || m.kind !== 'seat' || m.cliKey !== cliKey || m.pending) continue;
+        if (m.citations !== undefined) return prev; // already answered — never double-mark
+        const next = [...prev];
+        next[i] = {
+          ...m,
+          citations: {
+            verified: frame.verified,
+            unverifiable: frame.unverifiable,
+            corrected: frame.corrected,
+            unchecked: frame.unchecked,
+            items: frame.items,
+          },
+        };
+        return next;
+      }
+      return prev;
     });
   }
 
