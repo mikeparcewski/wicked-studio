@@ -89,7 +89,8 @@ export function useLegacyRedirect(route: LegacyRoute, navigate: Navigate): void 
     let cancelled = false;
     void resolveRunProject(runId)
       .then((pid) => {
-        if (!cancelled && pid !== null) navigate(modePath(pid, 'build', runId), { replace: true });
+        // The fragment rides along: `#governance` opens the run's Governance panel (MCP tools → Usage).
+        if (!cancelled && pid !== null) navigate(`${modePath(pid, 'build', runId)}${window.location.hash}`, { replace: true });
       })
       .catch(() => {
         /* projects surface unreachable — the legacy run view stays, which is the honest fallback */

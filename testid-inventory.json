@@ -10,10 +10,10 @@
   "version": 1,
   "studioVersion": "0.5.14",
   "counts": {
-    "files": 172,
-    "occurrences": 1708,
-    "static": 1492,
-    "dynamic": 72,
+    "files": 173,
+    "occurrences": 1738,
+    "static": 1520,
+    "dynamic": 73,
     "computed": 7
   },
   "static": [
@@ -4229,6 +4229,168 @@
       ]
     },
     {
+      "testId": "mcp-usage",
+      "files": [
+        "src/components/McpUsage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-usage-chain",
+      "files": [
+        "src/components/McpUsage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-usage-chains",
+      "files": [
+        "src/components/McpUsage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-usage-daily",
+      "files": [
+        "src/components/McpUsage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-usage-day",
+      "files": [
+        "src/components/McpUsage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-usage-days",
+      "files": [
+        "src/components/McpUsage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-usage-decision",
+      "files": [
+        "src/components/McpUsage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-usage-empty",
+      "files": [
+        "src/components/McpUsage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-usage-error",
+      "files": [
+        "src/components/McpUsage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-usage-filters",
+      "files": [
+        "src/components/McpUsage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-usage-loading",
+      "files": [
+        "src/components/McpUsage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-usage-no-chains",
+      "files": [
+        "src/components/McpUsage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-usage-run",
+      "files": [
+        "src/components/McpUsage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-usage-run-link",
+      "files": [
+        "src/components/McpUsage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-usage-runs",
+      "files": [
+        "src/components/McpUsage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-usage-seat",
+      "files": [
+        "src/components/McpUsage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-usage-skipped",
+      "files": [
+        "src/components/McpUsage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-usage-split",
+      "files": [
+        "src/components/McpUsage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-usage-subject",
+      "files": [
+        "src/components/McpUsage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-usage-subject-clear",
+      "files": [
+        "src/components/McpUsage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-usage-tool",
+      "files": [
+        "src/components/McpUsage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-usage-tool-drill",
+      "files": [
+        "src/components/McpUsage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-usage-tool-p95",
+      "files": [
+        "src/components/McpUsage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-usage-tools",
+      "files": [
+        "src/components/McpUsage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-usage-unsupported",
+      "files": [
+        "src/components/McpUsage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-view",
+      "files": [
+        "src/components/McpToolsPage.tsx"
+      ]
+    },
+    {
+      "testId": "mcp-view-tab",
+      "files": [
+        "src/components/McpToolsPage.tsx"
+      ]
+    },
+    {
       "testId": "memories-coverage",
       "files": [
         "src/components/MemoriesPanel.tsx"
@@ -5569,6 +5731,12 @@
     },
     {
       "testId": "rail-mcp-servers",
+      "files": [
+        "src/components/LeftSidebar.tsx"
+      ]
+    },
+    {
+      "testId": "rail-mcp-usage",
       "files": [
         "src/components/LeftSidebar.tsx"
       ]
@@ -9158,6 +9326,12 @@
       ]
     },
     {
+      "pattern": "*-value",
+      "files": [
+        "src/components/McpUsage.tsx"
+      ]
+    },
+    {
       "pattern": "batch-open-*",
       "files": [
         "src/components/BatchGateBar.tsx"
@@ -9481,6 +9655,7 @@
         "src/components/CampaignScoreboard.tsx",
         "src/components/GroupChat.tsx",
         "src/components/McpToolsPage.tsx",
+        "src/components/McpUsage.tsx",
         "src/components/ProposalChips.tsx",
         "src/components/ProposalsList.tsx",
         "src/components/SteeringAddMenu.tsx",

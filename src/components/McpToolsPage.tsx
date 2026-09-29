@@ -4,13 +4,18 @@ import {
   canApprove,
   cellOf,
   DECISION_LABELS,
+  DEFAULT_USAGE_FILTER,
   isMcpUnsupported,
   mcpApi,
+  mcpPath,
+  mcpUsagePath,
   MODE_LABELS,
   postureSummary,
   readMcpServerDeepLink,
+  readMcpView,
   ROLE_LABELS,
   serverSubject,
+  serverUsageText,
   type McpApprovalsResponse,
   type McpDecision,
   type McpPolicyPreviewResponse,
@@ -21,8 +26,12 @@ import {
   type McpServersResponse,
   type McpTool,
   type McpUpstreamKind,
+  type McpUsageFilter,
+  type McpUsageResponse,
+  type McpView,
 } from '../api/mcp.js';
 import { policiesPath } from '../api/steering.js';
+import { McpUsage } from './McpUsage.js';
 
 /**
  * MCP tools (DES-MCP-TOOLS-001 §7, slice S6): the operator's registry of upstream MCP servers and
@@ -36,6 +45,9 @@ import { policiesPath } from '../api/steering.js';
  *  - **Add existing**: paste a command or URL, preview (the tools and their decisions if saved
  *    now), then save exactly that preview (the save is bound to its `previewHash`).
  *  - Approving is an audited policy edit crew makes; the first use of any server always asks.
+ *  - **Usage** (`?view=usage`, slice S7): calls, decisions split by allow / ask / deny, error rate
+ *    and latency from the broker's call records; each server row also says its calls over 7 days
+ *    and when it was last used.
  */
 
 const MODES: McpRunMode[] = ['ask', 'balanced', 'autonomous'];
@@ -52,7 +64,7 @@ type Load =
   | { kind: 'loading' }
   | { kind: 'unsupported' }
   | { kind: 'failed'; message: string }
-  | { kind: 'loaded'; servers: McpServersResponse; policies: McpPolicyPreviewResponse | null; approvals: McpApprovalsResponse | null };
+  | { kind: 'loaded'; servers: McpServersResponse; policies: McpPolicyPreviewResponse | null; approvals: McpApprovalsResponse | null; usage: McpUsageResponse | null };
 
 const msg = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 
@@ -244,9 +256,11 @@ function ToolRow({ server, tool, policy, roles, seats, mode, busy, onAct, naviga
   );
 }
 
-function ServerRow({ server, policies, open, onToggle, mode, busy, onAct, navigate }: {
+function ServerRow({ server, policies, usage, open, onToggle, mode, busy, onAct, navigate }: {
   server: McpServer;
   policies: McpPolicyPreviewResponse | null;
+  /** The 7-day usage fold; `null` = this daemon does not report usage. */
+  usage: McpUsageResponse | null;
   open: boolean;
   onToggle: () => void;
   mode: McpRunMode;
@@ -278,6 +292,10 @@ function ServerRow({ server, policies, open, onToggle, mode, busy, onAct, naviga
         <Badge testid="mcp-server-auth" text={`auth ${server.authState}`} style={server.authState === 'missing' ? { color: 'var(--status-fail)' } : undefined} />
         <Badge testid="mcp-server-tools" text={`${server.counts.enabled}/${server.counts.total} tools enabled`} />
         {!server.enabled && <Badge text="disabled" style={{ color: 'var(--status-fail)' }} />}
+        {usage !== null && (() => {
+          const u = usage.servers.find((x) => x.server === server.name);
+          return <Badge testid="mcp-server-usage" text={serverUsageText(u, usage.days)} title={u === undefined ? undefined : `${u.decisions.allow} allowed · ${u.decisions.ask} asked · ${u.decisions.deny} denied · ${u.decisions.guard_error} guard errors`} />;
+        })()}
         <span data-testid="mcp-server-posture" data-allow={summary.allow} data-ask={summary.ask} data-deny={summary.deny} className="text-[10px]" style={{ color: 'var(--ink-muted)' }} title={`what a creator unit gets in ${MODE_LABELS[mode]} mode`}>
           {policies === null ? 'posture unavailable' : summary.text}
         </span>
@@ -547,6 +565,8 @@ export function McpToolsPage({ navigate, search }: { navigate: (p: string) => vo
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
   const deepLinked = readMcpServerDeepLink(search);
+  const view: McpView = readMcpView(search);
+  const [usageFilter, setUsageFilter] = useState<McpUsageFilter>(DEFAULT_USAGE_FILTER);
   const [openServers, setOpenServers] = useState<Set<string>>(() => new Set(deepLinked !== null ? [deepLinked] : []));
 
   // Only the latest load may land: an older, slower answer never overwrites a newer one.
@@ -556,12 +576,14 @@ export function McpToolsPage({ navigate, search }: { navigate: (p: string) => vo
     try {
       const servers = await mcpApi.servers();
       // The matrix and the approvals are S6; a daemon with the registry but not them still lists servers.
-      const [policies, approvals] = await Promise.all([
+      // Usage is S7: a daemon without it still lists servers, without the usage line.
+      const [policies, approvals, usage] = await Promise.all([
         mcpApi.policies({}).catch(() => null),
         mcpApi.approvals().catch(() => null),
+        mcpApi.usage(DEFAULT_USAGE_FILTER).catch(() => null),
       ]);
       if (seq !== loadSeq.current) return;
-      setState({ kind: 'loaded', servers, policies, approvals });
+      setState({ kind: 'loaded', servers, policies, approvals, usage });
     } catch (e) {
       if (seq !== loadSeq.current) return;
       setState(isMcpUnsupported(e) ? { kind: 'unsupported' } : { kind: 'failed', message: msg(e) });
@@ -602,7 +624,7 @@ export function McpToolsPage({ navigate, search }: { navigate: (p: string) => vo
             </p>
           </div>
           <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
-            <div role="radiogroup" aria-label="Show decisions for run mode" data-testid="mcp-mode" className="flex gap-1">
+            {view === 'servers' && <div role="radiogroup" aria-label="Show decisions for run mode" data-testid="mcp-mode" className="flex gap-1">
               {MODES.map((m) => (
                 <button
                   key={m}
@@ -618,7 +640,7 @@ export function McpToolsPage({ navigate, search }: { navigate: (p: string) => vo
                   {MODE_LABELS[m]}
                 </button>
               ))}
-            </div>
+            </div>}
             <a
               data-testid="mcp-steering-link"
               href={`${policiesPath()}?mcp=1`}
@@ -628,7 +650,7 @@ export function McpToolsPage({ navigate, search }: { navigate: (p: string) => vo
             >
               MCP policies
             </a>
-            {loaded !== null && !adding && (
+            {view === 'servers' && loaded !== null && !adding && (
               <button type="button" data-testid="mcp-add-open" onClick={() => setAdding(true)} className="rounded px-2 py-1 text-[11px] font-semibold" style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}>
                 Add existing server
               </button>
@@ -636,23 +658,43 @@ export function McpToolsPage({ navigate, search }: { navigate: (p: string) => vo
           </div>
         </div>
 
-        {state.kind === 'loading' && <p data-testid="mcp-loading" className="text-xs" style={{ color: 'var(--ink-dim)' }}>Loading MCP servers…</p>}
-        {state.kind === 'unsupported' && (
+        <div role="tablist" aria-label="MCP tools view" data-testid="mcp-view" className="flex gap-1" style={{ borderBottom: BORDER }}>
+          {(['servers', 'usage'] as const).map((v) => (
+            <button
+              key={v}
+              type="button"
+              role="tab"
+              aria-selected={view === v}
+              data-testid="mcp-view-tab"
+              data-view={v}
+              onClick={() => navigate(v === 'usage' ? mcpUsagePath() : mcpPath())}
+              className="-mb-px px-3 py-1.5 text-[11px] font-semibold"
+              style={{ color: view === v ? 'var(--ink-high)' : 'var(--ink-muted)', borderBottom: view === v ? '2px solid var(--accent)' : '2px solid transparent' }}
+            >
+              {v === 'servers' ? 'Servers' : 'Usage'}
+            </button>
+          ))}
+        </div>
+
+        {view === 'usage' && <McpUsage navigate={navigate} filter={usageFilter} onFilter={setUsageFilter} />}
+
+        {view === 'servers' && state.kind === 'loading' && <p data-testid="mcp-loading" className="text-xs" style={{ color: 'var(--ink-dim)' }}>Loading MCP servers…</p>}
+        {view === 'servers' && state.kind === 'unsupported' && (
           <p data-testid="mcp-unsupported" className="rounded px-3 py-2 text-[11px]" style={{ background: 'var(--surface-rail)', border: BORDER, color: 'var(--ink-muted)' }}>
             This wicked-crew daemon has no MCP tools registry yet. Upgrade wicked-crew to register servers here.
           </p>
         )}
-        {state.kind === 'failed' && (
+        {view === 'servers' && state.kind === 'failed' && (
           <p data-testid="mcp-error" className="rounded px-3 py-2 text-[11px]" style={{ background: 'var(--status-fail-dim)', color: 'var(--status-fail)' }}>{state.message}</p>
         )}
 
-        {note !== null && (
+        {view === 'servers' && note !== null && (
           <p data-testid="mcp-note" data-ok={note.ok} className="rounded px-3 py-2 text-[11px]" style={note.ok ? { background: 'var(--surface-rail)', border: BORDER, color: 'var(--ink-muted)' } : { background: 'var(--status-fail-dim)', color: 'var(--status-fail)' }}>
             {note.text}
           </p>
         )}
 
-        {loaded !== null && adding && (
+        {view === 'servers' && loaded !== null && adding && (
           <AddServerPanel
             mode={mode}
             navigate={navigate}
@@ -666,7 +708,7 @@ export function McpToolsPage({ navigate, search }: { navigate: (p: string) => vo
           />
         )}
 
-        {loaded !== null && (
+        {view === 'servers' && loaded !== null && (
           <>
             {(pendingFirst > 0 || pendingWrites > 0) && (
               <p data-testid="mcp-pending" data-first-use={pendingFirst} data-write={pendingWrites} className="rounded px-3 py-2 text-[11px]" style={{ background: 'var(--status-gate-dim)', color: 'var(--status-gate)' }}>
@@ -692,6 +734,7 @@ export function McpToolsPage({ navigate, search }: { navigate: (p: string) => vo
                     key={s.name}
                     server={s}
                     policies={loaded.policies}
+                    usage={loaded.usage}
                     open={openServers.has(s.name)}
                     onToggle={() => {
                       setOpenServers((cur) => {

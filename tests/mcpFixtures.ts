@@ -1,6 +1,7 @@
 import type {
   McpApprovalsResponse,
   McpDecision,
+  McpDecisionCounts,
   McpPhaseRole,
   McpPolicyCell,
   McpPolicyPreviewResponse,
@@ -11,6 +12,8 @@ import type {
   McpServersResponse,
   McpTool,
   McpToolClass,
+  McpUsageResponse,
+  McpUsageRun,
 } from '../src/api/mcp.js';
 
 /**
@@ -142,3 +145,45 @@ export function preview(name = 'jira'): McpPreviewResponse {
     },
   };
 }
+
+// ── the usage fold (slice S7): crew's own answer for its hand-computed fixture (crew tests/mcp-usage.test.ts) ──
+
+const dc = (allow: number, ask: number, deny: number, guard_error: number): McpDecisionCounts => ({ allow, ask, deny, guard_error });
+
+export function usage(over: Partial<McpUsageResponse> = {}): McpUsageResponse {
+  return {
+    days: 7,
+    since: '2026-09-21T12:00:00.000Z',
+    until: '2026-09-28T12:00:00.000Z',
+    filters: { subject: null, seat: null, decision: null },
+    totals: { calls: 10, decisions: dc(7, 1, 1, 1), ran: 7, errors: 1, errorRate: 1 / 7, p50Ms: 40, p95Ms: 100, p99Ms: 100 },
+    tools: [
+      { subject: 'mcp:fx/wt_echo', server: 'fx', tool: 'wt_echo', class: 'read', seats: ['claude', 'codex'], lastCall: '2026-09-28T11:00:00.000Z', calls: 5, decisions: dc(5, 0, 0, 0), ran: 5, errors: 0, errorRate: 0, p50Ms: 30, p95Ms: 60, p99Ms: 60 },
+      { subject: 'mcp:fx/wt_note', server: 'fx', tool: 'wt_note', class: 'destructive', seats: ['claude', 'codex'], lastCall: '2026-09-28T11:00:01.000Z', calls: 4, decisions: dc(1, 1, 1, 1), ran: 1, errors: 0, errorRate: 0, p50Ms: 40, p95Ms: 40, p99Ms: 40 },
+      { subject: 'mcp:sentry/get', server: 'sentry', tool: 'get', class: 'read', seats: ['codex'], lastCall: '2026-09-28T10:00:02.000Z', calls: 1, decisions: dc(1, 0, 0, 0), ran: 1, errors: 1, errorRate: 1, p50Ms: 100, p95Ms: 100, p99Ms: 100 },
+    ],
+    servers: [
+      { server: 'fx', calls: 9, decisions: dc(6, 1, 1, 1), lastCall: '2026-09-28T11:00:01.000Z' },
+      { server: 'sentry', calls: 1, decisions: dc(1, 0, 0, 0), lastCall: '2026-09-28T10:00:02.000Z' },
+    ],
+    runs: [],
+    chains: [
+      { from: 'mcp:fx/wt_echo', to: 'mcp:fx/wt_note', count: 3, runs: 2 },
+      { from: 'mcp:fx/wt_note', to: 'mcp:fx/wt_echo', count: 1, runs: 1 },
+      { from: 'mcp:fx/wt_note', to: 'mcp:sentry/get', count: 1, runs: 1 },
+    ],
+    daily: ['21', '22', '23', '24', '25', '26', '27', '28'].map((d) => {
+      const n = d === '27' ? 4 : d === '28' ? 5 : d === '26' ? 1 : 0;
+      return { day: `2026-09-${d}`, calls: n, decisions: d === '27' ? dc(3, 1, 0, 0) : d === '28' ? dc(4, 0, 1, 0) : d === '26' ? dc(0, 0, 0, 1) : dc(0, 0, 0, 0) };
+    }),
+    seats: ['claude', 'codex'],
+    skipped: 0,
+    ...over,
+  };
+}
+
+export const NOTE_RUNS: McpUsageRun[] = [
+  { subject: 'mcp:fx/wt_note', seat: 'claude', runId: 'r1aaaaaaaaaa', calls: 1, decisions: dc(0, 0, 1, 0), errors: 0, lastCall: '2026-09-28T11:00:01.000Z' },
+  { subject: 'mcp:fx/wt_note', seat: 'codex', runId: 'r1aaaaaaaaaa', calls: 1, decisions: dc(1, 0, 0, 0), errors: 0, lastCall: '2026-09-28T10:00:01.000Z' },
+  { subject: 'mcp:fx/wt_note', seat: null, runId: null, calls: 1, decisions: dc(0, 0, 0, 1), errors: 0, lastCall: '2026-09-26T00:00:00.000Z' },
+];
