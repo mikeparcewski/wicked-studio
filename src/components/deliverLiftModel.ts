@@ -37,9 +37,15 @@ export interface DeliverLiftView {
   outcome: string | null;
   /** The remote default ref the lift targets (`origin/main`), when one was resolved. */
   baseRef: string | null;
-  /** The run branch's `HEAD` before the lift (the base the work was verified on). */
+  /**
+   * THE BASE the work was verified on, before the lift. For `unchanged` it equals {@link baseAfter}
+   * (nothing moved); for `lifted`/`conflict` it is the OLD base the work sat on. It is never the
+   * run branch's head — see {@link liftContradictsItself} for the engine defect that made it one,
+   * and why this card no longer trusts a contradictory pair.
+   */
   baseBefore: string | null;
-  /** The remote tip the work now sits on (`lifted`) or would have (`conflict`). */
+  /** The remote tip the work now sits on (`lifted`), would have (`conflict`), or already sat on
+   *  (`unchanged` — the same commit as {@link baseBefore}). */
   baseAfter: string | null;
   treeBefore: string | null;
   treeAfter: string | null;
@@ -152,6 +158,38 @@ export function liftOutcomeLabel(outcome: string | null): string {
     case null: return 'refused before the lift';
     default: return outcome;
   }
+}
+
+/**
+ * An `unchanged` lift that names TWO bases (ship-proof F1).
+ *
+ * `outcome: unchanged` means the base did not move, so `baseBefore` and `baseAfter` are the same
+ * commit BY DEFINITION — they are both "the base". wicked-core's `Unchanged` arm set
+ * `base_before = HEAD`, and HEAD is the RUN BRANCH: it equals the base only until a phase commits.
+ * So every deliver RETRY emitted `unchanged` with `baseBefore != baseAfter`, and this card printed
+ * the run-branch SHA as the base — a false SHA on the consent surface for the only irreversible
+ * action. Fixed in the engine; this is the card refusing to be lied to by an older daemon (and by
+ * any future arm that gets it wrong), because studio ships against engines it did not release.
+ */
+export function liftContradictsItself(view: DeliverLiftView): boolean {
+  return (
+    view.outcome === 'unchanged' &&
+    view.baseBefore !== null &&
+    view.baseAfter !== null &&
+    view.baseBefore !== view.baseAfter
+  );
+}
+
+/**
+ * The base SHA an `unchanged` card may NAME, or `null` when it must not name one: the pair
+ * contradicts itself ({@link liftContradictsItself}) or the frame carried no base at all. The
+ * sentence "<ref> is still at <sha>" is only true of a value that is the base; anything else is a
+ * number the card cannot stand behind, and a gate card states no such number.
+ */
+export function unchangedBaseSha(view: DeliverLiftView): string | null {
+  if (view.outcome !== 'unchanged') return null;
+  if (liftContradictsItself(view)) return null;
+  return view.baseAfter ?? view.baseBefore;
 }
 
 /** Whether the outcome (or the absence of one beside a failure) is a stop: nothing was pushed. */

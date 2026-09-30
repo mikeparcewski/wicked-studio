@@ -25,10 +25,12 @@ import {
   DELIVER_SKIPPED_TAIL,
   DELIVER_UNCHANGED_TAIL,
   DELIVER_WRONG_HEAD_TAIL,
+  DELIVER_UNCHANGED_TWO_BASES_TAIL,
   DETAIL_REVERIFY_FAILED,
   REFUSAL_CONFLICT,
   REFUSAL_REVERIFY_FAILED,
   REFUSAL_WRONG_HEAD,
+  RUN_BRANCH_HEAD,
   deliverRejectedReason,
   deliverWorkerFailedReason,
 } from './fixtures/wire433.js';
@@ -72,6 +74,34 @@ describe('RunDelivery — the deliver lift block', () => {
     expect(screen.queryByTestId('deliver-lift-failure')).toBeNull();
     // The card's own claim is untouched: `done` without a url is still only "deliver ran".
     expect(screen.getByTestId('run-delivery')).toHaveAttribute('data-state', 'delivered');
+  });
+
+  // ── F1 (ship-proof C7) — the card refuses a base it cannot trust ────────────────────────────────
+  it('unchanged with TWO different bases: no SHA is claimed, the contradiction is disclosed', () => {
+    seed(DELIVER_UNCHANGED_TWO_BASES_TAIL);
+    render(<RunDelivery view={view('done')} />);
+    const summary = screen.getByTestId('deliver-lift-summary');
+
+    // The C7 signature: "origin/main is still at c9caa85" — where c9caa85 is the RUN BRANCH head.
+    expect(summary.textContent).not.toContain(RUN_BRANCH_HEAD.slice(0, 7));
+    expect(summary).not.toHaveTextContent('is still at');
+    expect(summary).toHaveAttribute('data-base', 'untrusted');
+    // What is still true is still said.
+    expect(summary).toHaveTextContent('origin/main did not move while the run ran');
+    expect(summary).toHaveTextContent('the tree the checks verified is the tree that would ship');
+    // And the reason no number is shown, with both halves of the pair, so it is diagnosable.
+    const untrusted = screen.getByTestId('deliver-lift-base-untrusted');
+    expect(untrusted).toHaveTextContent('naming two different bases');
+    expect(untrusted.textContent).toContain(RUN_BRANCH_HEAD.slice(0, 7));
+    expect(untrusted.textContent).toContain(BASE_BEFORE.slice(0, 7));
+    expect(untrusted).toHaveTextContent('read origin/main yourself before approving');
+  });
+
+  it('unchanged from a FIXED engine (one base) still names it, and discloses nothing', () => {
+    seed(DELIVER_UNCHANGED_TAIL);
+    render(<RunDelivery view={view('done')} />);
+    expect(screen.getByTestId('deliver-lift-summary')).toHaveAttribute('data-base', 'named');
+    expect(screen.queryByTestId('deliver-lift-base-untrusted')).toBeNull();
   });
 
   it('lifted: base before → after, tree before → after, and the re-verify per check — the forced install named by its source', () => {

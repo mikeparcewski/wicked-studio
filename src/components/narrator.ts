@@ -395,8 +395,21 @@ export function narrate(event: CoreEvent, ctx: NarratorContext): NarrationLine |
       const tip = str(event['baseAfter']) ? shortId(str(event['baseAfter']), 7) : '?';
       const note = str(event['note']);
       switch (outcome) {
-        case 'unchanged':
-          return line(`Deliver lift: base unchanged — ${base} is still at ${str(event['baseBefore']) ? shortId(str(event['baseBefore']), 7) : '?'}`, 'info');
+        case 'unchanged': {
+          // F1: an `unchanged` lift names ONE base — `baseBefore` and `baseAfter` are the same
+          // commit by definition. The engine's old `Unchanged` arm put the RUN BRANCH head in
+          // `baseBefore`, so every deliver RETRY narrated a false SHA. Name the base only when the
+          // pair agrees; otherwise say the thing that is true and no number.
+          const before = str(event['baseBefore']);
+          const after = str(event['baseAfter']);
+          const sha = before !== null && after !== null && before !== after ? null : (after ?? before);
+          return line(
+            sha !== null
+              ? `Deliver lift: base unchanged — ${base} is still at ${shortId(sha, 7)}`
+              : `Deliver lift: base unchanged — ${base} did not move while the run ran`,
+            'info',
+          );
+        }
         case 'lifted':
           return line(`Deliver lift: lifted onto ${base} @ ${tip} — re-running the repository's checks on the lifted tree`, 'work');
         case 'conflict': {

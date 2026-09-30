@@ -1,8 +1,10 @@
 import {
+  liftContradictsItself,
   liftIsFailure,
   liftOutcomeLabel,
   reverifyChangedTree,
   splitElided,
+  unchangedBaseSha,
   type DeliverLiftView,
 } from './deliverLiftModel.js';
 import { checkOutcome, checkTails, formatDuration, shortId, splitBackticks } from './gateVerdictModel.js';
@@ -37,6 +39,8 @@ export function DeliverLift({ view, omitFailure = false }: { view: DeliverLiftVi
   const base = view.baseRef ?? 'the remote default branch';
   const floor = view.reverify;
   const changedTree = floor !== null && reverifyChangedTree(floor);
+  // `null` = the card must name no base commit for this `unchanged` lift (F1).
+  const unchangedSha = unchangedBaseSha(view);
 
   return (
     <div
@@ -50,10 +54,26 @@ export function DeliverLift({ view, omitFailure = false }: { view: DeliverLiftVi
         Deliver lift — {liftOutcomeLabel(view.outcome)}
       </p>
 
+      {/* F1: "still at <sha>" is only true of a value that IS the base. An `unchanged` lift that
+          names two different bases contradicts itself (the engine's old `Unchanged` arm put the RUN
+          BRANCH head in `baseBefore`, so every deliver RETRY printed a false SHA here), and a frame
+          with no base names nothing. In both cases the card keeps the claim it CAN stand behind —
+          the base did not move, the verified tree is the tree that would ship — and states no
+          number rather than one it cannot trust. */}
       {view.outcome === 'unchanged' && (
-        <p data-testid="deliver-lift-summary">
-          {base} is still at {short7(view.baseBefore)} — the tree the checks verified is the tree that would ship
+        <p data-testid="deliver-lift-summary" data-base={unchangedSha === null ? 'untrusted' : 'named'}>
+          {unchangedSha !== null
+            ? <>{base} is still at {short7(unchangedSha)} — the tree the checks verified is the tree that would ship</>
+            : <>{base} did not move while the run ran — the tree the checks verified is the tree that would ship</>}
           {view.treeBefore !== null && <span style={{ color: 'var(--ink-dim)' }}> (tree {shortId(view.treeBefore)})</span>}
+        </p>
+      )}
+
+      {view.outcome === 'unchanged' && liftContradictsItself(view) && (
+        <p data-testid="deliver-lift-base-untrusted" style={{ color: 'var(--ink-muted)' }}>
+          the daemon reported an unchanged lift naming two different bases ({short7(view.baseBefore)} before,{' '}
+          {short7(view.baseAfter)} after), so no base commit is shown here — read {base} yourself before approving
+          (upgrade the daemon: wicked-core fixed the field this comes from)
         </p>
       )}
 

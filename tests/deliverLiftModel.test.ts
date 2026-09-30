@@ -3,11 +3,13 @@ import type { CoreEvent } from '../src/api/types.js';
 import {
   ELISION_MARKER,
   deliverLift,
+  liftContradictsItself,
   liftIsFailure,
   liftOutcomeLabel,
   reverifyChangedTree,
   splitElided,
   textCarriesFailure,
+  unchangedBaseSha,
   type DeliverLiftView,
 } from '../src/components/deliverLiftModel.js';
 import type { GateFloorCheck, GateFloorView } from '../src/components/gateVerdictModel.js';
@@ -355,5 +357,43 @@ describe('textCarriesFailure', () => {
     // splitElided('\n[… 5 chars elided …]\n') → ['\\n', marker, '\\n'] → trim → ['', ''] → filter → []
     // kept.length === 0 → false, regardless of text
     expect(textCarriesFailure('anything here', '\n[… 5 chars elided …]\n')).toBe(false);
+  });
+});
+
+// ── F1 (ship-proof C7) — an `unchanged` lift names ONE base, or none ───────────────────────────────
+//
+// `outcome: unchanged` means the base did not move, so `baseBefore` and `baseAfter` are the same
+// commit by definition. wicked-core's old `Unchanged` arm set `base_before = HEAD` — the RUN BRANCH
+// — which equals the base only until a phase commits, so every deliver RETRY emitted a pair the
+// card then printed as "origin/main is still at <run branch head>". Studio ships against engines it
+// did not release, so the model judges the pair rather than trusting it.
+describe('unchangedBaseSha / liftContradictsItself (F1)', () => {
+  const view = (over: Record<string, unknown>): DeliverLiftView => deliverLift([liftEv(over)], 5);
+
+  it('a pair that agrees is the base, and is named', () => {
+    expect(unchangedBaseSha(view({}))).toBe('aaaaaaa');
+    expect(liftContradictsItself(view({}))).toBe(false);
+  });
+
+  it('a pair that DISAGREES names nothing — the C7 retry shape', () => {
+    const v = view({ baseBefore: 'c9caa85', baseAfter: '4a18d8d' });
+    expect(liftContradictsItself(v)).toBe(true);
+    expect(unchangedBaseSha(v)).toBeNull();
+  });
+
+  it('a half-present pair falls back to the half that is there; an empty one names nothing', () => {
+    expect(unchangedBaseSha(view({ baseBefore: null }))).toBe('aaaaaaa');
+    expect(unchangedBaseSha(view({ baseAfter: null }))).toBe('aaaaaaa');
+    expect(unchangedBaseSha(view({ baseBefore: null, baseAfter: null }))).toBeNull();
+    // A missing half is not a contradiction: nothing disagrees with nothing.
+    expect(liftContradictsItself(view({ baseBefore: null }))).toBe(false);
+  });
+
+  it('only `unchanged` is judged — `lifted` and `conflict` name two bases BECAUSE they moved', () => {
+    for (const outcome of ['lifted', 'conflict', 'skipped', 'failed']) {
+      const v = view({ outcome, baseBefore: 'c9caa85', baseAfter: '4a18d8d' });
+      expect(liftContradictsItself(v)).toBe(false);
+      expect(unchangedBaseSha(v)).toBeNull();
+    }
   });
 });
