@@ -11,8 +11,8 @@
   "studioVersion": "0.5.14",
   "counts": {
     "files": 176,
-    "occurrences": 1760,
-    "static": 1541,
+    "occurrences": 1761,
+    "static": 1542,
     "dynamic": 73,
     "computed": 7
   },
@@ -1605,6 +1605,12 @@
     },
     {
       "testId": "deliver-lift",
+      "files": [
+        "src/components/DeliverLift.tsx"
+      ]
+    },
+    {
+      "testId": "deliver-lift-base-untrusted",
       "files": [
         "src/components/DeliverLift.tsx"
       ]

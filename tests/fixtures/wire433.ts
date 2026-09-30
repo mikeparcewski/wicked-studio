@@ -64,6 +64,8 @@ const T7 = (id: string): string => id.slice(0, 7);
 /** Synthetic commit ids (git's 40-hex width) for the deliver lift and the run base. */
 export const BASE_BEFORE = '1432c96e0f1a2b3c4d5e6f708192a3b4c5d6e7f8';
 export const BASE_AFTER = 'f57069d1e2f3a4b5c6d7e8f90a1b2c3d4e5f6a7b';
+/** The RUN BRANCH's head — never a base. What the old engine wrongly reported as `baseBefore`. */
+export const RUN_BRANCH_HEAD = 'c9caa8547a1b2c3d4e5f60718293a4b5c6d7e8f9';
 export const TREE_LIFTED = '9f8e7d6c5b4a39281706f5e4d3c2b1a0f9e8d7c6';
 export const SUGGESTION_REF = `refs/wicked/suggestions/${GATE_RUN}/4/0`;
 export const RUN_BRANCH = `wicked/${GATE_RUN}`;
@@ -239,6 +241,15 @@ export const DISPATCH_5: CoreEvent[] = [
 ];
 
 export const LIFT_UNCHANGED = lift(310, {});
+/**
+ * F1 — the SELF-CONTRADICTORY `unchanged` frame an older daemon emits on a deliver RETRY:
+ * `outcome: unchanged` while `baseBefore` names the RUN BRANCH head and `baseAfter` the base tip.
+ * wicked-core's old `Unchanged` arm set `base_before = HEAD`, which equals the base only until a
+ * phase commits — so every retry put a false SHA on the consent surface for the one irreversible
+ * action. Fixed in the engine; studio ships against engines it did not release, so the card must
+ * refuse the pair rather than print it.
+ */
+export const LIFT_UNCHANGED_TWO_BASES = lift(310, { baseBefore: RUN_BRANCH_HEAD, baseAfter: BASE_BEFORE });
 export const LIFT_LIFTED = lift(310, { outcome: 'lifted', baseAfter: BASE_AFTER, treeAfter: TREE_LIFTED });
 export const LIFT_CONFLICT = lift(310, {
   outcome: 'conflict', baseAfter: BASE_AFTER, treeAfter: null, conflicts: ['testid-inventory.json'],
@@ -403,6 +414,7 @@ function deliverRetry(seq: number, refusal: string): CoreEvent[] {
 /** Deliver stories, each `G6_EVENTS`-shaped tails for ord 5 — append to `G6_EVENTS` (the gate before
  *  unit #5) so the run's earlier folds stay in the log. */
 export const DELIVER_UNCHANGED_TAIL: CoreEvent[] = [...DISPATCH_5, LIFT_UNCHANGED];
+export const DELIVER_UNCHANGED_TWO_BASES_TAIL: CoreEvent[] = [...DISPATCH_5, LIFT_UNCHANGED_TWO_BASES];
 export const DELIVER_LIFTED_TAIL: CoreEvent[] = [...DISPATCH_5, LIFT_LIFTED, DELIVER_REVERIFY_PASS, GATE_DELIVER_PASS];
 export const DELIVER_CONFLICT_TAIL: CoreEvent[] = [...DISPATCH_5, LIFT_CONFLICT, STEP_FAILED_CONFLICT, ...deliverRetry(312, REFUSAL_CONFLICT)];
 export const DELIVER_SKIPPED_TAIL: CoreEvent[] = [...DISPATCH_5, LIFT_SKIPPED];

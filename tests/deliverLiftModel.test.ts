@@ -3,11 +3,13 @@ import type { CoreEvent } from '../src/api/types.js';
 import {
   ELISION_MARKER,
   deliverLift,
+  liftContradictsItself,
   liftIsFailure,
   liftOutcomeLabel,
   reverifyChangedTree,
   splitElided,
   textCarriesFailure,
+  unchangedBaseSha,
   type DeliverLiftView,
 } from '../src/components/deliverLiftModel.js';
 import type { GateFloorCheck, GateFloorView } from '../src/components/gateVerdictModel.js';
@@ -355,5 +357,62 @@ describe('textCarriesFailure', () => {
     // splitElided('\n[… 5 chars elided …]\n') → ['\\n', marker, '\\n'] → trim → ['', ''] → filter → []
     // kept.length === 0 → false, regardless of text
     expect(textCarriesFailure('anything here', '\n[… 5 chars elided …]\n')).toBe(false);
+  });
+});
+
+// ── F1 (ship-proof C7) — an `unchanged` lift names ONE base, or none ───────────────────────────────
+//
+// `outcome: unchanged` means the base did not move, so `baseBefore` and `baseAfter` are the same
+// commit by definition. wicked-core's old `Unchanged` arm set `base_before = HEAD` — the RUN BRANCH
+// — which equals the base only until a phase commits, so every deliver RETRY emitted a pair the
+// card then printed as "origin/main is still at <run branch head>". Studio ships against engines it
+// did not release, so the model judges the pair rather than trusting it.
+describe('unchangedBaseSha / liftContradictsItself (F1)', () => {
+  const view = (over: Record<string, unknown>): DeliverLiftView => {
+    const v = deliverLift([liftEv(over)], 5);
+    if (v === null) throw new Error('the fixture always carries a lift frame');
+    return v;
+  };
+
+  it('a pair that agrees is the base, and is named', () => {
+    expect(unchangedBaseSha(view({}))).toBe('aaaaaaa');
+    expect(liftContradictsItself(view({}))).toBe(false);
+  });
+
+  it('a pair that DISAGREES names nothing — the C7 retry shape', () => {
+    const v = view({ baseBefore: 'c9caa85', baseAfter: '4a18d8d' });
+    expect(liftContradictsItself(v)).toBe(true);
+    expect(unchangedBaseSha(v)).toBeNull();
+  });
+
+  it('a mixed full/abbreviated pair is ONE commit, not a contradiction (codex review, MEDIUM)', () => {
+    const full = '1432c96e0f1a2b3c4d5e6f708192a3b4c5d6e7f8';
+    for (const pair of [
+      { baseBefore: full, baseAfter: '1432c96' },
+      { baseBefore: '1432C96', baseAfter: full },
+    ]) {
+      const v = view(pair);
+      expect(liftContradictsItself(v)).toBe(false);
+      expect(unchangedBaseSha(v)).toBe(pair.baseAfter);
+    }
+  });
+
+  it('a BEFORE-ONLY frame names nothing — baseBefore is the field the defect corrupted', () => {
+    // codex review of the F1 PR, HIGH: falling back to `baseBefore` would print exactly the false
+    // claim this fix exists to stop, on a frame whose base tip could not be resolved.
+    const v = view({ baseBefore: 'c9caa85', baseAfter: null });
+    expect(liftContradictsItself(v)).toBe(false); // nothing disagrees with nothing
+    expect(unchangedBaseSha(v)).toBeNull();
+    // An after-only frame is fine: `baseAfter` IS the base on every engine that has shipped.
+    expect(unchangedBaseSha(view({ baseBefore: null }))).toBe('aaaaaaa');
+    expect(unchangedBaseSha(view({ baseBefore: null, baseAfter: null }))).toBeNull();
+  });
+
+  it('only `unchanged` is judged — `lifted` and `conflict` name two bases BECAUSE they moved', () => {
+    for (const outcome of ['lifted', 'conflict', 'skipped', 'failed', 'rebased_by_operator']) {
+      const v = view({ outcome, baseBefore: 'c9caa85', baseAfter: '4a18d8d' });
+      expect(liftContradictsItself(v)).toBe(false);
+      expect(unchangedBaseSha(v)).toBeNull();
+    }
   });
 });
