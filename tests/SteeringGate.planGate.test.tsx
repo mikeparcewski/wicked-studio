@@ -66,6 +66,9 @@ describe('planGateOf — the open plan gate off GET /runs/:id/team', () => {
       floorAdded: ['test_plan', 'architecture', 'security_review'],
       // pa-scope is the engine's (authoring it is refused); deliver is the launch's own step.
       editSeed: ['understand', 'design', 'produce', 'critique', 'review'],
+      // F4: the plan AS COMPOSED — every step, in order, by its own id. What the gate's
+      // consequence line must read, and what the edit seed above deliberately is not.
+      planSteps: ['pa-scope', 'understand', 'design', 'produce', 'critique', 'review', 'deliver'],
     });
     expect(v!.reasons).toEqual(['fail closed at 100: graph indexed at 3071a76 is not the run base e9d64e7']);
     expect(floorAddedText(v!)).toBe('The floor added test_plan, architecture, security_review: band 70-100 requires them.');

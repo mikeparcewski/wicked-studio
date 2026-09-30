@@ -1,5 +1,5 @@
 import type { CoreEvent, WorkUnit } from '../api/types.js';
-import type { PlanGateView } from '../board/planModel.js';
+import { DELIVER_STEP, type PlanGateView } from '../board/planModel.js';
 import { checkOutcome, phaseLabel, type GateVerdictView } from './gateVerdictModel.js';
 
 /**
@@ -178,12 +178,25 @@ export function recommendGateMove(input: GateMoveInput): GateMove | null {
   if (input.isPlanGate) {
     const view = input.planView;
     if (view === null || !isLowBand(view)) return null;
-    const phases = [...view.editSeed, ...view.floorAdded.filter((p) => !view.editSeed.includes(p))];
+    // F4 — THE CONSEQUENCE IS DERIVED FROM THE PLAN IT GATES, never from the editor's seed.
+    //
+    // This read `view.editSeed`, which is what the plan EDITOR is filled with: it strips the two
+    // steps an operator cannot author (`pa-scope`, the launch's `deliver`) and names steps by
+    // CATALOG. Used as the plan it said "approve runs 6 phases: understand → design → build →
+    // review → test → critique" over a plan of `pa-scope → clarify → design → build →
+    // adversarial-review → test → review → deliver` — the wrong count, the wrong names, and
+    // `deliver`, the only phase with an external side effect, absent from the line that gates it.
+    const phases = [...view.planSteps, ...view.floorAdded.filter((p) => !view.planSteps.includes(p))];
+    // Said out loud rather than left to be spotted in an eight-item arrow list: this is a consent
+    // line, and one of those names reaches outside the machine.
+    const sideEffect = phases.includes(DELIVER_STEP)
+      ? `; its ${DELIVER_STEP} phase is the one with an external side effect`
+      : '';
     return {
       kind: 'approve-plan',
       label: 'Approve the plan',
       consequence: phases.length > 0
-        ? `Band ${view.band}, low risk — approve runs ${plural(phases.length, 'phase')}: ${phases.join(' → ')}`
+        ? `Band ${view.band}, low risk — approve runs ${plural(phases.length, 'phase')}: ${phases.join(' → ')}${sideEffect}`
         : `Band ${view.band}, low risk — approve runs the plan as shown`,
       prefill: null,
       items: [],

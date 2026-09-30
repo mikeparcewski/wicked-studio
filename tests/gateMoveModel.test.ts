@@ -18,7 +18,7 @@ function input(over: Partial<GateMoveInput>): GateMoveInput {
 
 const plan = (over: Partial<PlanGateView>): PlanGateView => ({
   gateId: 'g-1', ord: 2, planRev: 1, band: '0-19', highRisk: false, reason: 'manual_mode', score: 10,
-  reasons: [], floorAdded: [], editSeed: ['understand', 'build'], ...over,
+  reasons: [], floorAdded: [], editSeed: ['understand', 'build'], planSteps: ['understand', 'build'], ...over,
 });
 
 describe('failingItems', () => {
@@ -63,6 +63,49 @@ describe('recommendGateMove', () => {
     expect(move?.label).toBe("Retry with the validator's findings");
     expect(move?.consequence).toBe('produce reruns with 1 failing check as its note');
     expect(move?.prefill).toContain('- test — exit 1');
+  });
+
+  // ── F4 (ship-proof C7) — THE CONSEQUENCE NAMES THE PLAN IT GATES ──────────────────────────────
+  //
+  // The line read "approve runs 6 phases: understand → design → build → review → test → critique"
+  // while the plan on the same card was `pa-scope → clarify → design → build → adversarial-review
+  // → test → review → deliver` (8 units). It was derived from `editSeed` — what the plan EDITOR is
+  // seeded with, which strips the two steps an operator cannot author and names steps by CATALOG —
+  // so the count, the names, and the presence of `deliver` (the only phase with an external side
+  // effect) were all wrong on the card that approves it.
+  it('derives the consequence from the COMPOSED plan, deliver included, not from the editor seed', () => {
+    const view = plan({
+      // What C7 saw: the plan as composed, by step id.
+      planSteps: ['pa-scope', 'clarify', 'design', 'build', 'adversarial-review', 'test', 'review', 'deliver'],
+      // What the editor is seeded with — deliberately different, and no longer what the line reads.
+      editSeed: ['understand', 'design', 'build', 'review', 'test', 'critique'],
+    });
+    const move = recommendGateMove(input({ isPlanGate: true, planView: view }));
+
+    expect(move?.consequence).toBe(
+      'Band 0-19, low risk — approve runs 8 phases: pa-scope → clarify → design → build → ' +
+        'adversarial-review → test → review → deliver; its deliver phase is the one with an ' +
+        'external side effect',
+    );
+    // The two halves of the defect, pinned separately so a regression names itself.
+    expect(move?.consequence).toContain('8 phases');
+    expect(move?.consequence).toContain('deliver');
+    expect(move?.consequence).not.toContain('6 phases');
+    expect(move?.consequence).not.toContain('critique');
+  });
+
+  it('a floor addition the proposed plan does not carry still rides the consequence, once', () => {
+    const view = plan({ planSteps: ['understand', 'build'], floorAdded: ['test_plan', 'build'] });
+    expect(recommendGateMove(input({ isPlanGate: true, planView: view }))?.consequence).toBe(
+      'Band 0-19, low risk — approve runs 3 phases: understand → build → test_plan',
+    );
+  });
+
+  it('a plan with no deliver step says nothing about an external side effect', () => {
+    const view = plan({ planSteps: ['understand', 'build'] });
+    expect(recommendGateMove(input({ isPlanGate: true, planView: view }))?.consequence).toBe(
+      'Band 0-19, low risk — approve runs 2 phases: understand → build',
+    );
   });
 
   it('a plan gate at a low band → approve the plan; a high band recommends nothing', () => {

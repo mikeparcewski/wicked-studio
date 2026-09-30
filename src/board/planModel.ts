@@ -258,6 +258,19 @@ export interface PlanGateView {
   floorAdded: string[];
   /** The held plan's authored phases (catalog ids), for an edit: no `pa-scope`, no deliver step. */
   editSeed: string[];
+  /**
+   * THE PLAN THIS GATE HOLDS (F5-adjacent, ship-proof F4): every step of `plan.proposed`, in order,
+   * by its own step id — `pa-scope` and the launch's `deliver` step included.
+   *
+   * Distinct from {@link editSeed} on purpose, and the distinction is the defect F4 caught. The
+   * edit seed is what the plan EDITOR is filled with, so it strips the two steps an operator cannot
+   * author (`pa-scope`, `deliver`) and names them by CATALOG. The gate's consequence line reused it
+   * as if it were the plan, and so said "approve runs 6 phases: understand → design → build →
+   * review → test → critique" over a plan of `pa-scope → clarify → design → build →
+   * adversarial-review → test → review → deliver`: the wrong count, the wrong names, and `deliver`
+   * — the only phase with an external side effect — missing from the sentence that gates it.
+   */
+  planSteps: string[];
 }
 
 function str(v: unknown): string | null {
@@ -305,6 +318,11 @@ export function planGateOf(team: RunTeamResponse): PlanGateView | null {
     editSeed: steps
       .filter((st) => st.id !== PA_SCOPE_STEP && st.catalog !== DELIVER_STEP && typeof st.catalog === 'string')
       .map((st) => st.catalog as string),
+    // Nothing stripped, nothing renamed: a step's own id when it has one (that is what the card
+    // shows), its catalog otherwise.
+    planSteps: steps
+      .map((st) => str(st.id) ?? str(st.catalog))
+      .filter((n): n is string => n !== null && n !== ''),
   };
 }
 
