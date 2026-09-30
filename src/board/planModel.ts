@@ -258,10 +258,43 @@ export interface PlanGateView {
   floorAdded: string[];
   /** The held plan's authored phases (catalog ids), for an edit: no `pa-scope`, no deliver step. */
   editSeed: string[];
+  /**
+   * THE PLAN THIS GATE HOLDS (ship-proof F4): every step of `plan.proposed`, in order — nothing
+   * stripped — with the `id` the card shows it under and the `catalog` that says WHAT it is.
+   *
+   * Distinct from {@link editSeed} on purpose, and the distinction is the defect F4 caught. The
+   * edit seed is what the plan EDITOR is filled with, so it strips the two steps an operator cannot
+   * author (`pa-scope`, `deliver`) and names them by CATALOG. The gate's consequence line reused it
+   * as if it were the plan, and so said "approve runs 6 phases: understand → design → build →
+   * review → test → critique" over a plan of `pa-scope → clarify → design → build →
+   * adversarial-review → test → review → deliver`: the wrong count, the wrong names, and `deliver`
+   * — the only phase with an external side effect — missing from the sentence that gates it.
+   *
+   * BOTH halves are kept because they answer different questions (codex review of the F4 PR): `id`
+   * is what a reader sees on the card, and `catalog` is the identity — whether a step IS the
+   * deliver step, and whether a `floorAdded` name (which is a catalog) is already in the plan,
+   * cannot be answered from a display name.
+   */
+  planSteps: PlanGateStep[];
+}
+
+/** One step of the plan a gate holds: the name the card shows, and what the step IS. */
+export interface PlanGateStep {
+  /** The step's own id, else its catalog, else `null` — nothing is invented for a nameless step. */
+  id: string | null;
+  /** The catalog the step instantiates (`deliver`, `understand`, …), or `null`. */
+  catalog: string | null;
 }
 
 function str(v: unknown): string | null {
   return typeof v === 'string' ? v : null;
+}
+
+/** `str`, but an EMPTY string is an absent value — otherwise `{ id: '', catalog: 'build' }` would
+ *  never fall back to its catalog (`?? ` accepts `''`) and the step would end up nameless. */
+function nonEmpty(v: unknown): string | null {
+  const s = str(v);
+  return s === null || s === '' ? null : s;
 }
 
 const SHA40 = /\b([0-9a-f]{7})[0-9a-f]{33}\b/g;
@@ -305,6 +338,10 @@ export function planGateOf(team: RunTeamResponse): PlanGateView | null {
     editSeed: steps
       .filter((st) => st.id !== PA_SCOPE_STEP && st.catalog !== DELIVER_STEP && typeof st.catalog === 'string')
       .map((st) => st.catalog as string),
+    // Nothing stripped, nothing renamed, NOTHING DROPPED: a step the payload could not name stays
+    // in the list as `id: null`, because losing it would make the count disagree with the plan
+    // again — which is the whole defect (codex review of the F4 PR, LOW).
+    planSteps: steps.map((st) => ({ id: nonEmpty(st.id) ?? nonEmpty(st.catalog), catalog: nonEmpty(st.catalog) })),
   };
 }
 

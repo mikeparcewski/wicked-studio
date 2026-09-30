@@ -1,5 +1,5 @@
 import type { CoreEvent, WorkUnit } from '../api/types.js';
-import type { PlanGateView } from '../board/planModel.js';
+import { DELIVER_STEP, type PlanGateView } from '../board/planModel.js';
 import { checkOutcome, phaseLabel, type GateVerdictView } from './gateVerdictModel.js';
 
 /**
@@ -178,12 +178,37 @@ export function recommendGateMove(input: GateMoveInput): GateMove | null {
   if (input.isPlanGate) {
     const view = input.planView;
     if (view === null || !isLowBand(view)) return null;
-    const phases = [...view.editSeed, ...view.floorAdded.filter((p) => !view.editSeed.includes(p))];
+    // F4 — THE CONSEQUENCE IS DERIVED FROM THE PLAN IT GATES, never from the editor's seed.
+    //
+    // This read `view.editSeed`, which is what the plan EDITOR is filled with: it strips the two
+    // steps an operator cannot author (`pa-scope`, the launch's `deliver`) and names steps by
+    // CATALOG. Used as the plan it said "approve runs 6 phases: understand → design → build →
+    // review → test → critique" over a plan of `pa-scope → clarify → design → build →
+    // adversarial-review → test → review → deliver` — the wrong count, the wrong names, and
+    // `deliver`, the only phase with an external side effect, absent from the line that gates it.
+    //
+    // The names the card shows are step IDS; the floor's additions and the deliver step are named
+    // by CATALOG. Mixing the two namespaces double-counts a floor addition already in the plan and
+    // reads the side effect off the wrong field (codex review of this PR, two MEDIUMs), so each
+    // question is answered from the field that can answer it. A step the payload could not name is
+    // still counted, and said to be unnamed rather than dropped or invented.
+    const named = view.planSteps.map((st) => st.id ?? '(unnamed phase)');
+    const inPlan = new Set<string>(
+      view.planSteps.flatMap((st) => [st.id, st.catalog].filter((n): n is string => n !== null)),
+    );
+    const phases = [...named, ...view.floorAdded.filter((p) => !inPlan.has(p))];
+    // Said out loud rather than left to be spotted in an eight-item arrow list: this is a consent
+    // line, and one of those names reaches outside the machine.
+    const delivers =
+      view.planSteps.some((st) => st.catalog === DELIVER_STEP) || view.floorAdded.includes(DELIVER_STEP);
+    const sideEffect = delivers
+      ? `; its ${DELIVER_STEP} phase is the one with an external side effect`
+      : '';
     return {
       kind: 'approve-plan',
       label: 'Approve the plan',
       consequence: phases.length > 0
-        ? `Band ${view.band}, low risk — approve runs ${plural(phases.length, 'phase')}: ${phases.join(' → ')}`
+        ? `Band ${view.band}, low risk — approve runs ${plural(phases.length, 'phase')}: ${phases.join(' → ')}${sideEffect}`
         : `Band ${view.band}, low risk — approve runs the plan as shown`,
       prefill: null,
       items: [],
