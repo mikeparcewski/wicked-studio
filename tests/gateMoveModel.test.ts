@@ -5,7 +5,7 @@ import {
   creatorClaims, failingItems, gateRowVerb, isLowBand, recommendGateMove, verdictDiff, type GateMoveInput,
 } from '../src/components/gateMoveModel.js';
 import { gateVerdictFor } from '../src/components/gateVerdictModel.js';
-import type { PlanGateView } from '../src/board/planModel.js';
+import type { PlanGateStep, PlanGateView } from '../src/board/planModel.js';
 import type { CoreEvent } from '../src/api/types.js';
 import { CREATOR_OUTPUT, MOVE_RUN, MOVE_UNITS, NOT_PASS_EVENTS, NOT_PASS_PROMPT, REVIEWER_REASON } from './fixtures/gateMove.js';
 
@@ -16,9 +16,17 @@ function input(over: Partial<GateMoveInput>): GateMoveInput {
   };
 }
 
+/** A plan step as `plan.proposed` carries it: the id the card shows, the catalog that says what it
+ *  is. `steps('a', 'b:c')` = id `a` (catalog `a`), then id `b` with catalog `c`. */
+const steps = (...spec: string[]): PlanGateStep[] =>
+  spec.map((s) => {
+    const [id, catalog] = s.split(':');
+    return { id: id!, catalog: catalog ?? id! };
+  });
+
 const plan = (over: Partial<PlanGateView>): PlanGateView => ({
   gateId: 'g-1', ord: 2, planRev: 1, band: '0-19', highRisk: false, reason: 'manual_mode', score: 10,
-  reasons: [], floorAdded: [], editSeed: ['understand', 'build'], planSteps: ['understand', 'build'], ...over,
+  reasons: [], floorAdded: [], editSeed: ['understand', 'build'], planSteps: steps('understand', 'build'), ...over,
 });
 
 describe('failingItems', () => {
@@ -76,7 +84,8 @@ describe('recommendGateMove', () => {
   it('derives the consequence from the COMPOSED plan, deliver included, not from the editor seed', () => {
     const view = plan({
       // What C7 saw: the plan as composed, by step id.
-      planSteps: ['pa-scope', 'clarify', 'design', 'build', 'adversarial-review', 'test', 'review', 'deliver'],
+      planSteps: steps('pa-scope:understand', 'clarify:understand', 'design', 'build:produce',
+        'adversarial-review:critique', 'test', 'review', 'deliver'),
       // What the editor is seeded with — deliberately different, and no longer what the line reads.
       editSeed: ['understand', 'design', 'build', 'review', 'test', 'critique'],
     });
@@ -95,16 +104,49 @@ describe('recommendGateMove', () => {
   });
 
   it('a floor addition the proposed plan does not carry still rides the consequence, once', () => {
-    const view = plan({ planSteps: ['understand', 'build'], floorAdded: ['test_plan', 'build'] });
+    const view = plan({ planSteps: steps('understand', 'build'), floorAdded: ['test_plan', 'build'] });
     expect(recommendGateMove(input({ isPlanGate: true, planView: view }))?.consequence).toBe(
       'Band 0-19, low risk — approve runs 3 phases: understand → build → test_plan',
     );
   });
 
   it('a plan with no deliver step says nothing about an external side effect', () => {
-    const view = plan({ planSteps: ['understand', 'build'] });
+    const view = plan({ planSteps: steps('understand', 'build') });
     expect(recommendGateMove(input({ isPlanGate: true, planView: view }))?.consequence).toBe(
       'Band 0-19, low risk — approve runs 2 phases: understand → build',
+    );
+  });
+
+  // codex review of this PR, two MEDIUMs: the names the card shows are step IDS while the floor's
+  // additions and the deliver step are named by CATALOG. Mixing the namespaces double-counted a
+  // floor addition already in the plan and read the side effect off the wrong field.
+  it('the deliver step is found by CATALOG, whatever its step id is', () => {
+    const renamed = plan({ planSteps: steps('understand', 'publish-output:deliver') });
+    expect(recommendGateMove(input({ isPlanGate: true, planView: renamed }))?.consequence).toBe(
+      'Band 0-19, low risk — approve runs 2 phases: understand → publish-output; its deliver phase ' +
+        'is the one with an external side effect',
+    );
+    // And a step merely CALLED deliver, instantiating something else, is not the side effect.
+    const impostor = plan({ planSteps: steps('understand', 'deliver:review') });
+    expect(recommendGateMove(input({ isPlanGate: true, planView: impostor }))?.consequence).toBe(
+      'Band 0-19, low risk — approve runs 2 phases: understand → deliver',
+    );
+  });
+
+  it('a floor addition already in the plan under another step id is not listed twice', () => {
+    const view = plan({
+      planSteps: steps('understand', 'adversarial-review:critique'),
+      floorAdded: ['critique', 'test_plan'],
+    });
+    expect(recommendGateMove(input({ isPlanGate: true, planView: view }))?.consequence).toBe(
+      'Band 0-19, low risk — approve runs 3 phases: understand → adversarial-review → test_plan',
+    );
+  });
+
+  it('a step the payload could not name is COUNTED and said to be unnamed, never dropped', () => {
+    const view = plan({ planSteps: [{ id: 'understand', catalog: 'understand' }, { id: null, catalog: null }] });
+    expect(recommendGateMove(input({ isPlanGate: true, planView: view }))?.consequence).toBe(
+      'Band 0-19, low risk — approve runs 2 phases: understand → (unnamed phase)',
     );
   });
 

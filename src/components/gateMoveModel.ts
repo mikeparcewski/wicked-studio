@@ -186,10 +186,22 @@ export function recommendGateMove(input: GateMoveInput): GateMove | null {
     // review → test → critique" over a plan of `pa-scope → clarify → design → build →
     // adversarial-review → test → review → deliver` — the wrong count, the wrong names, and
     // `deliver`, the only phase with an external side effect, absent from the line that gates it.
-    const phases = [...view.planSteps, ...view.floorAdded.filter((p) => !view.planSteps.includes(p))];
+    //
+    // The names the card shows are step IDS; the floor's additions and the deliver step are named
+    // by CATALOG. Mixing the two namespaces double-counts a floor addition already in the plan and
+    // reads the side effect off the wrong field (codex review of this PR, two MEDIUMs), so each
+    // question is answered from the field that can answer it. A step the payload could not name is
+    // still counted, and said to be unnamed rather than dropped or invented.
+    const named = view.planSteps.map((st) => st.id ?? '(unnamed phase)');
+    const inPlan = new Set<string>(
+      view.planSteps.flatMap((st) => [st.id, st.catalog].filter((n): n is string => n !== null)),
+    );
+    const phases = [...named, ...view.floorAdded.filter((p) => !inPlan.has(p))];
     // Said out loud rather than left to be spotted in an eight-item arrow list: this is a consent
     // line, and one of those names reaches outside the machine.
-    const sideEffect = phases.includes(DELIVER_STEP)
+    const delivers =
+      view.planSteps.some((st) => st.catalog === DELIVER_STEP) || view.floorAdded.includes(DELIVER_STEP);
+    const sideEffect = delivers
       ? `; its ${DELIVER_STEP} phase is the one with an external side effect`
       : '';
     return {
