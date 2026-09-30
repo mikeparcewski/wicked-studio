@@ -87,11 +87,12 @@ describe('RunDelivery — the deliver lift block', () => {
     expect(summary).not.toHaveTextContent('is still at');
     expect(summary).toHaveAttribute('data-base', 'untrusted');
     // What is still true is still said.
-    expect(summary).toHaveTextContent('origin/main did not move while the run ran');
+    expect(summary).toHaveTextContent('the lift found no change to origin/main');
     expect(summary).toHaveTextContent('the tree the checks verified is the tree that would ship');
     // And the reason no number is shown, with both halves of the pair, so it is diagnosable.
     const untrusted = screen.getByTestId('deliver-lift-base-untrusted');
-    expect(untrusted).toHaveTextContent('naming two different bases');
+    expect(untrusted).toHaveTextContent('naming two different commits');
+    expect(untrusted).toHaveTextContent('neither is identified as the base here');
     expect(untrusted.textContent).toContain(RUN_BRANCH_HEAD.slice(0, 7));
     expect(untrusted.textContent).toContain(BASE_BEFORE.slice(0, 7));
     expect(untrusted).toHaveTextContent('read origin/main yourself before approving');

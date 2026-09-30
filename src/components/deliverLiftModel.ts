@@ -161,7 +161,19 @@ export function liftOutcomeLabel(outcome: string | null): string {
 }
 
 /**
- * An `unchanged` lift that names TWO bases (ship-proof F1).
+ * Two SHAs that name the same commit, allowing for git's abbreviation: the engine writes full
+ * 40-hex ids, but a mixed full/abbreviated pair identifies ONE commit and must not read as a
+ * contradiction (codex review of this PR, MEDIUM).
+ */
+function sameCommit(a: string, b: string): boolean {
+  const x = a.trim().toLowerCase();
+  const y = b.trim().toLowerCase();
+  if (x === '' || y === '') return false;
+  return x.startsWith(y) || y.startsWith(x);
+}
+
+/**
+ * An `unchanged` lift that names TWO different commits (ship-proof F1).
  *
  * `outcome: unchanged` means the base did not move, so `baseBefore` and `baseAfter` are the same
  * commit BY DEFINITION — they are both "the base". wicked-core's `Unchanged` arm set
@@ -176,20 +188,26 @@ export function liftContradictsItself(view: DeliverLiftView): boolean {
     view.outcome === 'unchanged' &&
     view.baseBefore !== null &&
     view.baseAfter !== null &&
-    view.baseBefore !== view.baseAfter
+    !sameCommit(view.baseBefore, view.baseAfter)
   );
 }
 
 /**
- * The base SHA an `unchanged` card may NAME, or `null` when it must not name one: the pair
- * contradicts itself ({@link liftContradictsItself}) or the frame carried no base at all. The
- * sentence "<ref> is still at <sha>" is only true of a value that is the base; anything else is a
- * number the card cannot stand behind, and a gate card states no such number.
+ * The base SHA an `unchanged` card may NAME, or `null` when it must not name one. The sentence
+ * "<ref> is still at <sha>" is only true of a value that IS the base; anything else is a number
+ * the card cannot stand behind, and a gate card states no such number.
+ *
+ * ONLY `baseAfter` — never a fall back to `baseBefore` (codex review of this PR, HIGH). On an
+ * `unchanged` lift `baseAfter` is the base tip in every engine that has shipped, while
+ * `baseBefore` is the field the defect put the run-branch head in: a frame carrying only
+ * `baseBefore` (the base tip unresolved, say a failed fetch) would otherwise have printed exactly
+ * the false claim this fix exists to stop. `null` is also the answer for a contradictory pair
+ * ({@link liftContradictsItself}) and for a frame that carried no base at all.
  */
 export function unchangedBaseSha(view: DeliverLiftView): string | null {
   if (view.outcome !== 'unchanged') return null;
   if (liftContradictsItself(view)) return null;
-  return view.baseAfter ?? view.baseBefore;
+  return view.baseAfter;
 }
 
 /** Whether the outcome (or the absence of one beside a failure) is a stop: nothing was pushed. */

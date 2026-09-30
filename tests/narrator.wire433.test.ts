@@ -37,7 +37,9 @@ describe('narrate — the wicked-core#431 frames', () => {
     [LIFT_UNCHANGED, `Deliver lift: base unchanged — origin/main is still at ${BASE_BEFORE.slice(0, 7)}`, 'info'],
     // F1: an `unchanged` lift that names TWO bases names NONE — the old engine's `Unchanged` arm
     // put the RUN BRANCH head in `baseBefore`, so every deliver retry narrated a false SHA.
-    [LIFT_UNCHANGED_TWO_BASES, 'Deliver lift: base unchanged — origin/main did not move while the run ran', 'info'],
+    [LIFT_UNCHANGED_TWO_BASES, 'Deliver lift: base unchanged — the lift found no change to origin/main', 'info'],
+    // And a BEFORE-ONLY frame names nothing either: `baseBefore` is the field the defect corrupted.
+    [{ ...LIFT_UNCHANGED, baseAfter: null }, 'Deliver lift: base unchanged — the lift found no change to origin/main', 'info'],
     [LIFT_LIFTED, `Deliver lift: lifted onto origin/main @ ${BASE_AFTER.slice(0, 7)} — re-running the repository's checks on the lifted tree`, 'work'],
     [LIFT_CONFLICT, 'Deliver lift: CONFLICT in testid-inventory.json — nothing rebased, nothing pushed', 'fail'],
     [LIFT_SKIPPED, 'Deliver lift: skipped — no remote default branch resolved (origin/HEAD is unset and origin/main does not exist)', 'info'],

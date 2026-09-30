@@ -64,16 +64,16 @@ export function DeliverLift({ view, omitFailure = false }: { view: DeliverLiftVi
         <p data-testid="deliver-lift-summary" data-base={unchangedSha === null ? 'untrusted' : 'named'}>
           {unchangedSha !== null
             ? <>{base} is still at {short7(unchangedSha)} — the tree the checks verified is the tree that would ship</>
-            : <>{base} did not move while the run ran — the tree the checks verified is the tree that would ship</>}
+            : <>the lift found no change to {base} — the tree the checks verified is the tree that would ship</>}
           {view.treeBefore !== null && <span style={{ color: 'var(--ink-dim)' }}> (tree {shortId(view.treeBefore)})</span>}
         </p>
       )}
 
       {view.outcome === 'unchanged' && liftContradictsItself(view) && (
         <p data-testid="deliver-lift-base-untrusted" style={{ color: 'var(--ink-muted)' }}>
-          the daemon reported an unchanged lift naming two different bases ({short7(view.baseBefore)} before,{' '}
-          {short7(view.baseAfter)} after), so no base commit is shown here — read {base} yourself before approving
-          (upgrade the daemon: wicked-core fixed the field this comes from)
+          the daemon reported an unchanged lift naming two different commits ({short7(view.baseBefore)} before,{' '}
+          {short7(view.baseAfter)} after), so neither is identified as the base here — read {base} yourself before
+          approving (upgrade the daemon: wicked-core fixed the field this comes from)
         </p>
       )}
 

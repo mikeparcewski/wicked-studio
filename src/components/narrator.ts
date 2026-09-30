@@ -400,13 +400,19 @@ export function narrate(event: CoreEvent, ctx: NarratorContext): NarrationLine |
           // commit by definition. The engine's old `Unchanged` arm put the RUN BRANCH head in
           // `baseBefore`, so every deliver RETRY narrated a false SHA. Name the base only when the
           // pair agrees; otherwise say the thing that is true and no number.
+          // `str` answers `''` for an absent field, so an empty value is "no base named".
           const before = str(event['baseBefore']);
           const after = str(event['baseAfter']);
-          const sha = before !== null && after !== null && before !== after ? null : (after ?? before);
+          const agree = (a: string, b: string): boolean =>
+            a.toLowerCase().startsWith(b.toLowerCase()) || b.toLowerCase().startsWith(a.toLowerCase());
+          // ONLY `baseAfter` (codex review, HIGH): `baseBefore` is the field the defect put the run
+          // branch head in, so a before-only frame names nothing. A mixed full/abbreviated pair is
+          // ONE commit, not a contradiction (codex review, MEDIUM).
+          const sha = after !== '' && (before === '' || agree(before, after)) ? after : '';
           return line(
-            sha !== null
+            sha !== ''
               ? `Deliver lift: base unchanged — ${base} is still at ${shortId(sha, 7)}`
-              : `Deliver lift: base unchanged — ${base} did not move while the run ran`,
+              : `Deliver lift: base unchanged — the lift found no change to ${base}`,
             'info',
           );
         }
