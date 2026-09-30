@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { cleanup, render, screen } from '@testing-library/react';
 import { RightPanel } from '../src/components/RightPanel.js';
 import * as client from '../src/api/client.js';
 import { useRunEventStore } from '../src/store/events.js';
@@ -23,8 +23,21 @@ beforeEach(() => {
   vi.restoreAllMocks();
   useRunEventStore.setState({ byRun: {} });
   vi.spyOn(client.api, 'getRun').mockResolvedValue({ run: view('run-1') });
+  // The panel mounts GovernanceAudit, which loads on mount. Unmocked, its two requests settle
+  // AFTER the file's jsdom environment is torn down, and the `finally { setLoading(false) }` then
+  // throws `ReferenceError: window is not defined` out of React as an unhandled rejection — which
+  // reds the whole run while every test passes. It surfaced when an unrelated new test file
+  // changed vitest's scheduling; the race was always here. Mocked so the load settles, and
+  // `cleanup()` unmounts before teardown so nothing sets state into a dead environment.
+  // `getRunAcceptance` is typed non-nullable; the component's own fallback path is the
+  // "older daemon answered nothing usable" case, which a rejection reaches identically.
+  vi.spyOn(client.api, 'getRunAcceptance').mockRejectedValue(new Error('no acceptance wire'));
+  vi.spyOn(client.api, 'listClaims').mockResolvedValue({ claims: [] });
 });
-afterEach(() => window.history.replaceState(null, '', '/'));
+afterEach(() => {
+  cleanup();
+  window.history.replaceState(null, '', '/');
+});
 
 describe('RightPanel: #governance opens the Governance section', () => {
   it('without the fragment, What/Where is open', () => {
