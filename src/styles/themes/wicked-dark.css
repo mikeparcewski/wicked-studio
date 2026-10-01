@@ -1,0 +1,45 @@
+/* themes/wicked-dark.css — the wicked family palette on the graphite ground
+ * (DES-STUDIO-REBUILD-001 S1; DESIGN-simple §1a dark column; wicked-web tokens.css).
+ *
+ * A THEME, not a skin (DES §5.1). The dark ground is tokens.css itself, so this file only
+ * overrides: graphite canvas #0D1117 / sunk #0F1419 / surface #1B222E, ink #E6EDF3 →
+ * muted #AEB9C4 → faint, and the §1a dark status hues. Choosing the theme writes the
+ * harbor preset (appearance.ts HARBOR_ACCENT, #224A5E); on this ground the accent is the
+ * same hue 9 points lighter (≈ §1a's dark harbor #2F6680, white text ≥ 6:1), so the accent
+ * picker keeps owning it. Archivo for every word. The §1a faint #7D8995 measures 4.0:1 on
+ * raised, so it is lifted to #8A97A4. Measured in tests/tokens.contrast.test.ts. */
+
+[data-theme="wicked-dark"] {
+  --_surface-0: #0d1117;
+  --_surface-1: #0f1419;
+  --_surface-2: #1b222e;
+  --_surface-3: #222b38;
+  --_surface-4: #2a3442;
+
+  --_ink-faint:  #8a97a4;
+  --_ink-soft:   #aeb9c4;
+  --_ink-strong: #cdd6df;
+  --_ink-max:    #e6edf3;
+
+  --border-subtle: rgba(230, 237, 243, 0.07);
+  --border:        rgba(230, 237, 243, 0.14);
+  --border-strong: rgba(230, 237, 243, 0.24);
+  --border-input:  rgba(230, 237, 243, 0.48);
+
+  --accent:        hsl(var(--_accent-h) var(--_accent-s) calc(var(--_accent-l) + 9%));
+  --accent-dim:    hsl(var(--_accent-h) var(--_accent-s) calc(var(--_accent-l) - 4%));
+  --accent-subtle: hsl(var(--_accent-h) calc(var(--_accent-s) * 0.6) calc(var(--_accent-l) - 8%));
+  --accent-hover:  hsl(var(--_accent-h) var(--_accent-s) calc(var(--_accent-l) + 15%));
+  --accent-fg:     hsl(var(--_accent-h) 30% clamp(8%, calc((49% - var(--_accent-l)) * 100), 98%));
+
+  --status-gate:     #d2a8ff;
+  --status-gate-dim: #2a2140;
+  --status-fail:     #f47067;
+  --status-fail-dim: #3a1d1e;
+  --status-run:      #56d364;
+  --status-run-dim:  #15301c;
+  --status-warn:     #f0a868;
+  --status-warn-dim: #3a2716;
+
+  --font-sans: 'Archivo', system-ui, -apple-system, sans-serif;
+}

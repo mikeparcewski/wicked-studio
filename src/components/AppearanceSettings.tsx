@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { DEFAULT_SITE_NAME, useAppearanceStore } from '../theming/appearance.js';
+import { DEFAULT_SITE_NAME, THEMES, useAppearanceStore, type ThemeId } from '../theming/appearance.js';
 import { SKINS, isSkinId } from '../theming/skins.js';
 import { WickedLogo } from './WickedLogo.js';
 
@@ -19,8 +19,9 @@ import { WickedLogo } from './WickedLogo.js';
  * (EC12: accent vs status, side by side). Reset restores 258/72/62 (§3.5) and
  * persists; the logo is independent of the accent reset.
  *
- * Theme (§2.14): dark is tokens.css itself; light is the one theme instance,
- * applied as `data-theme="light"` on <html> and persisted with the rest.
+ * Theme (§2.14): dark is tokens.css itself; light, wicked-light and wicked-dark are theme
+ * instances, applied as `data-theme` on <html> and persisted with the rest. A wicked theme
+ * writes the harbor accent preset (DES-STUDIO-REBUILD-001 S1); the wheel owns it after.
  *
  * Skin (theming/skins.ts): the shape — layout, density, which variant renders each
  * behaviour surface — applied as `data-skin` on <html>, persisted with the rest.
@@ -206,14 +207,17 @@ export function AppearanceSettings(): React.ReactElement {
     reader.readAsDataURL(file);
   }
 
-  const themeButton = (theme: 'dark' | 'light', label: string): React.ReactElement => {
+  const chooseTheme = useAppearanceStore((s) => s.chooseTheme);
+
+  const themeButton = (theme: ThemeId, label: string): React.ReactElement => {
     const active = appearance.theme === theme;
     return (
       <button
+        key={theme}
         type="button"
         data-testid={`theme-${theme}`}
         aria-pressed={active}
-        onClick={() => update({ theme })}
+        onClick={() => chooseTheme(theme)}
         className="px-3 py-1 rounded-md text-xs font-medium"
         style={active
           ? { background: 'var(--accent)', color: 'var(--accent-fg)', border: '1px solid var(--accent)' }
@@ -326,12 +330,11 @@ export function AppearanceSettings(): React.ReactElement {
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium" style={{ color: 'var(--ink-high)' }}>Theme</p>
           <p className="text-xs mt-0.5" style={{ color: 'var(--ink-muted)' }}>
-            The surface and ink ramps. Accent and status colors carry across both.
+            The surface and ink ramps. The wicked themes also set the harbor accent and the Archivo type.
           </p>
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
-          {themeButton('dark', 'Dark')}
-          {themeButton('light', 'Light')}
+          {THEMES.map((t) => themeButton(t.id, t.label))}
         </div>
       </div>
 

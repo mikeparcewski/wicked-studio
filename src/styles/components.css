@@ -86,7 +86,7 @@
 }
 .wk-btn--secondary:active:not(:disabled) { box-shadow: var(--shadow-pressed); }
 /* Light theme: a pale secondary on white needs a 3:1 edge to read as a control (council M8). */
-[data-theme="light"] .wk-btn--secondary:not(:disabled) { border-color: var(--border-input); }
+[data-theme="light"] .wk-btn--secondary:not(:disabled), [data-theme="wicked-light"] .wk-btn--secondary:not(:disabled) { border-color: var(--border-input); }
 
 .wk-btn--danger {
   background: transparent;
@@ -97,7 +97,7 @@
   background: var(--status-fail-dim);
   border-color: color-mix(in oklab, var(--status-fail) 60%, transparent);
 }
-[data-theme="light"] .wk-btn--danger:not(:disabled) { border-color: color-mix(in oklab, var(--status-fail) 70%, transparent); }
+[data-theme="light"] .wk-btn--danger:not(:disabled), [data-theme="wicked-light"] .wk-btn--danger:not(:disabled) { border-color: color-mix(in oklab, var(--status-fail) 70%, transparent); }
 
 .wk-btn--quiet {
   background: transparent;
@@ -227,7 +227,7 @@ button.wk-chip, a.wk-chip { min-height: var(--control-h-sm); cursor: pointer; fo
 /* ── The needs-you queue: rows lift on hover; the verb is a compact accent door ── */
 .wk-need-row { transition: background-color var(--dur-instant) var(--ease-out); }
 .wk-need-row:hover { background: color-mix(in oklab, var(--surface-raised) 55%, transparent); }
-[data-theme="light"] .wk-need-row:hover { background: color-mix(in oklab, var(--surface-raised) 80%, transparent); }
+[data-theme="light"] .wk-need-row:hover, [data-theme="wicked-light"] .wk-need-row:hover { background: color-mix(in oklab, var(--surface-raised) 80%, transparent); }
 /* It scans as a table (council M12): a bold title column, a dimmer rationale, the age in a
    fixed right-aligned tabular cell, the verb in a fixed-width slot. */
 .wk-need-line { color: var(--ink-muted); font-family: var(--font-sans); }
@@ -611,4 +611,4 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
 }
 
 /* Light theme: a door's glyph is its only mark on a pale tile — take it to 3:1 (council S8). */
-[data-theme="light"] .deck-door-glyph { color: color-mix(in oklab, var(--door-col, var(--accent)) 70%, var(--ink-high)); }
+[data-theme="light"] .deck-door-glyph, [data-theme="wicked-light"] .deck-door-glyph { color: color-mix(in oklab, var(--door-col, var(--accent)) 70%, var(--ink-high)); }

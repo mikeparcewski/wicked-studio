@@ -134,4 +134,16 @@ describe('AppearanceSettings (DES-VISION-001 §3.2)', () => {
     fireEvent.click(screen.getByTestId('theme-dark'));
     expect(root().hasAttribute('data-theme')).toBe(false);
   });
+
+  it('theme picker: the wicked themes sit beside dark and light and write the harbor accent', () => {
+    render(<AppearanceSettings />);
+    fireEvent.click(screen.getByTestId('theme-wicked-light'));
+    expect(root().getAttribute('data-theme')).toBe('wicked-light');
+    expect(root().style.getPropertyValue('--_accent-h')).toBe('200');
+    expect(screen.getByTestId('theme-wicked-light')).toHaveAttribute('aria-pressed', 'true');
+
+    fireEvent.click(screen.getByTestId('theme-wicked-dark'));
+    expect(root().getAttribute('data-theme')).toBe('wicked-dark');
+    expect(screen.getByTestId('theme-wicked-light')).toHaveAttribute('aria-pressed', 'false');
+  });
 });

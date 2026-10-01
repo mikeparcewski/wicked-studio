@@ -1,0 +1,54 @@
+/* themes/wicked-light.css — the wicked family palette on a light ground
+ * (DES-STUDIO-REBUILD-001 S1; DESIGN-simple §1a; wicked-web src/styles/tokens.css).
+ *
+ * A THEME, not a skin: a skin never carries colour and never selects a theme (DES §5.1).
+ * It rides `data-theme="wicked-light"`, and light.css's light-ground rules (shadows, scrim,
+ * status tints) apply to it too; this file then sets the family values on top:
+ *   - canvas #F4F7F9 / sunk #EBF0F3 / surface #FFFFFF, graphite ink — no cream, no beige;
+ *   - harbor #224A5E is the action colour. It is NOT hard-coded here: choosing this theme
+ *     writes the harbor preset into the three accent primitives (appearance.ts
+ *     HARBOR_ACCENT = 200/47/25 = #224A5E), so `--accent` is the primitives UNSHIFTED and
+ *     the accent picker keeps owning it;
+ *   - status hues from §1a: violet for "waiting on you", red for failures, green for
+ *     running/done, amber for warnings;
+ *   - Archivo for every word (fonts.css self-hosts it), JetBrains Mono stays the mono.
+ * Signal yellow (#FFDA19) is a small mark only, never text or a fill, so no token here
+ * carries it yet; the desk slices place it.
+ * Every text token clears WCAG AA (4.5:1) on base, rail, card and raised, measured in
+ * tests/tokens.contrast.test.ts. The §1a faint ink #63707C measures 4.4:1 on the sunk
+ * surface, so it is one step darker here (#5A6672). */
+
+[data-theme="wicked-light"] {
+  --_surface-0: #f4f7f9;   /* canvas: a faint harbor tint */
+  --_surface-1: #ebf0f3;   /* sunk: the rail */
+  --_surface-2: #ffffff;   /* surface: cards */
+  --_surface-3: #e6ecf0;   /* raised */
+  --_surface-4: #dbe3e9;   /* overlay */
+
+  --_ink-faint:  #5a6672;
+  --_ink-soft:   #44515d;
+  --_ink-strong: #263039;
+  --_ink-max:    #0d1117;
+
+  --border-subtle: rgba(13, 17, 23, 0.07);
+  --border:        rgba(13, 17, 23, 0.12);
+  --border-strong: rgba(13, 17, 23, 0.22);
+  --border-input:  rgba(13, 17, 23, 0.50);
+
+  --accent:        hsl(var(--_accent-h) var(--_accent-s) var(--_accent-l));
+  --accent-dim:    hsl(var(--_accent-h) var(--_accent-s) calc(var(--_accent-l) + 14%));
+  --accent-subtle: hsl(var(--_accent-h) calc(var(--_accent-s) * 0.6) calc(var(--_accent-l) + 64%));
+  --accent-hover:  hsl(var(--_accent-h) var(--_accent-s) calc(var(--_accent-l) - 6%));
+  --accent-fg:     hsl(var(--_accent-h) 30% clamp(8%, calc((58% - var(--_accent-l)) * 100), 98%));
+
+  --status-gate:     #6f42c1;
+  --status-gate-dim: #f5f0fd;
+  --status-fail:     #b42532;
+  --status-fail-dim: #fbeaeb;
+  --status-run:      #177334;
+  --status-run-dim:  #eaf7ed;
+  --status-warn:     #9a4f12;
+  --status-warn-dim: #fdf3ea;
+
+  --font-sans: 'Archivo', system-ui, -apple-system, sans-serif;
+}

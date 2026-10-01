@@ -5,7 +5,8 @@ import { describe, expect, it } from 'vitest';
  * The secondary-text contrast gate (design council M16 on wicked-studio#370): every ink step,
  * and the field-edge token, MEASURED on every surface in both themes — read straight out of
  * tokens.css and themes/light.css, so a token edit that drops a pair under WCAG AA fails CI
- * instead of shipping on an eyeball estimate.
+ * instead of shipping on an eyeball estimate. The wicked themes (DES-STUDIO-REBUILD-001 S1) are
+ * measured the same way.
  *
  *   ink-dim / ink-muted / ink-body / ink-high  ≥ 4.5:1  (1.4.3, body text)
  *   border-input                               ≥ 3:1    (1.4.11, a field's only edge)
@@ -58,7 +59,9 @@ const INKS = [['ink-dim', '--_ink-faint'], ['ink-muted', '--_ink-soft'], ['ink-b
 
 const tokens = read('../src/styles/tokens.css');
 const light = read('../src/styles/themes/light.css');
-const THEMES = [['dark', tokens], ['light', light]] as const;
+const wickedLight = read('../src/styles/themes/wicked-light.css');
+const wickedDark = read('../src/styles/themes/wicked-dark.css');
+const THEMES = [['dark', tokens], ['light', light], ['wicked-light', wickedLight], ['wicked-dark', wickedDark]] as const;
 
 describe('token contrast (council M16) — measured, not estimated', () => {
   for (const [theme, css] of THEMES) {
