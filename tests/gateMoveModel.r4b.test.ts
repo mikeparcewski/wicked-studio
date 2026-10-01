@@ -217,3 +217,15 @@ describe('failingItems — Copilot review', () => {
     }
   });
 });
+
+describe('failingItems — codex review, round 5', () => {
+  it('a heading nested inside Commands run stays excluded (MEDIUM)', () => {
+    const text = ["the evaluator's verdict is FAIL", '- src/a.ts:3 drops the last item.', 'Commands run:', '  Test suite:', '    - npm test passed', 'VERDICT: FAIL'].join('\n');
+    expect(read(text)).toEqual([FINDING]);
+  });
+
+  it('an Issues section outside every Findings section is collected too (MEDIUM)', () => {
+    const text = ["the evaluator's verdict is FAIL", 'Issues:', '- Authentication can be bypassed.', '', 'Findings:', '- A label is misspelled.', 'VERDICT: FAIL'].join('\n');
+    expect(read(text)).toEqual(['Authentication can be bypassed.', 'A label is misspelled.']);
+  });
+});

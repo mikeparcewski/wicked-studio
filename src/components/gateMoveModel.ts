@@ -63,14 +63,22 @@ function lines(text: string | null | undefined): string[] {
 function outsideNonFinding(text: string | null | undefined): { bullets: string[]; prose: string[] } {
   const out = { bullets: [] as string[], prose: [] as string[] };
   let excluded = false;
-  for (const l of lines(text)) {
+  /** The indent of the heading that switched the reading off: a deeper heading (`  Test suite:`
+   *  under `Commands run:`) is nested in it and stays excluded (codex review). */
+  let excludedIndent = -1;
+  const raws = (text ?? '').replace(/\r/g, '').split('\n').filter((r) => r.trim() !== '');
+  for (const raw of raws) {
+    const l = raw.trim();
+    const indent = raw.length - raw.trimStart().length;
     const m = BULLET.exec(l);
     const body = m !== null ? m[1]! : l.replace(/^agent judge:\s*fail\s*[—-]\s*/i, '');
     const t = plain(body);
     const head = NON_FINDING_HEAD.test(t) ? t : subHeadingOf(body);
     if (head !== null && head.length <= 80) {
+      if (excluded && indent > excludedIndent) continue;
       const name = head.replace(/\s*:$/, '');
       excluded = NON_FINDING_HEAD.test(name) || PASSING_GROUP.test(name);
+      excludedIndent = indent;
       continue;
     }
     if (excluded || FRAME.test(body) || INLINE_PASSING.test(t) || NON_FINDING_LEAD.test(t)) continue;
@@ -199,13 +207,10 @@ function findingsSections(text: string | null | undefined): Array<{ head: string
     if (m !== null) heads.push({ at: i, finding: /^finding/i.test(m[1]!), passing: PASSING_FINDINGS.test(t) });
   }
   if (heads.length === 0) return null;
-  const family = heads.some((h) => h.finding) ? heads.filter((h) => h.finding) : heads;
-  const boundary = new Set(family.map((h) => h.at));
-  const sections: Array<{ head: string; lines: string[] }> = [];
-  for (const h of family) {
-    if (h.passing) continue;
+  /** The lines of the section headed at `at`, up to the next of `boundary` or a non-finding one. */
+  const body = (at: number, boundary: ReadonlySet<number>): string[] => {
     const out: string[] = [];
-    for (let i = h.at + 1; i < all.length; i++) {
+    for (let i = at + 1; i < all.length; i++) {
       const l = all[i]!;
       if (boundary.has(i)) break;
       // A `-` bullet never ends the section; a NUMBERED line ends it only as a heading (`2. Notes`),
@@ -213,9 +218,26 @@ function findingsSections(text: string | null | undefined): Array<{ head: string
       if (!MARK_BULLET.test(l) && (BULLET.test(l) ? NON_FINDING_HEAD.test(plain(l)) : endsFindings(l))) break;
       out.push(l);
     }
-    sections.push({ head: plain(all[h.at]!).replace(/\s*:$/, ''), lines: out });
+    return out;
+  };
+  const headOf = (at: number): string => plain(all[at]!).replace(/\s*:$/, '');
+  const findings = heads.filter((h) => h.finding);
+  const findingBoundary = new Set(findings.map((h) => h.at));
+  const sections: Array<{ at: number; head: string; lines: string[] }> = [];
+  /** The line indexes the `finding(s)` sections cover: a Concerns/Issues heading inside one is its
+   *  sub-heading; one outside every one is a section of its own (codex review). */
+  const covered = new Set<number>();
+  for (const h of findings) {
+    const lines = body(h.at, findingBoundary);
+    lines.forEach((_l, k) => covered.add(h.at + 1 + k));
+    if (!h.passing) sections.push({ at: h.at, head: headOf(h.at), lines });
   }
-  return sections;
+  const aliases = heads.filter((h) => !h.finding && !covered.has(h.at));
+  const allBoundary = new Set([...findingBoundary, ...aliases.map((h) => h.at)]);
+  for (const h of aliases) {
+    if (!h.passing) sections.push({ at: h.at, head: headOf(h.at), lines: body(h.at, allBoundary) });
+  }
+  return sections.sort((a, b) => a.at - b.at).map(({ head, lines }) => ({ head, lines }));
 }
 
 /**
