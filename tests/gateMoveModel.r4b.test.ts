@@ -238,3 +238,17 @@ describe('failingItems — codex review, round 6', () => {
     expect(read(none)).toEqual([]);
   });
 });
+
+describe('failingItems — Copilot review, round 2', () => {
+  it('a passing heading of either noun bounds the section above it', () => {
+    const a = ["the evaluator's verdict is FAIL", 'Findings:', `- ${FINDING}`, 'Optional issues:', '- rename the helper', 'VERDICT: FAIL'].join('\n');
+    expect(read(a)).toEqual([FINDING]);
+    const b = ["the evaluator's verdict is FAIL", 'Critical issues:', `- ${FINDING}`, 'Optional findings:', '- rename the helper', 'VERDICT: FAIL'].join('\n');
+    expect(read(b)).toEqual([FINDING]);
+  });
+
+  it('an unsectioned "- Commands run: npm test" owns its nested bullets', () => {
+    const text = ["the evaluator's verdict is FAIL", '- Commands run: npm test', '  - exit 0', `- ${FINDING}`, 'VERDICT: FAIL'].join('\n');
+    expect(read(text)).toEqual([FINDING]);
+  });
+});

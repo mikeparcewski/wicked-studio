@@ -66,6 +66,9 @@ function outsideNonFinding(text: string | null | undefined): { bullets: string[]
   /** The indent of the heading that switched the reading off: a deeper heading (`  Test suite:`
    *  under `Commands run:`) is nested in it and stays excluded (codex review). */
   let excludedIndent = -1;
+  /** The indent of an inline non-finding / passing bullet (`- Commands run: npm test`): its deeper
+   *  children (`  - exit 0`) are part of it (Copilot). */
+  let skipDeeper: number | null = null;
   const raws = (text ?? '').replace(/\r/g, '').split('\n').filter((r) => r.trim() !== '');
   for (const raw of raws) {
     const l = raw.trim();
@@ -75,6 +78,10 @@ function outsideNonFinding(text: string | null | undefined): { bullets: string[]
     const t = plain(body);
     const head = NON_FINDING_HEAD.test(t) ? t : subHeadingOf(body);
     // An inline finding (`Finding: cache invalidation is broken`) is an item wherever it sits.
+    if (skipDeeper !== null) {
+      if (indent > skipDeeper) continue;
+      skipDeeper = null;
+    }
     const lead = FINDING_LEAD.exec(t);
     if (lead !== null) {
       excluded = false;
@@ -89,7 +96,11 @@ function outsideNonFinding(text: string | null | undefined): { bullets: string[]
       excludedIndent = indent;
       continue;
     }
-    if (excluded || FRAME.test(body) || INLINE_PASSING.test(t) || NON_FINDING_LEAD.test(t)) continue;
+    if (excluded || FRAME.test(body)) continue;
+    if (INLINE_PASSING.test(t) || NON_FINDING_LEAD.test(t)) {
+      skipDeeper = indent;
+      continue;
+    }
     const into = m !== null ? out.bullets : out.prose;
     if (!into.includes(body)) into.push(body);
   }
@@ -232,7 +243,10 @@ function findingsSections(text: string | null | undefined): Array<{ head: string
   };
   const headOf = (at: number): string => plain(all[at]!).replace(/\s*:$/, '');
   const findings = heads.filter((h) => h.finding);
-  const findingBoundary = new Set(findings.map((h) => h.at));
+  // A heading marked as not failing ends the section above it whatever its noun: `Findings` then
+  // `Optional issues` must not read the nit as a finding (Copilot).
+  const passingAt = heads.filter((h) => h.passing).map((h) => h.at);
+  const findingBoundary = new Set([...findings.map((h) => h.at), ...passingAt]);
   const sections: Array<{ at: number; head: string; lines: string[] }> = [];
   /** The line indexes the `finding(s)` sections cover: a Concerns/Issues heading inside one is its
    *  sub-heading; one outside every one is a section of its own (codex review). */
