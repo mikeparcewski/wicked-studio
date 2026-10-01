@@ -342,12 +342,13 @@ function GateActionCard({
   const [loading, setLoading] = useState(false);
   const [steerOpen, setSteerOpen] = useState(false);
   const clearGate = useGateStore((s) => s.clearGate);
-  // R1/R3: approving a deliver gate from this inbox toasts the SAME card sentence the run page's
-  // gate does — what this push does on this origin. With no card, `null` lets `commitGateDecision`
-  // fall back on the gate's kind: `deliverPreview`'s push line with the pull request as a condition.
-  const deliverCard = deliverTargetOf(units ?? [], ord);
-  const deliver: DeliverTarget | null =
-    deliverCard !== null && isDeliverGate(runId, units ?? [], ord) ? { branch: null, repo: null, card: deliverCard } : null;
+  // R1/R3: approving a deliver gate from this inbox says it PUSHES whether or not the unit carries
+  // a card (a late join leaves the gate's kind unset, so the gate store cannot say it — Copilot),
+  // and repeats the card sentence when there is one, as the run page's gate does. With no card,
+  // `deliverPreview` states the push with the pull request as a condition.
+  const deliver: DeliverTarget | null = isDeliverGate(runId, units ?? [], ord)
+    ? { branch: null, repo: null, card: deliverTargetOf(units ?? [], ord) }
+    : null;
   // D11: a plan gate takes approve / reject / an edited plan (on the run page's card) — never
   // steer text — and shows no unit verdict (D10).
   const { isPlanGate, pending: kindPending } = usePlanGate(runId, true);

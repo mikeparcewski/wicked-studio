@@ -60,4 +60,29 @@ describe('the inbox approve on a deliver gate (R1/R3)', () => {
     expect(toast).not.toHaveTextContent('opens a pull request');
     expect(toast).not.toHaveTextContent('The run resumes past this gate');
   });
+
+  it('a card-less deliver unit on a late join (no gate kind) still says it pushes, PR as a condition (Copilot)', async () => {
+    useGateStore.setState({ gates: { [RUN]: { runId: RUN, ord: 4, prompt: PROMPT, lifecycle: 'open', receivedAt: 1 } } });
+    const units = [
+      makeUnit({ id: `${RUN}:fix`, session_id: RUN, ord: 3, status: 'done' }),
+      makeUnit({ id: `${RUN}:deliver`, session_id: RUN, ord: 4, status: 'pending', description: 'deliver — add the truncate helper' }),
+    ];
+    render(
+      <>
+        <CenterDashboard
+          runs={[makeView({ id: RUN, problem: 'add the truncate helper', status: 'awaiting_human', unit_ix: 3 }, units)]}
+          onSelectRun={vi.fn()}
+          onApproveGate={vi.fn()}
+          onRejectGate={vi.fn()}
+          navigate={vi.fn()}
+        />
+        <UndoToasts />
+      </>,
+    );
+    const card = await screen.findByTestId('gate-inbox-card');
+    await userEvent.click(within(card).getByRole('button', { name: 'Approve' }));
+    const toast = await screen.findByTestId('undo-toast');
+    expect(toast).toHaveTextContent('a pull request opens only if that origin is a GitHub repository');
+    expect(toast).not.toHaveTextContent('The run resumes past this gate');
+  });
 });
