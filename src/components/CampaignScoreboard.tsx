@@ -374,6 +374,7 @@ export function CampaignScoreboard({ campaignId, runs, navigate }: Props): React
                   ? row.delivery.deliverUrl
                   : null;
               const snapshotStranded = view === undefined && row.delivery?.delivery === 'stranded';
+              const snapshotPushed = view === undefined && row.delivery?.delivery === 'pushed';
               const verdict = row.runId !== null ? verdicts[row.runId] : undefined;
               return (
                 <tr
@@ -463,6 +464,8 @@ export function CampaignScoreboard({ campaignId, runs, navigate }: Props): React
                       </a>
                     ) : snapshotStranded ? (
                       <span style={{ color: 'var(--status-gate)' }}>{DELIVERY_LABEL['stranded']}</span>
+                    ) : snapshotPushed ? (
+                      <span style={{ color: 'var(--ink-body)' }}>{DELIVERY_LABEL['pushed']}</span>
                     ) : (
                       <span style={{ color: d !== null && d.claim === 'failed' ? 'var(--status-fail)' : 'var(--ink-dim)' }} title={d?.reason ?? undefined}>
                         {d !== null && DELIVERY_LABEL[d.claim] !== '' ? DELIVERY_LABEL[d.claim] : '—'}

@@ -194,6 +194,9 @@ export const HEADLINE: Record<DeliveryClaim, string> = {
   // deliberately not "no PR exists" — an ungoverned worker may have opened one
   // crew never saw (crew#391), and this module never claims past its evidence.
   'stranded':           'Stranded — this run finished, but its work is sitting uncommitted in its worktree. No PR is on record.',
+  // N1: a successful push-only delivery (a non-GitHub origin). It used to read 'stranded' — the
+  // line above, plus a "Deliver — open a PR" button that cannot succeed. Neither is true of it.
+  'pushed':             'Delivered as a pushed branch — no pull request was opened, because the origin is not a GitHub host gh can resolve.',
   'pr-open':            'PR open — merge stays human.',
   'nothing-to-deliver': 'Delivered nothing. Crew refused the push:',
   'failed':             'Delivery failed. Crew recorded:',
@@ -275,7 +278,7 @@ export function RunDelivery({ view, navigate }: Props): React.ReactElement {
   // run that just delivered resolves to the ordinary pr-open arm — one claim
   // path, never a parallel "just delivered" rendering that could drift from it.
   const postHoc = usePostHocDeliverStore((s) => s.byRun[runId]);
-  const { state, claim, unitId, reason, href } = resolveDelivery(
+  const { state, claim, unitId, reason, href, pushed } = resolveDelivery(
     deliveryOf(view),
     postHoc?.phase === 'delivered' ? postHoc.prUrl : (fetched?.url ?? null),
   );
@@ -455,6 +458,22 @@ export function RunDelivery({ view, navigate }: Props): React.ReactElement {
               </p>
             </div>
           )}
+        </>
+      )}
+
+      {/* N1: the branch is on the remote; nothing is left to lift, so no action is offered. */}
+      {claim === 'pushed' && (
+        <>
+          {pushed !== undefined && (
+            <p data-testid="run-delivery-pushed" className="font-mono break-all" style={{ color: 'var(--ink-muted)' }}>
+              {pushed.remote !== null
+                ? `${pushed.branch} is on ${compactPath(pushed.remote)}`
+                : `${pushed.branch} is on the origin`}
+            </p>
+          )}
+          <p className="font-mono" style={{ color: 'var(--ink-dim)' }}>
+            if a forge serves that remote, open the pull/merge request there — merge stays yours
+          </p>
         </>
       )}
 

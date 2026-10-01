@@ -80,9 +80,12 @@ export interface CampaignDef {
  * `delivery === 'delivered'`.
  */
 export interface CampaignNodeDelivery {
-  delivery: 'delivered' | 'stranded' | 'vacuous' | 'none';
+  delivery: 'delivered' | 'pushed' | 'stranded' | 'vacuous' | 'none';
   /** Untrusted until it passes `isPrUrl` — every rendering goes through that gate. */
   deliverUrl?: string;
+  /** N1: present exactly when `delivery === 'pushed'`. */
+  deliverBranch?: string;
+  deliverRemote?: string;
 }
 
 /**

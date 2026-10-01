@@ -144,6 +144,31 @@ export function isDeliverGate(runId: string, units: readonly WorkUnit[], ord: nu
 
 const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? '' : 's'}`;
 
+/** The engine's single-line segment marker between a unit's description and its phase's
+ *  instructions (wicked-core `plan::INSTRUCTION_SEP`). Never rendered. */
+export const INSTRUCTION_SEP = ' ||| ';
+
+/**
+ * What THIS deliver push will actually do, as the workflow's own gate card says it (N3, ship
+ * re-proof) — the first part of the deliver unit's instructions, up to the push-identity sentence:
+ * crew's `newPrTargetSentence`, e.g. "Pushes the run branch wicked/<run> to origin (…) — a local
+ * path, so no pull request can be opened against it: …". `null` when the unit carries no card (a
+ * def authored without instructions) — the caller then claims no pull request at all.
+ *
+ * The consent line used to be the diffstat alone while the prompt said both "no pull request can
+ * be opened" (behind "show the full prompt" and a raw ` ||| `) and "…opens a pull request".
+ */
+export function deliverTargetOf(units: readonly WorkUnit[], ord: number | null | undefined): string | null {
+  if (typeof ord !== 'number') return null;
+  const desc = units.find((u) => u.ord === ord)?.description ?? '';
+  const at = desc.indexOf(INSTRUCTION_SEP);
+  if (at === -1) return null;
+  const card = desc.slice(at + INSTRUCTION_SEP.length).split(INSTRUCTION_SEP).join(' ').trim();
+  const identity = card.indexOf(' Push identity:');
+  const target = (identity === -1 ? card : card.slice(0, identity)).trim();
+  return target === '' ? null : target;
+}
+
 /** The first item, clipped for a button, with how many more ride along. */
 function itemsLabel(items: readonly string[]): string {
   const first = items[0] ?? '';
@@ -253,12 +278,18 @@ export function recommendGateMove(input: GateMoveInput): GateMove | null {
   }
 
   if (!escalationGate && isDeliverGate(runId, units, ord)) {
+    const diff = input.diffstat !== null ? input.diffstat : 'no diff read for it yet';
+    const target = deliverTargetOf(units, ord);
     return {
       kind: 'deliver',
       label: 'Review the diff, then deliver',
-      consequence: input.diffstat !== null
-        ? `Deliver pushes the run branch: ${input.diffstat}`
-        : 'Deliver pushes the run branch (no diff read for it yet)',
+      // N3: the visible consent line states what will ACTUALLY happen on this origin, then what
+      // the push carries. Without the workflow's card it claims no pull request either way.
+      consequence: target !== null
+        ? `${target} The push carries: ${diff}`
+        : input.diffstat !== null
+          ? `Deliver pushes the run branch: ${input.diffstat}`
+          : 'Deliver pushes the run branch (no diff read for it yet)',
       prefill: null,
       items: [],
     };
@@ -338,5 +369,7 @@ export function gateRowVerb(prompt: string | undefined, gateKind?: string): stri
   }
   if (/^\s*Unit\s+\d+\s+(?:failed and triage escalated|failed its deterministic floor)/i.test(p)) return 'Retry… ›';
   if (/^\s*Approve unit\s+\d+\s+before it runs:\s*deliver\b/i.test(p)) return 'Review diff… ›';
+  // The engine's own deliver-gate prompt (`deliver_gate_prompt`).
+  if (/^\s*Approve delivery before unit\s+\d+\s+runs\b/i.test(p)) return 'Review diff… ›';
   return null;
 }

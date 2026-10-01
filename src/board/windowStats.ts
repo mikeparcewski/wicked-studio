@@ -241,7 +241,8 @@ export function wireDelivery(v: SessionView): string | null {
 }
 
 export interface DeliveryCounts {
-  /** `delivered` — a PR was opened: verified, shipped. */
+  /** `delivered` — a PR was opened, or (N1) the branch was pushed to an origin that cannot take a
+   *  PR (`'pushed'`): either way the verified work left the machine. */
   delivered: number;
   /** `stranded` — completed work nobody lifted: needs review (recoverable). */
   stranded: number;
@@ -271,7 +272,7 @@ export function deliveryCounts(runs: SessionView[], isSystemWorkflow?: IsSystemW
   for (const v of runs) {
     if (v.session.archived_at != null) continue;
     const d = wireDelivery(v);
-    if (d === 'delivered') c.delivered += 1;
+    if (d === 'delivered' || d === 'pushed') c.delivered += 1;
     else if (d === 'stranded') c.stranded += 1;
     else if (d === 'vacuous' && canDeliver(v, isSystemWorkflow)) c.vacuous += 1;
   }

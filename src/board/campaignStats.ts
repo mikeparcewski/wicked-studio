@@ -115,7 +115,7 @@ export interface StrandedMember {
 export interface DeliveryRollup {
   /** Whether this daemon carried per-member delivery at all (api-types 0.19.0). */
   onWire: boolean;
-  /** Members whose wire-carried delivery is `'delivered'`. */
+  /** Members whose wire-carried delivery is `'delivered'` or (N1) `'pushed'` — no PR link for the latter. */
   delivered: number;
   /** The rollup denominator — every member that could deliver (nodes + attached/grouped). */
   total: number;
@@ -135,6 +135,9 @@ function foldMember(
     if (typeof d.deliverUrl === 'string' && isPrUrl(d.deliverUrl)) {
       rollup.prs.push({ runId, href: d.deliverUrl });
     }
+  } else if (d.delivery === 'pushed') {
+    // N1: the branch is on a non-GitHub origin — delivered, with no PR to link and nothing waiting.
+    rollup.delivered += 1;
   } else if (d.delivery === 'stranded') {
     rollup.stranded.push({ runId, label });
   }

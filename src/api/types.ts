@@ -31,6 +31,9 @@ export type * from 'wicked-crew-api-types';
  *
  *  - `'delivered'` — a PR was opened for this run (by the deliver phase, or
  *    post-hoc via `POST /runs/:id/deliver`); `deliverUrl` carries the PR URL.
+ *  - `'pushed'`    — (api-types 0.69.0, N1) the run's branch was PUSHED and that
+ *    is the whole delivery: the origin is not a GitHub host gh can resolve, so no
+ *    PR could be opened. `deliverBranch` + `deliverRemote` say what is where.
  *  - `'stranded'`  — a COMPLETED repo-scoped run with no recorded PR whose
  *    worktree still exists on disk: reviewable work nobody lifted.
  *  - `'none'`      — everything else: repo-less runs, non-terminal runs,
@@ -45,7 +48,7 @@ export type * from 'wicked-crew-api-types';
  * (`src/components/delivery.ts`) still TOLERATES the legacy object from a
  * 0.11–0.17 daemon, which is why {@link SessionDelivery} survives below.
  */
-export type RunDeliveryState = 'delivered' | 'stranded' | 'vacuous' | 'none';
+export type RunDeliveryState = 'delivered' | 'pushed' | 'stranded' | 'vacuous' | 'none';
 
 /** The LEGACY 0.11.0–0.17.0 object spelling of `session.delivery` (crew#321).
  *  Gone from the 0.18.0 wire; kept only so the derivation can read the url off
@@ -64,6 +67,10 @@ export type SessionWithDelivery = Omit<AgentSession, 'delivery' | 'deliverUrl'> 
   delivery?: RunDeliveryState | SessionDelivery | null;
   /** The delivered PR's URL — present exactly when `delivery === 'delivered'`. */
   deliverUrl?: string;
+  /** N1: the pushed run branch — present exactly when `delivery === 'pushed'`. */
+  deliverBranch?: string;
+  /** N1: the remote it is on (userinfo removed) — present exactly when `delivery === 'pushed'`. */
+  deliverRemote?: string;
 };
 
 /**
