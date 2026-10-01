@@ -55,6 +55,8 @@ describe("N1 — delivery: 'pushed' reads as delivered, never stranded", () => {
     expect(card.textContent).toContain('the origin is not a GitHub host gh can resolve');
     expect(screen.getByTestId('run-delivery-pushed').textContent).toContain('wicked/r-push is on');
     expect(screen.getByTestId('run-delivery-pushed').textContent).toContain('remote.git');
+    // The full remote is always one hover away (Copilot on #397).
+    expect(screen.getByTestId('run-delivery-pushed').getAttribute('title')).toBe('/srv/proof/remote.git');
     // The re-proof's false sentence and its impossible button are gone.
     expect(card.textContent).not.toContain('Stranded');
     expect(card.textContent).not.toContain('No PR is on record');
@@ -73,5 +75,17 @@ describe("N1 — delivery: 'pushed' reads as delivered, never stranded", () => {
     });
     expect(deliveryCounts([v])).toEqual({ delivered: 1, stranded: 0, vacuous: 0 });
     expect(deliverySummary([v])).toBe('1 branch pushed');
+  });
+});
+
+describe('N1 — a hosted remote keeps its host visible', () => {
+  it('a URL or scp-like remote is shown whole; only a filesystem path is compacted', () => {
+    for (const remote of ['https://gitlab.example.com/acme/tools/deep/repo.git', 'git@gitlab.example.com:acme/tools/repo.git']) {
+      const v = pushedView('r-host');
+      (v.session as SessionWithDelivery).deliverRemote = remote;
+      render(<RunDelivery view={v} />);
+      expect(screen.getByTestId('run-delivery-pushed').textContent).toContain(remote);
+      cleanup();
+    }
   });
 });

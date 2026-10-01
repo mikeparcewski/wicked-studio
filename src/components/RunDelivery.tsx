@@ -69,6 +69,17 @@ interface Props {
   navigate?: (path: string) => void;
 }
 
+/**
+ * How a pushed branch's remote reads on the card (N1). A URL or an scp-like `host:path` keeps its
+ * HOST visible — that is what tells the operator which forge holds the branch (Copilot on #397); only
+ * a filesystem path is compacted to its tail. The full value is always the title.
+ */
+function remoteLabel(remote: string): string {
+  const hosted = /^[A-Za-z][A-Za-z0-9+.-]*:\/\/[^/]/.test(remote) && !/^file:/i.test(remote);
+  const scp = /^(?:[^@/\\]+@)?[A-Za-z0-9._-]+:/.test(remote) && !/^[A-Za-z]:[\\/]/.test(remote);
+  return hosted || scp ? remote : compactPath(remote);
+}
+
 /** Extract a GitHub PR number from a PR URL (`/pull/123`). `null` if not parseable. */
 function prNumberFromUrl(url: string): number | null {
   const m = /\/pull\/(\d+)(?:[/?#]|$)/.exec(url);
@@ -465,9 +476,14 @@ export function RunDelivery({ view, navigate }: Props): React.ReactElement {
       {claim === 'pushed' && (
         <>
           {pushed !== undefined && (
-            <p data-testid="run-delivery-pushed" className="font-mono break-all" style={{ color: 'var(--ink-muted)' }}>
+            <p
+              data-testid="run-delivery-pushed"
+              className="font-mono break-all"
+              style={{ color: 'var(--ink-muted)' }}
+              {...(pushed.remote !== null ? { title: pushed.remote } : {})}
+            >
               {pushed.remote !== null
-                ? `${pushed.branch} is on ${compactPath(pushed.remote)}`
+                ? `${pushed.branch} is on ${remoteLabel(pushed.remote)}`
                 : `${pushed.branch} is on the origin`}
             </p>
           )}
