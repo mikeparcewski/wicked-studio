@@ -133,3 +133,18 @@ describe('failingItems — known non-finding sections are never findings (R4)', 
     expect(move?.consequence).toMatch(/reruns with the reviewer's full verdict/);
   });
 });
+
+describe('failingItems — codex review of this fix', () => {
+  it('a NUMBERED findings heading opens the section after an excluded one (HIGH)', () => {
+    const text = ["the evaluator's verdict is FAIL", 'Commands run:', '- npm test — exit 0.', '1. Findings', `- ${FINDING}`, '2. Notes', '- none of note.', 'VERDICT: FAIL'].join('\n');
+    expect(read(text)).toEqual([FINDING]);
+  });
+
+  it('a bulleted non-finding sub-heading inside Findings keeps its bullets out (HIGH)', () => {
+    const only = ["the evaluator's verdict is FAIL", 'Findings:', '- Commands run:', '  - npm test — exit 0.', 'VERDICT: FAIL'].join('\n');
+    expect(read(only)).toEqual([]);
+    expect(moveFor(only)?.label).toMatch(/review failed/i);
+    const mixed = ["the evaluator's verdict is FAIL", 'Findings:', '- **Evidence:**', '  - npm test — exit 0.', `- ${FINDING}`, '- Commands run: npm run lint — exit 0.', 'VERDICT: FAIL'].join('\n');
+    expect(read(mixed)).toEqual([FINDING]);
+  });
+});

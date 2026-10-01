@@ -43,6 +43,8 @@ const EVALUATOR_SOURCES = new Set(['evaluator_verdict', 'agent_validator', 'eval
 const VALIDATOR_SOURCES = new Set(['repo_checks', 'repo_checks_timeout', 'pinned_validator', 'substance', 'deliverables']);
 
 const BULLET = /^\s*(?:[-*•]|\d+[.)])\s+(.*\S)\s*$/;
+/** A `-` / `*` / `•` bullet — never a section heading, unlike a numbered line (`1. Findings`). */
+const MARK_BULLET = /^\s*[-*•]\s+/;
 /** Lines that frame a verdict rather than state a finding. */
 const FRAME = /^(?:the evaluator'?s verdict is\b|verdict\s*[:=]|agent judge:\s*fail\s*$|not pass\b|reviewed\b|findings?:?$)/i;
 
@@ -173,7 +175,8 @@ function findingsSection(text: string | null | undefined): { head: string; lines
   let start = -1;
   let alias = -1;
   for (let i = 0; i < all.length; i++) {
-    if (BULLET.test(all[i]!)) continue;
+    // A `-`/`*` bullet is an item, never a heading; a NUMBERED line may be one (`1. Findings`).
+    if (MARK_BULLET.test(all[i]!)) continue;
     const m = FINDINGS_HEAD.exec(plain(all[i]!));
     if (m === null) continue;
     if (/^finding/i.test(m[1]!)) start = i;
@@ -184,7 +187,7 @@ function findingsSection(text: string | null | undefined): { head: string; lines
   const out: string[] = [];
   for (let i = at + 1; i < all.length; i++) {
     const l = all[i]!;
-    if (!BULLET.test(l) && endsFindings(l)) break;
+    if (!MARK_BULLET.test(l) && endsFindings(l)) break;
     out.push(l);
   }
   return { head: plain(all[at]!).replace(/\s*:$/, ''), lines: out };
@@ -212,7 +215,9 @@ function subHeadingOf(raw: string): string | null {
 /** What a Findings sub-heading opens: a failing group (and whether it is the must-fix tier), a
  *  passing one, or a neutral one. */
 function groupOf(head: string): { group: 'failing' | 'passing' | 'other'; groupMust: boolean } {
-  const group = FAILING_SEVERITY.test(head) ? 'failing' : PASSING_GROUP.test(head) ? 'passing' : 'other';
+  // A non-finding name nested in Findings (`- Commands run:`, `Evidence:` as a sub-heading) reads
+  // as a pass: its items are never findings (R4; codex review).
+  const group = FAILING_SEVERITY.test(head) ? 'failing' : PASSING_GROUP.test(head) || NON_FINDING_HEAD.test(head) ? 'passing' : 'other';
   return { group, groupMust: group === 'failing' && MUST_FIX.test(head) };
 }
 
@@ -257,7 +262,7 @@ function findingsItems(text: string | null | undefined): string[] | null {
     // "Verified:" is still part of the pass (codex review, MEDIUM; Copilot).
     if (bullet !== null && group === 'passing') continue;
     // `- **Verified:** src/math.ts validates…` is a pass carried inline (Copilot).
-    if (bullet !== null && INLINE_PASSING.test(plain(bullet[1]!))) continue;
+    if (bullet !== null && (INLINE_PASSING.test(plain(bullet[1]!)) || NON_FINDING_LEAD.test(plain(bullet[1]!)))) continue;
     // A bulleted sub-heading (`- **Verified:**`, `- Critical:`) opens a group like a plain one;
     // its nested bullets are the deeper-indented ones that follow (codex review; Copilot).
     const bulletHead = bullet !== null ? subHeadingOf(bullet[1]!) : null;
