@@ -133,8 +133,9 @@ describe('the deliver approve toast says what the gate card says (R1/R3)', () =>
     const card = LOCAL_SENTENCE.replace('the run branch', 'branch wicked/r1');
     expect(deliverPreview({ branch: 'wicked/r1', repo: 'shipproof-local', card })).toBe(card);
     // No card (a def authored without one): today's reading.
+    // No card (a lift retry, the palette): the PR is a condition, and the label names whose origin.
     expect(deliverPreview({ branch: 'wicked/r1', repo: 'acme/x' })).toBe(
-      "Pushes branch wicked/r1 and opens a pull request on acme/x, under the daemon's GitHub sign-in.",
+      "Pushes branch wicked/r1 to the origin of acme/x, under the daemon's GitHub sign-in; a pull request opens only if that origin is a GitHub repository.",
     );
   });
 });
