@@ -113,7 +113,7 @@ const SEVERITY_WORD = String.raw`(?:critical|blocking|blockers?|major|high(?:[- 
  *  singular or plural, an optional severity before (`Critical finding`, `Blocking issues`) or after
  *  (`Findings (critical)`, `Findings — blocking`), a trailing colon or none. Group 1 is the noun. */
 const FINDINGS_HEAD = new RegExp(
-  String.raw`^(?:\d+[.)]\s*)?(?:${SEVERITY_WORD}\s+)?(findings?(?:\s+or\s+plan)?|concerns?|issues?|problems?|blockers?)` +
+  String.raw`^(?:\d+[.)]\s*)?(?:${SEVERITY_WORD}\s+)?(?:[a-z][\w-]*\s+){0,2}?(findings?(?:\s+or\s+plan)?|concerns?|issues?|problems?|blockers?)` +
     String.raw`(?:\s*\(${SEVERITY_WORD}\)|\s*[—–-]\s*${SEVERITY_WORD})?\s*:?$`,
   'i',
 );
@@ -262,7 +262,14 @@ function findingsItems(text: string | null | undefined): string[] | null {
     // "Verified:" is still part of the pass (codex review, MEDIUM; Copilot).
     if (bullet !== null && group === 'passing') continue;
     // `- **Verified:** src/math.ts validates…` is a pass carried inline (Copilot).
-    if (bullet !== null && (INLINE_PASSING.test(plain(bullet[1]!)) || NON_FINDING_LEAD.test(plain(bullet[1]!)))) continue;
+    // `- Commands run: npm test` likewise; either one also owns the deeper bullets nested under
+    // it (`  - exit 0`), as a passing group at its indent (codex review).
+    if (bullet !== null && (INLINE_PASSING.test(plain(bullet[1]!)) || NON_FINDING_LEAD.test(plain(bullet[1]!)))) {
+      group = 'passing';
+      groupMust = false;
+      headIndent = indent;
+      continue;
+    }
     // A bulleted sub-heading (`- **Verified:**`, `- Critical:`) opens a group like a plain one;
     // its nested bullets are the deeper-indented ones that follow (codex review; Copilot).
     const bulletHead = bullet !== null ? subHeadingOf(bullet[1]!) : null;

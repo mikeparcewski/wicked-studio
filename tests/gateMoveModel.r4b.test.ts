@@ -148,3 +148,17 @@ describe('failingItems — codex review of this fix', () => {
     expect(read(mixed)).toEqual([FINDING]);
   });
 });
+
+describe('failingItems — codex review, round 2', () => {
+  it('an inline "- Commands run: …" bullet owns its nested bullets (HIGH)', () => {
+    const text = ["the evaluator's verdict is FAIL", '## Findings', '- Commands run: npm test', '  - exit 0', `- ${FINDING}`, 'VERDICT: FAIL'].join('\n');
+    expect(read(text)).toEqual([FINDING]);
+  });
+
+  it('a qualified findings heading ("## Actionable findings", "Key issues:") opens the section', () => {
+    for (const head of ['## Actionable findings', 'Key issues:', '**Review findings (blocking):**']) {
+      const text = ["the evaluator's verdict is FAIL", '## Commands run', '- npm test', '## Approach', '- read the diff', head, `- ${FINDING}`, 'VERDICT: FAIL'].join('\n');
+      expect(read(text)).toEqual([FINDING]);
+    }
+  });
+});
