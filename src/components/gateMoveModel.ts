@@ -68,6 +68,96 @@ function proseFindings(text: string | null | undefined): string[] {
 }
 
 /**
+ * R4 (ship-prove-3) — a governed evaluator writes a SECTIONED report (garden `governed-worker`
+ * output contract: What I did / Commands run / Counts / Findings / Open questions / VERDICT). Only
+ * the Findings section is what failed; reading every bullet of the whole report made "Read
+ * `…/SKILL.md` — exit 0." the headline of a send-back while the real Critical finding sat below it.
+ */
+const SECTION_HEAD = /^(?:#{1,6}\s*)?(?:\*\*)?\s*(?:\d+[.)]\s*)?(findings(?: or plan)?|what (?:i|you) did|commands run|run-record evidence|counts|open questions\b.*)\s*(?:\*\*)?\s*:?\s*$/i;
+const VERDICT_LINE = /^verdict\s*[:=]/i;
+/** A sub-heading inside Findings ("Critical:", "**Concerns**", "Verified from the build evidence:"). */
+const SUB_HEAD = /^(?:#{1,6}\s*)?(?:\*\*)?([^-*•\d].*?)(?:\*\*)?\s*:\s*(?:\*\*)?$/;
+/** The severities that FAIL a review (`Suggestion` does not; neither does a "Verified …" list). */
+const FAILING_SEVERITY = /^(?:critical|blockers?|blocking|must[- ]fix|high|major|concerns?|conditions?)\b/i;
+/** An inline severity lead: "Critical — src/text.ts:26 slices …", "**Concern:** …". */
+const INLINE_SEVERITY = /^(?:\*\*)?((?:critical|blockers?|blocking|must[- ]fix|high|major|concerns?|conditions?)\b[^—:]*?)(?:\*\*)?(?:\s*[—–:]|\s+-)\s*(?:\*\*)?\s*(.*\S)\s*$/i;
+/** "Concerns: none." states no finding. */
+const NO_FINDING = /^(?:none|n\/a|nil|no (?:critical |blocking )?(?:findings?|issues?|concerns?))\b[.!]?$/i;
+
+/** `[test/math.test.ts](/abs/worktree/test/math.test.ts:9)` → `test/math.test.ts:9`: the link text,
+ *  plus the target's line when the text lacks one. The absolute worktree path is never shown. */
+function unlink(text: string): string {
+  return text.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_m, label: string, target: string) => {
+    const line = /:(\d+(?::\d+)?)$/.exec(target);
+    return line !== null && !/:\d+(?::\d+)?$/.test(label) ? `${label}:${line[1]}` : label;
+  });
+}
+
+/** The lines of the Findings section of a sectioned report, or `null` when it has none. */
+function findingsSection(text: string | null | undefined): string[] | null {
+  const all = lines(text);
+  let start = -1;
+  for (let i = 0; i < all.length; i++) {
+    const m = SECTION_HEAD.exec(all[i]!);
+    if (m !== null && /^findings/i.test(m[1]!)) start = i + 1;
+  }
+  if (start < 0) return null;
+  const out: string[] = [];
+  for (let i = start; i < all.length; i++) {
+    const l = all[i]!;
+    if (SECTION_HEAD.test(l) || VERDICT_LINE.test(l)) break;
+    out.push(l);
+  }
+  return out;
+}
+
+/**
+ * The failing items of a sectioned report's Findings section, best reading first:
+ *  1. the items under a failing severity — a severity sub-heading's bullets, or a line that leads
+ *     with one ("Critical — …"); a "Verified …" or Suggestion group is not a failure;
+ *  2. else every bullet in the section;
+ *  3. else its prose lines.
+ * Empty when the report has no Findings section (the caller keeps its older readings).
+ */
+function findingsItems(text: string | null | undefined): string[] {
+  const section = findingsSection(text);
+  if (section === null) return [];
+  const severe: string[] = [];
+  const allBullets: string[] = [];
+  const prose: string[] = [];
+  let group: 'failing' | 'other' | null = null;
+  const push = (into: string[], item: string): void => {
+    const clean = unlink(item).trim();
+    if (clean !== '' && !NO_FINDING.test(clean) && !into.includes(clean)) into.push(clean);
+  };
+  for (const l of section) {
+    const bullet = BULLET.exec(l);
+    if (bullet !== null) {
+      const body = bullet[1]!;
+      const inline = INLINE_SEVERITY.exec(body);
+      if (inline !== null) push(severe, inline[2]!);
+      else if (group === 'failing') push(severe, body);
+      push(allBullets, inline !== null ? inline[2]! : body);
+      continue;
+    }
+    const inline = INLINE_SEVERITY.exec(l);
+    if (inline !== null) {
+      push(severe, inline[2]!);
+      continue;
+    }
+    const sub = SUB_HEAD.exec(l);
+    if (sub !== null) {
+      group = FAILING_SEVERITY.test(sub[1]!.trim()) ? 'failing' : 'other';
+      continue;
+    }
+    if (!FRAME.test(l)) push(prose, l);
+  }
+  if (severe.length > 0) return severe;
+  if (allBullets.length > 0) return allBullets;
+  return prose;
+}
+
+/**
  * The newest `gateEscalated.verdictSummary` for `ord` — the engine's copy of the reviewer's words on
  * the escalation it opened. `null` when the log holds none for that unit.
  */
@@ -84,6 +174,7 @@ export function escalationSummaryFor(events: readonly CoreEvent[], ord: number |
 
 /**
  * The reviewer's failing items for a failed verdict, best source first:
+ *  0. the Findings section of a sectioned report (denial reason, then summary) — {@link findingsItems};
  *  1. the bullets of the denial's reason (the evaluator's own findings — `VERDICT: FAIL` output);
  *  2. the bullets of `gateEscalated.verdictSummary`;
  *  3. the failing repository checks of the floor (`name — how it ended`);
@@ -94,6 +185,11 @@ export function escalationSummaryFor(events: readonly CoreEvent[], ord: number |
 export function failingItems(verdict: GateVerdictView | null, verdictSummary?: string | null): string[] {
   if (verdict === null || verdict.outcome !== 'fail') return [];
   const reason = verdict.denial?.reason ?? null;
+  // A sectioned report's Findings section outranks every other reading (R4).
+  const fromFindings = findingsItems(reason);
+  if (fromFindings.length > 0) return fromFindings;
+  const fromSummaryFindings = findingsItems(verdictSummary);
+  if (fromSummaryFindings.length > 0) return fromSummaryFindings;
   const fromBullets = bullets(reason);
   if (fromBullets.length > 0) return fromBullets;
   const fromSummary = bullets(verdictSummary);
