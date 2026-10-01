@@ -255,8 +255,8 @@ export interface DeliverTarget {
   branch: string | null;
   repo: string | null;
   /** The deliver unit's gate-card target sentence (`deliverTargetOf`) — what THIS push will do on
-   *  this origin. When present the toast says exactly that (R1/R3): the generic line below would
-   *  promise a pull request on a local origin, and name crew's registry label, not the repo. */
+   *  this origin. When present the toast says exactly that (R1/R3); without it `deliverPreview`
+   *  states the push and makes the pull request a condition, `repo` naming whose origin. */
   card?: string | null;
 }
 

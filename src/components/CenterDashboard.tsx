@@ -343,8 +343,8 @@ function GateActionCard({
   const [steerOpen, setSteerOpen] = useState(false);
   const clearGate = useGateStore((s) => s.clearGate);
   // R1/R3: approving a deliver gate from this inbox toasts the SAME card sentence the run page's
-  // gate does — what this push does on this origin. With no card the toast keeps "resumes" rather
-  // than a generic pull-request promise.
+  // gate does — what this push does on this origin. With no card, `null` lets `commitGateDecision`
+  // fall back on the gate's kind: `deliverPreview`'s push line with the pull request as a condition.
   const deliverCard = deliverTargetOf(units ?? [], ord);
   const deliver: DeliverTarget | null =
     deliverCard !== null && isDeliverGate(runId, units ?? [], ord) ? { branch: null, repo: null, card: deliverCard } : null;
