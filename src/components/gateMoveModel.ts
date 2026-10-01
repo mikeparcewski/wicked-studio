@@ -74,8 +74,16 @@ function outsideNonFinding(text: string | null | undefined): { bullets: string[]
     const body = m !== null ? m[1]! : l.replace(/^agent judge:\s*fail\s*[—-]\s*/i, '');
     const t = plain(body);
     const head = NON_FINDING_HEAD.test(t) ? t : subHeadingOf(body);
-    if (head !== null && head.length <= 80) {
-      if (excluded && indent > excludedIndent) continue;
+    // An inline finding (`Finding: cache invalidation is broken`) is an item wherever it sits.
+    const lead = FINDING_LEAD.exec(t);
+    if (lead !== null) {
+      excluded = false;
+      if (NO_FINDING.test(lead[1]!.trim())) continue; // "Concerns: none."
+    } else if (head !== null && head.length <= 80) {
+      // Inside an excluded section only a real section boundary ends it: a Markdown `#` heading at
+      // its level or above, or a findings heading. A deeper heading (`  Test suite:`) or a bare
+      // label (`npm test:`) is part of it (codex review).
+      if (excluded && (indent > excludedIndent || !(/^#{1,6}\s/.test(body) || FINDINGS_HEAD.test(head.replace(/\s*:$/, ''))))) continue;
       const name = head.replace(/\s*:$/, '');
       excluded = NON_FINDING_HEAD.test(name) || PASSING_GROUP.test(name);
       excludedIndent = indent;
@@ -142,6 +150,8 @@ const NON_FINDING_HEAD = new RegExp(
     String.raw`(?:commands? (?:run|executed)|evidence(?:\s+${GATHERED_WORD})?|notes?|summary)|${NON_FINDING_NAMES}|open questions?\b.*?)\s*:?$`,
   'i',
 );
+/** A finding written inline, its body on the same line: `Finding: …`, `Critical issue — …`. */
+const FINDING_LEAD = new RegExp(String.raw`^(?:${SEVERITY_WORD}\s+)?(?:findings?|issues?|concerns?|problems?)\s*[:—–]\s*(\S.*)$`, 'i');
 /** A non-finding section written inline, its body on the same line: `Counts: derived 1 / …`,
  *  `What I did: Evaluator role. …`, `Open question: "character" could mean …`. */
 const NON_FINDING_LEAD = new RegExp(String.raw`^(?:\d+[.)]\s*)?(?:${NON_FINDING_NAMES}|open questions?)\s*:\s*\S`, 'i');

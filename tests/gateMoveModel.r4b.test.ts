@@ -229,3 +229,12 @@ describe('failingItems — codex review, round 5', () => {
     expect(read(text)).toEqual(['Authentication can be bypassed.', 'A label is misspelled.']);
   });
 });
+
+describe('failingItems — codex review, round 6', () => {
+  it('a bare command label inside Commands run never ends it; an inline "Finding:" is the item (HIGH)', () => {
+    const text = ["the evaluator's verdict is FAIL", 'Commands run:', 'npm test:', '- exit 1', 'Finding: cache invalidation is broken', 'VERDICT: FAIL'].join('\n');
+    expect(read(text)).toEqual(['Finding: cache invalidation is broken']);
+    const none = ["the evaluator's verdict is FAIL", 'Commands run:', '- npm test — exit 0.', 'Concerns: none.', 'VERDICT: FAIL'].join('\n');
+    expect(read(none)).toEqual([]);
+  });
+});
