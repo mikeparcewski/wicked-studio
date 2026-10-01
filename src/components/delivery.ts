@@ -579,7 +579,9 @@ export function deliverySummary(
   const parts: string[] = [];
   if (counts['pr-open'] > 0) parts.push(`${counts['pr-open']} PR open`);
   if (counts['delivered'] > 0) parts.push(`${counts['delivered']} ran deliver`);
-  if (counts['pushed'] > 0) parts.push(`${counts['pushed']} branch pushed`);
+  if (counts['pushed'] > 0) {
+    parts.push(`${counts['pushed']} ${counts['pushed'] === 1 ? 'branch' : 'branches'} pushed`);
+  }
   // Right after the delivered buckets — stranded is the actionable one, and its
   // wording tracks DELIVERY_LABEL exactly (crew#393: work waiting on a person).
   if (counts['stranded'] > 0) parts.push(`${counts['stranded']} stranded`);

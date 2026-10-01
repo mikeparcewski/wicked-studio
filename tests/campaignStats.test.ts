@@ -95,6 +95,19 @@ describe('the delivery rollup — wire facts only, isPrUrl-gated', () => {
     expect(r.stranded).toEqual([{ runId: 'r2', label: 'r2' }]);
     expect(deliveryRollupWord(r)).toBe('1 of 3 delivered');
   });
+
+  it('N1: a pushed member (non-GitHub origin) is delivered — no PR link, never stranded', () => {
+    const pushed = { delivery: 'pushed' as const, deliverBranch: 'wicked/r1', deliverRemote: '/srv/r.git' };
+    const c = makeCampaign('camp', [{ runId: 'r1', status: 'completed', delivery: pushed }], {
+      attached_runs: [attachedRun('r2', { ...pushed, status: 'completed' })],
+    });
+    const r = campaignDeliveryRollup(c);
+    expect(r.delivered).toBe(2);
+    expect(r.prs).toEqual([]);
+    expect(r.stranded).toEqual([]);
+    const g = groupDeliveryRollup(makeGroup('g', [attachedRun('r3', { ...pushed, status: 'completed' })]));
+    expect(g).toMatchObject({ delivered: 1, prs: [], stranded: [] });
+  });
 });
 
 describe('campaignTotals — campaigns and groups, one aggregate', () => {
@@ -168,6 +181,12 @@ describe('matchesCampaignChip', () => {
     expect(matchesCampaignChip(model([{ status: 'completed' }, { status: 'completed' }]), 'quiet')).toBe(true);
     expect(matchesCampaignChip(model([{ status: 'awaiting_human' }]), 'quiet')).toBe(false);
     expect(matchesCampaignChip(model([]), 'all')).toBe(true);
+  });
+
+  it('N1: a pushed member does NOT route to needs-you — nothing waits on a person', () => {
+    const m = model([{ runId: 'r1', status: 'completed', delivery: { delivery: 'pushed', deliverBranch: 'wicked/r1' } }]);
+    expect(matchesCampaignChip(m, 'needs-you')).toBe(false);
+    expect(matchesCampaignChip(m, 'quiet')).toBe(true);
   });
 
   it('stranded work routes to needs-you (finished work waiting on a person)', () => {

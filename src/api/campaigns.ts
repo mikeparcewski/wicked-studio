@@ -98,6 +98,9 @@ export interface AttachedRunView {
   status: SessionStatus;
   delivery: CampaignNodeDelivery['delivery'];
   deliverUrl?: string;
+  /** N1: present exactly when `delivery === 'pushed'`. */
+  deliverBranch?: string;
+  deliverRemote?: string;
 }
 
 /**
