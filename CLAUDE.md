@@ -23,8 +23,13 @@ answer HITL gates, browse projects/evidence/coverage, watch live CoreEvents.
 - `tests/` — vitest (jsdom): `npm test`; typecheck with `npm run typecheck`.
 - `e2e/` — Python Playwright journeys on the in-process fixture (`e2e/uxfix_fixture.py`);
   `python3 e2e/run_journeys.py` runs the behaviour set CI runs (under both skins, via
-  `STUDIO_SKIN`); `--all` runs every journey except the few marked `LIVE` there (they need a
-  real daemon or bridge).
+  `STUDIO_SKIN`); `--all` runs every journey except `DESK` and the few marked `LIVE` there (they need a
+  real daemon or bridge). `--list desk` runs the `DESK` list under `STUDIO_SKIN=desk` (CI's
+  `journeys (desk)` leg, skipped while the list is empty); a desk journey goes there, never in
+  `BEHAVIOUR`.
+- `testid-inventory.json` — regenerate with `npm run manifest:testids`, never hand-merge it.
+  Removing a testid fails `tests/testidRemovals.test.ts` unless `e2e/testid-successors.json`
+  names its successor.
 - `site/` — the marketing site: its own app/deps, excluded from vitest.
 - `wicked-worktrees/` — gitignored checkouts created by governed runs inside
   this repo; never edit or clean them by hand.

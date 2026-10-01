@@ -32,8 +32,15 @@ jobs:
   check:
     name: lint · typecheck · test · build
     runs-on: ubuntu-latest
+    env:
+      # tests/testidRemovals.test.ts diffs testid-inventory.json against this commit. On a PR
+      # the checkout is the merge commit, whose first parent is the base branch tip; on a push
+      # to main it is the previous main commit. Depth 2 fetches exactly that parent.
+      TESTID_BASE_REF: HEAD^1
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          fetch-depth: 2
 
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
@@ -105,5 +112,63 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: journey-shots-${{ matrix.skin }}
+          path: e2e/shots/
+          if-no-files-found: ignore
+
+  # The desk journeys (e2e/run_journeys.py DESK, DES-STUDIO-REBUILD-001 §6.2): journeys that assert
+  # the `desk` skin, run only under STUDIO_SKIN=desk. The leg skips its install, build and run while
+  # DESK is empty, so it costs one checkout until the first desk slice lands.
+  journeys-desk:
+    name: journeys (desk)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      STUDIO_SKIN: desk
+      SKIP_STUDIO_BUILD: '1'
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+
+      - name: Count the desk journeys
+        id: desk
+        run: |
+          n=$(python3 -c "import sys; sys.path.insert(0, 'e2e'); import run_journeys; print(len(run_journeys.DESK))")
+          echo "count=$n" >> "$GITHUB_OUTPUT"
+          if [ "$n" = "0" ]; then echo "DESK is empty; skipping the desk leg"; fi
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        if: steps.desk.outputs.count != '0'
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        if: steps.desk.outputs.count != '0'
+        with:
+          python-version: '3.12'
+
+      - name: Install (clean, from lockfile)
+        if: steps.desk.outputs.count != '0'
+        run: npm ci
+
+      - name: Install Python Playwright + chromium
+        if: steps.desk.outputs.count != '0'
+        run: |
+          python -m pip install playwright
+          python -m playwright install --with-deps chromium
+
+      - name: Same-origin build
+        if: steps.desk.outputs.count != '0'
+        run: VITE_API_HOST= npx vite build --outDir dist-sameorigin
+
+      - name: Desk journeys
+        if: steps.desk.outputs.count != '0'
+        run: python e2e/run_journeys.py --list desk
+
+      - name: Upload screenshots
+        if: failure() && steps.desk.outputs.count != '0'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: journey-shots-desk
           path: e2e/shots/
           if-no-files-found: ignore
