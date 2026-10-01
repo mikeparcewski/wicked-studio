@@ -137,16 +137,22 @@ function findingsItems(text: string | null | undefined): string[] | null {
   for (const l of section) {
     const bullet = BULLET.exec(l);
     if (bullet !== null) {
+      // A "Verified …" / Suggestion group's bullets are never failures, whatever word they lead
+      // with — "- Critical: boundary handling is fixed." under "Verified:" is a pass (codex review,
+      // MEDIUM; Copilot).
+      if (group === 'passing') continue;
       const body = bullet[1]!;
       const inline = INLINE_SEVERITY.exec(body);
       if (inline !== null) push(severe, inline[2]!);
       else if (group === 'failing') push(severe, body);
-      // A "Verified …" / Suggestion group's bullets are never failures (codex review, MEDIUM).
-      if (group !== 'passing') push(allBullets, inline !== null ? inline[2]! : body);
+      push(allBullets, inline !== null ? inline[2]! : body);
       continue;
     }
     const inline = INLINE_SEVERITY.exec(l);
     if (inline !== null) {
+      // A severity-led LINE (not a bullet) is a new finding at the section's top level, the way
+      // the run-2 report wrote "Critical — …": it ends any group above it.
+      group = 'failing';
       push(severe, inline[2]!);
       continue;
     }

@@ -170,6 +170,19 @@ describe('failingItems — a sectioned review (R4)', () => {
     expect(failingItems(v, text)).toEqual([]);
   });
 
+  it('a severity word inside a Verified group is still a pass; a severity-led line after it is a finding (Copilot)', () => {
+    const text = [
+      "the evaluator's verdict is FAIL",
+      'Findings',
+      'Verified from the build evidence:',
+      '- Critical: boundary handling is fixed.',
+      'Critical — README.md:7 still documents the old signature.',
+      'VERDICT: FAIL',
+    ].join('\n');
+    const v = gateVerdictFor(events(text), 2, NOT_PASS_PROMPT);
+    expect(failingItems(v, text)).toEqual(['README.md:7 still documents the old signature.']);
+  });
+
   it('an unsectioned review keeps today’s reading (bullets, frame lines dropped)', () => {
     const plain = "the evaluator's verdict is FAIL\nReviewed the fix.\n- the regression test is missing\nVERDICT: FAIL";
     const v = gateVerdictFor(events(plain), 2, NOT_PASS_PROMPT);
