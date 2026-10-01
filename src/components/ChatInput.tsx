@@ -1,7 +1,7 @@
 import { commitGateDecision } from '../board/gateActions.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, ApiError } from '../api/client.js';
-import type { EntityMode, LaunchBodyWithDeliver, Project, RepoEntry, RosterSeat, WorkflowDef } from '../api/types.js';
+import type { DeliverTargetResponse, EntityMode, LaunchBodyWithDeliver, Project, RepoEntry, RosterSeat, WorkflowDef } from '../api/types.js';
 import { COMPOSER_DEFAULT_GATE_POSTURE } from './composerDefaults.js';
 import { isShortcutsPaletteOpen } from '../hooks/useGlobalShortcuts.js';
 import { useCampaignsStore } from '../store/campaigns.js';
@@ -382,6 +382,28 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   const targetLabel =
     targetRepoRef === null ? null : repoSlugOf(repos.find((r) => r.id === targetRepoRef) ?? { name: targetRepoRef });
   const targetRequired = launchKind === 'build' && target.kind === 'ambiguous';
+  /**
+   * R3 (ship-prove-3): what a delivering launch on the target repo would push, and where — crew's
+   * deliver-gate origin preflight (`GET /repos/:id/deliver-target`), so the notice cannot promise
+   * "opens a PR" on a local origin. Keyed by the repo it was read for: a stale answer for another
+   * repo is never shown. `null` answer = the daemon could not say.
+   */
+  const [deliverTarget, setDeliverTarget] = useState<{ repoRef: string; view: DeliverTargetResponse | null } | null>(null);
+  useEffect(() => {
+    // Every lookup starts from "could not say": a previous answer for this repo (A → B → A, or a
+    // round trip through another launch kind) is never shown while a fresh read is in flight —
+    // the origin may have changed since (codex review, MEDIUM).
+    setDeliverTarget(null);
+    if (targetRepoRef === null || launchKind !== 'build') return;
+    let live = true;
+    void api.getDeliverTarget(targetRepoRef).then((view) => {
+      if (live) setDeliverTarget({ repoRef: targetRepoRef, view });
+    });
+    return () => {
+      live = false;
+    };
+  }, [targetRepoRef, launchKind]);
+  const deliverTargetView = deliverTarget !== null && deliverTarget.repoRef === targetRepoRef ? deliverTarget.view : null;
   /** "No repository attached" — the resolver's verdict, the same one the wire body reads. */
   const noRepoAttached = target.kind === 'none';
   /** The composer row's repo picker shows the resolved target (D2). */
@@ -1039,24 +1061,37 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
               }
             : null;
         }
-        return deliverOn
-          ? {
-              // F-028: the notice NAMES the repo the PR lands on — `owner/repo`
-              // off its registered git URL, its registered name otherwise.
-              state: 'on',
-              // F-E2E-030: say WHEN the push happens — after the deliver gate the operator
-              // approves, or, under an explicitly unattended posture, with no gate at all —
-              // named "auto-deliver", never implied.
-              text:
-                daemonDeliverGate === false
-                  ? `When this finishes it pushes its branch → opens a PR on ${targetLabel} — this daemon delivers WITHOUT a deliver gate (upgrade crew to 0.7.33+ to confirm the push first). Merging stays yours.`
-                  : daemonDeliverGate === null
-                    ? `When this finishes it pushes its branch → opens a PR on ${targetLabel}. Merging stays yours.`
-                    : autoDeliver
-                      ? `When this finishes it pushes its branch → opens a PR on ${targetLabel} with NO deliver gate — this posture is auto-deliver. Merging stays yours.`
-                      : `When this finishes it pauses at the deliver gate; approve it and the run pushes its branch → opens a PR on ${targetLabel}. Merging stays yours.`,
-            }
-          : {
+        if (deliverOn) {
+          // R3: WHAT the push does comes from crew's origin preflight — the deliver gate's own
+          // sentence ("Pushes the run branch to <owner/repo> on GitHub and opens a pull request
+          // there…", "…a local path, so no pull request can be opened against it…"). A daemon
+          // that cannot say gets the condition, never the promise.
+          const sentence = typeof deliverTargetView?.sentence === 'string' ? deliverTargetView.sentence.trim() : '';
+          const what =
+            sentence !== ''
+              ? `${sentence.charAt(0).toLowerCase()}${sentence.slice(1).replace(/\.$/, '')}`
+              : // Unconfirmed: name the repo whose origin receives the push, never a PR destination —
+                // the registered name or URL is not proof of where a pull request would open (codex review).
+                `pushes its branch to the origin of ${targetLabel} → opens a PR there if that origin is a GitHub repository`;
+          const merging = sentence !== '' ? '' : ' Merging stays yours.';
+          return {
+            // F-028: the notice NAMES the repo the PR lands on — `owner/repo`
+            // off its registered git URL, its registered name otherwise.
+            state: 'on',
+            // F-E2E-030: say WHEN the push happens — after the deliver gate the operator
+            // approves, or, under an explicitly unattended posture, with no gate at all —
+            // named "auto-deliver", never implied.
+            text:
+              daemonDeliverGate === false
+                ? `When this finishes it ${what} — this daemon delivers WITHOUT a deliver gate (upgrade crew to 0.7.33+ to confirm the push first).${merging}`
+                : daemonDeliverGate === null
+                  ? `When this finishes it ${what}.${merging}`
+                  : autoDeliver
+                    ? `When this finishes it ${what} — with NO deliver gate: this posture is auto-deliver.${merging}`
+                    : `When this finishes it pauses at the deliver gate; approve it and the run ${what}.${merging}`,
+          };
+        }
+        return {
               // The consequence of OFF, said before the send (crew#393): the
               // wire carries an explicit `deliver: 'none'` and the completed
               // run will read `stranded` — recoverable from its run page.
@@ -1511,6 +1546,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
           data-testid="deliver-notice"
           data-deliver-state={deliverNotice.state}
           data-deliver-repo={targetRepoRef ?? ''}
+          data-deliver-origin={deliverNotice.state === 'on' ? (deliverTargetView?.origin ?? 'unknown') : ''}
           data-deliver-gate={deliverNotice.state === 'on' ? deliverGateWord : ''}
           className="text-xs px-1 font-mono"
           style={{

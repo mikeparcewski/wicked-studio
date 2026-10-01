@@ -89,7 +89,7 @@ describe('ChatInput delivery (#123)', () => {
     const notice = screen.getByTestId('deliver-notice');
     expect(notice.dataset.deliverState).toBe('on');
     // F-028: the notice NAMES the repo the PR lands on.
-    expect(notice.textContent).toMatch(/opens a PR on studio-api/i);
+    expect(notice.textContent).toMatch(/pushes its branch to the origin of studio-api → opens a PR there if/i);
     expect(notice.dataset.deliverRepo).toBe('studio-api');
     expect(notice.textContent).toMatch(/Merging stays yours/i);
 

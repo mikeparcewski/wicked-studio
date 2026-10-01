@@ -253,12 +253,12 @@ describe('studio#368 — approving the deliver gate says it pushes and opens a P
   it('describeDecision names the branch and repo for a deliver approve; other gates keep "resumes"', () => {
     const t = { branch: 'wicked/abc123', repo: 'wicked-crew' };
     expect(describeDecision({ approve: true }, 1, t).preview).toBe(
-      'Pushes branch wicked/abc123 and opens a pull request on wicked-crew, under the daemon\'s GitHub sign-in.',
+      'Pushes branch wicked/abc123 to the origin of wicked-crew, under the daemon\'s GitHub sign-in; a pull request opens only if that origin is a GitHub repository.',
     );
     expect(describeDecision({ approve: true, amend: 'squash it' }, 1, t).preview).toContain('carrying your note as guidance');
     expect(describeDecision({ approve: true }).preview).toBe('The run resumes past this gate.');
     expect(describeDecision({ approve: false }, 1, t).preview).toBe('The run is cancelled at this gate.');
-    expect(deliverPreview({ branch: null, repo: null })).toBe('Pushes the run branch and opens a pull request, under the daemon\'s GitHub sign-in.');
+    expect(deliverPreview({ branch: null, repo: null })).toBe('Pushes the run branch, under the daemon\'s GitHub sign-in; a pull request opens only if that origin is a GitHub repository.');
   });
 
   it('the gate card\'s approve on the deliver unit puts the push line in the undo toast', async () => {
@@ -281,7 +281,7 @@ describe('studio#368 — approving the deliver gate says it pushes and opens a P
     fireEvent.click(primary);
     if (screen.queryByTestId('undo-toast') === null) fireEvent.click(screen.getByTestId('gate-recommended'));
     const toast = await screen.findByTestId('undo-toast');
-    expect(toast).toHaveTextContent('Pushes branch wicked/r-deliver and opens a pull request on wicked-crew');
+    expect(toast).toHaveTextContent('Pushes branch wicked/r-deliver to the origin of wicked-crew');
     expect(toast).not.toHaveTextContent('The run resumes past this gate');
   });
 });

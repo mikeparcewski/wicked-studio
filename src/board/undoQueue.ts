@@ -254,13 +254,23 @@ export function decisionPreview(verb: DecisionVerb, count: number, withNote = fa
 export interface DeliverTarget {
   branch: string | null;
   repo: string | null;
+  /** The deliver unit's gate-card target sentence (`deliverTargetOf`) — what THIS push will do on
+   *  this origin. When present the toast says exactly that (R1/R3); without it `deliverPreview`
+   *  states the push and makes the pull request a condition, `repo` naming whose origin. */
+  card?: string | null;
 }
 
-/** The deliver approve's preview: "Pushes branch `wicked/abc` and opens a PR on wicked-crew, as …". */
+/** The deliver approve's preview: the gate card's own sentence, else the push with the pull request
+ *  stated as a condition. */
 export function deliverPreview(t: DeliverTarget): string {
+  const card = (t.card ?? '').trim();
+  if (card !== '') return card;
+  // No card (a def authored without one, a deliver-lift retry, the palette or triage keys): the
+  // origin is not known here, so the pull request is the condition it is — never a promise, and
+  // `repo` (a registry label) names whose origin, not where a PR opens (R3; Copilot on studio#400).
   const branch = t.branch !== null && t.branch !== '' ? `branch ${t.branch}` : 'the run branch';
-  const repo = t.repo !== null && t.repo !== '' ? ` on ${t.repo}` : '';
-  return `Pushes ${branch} and opens a pull request${repo}, under the daemon's GitHub sign-in.`;
+  const to = t.repo !== null && t.repo !== '' ? ` to the origin of ${t.repo}` : '';
+  return `Pushes ${branch}${to}, under the daemon's GitHub sign-in; a pull request opens only if that origin is a GitHub repository.`;
 }
 
 /**

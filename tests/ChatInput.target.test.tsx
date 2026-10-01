@@ -129,7 +129,7 @@ describe('ChatInput target repo (F-028)', () => {
     const notice = screen.getByTestId('deliver-notice');
     expect(notice.dataset.deliverState).toBe('on');
     expect(notice.dataset.deliverRepo).toBe('wicked-estate');
-    expect(notice.textContent).toMatch(/opens a PR on wicked-estate/);
+    expect(notice.textContent).toMatch(/the origin of wicked-estate → opens a PR there/);
     expect(notice.textContent).toMatch(/Merging stays yours/);
     const summary = screen.getByTestId('launch-confirm');
     expect(summary.dataset.workflow).toBe('bug');
@@ -174,8 +174,9 @@ describe('ChatInput target repo (F-028)', () => {
     expect(screen.queryByTestId('launch-target-reason')).toBeNull();
     const notice = screen.getByTestId('deliver-notice');
     expect(notice.dataset.deliverState).toBe('on');
-    // `git_url: git@github.com:acme/wicked-studio.git` → owner/repo.
-    expect(notice.textContent).toMatch(/→ opens a PR on acme\/wicked-studio\./);
+    // `git_url: git@github.com:acme/wicked-studio.git` → owner/repo. No deliver-target answer is
+    // mocked here, so the notice states the PR as the condition it is (R3).
+    expect(notice.textContent).toMatch(/the origin of acme\/wicked-studio → opens a PR there if that origin is a GitHub repository\./);
     expect(screen.getByTestId('launch-confirm-target').textContent).toBe('acme/wicked-studio');
 
     await user.type(screen.getByTestId('launch-problem'), 'fix issue #219');
@@ -195,7 +196,7 @@ describe('ChatInput target repo (F-028)', () => {
     await bind(user, { tick: 'wicked-studio' }); // B: ticked AFTER the choice
     expect((screen.getByTestId('launch-target-repo') as HTMLSelectElement).value).toBe('wicked-studio');
     expect(screen.getByTestId('launch-confirm').dataset.target).toBe('wicked-studio');
-    expect(screen.getByTestId('deliver-notice').textContent).toMatch(/opens a PR on acme\/wicked-studio/);
+    expect(screen.getByTestId('deliver-notice').textContent).toMatch(/the origin of acme\/wicked-studio → opens a PR there/);
     await user.type(screen.getByTestId('launch-problem'), 'fix issue #219');
     await waitFor(() => expect(screen.getByTestId('launch-submit')).toBeEnabled());
     await user.click(screen.getByTestId('launch-submit'));
@@ -229,7 +230,7 @@ describe('ChatInput target repo (F-028)', () => {
     await chips();
     await bind(user, { workflow: 'bug', tick: 'wicked-studio' });
     await user.selectOptions(screen.getByTestId('launch-target-repo'), 'wicked-core');
-    expect(screen.getByTestId('deliver-notice').textContent).toMatch(/opens a PR on wicked-core/);
+    expect(screen.getByTestId('deliver-notice').textContent).toMatch(/the origin of wicked-core → opens a PR there/);
     await user.type(screen.getByTestId('launch-problem'), 'fix issue #219');
     await waitFor(() => expect(screen.getByTestId('launch-submit')).toBeEnabled());
     await user.click(screen.getByTestId('launch-submit'));
@@ -288,7 +289,7 @@ describe('ChatInput target repo (F-028)', () => {
     // One candidate left: no select, no reason — it IS the target.
     expect(screen.queryByTestId('launch-target-row')).toBeNull();
     expect(screen.getByTestId('launch-confirm').dataset.target).toBe('wicked-estate');
-    expect(screen.getByTestId('deliver-notice').textContent).toMatch(/opens a PR on wicked-estate/);
+    expect(screen.getByTestId('deliver-notice').textContent).toMatch(/the origin of wicked-estate → opens a PR there/);
     await user.type(screen.getByTestId('launch-problem'), 'fix issue #219');
     await waitFor(() => expect(screen.getByTestId('launch-submit')).toBeEnabled());
     await user.click(screen.getByTestId('launch-submit'));
@@ -304,7 +305,7 @@ describe('ChatInput target repo (F-028)', () => {
     await bind(user, { workflow: 'bug' });
     expect(screen.queryByTestId('launch-target-row')).toBeNull();
     expect(screen.getByTestId('launch-confirm').dataset.target).toBe('wicked-studio');
-    expect(screen.getByTestId('deliver-notice').textContent).toMatch(/opens a PR on acme\/wicked-studio/);
+    expect(screen.getByTestId('deliver-notice').textContent).toMatch(/the origin of acme\/wicked-studio → opens a PR there/);
     await user.type(screen.getByTestId('launch-problem'), 'fix issue #219');
     await waitFor(() => expect(screen.getByTestId('launch-submit')).toBeEnabled());
     await user.click(screen.getByTestId('launch-submit'));

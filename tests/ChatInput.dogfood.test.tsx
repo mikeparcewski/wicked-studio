@@ -78,7 +78,7 @@ describe('D2 — the repo picker beside Project, and the no-PR notice only when 
     await user.selectOptions(picker, 'studio-api');
     expect(picker.value).toBe('studio-api');
     expect(screen.getByTestId('deliver-notice').dataset.deliverState).toBe('on');
-    expect(screen.getByTestId('deliver-notice').textContent).toMatch(/opens a PR on studio-api/);
+    expect(screen.getByTestId('deliver-notice').textContent).toMatch(/the origin of studio-api → opens a PR there/);
 
     // The launch options' tick list is kept, and agrees.
     const again = await openOptions(user);
