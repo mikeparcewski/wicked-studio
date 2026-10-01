@@ -152,9 +152,13 @@ const SEVERITY_WORD = String.raw`(?:critical|blocking|blockers?|major|high(?:[- 
  *  (R4, ship-prove-4 — "Critical finding:" was not read, so the send-back led with "Commands run"):
  *  singular or plural, an optional severity before (`Critical finding`, `Blocking issues`) or after
  *  (`Findings (critical)`, `Findings — blocking`), a trailing colon or none. Group 1 is the noun. */
+/** The marks that say a findings heading is NOT failing (`minor`, `optional`, `low-severity`, …). */
+const PASSING_MARK = String.raw`(?:non[- ]blocking|optional|minor|nits?|low(?:[- ]severity)?|informational|cosmetic)`;
 const FINDINGS_HEAD = new RegExp(
   String.raw`^(?:\d+[.)]\s*)?(?:${SEVERITY_WORD}\s+)?(?:[a-z][\w-]*\s+){0,2}?(findings?(?:\s+or\s+plan)?|concerns?|issues?|problems?|blockers?)` +
-    String.raw`(?:\s*\(${SEVERITY_WORD}\)|\s*[—–-]\s*${SEVERITY_WORD})?\s*:?$`,
+    // A trailing mark may be a severity (`Findings (critical)`) or a passing one (`Issues — minor`),
+    // so the latter reaches the passing-boundary logic (Copilot).
+    String.raw`(?:\s*\((?:${PASSING_MARK}|${SEVERITY_WORD})\)|\s*[—–-]\s*(?:${PASSING_MARK}|${SEVERITY_WORD}))?\s*:?$`,
   'i',
 );
 /** The sections of the output contract that are NEVER findings, whatever the report holds
@@ -221,7 +225,7 @@ function endsFindings(line: string): boolean {
 const PASSING_FINDINGS = /^(?:\d+[.)]\s*)?(?:non[- ]blocking|optional|minor|nits?|low(?:[- ]severity)?|informational|cosmetic|resolved|addressed|fixed|no)\b/i;
 
 /** The same mark trailing a findings heading: `Findings (low)`, `Issues — minor` (Copilot). */
-const PASSING_SUFFIX = /(?:\(\s*(?:non[- ]blocking|optional|minor|nits?|low(?:[- ]severity)?|informational|cosmetic)\s*\)|[—–-]\s*(?:non[- ]blocking|optional|minor|nits?|low(?:[- ]severity)?|informational|cosmetic))\s*:?$/i;
+const PASSING_SUFFIX = new RegExp(String.raw`(?:\(\s*${PASSING_MARK}\s*\)|[—–-]\s*${PASSING_MARK})\s*:?$`, 'i');
 
 /**
  * The Findings sections of a sectioned report — each one's heading and lines — or `null` when it

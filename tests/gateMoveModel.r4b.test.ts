@@ -294,3 +294,12 @@ describe('failingItems — Copilot review, round 5', () => {
     expect(read(text)).toEqual([FINDING]);
   });
 });
+
+describe('failingItems — Copilot review, round 6', () => {
+  for (const head of ['Issues — minor', 'Findings (optional)', 'Findings — informational', 'Findings (low-severity)', 'Findings (non-blocking)']) {
+    it(`"${head}" bounds the failing section above it`, () => {
+      const text = ["the evaluator's verdict is FAIL", '## Findings', `- ${FINDING}`, `## ${head}`, '- rename the helper', 'VERDICT: FAIL'].join('\n');
+      expect(read(text)).toEqual([FINDING]);
+    });
+  }
+});
