@@ -141,6 +141,35 @@ describe('failingItems — a sectioned review (R4)', () => {
     expect(failingItems(v, text)).toEqual(['the empty-input case throws instead of returning ""']);
   });
 
+  it('a Findings section that names no failure never falls back to Commands run (codex review, HIGH)', () => {
+    const text = [
+      "the evaluator's verdict is FAIL",
+      'Commands run',
+      '- Read `wicked-garden-governed-worker/SKILL.md` — exit 0.',
+      'Findings',
+      'Concerns: none.',
+      'VERDICT: FAIL',
+    ].join('\n');
+    const v = gateVerdictFor(events(text), 2, NOT_PASS_PROMPT);
+    expect(failingItems(v, text)).toEqual([]);
+  });
+
+  it('a verified-only Findings section lists nothing as failing (codex review, MEDIUM)', () => {
+    const text = [
+      "the evaluator's verdict is FAIL",
+      'Commands run',
+      '- `npm test` — exit 0.',
+      'Findings',
+      'Verified from the supplied build evidence:',
+      '- src/math.ts:24 validates all three arguments.',
+      'Suggestion:',
+      '- rename the helper.',
+      'VERDICT: FAIL',
+    ].join('\n');
+    const v = gateVerdictFor(events(text), 2, NOT_PASS_PROMPT);
+    expect(failingItems(v, text)).toEqual([]);
+  });
+
   it('an unsectioned review keeps today’s reading (bullets, frame lines dropped)', () => {
     const plain = "the evaluator's verdict is FAIL\nReviewed the fix.\n- the regression test is missing\nVERDICT: FAIL";
     const v = gateVerdictFor(events(plain), 2, NOT_PASS_PROMPT);

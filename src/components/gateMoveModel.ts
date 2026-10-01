@@ -79,6 +79,8 @@ const VERDICT_LINE = /^verdict\s*[:=]/i;
 const SUB_HEAD = /^(?:#{1,6}\s*)?(?:\*\*)?([^-*•\d].*?)(?:\*\*)?\s*:\s*(?:\*\*)?$/;
 /** The severities that FAIL a review (`Suggestion` does not; neither does a "Verified …" list). */
 const FAILING_SEVERITY = /^(?:critical|blockers?|blocking|must[- ]fix|high|major|concerns?|conditions?)\b/i;
+/** Groups that are explicitly NOT failures: what the reviewer verified, praised or only suggests. */
+const PASSING_GROUP = /^(?:verified|confirmed|pass(?:es|ed|ing)?|strengths?|what (?:works|passed)|ok\b|good\b|suggestions?|nits?|non[- ]blocking|optional)/i;
 /** An inline severity lead: "Critical — src/text.ts:26 slices …", "**Concern:** …". */
 const INLINE_SEVERITY = /^(?:\*\*)?((?:critical|blockers?|blocking|must[- ]fix|high|major|concerns?|conditions?)\b[^—:]*?)(?:\*\*)?(?:\s*[—–:]|\s+-)\s*(?:\*\*)?\s*(.*\S)\s*$/i;
 /** "Concerns: none." states no finding. */
@@ -117,15 +119,17 @@ function findingsSection(text: string | null | undefined): string[] | null {
  *     with one ("Critical — …"); a "Verified …" or Suggestion group is not a failure;
  *  2. else every bullet in the section;
  *  3. else its prose lines.
- * Empty when the report has no Findings section (the caller keeps its older readings).
+ * `null` when the report has no Findings section (the caller keeps its older readings); `[]` when
+ * it has one that names no failure — then the rest of the report (Commands run, evidence) is still
+ * not a finding (codex review, HIGH).
  */
-function findingsItems(text: string | null | undefined): string[] {
+function findingsItems(text: string | null | undefined): string[] | null {
   const section = findingsSection(text);
-  if (section === null) return [];
+  if (section === null) return null;
   const severe: string[] = [];
   const allBullets: string[] = [];
   const prose: string[] = [];
-  let group: 'failing' | 'other' | null = null;
+  let group: 'failing' | 'passing' | 'other' | null = null;
   const push = (into: string[], item: string): void => {
     const clean = unlink(item).trim();
     if (clean !== '' && !NO_FINDING.test(clean) && !into.includes(clean)) into.push(clean);
@@ -137,7 +141,8 @@ function findingsItems(text: string | null | undefined): string[] {
       const inline = INLINE_SEVERITY.exec(body);
       if (inline !== null) push(severe, inline[2]!);
       else if (group === 'failing') push(severe, body);
-      push(allBullets, inline !== null ? inline[2]! : body);
+      // A "Verified …" / Suggestion group's bullets are never failures (codex review, MEDIUM).
+      if (group !== 'passing') push(allBullets, inline !== null ? inline[2]! : body);
       continue;
     }
     const inline = INLINE_SEVERITY.exec(l);
@@ -147,10 +152,11 @@ function findingsItems(text: string | null | undefined): string[] {
     }
     const sub = SUB_HEAD.exec(l);
     if (sub !== null) {
-      group = FAILING_SEVERITY.test(sub[1]!.trim()) ? 'failing' : 'other';
+      const head = sub[1]!.trim();
+      group = FAILING_SEVERITY.test(head) ? 'failing' : PASSING_GROUP.test(head) ? 'passing' : 'other';
       continue;
     }
-    if (!FRAME.test(l)) push(prose, l);
+    if (group !== 'passing' && !FRAME.test(l)) push(prose, l);
   }
   if (severe.length > 0) return severe;
   if (allBullets.length > 0) return allBullets;
@@ -185,15 +191,20 @@ export function escalationSummaryFor(events: readonly CoreEvent[], ord: number |
 export function failingItems(verdict: GateVerdictView | null, verdictSummary?: string | null): string[] {
   if (verdict === null || verdict.outcome !== 'fail') return [];
   const reason = verdict.denial?.reason ?? null;
-  // A sectioned report's Findings section outranks every other reading (R4).
+  // A sectioned report's Findings section outranks every other reading (R4). When the report HAS
+  // one, its other sections (Commands run, evidence, counts) are never read as findings — even if
+  // the section itself names nothing; the floor's checks and the judge still speak below.
   const fromFindings = findingsItems(reason);
-  if (fromFindings.length > 0) return fromFindings;
+  if (fromFindings !== null && fromFindings.length > 0) return fromFindings;
   const fromSummaryFindings = findingsItems(verdictSummary);
-  if (fromSummaryFindings.length > 0) return fromSummaryFindings;
-  const fromBullets = bullets(reason);
-  if (fromBullets.length > 0) return fromBullets;
-  const fromSummary = bullets(verdictSummary);
-  if (fromSummary.length > 0) return fromSummary;
+  if (fromSummaryFindings !== null && fromSummaryFindings.length > 0) return fromSummaryFindings;
+  const sectioned = fromFindings !== null || fromSummaryFindings !== null;
+  if (!sectioned) {
+    const fromBullets = bullets(reason);
+    if (fromBullets.length > 0) return fromBullets;
+    const fromSummary = bullets(verdictSummary);
+    if (fromSummary.length > 0) return fromSummary;
+  }
   const checks = (verdict.floor?.checks ?? [])
     .filter((c) => !checkOutcome(c).ok)
     .map((c) => `${c.name} — ${checkOutcome(c).word}`);
@@ -206,6 +217,7 @@ export function failingItems(verdict: GateVerdictView | null, verdictSummary?: s
   // A validator's prose ("Repository checks failed on head") is a headline, not a finding: without
   // its checks there is nothing to carry, so the card recommends nothing rather than echo it.
   if (verdict.denial?.source != null && VALIDATOR_SOURCES.has(verdict.denial.source)) return [];
+  if (sectioned) return [];
   const prose = proseFindings(reason);
   return prose.length > 0 ? prose : proseFindings(verdictSummary);
 }
