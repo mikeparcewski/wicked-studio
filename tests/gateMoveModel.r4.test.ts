@@ -269,6 +269,20 @@ describe('failingItems — a sectioned review (R4)', () => {
     expect(failingItems(v, text)).toEqual(['src/auth.ts:12 logs the password in clear text.']);
   });
 
+  it('heading edge cases: "Confirmed security issues:" fails, inline "- **Verified:** …" passes, colonless "### Critical" outranks a Concern (Copilot)', () => {
+    const read = (body: string[]): string[] => {
+      const text = ["the evaluator's verdict is FAIL", 'Findings', ...body, 'VERDICT: FAIL'].join('\n');
+      return failingItems(gateVerdictFor(events(text), 2, NOT_PASS_PROMPT), text);
+    };
+    expect(read(['Confirmed security issues:', '- src/auth.ts:12 logs the token.'])).toEqual(['src/auth.ts:12 logs the token.']);
+    expect(read(['- **Verified:** src/math.ts validates all arguments.', '- test/math.test.ts lacks the equal-bounds case.'])).toEqual([
+      'test/math.test.ts lacks the equal-bounds case.',
+    ]);
+    expect(read(['### Concern:', '- the README wording is loose.', '### Critical', '- the min === max case is untested.'])).toEqual([
+      'the min === max case is untested.',
+    ]);
+  });
+
   it('an unsectioned review keeps today’s reading (bullets, frame lines dropped)', () => {
     const plain = "the evaluator's verdict is FAIL\nReviewed the fix.\n- the regression test is missing\nVERDICT: FAIL";
     const v = gateVerdictFor(events(plain), 2, NOT_PASS_PROMPT);

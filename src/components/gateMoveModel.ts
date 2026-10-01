@@ -94,7 +94,10 @@ const FAILING_SEVERITY = /^(?:critical|blockers?|blocking|must[- ]fix|high|major
  *  governed-worker contract — FAIL needs a Critical or a CONDITIONS list; Copilot). */
 const MUST_FIX = /^(?:critical|blockers?|blocking|must[- ]fix|high|major|conditions?)\b/i;
 /** Groups that are explicitly NOT failures: what the reviewer verified, praised or only suggests. */
-const PASSING_GROUP = /^(?:verified|confirmed|pass(?:es|ed|ing)?|strengths?|what (?:works|passed)|ok|good|suggestions?|nits?|non[- ]blocking|optional)\b/i;
+const PASSING_GROUP = /^(?:(?:verified|confirmed)(?:\s+(?:from|against|in|by|on|with)\b.*)?|pass(?:es|ed|ing)?|strengths?|what (?:works|passed)|ok|good|suggestions?|nits?|non[- ]blocking(?:\s+(?:notes?|suggestions?))?|optional(?:\s+(?:notes?|suggestions?))?)$/i;
+/** A passing lead that carries its item on the same line: `Verified: src/math.ts validates…`,
+ *  `- **Suggestion:** rename it` — the item is a pass, never a finding (Copilot). */
+const INLINE_PASSING = /^(?:verified|confirmed|suggestions?|nits?|non[- ]blocking|optional)\s*[:—–]\s*\S/i;
 /** An inline severity lead, on {@link plain} text: "Critical — src/text.ts:26 slices …",
  *  "Concern: …". A bare "Critical:" has no body and is a sub-heading instead. */
 const INLINE_SEVERITY = /^((?:critical|blockers?|blocking|must[- ]fix|high|major|concerns?|conditions?)\b[^—:]*?)(?:\s*[—–:]|\s+-)\s*(.*\S)\s*$/i;
@@ -140,6 +143,15 @@ function findingsSection(text: string | null | undefined): string[] | null {
  * it has one that names no failure — then the rest of the report (Commands run, evidence) is still
  * not a finding (codex review, HIGH).
  */
+/** The text of a Findings sub-heading, or `null`: a non-bullet line ending in a colon, or a
+ *  Markdown `#` heading with or without one (`### Critical`) — codex review; Copilot. */
+function subHeadingOf(raw: string): string | null {
+  const t = plain(raw);
+  const m = SUB_HEAD.exec(t);
+  if (m !== null) return m[1]!.trim();
+  return /^#{1,6}\s/.test(raw.trim()) && t !== '' && !/[.!?]$/.test(t) ? t : null;
+}
+
 /** What a Findings sub-heading opens: a failing group (and whether it is the must-fix tier), a
  *  passing one, or a neutral one. */
 function groupOf(head: string): { group: 'failing' | 'passing' | 'other'; groupMust: boolean } {
@@ -182,11 +194,13 @@ function findingsItems(text: string | null | undefined): string[] | null {
     // "- Critical: boundary handling is fixed." or a nested "- Critical:" sub-heading under
     // "Verified:" is still part of the pass (codex review, MEDIUM; Copilot).
     if (bullet !== null && group === 'passing') continue;
+    // `- **Verified:** src/math.ts validates…` is a pass carried inline (Copilot).
+    if (bullet !== null && INLINE_PASSING.test(plain(bullet[1]!))) continue;
     // A bulleted sub-heading (`- **Verified:**`, `- Critical:`) opens a group like a plain one;
     // its nested bullets are the deeper-indented ones that follow (codex review; Copilot).
-    const bulletHead = bullet !== null ? SUB_HEAD.exec(plain(bullet[1]!)) : null;
-    if (bulletHead !== null && bulletHead[1]!.length <= 80) {
-      ({ group, groupMust } = groupOf(bulletHead[1]!.trim()));
+    const bulletHead = bullet !== null ? subHeadingOf(bullet[1]!) : null;
+    if (bulletHead !== null && bulletHead.length <= 80) {
+      ({ group, groupMust } = groupOf(bulletHead));
       headIndent = indent;
       continue;
     }
@@ -198,6 +212,7 @@ function findingsItems(text: string | null | undefined): string[] | null {
       push(allBullets, inline !== null ? inline[2]! : body);
       continue;
     }
+    if (INLINE_PASSING.test(plain(l))) continue;
     const inline = INLINE_SEVERITY.exec(plain(l));
     if (inline !== null) {
       // A severity-led LINE (not a bullet) is a new finding at the section's top level, the way
@@ -208,9 +223,9 @@ function findingsItems(text: string | null | undefined): string[] | null {
       failing(inline[2]!, groupMust);
       continue;
     }
-    const sub = SUB_HEAD.exec(plain(l));
+    const sub = subHeadingOf(l);
     if (sub !== null) {
-      ({ group, groupMust } = groupOf(sub[1]!.trim()));
+      ({ group, groupMust } = groupOf(sub));
       headIndent = null;
       continue;
     }
