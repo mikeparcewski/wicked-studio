@@ -172,6 +172,16 @@ function findingsItems(text: string | null | undefined): string[] | null {
     const indent = raw.length - raw.trimStart().length;
     const l = raw.trim();
     const bullet = BULLET.exec(l);
+    if (bullet !== null && headIndent !== null && indent <= headIndent) {
+      // Back at a bulleted sub-heading's own level: this bullet is outside its group.
+      group = null;
+      groupMust = false;
+      headIndent = null;
+    }
+    // A "Verified …" / Suggestion group's bullets are never failures, whatever they lead with —
+    // "- Critical: boundary handling is fixed." or a nested "- Critical:" sub-heading under
+    // "Verified:" is still part of the pass (codex review, MEDIUM; Copilot).
+    if (bullet !== null && group === 'passing') continue;
     // A bulleted sub-heading (`- **Verified:**`, `- Critical:`) opens a group like a plain one;
     // its nested bullets are the deeper-indented ones that follow (codex review; Copilot).
     const bulletHead = bullet !== null ? SUB_HEAD.exec(plain(bullet[1]!)) : null;
@@ -180,17 +190,7 @@ function findingsItems(text: string | null | undefined): string[] | null {
       headIndent = indent;
       continue;
     }
-    if (bullet !== null && headIndent !== null && indent <= headIndent) {
-      // Back at the sub-heading's own level: this bullet is outside its group.
-      group = null;
-      groupMust = false;
-      headIndent = null;
-    }
     if (bullet !== null) {
-      // A "Verified …" / Suggestion group's bullets are never failures, whatever word they lead
-      // with — "- Critical: boundary handling is fixed." under "Verified:" is a pass (codex review,
-      // MEDIUM; Copilot).
-      if (group === 'passing') continue;
       const body = bullet[1]!;
       const inline = INLINE_SEVERITY.exec(plain(body));
       if (inline !== null) failing(inline[2]!, MUST_FIX.test(inline[1]!));
