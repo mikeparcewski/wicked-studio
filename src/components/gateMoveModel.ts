@@ -177,6 +177,8 @@ const FAILING_SEVERITY = /^(?:critical|blockers?|blocking|must[- ]fix|high|major
 const MUST_FIX = /^(?:critical|blockers?|blocking|must[- ]fix|high|major|conditions?)\b/i;
 /** Groups that are explicitly NOT failures: what the reviewer verified, praised or only suggests. */
 const PASSING_GROUP = /^(?:(?:verified|confirmed)(?:\s+(?:from|against|in|by|on|with)\b.*)?|pass(?:es|ed|ing)?|strengths?|what (?:works|passed)|ok|good|suggestions?|nits?|non[- ]blocking(?:\s+(?:notes?|suggestions?))?|optional(?:\s+(?:notes?|suggestions?))?)$/i;
+/** A passing group named bare, no colon or `#`: `Verified`, `Suggestions`. */
+const BARE_PASSING_HEAD = /^(?:verified|confirmed|suggestions?|nits?|strengths?|non[- ]blocking(?:\s+(?:notes?|suggestions?))?)$/i;
 /** A passing lead that carries its item on the same line: `Verified: src/math.ts validates…`,
  *  `- **Suggestion:** rename it` — the item is a pass, never a finding (Copilot). */
 const INLINE_PASSING = /^(?:verified|confirmed|suggestions?|nits?|non[- ]blocking|optional)\s*[:—–]\s*\S/i;
@@ -280,6 +282,8 @@ function subHeadingOf(raw: string): string | null {
   const t = plain(raw);
   const m = SUB_HEAD.exec(t);
   if (m !== null) return m[1]!.trim();
+  // A bare passing name on its own line (`Verified`, `Suggestions`) heads its group too (Copilot).
+  if (BARE_PASSING_HEAD.test(t)) return t;
   return /^#{1,6}\s/.test(raw.trim()) && t !== '' && !/[.!?]$/.test(t) ? t : null;
 }
 

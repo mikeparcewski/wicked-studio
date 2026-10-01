@@ -252,3 +252,14 @@ describe('failingItems — Copilot review, round 2', () => {
     expect(read(text)).toEqual([FINDING]);
   });
 });
+
+describe('failingItems — Copilot review, round 3', () => {
+  it('bare "Verified" / "Suggestions" headings exclude their bullets, sectioned or not', () => {
+    for (const head of ['Verified', 'Suggestions', 'Suggestion']) {
+      const unsectioned = ["the evaluator's verdict is FAIL", `- ${FINDING}`, head, '- src/math.ts validates its input.', 'VERDICT: FAIL'].join('\n');
+      expect(read(unsectioned)).toEqual([FINDING]);
+      const sectioned = ["the evaluator's verdict is FAIL", 'Findings', `- ${FINDING}`, head, '- src/math.ts validates its input.', 'VERDICT: FAIL'].join('\n');
+      expect(read(sectioned)).toEqual([FINDING]);
+    }
+  });
+});
