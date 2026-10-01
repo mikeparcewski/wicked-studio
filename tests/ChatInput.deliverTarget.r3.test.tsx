@@ -174,3 +174,19 @@ describe('the launch deliver checkbox label reads the same origin preflight (R3b
     expect(label()).toBe('Deliver when done');
   });
 });
+
+describe('R3b — an origin crew answers as "unknown" (Copilot)', () => {
+  it('reads "Deliver when done" once the unknown answer has landed', async () => {
+    const spy = vi.spyOn(client.api, 'getDeliverTarget').mockResolvedValue({
+      repo: 'shipproof-local', origin: 'unknown', githubRepo: null,
+      sentence: 'Pushes the run branch to origin and opens a pull request; merge stays human.',
+    });
+    const user = userEvent.setup();
+    render(<ChatInput runId={null} runStatus={null} onLaunched={vi.fn()} />);
+    await bind(user);
+    await waitFor(() => expect(spy).toHaveBeenCalledWith('shipproof-local'));
+    // The answer has landed: the notice carries crew's sentence for it.
+    await waitFor(() => expect(screen.getByTestId('deliver-notice').textContent).toContain('pushes the run branch to origin'));
+    expect(screen.getByTestId('deliver-toggle-row').textContent?.trim()).toBe('Deliver when done');
+  });
+});
