@@ -12,6 +12,7 @@ import * as client from '../src/api/client.js';
 import { DEFAULT_COMPOSER_PREFS, useComposerPrefsStore } from '../src/store/composerPrefs.js';
 import { clearRetryPrefill } from '../src/store/retryPrefill.js';
 import { deliverPreview } from '../src/board/undoQueue.js';
+import type { DeliverTargetResponse } from '../src/api/types.js';
 
 const LOCAL_SENTENCE =
   'Pushes the run branch to origin (/srv/proof/remote.git) — a local path, so no pull request can be opened against it: unless another remote in this checkout is a GitHub repository gh resolves, the pushed branch IS the delivery.';
@@ -137,5 +138,55 @@ describe('the deliver approve toast says what the gate card says (R1/R3)', () =>
     expect(deliverPreview({ branch: 'wicked/r1', repo: 'acme/x' })).toBe(
       "Pushes branch wicked/r1 to the origin of acme/x, under the daemon's GitHub sign-in; a pull request opens only if that origin is a GitHub repository.",
     );
+  });
+});
+
+// R3b (ship-prove-4): the notice was right, but the checkbox right above it still read "Open a PR
+// when done" on a local origin, where no pull request can be opened. The label now reads off the
+// same origin preflight as the notice: it promises a PR only on a GitHub origin.
+describe('the launch deliver checkbox label reads the same origin preflight (R3b)', () => {
+  const label = (): string => screen.getByTestId('deliver-toggle-row').textContent?.trim() ?? '';
+  const cases: Array<[string, DeliverTargetResponse | null, string]> = [
+    ['a GitHub origin', { repo: 'shipproof-local', origin: 'github', githubRepo: 'mikeparcewski/shipproof-scratch-20261001', sentence: GH_SENTENCE }, 'Open a PR when done'],
+    ['a LOCAL origin', { repo: 'shipproof-local', origin: 'local', githubRepo: null, sentence: LOCAL_SENTENCE }, 'Push the branch when done'],
+    ['a non-GitHub host', { repo: 'shipproof-local', origin: 'other', githubRepo: null, sentence: 'Pushes the run branch to origin (git.example.com) and opens a pull request only if gh resolves git.example.com as a GitHub host it is logged in to; otherwise no pull request is opened and the pushed branch IS the delivery. Merge stays human.' }, 'Push the branch when done'],
+    ['no origin remote', { repo: 'shipproof-local', origin: 'none', githubRepo: null, sentence: 'Pushes the run branch to origin — but this repository has no `origin` remote, so the push will fail and nothing will be delivered. Add the remote first.' }, 'Deliver when done (needs an origin remote)'],
+    ['an origin the daemon cannot read', null, 'Deliver when done'],
+  ];
+  for (const [what, view, want] of cases) {
+    it(`${what}: "${want}"`, async () => {
+      vi.spyOn(client.api, 'getDeliverTarget').mockResolvedValue(view);
+      const user = userEvent.setup();
+      render(<ChatInput runId={null} runStatus={null} onLaunched={vi.fn()} />);
+      await bind(user);
+      await waitFor(() => expect(screen.getByTestId('deliver-notice').dataset.deliverOrigin).toBe(view?.origin ?? 'unknown'));
+      expect(label()).toBe(want);
+      if (want !== 'Open a PR when done') expect(label()).not.toMatch(/\bPR\b|pull request/i);
+      if (view?.origin === 'none') expect(label()).not.toMatch(/^Push/);
+    });
+  }
+
+  it('while the origin is still being read, the label promises no PR', async () => {
+    vi.spyOn(client.api, 'getDeliverTarget').mockReturnValue(new Promise(() => {}));
+    const user = userEvent.setup();
+    render(<ChatInput runId={null} runStatus={null} onLaunched={vi.fn()} />);
+    await bind(user);
+    expect(label()).toBe('Deliver when done');
+  });
+});
+
+describe('R3b — an origin crew answers as "unknown" (Copilot)', () => {
+  it('reads "Deliver when done" once the unknown answer has landed', async () => {
+    const spy = vi.spyOn(client.api, 'getDeliverTarget').mockResolvedValue({
+      repo: 'shipproof-local', origin: 'unknown', githubRepo: null,
+      sentence: 'Pushes the run branch to origin and opens a pull request; merge stays human.',
+    });
+    const user = userEvent.setup();
+    render(<ChatInput runId={null} runStatus={null} onLaunched={vi.fn()} />);
+    await bind(user);
+    await waitFor(() => expect(spy).toHaveBeenCalledWith('shipproof-local'));
+    // The answer has landed: the notice carries crew's sentence for it.
+    await waitFor(() => expect(screen.getByTestId('deliver-notice').textContent).toContain('pushes the run branch to origin'));
+    expect(screen.getByTestId('deliver-toggle-row').textContent?.trim()).toBe('Deliver when done');
   });
 });

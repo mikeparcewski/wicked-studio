@@ -404,6 +404,22 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     };
   }, [targetRepoRef, launchKind]);
   const deliverTargetView = deliverTarget !== null && deliverTarget.repoRef === targetRepoRef ? deliverTarget.view : null;
+  /**
+   * R3b (ship-prove-4): the delivery checkbox's label, off the SAME origin preflight as the notice
+   * below it. Only a GitHub origin is promised a pull request; a local or other-host origin pushes
+   * the branch (crew's sentence says when a PR may still follow); a repo with no origin remote, or
+   * an origin not read yet, is promised neither.
+   */
+  const deliverToggleLabel =
+    deliverTargetView === null || deliverTargetView.origin === 'unknown'
+      ? 'Deliver when done'
+      : deliverTargetView.origin === 'github'
+        ? 'Open a PR when done'
+        : deliverTargetView.origin === 'none'
+          ? // No `origin` remote: crew says the push will fail, so the label promises no push either
+            // (codex review).
+            'Deliver when done (needs an origin remote)'
+          : 'Push the branch when done';
   /** "No repository attached" — the resolver's verdict, the same one the wire body reads. */
   const noRepoAttached = target.kind === 'none';
   /** The composer row's repo picker shows the resolved target (D2). */
@@ -1514,7 +1530,10 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
         </div>
       )}
 
-      {/* ── "Open a PR when done" (crew#393) — the per-launch delivery toggle.
+      {/* ── The per-launch delivery toggle (crew#393) — "Open a PR when done" on a
+          GitHub origin, "Push the branch when done" on a local or other-host origin,
+          a neutral "Deliver when done…" with no origin remote or before the origin is
+          read (R3b, deliverToggleLabel).
           Rendered exactly where the wire key can go (repo-scoped build work);
           hidden for repo-less/freeform/system launches. Defaults to the
           persisted preference (ships ON); the override lasts one composer. ── */}
@@ -1531,7 +1550,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
             onChange={(e) => setDeliverOverride(e.target.checked)}
             style={{ accentColor: 'var(--accent)' }}
           />
-          Open a PR when done
+          {deliverToggleLabel}
         </label>
       )}
 
