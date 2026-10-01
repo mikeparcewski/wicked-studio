@@ -121,6 +121,21 @@ export type LaunchBodyWithDeliver = Omit<LaunchRunBody, 'deliver'> & {
   plan?: import('./teamPlan.js').LaunchPlan;
 };
 
+// ── GET /repos/:id/deliver-target (R3, ship-prove-3) ──────────────────────────
+//
+// Hand-declared like the views above: `wicked-crew-api-types` 0.69.0 carries it
+// (`DeliverTargetResponse`), the version studio installs predates it. Where a
+// delivering launch on the repo would push, read by the SAME origin preflight
+// the deliver gate card uses (crew#730); `sentence` is that card's own target
+// sentence for a run not yet started. A daemon without the route answers 404 —
+// the client reads that as `null` ("could not say"), never as an origin.
+export interface DeliverTargetResponse {
+  repo: string;
+  origin: 'github' | 'local' | 'other' | 'none' | 'unknown';
+  githubRepo: string | null;
+  sentence: string;
+}
+
 // ── GET /runs/:id/acceptance (AW-14 / AW-18 — arch-R13a + R16) ────────────────
 //
 // Hand-declared, same contract as SessionDelivery above: `wicked-crew-api-types`

@@ -174,8 +174,9 @@ describe('ChatInput target repo (F-028)', () => {
     expect(screen.queryByTestId('launch-target-reason')).toBeNull();
     const notice = screen.getByTestId('deliver-notice');
     expect(notice.dataset.deliverState).toBe('on');
-    // `git_url: git@github.com:acme/wicked-studio.git` → owner/repo.
-    expect(notice.textContent).toMatch(/→ opens a PR on acme\/wicked-studio\./);
+    // `git_url: git@github.com:acme/wicked-studio.git` → owner/repo. No deliver-target answer is
+    // mocked here, so the notice states the PR as the condition it is (R3).
+    expect(notice.textContent).toMatch(/→ opens a PR on acme\/wicked-studio if its origin is a GitHub repository\./);
     expect(screen.getByTestId('launch-confirm-target').textContent).toBe('acme/wicked-studio');
 
     await user.type(screen.getByTestId('launch-problem'), 'fix issue #219');

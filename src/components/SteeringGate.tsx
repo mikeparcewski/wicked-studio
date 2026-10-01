@@ -29,7 +29,7 @@ import { usePhaseSelection } from '../hooks/useLaunchPlan.js';
 import { usePlanGate } from '../store/planGates.js';
 import { PhasePicker } from './PhasePicker.js';
 import { PlanGateSummary } from './PlanGateSummary.js';
-import { INSTRUCTION_SEP, creatorUnitBefore, escalationSummaryFor, isDeliverGate, recommendGateMove, type GateMove } from './gateMoveModel.js';
+import { INSTRUCTION_SEP, creatorUnitBefore, deliverTargetOf, escalationSummaryFor, isDeliverGate, recommendGateMove, type GateMove } from './gateMoveModel.js';
 import { recordLabel, ruleOffer, seatRecord } from './gateTrustModel.js';
 import { useGateTrust } from '../hooks/useGateTrust.js';
 import { useProjectsStore } from '../store/projects.js';
@@ -441,7 +441,12 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
   // so in its undo toast — the branch (the diff's own, else the run's) and the repository.
   const pushes = deliverGate || hasLift || trust?.gateKind === 'deliver';
   const deliverTarget = pushes
-    ? { branch: runDiff?.branch ?? delivery?.branch ?? null, repo: delivery?.repo ?? null }
+    ? {
+        branch: runDiff?.branch ?? delivery?.branch ?? null,
+        repo: delivery?.repo ?? null,
+        // R1/R3: the toast repeats the card the operator consented to, not a generic PR promise.
+        card: deliverGate ? deliverTargetOf(units ?? EMPTY_UNITS, ord) : null,
+      }
     : null;
   const approve = (): Promise<void> =>
     run(() => commitGateDecision(runId, { approve: true }, { deliver: deliverTarget }), { kind: 'approve' });

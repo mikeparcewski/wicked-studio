@@ -504,6 +504,17 @@ export const api = {
   getRepoGitHistory: (repoId: string) =>
     apiFetch<{ commits: import('./types.js').GitCommit[] }>(`/repos/${encodeURIComponent(repoId)}/git-history`),
 
+  /** R3: where a delivering launch on this repo would push (crew's deliver-gate origin
+   *  preflight). `null` when the daemon cannot say — an older crew without the route, or any
+   *  error — so the caller states a condition, never a promise. */
+  getDeliverTarget: async (repoId: string): Promise<import('./types.js').DeliverTargetResponse | null> => {
+    try {
+      return await apiFetch<import('./types.js').DeliverTargetResponse>(`/repos/${encodeURIComponent(repoId)}/deliver-target`);
+    } catch {
+      return null;
+    }
+  },
+
   /** Top contributors for a repo by commit count (via git shortlog). */
   getRepoContributors: (repoId: string) =>
     apiFetch<{ contributors: import('./types.js').GitContributor[] }>(`/repos/${encodeURIComponent(repoId)}/contributors`),

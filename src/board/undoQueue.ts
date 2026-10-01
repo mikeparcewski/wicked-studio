@@ -254,10 +254,17 @@ export function decisionPreview(verb: DecisionVerb, count: number, withNote = fa
 export interface DeliverTarget {
   branch: string | null;
   repo: string | null;
+  /** The deliver unit's gate-card target sentence (`deliverTargetOf`) — what THIS push will do on
+   *  this origin. When present the toast says exactly that (R1/R3): the generic line below would
+   *  promise a pull request on a local origin, and name crew's registry label, not the repo. */
+  card?: string | null;
 }
 
-/** The deliver approve's preview: "Pushes branch `wicked/abc` and opens a PR on wicked-crew, as …". */
+/** The deliver approve's preview: the gate card's own sentence, else "Pushes branch `wicked/abc`
+ *  and opens a PR on wicked-crew, as …". */
 export function deliverPreview(t: DeliverTarget): string {
+  const card = (t.card ?? '').trim();
+  if (card !== '') return card;
   const branch = t.branch !== null && t.branch !== '' ? `branch ${t.branch}` : 'the run branch';
   const repo = t.repo !== null && t.repo !== '' ? ` on ${t.repo}` : '';
   return `Pushes ${branch} and opens a pull request${repo}, under the daemon's GitHub sign-in.`;
