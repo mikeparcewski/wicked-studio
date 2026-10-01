@@ -40,14 +40,20 @@ interface SuccessorsFile {
   successors: Record<string, string>;
 }
 
-/** Every selector an inventory declares: static ids and dynamic `*` patterns. */
-function declared(inv: Inventory): Set<string> {
-  return new Set([...inv.static.map((e) => e.testId), ...inv.dynamic.map((e) => e.pattern)]);
+/**
+ * Every selector an inventory declares, keyed by kind: a static id and a dynamic pattern with
+ * the same text select differently, so swapping one for the other is a removal.
+ */
+function declared(inv: Inventory): Map<string, string> {
+  return new Map([
+    ...inv.static.map((e): [string, string] => [`static:${e.testId}`, e.testId]),
+    ...inv.dynamic.map((e): [string, string] => [`dynamic:${e.pattern}`, e.pattern]),
+  ]);
 }
 
 /**
  * The testids `base` declares and `head` does not, minus those with a successor `head`
- * declares. A successor that is itself missing does not excuse the removal.
+ * declares (as either kind). A successor that is itself missing does not excuse the removal.
  */
 function removalsWithoutSuccessor(
   base: Inventory,
@@ -55,11 +61,13 @@ function removalsWithoutSuccessor(
   successors: Record<string, string>,
 ): string[] {
   const now = declared(head);
+  const nowIds = new Set(now.values());
   return [...declared(base)]
-    .filter((id) => !now.has(id))
+    .filter(([key]) => !now.has(key))
+    .map(([, id]) => id)
     .filter((id) => {
       const next = successors[id];
-      return typeof next !== 'string' || !now.has(next);
+      return typeof next !== 'string' || !nowIds.has(next);
     })
     .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 }
@@ -101,6 +109,11 @@ describe('removalsWithoutSuccessor', () => {
 
   it('rejects a successor the new tree does not declare', () => {
     expect(removalsWithoutSuccessor(inv(['old']), inv(['other']), { old: 'new' })).toEqual(['old']);
+  });
+
+  it('flags a dynamic pattern replaced by the same string as a static id (and vice versa)', () => {
+    expect(removalsWithoutSuccessor(inv([], ['gate-*']), inv(['gate-*']), {})).toEqual(['gate-*']);
+    expect(removalsWithoutSuccessor(inv(['gate-*']), inv([], ['gate-*']), {})).toEqual(['gate-*']);
   });
 
   it('ignores additions and kept ids', () => {
