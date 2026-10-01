@@ -390,6 +390,10 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
    */
   const [deliverTarget, setDeliverTarget] = useState<{ repoRef: string; view: DeliverTargetResponse | null } | null>(null);
   useEffect(() => {
+    // Every lookup starts from "could not say": a previous answer for this repo (A → B → A, or a
+    // round trip through another launch kind) is never shown while a fresh read is in flight —
+    // the origin may have changed since (codex review, MEDIUM).
+    setDeliverTarget(null);
     if (targetRepoRef === null || launchKind !== 'build') return;
     let live = true;
     void api.getDeliverTarget(targetRepoRef).then((view) => {

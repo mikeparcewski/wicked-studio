@@ -90,6 +90,42 @@ describe('the launch deliver notice reads the gate\'s origin preflight (R3)', ()
   });
 });
 
+describe('a repeat lookup never shows the previous answer while a fresh read is in flight (codex review, MEDIUM)', () => {
+  it('A → B (in flight) → A: while A is re-read, the notice is the condition, not A\'s old sentence', async () => {
+    vi.mocked(client.api.listRepos).mockResolvedValue({
+      repos: [
+        { id: 'shipproof-local', name: 'shipproof-local', root_path: '/srv/proof/repo-local' } as never,
+        { id: 'other', name: 'other', root_path: '/srv/proof/other' } as never,
+      ],
+    });
+    const spy = vi
+      .spyOn(client.api, 'getDeliverTarget')
+      .mockResolvedValueOnce({ repo: 'shipproof-local', origin: 'local', githubRepo: null, sentence: LOCAL_SENTENCE })
+      // B's read is still in flight when the operator goes back to A, and so is A's re-read.
+      .mockReturnValueOnce(new Promise(() => {}))
+      .mockReturnValueOnce(new Promise(() => {}));
+    const user = userEvent.setup();
+    render(<ChatInput runId={null} runStatus={null} onLaunched={vi.fn()} />);
+    await bind(user);
+    await waitFor(() => expect(screen.getByTestId('deliver-notice').dataset.deliverOrigin).toBe('local'));
+    const toggle = async (id: string): Promise<void> => {
+      await user.click(screen.getByRole('button', { name: /open launch options/i }));
+      await user.click(screen.getByTestId(`launch-repo-${id}`));
+      await user.click(screen.getByRole('button', { name: /open launch options/i }));
+    };
+    await toggle('shipproof-local');
+    await toggle('other');
+    await waitFor(() => expect(spy).toHaveBeenCalledTimes(2));
+    await toggle('other');
+    await toggle('shipproof-local');
+    await waitFor(() => expect(spy).toHaveBeenCalledTimes(3));
+    const notice = screen.getByTestId('deliver-notice');
+    expect(notice.dataset.deliverOrigin).toBe('unknown');
+    expect(notice.textContent).toContain('if its origin is a GitHub repository');
+    expect(notice.textContent).not.toContain('no pull request can be opened');
+  });
+});
+
 describe('the deliver approve toast says what the gate card says (R1/R3)', () => {
   it('leads with the card sentence when the gate carries one — no PR promised on a local origin', () => {
     const card = LOCAL_SENTENCE.replace('the run branch', 'branch wicked/r1');
