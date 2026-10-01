@@ -230,6 +230,19 @@ describe('failingItems — a sectioned review (R4)', () => {
     expect(failingItems(gateVerdictFor(events(onlyConcern), 2, NOT_PASS_PROMPT), onlyConcern)).toEqual(['the README wording is loose.']);
   });
 
+  it('a top-level bullet after a bulleted Verified group is outside it (Copilot)', () => {
+    const text = [
+      "the evaluator's verdict is FAIL",
+      'Findings',
+      '- **Verified:**',
+      '  - src/math.ts:24 validates all three arguments.',
+      '- test/math.test.ts lacks the equal-bounds case.',
+      'VERDICT: FAIL',
+    ].join('\n');
+    const v = gateVerdictFor(events(text), 2, NOT_PASS_PROMPT);
+    expect(failingItems(v, text)).toEqual(['test/math.test.ts lacks the equal-bounds case.']);
+  });
+
   it('an unsectioned review keeps today’s reading (bullets, frame lines dropped)', () => {
     const plain = "the evaluator's verdict is FAIL\nReviewed the fix.\n- the regression test is missing\nVERDICT: FAIL";
     const v = gateVerdictFor(events(plain), 2, NOT_PASS_PROMPT);

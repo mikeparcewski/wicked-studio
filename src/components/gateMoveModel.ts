@@ -78,7 +78,7 @@ function proseFindings(text: string | null | undefined): string[] {
  *  so `### Findings` and `Findings` read alike (codex review). Markers inside the body stay —
  *  `src/__tests__/math.test.ts` is a path, not emphasis (Copilot). */
 function plain(line: string): string {
-  const t = line.replace(/^#{1,6}\s*/, '').trim();
+  const t = line.trim().replace(/^#{1,6}\s*/, '').trim();
   const m = /^(\*\*|__)(.+?)\1(.*)$/.exec(t);
   return (m !== null ? `${m[2]}${m[3]}` : t).trim();
 }
@@ -112,7 +112,9 @@ function unlink(text: string): string {
 
 /** The lines of the Findings section of a sectioned report, or `null` when it has none. */
 function findingsSection(text: string | null | undefined): string[] | null {
-  const all = lines(text);
+  // Indentation is KEPT (trailing whitespace only is dropped): a nested bullet under a bulleted
+  // sub-heading is told from a top-level sibling by it (Copilot).
+  const all = (text ?? '').replace(/\r/g, '').split('\n').map((l) => l.trimEnd()).filter((l) => l.trim() !== '');
   let start = -1;
   for (let i = 0; i < all.length; i++) {
     const m = SECTION_HEAD.exec(plain(all[i]!));
@@ -122,7 +124,7 @@ function findingsSection(text: string | null | undefined): string[] | null {
   const out: string[] = [];
   for (let i = start; i < all.length; i++) {
     const l = all[i]!;
-    if (SECTION_HEAD.test(plain(l)) || VERDICT_LINE.test(plain(l))) break;
+    if (SECTION_HEAD.test(plain(l)) || VERDICT_LINE.test(plain(l.trim()))) break;
     out.push(l);
   }
   return out;
@@ -163,14 +165,26 @@ function findingsItems(text: string | null | undefined): string[] | null {
     push(severe, item);
     if (must) push(mustFix, item);
   };
-  for (const l of section) {
+  /** The indent of the bulleted sub-heading whose group is open, or `null` (a plain heading's
+   *  group, or none): a bullet back at that indent or shallower is a sibling, not its child. */
+  let headIndent: number | null = null;
+  for (const raw of section) {
+    const indent = raw.length - raw.trimStart().length;
+    const l = raw.trim();
     const bullet = BULLET.exec(l);
-    // A bulleted sub-heading (`- **Verified:**`, `- Critical:`) opens a group like a plain one; the
-    // nested bullets under it arrive here already un-indented (codex review).
+    // A bulleted sub-heading (`- **Verified:**`, `- Critical:`) opens a group like a plain one;
+    // its nested bullets are the deeper-indented ones that follow (codex review; Copilot).
     const bulletHead = bullet !== null ? SUB_HEAD.exec(plain(bullet[1]!)) : null;
     if (bulletHead !== null && bulletHead[1]!.length <= 80) {
       ({ group, groupMust } = groupOf(bulletHead[1]!.trim()));
+      headIndent = indent;
       continue;
+    }
+    if (bullet !== null && headIndent !== null && indent <= headIndent) {
+      // Back at the sub-heading's own level: this bullet is outside its group.
+      group = null;
+      groupMust = false;
+      headIndent = null;
     }
     if (bullet !== null) {
       // A "Verified …" / Suggestion group's bullets are never failures, whatever word they lead
@@ -190,12 +204,14 @@ function findingsItems(text: string | null | undefined): string[] | null {
       // the run-2 report wrote "Critical — …": it ends any group above it.
       group = 'failing';
       groupMust = MUST_FIX.test(inline[1]!);
+      headIndent = null;
       failing(inline[2]!, groupMust);
       continue;
     }
     const sub = SUB_HEAD.exec(plain(l));
     if (sub !== null) {
       ({ group, groupMust } = groupOf(sub[1]!.trim()));
+      headIndent = null;
       continue;
     }
     if (group !== 'passing' && !FRAME.test(l)) push(prose, l);
