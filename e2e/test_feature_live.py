@@ -1695,8 +1695,9 @@ def gate_wire_check(entry: dict, run_id: str) -> str | None:
 def card_headline(prompt: str | None) -> str:
     """What SteeringGate shows for `prompt`: `cleanPrompt()` — the text before the first `[`,
     trimmed (the bracketed remainder is folded into a "why this gate fired" disclosure the
-    `steering-prompt` element never carries) — whitespace-normalized like `inner_text()`."""
-    text = prompt or ""
+    `steering-prompt` element never carries) — whitespace-normalized like `inner_text()`. The
+    engine's ` ||| ` segment marker renders as ` — ` (N3: plumbing, never prose)."""
+    text = (prompt or "").replace(" ||| ", " — ")
     i = text.find("[")
     return re.sub(r"\s+", " ", text if i == -1 else text[:i]).strip()
 

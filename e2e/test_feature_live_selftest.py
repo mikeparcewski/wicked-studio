@@ -1759,6 +1759,8 @@ class GateClickPath(Isolated):
         self.assertEqual(tfl.card_headline("Head [note] tail"), "Head")
         self.assertEqual(tfl.card_headline("  Head  "), "Head")
         self.assertEqual(tfl.card_headline(None), "")
+        # N3: the separator renders as an em dash, exactly as SteeringGate's cleanPrompt() does.
+        self.assertEqual(tfl.card_headline("Approve: deliver — x ||| Pushes y [deliver gate]"), "Approve: deliver — x — Pushes y")
 
     def test_every_call_site_decides_on_the_daemon_prompt_and_only_clicks_the_card(self):
         src = inspect.getsource(tfl.decide_gate_on_card)

@@ -135,6 +135,18 @@ describe('one surface groups the sibling runs', () => {
     expect(cells).toContain('stranded');
   });
 
+  it('N1: a pushed snapshot row says "branch pushed" — no PR link, no stranded chip', async () => {
+    getCampaign.mockResolvedValue(campaign([
+      { id: 'n1', status: 'completed', runId: 'r1', delivery: { delivery: 'pushed', deliverBranch: 'wicked/r1', deliverRemote: '/srv/r.git' } },
+    ]));
+    board([]);
+    await waitFor(() => expect(screen.getAllByTestId('campaign-run-delivery').length).toBeGreaterThan(0));
+    const cells = screen.getAllByTestId('campaign-run-delivery').map((c) => c.textContent);
+    expect(cells).toContain('branch pushed');
+    expect(screen.queryAllByRole('link')).toHaveLength(0);
+    expect(screen.queryByTestId('campaign-stranded-chip')).toBeNull();
+  });
+
   it('the campaign DAG is a DECLARED denominator — "n of N landed", never "so far"', async () => {
     getCampaign.mockResolvedValue(campaign([
       { id: 'n1', status: 'completed', runId: 'r1' }, { id: 'n2', status: 'running' }, { id: 'n3' },

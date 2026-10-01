@@ -29,7 +29,7 @@ import { usePhaseSelection } from '../hooks/useLaunchPlan.js';
 import { usePlanGate } from '../store/planGates.js';
 import { PhasePicker } from './PhasePicker.js';
 import { PlanGateSummary } from './PlanGateSummary.js';
-import { creatorUnitBefore, escalationSummaryFor, isDeliverGate, recommendGateMove, type GateMove } from './gateMoveModel.js';
+import { INSTRUCTION_SEP, creatorUnitBefore, escalationSummaryFor, isDeliverGate, recommendGateMove, type GateMove } from './gateMoveModel.js';
 import { recordLabel, ruleOffer, seatRecord } from './gateTrustModel.js';
 import { useGateTrust } from '../hooks/useGateTrust.js';
 import { useProjectsStore } from '../store/projects.js';
@@ -93,7 +93,10 @@ function duplicateOf(move: GateMove | null, escalationGate: boolean): string | n
 export const PROMPT_CLAMP_CHARS = 320;
 
 /** Strip the bracketed architectural footnote from a workflow gate prompt. */
-function cleanPrompt(raw: string): { headline: string; footnote: string | null } {
+function cleanPrompt(rawPrompt: string): { headline: string; footnote: string | null } {
+  // N3: the engine's ` ||| ` segment marker is plumbing, never prose — an older engine printed the
+  // deliver unit's description verbatim into its gate prompt, separator included.
+  const raw = rawPrompt.split(INSTRUCTION_SEP).join(' — ');
   const bracketIdx = raw.indexOf('[');
   if (bracketIdx === -1) return { headline: raw.trim(), footnote: null };
   const closeIdx = raw.lastIndexOf(']');
@@ -587,7 +590,9 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
   // full cause appears in the headline (F-E2E-014). Non-escalation prompts carry a genuine
   // architectural footnote that belongs collapsed.
   const rawPrompt = prompt ?? 'Prompt unavailable (daemon restarted) — you can still approve or reject.';
-  const cleaned = escalationGate ? { headline: rawPrompt.trim(), footnote: null } : cleanPrompt(rawPrompt);
+  const cleaned = escalationGate
+    ? { headline: rawPrompt.split(INSTRUCTION_SEP).join(' — ').trim(), footnote: null }
+    : cleanPrompt(rawPrompt);
   // A plan gate's prompt names "manual mode" twice (its mode and its reason): once is enough (D10).
   const headline = isPlanGate ? dedupePromptClauses(cleaned.headline) : cleaned.headline;
   const footnote = cleaned.footnote;

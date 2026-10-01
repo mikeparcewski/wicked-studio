@@ -56,13 +56,17 @@ import { deliverKindOf, type IsSystemWorkflow, type RunKind } from './runMode.js
  *    reviewable work nobody lifted. WIRE-ONLY: studio never infers it (the
  *    "worktree still exists" half lives on the daemon's disk, not in the DTO),
  *    so a pre-0.18 daemon simply never produces this state.
+ *  - `pushed` — the wire's verdict (N1, api-types 0.69.0): the deliver phase PUSHED the
+ *    branch and could open no PR, because the origin is not a GitHub host gh can
+ *    resolve. The branch on the remote IS the delivery; nothing is left to lift,
+ *    so no surface may offer "open a PR" for it. WIRE-ONLY, like `stranded`.
  *  - `nothing-to-deliver` — denied because the run committed nothing (crew#318).
  *  - `failed` — denied for any other reason; the reason is rendered verbatim.
  *  - `in-flight` — the deliver phase has not resolved (`pending`/`distributed`).
  *  - `none` — this run has no deliver phase at all.
  */
 export type DeliveryState =
-  | 'none' | 'in-flight' | 'delivered' | 'stranded' | 'nothing-to-deliver' | 'failed';
+  | 'none' | 'in-flight' | 'delivered' | 'pushed' | 'stranded' | 'nothing-to-deliver' | 'failed';
 
 /**
  * What a surface may SAY — {@link DeliveryState} with `delivered` split by the
@@ -101,6 +105,11 @@ export interface Delivery {
    * for; when crew ships the field this goes non-null and the fetch stops firing.
    */
   url: string | null;
+  /**
+   * N1: where a push-only delivery put the branch — present exactly when `state` is `'pushed'`
+   * and the wire named the branch. Never inferred.
+   */
+  pushed?: { branch: string; remote: string | null };
 }
 
 /** crew#318's refusal, matched ONLY to classify — the message itself renders verbatim. */
@@ -251,10 +260,19 @@ export function deliveryOf(view: SessionView): Delivery {
   // unit's `denial_reason` still tells the richer, equally-true story.
   const state: DeliveryState =
     wire === 'delivered' ? 'delivered'
+    : wire === 'pushed' ? 'pushed'
     : wire === 'stranded' ? 'stranded'
     : unitState;
 
-  return { state, unitId: unit?.id ?? null, reason, url };
+  const pushed =
+    state === 'pushed' && typeof s.deliverBranch === 'string' && s.deliverBranch !== ''
+      ? {
+          branch: s.deliverBranch,
+          remote: typeof s.deliverRemote === 'string' && s.deliverRemote !== '' ? s.deliverRemote : null,
+        }
+      : undefined;
+
+  return { state, unitId: unit?.id ?? null, reason, url, ...(pushed !== undefined ? { pushed } : {}) };
 }
 
 /** A {@link Delivery} plus the claim it licenses and the url that licensed it. */
@@ -324,6 +342,8 @@ export const DELIVERY_LABEL: Record<DeliveryClaim, string> = {
   // (10 cancelled, 2 failed) — not one of them is going to move again.
   'in-flight':          'pending',
   'delivered':          'deliver ran',
+  // N1: the branch is on the remote and no PR exists — said as exactly that, never "PR open".
+  'pushed':             'branch pushed',
   // The daemon's own word (crew#393): completed, repo-scoped, no PR, worktree
   // still on disk. Not a failure — work waiting on a person.
   'stranded':           'stranded',
@@ -342,6 +362,9 @@ export const DELIVERY_COLOR: Record<DeliveryClaim, string> = {
   'none':               'var(--ink-dim)',
   'in-flight':          'var(--ink-muted)',
   'delivered':          'var(--ink-muted)',
+  // Not the accent (no PR exists to claim) and not amber (nothing waits on studio): the work left
+  // the machine; the next step is the forge's, by hand.
+  'pushed':             'var(--ink-body)',
   // Amber, deliberately: not `--status-fail` (nothing failed — the work is
   // sitting there, finished) and never the accent (no PR exists to claim). The
   // gate token is studio's "waiting on a person" color, which is exactly what
@@ -543,7 +566,7 @@ export function deliverySummary(
   isSystemWorkflow?: IsSystemWorkflow,
 ): string {
   const counts: Record<DeliveryClaim, number> = {
-    'none': 0, 'in-flight': 0, 'delivered': 0, 'stranded': 0, 'pr-open': 0,
+    'none': 0, 'in-flight': 0, 'delivered': 0, 'pushed': 0, 'stranded': 0, 'pr-open': 0,
     'nothing-to-deliver': 0, 'failed': 0,
   };
   for (const v of views) {
@@ -556,6 +579,9 @@ export function deliverySummary(
   const parts: string[] = [];
   if (counts['pr-open'] > 0) parts.push(`${counts['pr-open']} PR open`);
   if (counts['delivered'] > 0) parts.push(`${counts['delivered']} ran deliver`);
+  if (counts['pushed'] > 0) {
+    parts.push(`${counts['pushed']} ${counts['pushed'] === 1 ? 'branch' : 'branches'} pushed`);
+  }
   // Right after the delivered buckets — stranded is the actionable one, and its
   // wording tracks DELIVERY_LABEL exactly (crew#393: work waiting on a person).
   if (counts['stranded'] > 0) parts.push(`${counts['stranded']} stranded`);
