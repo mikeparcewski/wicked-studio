@@ -60,12 +60,21 @@ function lines(text: string | null | undefined): string[] {
  * So "Read governed-worker skill — exit 0." under Commands run is never a finding, whatever else
  * the report holds — with or without a Findings section.
  */
+/** A line's Markdown heading level (`## X` → 2), or 0 when it is not a `#` heading. */
+function mdLevel(line: string): number {
+  const m = /^(#{1,6})\s/.exec(line.trim());
+  return m !== null ? m[1]!.length : 0;
+}
+
 function outsideNonFinding(text: string | null | undefined): { bullets: string[]; prose: string[] } {
   const out = { bullets: [] as string[], prose: [] as string[] };
   let excluded = false;
   /** The indent of the heading that switched the reading off: a deeper heading (`  Test suite:`
    *  under `Commands run:`) is nested in it and stays excluded (codex review). */
   let excludedIndent = -1;
+  /** The Markdown level of that heading (0 = not a `#` heading): a deeper `###` under `## Commands
+   *  run` is nested in it too (Copilot). */
+  let excludedLevel = 0;
   /** The indent of an inline non-finding / passing bullet (`- Commands run: npm test`): its deeper
    *  children (`  - exit 0`) are part of it (Copilot). */
   let skipDeeper: number | null = null;
@@ -90,10 +99,14 @@ function outsideNonFinding(text: string | null | undefined): { bullets: string[]
       // Inside an excluded section only a real section boundary ends it: a Markdown `#` heading at
       // its level or above, or a findings heading. A deeper heading (`  Test suite:`) or a bare
       // label (`npm test:`) is part of it (codex review).
-      if (excluded && (indent > excludedIndent || !(/^#{1,6}\s/.test(body) || FINDINGS_HEAD.test(head.replace(/\s*:$/, ''))))) continue;
+      const level = mdLevel(body);
+      const boundary =
+        FINDINGS_HEAD.test(head.replace(/\s*:$/, '')) || (level > 0 && (excludedLevel === 0 || level <= excludedLevel));
+      if (excluded && (indent > excludedIndent || !boundary)) continue;
       const name = head.replace(/\s*:$/, '');
       excluded = NON_FINDING_HEAD.test(name) || PASSING_GROUP.test(name);
       excludedIndent = indent;
+      excludedLevel = level;
       continue;
     }
     if (excluded || FRAME.test(body)) continue;
@@ -207,6 +220,9 @@ function endsFindings(line: string): boolean {
  *  issues`, `Minor findings`, `Resolved findings` (Copilot): a boundary, never a failure section. */
 const PASSING_FINDINGS = /^(?:\d+[.)]\s*)?(?:non[- ]blocking|optional|minor|nits?|low(?:[- ]severity)?|informational|cosmetic|resolved|addressed|fixed|no)\b/i;
 
+/** The same mark trailing a findings heading: `Findings (low)`, `Issues — minor` (Copilot). */
+const PASSING_SUFFIX = /(?:\(\s*(?:non[- ]blocking|optional|minor|nits?|low(?:[- ]severity)?|informational|cosmetic)\s*\)|[—–-]\s*(?:non[- ]blocking|optional|minor|nits?|low(?:[- ]severity)?|informational|cosmetic))\s*:?$/i;
+
 /**
  * The Findings sections of a sectioned report — each one's heading and lines — or `null` when it
  * has none. EVERY `finding(s)` heading opens one (`Critical findings` then `Major findings` both
@@ -227,7 +243,7 @@ function findingsSections(text: string | null | undefined): Array<{ head: string
     if (MARK_BULLET.test(all[i]!)) continue;
     const t = plain(all[i]!);
     const m = FINDINGS_HEAD.exec(t);
-    if (m !== null) heads.push({ at: i, finding: /^finding/i.test(m[1]!), passing: PASSING_FINDINGS.test(t) });
+    if (m !== null) heads.push({ at: i, finding: /^finding/i.test(m[1]!), passing: PASSING_FINDINGS.test(t) || PASSING_SUFFIX.test(t) });
   }
   if (heads.length === 0) return null;
   /** The lines of the section headed at `at`, up to the next of `boundary` or a non-finding one. */
@@ -336,6 +352,8 @@ function findingsItems(text: string | null | undefined): string[] | null {
     /** The indent of a PLAIN passing sub-heading (`Verified`): a deeper heading under it
      *  (`  Test suite:`) is still part of the pass (Copilot). */
     let plainPassIndent: number | null = null;
+    /** …and its Markdown level: a deeper `###` under `## Verified` is part of the pass. */
+    let plainPassLevel = 0;
     for (const raw of section.lines) {
       const indent = raw.length - raw.trimStart().length;
       const l = raw.trim();
@@ -389,13 +407,16 @@ function findingsItems(text: string | null | undefined): string[] | null {
       }
       const sub = subHeadingOf(l);
       if (sub !== null) {
+        const level = mdLevel(raw);
         const nestedInPass =
           group === 'passing' &&
-          ((headIndent !== null && indent > headIndent) || (plainPassIndent !== null && indent > plainPassIndent));
+          ((headIndent !== null && indent > headIndent) ||
+            (plainPassIndent !== null && (indent > plainPassIndent || (plainPassLevel > 0 && level > plainPassLevel))));
         if (nestedInPass) continue;
         ({ group, groupMust } = groupOf(sub));
         headIndent = null;
         plainPassIndent = group === 'passing' ? indent : null;
+        plainPassLevel = group === 'passing' ? level : 0;
         continue;
       }
       if (group !== 'passing' && !FRAME.test(l)) push(prose, l);

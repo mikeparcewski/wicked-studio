@@ -277,3 +277,20 @@ describe('failingItems — Copilot review, round 4', () => {
     expect(read(text)).toEqual([FINDING]);
   });
 });
+
+describe('failingItems — Copilot review, round 5', () => {
+  it('Markdown nesting: "### Test suite" under "## Commands run" stays excluded', () => {
+    const text = ["the evaluator's verdict is FAIL", `- ${FINDING}`, '## Commands run', '### Test suite', '- npm test passed', 'VERDICT: FAIL'].join('\n');
+    expect(read(text)).toEqual([FINDING]);
+  });
+
+  it('Markdown nesting: "### Test suite" under "## Verified" inside Findings stays in the pass', () => {
+    const text = ["the evaluator's verdict is FAIL", '# Findings', `- ${FINDING}`, '## Verified', '### Test suite', '- npm test passed', 'VERDICT: FAIL'].join('\n');
+    expect(read(text)).toEqual([FINDING]);
+  });
+
+  it('a trailing low severity marks a findings heading as not failing: "Findings (low)"', () => {
+    const text = ["the evaluator's verdict is FAIL", '## Findings', `- ${FINDING}`, '## Findings (low)', '- rename the helper', 'VERDICT: FAIL'].join('\n');
+    expect(read(text)).toEqual([FINDING]);
+  });
+});
