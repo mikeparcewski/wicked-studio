@@ -406,15 +406,20 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   const deliverTargetView = deliverTarget !== null && deliverTarget.repoRef === targetRepoRef ? deliverTarget.view : null;
   /**
    * R3b (ship-prove-4): the delivery checkbox's label, off the SAME origin preflight as the notice
-   * below it. Only a GitHub origin is promised a pull request; any other origin pushes the branch
-   * (crew's sentence says when a PR may still follow), and an origin not read yet promises neither.
+   * below it. Only a GitHub origin is promised a pull request; a local or other-host origin pushes
+   * the branch (crew's sentence says when a PR may still follow); a repo with no origin remote, or
+   * an origin not read yet, is promised neither.
    */
   const deliverToggleLabel =
     deliverTargetView === null || deliverTargetView.origin === 'unknown'
       ? 'Deliver when done'
       : deliverTargetView.origin === 'github'
         ? 'Open a PR when done'
-        : 'Push the branch when done';
+        : deliverTargetView.origin === 'none'
+          ? // No `origin` remote: crew says the push will fail, so the label promises no push either
+            // (codex review).
+            'Deliver when done (needs an origin remote)'
+          : 'Push the branch when done';
   /** "No repository attached" — the resolver's verdict, the same one the wire body reads. */
   const noRepoAttached = target.kind === 'none';
   /** The composer row's repo picker shows the resolved target (D2). */

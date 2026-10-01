@@ -150,7 +150,7 @@ describe('the launch deliver checkbox label reads the same origin preflight (R3b
     ['a GitHub origin', { repo: 'shipproof-local', origin: 'github', githubRepo: 'mikeparcewski/shipproof-scratch-20261001', sentence: GH_SENTENCE }, 'Open a PR when done'],
     ['a LOCAL origin', { repo: 'shipproof-local', origin: 'local', githubRepo: null, sentence: LOCAL_SENTENCE }, 'Push the branch when done'],
     ['a non-GitHub host', { repo: 'shipproof-local', origin: 'other', githubRepo: null, sentence: 'Pushes the run branch to origin (git.example.com) and opens a pull request only if gh resolves git.example.com as a GitHub host it is logged in to; otherwise no pull request is opened and the pushed branch IS the delivery. Merge stays human.' }, 'Push the branch when done'],
-    ['no origin remote', { repo: 'shipproof-local', origin: 'none', githubRepo: null, sentence: 'Pushes the run branch to origin — but this repository has no `origin` remote, so the push will fail and nothing will be delivered. Add the remote first.' }, 'Push the branch when done'],
+    ['no origin remote', { repo: 'shipproof-local', origin: 'none', githubRepo: null, sentence: 'Pushes the run branch to origin — but this repository has no `origin` remote, so the push will fail and nothing will be delivered. Add the remote first.' }, 'Deliver when done (needs an origin remote)'],
     ['an origin the daemon cannot read', null, 'Deliver when done'],
   ];
   for (const [what, view, want] of cases) {
@@ -162,6 +162,7 @@ describe('the launch deliver checkbox label reads the same origin preflight (R3b
       await waitFor(() => expect(screen.getByTestId('deliver-notice').dataset.deliverOrigin).toBe(view?.origin ?? 'unknown'));
       expect(label()).toBe(want);
       if (want !== 'Open a PR when done') expect(label()).not.toMatch(/\bPR\b|pull request/i);
+      if (view?.origin === 'none') expect(label()).not.toMatch(/^Push/);
     });
   }
 
