@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import type { RosterSeat, SystemSettings as Settings } from '../api/types.js';
 import { useComposerPrefsStore } from '../store/composerPrefs.js';
+import { useViewPrefsStore } from '../store/viewPrefs.js';
 import { setCachedRoster } from '../store/rosterCache.js';
 import { Modal } from './Modal.js';
 import { NotificationSettings } from './NotificationSettings.js';
@@ -110,6 +111,12 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
   const deliverPr = useComposerPrefsStore((s) => s.prefs.deliverPr);
   const composerPersist = useComposerPrefsStore((s) => s.persist);
   const updateComposerPrefs = useComposerPrefsStore((s) => s.update);
+
+  // S3 (DESIGN-simple §4): "Show technical details" — `studio.view` on the same settings wire,
+  // self-saving like the Runs row, off by default.
+  const techDetails = useViewPrefsStore((s) => s.prefs.technical_details);
+  const viewPersist = useViewPrefsStore((s) => s.persist);
+  const updateViewPrefs = useViewPrefsStore((s) => s.update);
 
   /** Where the daemon says its settings file lives (`GET /settings.path`, crew 0.7.36); `null` =
    *  the daemon predates the field — the page then says so instead of naming a path it made up. */
@@ -248,6 +255,48 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
           crew-persisted (`studio.notifications`), permission asked only on
           the toggle's own gesture (EC25). */}
       <NotificationSettings />
+
+      {/* ── View (DES-studio-rebuild S3) ───────────────────────────────────────
+          "Show technical details": one preference, off by default. Crew-persisted under
+          `studio.view`; it saves itself, outside the Save button below. */}
+      <section
+        data-testid="view-settings"
+        className="rounded-xl px-5 mb-6"
+        style={{ background: 'var(--surface-card)', border: '1px solid var(--surface-raised)' }}
+      >
+        <h2
+          className="text-xs font-semibold uppercase tracking-wide pt-4 pb-2 font-mono"
+          style={{ color: 'var(--ink-dim)' }}
+        >
+          View
+        </h2>
+
+        <SettingRow
+          label="Show technical details"
+          description="Adds ids, versions and helper names in small grey type: run ids, commit shas and seat names on the run header, the run rows and the gate card. Same screens; nothing else changes."
+        >
+          <div className="flex flex-col items-end gap-1">
+            <input
+              type="checkbox"
+              aria-label="Show technical details"
+              data-testid="tech-details-toggle"
+              checked={techDetails}
+              onChange={(e) => updateViewPrefs({ technical_details: e.target.checked })}
+              className="w-3.5 h-3.5 shrink-0"
+              style={{ accentColor: 'var(--accent)' }}
+            />
+            {viewPersist === 'dropped' && (
+              <p
+                className="text-xs text-right"
+                style={{ color: 'var(--status-gate)' }}
+                data-testid="tech-details-unsaved"
+              >
+                Not stored by this daemon — applies to this session only.
+              </p>
+            )}
+          </div>
+        </SettingRow>
+      </section>
 
       {/* ── Runs (studio#123) ─────────────────────────────────────────────────
           Crew-persisted under `studio.composer`, like Notifications above —

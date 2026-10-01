@@ -97,6 +97,7 @@ export function ApprovalDock({
           {...(view !== undefined
             ? {
                 units: view.units, clis: view.session.clis, autoDeliver: autoDeliverOf(view.session),
+                baseCommit: view.session.base_commit,
                 // studio#368: what a deliver approve pushes, named in its undo toast.
                 delivery: deliveryTargetOf(view.session),
                 // Brainstorm ideas 7 and 8: what the card needs to read the seat's record and offer a rule.

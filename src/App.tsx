@@ -73,6 +73,7 @@ import { api } from './api/client.js';
 import { useAppearanceStore } from './theming/appearance.js';
 import { useNotifPrefsStore } from './store/notifPrefs.js';
 import { useComposerPrefsStore } from './store/composerPrefs.js';
+import { useViewPrefsStore } from './store/viewPrefs.js';
 import { useDeliveryFreezeStore } from './store/deliveryFreeze.js';
 import { notifyGateIfUnfocused } from './board/desktopNotify.js';
 
@@ -170,6 +171,9 @@ export function App(): React.ReactElement {
     // at startup; the default (open a PR when a build run finishes) stands if
     // the surface, or the key, is absent.
     void useComposerPrefsStore.getState().load();
+    // S3: `studio.view` ("Show technical details") — read once at startup; off stands if the
+    // surface, or the key, is absent.
+    void useViewPrefsStore.getState().load();
     // Idea 15: the delivery freeze — read once at startup (and again when an approve comes back
     // `deliveries_frozen`); a daemon without the route draws no switch.
     void useDeliveryFreezeStore.getState().load();
