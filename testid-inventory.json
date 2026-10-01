@@ -11,8 +11,8 @@
   "studioVersion": "0.5.14",
   "counts": {
     "files": 176,
-    "occurrences": 1761,
-    "static": 1542,
+    "occurrences": 1762,
+    "static": 1543,
     "dynamic": 73,
     "computed": 7
   },
@@ -6242,6 +6242,12 @@
     },
     {
       "testId": "run-delivery-nolink",
+      "files": [
+        "src/components/RunDelivery.tsx"
+      ]
+    },
+    {
+      "testId": "run-delivery-pushed",
       "files": [
         "src/components/RunDelivery.tsx"
       ]
