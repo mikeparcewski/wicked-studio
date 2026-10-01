@@ -263,3 +263,17 @@ describe('failingItems — Copilot review, round 3', () => {
     }
   });
 });
+
+describe('failingItems — Copilot review, round 4', () => {
+  it('a trailing severity opens the must-fix tier: "Findings (critical)" outranks a Concerns subgroup', () => {
+    for (const head of ['Findings (critical)', 'Findings — blocking']) {
+      const text = ["the evaluator's verdict is FAIL", head, `- ${FINDING}`, 'Concerns:', '- the README wording is loose.', 'VERDICT: FAIL'].join('\n');
+      expect(read(text)).toEqual([FINDING]);
+    }
+  });
+
+  it('a plain heading nested under a passing one stays in the pass', () => {
+    const text = ["the evaluator's verdict is FAIL", 'Findings', `- ${FINDING}`, 'Verified', '  Test suite:', '  - npm test passed', 'VERDICT: FAIL'].join('\n');
+    expect(read(text)).toEqual([FINDING]);
+  });
+});

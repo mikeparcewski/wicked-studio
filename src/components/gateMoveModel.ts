@@ -296,6 +296,15 @@ function groupOf(head: string): { group: 'failing' | 'passing' | 'other'; groupM
   return { group, groupMust: group === 'failing' && MUST_FIX.test(head) };
 }
 
+/** A findings heading with its severity moved to the front, so {@link groupOf} reads a trailing
+ *  one too: `Findings (critical)` / `Findings — blocking` open the must-fix tier like
+ *  `Critical findings` (Copilot). */
+function severityFirst(head: string): string {
+  const m = new RegExp(String.raw`(?:\(\s*(${SEVERITY_WORD})\s*\)|[—–-]\s*(${SEVERITY_WORD}))\s*$`, 'i').exec(head);
+  const sev = m !== null ? (m[1] ?? m[2]) : undefined;
+  return sev !== undefined ? `${sev} ${head}` : head;
+}
+
 function findingsItems(text: string | null | undefined): string[] | null {
   const sections = findingsSections(text);
   if (sections === null) return null;
@@ -321,9 +330,12 @@ function findingsItems(text: string | null | undefined): string[] | null {
   for (const section of sections) {
     // Each section's own heading sets its opening group: "Critical finding:" opens the must-fix
     // tier, "Concerns:" a failing one, a plain "Findings" a neutral one.
-    opening = groupOf(section.head);
+    opening = groupOf(severityFirst(section.head));
     ({ group, groupMust } = opening);
     headIndent = null;
+    /** The indent of a PLAIN passing sub-heading (`Verified`): a deeper heading under it
+     *  (`  Test suite:`) is still part of the pass (Copilot). */
+    let plainPassIndent: number | null = null;
     for (const raw of section.lines) {
       const indent = raw.length - raw.trimStart().length;
       const l = raw.trim();
@@ -377,8 +389,13 @@ function findingsItems(text: string | null | undefined): string[] | null {
       }
       const sub = subHeadingOf(l);
       if (sub !== null) {
+        const nestedInPass =
+          group === 'passing' &&
+          ((headIndent !== null && indent > headIndent) || (plainPassIndent !== null && indent > plainPassIndent));
+        if (nestedInPass) continue;
         ({ group, groupMust } = groupOf(sub));
         headIndent = null;
+        plainPassIndent = group === 'passing' ? indent : null;
         continue;
       }
       if (group !== 'passing' && !FRAME.test(l)) push(prose, l);
