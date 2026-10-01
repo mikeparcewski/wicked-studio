@@ -184,8 +184,9 @@ function findingsItems(text: string | null | undefined): string[] | null {
     const indent = raw.length - raw.trimStart().length;
     const l = raw.trim();
     const bullet = BULLET.exec(l);
-    if (bullet !== null && headIndent !== null && indent <= headIndent) {
-      // Back at a bulleted sub-heading's own level: this bullet is outside its group.
+    if (headIndent !== null && indent <= headIndent) {
+      // Back at a bulleted sub-heading's own level — a sibling bullet or top-level prose: this
+      // line is outside its group (Copilot).
       group = null;
       groupMust = false;
       headIndent = null;

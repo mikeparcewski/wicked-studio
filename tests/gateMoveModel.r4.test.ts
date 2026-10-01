@@ -281,6 +281,10 @@ describe('failingItems — a sectioned review (R4)', () => {
     expect(read(['### Concern:', '- the README wording is loose.', '### Critical', '- the min === max case is untested.'])).toEqual([
       'the min === max case is untested.',
     ]);
+    // Top-level prose after a bulleted Verified group is outside it.
+    expect(read(['- **Verified:**', '  - src/math.ts:24 validates all arguments.', 'test/math.test.ts lacks the equal-bounds case.'])).toEqual([
+      'test/math.test.ts lacks the equal-bounds case.',
+    ]);
   });
 
   it('an unsectioned review keeps today’s reading (bullets, frame lines dropped)', () => {
