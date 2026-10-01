@@ -215,6 +215,21 @@ describe('failingItems — a sectioned review (R4)', () => {
     expect(failingItems(v, text)).toEqual(['src/text.ts:26 slices UTF-16 code units.']);
   });
 
+  it('Critical outranks Concern, and markers inside a finding are kept: src/__tests__/ is a path (Copilot)', () => {
+    const text = [
+      "the evaluator's verdict is FAIL",
+      'Findings',
+      'Concern: the README wording is loose.',
+      '**Critical:** src/__tests__/math.test.ts never asserts `min === max`.',
+      'VERDICT: FAIL',
+    ].join('\n');
+    const v = gateVerdictFor(events(text), 2, NOT_PASS_PROMPT);
+    expect(failingItems(v, text)).toEqual(['src/__tests__/math.test.ts never asserts `min === max`.']);
+    // With no must-fix item, the Concerns are what there is.
+    const onlyConcern = ["the evaluator's verdict is FAIL", 'Findings', 'Concern: the README wording is loose.', 'VERDICT: FAIL'].join('\n');
+    expect(failingItems(gateVerdictFor(events(onlyConcern), 2, NOT_PASS_PROMPT), onlyConcern)).toEqual(['the README wording is loose.']);
+  });
+
   it('an unsectioned review keeps today’s reading (bullets, frame lines dropped)', () => {
     const plain = "the evaluator's verdict is FAIL\nReviewed the fix.\n- the regression test is missing\nVERDICT: FAIL";
     const v = gateVerdictFor(events(plain), 2, NOT_PASS_PROMPT);

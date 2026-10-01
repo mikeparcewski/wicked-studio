@@ -73,10 +73,14 @@ function proseFindings(text: string | null | undefined): string[] {
  * the Findings section is what failed; reading every bullet of the whole report made "Read
  * `…/SKILL.md` — exit 0." the headline of a send-back while the real Critical finding sat below it.
  */
-/** Markdown dress stripped before a line is read as a heading: a leading `#…`, every `**`/`__`
- *  emphasis marker, so `**Findings:**`, `### Findings` and `Findings` read alike (codex review). */
+/** Markdown dress stripped before a line is read as a heading: a leading `#…` and the emphasis
+ *  wrapper around the line's LEAD only (`**Findings:**`, `**Critical:** body`, `**Critical**: body`),
+ *  so `### Findings` and `Findings` read alike (codex review). Markers inside the body stay —
+ *  `src/__tests__/math.test.ts` is a path, not emphasis (Copilot). */
 function plain(line: string): string {
-  return line.replace(/^#{1,6}\s*/, '').replace(/\*\*|__/g, '').trim();
+  const t = line.replace(/^#{1,6}\s*/, '').trim();
+  const m = /^(\*\*|__)(.+?)\1(.*)$/.exec(t);
+  return (m !== null ? `${m[2]}${m[3]}` : t).trim();
 }
 /** A top-level section heading of the output contract, read on {@link plain} text. */
 const SECTION_HEAD = /^(?:\d+[.)]\s*)?(findings(?: or plan)?|what (?:i|you) did|commands run|run-record evidence|counts|open questions\b.*?)\s*:?$/i;
@@ -86,6 +90,9 @@ const VERDICT_LINE = /^verdict\s*[:=]/i;
 const SUB_HEAD = /^([^-*•\d].*?)\s*:$/;
 /** The severities that FAIL a review (`Suggestion` does not; neither does a "Verified …" list). */
 const FAILING_SEVERITY = /^(?:critical|blockers?|blocking|must[- ]fix|high|major|concerns?|conditions?)\b/i;
+/** The MUST-FIX tier: when a report names any, its Concerns are not the reason it failed (the
+ *  governed-worker contract — FAIL needs a Critical or a CONDITIONS list; Copilot). */
+const MUST_FIX = /^(?:critical|blockers?|blocking|must[- ]fix|high|major|conditions?)\b/i;
 /** Groups that are explicitly NOT failures: what the reviewer verified, praised or only suggests. */
 const PASSING_GROUP = /^(?:verified|confirmed|pass(?:es|ed|ing)?|strengths?|what (?:works|passed)|ok\b|good\b|suggestions?|nits?|non[- ]blocking|optional)/i;
 /** An inline severity lead, on {@link plain} text: "Critical — src/text.ts:26 slices …",
@@ -131,16 +138,30 @@ function findingsSection(text: string | null | undefined): string[] | null {
  * it has one that names no failure — then the rest of the report (Commands run, evidence) is still
  * not a finding (codex review, HIGH).
  */
+/** What a Findings sub-heading opens: a failing group (and whether it is the must-fix tier), a
+ *  passing one, or a neutral one. */
+function groupOf(head: string): { group: 'failing' | 'passing' | 'other'; groupMust: boolean } {
+  const group = FAILING_SEVERITY.test(head) ? 'failing' : PASSING_GROUP.test(head) ? 'passing' : 'other';
+  return { group, groupMust: group === 'failing' && MUST_FIX.test(head) };
+}
+
 function findingsItems(text: string | null | undefined): string[] | null {
   const section = findingsSection(text);
   if (section === null) return null;
+  const mustFix: string[] = [];
   const severe: string[] = [];
   const allBullets: string[] = [];
   const prose: string[] = [];
   let group: 'failing' | 'passing' | 'other' | null = null;
+  /** Whether the current failing group is the must-fix tier (Critical…), not a Concern. */
+  let groupMust = false;
   const push = (into: string[], item: string): void => {
     const clean = unlink(item).trim();
     if (clean !== '' && !NO_FINDING.test(clean) && !into.includes(clean)) into.push(clean);
+  };
+  const failing = (item: string, must: boolean): void => {
+    push(severe, item);
+    if (must) push(mustFix, item);
   };
   for (const l of section) {
     const bullet = BULLET.exec(l);
@@ -148,8 +169,7 @@ function findingsItems(text: string | null | undefined): string[] | null {
     // nested bullets under it arrive here already un-indented (codex review).
     const bulletHead = bullet !== null ? SUB_HEAD.exec(plain(bullet[1]!)) : null;
     if (bulletHead !== null && bulletHead[1]!.length <= 80) {
-      const head = bulletHead[1]!.trim();
-      group = FAILING_SEVERITY.test(head) ? 'failing' : PASSING_GROUP.test(head) ? 'passing' : 'other';
+      ({ group, groupMust } = groupOf(bulletHead[1]!.trim()));
       continue;
     }
     if (bullet !== null) {
@@ -159,8 +179,8 @@ function findingsItems(text: string | null | undefined): string[] | null {
       if (group === 'passing') continue;
       const body = bullet[1]!;
       const inline = INLINE_SEVERITY.exec(plain(body));
-      if (inline !== null) push(severe, inline[2]!);
-      else if (group === 'failing') push(severe, body);
+      if (inline !== null) failing(inline[2]!, MUST_FIX.test(inline[1]!));
+      else if (group === 'failing') failing(body, groupMust);
       push(allBullets, inline !== null ? inline[2]! : body);
       continue;
     }
@@ -169,17 +189,19 @@ function findingsItems(text: string | null | undefined): string[] | null {
       // A severity-led LINE (not a bullet) is a new finding at the section's top level, the way
       // the run-2 report wrote "Critical — …": it ends any group above it.
       group = 'failing';
-      push(severe, inline[2]!);
+      groupMust = MUST_FIX.test(inline[1]!);
+      failing(inline[2]!, groupMust);
       continue;
     }
     const sub = SUB_HEAD.exec(plain(l));
     if (sub !== null) {
-      const head = sub[1]!.trim();
-      group = FAILING_SEVERITY.test(head) ? 'failing' : PASSING_GROUP.test(head) ? 'passing' : 'other';
+      ({ group, groupMust } = groupOf(sub[1]!.trim()));
       continue;
     }
     if (group !== 'passing' && !FRAME.test(l)) push(prose, l);
   }
+  // The must-fix tier is why the review failed; Concerns ride only when it names none (Copilot).
+  if (mustFix.length > 0) return mustFix;
   if (severe.length > 0) return severe;
   if (allBullets.length > 0) return allBullets;
   return prose;
