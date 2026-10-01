@@ -191,3 +191,29 @@ describe('failingItems — codex review, round 4', () => {
     expect(read(text)).toEqual([FINDING]);
   });
 });
+
+describe('failingItems — Copilot review', () => {
+  it('"Non-blocking findings" after "Critical findings" never displaces the critical items', () => {
+    const text = ["the evaluator's verdict is FAIL", '## Critical findings', `- ${FINDING}`, '## Non-blocking findings', '- rename the helper', 'VERDICT: FAIL'].join('\n');
+    expect(read(text)).toEqual([FINDING]);
+    const optionalOnly = ["the evaluator's verdict is FAIL", ...COMMANDS, 'Optional findings:', '- rename the helper', 'VERDICT: FAIL'].join('\n');
+    expect(read(optionalOnly)).toEqual([]);
+  });
+
+  it('every failing findings section counts: "Critical findings" then "Major findings"', () => {
+    const text = ["the evaluator's verdict is FAIL", '## Critical findings', `- ${FINDING}`, '## Major findings', '- src/b.ts:9 leaks a handle.', 'VERDICT: FAIL'].join('\n');
+    expect(read(text)).toEqual([FINDING, 'src/b.ts:9 leaks a handle.']);
+  });
+
+  it('a long verdict note and a long headline never start or end on half a surrogate pair', () => {
+    for (let pad = 0; pad < 4; pad++) {
+      const text = ["the evaluator's verdict is FAIL", ...COMMANDS, `${'x'.repeat(pad)}${'😀'.repeat(2000)}`, 'VERDICT: FAIL'].join('\n');
+      const prefill = moveFor(text)?.prefill ?? '';
+      expect(prefill).not.toMatch(/(?:^|[^\ud800-\udbff])[\udc00-\udfff]|[\ud800-\udbff](?![\udc00-\udfff])/);
+    }
+    for (let pad = 0; pad < 2; pad++) {
+      const text = ["the evaluator's verdict is FAIL", 'Findings:', `- ${'a'.repeat(53 + pad)}${'😀'.repeat(5)} broken`, 'VERDICT: FAIL'].join('\n');
+      expect(moveFor(text)?.label ?? '').not.toMatch(/[\ud800-\udbff](?![\udc00-\udfff])/);
+    }
+  });
+});

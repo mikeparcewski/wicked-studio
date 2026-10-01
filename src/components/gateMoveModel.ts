@@ -172,39 +172,50 @@ function endsFindings(line: string): boolean {
   return NON_FINDING_HEAD.test(t) || NON_FINDING_LEAD.test(t) || VERDICT_LINE.test(t);
 }
 
+/** A findings heading the reviewer marks as NOT failing — `Non-blocking findings`, `Optional
+ *  issues`, `Minor findings`, `Resolved findings` (Copilot): a boundary, never a failure section. */
+const PASSING_FINDINGS = /^(?:\d+[.)]\s*)?(?:non[- ]blocking|optional|minor|nits?|low(?:[- ]severity)?|informational|cosmetic|resolved|addressed|fixed|no)\b/i;
+
 /**
- * The Findings section of a sectioned report — its heading and its lines — or `null` when it has
- * none. A `finding(s)` heading wins (the last one, as before); without one, the FIRST
- * `Concerns` / `Issues` / `Problems` / `Blockers` heading opens the section, and those words below
- * it are its sub-headings (Critical outranks a Concern inside it). The section ends at a
- * non-finding section ({@link NON_FINDING_HEAD} — Commands run, Evidence, Notes, Summary, …) or
- * the VERDICT line.
+ * The Findings sections of a sectioned report — each one's heading and lines — or `null` when it
+ * has none. EVERY `finding(s)` heading opens one (`Critical findings` then `Major findings` both
+ * count); without any, every `Concerns` / `Issues` / `Problems` / `Blockers` heading does — with a
+ * `finding(s)` heading present those words are its sub-headings instead (Critical outranks a
+ * Concern inside it). A heading marked as not failing ({@link PASSING_FINDINGS}) opens nothing and
+ * ends the section above it. A section also ends at a non-finding section ({@link NON_FINDING_HEAD}
+ * — Commands run, Evidence, Notes, Summary, …) or the VERDICT line. `[]` = the report has findings
+ * headings but none that fails.
  */
-function findingsSection(text: string | null | undefined): { head: string; lines: string[] } | null {
+function findingsSections(text: string | null | undefined): Array<{ head: string; lines: string[] }> | null {
   // Indentation is KEPT (trailing whitespace only is dropped): a nested bullet under a bulleted
   // sub-heading is told from a top-level sibling by it (Copilot).
   const all = (text ?? '').replace(/\r/g, '').split('\n').map((l) => l.trimEnd()).filter((l) => l.trim() !== '');
-  let start = -1;
-  let alias = -1;
+  const heads: Array<{ at: number; finding: boolean; passing: boolean }> = [];
   for (let i = 0; i < all.length; i++) {
     // A `-`/`*` bullet is an item, never a heading; a NUMBERED line may be one (`1. Findings`).
     if (MARK_BULLET.test(all[i]!)) continue;
-    const m = FINDINGS_HEAD.exec(plain(all[i]!));
-    if (m === null) continue;
-    if (/^finding/i.test(m[1]!)) start = i;
-    else if (alias < 0) alias = i;
+    const t = plain(all[i]!);
+    const m = FINDINGS_HEAD.exec(t);
+    if (m !== null) heads.push({ at: i, finding: /^finding/i.test(m[1]!), passing: PASSING_FINDINGS.test(t) });
   }
-  const at = start >= 0 ? start : alias;
-  if (at < 0) return null;
-  const out: string[] = [];
-  for (let i = at + 1; i < all.length; i++) {
-    const l = all[i]!;
-    // A `-` bullet never ends the section; a NUMBERED line ends it only as a heading (`2. Notes`),
-    // never as an inline lead (`2. Evidence: npm test passed` is an item, read below — codex review).
-    if (!MARK_BULLET.test(l) && (BULLET.test(l) ? NON_FINDING_HEAD.test(plain(l)) : endsFindings(l))) break;
-    out.push(l);
+  if (heads.length === 0) return null;
+  const family = heads.some((h) => h.finding) ? heads.filter((h) => h.finding) : heads;
+  const boundary = new Set(family.map((h) => h.at));
+  const sections: Array<{ head: string; lines: string[] }> = [];
+  for (const h of family) {
+    if (h.passing) continue;
+    const out: string[] = [];
+    for (let i = h.at + 1; i < all.length; i++) {
+      const l = all[i]!;
+      if (boundary.has(i)) break;
+      // A `-` bullet never ends the section; a NUMBERED line ends it only as a heading (`2. Notes`),
+      // never as an inline lead (`2. Evidence: npm test passed` is an item, read below — codex review).
+      if (!MARK_BULLET.test(l) && (BULLET.test(l) ? NON_FINDING_HEAD.test(plain(l)) : endsFindings(l))) break;
+      out.push(l);
+    }
+    sections.push({ head: plain(all[h.at]!).replace(/\s*:$/, ''), lines: out });
   }
-  return { head: plain(all[at]!).replace(/\s*:$/, ''), lines: out };
+  return sections;
 }
 
 /**
@@ -236,19 +247,16 @@ function groupOf(head: string): { group: 'failing' | 'passing' | 'other'; groupM
 }
 
 function findingsItems(text: string | null | undefined): string[] | null {
-  const found = findingsSection(text);
-  if (found === null) return null;
-  const section = found.lines;
+  const sections = findingsSections(text);
+  if (sections === null) return null;
   const mustFix: string[] = [];
   const severe: string[] = [];
   const allBullets: string[] = [];
   const prose: string[] = [];
-  // The section's own heading sets its opening group: "Critical finding:" opens the must-fix tier,
-  // "Concerns:" a failing one, a plain "Findings" a neutral one.
-  const opening = groupOf(found.head);
-  let group: 'failing' | 'passing' | 'other' | null = opening.group;
+  let opening: ReturnType<typeof groupOf> = { group: 'other', groupMust: false };
+  let group: 'failing' | 'passing' | 'other' | null = null;
   /** Whether the current failing group is the must-fix tier (Critical…), not a Concern. */
-  let groupMust = opening.groupMust;
+  let groupMust = false;
   const push = (into: string[], item: string): void => {
     const clean = unlink(item).trim();
     if (clean !== '' && !NO_FINDING.test(clean) && !into.includes(clean)) into.push(clean);
@@ -260,64 +268,71 @@ function findingsItems(text: string | null | undefined): string[] | null {
   /** The indent of the bulleted sub-heading whose group is open, or `null` (a plain heading's
    *  group, or none): a bullet back at that indent or shallower is a sibling, not its child. */
   let headIndent: number | null = null;
-  for (const raw of section) {
-    const indent = raw.length - raw.trimStart().length;
-    const l = raw.trim();
-    const bullet = BULLET.exec(l);
-    if (headIndent !== null && indent <= headIndent) {
-      // Back at a bulleted sub-heading's own level — a sibling bullet or top-level prose: this
-      // line is outside its group, back in the section's own (Copilot).
-      group = opening.group;
-      groupMust = opening.groupMust;
-      headIndent = null;
+  for (const section of sections) {
+    // Each section's own heading sets its opening group: "Critical finding:" opens the must-fix
+    // tier, "Concerns:" a failing one, a plain "Findings" a neutral one.
+    opening = groupOf(section.head);
+    ({ group, groupMust } = opening);
+    headIndent = null;
+    for (const raw of section.lines) {
+      const indent = raw.length - raw.trimStart().length;
+      const l = raw.trim();
+      const bullet = BULLET.exec(l);
+      if (headIndent !== null && indent <= headIndent) {
+        // Back at a bulleted sub-heading's own level — a sibling bullet or top-level prose: this
+        // line is outside its group, back in the section's own (Copilot).
+        group = opening.group;
+        groupMust = opening.groupMust;
+        headIndent = null;
+      }
+      // A "Verified …" / Suggestion group's bullets are never failures, whatever they lead with —
+      // "- Critical: boundary handling is fixed." or a nested "- Critical:" sub-heading under
+      // "Verified:" is still part of the pass (codex review, MEDIUM; Copilot).
+      if (bullet !== null && group === 'passing') continue;
+      // `- **Verified:** src/math.ts validates…` is a pass carried inline (Copilot).
+      // `- Commands run: npm test` likewise; either one also owns the deeper bullets nested under
+      // it (`  - exit 0`), as a passing group at its indent (codex review).
+      if (bullet !== null && (INLINE_PASSING.test(plain(bullet[1]!)) || NON_FINDING_LEAD.test(plain(bullet[1]!)))) {
+        group = 'passing';
+        groupMust = false;
+        headIndent = indent;
+        continue;
+      }
+      // A bulleted sub-heading (`- **Verified:**`, `- Critical:`) opens a group like a plain one;
+      // its nested bullets are the deeper-indented ones that follow (codex review; Copilot).
+      const bulletHead = bullet !== null ? subHeadingOf(bullet[1]!) : null;
+      if (bulletHead !== null && bulletHead.length <= 80) {
+        ({ group, groupMust } = groupOf(bulletHead));
+        headIndent = indent;
+        continue;
+      }
+      if (bullet !== null) {
+        const body = bullet[1]!;
+        const inline = INLINE_SEVERITY.exec(plain(body));
+        if (inline !== null) failing(inline[2]!, MUST_FIX.test(inline[1]!));
+        else if (group === 'failing') failing(body, groupMust);
+        push(allBullets, inline !== null ? inline[2]! : body);
+        continue;
+      }
+      if (INLINE_PASSING.test(plain(l))) continue;
+      const inline = INLINE_SEVERITY.exec(plain(l));
+      if (inline !== null) {
+        // A severity-led LINE (not a bullet) is a new finding at the section's top level, the way
+        // the run-2 report wrote "Critical — …": it ends any group above it.
+        group = 'failing';
+        groupMust = MUST_FIX.test(inline[1]!);
+        headIndent = null;
+        failing(inline[2]!, groupMust);
+        continue;
+      }
+      const sub = subHeadingOf(l);
+      if (sub !== null) {
+        ({ group, groupMust } = groupOf(sub));
+        headIndent = null;
+        continue;
+      }
+      if (group !== 'passing' && !FRAME.test(l)) push(prose, l);
     }
-    // A "Verified …" / Suggestion group's bullets are never failures, whatever they lead with —
-    // "- Critical: boundary handling is fixed." or a nested "- Critical:" sub-heading under
-    // "Verified:" is still part of the pass (codex review, MEDIUM; Copilot).
-    if (bullet !== null && group === 'passing') continue;
-    // `- **Verified:** src/math.ts validates…` is a pass carried inline (Copilot).
-    // `- Commands run: npm test` likewise; either one also owns the deeper bullets nested under
-    // it (`  - exit 0`), as a passing group at its indent (codex review).
-    if (bullet !== null && (INLINE_PASSING.test(plain(bullet[1]!)) || NON_FINDING_LEAD.test(plain(bullet[1]!)))) {
-      group = 'passing';
-      groupMust = false;
-      headIndent = indent;
-      continue;
-    }
-    // A bulleted sub-heading (`- **Verified:**`, `- Critical:`) opens a group like a plain one;
-    // its nested bullets are the deeper-indented ones that follow (codex review; Copilot).
-    const bulletHead = bullet !== null ? subHeadingOf(bullet[1]!) : null;
-    if (bulletHead !== null && bulletHead.length <= 80) {
-      ({ group, groupMust } = groupOf(bulletHead));
-      headIndent = indent;
-      continue;
-    }
-    if (bullet !== null) {
-      const body = bullet[1]!;
-      const inline = INLINE_SEVERITY.exec(plain(body));
-      if (inline !== null) failing(inline[2]!, MUST_FIX.test(inline[1]!));
-      else if (group === 'failing') failing(body, groupMust);
-      push(allBullets, inline !== null ? inline[2]! : body);
-      continue;
-    }
-    if (INLINE_PASSING.test(plain(l))) continue;
-    const inline = INLINE_SEVERITY.exec(plain(l));
-    if (inline !== null) {
-      // A severity-led LINE (not a bullet) is a new finding at the section's top level, the way
-      // the run-2 report wrote "Critical — …": it ends any group above it.
-      group = 'failing';
-      groupMust = MUST_FIX.test(inline[1]!);
-      headIndent = null;
-      failing(inline[2]!, groupMust);
-      continue;
-    }
-    const sub = subHeadingOf(l);
-    if (sub !== null) {
-      ({ group, groupMust } = groupOf(sub));
-      headIndent = null;
-      continue;
-    }
-    if (group !== 'passing' && !FRAME.test(l)) push(prose, l);
   }
   // The must-fix tier is why the review failed; Concerns ride only when it names none (Copilot).
   if (mustFix.length > 0) return mustFix;
@@ -453,13 +468,20 @@ export function deliverTargetOf(units: readonly WorkUnit[], ord: number | null |
  *  than mid-way through whatever the reviewer concluded. */
 const NOTE_VERDICT_MAX = 3000;
 function clipNote(text: string): string {
-  return text.length > NOTE_VERDICT_MAX ? `…${text.slice(text.length - NOTE_VERDICT_MAX + 1)}` : text;
+  if (text.length <= NOTE_VERDICT_MAX) return text;
+  let from = text.length - NOTE_VERDICT_MAX + 1;
+  // Never start on the low half of a surrogate pair (Copilot): that would be malformed UTF-16.
+  const c = text.charCodeAt(from);
+  if (c >= 0xdc00 && c <= 0xdfff) from++;
+  return `…${text.slice(from)}`;
 }
 
 /** The first item, clipped for a button, with how many more ride along. */
 function itemsLabel(items: readonly string[]): string {
   const first = items[0] ?? '';
-  const clipped = first.length > 56 ? `${first.slice(0, 55).trimEnd()}…` : first;
+  // Never cut a surrogate pair in half (Copilot): keep the clip on a code-point boundary.
+  const cut = first.length > 56 && /[\ud800-\udbff]/.test(first.charAt(54)) ? 54 : 55;
+  const clipped = first.length > 56 ? `${first.slice(0, cut).trimEnd()}…` : first;
   return items.length > 1 ? `${clipped} (+${items.length - 1} more)` : clipped;
 }
 
