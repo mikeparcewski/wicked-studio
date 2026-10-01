@@ -94,7 +94,7 @@ const FAILING_SEVERITY = /^(?:critical|blockers?|blocking|must[- ]fix|high|major
  *  governed-worker contract — FAIL needs a Critical or a CONDITIONS list; Copilot). */
 const MUST_FIX = /^(?:critical|blockers?|blocking|must[- ]fix|high|major|conditions?)\b/i;
 /** Groups that are explicitly NOT failures: what the reviewer verified, praised or only suggests. */
-const PASSING_GROUP = /^(?:verified|confirmed|pass(?:es|ed|ing)?|strengths?|what (?:works|passed)|ok\b|good\b|suggestions?|nits?|non[- ]blocking|optional)/i;
+const PASSING_GROUP = /^(?:verified|confirmed|pass(?:es|ed|ing)?|strengths?|what (?:works|passed)|ok|good|suggestions?|nits?|non[- ]blocking|optional)\b/i;
 /** An inline severity lead, on {@link plain} text: "Critical — src/text.ts:26 slices …",
  *  "Concern: …". A bare "Critical:" has no body and is a sub-heading instead. */
 const INLINE_SEVERITY = /^((?:critical|blockers?|blocking|must[- ]fix|high|major|concerns?|conditions?)\b[^—:]*?)(?:\s*[—–:]|\s+-)\s*(.*\S)\s*$/i;

@@ -257,6 +257,18 @@ describe('failingItems — a sectioned review (R4)', () => {
     expect(failingItems(v, text)).toEqual(['the README wording is loose.']);
   });
 
+  it('a heading that merely starts like a passing word is not one: "Password issues:" (Copilot)', () => {
+    const text = [
+      "the evaluator's verdict is FAIL",
+      'Findings',
+      'Password issues:',
+      '- src/auth.ts:12 logs the password in clear text.',
+      'VERDICT: FAIL',
+    ].join('\n');
+    const v = gateVerdictFor(events(text), 2, NOT_PASS_PROMPT);
+    expect(failingItems(v, text)).toEqual(['src/auth.ts:12 logs the password in clear text.']);
+  });
+
   it('an unsectioned review keeps today’s reading (bullets, frame lines dropped)', () => {
     const plain = "the evaluator's verdict is FAIL\nReviewed the fix.\n- the regression test is missing\nVERDICT: FAIL";
     const v = gateVerdictFor(events(plain), 2, NOT_PASS_PROMPT);
