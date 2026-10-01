@@ -100,7 +100,7 @@ What this rig is, and what it is not:
     composer ASKS which repo the run works in — `launch-target-repo` REQUIRED with no default, Send
     disabled with `launch-target-reason`, `deliver-notice[data-deliver-state=no-target]` — then that an
     explicit popover tick wins over the auto-attached chips, that the Target choice outranks the tick,
-    that the notice reads "→ opens a PR on <repo>" and `launch-confirm` carries workflow + target + gate.
+    that the notice states the delivery for the target repo and `launch-confirm` carries workflow + target + gate.
     The run index is compared before/after: NOTHING launches. The second repo is detached at the end.
     RUN-CXL (F-029) asserts the run header's `run-cancel` control: it was OBSERVED (recorded, never
     asserted there) on a second page opened at `/p/A/build/<run>` while TST-1's run sat at its gate —
@@ -4400,7 +4400,7 @@ def run_scenarios(rig: Rig, page) -> None:
         workflow chosen. The composer must ASK which repo the run works in — `launch-target-repo`
         REQUIRED with no default, Send disabled with `launch-target-reason`, the deliver notice in
         `no-target` — an explicit popover tick must WIN over the auto-attached chips, the Target
-        choice must outrank the tick, the notice must read "→ opens a PR on <repo>", and
+        choice must outrank the tick, the notice must state the delivery on that repo's origin (R3), and
         `launch-confirm` must carry workflow + target + gate before Send. Nothing is launched: the
         run index is compared before/after. The second repo is harness setup over the API, labelled
         `[SUBSTITUTE]` (register → onboarding `completed` → attach to A), exactly as the rig's first
@@ -4472,14 +4472,16 @@ def run_scenarios(rig: Rig, page) -> None:
             notice = tid(page, "deliver-notice")
             assert notice.get_attribute("data-deliver-state") == "on" and notice.get_attribute("data-deliver-repo") == REPO_ID
             tick_text = text_of(notice)
-            assert "opens a PR on" in tick_text and f"seed-surfaces-{STAMP}" in tick_text, f"notice after the tick: {tick_text!r}"
+            # R3: the notice states what delivery does on THIS origin (crew's deliver-target sentence, or the
+            # condition when the daemon cannot say) — the repo it is about is `data-deliver-repo`, above.
+            assert "push" in tick_text.lower() and notice.get_attribute("data-deliver-origin"), f"notice after the tick: {tick_text!r}"
             # (3)/(4) a Target choice made AFTER the tick stands (the latest act); the notice and the confirmation
             # step name it; Send enables.
             tid(page, "launch-target-repo").select_option(repo2)
             page.wait_for_function(
                 "id => document.querySelector('[data-testid=\"deliver-notice\"]')?.getAttribute('data-deliver-repo') === id", arg=repo2, timeout=10_000)
             chosen_text = text_of(tid(page, "deliver-notice"))
-            assert "opens a PR on" in chosen_text and repo2_name in chosen_text, f"notice after the choice: {chosen_text!r}"
+            assert "push" in chosen_text.lower(), f"notice after the choice: {chosen_text!r}"
             summary = tid(page, "launch-confirm")
             gate = summary.get_attribute("data-gate") or ""
             assert summary.get_attribute("data-workflow") == "bug" and summary.get_attribute("data-target") == repo2 and gate != "", (

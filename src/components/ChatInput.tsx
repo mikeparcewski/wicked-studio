@@ -1070,7 +1070,9 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
           const what =
             sentence !== ''
               ? `${sentence.charAt(0).toLowerCase()}${sentence.slice(1).replace(/\.$/, '')}`
-              : `pushes its branch → opens a PR on ${targetLabel} if its origin is a GitHub repository`;
+              : // Unconfirmed: name the repo whose origin receives the push, never a PR destination —
+                // the registered name or URL is not proof of where a pull request would open (codex review).
+                `pushes its branch to the origin of ${targetLabel} → opens a PR there if that origin is a GitHub repository`;
           const merging = sentence !== '' ? '' : ' Merging stays yours.';
           return {
             // F-028: the notice NAMES the repo the PR lands on — `owner/repo`

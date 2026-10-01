@@ -85,8 +85,10 @@ describe('the launch deliver notice reads the gate\'s origin preflight (R3)', ()
     render(<ChatInput runId={null} runStatus={null} onLaunched={vi.fn()} />);
     await bind(user);
     const text = screen.getByTestId('deliver-notice').textContent ?? '';
-    expect(text).toContain('opens a PR on shipproof-local if its origin is a GitHub repository');
+    expect(text).toContain('pushes its branch to the origin of shipproof-local → opens a PR there if that origin is a GitHub repository');
     expect(screen.getByTestId('deliver-notice').dataset.deliverOrigin).toBe('unknown');
+    // A registered name is no proof of where a pull request would open (codex review).
+    expect(text).not.toContain('opens a PR on');
   });
 });
 
@@ -121,7 +123,7 @@ describe('a repeat lookup never shows the previous answer while a fresh read is 
     await waitFor(() => expect(spy).toHaveBeenCalledTimes(3));
     const notice = screen.getByTestId('deliver-notice');
     expect(notice.dataset.deliverOrigin).toBe('unknown');
-    expect(notice.textContent).toContain('if its origin is a GitHub repository');
+    expect(notice.textContent).toContain('if that origin is a GitHub repository');
     expect(notice.textContent).not.toContain('no pull request can be opened');
   });
 });
