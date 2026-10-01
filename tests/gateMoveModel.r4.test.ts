@@ -201,6 +201,20 @@ describe('failingItems — a sectioned review (R4)', () => {
     expect(failingItems(v, text)).toEqual(['the `min === max` case is untested.']);
   });
 
+  it('bulleted sub-headings group their nested bullets: - **Verified:** passes, - **Critical:** fails (codex review)', () => {
+    const text = [
+      "the evaluator's verdict is FAIL",
+      'Findings',
+      '- **Verified:**',
+      '  - Critical paths are covered.',
+      '- **Critical:**',
+      '  - src/text.ts:26 slices UTF-16 code units.',
+      'VERDICT: FAIL',
+    ].join('\n');
+    const v = gateVerdictFor(events(text), 2, NOT_PASS_PROMPT);
+    expect(failingItems(v, text)).toEqual(['src/text.ts:26 slices UTF-16 code units.']);
+  });
+
   it('an unsectioned review keeps today’s reading (bullets, frame lines dropped)', () => {
     const plain = "the evaluator's verdict is FAIL\nReviewed the fix.\n- the regression test is missing\nVERDICT: FAIL";
     const v = gateVerdictFor(events(plain), 2, NOT_PASS_PROMPT);

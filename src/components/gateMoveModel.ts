@@ -144,6 +144,14 @@ function findingsItems(text: string | null | undefined): string[] | null {
   };
   for (const l of section) {
     const bullet = BULLET.exec(l);
+    // A bulleted sub-heading (`- **Verified:**`, `- Critical:`) opens a group like a plain one; the
+    // nested bullets under it arrive here already un-indented (codex review).
+    const bulletHead = bullet !== null ? SUB_HEAD.exec(plain(bullet[1]!)) : null;
+    if (bulletHead !== null && bulletHead[1]!.length <= 80) {
+      const head = bulletHead[1]!.trim();
+      group = FAILING_SEVERITY.test(head) ? 'failing' : PASSING_GROUP.test(head) ? 'passing' : 'other';
+      continue;
+    }
     if (bullet !== null) {
       // A "Verified …" / Suggestion group's bullets are never failures, whatever word they lead
       // with — "- Critical: boundary handling is fixed." under "Verified:" is a pass (codex review,
