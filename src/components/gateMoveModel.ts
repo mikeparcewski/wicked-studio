@@ -50,21 +50,43 @@ function lines(text: string | null | undefined): string[] {
   return (text ?? '').replace(/\r/g, '').split('\n').map((l) => l.trim()).filter((l) => l !== '');
 }
 
-/** The bulleted findings in a reviewer's text, in order, deduplicated. */
-function bullets(text: string | null | undefined): string[] {
-  const out: string[] = [];
+/**
+ * The lines of a report OUTSIDE its known non-finding sections (R4, ship-prove-4), split into
+ * bullets and prose, in order, deduplicated. A heading — `Commands run`, `## Evidence`,
+ * `**Verified:**`, a bulleted `- Suggestions:` — switches the reading off until a heading that is
+ * not one of them; an inline lead (`Counts: derived 1 …`, `Verified: …`) is skipped on its own.
+ * So "Read governed-worker skill — exit 0." under Commands run is never a finding, whatever else
+ * the report holds — with or without a Findings section.
+ */
+function outsideNonFinding(text: string | null | undefined): { bullets: string[]; prose: string[] } {
+  const out = { bullets: [] as string[], prose: [] as string[] };
+  let excluded = false;
   for (const l of lines(text)) {
     const m = BULLET.exec(l);
-    if (m !== null && !FRAME.test(m[1]!) && !out.includes(m[1]!)) out.push(m[1]!);
+    const body = m !== null ? m[1]! : l.replace(/^agent judge:\s*fail\s*[—-]\s*/i, '');
+    const t = plain(body);
+    const head = NON_FINDING_HEAD.test(t) ? t : subHeadingOf(body);
+    if (head !== null && head.length <= 80) {
+      const name = head.replace(/\s*:$/, '');
+      excluded = NON_FINDING_HEAD.test(name) || PASSING_GROUP.test(name);
+      continue;
+    }
+    if (excluded || FRAME.test(body) || INLINE_PASSING.test(t) || NON_FINDING_LEAD.test(t)) continue;
+    const into = m !== null ? out.bullets : out.prose;
+    if (!into.includes(body)) into.push(body);
   }
   return out;
 }
 
-/** A reviewer's prose findings when it wrote no bullets: every line that is not a frame line. */
+/** The bulleted findings in a reviewer's text, in order, deduplicated — non-finding sections out. */
+function bullets(text: string | null | undefined): string[] {
+  return outsideNonFinding(text).bullets;
+}
+
+/** A reviewer's prose findings when it wrote no bullets: every line that is not a frame line, a
+ *  heading, or part of a non-finding section. */
 function proseFindings(text: string | null | undefined): string[] {
-  return lines(text)
-    .map((l) => l.replace(/^agent judge:\s*fail\s*[—-]\s*/i, ''))
-    .filter((l) => !FRAME.test(l));
+  return outsideNonFinding(text).prose;
 }
 
 /**
@@ -82,8 +104,25 @@ function plain(line: string): string {
   const m = /^(\*\*|__)(.+?)\1(.*)$/.exec(t);
   return (m !== null ? `${m[2]}${m[3]}` : t).trim();
 }
-/** A top-level section heading of the output contract, read on {@link plain} text. */
-const SECTION_HEAD = /^(?:\d+[.)]\s*)?(findings(?: or plan)?|what (?:i|you) did|commands run|run-record evidence|counts|open questions\b.*?)\s*:?$/i;
+/** Severity words a findings heading may carry before or after its noun. */
+const SEVERITY_WORD = String.raw`(?:critical|blocking|blockers?|major|high(?:[- ]severity)?|severe|must[- ]fix|medium|low)`;
+/** A findings-section heading, read on {@link plain} text, tolerant of how a reviewer writes it
+ *  (R4, ship-prove-4 — "Critical finding:" was not read, so the send-back led with "Commands run"):
+ *  singular or plural, an optional severity before (`Critical finding`, `Blocking issues`) or after
+ *  (`Findings (critical)`, `Findings — blocking`), a trailing colon or none. Group 1 is the noun. */
+const FINDINGS_HEAD = new RegExp(
+  String.raw`^(?:\d+[.)]\s*)?(?:${SEVERITY_WORD}\s+)?(findings?(?:\s+or\s+plan)?|concerns?|issues?|problems?|blockers?)` +
+    String.raw`(?:\s*\(${SEVERITY_WORD}\)|\s*[—–-]\s*${SEVERITY_WORD})?\s*:?$`,
+  'i',
+);
+/** The sections of the output contract that are NEVER findings, whatever the report holds
+ *  (R4): what the reviewer did, ran, checked or counted, its evidence, notes, summary, questions. */
+const NON_FINDING_NAMES = String.raw`what (?:i|you) did|what (?:i|you) checked|commands? run|(?:run-record )?evidence|counts?|notes?|summary`;
+/** A non-finding section heading, read on {@link plain} text. */
+const NON_FINDING_HEAD = new RegExp(String.raw`^(?:\d+[.)]\s*)?(?:${NON_FINDING_NAMES}|open questions?\b.*?)\s*:?$`, 'i');
+/** A non-finding section written inline, its body on the same line: `Counts: derived 1 / …`,
+ *  `What I did: Evaluator role. …`, `Open question: "character" could mean …`. */
+const NON_FINDING_LEAD = new RegExp(String.raw`^(?:\d+[.)]\s*)?(?:${NON_FINDING_NAMES}|open questions?)\s*:\s*\S`, 'i');
 const VERDICT_LINE = /^verdict\s*[:=]/i;
 /** A sub-heading inside Findings ("Critical:", "**Concerns:**", "Verified from the build evidence:"),
  *  read on {@link plain} text: a non-bullet line ending in a colon. */
@@ -113,24 +152,42 @@ function unlink(text: string): string {
   });
 }
 
-/** The lines of the Findings section of a sectioned report, or `null` when it has none. */
-function findingsSection(text: string | null | undefined): string[] | null {
+/** Where a non-finding section starts: its heading, or its inline lead (`Counts: derived 1 …`). */
+function endsFindings(line: string): boolean {
+  const t = plain(line);
+  return NON_FINDING_HEAD.test(t) || NON_FINDING_LEAD.test(t) || VERDICT_LINE.test(t);
+}
+
+/**
+ * The Findings section of a sectioned report — its heading and its lines — or `null` when it has
+ * none. A `finding(s)` heading wins (the last one, as before); without one, the FIRST
+ * `Concerns` / `Issues` / `Problems` / `Blockers` heading opens the section, and those words below
+ * it are its sub-headings (Critical outranks a Concern inside it). The section ends at a
+ * non-finding section ({@link NON_FINDING_HEAD} — Commands run, Evidence, Notes, Summary, …) or
+ * the VERDICT line.
+ */
+function findingsSection(text: string | null | undefined): { head: string; lines: string[] } | null {
   // Indentation is KEPT (trailing whitespace only is dropped): a nested bullet under a bulleted
   // sub-heading is told from a top-level sibling by it (Copilot).
   const all = (text ?? '').replace(/\r/g, '').split('\n').map((l) => l.trimEnd()).filter((l) => l.trim() !== '');
   let start = -1;
+  let alias = -1;
   for (let i = 0; i < all.length; i++) {
-    const m = SECTION_HEAD.exec(plain(all[i]!));
-    if (m !== null && /^findings/i.test(m[1]!)) start = i + 1;
+    if (BULLET.test(all[i]!)) continue;
+    const m = FINDINGS_HEAD.exec(plain(all[i]!));
+    if (m === null) continue;
+    if (/^finding/i.test(m[1]!)) start = i;
+    else if (alias < 0) alias = i;
   }
-  if (start < 0) return null;
+  const at = start >= 0 ? start : alias;
+  if (at < 0) return null;
   const out: string[] = [];
-  for (let i = start; i < all.length; i++) {
+  for (let i = at + 1; i < all.length; i++) {
     const l = all[i]!;
-    if (SECTION_HEAD.test(plain(l)) || VERDICT_LINE.test(plain(l.trim()))) break;
+    if (!BULLET.test(l) && endsFindings(l)) break;
     out.push(l);
   }
-  return out;
+  return { head: plain(all[at]!).replace(/\s*:$/, ''), lines: out };
 }
 
 /**
@@ -160,15 +217,19 @@ function groupOf(head: string): { group: 'failing' | 'passing' | 'other'; groupM
 }
 
 function findingsItems(text: string | null | undefined): string[] | null {
-  const section = findingsSection(text);
-  if (section === null) return null;
+  const found = findingsSection(text);
+  if (found === null) return null;
+  const section = found.lines;
   const mustFix: string[] = [];
   const severe: string[] = [];
   const allBullets: string[] = [];
   const prose: string[] = [];
-  let group: 'failing' | 'passing' | 'other' | null = null;
+  // The section's own heading sets its opening group: "Critical finding:" opens the must-fix tier,
+  // "Concerns:" a failing one, a plain "Findings" a neutral one.
+  const opening = groupOf(found.head);
+  let group: 'failing' | 'passing' | 'other' | null = opening.group;
   /** Whether the current failing group is the must-fix tier (Critical…), not a Concern. */
-  let groupMust = false;
+  let groupMust = opening.groupMust;
   const push = (into: string[], item: string): void => {
     const clean = unlink(item).trim();
     if (clean !== '' && !NO_FINDING.test(clean) && !into.includes(clean)) into.push(clean);
@@ -186,9 +247,9 @@ function findingsItems(text: string | null | undefined): string[] | null {
     const bullet = BULLET.exec(l);
     if (headIndent !== null && indent <= headIndent) {
       // Back at a bulleted sub-heading's own level — a sibling bullet or top-level prose: this
-      // line is outside its group (Copilot).
-      group = null;
-      groupMust = false;
+      // line is outside its group, back in the section's own (Copilot).
+      group = opening.group;
+      groupMust = opening.groupMust;
       headIndent = null;
     }
     // A "Verified …" / Suggestion group's bullets are never failures, whatever they lead with —
@@ -361,6 +422,14 @@ export function deliverTargetOf(units: readonly WorkUnit[], ord: number | null |
   return target === '' ? null : target;
 }
 
+/** A note's longest verdict body. The engine keeps only the TAIL of a long note (~4 KB), so a
+ *  longer verdict is clipped here, from the front — where Commands run / What I did sit — rather
+ *  than mid-way through whatever the reviewer concluded. */
+const NOTE_VERDICT_MAX = 3000;
+function clipNote(text: string): string {
+  return text.length > NOTE_VERDICT_MAX ? `…${text.slice(text.length - NOTE_VERDICT_MAX + 1)}` : text;
+}
+
 /** The first item, clipped for a button, with how many more ride along. */
 function itemsLabel(items: readonly string[]): string {
   const first = items[0] ?? '';
@@ -445,11 +514,27 @@ export function recommendGateMove(input: GateMoveInput): GateMove | null {
   if (own && source === 'repo_checks_timeout') return null;
   if (own && judged) {
     const items = failingItems(verdict, verdictSummary);
-    if (items.length === 0) return null;
     const reviewer = phaseLabel(runId, units, verdict.ord);
-    if (escalationGate && EVALUATOR_SOURCES.has(source)) {
+    const sendBack = escalationGate && EVALUATOR_SOURCES.has(source);
+    if (items.length === 0 && !sendBack) return null;
+    if (sendBack) {
       const creator = creatorUnitBefore(units, verdict.ord);
       const creatorName = creator === null ? 'the creator' : phaseLabel(runId, units, creator.ord);
+      if (items.length === 0) {
+        // R4: the review failed but names no finding outside its Commands run / evidence / notes.
+        // The headline says so plainly and points at the verdict — it never lists commands; the
+        // note carries the reviewer's full verdict rather than a guessed finding.
+        const full = (verdict.denial?.reason ?? verdictSummary ?? '').trim();
+        return {
+          kind: 'send-back',
+          label: 'Send back to the creator: the review failed — read its full verdict on this card',
+          consequence: `${creatorName} reruns with the reviewer's full verdict as its note; ${reviewer} re-reviews`,
+          prefill: full !== ''
+            ? `The reviewer failed this work without a separate findings list. Its full verdict:\n${clipNote(full)}`
+            : "The reviewer failed this work without a separate findings list; address the reviewer's full verdict.",
+          items: [],
+        };
+      }
       return {
         kind: 'send-back',
         label: `Send back to the creator: ${itemsLabel(items)}`,
