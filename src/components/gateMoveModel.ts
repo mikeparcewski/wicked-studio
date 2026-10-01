@@ -120,8 +120,14 @@ const FINDINGS_HEAD = new RegExp(
 /** The sections of the output contract that are NEVER findings, whatever the report holds
  *  (R4): what the reviewer did, ran, checked or counted, its evidence, notes, summary, questions. */
 const NON_FINDING_NAMES = String.raw`what (?:i|you) did|what (?:i|you) checked|commands? run|(?:run-record )?evidence|counts?|notes?|summary`;
-/** A non-finding section heading, read on {@link plain} text. */
-const NON_FINDING_HEAD = new RegExp(String.raw`^(?:\d+[.)]\s*)?(?:${NON_FINDING_NAMES}|open questions?\b.*?)\s*:?$`, 'i');
+/** A non-finding section heading, read on {@link plain} text. As a whole-line heading it may carry
+ *  up to two qualifier words that are not severities — `Test evidence`, `Build notes`, `Final
+ *  summary` (codex review) — while an inline lead stays exact, so `Missing test evidence: …` is
+ *  still a finding. */
+const NON_FINDING_HEAD = new RegExp(
+  String.raw`^(?:\d+[.)]\s*)?(?:(?:(?!${SEVERITY_WORD}\b)[a-z][\w-]*\s+){0,2}(?:commands? run|evidence|notes?|summary)|${NON_FINDING_NAMES}|open questions?\b.*?)\s*:?$`,
+  'i',
+);
 /** A non-finding section written inline, its body on the same line: `Counts: derived 1 / …`,
  *  `What I did: Evaluator role. …`, `Open question: "character" could mean …`. */
 const NON_FINDING_LEAD = new RegExp(String.raw`^(?:\d+[.)]\s*)?(?:${NON_FINDING_NAMES}|open questions?)\s*:\s*\S`, 'i');
@@ -187,7 +193,9 @@ function findingsSection(text: string | null | undefined): { head: string; lines
   const out: string[] = [];
   for (let i = at + 1; i < all.length; i++) {
     const l = all[i]!;
-    if (!MARK_BULLET.test(l) && endsFindings(l)) break;
+    // A `-` bullet never ends the section; a NUMBERED line ends it only as a heading (`2. Notes`),
+    // never as an inline lead (`2. Evidence: npm test passed` is an item, read below — codex review).
+    if (!MARK_BULLET.test(l) && (BULLET.test(l) ? NON_FINDING_HEAD.test(plain(l)) : endsFindings(l))) break;
     out.push(l);
   }
   return { head: plain(all[at]!).replace(/\s*:$/, ''), lines: out };

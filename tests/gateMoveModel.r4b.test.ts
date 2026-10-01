@@ -162,3 +162,20 @@ describe('failingItems — codex review, round 2', () => {
     }
   });
 });
+
+describe('failingItems — codex review, round 3', () => {
+  it('a qualified non-finding heading ("## Test evidence") ends the findings section (HIGH)', () => {
+    const text = ["the evaluator's verdict is FAIL", '## Findings', `- ${FINDING}`, '## Test evidence', '- npm test — passed', 'VERDICT: FAIL'].join('\n');
+    expect(read(text)).toEqual([FINDING]);
+  });
+
+  it('…but an inline "Missing test evidence: …" stays a finding', () => {
+    const text = ["the evaluator's verdict is FAIL", 'Missing test evidence: no case covers an empty list.', '## Commands run', '- npm test — exit 0.', 'VERDICT: FAIL'].join('\n');
+    expect(read(text)).toEqual(['Missing test evidence: no case covers an empty list.']);
+  });
+
+  it('a numbered inline non-finding item does not end the section (MEDIUM)', () => {
+    const text = ["the evaluator's verdict is FAIL", '## Findings', '1. src/a.ts:1 — first defect', '2. Evidence: npm test passed', '3. src/b.ts:2 — second defect', 'VERDICT: FAIL'].join('\n');
+    expect(read(text)).toEqual(['src/a.ts:1 — first defect', 'src/b.ts:2 — second defect']);
+  });
+});
