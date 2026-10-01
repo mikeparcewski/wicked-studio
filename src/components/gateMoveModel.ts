@@ -68,6 +68,178 @@ function proseFindings(text: string | null | undefined): string[] {
 }
 
 /**
+ * R4 (ship-prove-3) — a governed evaluator writes a SECTIONED report (garden `governed-worker`
+ * output contract: What I did / Commands run / Counts / Findings / Open questions / VERDICT). Only
+ * the Findings section is what failed; reading every bullet of the whole report made "Read
+ * `…/SKILL.md` — exit 0." the headline of a send-back while the real Critical finding sat below it.
+ */
+/** Markdown dress stripped before a line is read as a heading: a leading `#…` and the emphasis
+ *  wrapper around the line's LEAD only (`**Findings:**`, `**Critical:** body`, `**Critical**: body`),
+ *  so `### Findings` and `Findings` read alike (codex review). Markers inside the body stay —
+ *  `src/__tests__/math.test.ts` is a path, not emphasis (Copilot). */
+function plain(line: string): string {
+  const t = line.trim().replace(/^#{1,6}\s*/, '').trim();
+  const m = /^(\*\*|__)(.+?)\1(.*)$/.exec(t);
+  return (m !== null ? `${m[2]}${m[3]}` : t).trim();
+}
+/** A top-level section heading of the output contract, read on {@link plain} text. */
+const SECTION_HEAD = /^(?:\d+[.)]\s*)?(findings(?: or plan)?|what (?:i|you) did|commands run|run-record evidence|counts|open questions\b.*?)\s*:?$/i;
+const VERDICT_LINE = /^verdict\s*[:=]/i;
+/** A sub-heading inside Findings ("Critical:", "**Concerns:**", "Verified from the build evidence:"),
+ *  read on {@link plain} text: a non-bullet line ending in a colon. */
+const SUB_HEAD = /^([^-*•\d].*?)\s*:$/;
+/** The severities that FAIL a review (`Suggestion` does not; neither does a "Verified …" list). */
+const FAILING_SEVERITY = /^(?:critical|blockers?|blocking|must[- ]fix|high|major|concerns?|conditions?)\b/i;
+/** The MUST-FIX tier: when a report names any, its Concerns are not the reason it failed (the
+ *  governed-worker contract — FAIL needs a Critical or a CONDITIONS list; Copilot). */
+const MUST_FIX = /^(?:critical|blockers?|blocking|must[- ]fix|high|major|conditions?)\b/i;
+/** Groups that are explicitly NOT failures: what the reviewer verified, praised or only suggests. */
+const PASSING_GROUP = /^(?:(?:verified|confirmed)(?:\s+(?:from|against|in|by|on|with)\b.*)?|pass(?:es|ed|ing)?|strengths?|what (?:works|passed)|ok|good|suggestions?|nits?|non[- ]blocking(?:\s+(?:notes?|suggestions?))?|optional(?:\s+(?:notes?|suggestions?))?)$/i;
+/** A passing lead that carries its item on the same line: `Verified: src/math.ts validates…`,
+ *  `- **Suggestion:** rename it` — the item is a pass, never a finding (Copilot). */
+const INLINE_PASSING = /^(?:verified|confirmed|suggestions?|nits?|non[- ]blocking|optional)\s*[:—–]\s*\S/i;
+/** An inline severity lead, on {@link plain} text: "Critical — src/text.ts:26 slices …",
+ *  "Concern: …". A bare "Critical:" has no body and is a sub-heading instead. */
+const INLINE_SEVERITY = /^((?:critical|blockers?|blocking|must[- ]fix|high|major|concerns?|conditions?)\b[^—:]*?)(?:\s*[—–:]|\s+-)\s*(.*\S)\s*$/i;
+/** "Concerns: none." states no finding. */
+const NO_FINDING = /^(?:none|n\/a|nil|no (?:critical |blocking )?(?:findings?|issues?|concerns?))\b[.!]?$/i;
+
+/** `[test/math.test.ts](/abs/worktree/test/math.test.ts:9)` → `test/math.test.ts:9`: the link text,
+ *  plus the target's line when the text lacks one. The absolute worktree path is never shown. */
+function unlink(text: string): string {
+  return text.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_m, label: string, target: string) => {
+    const line = /:(\d+(?::\d+)?)$/.exec(target);
+    return line !== null && !/:\d+(?::\d+)?$/.test(label) ? `${label}:${line[1]}` : label;
+  });
+}
+
+/** The lines of the Findings section of a sectioned report, or `null` when it has none. */
+function findingsSection(text: string | null | undefined): string[] | null {
+  // Indentation is KEPT (trailing whitespace only is dropped): a nested bullet under a bulleted
+  // sub-heading is told from a top-level sibling by it (Copilot).
+  const all = (text ?? '').replace(/\r/g, '').split('\n').map((l) => l.trimEnd()).filter((l) => l.trim() !== '');
+  let start = -1;
+  for (let i = 0; i < all.length; i++) {
+    const m = SECTION_HEAD.exec(plain(all[i]!));
+    if (m !== null && /^findings/i.test(m[1]!)) start = i + 1;
+  }
+  if (start < 0) return null;
+  const out: string[] = [];
+  for (let i = start; i < all.length; i++) {
+    const l = all[i]!;
+    if (SECTION_HEAD.test(plain(l)) || VERDICT_LINE.test(plain(l.trim()))) break;
+    out.push(l);
+  }
+  return out;
+}
+
+/**
+ * The failing items of a sectioned report's Findings section, best reading first:
+ *  1. the items under a failing severity — a severity sub-heading's bullets, or a line that leads
+ *     with one ("Critical — …"); a "Verified …" or Suggestion group is not a failure;
+ *  2. else every bullet in the section;
+ *  3. else its prose lines.
+ * `null` when the report has no Findings section (the caller keeps its older readings); `[]` when
+ * it has one that names no failure — then the rest of the report (Commands run, evidence) is still
+ * not a finding (codex review, HIGH).
+ */
+/** The text of a Findings sub-heading, or `null`: a non-bullet line ending in a colon, or a
+ *  Markdown `#` heading with or without one (`### Critical`) — codex review; Copilot. */
+function subHeadingOf(raw: string): string | null {
+  const t = plain(raw);
+  const m = SUB_HEAD.exec(t);
+  if (m !== null) return m[1]!.trim();
+  return /^#{1,6}\s/.test(raw.trim()) && t !== '' && !/[.!?]$/.test(t) ? t : null;
+}
+
+/** What a Findings sub-heading opens: a failing group (and whether it is the must-fix tier), a
+ *  passing one, or a neutral one. */
+function groupOf(head: string): { group: 'failing' | 'passing' | 'other'; groupMust: boolean } {
+  const group = FAILING_SEVERITY.test(head) ? 'failing' : PASSING_GROUP.test(head) ? 'passing' : 'other';
+  return { group, groupMust: group === 'failing' && MUST_FIX.test(head) };
+}
+
+function findingsItems(text: string | null | undefined): string[] | null {
+  const section = findingsSection(text);
+  if (section === null) return null;
+  const mustFix: string[] = [];
+  const severe: string[] = [];
+  const allBullets: string[] = [];
+  const prose: string[] = [];
+  let group: 'failing' | 'passing' | 'other' | null = null;
+  /** Whether the current failing group is the must-fix tier (Critical…), not a Concern. */
+  let groupMust = false;
+  const push = (into: string[], item: string): void => {
+    const clean = unlink(item).trim();
+    if (clean !== '' && !NO_FINDING.test(clean) && !into.includes(clean)) into.push(clean);
+  };
+  const failing = (item: string, must: boolean): void => {
+    push(severe, item);
+    if (must) push(mustFix, item);
+  };
+  /** The indent of the bulleted sub-heading whose group is open, or `null` (a plain heading's
+   *  group, or none): a bullet back at that indent or shallower is a sibling, not its child. */
+  let headIndent: number | null = null;
+  for (const raw of section) {
+    const indent = raw.length - raw.trimStart().length;
+    const l = raw.trim();
+    const bullet = BULLET.exec(l);
+    if (headIndent !== null && indent <= headIndent) {
+      // Back at a bulleted sub-heading's own level — a sibling bullet or top-level prose: this
+      // line is outside its group (Copilot).
+      group = null;
+      groupMust = false;
+      headIndent = null;
+    }
+    // A "Verified …" / Suggestion group's bullets are never failures, whatever they lead with —
+    // "- Critical: boundary handling is fixed." or a nested "- Critical:" sub-heading under
+    // "Verified:" is still part of the pass (codex review, MEDIUM; Copilot).
+    if (bullet !== null && group === 'passing') continue;
+    // `- **Verified:** src/math.ts validates…` is a pass carried inline (Copilot).
+    if (bullet !== null && INLINE_PASSING.test(plain(bullet[1]!))) continue;
+    // A bulleted sub-heading (`- **Verified:**`, `- Critical:`) opens a group like a plain one;
+    // its nested bullets are the deeper-indented ones that follow (codex review; Copilot).
+    const bulletHead = bullet !== null ? subHeadingOf(bullet[1]!) : null;
+    if (bulletHead !== null && bulletHead.length <= 80) {
+      ({ group, groupMust } = groupOf(bulletHead));
+      headIndent = indent;
+      continue;
+    }
+    if (bullet !== null) {
+      const body = bullet[1]!;
+      const inline = INLINE_SEVERITY.exec(plain(body));
+      if (inline !== null) failing(inline[2]!, MUST_FIX.test(inline[1]!));
+      else if (group === 'failing') failing(body, groupMust);
+      push(allBullets, inline !== null ? inline[2]! : body);
+      continue;
+    }
+    if (INLINE_PASSING.test(plain(l))) continue;
+    const inline = INLINE_SEVERITY.exec(plain(l));
+    if (inline !== null) {
+      // A severity-led LINE (not a bullet) is a new finding at the section's top level, the way
+      // the run-2 report wrote "Critical — …": it ends any group above it.
+      group = 'failing';
+      groupMust = MUST_FIX.test(inline[1]!);
+      headIndent = null;
+      failing(inline[2]!, groupMust);
+      continue;
+    }
+    const sub = subHeadingOf(l);
+    if (sub !== null) {
+      ({ group, groupMust } = groupOf(sub));
+      headIndent = null;
+      continue;
+    }
+    if (group !== 'passing' && !FRAME.test(l)) push(prose, l);
+  }
+  // The must-fix tier is why the review failed; Concerns ride only when it names none (Copilot).
+  if (mustFix.length > 0) return mustFix;
+  if (severe.length > 0) return severe;
+  if (allBullets.length > 0) return allBullets;
+  return prose;
+}
+
+/**
  * The newest `gateEscalated.verdictSummary` for `ord` — the engine's copy of the reviewer's words on
  * the escalation it opened. `null` when the log holds none for that unit.
  */
@@ -84,6 +256,7 @@ export function escalationSummaryFor(events: readonly CoreEvent[], ord: number |
 
 /**
  * The reviewer's failing items for a failed verdict, best source first:
+ *  0. the Findings section of a sectioned report (denial reason, then summary) — {@link findingsItems};
  *  1. the bullets of the denial's reason (the evaluator's own findings — `VERDICT: FAIL` output);
  *  2. the bullets of `gateEscalated.verdictSummary`;
  *  3. the failing repository checks of the floor (`name — how it ended`);
@@ -94,10 +267,20 @@ export function escalationSummaryFor(events: readonly CoreEvent[], ord: number |
 export function failingItems(verdict: GateVerdictView | null, verdictSummary?: string | null): string[] {
   if (verdict === null || verdict.outcome !== 'fail') return [];
   const reason = verdict.denial?.reason ?? null;
-  const fromBullets = bullets(reason);
-  if (fromBullets.length > 0) return fromBullets;
-  const fromSummary = bullets(verdictSummary);
-  if (fromSummary.length > 0) return fromSummary;
+  // A sectioned report's Findings section outranks every other reading (R4). When the report HAS
+  // one, its other sections (Commands run, evidence, counts) are never read as findings — even if
+  // the section itself names nothing; the floor's checks and the judge still speak below.
+  const fromFindings = findingsItems(reason);
+  if (fromFindings !== null && fromFindings.length > 0) return fromFindings;
+  const fromSummaryFindings = findingsItems(verdictSummary);
+  if (fromSummaryFindings !== null && fromSummaryFindings.length > 0) return fromSummaryFindings;
+  const sectioned = fromFindings !== null || fromSummaryFindings !== null;
+  if (!sectioned) {
+    const fromBullets = bullets(reason);
+    if (fromBullets.length > 0) return fromBullets;
+    const fromSummary = bullets(verdictSummary);
+    if (fromSummary.length > 0) return fromSummary;
+  }
   const checks = (verdict.floor?.checks ?? [])
     .filter((c) => !checkOutcome(c).ok)
     .map((c) => `${c.name} — ${checkOutcome(c).word}`);
@@ -110,6 +293,7 @@ export function failingItems(verdict: GateVerdictView | null, verdictSummary?: s
   // A validator's prose ("Repository checks failed on head") is a headline, not a finding: without
   // its checks there is nothing to carry, so the card recommends nothing rather than echo it.
   if (verdict.denial?.source != null && VALIDATOR_SOURCES.has(verdict.denial.source)) return [];
+  if (sectioned) return [];
   const prose = proseFindings(reason);
   return prose.length > 0 ? prose : proseFindings(verdictSummary);
 }
