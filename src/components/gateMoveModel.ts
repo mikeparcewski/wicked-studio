@@ -43,6 +43,8 @@ const EVALUATOR_SOURCES = new Set(['evaluator_verdict', 'agent_validator', 'eval
 const VALIDATOR_SOURCES = new Set(['repo_checks', 'repo_checks_timeout', 'pinned_validator', 'substance', 'deliverables']);
 
 const BULLET = /^\s*(?:[-*•]|\d+[.)])\s+(.*\S)\s*$/;
+/** A `-` / `*` / `•` bullet — never a section heading, unlike a numbered line (`1. Findings`). */
+const MARK_BULLET = /^\s*[-*•]\s+/;
 /** Lines that frame a verdict rather than state a finding. */
 const FRAME = /^(?:the evaluator'?s verdict is\b|verdict\s*[:=]|agent judge:\s*fail\s*$|not pass\b|reviewed\b|findings?:?$)/i;
 
@@ -50,21 +52,83 @@ function lines(text: string | null | undefined): string[] {
   return (text ?? '').replace(/\r/g, '').split('\n').map((l) => l.trim()).filter((l) => l !== '');
 }
 
-/** The bulleted findings in a reviewer's text, in order, deduplicated. */
-function bullets(text: string | null | undefined): string[] {
-  const out: string[] = [];
-  for (const l of lines(text)) {
+/**
+ * The lines of a report OUTSIDE its known non-finding sections (R4, ship-prove-4), split into
+ * bullets and prose, in order, deduplicated. A heading — `Commands run`, `## Evidence`,
+ * `**Verified:**`, a bulleted `- Suggestions:` — switches the reading off until a heading that is
+ * not one of them; an inline lead (`Counts: derived 1 …`, `Verified: …`) is skipped on its own.
+ * So "Read governed-worker skill — exit 0." under Commands run is never a finding, whatever else
+ * the report holds — with or without a Findings section.
+ */
+/** A line's Markdown heading level (`## X` → 2), or 0 when it is not a `#` heading. */
+function mdLevel(line: string): number {
+  const m = /^(#{1,6})\s/.exec(line.trim());
+  return m !== null ? m[1]!.length : 0;
+}
+
+function outsideNonFinding(text: string | null | undefined): { bullets: string[]; prose: string[] } {
+  const out = { bullets: [] as string[], prose: [] as string[] };
+  let excluded = false;
+  /** The indent of the heading that switched the reading off: a deeper heading (`  Test suite:`
+   *  under `Commands run:`) is nested in it and stays excluded (codex review). */
+  let excludedIndent = -1;
+  /** The Markdown level of that heading (0 = not a `#` heading): a deeper `###` under `## Commands
+   *  run` is nested in it too (Copilot). */
+  let excludedLevel = 0;
+  /** The indent of an inline non-finding / passing bullet (`- Commands run: npm test`): its deeper
+   *  children (`  - exit 0`) are part of it (Copilot). */
+  let skipDeeper: number | null = null;
+  const raws = (text ?? '').replace(/\r/g, '').split('\n').filter((r) => r.trim() !== '');
+  for (const raw of raws) {
+    const l = raw.trim();
+    const indent = raw.length - raw.trimStart().length;
     const m = BULLET.exec(l);
-    if (m !== null && !FRAME.test(m[1]!) && !out.includes(m[1]!)) out.push(m[1]!);
+    const body = m !== null ? m[1]! : l.replace(/^agent judge:\s*fail\s*[—-]\s*/i, '');
+    const t = plain(body);
+    const head = NON_FINDING_HEAD.test(t) ? t : subHeadingOf(body);
+    // An inline finding (`Finding: cache invalidation is broken`) is an item wherever it sits.
+    if (skipDeeper !== null) {
+      if (indent > skipDeeper) continue;
+      skipDeeper = null;
+    }
+    const lead = FINDING_LEAD.exec(t);
+    if (lead !== null) {
+      excluded = false;
+      if (NO_FINDING.test(lead[1]!.trim())) continue; // "Concerns: none."
+    } else if (head !== null && head.length <= 80) {
+      // Inside an excluded section only a real section boundary ends it: a Markdown `#` heading at
+      // its level or above, or a findings heading. A deeper heading (`  Test suite:`) or a bare
+      // label (`npm test:`) is part of it (codex review).
+      const level = mdLevel(body);
+      const boundary =
+        FINDINGS_HEAD.test(head.replace(/\s*:$/, '')) || (level > 0 && (excludedLevel === 0 || level <= excludedLevel));
+      if (excluded && (indent > excludedIndent || !boundary)) continue;
+      const name = head.replace(/\s*:$/, '');
+      excluded = NON_FINDING_HEAD.test(name) || PASSING_GROUP.test(name);
+      excludedIndent = indent;
+      excludedLevel = level;
+      continue;
+    }
+    if (excluded || FRAME.test(body)) continue;
+    if (INLINE_PASSING.test(t) || NON_FINDING_LEAD.test(t)) {
+      skipDeeper = indent;
+      continue;
+    }
+    const into = m !== null ? out.bullets : out.prose;
+    if (!into.includes(body)) into.push(body);
   }
   return out;
 }
 
-/** A reviewer's prose findings when it wrote no bullets: every line that is not a frame line. */
+/** The bulleted findings in a reviewer's text, in order, deduplicated — non-finding sections out. */
+function bullets(text: string | null | undefined): string[] {
+  return outsideNonFinding(text).bullets;
+}
+
+/** A reviewer's prose findings when it wrote no bullets: every line that is not a frame line, a
+ *  heading, or part of a non-finding section. */
 function proseFindings(text: string | null | undefined): string[] {
-  return lines(text)
-    .map((l) => l.replace(/^agent judge:\s*fail\s*[—-]\s*/i, ''))
-    .filter((l) => !FRAME.test(l));
+  return outsideNonFinding(text).prose;
 }
 
 /**
@@ -82,8 +146,43 @@ function plain(line: string): string {
   const m = /^(\*\*|__)(.+?)\1(.*)$/.exec(t);
   return (m !== null ? `${m[2]}${m[3]}` : t).trim();
 }
-/** A top-level section heading of the output contract, read on {@link plain} text. */
-const SECTION_HEAD = /^(?:\d+[.)]\s*)?(findings(?: or plan)?|what (?:i|you) did|commands run|run-record evidence|counts|open questions\b.*?)\s*:?$/i;
+/** Severity words a findings heading may carry before or after its noun. */
+const SEVERITY_WORD = String.raw`(?:critical|blocking|blockers?|major|high(?:[- ]severity)?|severe|must[- ]fix|medium|low)`;
+/** A findings-section heading, read on {@link plain} text, tolerant of how a reviewer writes it
+ *  (R4, ship-prove-4 — "Critical finding:" was not read, so the send-back led with "Commands run"):
+ *  singular or plural, an optional severity before (`Critical finding`, `Blocking issues`) or after
+ *  (`Findings (critical)`, `Findings — blocking`), a trailing colon or none. Group 1 is the noun. */
+/** The marks that say a findings heading is NOT failing (`minor`, `optional`, `low-severity`, …). */
+const PASSING_MARK = String.raw`(?:non[- ]blocking|optional|minor|nits?|low(?:[- ]severity)?|informational|cosmetic)`;
+const FINDINGS_HEAD = new RegExp(
+  String.raw`^(?:\d+[.)]\s*)?(?:${SEVERITY_WORD}\s+)?(?:[a-z][\w-]*\s+){0,2}?(findings?(?:\s+or\s+plan)?|concerns?|issues?|problems?|blockers?)` +
+    // A trailing mark may be a severity (`Findings (critical)`) or a passing one (`Issues — minor`),
+    // so the latter reaches the passing-boundary logic (Copilot).
+    String.raw`(?:\s*\((?:${PASSING_MARK}|${SEVERITY_WORD})\)|\s*[—–-]\s*(?:${PASSING_MARK}|${SEVERITY_WORD}))?\s*:?$`,
+  'i',
+);
+/** The sections of the output contract that are NEVER findings, whatever the report holds
+ *  (R4): what the reviewer did, ran, checked or counted, its evidence, notes, summary, questions. */
+const NON_FINDING_NAMES = String.raw`what (?:i|you) did|what (?:i|you) checked|commands? run|(?:run-record )?evidence|counts?|notes?|summary`;
+/** A qualifier that turns a non-finding name INTO a finding: `Missing test evidence:` heads the
+ *  absence of evidence, which is what failed (codex review). */
+const LACKING_WORD = String.raw`(?:missing|no|lacking|insufficient|absent|incomplete|inadequate|weak|unverified|stale)`;
+/** The participles an evidence heading may trail with: `Evidence collected:`, `Evidence reviewed`. */
+const GATHERED_WORD = String.raw`(?:collected|gathered|reviewed|checked|considered|used|run)`;
+/** A non-finding section heading, read on {@link plain} text. As a whole-line heading it may carry
+ *  up to two qualifier words that are not severities — `Test evidence`, `Build notes`, `Final
+ *  summary` (codex review) — while an inline lead stays exact, so `Missing test evidence: …` is
+ *  still a finding. */
+const NON_FINDING_HEAD = new RegExp(
+  String.raw`^(?:\d+[.)]\s*)?(?:(?:(?!(?:${SEVERITY_WORD}|${LACKING_WORD})\b)[a-z][\w-]*\s+){0,2}` +
+    String.raw`(?:commands? (?:run|executed)|evidence(?:\s+${GATHERED_WORD})?|notes?|summary)|${NON_FINDING_NAMES}|open questions?\b.*?)\s*:?$`,
+  'i',
+);
+/** A finding written inline, its body on the same line: `Finding: …`, `Critical issue — …`. */
+const FINDING_LEAD = new RegExp(String.raw`^(?:${SEVERITY_WORD}\s+)?(?:findings?|issues?|concerns?|problems?)\s*[:—–]\s*(\S.*)$`, 'i');
+/** A non-finding section written inline, its body on the same line: `Counts: derived 1 / …`,
+ *  `What I did: Evaluator role. …`, `Open question: "character" could mean …`. */
+const NON_FINDING_LEAD = new RegExp(String.raw`^(?:\d+[.)]\s*)?(?:${NON_FINDING_NAMES}|open questions?)\s*:\s*\S`, 'i');
 const VERDICT_LINE = /^verdict\s*[:=]/i;
 /** A sub-heading inside Findings ("Critical:", "**Concerns:**", "Verified from the build evidence:"),
  *  read on {@link plain} text: a non-bullet line ending in a colon. */
@@ -95,6 +194,8 @@ const FAILING_SEVERITY = /^(?:critical|blockers?|blocking|must[- ]fix|high|major
 const MUST_FIX = /^(?:critical|blockers?|blocking|must[- ]fix|high|major|conditions?)\b/i;
 /** Groups that are explicitly NOT failures: what the reviewer verified, praised or only suggests. */
 const PASSING_GROUP = /^(?:(?:verified|confirmed)(?:\s+(?:from|against|in|by|on|with)\b.*)?|pass(?:es|ed|ing)?|strengths?|what (?:works|passed)|ok|good|suggestions?|nits?|non[- ]blocking(?:\s+(?:notes?|suggestions?))?|optional(?:\s+(?:notes?|suggestions?))?)$/i;
+/** A passing group named bare, no colon or `#`: `Verified`, `Suggestions`. */
+const BARE_PASSING_HEAD = /^(?:verified|confirmed|suggestions?|nits?|strengths?|non[- ]blocking(?:\s+(?:notes?|suggestions?))?)$/i;
 /** A passing lead that carries its item on the same line: `Verified: src/math.ts validates…`,
  *  `- **Suggestion:** rename it` — the item is a pass, never a finding (Copilot). */
 const INLINE_PASSING = /^(?:verified|confirmed|suggestions?|nits?|non[- ]blocking|optional)\s*[:—–]\s*\S/i;
@@ -113,24 +214,76 @@ function unlink(text: string): string {
   });
 }
 
-/** The lines of the Findings section of a sectioned report, or `null` when it has none. */
-function findingsSection(text: string | null | undefined): string[] | null {
+/** Where a non-finding section starts: its heading, or its inline lead (`Counts: derived 1 …`). */
+function endsFindings(line: string): boolean {
+  const t = plain(line);
+  return NON_FINDING_HEAD.test(t) || NON_FINDING_LEAD.test(t) || VERDICT_LINE.test(t);
+}
+
+/** A findings heading the reviewer marks as NOT failing — `Non-blocking findings`, `Optional
+ *  issues`, `Minor findings`, `Resolved findings` (Copilot): a boundary, never a failure section. */
+const PASSING_FINDINGS = /^(?:\d+[.)]\s*)?(?:non[- ]blocking|optional|minor|nits?|low(?:[- ]severity)?|informational|cosmetic|resolved|addressed|fixed|no)\b/i;
+
+/** The same mark trailing a findings heading: `Findings (low)`, `Issues — minor` (Copilot). */
+const PASSING_SUFFIX = new RegExp(String.raw`(?:\(\s*${PASSING_MARK}\s*\)|[—–-]\s*${PASSING_MARK})\s*:?$`, 'i');
+
+/**
+ * The Findings sections of a sectioned report — each one's heading and lines — or `null` when it
+ * has none. EVERY `finding(s)` heading opens one (`Critical findings` then `Major findings` both
+ * count); without any, every `Concerns` / `Issues` / `Problems` / `Blockers` heading does — with a
+ * `finding(s)` heading present those words are its sub-headings instead (Critical outranks a
+ * Concern inside it). A heading marked as not failing ({@link PASSING_FINDINGS}) opens nothing and
+ * ends the section above it. A section also ends at a non-finding section ({@link NON_FINDING_HEAD}
+ * — Commands run, Evidence, Notes, Summary, …) or the VERDICT line. `[]` = the report has findings
+ * headings but none that fails.
+ */
+function findingsSections(text: string | null | undefined): Array<{ head: string; lines: string[] }> | null {
   // Indentation is KEPT (trailing whitespace only is dropped): a nested bullet under a bulleted
   // sub-heading is told from a top-level sibling by it (Copilot).
   const all = (text ?? '').replace(/\r/g, '').split('\n').map((l) => l.trimEnd()).filter((l) => l.trim() !== '');
-  let start = -1;
+  const heads: Array<{ at: number; finding: boolean; passing: boolean }> = [];
   for (let i = 0; i < all.length; i++) {
-    const m = SECTION_HEAD.exec(plain(all[i]!));
-    if (m !== null && /^findings/i.test(m[1]!)) start = i + 1;
+    // A `-`/`*` bullet is an item, never a heading; a NUMBERED line may be one (`1. Findings`).
+    if (MARK_BULLET.test(all[i]!)) continue;
+    const t = plain(all[i]!);
+    const m = FINDINGS_HEAD.exec(t);
+    if (m !== null) heads.push({ at: i, finding: /^finding/i.test(m[1]!), passing: PASSING_FINDINGS.test(t) || PASSING_SUFFIX.test(t) });
   }
-  if (start < 0) return null;
-  const out: string[] = [];
-  for (let i = start; i < all.length; i++) {
-    const l = all[i]!;
-    if (SECTION_HEAD.test(plain(l)) || VERDICT_LINE.test(plain(l.trim()))) break;
-    out.push(l);
+  if (heads.length === 0) return null;
+  /** The lines of the section headed at `at`, up to the next of `boundary` or a non-finding one. */
+  const body = (at: number, boundary: ReadonlySet<number>): string[] => {
+    const out: string[] = [];
+    for (let i = at + 1; i < all.length; i++) {
+      const l = all[i]!;
+      if (boundary.has(i)) break;
+      // A `-` bullet never ends the section; a NUMBERED line ends it only as a heading (`2. Notes`),
+      // never as an inline lead (`2. Evidence: npm test passed` is an item, read below — codex review).
+      if (!MARK_BULLET.test(l) && (BULLET.test(l) ? NON_FINDING_HEAD.test(plain(l)) : endsFindings(l))) break;
+      out.push(l);
+    }
+    return out;
+  };
+  const headOf = (at: number): string => plain(all[at]!).replace(/\s*:$/, '');
+  const findings = heads.filter((h) => h.finding);
+  // A heading marked as not failing ends the section above it whatever its noun: `Findings` then
+  // `Optional issues` must not read the nit as a finding (Copilot).
+  const passingAt = heads.filter((h) => h.passing).map((h) => h.at);
+  const findingBoundary = new Set([...findings.map((h) => h.at), ...passingAt]);
+  const sections: Array<{ at: number; head: string; lines: string[] }> = [];
+  /** The line indexes the `finding(s)` sections cover: a Concerns/Issues heading inside one is its
+   *  sub-heading; one outside every one is a section of its own (codex review). */
+  const covered = new Set<number>();
+  for (const h of findings) {
+    const lines = body(h.at, findingBoundary);
+    lines.forEach((_l, k) => covered.add(h.at + 1 + k));
+    if (!h.passing) sections.push({ at: h.at, head: headOf(h.at), lines });
   }
-  return out;
+  const aliases = heads.filter((h) => !h.finding && !covered.has(h.at));
+  const allBoundary = new Set([...findingBoundary, ...aliases.map((h) => h.at)]);
+  for (const h of aliases) {
+    if (!h.passing) sections.push({ at: h.at, head: headOf(h.at), lines: body(h.at, allBoundary) });
+  }
+  return sections.sort((a, b) => a.at - b.at).map(({ head, lines }) => ({ head, lines }));
 }
 
 /**
@@ -149,23 +302,37 @@ function subHeadingOf(raw: string): string | null {
   const t = plain(raw);
   const m = SUB_HEAD.exec(t);
   if (m !== null) return m[1]!.trim();
+  // A bare passing name on its own line (`Verified`, `Suggestions`) heads its group too (Copilot).
+  if (BARE_PASSING_HEAD.test(t)) return t;
   return /^#{1,6}\s/.test(raw.trim()) && t !== '' && !/[.!?]$/.test(t) ? t : null;
 }
 
 /** What a Findings sub-heading opens: a failing group (and whether it is the must-fix tier), a
  *  passing one, or a neutral one. */
 function groupOf(head: string): { group: 'failing' | 'passing' | 'other'; groupMust: boolean } {
-  const group = FAILING_SEVERITY.test(head) ? 'failing' : PASSING_GROUP.test(head) ? 'passing' : 'other';
+  // A non-finding name nested in Findings (`- Commands run:`, `Evidence:` as a sub-heading) reads
+  // as a pass: its items are never findings (R4; codex review).
+  const group = FAILING_SEVERITY.test(head) ? 'failing' : PASSING_GROUP.test(head) || NON_FINDING_HEAD.test(head) ? 'passing' : 'other';
   return { group, groupMust: group === 'failing' && MUST_FIX.test(head) };
 }
 
+/** A findings heading with its severity moved to the front, so {@link groupOf} reads a trailing
+ *  one too: `Findings (critical)` / `Findings — blocking` open the must-fix tier like
+ *  `Critical findings` (Copilot). */
+function severityFirst(head: string): string {
+  const m = new RegExp(String.raw`(?:\(\s*(${SEVERITY_WORD})\s*\)|[—–-]\s*(${SEVERITY_WORD}))\s*$`, 'i').exec(head);
+  const sev = m !== null ? (m[1] ?? m[2]) : undefined;
+  return sev !== undefined ? `${sev} ${head}` : head;
+}
+
 function findingsItems(text: string | null | undefined): string[] | null {
-  const section = findingsSection(text);
-  if (section === null) return null;
+  const sections = findingsSections(text);
+  if (sections === null) return null;
   const mustFix: string[] = [];
   const severe: string[] = [];
   const allBullets: string[] = [];
   const prose: string[] = [];
+  let opening: ReturnType<typeof groupOf> = { group: 'other', groupMust: false };
   let group: 'failing' | 'passing' | 'other' | null = null;
   /** Whether the current failing group is the must-fix tier (Critical…), not a Concern. */
   let groupMust = false;
@@ -180,57 +347,84 @@ function findingsItems(text: string | null | undefined): string[] | null {
   /** The indent of the bulleted sub-heading whose group is open, or `null` (a plain heading's
    *  group, or none): a bullet back at that indent or shallower is a sibling, not its child. */
   let headIndent: number | null = null;
-  for (const raw of section) {
-    const indent = raw.length - raw.trimStart().length;
-    const l = raw.trim();
-    const bullet = BULLET.exec(l);
-    if (headIndent !== null && indent <= headIndent) {
-      // Back at a bulleted sub-heading's own level — a sibling bullet or top-level prose: this
-      // line is outside its group (Copilot).
-      group = null;
-      groupMust = false;
-      headIndent = null;
+  for (const section of sections) {
+    // Each section's own heading sets its opening group: "Critical finding:" opens the must-fix
+    // tier, "Concerns:" a failing one, a plain "Findings" a neutral one.
+    opening = groupOf(severityFirst(section.head));
+    ({ group, groupMust } = opening);
+    headIndent = null;
+    /** The indent of a PLAIN passing sub-heading (`Verified`): a deeper heading under it
+     *  (`  Test suite:`) is still part of the pass (Copilot). */
+    let plainPassIndent: number | null = null;
+    /** …and its Markdown level: a deeper `###` under `## Verified` is part of the pass. */
+    let plainPassLevel = 0;
+    for (const raw of section.lines) {
+      const indent = raw.length - raw.trimStart().length;
+      const l = raw.trim();
+      const bullet = BULLET.exec(l);
+      if (headIndent !== null && indent <= headIndent) {
+        // Back at a bulleted sub-heading's own level — a sibling bullet or top-level prose: this
+        // line is outside its group, back in the section's own (Copilot).
+        group = opening.group;
+        groupMust = opening.groupMust;
+        headIndent = null;
+      }
+      // A "Verified …" / Suggestion group's bullets are never failures, whatever they lead with —
+      // "- Critical: boundary handling is fixed." or a nested "- Critical:" sub-heading under
+      // "Verified:" is still part of the pass (codex review, MEDIUM; Copilot).
+      if (bullet !== null && group === 'passing') continue;
+      // `- **Verified:** src/math.ts validates…` is a pass carried inline (Copilot).
+      // `- Commands run: npm test` likewise; either one also owns the deeper bullets nested under
+      // it (`  - exit 0`), as a passing group at its indent (codex review).
+      if (bullet !== null && (INLINE_PASSING.test(plain(bullet[1]!)) || NON_FINDING_LEAD.test(plain(bullet[1]!)))) {
+        group = 'passing';
+        groupMust = false;
+        headIndent = indent;
+        continue;
+      }
+      // A bulleted sub-heading (`- **Verified:**`, `- Critical:`) opens a group like a plain one;
+      // its nested bullets are the deeper-indented ones that follow (codex review; Copilot).
+      const bulletHead = bullet !== null ? subHeadingOf(bullet[1]!) : null;
+      if (bulletHead !== null && bulletHead.length <= 80) {
+        ({ group, groupMust } = groupOf(bulletHead));
+        headIndent = indent;
+        continue;
+      }
+      if (bullet !== null) {
+        const body = bullet[1]!;
+        const inline = INLINE_SEVERITY.exec(plain(body));
+        if (inline !== null) failing(inline[2]!, MUST_FIX.test(inline[1]!));
+        else if (group === 'failing') failing(body, groupMust);
+        push(allBullets, inline !== null ? inline[2]! : body);
+        continue;
+      }
+      if (INLINE_PASSING.test(plain(l))) continue;
+      const inline = INLINE_SEVERITY.exec(plain(l));
+      if (inline !== null) {
+        // A severity-led LINE (not a bullet) is a new finding at the section's top level, the way
+        // the run-2 report wrote "Critical — …": it ends any group above it.
+        group = 'failing';
+        groupMust = MUST_FIX.test(inline[1]!);
+        headIndent = null;
+        failing(inline[2]!, groupMust);
+        continue;
+      }
+      const sub = subHeadingOf(l);
+      if (sub !== null) {
+        const level = mdLevel(raw);
+        const nestedInPass =
+          group === 'passing' &&
+          ((headIndent !== null && indent > headIndent) ||
+            (plainPassIndent !== null && (indent > plainPassIndent || (plainPassLevel > 0 && level > plainPassLevel))));
+        if (nestedInPass) continue;
+        ({ group, groupMust } = groupOf(sub));
+        headIndent = null;
+        plainPassIndent = group === 'passing' ? indent : null;
+        plainPassLevel = group === 'passing' ? level : 0;
+        continue;
+      }
+      if (group !== 'passing' && !FRAME.test(l)) push(prose, l);
     }
-    // A "Verified …" / Suggestion group's bullets are never failures, whatever they lead with —
-    // "- Critical: boundary handling is fixed." or a nested "- Critical:" sub-heading under
-    // "Verified:" is still part of the pass (codex review, MEDIUM; Copilot).
-    if (bullet !== null && group === 'passing') continue;
-    // `- **Verified:** src/math.ts validates…` is a pass carried inline (Copilot).
-    if (bullet !== null && INLINE_PASSING.test(plain(bullet[1]!))) continue;
-    // A bulleted sub-heading (`- **Verified:**`, `- Critical:`) opens a group like a plain one;
-    // its nested bullets are the deeper-indented ones that follow (codex review; Copilot).
-    const bulletHead = bullet !== null ? subHeadingOf(bullet[1]!) : null;
-    if (bulletHead !== null && bulletHead.length <= 80) {
-      ({ group, groupMust } = groupOf(bulletHead));
-      headIndent = indent;
-      continue;
-    }
-    if (bullet !== null) {
-      const body = bullet[1]!;
-      const inline = INLINE_SEVERITY.exec(plain(body));
-      if (inline !== null) failing(inline[2]!, MUST_FIX.test(inline[1]!));
-      else if (group === 'failing') failing(body, groupMust);
-      push(allBullets, inline !== null ? inline[2]! : body);
-      continue;
-    }
-    if (INLINE_PASSING.test(plain(l))) continue;
-    const inline = INLINE_SEVERITY.exec(plain(l));
-    if (inline !== null) {
-      // A severity-led LINE (not a bullet) is a new finding at the section's top level, the way
-      // the run-2 report wrote "Critical — …": it ends any group above it.
-      group = 'failing';
-      groupMust = MUST_FIX.test(inline[1]!);
-      headIndent = null;
-      failing(inline[2]!, groupMust);
-      continue;
-    }
-    const sub = subHeadingOf(l);
-    if (sub !== null) {
-      ({ group, groupMust } = groupOf(sub));
-      headIndent = null;
-      continue;
-    }
-    if (group !== 'passing' && !FRAME.test(l)) push(prose, l);
   }
   // The must-fix tier is why the review failed; Concerns ride only when it names none (Copilot).
   if (mustFix.length > 0) return mustFix;
@@ -361,10 +555,25 @@ export function deliverTargetOf(units: readonly WorkUnit[], ord: number | null |
   return target === '' ? null : target;
 }
 
+/** A note's longest verdict body. The engine keeps only the TAIL of a long note (~4 KB), so a
+ *  longer verdict is clipped here, from the front — where Commands run / What I did sit — rather
+ *  than mid-way through whatever the reviewer concluded. */
+const NOTE_VERDICT_MAX = 3000;
+function clipNote(text: string): string {
+  if (text.length <= NOTE_VERDICT_MAX) return text;
+  let from = text.length - NOTE_VERDICT_MAX + 1;
+  // Never start on the low half of a surrogate pair (Copilot): that would be malformed UTF-16.
+  const c = text.charCodeAt(from);
+  if (c >= 0xdc00 && c <= 0xdfff) from++;
+  return `…${text.slice(from)}`;
+}
+
 /** The first item, clipped for a button, with how many more ride along. */
 function itemsLabel(items: readonly string[]): string {
   const first = items[0] ?? '';
-  const clipped = first.length > 56 ? `${first.slice(0, 55).trimEnd()}…` : first;
+  // Never cut a surrogate pair in half (Copilot): keep the clip on a code-point boundary.
+  const cut = first.length > 56 && /[\ud800-\udbff]/.test(first.charAt(54)) ? 54 : 55;
+  const clipped = first.length > 56 ? `${first.slice(0, cut).trimEnd()}…` : first;
   return items.length > 1 ? `${clipped} (+${items.length - 1} more)` : clipped;
 }
 
@@ -445,11 +654,27 @@ export function recommendGateMove(input: GateMoveInput): GateMove | null {
   if (own && source === 'repo_checks_timeout') return null;
   if (own && judged) {
     const items = failingItems(verdict, verdictSummary);
-    if (items.length === 0) return null;
     const reviewer = phaseLabel(runId, units, verdict.ord);
-    if (escalationGate && EVALUATOR_SOURCES.has(source)) {
+    const sendBack = escalationGate && EVALUATOR_SOURCES.has(source);
+    if (items.length === 0 && !sendBack) return null;
+    if (sendBack) {
       const creator = creatorUnitBefore(units, verdict.ord);
       const creatorName = creator === null ? 'the creator' : phaseLabel(runId, units, creator.ord);
+      if (items.length === 0) {
+        // R4: the review failed but names no finding outside its Commands run / evidence / notes.
+        // The headline says so plainly and points at the verdict — it never lists commands; the
+        // note carries the reviewer's full verdict rather than a guessed finding.
+        const full = (verdict.denial?.reason ?? verdictSummary ?? '').trim();
+        return {
+          kind: 'send-back',
+          label: 'Send back to the creator: the review failed — read its full verdict on this card',
+          consequence: `${creatorName} reruns with the reviewer's full verdict as its note; ${reviewer} re-reviews`,
+          prefill: full !== ''
+            ? `The reviewer failed this work without a separate findings list. Its full verdict:\n${clipNote(full)}`
+            : "The reviewer failed this work without a separate findings list; address the reviewer's full verdict.",
+          items: [],
+        };
+      }
       return {
         kind: 'send-back',
         label: `Send back to the creator: ${itemsLabel(items)}`,
