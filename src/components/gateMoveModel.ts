@@ -148,6 +148,9 @@ const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? '' 
  *  instructions (wicked-core `plan::INSTRUCTION_SEP`). Never rendered. */
 export const INSTRUCTION_SEP = ' ||| ';
 
+/** The head of an approved intent amendment's segment (wicked-core `INTENT_AMENDMENT_PREFIX`). */
+const INTENT_AMENDMENT_HEAD = 'APPROVED INTENT AMENDMENT';
+
 /**
  * What THIS deliver push will actually do, as the workflow's own gate card says it (N3, ship
  * re-proof) — the first part of the deliver unit's instructions, up to the push-identity sentence:
@@ -161,9 +164,14 @@ export const INSTRUCTION_SEP = ' ||| ';
 export function deliverTargetOf(units: readonly WorkUnit[], ord: number | null | undefined): string | null {
   if (typeof ord !== 'number') return null;
   const desc = units.find((u) => u.ord === ord)?.description ?? '';
-  const at = desc.indexOf(INSTRUCTION_SEP);
-  if (at === -1) return null;
-  const card = desc.slice(at + INSTRUCTION_SEP.length).split(INSTRUCTION_SEP).join(' ').trim();
+  // Segment 0 is `deliver — <intent>`; an approved intent amendment adds its own
+  // `APPROVED INTENT AMENDMENT …` segment, which is never the card (Copilot on core#684).
+  const card = desc
+    .split(INSTRUCTION_SEP)
+    .slice(1)
+    .map((s) => s.trim())
+    .find((s) => s !== '' && !s.startsWith(INTENT_AMENDMENT_HEAD));
+  if (card === undefined) return null;
   const identity = card.indexOf(' Push identity:');
   const target = (identity === -1 ? card : card.slice(0, identity)).trim();
   return target === '' ? null : target;

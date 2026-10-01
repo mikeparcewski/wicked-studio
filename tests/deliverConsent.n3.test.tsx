@@ -73,6 +73,17 @@ describe('N3 — the deliver gate says what will actually happen', () => {
   it('a deliver unit with no card claims no pull request either way', () => {
     const bare = [makeUnit({ id: `${RUN}:deliver`, session_id: RUN, ord: 8, status: 'pending', description: 'deliver — x' })];
     expect(deliverTargetOf(bare, 8)).toBeNull();
+    // An approved intent amendment is a segment too, and never the card.
+    const amended = [makeUnit({
+      id: `${RUN}:deliver`, session_id: RUN, ord: 8, status: 'pending',
+      description: 'deliver — x ||| APPROVED INTENT AMENDMENT (overrides the corresponding launch-intent item; judge the amended acceptance, never the withdrawn one): clamp at 10',
+    })];
+    expect(deliverTargetOf(amended, 8)).toBeNull();
+    const cardThenAmendment = [makeUnit({
+      id: `${RUN}:deliver`, session_id: RUN, ord: 8, status: 'pending',
+      description: `${DESCRIPTION} ||| APPROVED INTENT AMENDMENT (…): clamp at 10`,
+    })];
+    expect(deliverTargetOf(cardThenAmendment, 8)).toContain('a local path, so no pull request can be opened');
     const move = recommendGateMove({
       runId: RUN, ord: 8, units: bare, verdict: null, verdictSummary: null, escalationGate: false,
       hasLift: false, restoredRetry: false, isPlanGate: false, planView: null, diffstat: '1 file changed, +1',
