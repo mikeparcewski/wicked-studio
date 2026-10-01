@@ -179,3 +179,15 @@ describe('failingItems — codex review, round 3', () => {
     expect(read(text)).toEqual(['src/a.ts:1 — first defect', 'src/b.ts:2 — second defect']);
   });
 });
+
+describe('failingItems — codex review, round 4', () => {
+  it('"## Missing test evidence:" inside Findings is a finding group, not an excluded section (HIGH)', () => {
+    const text = ["the evaluator's verdict is FAIL", '## Findings', '## Missing test evidence:', '- No regression test covers retry behavior', 'VERDICT: FAIL'].join('\n');
+    expect(read(text)).toEqual(['No regression test covers retry behavior']);
+  });
+
+  it('"## Evidence collected:" ends Findings like "## Evidence" (HIGH)', () => {
+    const text = ["the evaluator's verdict is FAIL", '## Findings', `- ${FINDING}`, '## Evidence collected:', '- npm test passed', 'VERDICT: FAIL'].join('\n');
+    expect(read(text)).toEqual([FINDING]);
+  });
+});

@@ -120,12 +120,18 @@ const FINDINGS_HEAD = new RegExp(
 /** The sections of the output contract that are NEVER findings, whatever the report holds
  *  (R4): what the reviewer did, ran, checked or counted, its evidence, notes, summary, questions. */
 const NON_FINDING_NAMES = String.raw`what (?:i|you) did|what (?:i|you) checked|commands? run|(?:run-record )?evidence|counts?|notes?|summary`;
+/** A qualifier that turns a non-finding name INTO a finding: `Missing test evidence:` heads the
+ *  absence of evidence, which is what failed (codex review). */
+const LACKING_WORD = String.raw`(?:missing|no|lacking|insufficient|absent|incomplete|inadequate|weak|unverified|stale)`;
+/** The participles an evidence heading may trail with: `Evidence collected:`, `Evidence reviewed`. */
+const GATHERED_WORD = String.raw`(?:collected|gathered|reviewed|checked|considered|used|run)`;
 /** A non-finding section heading, read on {@link plain} text. As a whole-line heading it may carry
  *  up to two qualifier words that are not severities — `Test evidence`, `Build notes`, `Final
  *  summary` (codex review) — while an inline lead stays exact, so `Missing test evidence: …` is
  *  still a finding. */
 const NON_FINDING_HEAD = new RegExp(
-  String.raw`^(?:\d+[.)]\s*)?(?:(?:(?!${SEVERITY_WORD}\b)[a-z][\w-]*\s+){0,2}(?:commands? run|evidence|notes?|summary)|${NON_FINDING_NAMES}|open questions?\b.*?)\s*:?$`,
+  String.raw`^(?:\d+[.)]\s*)?(?:(?:(?!(?:${SEVERITY_WORD}|${LACKING_WORD})\b)[a-z][\w-]*\s+){0,2}` +
+    String.raw`(?:commands? (?:run|executed)|evidence(?:\s+${GATHERED_WORD})?|notes?|summary)|${NON_FINDING_NAMES}|open questions?\b.*?)\s*:?$`,
   'i',
 );
 /** A non-finding section written inline, its body on the same line: `Counts: derived 1 / …`,
