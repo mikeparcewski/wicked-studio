@@ -1,4 +1,6 @@
 import { commitGateDecision } from '../board/gateActions.js';
+import type { DeliverTarget } from '../board/undoQueue.js';
+import { deliverTargetOf, isDeliverGate } from './gateMoveModel.js';
 /**
  * CenterDashboard — Build mode's home surface, given a purpose (DES-UXFIX-001 §2.7, F7).
  *
@@ -316,7 +318,8 @@ interface GateCardProps {
    *  attempt's evaluation plus this gate's `awaitingHuman`, and a same-ord retry would otherwise
    *  render the OLD verdict under the new gate — indefinitely, if the fetch returns nothing. */
   ready: boolean;
-  onApprove: (runId: string, amend?: string) => Promise<void>;
+  /** `deliver` = the deliver gate's own card sentence for the undo toast (R1/R3), `null` otherwise. */
+  onApprove: (runId: string, amend?: string, deliver?: DeliverTarget | null) => Promise<void>;
   onReject: (runId: string) => Promise<void>;
   /** Open the run page — where a plan gate's edited-plan answer lives (D11). */
   onOpenRun: (runId: string) => void;
@@ -339,6 +342,12 @@ function GateActionCard({
   const [loading, setLoading] = useState(false);
   const [steerOpen, setSteerOpen] = useState(false);
   const clearGate = useGateStore((s) => s.clearGate);
+  // R1/R3: approving a deliver gate from this inbox toasts the SAME card sentence the run page's
+  // gate does — what this push does on this origin. With no card the toast keeps "resumes" rather
+  // than a generic pull-request promise.
+  const deliverCard = deliverTargetOf(units ?? [], ord);
+  const deliver: DeliverTarget | null =
+    deliverCard !== null && isDeliverGate(runId, units ?? [], ord) ? { branch: null, repo: null, card: deliverCard } : null;
   // D11: a plan gate takes approve / reject / an edited plan (on the run page's card) — never
   // steer text — and shows no unit verdict (D10).
   const { isPlanGate, pending: kindPending } = usePlanGate(runId, true);
@@ -511,7 +520,7 @@ function GateActionCard({
         <button
           type="button"
           disabled={loading}
-          onClick={() => void run(() => onApprove(runId))}
+          onClick={() => void run(() => onApprove(runId, undefined, deliver))}
           {...(restoredRetry
             ? { title: "the evaluator's edit was discarded; the phase re-runs against the creator's verified tree" }
             : escalation && typeof failedCli === 'string'
@@ -560,7 +569,7 @@ function GateActionCard({
             if (!steerOpen) {
               setSteerOpen(true);
             } else if (amend.trim()) {
-              void run(() => onApprove(runId, amend.trim()));
+              void run(() => onApprove(runId, amend.trim(), deliver));
             }
           }}
           style={{
@@ -995,8 +1004,8 @@ export function CenterDashboard({
 
   // ── Gate handlers (with steering store + gate-store sync) ─────────────────
   const handleApprove = useCallback(
-    async (runId: string, amend?: string): Promise<void> => {
-      const outcome = await commitGateDecision(runId, { approve: true, ...(amend ? { amend } : {}) });
+    async (runId: string, amend?: string, deliver?: DeliverTarget | null): Promise<void> => {
+      const outcome = await commitGateDecision(runId, { approve: true, ...(amend ? { amend } : {}) }, { deliver: deliver ?? null });
       if (outcome !== 'sent') return;
       recordSteering({
         runId,
