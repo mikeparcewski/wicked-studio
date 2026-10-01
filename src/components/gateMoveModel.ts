@@ -73,16 +73,24 @@ function proseFindings(text: string | null | undefined): string[] {
  * the Findings section is what failed; reading every bullet of the whole report made "Read
  * `…/SKILL.md` — exit 0." the headline of a send-back while the real Critical finding sat below it.
  */
-const SECTION_HEAD = /^(?:#{1,6}\s*)?(?:\*\*)?\s*(?:\d+[.)]\s*)?(findings(?: or plan)?|what (?:i|you) did|commands run|run-record evidence|counts|open questions\b.*)\s*(?:\*\*)?\s*:?\s*$/i;
+/** Markdown dress stripped before a line is read as a heading: a leading `#…`, every `**`/`__`
+ *  emphasis marker, so `**Findings:**`, `### Findings` and `Findings` read alike (codex review). */
+function plain(line: string): string {
+  return line.replace(/^#{1,6}\s*/, '').replace(/\*\*|__/g, '').trim();
+}
+/** A top-level section heading of the output contract, read on {@link plain} text. */
+const SECTION_HEAD = /^(?:\d+[.)]\s*)?(findings(?: or plan)?|what (?:i|you) did|commands run|run-record evidence|counts|open questions\b.*?)\s*:?$/i;
 const VERDICT_LINE = /^verdict\s*[:=]/i;
-/** A sub-heading inside Findings ("Critical:", "**Concerns**", "Verified from the build evidence:"). */
-const SUB_HEAD = /^(?:#{1,6}\s*)?(?:\*\*)?([^-*•\d].*?)(?:\*\*)?\s*:\s*(?:\*\*)?$/;
+/** A sub-heading inside Findings ("Critical:", "**Concerns:**", "Verified from the build evidence:"),
+ *  read on {@link plain} text: a non-bullet line ending in a colon. */
+const SUB_HEAD = /^([^-*•\d].*?)\s*:$/;
 /** The severities that FAIL a review (`Suggestion` does not; neither does a "Verified …" list). */
 const FAILING_SEVERITY = /^(?:critical|blockers?|blocking|must[- ]fix|high|major|concerns?|conditions?)\b/i;
 /** Groups that are explicitly NOT failures: what the reviewer verified, praised or only suggests. */
 const PASSING_GROUP = /^(?:verified|confirmed|pass(?:es|ed|ing)?|strengths?|what (?:works|passed)|ok\b|good\b|suggestions?|nits?|non[- ]blocking|optional)/i;
-/** An inline severity lead: "Critical — src/text.ts:26 slices …", "**Concern:** …". */
-const INLINE_SEVERITY = /^(?:\*\*)?((?:critical|blockers?|blocking|must[- ]fix|high|major|concerns?|conditions?)\b[^—:]*?)(?:\*\*)?(?:\s*[—–:]|\s+-)\s*(?:\*\*)?\s*(.*\S)\s*$/i;
+/** An inline severity lead, on {@link plain} text: "Critical — src/text.ts:26 slices …",
+ *  "Concern: …". A bare "Critical:" has no body and is a sub-heading instead. */
+const INLINE_SEVERITY = /^((?:critical|blockers?|blocking|must[- ]fix|high|major|concerns?|conditions?)\b[^—:]*?)(?:\s*[—–:]|\s+-)\s*(.*\S)\s*$/i;
 /** "Concerns: none." states no finding. */
 const NO_FINDING = /^(?:none|n\/a|nil|no (?:critical |blocking )?(?:findings?|issues?|concerns?))\b[.!]?$/i;
 
@@ -100,14 +108,14 @@ function findingsSection(text: string | null | undefined): string[] | null {
   const all = lines(text);
   let start = -1;
   for (let i = 0; i < all.length; i++) {
-    const m = SECTION_HEAD.exec(all[i]!);
+    const m = SECTION_HEAD.exec(plain(all[i]!));
     if (m !== null && /^findings/i.test(m[1]!)) start = i + 1;
   }
   if (start < 0) return null;
   const out: string[] = [];
   for (let i = start; i < all.length; i++) {
     const l = all[i]!;
-    if (SECTION_HEAD.test(l) || VERDICT_LINE.test(l)) break;
+    if (SECTION_HEAD.test(plain(l)) || VERDICT_LINE.test(plain(l))) break;
     out.push(l);
   }
   return out;
@@ -142,13 +150,13 @@ function findingsItems(text: string | null | undefined): string[] | null {
       // MEDIUM; Copilot).
       if (group === 'passing') continue;
       const body = bullet[1]!;
-      const inline = INLINE_SEVERITY.exec(body);
+      const inline = INLINE_SEVERITY.exec(plain(body));
       if (inline !== null) push(severe, inline[2]!);
       else if (group === 'failing') push(severe, body);
       push(allBullets, inline !== null ? inline[2]! : body);
       continue;
     }
-    const inline = INLINE_SEVERITY.exec(l);
+    const inline = INLINE_SEVERITY.exec(plain(l));
     if (inline !== null) {
       // A severity-led LINE (not a bullet) is a new finding at the section's top level, the way
       // the run-2 report wrote "Critical — …": it ends any group above it.
@@ -156,7 +164,7 @@ function findingsItems(text: string | null | undefined): string[] | null {
       push(severe, inline[2]!);
       continue;
     }
-    const sub = SUB_HEAD.exec(l);
+    const sub = SUB_HEAD.exec(plain(l));
     if (sub !== null) {
       const head = sub[1]!.trim();
       group = FAILING_SEVERITY.test(head) ? 'failing' : PASSING_GROUP.test(head) ? 'passing' : 'other';

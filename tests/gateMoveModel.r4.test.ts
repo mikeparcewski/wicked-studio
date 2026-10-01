@@ -183,6 +183,24 @@ describe('failingItems — a sectioned review (R4)', () => {
     expect(failingItems(v, text)).toEqual(['README.md:7 still documents the old signature.']);
   });
 
+  it('Markdown-dressed headings read the same: **Findings:**, **Critical:**, **Verified:** (codex review)', () => {
+    const text = [
+      "the evaluator's verdict is FAIL",
+      '**Commands run:**',
+      '- `npm test` — exit 0.',
+      '**Findings:**',
+      '**Verified:**',
+      '- src/math.ts:24 validates all three arguments.',
+      '**Critical:**',
+      '- the `min === max` case is untested.',
+      '### Open questions as statements',
+      'none.',
+      'VERDICT: FAIL',
+    ].join('\n');
+    const v = gateVerdictFor(events(text), 2, NOT_PASS_PROMPT);
+    expect(failingItems(v, text)).toEqual(['the `min === max` case is untested.']);
+  });
+
   it('an unsectioned review keeps today’s reading (bullets, frame lines dropped)', () => {
     const plain = "the evaluator's verdict is FAIL\nReviewed the fix.\n- the regression test is missing\nVERDICT: FAIL";
     const v = gateVerdictFor(events(plain), 2, NOT_PASS_PROMPT);
