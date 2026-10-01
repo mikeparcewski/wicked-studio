@@ -1531,7 +1531,9 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
       )}
 
       {/* ── The per-launch delivery toggle (crew#393) — "Open a PR when done" on a
-          GitHub origin, "Push the branch when done" elsewhere (R3b, deliverToggleLabel).
+          GitHub origin, "Push the branch when done" on a local or other-host origin,
+          a neutral "Deliver when done…" with no origin remote or before the origin is
+          read (R3b, deliverToggleLabel).
           Rendered exactly where the wire key can go (repo-scoped build work);
           hidden for repo-less/freeform/system launches. Defaults to the
           persisted preference (ships ON); the override lasts one composer. ── */}
