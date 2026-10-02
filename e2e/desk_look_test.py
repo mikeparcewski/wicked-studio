@@ -187,6 +187,24 @@ with sync_playwright() as p:
     ev = page.evaluate(EVERYTHING, H)
     check("everything-else-fits", ev["listInView"] and ev["startShown"] and ev["sessions"] >= 6
           and ev["sessionsShown"] >= 6 and not ev["unreachable"], **ev)
+    # The overlay contract: Escape from inside closes it and returns focus to "Everything else";
+    # an Escape a higher layer owns (the shortcut overlay) closes only that layer (Copilot r1).
+    page.locator('[data-testid="desk-rail-everything"] [data-nav-dest="section:projects"]').focus()
+    page.keyboard.press("Escape")
+    page.wait_for_timeout(150)
+    esc = page.evaluate("""() => ({open: !!document.querySelector('[data-testid="desk-rail-everything"]'),
+      focus: document.activeElement?.dataset?.testid ?? null})""")
+    page.get_by_test_id("desk-rail-more").click()
+    page.get_by_test_id("desk-rail-everything").wait_for(state="visible", timeout=5000)
+    page.evaluate("() => document.activeElement && document.activeElement.blur()")
+    page.keyboard.press("Alt+/")
+    page.get_by_test_id("shortcut-overlay").wait_for(state="visible", timeout=5000)
+    page.keyboard.press("Escape")
+    page.wait_for_timeout(200)
+    layered = page.evaluate("""() => ({overlay: !!document.querySelector('[data-testid="shortcut-overlay"]'),
+      open: !!document.querySelector('[data-testid="desk-rail-everything"]')})""")
+    check("everything-else-escape", not esc["open"] and esc["focus"] == "desk-rail-more"
+          and not layered["overlay"] and layered["open"], esc=esc, layered=layered)
     last = page.locator('[data-testid="desk-rail-everything"] [data-nav-dest="settings:/system"]')
     last.scroll_into_view_if_needed()
     last.click()

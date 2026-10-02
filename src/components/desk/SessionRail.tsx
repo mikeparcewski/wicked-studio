@@ -7,6 +7,7 @@ import { useBoardModel } from '../../hooks/useBoardModel.js';
 import { useCapabilities } from '../../store/capabilities.js';
 import type { Navigate } from '../../hooks/useRoute.js';
 import { SESSION_RAIL_PX } from '../../theming/skins.js';
+import { anyModalOpen, useLayerStore } from '../../store/layers.js';
 import { HealthRailSection } from '../HealthRailSection.js';
 import { NotificationBell } from '../NotificationBell.js';
 import { WatchPill } from './WatchPill.js';
@@ -40,14 +41,24 @@ export function SessionRail({ runs, needRows, navigate, pathname }: {
   const [more, setMore] = useState(false);
   const [healthOpen, setHealthOpen] = useState(false);
   const moreRef = useRef<HTMLDivElement | null>(null);
+  const moreTrigger = useRef<HTMLButtonElement | null>(null);
   const go = (path: string) => (e: React.MouseEvent): void => { e.preventDefault(); setMore(false); navigate(path); };
-  // "Everything else" is a popover beside the rail (studio#421): Escape or a click outside closes it.
+  // "Everything else" is a popover beside the rail (studio#421), on the overlay contract
+  // (hooks/useDismissable): a click outside closes it; Escape closes it and returns focus to its
+  // trigger — but only when no higher layer owns that Escape (store/layers.ts precedence: the
+  // shortcut overlay, an open modal, or a surface that already handled it, like the palette).
   useEffect(() => {
     if (!more) return;
     const onDown = (e: PointerEvent): void => {
       if (moreRef.current !== null && e.target instanceof Node && !moreRef.current.contains(e.target)) setMore(false);
     };
-    const onKey = (e: KeyboardEvent): void => { if (e.key === 'Escape') setMore(false); };
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key !== 'Escape' || e.defaultPrevented) return;
+      if (useLayerStore.getState().shortcutOverlayOpen || anyModalOpen()) return;
+      e.stopPropagation();
+      setMore(false);
+      moreTrigger.current?.focus();
+    };
     document.addEventListener('pointerdown', onDown);
     document.addEventListener('keydown', onKey);
     return () => { document.removeEventListener('pointerdown', onDown); document.removeEventListener('keydown', onKey); };
@@ -103,6 +114,7 @@ export function SessionRail({ runs, needRows, navigate, pathname }: {
         <HealthRailSection open={healthOpen} onToggle={() => setHealthOpen((v) => !v)} />
         <div ref={moreRef}>
           <button
+            ref={moreTrigger}
             type="button"
             data-testid="desk-rail-more"
             aria-expanded={more}
