@@ -55,10 +55,13 @@ export function plainRunTitle(problem: string): string {
 
 // ── studio#424: finished work kept on this machine ──────────────────────────────────────────
 
-/** A completed run the daemon calls `stranded` that was never asked to deliver (no deliver phase):
- *  the work is where the run left it, as asked. Not a need, and no PR was ever promised. */
-export function keptLocally(view: SessionView): boolean {
-  return view.session.status === 'completed' && deliveryOf(view).state === 'stranded' && deliverUnit(view) === null;
+/** A completed run the daemon calls `stranded` that was never asked to deliver (no deliver phase,
+ *  and no post-hoc `POST /runs/:id/deliver` tried this session): the work is where the run left it,
+ *  as asked. Not a need, and no PR was ever promised. A post-hoc attempt in flight or failed leaves
+ *  no deliver unit either, so the caller says whether one was tried (Copilot). */
+export function keptLocally(view: SessionView, deliveryAttempted = false): boolean {
+  return !deliveryAttempted && view.session.status === 'completed' && deliveryOf(view).state === 'stranded'
+    && deliverUnit(view) === null;
 }
 
 /** Its line on the Desk and in the rail. */

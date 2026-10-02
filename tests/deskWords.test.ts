@@ -113,6 +113,13 @@ describe('#424 a run launched without delivery is kept, not stranded', () => {
     expect(KEPT_LINE).not.toMatch(/stranded|PR/);
   });
 
+  it('a post-hoc delivery attempted this session (in flight or failed) is not "kept": it still needs you (Copilot)', () => {
+    const tried = finished('r-posthoc', { deliverUnit: false });
+    expect(keptLocally(tried, true)).toBe(false);
+    const rows = needsYouRows(inputs({ runs: [tried], deliveryAttempted: new Set(['r-posthoc']) }));
+    expect(rows.map((r) => r.key)).toStrictEqual(['stranded:r-posthoc']);
+  });
+
   it('a run whose delivery was asked for and did not land still needs you, without promising a PR', () => {
     const stuck = finished('r-stuck', { deliverUnit: true });
     expect(keptLocally(stuck)).toBe(false);
