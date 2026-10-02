@@ -82,7 +82,7 @@ export function NotificationBell({ navigate, collapsed = false }: Props): React.
   const ref = useRef<HTMLDivElement>(null);
 
   // §7.7: Escape closes the bell popover — the brief's named gap. Registered
-  // through the ONE slice-G registry; yields while the '?' overlay or the runs
+  // through the ONE slice-G registry; yields while the shortcut overlay or the runs
   // sheet is up (their entries close them first, per the chain).
   const escapeEntries = useMemo<ShortcutEntry[]>(() => [{
     id: 'bell-close',

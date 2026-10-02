@@ -14,6 +14,7 @@ import { useMembershipStore } from '../src/store/membership.js';
 import { useRunsPanelStore } from '../src/store/runsPanel.js';
 import { useRuntimeStore, type LoggedEvent } from '../src/store/runtime.js';
 import { makeView } from './factories.js';
+import { chordKey } from './altKeys.js';
 
 /**
  * The runs bottom panel (DES-FEEDBACK-003 §5, slice N): the §5.3 stat
@@ -57,7 +58,7 @@ function mount(over: { runs?: typeof W2; immersive?: boolean; scope?: string | n
 
 const press = (key: string): void => {
   act(() => {
-    window.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+    window.dispatchEvent(new KeyboardEvent('keydown', { ...chordKey(key), bubbles: true, cancelable: true }));
   });
 };
 

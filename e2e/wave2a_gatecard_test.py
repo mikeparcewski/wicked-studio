@@ -105,7 +105,7 @@ with sync_playwright() as p:
     # ── the card's a key: same window, then exactly one POST ────────────────────
     page.get_by_test_id("steering-prompt").focus()
     pressed = time.monotonic()
-    page.keyboard.press("a")
+    page.keyboard.press("Alt+a")
     check("key-a-shows-toast", toast_shown(page))
     page.wait_for_timeout(max(0, int((pressed + 9.3 - time.monotonic()) * 1000)))
     check("key-nothing-before-window", len(posts) == 0, browser_posts=len(posts))

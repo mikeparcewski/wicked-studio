@@ -394,7 +394,7 @@ function DocFrame({
     chord: { key: 'escape' },
     group: 'panels',
     description: 'Exit the version compare lens',
-    // §7.7 chain: the '?' overlay and any modal close before the compare lens.
+    // §7.7 chain: the shortcut overlay and any modal close before the compare lens.
     guard: () =>
       cmpRef.current !== null &&
       !useLayerStore.getState().shortcutOverlayOpen &&

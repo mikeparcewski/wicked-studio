@@ -613,7 +613,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   }, [popoverOpen]);
 
   // ── Close popover on Escape ────────────────────────────────────────────────
-  // §7.7 (slice AC): a popover rung — yields to the '?' overlay, the palette,
+  // §7.7 (slice AC): a popover rung — yields to the shortcut overlay, the palette,
   // and any open modal above it (one press, one layer).
   useEffect(() => {
     if (!popoverOpen) return;

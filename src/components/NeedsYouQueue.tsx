@@ -27,7 +27,7 @@ import { humanTitle } from './runIdentity.js';
  *
  * Studio wave 2b: the rows, their grouping ("2 approvals", expandable), the ranking,
  * the keyboard cursor and the verbs all come from `useNeedsQueue` — this component only
- * renders them. Keys: focus the queue (Tab or click), then j/k walk it and Enter acts.
+ * renders them. Keys: focus the queue (Tab or click), then ⌥J/⌥K (or ↓/↑) walk it and Enter acts.
  *
  * THE CONTRADICTION GUARD IS STRUCTURAL: this component receives the fold's
  * rows and branches on `rows.length === 0` — the calm copy derives from the
@@ -280,7 +280,7 @@ export function NeedsYouQueue({ queue, runs, navigate, now, variant = 'inline' }
     <section
       ref={(el) => { sectionEl.current = el; queue.rootRef(el); }}
       tabIndex={0}
-      aria-label="Needs you — focus, then j/k to move and Enter to act"
+      aria-label="Needs you — focus, then arrow keys or Alt+J/Alt+K to move and Enter to act"
       data-testid="needs-you-queue"
       data-count={queue.count}
       data-focus-lock={queue.focus.on ? 'on' : 'off'}

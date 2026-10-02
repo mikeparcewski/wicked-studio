@@ -14,14 +14,14 @@ interface Props {
  * registry-routed, so it fires even from typing contexts inside the modal).
  * DES-UX-001 §7.7 (slice AC) made it universal — the former `disableEscapeKey`
  * opt-out is gone: ONE Escape contract closes every layer, the Operator-shell
- * and sign-in terminals included. The one yield is the '?' overlay, which sits
+ * and sign-in terminals included. The one yield is the shortcut overlay, which sits
  * above modals in the §7.7 chain and closes first.
  */
 /**
  * The modal family's shared Escape wiring (§7.7, one press = one layer):
  * registers the mounted modal in the layer ledger (so the bell, the runs
  * sheet, and the triage selection yield beneath it) and closes it on Escape —
- * yielding to the '?' overlay and the palette above it in the chain, and to
+ * yielding to the shortcut overlay and the palette above it in the chain, and to
  * any LATER-opened modal (only the topmost answers). Used by every
  * modal-family component: Modal, RepoGraphModal, NewProjectModal.
  */

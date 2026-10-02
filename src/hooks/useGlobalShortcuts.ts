@@ -29,13 +29,13 @@ export interface ShortcutChord {
   code?: string;
 }
 
-/** The '?' overlay's section headings (DES-UX-001 §7.7, slice AC). */
+/** The shortcut overlay's section headings (DES-UX-001 §7.7, slice AC). */
 export type ShortcutGroup = 'triage' | 'palette' | 'gates' | 'navigate' | 'panels';
 
 export interface ShortcutEntry {
   id: string;
   chord: ShortcutChord;
-  /** Human-readable — rendered verbatim by the '?' overlay (§7.7). */
+  /** Human-readable — rendered verbatim by the shortcut overlay (§7.7). */
   description: string;
   /** Overlay section (§7.7). Untagged entries land under "panels". */
   group?: ShortcutGroup;
@@ -82,12 +82,37 @@ export function chordMatches(e: KeyboardEvent, chord: ShortcutChord): boolean {
   return true;
 }
 
+/**
+ * DES-STUDIO-REBUILD-001 §5.6 rule 1: no global shortcut is a printable key without a
+ * modifier — a letter, digit, symbol or Space always TYPES. A chord is "bare printable"
+ * when its key is one printable character and it carries neither Alt nor Ctrl/⌘ (Shift
+ * alone does not count: Shift+? is still a printable '?'). Named keys (Escape, Enter,
+ * arrows) are not printable and stay bare.
+ */
+export function isBarePrintable(chord: ShortcutChord): boolean {
+  return [...chord.key].length === 1 && chord.alt !== true && chord.ctrlOrMeta !== true;
+}
+
+const CODE_FOR: Record<string, string> = { '/': 'Slash', '.': 'Period', ',': 'Comma' };
+
+/**
+ * The ⌥ chord for one letter (or `/`): matched positionally on `code`, because macOS
+ * Option+J reports `key: '∆'` while `code` stays `KeyJ`. `key` is kept for the overlay's
+ * label. Every global letter chord is spelled through this, so the rule holds by
+ * construction.
+ */
+export function altChord(key: string): ShortcutChord {
+  const code = CODE_FOR[key] ?? (/^[a-z]$/.test(key) ? `Key${key.toUpperCase()}` : undefined);
+  if (code === undefined) throw new Error(`altChord: no positional code for '${key}'`);
+  return { key, code, alt: true };
+}
+
 /** The ordered handler table — registration order is precedence. */
 const table: ShortcutEntry[] = [];
 
 /**
  * The overlay's corpus (§7.7, EC42): a snapshot of what is REGISTERED right
- * now — the '?' overlay renders from this, never from a hand-kept list, so a
+ * now — the shortcut overlay renders from this, never from a hand-kept list, so a
  * key that exists is documented and a key that unmounted disappears with its
  * surface. Read on open; entries are live references, never mutated here.
  */
@@ -127,6 +152,18 @@ let listening = false;
 
 /** Register entries (in order); returns the unregister. Non-hook form for tests. */
 export function registerShortcuts(entries: ShortcutEntry[]): () => void {
+  // §5.6 rule 1, enforced at the one registry: a bare printable chord is a programming
+  // error (it would swallow a letter the operator is typing), so it never registers.
+  const bare = entries.find((e) => isBarePrintable(e.chord));
+  if (bare !== undefined) {
+    throw new Error(`shortcut '${bare.id}' needs a modifier: '${bare.chord.key}' must type, not act (§5.6)`);
+  }
+  // An Alt chord on a printable key must match on `code`: macOS Option mangles `key`
+  // (Option+J reports '∆'), so a key-matched Alt chord would never fire there.
+  const keyMatchedAlt = entries.find((e) => e.chord.alt === true && [...e.chord.key].length === 1 && e.chord.code === undefined);
+  if (keyMatchedAlt !== undefined) {
+    throw new Error(`shortcut '${keyMatchedAlt.id}': an Alt chord must match on \`code\` (use altChord)`);
+  }
   if (!listening) {
     listening = true;
     window.addEventListener('keydown', dispatch);

@@ -1,6 +1,6 @@
 import { Fragment, useMemo, useRef, useState } from 'react';
 import { sessionGuidance } from '../api/guidance.js';
-import { useGlobalShortcuts, type ShortcutEntry } from '../hooks/useGlobalShortcuts.js';
+import { altChord, useGlobalShortcuts, type ShortcutEntry } from '../hooks/useGlobalShortcuts.js';
 import type { SessionView } from '../api/types.js';
 import type { SignalKind } from '../board/boardAttention.js';
 import { leadMovingRun, truncate } from '../board/phaseProgress.js';
@@ -372,7 +372,7 @@ export function ProjectCard({
   // Bumped by the gate-approaching chip (an entry point): opens + focuses the widget.
   const [annotateSignal, setAnnotateSignal] = useState(0);
 
-  // DES-UX-002 §5.4 (slice BE): `n` opens the steer-note widget from the board,
+  // DES-UX-002 §5.4 (slice BE): ⌥N opens the steer-note widget from the board,
   // through the ONE registry. Registered per card and guard-scoped to the
   // triage-SELECTED card that actually mounts a widget — dispatch walks the
   // table until a guard holds, so every peer card yields silently, and the
@@ -381,7 +381,7 @@ export function ProjectCard({
   nState.current = { selected: kbdSelected, has: annotateFor !== undefined };
   const nEntries = useMemo<ShortcutEntry[]>(() => [{
     id: `annotate-note-${project.id}`,
-    chord: { key: 'n' },
+    chord: altChord('n'),
     group: 'gates',
     description: 'Compose a steer note on the selected card',
     guard: () => nState.current.selected && nState.current.has,

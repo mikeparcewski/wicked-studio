@@ -4,7 +4,7 @@ import type { NeedAction, NeedRow } from '../board/needsYou.js';
 import { useFocusLockStore } from '../store/focusLock.js';
 import { useNotificationStore } from '../store/notifications.js';
 import { setRetryPrefill } from '../store/retryPrefill.js';
-import { useGlobalShortcuts, type ShortcutEntry } from './useGlobalShortcuts.js';
+import { altChord, useGlobalShortcuts, type ShortcutEntry } from './useGlobalShortcuts.js';
 import { useBatchOnboard, type BatchState } from './useRepairMoves.js';
 import { useAcceptMemory, type AcceptMemory } from './useAcceptMemory.js';
 import type { Navigate } from './useRoute.js';
@@ -14,10 +14,10 @@ import { useHandoverProgress } from '../store/visit.js';
  * The needs-you queue's BEHAVIOUR (studio wave 2b): grouping, expansion, the keyboard
  * cursor and the act verbs. Skins render {@link NeedsQueue}; they never re-derive it.
  *
- * Keys live on the queue ITSELF: j/k (and ↓/↑) walk the queue and Enter acts on the
+ * Keys live on the queue ITSELF: ⌥J/⌥K (and ↓/↑) walk the queue and Enter acts on the
  * selected row — a group expands or collapses, a row does its verb — while focus is
  * inside the queue (Tab onto it, or click it). With focus elsewhere the keys yield, so
- * the portfolio wall's triage cursor keeps j/k exactly as before. The two sets of keys
+ * the portfolio wall's triage cursor keeps ⌥J/⌥K exactly as before. The two sets of keys
  * are mutually exclusive by guard (the queue's need focus inside it; the wall's yield
  * while it has it), so registration order is irrelevant — the queue may be mounted by
  * Home or by the shell's right rail (`NeedsQueueSurface`), on any route.
@@ -221,9 +221,9 @@ export function useNeedsQueue(flat: NeedRow[], navigate: Navigate, now: number):
       setSelectedKey(list[next]?.row.key ?? null);
     };
     return [
-      { id: 'queue-next-j', chord: { key: 'j' }, group: 'triage', description: 'Needs-you queue: next row', guard: focused, handler: move(1) },
+      { id: 'queue-next-j', chord: altChord('j'), group: 'triage', description: 'Needs-you queue: next row', guard: focused, handler: move(1) },
       { id: 'queue-next-down', chord: { key: 'arrowdown' }, group: 'triage', description: 'Needs-you queue: next row', guard: focused, handler: move(1) },
-      { id: 'queue-prev-k', chord: { key: 'k' }, group: 'triage', description: 'Needs-you queue: previous row', guard: focused, handler: move(-1) },
+      { id: 'queue-prev-k', chord: altChord('k'), group: 'triage', description: 'Needs-you queue: previous row', guard: focused, handler: move(-1) },
       { id: 'queue-prev-up', chord: { key: 'arrowup' }, group: 'triage', description: 'Needs-you queue: previous row', guard: focused, handler: move(-1) },
       {
         id: 'queue-act',

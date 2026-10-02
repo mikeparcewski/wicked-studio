@@ -131,14 +131,14 @@ describe('registerShortcuts — dispatch, order, unregistration', () => {
     register([
       {
         id: 'a',
-        chord: { key: 'j' },
+        chord: { key: 'j', code: 'KeyJ', alt: true },
         description: 'a',
         guard: () => false,
         handler: first,
       },
-      { id: 'b', chord: { key: 'j' }, description: 'b', handler: second },
+      { id: 'b', chord: { key: 'j', code: 'KeyJ', alt: true }, description: 'b', handler: second },
     ]);
-    window.dispatchEvent(key({ key: 'j' }));
+    window.dispatchEvent(key({ key: '∆', code: 'KeyJ', altKey: true }));
     expect(first).not.toHaveBeenCalled();
     expect(second).toHaveBeenCalledTimes(1);
   });
@@ -147,10 +147,10 @@ describe('registerShortcuts — dispatch, order, unregistration', () => {
     const first = vi.fn();
     const second = vi.fn();
     register([
-      { id: 'a', chord: { key: 'j' }, description: 'a', handler: first },
-      { id: 'b', chord: { key: 'j' }, description: 'b', handler: second },
+      { id: 'a', chord: { key: 'j', code: 'KeyJ', alt: true }, description: 'a', handler: first },
+      { id: 'b', chord: { key: 'j', code: 'KeyJ', alt: true }, description: 'b', handler: second },
     ]);
-    window.dispatchEvent(key({ key: 'j' }));
+    window.dispatchEvent(key({ key: '∆', code: 'KeyJ', altKey: true }));
     expect(first).toHaveBeenCalledTimes(1);
     expect(second).not.toHaveBeenCalled();
   });

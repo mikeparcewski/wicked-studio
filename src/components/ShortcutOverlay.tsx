@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import {
+  altChord,
   listShortcuts,
   useGlobalShortcuts,
   type ShortcutChord,
@@ -9,7 +10,7 @@ import {
 import { useLayerStore } from '../store/layers.js';
 
 /**
- * The global '?' shortcut overlay (DES-UX-001 §7.7, EC42): '?' opens it on
+ * The global shortcut overlay (DES-UX-001 §7.7, EC42): ⌥/ opens it on
  * every route, and its corpus is `listShortcuts()` — the slice-G registry's
  * OWN registrations at open time, grouped by each entry's declared section —
  * so it can never drift from what the keys actually do, and a key that only
@@ -40,10 +41,8 @@ export function chordLabel(chord: ShortcutChord): string {
   if (chord.ctrlOrMeta) parts.push('Ctrl/⌘');
   if (chord.alt) parts.push('Alt/⌥');
   if (chord.shift) parts.push('Shift');
-  const base = KEY_LABEL[chord.key] ?? chord.key.toUpperCase();
-  // '?' already spells its shift — "Shift+?" would document a chord nobody types.
-  parts.push(base);
-  return (chord.key === '?' ? [base] : parts).join('+');
+  parts.push(KEY_LABEL[chord.key] ?? chord.key.toUpperCase());
+  return parts.join('+');
 }
 
 interface Row {
@@ -87,10 +86,9 @@ export function ShortcutOverlay(): React.ReactElement | null {
       useLayerStore.getState().setShortcutOverlayOpen(next);
     };
     return [
-      // Both spellings: layouts that report '?' with shiftKey and those that
-      // don't each match exactly one entry (chordMatches is shift-strict).
-      { id: 'help-overlay', chord: { key: '?', shift: true }, group: 'panels', description: 'Keyboard shortcuts (this overlay)', handler: toggle },
-      { id: 'help-overlay-noshift', chord: { key: '?' }, group: 'panels', description: 'Keyboard shortcuts (this overlay)', handler: toggle },
+      // ⌥/ (DES-STUDIO-REBUILD-001 §5.6): a bare '?' types — it is a printable key, so the
+      // overlay rides the same ⌥ family as every other global chord, matched on `code`.
+      { id: 'help-overlay', chord: altChord('/'), group: 'panels', description: 'Keyboard shortcuts (this overlay)', handler: toggle },
       {
         id: 'help-overlay-close',
         chord: { key: 'escape' },

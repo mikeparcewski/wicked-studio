@@ -320,7 +320,7 @@ export function App(): React.ReactElement {
           if (runId) void onKill(runId);
         },
       }),
-      // Ctrl/⌘+Shift+A — the ASK toggle, documented in the '?' overlay via the registry.
+      // Ctrl/⌘+Shift+A — the ASK toggle, documented in the shortcut overlay via the registry.
       {
         id: 'ask-dock',
         chord: { key: 'a', ctrlOrMeta: true, shift: true },
@@ -812,7 +812,7 @@ export function App(): React.ReactElement {
         <GateNotifications onSelect={selectRun} runId={runId} projectId={projectId} runs={runs} />
       )}
 
-      {/* The '?' shortcut overlay (DES-UX-001 §7.7, EC42) — every route: this
+      {/* The shortcut overlay (DES-UX-001 §7.7, EC42) — every route: this
           root renders on all of them, and the overlay's corpus is the registry
           itself, so each surface documents exactly the keys it registered. */}
       <ShortcutOverlay />

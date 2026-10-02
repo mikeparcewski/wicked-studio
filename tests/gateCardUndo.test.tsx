@@ -57,11 +57,11 @@ describe('the gate card rides the undo window', () => {
     expect(screen.getByTestId('steering-approve')).not.toBeDisabled();
   });
 
-  it("the card's a key queues the same way", async () => {
+  it("the card's ⌥A chord queues the same way", async () => {
     vi.useFakeTimers();
     renderCard();
     screen.getByTestId('steering-gate').focus();
-    act(() => { fireEvent.keyDown(window, { key: 'a' }); });
+    act(() => { fireEvent.keyDown(window, { key: 'å', code: 'KeyA', altKey: true }); });
     expect(screen.getByTestId('undo-toast').textContent).toContain('Approving r-gate in 10 s');
     await act(async () => { await vi.advanceTimersByTimeAsync(9_000); });
     expect(client.api.confirmGate).not.toHaveBeenCalled();

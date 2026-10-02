@@ -117,7 +117,7 @@ def select_project(page, pid: str, order: list) -> None:
     """Walk the cursor onto `pid` with j presses from a CLEARED cursor."""
     page.keyboard.press("Escape")
     for _ in range(order.index(pid) + 1):
-        page.keyboard.press("j")
+        page.keyboard.press("Alt+j")
     page.wait_for_function(
         """(pid) => document.querySelector(
              '[data-kbd-selected="true"]')?.dataset?.projectId === pid""",
@@ -167,23 +167,23 @@ with sync_playwright() as p:
     if len(order) < 2 or SIMPLE_PROJECT not in order or COMPLEX_PROJECT not in order:
         fail("fixture_shape", f"needs-you band lacks the two gated projects: {order}")
 
-    page.keyboard.press("j")
+    page.keyboard.press("Alt+j")
     first = page.evaluate(CURSOR_STATE)
-    page.keyboard.press("j")
+    page.keyboard.press("Alt+j")
     second = page.evaluate(CURSOR_STATE)
 
     # ── Capture 1: second card ring-selected, hint row visible ──────────────────
     page.screenshot(path=str(VSHOTS / "feedback2-H-triage-cursor.png"))
 
-    page.keyboard.press("k")
+    page.keyboard.press("Alt+k")
     back = page.evaluate(CURSOR_STATE)
 
     # The full walk follows the band's own render order and clamps at the end.
     walked = [back["selected"]]
     for _ in range(len(order) - 1):
-        page.keyboard.press("j")
+        page.keyboard.press("Alt+j")
         walked.append(page.evaluate(CURSOR_STATE)["selected"])
-    page.keyboard.press("j")  # past the end — must clamp, never wrap
+    page.keyboard.press("Alt+j")  # past the end — must clamp, never wrap
     clamped = page.evaluate(CURSOR_STATE)["selected"]
 
     page.keyboard.press("Escape")
@@ -216,7 +216,7 @@ with sync_playwright() as p:
     # ── AC 3 (cancel half) + capture 2: r opens the note; Escape fires nothing ──
     select_project(page, SIMPLE_PROJECT, order)
     posts_before = len(gate_posts)
-    page.keyboard.press("r")
+    page.keyboard.press("Alt+r")
     page.locator('[data-testid="gate-reject-note"]').wait_for(timeout=5000)
     note_open = page.evaluate(CURSOR_STATE)
     page.screenshot(path=str(VSHOTS / "feedback2-H-reject-note.png"))
@@ -281,9 +281,9 @@ with sync_playwright() as p:
     }
 
     # ── AC 2: a approves the simple gate — one POST, no navigation ──────────────
-    page.keyboard.press("a")
+    page.keyboard.press("Alt+a")
     page.locator(f'[data-testid="gate-answered-{SIMPLE_RUN}"]').wait_for(timeout=20000)  # 10 s undo window first (wave 2a)
-    page.keyboard.press("a")  # answered — the shared guard drops the second
+    page.keyboard.press("Alt+a")  # answered — the shared guard drops the second
     page.wait_for_timeout(400)
     approve_posts = gate_posts[posts_before:]
     approve_state = page.evaluate(
@@ -317,7 +317,7 @@ with sync_playwright() as p:
           history.pushState = (s, t, url) => { window.__pushed.push(String(url)); orig(s, t, url); };
         }"""
     )
-    page.keyboard.press("a")
+    page.keyboard.press("Alt+a")
     page.wait_for_function(
         """(args) => window.location.pathname === `/p/${args[0]}/build/${args[1]}`""",
         arg=[COMPLEX_PROJECT, COMPLEX_RUN], timeout=10000,
@@ -341,7 +341,7 @@ with sync_playwright() as p:
     order2 = page.evaluate(CURSOR_STATE)["order"]
     select_project(page, SIMPLE_PROJECT, order2)
     posts_before_reject = len(gate_posts)
-    page.keyboard.press("r")
+    page.keyboard.press("Alt+r")
     page.locator('[data-testid="gate-reject-note"]').wait_for(timeout=5000)
     page.keyboard.type("needs the Q3 numbers first")
     page.keyboard.press("Enter")
@@ -374,7 +374,7 @@ with sync_playwright() as p:
     page.add_style_tag(content=HIDE_GATE_TOASTS)
     page.locator(f'[data-testid="gate-approve-{SIMPLE_RUN}"]').wait_for(timeout=30000)
     posts_before_dash = len(gate_posts)
-    page.keyboard.press("j")
+    page.keyboard.press("Alt+j")
     dash = page.evaluate(
         """(run) => {
           const row = document.querySelector(`[data-testid="dashboard-gate"][data-run-id="${run}"]`);
@@ -386,7 +386,7 @@ with sync_playwright() as p:
         }""",
         SIMPLE_RUN,
     )
-    page.keyboard.press("a")
+    page.keyboard.press("Alt+a")
     page.locator(f'[data-testid="gate-answered-{SIMPLE_RUN}"]').wait_for(timeout=20000)  # 10 s undo window first (wave 2a)
     page.wait_for_timeout(400)
     dash_posts = gate_posts[posts_before_dash:]

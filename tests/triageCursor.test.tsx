@@ -7,6 +7,7 @@ import { useGateActionStore } from '../src/board/gateActions.js';
 import { useGateStore, type OpenGate } from '../src/store/gates.js';
 import * as client from '../src/api/client.js';
 import type { Navigate } from '../src/hooks/useRoute.js';
+import { chordKey } from './altKeys.js';
 
 /**
  * The slice-H triage cursor (DES-FEEDBACK-002 §2): traversal order and the
@@ -47,7 +48,7 @@ function Harness({ items, navigate }: { items: TriageItem[]; navigate: Navigate 
 }
 
 const press = (key: string, target: HTMLElement | Window = window): void => {
-  const e = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
+  const e = new KeyboardEvent('keydown', { ...chordKey(key), bubbles: true, cancelable: true });
   act(() => {
     if (target === window) window.dispatchEvent(e);
     else (target as HTMLElement).dispatchEvent(e);
@@ -89,7 +90,19 @@ describe('the triage cursor (slice H, §2.2)', () => {
     expect(selectedKeys()).toEqual(['p1']);
   });
 
-  it('the arrows pair with j/k; the cursor CLAMPS at both ends, never wraps', () => {
+  it('bare j, k, a and r do nothing: letters type, they are never shortcuts (§5.6 rule 1)', async () => {
+    render(<Harness items={items3()} navigate={vi.fn()} />);
+    for (const key of ['j', 'k', 'a', 'r']) {
+      act(() => { window.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true })); });
+    }
+    expect(selectedKeys()).toEqual([]);
+    press('j'); // ⌥J selects p1 (a simple gate) …
+    act(() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', bubbles: true, cancelable: true })); });
+    await new Promise((r) => setTimeout(r, 5));
+    expect(client.api.confirmGate).not.toHaveBeenCalled(); // … and a bare a still answers nothing
+  });
+
+  it('the arrows pair with ⌥J/⌥K; the cursor CLAMPS at both ends, never wraps', () => {
     render(<Harness items={items3()} navigate={vi.fn()} />);
     press('ArrowDown');
     press('ArrowDown');

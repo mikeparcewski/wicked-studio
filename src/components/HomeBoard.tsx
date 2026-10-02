@@ -534,7 +534,7 @@ export function HomeBoard({ runs, navigate, onOpenAsk }: Props): React.ReactElem
                       fontFamily: 'var(--font-mono)', margin: '8px 0 0',
                     }}
                   >
-                    j/k select · a approve · r reject · ↵ open
+                    ⌥J/⌥K select · ⌥A approve · ⌥R reject · ↵ open
                   </p>
                 )}
               </section>

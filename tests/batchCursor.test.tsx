@@ -6,6 +6,7 @@ import { useTriageCursor, type TriageItem } from '../src/hooks/useTriageCursor.j
 import { setShortcutsPaletteOpen } from '../src/hooks/useGlobalShortcuts.js';
 import type { OpenGate } from '../src/store/gates.js';
 import type { Navigate } from '../src/hooks/useRoute.js';
+import { chordKey } from './altKeys.js';
 
 /**
  * Slice L's selection keys on the slice-H cursor (DES-FEEDBACK-002 §9.2):
@@ -37,7 +38,7 @@ function Harness({ items, navigate }: { items: TriageItem[]; navigate: Navigate 
 
 const press = (key: string): void => {
   act(() => {
-    window.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+    window.dispatchEvent(new KeyboardEvent('keydown', { ...chordKey(key), bubbles: true, cancelable: true }));
   });
 };
 
@@ -62,16 +63,19 @@ beforeEach(() => {
   });
 });
 
-describe('x / Space on the cursor (§9.2)', () => {
-  it('toggles the SIMPLE gate under the cursor — x on, x off; Space too', () => {
+describe('⌥X on the cursor (§9.2, §5.6)', () => {
+  it('toggles the SIMPLE gate under the cursor — ⌥X on, ⌥X off; bare x and Space select nothing', () => {
     render(<Harness items={ITEMS} navigate={vi.fn()} />);
     press('j'); // cursor → p-simple
     press('x');
     expect(selected()).toEqual(['r-simple']);
     press('x');
     expect(selected()).toEqual([]);
-    press(' ');
-    expect(selected()).toEqual(['r-simple']);
+    // §5.6 rule 1: a printable key with no modifier types; it is never a shortcut.
+    act(() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'x', bubbles: true, cancelable: true })); });
+    expect(selected()).toEqual([]);
+    act(() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true })); });
+    expect(selected()).toEqual([]);
   });
 
   it('a cached-gate-less run is still simple (§7.11) and selectable', () => {
@@ -85,7 +89,6 @@ describe('x / Space on the cursor (§9.2)', () => {
     render(<Harness items={ITEMS} navigate={vi.fn()} />);
     press('j'); press('j'); // → p-complex
     press('x');
-    press(' ');
     expect(selected()).toEqual([]);
   });
 
