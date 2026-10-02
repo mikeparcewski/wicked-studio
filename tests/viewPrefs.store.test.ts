@@ -107,6 +107,20 @@ describe('races (Copilot on #417)', () => {
     expect(putView).toHaveBeenLastCalledWith({ technical_details: false });
     expect(useViewPrefsStore.getState().persist).toBe('ok');
   });
+
+  it('a failed write superseded while in flight is not retried, and never reports the newer edit dropped', async () => {
+    let fail: (e: Error) => void = () => undefined;
+    putView.mockReturnValueOnce(new Promise((_, rej) => { fail = rej; }));
+    useViewPrefsStore.getState().update({ technical_details: true });
+    await vi.advanceTimersByTimeAsync(400);
+    useViewPrefsStore.getState().update({ technical_details: false });
+    fail(new Error('offline'));
+    await vi.advanceTimersByTimeAsync(400);
+    expect(useViewPrefsStore.getState().persist).toBe('ok');
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(putView).toHaveBeenCalledTimes(2);
+    expect(useViewPrefsStore.getState().persist).toBe('ok');
+  });
 });
 
 describe('update (optimistic, debounced PUT /settings)', () => {

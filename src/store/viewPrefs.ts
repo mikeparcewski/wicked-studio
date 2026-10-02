@@ -75,11 +75,15 @@ export const useViewPrefsStore = create<ViewPrefsStore>((set, get) => ({
     if (persistTimer !== null) clearTimeout(persistTimer);
     persistTimer = setTimeout(() => {
       persistTimer = null;
-      // One silent retry that re-reads the store, so a newer edit is never clobbered.
+      // One silent retry, for this edit only.
+      // The revision this write is FOR, taken before it starts: a failure that a newer edit has
+      // superseded is not retried (that edit has its own PUT) and never reports it dropped.
+      const writeAt = revision;
       void attempt(get, set).catch(() => {
-        const failedAt = revision;
+        if (revision !== writeAt) return;
         setTimeout(() => {
-          void attempt(get, set).catch(() => { if (revision === failedAt) set({ persist: 'dropped' }); });
+          if (revision !== writeAt) return;
+          void attempt(get, set).catch(() => { if (revision === writeAt) set({ persist: 'dropped' }); });
         }, RETRY_MS);
       });
     }, PERSIST_DEBOUNCE_MS);
