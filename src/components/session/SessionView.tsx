@@ -131,7 +131,8 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
     if (!ready) return;
     const el = scroller.current;
     const top = useSessionDrafts.getState().scroll[sessionId];
-    if (el !== null && top !== undefined) el.scrollTop = top;
+    // A first visit starts at the top: the scroller is reused across sessions (Copilot).
+    if (el !== null) el.scrollTop = top ?? 0;
   }, [sessionId, ready]);
 
   const send = (): void => {
@@ -218,7 +219,7 @@ function RunBlock({ view, badge, go }: {
   badge: number;
   go: (path: string) => (e: React.MouseEvent) => void;
 }): React.ReactElement {
-  const chain = useRunChain(view);
+  const { chain, teamError, retry } = useRunChain(view);
   const id = view.session.id;
   const state = sessionState(view.session.status);
   const page = `/runs/${encodeURIComponent(id)}`;
@@ -229,7 +230,7 @@ function RunBlock({ view, badge, go }: {
         <span className="wk-session-run-title">{humanTitle(view.session.problem || id)}</span>
         <span className="wk-session-run-state">{STATE_WORD[state]}{badge > 0 ? ' · needs you' : ''}</span>
       </p>
-      <ChainLine chain={chain} runId={id} />
+      <ChainLine chain={chain} runId={id} teamError={teamError} onRetry={retry} />
       <a href={page} onClick={go(page)} data-testid="session-run-open" className="wk-session-link">Open the run page →</a>
     </section>
   );

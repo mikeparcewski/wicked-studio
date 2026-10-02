@@ -201,7 +201,9 @@ with sync_playwright() as p:
         "() => !!document.querySelector('[data-testid=\"chain-transport\"]')", timeout=10000)
     solo = page.evaluate(CHAIN, "r-solo")
     check("un-teamed", solo["transport"] == "Team transport unavailable: the team bus was unreachable at launch"
-          and page.get_by_test_id("session-composer-input").input_value() == "", solo=solo)
+          and page.get_by_test_id("session-composer-input").input_value() == ""
+          # a first visit starts at the top, not at the last session's scroll (Copilot)
+          and page.evaluate(THREAD)["scrollTop"] == 0, solo=solo)
 
     # ── 8b. R4: back again ────────────────────────────────────────────────────────
     page.locator('[data-testid="rail-session"][data-session-id="chat-pay"]').click()
@@ -252,6 +254,19 @@ with sync_playwright() as p:
     page.unroute("**/api/v1/chats/chat-pay")
     check("chat-read-failure", unread["conv"] == "unreadable" and not unread["closed"] and unread["runs"] == 2
           and page.locator('[data-testid="session-chat-error"]').count() == 0, **unread)
+
+    # ── 7c. a failed team read is said, never replaced by a plausible chain (Copilot) ──
+    page.route("**/api/v1/runs/r-pay-1/team", lambda route: route.fulfill(
+        status=500, content_type="application/json", body='{"error":"engine unavailable"}'))
+    page.goto(f"{origin}/s/chat-pay", wait_until="networkidle")
+    page.wait_for_function(
+        "() => !!document.querySelector('[data-testid=\"chain\"][data-run-id=\"r-pay-1\"] [data-testid=\"chain-team-error\"]')",
+        timeout=10000)
+    page.unroute("**/api/v1/runs/r-pay-1/team")
+    page.locator('[data-testid="chain"][data-run-id="r-pay-1"] [data-testid="chain-team-retry"]').click()
+    page.wait_for_function(
+        "() => !document.querySelector('[data-testid=\"chain-team-error\"]')", timeout=10000)
+    check("team-read-failure", True)
 
     # ── 9. R2: since you left ─────────────────────────────────────────────────────
     five_h_ago = int(time.time() * 1000) - 5 * 3_600_000

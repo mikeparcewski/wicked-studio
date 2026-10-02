@@ -154,11 +154,12 @@ describe('chainFromUnits (a run that is not a team run)', () => {
       units: units.map((u, ord) => ({ ord, phase_ref: null, stage: 'build', ...u })),
     } as unknown as SessionView;
   }
-  it('done → done, rejected → failed, distributed → running, pending → todo', () => {
+  it('done → done, rejected → failed; only the cursor unit of an executing run is running', () => {
     const c = chainFromUnits(view([
       { status: 'done', phase_ref: 'understand', description: 'read the code' },
       { status: 'distributed', phase_ref: 'build', description: 'fix it' },
-      { status: 'pending', phase_ref: 'review', description: 'review it' },
+      // Routed, not running (Copilot): every unit is distributed before any runs.
+      { status: 'distributed', phase_ref: 'review', description: 'review it' },
       { status: 'rejected', phase_ref: null, description: 'odd one', stage: 'test' },
     ]));
     expect(c.source).toBe('units');
@@ -166,6 +167,13 @@ describe('chainFromUnits (a run that is not a team run)', () => {
       ['research', 'done', 'read the code'], ['build', 'running', 'fix it'],
       ['review', 'todo', 'review it'], ['test', 'failed', 'odd one'],
     ]);
+  });
+  it('a run paused at a gate has no running unit', () => {
+    const c = chainFromUnits(view([
+      { status: 'done', phase_ref: 'understand', description: 'a' },
+      { status: 'distributed', phase_ref: 'build', description: 'b' },
+    ], 'awaiting_human'));
+    expect(c.steps.map((s) => s.state)).toEqual(['done', 'todo']);
   });
   it('chainOf picks the units when the run is not teamed', () => {
     const v = view([{ status: 'done', phase_ref: 'build', description: 'b' }], 'completed');

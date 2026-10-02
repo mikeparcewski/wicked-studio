@@ -1,5 +1,6 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import type { SessionView } from '../../api/types.js';
+import { isRouteUnsupported } from '../../api/errors.js';
 import { runIdentityOf, teamPlanApi } from '../../api/teamPlan.js';
 import { chainOf, chainSentence, type ChainModel, type ChainStep } from '../../board/chainModel.js';
 import { useConnectionStore } from '../../store/connection.js';
@@ -14,7 +15,14 @@ import { useTeamPlanStore } from '../../store/teamPlan.js';
  * a `/ws` reconnect; live `teamEvent` frames fold in between (App feeds the store). A run that is
  * not a team run renders from its units. Never "checked" without `check_state` (board/chainModel).
  */
-export function useRunChain(view: SessionView): ChainModel {
+export interface RunChain {
+  chain: ChainModel;
+  /** The team read failed for a reason other than "this daemon has no such route": said, with a retry. */
+  teamError: string | null;
+  retry: () => void;
+}
+
+export function useRunChain(view: SessionView): RunChain {
   const runId = view.session.id;
   const fold = useTeamPlanStore((s) => s.byRun[runId] ?? null);
   const connected = useConnectionStore((s) => s.status === 'connected');
@@ -27,20 +35,35 @@ export function useRunChain(view: SessionView): ChainModel {
     return () => useTeamPlanStore.getState().untrack(runId);
   }, [runId]);
 
+  const [teamError, setTeamError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     // Re-read on a reconnect too (`connected` flips): /ws has no replay of what was missed.
     let cancelled = false;
     teamPlanApi.team(runId)
-      .then((resp) => { if (!cancelled) useTeamPlanStore.getState().hydrate(runId, resp); })
-      .catch(() => { /* an older daemon, or no team state: the units stand */ });
+      .then((resp) => {
+        if (cancelled) return;
+        setTeamError(null);
+        useTeamPlanStore.getState().hydrate(runId, resp);
+      })
+      .catch((e: unknown) => {
+        if (cancelled) return;
+        // A daemon without the route (bare 404/501): the units are the honest chain. Anything
+        // else is a failure, said as one — never a plausible chain standing in for the team's.
+        setTeamError(isRouteUnsupported(e) ? null : e instanceof Error ? e.message : String(e));
+      });
     return () => { cancelled = true; };
-  }, [runId, moved, connected]);
+  }, [runId, moved, connected, attempt]);
 
   const labels: Record<string, string> = {};
   for (const e of entries) {
     if (e.description !== null && e.description.length <= 40) labels[e.id] = e.description;
   }
-  return chainOf(view, fold, { userPlan: runIdentityOf(view.session)?.kind === 'user_plan', catalogLabels: labels });
+  return {
+    chain: chainOf(view, fold, { userPlan: runIdentityOf(view.session)?.kind === 'user_plan', catalogLabels: labels }),
+    teamError,
+    retry: () => setAttempt((n) => n + 1),
+  };
 }
 
 const STATE_WORD: Record<ChainStep['state'], string> = {
@@ -52,7 +75,16 @@ const ADDED_WORD: Record<ChainStep['addedBy'], string> = {
   pa: 'added by the lead helper', floor: 'required for this risk', human: 'from your plan', policy: 'added by a rule',
 };
 
-export function ChainLine({ chain, runId }: { chain: ChainModel; runId: string }): React.ReactElement {
+function whyOf(s: ChainStep): string {
+  return [ADDED_WORD[s.addedBy], s.reason].filter(Boolean).join(' — ');
+}
+
+export function ChainLine({ chain, runId, teamError = null, onRetry }: {
+  chain: ChainModel;
+  runId: string;
+  teamError?: string | null;
+  onRetry?: () => void;
+}): React.ReactElement {
   return (
     <div data-testid="chain" data-run-id={runId} data-source={chain.source} data-proposed={chain.proposed ? 'true' : 'false'} className="wk-chain">
       {chain.steps.length > 0 && (
@@ -66,8 +98,8 @@ export function ChainLine({ chain, runId }: { chain: ChainModel; runId: string }
               data-state={s.state}
               data-added-by={s.addedBy}
               {...(s.late ? { 'data-late': 'true' } : {})}
-              title={[ADDED_WORD[s.addedBy], s.reason].filter(Boolean).join(' — ')}
-              aria-label={`${s.label}: ${STATE_WORD[s.state]}`}
+              title={whyOf(s)}
+              aria-label={`${s.label}: ${STATE_WORD[s.state]} — ${whyOf(s)}`}
               className={`wk-chain-step wk-chain-step--${s.state}`}
             >
               {i > 0 && <span aria-hidden className="wk-chain-join" />}
@@ -80,6 +112,14 @@ export function ChainLine({ chain, runId }: { chain: ChainModel; runId: string }
       )}
       {(chain.total > 0 || chain.transportLine === null) && (
         <p data-testid="chain-sentence" className="wk-chain-sentence">{chainSentence(chain)}</p>
+      )}
+      {teamError !== null && (
+        <p data-testid="chain-team-error" className="wk-chain-transport">
+          Could not read the team plan ({teamError}); showing the run&apos;s own steps.{' '}
+          {onRetry !== undefined && (
+            <button type="button" data-testid="chain-team-retry" onClick={onRetry} className="wk-since-toggle">Try again</button>
+          )}
+        </p>
       )}
       {chain.transportLine !== null && (
         <p data-testid="chain-transport" className="wk-chain-transport">{chain.transportLine}</p>

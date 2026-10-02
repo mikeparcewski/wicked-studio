@@ -1,3 +1,4 @@
+import { executingOrd } from '../api/run-state.js';
 import type { SessionView } from '../api/types.js';
 import type { TeamRow } from '../api/teamPlan.js';
 import type { TeamFold } from '../store/teamPlan.js';
@@ -226,6 +227,9 @@ export function chainFromTeam(fold: TeamFold, opts: ChainOptions = {}): ChainMod
 const STAGE_CATALOG: Record<string, string> = { recon: 'understand', build: 'build', review: 'review', test: 'test' };
 
 export function chainFromUnits(view: SessionView, opts: ChainOptions = {}): ChainModel {
+  // `distributed` means routed, not running: every unit is routed before any runs. The one unit
+  // working is the one under the cursor while the run executes (api/run-state.ts).
+  const running = executingOrd(view.session, view.units);
   const steps: ChainStep[] = [...view.units]
     .sort((a, b) => a.ord - b.ord)
     .map((u) => {
@@ -233,7 +237,7 @@ export function chainFromUnits(view: SessionView, opts: ChainOptions = {}): Chai
       const block = blockOf(catalog);
       const state: ChainStepState = u.status === 'done' ? 'done'
         : u.status === 'rejected' ? 'failed'
-          : u.status === 'distributed' ? 'running' : 'todo';
+          : u.ord === running ? 'running' : 'todo';
       return {
         id: `u${u.ord}`, catalog, block,
         label: u.description || labelOf(block, catalog, catalog, opts.catalogLabels ?? {}),

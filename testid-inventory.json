@@ -11,8 +11,8 @@
   "studioVersion": "0.5.19",
   "counts": {
     "files": 183,
-    "occurrences": 1814,
-    "static": 1590,
+    "occurrences": 1816,
+    "static": 1592,
     "dynamic": 73,
     "computed": 8
   },
@@ -909,6 +909,18 @@
     },
     {
       "testId": "chain-step",
+      "files": [
+        "src/components/session/ChainLine.tsx"
+      ]
+    },
+    {
+      "testId": "chain-team-error",
+      "files": [
+        "src/components/session/ChainLine.tsx"
+      ]
+    },
+    {
+      "testId": "chain-team-retry",
       "files": [
         "src/components/session/ChainLine.tsx"
       ]
