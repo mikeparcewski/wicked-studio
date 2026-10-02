@@ -273,7 +273,7 @@ function RunBlock({ view, badge, go }: {
         <span className="wk-session-run-state">{badge > 0 ? 'Needs you' : STATE_WORD[state]}</span>
       </p>
       {/* S6b: the run's ONE status sentence, then its proposal (the plan, the hand-over). */}
-      <p data-testid="session-status-sentence" className="wk-session-status-sentence">{statusSentence(view, chain, gate, action)}</p>
+      <p data-testid="session-status-sentence" role="status" className="wk-session-status-sentence">{statusSentence(view, chain, gate, action)}</p>
       <ProposalCard view={view} chain={chain} />
       <ChainLine chain={chain} runId={id} teamError={teamError} onRetry={retry} />
       <a href={page} onClick={go(page)} data-testid="session-run-open" className="wk-session-link">Open the run page →</a>

@@ -168,7 +168,7 @@ export function deliverLine(view: SessionView, gate: OpenGate | undefined, repoN
 function deliverEvidence(view: SessionView): ProposalKind | null {
   const du = deliverUnit(view);
   if (du === null) return null;
-  return du.status === 'done' || du.status === 'rejected' || executingOrd(view.session, view.units) === du.ord ? 'deliver' : null;
+  return du.status === 'done' || executingOrd(view.session, view.units) === du.ord ? 'deliver' : null;
 }
 
 function base(kind: ProposalKind): ProposalCardModel {
@@ -211,7 +211,10 @@ export function proposalCard(input: ProposalInput): ProposalCardModel | null {
   // No proposal open. A proposal this card asked (remembered by the host), a hand-over the run's own
   // units show under way or done, or a team run whose plan was accepted: the card is its progress,
   // then its receipt. A run that never proposed (free text, a registered def) has no card.
-  const remembered = input.lastKind ?? deliverEvidence(view) ?? null;
+  // While a gate this card does not ask is open (an escalation, a retry), nothing is inferred from the
+  // units: a rejected deliver unit under an open escalation is a stopped hand-over, not one under way.
+  const inferred = gate === undefined && status !== 'awaiting_human' ? deliverEvidence(view) : null;
+  const remembered = input.lastKind ?? inferred ?? null;
   if (remembered === null && (chain.source !== 'team' || chain.proposed || chain.total === 0)) return null;
   const card = base(remembered ?? 'plan');
   if (!TERMINAL.has(status)) {

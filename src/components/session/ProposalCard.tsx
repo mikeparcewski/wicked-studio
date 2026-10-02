@@ -52,6 +52,8 @@ export function ProposalCard({ view, chain }: { view: SessionView; chain: ChainM
     const deliver = card.kind === 'deliver'
       ? { deliver: { branch: (view.session as unknown as { run_branch?: string }).run_branch ?? null, repo: null, card: deliverTargetOf(view.units, gate.ord) } }
       : {};
+    // The pressed button goes away as the card becomes progress: the card keeps keyboard focus.
+    requestAnimationFrame(() => cardRef.current?.focus());
     commitGateDecision(runId, { approve: true }, deliver)
       .catch(() => { /* the refusal is in the shared action state, which the card renders */ })
       .finally(() => { sending.current = false; });

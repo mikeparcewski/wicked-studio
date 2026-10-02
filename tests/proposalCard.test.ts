@@ -173,6 +173,16 @@ describe('Copilot r3 (past the cap: small, user-visible)', () => {
     expect(card.out).toBe('Cancelled · 1 of 1 done');
   });
 
+  it('r4: a late join never infers a hand-over while an escalation waits on the operator', () => {
+    const units = [
+      makeUnit({ id: 'r9:build', session_id: 'r9', ord: 1, status: 'done' }),
+      makeUnit({ id: 'r9:deliver', session_id: 'r9', ord: 2, status: 'rejected', phase_ref: 'deliver' }),
+    ];
+    const lift = openGate({ runId: 'r9', ord: 2, gateKind: 'escalation', prompt: 'deliver: LIFT-CONFLICT — nothing pushed' });
+    const c = proposalCard({ view: run('r9', 'awaiting_human', units), gate: lift, chain: EMPTY, action: IDLE_GATE_ACTION, ui: NO_UI });
+    expect(c).toBeNull();
+  });
+
   it('a line-range citation opens at its first line', () => {
     expect(parsePlace('src/a.ts:12-20')).toStrictEqual({ path: 'src/a.ts', line: 12 });
   });
