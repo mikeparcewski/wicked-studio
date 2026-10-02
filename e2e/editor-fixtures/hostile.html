@@ -30,9 +30,12 @@
       const base = r.payload ? r.payload.version : 1;
       req('version.write', { base, ops: [{ op: 'text', anchor: 'hero-title', value: '<img src=x onerror=alert(1)>', before: 'Book a study room in under a minute' }], summary: 'the title' });
     },
-    'bad-styles': () => {
+    'bad-styles': async () => {
+      // The CURRENT base, so the host's style validator is what refuses (not a stale base).
+      const r = await new Promise((res) => { const id = req('artifact.read', {}); replies.push([id, res]); });
+      const base = r.payload ? r.payload.version : 1;
       for (const bg of ['url(https://example.invalid/x.png)', 'red; position:fixed', '#fff}body{display:none']) {
-        req('version.write', { base: 99, ops: [{ op: 'style', anchor: 'cta', style: { background: bg } }], summary: 'x' });
+        await new Promise((res) => { const id = req('version.write', { base, ops: [{ op: 'style', anchor: 'cta', style: { background: bg } }], summary: 'x' }); replies.push([id, res]); });
       }
     },
     'labels': () => {

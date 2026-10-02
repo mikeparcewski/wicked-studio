@@ -110,6 +110,8 @@ export class EditorHost {
   private pingWait: ReturnType<typeof setTimeout> | null = null;
   private pingSeq = 0;
   private drops = 0;
+  /** Window messages after the handshake: counted against the flood limit, logged only the first few. */
+  private ignoredWindow = 0;
   /** One typed character per gesture (§5.10): spent by an accepted `ui.typed`, re-armed only when
    *  focus enters the frame again — transient activation lasts seconds and is not consumed (Copilot). */
   private typingSpent = false;
@@ -152,7 +154,14 @@ export class EditorHost {
 
   private windowMessage(e: MessageEvent): void {
     if (this.torn || e.source !== this.frame.contentWindow) return; // not this frame: not ours
-    if (this.handshaken) { this.log({ kind: 'ignored-window-message', why: 'after the handshake every message rides the port' }); return; }
+    if (this.handshaken) {
+      // The window is not a second channel: it counts toward the flood limit, and a flood of it
+      // cannot grow the host log without bound (Copilot).
+      this.ignoredWindow += 1;
+      if (this.ignoredWindow <= 50) this.log({ kind: 'ignored-window-message', why: 'after the handshake every message rides the port' });
+      this.overRate();
+      return;
+    }
     const ready = parseReady(e.data);
     if (ready === null) { this.log({ kind: 'ignored-window-message', why: 'not a plugin.ready' }); return; }
     if (ready.editor !== this.o.editor || ready.version !== this.o.version) {
@@ -315,8 +324,10 @@ export class EditorHost {
   private async chipsOf(anchors: readonly AnchorRef[]): Promise<Chip[]> {
     const inv = await this.currentInventory();
     const wids = 'error' in inv ? new Map<string, { text: string }>() : inv.inv.wids;
-    return chipsFor(anchors, (x) => (x.kind === 'element' ? (wids.has(x.id) ? elementLabel(wids.get(x.id)?.text, x.id) : null)
-      : x.kind === 'time' ? `the moment at ${Math.round(x.atSec)} s` : `chapter ${x.id}`));
+    // Only anchors the HOST can resolve get a chip: elements in its own inventory. A page has no
+    // chapters or times; a plugin-chosen chapter id is never echoed as a label (Copilot). The
+    // demo-video adapter resolves those against its own chapter list (EP-P5).
+    return chipsFor(anchors, (x) => (x.kind === 'element' && wids.has(x.id) ? elementLabel(wids.get(x.id)?.text, x.id) : null));
   }
 
   private drop(type: string, why: string): void {

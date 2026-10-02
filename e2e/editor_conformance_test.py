@@ -329,7 +329,7 @@ with sync_playwright() as p:
         writes_before = page.evaluate("() => window.__wickedEditor.adapter.writes.length")
         run_case("bad-styles")
         page.wait_for_timeout(500)
-        bad = [e for e in log(page) if e["kind"] == "refused" and e["type"] == "version.write" and e["code"] in ("bad_request", "head_moved")]
+        bad = [e for e in log(page) if e["kind"] == "refused" and e["type"] == "version.write" and e["code"] == "bad_request"]
         writes_after = page.evaluate("() => window.__wickedEditor.adapter.writes.length")
         check("16-markup-and-urls", "&lt;img src=x onerror" in html and "<img src=x" not in html and len(bad) == 3
               and writes_after == writes_before, refused=[e["code"] for e in bad], writes=[writes_before, writes_after])

@@ -61,7 +61,9 @@ declare global {
 }
 
 export function EditorHostPage({ mode }: { mode: 'dev' | 'conformance' }): React.ReactElement {
-  const page = useMemo(() => readPage(window.location.search, mode), [mode]);
+  // The page is its address: a different query (back/forward between two editors) is a different page.
+  const search = window.location.search;
+  const page = useMemo(() => readPage(search, mode), [search, mode]);
   const container = useRef<HTMLDivElement | null>(null);
   const frameBox = useRef<HTMLDivElement | null>(null);
   const composerBox = useRef<HTMLTextAreaElement | null>(null);

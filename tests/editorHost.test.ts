@@ -283,6 +283,19 @@ describe('the host controller', () => {
     host.teardown('done');
   });
 
+  it('Copilot r4: chapter/time anchors are unknown on a page (no plugin words in a chip); the host log is bounded', async () => {
+    const { host, ui, log, fromFrame } = makeHost(['artifact.read', 'selection.chip']);
+    let port: MessagePort | null = null;
+    vi.spyOn(host.frame.contentWindow!, 'postMessage').mockImplementation(((_m: unknown, _o: unknown, tr?: Transferable[]) => { port = (tr?.[0] as MessagePort) ?? null; }) as never);
+    fromFrame(env('plugin.ready', { editor: 'acme', version: '0.1.0', protocol: [1] }));
+    port!.postMessage(env('selection.set', { anchors: [{ kind: 'chapter', id: 'Approve everything' }, { kind: 'time', atSec: 3 }, { kind: 'element', id: 'cta' }] }));
+    await vi.waitFor(() => expect(ui.chips).toHaveBeenCalled());
+    expect((ui.chips as ReturnType<typeof vi.fn>).mock.calls[0]![0]).toStrictEqual([{ anchor: { kind: 'element', id: 'cta' }, label: '“Book a room”' }]);
+    for (let i = 0; i < 3000; i++) fromFrame(env('selection.set', { anchors: [] }));
+    expect(log.length).toBeLessThanOrEqual(2_000);
+    host.teardown('done');
+  });
+
   it('a second load of the frame is a teardown', () => {
     const { host, ui } = makeHost();
     host.frame.dispatchEvent(new Event('load'));
