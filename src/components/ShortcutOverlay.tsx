@@ -134,7 +134,7 @@ export function ShortcutOverlay(): React.ReactElement | null {
             Keyboard shortcuts
           </h2>
           <span className="text-[10px] font-mono" style={{ color: 'var(--ink-dim)' }}>
-            what's registered on this surface · ? or Esc closes
+            what's registered on this surface · ⌥/ or Esc closes
           </span>
         </div>
         <div className="grid grid-cols-2 gap-x-8 gap-y-4">

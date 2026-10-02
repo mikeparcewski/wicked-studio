@@ -26,40 +26,46 @@ function sourceFiles(dir: string): string[] {
 
 interface Found { file: string; literal: string; chord: ShortcutChord | null }
 
-/** Every `chord: { … }` literal in the app source. A literal the scan cannot read
- *  (a computed `key`) is reported with `chord: null` — the scan fails closed. */
-function enumerateChords(): Found[] {
+/** Classify every `chord:` initializer in one source text. Readable forms: an object literal
+ *  or a plain `altChord('x')` call, each ENDING the initializer (`,` `}` or newline next).
+ *  Anything else — a constant, another helper, `altChord('j' + s)`, `altChord('j') && {…}` —
+ *  is reported with `chord: null`: the scan fails closed instead of skipping it. */
+function scanChords(text: string, file: string): Found[] {
   const found: Found[] = [];
-  for (const file of sourceFiles(SRC)) {
-    const text = readFileSync(file, 'utf8');
-    for (const m of text.matchAll(/chord:\s*(\{[^}]*\})/g)) {
-      const literal = m[1]!;
-      const key = /key:\s*'((?:\\'|[^'])*)'/.exec(literal)?.[1];
-      const modified = /(alt|ctrlOrMeta):\s*true/.test(literal);
-      found.push({
-        file: relative(SRC, file),
-        literal,
-        // A computed key is readable only when the literal carries a modifier anyway.
-        chord: key === undefined ? (modified ? { key: '(computed)', alt: true } : null) : {
-          key: key.replace(/\\'/g, "'"),
-          alt: /alt:\s*true/.test(literal),
-          ctrlOrMeta: /ctrlOrMeta:\s*true/.test(literal),
-          shift: /shift:\s*true/.test(literal),
-        },
-      });
-    }
-    // Any other chord expression (a constant, another helper) cannot be judged by the scan:
-    // report it unreadable, so the scan fails closed rather than skipping it.
-    for (const m of text.matchAll(/chord:(?!\s*(?:\{|altChord\(\s*'))\s*([^,}\n]+)/g)) {
-      if (/^ShortcutChord\b/.test(m[1]!.trim())) continue; // a type annotation, not a value
-      found.push({ file: relative(SRC, file), literal: m[0], chord: null });
-    }
-    // Chords built through the helper (`chord: altChord('j')`) are modified by construction.
-    for (const m of text.matchAll(/chord:\s*altChord\(\s*'([^']+)'\s*\)/g)) {
-      found.push({ file: relative(SRC, file), literal: m[0], chord: { key: m[1]!, alt: true } });
-    }
+  const END = String.raw`(?=\s*[,}\n])`;
+  for (const m of text.matchAll(new RegExp(String.raw`chord:\s*(\{[^}]*\})` + END, 'g'))) {
+    const literal = m[1]!;
+    const key = /key:\s*'((?:\\'|[^'])*)'/.exec(literal)?.[1];
+    const modified = /(alt|ctrlOrMeta):\s*true/.test(literal);
+    found.push({
+      file,
+      literal,
+      // A computed key is readable only when the literal carries a modifier anyway.
+      chord: key === undefined ? (modified ? { key: '(computed)', alt: true } : null) : {
+        key: key.replace(/\\'/g, "'"),
+        alt: /alt:\s*true/.test(literal),
+        ctrlOrMeta: /ctrlOrMeta:\s*true/.test(literal),
+        shift: /shift:\s*true/.test(literal),
+      },
+    });
+  }
+  // Chords built through the helper (`chord: altChord('j')`) are modified by construction.
+  for (const m of text.matchAll(new RegExp(String.raw`chord:\s*altChord\(\s*'([^']+)'\s*\)` + END, 'g'))) {
+    found.push({ file, literal: m[0], chord: { key: m[1]!, alt: true } });
+  }
+  const readable = new RegExp(String.raw`^\s*(?:\{[^}]*\}|altChord\(\s*'[^']+'\s*\))` + END);
+  for (const m of text.matchAll(/chord:([^\n]*)/g)) {
+    const rest = text.slice(m.index! + 'chord:'.length);
+    if (readable.test(rest)) continue;
+    if (/^\s*ShortcutChord\b/.test(m[1]!)) continue; // a type annotation, not a value
+    found.push({ file, literal: m[0], chord: null });
   }
   return found;
+}
+
+/** Every chord initializer under src/. */
+function enumerateChords(): Found[] {
+  return sourceFiles(SRC).flatMap((f) => scanChords(readFileSync(f, 'utf8'), relative(SRC, f)));
 }
 
 const cleanups: Array<() => void> = [];
@@ -90,6 +96,17 @@ describe('§5.6 rule 1 — every global chord carries a modifier', () => {
       .map((f) => `${f.file}: ${f.literal}`);
     // `unreadable`: spell the key literally (or through altChord) so the scan can judge it.
     expect({ bare, unreadable }).toEqual({ bare: [], unreadable: [] });
+  });
+
+  it('the scan fails closed on initializers it cannot judge (Copilot review on #418)', () => {
+    const unreadable = (src: string): boolean => scanChords(src, 'x.ts').some((f) => f.chord === null);
+    expect(unreadable("{ id: 'a', chord: altChord('j' + suffix), handler }")).toBe(true);
+    expect(unreadable("{ id: 'a', chord: altChord('j') && { key: 'a' }, handler }")).toBe(true);
+    expect(unreadable("{ id: 'a', chord: SOME_CHORD, handler }")).toBe(true);
+    expect(unreadable("{ id: 'a', chord: { key: 'j' } && x, handler }")).toBe(true);
+    expect(unreadable("{ id: 'a', chord: altChord('j'), handler }")).toBe(false);
+    expect(unreadable("{ id: 'a', chord: { key: 'escape' },\n handler }")).toBe(false);
+    expect(unreadable('function f(chord: ShortcutChord): void {}')).toBe(false);
   });
 
   it('the registry refuses a bare printable chord at registration', () => {

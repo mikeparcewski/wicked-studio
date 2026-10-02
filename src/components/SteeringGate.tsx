@@ -1157,7 +1157,7 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
             {sourceLine !== null && (
               <span data-testid="gate-source" data-gate-source={gateKind ?? ''}>{sourceLine} · </span>
             )}
-            a {restoredRetry ? 'retry' : 'approve'} · r reject while this card holds focus
+            ⌥A {restoredRetry ? 'retry' : 'approve'} · ⌥R reject while this card holds focus
           </p>
         )}
       </div>
