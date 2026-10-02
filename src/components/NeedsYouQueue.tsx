@@ -211,6 +211,9 @@ export function NeedsYouQueue({ queue, runs, navigate, now, variant = 'inline' }
     const isGroup = row.members !== undefined;
     const open = isGroup && queue.expanded.has(row.key);
     const waiting = row.tone === 'gate' || row.tone === 'human';
+    // The one yellow dot (DESIGN-simple §1a): the most urgent row, the list's first.
+    const urgent = testId === 'need-row' && queue.rows[0]?.key === row.key;
+    const dot = urgent ? ' wk-desk-dot--urgent' : waiting ? ' wk-desk-dot--waiting' : '';
     return (
       <div
         key={row.key}
@@ -224,7 +227,7 @@ export function NeedsYouQueue({ queue, runs, navigate, now, variant = 'inline' }
         tabIndex={-1}
         className={`wk-desk-need wk-desk-need--wrap${testId === 'need-member' ? ' wk-desk-need--member' : ''}${selected ? ' wk-desk-need--selected' : ''}${revealed.has(row.key) ? ' wk-need-row--reveal' : ''}`}
       >
-        <span aria-hidden className={`wk-desk-dot${waiting ? ' wk-desk-dot--waiting' : ''}`} style={waiting ? undefined : { background: TONE_COLOR[row.tone] }} />
+        <span aria-hidden data-urgent={urgent ? 'true' : undefined} className={`wk-desk-dot${dot}`} style={urgent || waiting ? undefined : { background: TONE_COLOR[row.tone] }} />
         <span className="wk-desk-need-body">
           {isGroup ? (
             <span title={row.subject} className="wk-desk-need-title">{row.subject}</span>

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { SessionView } from '../../api/types.js';
 import { DESK_DESTINATIONS, needsByRun, needTextByRun, railGroups } from '../../board/deskModel.js';
 import { needCount } from '../../board/needsQueue.js';
@@ -39,7 +39,19 @@ export function SessionRail({ runs, needRows, navigate, pathname }: {
   );
   const [more, setMore] = useState(false);
   const [healthOpen, setHealthOpen] = useState(false);
-  const go = (path: string) => (e: React.MouseEvent): void => { e.preventDefault(); navigate(path); };
+  const moreRef = useRef<HTMLDivElement | null>(null);
+  const go = (path: string) => (e: React.MouseEvent): void => { e.preventDefault(); setMore(false); navigate(path); };
+  // "Everything else" is a popover beside the rail (studio#421): Escape or a click outside closes it.
+  useEffect(() => {
+    if (!more) return;
+    const onDown = (e: PointerEvent): void => {
+      if (moreRef.current !== null && e.target instanceof Node && !moreRef.current.contains(e.target)) setMore(false);
+    };
+    const onKey = (e: KeyboardEvent): void => { if (e.key === 'Escape') setMore(false); };
+    document.addEventListener('pointerdown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => { document.removeEventListener('pointerdown', onDown); document.removeEventListener('keydown', onKey); };
+  }, [more]);
   const startSomething = (): void => {
     navigate('/');
     requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>('[data-testid="desk-composer-input"]')?.focus());
@@ -89,24 +101,28 @@ export function SessionRail({ runs, needRows, navigate, pathname }: {
         <WatchPill count={count} runs={runs} navigate={navigate} />
         <a href="/steering/policies" onClick={go('/steering/policies')} className="wk-rail-link">Rules</a>
         <HealthRailSection open={healthOpen} onToggle={() => setHealthOpen((v) => !v)} />
-        <button
-          type="button"
-          data-testid="desk-rail-more"
-          aria-expanded={more}
-          onClick={() => setMore((v) => !v)}
-          className="wk-rail-link"
-        >
-          {more ? 'Everything else ▴' : 'Everything else ▾'}
-        </button>
-        {more && (
-          <div data-testid="desk-rail-everything" className="wk-rail-everything">
-            {DESK_DESTINATIONS.map((d) => (
-              <a key={d.dest} href={d.path} data-nav-dest={d.dest} onClick={go(d.path)} className="wk-rail-link">
-                {d.label}
-              </a>
-            ))}
-          </div>
-        )}
+        <div ref={moreRef}>
+          <button
+            type="button"
+            data-testid="desk-rail-more"
+            aria-expanded={more}
+            aria-controls={more ? 'desk-rail-everything' : undefined}
+            onClick={() => setMore((v) => !v)}
+            className="wk-rail-link"
+            style={{ width: '100%' }}
+          >
+            {more ? 'Everything else ▸' : 'Everything else ▾'}
+          </button>
+          {more && (
+            <div id="desk-rail-everything" data-testid="desk-rail-everything" className="wk-rail-everything">
+              {DESK_DESTINATIONS.map((d) => (
+                <a key={d.dest} href={d.path} data-nav-dest={d.dest} onClick={go(d.path)} className="wk-rail-link">
+                  {d.label}
+                </a>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </nav>
   );

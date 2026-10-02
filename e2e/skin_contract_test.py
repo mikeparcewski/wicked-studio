@@ -204,6 +204,9 @@ def nav_reach(page, skin: str) -> dict:
     if skin == "compact-rail":
         page.get_by_test_id("rail-icon-settings").click()
     if skin == "desk":
+        # "Everything else" is a popover beside the rail (studio#421): the Health click closed it.
+        if not page.get_by_test_id("desk-rail-everything").is_visible():
+            page.get_by_test_id("desk-rail-more").click()
         page.locator('[data-testid="session-rail"] [data-nav-dest="settings:/theme"]').click()
     else:
         page.get_by_role("menuitem", name="Theme").click()

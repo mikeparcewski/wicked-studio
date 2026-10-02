@@ -622,6 +622,8 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
 }
 .wk-rail-brand { padding: 16px 18px 10px; font-size: var(--text-lg); color: var(--ink-muted); display: flex; align-items: center; gap: 6px; }
 .wk-rail-brand b { color: var(--ink-high); }
+/* The wordmark: a yellow dot with a harbor ring (DESIGN-simple §1a). */
+.wk-rail-brand .wk-desk-dot, .wk-desk-avatar .wk-desk-dot { background: var(--spark); box-shadow: 0 0 0 1.5px var(--accent); }
 .wk-rail-desk {
   display: flex; align-items: center; justify-content: space-between; margin: 0 10px 6px; padding: 8px 10px;
   border-radius: var(--radius-md); color: var(--ink-high); font-weight: var(--weight-semi); text-decoration: none;
@@ -632,6 +634,8 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
   display: inline-flex; align-items: center; justify-content: center;
   background: var(--accent); color: var(--accent-fg); font-size: var(--text-2xs); font-weight: var(--weight-bold);
 }
+/* The Desk badge is the spark; a session's own badge stays harbor (one yellow mark per viewport). */
+.wk-rail-desk .wk-rail-badge { background: var(--spark); color: var(--spark-ink); }
 .wk-rail-groups { flex: 1 1 auto; overflow-y: auto; min-height: 0; padding: 4px 10px 8px; }
 .wk-rail-group { margin: 10px 10px 4px; font-size: var(--text-xs); font-weight: var(--weight-semi); color: var(--ink-muted); }
 .wk-rail-session {
@@ -645,14 +649,29 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
   background: none; color: var(--ink-muted); cursor: pointer; font: inherit;
 }
 .wk-rail-bell { margin: 0 10px 4px; position: relative; z-index: 30; }
-.wk-rail-foot { border-top: 1px solid var(--border); padding: 8px 10px; display: flex; flex-direction: column; gap: 2px; }
+.wk-rail-foot { position: relative; border-top: 1px solid var(--border); padding: 8px 10px; display: flex; flex-direction: column; gap: 2px; }
 .wk-rail-link {
   display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 5px 10px;
   border-radius: var(--radius-md); background: none; border: none; color: var(--ink-body);
   text-decoration: none; font: inherit; cursor: pointer; text-align: left;
 }
 .wk-rail-link:hover { background: var(--surface-card); }
-.wk-rail-everything { display: flex; flex-direction: column; padding-left: 8px; max-height: 32vh; overflow-y: auto; }
+/* "Everything else" opens BESIDE the rail (studio#421): in the rail's flow it pushed the foot up over
+   the sessions and "+ Start something" and ran past the window. Beside it, nothing in the rail moves,
+   and the list scrolls inside its own box when the window is short. */
+.wk-rail-everything {
+  position: absolute; left: calc(100% + 6px); bottom: 8px; z-index: 40; width: 220px;
+  max-height: calc(100vh - 16px); overflow-y: auto; display: flex; flex-direction: column; padding: 6px;
+  background: var(--surface-card); border: 1px solid var(--border); border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-raised);
+}
+/* No monospace in the Desk's default layer (DESIGN-simple §1a, §7; studio#425): mono belongs to the
+   terminal, the diff, keycaps and technical details. Shared components (the bell, the handover, the
+   health rows) set mono inline for the other skins, so the desk skin overrides it here — except for
+   code, keycaps and a technical handle (<Tech>, shown only with "Show technical details" on). */
+[data-skin="desk"] :is([data-testid="session-rail"], [data-testid="desk"]) :not(code, pre, kbd, samp, [data-tech], [data-tech] *) {
+  font-family: var(--font-sans) !important;
+}
 /* Focus that survives every mode (council M3), for the Desk's own controls. */
 [data-testid="session-rail"] a:focus-visible,
 [data-testid="session-rail"] button:focus-visible,
@@ -666,7 +685,10 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
 }
 
 .wk-desk-dot { display: inline-block; width: 8px; height: 8px; border-radius: var(--radius-full); flex-shrink: 0; background: var(--ink-dim); }
-.wk-desk-dot--waiting { background: var(--status-gate); }
+/* "Needs you" dots are harbor (DESIGN-simple §7): violet is only a quiet gate/rule tint, and the
+   one yellow dot is the most urgent row's. */
+.wk-desk-dot--waiting { background: var(--accent); }
+.wk-desk-dot--urgent { background: var(--spark); box-shadow: 0 0 0 1px var(--accent); }
 .wk-desk-dot--working { background: var(--status-run); }
 .wk-desk-dot--blocked { background: var(--status-fail); }
 .wk-desk-dot--done { background: var(--status-ok); }
@@ -683,7 +705,8 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
 }
 .wk-desk-who { margin: 0; font-size: var(--text-xs); font-weight: var(--weight-semi); color: var(--ink-high); }
 .wk-desk-sentence { margin: 2px 0 0; font-size: var(--text-lg); color: var(--ink-body); }
-.wk-desk-mark { background: color-mix(in oklab, var(--status-gate) 35%, transparent); color: var(--ink-high); font-weight: var(--weight-bold); padding: 0 2px; }
+/* The highlighter behind "N things need you.": the spark, with graphite ink on it. */
+.wk-desk-mark { background: var(--spark); color: var(--spark-ink); font-weight: var(--weight-bold); padding: 0 2px; }
 .wk-handover--desk-away { min-height: 30px; padding-top: 2px; padding-bottom: 2px; margin: 0 0 8px 20px; background: none; border: none; border-left: 2px solid var(--border); border-radius: 0; box-shadow: none; }
 
 .wk-desk-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 340px); gap: 24px; margin-left: 20px; }
@@ -711,7 +734,7 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
 .wk-desk-card-aside { font-weight: normal; font-size: var(--text-xs); color: var(--ink-muted); }
 .wk-desk-session { display: flex; align-items: baseline; gap: 8px; padding: 2px 0; border-top: 1px solid var(--border-subtle); text-decoration: none; min-width: 0; }
 .wk-desk-session-title { color: var(--ink-high); font-size: var(--text-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.wk-desk-underline { text-decoration: underline; text-decoration-color: var(--status-gate); text-decoration-thickness: 2px; }
+.wk-desk-underline { text-decoration: underline; text-decoration-color: var(--accent); text-decoration-thickness: 2px; }
 .wk-desk-more, .wk-desk-quiet { font-size: var(--text-sm); color: var(--ink-muted); }
 
 .wk-desk-bottom { flex-shrink: 0; padding: 8px 32px 12px 52px; border-top: 1px solid var(--border-subtle); }
