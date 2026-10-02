@@ -943,6 +943,8 @@ function RunChat({
     navigate?.('/runs/new');
   }
 
+  // TR-W8: a jump names a moment in the FEED: open it there whatever lens was remembered (Copilot).
+  useEffect(() => { if (jump !== null) setRunTab('feed'); }, [jump]);
   const showFeed = !isTerminal || runTab === 'feed';
   // The outbound draft's kind is FIXED when it opens (wave 1 round 2): a run finishing
   // while the operator edits must not re-key the draft and refetch over their edits.

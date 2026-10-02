@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { SessionView } from '../api/types.js';
+import { wireDelivery } from '../board/windowStats.js';
 import {
   WATCH_CLEARED, WATCH_RAISED, type WatchAnchor, type WatchFeedResponse, type WatchFinding, type WatchFindingCleared,
   type WatchKind, type WatchSeverity,
@@ -264,7 +265,10 @@ export function foldRuns(fold: WatchFold, runs: readonly SessionView[], projectO
     if (pid !== undefined) { rows[r.id] = { ...r, projectId: pid }; changed = true; }
   }
   for (const v of runs) {
-    const s = v.session as unknown as { id: string; status: string; ended_at?: number; delivery?: unknown };
+    const s = v.session as unknown as { id: string; status: string; ended_at?: number };
+    // The delivery verdict on either wire: the 0.18.0 string, or a legacy daemon's
+    // `{kind:'pull_request', url}` object (board/windowStats `wireDelivery`, Copilot).
+    const delivery = wireDelivery(v);
     const at = typeof s.ended_at === 'number' ? s.ended_at * 1000 : null;
     if (s.status !== 'completed' || at === null) continue;
     const base = {
@@ -275,8 +279,8 @@ export function foldRuns(fold: WatchFold, runs: readonly SessionView[], projectO
     const finished = `finished:${s.id}`;
     if (rows[finished] === undefined) { rows[finished] = { ...base, id: finished, kind: 'done', sentence: 'Finished' }; changed = true; }
     const delivered = `delivered:${s.id}`;
-    if ((s.delivery === 'delivered' || s.delivery === 'pushed') && rows[delivered] === undefined) {
-      rows[delivered] = { ...base, id: delivered, kind: 'delivery', sentence: s.delivery === 'delivered' ? 'Delivered' : 'Delivered as a pushed branch' };
+    if ((delivery === 'delivered' || delivery === 'pushed') && rows[delivered] === undefined) {
+      rows[delivered] = { ...base, id: delivered, kind: 'delivery', sentence: delivery === 'delivered' ? 'Delivered' : 'Delivered as a pushed branch' };
       changed = true;
     }
   }
@@ -304,13 +308,18 @@ export function gateLine(fold: WatchFold, runId: string, ord?: number | null): s
   return rows[0]?.sentence ?? null;
 }
 
-/** "Jump in": the run page, at the row's moment. */
+/** "Jump in": the run page, at the row's moment — or null when the row names no unit to land on
+ *  (a Finished row, a quiet run with no cursor): the row then opens its run, it does not "jump" (Copilot). */
 export function jumpPath(row: Pick<WatchRow, 'anchor' | 'runId'>): string | null {
   const a = row.anchor;
-  const runId = a?.run_id ?? row.runId;
-  if (runId === null) return null;
-  const at = a === null ? '' : `?jump=${a.ord ?? ''}:${a.attempt ?? ''}:${a.at}`;
-  return `/runs/${encodeURIComponent(runId)}${at}`;
+  if (a === null || a.ord === null) return null;
+  return `/runs/${encodeURIComponent(a.run_id)}?jump=${a.ord}:${a.attempt ?? ''}:${a.at}`;
+}
+
+/** The run a row opens when it has no moment to jump to. */
+export function runPath(row: Pick<WatchRow, 'anchor' | 'runId'>): string | null {
+  const id = row.anchor?.run_id ?? row.runId;
+  return id === null ? null : `/runs/${encodeURIComponent(id)}`;
 }
 
 /** `?jump=ord:attempt:at` → its parts, or null. */
