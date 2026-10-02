@@ -99,6 +99,14 @@ describe('sessions in the rail and on the project cards', () => {
     expect(railGroups([{ project: { id: 'e', name: 'Empty' }, runs: [] }] as never, [], {})).toEqual([]);
   });
 
+  it('the cap never drops a session that needs you (its badge is part of the count)', () => {
+    const many = [{ project: { id: 'p', name: 'P' }, runs: Array.from({ length: 7 }, (_, i) => run(`n${i}`, 'awaiting_human')) }];
+    const badges = Object.fromEntries(Array.from({ length: 7 }, (_, i) => [`n${i}`, 1]));
+    const g = railGroups(many as never, [], badges, 4);
+    expect(g[0]!.sessions).toHaveLength(7);
+    expect(g[0]!.sessions.reduce((n, s) => n + s.badge, 0)).toBe(7);
+  });
+
   it('a card counts every other session, not just the rail\'s newest few', () => {
     const many = [{ project: { id: 'p', name: 'P' }, runs: Array.from({ length: 9 }, (_, i) => run(`x${i}`, 'completed')) }];
     const card = deskProjects(railGroups(many as never, [], {}, Infinity))[0]!;

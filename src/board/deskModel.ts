@@ -133,6 +133,12 @@ function toSession(v: SessionView, badges: Record<string, number>, texts: Record
   };
 }
 
+/** The newest few — but never drop a session that needs you: its badge is part of the count. */
+function capSessions(list: RailSession[], max: number): RailSession[] {
+  const needy = list.filter((s) => s.badge > 0).length;
+  return list.slice(0, Math.max(max, needy));
+}
+
 function orderSessions(list: RailSession[]): RailSession[] {
   return list
     .map((s, i) => ({ s, i }))
@@ -157,12 +163,12 @@ export function railGroups(
   const groups: RailGroup[] = projects.map((p) => ({
     projectId: p.project.id,
     name: p.project.name,
-    sessions: orderSessions(p.runs.map((v) => toSession(v, badges, texts))).slice(0, max),
+    sessions: capSessions(orderSessions(p.runs.map((v) => toSession(v, badges, texts))), max),
   }));
   groups.push({
     projectId: null,
     name: 'Not in a project',
-    sessions: orderSessions(unfiled.map((v) => toSession(v, badges, texts))).slice(0, max),
+    sessions: capSessions(orderSessions(unfiled.map((v) => toSession(v, badges, texts))), max),
   });
   return groups.filter((g) => g.sessions.length > 0);
 }
