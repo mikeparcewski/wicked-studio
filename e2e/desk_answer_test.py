@@ -192,6 +192,9 @@ with sync_playwright() as p:
         check("ord-one-post-names-gate", len(posts) == 1 and posts[0]["body"] == {"approve": True, "ord": 3},
               posts=[q["body"] for q in posts])
         check("sent-result", "sent: Approved beta · b1." in notice(page), notice=notice(page))
+        # The row says it was sent while the run has no gate (Copilot): never falls back to Open.
+        sent_line = page.evaluate("() => [...document.querySelectorAll('[data-testid=\"need-chosen-line\"]')].map(e => e.innerText)")
+        check("sent-row", sent_line in ([], ["You chose Approve · sent"]), sent_line=sent_line)
         page.close()
 
     if PART in ("", "b"):

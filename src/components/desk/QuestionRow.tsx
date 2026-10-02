@@ -91,7 +91,9 @@ export function QuestionRow({ runId, units, openPath, openLabel, onOpen }: {
   };
 
   // Folded: the decision is in its window, on its way, or sent — for THIS gate only.
-  if (chosen !== null && chosen.key === gateKey) {
+  // A sent answer clears its gate before the send resolves (sendGateDecision): with no gate on the
+  // run it stays shown as sent; a NEWER gate replaces it (Copilot).
+  if (chosen !== null && (chosen.key === gateKey || (chosen.sent && gate === undefined))) {
     const left = pending === null ? 0 : secondsLeft(pending, now);
     return (
       <span data-testid="need-chosen" data-pending={pending !== null ? 'true' : 'false'} className="wk-need-chosen" role="status">
