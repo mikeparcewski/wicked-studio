@@ -39,7 +39,7 @@ export function plainGateQuestion(prompt: string | undefined, gateKind: string |
     return noun !== undefined ? `Approve the ${noun}` : `Approve the ${phase.replace(/[_-]+/g, ' ')} step`;
   }
   const first = p.split('\n')[0]!.trim();
-  if (first === '' || ENGINE_TEXT.test(first) || first.length > 120) return 'Waiting on your answer';
+  if (first === '' || ENGINE_TEXT.test(first)) return 'Waiting on your answer';
   return first;
 }
 

@@ -57,6 +57,9 @@ describe('#422 a gate says its question in plain words', () => {
 
   it('a question an author wrote in words is kept; engine text never shows', () => {
     expect(plainGateQuestion('Approve the TTL bump?', undefined)).toBe('Approve the TTL bump?');
+    // A long authored question is kept whole: the Desk truncates the line, its hover keeps it (Copilot).
+    const long = 'Should the nightly export keep the 90-day window for the finance team, or move to 30 days now that the archive covers everything older than a month?';
+    expect(plainGateQuestion(long, undefined)).toBe(long);
     expect(plainGateQuestion('Unit 4 rev 3 band 20-39: proceed?', undefined)).toBe('Waiting on your answer');
     expect(plainGateQuestion(undefined, undefined)).toBe('Waiting on your answer');
   });
