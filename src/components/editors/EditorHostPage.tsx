@@ -108,7 +108,8 @@ export function EditorHostPage({ mode }: { mode: 'dev' | 'conformance' }): React
           draft: (t, c) => setDrafted((d) => [...d, { text: t, chips: c }]),
           typed: (g) => {
             setText((t) => t + g);
-            requestAnimationFrame(() => composerBox.current?.focus());
+            // Focus moves NOW, so the rest of the typing goes straight to the composer.
+            composerBox.current?.focus();
           },
           key: (k) => {
             keys.current.push(k);

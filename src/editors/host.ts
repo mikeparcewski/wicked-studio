@@ -110,6 +110,10 @@ export class EditorHost {
   private pingWait: ReturnType<typeof setTimeout> | null = null;
   private pingSeq = 0;
   private drops = 0;
+  /** One typed character per gesture (§5.10): spent by an accepted `ui.typed`, re-armed only when
+   *  focus enters the frame again — transient activation lasts seconds and is not consumed (Copilot). */
+  private typingSpent = false;
+  private readonly onHostBlur = (): void => { if (document.activeElement === this.frame) this.typingRearm(); };
   private writing = false;
   private grants: Set<PermissionId>;
   private ownVersions = new Set<number>();
@@ -134,6 +138,7 @@ export class EditorHost {
 
   mount(): void {
     window.addEventListener('message', this.onWindow);
+    window.addEventListener('blur', this.onHostBlur);
     this.frame.addEventListener('load', this.onLoad);
     this.frame.src = this.o.src;
     this.o.container.appendChild(this.frame);
@@ -344,8 +349,10 @@ export class EditorHost {
       case 'ui.typed': {
         const focus = (this.o.focusInFrame ?? ((f) => document.activeElement === f))(this.frame);
         const v = judgeTyped(String(p['grapheme']), activation, focus);
-        if (v.ok) this.o.ui.typed(String(p['grapheme']));
-        else this.drop(type, v.why);
+        if (!v.ok) { this.drop(type, v.why); return; }
+        if (this.typingSpent) { this.drop(type, 'one typed character per gesture'); return; }
+        this.typingSpent = true;
+        this.o.ui.typed(String(p['grapheme']));
         return;
       }
       case 'ui.status':
@@ -371,6 +378,9 @@ export class EditorHost {
 
   // ── host → plugin ─────────────────────────────────────────────────────────────────────────
 
+  /** Focus entered the frame again (a new gesture there): one more typed character may pass. */
+  typingRearm(): void { this.typingSpent = false; }
+
   setSize(size: Size): void { this.post(event('host.size', { size })); }
   setTheme(theme: Record<string, string>): void { this.post(event('host.theme', { theme, artifactTheme: null })); }
   setGrants(grants: readonly PermissionId[]): void { this.grants = new Set(grants); }
@@ -392,6 +402,7 @@ export class EditorHost {
     this.post(event('host.teardown', { reason }));
     this.torn = true;
     window.removeEventListener('message', this.onWindow);
+    window.removeEventListener('blur', this.onHostBlur);
     this.frame.removeEventListener('load', this.onLoad);
     if (this.readyTimer !== null) clearTimeout(this.readyTimer);
     if (this.pingTimer !== null) clearInterval(this.pingTimer);

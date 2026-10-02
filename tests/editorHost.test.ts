@@ -256,6 +256,33 @@ describe('the host controller', () => {
     host.teardown('done');
   });
 
+  it('Copilot r3: one typed character per gesture, even in a burst under activation', async () => {
+    const log: HostLogEntry[] = [];
+    const typed = vi.fn();
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const host = new EditorHost({
+      container, src: 'about:blank', editor: 'acme', version: '0.1.0', name: 'Acme', title: 'Acme: a page', size: 'pane',
+      grants: ['artifact.read'], theme: {}, prefs: { reducedMotion: false, techDetails: false, locale: 'en' }, firstParty: false,
+      adapter: new FakeDocAdapter(),
+      ui: { chips: vi.fn(), draft: vi.fn(), typed, key: vi.fn(), morph: vi.fn(), status: vi.fn(), notes: vi.fn(), thread: vi.fn(), fullscreen: vi.fn(async () => true), torn: vi.fn(), log: (e) => log.push(e) },
+      activation: () => true, focusInFrame: () => true,
+    });
+    host.mount();
+    let port: MessagePort | null = null;
+    vi.spyOn(host.frame.contentWindow!, 'postMessage').mockImplementation(((_m: unknown, _o: unknown, tr?: Transferable[]) => { port = (tr?.[0] as MessagePort) ?? null; }) as never);
+    window.dispatchEvent(new MessageEvent('message', { data: env('plugin.ready', { editor: 'acme', version: '0.1.0', protocol: [1] }), source: host.frame.contentWindow }));
+    for (const g of ['a', 'p', 'p']) port!.postMessage(env('ui.typed', { grapheme: g }));
+    await vi.waitFor(() => expect(log.filter((e) => e.kind === 'in' && e.type === 'ui.typed').length).toBe(3));
+    expect(typed).toHaveBeenCalledTimes(1);
+    expect(typed).toHaveBeenCalledWith('a');
+    // Focus coming back into the frame (a new gesture there) allows one more.
+    host.typingRearm();
+    port!.postMessage(env('ui.typed', { grapheme: 'b' }));
+    await vi.waitFor(() => expect(typed).toHaveBeenCalledTimes(2));
+    host.teardown('done');
+  });
+
   it('a second load of the frame is a teardown', () => {
     const { host, ui } = makeHost();
     host.frame.dispatchEvent(new Event('load'));
