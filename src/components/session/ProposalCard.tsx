@@ -2,7 +2,7 @@ import { useRef, useState } from 'react';
 import type { SessionView } from '../../api/types.js';
 import type { ChainModel } from '../../board/chainModel.js';
 import { commitGateDecision, IDLE_GATE_ACTION, useGateActionStore } from '../../board/gateActions.js';
-import { proposalCard } from '../../board/proposalCard.js';
+import { proposalCard, type ProposalKind } from '../../board/proposalCard.js';
 import { useGateStore } from '../../store/gates.js';
 import { deliverTargetOf } from '../gateMoveModel.js';
 
@@ -21,7 +21,9 @@ export function ProposalCard({ view, chain }: { view: SessionView; chain: ChainM
   const action = useGateActionStore((s) => s.byGate[runId] ?? IDLE_GATE_ACTION);
   const [ui, setUi] = useState<{ dismissedOrd: number | null; confirmingOrd: number | null }>({ dismissedOrd: null, confirmingOrd: null });
   const sending = useRef(false);
-  const card = proposalCard({ view, gate, chain, action, ui });
+  const lastKind = useRef<ProposalKind | null>(null);
+  const card = proposalCard({ view, gate, chain, action, ui, lastKind: lastKind.current });
+  if (card !== null && gate !== undefined) lastKind.current = card.kind;
   if (card === null) return null;
   const ord = gate?.ord ?? null;
 

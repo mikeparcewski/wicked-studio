@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { api } from '../../api/client.js';
 import type { ChatCitations } from '../../api/chat-wire.js';
 import { basedOnLine, passageCandidates, passageWindow, sourcesOf, type PassageLine, type SourceRef } from '../../board/sources.js';
@@ -23,13 +23,19 @@ export function SourceChips({ citations, runs }: {
   runs: readonly { id: string; workdir: string | null }[];
 }): React.ReactElement | null {
   const sources = sourcesOf(citations);
-  const [open, setOpen] = useState<Passage | null>(null);
+  const [open, setOpenState] = useState<Passage | null>(null);
+  // Only the newest request may land: a slow read never reopens a passage after Back, or
+  // overwrites the chip clicked after it (codex).
+  const req = useRef(0);
+  const setOpen = (p: Passage | null): void => { req.current += 1; setOpenState(p); };
   const line = basedOnLine(sources.length);
   if (line === null) return null;
 
   const openSource = async (s: SourceRef): Promise<void> => {
     if (open?.key === s.key) { setOpen(null); return; }
     setOpen({ key: s.key, state: 'loading' });
+    const mine = req.current;
+    const land = (p: Passage): void => { if (req.current === mine) setOpenState(p); };
     let why = 'no run of this session has a copy of the code to read it from';
     let first = true; // the reason said is the first refusal: the path as cited, not a fallback's
     for (const r of runs) {
@@ -37,7 +43,7 @@ export function SourceChips({ citations, runs }: {
         try {
           const f = await api.getRunFile(r.id, path);
           if (f.binary) { if (first) why = 'it is a binary file'; first = false; continue; }
-          setOpen({ key: s.key, state: 'shown', lines: passageWindow(f.content, s.line), path: s.key, truncated: f.truncated });
+          land({ key: s.key, state: 'shown', lines: passageWindow(f.content, s.line), path: s.key, truncated: f.truncated });
           return;
         } catch (e) {
           if (first) why = e instanceof Error ? e.message : String(e);
@@ -45,7 +51,7 @@ export function SourceChips({ citations, runs }: {
         }
       }
     }
-    setOpen({ key: s.key, state: 'unreadable', why });
+    land({ key: s.key, state: 'unreadable', why });
   };
 
   return (

@@ -122,6 +122,9 @@ export interface ProposalInput {
   ui: { dismissedOrd: number | null; confirmingOrd: number | null };
   /** The registry name of the run's repo, when the host knows it (names whose origin). */
   repoName?: string | null;
+  /** The proposal this card last asked (the host remembers it): after its gate is pruned, an
+   *  accepted hand-over still reads as one (codex). */
+  lastKind?: ProposalKind | null;
 }
 
 /** What the deliver approve sends off the machine, in the gate card's own words when it has them. */
@@ -172,10 +175,11 @@ export function proposalCard(input: ProposalInput): ProposalCardModel | null {
 
   // No proposal open. A team run's plan was proposed and answered: the card is its progress, then
   // its receipt. A run that never proposed (free text, a registered def) has no card.
-  const card = base('plan');
-  // Just answered here: the gate is pruned on the 200, before the accepted plan reaches the bus.
-  if (action.answered === 'approved' && !TERMINAL.has(status) && chain.source === 'team') {
-    return { ...card, state: 'run', runLabel: 'Going', live: 'Starting the work' };
+  const card = base(input.lastKind ?? 'plan');
+  // Just answered here: the gate is pruned on the 200, before the run's own frame moves it.
+  if (action.answered === 'approved' && !TERMINAL.has(status)) {
+    if (input.lastKind === 'deliver') return { ...card, state: 'run', runLabel: 'Handing over', live: 'Pushing the work' };
+    if (chain.source === 'team') return { ...card, state: 'run', runLabel: 'Going', live: 'Starting the work' };
   }
   if (chain.source !== 'team' || chain.proposed || chain.total === 0) return null;
   if (!TERMINAL.has(status)) {

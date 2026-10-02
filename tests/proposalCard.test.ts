@@ -126,6 +126,14 @@ describe('the deliver card: the one "Are you sure?"', () => {
   });
 });
 
+describe('after an accepted hand-over is pruned', () => {
+  it('still reads as a hand-over, not a plan (codex)', () => {
+    const c = proposalCard({ view: run('r9', 'awaiting_human'), gate: undefined, chain: EMPTY, action: { ...IDLE_GATE_ACTION, answered: 'approved' }, ui: NO_UI, lastKind: 'deliver' })!;
+    expect(c.kind).toBe('deliver');
+    expect(c.runLabel).toBe('Handing over');
+  });
+});
+
 describe('the status sentence and the outcome line', () => {
   it('says what is happening in words', () => {
     const c = chain([step('a', 'Research', 'done'), step('b', 'Build', 'failed')]);
@@ -170,7 +178,7 @@ describe('sources: "Based on N sources", hover, the passage', () => {
   it('parses places and builds contained candidates under the run’s worktree', () => {
     expect(parsePlace('src/a.ts:42')).toStrictEqual({ path: 'src/a.ts', line: 42 });
     expect(parsePlace('src/a.ts:charge')).toStrictEqual({ path: 'src/a.ts', line: null });
-    expect(passageCandidates('alpha/src/a.ts', '/w/r1/')).toStrictEqual(['/w/r1/alpha/src/a.ts', '/w/r1/src/a.ts']);
+    expect(passageCandidates('alpha/src/a.ts', '/w/r1/')).toStrictEqual(['/w/r1/alpha/src/a.ts']);
     expect(passageCandidates('../etc/passwd', '/w/r1')).toStrictEqual([]);
     expect(passageCandidates('a.ts', null)).toStrictEqual([]);
   });

@@ -63,17 +63,15 @@ export function basedOnLine(n: number): string | null {
   return `Based on ${n} source${n === 1 ? '' : 's'}`;
 }
 
-/** Absolute paths to try under a run's worktree: the path as cited, then without a leading repo
- *  segment (a multi-repo chat cites `alpha/src/x.ts`; the run's worktree is alpha's root). */
+/** The absolute path to read under a run's worktree: the path as cited, and nothing else — a
+ *  guessed variant (say, dropping a leading segment) could open a different file of the same name
+ *  (codex). A place the worktree does not hold says so instead. */
 export function passageCandidates(path: string, workdir: string | null | undefined): string[] {
   if (typeof workdir !== 'string' || workdir === '') return [];
   const root = workdir.replace(/\/+$/, '');
   const rel = path.replace(/^\.?\/+/, '');
   if (rel.split('/').includes('..')) return [];
-  const out = [`${root}/${rel}`];
-  const cut = rel.indexOf('/');
-  if (cut > 0) out.push(`${root}/${rel.slice(cut + 1)}`);
-  return out;
+  return [`${root}/${rel}`];
 }
 
 export interface PassageLine { n: number; text: string; hit: boolean }
