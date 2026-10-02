@@ -1,3 +1,4 @@
+import { executingOrd } from '../api/run-state.js';
 import type { SessionView, WorkUnit } from '../api/types.js';
 import { deliverUnit, deliveryOf } from '../components/delivery.js';
 import { deliverTargetOf, isDeliverGate } from '../components/gateMoveModel.js';
@@ -50,21 +51,35 @@ export interface ProposalCardModel {
 
 const TERMINAL: ReadonlySet<string> = new Set(['completed', 'failed', 'cancelled']);
 
-/** The proposal a gate makes, or null (every other gate is the row's or its card's). */
+/** A gate that reports a failure (an escalation, a refused or conflicted delivery): never a
+ *  proposal — its card carries the failure, the evidence and the retry (Copilot). */
+const FAILURE_PROMPT = /LIFT-CONFLICT|BASE MOVED|failed and triage escalated|verdict is NOT PASS|deliver: .*refused/i;
+
+/** The proposal a gate makes, or null (every other gate is the row's or its card's). A plan
+ *  approval is classified first; an escalation is never a hand-over. */
 export function proposalKindOf(runId: string, gate: OpenGate | undefined, units: readonly WorkUnit[]): ProposalKind | null {
   if (gate === undefined) return null;
-  if (gate.gateKind === 'deliver' || isDeliverGate(runId, units, gate.ord)) return 'deliver';
   if (gate.gateKind === 'plan_approval' || /^\s*Approve plan rev \d+/i.test(gate.prompt)) return 'plan';
+  if (gate.gateKind === 'escalation' || FAILURE_PROMPT.test(gate.prompt)) return null;
+  if (gate.gateKind === 'deliver' || isDeliverGate(runId, units, gate.ord)) return 'deliver';
   return null;
 }
 
-/** A plan's steps in words: the proposed chain when the team plan has reached the bus, else the
- *  gate prompt's own arrow list (`… : a → b → c`), each id said as words. */
+/** One gate instance: a run can reopen a gate at the same ord, which asks afresh (Copilot). */
+export function gateInstance(gate: OpenGate | undefined): string | null {
+  return gate === undefined ? null : `${gate.ord ?? '-'}:${gate.receivedAt}`;
+}
+
+/** A plan's steps in words: the PROPOSED team chain when it has reached the bus (never the units,
+ *  never an older accepted revision), else the gate prompt's own arrow list (`… : a → b → c`), each
+ *  id said as words, with the gate's trailing instruction sentence dropped (Copilot). */
 export function planSteps(chain: ChainModel, prompt: string | undefined): string[] {
-  if (chain.steps.length > 0) return chain.steps.map((s) => s.label);
+  if (chain.source === 'team' && chain.proposed && chain.steps.length > 0) return chain.steps.map((s) => s.label);
   const list = /\):\s*(.+)$/s.exec(prompt ?? '')?.[1];
   if (list === undefined) return [];
-  return list.split('→').map((s) => s.trim()).filter((s) => s !== '').map((id) => {
+  const steps = list.split('→').map((s) => s.trim()).filter((s) => s !== '');
+  if (steps.length > 0) steps[steps.length - 1] = steps[steps.length - 1]!.split(/[.;]\s/)[0]!.replace(/[.;]$/, '').trim();
+  return steps.filter((s) => s !== '').map((id) => {
     const w = id.replace(/[-_]+/g, ' ');
     return w[0]!.toUpperCase() + w.slice(1);
   });
@@ -76,10 +91,16 @@ export function planSentence(steps: readonly string[]): string {
   return `Here’s the plan: ${steps.join(' → ')} (${steps.length} step${steps.length === 1 ? '' : 's'}).`;
 }
 
-/** The run's ONE status sentence: what is happening now, in words, with the step count. */
-export function statusSentence(view: SessionView, chain: ChainModel, gate: OpenGate | undefined): string {
+/** The run's ONE status sentence: what is happening now, in words, with the step count. While an
+ *  answer is queued (the 10 s undo window) or being sent, it says so — never that work started. */
+export function statusSentence(view: SessionView, chain: ChainModel, gate: OpenGate | undefined, action?: GateActionState): string {
   const s = view.session.status;
   const count = chain.total > 0 && !chain.proposed ? ` · ${chain.done} of ${chain.total} done` : '';
+  if (action !== undefined && (s === 'awaiting_human' || gate !== undefined)) {
+    if (action.queued) return `Your answer goes in a moment — Undo is in the notice${count}`;
+    if (action.busy) return `Sending your answer${count}`;
+    if (action.answered === 'approved') return `Answered — starting${count}`;
+  }
   if (s === 'awaiting_human' || gate !== undefined) {
     const kind = proposalKindOf(view.session.id, gate, view.units);
     const what = kind === 'plan' ? 'Waiting on your go for the plan'
@@ -118,8 +139,8 @@ export interface ProposalInput {
   gate: OpenGate | undefined;
   chain: ChainModel;
   action: GateActionState;
-  /** The operator pressed "Not now" on this gate (ord), or Deliver and is being asked. */
-  ui: { dismissedOrd: number | null; confirmingOrd: number | null };
+  /** The gate instance (`gateInstance`) the operator pressed "Not now" on, or Deliver and is being asked. */
+  ui: { dismissed: string | null; confirming: string | null };
   /** The registry name of the run's repo, when the host knows it (names whose origin). */
   repoName?: string | null;
   /** The proposal this card last asked (the host remembers it): after its gate is pruned, an
@@ -137,6 +158,13 @@ export function deliverLine(view: SessionView, gate: OpenGate | undefined, repoN
   });
 }
 
+/** A late join's memory of a hand-over: the run's deliver unit is under way or done. */
+function deliverEvidence(view: SessionView): ProposalKind | null {
+  const du = deliverUnit(view);
+  if (du === null) return null;
+  return du.status === 'done' || du.status === 'rejected' || executingOrd(view.session, view.units) === du.ord ? 'deliver' : null;
+}
+
 function base(kind: ProposalKind): ProposalCardModel {
   return {
     kind, state: 'ask', text: '', why: null, act: kind === 'plan' ? 'Go' : 'Deliver', confirm: null,
@@ -149,6 +177,7 @@ export function proposalCard(input: ProposalInput): ProposalCardModel | null {
   const { view, gate, chain, action, ui } = input;
   const status = view.session.status;
   const kind = proposalKindOf(view.session.id, gate, view.units);
+  const instance = gateInstance(gate);
 
   if (kind !== null && gate !== undefined) {
     const card = base(kind);
@@ -162,28 +191,28 @@ export function proposalCard(input: ProposalInput): ProposalCardModel | null {
         live: action.queued ? 'Sending in a moment — Undo is in the notice' : 'Sending your answer',
       };
     }
-    if (kind === 'deliver' && ui.confirmingOrd === gate.ord) {
+    if (kind === 'deliver' && ui.confirming === instance) {
       return {
         ...card, state: 'confirm',
         confirm: { q: 'This leaves studio.', w: card.why ?? '', a: 'Yes, deliver' },
       };
     }
-    if (ui.dismissedOrd === gate.ord) return { ...card, state: 'no', text: 'Not now — nothing started.' };
+    if (ui.dismissed === instance) return { ...card, state: 'no', text: 'Not now — nothing started.' };
     if (action.error !== null) return { ...card, state: 'fail', reason: action.error, canRetry: true, act: 'Try again' };
     return card;
   }
 
-  // No proposal open. A team run's plan was proposed and answered: the card is its progress, then
-  // its receipt. A run that never proposed (free text, a registered def) has no card.
-  const card = base(input.lastKind ?? 'plan');
-  // Just answered here: the gate is pruned on the 200, before the run's own frame moves it.
-  if (action.answered === 'approved' && !TERMINAL.has(status)) {
-    if (input.lastKind === 'deliver') return { ...card, state: 'run', runLabel: 'Handing over', live: 'Pushing the work' };
-    if (chain.source === 'team') return { ...card, state: 'run', runLabel: 'Going', live: 'Starting the work' };
-  }
-  if (chain.source !== 'team' || chain.proposed || chain.total === 0) return null;
+  // No proposal open. A proposal this card asked (remembered by the host), a hand-over the run's own
+  // units show under way or done, or a team run whose plan was accepted: the card is its progress,
+  // then its receipt. A run that never proposed (free text, a registered def) has no card.
+  const remembered = input.lastKind ?? deliverEvidence(view) ?? null;
+  if (remembered === null && (chain.source !== 'team' || chain.proposed || chain.total === 0)) return null;
+  const card = base(remembered ?? 'plan');
   if (!TERMINAL.has(status)) {
-    return { ...card, state: 'run', runLabel: 'Going', live: statusSentence(view, chain, gate) };
+    // Answered here, and the daemon has not moved the run yet: say it is starting — only until then.
+    const starting = action.answered === 'approved' && status === 'awaiting_human';
+    const live = starting ? (card.kind === 'deliver' ? 'Pushing the work' : 'Starting the work') : statusSentence(view, chain, gate);
+    return { ...card, state: 'run', runLabel: card.kind === 'deliver' ? 'Handing over' : 'Going', live };
   }
   if (status === 'completed') return { ...card, state: 'done', out: outcomeLine(view) };
   return { ...card, state: 'fail', reason: statusSentence(view, chain, gate), canRetry: false };

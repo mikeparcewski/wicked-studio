@@ -12,6 +12,7 @@ import { useCapabilities } from '../../store/capabilities.js';
 import { readSessionVisit, useSessionDrafts, writeSessionVisit } from '../../store/sessionDrafts.js';
 import { humanTitle } from '../runIdentity.js';
 import type { ChatCitations } from '../../api/chat-wire.js';
+import { IDLE_GATE_ACTION, useGateActionStore } from '../../board/gateActions.js';
 import { statusSentence } from '../../board/proposalCard.js';
 import { useGateStore } from '../../store/gates.js';
 import { ChainLine, useRunChain } from './ChainLine.js';
@@ -262,6 +263,7 @@ function RunBlock({ view, badge, go }: {
   const id = view.session.id;
   const state = sessionState(view.session.status);
   const gate = useGateStore((s) => s.gates[id]);
+  const action = useGateActionStore((s) => s.byGate[id] ?? IDLE_GATE_ACTION);
   const page = `/runs/${encodeURIComponent(id)}`;
   return (
     <section data-testid="session-run" data-run-id={id} data-state={state} className="wk-session-run">
@@ -271,7 +273,7 @@ function RunBlock({ view, badge, go }: {
         <span className="wk-session-run-state">{badge > 0 ? 'Needs you' : STATE_WORD[state]}</span>
       </p>
       {/* S6b: the run's ONE status sentence, then its proposal (the plan, the hand-over). */}
-      <p data-testid="session-status-sentence" className="wk-session-status-sentence">{statusSentence(view, chain, gate)}</p>
+      <p data-testid="session-status-sentence" className="wk-session-status-sentence">{statusSentence(view, chain, gate, action)}</p>
       <ProposalCard view={view} chain={chain} />
       <ChainLine chain={chain} runId={id} teamError={teamError} onRetry={retry} />
       <a href={page} onClick={go(page)} data-testid="session-run-open" className="wk-session-link">Open the run page →</a>

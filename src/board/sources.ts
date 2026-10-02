@@ -42,7 +42,10 @@ export function sourcesOf(c: ChatCitations | undefined): SourceRef[] {
   const seen = new Set<string>();
   for (const i of c?.items ?? []) {
     if ((i.status !== 'verified' && i.status !== 'corrected') || !PLACE_KINDS.has(i.kind)) continue;
-    const place = (i.status === 'corrected' && i.resolved !== undefined && i.resolved !== '' ? i.resolved : i.raw).replace(/^`|`$/g, '');
+    // A corrected citation's `raw` is the place the daemon said was WRONG: only its `resolved` place
+    // is a source, and one without it is skipped (Copilot).
+    if (i.status === 'corrected' && (i.resolved === undefined || i.resolved === '')) continue;
+    const place = (i.status === 'corrected' ? i.resolved! : i.raw).replace(/^`|`$/g, '');
     if (place === '' || seen.has(place)) continue;
     seen.add(place);
     const { path, line } = parsePlace(place);
@@ -75,6 +78,13 @@ export function passageCandidates(path: string, workdir: string | null | undefin
 }
 
 export interface PassageLine { n: number; text: string; hit: boolean }
+
+/** Whether a read can show the cited line: a line past the end of what was served (a missing line,
+ *  or one past the route's 512 KB cap) cannot be highlighted, so it is not "shown" (Copilot). */
+export function passageHasLine(content: string, line: number | null): boolean {
+  if (line === null) return true;
+  return line >= 1 && line <= content.split('\n').length;
+}
 
 /** The lines around the cited one (all of a short file), the cited line marked. */
 export function passageWindow(content: string, line: number | null, radius = 6): PassageLine[] {

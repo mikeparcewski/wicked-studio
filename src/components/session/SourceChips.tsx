@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { api } from '../../api/client.js';
 import type { ChatCitations } from '../../api/chat-wire.js';
-import { basedOnLine, passageCandidates, passageWindow, sourcesOf, type PassageLine, type SourceRef } from '../../board/sources.js';
+import { basedOnLine, passageCandidates, passageHasLine, passageWindow, sourcesOf, type PassageLine, type SourceRef } from '../../board/sources.js';
 
 /**
  * SOURCES (DES-STUDIO-REBUILD-001 §3 scenes 33/34, slice S6b): "Based on 3 sources" under a helper's
@@ -43,6 +43,11 @@ export function SourceChips({ citations, runs }: {
         try {
           const f = await api.getRunFile(r.id, path);
           if (f.binary) { if (first) why = 'it is a binary file'; first = false; continue; }
+          if (!passageHasLine(f.content, s.line)) {
+            if (first) why = f.truncated ? `line ${s.line} is past the part of the file the daemon serves (512 KB)` : `the file has no line ${s.line} any more`;
+            first = false;
+            continue;
+          }
           land({ key: s.key, state: 'shown', lines: passageWindow(f.content, s.line), path: s.key, truncated: f.truncated });
           return;
         } catch (e) {
@@ -85,7 +90,9 @@ export function SourceChips({ citations, runs }: {
             <pre className="wk-passage-text">
               {open.lines.map((l) => (
                 <span key={l.n} data-hit={l.hit ? 'true' : undefined} className={l.hit ? 'wk-passage-hit' : undefined}>
-                  <span aria-hidden className="wk-passage-n">{l.n}</span>{l.text}{'\n'}
+                  <span aria-hidden className="wk-passage-n">{l.n}</span>
+                  {l.hit && <span className="sr-only">Cited line {l.n}: </span>}
+                  {l.text}{'\n'}
                 </span>
               ))}
             </pre>

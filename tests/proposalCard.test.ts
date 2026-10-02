@@ -4,9 +4,9 @@ import type { SessionView, SessionWithDelivery } from '../src/api/types.js';
 import type { ChainModel, ChainStep } from '../src/board/chainModel.js';
 import { IDLE_GATE_ACTION } from '../src/board/gateActions.js';
 import {
-  outcomeLine, planSentence, planSteps, proposalCard, proposalKindOf, statusSentence,
+  gateInstance, outcomeLine, planSentence, planSteps, proposalCard, proposalKindOf, statusSentence,
 } from '../src/board/proposalCard.js';
-import { basedOnLine, parsePlace, passageCandidates, passageWindow, sourcesOf } from '../src/board/sources.js';
+import { basedOnLine, parsePlace, passageCandidates, passageHasLine, passageWindow, sourcesOf } from '../src/board/sources.js';
 import type { OpenGate } from '../src/store/gates.js';
 import { makeUnit, makeView } from './factories.js';
 
@@ -16,7 +16,7 @@ import { makeUnit, makeView } from './factories.js';
  */
 
 const PLAN_PROMPT = 'Approve plan rev 2 before unit 2 runs (manual mode; band 20-39; manual mode): understand → build → test → review → deliver';
-const NO_UI = { dismissedOrd: null, confirmingOrd: null };
+const NO_UI = { dismissed: null, confirming: null };
 
 function step(id: string, label: string, state: ChainStep['state']): ChainStep {
   return { id, catalog: id, block: 'build', label, state, addedBy: 'pa' };
@@ -66,11 +66,15 @@ describe('the proposal: the plan, in one sentence, with Go / Not now', () => {
   });
 
   it('"Not now" sends nothing and keeps the proposal, for this gate only', () => {
-    const c = proposalCard({ view: run('r1', 'awaiting_human'), gate: planGate(2), chain: EMPTY, action: IDLE_GATE_ACTION, ui: { dismissedOrd: 2, confirmingOrd: null } })!;
+    const c = proposalCard({ view: run('r1', 'awaiting_human'), gate: planGate(2), chain: EMPTY, action: IDLE_GATE_ACTION, ui: { dismissed: gateInstance(planGate(2)), confirming: null } })!;
     expect(c.state).toBe('no');
     expect(c.text).toBe('Not now — nothing started.');
-    const next = proposalCard({ view: run('r1', 'awaiting_human'), gate: planGate(5), chain: EMPTY, action: IDLE_GATE_ACTION, ui: { dismissedOrd: 2, confirmingOrd: null } })!;
+    const next = proposalCard({ view: run('r1', 'awaiting_human'), gate: planGate(5), chain: EMPTY, action: IDLE_GATE_ACTION, ui: { dismissed: gateInstance(planGate(2)), confirming: null } })!;
     expect(next.state).toBe('ask');
+    // The same ord reopened (a new gate instance) asks afresh (Copilot).
+    const reopened = openGate({ prompt: PLAN_PROMPT, ord: 2, gateKind: 'plan_approval', receivedAt: 99 });
+    const again = proposalCard({ view: run('r1', 'awaiting_human'), gate: reopened, chain: EMPTY, action: IDLE_GATE_ACTION, ui: { dismissed: gateInstance(planGate(2)), confirming: null } })!;
+    expect(again.state).toBe('ask');
   });
 
   it('becomes its progress, then its receipt (one outcome line)', () => {
@@ -88,7 +92,7 @@ describe('the proposal: the plan, in one sentence, with Go / Not now', () => {
 
   it('just answered, before the accepted plan reaches the bus, it reads "Going"', () => {
     const proposed = chain([step('a', 'Research', 'todo')], { proposed: true });
-    const c = proposalCard({ view: run('r1', 'awaiting_human'), gate: undefined, chain: proposed, action: { ...IDLE_GATE_ACTION, answered: 'approved' }, ui: NO_UI })!;
+    const c = proposalCard({ view: run('r1', 'awaiting_human'), gate: undefined, chain: proposed, action: { ...IDLE_GATE_ACTION, answered: 'approved' }, ui: NO_UI, lastKind: 'plan' })!;
     expect(c.state).toBe('run');
     expect(c.runLabel).toBe('Going');
   });
@@ -97,6 +101,58 @@ describe('the proposal: the plan, in one sentence, with Go / Not now', () => {
     expect(proposalCard({ view: run('r1', 'executing'), gate: undefined, chain: EMPTY, action: IDLE_GATE_ACTION, ui: NO_UI })).toBeNull();
     const plain = openGate({ prompt: 'Approve the TTL bump?', ord: 1, gateKind: 'def' });
     expect(proposalCard({ view: run('r1', 'awaiting_human'), gate: plain, chain: EMPTY, action: IDLE_GATE_ACTION, ui: NO_UI })).toBeNull();
+  });
+});
+
+describe('Copilot r1 on the proposal model', () => {
+  it('a plan prompt’s trailing instruction is not a step; a units chain or an accepted plan never stands in for the proposal', () => {
+    const prompt = 'Approve plan rev 2 before unit 2 runs (manual mode; band 70-100; manual mode): understand → design → deliver. Approve, approve with an edited plan, or reject.';
+    expect(planSteps(EMPTY, prompt)).toStrictEqual(['Understand', 'Design', 'Deliver']);
+    const units: ChainModel = { ...EMPTY, source: 'units', steps: [step('u0', 'raw unit description', 'todo')], total: 1 };
+    expect(planSteps(units, prompt)).toStrictEqual(['Understand', 'Design', 'Deliver']);
+    const accepted = chain([step('a', 'Old step', 'done')]);
+    expect(planSteps(accepted, prompt)).toStrictEqual(['Understand', 'Design', 'Deliver']);
+  });
+
+  it('a plan gate is classified first, and an escalation on the deliver unit is never a hand-over', () => {
+    const units = [makeUnit({ id: 'r9:deliver', session_id: 'r9', ord: 2, status: 'pending', phase_ref: 'deliver' })];
+    const lift = openGate({ runId: 'r9', ord: 2, prompt: 'Unit 2 failed: deliver: LIFT-CONFLICT — rebase onto origin/main conflicted; nothing pushed' });
+    expect(proposalKindOf('r9', lift, units)).toBeNull();
+    expect(proposalKindOf('r9', openGate({ runId: 'r9', ord: 2, gateKind: 'escalation', prompt: 'x' }), units)).toBeNull();
+    expect(proposalKindOf('r9', openGate({ runId: 'r9', ord: 2, gateKind: 'plan_approval', prompt: 'x' }), units)).toBe('plan');
+  });
+
+  it('"Starting" lasts only until the daemon moves the run; then the card is live progress', () => {
+    const live = chain([step('a', 'Research', 'running')]);
+    const answered = { ...IDLE_GATE_ACTION, answered: 'approved' as const };
+    expect(proposalCard({ view: run('r1', 'awaiting_human'), gate: undefined, chain: live, action: answered, ui: NO_UI })!.live).toBe('Starting the work');
+    expect(proposalCard({ view: run('r1', 'executing'), gate: undefined, chain: live, action: answered, ui: NO_UI })!.live).toBe('Research is running · 0 of 1 done');
+  });
+
+  it('a remembered proposal keeps its card on a non-team run, through to its receipt; a late join reads a hand-over from the deliver unit', () => {
+    const done = run('r1', 'completed');
+    expect(proposalCard({ view: done, gate: undefined, chain: EMPTY, action: IDLE_GATE_ACTION, ui: NO_UI, lastKind: 'deliver' })!.state).toBe('done');
+    const delivering = makeView({ id: 'r7', status: 'executing', unit_ix: 1, problem: 'x' }, [
+      makeUnit({ id: 'r7:build', session_id: 'r7', ord: 0, status: 'done' }),
+      makeUnit({ id: 'r7:deliver', session_id: 'r7', ord: 1, status: 'distributed', phase_ref: 'deliver' }),
+    ]);
+    const c = proposalCard({ view: delivering, gate: undefined, chain: EMPTY, action: IDLE_GATE_ACTION, ui: NO_UI })!;
+    expect(c.kind).toBe('deliver');
+    expect(c.runLabel).toBe('Handing over');
+  });
+
+  it('the status sentence never says work started while an answer is queued or sending', () => {
+    const g = planGate();
+    expect(statusSentence(run('r', 'awaiting_human'), EMPTY, g, { ...IDLE_GATE_ACTION, queued: true })).toBe('Your answer goes in a moment — Undo is in the notice');
+    expect(statusSentence(run('r', 'awaiting_human'), EMPTY, g, { ...IDLE_GATE_ACTION, busy: true })).toBe('Sending your answer');
+    expect(statusSentence(run('r', 'awaiting_human'), EMPTY, g, IDLE_GATE_ACTION)).toBe('Waiting on your go for the plan');
+  });
+
+  it('a corrected citation without its real place is not a source; a missing line is not "shown"', () => {
+    expect(sourcesOf({ verified: 0, unverifiable: 0, corrected: 1, unchecked: 0, items: [{ raw: 'src/a.ts:3', kind: 'line', status: 'corrected' }] })).toStrictEqual([]);
+    expect(passageHasLine('a\nb', 2)).toBe(true);
+    expect(passageHasLine('a\nb', 9)).toBe(false);
+    expect(passageHasLine('a', null)).toBe(true);
   });
 });
 
@@ -114,7 +170,7 @@ describe('the deliver card: the one "Are you sure?"', () => {
     expect(ask.state).toBe('ask');
     expect(ask.act).toBe('Deliver');
     expect(ask.why).toBe('Pushes branch wicked/r9 to origin and opens a pull request on acme/shop.');
-    const sure = proposalCard({ view: v, gate, chain: EMPTY, action: IDLE_GATE_ACTION, ui: { dismissedOrd: null, confirmingOrd: 2 } })!;
+    const sure = proposalCard({ view: v, gate, chain: EMPTY, action: IDLE_GATE_ACTION, ui: { dismissed: null, confirming: gateInstance(gate) } })!;
     expect(sure.state).toBe('confirm');
     expect(sure.confirm).toStrictEqual({ q: 'This leaves studio.', w: ask.why, a: 'Yes, deliver' });
   });
