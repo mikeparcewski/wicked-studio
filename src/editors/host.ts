@@ -265,12 +265,13 @@ export class EditorHost {
         if (this.writing) return { error: 'rate_limited', message: 'one write at a time' };
         if (a.artifact().readonly) return { error: 'refused', message: 'this artifact is read-only here' };
         if (p['base'] !== a.artifact().head) return { error: 'head_moved', message: 'the artifact changed since', head: a.artifact().head };
-        const inv = await this.currentInventory();
-        if ('error' in inv) return inv;
-        const checked = checkOps(p['ops'] as unknown[], inv.inv, inv.tokens);
-        if (!checked.ok) return { error: checked.code, message: checked.message };
+        // The lock is taken BEFORE the first await (the inventory read): one write in flight (Copilot).
         this.writing = true;
         try {
+          const inv = await this.currentInventory();
+          if ('error' in inv) return inv;
+          const checked = checkOps(p['ops'] as unknown[], inv.inv, inv.tokens);
+          if (!checked.ok) return { error: checked.code, message: checked.message };
           const r = await a.write(p['base'] as number, checked.items, String(p['summary']));
           if (!('error' in r)) {
             this.ownVersions.add(r.version);

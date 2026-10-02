@@ -236,6 +236,26 @@ describe('the host controller', () => {
     expect(host.alive).toBe(false);
   });
 
+  it('Copilot r2: one write in flight even while the inventory read is pending', async () => {
+    const { host, fromFrame, adapter } = makeHost(['artifact.read', 'artifact.write']);
+    let port: MessagePort | null = null;
+    vi.spyOn(host.frame.contentWindow!, 'postMessage').mockImplementation(((_m: unknown, _o: unknown, tr?: Transferable[]) => { port = (tr?.[0] as MessagePort) ?? null; }) as never);
+    fromFrame(env('plugin.ready', { editor: 'acme', version: '0.1.0', protocol: [1] }));
+    const write = vi.spyOn(adapter, 'write');
+    // The inventory read is slow: the second write arrives while the first is still reading.
+    const read = adapter.read.bind(adapter);
+    vi.spyOn(adapter, 'read').mockImplementation(async (v?: number) => { await new Promise((r) => setTimeout(r, 50)); return read(v); });
+    const replies: { re: string; ok: boolean; error?: { code: string } }[] = [];
+    port!.onmessage = (m) => replies.push(m.data);
+    const op = { op: 'style', anchor: 'cta', style: { color: '#fff' } };
+    port!.postMessage(env('version.write', { base: 1, ops: [op], summary: 'a' }, 'w1'));
+    port!.postMessage(env('version.write', { base: 1, ops: [op], summary: 'b' }, 'w2'));
+    await vi.waitFor(() => expect(replies.length).toBe(2));
+    expect(write).toHaveBeenCalledTimes(1);
+    expect(replies.find((r) => r.re === 'w2')).toMatchObject({ ok: false, error: { code: 'rate_limited' } });
+    host.teardown('done');
+  });
+
   it('a second load of the frame is a teardown', () => {
     const { host, ui } = makeHost();
     host.frame.dispatchEvent(new Event('load'));
