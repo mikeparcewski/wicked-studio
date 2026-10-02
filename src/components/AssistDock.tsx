@@ -456,7 +456,7 @@ function DockChat({ chatId, resumed = false, onResumeProbe }: {
 
 const RESUMED_NOTE = 'Resumed your earlier session — its agents are still on the line.';
 
-export function AssistDock({ context, verbs, importable, open, onOpenChange, onError, resumeChatId = null, onExpandChat, onResumeGone, fill = false }: {
+export function AssistDock({ context, verbs, importable, open, onOpenChange, onError, resumeChatId = null, onExpandChat, onResumeGone, fill = false, typeTarget, initialText = '' }: {
   context: AssistContext;
   verbs: AssistVerbs;
   /** Which attachments offer the Import-directly fork. Absent ⇒ everything is analysis-only. */
@@ -477,6 +477,11 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
   /** The resumed session was reclaimed by the daemon (studio#328) — the surface forgets
    *  it, so the next send opens a fresh session. */
   onResumeGone?: ((chatId: string) => void) | undefined;
+  /** Type-to-composer (§5.6 rule 4): which composer this input is for letters typed with
+   *  focus elsewhere — `ask` (the app-wide dock) or `page` (the page's own assistant). */
+  typeTarget?: 'ask' | 'page' | undefined;
+  /** Letters typed before the dock mounted (the keystrokes that opened it). */
+  initialText?: string;
 }): React.ReactElement {
   const [items, setItems] = useState<ThreadItem[]>(() =>
     resumeChatId !== null
@@ -486,13 +491,24 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
         ]
       : [],
   );
-  const [text, setText] = useState('');
+  const [text, setText] = useState(initialText);
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   const [sending, setSending] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const threadRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Opened by typing (§5.6 rule 4): the typed letters are already in the box — keep typing there.
+  const typedOpen = useRef(initialText !== '');
+  useEffect(() => {
+    if (!typedOpen.current) return;
+    typedOpen.current = false;
+    const el = textareaRef.current;
+    if (el === null) return;
+    el.focus();
+    el.setSelectionRange(el.value.length, el.value.length);
+  }, []);
 
   // The ACTIVE launch: the newest run/chat item — its gates/elicitations pin below the
   // thread (the daemon keys chat-session gates by the chat id, §11.5).
@@ -846,6 +862,7 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
           <textarea
             ref={textareaRef}
             data-testid="assist-input"
+            {...(typeTarget !== undefined ? { 'data-type-target': typeTarget } : {})}
             aria-label={context.placeholder}
             className="min-w-0 flex-1 resize-none border-0 bg-transparent text-[12px] leading-5 outline-none"
             style={{ minHeight: '20px', color: 'var(--ink-high)' }}

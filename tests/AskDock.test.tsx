@@ -456,3 +456,27 @@ describe('the Ask session survives close/reopen, and promotes into the full chat
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('type-to-composer opens the dock with the typed letters (§5.6 rule 4, S2b)', () => {
+  it('letters typed with nothing focused open Ask holding them, focused — and nothing is sent', async () => {
+    wireDiagnostics('present');
+    const { useTypeToComposer } = await import('../src/hooks/useTypeToComposer.js');
+    const { useCallback, useState } = await import('react');
+    const { act } = await import('@testing-library/react');
+    function TypedAsk(): React.ReactElement | null {
+      const [open, setOpen] = useState(false);
+      useTypeToComposer(useCallback(() => setOpen(true), []));
+      return open ? <AskDock runs={[]} pathname="/" onClose={() => undefined} /> : null;
+    }
+    render(<TypedAsk />);
+    (document.activeElement as HTMLElement | null)?.blur();
+    for (const ch of 'hi') {
+      act(() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: ch, bubbles: true, cancelable: true })); });
+    }
+    const input = await screen.findByTestId('assist-input');
+    await waitFor(() => expect((input as HTMLTextAreaElement).value).toBe('hi'));
+    expect(document.activeElement).toBe(input);
+    expect(openChat).not.toHaveBeenCalled();
+    expect(sendChatMessage).not.toHaveBeenCalled();
+  });
+});

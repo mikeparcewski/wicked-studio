@@ -2551,6 +2551,7 @@ export function GroupChat({
             }}
             rows={2}
             autoFocus
+            data-type-target="page"
             placeholder="Describe what you want… (Enter to send, Shift+Enter for newline)"
             className="wk-composer flex-1 px-4 py-2 text-[13px] outline-none resize-none"
             style={{

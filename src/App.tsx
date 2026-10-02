@@ -53,6 +53,7 @@ import { usePeekJump } from './hooks/usePeekJump.js';
 import { usePlacePanel } from './hooks/usePlacePanel.js';
 import { useRunsPanelStore } from './store/runsPanel.js';
 import { setShortcutsPaletteOpen, useGlobalShortcuts } from './hooks/useGlobalShortcuts.js';
+import { useTypeToComposer } from './hooks/useTypeToComposer.js';
 import { useLegacyRedirect, useMakeRedirect, useRetiredSettingsRedirect, useSteeringRedirect, useTestingRedirect } from './hooks/useLegacyRedirect.js';
 import { modePath, routedVersion, useRoute, type Mode } from './hooks/useRoute.js';
 import { useRuns } from './hooks/useRuns.js';
@@ -294,6 +295,9 @@ export function App(): React.ReactElement {
   // ASK — the app-wide assist dock (AskDock): opened from the floating launcher
   // bubble (AskLauncher) or Ctrl/⌘+Shift+A; collapsing the dock closes it entirely.
   const [askOpen, setAskOpen] = useState(false);
+  // §5.6 rule 4 (S2b): letters always type — into the open Ask dock, else the page's
+  // composer, else the Ask dock opened with them (opening it only reads).
+  useTypeToComposer(useCallback(() => setAskOpen(true), []));
   // studio#333: the Chat surface's bottom composer puts its Send in the bubble's corner.
   // GroupChat reports the band's LIVE height (a ResizeObserver — it grows with the scope
   // picker) and 0 on unmount; the launcher clears it exactly as it clears the right panel.

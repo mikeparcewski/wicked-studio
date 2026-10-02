@@ -469,6 +469,7 @@ export function SteeringPage({ type, navigate, search = '', runs = [] }: {
         importable={(name) => /\.(md|markdown|json)$/i.test(name)}
         open={dockOpen}
         onOpenChange={setDockOpen}
+        typeTarget="page"
       />
 
       {selected !== null && (
