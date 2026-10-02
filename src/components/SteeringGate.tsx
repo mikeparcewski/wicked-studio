@@ -34,6 +34,7 @@ import { recordLabel, ruleOffer, seatRecord } from './gateTrustModel.js';
 import { useGateTrust } from '../hooks/useGateTrust.js';
 import { useProjectsStore } from '../store/projects.js';
 import { VerdictDiff } from './VerdictDiff.js';
+import { Tech, runTechParts } from './Tech.js';
 
 interface Props {
   runId: string;
@@ -50,6 +51,9 @@ interface Props {
   /** The run's seat pool (`session.clis`) — the seats a failure-escalation gate may reassign the
    *  unit to (F-7R2-007). Absent ⇒ the card offers no reassign. */
   clis?: readonly string[];
+  /** The commit the run's worktree was minted from (`session.base_commit`), for the technical
+   *  details handle (S3). Absent ⇒ the handle names no sha. */
+  baseCommit?: string | undefined;
   /** The workflow def the run was planned from, when the host knows it (`GET /workflows`) — the
    *  intake plan (F-7R2-008) reads executor / skill / role vocabulary off it. */
   workflow?: WorkflowDef | null;
@@ -134,7 +138,7 @@ function coverageLabel(r: CoverageReport): string {
   return `Coverage: ${pct} · ${r.behavior_bearing.toLocaleString()} nodes · ${r.unaccounted} unaccounted${resolvedPct}`;
 }
 
-export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, clis, workflow, onResolved, autoDeliver, trust, delivery }: Props): React.ReactElement {
+export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, clis, baseCommit, workflow, onResolved, autoDeliver, trust, delivery }: Props): React.ReactElement {
   const clearGate = useGateStore((s) => s.clearGate);
   const recordSteering = useSteeringStore((s) => s.record);
   // D10 / D11: a PLAN gate (`plan_approval`) decides the plan, not a unit. The daemon takes an
@@ -635,6 +639,8 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
         run {runId.slice(0, 8)}
         {typeof ord === 'number' ? ` · before unit #${ord}` : ''}
       </p>
+      {/* S3: the run's handles, only with "Show technical details" on. */}
+      <Tech data-testid="tech-gate" parts={runTechParts({ id: runId, base_commit: baseCommit, clis: pool ?? [] })} block className="-mt-2 mb-3" />
       {decided && (
         <p data-testid="steering-queued" className="text-xs font-mono mb-2" style={{ color: 'var(--ink-muted)' }}>
           {shared.queued ? 'queued · undo in toast' : shared.busy ? 'answering…' : `${shared.answered} · advancing…`}

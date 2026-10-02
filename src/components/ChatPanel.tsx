@@ -1,4 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Tech, runTechParts } from './Tech.js';
 import { lostQuorum, quorumLabel } from './councilQuorum.js';
 import { api, downloadRunEvidence } from '../api/client.js';
 import { useGlobalShortcuts, type ShortcutEntry } from '../hooks/useGlobalShortcuts.js';
@@ -974,6 +975,8 @@ function RunChat({
         <p className="flex-1 text-base font-semibold truncate" style={{ color: 'var(--ink-high)' }} title={session.problem}>
           {runTitle(session)}
         </p>
+        {/* S3: the run's handles, only with Settings › "Show technical details" on. */}
+        <Tech data-testid="tech-run-header" parts={runTechParts(session)} className="shrink min-w-0 max-w-[40%]" />
         <span className="text-xs font-medium shrink-0 font-mono" style={{ color: style.color }}>{style.label}</span>
         {/* Retry — failed/cancelled only (§4.5: the loop closes failures, not
             successes). A standard secondary button (§4.4 tokens). */}

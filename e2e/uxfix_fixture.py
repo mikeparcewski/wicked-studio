@@ -99,6 +99,10 @@ Mutable switches (flipped over POST /__fixture between page loads):
   notif_prefs     — replaces the settings store's `studio.notifications`
                     (a dict; None REMOVES the key — the never-persisted
                     default case), same channel as `appearance`.
+  view_prefs      — replaces the settings store's `studio.view` (S3, technical
+                    details; None REMOVES the key — off, the fresh install).
+  session_over    — {run id: {field: value}} merged into that run's session on
+                    both run wires (S3: a `base_commit` for the sha handle).
   forensics       — the slice-R failure-forensics corpus (DES-UX-001 §1):
                     r-auth (failed 13m ago) gains TWO real-shape units — a
                     `done` survey with a captured transcript served on the
@@ -560,6 +564,10 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          #   flip a run mid-page (pair with an extra_frames lifecycle frame so the app
          #   reconciles) or seed one failed run into the healthy corpus.
          "wave1_stall": False, "status_over": {},
+         # session_over — {run id: {field: value}} merged into that run's session on both
+         #   run wires, after status_over (S3: a `base_commit` for the technical-details
+         #   journey). Default {}: no corpus changes.
+         "session_over": {},
          # ── Studio wave 2b (e2e/wave2b_*_test.py) ──
          # wave2b — ADDS to the wave1 corpus (turn both on): five runs across alpha /
          #   beta / gamma — two gate candidates (g1 alpha, g2 beta), an executing run
@@ -3134,13 +3142,15 @@ def assemble_runs() -> list:
     with state_lock:
         status_over = dict(state["status_over"])
         simple_gates = list(state["simple_gates"])
-    if status_over or simple_gates:
+        session_over = json.loads(json.dumps(state["session_over"]))
+    if status_over or simple_gates or session_over:
         runs = json.loads(json.dumps(runs))
         for r in runs:
             if r["session"]["id"] in simple_gates:
                 r["session"]["status"] = "awaiting_human"
             if r["session"]["id"] in status_over:
                 r["session"]["status"] = status_over[r["session"]["id"]]
+            r["session"].update(session_over.get(r["session"]["id"], {}))
     return runs
 
 
@@ -5144,6 +5154,13 @@ class W2Handler(SimpleHTTPRequestHandler):
                         settings_store.pop("studio.notifications", None)
                     else:
                         settings_store["studio.notifications"] = body["notif_prefs"]
+                # S3: seed `studio.view` the same way (None removes the key: the
+                # fresh-install case, technical details off).
+                if "view_prefs" in body:
+                    if body["view_prefs"] is None:
+                        settings_store.pop("studio.view", None)
+                    else:
+                        settings_store["studio.view"] = body["view_prefs"]
                 state.update({k: v for k, v in body.items() if k in state})
                 snapshot = dict(state)
             return self._json(200, {"ok": True, "state": snapshot})

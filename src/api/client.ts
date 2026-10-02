@@ -633,6 +633,14 @@ export const api = {
       body: JSON.stringify({ 'studio.composer': prefs }),
     }),
 
+  /** DES-studio-rebuild S3: `studio.view` ("Show technical details") rides the SAME settings
+   *  store; the merged blob it returns is the read-back the store checks (wicked-crew#323). */
+  putViewSettings: (prefs: import('../store/viewPrefs.js').StudioViewPrefs) =>
+    apiFetch<{ settings: Record<string, unknown> }>('/settings', {
+      method: 'PUT',
+      body: JSON.stringify({ 'studio.view': prefs }),
+    }),
+
   // ── Projects (DES-PROJECT-001) ───────────────────────────────────────────────
 
   /** All projects; `status=active` (default) or `archived` filters. Includes the synthesized "Unfiled" default. */

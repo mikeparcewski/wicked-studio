@@ -6,6 +6,7 @@ import { AgeStamp } from './AgeStamp.js';
 import { runTitle, runWhenWord, WHEN_TITLE } from './runIdentity.js';
 import { runRowKind } from './runMode.js';
 import { DeliveryChip } from './RunDelivery.js';
+import { Tech, runTechParts } from './Tech.js';
 
 interface Props {
   view: SessionView;
@@ -92,6 +93,8 @@ export function RunLink({ view, selectedRunId, onSelect }: Props): React.ReactEl
           ? <span data-testid="run-when" title={WHEN_TITLE}>{runWhenWord(attachedAt, now, session.created_at)}</span>
           : <AgeStamp at={runClockMs} now={now} testId="run-when" />}
       </p>
+      {/* S3: the run's handles, only with Settings › "Show technical details" on. */}
+      <Tech data-testid="tech-run-row" parts={runTechParts(session)} block className="mt-0.5" />
     </button>
   );
 }
