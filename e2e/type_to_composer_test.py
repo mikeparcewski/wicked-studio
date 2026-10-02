@@ -110,8 +110,11 @@ with sync_playwright() as p:
         except Exception:  # noqa: BLE001 — reported by the check below
             pass
         note_toast()
-        check(step, page.evaluate(VALUE, "assist-input") == TEXT and not toasts,
-              dock=page.evaluate(VALUE, "assist-input"), active=page.evaluate(ACTIVE), toasts=toasts)
+        # Focus must land in the dock too: a later Space then types there instead of
+        # pressing the card/button that held focus before.
+        active = page.evaluate(ACTIVE)
+        check(step, page.evaluate(VALUE, "assist-input") == TEXT and active == "assist-input" and not toasts,
+              dock=page.evaluate(VALUE, "assist-input"), active=active, toasts=toasts)
 
     # ── body: nothing focused on Home ──────────────────────────────────────────────
     home()
@@ -164,11 +167,13 @@ with sync_playwright() as p:
     gate_box = page.evaluate(VALUE, "gate-composer")
     amend = page.evaluate(VALUE, "steering-amend")
     page.screenshot(path=str(SHOTS / "type-to-composer-gate.png"))
+    gate_active = page.evaluate(ACTIVE)
     check("gate-steer-boxes-stay-empty",
-          page.evaluate(VALUE, "assist-input") == TEXT and not gate_box and not amend
+          page.evaluate(VALUE, "assist-input") == TEXT and gate_active == "assist-input"
+          and not gate_box and not amend
           and page.get_by_test_id("steering-queued").count() == 0 and not toasts,
-          dock=page.evaluate(VALUE, "assist-input"), gate_composer=gate_box, steering_amend=amend,
-          toasts=toasts)
+          dock=page.evaluate(VALUE, "assist-input"), active=gate_active, gate_composer=gate_box,
+          steering_amend=amend, toasts=toasts)
 
     # ── composite: a focused radiogroup keeps its keys ─────────────────────────────
     page.goto(f"{origin}/theme", wait_until="networkidle")
