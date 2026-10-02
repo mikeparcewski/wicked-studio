@@ -39,6 +39,7 @@ args = ap.parse_args()
 report: dict = {"ok": False, "cases": {}, "gaps": [
     "case 10: keyboard reachability + visible focus only; axe is not run (not installed in this harness)",
     "case 3: request interception cannot see WebRTC/STUN or DNS prefetch (DES §12.1, [A11])",
+    "case 9: liveness is checked over one ping period (10 s), not a whole scripted session; no Long Tasks probe",
 ]}
 
 

@@ -10,9 +10,9 @@
   "version": 1,
   "studioVersion": "0.5.19",
   "counts": {
-    "files": 188,
-    "occurrences": 1870,
-    "static": 1638,
+    "files": 189,
+    "occurrences": 1871,
+    "static": 1639,
     "dynamic": 74,
     "computed": 8
   },
@@ -2561,6 +2561,12 @@
       "testId": "editor-drafted",
       "files": [
         "src/components/editors/EditorHostPage.tsx"
+      ]
+    },
+    {
+      "testId": "editor-frame",
+      "files": [
+        "src/editors/host.ts"
       ]
     },
     {

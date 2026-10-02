@@ -1,5 +1,6 @@
 import { readdirSync, readFileSync } from 'node:fs';
 
+import { loadEnv } from 'vite';
 import { defineConfig, configDefaults, type Plugin } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 
@@ -42,7 +43,9 @@ function emitFontLicences(): Plugin {
 // EP-P1 (DES-EDITOR-PLUGINS-001 §8.2): the dev server serves the shell with the frame-src policy crew
 // serves it with, so an editor plugin that navigates itself can reach only the editor bundle route and
 // the interactive document route — on the page's own origin and on the daemon's (VITE_API_HOST).
-function editorFrameSrc(): Plugin {
+// The daemon's host is the RESOLVED Vite env (`.env.development`'s VITE_API_HOST, `127.0.0.1:7701`),
+// normalized as `apiBase()` does: a bare host gets `http://` (Copilot).
+function editorFrameSrc(apiHost: string | undefined): Plugin {
   return {
     name: 'editor-frame-src',
     apply: 'serve',
@@ -50,8 +53,8 @@ function editorFrameSrc(): Plugin {
       server.middlewares.use((req, res, next) => {
         const host = req.headers.host ?? '127.0.0.1:4200';
         const origins = [`http://${host}`];
-        const api = process.env.VITE_API_HOST;
-        if (api !== undefined && api !== '') origins.push(api.replace(/\/+$/, ''));
+        const api = (apiHost ?? '').trim().replace(/\/+$/, '');
+        if (api !== '') origins.push(/^https?:\/\//.test(api) ? api : `http://${api}`);
         const src = origins.flatMap((o) => [`${o}/api/v1/editors/`, `${o}/api/v1/projects/`]).join(' ');
         res.setHeader('Content-Security-Policy', `frame-src ${src} blob: data:`);
         next();
@@ -60,8 +63,8 @@ function editorFrameSrc(): Plugin {
   };
 }
 
-export default defineConfig({
-  plugins: [react(), emitTestidInventory(), emitFontLicences(), editorFrameSrc()],
+export default defineConfig(({ mode }) => ({
+  plugins: [react(), emitTestidInventory(), emitFontLicences(), editorFrameSrc(loadEnv(mode, process.cwd(), '').VITE_API_HOST)],
   server: { port: 4200, host: '127.0.0.1' },
   preview: { port: 4200 },
   test: {
@@ -76,4 +79,4 @@ export default defineConfig({
     // crew run makes INSIDE this repo) — same sweep problem, foreign suites.
     exclude: [...configDefaults.exclude, 'site/**', 'wicked-worktrees/**', 'tests/e2e/**'],
   },
-});
+}));

@@ -123,11 +123,11 @@ export class EditorHost {
     this.now = o.now ?? Date.now;
     this.grants = new Set(o.grants);
     const f = document.createElement('iframe');
-    f.setAttribute('sandbox', 'allow-scripts');
-    f.setAttribute('referrerpolicy', 'no-referrer');
-    f.setAttribute('title', o.title);
-    f.setAttribute('data-testid', 'editor-frame');
-    f.setAttribute('data-editor', o.editor);
+    // A props-style object, so the testid scanner (scripts/testid-inventory.mjs) sees `editor-frame`.
+    const attrs: Record<string, string> = {
+      sandbox: 'allow-scripts', referrerpolicy: 'no-referrer', title: o.title, 'data-testid': 'editor-frame', 'data-editor': o.editor,
+    };
+    for (const [k, v] of Object.entries(attrs)) f.setAttribute(k, v);
     f.className = 'wk-editor-frame';
     this.frame = f;
   }

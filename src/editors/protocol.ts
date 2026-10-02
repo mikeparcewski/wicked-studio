@@ -98,9 +98,13 @@ const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object
 const isStr = (v: unknown, max = Infinity): v is string => typeof v === 'string' && v.length <= max;
 const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 
-function sizeOf(v: unknown): number {
-  try { return JSON.stringify(v)?.length ?? 0; } catch { return Infinity; }
+/** A message's serialized size in UTF-8 BYTES (not UTF-16 units: an emoji is 4 bytes) (Copilot). */
+export function sizeOf(v: unknown): number {
+  try { return new TextEncoder().encode(JSON.stringify(v) ?? '').length; } catch { return Infinity; }
 }
+
+/** One line of text: no CR or LF (Copilot). */
+const isLine = (v: unknown, max: number): v is string => isStr(v, max) && !/[\r\n]/.test(v);
 
 /** The per-type payload checks: a missing field or a wrong type rejects the message. */
 function payloadOk(type: string, p: Record<string, unknown>): boolean {
@@ -123,12 +127,12 @@ function payloadOk(type: string, p: Record<string, unknown>): boolean {
     case 'checks.contribute':
       // Advisory notes (§5.8): at most 100, each an id and one line of text — nothing else is read.
       return Array.isArray(p['checks']) && p['checks'].length <= 100
-        && p['checks'].every((c) => isObj(c) && isStr(c['id'], 100) && isStr(c['text'], 300));
+        && p['checks'].every((c) => isObj(c) && isLine(c['id'], 100) && isLine(c['text'], 300));
     case 'evidence.open': return isStr(p['checkId'], 200);
     case 'ui.morph': return SIZES.includes(p['to'] as Size);
     case 'ui.key': return isStr(p['key'], 40);
     case 'ui.typed': return isStr(p['grapheme'], 64);
-    case 'ui.status': return isStr(p['line'], LIMITS.statusChars);
+    case 'ui.status': return isLine(p['line'], LIMITS.statusChars);
     case 'plugin.error': return isStr(p['message'], 2_000);
     default: return false;
   }

@@ -85,7 +85,7 @@ export function checkOps(ops: unknown[], inv: Inventory, themeTokens: ReadonlySe
   if (ops.length === 0) return { ok: false, code: 'bad_request', message: 'no ops' };
   if (ops.length > LIMITS.writeOps) return { ok: false, code: 'too_large', message: `more than ${LIMITS.writeOps} ops` };
   let bytes = 0;
-  try { bytes = JSON.stringify(ops).length; } catch { return { ok: false, code: 'bad_request', message: 'ops are not data' }; }
+  try { bytes = new TextEncoder().encode(JSON.stringify(ops)).length; } catch { return { ok: false, code: 'bad_request', message: 'ops are not data' }; }
   if (bytes > LIMITS.writeBytes) return { ok: false, code: 'too_large', message: 'ops are too large' };
   const items: WireItem[] = [];
   for (const raw of ops) {

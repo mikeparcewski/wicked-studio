@@ -46,6 +46,10 @@ describe('the strict parser', () => {
     expect(parseInbound(env('checks.contribute', { checks: ['approve'] })).ok).toBe(false);
     expect(parseInbound(env('checks.contribute', { checks: Array.from({ length: 101 }, () => ({ id: 'c', text: 't' })) })).ok).toBe(false);
     expect(parseInbound(env('checks.contribute', { checks: [{ id: 'c1', text: 'The term "free" is used 3 times' }] })).ok).toBe(true);
+    // One line means one line; sizes are UTF-8 bytes (Copilot).
+    expect(parseInbound(env('checks.contribute', { checks: [{ id: 'c1', text: 'line one\nline two' }] })).ok).toBe(false);
+    expect(parseInbound(env('ui.status', { line: 'a\rb' })).ok).toBe(false);
+    expect(parseInbound(env('ui.status', { line: 'x', pad: '😀'.repeat(300_000) }))).toMatchObject({ ok: false, reason: 'too large' });
     // Additive payload fields are ignored within v1 (§5.4), never acted on.
     expect(parseInbound(env('ui.status', { line: 'x', extra: true })).ok).toBe(true);
   });
