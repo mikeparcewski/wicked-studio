@@ -326,14 +326,14 @@ export function AppearanceSettings(): React.ReactElement {
       </div>
 
       {/* ── Theme (§2.14): dark is the default instance; light is the override ── */}
-      <div className="flex items-center justify-between gap-4 py-4 border-b" style={{ borderColor: 'var(--surface-raised)' }}>
+      <div className="flex flex-col gap-3 py-4 border-b sm:flex-row sm:items-center sm:justify-between sm:gap-4" style={{ borderColor: 'var(--surface-raised)' }}>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium" style={{ color: 'var(--ink-high)' }}>Theme</p>
           <p className="text-xs mt-0.5" style={{ color: 'var(--ink-muted)' }}>
             The surface and ink ramps. The wicked themes also set the harbor accent and the Archivo type.
           </p>
         </div>
-        <div className="flex items-center gap-1.5 shrink-0">
+        <div className="flex flex-wrap items-center gap-1.5 sm:shrink-0">
           {THEMES.map((t) => themeButton(t.id, t.label))}
         </div>
       </div>
