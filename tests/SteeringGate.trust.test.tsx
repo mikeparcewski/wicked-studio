@@ -14,7 +14,7 @@ import { useGateStore } from '../src/store/gates.js';
 import { useRunEventStore } from '../src/store/events.js';
 import { useSteeringStore } from '../src/store/steering.js';
 import { makeUnit } from './factories.js';
-import { history } from './fixtures/gateTrust.js';
+import { NOW, history } from './fixtures/gateTrust.js';
 
 vi.mock('../src/api/gateHistory.js', () => ({
   getDecidedGates: vi.fn(),
@@ -33,6 +33,10 @@ const TRUST = { projectId: 'northwind', band: '0-19', gateKind: 'def', landsDoct
 const REVIEW_PROMPT = 'Approve unit 2 before it runs: review';
 
 beforeEach(() => {
+  // The history is dated against the fixture's NOW and the offer counts a 14-day window from the
+  // clock, so the clock is pinned: unpinned, the test lost an approval per day after 2026-09-28.
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(NOW);
   vi.restoreAllMocks();
   useGateStore.setState({ gates: {} });
   useAnnotationStore.setState({ drafts: {} });
@@ -44,7 +48,7 @@ beforeEach(() => {
   vi.mocked(gateHistory.getWhoami).mockResolvedValue({ actor: { id: 'local' } });
   vi.mocked(gateHistory.createStandingOrder).mockImplementation(async (text, rule) => ({ order: { id: 'o-new', text, rule, createdAt: 1 } }));
 });
-afterEach(cleanup);
+afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 describe('SteeringGate — the creator seat\'s track record on the button', () => {
   it('two seats with different histories show different records, on the Approve button', async () => {
