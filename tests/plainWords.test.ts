@@ -97,6 +97,28 @@ describe('plainWord (lookup)', () => {
     expect(plainWord('worktree')).toBe('its own copy of the code');
   });
 
+  it('a row of parallel alternatives answers the wording for the alias asked', () => {
+    expect(plainWord('rs')).toBe('Research');
+    expect(plainWord('PL')).toBe('Plan');
+    expect(plainWord('ch')).toBe('Just ask');
+    expect(plainWord('advisory')).toBe('Yes (helpers follow it)');
+    expect(plainWord('blocking')).toBe('Yes, and hold work to it');
+    expect(plainWord('verified')).toBe('done and checked');
+    expect(plainWord('stalled')).toBe('says it’s finished, but nothing new in a while');
+    expect(plainWord('contradicted')).toBeNull(); // §3 gives it no plain wording
+    expect(plainWord('candidate rule id')).toBe('a rule waiting for your yes');
+    expect(plainWord('policy')).toBe('a rule for this project');
+  });
+
+  it('every aliasPlain key is one of its row\'s aliases and points at a plain wording', () => {
+    for (const row of PLAIN_WORDS) {
+      for (const [alias, i] of Object.entries(row.aliasPlain ?? {})) {
+        expect(row.aliases, `${row.term}: ${alias}`).toContain(alias);
+        if (i !== null) expect(row.plain?.[i], `${row.term}: ${alias} → ${i}`).toBeDefined();
+      }
+    }
+  });
+
   it('is case- and space-insensitive, and answers null for a hidden or unknown term', () => {
     expect(plainWord('  Seat ')).toBe('an AI helper');
     expect(plainWord('PLAN GATE')).toBe(plainWord('gate'));

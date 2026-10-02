@@ -17,6 +17,10 @@ export interface PlainWordRow {
   plain: readonly string[] | null;
   /** Where the technical term still lives. */
   where: string;
+  /** For rows whose `plain` entries are parallel alternatives (one per alias, e.g. the mode
+   *  codes or ADVISORY / BLOCKING): alias → index into `plain`, or `null` when the design gives
+   *  that alias no plain wording. An alias not listed here gets the usual wording, `plain[0]`. */
+  aliasPlain?: Readonly<Record<string, number | null>>;
 }
 
 export const PLAIN_WORDS: readonly PlainWordRow[] = [
@@ -36,15 +40,18 @@ export const PLAIN_WORDS: readonly PlainWordRow[] = [
     plain: ['N of M steps done and checked', 'N more say they’re done but aren’t checked yet'], where: 'Tech (progress line)' },
   { term: 'CLAIMED / VERIFIED / CONTRADICTED / STALLED 18M', aliases: ['claimed', 'verified', 'contradicted', 'stalled'],
     plain: ['says it’s done, being checked', 'done and checked', 'says it’s finished, but nothing new in a while'],
+    aliasPlain: { claimed: 0, verified: 1, contradicted: null, stalled: 2 },
     where: 'Tech · step sheet › Live events' },
   { term: 'REFUSED BY GATE · POL-kes-0019', aliases: ['refused by gate'],
     plain: ['Sent back by your rule'], where: 'Tech · rule sheet › Where it was used' },
   { term: 'OOM · killed · retried', aliases: ['oom', 'killed', 'retried'],
     plain: ['One helper hit a snag and restarted itself', 'Fixed'], where: 'Tech · Watchtower' },
   { term: 'policy / POL-kes-0019 / cand-kes-0007', aliases: ['policy', 'policy id', 'candidate rule id'],
-    plain: ['a rule for this project', 'a rule waiting for your yes'], where: 'Tech · rule sheet › History' },
+    plain: ['a rule for this project', 'a rule waiting for your yes'],
+    aliasPlain: { policy: 0, 'policy id': 0, 'candidate rule id': 1 }, where: 'Tech · rule sheet › History' },
   { term: 'ADVISORY / BLOCKING', aliases: ['advisory', 'blocking'],
-    plain: ['Yes (helpers follow it)', 'Yes, and hold work to it'], where: 'Rule sheet › How it’s held' },
+    plain: ['Yes (helpers follow it)', 'Yes, and hold work to it'],
+    aliasPlain: { advisory: 0, blocking: 1 }, where: 'Rule sheet › How it’s held' },
   { term: 'CANDIDATE · QUEUED', aliases: ['candidate', 'queued'],
     plain: ['Saved for later; it’s waiting on the Desk'], where: 'Tech' },
   { term: 'scope (project / all)', aliases: ['scope'],
@@ -56,7 +63,8 @@ export const PLAIN_WORDS: readonly PlainWordRow[] = [
   { term: 'recurrence ↺', aliases: ['recurrence'],
     plain: ['You’ve said this before.', 'You already have this rule.'], where: 'Rule offer' },
   { term: 'mode codes RS PL EX PT BR VB CH', aliases: ['mode code', 'rs', 'pl', 'ex', 'pt', 'br', 'vb', 'ch'],
-    plain: ['Research', 'Plan', 'Build', 'Write a proposal', 'Brainstorm', 'Make a demo', 'Just ask'], where: 'none needed' },
+    plain: ['Research', 'Plan', 'Build', 'Write a proposal', 'Brainstorm', 'Make a demo', 'Just ask'],
+    aliasPlain: { rs: 0, pl: 1, ex: 2, pt: 3, br: 4, vb: 5, ch: 6 }, where: 'none needed' },
   { term: 'phase / wave', aliases: ['phase', 'wave'],
     plain: ['the stage names in the title row'], where: 'Tech (wave N)' },
   { term: 'artifact / brief v3 / plan v1', aliases: ['artifact', 'artifact version'],
@@ -98,6 +106,12 @@ const BY_ALIAS: ReadonlyMap<string, PlainWordRow> = new Map(
 /** The usual plain wording for a technical term; `null` when the default layer does not show
  *  the term at all, or the term is unknown. */
 export function plainWord(term: string): string | null {
-  const row = BY_ALIAS.get(norm(term));
-  return row?.plain?.[0] ?? null;
+  const key = norm(term);
+  const row = BY_ALIAS.get(key);
+  if (!row?.plain) return null;
+  const hit = row.aliasPlain
+    ? Object.entries(row.aliasPlain).find(([a]) => norm(a) === key)
+    : undefined;
+  if (hit && hit[1] === null) return null;
+  return row.plain[hit?.[1] ?? 0] ?? null;
 }
