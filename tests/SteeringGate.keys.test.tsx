@@ -56,6 +56,9 @@ describe('SteeringGate ⌥A/⌥R keys (§7.7, §5.6)', () => {
     screen.getByTestId('steering-gate').focus();
     fireEvent.keyDown(window, { key: 'a' });
     fireEvent.keyDown(window, { key: 'r' });
+    // A handled decision disables Approve synchronously (it is queued before any POST), so an
+    // enabled Approve proves nothing was queued — not merely that the POST has not run yet.
+    expect(screen.getByTestId('steering-approve')).not.toBeDisabled();
     expect(client.api.confirmGate).not.toHaveBeenCalled();
   });
 
@@ -67,6 +70,7 @@ describe('SteeringGate ⌥A/⌥R keys (§7.7, §5.6)', () => {
     fireEvent.keyDown(ta, { key: 'r' });
     fireEvent.keyDown(ta, ALT_A);
     fireEvent.keyDown(ta, ALT_R);
+    expect(screen.getByTestId('steering-approve')).not.toBeDisabled();
     expect(client.api.confirmGate).not.toHaveBeenCalled();
   });
 });

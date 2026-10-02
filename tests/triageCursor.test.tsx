@@ -3,7 +3,7 @@ import { act, render, screen } from '@testing-library/react';
 import { GateRejectNote } from '../src/components/GateRejectNote.js';
 import { useTriageCursor, type TriageItem } from '../src/hooks/useTriageCursor.js';
 import { setShortcutsPaletteOpen } from '../src/hooks/useGlobalShortcuts.js';
-import { useGateActionStore } from '../src/board/gateActions.js';
+import { isDecisionPending, useGateActionStore } from '../src/board/gateActions.js';
 import { useGateStore, type OpenGate } from '../src/store/gates.js';
 import * as client from '../src/api/client.js';
 import type { Navigate } from '../src/hooks/useRoute.js';
@@ -98,8 +98,12 @@ describe('the triage cursor (slice H, §2.2)', () => {
     expect(selectedKeys()).toEqual([]);
     press('j'); // ⌥J selects p1 (a simple gate) …
     act(() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', bubbles: true, cancelable: true })); });
+    // … and a bare a still answers nothing: no decision is even queued (a queued one POSTs later).
+    expect(isDecisionPending('r1')).toBe(false);
     await new Promise((r) => setTimeout(r, 5));
-    expect(client.api.confirmGate).not.toHaveBeenCalled(); // … and a bare a still answers nothing
+    expect(client.api.confirmGate).not.toHaveBeenCalled();
+    press('a'); // the probe is live: ⌥A on the same row DOES queue a decision
+    expect(isDecisionPending('r1')).toBe(true);
   });
 
   it('the arrows pair with ⌥J/⌥K; the cursor CLAMPS at both ends, never wraps', () => {

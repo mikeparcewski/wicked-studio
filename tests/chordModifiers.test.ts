@@ -27,12 +27,13 @@ function sourceFiles(dir: string): string[] {
 interface Found { file: string; literal: string; chord: ShortcutChord | null }
 
 /** Classify every `chord:` initializer in one source text. Readable forms: an object literal
- *  or a plain `altChord('x')` call, each ENDING the initializer (`,` `}` or newline next).
+ *  or a plain `altChord('x')` call, each ENDING the initializer (`,` or `}` next).
  *  Anything else — a constant, another helper, `altChord('j' + s)`, `altChord('j') && {…}` —
  *  is reported with `chord: null`: the scan fails closed instead of skipping it. */
 function scanChords(text: string, file: string): Found[] {
   const found: Found[] = [];
-  const END = String.raw`(?=\s*[,}\n])`;
+  // An initializer ends at `,` or `}` — a newline does not end one (`altChord('j')\n && {…}`).
+  const END = String.raw`(?=\s*[,}])`;
   for (const m of text.matchAll(new RegExp(String.raw`chord:\s*(\{[^}]*\})` + END, 'g'))) {
     const literal = m[1]!;
     const key = /key:\s*'((?:\\'|[^'])*)'/.exec(literal)?.[1];
@@ -104,6 +105,7 @@ describe('§5.6 rule 1 — every global chord carries a modifier', () => {
     expect(unreadable("{ id: 'a', chord: altChord('j') && { key: 'a' }, handler }")).toBe(true);
     expect(unreadable("{ id: 'a', chord: SOME_CHORD, handler }")).toBe(true);
     expect(unreadable("{ id: 'a', chord: { key: 'j' } && x, handler }")).toBe(true);
+    expect(unreadable("{ id: 'a', chord: altChord('j')\n    && { key: 'a' }, handler }")).toBe(true);
     expect(unreadable("{ id: 'a', chord: altChord('j'), handler }")).toBe(false);
     expect(unreadable("{ id: 'a', chord: { key: 'escape' },\n handler }")).toBe(false);
     expect(unreadable('function f(chord: ShortcutChord): void {}')).toBe(false);
