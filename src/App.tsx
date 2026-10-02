@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { EditorHostPage } from './components/editors/EditorHostPage.js';
 import { CenterDashboard } from './components/CenterDashboard.js';
 import { AskDock } from './components/AskDock.js';
 import { AskLauncher } from './components/AskLauncher.js';
@@ -567,6 +568,10 @@ export function App(): React.ReactElement {
           navigate={navigate}
         />
       );
+    }
+    // `/editors/{dev,conformance}` (EP-P1): one editor plugin in its sandboxed host, behind a dev route.
+    if (panel === 'editors' && (artifactId === 'dev' || artifactId === 'conformance')) {
+      return <EditorHostPage mode={artifactId} />;
     }
     // `/s/:id` (S6a): a session — under every skin (a route is not a skin concern).
     if (panel === 'session' && artifactId !== null) {

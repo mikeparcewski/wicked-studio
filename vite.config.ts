@@ -39,8 +39,29 @@ function emitFontLicences(): Plugin {
   };
 }
 
+// EP-P1 (DES-EDITOR-PLUGINS-001 §8.2): the dev server serves the shell with the frame-src policy crew
+// serves it with, so an editor plugin that navigates itself can reach only the editor bundle route and
+// the interactive document route — on the page's own origin and on the daemon's (VITE_API_HOST).
+function editorFrameSrc(): Plugin {
+  return {
+    name: 'editor-frame-src',
+    apply: 'serve',
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        const host = req.headers.host ?? '127.0.0.1:4200';
+        const origins = [`http://${host}`];
+        const api = process.env.VITE_API_HOST;
+        if (api !== undefined && api !== '') origins.push(api.replace(/\/+$/, ''));
+        const src = origins.flatMap((o) => [`${o}/api/v1/editors/`, `${o}/api/v1/projects/`]).join(' ');
+        res.setHeader('Content-Security-Policy', `frame-src ${src} blob: data:`);
+        next();
+      });
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [react(), emitTestidInventory(), emitFontLicences()],
+  plugins: [react(), emitTestidInventory(), emitFontLicences(), editorFrameSrc()],
   server: { port: 4200, host: '127.0.0.1' },
   preview: { port: 4200 },
   test: {
