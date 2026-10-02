@@ -6,9 +6,10 @@ Every journey in e2e/*_test.py is a standalone Python Playwright script: it serv
 `dist-sameorigin/` build plus the in-process fixture API (uxfix_fixture.py) and exits 0/1.
 Some share default ports, so they run one at a time.
 
-  python3 e2e/run_journeys.py            # the behaviour journeys (the CI set)
-  python3 e2e/run_journeys.py --all      # every journey except the LIVE ones
-  python3 e2e/run_journeys.py wave1_dark # just the named journeys
+  python3 e2e/run_journeys.py              # the behaviour journeys (the CI set)
+  python3 e2e/run_journeys.py --list desk  # the desk journeys (CI runs them under STUDIO_SKIN=desk)
+  python3 e2e/run_journeys.py --all        # every journey except the LIVE and DESK ones
+  python3 e2e/run_journeys.py wave1_dark   # just the named journeys
 
 The same-origin build is made once up front (unless SKIP_STUDIO_BUILD=1 and it already
 exists), then every journey runs with SKIP_STUDIO_BUILD=1. STUDIO_SKIN passes through, so
@@ -44,6 +45,13 @@ BEHAVIOUR = [
     "mcp_tools",
 ]
 
+# The desk journeys (DES-STUDIO-REBUILD-001 §6.2): they assert the `desk` skin, so they run only
+# under STUDIO_SKIN=desk (CI's `journeys (desk)` leg, skipped while this list is empty). A desk
+# slice adds its journey here and never to BEHAVIOUR, which runs under [studio, compact-rail].
+DESK: list[str] = []
+
+LISTS = {"behaviour": BEHAVIOUR, "desk": DESK}
+
 # Journeys that need a live daemon or bridge: a real wicked-crew daemon (seed_surfaces,
 # studio_standalone, test_feature_live) or a sibling wicked-interactive checkout
 # (interactive_wire_contract). Operator-run only; never part of --all or CI.
@@ -54,7 +62,7 @@ TIMEOUT_S = 240
 
 def all_journeys() -> list[str]:
     names = sorted(p.name[: -len("_test.py")] for p in E2E.glob("*_test.py"))
-    return [n for n in names if n not in LIVE]
+    return [n for n in names if n not in LIVE and n not in DESK]
 
 
 def build() -> None:
@@ -86,10 +94,20 @@ def run(name: str) -> tuple[bool, float, str]:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("names", nargs="*", help="journey names (without _test.py); default: the behaviour set")
-    ap.add_argument("--all", action="store_true", help="every journey except the LIVE ones")
+    ap.add_argument("--all", action="store_true", help="every journey except the LIVE and DESK ones")
+    ap.add_argument("--list", choices=sorted(LISTS), default="behaviour",
+                    help="which named list to run when no names are given (default: behaviour)")
     args = ap.parse_args()
 
-    names = args.names or (all_journeys() if args.all else BEHAVIOUR)
+    if args.list == "desk" and not args.names and not args.all:
+        # The desk list only means something under the desk skin.
+        if os.environ.setdefault("STUDIO_SKIN", "desk") != "desk":
+            print(f"--list desk runs under STUDIO_SKIN=desk, not {os.environ['STUDIO_SKIN']}", file=sys.stderr)
+            return 2
+    names = args.names or (all_journeys() if args.all else LISTS[args.list])
+    if not names:
+        print(f"no journeys in the {args.list} list; nothing to run")
+        return 0
     build()
 
     skin = os.environ.get("STUDIO_SKIN", "studio")
