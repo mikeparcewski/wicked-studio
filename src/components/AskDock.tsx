@@ -55,13 +55,16 @@ function scopeField(scope: ChatScope | null): { scope?: ChatScope } {
   return scope !== null ? { scope } : {};
 }
 
-export function AskDock({ runs, pathname, onClose, navigate }: {
+export function AskDock({ runs, pathname, onClose, navigate, sendText }: {
   runs: SessionView[];
   pathname: string;
   /** Collapsing the dock closes Ask entirely — the launcher bubble/shortcut reopen it. */
   onClose: () => void;
   /** The promote door (studio#323 R3): "Open in full chat" routes to `/chat/:id`. */
   navigate?: (path: string) => void;
+  /** A message the operator already SENT from another composer (the Desk's, skin `desk`): the
+   *  dock opens with it and sends it as the operator's own question. Absent ⇒ nothing is sent. */
+  sendText?: string;
 }): React.ReactElement {
   // The letters that opened the dock (type-to-composer, §5.6 rule 4): read on mount, cleared
   // in an effect (a StrictMode double initializer must not read an already-emptied seed).
@@ -304,7 +307,8 @@ export function AskDock({ runs, pathname, onClose, navigate }: {
       }}
       fill
       typeTarget="ask"
-      initialText={typedSeed}
+      initialText={sendText ?? typedSeed}
+      sendOnOpen={sendText !== undefined && sendText.trim() !== ''}
       onExpandChat={
         navigate === undefined
           ? undefined

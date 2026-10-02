@@ -1,0 +1,182 @@
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { api } from '../../api/client.js';
+import type { RosterSeat, SessionView } from '../../api/types.js';
+import {
+  deskGreeting, deskProjects, lapsedSeatChores, needsByRun, needsHeadline, needTextByRun, railGroups, START_CHIPS,
+} from '../../board/deskModel.js';
+import { needCount } from '../../board/needsQueue.js';
+import type { NeedRow } from '../../board/needsYou.js';
+import { useBoardModel } from '../../hooks/useBoardModel.js';
+import { useHandover } from '../../hooks/useHandover.js';
+import type { Navigate } from '../../hooks/useRoute.js';
+import { getCachedRoster, setCachedRoster } from '../../store/rosterCache.js';
+import { HandoverPanel } from '../HandoverPanel.js';
+import { NeedsQueueSurface } from '../NeedsYouQueue.js';
+
+/** Project cards on the first screen (the concept's three); the rest are one link away. */
+const CARDS_MAX = 3;
+
+/**
+ * THE DESK (skin `desk`, DES-STUDIO-REBUILD-001 §3 scenes 01/04, slice S4) — the route `/`.
+ *
+ * The greeting, Studio's one sentence ("N things need you."), "While you were away" after an
+ * absence, the needs-you list (the ONE fold, rendered as its `desk` variant), the chores "for
+ * whoever runs studio" (lapsed sign-ins from `GET /roster`, never counted as needing you), "Your
+ * projects" in sentences, the Start row and the composer. No KPI tile, no chart, no status bar.
+ *
+ * Render only: counts and sentences are `board/deskModel.ts` over `useNeedsRows`, `useBoardModel`,
+ * `useHandover` and the roster.
+ */
+export function Desk({ runs, needRows, now, navigate, onAsk }: {
+  runs: SessionView[];
+  needRows: NeedRow[];
+  now: number;
+  navigate: Navigate;
+  /** The composer's send: hands the operator's message to the Ask session (App's dock). */
+  onAsk: (text: string) => void;
+}): React.ReactElement {
+  const { items, unfiled, failedAt } = useBoardModel(runs);
+  const handover = useHandover(runs, failedAt);
+  const roster = useRoster();
+  const count = needCount(needRows);
+  const { hello, date } = deskGreeting(now);
+  const cards = useMemo(
+    () => deskProjects(railGroups(items, unfiled, needsByRun(needRows), undefined, needTextByRun(needRows))),
+    [items, unfiled, needRows],
+  );
+  const chores = useMemo(() => lapsedSeatChores(roster), [roster]);
+  const [text, setText] = useState('');
+  const box = useRef<HTMLTextAreaElement | null>(null);
+  const go = (path: string) => (e: React.MouseEvent): void => { e.preventDefault(); navigate(path); };
+
+  const seed = (s: string): void => {
+    setText(s);
+    requestAnimationFrame(() => {
+      const el = box.current;
+      if (el === null) return;
+      el.focus();
+      el.setSelectionRange(s.length, s.length);
+    });
+  };
+  const send = (): void => {
+    const body = text.trim();
+    if (body === '') return;
+    onAsk(body);
+    setText('');
+  };
+
+  return (
+    <div data-testid="desk" className="wk-desk">
+      <div className="wk-desk-scroll">
+        <header className="wk-desk-head">
+          <h1 className="wk-desk-hello">{hello}</h1>
+          <p className="wk-desk-date">{date}</p>
+        </header>
+        <div className="wk-desk-studio">
+          <span aria-hidden className="wk-desk-avatar"><span className="wk-desk-dot wk-desk-dot--waiting" /></span>
+          <div>
+            <p className="wk-desk-who">Studio</p>
+            <p data-testid="desk-headline" data-count={count} className="wk-desk-sentence">
+              {count > 0 ? <mark className="wk-desk-mark">{needsHeadline(count)}</mark> : needsHeadline(count)}
+              {count === 0 && ' We’ll tap you when something needs a decision.'}
+            </p>
+          </div>
+        </div>
+        {handover.since !== null && (
+          <HandoverPanel handover={handover} navigate={navigate} now={now} runs={runs} variant="desk-away" />
+        )}
+
+        <div className="wk-desk-cols">
+          <div className="wk-desk-main">
+            <NeedsQueueSurface rows={needRows} runs={runs} navigate={navigate} now={now} variant="desk" />
+            {chores.length > 0 && (
+              <section data-testid="desk-chores" aria-label="For whoever runs studio" className="wk-desk-chores">
+                <p className="wk-desk-label">For whoever runs studio · {chores.length}</p>
+                {chores.map((c) => (
+                  <div key={c.key} data-testid="desk-chore" data-seat={c.seat} className="wk-desk-need">
+                    <span aria-hidden className="wk-desk-dot wk-desk-dot--blocked" />
+                    <span className="wk-desk-need-body">
+                      <span className="wk-desk-need-title">{c.title}</span>
+                      <span className="wk-desk-need-line">{c.line}</span>
+                    </span>
+                    <a href={c.action.path} onClick={go(c.action.path)} className="wk-need-act">{c.action.label}</a>
+                  </div>
+                ))}
+              </section>
+            )}
+          </div>
+
+          <aside className="wk-desk-side" aria-label="Your projects">
+            <p className="wk-desk-label">Your projects</p>
+            {cards.length === 0 && <p className="wk-desk-quiet">Nothing has been started yet.</p>}
+            {cards.slice(0, CARDS_MAX).map((card) => (
+              <section key={card.projectId ?? 'unfiled'} data-testid="desk-project" data-project-id={card.projectId ?? ''} className="wk-desk-card">
+                <p className="wk-desk-card-title">
+                  <span>{card.name}</span>
+                  {card.quiet.length > 0 && (
+                    <span className="wk-desk-card-aside" title={card.quiet.join(', ')}>{card.quiet.length} more</span>
+                  )}
+                </p>
+                {card.shown.map((s) => (
+                  <a key={s.id} href={s.path} onClick={go(s.path)} data-testid="desk-session" data-run-id={s.runId} data-state={s.state} className="wk-desk-session">
+                    <span aria-hidden className={`wk-desk-dot wk-desk-dot--${s.state}`} />
+                    <span className="wk-desk-need-body">
+                      <span className="wk-desk-session-title">{s.title}</span>
+                      <span className={`wk-desk-need-line${s.state === 'waiting' ? ' wk-desk-underline' : ''}`}>{s.line}</span>
+                    </span>
+                  </a>
+                ))}
+              </section>
+            ))}
+            <a href="/projects" onClick={go('/projects')} data-testid="desk-see-everything" className="wk-desk-more">See everything →</a>
+          </aside>
+        </div>
+      </div>
+
+      <div className="wk-desk-bottom">
+        <div data-testid="desk-start-row" className="wk-desk-start">
+          <span className="wk-desk-start-label">Start something:</span>
+          {START_CHIPS.map((c) => (
+            <button key={c.label} type="button" data-testid="desk-start-chip" data-chip={c.label} onClick={() => seed(c.seed)} className="wk-desk-chip">
+              {c.label}
+            </button>
+          ))}
+        </div>
+        <form
+          className="wk-desk-composer"
+          onSubmit={(e) => { e.preventDefault(); send(); }}
+        >
+          <textarea
+            ref={box}
+            data-testid="desk-composer-input"
+            data-type-target="page"
+            aria-label="Ask or tell studio what to do"
+            rows={1}
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); send(); }
+            }}
+            placeholder="Ask anything across your projects, or tell one what to do"
+            className="wk-desk-input"
+          />
+          <button type="submit" data-testid="desk-composer-send" aria-label="Send" disabled={text.trim() === ''} className="wk-desk-send">↑</button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+/** The roster, from the shared cache when any surface already read it; one `GET /roster` otherwise. */
+function useRoster(): RosterSeat[] | null {
+  const [roster, setRoster] = useState<RosterSeat[] | null>(() => getCachedRoster());
+  useEffect(() => {
+    if (roster !== null) return;
+    let cancelled = false;
+    api.getRoster()
+      .then(({ roster: r }) => { setCachedRoster(r); if (!cancelled) setRoster(r); })
+      .catch(() => { /* no roster, no chore — never a guessed one */ });
+    return () => { cancelled = true; };
+  }, [roster]);
+  return roster;
+}

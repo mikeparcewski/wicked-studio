@@ -41,10 +41,12 @@ import { ConnectionStatus } from './components/ConnectionStatus.js';
 import { SystemSettings } from './components/SystemSettings.js';
 import { ThemePage } from './components/ThemePage.js';
 import { SkinRightRail } from './components/SkinRightRail.js';
+import { Desk } from './components/desk/Desk.js';
+import { SessionRail } from './components/desk/SessionRail.js';
 import { NeedsQueueSurface } from './components/NeedsYouQueue.js';
 import { useSkin } from './hooks/useSkin.js';
 import { useNeedsClock, useNeedsRows } from './hooks/useNeedsRows.js';
-import { RIGHT_RAIL_PX, rightRailOpen } from './theming/skins.js';
+import { deskShell, RIGHT_RAIL_PX, rightRailOpen } from './theming/skins.js';
 import { ambientProjectId } from './hooks/ambientProject.js';
 import { useEventStream } from './hooks/useEventStream.js';
 import { useVisitClock } from './hooks/useVisitClock.js';
@@ -98,6 +100,8 @@ const LIFECYCLE_EVENTS: ReadonlySet<string> = new Set([
 const TERMINAL_STATES = ['completed', 'cancelled', 'failed'];
 /** The expanded RightPanel's width (`w-72`) — the Ask launcher stays clear of it. */
 const RIGHT_PANEL_PX = 288;
+/** The Desk's Start row + composer band (skin `desk`): the Ask panel opens above it. */
+const DESK_COMPOSER_PX = 96;
 
 export function App(): React.ReactElement {
   const { panel, runId, repoId, projectId, mode, artifactId, showLaunch, showRegisterRepo, chatMode, chronicleView, campaignsView, campaignId, steeringSection, testingPage, navigate, search, pathname } = useRoute();
@@ -295,6 +299,13 @@ export function App(): React.ReactElement {
   // ASK — the app-wide assist dock (AskDock): opened from the floating launcher
   // bubble (AskLauncher) or Ctrl/⌘+Shift+A; collapsing the dock closes it entirely.
   const [askOpen, setAskOpen] = useState(false);
+  // The Desk composer's send (skin `desk`, S4): the message rides to the Ask dock, which sends it
+  // as the operator's own question. `n` remounts the dock so each handoff sends exactly once.
+  const [askHandoff, setAskHandoff] = useState<{ text: string; n: number } | null>(null);
+  const handToAsk = useCallback((text: string) => {
+    setAskHandoff((cur) => ({ text, n: (cur?.n ?? 0) + 1 }));
+    setAskOpen(true);
+  }, []);
   // §5.6 rule 4 (S2b): letters always type — into the open Ask dock, else the page's
   // composer, else the Ask dock opened with them (opening it only reads).
   useTypeToComposer(useCallback(() => setAskOpen(true), []));
@@ -538,6 +549,10 @@ export function App(): React.ReactElement {
     // `/` is the orchestrator board (§1.4, slice 5); the flat run list it replaced is
     // still at `/runs`, which the `panel === 'runs'` fallback below keeps rendering.
     if (panel === 'home') {
+      // The Desk (skin `desk`, S4) replaces the command center; same fold, same stores.
+      if (desk) {
+        return <Desk runs={runs} needRows={needRows} now={needsNow} navigate={navigate} onAsk={handToAsk} />;
+      }
       // The board-level Ask invite opens the SAME dock the rail button opens.
       return <HomeBoard runs={runs} navigate={navigate} onOpenAsk={() => setAskOpen(true)} />;
     }
@@ -729,23 +744,30 @@ export function App(): React.ReactElement {
   // column at the right edge on EVERY route, which the Needs-you queue docks into by variant.
   const skin = useSkin();
   const railOpen = rightRailOpen(skin);
+  // The desk shell (S4): the session rail replaces the classic nav, and the runs bottom bar's
+  // job moves to the rail's rows — so the root reserves no bar.
+  const desk = deskShell(skin);
 
   return (
     // §5.2: the root reserves the bar's 28px as padding — the collapsed bar is
     // a ROW, not an overlay, so every surface (board, dashboards, canvas — and
     // with it the version strip's proximity-sensor band, which ends at the
     // canvas edge) ends ABOVE the bar. Nothing is ever covered while collapsed.
-    <div className="flex h-screen overflow-hidden bg-surface-base" style={{ paddingBottom: RUNS_BAR_PX }}>
+    <div className="flex h-screen overflow-hidden bg-surface-base" data-shell={skin.shell} style={{ paddingBottom: desk ? 0 : RUNS_BAR_PX }}>
       {/* The FIRST tabbable element (usability review #10): one Tab reaches a
           jump to the main content instead of a page's top-right Refresh. */}
       <SkipLink />
-      <LeftSidebar
-        runs={runs}
-        navigate={navigate}
-        pathname={pathname}
-        runPath={runPath}
-        immersive={immersive}
-      />
+      {desk ? (
+        <SessionRail runs={runs} needRows={needRows} navigate={navigate} pathname={pathname} />
+      ) : (
+        <LeftSidebar
+          runs={runs}
+          navigate={navigate}
+          pathname={pathname}
+          runPath={runPath}
+          immersive={immersive}
+        />
+      )}
 
       <div id="main" tabIndex={-1} className="flex flex-1 overflow-hidden" style={{ outline: 'none' }}>
         {renderCenter()}
@@ -772,10 +794,19 @@ export function App(): React.ReactElement {
         open={askOpen}
         onToggle={() => setAskOpen((v) => !v)}
         rightOffsetPx={(selected !== null ? RIGHT_PANEL_PX : 0) + (railOpen ? RIGHT_RAIL_PX : 0)}
-        bottomOffsetPx={chatComposerPx}
+        bottomOffsetPx={desk && panel === 'home' ? DESK_COMPOSER_PX : chatComposerPx}
+        // The Desk has its own composer in this corner: there the bubble stands down.
+        bubble={!(desk && panel === 'home')}
       >
         {askOpen && (
-          <AskDock runs={runs} pathname={pathname} navigate={navigate} onClose={() => setAskOpen(false)} />
+          <AskDock
+            key={askHandoff?.n ?? 0}
+            runs={runs}
+            pathname={pathname}
+            navigate={navigate}
+            onClose={() => { setAskOpen(false); setAskHandoff(null); }}
+            {...(askHandoff !== null ? { sendText: askHandoff.text } : {})}
+          />
         )}
       </AskLauncher>
 
@@ -798,13 +829,15 @@ export function App(): React.ReactElement {
           requests, zero new sockets. Fixed at the viewport bottom, everywhere.
           Inside a project route its counters scope to THAT project's runs
           (DES-UX-001 §2.3 rule 2, slice S — `data-scope="project"`). */}
-      <RunsBottomPanel
-        runs={runs}
-        runPath={runPath}
-        navigate={navigate}
-        immersive={immersive}
-        scopeProjectId={projectId}
-      />
+      {!desk && (
+        <RunsBottomPanel
+          runs={runs}
+          runPath={runPath}
+          navigate={navigate}
+          immersive={immersive}
+          scopeProjectId={projectId}
+        />
+      )}
 
       {/* Gate toasts — renders above everything; scoped to the current run. NOT on the
           orchestrator board: there every waiting gate is already an answerable chip on

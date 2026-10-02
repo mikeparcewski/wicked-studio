@@ -612,3 +612,110 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
 
 /* Light theme: a door's glyph is its only mark on a pale tile — take it to 3:1 (council S8). */
 [data-theme="light"] .deck-door-glyph, [data-theme="wicked-light"] .deck-door-glyph { color: color-mix(in oklab, var(--door-col, var(--accent)) 70%, var(--ink-high)); }
+
+/* ── THE DESK (skin `desk`, DES-STUDIO-REBUILD-001 slice S4): the session rail and the Desk. Tokens
+   only — colour comes from the theme (wicked-light / wicked-dark), never the skin. ── */
+.wk-rail {
+  flex-shrink: 0; display: flex; flex-direction: column; min-height: 0;
+  background: var(--surface-rail); border-right: 1px solid var(--border);
+  font-size: var(--text-sm); color: var(--ink-body);
+}
+.wk-rail-brand { padding: 16px 18px 10px; font-size: var(--text-lg); color: var(--ink-muted); display: flex; align-items: center; gap: 6px; }
+.wk-rail-brand b { color: var(--ink-high); }
+.wk-rail-desk {
+  display: flex; align-items: center; justify-content: space-between; margin: 0 10px 6px; padding: 8px 10px;
+  border-radius: var(--radius-md); color: var(--ink-high); font-weight: var(--weight-semi); text-decoration: none;
+}
+.wk-rail-desk[aria-current="page"], .wk-rail-desk:hover { background: var(--surface-card); box-shadow: var(--shadow-card); }
+.wk-rail-badge {
+  min-width: 20px; height: 20px; padding: 0 6px; border-radius: var(--radius-full); flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--accent); color: var(--accent-fg); font-size: var(--text-2xs); font-weight: var(--weight-bold);
+}
+.wk-rail-groups { flex: 1 1 auto; overflow-y: auto; min-height: 0; padding: 4px 10px 8px; }
+.wk-rail-group { margin: 10px 10px 4px; font-size: var(--text-xs); font-weight: var(--weight-semi); color: var(--ink-muted); }
+.wk-rail-session {
+  display: flex; align-items: center; gap: 8px; padding: 5px 10px; border-radius: var(--radius-md);
+  color: var(--ink-body); text-decoration: none; min-width: 0;
+}
+.wk-rail-session:hover, .wk-rail-session[aria-current="page"] { background: var(--surface-card); }
+.wk-rail-session-title { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wk-rail-start {
+  width: 100%; margin-top: 12px; padding: 8px; border: 1px dashed var(--border); border-radius: var(--radius-md);
+  background: none; color: var(--ink-muted); cursor: pointer; font: inherit;
+}
+.wk-rail-foot { border-top: 1px solid var(--border); padding: 8px 10px; display: flex; flex-direction: column; gap: 2px; max-height: 45vh; overflow-y: auto; }
+.wk-rail-link {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 5px 10px;
+  border-radius: var(--radius-md); background: none; border: none; color: var(--ink-body);
+  text-decoration: none; font: inherit; cursor: pointer; text-align: left;
+}
+.wk-rail-link:hover { background: var(--surface-card); }
+.wk-rail-everything { display: flex; flex-direction: column; padding-left: 8px; }
+
+.wk-desk-dot { display: inline-block; width: 8px; height: 8px; border-radius: var(--radius-full); flex-shrink: 0; background: var(--ink-dim); }
+.wk-desk-dot--waiting { background: var(--status-gate); }
+.wk-desk-dot--working { background: var(--status-run); }
+.wk-desk-dot--blocked { background: var(--status-fail); }
+.wk-desk-dot--done { background: var(--status-ok); }
+.wk-desk-dot--quiet { background: transparent; border: 1px solid var(--ink-dim); }
+
+.wk-desk { flex: 1 1 auto; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.wk-desk-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 16px 32px 8px; }
+.wk-desk-hello { margin: 0; font-size: var(--text-2xl); font-weight: var(--weight-bold); color: var(--ink-high); }
+.wk-desk-date { margin: 0 0 8px; font-size: var(--text-sm); color: var(--ink-muted); }
+.wk-desk-studio { display: flex; gap: 12px; align-items: flex-start; margin: 0 0 8px 20px; }
+.wk-desk-avatar {
+  width: 28px; height: 28px; border-radius: var(--radius-full); background: var(--accent);
+  display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.wk-desk-who { margin: 0; font-size: var(--text-xs); font-weight: var(--weight-semi); color: var(--ink-high); }
+.wk-desk-sentence { margin: 2px 0 0; font-size: var(--text-lg); color: var(--ink-body); }
+.wk-desk-mark { background: color-mix(in oklab, var(--status-gate) 35%, transparent); color: var(--ink-high); font-weight: var(--weight-bold); padding: 0 2px; }
+.wk-handover--desk-away { min-height: 30px; padding-top: 2px; padding-bottom: 2px; margin: 0 0 8px 20px; background: none; border: none; border-left: 2px solid var(--border); border-radius: 0; box-shadow: none; }
+
+.wk-desk-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 340px); gap: 24px; margin-left: 20px; }
+.wk-desk-main { min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.wk-desk-label { margin: 0 0 6px; font-size: var(--text-sm); font-weight: var(--weight-semi); color: var(--ink-high); }
+.wk-desk-label-aside { font-weight: normal; color: var(--ink-muted); margin-left: 6px; }
+.wk-desk-needs { outline: none; min-width: 0; }
+.wk-desk-need {
+  display: flex; align-items: center; gap: 10px; padding: 7px 12px; margin-bottom: 6px; min-width: 0;
+  background: var(--surface-card); border: 1px solid var(--border); border-radius: var(--radius-md);
+}
+.wk-desk-need--member { margin-left: 20px; }
+.wk-desk-need--selected { outline: 1px solid var(--accent); }
+.wk-desk-need-body { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+.wk-desk-need-title {
+  font-weight: var(--weight-semi); color: var(--ink-high); text-decoration: none;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.wk-desk-need-line { font-size: var(--text-xs); color: var(--ink-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wk-desk-chores { min-width: 0; }
+
+.wk-desk-side { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.wk-desk-card { background: var(--surface-card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 6px 14px 4px; }
+.wk-desk-card-title { margin: 0 0 2px; display: flex; justify-content: space-between; font-weight: var(--weight-bold); color: var(--ink-high); }
+.wk-desk-card-aside { font-weight: normal; font-size: var(--text-xs); color: var(--ink-muted); }
+.wk-desk-session { display: flex; align-items: baseline; gap: 8px; padding: 2px 0; border-top: 1px solid var(--border-subtle); text-decoration: none; min-width: 0; }
+.wk-desk-session-title { color: var(--ink-high); font-size: var(--text-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wk-desk-underline { text-decoration: underline; text-decoration-color: var(--status-gate); text-decoration-thickness: 2px; }
+.wk-desk-more, .wk-desk-quiet { font-size: var(--text-sm); color: var(--ink-muted); }
+
+.wk-desk-bottom { flex-shrink: 0; padding: 8px 32px 12px 52px; border-top: 1px solid var(--border-subtle); }
+.wk-desk-start { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 8px; }
+.wk-desk-start-label { font-size: var(--text-xs); color: var(--ink-muted); margin-right: 4px; }
+.wk-desk-chip {
+  padding: 4px 12px; border-radius: var(--radius-full); border: 1px solid var(--border);
+  background: var(--surface-card); color: var(--ink-body); font: inherit; font-size: var(--text-xs); cursor: pointer;
+}
+.wk-desk-composer {
+  display: flex; align-items: flex-end; gap: 8px; padding: 8px 8px 8px 14px;
+  background: var(--surface-card); border: 1px solid var(--border); border-radius: var(--radius-lg);
+}
+.wk-desk-input { flex: 1 1 auto; resize: none; border: none; background: none; color: var(--ink-high); font: inherit; outline: none; padding: 6px 0; }
+.wk-desk-send {
+  width: 32px; height: 32px; border-radius: var(--radius-md); border: none; flex-shrink: 0;
+  background: var(--accent); color: var(--accent-fg); cursor: pointer;
+}
+.wk-desk-send:disabled { opacity: 0.5; cursor: default; }

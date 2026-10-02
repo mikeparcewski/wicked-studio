@@ -10,7 +10,7 @@ The contract, as restated by the operator (DES-STUDIO-REBUILD-001 §10, §14 Q2)
 So there is ONE keyboard model for every skin (§5.6): no global shortcut is a bare
 printable key — the queue cursor is ⌥J/⌥K (or the arrows) under every skin, and a bare
 `j` moves nothing under any of them. This journey drives the SAME wave-2b queue corpus
-(two simple gates grouped, one MCP elicitation, one failure) under both skins and proves:
+(two simple gates grouped, one MCP elicitation, one failure) under every skin and proves:
 
   0. ENV SWITCH: with the fixture's default appearance, the page boots under STUDIO_SKIN
      (default `studio`) — the switch every behaviour journey runs under.
@@ -24,13 +24,15 @@ printable key — the queue cursor is ⌥J/⌥K (or the arrows) under every skin
   2. BEHAVIOUR STAYS IDENTICAL, KEYBOARD INCLUDED: the queue's rows (keys, kinds, counts,
      order), a bare `j` moving nothing and typing into the Ask dock (§5.6 rule 4), the ⌥J
      cursor, Enter-expands-the-group and its members, ⌥K back, Enter-opens-a-row, and
-     Ctrl/⌘+K opening the palette are the same under both skins.
+     Ctrl/⌘+K opening the palette are the same under every skin.
   3. EVERY NAV DESTINATION IS REACHABLE UNDER EVERY SKIN: the nav's destinations (the ten
      section dashboards, the three Settings pages, Notifications, Health — every element
-     stamped `data-nav-dest`) are enumerated under both skins with Settings opened (the
+     stamped `data-nav-dest`) are enumerated under every skin with Settings opened (the
      accordion under `studio`, the icon flyout under `compact-rail`); the sets must be equal,
      every icon must carry an aria-label, Health must open its registry and a Settings page
      must navigate under both.
+  1b. Under `desk` (DES-STUDIO-REBUILD-001 S4): the session rail (236px) replaces the nav, no
+     right rail, and the queue renders as the Desk's list (data-skin-variant="desk").
   4. THE PICKER: on /theme, choosing `Compact rail` flips data-skin live, the debounced PUT
      carries `studio.appearance.skin`, and Home then renders the queue in the right rail.
 
@@ -53,6 +55,8 @@ PORT = int(os.environ.get("FEEDBACK_PORT", "4346"))
 W, H = 1440, 700
 SHOTS = REPO / "e2e" / "shots"
 RAIL_PX = 340
+# The restated contract covers every skin (DES-STUDIO-REBUILD-001 §14 Q2, S4).
+SKINS = ("studio", "compact-rail", "desk")
 
 report: dict = {"ok": False, "steps": {}}
 
@@ -79,7 +83,7 @@ STRUCTURE = """() => {
   const q = document.querySelector('[data-testid="needs-you-queue"]');
   const rail = document.querySelector('[data-testid="skin-right-rail"]');
   const cc = document.querySelector('[data-testid="command-center"]');
-  const nav = document.querySelector('[data-testid="left-rail"]');
+  const nav = document.querySelector('[data-testid="left-rail"]') || document.querySelector('[data-testid="session-rail"]');
   const qb = q.getBoundingClientRect();
   return {
     skin: document.documentElement.getAttribute('data-skin'),
@@ -90,6 +94,8 @@ STRUCTURE = """() => {
     queueLeft: Math.round(qb.left), queueRight: Math.round(qb.right), queueHeight: Math.round(qb.height),
     navWidth: Math.round(nav.getBoundingClientRect().width),
     navVariant: nav.getAttribute('data-skin-variant'),
+    sessionRail: !!document.querySelector('[data-testid="session-rail"]'),
+    desk: !!document.querySelector('[data-testid="desk"]'),
     navGlyphs: document.querySelectorAll('[data-testid="rail-collapsed-glyph"]').length,
     textSm: getComputedStyle(document.documentElement).getPropertyValue('--text-sm').trim(),
     space4: getComputedStyle(document.documentElement).getPropertyValue('--space-4').trim(),
@@ -115,6 +121,11 @@ def boot_home(page, origin: str, skin: str | None) -> None:
         timeout=5000)
 
 
+TYPED_VALUE = """() => (document.querySelector('[data-testid="desk-composer-input"]')
+  || document.querySelector('[data-testid="assist-input"]'))?.value ?? null"""
+TYPED_J = "() => (" + TYPED_VALUE + ")() === 'j'"
+
+
 def behaviour(page) -> dict:
     """The queue's behaviour, read through testids and keys only — skin-blind."""
     rows = page.evaluate(TOP_ROWS)
@@ -122,10 +133,10 @@ def behaviour(page) -> dict:
     q.focus()
     page.keyboard.press("j")  # §5.6 rule 1: a bare letter is never a shortcut, under any skin
     bare = page.evaluate(SELECTED)
-    # §5.6 rule 4: it TYPES — Home has no page composer, so it opens the Ask dock with it.
-    page.wait_for_function(
-        "() => document.querySelector('[data-testid=\"assist-input\"]')?.value === 'j'", timeout=5000)
-    bare_typed = page.evaluate("() => document.querySelector('[data-testid=\"assist-input\"]')?.value ?? null")
+    # §5.6 rule 4: it TYPES — into the page's composer (the Desk's, under `desk`), else Home has
+    # none, so it opens the Ask dock with it. Same behaviour: the letter lands in a composer.
+    page.wait_for_function(TYPED_J, timeout=5000)
+    bare_typed = page.evaluate(TYPED_VALUE)
     q.focus()
     page.keyboard.press("Alt+j")
     first = page.evaluate(SELECTED)
@@ -155,7 +166,7 @@ def palette_opens(page) -> bool:
     return True
 
 
-NAV_DESTS = """() => [...document.querySelectorAll('[data-testid="left-rail"] [data-nav-dest], [data-nav-dest="health"]')]
+NAV_DESTS = """() => [...document.querySelectorAll('[data-testid="left-rail"] [data-nav-dest], [data-testid="session-rail"] [data-nav-dest], [data-nav-dest="health"]')]
   .filter(el => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; })
   .map(el => ({dest: el.dataset.navDest, label: el.getAttribute('aria-label'),
                name: (el.getAttribute('aria-label') || el.innerText || '').trim()}))"""
@@ -171,12 +182,17 @@ def nav_reach(page, skin: str) -> dict:
     if skin == "compact-rail":
         page.get_by_test_id("rail-icon-settings").click()
         page.get_by_test_id("rail-settings-flyout").wait_for(state="visible", timeout=5000)
+    elif skin == "desk":
+        page.get_by_test_id("desk-rail-more").click()
+        page.get_by_test_id("desk-rail-everything").wait_for(state="visible", timeout=5000)
     else:
         page.get_by_test_id("rail-title-settings").click()
-    page.get_by_role("menuitem", name="Theme").wait_for(state="visible", timeout=5000)
+    if skin != "desk":
+        page.get_by_role("menuitem", name="Theme").wait_for(state="visible", timeout=5000)
     dests = page.evaluate(NAV_DESTS)
     page.screenshot(path=str(SHOTS / f"skin-{skin}-nav.png"))
-    page.keyboard.press("Escape")
+    if skin != "desk":
+        page.keyboard.press("Escape")
     # Health opens its registry (a flyout at icon width, the rail foot at full width).
     page.get_by_test_id("rail-health-toggle").click()
     page.wait_for_function(
@@ -187,7 +203,10 @@ def nav_reach(page, skin: str) -> dict:
     # A Settings page navigates.
     if skin == "compact-rail":
         page.get_by_test_id("rail-icon-settings").click()
-    page.get_by_role("menuitem", name="Theme").click()
+    if skin == "desk":
+        page.locator('[data-testid="session-rail"] [data-nav-dest="settings:/theme"]').click()
+    else:
+        page.get_by_role("menuitem", name="Theme").click()
     page.wait_for_function("() => window.location.pathname === '/theme'", timeout=5000)
     return {"dests": dests, "health_opens": health_open, "settings_navigates": True}
 
@@ -221,7 +240,7 @@ with sync_playwright() as p:
 
     # ── 1 + 2. both skins: structure, then behaviour ──────────────────────────────────
     seen: dict = {}
-    for skin in ("studio", "compact-rail"):
+    for skin in SKINS:
         boot_home(page, origin, skin)
         page.mouse.move(W // 2, H // 2)
         page.wait_for_function(
@@ -259,29 +278,36 @@ with sync_playwright() as p:
           studio={"text_sm": s["textSm"], "space_4": s["space4"]},
           compact={"text_sm": c["textSm"], "space_4": c["space4"]})
 
-    bs, bc = seen["studio"]["behaviour"], seen["compact-rail"]["behaviour"]
+    d = seen["desk"]["structure"]
+    check("desk-structure",
+          d["skin"] == "desk" and not d["railPresent"] and d["sessionRail"] and d["desk"]
+          and d["queueVariant"] == "desk" and not d["queueInCommandCenter"] and d["navWidth"] == 236,
+          **d)
+
+    bs, bc, bd = seen["studio"]["behaviour"], seen["compact-rail"]["behaviour"], seen["desk"]["behaviour"]
     check("behaviour-identical",
-          bs == bc and seen["studio"]["opened"] == seen["compact-rail"]["opened"]
+          bs == bc == bd and seen["studio"]["opened"] == seen["compact-rail"]["opened"] == seen["desk"]["opened"]
           and len(bs["rows"]) == 3 and bs["rows"][0]["count"] == 2
           and bs["members"] == ["gate:g1", "gate:g2"] and bs["k_back"] == "gate:g2"
           and bs["bare_j"] is None and bs["bare_j_typed"] == "j" and bs["palette_opens"] is True,
-          studio=bs, compact_rail=bc, opened=seen["studio"]["opened"])
+          studio=bs, compact_rail=bc, desk=bd, opened=seen["studio"]["opened"])
 
     # ── 3. every nav destination reachable under every skin ───────────────────────────
     reach: dict = {}
-    for skin in ("studio", "compact-rail"):
+    for skin in SKINS:
         boot_home(page, origin, skin)
         page.mouse.move(W // 2, H // 2)
         reach[skin] = nav_reach(page, skin)
     rs = sorted(d["dest"] for d in reach["studio"]["dests"])
     rc = sorted(d["dest"] for d in reach["compact-rail"]["dests"])
+    rd = sorted(d["dest"] for d in reach["desk"]["dests"])
     unlabelled = [d["dest"] for d in reach["compact-rail"]["dests"] if not d["name"]]
     icons_without_aria = [d["dest"] for d in reach["compact-rail"]["dests"]
                           if d["dest"].startswith(("section:", "notifications", "health")) and not d["label"]]
-    check("nav-destinations-same-under-both-skins",
-          rs == EXPECTED_DESTS and rc == EXPECTED_DESTS and not unlabelled and not icons_without_aria
+    check("nav-destinations-same-under-every-skin",
+          rs == EXPECTED_DESTS and rc == EXPECTED_DESTS and rd == EXPECTED_DESTS and not unlabelled and not icons_without_aria
           and all(r["health_opens"] and r["settings_navigates"] for r in reach.values()),
-          studio=rs, compact_rail=rc, unlabelled=unlabelled, icons_without_aria=icons_without_aria)
+          studio=rs, compact_rail=rc, desk=rd, unlabelled=unlabelled, icons_without_aria=icons_without_aria)
 
     # ── 4. the picker: live swap + persisted through the same PUT ─────────────────────
     set_fixture(origin, appearance={**DEFAULT_APPEARANCE, "skin": "studio"}, **CORPUS)

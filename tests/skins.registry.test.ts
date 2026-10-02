@@ -25,9 +25,9 @@ const RAW_COLOR = /#[0-9a-fA-F]{3,8}\b|\brgba?\(\s*\d|\bhsla?\(\s*[\d.]/;
 const COLOUR_FAMILY = /^--(surface|ink|accent|status|section|scrim|shadow)/;
 
 describe('the skin registry', () => {
-  it('ships the current look as `studio` (the default) and the proof skin `compact-rail`', () => {
+  it('ships the current look as `studio` (the default), the proof skin `compact-rail`, and `desk`', () => {
     expect(DEFAULT_SKIN_ID).toBe('studio');
-    expect(SKINS.map((s) => s.id)).toEqual(['studio', 'compact-rail']);
+    expect(SKINS.map((s) => s.id)).toEqual(['studio', 'compact-rail', 'desk']);
   });
 
   it('ids are unique and resolve; an unknown id falls back to the default skin', () => {
@@ -36,6 +36,7 @@ describe('the skin registry', () => {
     expect(skinById('nope').id).toBe('studio');
     expect(skinById(undefined).id).toBe('studio');
     expect(isSkinId('compact-rail')).toBe(true);
+    expect(isSkinId('desk')).toBe(true);
     expect(isSkinId('Compact-Rail')).toBe(false);
     expect(isSkinId(42)).toBe(false);
   });
@@ -115,6 +116,31 @@ describe('the proof skin `compact-rail` is STRUCTURALLY different', () => {
       const override = (rail.tokens as Record<string, string>)[t];
       expect(override, `${t} is not overridden`).toBeDefined();
       expect(px(override), t).toBeLessThan(base(t));
+    }
+  });
+});
+
+describe('the desk skin is the flag of the rebuild (DES-STUDIO-REBUILD-001 §5.1, S4)', () => {
+  const desk = skinById('desk');
+
+  it('has its own shell and names the desk variant of every surface it reshapes', () => {
+    expect(desk.shell).toBe('desk');
+    expect(desk.variants).toEqual({
+      needsQueue: 'desk', liveRuns: 'rail-rows', handover: 'desk-away',
+      peek: 'card', undoToasts: 'stack', navRail: 'sessions',
+    });
+  });
+
+  it('sets the type face to Archivo and never a colour (a skin never selects a theme)', () => {
+    expect((desk.tokens as Record<string, string>)['--font-sans']).toMatch(/^'Archivo'/);
+  });
+
+  it('only the desk shell carries the desk variants (the manifest is self-consistent)', () => {
+    for (const s of SKINS) {
+      const isDesk = s.shell === 'desk';
+      expect(s.variants.needsQueue === 'desk', s.id).toBe(isDesk);
+      expect(s.variants.navRail === 'sessions', s.id).toBe(isDesk);
+      expect(s.variants.handover === 'desk-away', s.id).toBe(isDesk);
     }
   });
 });
