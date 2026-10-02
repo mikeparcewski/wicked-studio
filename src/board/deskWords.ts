@@ -75,3 +75,6 @@ export function keptLocally(view: SessionView, deliveryAttempted = false): boole
 
 /** Its line on the Desk and in the rail. */
 export const KEPT_LINE = 'Finished · kept on this machine, not pushed';
+
+/** A finished run whose post-hoc delivery landed this session. */
+export const DELIVERED_LINE = 'Finished · delivered';

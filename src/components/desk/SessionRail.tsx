@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useDeliveredNow } from '../../store/postHocDeliver.js';
 import type { SessionView } from '../../api/types.js';
 import { DESK_DESTINATIONS, needsByRun, needTextByRun, railGroups } from '../../board/deskModel.js';
 import { needCount } from '../../board/needsQueue.js';
@@ -34,9 +35,10 @@ export function SessionRail({ runs, needRows, navigate, pathname }: {
   const { items, unfiled } = useBoardModel(runs);
   const count = needCount(needRows);
   const runChatId = useCapabilities((s) => s.runChatId);
+  const deliveredNow = useDeliveredNow();
   const groups = useMemo(
-    () => railGroups(items, unfiled, needsByRun(needRows), undefined, needTextByRun(needRows), runChatId),
-    [items, unfiled, needRows, runChatId],
+    () => railGroups(items, unfiled, needsByRun(needRows), undefined, needTextByRun(needRows), runChatId, deliveredNow),
+    [items, unfiled, needRows, runChatId, deliveredNow],
   );
   const [more, setMore] = useState(false);
   const [healthOpen, setHealthOpen] = useState(false);

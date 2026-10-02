@@ -5,7 +5,7 @@ import { needsYouRows, type NeedRow } from '../board/needsYou.js';
 import { activityEvidence, stalledRuns } from '../board/stalls.js';
 import { useActivityClocks } from '../store/activityClocks.js';
 import { useCampaignsStore } from '../store/campaigns.js';
-import { usePostHocDeliverStore } from '../store/postHocDeliver.js';
+import { useDeliveredNow, usePostHocDeliverStore } from '../store/postHocDeliver.js';
 import { useElicitationStore } from '../store/elicitations.js';
 import { useFailureClocks } from '../store/failureClocks.js';
 import { useGateStore } from '../store/gates.js';
@@ -50,6 +50,8 @@ export function useNeedsRows(runs: SessionView[], now: number): NeedRow[] {
     () => new Set(Object.entries(postHoc).filter(([, d]) => d.phase !== 'delivered').map(([id]) => id)),
     [postHoc],
   );
+  // Landed this session: the stale DTO's stranded row goes, as the rail's line says delivered (#438).
+  const deliveredNow = useDeliveredNow();
 
   useEffect(() => {
     void useNeedsSources.getState().load();
@@ -87,9 +89,10 @@ export function useNeedsRows(runs: SessionView[], now: number): NeedRow[] {
         stallEscalations,
         proposals: proposals ?? [],
         deliveryAttempted,
+        deliveredNow,
         now,
       }),
-    [runs, gates, failedAt, attachedAt, projectIds, chats, repos, campaigns, stalledAt, elicitations, steerRequests, stallEscalations, proposals, deliveryAttempted, now],
+    [runs, gates, failedAt, attachedAt, projectIds, chats, repos, campaigns, stalledAt, elicitations, steerRequests, stallEscalations, proposals, deliveryAttempted, deliveredNow, now],
   );
 }
 

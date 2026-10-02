@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { create } from 'zustand';
 import { api } from '../api/client.js';
 
@@ -60,3 +61,12 @@ export const usePostHocDeliverStore = create<PostHocDeliverStore>((set, get) => 
       });
   },
 }));
+
+/** Runs whose post-hoc delivery landed this session (stable while the store is unchanged). */
+export function useDeliveredNow(): ReadonlySet<string> {
+  const byRun = usePostHocDeliverStore((s) => s.byRun);
+  return useMemo(
+    () => new Set(Object.entries(byRun).filter(([, d]) => d.phase === 'delivered').map(([id]) => id)),
+    [byRun],
+  );
+}

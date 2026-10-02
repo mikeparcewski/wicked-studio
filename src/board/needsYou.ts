@@ -260,6 +260,8 @@ export interface NeedsYouInputs {
   proposals?: readonly Proposal[];
   /** Runs with a post-hoc delivery tried this session (in flight or failed): never "kept locally". */
   deliveryAttempted?: ReadonlySet<string>;
+  /** Runs whose post-hoc delivery LANDED this session: no stranded row, whatever the stale DTO says. */
+  deliveredNow?: ReadonlySet<string>;
   now: number;
 }
 
@@ -318,7 +320,7 @@ const clipLine = (t: string, n = 120): string => {
 };
 
 export function needsYouRows(inputs: NeedsYouInputs): NeedRow[] {
-  const { runs, gates, failedAt, attachedAt, projectIds, chats, repos, campaigns, now, deliveryAttempted } = inputs;
+  const { runs, gates, failedAt, attachedAt, projectIds, chats, repos, campaigns, now, deliveryAttempted, deliveredNow } = inputs;
   const stalledAt = inputs.stalledAt ?? {};
   const escalations = inputs.stallEscalations ?? {};
   const rows: NeedRow[] = [];
@@ -469,7 +471,7 @@ export function needsYouRows(inputs: NeedsYouInputs): NeedRow[] {
         subjectPath: `/runs/${encodeURIComponent(s.id)}`,
         action: { kind: 'open', path: `/runs/${encodeURIComponent(s.id)}`, label: 'Check run ›' },
       });
-    } else if (s.status === 'completed' && deliveryOf(v).state === 'stranded' && !keptLocally(v, deliveryAttempted?.has(s.id) ?? false)) {
+    } else if (s.status === 'completed' && deliveryOf(v).state === 'stranded' && !keptLocally(v, deliveryAttempted?.has(s.id) ?? false) && !(deliveredNow?.has(s.id) ?? false)) {
       // A run launched without delivery is finished work kept on this machine, as asked
       // (studio#424): not a need. One whose delivery was asked for and did not land is.
       // Stranded completed runs (crew#393): the daemon's OWN wire verdict — a

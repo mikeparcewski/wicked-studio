@@ -124,6 +124,28 @@ describe('#424 a run launched without delivery is kept, not stranded', () => {
     expect(rows.map((r) => r.key)).toStrictEqual(['stranded:r-posthoc']);
   });
 
+  it('a post-hoc delivery that just landed is not a stranded need, even with a deliver unit (Copilot on #438)', () => {
+    const stuck = finished('r-stuck', { deliverUnit: true });
+    expect(needsYouRows(inputs({ runs: [stuck], deliveredNow: new Set(['r-stuck']) })).map((r) => r.key)).toStrictEqual([]);
+    expect(needsYouRows(inputs({ runs: [stuck] })).map((r) => r.key)).toStrictEqual(['stranded:r-stuck']);
+  });
+
+  it('a delivered-just-now run does not hide live work in its session (Copilot r2 on #438)', () => {
+    const live = { session: { id: 'r-live', status: 'executing', problem: 'still going', chat_id: 'c1', created_at: 1 }, units: [] } as unknown as SessionView;
+    const done = finished('r-done', { deliverUnit: false });
+    (done.session as unknown as { chat_id: string; created_at: number }).chat_id = 'c1';
+    (done.session as unknown as { created_at: number }).created_at = 2;
+    const [group] = railGroups([], [live, done], {}, 5, {}, true, new Set(['r-done']));
+    expect(group!.sessions[0]!.state).toBe('working');
+    expect(group!.sessions[0]!.line).not.toBe('Finished · delivered');
+  });
+
+  it('a post-hoc delivery that just landed reads as delivered, before the run list catches up (Copilot r4)', () => {
+    const kept = finished('2f903154', { deliverUnit: false });
+    const [group] = railGroups([], [kept], {}, 5, {}, false, new Set(['2f903154']));
+    expect(group!.sessions[0]!.line).toBe('Finished · delivered');
+  });
+
   it('a run whose delivery was asked for and did not land still needs you, without promising a PR', () => {
     const stuck = finished('r-stuck', { deliverUnit: true });
     expect(keptLocally(stuck)).toBe(false);
