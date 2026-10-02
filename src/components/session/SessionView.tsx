@@ -11,7 +11,13 @@ import type { Navigate } from '../../hooks/useRoute.js';
 import { useCapabilities } from '../../store/capabilities.js';
 import { readSessionVisit, useSessionDrafts, writeSessionVisit } from '../../store/sessionDrafts.js';
 import { humanTitle } from '../runIdentity.js';
+import type { ChatCitations } from '../../api/chat-wire.js';
+import { IDLE_GATE_ACTION, useGateActionStore } from '../../board/gateActions.js';
+import { statusSentence } from '../../board/proposalCard.js';
+import { useGateStore } from '../../store/gates.js';
 import { ChainLine, useRunChain } from './ChainLine.js';
+import { ProposalCard } from './ProposalCard.js';
+import { SourceChips } from './SourceChips.js';
 import { SinceYouLeft } from './SinceYouLeft.js';
 
 /**
@@ -32,11 +38,15 @@ import { SinceYouLeft } from './SinceYouLeft.js';
 
 interface ChatDetail {
   scope?: unknown;
-  messages?: Array<{ at?: number; kind: string; text?: string; cliKey?: string; ok?: boolean }>;
+  messages?: Array<{
+    at?: number; kind: string; text?: string; cliKey?: string; ok?: boolean; turnId?: string;
+    /** A `citations` record (crew#561, api-types 0.68.0): the verdicts of the earlier reply with the same turn + seat. */
+    verified?: number; unverifiable?: number; corrected?: number; unchecked?: number; items?: ChatCitations['items'];
+  }>;
 }
 
 type ThreadEntry =
-  | { kind: 'turn'; key: string; at: number; who: 'you' | string; text: string; ok: boolean }
+  | { kind: 'turn'; key: string; at: number; who: 'you' | string; text: string; ok: boolean; citations?: ChatCitations }
   | { kind: 'run'; key: string; at: number; view: RunView };
 
 const STATE_WORD: Record<SessionState, string> = {
@@ -118,8 +128,23 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
 
   const entries = useMemo<ThreadEntry[]>(() => {
     const out: ThreadEntry[] = [];
+    const seatAt = new Map<string, number>(); // `${turnId}:${cliKey}` → the reply's index in `out`
     messages.forEach((m, i) => {
+      if (m.kind === 'citations') {
+        // S6b: the verdicts land after their reply (append-only); fold them onto it. A record with
+        // no reply to fold onto is dropped, never rendered alone.
+        const at = seatAt.get(`${m.turnId ?? ''}:${m.cliKey ?? ''}`);
+        const e = at === undefined ? undefined : out[at];
+        if (e !== undefined && e.kind === 'turn') {
+          e.citations = {
+            verified: m.verified ?? 0, unverifiable: m.unverifiable ?? 0, corrected: m.corrected ?? 0,
+            unchecked: m.unchecked ?? 0, items: m.items ?? [],
+          };
+        }
+        return;
+      }
       if ((m.kind !== 'user' && m.kind !== 'seat') || typeof m.text !== 'string') return;
+      if (m.kind === 'seat') seatAt.set(`${m.turnId ?? ''}:${m.cliKey ?? ''}`, out.length);
       out.push({
         kind: 'turn', key: `m${i}`, at: typeof m.at === 'number' ? m.at : 0,
         who: m.kind === 'user' ? 'you' : (m.cliKey ?? 'helper'), text: m.text, ok: m.ok !== false,
@@ -152,6 +177,10 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
     setDraft(sessionId, '');
   };
   const go = (path: string) => (e: React.MouseEvent): void => { e.preventDefault(); navigate(path); };
+  // Where a source's passage can be read from: the session's runs with a worktree, newest first.
+  const readers = useMemo(() => [...mine].reverse().map((v) => ({
+    id: v.session.id, workdir: typeof v.session.workdir === 'string' ? v.session.workdir : null,
+  })).filter((r) => r.workdir !== null), [mine]);
   const missing = ready && mine.length === 0 && (conversation === 'closed' || conversation === 'none');
 
   return (
@@ -198,6 +227,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
               <div key={e.key} data-testid="session-turn" data-who={e.who === 'you' ? 'you' : 'helper'} className={`wk-session-turn wk-session-turn--${e.who === 'you' ? 'you' : 'helper'}`}>
                 <p className="wk-session-who">{e.who === 'you' ? 'You' : e.who}</p>
                 <p className={`wk-session-text${e.ok ? '' : ' wk-session-grey'}`}>{e.text}</p>
+                {e.who !== 'you' && <SourceChips citations={e.citations} runs={readers} />}
               </div>
             )
             : <RunBlock key={e.key} view={e.view} badge={badges[e.view.session.id] ?? 0} go={go} />))}
@@ -232,14 +262,19 @@ function RunBlock({ view, badge, go }: {
   const { chain, teamError, retry } = useRunChain(view);
   const id = view.session.id;
   const state = sessionState(view.session.status);
+  const gate = useGateStore((s) => s.gates[id]);
+  const action = useGateActionStore((s) => s.byGate[id] ?? IDLE_GATE_ACTION);
   const page = `/runs/${encodeURIComponent(id)}`;
   return (
     <section data-testid="session-run" data-run-id={id} data-state={state} className="wk-session-run">
       <p className="wk-session-run-head">
         <span aria-hidden className={`wk-desk-dot wk-desk-dot--${state}`} />
         <span className="wk-session-run-title">{humanTitle(view.session.problem || id)}</span>
-        <span className="wk-session-run-state">{STATE_WORD[state]}{badge > 0 ? ' · needs you' : ''}</span>
+        <span className="wk-session-run-state">{badge > 0 ? 'Needs you' : STATE_WORD[state]}</span>
       </p>
+      {/* S6b: the run's ONE status sentence, then its proposal (the plan, the hand-over). */}
+      <p data-testid="session-status-sentence" role="status" className="wk-session-status-sentence">{statusSentence(view, chain, gate, action)}</p>
+      <ProposalCard view={view} chain={chain} />
       <ChainLine chain={chain} runId={id} teamError={teamError} onRetry={retry} />
       <a href={page} onClick={go(page)} data-testid="session-run-open" className="wk-session-link">Open the run page →</a>
     </section>

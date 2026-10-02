@@ -691,6 +691,13 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          # run_chat_id — GET /health.capabilities.runChatId (C1). Off: a daemon before C1 (and the
          #   runs then carry no chat_id either).
          "sessions": False, "run_chat_id": False,
+         # ship_proposals — (S6b, e2e/desk_proposal_test.py; needs `sessions`) adds chat-ship's two runs to
+         #   the sessions corpus: r-ship-plan waits at its plan gate (the team plan proposed, not
+         #   accepted), r-ship-deliver waits at its deliver gate (every other step done); chat-ship's
+         #   transcript holds a reply with a citations record; GET /runs/r-ship-deliver/files reads
+         #   src/checkout.ts from its worktree. proposal_refuse — POST /runs/r-ship-plan/gate answers
+         #   crew's 400 with a reason (the refused-plan case).
+         "ship_proposals": False, "proposal_refuse": False,
          }
 state_lock = threading.Lock()
 # Idea 9: every POST /governance/rules body the fixture received (GET /__fixture/rule-posts).
@@ -1042,6 +1049,63 @@ def session_team(rid: str) -> dict | None:
     return None
 
 
+# ── Proposals corpus (switch `ship_proposals`, S6b) ─────────────────────────────────
+SHIP_WORKDIR = "/w/r-ship-deliver"
+SHIP_PLAN_PROMPT = ("Approve plan rev 1 before unit 0 runs (manual mode; band 20-39; manual mode): "
+                    "understand → build → test → review")
+SHIP_DELIVER_CARD = "Pushes branch wicked/r-ship-deliver to origin and opens a pull request on acme/shop."
+PROPOSAL_RUNS = [
+    _session_run("r-ship-plan", "awaiting_human", "add a FREESHIP code to the checkout", "chat-ship",
+                 SESSION_T0 + 3000, None,
+                 [("understand", "understand", "pending"), ("build", "build", "pending"),
+                  ("test", "test", "pending"), ("review", "review", "pending")]),
+    _session_run("r-ship-deliver", "awaiting_human", "show the free-shipping banner on the cart", "chat-ship",
+                 SESSION_T0 + 3300, None,
+                 [("understand", "understand", "done"), ("build", "build", "done"), ("test", "test", "done"),
+                  ("review", "review", "done"),
+                  ("deliver — show the free-shipping banner on the cart ||| " + SHIP_DELIVER_CARD
+                   + " Push identity: the daemon's gh sign-in", "deliver", "pending")]),
+]
+for _r in PROPOSAL_RUNS:
+    _r["session"]["human_confirm"] = "all"
+PROPOSAL_RUNS[1]["units"][4]["id"] = "r-ship-deliver:deliver"  # crew names a phase's unit <run>:<phase>
+PROPOSAL_RUNS[1]["session"]["workdir"] = SHIP_WORKDIR
+PROPOSAL_RUNS[1]["session"]["run_branch"] = "wicked/r-ship-deliver"
+PROPOSAL_GATES = {"r-ship-plan": (0, SHIP_PLAN_PROMPT),
+                  "r-ship-deliver": (4, "Approve unit 4 before it runs: deliver")}
+SHIP_STEPS = [{"catalog": c, "id": c} for c in ("understand", "build", "test", "review")]
+SHIP_CHECKOUT_TS = "\n".join(
+    ["// checkout.ts — the cart total and the free-shipping rule"]
+    + [f"// line {i}" for i in range(2, 12)]
+    + ["export const FREE_SHIPPING_OVER = 50; // carts over $50 ship free"]
+    + [f"// line {i}" for i in range(13, 25)])
+
+
+def proposal_team(rid: str) -> dict | None:
+    blank = {"runId": rid, "streamFloor": None, "pending": None, "units": [], "rows": []}
+    if rid == "r-ship-plan":
+        rows = [_team_row(951, "wicked.team.plan.proposed", rid, proposal_id="p-ship", base_rev=None,
+                          kind="initial", preset=None, steps=SHIP_STEPS, monitors={"asked": 1}, asks=[],
+                          touch=["src/checkout/"], override=None, rationale="", by="claude#1")]
+        return dict(blank, teamed=True, transport="bus", reason=None, planRev=None, ended=False, rows=rows)
+    if rid == "r-ship-deliver":
+        steps = SHIP_STEPS + [{"catalog": "deliver", "id": "deliver"}]
+        rows = [_team_row(961, "wicked.team.plan.accepted", rid, plan_rev=1, workflow_id="r-ship-deliver:plan-1",
+                          band="20-39", high_risk=False, mode="manual", steps=steps, override=None,
+                          proposal_id="p-ship-2")]
+        unit_rows = []
+        for i, st in enumerate(SHIP_STEPS):
+            unit_rows.append(_team_row(962 + 2 * i, "wicked.team.step.claimed", rid, ord=i, step_id=st["id"],
+                                       role="creator", kind="agent", phase=st["id"], criterion="",
+                                       baseline_tree=None, repo=None, code_graph_db=None, by="claude#1"))
+            unit_rows.append(_team_row(963 + 2 * i, "wicked.team.step.completed", rid, ord=i, step_id=st["id"],
+                                       status="ok", tree=None, output_bytes=10, output_ref=f"u{i}", by="claude#1"))
+        return dict(blank, teamed=True, transport="bus", reason=None, planRev=1, ended=False, rows=rows,
+                    units=[{"ord": i, "transport": "bus", "reason": None, "rows": unit_rows[2 * i:2 * i + 2]}
+                           for i in range(4)])
+    return None
+
+
 SESSION_CHATS = {
     "chat-pay": {"chatId": "chat-pay", "seats": ["claude"], "scope": {"kind": "none", "repos": [], "cwd": "/w/chat-pay"},
                  "refused": [], "messages": (
@@ -1054,6 +1118,21 @@ SESSION_CHATS = {
                          "text": f"Note {i + 1}: the retry handler and the webhook both post the charge."}
                         for i in range(14)])},
     "chat-gone": {"chatId": "chat-gone", "seats": [], "scope": None, "refused": None, "messages": []},
+    "chat-ship": {"chatId": "chat-ship", "seats": ["claude"], "scope": {"kind": "none", "repos": [], "cwd": "/w/chat-ship"},
+                  "refused": [], "messages": [
+                      {"at": (SESSION_T0 + 2900) * 1000, "turnId": "s1", "kind": "user", "seats": ["claude"],
+                       "text": "where does free shipping start?"},
+                      {"at": (SESSION_T0 + 2910) * 1000, "turnId": "s1", "kind": "seat", "cliKey": "claude", "ok": True,
+                       "usage": None,
+                       "text": "Carts over $50 ship free — see src/checkout.ts:12 and the banner in src/cart/Banner.tsx."},
+                      {"at": (SESSION_T0 + 2912) * 1000, "turnId": "s1", "kind": "citations", "cliKey": "claude",
+                       "verified": 2, "unverifiable": 1, "corrected": 1, "unchecked": 0, "items": [
+                           {"raw": "src/checkout.ts:12", "kind": "line", "status": "verified"},
+                           {"raw": "src/cart/Banner.tsx", "kind": "path", "status": "verified"},
+                           {"raw": "src/cart/total.ts:3", "kind": "line", "status": "corrected",
+                            "resolved": "src/cart/total.ts:7", "note": "the line moved"},
+                           {"raw": "src/ghost.ts", "kind": "path", "status": "unverified",
+                            "note": "in no repo this chat can read"}]}]},
 }
 
 
@@ -3204,6 +3283,11 @@ def assemble_runs() -> list:
             if not state["run_chat_id"]:
                 for r in extra:  # a daemon before C1 carries no chat_id
                     r["session"].pop("chat_id", None)
+            if state["ship_proposals"]:
+                extra = extra + json.loads(json.dumps(PROPOSAL_RUNS))
+                if not state["run_chat_id"]:
+                    for r in extra:
+                        r["session"].pop("chat_id", None)
             runs = extra  # the sessions corpus stands alone: the rail shows exactly these
         if state["demo_runs"] and not state["no_runs"]:
             with demo_lock:
@@ -4135,7 +4219,11 @@ class W2Handler(SimpleHTTPRequestHandler):
             with state_lock:
                 on = state["plan_gate"]
                 sessions_on = state["sessions"]
-            if sessions_on and session_team(rid) is not None:
+            with state_lock:
+                proposals_on = state["ship_proposals"]
+            if sessions_on and proposals_on and proposal_team(rid) is not None:
+                self._json(200, proposal_team(rid))
+            elif sessions_on and session_team(rid) is not None:
                 self._json(200, session_team(rid))
             elif on and rid == "r-plan-gate":
                 self._json(200, PLAN_GATE_TEAM)
@@ -4147,6 +4235,12 @@ class W2Handler(SimpleHTTPRequestHandler):
             rid = urllib.parse.unquote(parts[4])
             with state_lock:
                 plan_gate_on = state["plan_gate"]
+                proposals_open = state["sessions"] and state["ship_proposals"]
+            if proposals_open and rid in PROPOSAL_GATES:
+                g_ord, g_prompt = PROPOSAL_GATES[rid]
+                self._json(200, {"runId": rid, "ord": g_ord, "lifecycle": "open", "prompt": g_prompt,
+                                 "receivedAt": iso((SESSION_T0 + 3400) * 1000)})
+                return True
             with state_lock:
                 gate_move_on = state["gate_move"]
             if rid == "r-review" and gate_move_on:
@@ -4362,6 +4456,20 @@ class W2Handler(SimpleHTTPRequestHandler):
             orphan_on = state["orphan"]
             forensics_on = state["forensics"]
             gt_on = state["governed_testing"]
+        # S6b: a source's passage, read from r-ship-deliver's worktree (the contained route's ladder).
+        with state_lock:
+            ship_on = state["sessions"] and state["ship_proposals"]
+        if ship_on and rid == "r-ship-deliver" and leaf == "files":
+            q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query).get("path", [""])[0]
+            if not q.startswith(SHIP_WORKDIR + "/"):
+                self._json(403, {"error": "path is outside every allowed root (the run's workdir/write roots "
+                                          "and the registered repos)"})
+            elif q == SHIP_WORKDIR + "/src/checkout.ts":
+                self._json(200, {"path": q, "content": SHIP_CHECKOUT_TS, "size": len(SHIP_CHECKOUT_TS),
+                                 "truncated": False, "binary": False})
+            else:
+                self._json(404, {"error": f"no such file: {q}"})
+            return
         # Studio wave 1: r1's worktree diff (the `>files r1` route opens the viewer on it).
         with state_lock:
             wave1_on = state["wave1"]
@@ -5545,6 +5653,11 @@ class W2Handler(SimpleHTTPRequestHandler):
                              "but the open gate is before unit 4 — it was answered or replaced. "
                              "Read the open gate before deciding.",
                     "code": "gate_changed", "openOrd": 4})
+            with state_lock:
+                refuse = state["proposal_refuse"] and rid == "r-ship-plan"
+            if refuse:
+                # S6b: crew's 400 for a plan approval the engine refused, with its reason.
+                return self._json(400, {"error": "plan refused: a change to payment code needs a test step"})
             if conflict:
                 # Slice L (§9.5): the daemon's real 409 — the run stopped
                 # awaiting between the selection and the fan-out.

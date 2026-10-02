@@ -10,9 +10,9 @@
   "version": 1,
   "studioVersion": "0.5.19",
   "counts": {
-    "files": 185,
-    "occurrences": 1834,
-    "static": 1607,
+    "files": 187,
+    "occurrences": 1856,
+    "static": 1626,
     "dynamic": 73,
     "computed": 8
   },
@@ -6805,6 +6805,102 @@
       ]
     },
     {
+      "testId": "session-passage",
+      "files": [
+        "src/components/session/SourceChips.tsx"
+      ]
+    },
+    {
+      "testId": "session-passage-back",
+      "files": [
+        "src/components/session/SourceChips.tsx"
+      ]
+    },
+    {
+      "testId": "session-passage-unreadable",
+      "files": [
+        "src/components/session/SourceChips.tsx"
+      ]
+    },
+    {
+      "testId": "session-proposal",
+      "files": [
+        "src/components/session/ProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "session-proposal-bring-back",
+      "files": [
+        "src/components/session/ProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "session-proposal-confirm",
+      "files": [
+        "src/components/session/ProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "session-proposal-confirm-cancel",
+      "files": [
+        "src/components/session/ProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "session-proposal-confirm-yes",
+      "files": [
+        "src/components/session/ProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "session-proposal-go",
+      "files": [
+        "src/components/session/ProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "session-proposal-live",
+      "files": [
+        "src/components/session/ProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "session-proposal-no",
+      "files": [
+        "src/components/session/ProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "session-proposal-not-now",
+      "files": [
+        "src/components/session/ProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "session-proposal-outcome",
+      "files": [
+        "src/components/session/ProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "session-proposal-reason",
+      "files": [
+        "src/components/session/ProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "session-proposal-text",
+      "files": [
+        "src/components/session/ProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "session-proposal-why",
+      "files": [
+        "src/components/session/ProposalCard.tsx"
+      ]
+    },
+    {
       "testId": "session-rail",
       "files": [
         "src/components/desk/SessionRail.tsx"
@@ -6823,7 +6919,25 @@
       ]
     },
     {
+      "testId": "session-source",
+      "files": [
+        "src/components/session/SourceChips.tsx"
+      ]
+    },
+    {
+      "testId": "session-sources",
+      "files": [
+        "src/components/session/SourceChips.tsx"
+      ]
+    },
+    {
       "testId": "session-status",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
+      "testId": "session-status-sentence",
       "files": [
         "src/components/session/SessionView.tsx"
       ]
