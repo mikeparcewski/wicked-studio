@@ -644,14 +644,26 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
   width: 100%; margin-top: 12px; padding: 8px; border: 1px dashed var(--border); border-radius: var(--radius-md);
   background: none; color: var(--ink-muted); cursor: pointer; font: inherit;
 }
-.wk-rail-foot { border-top: 1px solid var(--border); padding: 8px 10px; display: flex; flex-direction: column; gap: 2px; max-height: 45vh; overflow-y: auto; }
+.wk-rail-bell { margin: 0 10px 4px; position: relative; z-index: 30; }
+.wk-rail-foot { border-top: 1px solid var(--border); padding: 8px 10px; display: flex; flex-direction: column; gap: 2px; }
 .wk-rail-link {
   display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 5px 10px;
   border-radius: var(--radius-md); background: none; border: none; color: var(--ink-body);
   text-decoration: none; font: inherit; cursor: pointer; text-align: left;
 }
 .wk-rail-link:hover { background: var(--surface-card); }
-.wk-rail-everything { display: flex; flex-direction: column; padding-left: 8px; }
+.wk-rail-everything { display: flex; flex-direction: column; padding-left: 8px; max-height: 32vh; overflow-y: auto; }
+/* Focus that survives every mode (council M3), for the Desk's own controls. */
+[data-testid="session-rail"] a:focus-visible,
+[data-testid="session-rail"] button:focus-visible,
+[data-testid="desk"] a:focus-visible,
+[data-testid="desk"] button:focus-visible,
+.wk-desk-needs:focus-visible,
+.wk-desk-composer:focus-within {
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  box-shadow: var(--focus-ring);
+}
 
 .wk-desk-dot { display: inline-block; width: 8px; height: 8px; border-radius: var(--radius-full); flex-shrink: 0; background: var(--ink-dim); }
 .wk-desk-dot--waiting { background: var(--status-gate); }

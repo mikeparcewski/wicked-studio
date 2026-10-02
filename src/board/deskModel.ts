@@ -83,13 +83,15 @@ export function sessionState(status: string): SessionState {
   }
 }
 
-/** The card's sentence for a session. Never "checked": that word needs evidence (WT). */
+/** The card's sentence for a session. Never "checked": that word needs evidence (WT). A session
+ *  with a needs-you item says that item's own line (it already says what is waiting), whatever
+ *  the run's status — a live run can be asking a question, a finished one can be stranded. */
 export function sessionLine(state: SessionState, badge: number, needText: string | null): string {
+  if (badge > 0 && needText) return state === 'blocked' ? `Stopped: ${needText}` : needText;
   switch (state) {
-    // The fold's own line already says what is waiting ("Gate: waiting on you — …"): say it once.
-    case 'waiting': return badge > 0 && needText ? needText : 'Waiting on you';
+    case 'waiting': return 'Waiting on you';
     case 'working': return 'Being worked on';
-    case 'blocked': return needText ? `Stopped: ${needText}` : 'Stopped';
+    case 'blocked': return 'Stopped';
     case 'done': return 'Finished';
     default: return 'Quiet';
   }
@@ -113,7 +115,8 @@ export interface RailGroup {
   sessions: RailSession[];
 }
 
-const STATE_ORDER: Record<SessionState, number> = { waiting: 0, blocked: 1, working: 2, done: 3, quiet: 4 };
+// Live work before old failures: a failure that still needs you already sorts first by its badge.
+const STATE_ORDER: Record<SessionState, number> = { waiting: 0, working: 1, blocked: 2, done: 3, quiet: 4 };
 
 /** Sessions per rail group — the newest few, the ones that need you first. */
 export const RAIL_SESSIONS_MAX = 5;

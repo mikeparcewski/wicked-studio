@@ -114,6 +114,12 @@ describe('sessions in the rail and on the project cards', () => {
     expect(card.quiet).toHaveLength(7);
   });
 
+  it('live work sorts before old failures, so the cap never hides the only running session', () => {
+    const p = [{ project: { id: 'p', name: 'P' }, runs: [
+      ...Array.from({ length: 5 }, (_, i) => run(`f${i}`, 'failed')), run('live', 'executing')] }];
+    expect(railGroups(p as never, [], {}, 5)[0]!.sessions[0]!.runId).toBe('live');
+  });
+
   it('states come from the run status; a session never claims "checked"', () => {
     expect(sessionState(run('a', 'awaiting_human').session.status)).toBe('waiting');
     expect(sessionState(run('a', 'executing').session.status)).toBe('working');
@@ -127,6 +133,10 @@ describe('sessions in the rail and on the project cards', () => {
     expect(sessionLine('waiting', 0, null)).toBe('Waiting on you');
     expect(sessionLine('working', 0, null)).toBe('Being worked on');
     expect(sessionLine('blocked', 1, 'Failed at build')).toBe('Stopped: Failed at build');
+    expect(sessionLine('blocked', 0, null)).toBe('Stopped');
+    // A live run asking a question, a finished run stranded: the needs-you line wins.
+    expect(sessionLine('working', 1, 'Question: which region?')).toBe('Question: which region?');
+    expect(sessionLine('done', 1, 'Finished but not delivered')).toBe('Finished but not delivered');
     expect(sessionLine('done', 0, null)).toBe('Finished');
     const cards = deskProjects(railGroups(projects as never, unfiled, { r1: 1 }), 3);
     expect(deskProjects(railGroups(projects as never, unfiled, {}))[0]!.shown).toHaveLength(2);

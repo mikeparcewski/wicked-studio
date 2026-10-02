@@ -1,7 +1,8 @@
 import type { SessionView } from '../../api/types.js';
 import type { Navigate } from '../../hooks/useRoute.js';
 
-const TERMINAL: ReadonlySet<string> = new Set(['completed', 'failed', 'cancelled']);
+/** Not running: finished, or stopped at a gate (a gate is waiting on you, not working — metrics.ts). */
+const NOT_RUNNING: ReadonlySet<string> = new Set(['completed', 'failed', 'cancelled', 'awaiting_human']);
 
 /** The Watchtower's one quiet sentence, from the SAME count the Desk says (DES-STUDIO §3 rule 10). */
 export function watchSentence(count: number, live: number): string {
@@ -15,7 +16,7 @@ export function watchSentence(count: number, live: number): string {
  * then the entry opens the runs list.
  */
 export function WatchPill({ count, runs, navigate }: { count: number; runs: SessionView[]; navigate: Navigate }): React.ReactElement {
-  const live = runs.filter((v) => !TERMINAL.has(v.session.status)).length;
+  const live = runs.filter((v) => !NOT_RUNNING.has(v.session.status)).length;
   const sentence = watchSentence(count, live);
   return (
     <a

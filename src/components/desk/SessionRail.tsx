@@ -49,6 +49,8 @@ export function SessionRail({ runs, needRows, navigate, pathname }: {
         <span>Desk</span>
         {count > 0 && <span data-testid="desk-rail-badge" className="wk-rail-badge" aria-label={`${count} need you`}>{count}</span>}
       </a>
+      {/* Outside every scroller, so its popover is never clipped. */}
+      <div className="wk-rail-bell"><NotificationBell navigate={navigate} /></div>
 
       <div className="wk-rail-groups">
         {groups.map((g) => (
@@ -65,6 +67,7 @@ export function SessionRail({ runs, needRows, navigate, pathname }: {
                 data-state={s.state}
                 data-badge={s.badge}
                 title={s.line}
+                aria-label={`${s.title} — ${s.line}${s.badge > 0 ? `, ${s.badge} need you` : ''}`}
                 aria-current={pathname === s.path ? 'page' : undefined}
                 className="wk-rail-session"
               >
@@ -81,7 +84,6 @@ export function SessionRail({ runs, needRows, navigate, pathname }: {
       <div className="wk-rail-foot">
         <WatchPill count={count} runs={runs} navigate={navigate} />
         <a href="/steering/policies" onClick={go('/steering/policies')} className="wk-rail-link">Rules</a>
-        <NotificationBell navigate={navigate} />
         <HealthRailSection open={healthOpen} onToggle={() => setHealthOpen((v) => !v)} />
         <button
           type="button"
