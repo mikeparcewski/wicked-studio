@@ -137,3 +137,29 @@ describe('toggledTheme (the ⌘K "Toggle Theme")', () => {
     expect(toggledTheme('wicked-dark')).toBe('wicked-light');
   });
 });
+
+describe('resetAccent under a wicked theme', () => {
+  it('goes back to the harbor preset, so the accent stays legible and editable', () => {
+    for (const t of ['wicked-light', 'wicked-dark'] as const) {
+      useAppearanceStore.getState().chooseTheme(t);
+      useAppearanceStore.getState().update({ accent_h: 10, accent_s: 90, accent_l: 70 });
+      useAppearanceStore.getState().resetAccent();
+      const a = useAppearanceStore.getState().appearance;
+      expect([a.accent_h, a.accent_s, a.accent_l]).toEqual([HARBOR_ACCENT.accent_h, HARBOR_ACCENT.accent_s, HARBOR_ACCENT.accent_l]);
+      expect(a.theme).toBe(t);
+      // and the picker still owns it after the reset
+      useAppearanceStore.getState().update({ accent_h: 120 });
+      expect(root().style.getPropertyValue('--_accent-h')).toBe('120');
+    }
+  });
+
+  it('under dark and light it still restores 230/74/68', () => {
+    for (const t of ['dark', 'light'] as const) {
+      useAppearanceStore.getState().chooseTheme(t);
+      useAppearanceStore.getState().update({ accent_h: 10, accent_s: 90, accent_l: 70 });
+      useAppearanceStore.getState().resetAccent();
+      const a = useAppearanceStore.getState().appearance;
+      expect([a.accent_h, a.accent_s, a.accent_l]).toEqual([230, 74, 68]);
+    }
+  });
+});

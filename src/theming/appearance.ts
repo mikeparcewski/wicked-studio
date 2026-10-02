@@ -157,7 +157,8 @@ interface AppearanceStore {
    *  family for dark/light while the accent is still the untouched preset restores the
    *  default accent; any other accent is the user's and stays. */
   chooseTheme: (theme: ThemeId) => void;
-  /** §3.5 reset 1: the three accent primitives only — the logo is independent. */
+  /** §3.5 reset 1: the three accent primitives only — the logo is independent. Under a wicked
+   *  theme the default accent is the harbor preset (the wicked themes' offsets assume it). */
   resetAccent: () => void;
   /** §3.5 reset 2: back to the default wicked mark — the accent is independent. */
   removeLogo: () => void;
@@ -222,11 +223,13 @@ export const useAppearanceStore = create<AppearanceStore>((set, get) => ({
   },
 
   resetAccent: () =>
-    get().update({
-      accent_h: DEFAULT_APPEARANCE.accent_h,
-      accent_s: DEFAULT_APPEARANCE.accent_s,
-      accent_l: DEFAULT_APPEARANCE.accent_l,
-    }),
+    get().update(isWickedTheme(get().appearance.theme)
+      ? { ...HARBOR_ACCENT }
+      : {
+        accent_h: DEFAULT_APPEARANCE.accent_h,
+        accent_s: DEFAULT_APPEARANCE.accent_s,
+        accent_l: DEFAULT_APPEARANCE.accent_l,
+      }),
 
   removeLogo: () => get().update({ logo_url: null }),
 }));
