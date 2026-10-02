@@ -12,7 +12,7 @@ import type { ShortcutEntry } from '../hooks/useGlobalShortcuts.js';
 import { useMembershipStore } from '../store/membership.js';
 import { useProjectsStore } from '../store/projects.js';
 import { useGateStore } from '../store/gates.js';
-import { useAppearanceStore } from '../theming/appearance.js';
+import { toggledTheme, useAppearanceStore } from '../theming/appearance.js';
 import { decideGate, GATE_HASH } from '../board/gateActions.js';
 import { NewProjectModal } from './NewProjectModal.js';
 import { Modal } from './Modal.js';
@@ -523,7 +523,7 @@ export function CommandPalette({
         name: 'Toggle Theme',
         action: () => {
           const cur = useAppearanceStore.getState().appearance.theme;
-          useAppearanceStore.getState().update({ theme: cur === 'dark' ? 'light' : 'dark' });
+          useAppearanceStore.getState().chooseTheme(toggledTheme(cur));
         },
       },
       { name: 'Open Terminal', action: () => setShowTerminal(true) },

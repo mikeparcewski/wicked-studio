@@ -23,7 +23,7 @@ export interface StudioAppearance {
   accent_s: number;
   accent_l: number;
   logo_url: string | null;
-  theme: 'dark' | 'light';
+  theme: ThemeId;
   /** A custom product name for the chrome (nav-ui-tweaks). `null` = the default
    *  wordmark (`DEFAULT_SITE_NAME`); a non-empty string overrides it. */
   site_name: string | null;
@@ -33,6 +33,40 @@ export interface StudioAppearance {
 }
 
 export const APPEARANCE_KEY = 'studio.appearance';
+
+/** The theme instances, each a `data-theme` value (absent = `dark`, tokens.css itself).
+ *  The wicked pair (DES-STUDIO-REBUILD-001 S1, DESIGN-simple §1a) is the family palette:
+ *  themes/wicked-light.css and themes/wicked-dark.css. A skin never selects one (§5.1). */
+export const THEMES = [
+  { id: 'dark', label: 'Dark' },
+  { id: 'light', label: 'Light' },
+  { id: 'wicked-light', label: 'Wicked light' },
+  { id: 'wicked-dark', label: 'Wicked dark' },
+] as const;
+
+export type ThemeId = (typeof THEMES)[number]['id'];
+
+export function isThemeId(v: unknown): v is ThemeId {
+  return THEMES.some((t) => t.id === v);
+}
+
+export function isWickedTheme(t: ThemeId): boolean {
+  return t === 'wicked-light' || t === 'wicked-dark';
+}
+
+/** The harbor accent preset, #224A5E (hsl 200 47% 25%), the wicked action colour. Choosing a
+ *  wicked theme writes it into the three accent primitives; the picker owns them after that. */
+export const HARBOR_ACCENT = { accent_h: 200, accent_s: 47, accent_l: 25 } as const;
+
+/** The ⌘K "Toggle Theme": flip the ground, stay in the family. */
+export function toggledTheme(t: ThemeId): ThemeId {
+  switch (t) {
+    case 'dark': return 'light';
+    case 'light': return 'dark';
+    case 'wicked-light': return 'wicked-dark';
+    case 'wicked-dark': return 'wicked-light';
+  }
+}
 
 /** The default product wordmark shown in the chrome when no custom name is set. */
 export const DEFAULT_SITE_NAME = 'wicked-studio';
@@ -65,7 +99,7 @@ export function sanitizeAppearance(raw: unknown): StudioAppearance {
     accent_s: clamp(o.accent_s, 0, 100, DEFAULT_APPEARANCE.accent_s),
     accent_l: clamp(o.accent_l, 0, 100, DEFAULT_APPEARANCE.accent_l),
     logo_url: typeof o.logo_url === 'string' && o.logo_url !== '' ? o.logo_url : null,
-    theme: o.theme === 'light' ? 'light' : 'dark',
+    theme: isThemeId(o.theme) ? o.theme : 'dark',
     site_name: typeof o.site_name === 'string' && o.site_name.trim() !== '' ? o.site_name.trim() : null,
     skin: isSkinId(o.skin) ? o.skin : DEFAULT_SKIN_ID,
   };
@@ -75,7 +109,8 @@ export function sanitizeAppearance(raw: unknown): StudioAppearance {
  * Write the appearance onto `<html>`: the three accent primitives as §3.3
  * spells them, `--logo-url` as a quoted `url(...)` (removed when unset, so the
  * slot's `var(--logo-url, none)` fallback renders the default mark), and the
- * theme instance as the `data-theme` attribute (§2.14 — absent = dark, §2.13), and the
+ * theme instance as the `data-theme` attribute (§2.14 — absent = dark, §2.13; otherwise the
+ * theme id: `light`, `wicked-light`, `wicked-dark`), and the
  * skin as `data-skin` plus its token overrides (theming/skins.ts).
  */
 export function applyAppearance(a: StudioAppearance): void {
@@ -88,8 +123,8 @@ export function applyAppearance(a: StudioAppearance): void {
   } else {
     root.style.removeProperty('--logo-url');
   }
-  if (a.theme === 'light') root.setAttribute('data-theme', 'light');
-  else root.removeAttribute('data-theme');
+  if (a.theme === 'dark') root.removeAttribute('data-theme');
+  else root.setAttribute('data-theme', a.theme);
   applySkin(root, a.skin);
 }
 
@@ -117,7 +152,13 @@ interface AppearanceStore {
   load: () => Promise<void>;
   /** Optimistic partial update: apply NOW, persist after the debounce. */
   update: (patch: Partial<StudioAppearance>) => void;
-  /** §3.5 reset 1: the three accent primitives only — the logo is independent. */
+  /** Choose a theme. A wicked theme writes the harbor accent preset (the picker owns the
+   *  accent after that; moving between the two wicked themes keeps it). Leaving the wicked
+   *  family for dark/light while the accent is still the untouched preset restores the
+   *  default accent; any other accent is the user's and stays. */
+  chooseTheme: (theme: ThemeId) => void;
+  /** §3.5 reset 1: the three accent primitives only — the logo is independent. Under a wicked
+   *  theme the default accent is the harbor preset (the wicked themes' offsets assume it). */
   resetAccent: () => void;
   /** §3.5 reset 2: back to the default wicked mark — the accent is independent. */
   removeLogo: () => void;
@@ -163,12 +204,32 @@ export const useAppearanceStore = create<AppearanceStore>((set, get) => ({
     persistSoon(() => get().appearance);
   },
 
+  chooseTheme: (theme) => {
+    const cur = get().appearance;
+    const isHarbor = cur.accent_h === HARBOR_ACCENT.accent_h
+      && cur.accent_s === HARBOR_ACCENT.accent_s && cur.accent_l === HARBOR_ACCENT.accent_l;
+    if (isWickedTheme(theme)) {
+      get().update(isWickedTheme(cur.theme) ? { theme } : { theme, ...HARBOR_ACCENT });
+    } else if (isWickedTheme(cur.theme) && isHarbor) {
+      get().update({
+        theme,
+        accent_h: DEFAULT_APPEARANCE.accent_h,
+        accent_s: DEFAULT_APPEARANCE.accent_s,
+        accent_l: DEFAULT_APPEARANCE.accent_l,
+      });
+    } else {
+      get().update({ theme });
+    }
+  },
+
   resetAccent: () =>
-    get().update({
-      accent_h: DEFAULT_APPEARANCE.accent_h,
-      accent_s: DEFAULT_APPEARANCE.accent_s,
-      accent_l: DEFAULT_APPEARANCE.accent_l,
-    }),
+    get().update(isWickedTheme(get().appearance.theme)
+      ? { ...HARBOR_ACCENT }
+      : {
+        accent_h: DEFAULT_APPEARANCE.accent_h,
+        accent_s: DEFAULT_APPEARANCE.accent_s,
+        accent_l: DEFAULT_APPEARANCE.accent_l,
+      }),
 
   removeLogo: () => get().update({ logo_url: null }),
 }));

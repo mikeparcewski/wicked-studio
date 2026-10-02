@@ -1,5 +1,6 @@
 /* themes/light.css — the light theme as a THEME INSTANCE (DES-VISION-001 §2.14):
- * applied via [data-theme="light"] on <html>, not a separate stylesheet tree.
+ * applied via [data-theme="light"] on <html>, not a separate stylesheet tree. Its light-ground
+ * rules also apply to [data-theme="wicked-light"], which then sets the family palette on top.
  * It overrides the surface and ink ramps, the hairlines and shadows, and re-tints the
  * accent and status colours for a light ground: the dark theme's light accent and bright
  * status hues fall under 3:1 on a near-white surface, so each is darkened here (same
@@ -7,7 +8,8 @@
  * moves). Spacing, type, radius and motion tokens are theme-invariant and stay in
  * tokens.css. Every text token clears WCAG AA (4.5:1) on base, rail, card and raised. */
 
-[data-theme="light"] {
+[data-theme="light"],
+[data-theme="wicked-light"] {
   /* Cool paper: the page sits a shade below white cards, the rail a shade below the page. */
   --_surface-0: #f4f6fa;
   --_surface-1: #eceff5;

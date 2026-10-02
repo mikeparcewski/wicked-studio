@@ -8,9 +8,12 @@
  * (slice 1 is the enabler: zero visual change is the gate). The inherited
  * --wk-* palette lived here until slice 6 converted its last consumer onto
  * the semantic tokens; it is retired — tokens.css is the only color source. */
+@import './fonts.css';
 @import './tokens.css';
 @import './themes/dark.css';
 @import './themes/light.css';
+@import './themes/wicked-light.css';
+@import './themes/wicked-dark.css';
 @import './deck.css';
 @import './components.css';
 
@@ -22,9 +25,8 @@ html, body, #root {
   background: var(--surface-base);
   color: var(--ink-body);
   height: 100%;
-  /* §2.8's one sans, resolved from the token: Inter (loaded in index.html —
-     slice 3 reconciled the legacy Archivo load against the token contract;
-     the doc names Inter in §1.5 rule 3 and §2.8, so Inter is what loads). */
+  /* §2.8's one sans, resolved from the token: Inter by default, Archivo under the
+     wicked themes — both self-hosted by fonts.css (no font CDN). */
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
 }

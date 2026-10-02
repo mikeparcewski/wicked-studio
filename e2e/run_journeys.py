@@ -43,6 +43,7 @@ BEHAVIOUR = [
     "chat_citations",
     "demo_mode",
     "mcp_tools",
+    "wicked_theme",
 ]
 
 # The desk journeys (DES-STUDIO-REBUILD-001 §6.2): they assert the `desk` skin, so they run only
