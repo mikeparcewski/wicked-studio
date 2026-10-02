@@ -124,6 +124,12 @@ describe('#424 a run launched without delivery is kept, not stranded', () => {
     expect(rows.map((r) => r.key)).toStrictEqual(['stranded:r-posthoc']);
   });
 
+  it('a post-hoc delivery that just landed is not a stranded need, even with a deliver unit (Copilot on #438)', () => {
+    const stuck = finished('r-stuck', { deliverUnit: true });
+    expect(needsYouRows(inputs({ runs: [stuck], deliveredNow: new Set(['r-stuck']) })).map((r) => r.key)).toStrictEqual([]);
+    expect(needsYouRows(inputs({ runs: [stuck] })).map((r) => r.key)).toStrictEqual(['stranded:r-stuck']);
+  });
+
   it('a post-hoc delivery that just landed reads as delivered, before the run list catches up (Copilot r4)', () => {
     const kept = finished('2f903154', { deliverUnit: false });
     const [group] = railGroups([], [kept], {}, 5, {}, false, new Set(['2f903154']));
