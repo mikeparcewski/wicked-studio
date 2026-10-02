@@ -186,7 +186,7 @@ describe('SteeringGate — Approve means "retry against the restored tree" exact
     expect(screen.getByTestId('steering-approve')).toHaveTextContent('Retry against the restored tree');
     expect(screen.getByTestId('steering-approve-steer')).toHaveTextContent('Retry + steer');
     expect(screen.getByTestId('steering-reject')).toHaveTextContent('Reject');
-    expect(screen.getByTestId('steering-gate')).toHaveTextContent('a retry · r reject');
+    expect(screen.getByTestId('steering-gate')).toHaveTextContent('⌥A retry · ⌥R reject');
   });
 
   it('the relabel keys on the frames, not the prompt: the same frames with the OLD prompt still relabel', () => {
