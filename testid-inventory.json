@@ -10,9 +10,9 @@
   "version": 1,
   "studioVersion": "0.5.19",
   "counts": {
-    "files": 183,
-    "occurrences": 1816,
-    "static": 1592,
+    "files": 184,
+    "occurrences": 1828,
+    "static": 1601,
     "dynamic": 73,
     "computed": 8
   },
@@ -4783,13 +4783,68 @@
     {
       "testId": "need-act",
       "files": [
-        "src/components/NeedsYouQueue.tsx"
+        "src/components/NeedsYouQueue.tsx",
+        "src/components/desk/QuestionRow.tsx"
+      ]
+    },
+    {
+      "testId": "need-answer",
+      "files": [
+        "src/components/desk/QuestionRow.tsx"
+      ]
+    },
+    {
+      "testId": "need-answer-card",
+      "files": [
+        "src/components/desk/QuestionRow.tsx"
+      ]
+    },
+    {
+      "testId": "need-answer-close",
+      "files": [
+        "src/components/desk/QuestionRow.tsx"
+      ]
+    },
+    {
+      "testId": "need-answer-panel",
+      "files": [
+        "src/components/desk/QuestionRow.tsx"
       ]
     },
     {
       "testId": "need-batch-act",
       "files": [
         "src/components/NeedsYouQueue.tsx"
+      ]
+    },
+    {
+      "testId": "need-choice",
+      "files": [
+        "src/components/desk/QuestionRow.tsx"
+      ]
+    },
+    {
+      "testId": "need-choices",
+      "files": [
+        "src/components/desk/QuestionRow.tsx"
+      ]
+    },
+    {
+      "testId": "need-chosen",
+      "files": [
+        "src/components/desk/QuestionRow.tsx"
+      ]
+    },
+    {
+      "testId": "need-chosen-line",
+      "files": [
+        "src/components/desk/QuestionRow.tsx"
+      ]
+    },
+    {
+      "testId": "need-chosen-undo",
+      "files": [
+        "src/components/desk/QuestionRow.tsx"
       ]
     },
     {

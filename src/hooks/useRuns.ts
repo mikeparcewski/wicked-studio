@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import type { SessionView } from '../api/types.js';
 import { useConnectionStore } from '../store/connection.js';
-import { choicesOf, useGateStore } from '../store/gates.js';
+import { choicesOf, recommendedOf, useGateStore } from '../store/gates.js';
 import { useElicitationStore } from '../store/elicitations.js';
 
 /**
@@ -81,6 +81,7 @@ export function useRuns(): { runs: SessionView[]; refresh: () => void; loaded: b
           // The daemon-cached gate carries whatever the payload named; `GateInfo` is a
           // closed interface, so the additive answer shape (§7.11) is read off the bag.
           const choices = choicesOf(g as unknown as Record<string, unknown>);
+          const recommended = recommendedOf(g as unknown as Record<string, unknown>);
           setGate({
             runId: g.runId,
             ord: g.ord,
@@ -88,6 +89,7 @@ export function useRuns(): { runs: SessionView[]; refresh: () => void; loaded: b
             lifecycle: g.lifecycle,
             receivedAt: Date.parse(g.receivedAt) || Date.now(),
             ...(choices !== undefined ? { choices } : {}),
+            ...(recommended !== undefined ? { recommended } : {}),
           });
         } catch {
           /* no cached prompt — id-only gate still works */
