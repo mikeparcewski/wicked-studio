@@ -34,9 +34,12 @@ export function ProposalCard({ view, chain }: { view: SessionView; chain: ChainM
   const goRef = useRef<HTMLButtonElement | null>(null);
   const confirmOpen = card?.state === 'confirm';
   const wasConfirm = useRef(false);
+  const cardRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     if (confirmOpen) yesRef.current?.focus();
-    else if (wasConfirm.current) goRef.current?.focus();
+    // Leaving the confirm: Cancel returns to Deliver; "Yes, deliver" leaves no button, so the card
+    // itself takes focus and keyboard users keep their place (Copilot).
+    else if (wasConfirm.current) (goRef.current ?? cardRef.current)?.focus();
     wasConfirm.current = confirmOpen;
   }, [confirmOpen]);
   if (card === null) return null;
@@ -60,7 +63,7 @@ export function ProposalCard({ view, chain }: { view: SessionView; chain: ChainM
   const notNow = (): void => setUi({ dismissed: instance, confirming: null });
 
   return (
-    <div data-testid="session-proposal" data-run-id={runId} data-kind={card.kind} data-state={card.state} className={`wk-prop wk-prop--${card.state}`}>
+    <div ref={cardRef} tabIndex={-1} data-testid="session-proposal" data-run-id={runId} data-kind={card.kind} data-state={card.state} className={`wk-prop wk-prop--${card.state}`}>
       {(card.state === 'ask' || card.state === 'confirm') && (
         <>
           <p data-testid="session-proposal-text" className="wk-prop-text">{card.text}</p>
@@ -86,6 +89,12 @@ export function ProposalCard({ view, chain }: { view: SessionView; chain: ChainM
           <span aria-hidden className="wk-desk-dot wk-desk-dot--working" />
           <b>{card.runLabel}</b>
           <span data-testid="session-proposal-live" className="wk-prop-live">{card.live}</span>
+        </p>
+      )}
+      {card.state === 'cancelled' && (
+        <p className="wk-prop-status">
+          <b>Cancelled</b>
+          <span data-testid="session-proposal-outcome" className="wk-prop-live">{card.out}</span>
         </p>
       )}
       {card.state === 'done' && (

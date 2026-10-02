@@ -25,7 +25,13 @@ import { deliverPreview } from './undoQueue.js';
  */
 
 export type ProposalKind = 'plan' | 'deliver';
-export type ProposalState = 'ask' | 'confirm' | 'run' | 'done' | 'fail' | 'no';
+export type ProposalState = 'ask' | 'confirm' | 'run' | 'done' | 'cancelled' | 'fail' | 'no';
+
+/** A step's label in words: never the engine's instruction segment (` ||| …`, `INSTRUCTION_SEP`). */
+export function stepWords(label: string): string {
+  const cut = label.indexOf(' ||| ');
+  return (cut === -1 ? label : label.slice(0, cut)).trim();
+}
 
 export interface ProposalCardModel {
   kind: ProposalKind;
@@ -111,11 +117,11 @@ export function statusSentence(view: SessionView, chain: ChainModel, gate: OpenG
   if (s === 'completed') return `${outcomeLine(view)}${count}`;
   if (s === 'failed') {
     const at = chain.steps.find((x) => x.state === 'failed');
-    return `Stopped${at !== undefined ? ` at ${at.label}` : ''}${count}`;
+    return `Stopped${at !== undefined ? ` at ${stepWords(at.label)}` : ''}${count}`;
   }
   if (s === 'cancelled') return `Cancelled${count}`;
   const running = chain.steps.find((x) => x.state === 'running');
-  return `${running !== undefined ? `${running.label} is running` : 'Being worked on'}${count}`;
+  return `${running !== undefined ? `${stepWords(running.label)} is running` : 'Being worked on'}${count}`;
 }
 
 /** A finished run's one outcome line, from the daemon's delivery verdict — never more than it says. */
@@ -215,5 +221,7 @@ export function proposalCard(input: ProposalInput): ProposalCardModel | null {
     return { ...card, state: 'run', runLabel: card.kind === 'deliver' ? 'Handing over' : 'Going', live };
   }
   if (status === 'completed') return { ...card, state: 'done', out: outcomeLine(view) };
+  // Cancelled is its own outcome, never a failure (board/metrics.ts).
+  if (status === 'cancelled') return { ...card, state: 'cancelled', out: statusSentence(view, chain, gate) };
   return { ...card, state: 'fail', reason: statusSentence(view, chain, gate), canRetry: false };
 }

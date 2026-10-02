@@ -160,6 +160,24 @@ describe('Copilot r1 on the proposal model', () => {
   });
 });
 
+describe('Copilot r3 (past the cap: small, user-visible)', () => {
+  it('a step label never carries the engine’s instruction segment', () => {
+    const c = chain([step('d', 'deliver — Fix it ||| Pushes branch x to origin. Push identity: gh', 'running')], { source: 'units' });
+    expect(statusSentence(run('r', 'executing'), c, undefined)).toBe('deliver — Fix it is running · 0 of 1 done');
+  });
+
+  it('a cancelled run reads Cancelled, neutral, not a failure', () => {
+    const c = chain([step('a', 'Research', 'done')]);
+    const card = proposalCard({ view: run('r1', 'cancelled'), gate: undefined, chain: c, action: IDLE_GATE_ACTION, ui: NO_UI, lastKind: 'plan' })!;
+    expect(card.state).toBe('cancelled');
+    expect(card.out).toBe('Cancelled · 1 of 1 done');
+  });
+
+  it('a line-range citation opens at its first line', () => {
+    expect(parsePlace('src/a.ts:12-20')).toStrictEqual({ path: 'src/a.ts', line: 12 });
+  });
+});
+
 describe('the deliver card: the one "Are you sure?"', () => {
   const units = [
     makeUnit({ id: 'r9:build', session_id: 'r9', ord: 1, status: 'done', phase_ref: 'build' }),

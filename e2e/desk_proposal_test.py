@@ -156,7 +156,10 @@ with sync_playwright() as p:
     after_cancel = len(posts("r-ship-deliver"))
     state_cancel = page.evaluate(f"() => document.querySelector('{CARD.format('r-ship-deliver')}')?.dataset.state ?? null")
     deliver.get_by_test_id("session-proposal-go").click()
-    deliver.get_by_test_id("session-proposal-confirm-yes").click()
+    deliver.get_by_test_id("session-proposal-confirm-yes").focus()
+    page.keyboard.press("Enter")
+    page.wait_for_timeout(200)
+    focus_after_yes = page.evaluate("() => document.activeElement?.dataset?.testid ?? null")
     deadline = time.time() + UNDO_S + 8
     while time.time() < deadline and not posts("r-ship-deliver"):
         page.wait_for_timeout(250)
@@ -166,8 +169,9 @@ with sync_playwright() as p:
           why == "Pushes branch wicked/r-ship-deliver to origin and opens a pull request on acme/shop."
           and "Are you sure? This leaves studio." in sure and why in sure
           and after_cancel == 0 and state_cancel == "ask"
-          and len(delivered) == 1 and delivered[0]["body"].get("approve") is True,
-          why=why, sure=sure, after_cancel=after_cancel, state_cancel=state_cancel, posts=len(delivered))
+          and len(delivered) == 1 and delivered[0]["body"].get("approve") is True and focus_after_yes == "session-proposal",
+          why=why, sure=sure, after_cancel=after_cancel, state_cancel=state_cancel, posts=len(delivered),
+          focus_after_yes=focus_after_yes)
 
     # ── 5. sources ────────────────────────────────────────────────────────────────
     src = page.get_by_test_id("session-sources")

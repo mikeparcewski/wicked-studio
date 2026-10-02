@@ -29,7 +29,8 @@ const PLACE_KINDS: ReadonlySet<ChatCitationItem['kind']> = new Set(['path', 'lin
 
 /** `src/a.ts:42` → { path: 'src/a.ts', line: 42 }; `src/a.ts:charge` → { path, line: null }. */
 export function parsePlace(place: string): { path: string; line: number | null } {
-  const m = /^(.*?):(\d+)(?::\d+)?$/.exec(place);
+  // `path:12`, `path:12:4` (a column) and `path:12-20` (a range, crew#722): open at the first line.
+  const m = /^(.*?):(\d+)(?:[:-]\d+)?$/.exec(place);
   if (m !== null && m[1] !== '') return { path: m[1]!, line: Number(m[2]) };
   const sym = /^(.*\.[A-Za-z0-9]+):[A-Za-z_$][\w$.]*$/.exec(place);
   if (sym !== null) return { path: sym[1]!, line: null };
