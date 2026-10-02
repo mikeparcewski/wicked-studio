@@ -52,6 +52,10 @@ describe('#422 a gate says its question in plain words', () => {
     expect(plainGateQuestion(PHASE_PROMPT, 'def')).toBe('Approve the review');
     expect(plainGateQuestion('Approve the output of unit 3 (build — Add a code)', 'def')).toBe('Approve the build');
     expect(plainGateQuestion('Approve the output of unit 3 (design)', 'def')).toBe('Approve the design');
+    // The pre-execution form names the phase after the colon (Copilot r3).
+    expect(plainGateQuestion('Approve unit 2 before it runs: review', 'def')).toBe('Approve the review');
+    expect(plainGateQuestion('Approve unit 4 before it runs: deliver', undefined)).toBe('Approve the delivery');
+    expect(plainGateQuestion('Approve unit 3 before it runs: apply the review fixes to the middleware chain', 'def')).toBe('Approve the next step: apply the review fixes to the middleware chain');
     expect(plainGateQuestion('Approve the output of unit 3 (some_new-phase — x)', 'def')).toBe('Approve the some new phase step');
   });
 

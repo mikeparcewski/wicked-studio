@@ -38,6 +38,15 @@ export function plainGateQuestion(prompt: string | undefined, gateKind: string |
     const noun = STEP_NOUN[phase.toLowerCase()];
     return noun !== undefined ? `Approve the ${noun}` : `Approve the ${phase.replace(/[_-]+/g, ' ')} step`;
   }
+  // The pre-execution form: "Approve unit 2 before it runs: review" (a phase id) or ": <its words>".
+  const before = /^Approve unit \d+ before it runs:\s*(.+)$/i.exec(p.split('\n')[0]!.trim())?.[1]?.trim();
+  if (before !== undefined && before !== '') {
+    if (/^[A-Za-z0-9_-]+$/.test(before)) {
+      const noun = STEP_NOUN[before.toLowerCase()];
+      return noun !== undefined ? `Approve the ${noun}` : `Approve the ${before.replace(/[_-]+/g, ' ')} step`;
+    }
+    if (!ENGINE_TEXT.test(before)) return `Approve the next step: ${before}`;
+  }
   const first = p.split('\n')[0]!.trim();
   if (first === '' || ENGINE_TEXT.test(first)) return 'Waiting on your answer';
   return first;
