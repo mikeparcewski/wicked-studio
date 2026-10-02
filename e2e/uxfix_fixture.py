@@ -678,6 +678,10 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          #   GET /runs/:id/demo/file serves the contact sheets and the video with Range. Off: the
          #   unknown-route 404. Every demo write lands in demo_post_log (GET /__fixture/demo-posts).
          "demo_runs": False,
+         # watch_feed — (TR-W8, e2e/desk_watch_test.py) GET /api/v1/watch answers on crew's TR-W5a wire:
+         #   b1 carries a gate-attached finding and a problem anchored at unit 0 (a clearing on the
+         #   page fixes an older one); `?run=b1` adds coverage with one entry not checked. Off: 404.
+         "watch_feed": False,
          # ── Sessions (DES-STUDIO-REBUILD-001 S6a, e2e/desk_session_test.py) ──
          # sessions — SESSION_RUNS are GET /runs (they REPLACE the corpus): r-pay-1 (completed, not a team run) and r-pay-2
          #   (executing team run) launched from chat-pay, whose GET /chats/:id holds a live
@@ -1051,6 +1055,32 @@ SESSION_CHATS = {
                         for i in range(14)])},
     "chat-gone": {"chatId": "chat-gone", "seats": [], "scope": None, "refused": None, "messages": []},
 }
+
+
+# ── Watch feed corpus (switch `watch_feed`, TR-W8) ─────────────────────────────
+def _watch_row(wid: str, run: str, **over) -> dict:
+    row = {"run_id": run, "ord": 0, "attempt": 1, "by": "watch:claim-vs-evidence@1", "at": NOW0 - 4 * MIN,
+           "re": "repoChecksEvaluated#0:1", "watch_id": wid, "entry_id": "claim-vs-evidence", "entry_version": 1,
+           "check": "deterministic:claim_vs_evidence", "kind": "finding", "severity": "medium",
+           "watch_kind": "problem", "attach": None, "project_id": "beta",
+           "sentence": "The build step handed back as finished; its own checks failed (lint).",
+           "facts": {}, "anchor": {"run_id": run, "ord": 0, "attempt": 1, "at": NOW0 - 5 * MIN},
+           "evidence": [], "model": None, "rolled_up": 0}
+    row.update(over)
+    return row
+
+
+WATCH_FINDINGS = [
+    _watch_row("w-gate-b1", "b1", ord=3, entry_id="gate-ask-vs-plan", watch_kind="decision", attach="gate",
+               sentence="This asks you to push to origin; the plan delivers to acme/web.", at=NOW0 - 2 * MIN),
+    _watch_row("w-claim-b1", "b1"),
+    _watch_row("w-old-b1", "b1", sentence="An older finding that a later attempt fixed.", at=NOW0 - 30 * MIN),
+]
+WATCH_CLEARED_ROWS = [{"run_id": "b1", "ord": 0, "attempt": 2, "by": "watch:claim-vs-evidence@1",
+                       "at": NOW0 - 20 * MIN, "re": "x", "watch_id": "w-old-b1", "entry_id": "claim-vs-evidence",
+                       "entry_version": 1, "reason": "resolved"}]
+WATCH_COVERAGE = [{"entry_id": "scope-drift", "state": "not_checked", "reason": "no declared scope"},
+                  {"entry_id": "claim-vs-evidence", "state": "checked"}]
 
 
 # ── T9 team corpus (switch `team_plan`) ────────────────────────────────────────
@@ -3964,6 +3994,21 @@ class W2Handler(SimpleHTTPRequestHandler):
                          "idleSecs": 5}
                         for cid, seats in chat_warm_seats.items()]
             self._json(200, {"chats": rows})
+            return True
+        # TR-W8: GET /api/v1/watch — the registry's feed page (watch_feed switch).
+        if path == "/api/v1/watch":
+            with state_lock:
+                watch_on = state["watch_feed"]
+            if not watch_on:
+                self._json(404, {"message": f"Route GET:{path} not found", "error": "Not Found", "statusCode": 404})
+                return True
+            q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            run = (q.get("run") or [None])[0]
+            body = {"findings": [r for r in WATCH_FINDINGS if run is None or r["run_id"] == run],
+                    "cleared": [c for c in WATCH_CLEARED_ROWS if run is None or c["run_id"] == run]}
+            if run is not None:
+                body["coverage"] = WATCH_COVERAGE if run == "b1" else []
+            self._json(200, body)
             return True
         # /api/v1/chats/<id> — seats of a chat, the POOL truth (crew's
         # `chatSeats`): the live seats of a chat this server opened, EMPTY for

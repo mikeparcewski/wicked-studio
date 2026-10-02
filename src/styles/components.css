@@ -827,3 +827,9 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
 .wk-need-choice-n { font-size: var(--text-2xs); color: var(--ink-muted); font-variant-numeric: tabular-nums; }
 .wk-need-choice-rec { font-size: var(--text-2xs); color: var(--ink-muted); }
 .wk-need-chosen { display: inline-flex; align-items: center; gap: 8px; flex-shrink: 0; font-size: var(--text-sm); color: var(--ink-body); }
+
+/* TR-W8: the watch registry's quiet lines on existing surfaces, and a jumped-to moment. */
+.wk-watch-gate-line { margin: -4px 0 10px; padding-left: 8px; border-left: 2px solid var(--status-gate); font-size: var(--text-xs); color: var(--ink-muted); }
+.wk-watch-run-lines { flex-shrink: 0; padding: 4px 24px; border-bottom: 1px solid var(--surface-raised); background: var(--surface-card); }
+.wk-watch-jumped, .wk-watch-coverage { margin: 2px 0; font-size: var(--text-xs); color: var(--ink-muted); display: flex; gap: 8px; align-items: baseline; }
+.wk-jumped { border-radius: var(--radius-lg); box-shadow: 0 0 0 2px var(--accent); }

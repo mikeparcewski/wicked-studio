@@ -72,6 +72,8 @@ import { useRunEventStore } from './store/events.js';
 import { useDocThreadStore } from './store/docThread.js';
 import { useCapabilities } from './store/capabilities.js';
 import { useTeamPlanStore } from './store/teamPlan.js';
+import { useWatchStore } from './store/watch.js';
+import { useWatchHydrate } from './hooks/useWatchFeed.js';
 import type { CoreEvent, RepoEntry } from './api/types.js';
 import { readSteeringTypeFilter } from './api/steering.js';
 import { isTestingSubPage, readLaunchIntent } from './api/testing.js';
@@ -145,6 +147,8 @@ export function App(): React.ReactElement {
       ingestDocThread(event);
       // S6a: relayed `wicked.team.*` rows grow the team-plan fold of every run a session shows.
       useTeamPlanStore.getState().ingest(event as unknown as { type: string } & Record<string, unknown>);
+      // TR-W8: the Watchtower's fold — watch findings, team findings and the watchdog's frames.
+      useWatchStore.getState().ingest(event as unknown as { type: string } & Record<string, unknown>);
       // J4 round 2: chat frames announce/retire live sessions for the rail's
       // Chat accordion — evidence this subscription already carries, no fetch.
       ingestLiveChat(event);
@@ -162,6 +166,9 @@ export function App(): React.ReactElement {
   );
 
   useEventStream(handleEvent);
+  // TR-W8: finished and delivered runs are Watchtower rows, from the run list studio already reads.
+  useEffect(() => { useWatchStore.getState().runs(runs); }, [runs]);
+  useWatchHydrate();
 
   // Wave 2b: the operator's visit clock — an absence past the threshold opens a handover.
   useVisitClock();

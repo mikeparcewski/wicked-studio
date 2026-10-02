@@ -1,4 +1,5 @@
 import { commitGateDecision } from '../board/gateActions.js';
+import { WatchGateLine } from './WatchLines.js';
 import type { DeliverTarget } from '../board/undoQueue.js';
 import { deliverTargetOf, isDeliverGate } from './gateMoveModel.js';
 /**
@@ -436,6 +437,8 @@ function GateActionCard({
           {sessionLbl}
         </span>
       </div>
+      {/* TR-W8: the registry's gate-attached finding, the same line the run page's card carries. */}
+      <WatchGateLine runId={runId} ord={typeof ord === 'number' ? ord : null} />
 
       {/* Context line */}
       <p
