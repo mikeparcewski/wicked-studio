@@ -16,6 +16,7 @@ in a real browser at 1440x700.
      data-theme plus the accent stay exactly as they were.
   5. WICKED-DARK stamps data-theme="wicked-dark".
   6. 0 FONT CDN REQUESTS over the whole session, and at least one woff2 served same-origin.
+  7. THE OFL LICENCES SHIP: dist/fonts/LICENSE-{Inter,Archivo,JetBrainsMono}.txt are served.
 
 Captures: e2e/shots/wicked-light-theme.png, e2e/shots/wicked-dark-theme.png.
 Env: FEEDBACK_PORT (default 4351), STUDIO_SKIN. Prints a JSON report; exit 0/1.
@@ -109,6 +110,7 @@ with sync_playwright() as p:
           and s1["accent"] == "rgb(34, 74, 94)" and s1["bodyFont"] == "Archivo" and s1["archivoLoaded"]
           and last_put.get("theme") == "wicked-light" and last_put.get("accent_h") == 200,
           state=s1, put=last_put)
+    page.wait_for_timeout(1000)  # let colour transitions settle before the capture
     page.screenshot(path=str(SHOTS / "wicked-light-theme.png"))
 
     # 3. the accent picker still changes --accent under the wicked theme
@@ -134,6 +136,7 @@ with sync_playwright() as p:
     page.wait_for_function("() => document.documentElement.getAttribute('data-theme') === 'wicked-dark'", timeout=5000)
     s4 = page.evaluate(STATE)
     check("wicked_dark", s4["theme"] == "wicked-dark" and s4["h"] == "210" and s4["bodyFont"] == "Archivo", state=s4)
+    page.wait_for_timeout(1000)  # let colour transitions settle before the capture
     page.screenshot(path=str(SHOTS / "wicked-dark-theme.png"))
 
     browser.close()
@@ -143,6 +146,18 @@ cdn = [u for u in requests if FONT_CDN.search(u)]
 woff2 = [u for u in requests if u.endswith(".woff2")]
 check("no_font_cdn", cdn == [] and len(woff2) > 0 and all(u.startswith(origin) for u in woff2),
       cdn=cdn, woff2=[u.rsplit("/", 1)[-1] for u in woff2])
+
+# 7. the OFL licence texts ship in the build beside the fonts (dist/fonts/LICENSE-*.txt)
+import urllib.request  # noqa: E402
+
+licences = {}
+for name in ("LICENSE-Inter.txt", "LICENSE-Archivo.txt", "LICENSE-JetBrainsMono.txt"):
+    try:
+        with urllib.request.urlopen(f"{origin}/fonts/{name}", timeout=10) as res:
+            licences[name] = "SIL Open Font License" in res.read().decode("utf8", "replace")
+    except Exception:  # noqa: BLE001
+        licences[name] = False
+check("font_licences_shipped", all(licences.values()), licences=licences)
 
 report["ok"] = True
 print(json.dumps(report, indent=2))

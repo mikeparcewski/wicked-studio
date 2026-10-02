@@ -4,7 +4,8 @@
  * and the desk skin's sans, DESIGN-simple §1a) and JetBrains Mono (--font-mono). All three are
  * SIL OFL 1.1; the variable woff2 files and their licences live in src/assets/fonts (taken
  * from the @fontsource-variable 5.3.0 packages, latin + latin-ext subsets). Vite fingerprints
- * them into the build, so the app makes 0 requests to a font CDN. Archivo ships upright
+ * them into the build, so the app makes 0 requests to a font CDN; vite.config.ts emits the
+ * licences into dist/fonts/. Archivo ships upright
  * only: the wicked look sets no italics. A face only downloads when text uses it.
  */
 

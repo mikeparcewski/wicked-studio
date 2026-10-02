@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 
 import { defineConfig, configDefaults, type Plugin } from 'vitest/config';
 import react from '@vitejs/plugin-react';
@@ -23,8 +23,24 @@ function emitTestidInventory(): Plugin {
   };
 }
 
+// DES-STUDIO-REBUILD-001 S1: the self-hosted fonts are SIL OFL 1.1, whose condition 2 wants the
+// licence text to travel with the font files. Vite fingerprints the woff2 files into dist/assets;
+// this emits each family's licence beside them as dist/fonts/LICENSE-*.txt (crew serves dist/).
+function emitFontLicences(): Plugin {
+  const dir = new URL('./src/assets/fonts/', import.meta.url);
+  return {
+    name: 'emit-font-licences',
+    apply: 'build',
+    generateBundle() {
+      for (const name of readdirSync(dir).filter((f) => f.startsWith('LICENSE-'))) {
+        this.emitFile({ type: 'asset', fileName: `fonts/${name}`, source: readFileSync(new URL(name, dir), 'utf8') });
+      }
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [react(), emitTestidInventory()],
+  plugins: [react(), emitTestidInventory(), emitFontLicences()],
   server: { port: 4200, host: '127.0.0.1' },
   preview: { port: 4200 },
   test: {

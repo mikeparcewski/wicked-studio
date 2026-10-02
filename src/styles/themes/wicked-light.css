@@ -36,7 +36,7 @@
   --border-input:  rgba(13, 17, 23, 0.50);
 
   --accent:        hsl(var(--_accent-h) var(--_accent-s) var(--_accent-l));
-  --accent-dim:    hsl(var(--_accent-h) var(--_accent-s) calc(var(--_accent-l) + 14%));
+  --accent-dim:    hsl(var(--_accent-h) var(--_accent-s) calc(var(--_accent-l) + 8%));
   --accent-subtle: hsl(var(--_accent-h) calc(var(--_accent-s) * 0.6) calc(var(--_accent-l) + 64%));
   --accent-hover:  hsl(var(--_accent-h) var(--_accent-s) calc(var(--_accent-l) - 6%));
   --accent-fg:     hsl(var(--_accent-h) 30% clamp(8%, calc((58% - var(--_accent-l)) * 100), 98%));
