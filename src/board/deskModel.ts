@@ -3,8 +3,8 @@ import { mcpPath } from '../api/mcp.js';
 import { skillsPath } from '../api/skills.js';
 import { steeringDashboardPath } from '../api/steering.js';
 import { testingPath } from '../api/testing.js';
-import { humanTitle } from '../components/runIdentity.js';
 import type { NeedRow } from './needsYou.js';
+import { sessionIdOf, sessionPath, summarize, type SessionState } from './sessionModel.js';
 
 /**
  * THE DESK's model (DES-STUDIO-REBUILD-001 §5.5, slice S4) — pure folds over what studio already
@@ -12,8 +12,9 @@ import type { NeedRow } from './needsYou.js';
  *
  *  - The count is the needs-you fold's (`useNeedsRows` → `needCount`): the Desk sentence, the Desk
  *    rail badge and the list all read it, so they can never disagree (§10). Chores are NOT in it.
- *  - A session, until crew stamps `chat_id` on runs (C1, `capabilities.runChatId`), is one run:
- *    `run:<id>` (§7 "chat_id absent"). Its badge is the fold's items that name that run.
+ *  - A session is a chat and the runs launched from it, grouped by the runs' `chat_id` (C1) when
+ *    the daemon says `capabilities.runChatId`; else one run, `run:<id>` (§7 "chat_id absent"). Its
+ *    badge is the fold's items that name any of its runs (board/sessionModel.ts).
  *  - "For whoever runs studio" holds only what the wire carries: a seat whose sign-in lapsed
  *    (`GET /roster`). Disk pressure has no wire field, so no disk chore exists (§2 non-goals).
  */
@@ -71,17 +72,7 @@ export function needTextByRun(rows: readonly NeedRow[]): Record<string, string> 
 
 // ── Sessions ─────────────────────────────────────────────────────────────────
 
-export type SessionState = 'working' | 'waiting' | 'blocked' | 'done' | 'quiet';
-
-export function sessionState(status: string): SessionState {
-  switch (status) {
-    case 'awaiting_human': return 'waiting';
-    case 'failed': return 'blocked';
-    case 'completed': return 'done';
-    case 'cancelled': return 'quiet';
-    default: return 'working';
-  }
-}
+export { sessionState, type SessionState } from './sessionModel.js';
 
 /** The card's sentence for a session. Never "checked": that word needs evidence (WT). A session
  *  with a needs-you item says that item's own line (it already says what is waiting), whatever
@@ -98,14 +89,18 @@ export function sessionLine(state: SessionState, badge: number, needText: string
 }
 
 export interface RailSession {
-  /** `run:<id>` — a run with no chat is its own session (§5.2). */
+  /** The session id (§5.2): the chat's id when the daemon stamps `chat_id` (C1), else `run:<id>`. */
   id: string;
+  /** The run a needs-you item names (the first such), else the newest run. */
   runId: string;
+  /** Every run of the session, oldest launch first. */
+  runIds: string[];
   title: string;
   state: SessionState;
-  /** Needs-you items that name this run. */
+  /** Needs-you items that name any of its runs. */
   badge: number;
   line: string;
+  /** `/s/:id` (S6a). */
   path: string;
 }
 
@@ -121,19 +116,40 @@ const STATE_ORDER: Record<SessionState, number> = { waiting: 0, working: 1, bloc
 /** Sessions per rail group — the newest few, the ones that need you first. */
 export const RAIL_SESSIONS_MAX = 5;
 
-function toSession(v: SessionView, badges: Record<string, number>, texts: Record<string, string>): RailSession {
-  const id = v.session.id;
-  const state = sessionState(v.session.status);
-  const badge = badges[id] ?? 0;
-  return {
-    id: `run:${id}`,
-    runId: id,
-    title: humanTitle(v.session.problem || id),
-    state,
-    badge,
-    line: sessionLine(state, badge, texts[id] ?? null),
-    path: `/runs/${encodeURIComponent(id)}`,
-  };
+/**
+ * The sessions of one group's runs: runs that share a chat are one session when the daemon says
+ * `capabilities.runChatId` (C1); otherwise each run is its own. Ordered by the group's run order
+ * (the newest run of a session places it).
+ */
+function toSessions(
+  runs: readonly SessionView[],
+  badges: Record<string, number>,
+  texts: Record<string, string>,
+  runChatId: boolean,
+): RailSession[] {
+  const order: string[] = [];
+  const byId = new Map<string, SessionView[]>();
+  for (const v of runs) {
+    const id = sessionIdOf(v, runChatId);
+    const list = byId.get(id);
+    if (list === undefined) { byId.set(id, [v]); order.push(id); } else list.push(v);
+  }
+  return order.map((id) => {
+    const sum = summarize(id, byId.get(id)!, badges);
+    const needy = sum.runIds.find((r) => (badges[r] ?? 0) > 0);
+    const newest = sum.runIds[sum.runIds.length - 1]!;
+    const runId = needy ?? newest;
+    return {
+      id,
+      runId,
+      runIds: sum.runIds,
+      title: sum.title,
+      state: sum.state,
+      badge: sum.badge,
+      line: sessionLine(sum.state, sum.badge, texts[runId] ?? null),
+      path: sessionPath(id),
+    };
+  });
 }
 
 /** The newest few — but never drop a session that needs you: its badge is part of the count. */
@@ -162,16 +178,17 @@ export function railGroups(
   badges: Record<string, number>,
   max: number = RAIL_SESSIONS_MAX,
   texts: Record<string, string> = {},
+  runChatId = false,
 ): RailGroup[] {
   const groups: RailGroup[] = projects.map((p) => ({
     projectId: p.project.id,
     name: p.project.name,
-    sessions: capSessions(orderSessions(p.runs.map((v) => toSession(v, badges, texts))), max),
+    sessions: capSessions(orderSessions(toSessions(p.runs, badges, texts, runChatId)), max),
   }));
   groups.push({
     projectId: null,
     name: 'Not in a project',
-    sessions: capSessions(orderSessions(unfiled.map((v) => toSession(v, badges, texts))), max),
+    sessions: capSessions(orderSessions(toSessions(unfiled, badges, texts, runChatId)), max),
   });
   return groups.filter((g) => g.sessions.length > 0);
 }

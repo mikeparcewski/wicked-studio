@@ -678,6 +678,15 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          #   GET /runs/:id/demo/file serves the contact sheets and the video with Range. Off: the
          #   unknown-route 404. Every demo write lands in demo_post_log (GET /__fixture/demo-posts).
          "demo_runs": False,
+         # ── Sessions (DES-STUDIO-REBUILD-001 S6a, e2e/desk_session_test.py) ──
+         # sessions — SESSION_RUNS are GET /runs (they REPLACE the corpus): r-pay-1 (completed, not a team run) and r-pay-2
+         #   (executing team run) launched from chat-pay, whose GET /chats/:id holds a live
+         #   transcript; r-solo (a team run with no team transport, no chat); r-old (completed,
+         #   launched from chat-gone, which this daemon reclaimed: scope null, messages []).
+         #   GET /runs/:id/team answers each on crew's RunTeamResponse wire.
+         # run_chat_id — GET /health.capabilities.runChatId (C1). Off: a daemon before C1 (and the
+         #   runs then carry no chat_id either).
+         "sessions": False, "run_chat_id": False,
          }
 state_lock = threading.Lock()
 # Idea 9: every POST /governance/rules body the fixture received (GET /__fixture/rule-posts).
@@ -951,6 +960,98 @@ RUNS = [
 ]
 ORPHAN = session("r-orphan", "executing", "stranded work from another client",
                  "stranded work from another client")
+
+# ── Sessions corpus (switch `sessions`, S6a) ──────────────────────────────────
+def _session_run(rid: str, status: str, problem: str, chat: str | None, created_s: int,
+                 ended_s: int | None, units: list) -> dict:
+    r = session(rid, status, problem, problem)
+    r["session"]["created_at"] = created_s
+    if ended_s is not None:
+        r["session"]["ended_at"] = ended_s
+    if chat is not None:
+        r["session"]["chat_id"] = chat
+    r["units"] = [dict(r["units"][0], id=f"{rid}:u{i}", ord=i, description=d, phase_ref=ph, status=st)
+                  for i, (d, ph, st) in enumerate(units)]
+    return r
+
+
+SESSION_T0 = NOW0 // 1000 - 7200  # two hours ago, unix seconds
+SESSION_RUNS = [
+    _session_run("r-pay-1", "completed", "find why checkout charges twice", "chat-pay",
+                 SESSION_T0, SESSION_T0 + 600,
+                 [("read the checkout code", "understand", "done"), ("write up the cause", "produce", "done")]),
+    _session_run("r-pay-2", "executing", "fix the double charge on checkout, then show me", "chat-pay",
+                 SESSION_T0 + 1800, None,
+                 [("understand", "understand", "done"), ("build", "build", "distributed"),
+                  ("test", "test", "pending"), ("review", "review", "pending"), ("deliver", "deliver", "pending")]),
+    _session_run("r-solo", "executing", "tidy the settings page copy", None, SESSION_T0 + 2400, None,
+                 [("build", "build", "distributed")]),
+    _session_run("r-old", "completed", "rename the invoice fields", "chat-gone", SESSION_T0 - 86400,
+                 SESSION_T0 - 86000, [("build", "build", "done")]),
+]
+SESSION_STEPS = [
+    {"catalog": "understand", "id": "understand"},
+    {"catalog": "build", "id": "build"},
+    {"catalog": "test", "id": "test", "added_by": "floor", "floor_reason": "a change to payment code is tested"},
+    {"catalog": "review", "id": "review", "added_by": "floor", "floor_reason": "band 20+ always reviews"},
+    {"catalog": "deliver", "id": "deliver"},
+]
+
+
+def _team_row(eid: int, etype: str, run_id: str, **payload) -> dict:
+    base = {"run_id": run_id, "ord": payload.pop("ord", None), "attempt": None, "by": payload.pop("by", "engine"),
+            "at": (SESSION_T0 + 1800) * 1000 + eid, "re": None}
+    return {"event_id": eid, "event_type": etype, "emitted_at": (SESSION_T0 + 1800) * 1000 + eid,
+            "payload": dict(base, **payload)}
+
+
+def session_team(rid: str) -> dict | None:
+    """GET /runs/:id/team for the sessions corpus (crew RunTeamResponse)."""
+    blank = {"runId": rid, "streamFloor": None, "pending": None, "units": [], "rows": []}
+    if rid in ("r-pay-1", "r-old"):
+        return dict(blank, teamed=False, transport=None, reason=None, planRev=None, ended=True)
+    if rid == "r-solo":
+        return dict(blank, teamed=True, transport="none", reason="the team bus was unreachable at launch",
+                    planRev=1, ended=False)
+    if rid == "r-pay-2":
+        rows = [
+            _team_row(901, "wicked.team.plan.proposed", rid, proposal_id="p-1", base_rev=None, kind="initial",
+                      preset=None, steps=SESSION_STEPS[:2] + SESSION_STEPS[4:], monitors={"asked": 1}, asks=[],
+                      touch=["src/checkout/"], override=None, rationale="", by="claude#1"),
+            _team_row(902, "wicked.team.plan.accepted", rid, plan_rev=1, workflow_id="r-pay-2:plan-1",
+                      band="40-69", high_risk=False, mode="auto", steps=SESSION_STEPS, override=None,
+                      proposal_id="p-1"),
+        ]
+        unit_rows = [
+            _team_row(903, "wicked.team.step.claimed", rid, ord=0, step_id="understand", role="creator",
+                      kind="agent", phase="understand", criterion="", baseline_tree=None, repo=None,
+                      code_graph_db=None, by="claude#1"),
+            _team_row(904, "wicked.team.step.completed", rid, ord=0, step_id="understand", status="ok",
+                      tree=None, output_bytes=10, output_ref="u0", by="claude#1"),
+            _team_row(905, "wicked.team.step.claimed", rid, ord=1, step_id="build", role="creator", kind="agent",
+                      phase="build", criterion="", baseline_tree=None, repo=None, code_graph_db=None,
+                      by="codex"),
+        ]
+        return dict(blank, teamed=True, transport="bus", reason=None, planRev=1, ended=False, rows=rows,
+                    units=[{"ord": 0, "transport": "bus", "reason": None, "rows": unit_rows[:2]},
+                           {"ord": 1, "transport": "bus", "reason": None, "rows": unit_rows[2:]}])
+    return None
+
+
+SESSION_CHATS = {
+    "chat-pay": {"chatId": "chat-pay", "seats": ["claude"], "scope": {"kind": "none", "repos": [], "cwd": "/w/chat-pay"},
+                 "refused": [], "messages": (
+                     [{"at": (SESSION_T0 - 60) * 1000, "turnId": "t1", "kind": "user", "seats": ["claude"],
+                       "text": "fix the double charge on checkout, then show me"},
+                      {"at": (SESSION_T0 - 30) * 1000, "turnId": "t1", "kind": "seat", "cliKey": "claude", "ok": True,
+                       "usage": None, "text": "I will find the cause first, then fix it and show you the change."}]
+                     + [{"at": (SESSION_T0 + 900 + i) * 1000, "turnId": f"t{i + 2}", "kind": "seat",
+                         "cliKey": "claude", "ok": True, "usage": None,
+                         "text": f"Note {i + 1}: the retry handler and the webhook both post the charge."}
+                        for i in range(14)])},
+    "chat-gone": {"chatId": "chat-gone", "seats": [], "scope": None, "refused": None, "messages": []},
+}
+
 
 # ── T9 team corpus (switch `team_plan`) ────────────────────────────────────────
 # The engine catalog as crew 0.47.0 serves it (GET /catalog) — including `domain_coverage`, an
@@ -3068,6 +3169,12 @@ def assemble_runs() -> list:
             runs = runs + json.loads(json.dumps(RUN_PAGE_RUNS))
         if state["home_runs"] and not state["no_runs"]:
             runs = runs + [json.loads(json.dumps(REUSE_RUN))]
+        if state["sessions"] and not state["no_runs"]:
+            extra = json.loads(json.dumps(SESSION_RUNS))
+            if not state["run_chat_id"]:
+                for r in extra:  # a daemon before C1 carries no chat_id
+                    r["session"].pop("chat_id", None)
+            runs = extra  # the sessions corpus stands alone: the rail shows exactly these
         if state["demo_runs"] and not state["no_runs"]:
             with demo_lock:
                 for d in demo_runs.values():
@@ -3606,9 +3713,11 @@ class W2Handler(SimpleHTTPRequestHandler):
         if path == "/api/v1/health":
             # The capabilities crew 0.7.40 answers: without them the composer (rightly) warns that
             # the daemon predates the deliver gate (crew < 0.7.33), which no current daemon does.
-            self._json(200, {"status": "ok", "version": "w2-fixture", "ping": "pong",
-                             "capabilities": {"deliverGate": True, "revisesPr": True,
-                                              "chatIdOnLaunch": True, "seatChipOnCreate": True}})
+            caps = {"deliverGate": True, "revisesPr": True, "chatIdOnLaunch": True, "seatChipOnCreate": True}
+            with state_lock:
+                if state["run_chat_id"]:
+                    caps["runChatId"] = True
+            self._json(200, {"status": "ok", "version": "w2-fixture", "ping": "pong", "capabilities": caps})
             return True
         # Idea 15: the delivery freeze switch (crew#694).
         if path == "/api/v1/deliveries/freeze":
@@ -3862,6 +3971,11 @@ class W2Handler(SimpleHTTPRequestHandler):
         # reclaimed/none). Fix slice J4 reads this as the rejoin probe.
         if path.startswith("/api/v1/chats/") and len(path.split("/")) == 5:
             cid = urllib.parse.unquote(path.split("/")[4])
+            with state_lock:
+                sessions_on = state["sessions"]
+            if sessions_on and cid in SESSION_CHATS:
+                self._json(200, SESSION_CHATS[cid])
+                return True
             with chat_state_lock:
                 seats = [k for k in chat_warm_seats.get(cid, [])
                          if k not in chat_dead_seats.get(cid, set())]
@@ -3975,7 +4089,10 @@ class W2Handler(SimpleHTTPRequestHandler):
             rid = urllib.parse.unquote(parts[4])
             with state_lock:
                 on = state["plan_gate"]
-            if on and rid == "r-plan-gate":
+                sessions_on = state["sessions"]
+            if sessions_on and session_team(rid) is not None:
+                self._json(200, session_team(rid))
+            elif on and rid == "r-plan-gate":
                 self._json(200, PLAN_GATE_TEAM)
             else:
                 self._json(404, {"error": f"w2 fixture: no team state for {rid}"})

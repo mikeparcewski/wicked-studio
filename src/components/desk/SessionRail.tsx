@@ -4,6 +4,7 @@ import { DESK_DESTINATIONS, needsByRun, needTextByRun, railGroups } from '../../
 import { needCount } from '../../board/needsQueue.js';
 import type { NeedRow } from '../../board/needsYou.js';
 import { useBoardModel } from '../../hooks/useBoardModel.js';
+import { useCapabilities } from '../../store/capabilities.js';
 import type { Navigate } from '../../hooks/useRoute.js';
 import { SESSION_RAIL_PX } from '../../theming/skins.js';
 import { HealthRailSection } from '../HealthRailSection.js';
@@ -16,7 +17,8 @@ import { WatchPill } from './WatchPill.js';
  *  - Desk, with the needs-you count as its badge (the fold's `needCount`, the Desk sentence's
  *    number — one source, so they never disagree).
  *  - Sessions grouped by project (the board model's order), each with a state dot and the count
- *    of needs-you items that name it. Until crew stamps `chat_id` (C1) a session is one run.
+ *    of needs-you items that name it. A session is a chat and its runs when the daemon stamps
+ *    `chat_id` (C1, `capabilities.runChatId`), else one run; each opens `/s/:id` (S6a).
  *  - The foot: Watchtower (one quiet sentence), Rules, the bell, Health, and "Everything else" —
  *    every destination the other skins' nav reaches (the restated skin contract).
  *
@@ -30,9 +32,10 @@ export function SessionRail({ runs, needRows, navigate, pathname }: {
 }): React.ReactElement {
   const { items, unfiled } = useBoardModel(runs);
   const count = needCount(needRows);
+  const runChatId = useCapabilities((s) => s.runChatId);
   const groups = useMemo(
-    () => railGroups(items, unfiled, needsByRun(needRows), undefined, needTextByRun(needRows)),
-    [items, unfiled, needRows],
+    () => railGroups(items, unfiled, needsByRun(needRows), undefined, needTextByRun(needRows), runChatId),
+    [items, unfiled, needRows, runChatId],
   );
   const [more, setMore] = useState(false);
   const [healthOpen, setHealthOpen] = useState(false);
@@ -64,6 +67,7 @@ export function SessionRail({ runs, needRows, navigate, pathname }: {
                 data-testid="rail-session"
                 data-session-id={s.id}
                 data-run-id={s.runId}
+                data-run-ids={s.runIds.join(' ')}
                 data-state={s.state}
                 data-badge={s.badge}
                 title={s.line}

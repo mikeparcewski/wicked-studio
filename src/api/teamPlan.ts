@@ -145,6 +145,8 @@ export interface TeamRow {
   event_id: number;
   event_type: string;
   payload: Record<string, unknown>;
+  /** wicked-bus `emitted_at` (Unix millis; crew api-types 0.42.0). */
+  emitted_at?: number;
 }
 
 /**
@@ -153,7 +155,26 @@ export interface TeamRow {
  */
 export interface RunTeamResponse {
   rows: TeamRow[];
-  units: Array<{ ord: number; rows: TeamRow[] }>;
+  units: Array<{ ord: number; rows: TeamRow[]; transport?: string | null; reason?: string | null }>;
+  // The fields below are crew's `RunTeamResponse` (api-types 0.42.0+), read by the session chain
+  // (S6a). Optional here so a partial fixture or an older daemon reads as "not said".
+  runId?: string;
+  /** Whether the run is a team run at all. `false` ⇒ `transport` and `reason` are `null`. */
+  teamed?: boolean;
+  /** `"bus"`, `"none"` (the team fell back to no transport: say so, with `reason`), `"pending"`,
+   *  `"unavailable"`; `null` for a run that is not a team run. */
+  transport?: string | null;
+  reason?: string | null;
+  planRev?: number | null;
+  /** The run is terminal and its end is on record. */
+  ended?: boolean;
+}
+
+/** One `/ws` frame relaying one `wicked.team.*` bus row verbatim (crew `TeamEventFrame`). */
+export interface TeamEventFrame {
+  type: 'teamEvent';
+  event: TeamRow & { [k: string]: unknown };
+  project_id?: string;
 }
 
 // ── Calls ─────────────────────────────────────────────────────────────────────────────────────

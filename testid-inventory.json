@@ -10,9 +10,9 @@
   "version": 1,
   "studioVersion": "0.5.19",
   "counts": {
-    "files": 180,
-    "occurrences": 1793,
-    "static": 1569,
+    "files": 183,
+    "occurrences": 1814,
+    "static": 1590,
     "dynamic": 73,
     "computed": 8
   },
@@ -878,15 +878,45 @@
       ]
     },
     {
+      "testId": "chain",
+      "files": [
+        "src/components/session/ChainLine.tsx"
+      ]
+    },
+    {
       "testId": "chain-header",
       "files": [
         "src/components/WorkChronicle.tsx"
       ]
     },
     {
+      "testId": "chain-line",
+      "files": [
+        "src/components/session/ChainLine.tsx"
+      ]
+    },
+    {
+      "testId": "chain-sentence",
+      "files": [
+        "src/components/session/ChainLine.tsx"
+      ]
+    },
+    {
       "testId": "chain-status",
       "files": [
         "src/components/WorkChronicle.tsx"
+      ]
+    },
+    {
+      "testId": "chain-step",
+      "files": [
+        "src/components/session/ChainLine.tsx"
+      ]
+    },
+    {
+      "testId": "chain-transport",
+      "files": [
+        "src/components/session/ChainLine.tsx"
       ]
     },
     {
@@ -6666,9 +6696,87 @@
       ]
     },
     {
+      "testId": "session",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
+      "testId": "session-chat-error",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
+      "testId": "session-chat-retry",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
+      "testId": "session-closed-line",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
+      "testId": "session-composer-input",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
+      "testId": "session-composer-send",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
+      "testId": "session-missing",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
       "testId": "session-rail",
       "files": [
         "src/components/desk/SessionRail.tsx"
+      ]
+    },
+    {
+      "testId": "session-run",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
+      "testId": "session-run-open",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
+      "testId": "session-status",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
+      "testId": "session-thread",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
+      "testId": "session-title",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
+      "testId": "session-turn",
+      "files": [
+        "src/components/session/SessionView.tsx"
       ]
     },
     {
@@ -6681,6 +6789,24 @@
       "testId": "signin-warning",
       "files": [
         "src/components/ChatInput.tsx"
+      ]
+    },
+    {
+      "testId": "since-summary",
+      "files": [
+        "src/components/session/SinceYouLeft.tsx"
+      ]
+    },
+    {
+      "testId": "since-toggle",
+      "files": [
+        "src/components/session/SinceYouLeft.tsx"
+      ]
+    },
+    {
+      "testId": "since-you-left",
+      "files": [
+        "src/components/session/SinceYouLeft.tsx"
       ]
     },
     {

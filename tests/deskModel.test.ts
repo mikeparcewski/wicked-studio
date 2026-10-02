@@ -88,7 +88,26 @@ describe('sessions in the rail and on the project cards', () => {
     expect(groups[0]!.sessions.map((s) => s.id)).toEqual(['run:r1', 'run:r2', 'run:r3']);
     expect(groups[0]!.sessions[0]!.badge).toBe(1);
     expect(groups[0]!.sessions[1]!.badge).toBe(0);
-    expect(groups[0]!.sessions[0]!.path).toBe('/runs/r1');
+    // S6a: a session opens its own route.
+    expect(groups[0]!.sessions[0]!.path).toBe('/s/run%3Ar1');
+  });
+
+  it('with runChatId, runs launched from one chat are one session; its badge sums its runs (S6a)', () => {
+    const chatRuns = [{
+      project: { id: 'k', name: 'Kestrel' },
+      runs: [
+        run('c2', 'awaiting_human', 'fix it', { chat_id: 'chat-a', created_at: 20 }),
+        run('c1', 'completed', 'find it', { chat_id: 'chat-a', created_at: 10 }),
+        run('c3', 'executing', 'other', { created_at: 30 }),
+      ],
+    }];
+    const g = railGroups(chatRuns as never, [], { c2: 1 }, undefined, {}, true);
+    expect(g[0]!.sessions.map((s) => [s.id, s.runIds, s.badge, s.runId])).toEqual([
+      ['chat-a', ['c1', 'c2'], 1, 'c2'], ['run:c3', ['c3'], 0, 'c3'],
+    ]);
+    expect(g[0]!.sessions[0]!.path).toBe('/s/chat-a');
+    // Without the capability the same runs stay apart, chat_id or not.
+    expect(railGroups(chatRuns as never, [], {}, undefined, {}, false)[0]!.sessions).toHaveLength(3);
   });
 
   it('caps each project at its newest few, waiting and live first, and drops empty groups', () => {
