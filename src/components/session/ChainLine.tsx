@@ -115,7 +115,7 @@ export function ChainLine({ chain, runId, teamError = null, onRetry }: {
       )}
       {teamError !== null && (
         <p data-testid="chain-team-error" className="wk-chain-transport">
-          Could not read the team plan ({teamError}); showing the run&apos;s own steps.{' '}
+          Could not read the team plan ({teamError}); {chain.source === 'team' ? 'showing the plan as last read' : 'showing the run\u2019s own steps'}.{' '}
           {onRetry !== undefined && (
             <button type="button" data-testid="chain-team-retry" onClick={onRetry} className="wk-since-toggle">Try again</button>
           )}
