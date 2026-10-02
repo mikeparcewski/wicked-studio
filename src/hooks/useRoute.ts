@@ -45,7 +45,7 @@ import { announceNavigateAway, inAppEntryState, isInAppEntry, replacedEntryState
 // worktree files/diff as REAL routes — `/runs/:id/events`, `/runs/:id/files` — so the palette
 // verb that opens them is one history entry and browser Back returns to where you were. The run
 // id rides in `artifactId` (NOT `runId`: no run-selected machinery, no legacy shell redirect).
-export type Panel = 'home' | 'runs' | 'run-events' | 'run-files' | 'workflows' | 'skills' | 'mcp' | 'steering' | 'testing' | 'repos' | 'system' | 'theme' | 'chats' | 'work' | 'repo-detail' | 'projects' | 'project-detail' | 'execute' | 'vibe' | 'demo' | 'not-found';
+export type Panel = 'home' | 'runs' | 'run-events' | 'run-files' | 'workflows' | 'skills' | 'mcp' | 'steering' | 'testing' | 'repos' | 'system' | 'theme' | 'chats' | 'work' | 'repo-detail' | 'projects' | 'project-detail' | 'execute' | 'vibe' | 'demo' | 'session' | 'not-found';
 
 const PANELS: Panel[] = ['runs', 'workflows', 'skills', 'mcp', 'repos', 'system', 'theme', 'chats', 'work', 'repo-detail', 'projects', 'project-detail', 'execute', 'vibe', 'demo'];
 
@@ -324,6 +324,13 @@ function parse(pathname: string): Route {
   // onto `/execute` by `useMakeRedirect`.
   if (first === 'make') {
     return route({ panel: 'execute' });
+  }
+  // `/s/:sessionId` (DES-STUDIO-REBUILD-001 §5.4, slice S6a): a session — a chat and the runs
+  // launched from it, or one run (`run:<id>`). A real route under every skin (a route is not a skin
+  // concern). The id rides in `artifactId`, never `runId`: no run-selected machinery fires here.
+  // `/s/:id/a/:artifact` belongs to S8; until then any deeper address is a dead one.
+  if (first === 's' && second) {
+    return third ? route({ panel: 'not-found' }) : route({ panel: 'session', artifactId: safeDecode(second) });
   }
   if (first === 'repo-detail' && second) {
     return route({ panel: 'repo-detail', repoId: safeDecode(second) });

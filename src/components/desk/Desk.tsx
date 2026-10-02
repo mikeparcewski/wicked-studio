@@ -7,6 +7,7 @@ import {
 import { needCount } from '../../board/needsQueue.js';
 import type { NeedRow } from '../../board/needsYou.js';
 import { useBoardModel } from '../../hooks/useBoardModel.js';
+import { useCapabilities } from '../../store/capabilities.js';
 import { useHandover } from '../../hooks/useHandover.js';
 import type { Navigate } from '../../hooks/useRoute.js';
 import { getCachedRoster, setCachedRoster } from '../../store/rosterCache.js';
@@ -40,10 +41,11 @@ export function Desk({ runs, needRows, now, navigate, onAsk }: {
   const roster = useRoster();
   const count = needCount(needRows);
   const { hello, date } = deskGreeting(now);
+  const runChatId = useCapabilities((s) => s.runChatId);
   const cards = useMemo(
     // Unbounded here: a card's "N more" counts every other session, not the rail's newest few.
-    () => deskProjects(railGroups(items, unfiled, needsByRun(needRows), Infinity, needTextByRun(needRows))),
-    [items, unfiled, needRows],
+    () => deskProjects(railGroups(items, unfiled, needsByRun(needRows), Infinity, needTextByRun(needRows), runChatId)),
+    [items, unfiled, needRows, runChatId],
   );
   const chores = useMemo(() => lapsedSeatChores(roster), [roster]);
   const [text, setText] = useState('');
@@ -119,7 +121,7 @@ export function Desk({ runs, needRows, now, navigate, onAsk }: {
                   )}
                 </p>
                 {card.shown.map((s) => (
-                  <a key={s.id} href={s.path} onClick={go(s.path)} data-testid="desk-session" data-run-id={s.runId} data-state={s.state} className="wk-desk-session">
+                  <a key={s.id} href={s.path} onClick={go(s.path)} data-testid="desk-session" data-session-id={s.id} data-run-id={s.runId} data-state={s.state} className="wk-desk-session">
                     <span aria-hidden className={`wk-desk-dot wk-desk-dot--${s.state}`} />
                     <span className="wk-desk-need-body">
                       <span className="wk-desk-session-title">{s.title}</span>

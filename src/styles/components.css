@@ -731,3 +731,54 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
   background: var(--accent); color: var(--accent-fg); cursor: pointer;
 }
 .wk-desk-send:disabled { opacity: 0.5; cursor: default; }
+
+/* ── A SESSION (`/s/:id`, DES-STUDIO-REBUILD-001 slice S6a): the goal sentence, the thread, each
+   run's chain line, the since-you-left overlay and the composer. Tokens only. ── */
+.wk-session { flex: 1 1 auto; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.wk-session-head { flex-shrink: 0; display: flex; gap: 12px; align-items: baseline; padding: 16px 32px 10px; border-bottom: 1px solid var(--border-subtle); }
+.wk-session-head-body { min-width: 0; }
+.wk-session-title { margin: 0; font-size: var(--text-xl); font-weight: var(--weight-bold); color: var(--ink-high); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wk-session-status { margin: 2px 0 0; font-size: var(--text-sm); color: var(--ink-muted); }
+/* The frame the since-you-left card overlays: the card is absolute, the thread never moves. */
+.wk-session-body { position: relative; flex: 1 1 auto; min-height: 0; display: flex; }
+.wk-session-thread { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 12px 32px 16px 52px; display: flex; flex-direction: column; gap: 10px; }
+.wk-session-grey { margin: 0; font-size: var(--text-sm); color: var(--ink-muted); }
+.wk-session-turn { max-width: 720px; }
+.wk-session-turn--you { align-self: flex-end; background: var(--surface-card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 6px 12px; }
+.wk-session-who { margin: 0; font-size: var(--text-xs); font-weight: var(--weight-semi); color: var(--ink-muted); }
+.wk-session-text { margin: 2px 0 0; color: var(--ink-body); white-space: pre-wrap; overflow-wrap: anywhere; }
+.wk-session-run { background: var(--surface-card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 8px 14px; min-width: 0; }
+.wk-session-run-head { margin: 0 0 6px; display: flex; align-items: center; gap: 8px; min-width: 0; }
+.wk-session-run-title { flex: 1 1 auto; min-width: 0; font-weight: var(--weight-semi); color: var(--ink-high); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wk-session-run-state { font-size: var(--text-xs); color: var(--ink-muted); flex-shrink: 0; }
+.wk-session-link { font-size: var(--text-xs); color: var(--ink-muted); }
+.wk-session-composer { flex-shrink: 0; margin: 8px 32px 12px 52px; }
+
+.wk-chain-line { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 0; }
+.wk-chain-step { display: inline-flex; align-items: center; gap: 6px; font-size: var(--text-sm); color: var(--ink-body); }
+.wk-chain-join { display: inline-block; width: 18px; height: 1px; margin: 0 6px; background: var(--border); }
+.wk-chain-dot { display: inline-block; width: 9px; height: 9px; border-radius: var(--radius-full); border: 1px solid var(--ink-dim); background: transparent; }
+.wk-chain-dot--running { border-color: var(--status-run); background: color-mix(in oklab, var(--status-run) 40%, transparent); }
+.wk-chain-dot--done, .wk-chain-dot--checked { border-color: var(--status-ok); background: var(--status-ok); }
+.wk-chain-dot--failed { border-color: var(--status-fail); background: var(--status-fail); }
+.wk-chain-step--todo .wk-chain-label { color: var(--ink-muted); }
+.wk-chain-step--struck .wk-chain-label, .wk-chain-step--replaced .wk-chain-label { text-decoration: line-through; color: var(--ink-dim); }
+.wk-chain-late { font-size: var(--text-2xs); color: var(--ink-muted); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0 4px; }
+.wk-chain-sentence { margin: 4px 0 0; font-size: var(--text-xs); color: var(--ink-muted); }
+.wk-chain-transport { margin: 4px 0 0; font-size: var(--text-xs); color: var(--status-fail); }
+
+.wk-since {
+  position: absolute; top: 8px; left: 52px; right: 32px; z-index: 5;
+  background: var(--surface-overlay); border: 1px solid var(--border); border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-raised); padding: 8px 14px; font-size: var(--text-sm); color: var(--ink-body);
+}
+.wk-since-head { margin: 0; display: flex; align-items: baseline; gap: 10px; }
+.wk-since-summary { flex: 1 1 auto; color: var(--ink-muted); }
+.wk-since-toggle { background: none; border: none; color: var(--ink-muted); cursor: pointer; font: inherit; }
+.wk-since-cols { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 6px; }
+.wk-since-cols p { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wk-since-col { font-size: var(--text-xs); font-weight: var(--weight-semi); color: var(--ink-high); }
+.wk-since-none { color: var(--ink-dim); }
+[data-testid="session"] a:focus-visible, [data-testid="session"] button:focus-visible, .wk-session-composer:focus-within {
+  outline: 2px solid transparent; outline-offset: 2px; box-shadow: var(--focus-ring);
+}

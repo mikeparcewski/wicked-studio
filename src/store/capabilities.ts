@@ -1,0 +1,31 @@
+import { create } from 'zustand';
+import { api } from '../api/client.js';
+
+/**
+ * The daemon's `GET /health.capabilities` the session surfaces read (S6a): read once at startup.
+ * `runChatId` (C1, api-types 0.71.0) — runs carry `chat_id`, so a chat and its runs are one
+ * session. Absent, or a failed read, is `false`: every run is its own session (§7).
+ */
+interface CapabilitiesStore {
+  loaded: boolean;
+  runChatId: boolean;
+  load: () => Promise<void>;
+}
+
+let inflight: Promise<void> | null = null;
+
+export const useCapabilities = create<CapabilitiesStore>((set, get) => ({
+  loaded: false,
+  runChatId: false,
+  load: () => {
+    if (get().loaded) return Promise.resolve();
+    inflight ??= Promise.resolve().then(() => api.getHealth())
+      .then((h) => {
+        const caps = ((h as unknown as { capabilities?: Record<string, unknown> }).capabilities) ?? {};
+        set({ loaded: true, runChatId: caps['runChatId'] === true });
+      })
+      .catch(() => { set({ loaded: true, runChatId: false }); })
+      .finally(() => { inflight = null; });
+    return inflight;
+  },
+}));

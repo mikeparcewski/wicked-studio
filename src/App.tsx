@@ -43,6 +43,7 @@ import { ThemePage } from './components/ThemePage.js';
 import { SkinRightRail } from './components/SkinRightRail.js';
 import { Desk } from './components/desk/Desk.js';
 import { SessionRail } from './components/desk/SessionRail.js';
+import { SessionPage } from './components/session/SessionView.js';
 import { NeedsQueueSurface } from './components/NeedsYouQueue.js';
 import { useSkin } from './hooks/useSkin.js';
 import { useNeedsClock, useNeedsRows } from './hooks/useNeedsRows.js';
@@ -69,6 +70,8 @@ import { useStallEscalationStore } from './store/stallEscalations.js';
 import { useRuntimeStore } from './store/runtime.js';
 import { useRunEventStore } from './store/events.js';
 import { useDocThreadStore } from './store/docThread.js';
+import { useCapabilities } from './store/capabilities.js';
+import { useTeamPlanStore } from './store/teamPlan.js';
 import type { CoreEvent, RepoEntry } from './api/types.js';
 import { readSteeringTypeFilter } from './api/steering.js';
 import { isTestingSubPage, readLaunchIntent } from './api/testing.js';
@@ -140,6 +143,8 @@ export function App(): React.ReactElement {
       // Relayed interactive frames feed BOTH altitudes off the one subscription (§3.4):
       // the runtime store's board headline above, the doc transcript here.
       ingestDocThread(event);
+      // S6a: relayed `wicked.team.*` rows grow the team-plan fold of every run a session shows.
+      useTeamPlanStore.getState().ingest(event as unknown as { type: string } & Record<string, unknown>);
       // J4 round 2: chat frames announce/retire live sessions for the rail's
       // Chat accordion — evidence this subscription already carries, no fetch.
       ingestLiveChat(event);
@@ -182,6 +187,8 @@ export function App(): React.ReactElement {
     // Idea 15: the delivery freeze — read once at startup (and again when an approve comes back
     // `deliveries_frozen`); a daemon without the route draws no switch.
     void useDeliveryFreezeStore.getState().load();
+    // S6a: `capabilities.runChatId` (C1) — whether runs carry the chat they were launched from.
+    void useCapabilities.getState().load();
   }, []);
 
   // Pre-merge bookmarks (`/runs/:id`, `/projects/:id`) redirect into the shell (§1.5).
@@ -554,6 +561,19 @@ export function App(): React.ReactElement {
         />
       );
     }
+    // `/s/:id` (S6a): a session — under every skin (a route is not a skin concern).
+    if (panel === 'session' && artifactId !== null) {
+      return (
+        <SessionPage
+          sessionId={artifactId}
+          runs={runs}
+          runsLoaded={runsLoaded}
+          needRows={needRows}
+          navigate={navigate}
+          onAsk={handToAsk}
+        />
+      );
+    }
     // `/` is the orchestrator board (§1.4, slice 5); the flat run list it replaced is
     // still at `/runs`, which the `panel === 'runs'` fallback below keeps rendering.
     if (panel === 'home') {
@@ -802,9 +822,9 @@ export function App(): React.ReactElement {
         open={askOpen}
         onToggle={() => setAskOpen((v) => !v)}
         rightOffsetPx={(selected !== null ? RIGHT_PANEL_PX : 0) + (railOpen ? RIGHT_RAIL_PX : 0)}
-        bottomOffsetPx={desk && panel === 'home' ? DESK_COMPOSER_PX : chatComposerPx}
-        // The Desk has its own composer in this corner: there the bubble stands down.
-        bubble={!(desk && panel === 'home')}
+        bottomOffsetPx={(desk && panel === 'home') || panel === 'session' ? DESK_COMPOSER_PX : chatComposerPx}
+        // The Desk and a session have their own composer in this corner: there the bubble stands down.
+        bubble={!((desk && panel === 'home') || panel === 'session')}
       >
         {askOpen && (
           <AskDock
