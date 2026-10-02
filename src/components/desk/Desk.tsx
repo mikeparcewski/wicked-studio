@@ -41,7 +41,8 @@ export function Desk({ runs, needRows, now, navigate, onAsk }: {
   const count = needCount(needRows);
   const { hello, date } = deskGreeting(now);
   const cards = useMemo(
-    () => deskProjects(railGroups(items, unfiled, needsByRun(needRows), undefined, needTextByRun(needRows))),
+    // Unbounded here: a card's "N more" counts every other session, not the rail's newest few.
+    () => deskProjects(railGroups(items, unfiled, needsByRun(needRows), Infinity, needTextByRun(needRows))),
     [items, unfiled, needRows],
   );
   const chores = useMemo(() => lapsedSeatChores(roster), [roster]);

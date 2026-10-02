@@ -99,6 +99,13 @@ describe('sessions in the rail and on the project cards', () => {
     expect(railGroups([{ project: { id: 'e', name: 'Empty' }, runs: [] }] as never, [], {})).toEqual([]);
   });
 
+  it('a card counts every other session, not just the rail\'s newest few', () => {
+    const many = [{ project: { id: 'p', name: 'P' }, runs: Array.from({ length: 9 }, (_, i) => run(`x${i}`, 'completed')) }];
+    const card = deskProjects(railGroups(many as never, [], {}, Infinity))[0]!;
+    expect(card.shown).toHaveLength(2);
+    expect(card.quiet).toHaveLength(7);
+  });
+
   it('states come from the run status; a session never claims "checked"', () => {
     expect(sessionState(run('a', 'awaiting_human').session.status)).toBe('waiting');
     expect(sessionState(run('a', 'executing').session.status)).toBe('working');

@@ -302,6 +302,11 @@ export function App(): React.ReactElement {
   // The Desk composer's send (skin `desk`, S4): the message rides to the Ask dock, which sends it
   // as the operator's own question. `n` remounts the dock so each handoff sends exactly once.
   const [askHandoff, setAskHandoff] = useState<{ text: string; n: number } | null>(null);
+  // A handoff is sent once: whenever the dock closes (its ×, the bubble, the chord), it is spent,
+  // so a reopen never sends it again and never shadows letters typed to open the dock.
+  useEffect(() => {
+    if (!askOpen) setAskHandoff(null);
+  }, [askOpen]);
   const handToAsk = useCallback((text: string) => {
     setAskHandoff((cur) => ({ text, n: (cur?.n ?? 0) + 1 }));
     setAskOpen(true);
@@ -804,7 +809,7 @@ export function App(): React.ReactElement {
             runs={runs}
             pathname={pathname}
             navigate={navigate}
-            onClose={() => { setAskOpen(false); setAskHandoff(null); }}
+            onClose={() => setAskOpen(false)}
             {...(askHandoff !== null ? { sendText: askHandoff.text } : {})}
           />
         )}

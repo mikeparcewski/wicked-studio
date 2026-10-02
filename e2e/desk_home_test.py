@@ -16,7 +16,8 @@ proves the S4 acceptance:
   5. WHILE YOU WERE AWAY: after a 3 h absence the handover renders on the Desk, from
      board/handover.ts, as its `desk-away` variant.
   6. LETTERS TYPE: a letter typed with the body focused lands in the Desk composer; the Start row's
-     Test chip puts "Test " in it; neither sends anything.
+     Test chip puts "Test " in it; neither sends anything. The composer's own Send hands the message
+     to the Ask dock, which sends it exactly once — closing and reopening the dock sends nothing.
   7. EVERY DESTINATION: the rail's "Everything else" reaches every nav destination (the restated
      skin contract), and a destination navigates.
   8. 0 page errors, no horizontal scroll.
@@ -190,6 +191,27 @@ with sync_playwright() as p:
     check("letters-type-and-chips-fill", typed == "hi" and seeded == "Test " and focused == "desk-composer-input"
           and len(posts) == before, typed=typed, seeded=seeded, focused=focused, posts=posts[before:])
     page.get_by_test_id("desk-composer-input").fill("")
+
+    # ── 6b. the composer's Send hands the message to the Ask dock, which sends it ONCE ──────
+    msgs = lambda: [x for x in posts if "/messages" in x]
+    page.get_by_test_id("desk-composer-input").fill("what changed in beta today?")
+    page.keyboard.press("Enter")
+    page.get_by_test_id("ask-panel").wait_for(state="visible", timeout=10000)
+    for _ in range(40):
+        if msgs():
+            break
+        page.wait_for_timeout(250)
+    first_send = len(msgs())
+    cleared = page.evaluate("() => document.querySelector('[data-testid=\"desk-composer-input\"]')?.value ?? null")
+    # Close and reopen the dock with its chord: the handoff is spent, nothing is sent again.
+    page.keyboard.press("Control+Shift+A")
+    page.wait_for_function("() => !document.querySelector('[data-testid=\"ask-panel\"]')", timeout=5000)
+    page.keyboard.press("Control+Shift+A")
+    page.get_by_test_id("ask-panel").wait_for(state="visible", timeout=5000)
+    page.wait_for_timeout(1500)
+    check("composer-hands-to-ask-once", first_send == 1 and len(msgs()) == 1 and cleared == "",
+          first_send=first_send, after_reopen=len(msgs()), cleared=cleared)
+    page.keyboard.press("Control+Shift+A")
 
     # ── 7. every destination reachable from the rail ──────────────────────────────
     page.get_by_test_id("desk-rail-more").click()
