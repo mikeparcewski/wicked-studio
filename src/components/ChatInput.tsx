@@ -1776,6 +1776,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
         <textarea
           ref={textareaRef}
           data-testid="launch-problem"
+          data-type-target="page"
           className="flex-1 resize-none text-base outline-none border-0 bg-transparent leading-6"
           style={{ minHeight: '28px', color: 'var(--ink-high)', fontFamily: 'inherit' }}
           placeholder="What do you need built?"

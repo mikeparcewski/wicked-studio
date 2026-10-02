@@ -31,6 +31,7 @@ import {
 import { defaultSelection, describeChatOpenRefusal } from './GroupChat.js';
 import { apiStatus, apiWire } from '../api/errors.js';
 import { ambientProjectId } from '../hooks/ambientProject.js';
+import { peekTypedSeed, takeTypedSeed } from '../hooks/useTypeToComposer.js';
 
 /**
  * ASK — the app-wide binding of the ASSIST DOCK (DES-ASSIST-DOCK §5: "the dock becomes
@@ -62,6 +63,10 @@ export function AskDock({ runs, pathname, onClose, navigate }: {
   /** The promote door (studio#323 R3): "Open in full chat" routes to `/chat/:id`. */
   navigate?: (path: string) => void;
 }): React.ReactElement {
+  // The letters that opened the dock (type-to-composer, §5.6 rule 4): read on mount, cleared
+  // in an effect (a StrictMode double initializer must not read an already-emptied seed).
+  const [typedSeed] = useState(peekTypedSeed);
+  useEffect(() => { takeTypedSeed(); }, []);
   const [diag, setDiag] = useState<DiagnosticsState>({ kind: 'loading' });
   const [repos, setRepos] = useState<RepoEntry[]>(() => getCachedRepos() ?? []);
   const projects = useProjectsStore((s) => s.projects);
@@ -298,6 +303,8 @@ export function AskDock({ runs, pathname, onClose, navigate }: {
         }
       }}
       fill
+      typeTarget="ask"
+      initialText={typedSeed}
       onExpandChat={
         navigate === undefined
           ? undefined

@@ -45,6 +45,7 @@ BEHAVIOUR = [
     "mcp_tools",
     "wicked_theme",
     "tech_details",
+    "type_to_composer",
 ]
 
 # The desk journeys (DES-STUDIO-REBUILD-001 §6.2): they assert the `desk` skin, so they run only

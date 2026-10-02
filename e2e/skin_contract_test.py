@@ -22,9 +22,9 @@ printable key — the queue cursor is ⌥J/⌥K (or the arrows) under every skin
        - the type scale is denser (computed --text-sm is 12px, not 13px).
      Under `studio`: no right rail, the queue sits in the command center, the full nav rail.
   2. BEHAVIOUR STAYS IDENTICAL, KEYBOARD INCLUDED: the queue's rows (keys, kinds, counts,
-     order), a bare `j` moving nothing, the ⌥J cursor, Enter-expands-the-group and its
-     members, ⌥K back, Enter-opens-a-row, and Ctrl/⌘+K opening the palette are the same
-     under both skins.
+     order), a bare `j` moving nothing and typing into the Ask dock (§5.6 rule 4), the ⌥J
+     cursor, Enter-expands-the-group and its members, ⌥K back, Enter-opens-a-row, and
+     Ctrl/⌘+K opening the palette are the same under both skins.
   3. EVERY NAV DESTINATION IS REACHABLE UNDER EVERY SKIN: the nav's destinations (the ten
      section dashboards, the three Settings pages, Notifications, Health — every element
      stamped `data-nav-dest`) are enumerated under both skins with Settings opened (the
@@ -122,6 +122,11 @@ def behaviour(page) -> dict:
     q.focus()
     page.keyboard.press("j")  # §5.6 rule 1: a bare letter is never a shortcut, under any skin
     bare = page.evaluate(SELECTED)
+    # §5.6 rule 4: it TYPES — Home has no page composer, so it opens the Ask dock with it.
+    page.wait_for_function(
+        "() => document.querySelector('[data-testid=\"assist-input\"]')?.value === 'j'", timeout=5000)
+    bare_typed = page.evaluate("() => document.querySelector('[data-testid=\"assist-input\"]')?.value ?? null")
+    q.focus()
     page.keyboard.press("Alt+j")
     first = page.evaluate(SELECTED)
     page.keyboard.press("Enter")
@@ -135,7 +140,7 @@ def behaviour(page) -> dict:
     elicit = page.evaluate(SELECTED)
     page.keyboard.press("Alt+k")
     back = page.evaluate(SELECTED)
-    return {"rows": rows, "bare_j": bare, "j": first, "members": members, "j_into_members": into,
+    return {"rows": rows, "bare_j": bare, "bare_j_typed": bare_typed, "j": first, "members": members, "j_into_members": into,
             "j_to_elicitation": elicit, "k_back": back}
 
 
@@ -259,7 +264,7 @@ with sync_playwright() as p:
           bs == bc and seen["studio"]["opened"] == seen["compact-rail"]["opened"]
           and len(bs["rows"]) == 3 and bs["rows"][0]["count"] == 2
           and bs["members"] == ["gate:g1", "gate:g2"] and bs["k_back"] == "gate:g2"
-          and bs["bare_j"] is None and bs["palette_opens"] is True,
+          and bs["bare_j"] is None and bs["bare_j_typed"] == "j" and bs["palette_opens"] is True,
           studio=bs, compact_rail=bc, opened=seen["studio"]["opened"])
 
     # ── 3. every nav destination reachable under every skin ───────────────────────────
