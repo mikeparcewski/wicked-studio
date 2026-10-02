@@ -682,6 +682,14 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          #   b1 carries a gate-attached finding and a problem anchored at unit 0 (a clearing on the
          #   page fixes an older one); `?run=b1` adds coverage with one entry not checked. Off: 404.
          "watch_feed": False,
+         # editors — (EP-P1, e2e/editor_conformance_test.py) a stand-in for crew's EP-C1: GET
+         #   /api/v1/editors/<id>/<version>/entry?sha= serves e2e/editor-fixtures/<good|hostile>.html
+         #   with the bundle CSP (DES-EDITOR-PLUGINS-001 §8.2) and refuses a hash that does not match;
+         #   GET /api/v1/editors/<id>/grants answers `editor_grants`. shell_csp — the SPA shell is
+         #   served with crew's `frame-src` policy (§8.2), so a plugin cannot navigate off-origin.
+         "editors": False, "editor_grants": ["artifact.read", "artifact.write", "selection.chip",
+                                              "composer.draft", "checks.contribute", "ui.fullscreen"],
+         "shell_csp": False,
          # ── Sessions (DES-STUDIO-REBUILD-001 S6a, e2e/desk_session_test.py) ──
          # sessions — SESSION_RUNS are GET /runs (they REPLACE the corpus): r-pay-1 (completed, not a team run) and r-pay-2
          #   (executing team run) launched from chat-pay, whose GET /chats/:id holds a live
@@ -5323,11 +5331,64 @@ class W2Handler(SimpleHTTPRequestHandler):
             with state_lock:
                 posts = list(capture_post_log)
             return self._json(200, {"posts": posts})
+        if path.startswith("/api/v1/editors/") and self._editor_routes(path):
+            return None
         if self._api(path):
             return None
         if not Path(self.translate_path(self.path)).is_file():
             self.path = "/index.html"  # client-side routes resolve to the shell
         return super().do_GET()
+
+    def end_headers(self):  # noqa: D401 — the shell's frame-src policy (EP-P1 stand-in for crew)
+        with state_lock:
+            shell_csp = state["shell_csp"]
+        if shell_csp and getattr(self, "path", "") == "/index.html":
+            host = self.headers.get("Host", "127.0.0.1")
+            self.send_header("Content-Security-Policy",
+                             f"frame-src http://{host}/api/v1/editors/ http://{host}/api/v1/projects/ blob: data:")
+        super().end_headers()
+
+    def _editor_routes(self, path: str) -> bool:
+        """EP-C1 stand-in: the editor bundle route (hash-pinned, with its CSP) and the grants route."""
+        with state_lock:
+            on = state["editors"]
+            grants = list(state["editor_grants"])
+        if not on:
+            return False
+        parts = path.split("/")
+        # /api/v1/editors/<id>/grants
+        if len(parts) == 6 and parts[5] == "grants":
+            self._json(200, {"editor": parts[4], "grants": grants})
+            return True
+        # /api/v1/editors/<id>/<version>/entry
+        if len(parts) == 7 and parts[6] == "entry":
+            files = {"acme-good": "good.html", "acme-hostile": "hostile.html"}
+            name = files.get(parts[4])
+            if name is None or parts[5] != "0.1.0":
+                self._json(404, {"error": f"no editor {parts[4]}@{parts[5]}"})
+                return True
+            body = (REPO / "e2e" / "editor-fixtures" / name).read_bytes()
+            sha = hashlib.sha256(body).hexdigest()
+            q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            if (q.get("sha") or [""])[0] != sha:
+                self._json(409, {"error": "the entry's hash does not match the pinned hash", "code": "hash_mismatch"})
+                return True
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Content-Security-Policy",
+                             "sandbox allow-scripts; default-src 'none'; script-src 'unsafe-inline'; "
+                             "style-src 'unsafe-inline'; img-src data: blob:; media-src blob:; font-src data:; "
+                             "frame-src blob: data: about:; child-src blob: data: about:; connect-src 'none'; "
+                             "form-action 'none'; base-uri 'none'; worker-src 'none'; manifest-src 'none'")
+            self.send_header("Cross-Origin-Resource-Policy", "same-origin")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("Referrer-Policy", "no-referrer")
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(body)
+            return True
+        return False
 
     def do_POST(self):  # noqa: N802 (stdlib naming)
         path = urllib.parse.urlparse(self.path).path

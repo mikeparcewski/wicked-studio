@@ -10,10 +10,10 @@
   "version": 1,
   "studioVersion": "0.5.19",
   "counts": {
-    "files": 187,
-    "occurrences": 1856,
-    "static": 1626,
-    "dynamic": 73,
+    "files": 189,
+    "occurrences": 1871,
+    "static": 1639,
+    "dynamic": 74,
     "computed": 8
   },
   "static": [
@@ -2531,6 +2531,84 @@
       "testId": "document-canvas",
       "files": [
         "src/components/DocumentCanvas.tsx"
+      ]
+    },
+    {
+      "testId": "editor-artifact-frame",
+      "files": [
+        "src/components/editors/EditorHostPage.tsx"
+      ]
+    },
+    {
+      "testId": "editor-chip",
+      "files": [
+        "src/components/editors/EditorHostPage.tsx"
+      ]
+    },
+    {
+      "testId": "editor-chips",
+      "files": [
+        "src/components/editors/EditorHostPage.tsx"
+      ]
+    },
+    {
+      "testId": "editor-composer",
+      "files": [
+        "src/components/editors/EditorHostPage.tsx"
+      ]
+    },
+    {
+      "testId": "editor-drafted",
+      "files": [
+        "src/components/editors/EditorHostPage.tsx"
+      ]
+    },
+    {
+      "testId": "editor-frame",
+      "files": [
+        "src/editors/host.ts"
+      ]
+    },
+    {
+      "testId": "editor-grants-note",
+      "files": [
+        "src/components/editors/EditorHostPage.tsx"
+      ]
+    },
+    {
+      "testId": "editor-host-page",
+      "files": [
+        "src/components/editors/EditorHostPage.tsx"
+      ]
+    },
+    {
+      "testId": "editor-notes",
+      "files": [
+        "src/components/editors/EditorHostPage.tsx"
+      ]
+    },
+    {
+      "testId": "editor-reload",
+      "files": [
+        "src/components/editors/EditorHostPage.tsx"
+      ]
+    },
+    {
+      "testId": "editor-status",
+      "files": [
+        "src/components/editors/EditorHostPage.tsx"
+      ]
+    },
+    {
+      "testId": "editor-thread",
+      "files": [
+        "src/components/editors/EditorHostPage.tsx"
+      ]
+    },
+    {
+      "testId": "editor-torn",
+      "files": [
+        "src/components/editors/EditorHostPage.tsx"
       ]
     },
     {
@@ -10026,6 +10104,12 @@
       "pattern": "doc-seat-*",
       "files": [
         "src/components/DocumentThread.tsx"
+      ]
+    },
+    {
+      "pattern": "editor-size-*",
+      "files": [
+        "src/components/editors/EditorHostPage.tsx"
       ]
     },
     {

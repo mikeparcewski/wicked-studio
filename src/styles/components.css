@@ -869,3 +869,24 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
 .wk-watch-run-lines { flex-shrink: 0; padding: 4px 24px; border-bottom: 1px solid var(--surface-raised); background: var(--surface-card); }
 .wk-watch-jumped, .wk-watch-coverage { margin: 2px 0; font-size: var(--text-xs); color: var(--ink-muted); display: flex; gap: 8px; align-items: baseline; }
 .wk-jumped { border-radius: var(--radius-lg); box-shadow: 0 0 0 2px var(--accent); }
+/* EP-P1: the editor plugin host — the frame sits in a host-drawn container (header, sizes, "Reload
+   it"); full screen is the CONTAINER, never the frame. Tokens only. */
+.wk-editor-page { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; padding: 16px 24px; }
+.wk-editor-artifact { display: flex; flex-direction: column; min-height: 0; background: var(--surface-card); border: 1px solid var(--border); border-radius: var(--radius-lg); }
+.wk-editor-artifact--inline { max-height: 220px; }
+.wk-editor-artifact:fullscreen { border-radius: 0; }
+.wk-editor-head { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-bottom: 1px solid var(--border-subtle); }
+.wk-editor-title { font-weight: var(--weight-semi); color: var(--ink-high); flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wk-editor-status { font-size: var(--text-xs); color: var(--ink-muted); }
+.wk-editor-sizes { display: inline-flex; gap: 4px; }
+.wk-editor-size { padding: 2px 8px; border-radius: var(--radius-full); border: 1px solid var(--border); background: none; color: var(--ink-body); font: inherit; font-size: var(--text-xs); cursor: pointer; }
+.wk-editor-size[aria-pressed="true"] { border-color: var(--accent); color: var(--ink-high); }
+.wk-editor-frame-box { flex: 1 1 auto; min-height: 0; display: flex; }
+.wk-editor-frame { flex: 1 1 auto; width: 100%; min-height: 360px; border: 0; background: var(--surface-card); }
+.wk-editor-artifact--inline .wk-editor-frame { min-height: 160px; pointer-events: none; }
+.wk-editor-torn { margin: 8px 12px; font-size: var(--text-sm); color: var(--ink-muted); }
+.wk-editor-side { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.wk-editor-thread { margin: 0; padding-left: 16px; font-size: var(--text-sm); color: var(--ink-body); }
+.wk-editor-composer { display: flex; flex-direction: column; gap: 6px; padding: 8px; background: var(--surface-card); border: 1px solid var(--border); border-radius: var(--radius-lg); }
+.wk-editor-chips { margin: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.wk-editor-drafted { margin: 0; padding: 4px 8px; font-size: var(--text-sm); color: var(--ink-muted); border-left: 2px solid var(--border-strong); }
