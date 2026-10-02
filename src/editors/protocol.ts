@@ -120,7 +120,10 @@ function payloadOk(type: string, p: Record<string, unknown>): boolean {
     case 'export.request':
       return ['html', 'pdf', 'pptx', 'mp4', 'gif', 'poster'].includes(p['format'] as string);
     case 'selection.set': return Array.isArray(p['anchors']) && p['anchors'].every(isAnchorRef);
-    case 'checks.contribute': return Array.isArray(p['checks']);
+    case 'checks.contribute':
+      // Advisory notes (§5.8): at most 100, each an id and one line of text — nothing else is read.
+      return Array.isArray(p['checks']) && p['checks'].length <= 100
+        && p['checks'].every((c) => isObj(c) && isStr(c['id'], 100) && isStr(c['text'], 300));
     case 'evidence.open': return isStr(p['checkId'], 200);
     case 'ui.morph': return SIZES.includes(p['to'] as Size);
     case 'ui.key': return isStr(p['key'], 40);
@@ -147,6 +150,8 @@ export function parseInbound(data: unknown): ParseResult {
     return { ok: false, reason: 'too large', ...(id !== undefined ? { id } : {}) };
   }
   if ('re' in data) {
+    // A reply carries no type or id: an envelope that is both is ambiguous and dropped (codex).
+    if ('type' in data || 'id' in data) return { ok: false, reason: 'ambiguous reply' };
     if (!isStr(data['re'], LIMITS.idChars) || typeof data['ok'] !== 'boolean') return { ok: false, reason: 'bad reply' };
     return { ok: true, msg: { kind: 'reply', re: data['re'], ok: data['ok'], payload: data['payload'] } };
   }
@@ -174,8 +179,10 @@ export function parseReady(data: unknown): { editor: string; version: string; pr
   if (!isObj(data) || data['p'] !== PROTOCOL || data['v'] !== PROTOCOL_VERSION || data['type'] !== 'plugin.ready') return null;
   const p = data['payload'];
   if (!isObj(p) || !isStr(p['editor'], 100) || !isStr(p['version'], 40) || !Array.isArray(p['protocol'])) return null;
-  const protocol = (p['protocol'] as unknown[]).filter((n): n is number => Number.isInteger(n));
-  return { editor: p['editor'], version: p['version'], protocol };
+  // Strict: every entry an integer, or the whole ready is refused (codex).
+  const protocol = p['protocol'] as unknown[];
+  if (protocol.length === 0 || protocol.length > 8 || !protocol.every((n) => Number.isInteger(n))) return null;
+  return { editor: p['editor'], version: p['version'], protocol: protocol as number[] };
 }
 
 export function reply(re: string, payload: unknown): Record<string, unknown> {

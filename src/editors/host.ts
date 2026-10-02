@@ -185,9 +185,14 @@ export class EditorHost {
 
   private overRate(): boolean {
     const sec = Math.floor(this.now() / 1000);
-    if (sec !== this.rate.second) { this.rate.second = sec; this.rate.count = 0; }
+    if (sec !== this.rate.second) {
+      // A flood is "sustained" across seconds: only a whole second spent under the limit ends it (codex).
+      if (this.rate.count <= LIMITS.ratePerSec || sec - this.rate.second > 1) this.rate.overSince = null;
+      this.rate.second = sec;
+      this.rate.count = 0;
+    }
     this.rate.count += 1;
-    if (this.rate.count <= LIMITS.ratePerSec) { this.rate.overSince = null; return false; }
+    if (this.rate.count <= LIMITS.ratePerSec) return false;
     this.rate.overSince ??= this.now();
     if (this.now() - this.rate.overSince >= 5_000) this.teardown('This editor sent too many messages');
     return true;

@@ -40,8 +40,18 @@ describe('the strict parser', () => {
     expect(parseInbound(env('ui.status', { line: 'x', pad: 'y'.repeat(1_000_001) }))).toMatchObject({ ok: false, reason: 'too large' });
   });
 
+  it('codex: an ambiguous reply, a malformed ready, and a malformed checks list are rejected', () => {
+    expect(parseInbound({ p: 'wicked.editor', v: 1, re: 'ping-1', ok: true, type: 'version.write', id: 'x', payload: {} }).ok).toBe(false);
+    expect(parseReady(env('plugin.ready', { editor: 'acme', version: '0.1.0', protocol: [1, 'invalid'] }))).toBeNull();
+    expect(parseInbound(env('checks.contribute', { checks: ['approve'] })).ok).toBe(false);
+    expect(parseInbound(env('checks.contribute', { checks: Array.from({ length: 101 }, () => ({ id: 'c', text: 't' })) })).ok).toBe(false);
+    expect(parseInbound(env('checks.contribute', { checks: [{ id: 'c1', text: 'The term "free" is used 3 times' }] })).ok).toBe(true);
+    // Additive payload fields are ignored within v1 (§5.4), never acted on.
+    expect(parseInbound(env('ui.status', { line: 'x', extra: true })).ok).toBe(true);
+  });
+
   it('reads the one plugin.ready window message', () => {
-    expect(parseReady(env('plugin.ready', { editor: 'acme', version: '0.1.0', protocol: [1, 'x', 2] }))).toStrictEqual({ editor: 'acme', version: '0.1.0', protocol: [1, 2] });
+    expect(parseReady(env('plugin.ready', { editor: 'acme', version: '0.1.0', protocol: [1, 2] }))).toStrictEqual({ editor: 'acme', version: '0.1.0', protocol: [1, 2] });
     expect(parseReady(env('plugin.ready', { editor: 1 }))).toBeNull();
     expect(parseReady(env('host.hello', {}))).toBeNull();
   });
@@ -75,6 +85,13 @@ describe('ops: text and colours, never markup', () => {
     expect(checkOps([{ op: 'remove', anchor: 'cta' }], inv)).toStrictEqual({ ok: true, items: [{ selector: '[data-wid="cta"]', type: 'remove' }] });
     expect(checkOps(Array.from({ length: 201 }, () => ({ op: 'remove', anchor: 'cta' })), inv)).toMatchObject({ ok: false, code: 'too_large' });
     expect(checkOps([], inv)).toMatchObject({ ok: false });
+  });
+
+  it('codex: an anchor the selector cannot name exactly, or a duplicate, is not in the inventory', () => {
+    const w = inventoryOf('<p data-wid="a&quot;b">q</p><p data-wid="ab">r</p><p data-wid="x">1</p><p data-wid="x">2</p><p data-wid="ok-1">3</p>');
+    expect([...w.wids.keys()]).toStrictEqual(['ab', 'ok-1']);
+    expect(checkOps([{ op: 'remove', anchor: 'x' }], w)).toMatchObject({ ok: false });
+    expect(checkOps([{ op: 'remove', anchor: 'a"b' }], w)).toMatchObject({ ok: false });
   });
 
   it('the inventory is parsed without running scripts, with section ancestry', () => {
@@ -197,6 +214,22 @@ describe('the host controller', () => {
     window.dispatchEvent(new MessageEvent('message', { data: env('plugin.ready', { editor: 'acme', version: '0.1.0', protocol: [1] }), source: window }));
     expect(posted).toHaveBeenCalledTimes(1);
     host.teardown('done');
+  });
+
+  it('codex: a sustained flood tears down even when each second starts under the limit', () => {
+    let t = 0;
+    const { host, fromFrame } = makeHost();
+    (host as unknown as { now: () => number }).now = () => t;
+    let port: MessagePort | null = null;
+    vi.spyOn(host.frame.contentWindow!, 'postMessage').mockImplementation(((_m: unknown, _o: unknown, tr?: Transferable[]) => { port = (tr?.[0] as MessagePort) ?? null; }) as never);
+    fromFrame(env('plugin.ready', { editor: 'acme', version: '0.1.0', protocol: [1] }));
+    const portMessage = (host as unknown as { portMessage: (d: unknown) => void }).portMessage.bind(host);
+    expect(port).not.toBeNull();
+    for (let sec = 0; sec < 7 && host.alive; sec++) {
+      t = sec * 1000;
+      for (let i = 0; i < 205; i++) portMessage(env('ui.status', { line: 'x' }));
+    }
+    expect(host.alive).toBe(false);
   });
 
   it('a second load of the frame is a teardown', () => {

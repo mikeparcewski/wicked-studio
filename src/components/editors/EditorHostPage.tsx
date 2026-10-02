@@ -29,9 +29,11 @@ interface Page {
   firstParty: boolean;
 }
 
-function readPage(search: string): Page {
+function readPage(search: string, mode: 'dev' | 'conformance'): Page {
   const q = new URLSearchParams(search);
-  const grants = q.get('grants');
+  // Grants in the address are the CONFORMANCE host's scripted set only; the dev host always asks
+  // crew for its decided set (codex).
+  const grants = mode === 'conformance' ? q.get('grants') : null;
   const editor = q.get('editor') ?? '';
   return {
     editor,
@@ -59,7 +61,7 @@ declare global {
 }
 
 export function EditorHostPage({ mode }: { mode: 'dev' | 'conformance' }): React.ReactElement {
-  const page = useMemo(() => readPage(window.location.search), []);
+  const page = useMemo(() => readPage(window.location.search, mode), [mode]);
   const container = useRef<HTMLDivElement | null>(null);
   const frameBox = useRef<HTMLDivElement | null>(null);
   const composerBox = useRef<HTMLTextAreaElement | null>(null);

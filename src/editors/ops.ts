@@ -40,13 +40,23 @@ export interface Inventory {
   wids: ReadonlyMap<string, { slide: string | null; section: string | null; text: string }>;
 }
 
-/** The host's own anchor inventory, from the version HTML it already holds. `DOMParser` runs no script. */
+/** An anchor id the wire selector `[data-wid="…"]` names exactly: the engine's ids are of this shape. */
+const SAFE_WID = /^[A-Za-z0-9_.:-]{1,100}$/;
+
+/** The host's own anchor inventory, from the version HTML it already holds. `DOMParser` runs no script.
+ *  An id the selector could not name exactly, or one two elements share, is left out: an op on it
+ *  could change the wrong element, or several (codex). */
 export function inventoryOf(html: string): Inventory {
   const doc = new DOMParser().parseFromString(html, 'text/html');
   const wids = new Map<string, { slide: string | null; section: string | null; text: string }>();
+  const seen = new Map<string, number>();
+  for (const el of Array.from(doc.querySelectorAll('[data-wid]'))) {
+    const id = el.getAttribute('data-wid') ?? '';
+    seen.set(id, (seen.get(id) ?? 0) + 1);
+  }
   for (const el of Array.from(doc.querySelectorAll('[data-wid]'))) {
     const id = el.getAttribute('data-wid');
-    if (id === null || id === '' || wids.has(id)) continue;
+    if (id === null || !SAFE_WID.test(id) || (seen.get(id) ?? 0) > 1 || wids.has(id)) continue;
     const slide = el.parentElement?.closest('[data-wid^="slide-"]')?.getAttribute('data-wid') ?? null;
     const section = el.parentElement?.closest('section[data-wid], [data-wid^="section-"]')?.getAttribute('data-wid') ?? null;
     wids.set(id, { slide, section, text: (el.textContent ?? '').trim().slice(0, 200) });
@@ -67,7 +77,8 @@ export type WireItem =
 
 export type OpsCheck = { ok: true; items: WireItem[] } | { ok: false; code: 'bad_request' | 'too_large'; message: string };
 
-const selectorOf = (wid: string): string => `[data-wid="${wid.replace(/["\\]/g, '')}"]`;
+// Only inventory ids reach here, and those match SAFE_WID: nothing to escape.
+const selectorOf = (wid: string): string => `[data-wid="${wid}"]`;
 
 /** Validate a plugin's ops against the host's inventory and map them to wire items, or refuse all. */
 export function checkOps(ops: unknown[], inv: Inventory, themeTokens: ReadonlySet<string> = new Set()): OpsCheck {
