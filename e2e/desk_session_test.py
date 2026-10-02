@@ -137,6 +137,10 @@ with sync_playwright() as p:
     page.get_by_test_id("session").wait_for(state="visible", timeout=10000)
     page.wait_for_function(
         "() => document.querySelectorAll('[data-testid=\"session-run\"]').length === 2", timeout=10000)
+    # The goal sentence is the chat's first turn: read it once the transcript has arrived (the runs
+    # can render first, titled by the first run's intent, while GET /chats/:id is in flight).
+    page.wait_for_function(
+        "() => !!document.querySelector('[data-testid=\"session-turn\"]')", timeout=10000)
     title = page.get_by_test_id("session-title").inner_text()
     th = page.evaluate(THREAD)
     run_order = [k for k in th["kids"] if k.startswith("session-run:")]
@@ -209,6 +213,9 @@ with sync_playwright() as p:
     page.locator('[data-testid="rail-session"][data-session-id="chat-pay"]').click()
     page.wait_for_function(
         "() => document.querySelectorAll('[data-testid=\"session-run\"]').length === 2", timeout=10000)
+    # Scroll is restored once the session is ready (its transcript read): wait for the turns.
+    page.wait_for_function(
+        "() => !!document.querySelector('[data-testid=\"session-turn\"]')", timeout=10000)
     page.wait_for_timeout(300)
     back = page.evaluate(THREAD)
     draft = page.get_by_test_id("session-composer-input").input_value()
@@ -297,6 +304,9 @@ with sync_playwright() as p:
     page.goto(f"{origin}/s/chat-pay", wait_until="networkidle")
     page.wait_for_function(
         "() => document.querySelectorAll('[data-testid=\"session-run\"]').length === 2", timeout=10000)
+    page.wait_for_function(
+        "() => !!document.querySelector('[data-testid=\"session-turn\"]')", timeout=10000)
+    page.wait_for_timeout(300)
     check("since-once", page.locator('[data-testid="since-you-left"]').count() == 0)
 
     # ── 11. capability absent ─────────────────────────────────────────────────────
