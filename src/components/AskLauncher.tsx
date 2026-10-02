@@ -63,7 +63,7 @@ function ChatGlyph(): React.ReactElement {
   );
 }
 
-export function AskLauncher({ open, onToggle, rightOffsetPx = 0, bottomOffsetPx = 0, children }: {
+export function AskLauncher({ open, onToggle, rightOffsetPx = 0, bottomOffsetPx = 0, bubble = true, children }: {
   open: boolean;
   onToggle: () => void;
   /** Width of a right-edge panel the launcher must stay clear of (0 = none). */
@@ -71,6 +71,9 @@ export function AskLauncher({ open, onToggle, rightOffsetPx = 0, bottomOffsetPx 
   /** Height of a bottom-edge band (a full-width composer) above the runs bar the
    *  launcher must stay clear of (0 = none). */
   bottomOffsetPx?: number;
+  /** Draw the bubble. The Desk has its own composer in this corner (skin `desk`, S4), so there the
+   *  bubble stands down and the Desk composer hands its message to the panel instead. */
+  bubble?: boolean;
   /** The dock, rendered inside the floating panel while `open`. */
   children?: React.ReactNode;
 }): React.ReactElement {
@@ -117,7 +120,7 @@ export function AskLauncher({ open, onToggle, rightOffsetPx = 0, bottomOffsetPx 
           {children}
         </div>
       )}
-      <button
+      {bubble && <button
         type="button"
         data-testid="ask-launcher"
         data-idiom="ask"
@@ -144,7 +147,7 @@ export function AskLauncher({ open, onToggle, rightOffsetPx = 0, bottomOffsetPx 
         }}
       >
         {open ? <span aria-hidden style={{ fontSize: '20px', lineHeight: 1 }}>×</span> : <ChatGlyph />}
-      </button>
+      </button>}
     </>
   );
 }

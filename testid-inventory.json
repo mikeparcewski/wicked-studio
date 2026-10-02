@@ -10,9 +10,9 @@
   "version": 1,
   "studioVersion": "0.5.19",
   "counts": {
-    "files": 177,
-    "occurrences": 1770,
-    "static": 1549,
+    "files": 180,
+    "occurrences": 1793,
+    "static": 1569,
     "dynamic": 73,
     "computed": 8
   },
@@ -2045,6 +2045,102 @@
       "testId": "demo-watch",
       "files": [
         "src/components/DemoMode.tsx"
+      ]
+    },
+    {
+      "testId": "desk",
+      "files": [
+        "src/components/desk/Desk.tsx"
+      ]
+    },
+    {
+      "testId": "desk-chore",
+      "files": [
+        "src/components/desk/Desk.tsx"
+      ]
+    },
+    {
+      "testId": "desk-chores",
+      "files": [
+        "src/components/desk/Desk.tsx"
+      ]
+    },
+    {
+      "testId": "desk-composer-input",
+      "files": [
+        "src/components/desk/Desk.tsx"
+      ]
+    },
+    {
+      "testId": "desk-composer-send",
+      "files": [
+        "src/components/desk/Desk.tsx"
+      ]
+    },
+    {
+      "testId": "desk-headline",
+      "files": [
+        "src/components/desk/Desk.tsx"
+      ]
+    },
+    {
+      "testId": "desk-project",
+      "files": [
+        "src/components/desk/Desk.tsx"
+      ]
+    },
+    {
+      "testId": "desk-rail-badge",
+      "files": [
+        "src/components/desk/SessionRail.tsx"
+      ]
+    },
+    {
+      "testId": "desk-rail-everything",
+      "files": [
+        "src/components/desk/SessionRail.tsx"
+      ]
+    },
+    {
+      "testId": "desk-rail-home",
+      "files": [
+        "src/components/desk/SessionRail.tsx"
+      ]
+    },
+    {
+      "testId": "desk-rail-more",
+      "files": [
+        "src/components/desk/SessionRail.tsx"
+      ]
+    },
+    {
+      "testId": "desk-rail-start",
+      "files": [
+        "src/components/desk/SessionRail.tsx"
+      ]
+    },
+    {
+      "testId": "desk-see-everything",
+      "files": [
+        "src/components/desk/Desk.tsx"
+      ]
+    },
+    {
+      "testId": "desk-session",
+      "files": [
+        "src/components/desk/Desk.tsx"
+      ]
+    },
+    {
+      "testId": "desk-start-chip",
+      "files": [
+        "src/components/desk/Desk.tsx"
+      ]
+    },
+    {
+      "testId": "desk-start-row",
+      "files": [
+        "src/components/desk/Desk.tsx"
       ]
     },
     {
@@ -5754,6 +5850,12 @@
       ]
     },
     {
+      "testId": "rail-group",
+      "files": [
+        "src/components/desk/SessionRail.tsx"
+      ]
+    },
+    {
       "testId": "rail-health-chevron",
       "files": [
         "src/components/HealthRailSection.tsx"
@@ -5902,6 +6004,12 @@
       "testId": "rail-seat-week-window",
       "files": [
         "src/components/HealthRailSection.tsx"
+      ]
+    },
+    {
+      "testId": "rail-session",
+      "files": [
+        "src/components/desk/SessionRail.tsx"
       ]
     },
     {
@@ -6555,6 +6663,12 @@
       "testId": "section-door",
       "files": [
         "src/components/DeckSectionDoors.tsx"
+      ]
+    },
+    {
+      "testId": "session-rail",
+      "files": [
+        "src/components/desk/SessionRail.tsx"
       ]
     },
     {
@@ -9265,6 +9379,12 @@
       "testId": "viewer-truncation-banner",
       "files": [
         "src/components/FileViewer.tsx"
+      ]
+    },
+    {
+      "testId": "watch-pill",
+      "files": [
+        "src/components/desk/WatchPill.tsx"
       ]
     },
     {

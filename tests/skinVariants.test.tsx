@@ -60,7 +60,7 @@ describe('the skin picker (Appearance settings)', () => {
     render(<AppearanceSettings />);
     const group = screen.getByRole('radiogroup', { name: 'Skin' });
     const options = within(group).getAllByRole('radio');
-    expect(options.map((o) => o.getAttribute('data-testid'))).toEqual(['skin-option-studio', 'skin-option-compact-rail']);
+    expect(options.map((o) => o.getAttribute('data-testid'))).toEqual(['skin-option-studio', 'skin-option-compact-rail', 'skin-option-desk']);
     expect(screen.getByTestId('skin-option-studio')).toHaveAttribute('aria-checked', 'true');
     expect(screen.getByTestId('skin-option-compact-rail')).toHaveAttribute('aria-checked', 'false');
   });

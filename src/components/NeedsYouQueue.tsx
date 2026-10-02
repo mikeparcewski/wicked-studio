@@ -202,7 +202,54 @@ export function NeedsYouQueue({ queue, runs, navigate, now, variant = 'inline' }
     );
   };
 
+  /** The Desk's row (skin `desk`, S4): a plain card — the subject in words, one line under it
+   *  ("project · what · age"), and ONE plain action on the right. Same keys, verbs and testids. */
+  const deskLine = (row: NeedRow, testId: 'need-row' | 'need-member'): React.ReactElement => {
+    const selected = queue.selectedKey === row.key;
+    const isGroup = row.members !== undefined;
+    const open = isGroup && queue.expanded.has(row.key);
+    const waiting = row.tone === 'gate' || row.tone === 'human';
+    return (
+      <div
+        key={row.key}
+        data-testid={testId}
+        data-kind={row.kind}
+        data-key={row.key}
+        data-count={row.members?.length ?? 1}
+        data-queue-item={row.key}
+        data-kbd-selected={selected ? 'true' : undefined}
+        data-reveal={revealed.has(row.key) ? 'true' : undefined}
+        tabIndex={-1}
+        className={`wk-desk-need${testId === 'need-member' ? ' wk-desk-need--member' : ''}${selected ? ' wk-desk-need--selected' : ''}${revealed.has(row.key) ? ' wk-need-row--reveal' : ''}`}
+      >
+        <span aria-hidden className={`wk-desk-dot${waiting ? ' wk-desk-dot--waiting' : ''}`} style={waiting ? undefined : { background: TONE_COLOR[row.tone] }} />
+        <span className="wk-desk-need-body">
+          {isGroup ? (
+            <span title={row.subject} className="wk-desk-need-title">{row.subject}</span>
+          ) : (
+            <a {...link(row.subjectPath)} title={row.subject} className="wk-desk-need-title">{humanTitle(row.subject)}</a>
+          )}
+          <span className="wk-desk-need-line">
+            <span data-testid="need-line" title={row.text}>{row.text}</span>
+            <span aria-hidden> · </span>
+            <AgeStamp at={row.at} now={at} testId="need-age" {...(isGroup ? {} : { href: row.subjectPath, onOpen: navigate })} />
+          </span>
+        </span>
+        {isGroup && row.action.kind === 'batch-onboard' && batchAct(row.action, row.text)}
+        {isGroup && row.action.kind === 'accept-memory' && acceptAct(row.action)}
+        {isGroup ? (
+          <button type="button" data-testid="need-group-toggle" aria-expanded={open} onClick={() => queue.toggle(row.key)} className="wk-need-act">
+            {open ? 'Fold' : 'Show each'}
+          </button>
+        ) : (
+          act(row)
+        )}
+      </div>
+    );
+  };
+
   const line = (row: NeedRow, testId: 'need-row' | 'need-member'): React.ReactElement => {
+    if (variant === 'desk') return deskLine(row, testId);
     const selected = queue.selectedKey === row.key;
     const isGroup = row.members !== undefined;
     const open = isGroup && queue.expanded.has(row.key);
@@ -285,13 +332,16 @@ export function NeedsYouQueue({ queue, runs, navigate, now, variant = 'inline' }
       data-count={queue.count}
       data-focus-lock={queue.focus.on ? 'on' : 'off'}
       data-skin-variant={variant}
-      style={{
+      className={variant === 'desk' ? 'wk-desk-needs' : undefined}
+      style={variant === 'desk' ? undefined : {
         flex: variant === 'rail' ? '1 1 auto' : '1.4 1 0', minWidth: 0, display: 'flex', flexDirection: 'column',
         background: 'var(--surface-card)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-card)',
         borderRadius: 'var(--radius-lg)', overflow: 'hidden', outline: 'none',
       }}
     >
-      <p
+      {variant === 'desk' ? (
+        <p className="wk-desk-label">Needs you <span className="wk-desk-label-aside">most urgent first</span></p>
+      ) : <p
         style={{
           margin: 0, padding: '8px 10px 6px',
           fontSize: 'var(--text-2xs)', fontWeight: 'var(--weight-bold)',
@@ -300,7 +350,7 @@ export function NeedsYouQueue({ queue, runs, navigate, now, variant = 'inline' }
         }}
       >
         Needs you{queue.count > 0 ? ` (${queue.count})` : ''}
-      </p>
+      </p>}
       {/* Just the top one (idea 10): the rest are hidden, never dropped — they come back when the
           held item clears, or at once with "Show all". */}
       {queue.focus.on && (
@@ -332,7 +382,7 @@ export function NeedsYouQueue({ queue, runs, navigate, now, variant = 'inline' }
           {calmCopy(runs)}
         </p>
       ) : (
-        <div style={{ overflowY: 'auto', minHeight: 0 }}>
+        <div style={variant === 'desk' ? undefined : { overflowY: 'auto', minHeight: 0 }}>
           {queue.rows.map((row) => (
             <div key={row.key} role="group">
               {line(row, 'need-row')}

@@ -55,18 +55,28 @@ function scopeField(scope: ChatScope | null): { scope?: ChatScope } {
   return scope !== null ? { scope } : {};
 }
 
-export function AskDock({ runs, pathname, onClose, navigate }: {
+export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoffTaken }: {
   runs: SessionView[];
   pathname: string;
   /** Collapsing the dock closes Ask entirely — the launcher bubble/shortcut reopen it. */
   onClose: () => void;
   /** The promote door (studio#323 R3): "Open in full chat" routes to `/chat/:id`. */
   navigate?: (path: string) => void;
+  /** A message the operator already SENT from another composer (the Desk's, skin `desk`): the
+   *  dock opens with it and sends it as the operator's own question. Absent ⇒ nothing is sent. */
+  sendText?: string;
+  /** Called once the dock has taken `sendText` (it is in the dock's own state and being sent):
+   *  the caller drops it, so nothing can hand it over a second time. */
+  onHandoffTaken?: () => void;
 }): React.ReactElement {
   // The letters that opened the dock (type-to-composer, §5.6 rule 4): read on mount, cleared
   // in an effect (a StrictMode double initializer must not read an already-emptied seed).
   const [typedSeed] = useState(peekTypedSeed);
   useEffect(() => { takeTypedSeed(); }, []);
+  // A Desk handoff is read once, at mount, like the seed: later props never re-send it.
+  const [handoff] = useState(() => sendText);
+  const tookRef = useRef(onHandoffTaken);
+  useEffect(() => { if (handoff !== undefined) tookRef.current?.(); }, [handoff]);
   const [diag, setDiag] = useState<DiagnosticsState>({ kind: 'loading' });
   const [repos, setRepos] = useState<RepoEntry[]>(() => getCachedRepos() ?? []);
   const projects = useProjectsStore((s) => s.projects);
@@ -304,7 +314,8 @@ export function AskDock({ runs, pathname, onClose, navigate }: {
       }}
       fill
       typeTarget="ask"
-      initialText={typedSeed}
+      initialText={handoff ?? typedSeed}
+      sendOnOpen={handoff !== undefined && handoff.trim() !== ''}
       onExpandChat={
         navigate === undefined
           ? undefined

@@ -456,7 +456,7 @@ function DockChat({ chatId, resumed = false, onResumeProbe }: {
 
 const RESUMED_NOTE = 'Resumed your earlier session — its agents are still on the line.';
 
-export function AssistDock({ context, verbs, importable, open, onOpenChange, onError, resumeChatId = null, onExpandChat, onResumeGone, fill = false, typeTarget, initialText = '' }: {
+export function AssistDock({ context, verbs, importable, open, onOpenChange, onError, resumeChatId = null, onExpandChat, onResumeGone, fill = false, typeTarget, initialText = '', sendOnOpen = false }: {
   context: AssistContext;
   verbs: AssistVerbs;
   /** Which attachments offer the Import-directly fork. Absent ⇒ everything is analysis-only. */
@@ -482,6 +482,9 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
   typeTarget?: 'ask' | 'page' | undefined;
   /** Letters typed before the dock mounted (the keystrokes that opened it). */
   initialText?: string;
+  /** `initialText` was already sent by the operator from another composer (the Desk's): send it
+   *  once on mount. Only ever set from an explicit send — typed letters never send. */
+  sendOnOpen?: boolean;
 }): React.ReactElement {
   const [items, setItems] = useState<ThreadItem[]>(() =>
     resumeChatId !== null
@@ -575,9 +578,12 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
       });
   };
 
+  // Re-entry guard: `sending` is state, so two calls in one tick would both read it as false.
+  const inFlight = useRef(false);
   const send = async (): Promise<void> => {
     const body = text.trim();
-    if (body === '' || sending) return;
+    if (body === '' || sending || inFlight.current) return;
+    inFlight.current = true;
     setSending(true);
     // An attachment still sitting at the fork when the operator hits send rides as analysis —
     // they attached it and asked; silently dropping it would run a different request.
@@ -604,9 +610,19 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
       note('fail', msg);
       onError?.(msg);
     } finally {
+      inFlight.current = false;
       setSending(false);
     }
   };
+
+  // The Desk composer's handoff (S4): the operator pressed Send there — send it here, once.
+  const sentOnOpen = useRef(false);
+  useEffect(() => {
+    if (!sendOnOpen || sentOnOpen.current) return;
+    sentOnOpen.current = true;
+    void send();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once, on mount, with the handed-over text
+  }, []);
 
   /** studio#328: a resumed block's probe answered. Reclaimed → drop the resumed block
    *  (and its "still on the line" note), say so, and let the surface forget it; could

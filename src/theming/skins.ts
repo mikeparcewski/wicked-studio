@@ -16,8 +16,9 @@
  *   1. `tokens`   — overrides of the SAME semantic-token names tokens.css declares
  *                   (never a primitive, never a colour: themes own colour). Applied as
  *                   inline custom properties on <html>, the §3.3 cascade seam.
- *   2. `shell`    — the shell layout: `classic`, or `right-rail` (the shell reserves a
- *                   persistent right column on every route).
+ *   2. `shell`    — the shell layout: `classic`, `right-rail` (the shell reserves a
+ *                   persistent right column on every route), or `desk` (the session rail
+ *                   and the Desk — DES-STUDIO-REBUILD-001 §5.1, slice S4).
  *   3. `variants` — which variant renders each behaviour surface.
  *
  * Kept deliberately small: a surface's variant union only holds variants that exist.
@@ -28,22 +29,23 @@
  */
 
 /** The shell layouts a skin can choose. */
-export type ShellLayout = 'classic' | 'right-rail';
+export type ShellLayout = 'classic' | 'right-rail' | 'desk';
 
 /** Which variant renders each behaviour surface. */
 export interface SkinVariants {
-  /** The Needs-you queue: inline in Home's command center, or docked in the right rail. */
-  needsQueue: 'inline' | 'rail';
-  /** The live-runs surface: the bottom sheet. */
-  liveRuns: 'sheet';
-  /** Handover on arrival: the banner above the KPI ribbon. */
-  handover: 'banner';
+  /** The Needs-you queue: inline in Home's command center, docked in the right rail, or the
+   *  Desk's list of plain rows (one action each). */
+  needsQueue: 'inline' | 'rail' | 'desk';
+  /** The live-runs surface: the bottom sheet, or rows in the session rail. */
+  liveRuns: 'sheet' | 'rail-rows';
+  /** Handover on arrival: the banner above the KPI ribbon, or the Desk's "While you were away". */
+  handover: 'banner' | 'desk-away';
   /** The peek card (P). */
   peek: 'card';
   /** The gate-decision undo toasts. */
   undoToasts: 'stack';
-  /** The left nav: the full accordion rail, or collapsed to icons. */
-  navRail: 'full' | 'icons';
+  /** The left nav: the full accordion rail, collapsed to icons, or the session rail. */
+  navRail: 'full' | 'icons' | 'sessions';
 }
 
 export type SkinSurface = keyof SkinVariants;
@@ -116,9 +118,33 @@ const COMPACT_RAIL: SkinManifest = {
   },
 };
 
-export const SKINS: readonly SkinManifest[] = [STUDIO, COMPACT_RAIL];
+/**
+ * The DESK (DES-STUDIO-REBUILD-001 §5.1, slice S4): the concept's shape — a 236 px session rail
+ * (sessions grouped by project, with badges), and on `/` the Desk: the greeting, "N things need
+ * you", the needs-you list as plain rows, the chores "for whoever runs studio", "Your projects" in
+ * sentences, the Start row and the composer. Opt-in until the flip (S15b). Tokens: the type face
+ * and the softer radii of DESIGN-simple §1a — never a colour (the wicked themes own colour, and a
+ * skin never selects a theme).
+ */
+const DESK: SkinManifest = {
+  id: 'desk',
+  name: 'Desk',
+  description: 'The calm Desk — what needs you, your projects in sentences, one composer, a session rail.',
+  tokens: {
+    '--font-sans': "'Archivo', system-ui, -apple-system, sans-serif",
+    '--radius-md': '8px',
+    '--radius-lg': '12px',
+  },
+  shell: 'desk',
+  variants: {
+    needsQueue: 'desk', liveRuns: 'rail-rows', handover: 'desk-away',
+    peek: 'card', undoToasts: 'stack', navRail: 'sessions',
+  },
+};
 
-export type SkinId = 'studio' | 'compact-rail';
+export const SKINS: readonly SkinManifest[] = [STUDIO, COMPACT_RAIL, DESK];
+
+export type SkinId = 'studio' | 'compact-rail' | 'desk';
 
 export const DEFAULT_SKIN_ID: SkinId = 'studio';
 
@@ -145,4 +171,12 @@ export const RIGHT_RAIL_PX = 340;
  */
 export function rightRailOpen(skin: SkinManifest): boolean {
   return skin.shell === 'right-rail';
+}
+
+/** Width of the desk shell's session rail (px) — fixed, so nothing moves when a pane opens. */
+export const SESSION_RAIL_PX = 236;
+
+/** Whether the shell is the Desk's (the session rail on every route, the Desk on `/`). */
+export function deskShell(skin: SkinManifest): boolean {
+  return skin.shell === 'desk';
 }
