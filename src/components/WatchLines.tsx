@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api/client.js';
+import { isRouteUnsupported } from '../api/errors.js';
 import type { WatchCoverage } from '../api/watch-wire.js';
 import { coverageLine, gateLine, useWatchStore } from '../store/watch.js';
 
@@ -27,15 +28,20 @@ export function WatchRunLines({ runId, jumped, onBack }: {
   onBack?: () => void;
 }): React.ReactElement | null {
   const [coverage, setCoverage] = useState<WatchCoverage[] | undefined>(undefined);
+  const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     let cancelled = false;
     setCoverage(undefined);
+    setError(null);
     api.getWatch({ run: runId, limit: 1 })
       .then((r) => { if (!cancelled) setCoverage(r.coverage); })
-      .catch(() => { /* no registry: no line, never "all clear" */ });
+      .catch((e: unknown) => {
+        // No registry on this daemon: no line. Any other failure is said, never read as "all checked".
+        if (!cancelled && !isRouteUnsupported(e)) setError(e instanceof Error ? e.message : String(e));
+      });
     return () => { cancelled = true; };
   }, [runId]);
-  const line = coverageLine(coverage, entryLabel);
+  const line = error !== null ? `Could not read what was checked on this run (${error})` : coverageLine(coverage, entryLabel);
   if (line === null && !jumped) return null;
   return (
     <div className="wk-watch-run-lines">

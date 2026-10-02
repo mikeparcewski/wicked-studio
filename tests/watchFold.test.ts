@@ -155,6 +155,13 @@ describe('the run list: Finished and Delivered', () => {
   const run = (id: string, status: string, delivery?: string, ended = 3_000): SessionView =>
     ({ session: { id, status, problem: id, ended_at: ended, ...(delivery ? { delivery } : {}) }, units: [] }) as unknown as SessionView;
 
+  it('rows that arrived without a project take their run’s project from the run list (Copilot)', () => {
+    let f = foldWatchdog(EMPTY_WATCH, { type: 'workerStalled', session: 'r-q', quietForMs: 60_000 }, 1);
+    expect(watchFeed(f, { project: 'kes' })).toStrictEqual([]);
+    f = foldRuns(f, [run('r-q', 'executing')], () => 'kes');
+    expect(watchFeed(f, { project: 'kes' }).map((r) => r.id)).toStrictEqual(['quiet:r-q:1']);
+  });
+
   it('a finished run is Finished; a delivered one adds Delivered; folding again changes nothing', () => {
     const f = foldRuns(EMPTY_WATCH, [run('a', 'completed', 'delivered'), run('b', 'executing'), run('c', 'completed')], () => 'kes');
     expect(watchFeed(f).map((r) => r.id).sort()).toStrictEqual(['delivered:a', 'finished:a', 'finished:c']);

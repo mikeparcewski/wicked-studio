@@ -251,6 +251,18 @@ const sessionProject = (v: SessionView): string | null => {
 export function foldRuns(fold: WatchFold, runs: readonly SessionView[], projectOf?: (runId: string) => string | null): WatchFold {
   const rows = { ...fold.rows };
   let changed = false;
+  // A run's rows that arrived without a project (watchdog frames, team findings) take the run's
+  // project from the run list, so a project-filtered feed keeps them (Copilot).
+  const projectOfRun = new Map<string, string>();
+  for (const v of runs) {
+    const pid = projectOf?.(v.session.id) ?? sessionProject(v);
+    if (pid !== null) projectOfRun.set(v.session.id, pid);
+  }
+  for (const r of Object.values(rows)) {
+    if (r.projectId !== null || r.runId === null) continue;
+    const pid = projectOfRun.get(r.runId);
+    if (pid !== undefined) { rows[r.id] = { ...r, projectId: pid }; changed = true; }
+  }
   for (const v of runs) {
     const s = v.session as unknown as { id: string; status: string; ended_at?: number; delivery?: unknown };
     const at = typeof s.ended_at === 'number' ? s.ended_at * 1000 : null;
@@ -323,15 +335,20 @@ export function coverageLine(coverage: WatchFeedResponse['coverage'], label: (en
 
 interface WatchStore {
   fold: WatchFold;
+  /** The late-join read failed for a reason other than "this daemon has no registry": said, never
+   *  read as an empty feed (the adoption-seam rule, `api/errors.ts` `isRouteUnsupported`). */
+  feedError: string | null;
   /** Every `/ws` frame: watch, team and watchdog inputs; everything else is a cheap miss. */
   ingest: (frame: { type: string } & Record<string, unknown>) => void;
   hydrate: (resp: WatchFeedResponse) => void;
+  failFeed: (error: string | null) => void;
   runs: (runs: readonly SessionView[], projectOf?: (runId: string) => string | null) => void;
   reset: () => void;
 }
 
 export const useWatchStore = create<WatchStore>((set, get) => ({
   fold: EMPTY_WATCH,
+  feedError: null,
   ingest: (frame) => {
     const before = get().fold;
     let next = before;
@@ -340,10 +357,11 @@ export const useWatchStore = create<WatchStore>((set, get) => ({
     else if (typeof frame['session'] === 'string') next = foldWatchdog(next, frame, Date.now());
     if (next !== before) set({ fold: next });
   },
-  hydrate: (resp) => set({ fold: foldFeed(get().fold, resp) }),
+  hydrate: (resp) => set({ fold: foldFeed(get().fold, resp), feedError: null }),
+  failFeed: (error) => set({ feedError: error }),
   runs: (runs, projectOf) => {
     const next = foldRuns(get().fold, runs, projectOf);
     if (next !== get().fold) set({ fold: next });
   },
-  reset: () => set({ fold: EMPTY_WATCH }),
+  reset: () => set({ fold: EMPTY_WATCH, feedError: null }),
 }));

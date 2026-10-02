@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { api } from '../api/client.js';
+import { isRouteUnsupported } from '../api/errors.js';
 import type { WatchKind } from '../api/watch-wire.js';
 import { useConnectionStore } from '../store/connection.js';
 import { useWatchStore, watchFeed, type WatchRow } from '../store/watch.js';
@@ -18,7 +19,12 @@ export function useWatchHydrate(): void {
     let cancelled = false;
     api.getWatch({ limit: 200 })
       .then((resp) => { if (!cancelled) useWatchStore.getState().hydrate(resp); })
-      .catch(() => { /* no registry on this daemon: the feed is studio's own fold */ });
+      .catch((e: unknown) => {
+        if (cancelled) return;
+        // A daemon without the registry (bare 404 / 501): the feed is studio's own fold, silently.
+        // Anything else is a failure the Watchtower says (Copilot).
+        useWatchStore.getState().failFeed(isRouteUnsupported(e) ? null : e instanceof Error ? e.message : String(e));
+      });
     return () => { cancelled = true; };
   }, [connected]);
 }
