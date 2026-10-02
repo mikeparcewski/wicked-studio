@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useDeliveredNow } from '../../store/postHocDeliver.js';
 import { api } from '../../api/client.js';
 import type { RosterSeat, SessionView } from '../../api/types.js';
 import {
@@ -42,10 +43,11 @@ export function Desk({ runs, needRows, now, navigate, onAsk }: {
   const count = needCount(needRows);
   const { hello, date } = deskGreeting(now);
   const runChatId = useCapabilities((s) => s.runChatId);
+  const deliveredNow = useDeliveredNow();
   const cards = useMemo(
     // Unbounded here: a card's "N more" counts every other session, not the rail's newest few.
-    () => deskProjects(railGroups(items, unfiled, needsByRun(needRows), Infinity, needTextByRun(needRows), runChatId)),
-    [items, unfiled, needRows, runChatId],
+    () => deskProjects(railGroups(items, unfiled, needsByRun(needRows), Infinity, needTextByRun(needRows), runChatId, deliveredNow)),
+    [items, unfiled, needRows, runChatId, deliveredNow],
   );
   const chores = useMemo(() => lapsedSeatChores(roster), [roster]);
   const [text, setText] = useState('');

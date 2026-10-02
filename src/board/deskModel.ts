@@ -4,7 +4,7 @@ import { skillsPath } from '../api/skills.js';
 import { steeringDashboardPath } from '../api/steering.js';
 import { testingPath } from '../api/testing.js';
 import type { NeedRow } from './needsYou.js';
-import { KEPT_LINE, keptLocally } from './deskWords.js';
+import { DELIVERED_LINE, KEPT_LINE, keptLocally } from './deskWords.js';
 import { sessionIdOf, sessionPath, summarize, type SessionState } from './sessionModel.js';
 
 /**
@@ -127,6 +127,7 @@ function toSessions(
   badges: Record<string, number>,
   texts: Record<string, string>,
   runChatId: boolean,
+  deliveredNow: ReadonlySet<string> = new Set(),
 ): RailSession[] {
   const order: string[] = [];
   const byId = new Map<string, SessionView[]>();
@@ -142,7 +143,10 @@ function toSessions(
     const runId = needy ?? newest;
     const views = byId.get(id)!;
     const newestView = views.find((v) => v.session.id === newest);
-    const kept = sum.state === 'done' && sum.badge === 0 && newestView !== undefined && keptLocally(newestView);
+    // A post-hoc delivery that just landed (this session's store) is delivered, even before the run
+    // list catches up: no lifecycle frame follows it, so the DTO can say `stranded` until a reload.
+    const deliveredJustNow = deliveredNow.has(newest);
+    const kept = !deliveredJustNow && sum.state === 'done' && sum.badge === 0 && newestView !== undefined && keptLocally(newestView);
     return {
       id,
       runId,
@@ -150,7 +154,7 @@ function toSessions(
       title: sum.title,
       state: sum.state,
       badge: sum.badge,
-      line: kept ? KEPT_LINE : sessionLine(sum.state, sum.badge, texts[runId] ?? null),
+      line: deliveredJustNow && sum.badge === 0 ? DELIVERED_LINE : kept ? KEPT_LINE : sessionLine(sum.state, sum.badge, texts[runId] ?? null),
       path: sessionPath(id),
     };
   });
@@ -183,16 +187,17 @@ export function railGroups(
   max: number = RAIL_SESSIONS_MAX,
   texts: Record<string, string> = {},
   runChatId = false,
+  deliveredNow: ReadonlySet<string> = new Set(),
 ): RailGroup[] {
   const groups: RailGroup[] = projects.map((p) => ({
     projectId: p.project.id,
     name: p.project.name,
-    sessions: capSessions(orderSessions(toSessions(p.runs, badges, texts, runChatId)), max),
+    sessions: capSessions(orderSessions(toSessions(p.runs, badges, texts, runChatId, deliveredNow)), max),
   }));
   groups.push({
     projectId: null,
     name: 'Not in a project',
-    sessions: capSessions(orderSessions(toSessions(unfiled, badges, texts, runChatId)), max),
+    sessions: capSessions(orderSessions(toSessions(unfiled, badges, texts, runChatId, deliveredNow)), max),
   });
   return groups.filter((g) => g.sessions.length > 0);
 }
