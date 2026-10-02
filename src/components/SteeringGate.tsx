@@ -4,7 +4,7 @@ import { keepEntryState } from '../hooks/useHistoryState.js';
 import { useCallback, useState, useEffect, useMemo, useRef } from 'react';
 import { api, type GateDecision, type RunDiff } from '../api/client.js';
 import type { CoreEvent, CoverageReport, WorkUnit, WorkflowDef } from '../api/types.js';
-import { useGlobalShortcuts, type ShortcutEntry } from '../hooks/useGlobalShortcuts.js';
+import { altChord, useGlobalShortcuts, type ShortcutEntry } from '../hooks/useGlobalShortcuts.js';
 import { useSteerPrefixes } from '../hooks/useSteerPrefixes.js';
 import { useAnnotationStore } from '../store/annotations.js';
 import { useRunEventStore } from '../store/events.js';
@@ -554,13 +554,13 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
     return run(() => commitGateDecision(runId, decision), { kind: 'request-changes', amend: text });
   };
 
-  // DES-UX-001 §7.7 (slice AC): the gate panel honors a / r — the same
+  // DES-UX-001 §7.7 (slice AC): the gate panel honors ⌥A / ⌥R (§5.6: letters always type) — the same
   // POST /runs/:id/gate its buttons fire, through the ONE slice-G registry
   // (the shared typing guard keeps the steer textarea's letters as letters).
   // Guarded on the panel HOLDING focus: a is approve exactly where approve
   // matters most, and nowhere else on the page.
   const actions = useRef({ approve, reject });
-  // On escalation gates the 'a' key fires Retry (optionally carries amend), not the plain approve.
+  // On escalation gates ⌥A fires Retry (optionally carries amend), not the plain approve.
   actions.current = { approve: escalationGate ? retry : approve, reject };
   const keyEntries = useMemo<ShortcutEntry[]>(() => {
     // No in-flight check here: a key pressed while a decision is in progress reaches `run`, which
@@ -571,7 +571,7 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
     return [
       {
         id: 'gate-panel-approve',
-        chord: { key: 'a' },
+        chord: altChord('a'),
         group: 'gates',
         description: 'Approve the focused gate',
         guard: focused,
@@ -582,7 +582,7 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
       },
       {
         id: 'gate-panel-reject',
-        chord: { key: 'r' },
+        chord: altChord('r'),
         group: 'gates',
         description: 'Reject the focused gate',
         guard: focused,
@@ -1157,7 +1157,7 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
             {sourceLine !== null && (
               <span data-testid="gate-source" data-gate-source={gateKind ?? ''}>{sourceLine} · </span>
             )}
-            a {restoredRetry ? 'retry' : 'approve'} · r reject while this card holds focus
+            ⌥A {restoredRetry ? 'retry' : 'approve'} · ⌥R reject while this card holds focus
           </p>
         )}
       </div>

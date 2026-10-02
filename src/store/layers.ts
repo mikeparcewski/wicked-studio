@@ -15,7 +15,7 @@ import { create } from 'zustand';
  * yield to the overlay via `shortcutOverlayOpen`.
  */
 interface LayerStore {
-  /** The '?' shortcut overlay (§7.7) — the topmost layer while open. */
+  /** The shortcut overlay (§7.7) — the topmost layer while open. */
   shortcutOverlayOpen: boolean;
   /** The bell's notifications popover — the modal/popover rung of the chain. */
   bellOpen: boolean;

@@ -171,7 +171,7 @@ export function RunsBottomPanel({ runs, runPath, navigate, immersive, scopeProje
         chord: { key: 'escape' },
         group: 'panels',
         description: 'Collapse the runs sheet',
-        // §7.7 chain: the '?' overlay closes before the sheet (slice AC), and
+        // §7.7 chain: the shortcut overlay closes before the sheet (slice AC), and
         // a modal's scrim sits above the sheet — the modal closes first.
         guard: () =>
           useRunsPanelStore.getState().expanded &&

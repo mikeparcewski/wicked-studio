@@ -147,7 +147,7 @@ with sync_playwright() as p:
 
     # The rail's keys work off Home: focus the queue, j selects the top row.
     page.locator('[data-testid="skin-right-rail"] [data-testid="needs-you-queue"]').focus()
-    page.keyboard.press("j")
+    page.keyboard.press("Alt+j")
     check("run-page-rail-keys", page.evaluate(SELECTED) == home_rows[0]["key"],
           selected=page.evaluate(SELECTED))
     page.evaluate("() => document.activeElement && document.activeElement.blur()")
@@ -180,7 +180,7 @@ with sync_playwright() as p:
     page.evaluate("() => document.activeElement && document.activeElement.blur()")
 
     def peek_key() -> str | None:
-        page.keyboard.press("p")
+        page.keyboard.press("Alt+p")
         if not wait_ok(page, "() => !!document.querySelector('[data-testid=\"peek-card\"]')", 5000):
             return None
         return page.get_by_test_id("peek-card").get_attribute("data-key")

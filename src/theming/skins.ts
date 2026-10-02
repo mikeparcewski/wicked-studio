@@ -1,6 +1,13 @@
 /**
  * THE SKIN CONTRACT — studio's shape and style are skins over ONE behaviour layer.
  *
+ *   A skin changes no behaviour; every route is reachable under every skin, by its nav
+ *   or ⌘K; keyboard behaviour is identical across skins.
+ *
+ * (Restated by the operator, DES-STUDIO-REBUILD-001 §10 / §14 Q2; pinned by
+ * e2e/skin_contract_test.py.) There is one keyboard model for every skin — no global
+ * shortcut is a bare printable key (§5.6), so no skin can claim a letter.
+ *
  * The behaviours (the needs-you queue's ranking and keys, handover, peek/jump/back, the
  * undo window, …) live in models, hooks and stores; components render them; the e2e
  * journeys assert them through data-testid and roles. A skin changes none of that. It

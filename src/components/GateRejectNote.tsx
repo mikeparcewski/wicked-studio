@@ -12,7 +12,7 @@ import { decisionPreview, takeRestoredNote } from '../board/undoQueue.js';
  * restores the chip row, firing nothing.
  *
  * While this input is focused it IS a typing context: the §1.2 registry guard
- * makes j/k/a inert with no second mechanism (§2.3) — its own keydown handler
+ * makes the ⌥ chords inert with no second mechanism (§2.3) — its own keydown handler
  * below is the input-local kind the EC21 grep exempts by construction (it is
  * not a window-level listener).
  *

@@ -103,7 +103,7 @@ with sync_playwright() as p:
 
     # ── 2 + 3. keys on the queue: focus, j selects the group, Enter expands ────
     page.get_by_test_id("needs-you-queue").focus()
-    page.keyboard.press("j")
+    page.keyboard.press("Alt+j")
     check("j-selects-first", page.evaluate(SELECTED) == keys[0], selected=page.evaluate(SELECTED))
     page.keyboard.press("Enter")
     try:
@@ -114,14 +114,14 @@ with sync_playwright() as p:
     members = page.evaluate(MEMBERS)
     check("group-members-longest-waiting-first", members == ["gate:g1", "gate:g2"], members=members)
     page.screenshot(path=str(SHOTS / "wave2b-queue-expanded.png"))
-    page.keyboard.press("j")
+    page.keyboard.press("Alt+j")
     check("j-walks-into-members", page.evaluate(SELECTED) == "gate:g1", selected=page.evaluate(SELECTED))
-    page.keyboard.press("j")
-    page.keyboard.press("j")
+    page.keyboard.press("Alt+j")
+    page.keyboard.press("Alt+j")
     check("j-reaches-elicitation", page.evaluate(SELECTED) == "elicit:e1", selected=page.evaluate(SELECTED))
-    page.keyboard.press("k")
+    page.keyboard.press("Alt+k")
     check("k-walks-back", page.evaluate(SELECTED) == "gate:g2", selected=page.evaluate(SELECTED))
-    page.keyboard.press("j")
+    page.keyboard.press("Alt+j")
     page.keyboard.press("Enter")
     try:
         page.wait_for_function("() => window.location.pathname.includes('e1')", timeout=5000)
@@ -169,7 +169,7 @@ with sync_playwright() as p:
     if "1" in only:
         fresh_home()
         page.get_by_test_id("needs-you-queue").focus()
-        page.keyboard.press("j")
+        page.keyboard.press("Alt+j")
         check("r2-queue-row-selected", page.evaluate(SELECTED) == "group:approval")
         page.keyboard.press("Control+Shift+A")
         page.get_by_test_id("assist-input").wait_for(state="visible", timeout=10000)
@@ -188,22 +188,22 @@ with sync_playwright() as p:
     if "2" in only:
         fresh_home()
         page.evaluate("() => document.activeElement && document.activeElement.blur()")
-        page.keyboard.press("j")
+        page.keyboard.press("Alt+j")
         wall = page.evaluate("() => { const c = document.querySelector('[data-testid=\"band-needs-you\"] [data-kbd-selected]'); "
                              "return c ? c.getAttribute('data-kbd-item') : null; }")
         check("r2-wall-card-selected", wall in ("alpha", "beta"), wall=wall)
         other_run = "g2" if wall == "alpha" else "g1"
         page.get_by_test_id("needs-you-queue").focus()
-        page.keyboard.press("j")
+        page.keyboard.press("Alt+j")
         page.keyboard.press("Enter")
         page.wait_for_function("() => document.querySelectorAll('[data-testid=\"need-member\"]').length === 2", timeout=3000)
         for _ in range(3):
             if page.evaluate(SELECTED) == f"gate:{other_run}":
                 break
-            page.keyboard.press("j")
+            page.keyboard.press("Alt+j")
         check("r2-queue-on-gate-b", page.evaluate(SELECTED) == f"gate:{other_run}", selected=page.evaluate(SELECTED))
         gate_posts.clear()
-        page.keyboard.press("a")
+        page.keyboard.press("Alt+a")
         page.wait_for_timeout(1000)
         check("r2-a-decides-nothing-while-queue-focused", gate_posts == [], posts=gate_posts, wall=wall)
 
@@ -211,7 +211,7 @@ with sync_playwright() as p:
     if "3" in only:
         fresh_home()
         page.get_by_test_id("needs-you-queue").focus()
-        page.keyboard.press("j")  # remembered row = the approvals group
+        page.keyboard.press("Alt+j")  # remembered row = the approvals group
         page.locator('[data-testid="need-row"][data-key="fail:f1"] [data-testid="need-act"]').focus()
         page.keyboard.press("Enter")
         page.wait_for_timeout(800)

@@ -5,13 +5,13 @@ import { isSimpleGate, type OpenGate } from '../store/gates.js';
 import { anyModalOpen, useLayerStore } from '../store/layers.js';
 import { useRunsPanelStore } from '../store/runsPanel.js';
 import type { Navigate } from './useRoute.js';
-import { useGlobalShortcuts, type ShortcutEntry } from './useGlobalShortcuts.js';
+import { altChord, useGlobalShortcuts, type ShortcutEntry } from './useGlobalShortcuts.js';
 import { queueHasFocus } from './useNeedsQueue.js';
 
 /**
- * The roving triage cursor (DES-FEEDBACK-002 §2, P0-2, slice H): j/k walk the
+ * The roving triage cursor (DES-FEEDBACK-002 §2, P0-2, slice H): ⌥J/⌥K (and ↓/↑) walk the
  * gate-bearing rows of the current surface — the HomeBoard's NEEDS-YOU cards,
- * the ProjectDashboard's gate-inbox rows — `a` approves, `r` opens the inline
+ * the ProjectDashboard's gate-inbox rows — ⌥A approves, ⌥R opens the inline
  * reject note, Enter opens, Escape clears. Order is what the surface already
  * renders (the attention order): the model is untouched, the cursor just
  * walks it.
@@ -19,7 +19,7 @@ import { queueHasFocus } from './useNeedsQueue.js';
  * Every key registers through the slice-G registry (`useGlobalShortcuts`), so
  * the ONE `isTypingContext` guard and the paletteOpen yield run before any of
  * them (§2.4, EC21) — no unmodified key ever acts while anything editable has
- * focus, and while the palette is open j/k belong to the palette. The hook is
+ * focus, and while the palette is open the arrows belong to the palette. The hook is
  * mounted BY the two surfaces, never globally: the surface check is the mount.
  *
  * The selection is keyboard-only, unpersisted state; it dies with the surface
@@ -32,7 +32,7 @@ export interface TriageItem {
   /** The DOM anchor: the surface renders `data-kbd-item={key}` on the row. */
   key: string;
   /** The answerable waiting run on this row — null when nothing gates here,
-   *  which makes `a`/`r` yield silently (a card can need you for a failure). */
+   *  which makes ⌥A/⌥R yield silently (a card can need you for a failure). */
   runId: string | null;
   /** The cached gate for `runId` (undefined = daemon restarted, still simple). */
   gate: OpenGate | undefined;
@@ -44,7 +44,7 @@ export interface TriageItem {
 export interface TriageCursor {
   /** The selected row's `key`, or null while no cursor is active. */
   selectedKey: string | null;
-  /** The run whose inline reject note is open (§2.3's `r`), or null. */
+  /** The run whose inline reject note is open (§2.3's ⌥R), or null. */
   noteFor: string | null;
   /** Close the note (Escape inside it, or after its Enter submits). */
   closeNote: () => void;
@@ -112,7 +112,7 @@ export function useTriageCursor(
       itemsRef.current.find((i) => i.key === selRef.current) ?? null;
 
     /** Wave 2b (review of #336): while the needs-you queue holds focus, the wall's keys
-     *  yield — `a` on a queue row must never decide the wall-selected card's gate. */
+     *  yield — ⌥A on a queue row must never decide the wall-selected card's gate. */
     const wallOwnsKeys = (): boolean => !queueHasFocus();
 
     const move = (delta: number) => (e: KeyboardEvent): void => {
@@ -121,12 +121,12 @@ export function useTriageCursor(
       if (list.length === 0) return;
       const ix = list.findIndex((i) => i.key === selRef.current);
       // First press selects the first row (§2.2); afterwards the cursor clamps
-      // at both ends — j on the last row stays put, it never wraps.
+      // at both ends — ⌥J on the last row stays put, it never wraps.
       const next = ix < 0 ? 0 : Math.min(list.length - 1, Math.max(0, ix + delta));
       setSelectedKey(list[next]?.key ?? null);
     };
 
-    /** `a`/`r` exist only where a gate waits — elsewhere they yield silently. */
+    /** ⌥A/⌥R exist only where a gate waits — elsewhere they yield silently. */
     const gated = (): boolean => wallOwnsKeys() && current()?.runId != null;
 
     const openThread = (e: KeyboardEvent, item: TriageItem, runId: string): void => {
@@ -135,13 +135,13 @@ export function useTriageCursor(
     };
 
     return [
-      { id: 'triage-next-j', chord: { key: 'j' }, group: 'triage', description: 'Select the next card', guard: wallOwnsKeys, handler: move(1) },
+      { id: 'triage-next-j', chord: altChord('j'), group: 'triage', description: 'Select the next card', guard: wallOwnsKeys, handler: move(1) },
       { id: 'triage-next-down', chord: { key: 'arrowdown' }, group: 'triage', description: 'Select the next card', guard: wallOwnsKeys, handler: move(1) },
-      { id: 'triage-prev-k', chord: { key: 'k' }, group: 'triage', description: 'Select the previous card', guard: wallOwnsKeys, handler: move(-1) },
+      { id: 'triage-prev-k', chord: altChord('k'), group: 'triage', description: 'Select the previous card', guard: wallOwnsKeys, handler: move(-1) },
       { id: 'triage-prev-up', chord: { key: 'arrowup' }, group: 'triage', description: 'Select the previous card', guard: wallOwnsKeys, handler: move(-1) },
       {
         id: 'triage-approve',
-        chord: { key: 'a' },
+        chord: altChord('a'),
         group: 'gates',
         description: 'Approve the selected gate',
         guard: gated,
@@ -161,7 +161,7 @@ export function useTriageCursor(
       },
       {
         id: 'triage-reject',
-        chord: { key: 'r' },
+        chord: altChord('r'),
         group: 'gates',
         description: 'Reject the selected gate with a note',
         guard: gated,
@@ -178,13 +178,14 @@ export function useTriageCursor(
           }
         },
       },
-      // Slice L (§9.2): `x` (or Space) toggles the cursor row's gate into the
-      // batch selection. Only a SIMPLE gate may enter (§7.11 — a complex gate
-      // cannot be batch-answered for the same reason its chip has no inline
-      // buttons); on a complex or gateless row the key yields silently.
-      ...(['x', ' '] as const).map((key): ShortcutEntry => ({
-        id: `batch-toggle-${key === ' ' ? 'space' : key}`,
-        chord: { key },
+      // Slice L (§9.2): ⌥X toggles the cursor row's gate into the batch
+      // selection (§5.6: bare `x` and Space type / press the focused control).
+      // Only a SIMPLE gate may enter (§7.11 — a complex gate cannot be
+      // batch-answered for the same reason its chip has no inline buttons); on
+      // a complex or gateless row the key yields silently.
+      {
+        id: 'batch-toggle-x',
+        chord: altChord('x'),
         group: 'gates',
         description: 'Select the gate for batch resolution',
         guard: () => {
@@ -196,10 +197,10 @@ export function useTriageCursor(
         handler: (e) => {
           const item = current();
           if (item === null || item.runId === null) return;
-          e.preventDefault(); // Space must select, never scroll
+          e.preventDefault();
           toggleBatchSelect(item.runId);
         },
-      })),
+      },
       {
         id: 'triage-open',
         chord: { key: 'enter' },
@@ -220,7 +221,7 @@ export function useTriageCursor(
         description: 'Clear the triage cursor and batch selection',
         // §7.7 Escape chain (overlay → palette → sheet → modal/popover →
         // triage): the triage selection is the LAST rung — this entry yields
-        // while the '?' overlay, the runs sheet, or the bell popover is up so
+        // while the shortcut overlay, the runs sheet, or the bell popover is up so
         // their own entries close them first; the selection survives the press.
         guard: () =>
           (selRef.current !== null || useBatchGateStore.getState().selected.length > 0) &&

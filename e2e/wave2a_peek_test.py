@@ -108,7 +108,7 @@ with sync_playwright() as p:
     before = feed_top(page)
 
     # ── peek ────────────────────────────────────────────────────────────────────
-    page.keyboard.press("p")
+    page.keyboard.press("Alt+p")
     card = page.get_by_test_id("peek-card")
     check("peek-card-shows", wait_ok(page, "() => !!document.querySelector('[data-testid=\"peek-card\"]')", 5000))
     check("peek-is-b1", card.get_attribute("data-run-id") == "b1", run=card.get_attribute("data-run-id"))
@@ -121,7 +121,7 @@ with sync_playwright() as p:
           url=page.evaluate("() => window.location.href"))
 
     # ── jump ────────────────────────────────────────────────────────────────────
-    page.keyboard.press("g")
+    page.keyboard.press("Alt+g")
     # The gate's address is /p/beta/build/b1#gate; the thread consumes the one-shot `#gate` on
     # arrival (SteeringGate) by scrolling the gate card in and focusing its prompt — so "at the
     # gate" is: the b1 thread, with the gate prompt holding focus.
@@ -136,7 +136,7 @@ with sync_playwright() as p:
     page.screenshot(path=str(SHOTS / "wave2a-jump.png"))
 
     # ── back to exactly where you were ──────────────────────────────────────────
-    page.keyboard.press("b")
+    page.keyboard.press("Alt+b")
     check("back-to-r1", wait_ok(page, "() => window.location.pathname === '/p/gamma/build/r1'"),
           url=page.evaluate("() => window.location.href"))
     restored = wait_ok(
@@ -151,7 +151,7 @@ with sync_playwright() as p:
 
     # ── the ? overlay documents all three keys ──────────────────────────────────
     page.evaluate("() => document.activeElement && document.activeElement.blur()")
-    page.keyboard.press("Shift+?")
+    page.keyboard.press("Alt+/")
     ov = page.get_by_test_id("shortcut-overlay")
     ov.wait_for(state="visible", timeout=5000)
     text = ov.text_content() or ""
@@ -190,7 +190,7 @@ with sync_playwright() as p:
         top=q.evaluate("() => document.querySelector('[data-testid=\"need-row\"]')?.dataset.key"))
     q.get_by_test_id("needs-you-queue").focus()
     href0 = q.evaluate("() => window.location.href")
-    q.keyboard.press("p")
+    q.keyboard.press("Alt+p")
     check("queue-focused-peek-shows", wait_ok(q, "() => !!document.querySelector('[data-testid=\"peek-card\"]')", 5000))
     # The approvals group stands for its top-ranked member: g1 has waited 20 min, g2 10 min.
     peek_key = q.get_by_test_id("peek-card").get_attribute("data-key")
@@ -202,10 +202,10 @@ with sync_playwright() as p:
           wait_ok(q, "() => !document.querySelector('[data-testid=\"peek-card\"]')", 3000)
           and q.evaluate("() => !!document.activeElement?.closest('[data-testid=\"needs-you-queue\"]')"),
           focused=q.evaluate("() => document.activeElement?.getAttribute('data-testid')"))
-    q.keyboard.press("g")
+    q.keyboard.press("Alt+g")
     check("queue-jump-to-g1", wait_ok(q, "() => window.location.pathname === '/p/alpha/build/g1'"),
           url=q.evaluate("() => window.location.href"))
-    q.keyboard.press("b")
+    q.keyboard.press("Alt+b")
     check("queue-back-home-focus-on-queue", wait_ok(
         q, "() => window.location.pathname === '/'"
            " && !!document.activeElement?.closest('[data-testid=\"needs-you-queue\"]')", 8000),

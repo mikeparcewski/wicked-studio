@@ -23,20 +23,23 @@ function renderGate(): void {
   render(<SteeringGate runId="r-gate" ord={2} prompt="Proceed with unit 2?" />);
 }
 
-describe('SteeringGate a/r keys (§7.7)', () => {
-  it("'a' with the panel focused fires the approve POST exactly once", async () => {
+const ALT_A = { key: 'å', code: 'KeyA', altKey: true }; // macOS Option+A reports key 'å'
+const ALT_R = { key: '®', code: 'KeyR', altKey: true };
+
+describe('SteeringGate ⌥A/⌥R keys (§7.7, §5.6)', () => {
+  it('⌥A with the panel focused fires the approve POST exactly once', async () => {
     renderGate();
     screen.getByTestId('steering-gate').focus();
-    fireEvent.keyDown(window, { key: 'a' });
-    fireEvent.keyDown(window, { key: 'a' }); // double-tap: the in-flight guard drops it
+    fireEvent.keyDown(window, ALT_A);
+    fireEvent.keyDown(window, ALT_A); // double-tap: the in-flight guard drops it
     await waitFor(() => expect(client.api.confirmGate).toHaveBeenCalledTimes(1));
     expect(client.api.confirmGate).toHaveBeenCalledWith('r-gate', { approve: true });
   });
 
-  it("'r' with the panel focused fires the reject POST", async () => {
+  it('⌥R with the panel focused fires the reject POST', async () => {
     renderGate();
     screen.getByTestId('steering-approve').focus(); // any focus INSIDE the panel arms the keys
-    fireEvent.keyDown(window, { key: 'r' });
+    fireEvent.keyDown(window, ALT_R);
     await waitFor(() => expect(client.api.confirmGate).toHaveBeenCalledTimes(1));
     expect(client.api.confirmGate).toHaveBeenCalledWith('r-gate', { approve: false });
   });
@@ -44,7 +47,18 @@ describe('SteeringGate a/r keys (§7.7)', () => {
   it('yields silently while the panel does not hold focus', () => {
     renderGate();
     (document.activeElement as HTMLElement | null)?.blur();
+    fireEvent.keyDown(window, ALT_A);
+    expect(client.api.confirmGate).not.toHaveBeenCalled();
+  });
+
+  it('a bare a or r with the panel focused never answers the gate (§5.6: letters type)', () => {
+    renderGate();
+    screen.getByTestId('steering-gate').focus();
     fireEvent.keyDown(window, { key: 'a' });
+    fireEvent.keyDown(window, { key: 'r' });
+    // A handled decision disables Approve synchronously (it is queued before any POST), so an
+    // enabled Approve proves nothing was queued — not merely that the POST has not run yet.
+    expect(screen.getByTestId('steering-approve')).not.toBeDisabled();
     expect(client.api.confirmGate).not.toHaveBeenCalled();
   });
 
@@ -54,6 +68,9 @@ describe('SteeringGate a/r keys (§7.7)', () => {
     ta.focus();
     fireEvent.keyDown(ta, { key: 'a' });
     fireEvent.keyDown(ta, { key: 'r' });
+    fireEvent.keyDown(ta, ALT_A);
+    fireEvent.keyDown(ta, ALT_R);
+    expect(screen.getByTestId('steering-approve')).not.toBeDisabled();
     expect(client.api.confirmGate).not.toHaveBeenCalled();
   });
 });

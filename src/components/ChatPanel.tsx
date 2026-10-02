@@ -2,7 +2,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'rea
 import { Tech, runTechParts } from './Tech.js';
 import { lostQuorum, quorumLabel } from './councilQuorum.js';
 import { api, downloadRunEvidence } from '../api/client.js';
-import { useGlobalShortcuts, type ShortcutEntry } from '../hooks/useGlobalShortcuts.js';
+import { altChord, useGlobalShortcuts, type ShortcutEntry } from '../hooks/useGlobalShortcuts.js';
 import { usePlacePanel } from '../hooks/usePlacePanel.js';
 import type { SessionView, WorkUnit } from '../api/types.js';
 import { liveExecutingOrd } from '../hooks/useRunModel.js';
@@ -890,7 +890,7 @@ function RunChat({
   const style = STATUS_STYLE[session.status] ?? { label: session.status, className: '', color: 'var(--ink-muted)' };
   const isTerminal = ['completed', 'cancelled', 'failed'].includes(session.status);
 
-  // DES-UX-002 §5.4 (slice BE): `t` / `u` switch the terminal run's lenses
+  // DES-UX-002 §5.4 (slice BE): ⌥T / ⌥U switch the terminal run's lenses
   // through the ONE shortcut registry (EC42). Guarded on the run being
   // terminal; the shared typing guard keeps letters as letters in textareas.
   const tabsLive = useRef(isTerminal);
@@ -898,7 +898,7 @@ function RunChat({
   const tabEntries = useMemo<ShortcutEntry[]>(() => [
     {
       id: 'run-tab-timeline',
-      chord: { key: 't' },
+      chord: altChord('t'),
       group: 'panels',
       description: 'Run detail: show the evidence timeline',
       guard: () => tabsLive.current,
@@ -906,7 +906,7 @@ function RunChat({
     },
     {
       id: 'run-tab-units',
-      chord: { key: 'u' },
+      chord: altChord('u'),
       group: 'panels',
       description: 'Run detail: show the unit list',
       guard: () => tabsLive.current,

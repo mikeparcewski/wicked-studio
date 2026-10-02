@@ -2,7 +2,14 @@
 """
 skin_contract_test.py — the SKIN CONTRACT (src/theming/skins.ts) at 1440x700.
 
-A skin changes shape, never behaviour. This journey drives the SAME wave-2b queue corpus
+The contract, as restated by the operator (DES-STUDIO-REBUILD-001 §10, §14 Q2):
+
+    A skin changes no behaviour; every route is reachable under every skin, by its nav
+    or ⌘K; keyboard behaviour is identical across skins.
+
+So there is ONE keyboard model for every skin (§5.6): no global shortcut is a bare
+printable key — the queue cursor is ⌥J/⌥K (or the arrows) under every skin, and a bare
+`j` moves nothing under any of them. This journey drives the SAME wave-2b queue corpus
 (two simple gates grouped, one MCP elicitation, one failure) under both skins and proves:
 
   0. ENV SWITCH: with the fixture's default appearance, the page boots under STUDIO_SKIN
@@ -14,8 +21,9 @@ A skin changes shape, never behaviour. This journey drives the SAME wave-2b queu
        - the left nav is collapsed to icons (the glyph column, 56px wide);
        - the type scale is denser (computed --text-sm is 12px, not 13px).
      Under `studio`: no right rail, the queue sits in the command center, the full nav rail.
-  2. BEHAVIOUR STAYS IDENTICAL: the queue's rows (keys, kinds, counts, order), the j cursor,
-     Enter-expands-the-group and its members, k back, and Enter-opens-a-row are the same
+  2. BEHAVIOUR STAYS IDENTICAL, KEYBOARD INCLUDED: the queue's rows (keys, kinds, counts,
+     order), a bare `j` moving nothing, the ⌥J cursor, Enter-expands-the-group and its
+     members, ⌥K back, Enter-opens-a-row, and Ctrl/⌘+K opening the palette are the same
      under both skins.
   3. EVERY NAV DESTINATION IS REACHABLE UNDER EVERY SKIN: the nav's destinations (the ten
      section dashboards, the three Settings pages, Notifications, Health — every element
@@ -112,21 +120,34 @@ def behaviour(page) -> dict:
     rows = page.evaluate(TOP_ROWS)
     q = page.get_by_test_id("needs-you-queue")
     q.focus()
-    page.keyboard.press("j")
+    page.keyboard.press("j")  # §5.6 rule 1: a bare letter is never a shortcut, under any skin
+    bare = page.evaluate(SELECTED)
+    page.keyboard.press("Alt+j")
     first = page.evaluate(SELECTED)
     page.keyboard.press("Enter")
     page.wait_for_function(
         "() => document.querySelectorAll('[data-testid=\"need-member\"]').length === 2", timeout=3000)
     members = page.evaluate(MEMBERS)
-    page.keyboard.press("j")
+    page.keyboard.press("Alt+j")
     into = page.evaluate(SELECTED)
-    page.keyboard.press("j")
-    page.keyboard.press("j")
+    page.keyboard.press("Alt+j")
+    page.keyboard.press("Alt+j")
     elicit = page.evaluate(SELECTED)
-    page.keyboard.press("k")
+    page.keyboard.press("Alt+k")
     back = page.evaluate(SELECTED)
-    return {"rows": rows, "j": first, "members": members, "j_into_members": into,
+    return {"rows": rows, "bare_j": bare, "j": first, "members": members, "j_into_members": into,
             "j_to_elicitation": elicit, "k_back": back}
+
+
+def palette_opens(page) -> bool:
+    """⌘K reaches every destination, so it must open under every skin (the restated clause)."""
+    page.evaluate("() => document.activeElement && document.activeElement.blur()")
+    page.keyboard.press("Control+k")
+    page.get_by_test_id("palette-input").wait_for(state="visible", timeout=5000)
+    page.keyboard.press("Escape")
+    page.wait_for_function(
+        "() => document.querySelector('[data-testid=\"command-palette\"]') === null", timeout=5000)
+    return True
 
 
 NAV_DESTS = """() => [...document.querySelectorAll('[data-testid="left-rail"] [data-nav-dest], [data-nav-dest="health"]')]
@@ -167,7 +188,7 @@ def nav_reach(page, skin: str) -> dict:
 
 
 def open_selected(page) -> str:
-    page.keyboard.press("j")
+    page.keyboard.press("Alt+j")
     page.keyboard.press("Enter")
     page.wait_for_function("() => window.location.pathname.includes('e1')", timeout=5000)
     return page.evaluate("() => window.location.pathname")
@@ -211,6 +232,7 @@ with sync_playwright() as p:
         page.screenshot(path=str(SHOTS / f"skin-{skin}-home.png"))
         beh = behaviour(page)
         opened = open_selected(page)
+        beh["palette_opens"] = palette_opens(page)
         seen[skin] = {"structure": structure, "behaviour": beh, "opened": opened}
 
     s, c = seen["studio"]["structure"], seen["compact-rail"]["structure"]
@@ -236,7 +258,8 @@ with sync_playwright() as p:
     check("behaviour-identical",
           bs == bc and seen["studio"]["opened"] == seen["compact-rail"]["opened"]
           and len(bs["rows"]) == 3 and bs["rows"][0]["count"] == 2
-          and bs["members"] == ["gate:g1", "gate:g2"] and bs["k_back"] == "gate:g2",
+          and bs["members"] == ["gate:g1", "gate:g2"] and bs["k_back"] == "gate:g2"
+          and bs["bare_j"] is None and bs["palette_opens"] is True,
           studio=bs, compact_rail=bc, opened=seen["studio"]["opened"])
 
     # ── 3. every nav destination reachable under every skin ───────────────────────────

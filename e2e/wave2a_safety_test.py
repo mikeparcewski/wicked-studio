@@ -79,10 +79,10 @@ def board(browser):
 
 def approve_on_board(page) -> float:
     page.evaluate("() => document.activeElement && document.activeElement.blur()")
-    page.keyboard.press("j")
+    page.keyboard.press("Alt+j")
     page.wait_for_function(
         "() => !!document.querySelector('[data-kbd-item=\"beta\"][data-kbd-selected=\"true\"]')", timeout=5000)
-    page.keyboard.press("a")
+    page.keyboard.press("Alt+a")
     page.get_by_test_id("undo-toast").wait_for(state="visible", timeout=3000)
     return time.monotonic()
 
@@ -95,7 +95,7 @@ with sync_playwright() as p:
     pressed = approve_on_board(page)
     text = page.get_by_test_id("undo-toast").text_content() or ""
     check("toast-names-the-gate", "Approving beta · b1 in 10 s" in text, text=text)
-    page.keyboard.press("p")
+    page.keyboard.press("Alt+p")
     page.get_by_test_id("peek-card").wait_for(state="visible", timeout=3000)
     check("peek-skips-queued-gate", page.get_by_test_id("peek-card").get_attribute("data-run-id") != "b1"
           and page.get_by_test_id("peek-empty").count() == 1,
@@ -151,7 +151,7 @@ with sync_playwright() as p:
           and (page.get_by_test_id("steering-queued").text_content() or "") == "queued · undo in toast"
           and page.get_by_test_id("steering-approve").is_disabled())
     page.get_by_test_id("steering-prompt").focus()
-    page.keyboard.press("a")
+    page.keyboard.press("Alt+a")
     page.wait_for_timeout(500)
     page.screenshot(path=str(SHOTS / "wave2a-safety-card.png"))
     check("card-second-a-not-silent", "not-sent:" in notice(page), notice=notice(page))

@@ -11,19 +11,19 @@ import { anyModalOpen, useLayerStore } from '../store/layers.js';
 import { useMembershipStore } from '../store/membership.js';
 import { capturePlace, restorePlace, useReturnPlace } from '../store/place.js';
 import { useProjectsStore } from '../store/projects.js';
-import { useGlobalShortcuts, type ShortcutEntry } from './useGlobalShortcuts.js';
+import { altChord, useGlobalShortcuts, type ShortcutEntry } from './useGlobalShortcuts.js';
 import type { Navigate } from './useRoute.js';
 
 /**
  * Peek, jump, back (studio wave 2a, behaviour 3) — the behaviour, registered once, app-wide:
  *
- *   P   peek: show the top item that needs you (its gate card, with its evidence) IN PLACE —
- *       the URL does not change. P again or Esc closes it.
- *   G   jump: go to that gate (the thread at `#gate`), remembering exactly where you were.
- *   B   back: return to that place — route, scroll, focus, open panels (`store/place.ts`).
+ *   ⌥P  peek: show the top item that needs you (its gate card, with its evidence) IN PLACE —
+ *       the URL does not change. ⌥P again or Esc closes it.
+ *   ⌥G  jump: go to that gate (the thread at `#gate`), remembering exactly where you were.
+ *   ⌥B  back: return to that place — route, scroll, focus, open panels (`store/place.ts`).
  *
- * All three are entries in the ONE shortcut registry, so the '?' overlay lists them and the
- * shared typing guard keeps them letters inside any input. The skin (`PeekCard`) renders
+ * All three are entries in the ONE shortcut registry, so the shortcut overlay lists them and the
+ * shared typing guard keeps them inert inside any input (§5.6: no bare letter is a shortcut). The skin (`PeekCard`) renders
  * {@link PeekView}; it decides nothing.
  */
 
@@ -58,7 +58,7 @@ function herePath(): string {
 
 const withoutHash = (path: string): string => path.split('#')[0] ?? path;
 
-/** P, G and B stand down while a modal or the '?' overlay owns the keyboard. */
+/** ⌥P, ⌥G and ⌥B stand down while a modal or the shortcut overlay owns the keyboard. */
 const keysFree = (): boolean => !anyModalOpen() && !useLayerStore.getState().shortcutOverlayOpen;
 
 /**
@@ -119,7 +119,7 @@ export function usePeekJump(runs: SessionView[], navigate: Navigate, rows: reado
   const entries = useMemo<ShortcutEntry[]>(() => [
     {
       id: 'peek-toggle',
-      chord: { key: 'p' },
+      chord: altChord('p'),
       group: 'navigate',
       description: 'Peek at the top item that needs you (the URL stays put)',
       guard: keysFree,
@@ -131,7 +131,7 @@ export function usePeekJump(runs: SessionView[], navigate: Navigate, rows: reado
     },
     {
       id: 'peek-jump',
-      chord: { key: 'g' },
+      chord: altChord('g'),
       group: 'navigate',
       description: 'Jump to the top item that needs you',
       guard: () => keysFree() && targetRef.current !== null,
@@ -142,7 +142,7 @@ export function usePeekJump(runs: SessionView[], navigate: Navigate, rows: reado
     },
     {
       id: 'peek-back',
-      chord: { key: 'b' },
+      chord: altChord('b'),
       group: 'navigate',
       description: 'Back to exactly where you were before the jump',
       guard: () => keysFree() && useReturnPlace.getState().place !== null,
@@ -156,7 +156,7 @@ export function usePeekJump(runs: SessionView[], navigate: Navigate, rows: reado
       chord: { key: 'escape' },
       group: 'navigate',
       description: 'Close the peek card',
-      // The popover rung of the §7.7 chain: the '?' overlay and any modal close first.
+      // The popover rung of the §7.7 chain: the shortcut overlay and any modal close first.
       guard: () =>
         useLayerStore.getState().peekOpen &&
         !useLayerStore.getState().shortcutOverlayOpen &&

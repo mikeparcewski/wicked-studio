@@ -17,7 +17,7 @@ import { useGlobalShortcuts, type ShortcutEntry } from './useGlobalShortcuts.js'
  * browser-level collisions of the mnemonic alternatives (Alt+F = the Chrome
  * menu on Windows, Ctrl+Shift+C = DevTools inspect) don't exist for digits.
  * Registered through the ONE shortcut registry with `allowInTypingContext` +
- * an element guard, so the '?' overlay documents them (EC42) and they act in
+ * an element guard, so the shortcut overlay documents them (EC42) and they act in
  * exactly one place: the steer textarea that owns focus.
  */
 

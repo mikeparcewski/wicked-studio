@@ -175,9 +175,9 @@ def cursor_to(page, order: list, pid: str, cur: int | None) -> int:
     the batch selection, §9.5); returns the new index. `cur=None` = no cursor."""
     target = order.index(pid)
     if cur is None:
-        page.keyboard.press("j")  # first press selects the first row (§2.2)
+        page.keyboard.press("Alt+j")  # first press selects the first row (§2.2)
         cur = 0
-    key = "j" if target > cur else "k"
+    key = "Alt+j" if target > cur else "Alt+k"
     for _ in range(abs(target - cur)):
         page.keyboard.press(key)
     page.wait_for_function(
@@ -190,7 +190,7 @@ def cursor_to(page, order: list, pid: str, cur: int | None) -> int:
 def select_at(page, order: list, pid: str, cur: int | None) -> int:
     """Cursor onto `pid`, then `x` (the §9.2 toggle)."""
     ix = cursor_to(page, order, pid, cur)
-    page.keyboard.press("x")
+    page.keyboard.press("Alt+x")
     return ix
 
 
@@ -539,8 +539,8 @@ with sync_playwright() as p:
     pageC.locator('[data-testid="dashboard-gates"]').wait_for(timeout=30000)
     pageC.add_style_tag(content=HIDE_GATE_TOASTS)
     pageC.wait_for_timeout(1000)
-    pageC.keyboard.press("j")
-    pageC.keyboard.press("x")
+    pageC.keyboard.press("Alt+j")
+    pageC.keyboard.press("Alt+x")
     pageC.locator('[data-testid="batch-bar"][data-count="1"]').wait_for(timeout=5000)
     dash_cb = pageC.evaluate(
         f"""() => document.querySelector('[data-testid="batch-select-{SIMPLE_RUN}"]')?.checked ?? null"""

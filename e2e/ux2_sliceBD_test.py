@@ -278,7 +278,7 @@ with sync_playwright() as p:
     # ── Scene 6 (AC 5): the '?' overlay documents the prefixes under GATES,
     #    with the corrected Alt labels ──────────────────────────────────────────
     page.evaluate("() => document.activeElement?.blur?.()")
-    page.keyboard.press("?")
+    page.keyboard.press("Alt+/")
     page.locator('[data-testid="shortcut-overlay"]').wait_for(timeout=5000)
     overlay = page.evaluate(
         """() => {

@@ -2,11 +2,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, render, screen } from '@testing-library/react';
 import { useState } from 'react';
 import type { SessionView } from '../src/api/types.js';
+import { chordKey } from './altKeys.js';
 
 /**
  * Wave 2a, behaviour 3: P peeks the top gate in place (URL untouched), G jumps to it and
  * remembers where you were, B puts you back — route, scroll, focus, open panel. All three
- * live in the one registry, so the '?' overlay lists them.
+ * live in the one registry, so the shortcut overlay lists them.
  */
 
 vi.mock('../src/api/client.js', () => ({
@@ -50,7 +51,7 @@ function Harness({ navigate, runs = RUNS }: { navigate: (p: string) => void; run
 }
 
 const press = (key: string): void => {
-  act(() => { window.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true })); });
+  act(() => { window.dispatchEvent(new KeyboardEvent('keydown', { ...chordKey(key), bubbles: true, cancelable: true })); });
 };
 
 beforeEach(() => {
@@ -149,22 +150,22 @@ describe('jump and back', () => {
   });
 });
 
-describe('the ? overlay', () => {
+describe('the shortcut overlay', () => {
   it('lists peek, jump and back under their own section', () => {
     render(<Harness navigate={vi.fn()} />);
     const groups = overlayRows(listShortcuts());
     const nav = groups.find((g) => g.group === 'navigate');
     expect(nav?.rows.map((r) => [r.keys.join(','), r.description])).toEqual([
-      ['P', 'Peek at the top item that needs you (the URL stays put)'],
-      ['G', 'Jump to the top item that needs you'],
-      ['B', 'Back to exactly where you were before the jump'],
+      ['Alt/⌥+P', 'Peek at the top item that needs you (the URL stays put)'],
+      ['Alt/⌥+G', 'Jump to the top item that needs you'],
+      ['Alt/⌥+B', 'Back to exactly where you were before the jump'],
       ['Esc', 'Close the peek card'],
     ]);
   });
 });
 
 describe('round 3', () => {
-  it('P, G and B stand down while a modal or the ? overlay owns the keyboard', () => {
+  it('⌥P, ⌥G and ⌥B stand down while a modal or the shortcut overlay owns the keyboard', () => {
     const navigate = vi.fn();
     render(<Harness navigate={navigate} />);
     useLayerStore.setState({ modalIds: [7] });
