@@ -28,6 +28,18 @@ export interface OpenGate {
   /** The engine's gate kind off the live `awaitingHuman` frame (`plan_approval`, …); absent on a
    *  late join (`GET /runs/:id/gate` does not carry it — the plan-gate read covers that). */
   gateKind?: string;
+  /**
+   * C3 (DES-STUDIO-REBUILD-001 §5.3): the index of the answer the producer that wrote the options
+   * recommends. Absent ⇒ nothing is preselected. Read when the wire carries it; a recommendation
+   * only ever PRESELECTS (S5): Enter still waits for the operator to move.
+   */
+  recommended?: number;
+}
+
+/** `recommended` off a gate payload: a non-negative integer, else absent. */
+export function recommendedOf(bag: Record<string, unknown>): number | undefined {
+  const r = bag['recommended'];
+  return typeof r === 'number' && Number.isInteger(r) && r >= 0 ? r : undefined;
 }
 
 /**
@@ -63,6 +75,11 @@ function gateKindOf(event: CoreEvent): { gateKind?: string } {
  * No cached gate (`undefined`, the daemon-restarted case of §3.3) is simple: the
  * prompt is what was lost, not the two answers the endpoint still accepts.
  */
+function recommendedField(bag: Record<string, unknown>): { recommended?: number } {
+  const r = recommendedOf(bag);
+  return r === undefined ? {} : { recommended: r };
+}
+
 export function isSimpleGate(gate: OpenGate | undefined): boolean {
   if (gate === undefined) return true;
   if (gate.choices === null) return false;
@@ -159,6 +176,7 @@ export const useGateStore = create<GateStore>((set) => ({
                   // Omitted rather than set to `undefined`: `exactOptionalPropertyTypes`.
                   ...(choices !== undefined ? { choices } : {}),
                   ...gateKindOf(event),
+                  ...recommendedField(event as unknown as Record<string, unknown>),
                 },
               },
             };

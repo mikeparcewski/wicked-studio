@@ -10,6 +10,8 @@ import type { Navigate } from '../hooks/useRoute.js';
 import type { SkinVariants } from '../theming/skins.js';
 import { TONE_COLOR, TONE_GLYPH } from './narrator.js';
 import { AgeStamp } from './AgeStamp.js';
+import { QuestionRow } from './desk/QuestionRow.js';
+import { needRunId } from '../board/deskModel.js';
 import { humanTitle } from './runIdentity.js';
 
 /**
@@ -220,7 +222,7 @@ export function NeedsYouQueue({ queue, runs, navigate, now, variant = 'inline' }
         data-kbd-selected={selected ? 'true' : undefined}
         data-reveal={revealed.has(row.key) ? 'true' : undefined}
         tabIndex={-1}
-        className={`wk-desk-need${testId === 'need-member' ? ' wk-desk-need--member' : ''}${selected ? ' wk-desk-need--selected' : ''}${revealed.has(row.key) ? ' wk-need-row--reveal' : ''}`}
+        className={`wk-desk-need wk-desk-need--wrap${testId === 'need-member' ? ' wk-desk-need--member' : ''}${selected ? ' wk-desk-need--selected' : ''}${revealed.has(row.key) ? ' wk-need-row--reveal' : ''}`}
       >
         <span aria-hidden className={`wk-desk-dot${waiting ? ' wk-desk-dot--waiting' : ''}`} style={waiting ? undefined : { background: TONE_COLOR[row.tone] }} />
         <span className="wk-desk-need-body">
@@ -241,10 +243,27 @@ export function NeedsYouQueue({ queue, runs, navigate, now, variant = 'inline' }
           <button type="button" data-testid="need-group-toggle" aria-expanded={open} onClick={() => queue.toggle(row.key)} className="wk-need-act">
             {open ? 'Fold' : 'Show each'}
           </button>
+        ) : row.kind === 'gate' && row.action.kind === 'open' ? (
+          // S5: a gate is answered in its row (deliver, retry and escalation gates open their card).
+          deskGate(row, row.action)
         ) : (
           act(row)
         )}
       </div>
+    );
+  };
+
+  const deskGate = (row: NeedRow, a: Extract<NeedRow['action'], { kind: 'open' }>): React.ReactElement => {
+    const runId = needRunId(row) ?? '';
+    const units = runs.find((v) => v.session.id === runId)?.units ?? [];
+    return (
+      <QuestionRow
+        runId={runId}
+        units={units}
+        openPath={a.path}
+        openLabel={a.label}
+        onOpen={(e) => { e.preventDefault(); queue.act(a, row.key); }}
+      />
     );
   };
 
