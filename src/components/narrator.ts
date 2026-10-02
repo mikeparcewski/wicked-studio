@@ -576,7 +576,8 @@ export function deriveArtifacts(
  * failure, not motion.
  */
 export function narrateStranded(): { text: string; tone: NarrationTone } {
-  return { text: 'Finished, but the work is stranded in its worktree — no PR', tone: 'gate' };
+  // Origin-neutral (studio#424): on a local origin no PR can exist, so the line never promises one.
+  return { text: 'Finished, but the work hasn’t been pushed anywhere yet', tone: 'gate' };
 }
 
 /** The old timeline filter, verbatim (FINDING-052): units that have run or are running. */

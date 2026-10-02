@@ -3,6 +3,7 @@ import { memoryPayload, policyPayload, proposalKind, type Proposal } from '../ap
 import type { RepoEntry, SessionView } from '../api/types.js';
 import { deliveryOf } from '../components/delivery.js';
 import { narrate, narrateStranded, type NarrationTone } from '../components/narrator.js';
+import { keptLocally, plainGateQuestion } from './deskWords.js';
 import type { RetryPrefill } from '../store/retryPrefill.js';
 import { campaignCounts, campaignMemberRunIds } from './campaignStats.js';
 import { STALLED_IDLE_SECS, stalledLiveChats, type LiveChatSnapshot } from './chatStats.js';
@@ -102,6 +103,9 @@ export interface NeedRow {
   subject: string;
   /** The narrated one-liner (narrator vocabulary — gate rows via `narrate()`). */
   text: string;
+  /** A gate row's question in plain words (`deskWords.plainGateQuestion`, studio#422): what the
+   *  Desk says. `text` keeps the engine's prompt for the layer underneath. */
+  question?: string;
   tone: NarrationTone;
   /** The honest clock, or null when no wire carries one ("age unknown"). */
   at: number | null;
@@ -254,6 +258,8 @@ export interface NeedsYouInputs {
   stallEscalations?: Record<string, StallEscalationLite>;
   /** Pending governed-knowledge proposals (`GET /proposals?state=pending`); empty when unsupported. */
   proposals?: readonly Proposal[];
+  /** Runs with a post-hoc delivery tried this session (in flight or failed): never "kept locally". */
+  deliveryAttempted?: ReadonlySet<string>;
   now: number;
 }
 
@@ -312,7 +318,7 @@ const clipLine = (t: string, n = 120): string => {
 };
 
 export function needsYouRows(inputs: NeedsYouInputs): NeedRow[] {
-  const { runs, gates, failedAt, attachedAt, projectIds, chats, repos, campaigns, now } = inputs;
+  const { runs, gates, failedAt, attachedAt, projectIds, chats, repos, campaigns, now, deliveryAttempted } = inputs;
   const stalledAt = inputs.stalledAt ?? {};
   const escalations = inputs.stallEscalations ?? {};
   const rows: NeedRow[] = [];
@@ -390,6 +396,7 @@ export function needsYouRows(inputs: NeedsYouInputs): NeedRow[] {
         ...(simpleGate(gate) ? { groupKey: 'approval' as const } : {}),
         subject: s.problem,
         text: line?.text ?? 'Gate: waiting on you',
+        question: plainGateQuestion(gate?.prompt, gate?.gateKind),
         tone: 'gate',
         at: gate?.receivedAt ?? attachedAt[s.id] ?? null,
         subjectPath: `/runs/${encodeURIComponent(s.id)}`,
@@ -462,7 +469,9 @@ export function needsYouRows(inputs: NeedsYouInputs): NeedRow[] {
         subjectPath: `/runs/${encodeURIComponent(s.id)}`,
         action: { kind: 'open', path: `/runs/${encodeURIComponent(s.id)}`, label: 'Check run ›' },
       });
-    } else if (s.status === 'completed' && deliveryOf(v).state === 'stranded') {
+    } else if (s.status === 'completed' && deliveryOf(v).state === 'stranded' && !keptLocally(v, deliveryAttempted?.has(s.id) ?? false)) {
+      // A run launched without delivery is finished work kept on this machine, as asked
+      // (studio#424): not a need. One whose delivery was asked for and did not land is.
       // Stranded completed runs (crew#393): the daemon's OWN wire verdict — a
       // completed repo-scoped run with no recorded PR whose worktree still
       // exists. Reviewable work nobody lifted is a person's job, so it queues.

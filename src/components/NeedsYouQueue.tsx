@@ -12,6 +12,8 @@ import { TONE_COLOR, TONE_GLYPH } from './narrator.js';
 import { AgeStamp } from './AgeStamp.js';
 import { QuestionRow } from './desk/QuestionRow.js';
 import { needRunId } from '../board/deskModel.js';
+import { plainRunTitle } from '../board/deskWords.js';
+import { Tech } from './Tech.js';
 import { humanTitle } from './runIdentity.js';
 
 /**
@@ -232,13 +234,17 @@ export function NeedsYouQueue({ queue, runs, navigate, now, variant = 'inline' }
           {isGroup ? (
             <span title={row.subject} className="wk-desk-need-title">{row.subject}</span>
           ) : (
-            <a {...link(row.subjectPath)} title={row.subject} className="wk-desk-need-title">{humanTitle(row.subject)}</a>
+            <a {...link(row.subjectPath)} title={row.subject} className="wk-desk-need-title">{plainRunTitle(row.subject)}</a>
           )}
           <span className="wk-desk-need-line">
-            <span data-testid="need-line" title={row.text}>{row.text}</span>
+            {/* studio#422: the question in plain words; the engine's prompt is underneath. */}
+            <span data-testid="need-line" title={row.question ?? row.text}>{row.question ?? row.text}</span>
             <span aria-hidden> · </span>
             <AgeStamp at={row.at} now={at} testId="need-age" {...(isGroup ? {} : { href: row.subjectPath, onOpen: navigate })} />
           </span>
+          {row.question !== undefined && row.question !== row.text && (
+            <Tech data-testid="tech-need-prompt" parts={[row.text]} block />
+          )}
         </span>
         {isGroup && row.action.kind === 'batch-onboard' && batchAct(row.action, row.text)}
         {isGroup && row.action.kind === 'accept-memory' && acceptAct(row.action)}

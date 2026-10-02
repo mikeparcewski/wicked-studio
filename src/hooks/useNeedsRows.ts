@@ -5,6 +5,7 @@ import { needsYouRows, type NeedRow } from '../board/needsYou.js';
 import { activityEvidence, stalledRuns } from '../board/stalls.js';
 import { useActivityClocks } from '../store/activityClocks.js';
 import { useCampaignsStore } from '../store/campaigns.js';
+import { usePostHocDeliverStore } from '../store/postHocDeliver.js';
 import { useElicitationStore } from '../store/elicitations.js';
 import { useFailureClocks } from '../store/failureClocks.js';
 import { useGateStore } from '../store/gates.js';
@@ -43,6 +44,12 @@ export function useNeedsRows(runs: SessionView[], now: number): NeedRow[] {
   const repos = useNeedsSources((s) => s.repos);
   // The needs-you rows read the ENGINE campaigns (a label group has no gate of its own).
   const campaigns = useCampaignsStore((s) => s.campaigns);
+  // studio#424: a post-hoc delivery tried this session (in flight or failed) keeps its run a need.
+  const postHoc = usePostHocDeliverStore((s) => s.byRun);
+  const deliveryAttempted = useMemo(
+    () => new Set(Object.entries(postHoc).filter(([, d]) => d.phase !== 'delivered').map(([id]) => id)),
+    [postHoc],
+  );
 
   useEffect(() => {
     void useNeedsSources.getState().load();
@@ -79,9 +86,10 @@ export function useNeedsRows(runs: SessionView[], now: number): NeedRow[] {
         steerRequests,
         stallEscalations,
         proposals: proposals ?? [],
+        deliveryAttempted,
         now,
       }),
-    [runs, gates, failedAt, attachedAt, projectIds, chats, repos, campaigns, stalledAt, elicitations, steerRequests, stallEscalations, proposals, now],
+    [runs, gates, failedAt, attachedAt, projectIds, chats, repos, campaigns, stalledAt, elicitations, steerRequests, stallEscalations, proposals, deliveryAttempted, now],
   );
 }
 
