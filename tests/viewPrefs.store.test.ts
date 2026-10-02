@@ -74,6 +74,41 @@ describe('load (startup read)', () => {
   });
 });
 
+describe('races (Copilot on #417)', () => {
+  it('a slow startup GET never overwrites a toggle made while it was in flight', async () => {
+    let answer: (v: { settings: Record<string, unknown> }) => void = () => undefined;
+    getSettings.mockReturnValue(new Promise((r) => { answer = r; }));
+    const loading = useViewPrefsStore.getState().load();
+    useViewPrefsStore.getState().update({ technical_details: true });
+    answer({ settings: { [VIEW_PREFS_KEY]: { technical_details: false } } });
+    await loading;
+    expect(useViewPrefsStore.getState()).toMatchObject({ loaded: true, prefs: { technical_details: true } });
+    await vi.advanceTimersByTimeAsync(400);
+    expect(putView).toHaveBeenLastCalledWith({ technical_details: true });
+  });
+
+  it('an echo of an OLDER value is not proof: reported as dropped', async () => {
+    putView.mockResolvedValue({ settings: { [VIEW_PREFS_KEY]: { technical_details: false } } });
+    useViewPrefsStore.getState().update({ technical_details: true });
+    await vi.advanceTimersByTimeAsync(400);
+    expect(useViewPrefsStore.getState().persist).toBe('dropped');
+  });
+
+  it('a late answer for a superseded write does not mark the newer edit saved', async () => {
+    let answer: (v: { settings: Record<string, unknown> }) => void = () => undefined;
+    putView.mockReturnValueOnce(new Promise((r) => { answer = r; }));
+    useViewPrefsStore.getState().update({ technical_details: true });
+    await vi.advanceTimersByTimeAsync(400);
+    useViewPrefsStore.getState().update({ technical_details: false });
+    answer({ settings: { [VIEW_PREFS_KEY]: { technical_details: true } } });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(useViewPrefsStore.getState().persist).toBe('unknown');
+    await vi.advanceTimersByTimeAsync(400);
+    expect(putView).toHaveBeenLastCalledWith({ technical_details: false });
+    expect(useViewPrefsStore.getState().persist).toBe('ok');
+  });
+});
+
 describe('update (optimistic, debounced PUT /settings)', () => {
   it('applies now, PUTs `studio.view` once after the debounce, and verifies the echo', async () => {
     useViewPrefsStore.getState().update({ technical_details: true });

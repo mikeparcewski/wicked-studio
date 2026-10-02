@@ -47,6 +47,9 @@ interface ViewPrefsStore {
 }
 
 let persistTimer: ReturnType<typeof setTimeout> | null = null;
+/** Bumped on every edit. A startup read or a PUT answer that began before the latest edit is
+ *  stale: it may mark the store loaded, never overwrite the edit or vouch for it (Copilot, #417). */
+let revision = 0;
 
 export const useViewPrefsStore = create<ViewPrefsStore>((set, get) => ({
   prefs: DEFAULT_VIEW_PREFS,
@@ -54,10 +57,12 @@ export const useViewPrefsStore = create<ViewPrefsStore>((set, get) => ({
   persist: 'unknown',
 
   load: async () => {
+    const startedAt = revision;
     try {
       const { settings } = await api.getAppearanceSettings();
       const stored = (settings as Record<string, unknown>)[VIEW_PREFS_KEY];
-      set({ prefs: sanitizeViewPrefs(stored), loaded: true });
+      if (revision !== startedAt) set({ loaded: true });
+      else set({ prefs: sanitizeViewPrefs(stored), loaded: true });
     } catch {
       set({ loaded: true });
     }
@@ -65,14 +70,16 @@ export const useViewPrefsStore = create<ViewPrefsStore>((set, get) => ({
 
   update: (patch) => {
     const prefs = { ...get().prefs, ...patch };
+    revision += 1;
     set({ prefs, persist: 'unknown' });
     if (persistTimer !== null) clearTimeout(persistTimer);
     persistTimer = setTimeout(() => {
       persistTimer = null;
       // One silent retry that re-reads the store, so a newer edit is never clobbered.
       void attempt(get, set).catch(() => {
+        const failedAt = revision;
         setTimeout(() => {
-          void attempt(get, set).catch(() => set({ persist: 'dropped' }));
+          void attempt(get, set).catch(() => { if (revision === failedAt) set({ persist: 'dropped' }); });
         }, RETRY_MS);
       });
     }, PERSIST_DEBOUNCE_MS);
@@ -83,7 +90,14 @@ async function attempt(
   get: () => ViewPrefsStore,
   set: (partial: Partial<ViewPrefsStore>) => void,
 ): Promise<void> {
-  const { settings } = await api.putViewSettings(get().prefs);
+  const sentAt = revision;
+  const sent = get().prefs;
+  const { settings } = await api.putViewSettings(sent);
+  // A newer edit has its own PUT coming; this answer says nothing about it.
+  if (revision !== sentAt) return;
+  // Proof is the echoed VALUE, not the key: a daemon that kept an older `studio.view` while
+  // ignoring this write still echoes the key.
   const echoed = (settings as Record<string, unknown>)[VIEW_PREFS_KEY];
-  set({ persist: echoed === undefined ? 'dropped' : 'ok' });
+  const landed = echoed !== undefined && sanitizeViewPrefs(echoed).technical_details === sent.technical_details;
+  set({ persist: landed ? 'ok' : 'dropped' });
 }
