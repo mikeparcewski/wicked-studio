@@ -180,8 +180,11 @@ with sync_playwright() as p:
         "() => document.querySelector('[data-testid=\"session-passage\"]')?.dataset.state === 'shown'", timeout=8000)
     hit = page.evaluate("() => document.querySelector('[data-testid=\"session-passage\"] [data-hit=\"true\"]')?.innerText ?? null")
     page.screenshot(path=str(SHOTS / "desk-proposal-passage.png"))
-    page.get_by_test_id("session-passage-back").click()
+    page.get_by_test_id("session-passage-back").focus()
+    page.keyboard.press("Enter")
+    page.wait_for_timeout(200)
     closed = page.get_by_test_id("session-passage").count() == 0
+    focus_back = page.evaluate("() => document.activeElement?.dataset?.source ?? null")
     page.locator('[data-testid="session-source"][data-source="src/cart/Banner.tsx"]').click()
     page.wait_for_function(
         "() => document.querySelector('[data-testid=\"session-passage\"]')?.dataset.state === 'unreadable'", timeout=8000)
@@ -190,9 +193,9 @@ with sync_playwright() as p:
           line.startswith("Based on 3 sources")
           and [c["label"] for c in chips] == ["checkout.ts:12", "Banner.tsx", "total.ts:7"]
           and "the reply said src/cart/total.ts:3" in chips[2]["title"]
-          and hit is not None and "FREE_SHIPPING_OVER" in hit and closed
+          and hit is not None and "FREE_SHIPPING_OVER" in hit and closed and focus_back == "src/checkout.ts:12"
           and unreadable.startswith("Studio can’t open this here"),
-          line=line, chips=chips, hit=hit, closed=closed, unreadable=unreadable)
+          line=line, chips=chips, hit=hit, closed=closed, focus_back=focus_back, unreadable=unreadable)
 
     hs = page.evaluate("() => document.documentElement.scrollWidth > document.documentElement.clientWidth")
     check("no-errors-no-hscroll", not errors and not hs, errors=errors)

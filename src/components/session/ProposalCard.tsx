@@ -103,7 +103,7 @@ export function ProposalCard({ view, chain }: { view: SessionView; chain: ChainM
           </p>
           {card.canRetry && (
             <div className="wk-prop-btns">
-              <button type="button" data-testid="session-proposal-go" onClick={go} className="wk-prop-btn wk-prop-btn--primary">{card.act}</button>
+              <button ref={goRef} type="button" data-testid="session-proposal-go" onClick={go} className="wk-prop-btn wk-prop-btn--primary">{card.act}</button>
               <button type="button" data-testid="session-proposal-not-now" onClick={notNow} className="wk-prop-btn wk-prop-btn--ghost">Not now</button>
             </div>
           )}

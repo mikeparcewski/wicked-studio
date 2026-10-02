@@ -27,6 +27,12 @@ export function SourceChips({ citations, runs }: {
   // Only the newest request may land: a slow read never reopens a passage after Back, or
   // overwrites the chip clicked after it (codex).
   const req = useRef(0);
+  // "Back to the reply" gives focus back to the chip that opened the passage (Copilot).
+  const chipRefs = useRef(new Map<string, HTMLButtonElement>());
+  const back = (key: string): void => {
+    setOpen(null);
+    requestAnimationFrame(() => chipRefs.current.get(key)?.focus());
+  };
   const setOpen = (p: Passage | null): void => { req.current += 1; setOpenState(p); };
   const line = basedOnLine(sources.length);
   if (line === null) return null;
@@ -65,6 +71,7 @@ export function SourceChips({ citations, runs }: {
       {sources.map((s) => (
         <button
           key={s.key}
+          ref={(el) => { if (el !== null) chipRefs.current.set(s.key, el); else chipRefs.current.delete(s.key); }}
           type="button"
           data-testid="session-source"
           data-source={s.key}
@@ -80,7 +87,7 @@ export function SourceChips({ citations, runs }: {
         <div data-testid="session-passage" data-source={open.key} data-state={open.state} className="wk-passage">
           <p className="wk-passage-head">
             <span>{open.key}</span>
-            <button type="button" data-testid="session-passage-back" onClick={() => setOpen(null)} className="wk-since-toggle">Back to the reply</button>
+            <button type="button" data-testid="session-passage-back" onClick={() => back(open.key)} className="wk-since-toggle">Back to the reply</button>
           </p>
           {open.state === 'loading' && <p className="wk-session-grey">Reading it…</p>}
           {open.state === 'unreadable' && (

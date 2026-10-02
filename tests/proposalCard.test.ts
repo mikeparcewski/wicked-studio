@@ -153,6 +153,10 @@ describe('Copilot r1 on the proposal model', () => {
     expect(passageHasLine('a\nb', 2)).toBe(true);
     expect(passageHasLine('a\nb', 9)).toBe(false);
     expect(passageHasLine('a', null)).toBe(true);
+    // A trailing newline is not a line; empty content has none (Copilot r2).
+    expect(passageHasLine('a\n', 2)).toBe(false);
+    expect(passageHasLine('', 1)).toBe(false);
+    expect(passageHasLine('a\nb\n', 2)).toBe(true);
   });
 });
 

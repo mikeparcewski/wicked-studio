@@ -793,6 +793,10 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
 .wk-prop-confirm { margin-top: 6px; }
 .wk-prop-status { margin: 0; display: flex; align-items: center; gap: 8px; font-size: var(--text-sm); color: var(--ink-body); min-width: 0; }
 .wk-prop-live { color: var(--ink-muted); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* A refusal's reason is read in full (it can carry the recovery, e.g. the gate-moved text); only live
+   progress stays one line (Copilot). */
+.wk-prop--fail .wk-prop-status { align-items: flex-start; }
+.wk-prop--fail .wk-prop-live { white-space: normal; overflow: visible; overflow-wrap: anywhere; }
 .wk-prop-tick { color: var(--status-ok); font-weight: var(--weight-bold); }
 .wk-prop-bad { color: var(--status-fail); }
 .wk-sources { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; }

@@ -83,7 +83,14 @@ export interface PassageLine { n: number; text: string; hit: boolean }
  *  or one past the route's 512 KB cap) cannot be highlighted, so it is not "shown" (Copilot). */
 export function passageHasLine(content: string, line: number | null): boolean {
   if (line === null) return true;
-  return line >= 1 && line <= content.split('\n').length;
+  return line >= 1 && line <= lineCount(content);
+}
+
+/** Lines in a file: a trailing newline ends the last line, it does not start another (Copilot). */
+export function lineCount(content: string): number {
+  if (content === '') return 0;
+  const n = content.split('\n').length;
+  return content.endsWith('\n') ? n - 1 : n;
 }
 
 /** The lines around the cited one (all of a short file), the cited line marked. */
