@@ -154,7 +154,7 @@ function toSessions(
       title: sum.title,
       state: sum.state,
       badge: sum.badge,
-      line: deliveredJustNow && sum.badge === 0 ? DELIVERED_LINE : kept ? KEPT_LINE : sessionLine(sum.state, sum.badge, texts[runId] ?? null),
+      line: deliveredJustNow && sum.badge === 0 && sum.state === 'done' ? DELIVERED_LINE : kept ? KEPT_LINE : sessionLine(sum.state, sum.badge, texts[runId] ?? null),
       path: sessionPath(id),
     };
   });
