@@ -134,7 +134,9 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
   const setScroll = useSessionDrafts((s) => s.setScroll);
   const draft = useSessionDrafts((s) => s.drafts[sessionId] ?? '');
   const setDraft = useSessionDrafts((s) => s.setDraft);
-  const ready = runsLoaded && chatLoaded;
+  // Not ready until `/health` answered too: before it, "no runs in this chat" could be false (Copilot).
+  const capsLoaded = useCapabilities((s) => s.loaded);
+  const ready = runsLoaded && chatLoaded && capsLoaded;
   useLayoutEffect(() => {
     if (!ready) return;
     const el = scroller.current;
