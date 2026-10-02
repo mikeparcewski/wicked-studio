@@ -38,7 +38,9 @@ export function useRunChain(view: SessionView): RunChain {
   const [teamError, setTeamError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
-    // Re-read on a reconnect too (`connected` flips): /ws has no replay of what was missed.
+    // Read on mount and again on each REconnect (/ws has no replay of what was missed) — never on
+    // the drop itself: during an outage the retained chain stands (Copilot).
+    if (!connected && (useTeamPlanStore.getState().byRun[runId]?.snapshot ?? null) !== null) return;
     let cancelled = false;
     teamPlanApi.team(runId)
       .then((resp) => {

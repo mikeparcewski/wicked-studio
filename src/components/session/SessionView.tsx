@@ -4,7 +4,7 @@ import type { SessionView as RunView } from '../../api/types.js';
 import { needsByRun } from '../../board/deskModel.js';
 import type { NeedRow } from '../../board/needsYou.js';
 import {
-  CLOSED_LINE, conversationOf, parseSessionId, runChatIdOf, sessionState, sessionTitle, sinceYouLeft,
+  CLOSED_LINE, conversationOf, parseSessionId, runChatIdOf, sessionPath, sessionState, sessionTitle, sinceYouLeft,
   type Conversation, type SessionState,
 } from '../../board/sessionModel.js';
 import type { Navigate } from '../../hooks/useRoute.js';
@@ -58,6 +58,14 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
 }): React.ReactElement {
   const ref = useMemo(() => parseSessionId(sessionId), [sessionId]);
   const runChatId = useCapabilities((s) => s.runChatId);
+  // With C1, a run launched from a chat belongs to that chat's session: a `run:<id>` address for
+  // it (followed while `/health` was still loading) is replaced by the chat's (Copilot).
+  useEffect(() => {
+    if (ref.kind !== 'run' || !runChatId) return;
+    const v = runs.find((r) => r.session.id === ref.runId);
+    const chat = v === undefined ? null : runChatIdOf(v);
+    if (chat !== null) navigate(sessionPath(chat), { replace: true });
+  }, [ref, runChatId, runs, navigate]);
   const mine = useMemo(() => {
     const list = ref.kind === 'run'
       ? runs.filter((v) => v.session.id === ref.runId)

@@ -234,6 +234,11 @@ with sync_playwright() as p:
           and closed["line"] == "The conversation before this was closed. The work is below.", **closed)
     page.screenshot(path=str(SHOTS / "desk-session-closed.png"))
 
+    # ── 7a. with C1, a run:<id> address of a chat's run lands on the chat's session (Copilot) ──
+    page.goto(f"{origin}/s/run%3Ar-pay-2", wait_until="networkidle")
+    page.wait_for_function("() => location.pathname === '/s/chat-pay'", timeout=10000)
+    check("canonical-session", True)
+
     # ── 7b. a failed chat read claims nothing (codex): no closed line, a retry that recovers ──
     fails = {"n": 0}
 
