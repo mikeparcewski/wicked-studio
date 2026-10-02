@@ -4,6 +4,7 @@ import { skillsPath } from '../api/skills.js';
 import { steeringDashboardPath } from '../api/steering.js';
 import { testingPath } from '../api/testing.js';
 import type { NeedRow } from './needsYou.js';
+import { KEPT_LINE, keptLocally } from './deskWords.js';
 import { sessionIdOf, sessionPath, summarize, type SessionState } from './sessionModel.js';
 
 /**
@@ -65,7 +66,7 @@ export function needTextByRun(rows: readonly NeedRow[]): Record<string, string> 
   const out: Record<string, string> = {};
   for (const r of leaves(rows)) {
     const id = needRunId(r);
-    if (id !== null && out[id] === undefined) out[id] = r.text;
+    if (id !== null && out[id] === undefined) out[id] = r.question ?? r.text;
   }
   return out;
 }
@@ -139,6 +140,9 @@ function toSessions(
     const needy = sum.runIds.find((r) => (badges[r] ?? 0) > 0);
     const newest = sum.runIds[sum.runIds.length - 1]!;
     const runId = needy ?? newest;
+    const views = byId.get(id)!;
+    const newestView = views.find((v) => v.session.id === newest);
+    const kept = sum.state === 'done' && sum.badge === 0 && newestView !== undefined && keptLocally(newestView);
     return {
       id,
       runId,
@@ -146,7 +150,7 @@ function toSessions(
       title: sum.title,
       state: sum.state,
       badge: sum.badge,
-      line: sessionLine(sum.state, sum.badge, texts[runId] ?? null),
+      line: kept ? KEPT_LINE : sessionLine(sum.state, sum.badge, texts[runId] ?? null),
       path: sessionPath(id),
     };
   });

@@ -11,8 +11,8 @@
   "studioVersion": "0.5.19",
   "counts": {
     "files": 184,
-    "occurrences": 1828,
-    "static": 1601,
+    "occurrences": 1829,
+    "static": 1602,
     "dynamic": 73,
     "computed": 8
   },
@@ -8606,6 +8606,12 @@
       "testId": "tech-gate",
       "files": [
         "src/components/SteeringGate.tsx"
+      ]
+    },
+    {
+      "testId": "tech-need-prompt",
+      "files": [
+        "src/components/NeedsYouQueue.tsx"
       ]
     },
     {

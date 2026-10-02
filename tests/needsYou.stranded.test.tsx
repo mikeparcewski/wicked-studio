@@ -33,7 +33,10 @@ function inputs(over: Partial<NeedsYouInputs>): NeedsYouInputs {
 function completedRun(id: string, delivery?: 'delivered' | 'stranded' | 'none'): SessionView {
   const v = makeView(
     { id, workflow_id: 'feature', status: 'completed', problem: `problem of ${id}`, workdir: `/w/${id}` },
-    [makeUnit({ id: `${id}:build`, session_id: id, ord: 0, status: 'done' })],
+    // A run whose delivery was asked for (it has a deliver phase): one launched without delivery
+    // is kept on this machine, never a need (studio#424, tests/deskWords.test.ts).
+    [makeUnit({ id: `${id}:build`, session_id: id, ord: 0, status: 'done' }),
+      makeUnit({ id: `${id}:deliver`, session_id: id, ord: 1, status: 'rejected' })],
   );
   if (delivery !== undefined) (v.session as SessionWithDelivery).delivery = delivery;
   return v;

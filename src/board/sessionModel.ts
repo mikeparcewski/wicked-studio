@@ -1,5 +1,5 @@
 import type { SessionView } from '../api/types.js';
-import { humanTitle } from '../components/runIdentity.js';
+import { plainRunTitle } from './deskWords.js';
 import { endedAtMs } from './needsYou.js';
 
 /**
@@ -138,9 +138,9 @@ interface TranscriptLike {
 /** R1: the chat's first operator turn, else the first run's intent. */
 export function sessionTitle(messages: readonly TranscriptLike[], runs: readonly SessionView[]): string {
   const first = messages.find((m) => m.kind === 'user' && typeof m.text === 'string' && m.text.trim() !== '');
-  if (first !== undefined) return humanTitle(String(first.text));
+  if (first !== undefined) return plainRunTitle(String(first.text));
   const v = runs[0];
-  return v === undefined ? 'A session' : humanTitle(v.session.problem || v.session.id);
+  return v === undefined ? 'A session' : plainRunTitle(v.session.problem || v.session.id);
 }
 
 export type Conversation = 'live' | 'closed' | 'none';
