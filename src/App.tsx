@@ -300,17 +300,20 @@ export function App(): React.ReactElement {
   // bubble (AskLauncher) or Ctrl/⌘+Shift+A; collapsing the dock closes it entirely.
   const [askOpen, setAskOpen] = useState(false);
   // The Desk composer's send (skin `desk`, S4): the message rides to the Ask dock, which sends it
-  // as the operator's own question. `n` remounts the dock so each handoff sends exactly once.
-  const [askHandoff, setAskHandoff] = useState<{ text: string; n: number } | null>(null);
-  // A handoff is sent once: whenever the dock closes (its ×, the bubble, the chord), it is spent,
-  // so a reopen never sends it again and never shadows letters typed to open the dock.
+  // as the operator's own question. `askKey` remounts the dock for each handoff; the text is spent
+  // the moment the dock takes it (`onHandoffTaken`), and again whenever the dock closes, so no
+  // reopen or re-render can send it twice or shadow letters typed to open the dock.
+  const [askKey, setAskKey] = useState(0);
+  const [askHandoff, setAskHandoff] = useState<string | null>(null);
   useEffect(() => {
     if (!askOpen) setAskHandoff(null);
   }, [askOpen]);
   const handToAsk = useCallback((text: string) => {
-    setAskHandoff((cur) => ({ text, n: (cur?.n ?? 0) + 1 }));
+    setAskKey((k) => k + 1);
+    setAskHandoff(text);
     setAskOpen(true);
   }, []);
+  const takeHandoff = useCallback(() => setAskHandoff(null), []);
   // §5.6 rule 4 (S2b): letters always type — into the open Ask dock, else the page's
   // composer, else the Ask dock opened with them (opening it only reads).
   useTypeToComposer(useCallback(() => setAskOpen(true), []));
@@ -805,12 +808,12 @@ export function App(): React.ReactElement {
       >
         {askOpen && (
           <AskDock
-            key={askHandoff?.n ?? 0}
+            key={askKey}
             runs={runs}
             pathname={pathname}
             navigate={navigate}
             onClose={() => setAskOpen(false)}
-            {...(askHandoff !== null ? { sendText: askHandoff.text } : {})}
+            {...(askHandoff !== null ? { sendText: askHandoff, onHandoffTaken: takeHandoff } : {})}
           />
         )}
       </AskLauncher>

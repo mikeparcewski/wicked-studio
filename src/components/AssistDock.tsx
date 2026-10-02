@@ -578,9 +578,12 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
       });
   };
 
+  // Re-entry guard: `sending` is state, so two calls in one tick would both read it as false.
+  const inFlight = useRef(false);
   const send = async (): Promise<void> => {
     const body = text.trim();
-    if (body === '' || sending) return;
+    if (body === '' || sending || inFlight.current) return;
+    inFlight.current = true;
     setSending(true);
     // An attachment still sitting at the fork when the operator hits send rides as analysis —
     // they attached it and asked; silently dropping it would run a different request.
@@ -607,6 +610,7 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
       note('fail', msg);
       onError?.(msg);
     } finally {
+      inFlight.current = false;
       setSending(false);
     }
   };

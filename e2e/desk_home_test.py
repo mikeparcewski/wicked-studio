@@ -201,6 +201,7 @@ with sync_playwright() as p:
         if msgs():
             break
         page.wait_for_timeout(250)
+    page.wait_for_timeout(1500)  # a late duplicate of the first send would land in this window
     first_send = len(msgs())
     cleared = page.evaluate("() => document.querySelector('[data-testid=\"desk-composer-input\"]')?.value ?? null")
     # Close and reopen the dock with its chord: the handoff is spent, nothing is sent again.
