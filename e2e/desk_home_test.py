@@ -204,15 +204,21 @@ with sync_playwright() as p:
     page.wait_for_timeout(1500)  # a late duplicate of the first send would land in this window
     first_send = len(msgs())
     cleared = page.evaluate("() => document.querySelector('[data-testid=\"desk-composer-input\"]')?.value ?? null")
-    # Close and reopen the dock with its chord: the handoff is spent, nothing is sent again.
+    # Close and reopen the dock with its chord: the handoff is spent, nothing is sent again. The
+    # chord is inert while focus is in a text box (EC21), so focus leaves the dock's box first.
+    blur = "() => document.activeElement && document.activeElement.blur()"
+    page.evaluate(blur)
     page.keyboard.press("Control+Shift+A")
     page.wait_for_function("() => !document.querySelector('[data-testid=\"ask-panel\"]')", timeout=5000)
+    page.evaluate(blur)
     page.keyboard.press("Control+Shift+A")
     page.get_by_test_id("ask-panel").wait_for(state="visible", timeout=5000)
     page.wait_for_timeout(1500)
     check("composer-hands-to-ask-once", first_send == 1 and len(msgs()) == 1 and cleared == "",
           first_send=first_send, after_reopen=len(msgs()), cleared=cleared)
+    page.evaluate(blur)
     page.keyboard.press("Control+Shift+A")
+    page.wait_for_function("() => !document.querySelector('[data-testid=\"ask-panel\"]')", timeout=5000)
 
     # ── 7. every destination reachable from the rail ──────────────────────────────
     page.get_by_test_id("desk-rail-more").click()
