@@ -1,6 +1,6 @@
 import type { CoreEvent, GateDecision, WorkUnit } from '../api/types.js';
 import { isDeliverGate } from '../components/gateMoveModel.js';
-import { gateVerdictFor, isEscalationGate, isLaunchRefusal, isRestoredRetry } from '../components/gateVerdictModel.js';
+import { gateFrameFor, gateVerdictFor, isEscalationGate, isLaunchRefusal, isRestoredRetry } from '../components/gateVerdictModel.js';
 import type { OpenGate } from '../store/gates.js';
 
 /**
@@ -44,6 +44,8 @@ export const CARD_REASON: Record<RowCardReason, string> = {
 };
 
 const TEAM_PAUSES: ReadonlySet<string> = new Set(['team_dispute', 'team_transport']);
+/** The engine's ordinary gate kinds a row may answer (gateVerdictModel `gateSourceLine`) + a plan. */
+const ROW_KINDS: ReadonlySet<string> = new Set(['def', 'run_level', 'terminal', 'plan_approval']);
 
 export function classifyRowGate(input: {
   runId: string;
@@ -54,7 +56,9 @@ export function classifyRowGate(input: {
 }): RowGateClass {
   const { runId, gate, units, events } = input;
   if (gate === undefined) return { kind: 'card', reason: 'unknown' };
-  const kind = gate.gateKind;
+  // A late join carries no `gateKind` (GET /runs/:id/gate does not); the log's same-ord
+  // `awaitingHuman` does (Copilot).
+  const kind = gate.gateKind ?? (events === null ? undefined : gateFrameFor(events, gate.ord)?.gateKind ?? undefined);
   if (kind === 'deliver' || isDeliverGate(runId, units, gate.ord)) return { kind: 'card', reason: 'deliver' };
   if (kind !== undefined && TEAM_PAUSES.has(kind)) return { kind: 'card', reason: 'team' };
   // The engine's own word (`awaitingHuman.gateKind: 'escalation'`, wicked-core#464), or the
@@ -64,10 +68,12 @@ export function classifyRowGate(input: {
   }
   if (isLaunchRefusal(gate.prompt, events ?? [], gate.ord)) return { kind: 'card', reason: 'retry' };
   if (gate.choices === null) return { kind: 'card', reason: 'free-text' };
-  if (gate.choices !== undefined) {
-    const plain = gate.choices.length === 2 && gate.choices.every((c) => c === 'approve' || c === 'reject');
-    if (!plain) return { kind: 'card', reason: 'choices' };
+  // Only the canonical order: `recommended` indexes the producer's own list (Copilot).
+  if (gate.choices !== undefined && !(gate.choices.length === 2 && gate.choices[0] === 'approve' && gate.choices[1] === 'reject')) {
+    return { kind: 'card', reason: 'choices' };
   }
+  // Fail closed: a gate kind this row does not know is never answered inline (Copilot).
+  if (kind !== undefined && !ROW_KINDS.has(kind)) return { kind: 'card', reason: 'unknown' };
   if (events === null) return { kind: 'checking' };
   const verdict = gateVerdictFor(events, gate.ord, gate.prompt);
   if (isRestoredRetry(verdict, gate.ord)) return { kind: 'card', reason: 'retry' };

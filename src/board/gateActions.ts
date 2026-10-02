@@ -6,7 +6,7 @@ import { useDeliveryFreezeStore } from '../store/deliveryFreeze.js';
 import type { GateDecision } from '../api/types.js';
 import type { LaunchPlan } from '../api/teamPlan.js';
 import { modePath } from '../hooks/useRoute.js';
-import { choicesOf, useGateStore } from '../store/gates.js';
+import { choicesOf, recommendedOf, useGateStore } from '../store/gates.js';
 import { useMembershipStore } from '../store/membership.js';
 import {
   cancelDecision, describeDecision, onDecisionTestReset, queueDecision, reportDecision, restoreNote,
@@ -299,6 +299,7 @@ export async function refreshGate(runId: string): Promise<void> {
   try {
     const g = await api.getGate(runId);
     const choices = choicesOf(g as unknown as Record<string, unknown>);
+    const recommended = recommendedOf(g as unknown as Record<string, unknown>);
     store.setGate({
       runId: g.runId,
       ord: g.ord,
@@ -306,6 +307,7 @@ export async function refreshGate(runId: string): Promise<void> {
       lifecycle: g.lifecycle,
       receivedAt: Date.parse(g.receivedAt) || Date.now(),
       ...(choices !== undefined ? { choices } : {}),
+      ...(recommended !== undefined ? { recommended } : {}),
     });
   } catch (e) {
     if (e instanceof ApiError && e.status === 404) store.clearGate(runId);

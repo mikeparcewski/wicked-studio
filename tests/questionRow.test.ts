@@ -124,3 +124,27 @@ describe('the folded row', () => {
     expect(chosenLine('Approve', 0)).toBe('You chose Approve · sending');
   });
 });
+
+describe('Copilot round 1 on S5 — fail closed', () => {
+  it('an unknown gate kind opens its card; the known ordinary kinds are answered', () => {
+    expect(classifyRowGate({ runId: 'r1', gate: gate({ gateKind: 'brand_new_sensitive' }), units: UNITS, events: [] }))
+      .toEqual({ kind: 'card', reason: 'unknown' });
+    for (const k of ['def', 'run_level', 'terminal', 'plan_approval']) {
+      expect(classifyRowGate({ runId: 'r1', gate: gate({ gateKind: k }), units: UNITS, events: [] }).kind).toBe('answer');
+    }
+  });
+  it('after a reload the kind is recovered from the same-ord awaitingHuman in the log', () => {
+    const log = (kind: string) => [{ type: 'awaitingHuman', session: 'r1', ord: 2, prompt: 'p', gateKind: kind }] as unknown as CoreEvent[];
+    expect(classifyRowGate({ runId: 'r1', gate: gate(), units: UNITS, events: log('team_dispute') }))
+      .toEqual({ kind: 'card', reason: 'team' });
+    const plan = classifyRowGate({ runId: 'r1', gate: gate(), units: UNITS, events: log('plan_approval') });
+    expect(plan.kind === 'answer' && plan.choices[0]!.label).toBe('Approve the plan');
+  });
+  it('only the canonical [approve, reject] order is answered in the row', () => {
+    expect(classifyRowGate({ runId: 'r1', gate: gate({ choices: ['reject', 'approve'], recommended: 0 }), units: UNITS, events: [] }))
+      .toEqual({ kind: 'card', reason: 'choices' });
+    expect(classifyRowGate({ runId: 'r1', gate: gate({ choices: ['approve', 'approve'] }), units: UNITS, events: [] }))
+      .toEqual({ kind: 'card', reason: 'choices' });
+    expect(classifyRowGate({ runId: 'r1', gate: gate({ choices: ['approve', 'reject'] }), units: UNITS, events: [] }).kind).toBe('answer');
+  });
+});
