@@ -69,6 +69,12 @@
   --accent-hover:  hsl(var(--_accent-h) var(--_accent-s) calc(var(--_accent-l) + 5%));
   --accent-wash:   color-mix(in oklab, var(--accent) 12%, transparent);   /* selected / tinted fills */
 
+  /* Signal yellow, the spark (DESIGN-simple §1a): a small mark only, never text or a fill — the
+     brand dot, the Desk badge, the highlighter behind "N things need you", the dot on the most
+     urgent row. The same value on every theme. */
+  --spark: #ffda19;
+  --spark-ink: #0d1117;
+
   /* The keyboard focus ring: a gap in the colour UNDER the control, then the accent. A panel
      that is not the page (the gate card) re-points --focus-gap at its own surface, so the gap
      never reads as a dark notch. Every focus-visible rule ALSO sets a transparent outline, so
