@@ -97,6 +97,8 @@ interface Props {
   onOpenFile?: ((path: string) => void) | undefined;
   /** The scrolling container ref — the now-bar's "Latest ↓" scrolls it. */
   scrollRef?: React.MutableRefObject<HTMLDivElement | null> | undefined;
+  /** TR-W8 "Jump in": the unit ord a Watchtower row pointed at — highlighted and scrolled to. */
+  jumpOrd?: number | null;
 }
 
 export function NarratorFeed({
@@ -110,6 +112,7 @@ export function NarratorFeed({
   agentTerminalCli = null,
   onOpenFile,
   scrollRef,
+  jumpOrd = null,
 }: Props): React.ReactElement {
   const { session } = view;
   const events = useRunEventStore((s) => s.byRun[session.id]) ?? EMPTY_EVENTS;
@@ -197,9 +200,19 @@ export function NarratorFeed({
   // block above the tail — without the re-pin the latest narration slid below
   // the fold (caught on the 1440x700 evidence pass).
   const bottomRef = useRef<HTMLDivElement>(null);
+  const jumpRef = useRef<HTMLDivElement | null>(null);
+  // TR-W8: the moment a jump names — its unit's block, else the next one the feed shows (the nearest
+  // event at or after it); null when the feed holds none, which the feed then says.
+  const jumpTarget = useMemo(() => {
+    if (jumpOrd === null) return null;
+    const ords = items.flatMap((i) => (i.kind === 'unit' ? [i.ord] : [])).sort((a, b) => a - b);
+    return ords.find((o) => o >= jumpOrd) ?? null;
+  }, [items, jumpOrd]);
   useEffect(() => {
+    // A jump holds the moment it named: the tail pin would scroll it away (TR-W8).
+    if (jumpTarget !== null && jumpRef.current !== null) { jumpRef.current.scrollIntoView({ block: 'center' }); return; }
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [items.length, transcripts]);
+  }, [items.length, transcripts, jumpTarget]);
 
   const byOrd = useMemo(() => new Map(orderedUnits.map((u) => [u.ord, u])), [orderedUnits]);
 
@@ -210,7 +223,13 @@ export function NarratorFeed({
     const tc = transcripts[unit.ord];
     const stageBadge = STAGE_BADGE[unit.stage] ?? { bg: 'var(--surface-raised)', color: 'var(--ink-muted)' };
     return (
-      <div key={`unit-${unit.id}`} data-message-id={unit.id} className="flex flex-col gap-2">
+      <div
+        key={`unit-${unit.id}`}
+        data-message-id={unit.id}
+        data-unit-ord={unit.ord}
+        {...(jumpTarget === unit.ord ? { 'data-jumped': 'true', ref: jumpRef } : {})}
+        className={`flex flex-col gap-2${jumpTarget === unit.ord ? ' wk-jumped' : ''}`}
+      >
         <div className="self-start w-full max-w-[85%] flex flex-col gap-2">
           {/* Meta row: avatar + attribution + stage (clickable to target inject). */}
           <div className="flex items-center gap-2 flex-wrap">
@@ -337,6 +356,12 @@ export function NarratorFeed({
       data-place-scroll={`run-feed-${lens}`}
       className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-3 max-w-3xl w-full mx-auto"
     >
+      {/* TR-W8: a jump whose moment this feed does not hold says so rather than highlighting something else. */}
+      {jumpOrd !== null && jumpTarget === null && (
+        <p data-testid="watch-jump-missing" className="text-xs" style={{ color: 'var(--ink-muted)' }}>
+          That moment is not in this run’s feed yet.
+        </p>
+      )}
       {/* Feed header: what this stream is + the raw-wire toggle (§4). */}
       {lens === 'feed' && (
         <div className="flex items-center gap-2">

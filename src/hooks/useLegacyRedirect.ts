@@ -90,7 +90,8 @@ export function useLegacyRedirect(route: LegacyRoute, navigate: Navigate): void 
     void resolveRunProject(runId)
       .then((pid) => {
         // The fragment rides along: `#governance` opens the run's Governance panel (MCP tools → Usage).
-        if (!cancelled && pid !== null) navigate(`${modePath(pid, 'build', runId)}${window.location.hash}`, { replace: true });
+        // The query rides along too: a Watchtower "Jump in" (`?jump=`, TR-W8) names its moment there.
+        if (!cancelled && pid !== null) navigate(`${modePath(pid, 'build', runId)}${window.location.search}${window.location.hash}`, { replace: true });
       })
       .catch(() => {
         /* projects surface unreachable — the legacy run view stays, which is the honest fallback */

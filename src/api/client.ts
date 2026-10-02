@@ -328,6 +328,14 @@ export const api = {
 
   /** The council seats for the launch form. */
   getRoster: () => apiFetch<{ roster: RosterSeat[] }>('/roster'),
+  /** TR-W8: the watch feed (`GET /watch`, crew TR-W5a) — a late join's page, or one run's
+   *  findings + coverage with `run`. A daemon before the registry 404s: callers read that as "no feed". */
+  getWatch: (q: { run?: string; project?: string; kind?: string; limit?: number } = {}) => {
+    const qs = new URLSearchParams();
+    for (const [k, v] of Object.entries(q)) if (v !== undefined && v !== '') qs.set(k, String(v));
+    const tail = qs.toString();
+    return apiFetch<import('./watch-wire.js').WatchFeedResponse>(`/watch${tail === '' ? '' : `?${tail}`}`);
+  },
   /** Each seat's week (`GET /roster/record`, crew#690) — the Health panel's weekly 1:1. */
   getSeatRecord: (days = 7) =>
     apiFetch<import('./seatRecord.js').SeatRecordResponse>(`/roster/record?days=${days}`),

@@ -10,9 +10,9 @@
   "version": 1,
   "studioVersion": "0.5.19",
   "counts": {
-    "files": 184,
-    "occurrences": 1829,
-    "static": 1602,
+    "files": 185,
+    "occurrences": 1834,
+    "static": 1607,
     "dynamic": 73,
     "computed": 8
   },
@@ -9578,6 +9578,36 @@
       "testId": "viewer-truncation-banner",
       "files": [
         "src/components/FileViewer.tsx"
+      ]
+    },
+    {
+      "testId": "watch-coverage",
+      "files": [
+        "src/components/WatchLines.tsx"
+      ]
+    },
+    {
+      "testId": "watch-gate-line",
+      "files": [
+        "src/components/WatchLines.tsx"
+      ]
+    },
+    {
+      "testId": "watch-jump-back",
+      "files": [
+        "src/components/WatchLines.tsx"
+      ]
+    },
+    {
+      "testId": "watch-jump-missing",
+      "files": [
+        "src/components/NarratorFeed.tsx"
+      ]
+    },
+    {
+      "testId": "watch-jumped",
+      "files": [
+        "src/components/WatchLines.tsx"
       ]
     },
     {

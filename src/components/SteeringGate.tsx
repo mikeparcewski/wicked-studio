@@ -1,4 +1,5 @@
 import { commitGateDecision, IDLE_GATE_ACTION, useGateActionStore } from '../board/gateActions.js';
+import { WatchGateLine } from './WatchLines.js';
 import { reportDecision } from '../board/undoQueue.js';
 import { keepEntryState } from '../hooks/useHistoryState.js';
 import { useCallback, useState, useEffect, useMemo, useRef } from 'react';
@@ -641,6 +642,8 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
       </p>
       {/* S3: the run's handles, only with "Show technical details" on. */}
       <Tech data-testid="tech-gate" parts={runTechParts({ id: runId, base_commit: baseCommit, clis: pool ?? [] })} block className="-mt-2 mb-3" />
+      {/* TR-W8: a watch finding attached to this gate, as one quiet line (nothing when absent). */}
+      <WatchGateLine runId={runId} />
       {decided && (
         <p data-testid="steering-queued" className="text-xs font-mono mb-2" style={{ color: 'var(--ink-muted)' }}>
           {shared.queued ? 'queued · undo in toast' : shared.busy ? 'answering…' : `${shared.answered} · advancing…`}

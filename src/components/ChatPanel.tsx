@@ -1,4 +1,6 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { parseJump } from '../store/watch.js';
+import { WatchRunLines } from './WatchLines.js';
 import { Tech, runTechParts } from './Tech.js';
 import { lostQuorum, quorumLabel } from './councilQuorum.js';
 import { api, downloadRunEvidence } from '../api/client.js';
@@ -834,6 +836,9 @@ function RunChat({
   // it. Memoized so neither reruns while `units` is unchanged (PR #179 review).
   const ordered = useMemo(() => [...units].sort((a, b) => a.ord - b.ord), [units]);
   const log = useRuntimeStore((s) => s.logs[session.id]) ?? [];
+  // TR-W8 "Jump in": `?jump=ord:attempt:at` on the run page's address.
+  const search = window.location.search;
+  const jump = useMemo(() => parseJump(search), [search]);
   const events = useRunEventStore((s) => s.byRun[session.id]) ?? EMPTY_EVENTS_FOR_NARRATOR;
   // studio#232: the working unit is the live log's, not the lagging snapshot cursor's.
   const executingUnitOrd = useMemo(() => liveExecutingOrd(session, units, events), [session, units, events]);
@@ -1064,6 +1069,9 @@ function RunChat({
         </div>
       )}
 
+      {/* TR-W8: "You jumped in from the Watchtower" and the run's watch coverage line. */}
+      <WatchRunLines runId={session.id} jumped={jump !== null} onBack={() => window.history.back()} />
+
       {/* The Units lens: the slice-R post-mortem spine for failed/cancelled runs
           (unchanged), the crew#272 output blocks for completed ones. */}
       {isTerminal && runTab === 'units' && (
@@ -1106,6 +1114,7 @@ function RunChat({
             executingUnitOrd={executingUnitOrd}
             phaseOf={phaseOf}
             lens="feed"
+            jumpOrd={jump?.ord ?? null}
             onTargetInject={isTerminal ? undefined : setInjectTarget}
             onToggleTerminal={(cli, terminalId) =>
               setAgentTerminal((cur) => (cur?.cliKey === cli ? null : { cliKey: cli, terminalId }))}
