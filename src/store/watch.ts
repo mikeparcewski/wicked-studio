@@ -52,6 +52,10 @@ export interface WatchRow {
   foldedInto: string | null;
   /** For corroboration: the place a finding or flag names. */
   place: { ord: number | null; attempt: number | null; path: string } | null;
+  /** The unit ord the row is about (a gate-attached row: the gate's), when it names one. */
+  ord: number | null;
+  /** A watch row's emit class: only a `flag` corroborates a team finding. */
+  emit: 'finding' | 'flag' | 'proposal' | null;
 }
 
 export interface WatchFold {
@@ -83,7 +87,8 @@ function corroborate(rows: Record<string, WatchRow>, row: WatchRow): Record<stri
   for (const other of Object.values(rows)) {
     if (other.id === row.id || !samePlace(other, row)) continue;
     const team = row.source === 'team' ? row : other.source === 'team' ? other : null;
-    const flag = row.source === 'watch' ? row : other.source === 'watch' ? other : null;
+    const isFlag = (r: WatchRow): boolean => r.source === 'watch' && r.emit === 'flag';
+    const flag = isFlag(row) ? row : isFlag(other) ? other : null;
     if (team === null || flag === null) continue;
     out[team.id] = { ...out[team.id]!, corroboratedBy: [...new Set([...out[team.id]!.corroboratedBy, flag.id])] };
     out[flag.id] = { ...out[flag.id]!, foldedInto: team.id };
@@ -110,6 +115,7 @@ export function foldFinding(fold: WatchFold, f: WatchFinding): WatchFold {
     severity: f.severity, attach: f.attach, anchor: f.anchor, rolledUp: f.rolled_up,
     corroboratedBy: prev?.corroboratedBy ?? [], foldedInto: prev?.foldedInto ?? null,
     place: placeOf(f.run_id, f.ord, f.attempt, str(f.facts['path'])),
+    ord: f.ord, emit: f.kind,
   };
   const pending = fold.pendingClears[f.watch_id];
   const pendingClears = { ...fold.pendingClears };
@@ -165,7 +171,7 @@ export function foldWatchdog(fold: WatchFold, event: Record<string, unknown>, at
       id, source: 'watchdog', kind: 'quiet', runId, projectId: null,
       sentence: `Nothing new from this run in ${minutes(quiet)}`, at, state: 'open', stateLine: null,
       severity: null, attach: null, anchor: { run_id: runId, ord, attempt: null, at }, rolledUp: 0,
-      corroboratedBy: [], foldedInto: null, place: null,
+      corroboratedBy: [], foldedInto: null, place: null, ord, emit: null,
     };
     return {
       ...fold, rows: { ...fold.rows, [id]: row },
@@ -219,6 +225,7 @@ export function foldTeamFrame(fold: WatchFold, frame: Record<string, unknown>): 
       anchor: runId === null ? null : { run_id: runId, ord: num(p['ord']), attempt: num(p['attempt']), at: num(p['at']) ?? 0 },
       rolledUp: 0, corroboratedBy: prev?.corroboratedBy ?? [], foldedInto: null,
       place: placeOf(runId, num(p['ord']), num(p['attempt']), path),
+      ord: num(p['ord']), emit: null,
     };
     return { ...fold, rows: corroborate(fold.rows, row) };
   }
@@ -251,7 +258,7 @@ export function foldRuns(fold: WatchFold, runs: readonly SessionView[], projectO
     const base = {
       source: 'run' as const, runId: s.id, projectId: projectOf?.(s.id) ?? sessionProject(v), at, state: 'done' as const, stateLine: null,
       severity: null, attach: null, anchor: { run_id: s.id, ord: null, attempt: null, at }, rolledUp: 0,
-      corroboratedBy: [], foldedInto: null, place: null,
+      corroboratedBy: [], foldedInto: null, place: null, ord: null, emit: null,
     };
     const finished = `finished:${s.id}`;
     if (rows[finished] === undefined) { rows[finished] = { ...base, id: finished, kind: 'done', sentence: 'Finished' }; changed = true; }
@@ -275,10 +282,12 @@ export function watchFeed(fold: WatchFold, filter: { project?: string | null; ki
     .sort((a, b) => b.at - a.at || a.id.localeCompare(b.id));
 }
 
-/** The one quiet line on a run's open gate, or null (an absent check renders nothing). */
-export function gateLine(fold: WatchFold, runId: string): string | null {
+/** The one quiet line on a run's open gate, or null (an absent check renders nothing). With the
+ *  gate's `ord`, only a finding raised on THAT gate (or one naming no ord) — never an older gate's. */
+export function gateLine(fold: WatchFold, runId: string, ord?: number | null): string | null {
   const rows = Object.values(fold.rows)
     .filter((r) => r.runId === runId && r.attach === 'gate' && r.state === 'open' && r.foldedInto === null)
+    .filter((r) => ord === undefined || ord === null || r.ord === null || r.ord === ord)
     .sort((a, b) => b.at - a.at);
   return rows[0]?.sentence ?? null;
 }

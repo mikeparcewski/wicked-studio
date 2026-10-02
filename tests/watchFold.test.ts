@@ -70,10 +70,13 @@ describe('watch findings', () => {
   });
 
   it('a gate-attached finding is one quiet line on the gate, never a feed row', () => {
-    const f = foldFinding(EMPTY_WATCH, finding({ watch_id: 'w-g', attach: 'gate', watch_kind: 'decision', sentence: 'This asks you to push to origin; the plan delivers to acme/web.' }));
+    const f = foldFinding(EMPTY_WATCH, finding({ watch_id: 'w-g', attach: 'gate', ord: 5, watch_kind: 'decision', sentence: 'This asks you to push to origin; the plan delivers to acme/web.' }));
     expect(watchFeed(f)).toStrictEqual([]);
     expect(gateLine(f, 'r-88')).toBe('This asks you to push to origin; the plan delivers to acme/web.');
     expect(gateLine(f, 'r-other')).toBeNull();
+    // Scoped to the gate it was raised on: a later gate on the same run does not carry it (codex).
+    expect(gateLine(f, 'r-88', 5)).toBe('This asks you to push to origin; the plan delivers to acme/web.');
+    expect(gateLine(f, 'r-88', 9)).toBeNull();
     expect(gateLine(foldCleared(f, cleared('w-g', { reason: 'resolved' })), 'r-88')).toBeNull();
   });
 
@@ -138,7 +141,12 @@ describe('team findings and corroboration', () => {
       expect(f.rows['team:f-1']!.corroboratedBy).toStrictEqual(['w-drift']);
       expect(watchFeed(f).map((r) => r.id)).toStrictEqual(['team:f-1']);
     }
-    const elsewhere = finding({ watch_id: 'w-x', facts: { path: 'src/other.ts' } });
+    // Only a FLAG corroborates; a watch finding on the same place stays its own row (codex).
+    const own = finding({ watch_id: 'w-own', kind: 'finding', facts: { path: 'src/pay.ts' } });
+    const g = foldFinding(foldTeamFrame(EMPTY_WATCH, raised), own);
+    expect(g.rows['team:f-1']!.corroboratedBy).toStrictEqual([]);
+    expect(watchFeed(g).map((r) => r.id).sort()).toStrictEqual(['team:f-1', 'w-own']);
+    const elsewhere = finding({ watch_id: 'w-x', kind: 'flag', facts: { path: 'src/other.ts' } });
     expect(foldFinding(foldTeamFrame(EMPTY_WATCH, raised), elsewhere).rows['team:f-1']!.corroboratedBy).toStrictEqual([]);
   });
 });

@@ -1071,7 +1071,7 @@ def _watch_row(wid: str, run: str, **over) -> dict:
 
 
 WATCH_FINDINGS = [
-    _watch_row("w-gate-b1", "b1", entry_id="gate-ask-vs-plan", watch_kind="decision", attach="gate",
+    _watch_row("w-gate-b1", "b1", ord=3, entry_id="gate-ask-vs-plan", watch_kind="decision", attach="gate",
                sentence="This asks you to push to origin; the plan delivers to acme/web.", at=NOW0 - 2 * MIN),
     _watch_row("w-claim-b1", "b1"),
     _watch_row("w-old-b1", "b1", sentence="An older finding that a later attempt fixed.", at=NOW0 - 30 * MIN),

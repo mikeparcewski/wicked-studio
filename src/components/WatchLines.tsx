@@ -9,8 +9,8 @@ import { coverageLine, gateLine, useWatchStore } from '../store/watch.js';
  */
 
 /** One quiet line on an open gate's card: a finding the registry attached to the gate. */
-export function WatchGateLine({ runId }: { runId: string }): React.ReactElement | null {
-  const line = useWatchStore((s) => gateLine(s.fold, runId));
+export function WatchGateLine({ runId, ord }: { runId: string; ord?: number | null }): React.ReactElement | null {
+  const line = useWatchStore((s) => gateLine(s.fold, runId, ord));
   if (line === null) return null;
   return <p data-testid="watch-gate-line" className="wk-watch-gate-line">{line}</p>;
 }
