@@ -148,6 +148,8 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   }, [prefill]);
   /** Lineage claim carried to the launch (`retryOf`, CREW-UX-3) — clearable. */
   const [retryOf, setRetryOf] = useState<string | null>(prefill?.retryOf ?? null);
+  /** The chat this launch was promoted from (studio#446). */
+  const fromChat = prefill?.chatId ?? null;
 
   // Guidance-as-prefill (DES-UX-002 §3.3, slice BC): the chronicle's "use in
   // next run" deposits a past gate amendment; the launch form shows it in an
@@ -275,6 +277,9 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   // …and whether it can REVISE an open PR (`capabilities.revisesPr`, crew 0.7.36 / DES-L9): the
   // "Revise PR #N" pre-fill sends `revisesPr` only on `true`; `null` = not yet known.
   const [daemonRevisesPr, setDaemonRevisesPr] = useState<boolean | null>(null);
+  // …and whether it accepts the chat a launch was promoted from (`capabilities.chatIdOnLaunch`,
+  // crew#619; studio#446). `null` = not yet known: the key is not sent.
+  const [daemonChatId, setDaemonChatId] = useState<boolean | null>(null);
   useEffect(() => {
     let cancelled = false;
     Promise.resolve()
@@ -283,8 +288,9 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
         if (cancelled) return;
         setDaemonDeliverGate(h.capabilities?.deliverGate === true);
         setDaemonRevisesPr(h.capabilities?.revisesPr === true);
+        setDaemonChatId(h.capabilities?.chatIdOnLaunch === true);
       })
-      .catch(() => { if (!cancelled) { setDaemonDeliverGate(null); setDaemonRevisesPr(null); } });
+      .catch(() => { if (!cancelled) { setDaemonDeliverGate(null); setDaemonRevisesPr(null); setDaemonChatId(null); } });
     return () => { cancelled = true; };
   }, []);
   /** The PR this launch revises (DES-L9 pre-fill) — clearable, like the lineage pill. */
@@ -710,6 +716,14 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     // never inferred from prompt equality. The pill above is the operator's
     // way to drop the claim before sending.
     if (retryOf) body.retryOf = retryOf;
+    // studio#446: a launch promoted from a chat names it, so the run lands in that chat's session —
+    // only on a daemon that says it accepts the key. A Send before the first health read landed asks
+    // the daemon now rather than dropping the chat (codex); a failed read sends no key.
+    if (fromChat !== null) {
+      const accepts = daemonChatId ?? await api.getHealth().then(
+        (h) => h.capabilities?.chatIdOnLaunch === true, () => false);
+      if (accepts) body.chatId = fromChat;
+    }
     // DES-L9 §5: `revisesPr` rides the body ONLY when this daemon says it can revise a PR (an
     // older launch schema 400s on the key); a revision is always a PR delivery onto that PR.
     if (revisesPr !== null && daemonRevisesPr === true && targetRepoRef !== null && selection.plan === null) {
