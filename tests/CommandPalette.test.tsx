@@ -102,7 +102,7 @@ describe('corpus & prefixes (§1.3/§1.4)', () => {
     await waitFor(() => expect(rows().some((r) => r.dataset.group === 'repos')).toBe(true));
     const gs = groupsOf(rows());
     // Grouped in §1.3 order, each group contiguous.
-    expect([...new Set(gs)]).toEqual(['runs', 'projects', 'repos', 'verbs']);
+    expect([...new Set(gs)]).toEqual(['runs', 'projects', 'repos', 'verbs', 'go']);
     // Gates lead the runs group; terminal runs trail it.
     const runRows = rows().filter((r) => r.dataset.group === 'runs');
     expect(runRows[0]?.textContent).toContain('migrate the auth tables');
