@@ -1,11 +1,15 @@
 import { useEffect, useState } from 'react';
+import { isDemoRun } from '../../api/demo.js';
 import { listDocs, type DocSummary } from '../../api/interactive.js';
 import type { SessionView } from '../../api/types.js';
+import type { ChainModel } from '../../board/chainModel.js';
 import { isDocRun } from '../../interactive/runBinding.js';
 import { editorKindOf } from '../../board/artifactMorph.js';
 import { repoNameOf } from '../../board/deskWords.js';
 import { artifactKey } from '../../store/artifactSizes.js';
+import { useCapabilities } from '../../store/capabilities.js';
 import { ArtifactMorph } from './ArtifactMorph.js';
+import { WalkthroughEditor } from './WalkthroughEditor.js';
 
 /**
  * S8 — the artifacts a run is producing, in its block of the session thread: the project's
@@ -32,8 +36,21 @@ export function resetRunArtifactsCache(): void {
   docsByProject.clear();
 }
 
-export function RunArtifacts({ view, composerKey }: { view: SessionView; composerKey: string }): React.ReactElement | null {
+/** WT-U1: the walkthrough step of a run's plan, when the daemon can record one (`walkthroughRoots`). */
+function walkthroughStepOf(chain: ChainModel | undefined, roots: boolean): string | null {
+  if (!roots || chain === undefined) return null;
+  const s = chain.steps.find((x) => x.catalog === 'walkthrough_review' && x.state !== 'struck' && x.state !== 'replaced');
+  return s === undefined ? null : s.id;
+}
+
+export function RunArtifacts({ view, composerKey, chain }: { view: SessionView; composerKey: string; chain?: ChainModel }): React.ReactElement | null {
   const projectId = typeof view.session.project_id === 'string' && view.session.project_id !== '' ? view.session.project_id : null;
+  const runId = view.session.id;
+  const roots = useCapabilities((s) => s.walkthroughRoots);
+  // WT-U1 / EP-D3: the run's walkthrough (its `walkthrough_review` step) and a demo run's video open
+  // in the same slot — a recording is a run's artifact whether or not the run is filed.
+  const walkStep = walkthroughStepOf(chain, roots);
+  const demo = isDemoRun(view);
   const [docs, setDocs] = useState<DocSummary[]>([]);
   useEffect(() => {
     if (projectId === null) return undefined;
@@ -44,12 +61,24 @@ export function RunArtifacts({ view, composerKey }: { view: SessionView; compose
     const timer = setInterval(read, FRESH_MS);
     return () => { cancelled = true; clearInterval(timer); };
   }, [projectId, view.session.id, view.session.status]);
-  if (projectId === null) return null;
-  const mine = docs.filter((d) => d.kind === 'doc' && isDocRun(view, d.name));
-  if (mine.length === 0) return null;
+  const mine = projectId === null ? [] : docs.filter((d) => d.kind === 'doc' && isDocRun(view, d.name));
+  const count = mine.length + (walkStep !== null ? 1 : 0) + (demo ? 1 : 0);
+  if (count === 0) return null;
   return (
-    <div data-testid="run-artifacts" data-run-id={view.session.id} data-count={mine.length}>
-      {mine.map((d) => (
+    <div data-testid="run-artifacts" data-run-id={runId} data-count={count}>
+      {walkStep !== null && (
+        <ArtifactMorph
+          artifactKey={artifactKey('run', 'walkthrough', runId)} title="Walkthrough" projectId={projectId ?? ''} docId="" composerKey={composerKey}
+          slot={{ kind: 'walkthrough', body: (size, morph) => <WalkthroughEditor runId={runId} kind="walkthrough" step={walkStep} size={size} morph={morph} units={view.units} runStatus={view.session.status} /> }}
+        />
+      )}
+      {demo && (
+        <ArtifactMorph
+          artifactKey={artifactKey('run', 'demo-video', runId)} title="Demo video" projectId={projectId ?? ''} docId="" composerKey={composerKey}
+          slot={{ kind: 'demo-video', body: (size, morph) => <WalkthroughEditor runId={runId} kind="demo-video" step={null} size={size} morph={morph} units={view.units} runStatus={view.session.status} /> }}
+        />
+      )}
+      {projectId !== null && mine.map((d) => (
         <ArtifactMorph
           key={d.name}
           artifactKey={artifactKey(projectId, d.name, view.session.id)}

@@ -8,6 +8,14 @@ import { DocCoverage } from './DocCoverage.js';
 import { PageEditor, type FrameParts } from './PageEditor.js';
 import { SlideStrip } from './SlideStrip.js';
 
+/** WT-U1: a body other than the page-editor family — a run's walkthrough, a demo's video (EP-D3) —
+ *  behind the same chrome: its kind (the artifact's `data-kind`) and the body drawn at each size.
+ *  `morph` lets a control inside it change the size (the walkthrough's Watch opens the pane). */
+export interface ArtifactSlot {
+  kind: 'walkthrough' | 'demo-video';
+  body: (size: ArtifactSize, morph: (to: ArtifactSize) => void) => React.ReactNode;
+}
+
 /**
  * S8 — the morphing artifact (DESIGN-interaction rule 1: the object is the control). ONE element
  * that is the page's live preview in the thread, grows to a pane beside it on a click and to full
@@ -33,7 +41,7 @@ type ExportLine =
   | { state: 'ready'; text: string; href: string; file: string }
   | { state: 'failed'; text: string };
 
-export function ArtifactMorph({ artifactKey, title, projectId, docId, composerKey, kind = 'page', repoId = null }: {
+export function ArtifactMorph({ artifactKey, title, projectId, docId, composerKey, kind = 'page', repoId = null, slot }: {
   artifactKey: string;
   title: string;
   projectId: string;
@@ -43,6 +51,8 @@ export function ArtifactMorph({ artifactKey, title, projectId, docId, composerKe
   kind?: EditorKind;
   /** The run's repository, when it has one: where a document's requirement coverage is read. */
   repoId?: string | null;
+  /** WT-U1: what the slot hosts instead of the page editor (see {@link ArtifactSlot}). */
+  slot?: ArtifactSlot;
 }): React.ReactElement {
   const size = useArtifactSizes((s) => artifactSizeOf(s, artifactKey));
   const topmost = useArtifactSizes((s) => topmostArtifact(s) === artifactKey);
@@ -140,7 +150,7 @@ export function ArtifactMorph({ artifactKey, title, projectId, docId, composerKe
       data-object={`artifact:${artifactKey}`}
       data-size={size}
       data-doc={docId}
-      data-kind={kind}
+      data-kind={slot?.kind ?? kind}
       aria-label={`${title} — ${size === 'inline' ? 'preview' : size === 'pane' ? 'open beside the thread' : 'full screen'}`}
       className={`wk-artifact wk-artifact--${size}`}
       style={{ viewTransitionName: `artifact-${slug}` } as React.CSSProperties}
@@ -167,7 +177,9 @@ export function ArtifactMorph({ artifactKey, title, projectId, docId, composerKe
           <button ref={shrinkBtn} type="button" data-testid="artifact-shrink" aria-label={size === 'full' ? 'Back to the pane' : 'Back to the thread'} title="Esc" onClick={() => morph(shrink(size))} className="wk-artifact-btn">{size === 'full' ? '⤡' : '×'}</button>
         )}
       </header>
-      <PageEditor projectId={projectId} docId={docId} composerKey={composerKey} size={size} kind={kind} side={side} onHead={setHead} />
+      {slot !== undefined
+        ? slot.body(size, morph)
+        : <PageEditor projectId={projectId} docId={docId} composerKey={composerKey} size={size} kind={kind} side={side} onHead={setHead} />}
       {exported !== null && size !== 'inline' && (
         <p data-testid="artifact-export-line" data-state={exported.state} className={`wk-artifact-line${exported.state === 'failed' ? ' wk-artifact-line--bad' : ''}`}>
           {exported.text}

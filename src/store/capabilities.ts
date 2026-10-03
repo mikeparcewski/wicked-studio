@@ -9,6 +9,9 @@ import { api } from '../api/client.js';
 interface CapabilitiesStore {
   loaded: boolean;
   runChatId: boolean;
+  /** `walkthroughRoots` (WT-W1, api-types 0.74.0) — repo-bound runs get an evidence root, so a
+   *  walkthrough step can record; absent, the walkthrough artifact is not offered. */
+  walkthroughRoots: boolean;
   load: () => Promise<void>;
 }
 
@@ -17,14 +20,15 @@ let inflight: Promise<void> | null = null;
 export const useCapabilities = create<CapabilitiesStore>((set, get) => ({
   loaded: false,
   runChatId: false,
+  walkthroughRoots: false,
   load: () => {
     if (get().loaded) return Promise.resolve();
     inflight ??= Promise.resolve().then(() => api.getHealth())
       .then((h) => {
         const caps = ((h as unknown as { capabilities?: Record<string, unknown> }).capabilities) ?? {};
-        set({ loaded: true, runChatId: caps['runChatId'] === true });
+        set({ loaded: true, runChatId: caps['runChatId'] === true, walkthroughRoots: caps['walkthroughRoots'] === true });
       })
-      .catch(() => { set({ loaded: true, runChatId: false }); })
+      .catch(() => { set({ loaded: true, runChatId: false, walkthroughRoots: false }); })
       .finally(() => { inflight = null; });
     return inflight;
   },

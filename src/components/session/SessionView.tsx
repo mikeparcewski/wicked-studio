@@ -330,7 +330,7 @@ function RunBlock({ view, badge, go, sessionId }: {
       <PlanStepLines runId={id} />
       <ChainLine chain={chain} runId={id} units={view.units} teamError={teamError} onRetry={retry} />
       {/* S8: the page the run is producing — a live preview that morphs inline → pane → full. */}
-      <RunArtifacts view={view} composerKey={sessionId} />
+      <RunArtifacts view={view} composerKey={sessionId} chain={chain} />
       <RunHelpers view={view} />
       <a href={page} onClick={go(page)} data-testid="session-run-open" className="wk-session-link">Open the run page →</a>
     </section>

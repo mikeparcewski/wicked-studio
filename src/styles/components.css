@@ -1059,3 +1059,69 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
 @media (prefers-reduced-motion: no-preference) {
   .wk-artifact { transition: height 220ms ease, width 220ms ease, box-shadow 220ms ease; }
 }
+
+/* WT-U1: the walkthrough artifact — the preview in the thread (state, seats, chapter marks, the
+   failing frame) and the video editor at pane / full (the take, the timeline with the failing moment,
+   chapters as seek points, the checks track, the gate verbs, export). Tokens only. */
+.wk-walk { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; min-height: 0; overflow: auto; flex: 1 1 auto; }
+.wk-walk--preview { height: 100%; box-sizing: border-box; }
+.wk-walk-cols { display: flex; gap: 10px; align-items: flex-start; min-width: 0; }
+.wk-walk-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.wk-walk-frame { flex: 0 0 auto; max-height: 150px; max-width: 42%; border: 1px solid var(--status-fail); border-radius: var(--radius-sm); object-fit: contain; background: var(--surface-card); }
+.wk-walk-state { margin: 0; font-size: var(--text-sm); font-weight: var(--weight-semi); color: var(--ink-high); }
+.wk-walk-state--live .wk-walk-mark { color: var(--status-run); }
+.wk-walk-state--bad { color: var(--status-fail); }
+.wk-walk-state--ok .wk-walk-mark { color: var(--status-done); }
+.wk-walk-quiet { margin: 0; font-size: var(--text-xs); color: var(--ink-muted); }
+.wk-walk-bad { color: var(--status-fail); }
+.wk-walk-under { margin: 2px 0 0; padding-left: 14px; font-size: var(--text-xs); }
+.wk-walk-chapters { display: flex; flex-wrap: wrap; gap: 4px 10px; margin: 0; padding: 0; list-style: none; }
+.wk-walk-chapter-btn { display: inline-flex; align-items: center; gap: 5px; background: none; border: 0; padding: 0; font: inherit; font-size: var(--text-xs); color: var(--ink-body); cursor: default; }
+button.wk-walk-chapter-btn { cursor: pointer; }
+button.wk-walk-chapter-btn:hover .wk-walk-chapter-title { text-decoration: underline; }
+.wk-walk-chip { display: inline-flex; align-items: center; justify-content: center; min-width: 16px; height: 16px; padding: 0 4px; border-radius: var(--radius-full); border: 1px solid var(--border); font-size: 10px; color: var(--ink-muted); }
+.wk-walk-chip--pass { color: var(--status-done); border-color: var(--status-done); }
+.wk-walk-chip--fail { color: var(--status-fail); border-color: var(--status-fail); }
+.wk-walk-chip--live { color: var(--status-run); border-color: var(--status-run); }
+.wk-walk-chip--done { color: var(--ink-high); background: var(--surface-raised); }
+.wk-walk-chip--todo { border-style: dashed; opacity: .6; }
+.wk-walk-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+.wk-walk-grid { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+.wk-walk-stage { position: relative; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.wk-walk-side { display: flex; flex-direction: column; gap: 6px; min-width: 0; min-height: 0; }
+.wk-walk-video { display: block; width: 100%; max-height: 30vh; object-fit: contain; background: var(--surface-card); border-radius: var(--radius-sm); }
+/* Full screen: the take on the left, what to do and every check beside it — nothing load-bearing below the fold. */
+.wk-walk--full { overflow: hidden; }
+.wk-walk--full .wk-walk-grid { display: grid; grid-template-columns: minmax(0, 3fr) minmax(340px, 2fr); gap: 14px; flex: 1 1 auto; }
+.wk-walk--full .wk-walk-side { overflow: auto; }
+.wk-walk--full .wk-walk-video { max-height: calc(100vh - 190px); }
+.wk-walk-timeline { position: relative; height: 6px; border-radius: 3px; background: var(--surface-raised); }
+.wk-walk-tick { position: absolute; top: -2px; width: 2px; height: 10px; background: var(--ink-dim); transform: translateX(-1px); }
+.wk-walk-tick--fail { background: var(--status-fail); width: 3px; height: 12px; top: -3px; }
+.wk-walk-checks { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 3px; }
+.wk-walk-check { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; font-size: var(--text-xs); color: var(--ink-body); }
+.wk-walk-check--fail .wk-walk-check-text { color: var(--status-fail); font-weight: var(--weight-semi); }
+.wk-walk-check-text { flex: 1 1 auto; min-width: 0; }
+.wk-walk-time { background: none; border: 0; padding: 0; font: inherit; font-size: var(--text-xs); color: var(--ink-muted); cursor: pointer; }
+.wk-walk-time:hover { color: var(--ink-high); text-decoration: underline; }
+.wk-walk-evidence { flex-basis: 100%; margin: 0; padding-left: 22px; font-size: var(--text-xs); color: var(--ink-muted); }
+.wk-walk-evidence a { color: var(--accent); }
+.wk-walk-narration { font-size: var(--text-xs); color: var(--ink-muted); }
+.wk-walk-narration-list { margin: 0; padding-left: 16px; font-size: var(--text-xs); color: var(--ink-muted); }
+.wk-walk-pre { white-space: pre-wrap; margin: 4px 0 0; color: var(--ink-body); }
+.wk-walk-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+/* Inline, the whole preview is one control (the catch above it opens the pane): the actions sit over the catch. */
+.wk-artifact--inline .wk-walk-actions { position: relative; z-index: 1; }
+.wk-artifact--inline .wk-walk-actions .wk-prop-btn { padding: 2px 10px; font-size: var(--text-xs); }
+.wk-walk-edit { display: flex; flex-direction: column; gap: 6px; }
+.wk-walk-edit .wk-prop-btns { margin-top: 0; }
+.wk-walk-storyline { width: 100%; box-sizing: border-box; font: inherit; font-size: var(--text-sm); padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-base); color: var(--ink-high); resize: vertical; }
+.wk-walk-storyline:focus-visible { outline: 2px solid transparent; box-shadow: var(--focus-ring); }
+.wk-walk-pad { padding: 8px 10px; }
+.wk-walk-detail { flex-basis: 100%; padding-left: 22px; }
+.wk-walk-export { position: relative; margin-left: auto; }
+.wk-walk-export-menu { position: absolute; right: 0; top: calc(100% + 4px); z-index: 2; display: flex; flex-direction: column; min-width: 190px; padding: 4px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-card); box-shadow: var(--shadow-card); }
+.wk-walk-export-item { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 5px 8px; border: 0; border-radius: var(--radius-sm); background: none; font: inherit; font-size: var(--text-sm); color: var(--ink-high); text-align: left; text-decoration: none; cursor: pointer; }
+.wk-walk-export-item:hover:not(:disabled) { background: var(--surface-raised); }
+.wk-walk-export-item:disabled { color: var(--ink-dim); cursor: default; }
+.wk-walk-export-item small { font-size: var(--text-xs); color: var(--ink-muted); }
