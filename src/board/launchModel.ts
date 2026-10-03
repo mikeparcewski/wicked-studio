@@ -47,11 +47,14 @@ export function launchSubmit(input: LaunchSubmitInput): { canSubmit: boolean; no
  * The Desk's and a session's composer (S7): the message opens (or continues) a chat whose seats are
  * the roster's. When the roster SAYS not one seat can carry it — each benched, not council-eligible,
  * or refused by the daemon's own chat admission for this scope — the composer refuses to send and
- * names why (studio#315): the send would only fail at the daemon. A cold roster is never a refusal.
+ * names why (studio#315): the send would only fail at the daemon. A cold (unread) roster is never a
+ * refusal; an empty one is.
  * `null`: send.
  */
 export function composerSendRefusal(roster: readonly RosterSeat[] | null, scoped: boolean): string | null {
-  if (roster === null || roster.length === 0) return null;
+  if (roster === null) return null;
+  // A roster the daemon ANSWERED with no seats is an answer, not a cold read (codex on S7).
+  if (roster.length === 0) return 'No helper is set up on this daemon yet — add one under Settings.';
   const reasons: string[] = [];
   for (const seat of roster) {
     const admission = chatAdmissionOf(seat, scoped);

@@ -203,3 +203,31 @@ describe('studio#315 still blocks send', () => {
     expect(sent).toStrictEqual([]);
   });
 });
+
+describe('codex on S7: IME and a moved gate', () => {
+  it('Enter that confirms an IME composition picks nothing from an open menu', async () => {
+    render(<Harness runs={[makeView({ id: 'r2', status: 'executing', run_identity: PLANNED } as never)]} onSend={() => {}} />);
+    type('/test');
+    await screen.findByTestId('composer-menu');
+    fireEvent.keyDown(screen.getByTestId('session-composer-input'), { key: 'Enter', isComposing: true });
+    const { useUndoQueue } = await import('../src/board/undoQueue.js');
+    expect(useUndoQueue.getState().pending).toHaveLength(0);
+  });
+
+  it('a draft made on one gate instance is never sent to its successor, nor dropped by it', async () => {
+    const { addGateDraftStep, dropGateDraft, usePlanDrafts } = await import('../src/store/planDrafts.js');
+    addGateDraftStep('r1', '2:5', ['build'], 'test');
+    dropGateDraft('r1', '2:9');
+    expect(usePlanDrafts.getState().gate['r1']?.gateKey).toBe('2:5');
+    const run = makeView({ id: 'r1', status: 'awaiting_human', problem: 'Fix it', run_identity: PLANNED } as never);
+    useGateStore.setState({ gates: { r1: { runId: 'r1', ord: 2, prompt: 'Approve plan rev 1 before unit 2 runs: build', lifecycle: 'open', receivedAt: 5, gateKind: 'plan_approval' } } });
+    render(<ProposalCard view={run} chain={EMPTY} />);
+    const go = screen.getByTestId('session-proposal-go');
+    expect(go.textContent).toBe('Approve with these changes');
+    // The gate is asked afresh between the render and the click.
+    useGateStore.setState({ gates: { r1: { runId: 'r1', ord: 2, prompt: 'Approve plan rev 1 before unit 2 runs: build', lifecycle: 'open', receivedAt: 9, gateKind: 'plan_approval' } } }, false);
+    fireEvent.click(go);
+    await act(async () => { await flushDecisionsForTest(); });
+    expect(posts.filter((p) => p.path.endsWith('/gate') && (p.body as { plan?: unknown }).plan !== undefined)).toStrictEqual([]);
+  });
+});

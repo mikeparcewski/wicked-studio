@@ -61,9 +61,12 @@ export function ProposalCard({ view, chain }: { view: SessionView; chain: ChainM
       : {};
     // The pressed button goes away as the card becomes progress: the card keeps keyboard focus.
     requestAnimationFrame(() => cardRef.current?.focus());
+    // A draft answers only the gate it was made on: if the gate moved under it, nothing is sent
+    // and the card re-renders for the new gate (codex on S7).
+    if (draft !== null && gateInstance(useGateStore.getState().gates[runId]) !== draft.gateKey) { sending.current = false; return; }
     const answer: GateAnswer = draft !== null ? { approve: true, plan: gateDraftPlan(draft) } : { approve: true };
     commitGateDecision(runId, answer, deliver)
-      .then((outcome) => { if (outcome === 'sent' && draft !== null) dropGateDraft(runId); })
+      .then((outcome) => { if (outcome === 'sent' && draft !== null) dropGateDraft(runId, draft.gateKey); })
       .catch(() => { /* the refusal is in the shared action state, which the card renders */ })
       .finally(() => { sending.current = false; });
   };
@@ -94,7 +97,7 @@ export function ProposalCard({ view, chain }: { view: SessionView; chain: ChainM
               {draft !== null && <p data-testid="session-proposal-draft" className="wk-prop-why"><b>{draftLine(draft.added)}</b> Approving sends your changes with it; nothing has been sent yet.</p>}
               <div className="wk-prop-btns">
                 <button ref={goRef} type="button" data-testid="session-proposal-go" data-draft={draft !== null ? 'true' : 'false'} onClick={go} className="wk-prop-btn wk-prop-btn--primary">{draft !== null ? 'Approve with these changes' : card.act}</button>
-                {draft !== null && <button type="button" data-testid="session-proposal-drop-draft" onClick={() => dropGateDraft(runId)} className="wk-prop-btn wk-prop-btn--ghost">Drop the changes</button>}
+                {draft !== null && <button type="button" data-testid="session-proposal-drop-draft" onClick={() => dropGateDraft(runId, draft.gateKey)} className="wk-prop-btn wk-prop-btn--ghost">Drop the changes</button>}
                 <button type="button" data-testid="session-proposal-not-now" onClick={notNow} className="wk-prop-btn wk-prop-btn--ghost">Not now</button>
               </div>
             </>
@@ -132,7 +135,7 @@ export function ProposalCard({ view, chain }: { view: SessionView; chain: ChainM
               {draft !== null && <p data-testid="session-proposal-draft" className="wk-prop-why"><b>{draftLine(draft.added)}</b> Approving sends your changes with it; nothing has been sent yet.</p>}
               <div className="wk-prop-btns">
                 <button ref={goRef} type="button" data-testid="session-proposal-go" data-draft={draft !== null ? 'true' : 'false'} onClick={go} className="wk-prop-btn wk-prop-btn--primary">{draft !== null ? 'Approve with these changes' : card.act}</button>
-                {draft !== null && <button type="button" data-testid="session-proposal-drop-draft" onClick={() => dropGateDraft(runId)} className="wk-prop-btn wk-prop-btn--ghost">Drop the changes</button>}
+                {draft !== null && <button type="button" data-testid="session-proposal-drop-draft" onClick={() => dropGateDraft(runId, draft.gateKey)} className="wk-prop-btn wk-prop-btn--ghost">Drop the changes</button>}
                 <button type="button" data-testid="session-proposal-not-now" onClick={notNow} className="wk-prop-btn wk-prop-btn--ghost">Not now</button>
               </div>
             </>

@@ -261,6 +261,8 @@ export function Composer({
           onChange={(e) => { setText(e.target.value); syncCaret(e.target); setCursor(0); if (note !== null && e.target.value !== '') setNote(null); }}
           onSelect={(e) => syncCaret(e.currentTarget)}
           onKeyDown={(e) => {
+            // An IME confirming its composition with Enter picks nothing and sends nothing (codex on S7).
+            if (e.nativeEvent.isComposing) return;
             if (menuOpen && count > 0) {
               if (e.key === 'ArrowDown') { e.preventDefault(); setCursor((active + 1) % count); return; }
               if (e.key === 'ArrowUp') { e.preventDefault(); setCursor((active - 1 + count) % count); return; }
@@ -268,7 +270,7 @@ export function Composer({
             }
             if (menuOpen && e.key === 'Escape' && token !== null) { e.preventDefault(); e.stopPropagation(); setClosedAt(`${token.trigger}${token.start}`); return; }
             if (e.key === 'Backspace' && text === '' && backspaceAboutChip(composerKey, text)) { e.preventDefault(); return; }
-            if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); send(); }
+            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
           }}
           placeholder={placeholder}
           className="wk-desk-input"

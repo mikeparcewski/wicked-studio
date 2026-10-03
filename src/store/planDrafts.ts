@@ -35,8 +35,10 @@ export function addGateDraftStep(runId: string, gateKey: string, seed: readonly 
   });
 }
 
-export function dropGateDraft(runId: string): void {
+/** Drop a run's draft — only the one made on `gateKey` when given, so a successor gate's draft survives. */
+export function dropGateDraft(runId: string, gateKey?: string): void {
   usePlanDrafts.setState((s) => {
+    if (gateKey !== undefined && s.gate[runId]?.gateKey !== gateKey) return s;
     const gate = { ...s.gate };
     delete gate[runId];
     return { gate };

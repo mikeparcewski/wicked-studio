@@ -89,7 +89,7 @@ describe('the launch rules, extracted (launchModel)', () => {
       .toMatchObject({ canSubmit: false, noSeatReason: expect.stringMatching(/codex: benched/) });
     expect(composerSendRefusal([benched], false)).toMatch(/^No helper can take this right now — codex: benched/);
     expect(composerSendRefusal(null, false)).toBeNull();
-    expect(composerSendRefusal([], false)).toBeNull();
+    expect(composerSendRefusal([], false)).toMatch(/No helper is set up/);
   });
   it('reads the workflow off the words as ChatInput did', () => {
     expect(detectWorkflow('fix the crash')).toBe('bug');
