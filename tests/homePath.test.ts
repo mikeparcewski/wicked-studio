@@ -19,6 +19,7 @@ describe('displayPath — a path under the home directory reads as ~', () => {
     expect(displayPath("C:\\Users\\O'Neil\\repos\\api")).toBe('~\\repos\\api');
     expect(displayPath('D:\\USERS\\alice\\repo')).toBe('~\\repo');
     expect(displayPath('C:\\Users\\Jane Doe\\repo')).toBe('~\\repo');
+    expect(displayPath('C:\\Users\\Jane  Doe\\repo')).toBe('~\\repo');
     expect(displayPath('C:\\Users\\Jane Doe')).toBe('C:\\Users\\Jane Doe'); // a bare spaced Windows name: left whole, never half-abbreviated
   });
   it('accepts the account names people have: dotted, hyphenated, underscored, digits', () => {

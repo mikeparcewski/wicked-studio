@@ -27,7 +27,7 @@ const NAME = String.raw`${RUN}(?:\.${RUN})*`;
 /** A Windows account name: runs joined by dots or apostrophes (`O'Neil`, `jane.doe`). */
 const WIN_NAME = String.raw`${RUN}(?:['.]${RUN})*`;
 /** A Windows name with spaces, only when a separator follows (so prose after a bare one is safe). */
-const WIN_SPACED = String.raw`${WIN_NAME}(?: ${WIN_NAME})+(?=[\\\/])`;
+const WIN_SPACED = String.raw`${WIN_NAME}(?: +${WIN_NAME})+(?=[\\\/])`;
 const USERS = String.raw`[Uu][Ss][Ee][Rr][Ss]`;
 /** The three spellings of a home directory, at the start of a path. */
 const HOME_HEAD =
