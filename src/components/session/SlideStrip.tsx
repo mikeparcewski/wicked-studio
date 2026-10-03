@@ -16,11 +16,22 @@ import type { FrameParts } from './PageEditor.js';
 
 /** A click on a slide outranks "the slide in view" (the last slides of a deck cannot be scrolled
  *  to the middle of the frame, so the view alone would mark the wrong one). The pick holds where
- *  its own jump landed — the first scroll within this window — and any scroll away from there is
- *  the reader's, which hands the mark back to the view. The window is only as long as the jump
- *  takes to report (the frame posts its scroll within a frame or two): a jump that moves nothing
- *  must not let the reader's own first scroll, a moment later, pass for the landing. */
-const JUMP_WINDOW_MS = 200;
+ *  its own jump landed, and any scroll away from there is the reader's, which hands the mark back
+ *  to the view. The landing is the scroll the frame reports right behind its confirmation of the
+ *  jump (`scroll-ack`, counted in `parts.jumps`) — this long behind it at most, so a jump that
+ *  moved nothing does not let the reader's own scroll, a moment later, pass for the landing. The
+ *  window starts at the confirmation, not at the click: a slow frame costs nothing. */
+const LANDING_WITHIN_MS = 150;
+
+interface Pick {
+  index: number;
+  /** `parts.jumps` when the slide was clicked — the jump is confirmed once the count passes it. */
+  asked: number;
+  /** When the confirmation was seen (`null` = not yet). */
+  confirmedAt: number | null;
+  /** Where the jump landed (`null` = no scroll reported for it, yet or at all). */
+  landedAt: number | null;
+}
 
 export function SlideStrip({ parts, docId, composerKey }: {
   parts: FrameParts;
@@ -28,12 +39,15 @@ export function SlideStrip({ parts, docId, composerKey }: {
   composerKey: string;
 }): React.ReactElement | null {
   const slides = useMemo(() => slidesOf(parts.blocks), [parts.blocks]);
-  const [picked, setPicked] = useState<{ index: number; until: number; landedAt: number | null } | null>(null);
-  const { scrollY } = parts;
+  const [picked, setPicked] = useState<Pick | null>(null);
+  const { scrollY, jumps } = parts;
+  useEffect(() => {
+    setPicked((p) => (p !== null && p.confirmedAt === null && jumps > p.asked ? { ...p, confirmedAt: performance.now() } : p));
+  }, [jumps]);
   useEffect(() => {
     setPicked((p) => {
-      if (p === null) return null;
-      if (p.landedAt === null) return performance.now() <= p.until ? { ...p, landedAt: scrollY } : null;
+      if (p === null || p.confirmedAt === null) return p; // the jump has not happened yet
+      if (p.landedAt === null) return performance.now() - p.confirmedAt <= LANDING_WITHIN_MS ? { ...p, landedAt: scrollY } : null;
       return scrollY === p.landedAt ? p : null;
     });
   }, [scrollY]);
@@ -50,7 +64,7 @@ export function SlideStrip({ parts, docId, composerKey }: {
           aria-current={s.index === current ? 'true' : undefined}
           className={`wk-slide-thumb${s.index === current ? ' wk-slide-thumb--on' : ''}`}
           onClick={() => {
-            setPicked({ index: s.index, until: performance.now() + JUMP_WINDOW_MS, landedAt: null });
+            setPicked({ index: s.index, asked: jumps, confirmedAt: null, landedAt: null });
             parts.scrollTo(s.first);
             addAboutChip(composerKey, slideChip(s, docId));
           }}

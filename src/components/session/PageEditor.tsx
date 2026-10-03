@@ -47,6 +47,8 @@ export interface FrameParts {
   tops: Readonly<Record<string, number>>;
   scrollY: number;
   frameHeight: number;
+  /** How many `scrollTo` jumps the frame has confirmed it performed (its `scroll-ack`s). */
+  jumps: number;
   selected: string | null;
   /** Bring an anchor into view. */
   scrollTo: (wid: string) => void;
@@ -119,6 +121,7 @@ export function PageEditor({ projectId, docId, composerKey, size, kind = 'page',
   // late slide does not throw the reader back to the top.
   const returnTo = useRef<string | null>(null);
   const armed = useRef<string | null>(null);
+  const [jumps, setJumps] = useState(0);
   // The frame's own height, measured — what stands beside the frame asks "which slide is in view".
   const [frameHeight, setFrameHeight] = useState(0);
   useEffect(() => {
@@ -231,6 +234,8 @@ export function PageEditor({ projectId, docId, composerKey, size, kind = 'page',
         if (back !== null && msg.widMap[back] !== undefined) post(makeScrollToWid(back));
       } else if (msg.type === 'scroll-state') {
         setCurrent({ scrollX: msg.scrollX, scrollY: msg.scrollY });
+      } else if (msg.type === 'scroll-ack') {
+        setJumps((n) => n + 1);
       } else if (msg.type === 'wid-hover') {
         setHover(msg.wid);
       } else if (msg.type === 'wid-click') {
@@ -371,10 +376,11 @@ export function PageEditor({ projectId, docId, composerKey, size, kind = 'page',
     tops: Object.fromEntries(Object.entries(inventory.widMap).map(([wid, r]) => [wid, r.top + inventory.measured.scrollY])),
     scrollY,
     frameHeight,
+    jumps,
     selected,
     scrollTo,
     pick,
-  }), [inventory, scrollY, frameHeight, selected, scrollTo, pick]);
+  }), [inventory, scrollY, frameHeight, jumps, selected, scrollTo, pick]);
 
   return (
     <>

@@ -32,7 +32,8 @@ written document (`style: doc`) and a deck (`style: ppt`), anchored the way the 
   8. KIND + STRIP: `artifact[data-kind=deck]`; the pane holds a strip of the deck's four slides,
      named by their titles, the first one marked.
   9. A SLIDE IS A SUBJECT: a click on slide 3 marks it, brings its title into view in the frame and
-     puts "about: slide 3 — “Staff stay in control”" on the composer.
+     puts "about: slide 3 — “Staff stay in control”" on the composer. The reader scrolling the deck
+     back to the top hands the mark to the slide in view (slide 1); a pick takes it again and holds.
  10. A SLIDE TITLE EDIT IS ONE VERSION: typing on slide 3's title lands version 2 ("Changed slide
      3’s title — version 2.") with Undo; the strip names the slide by its new title, and the new
      version's frame is still on slide 3 — an edit does not throw the reader back to the top.
@@ -353,9 +354,26 @@ with sync_playwright() as p:
         page.wait_for_timeout(150)
     chips9 = page.evaluate(CHIPS)
     page.screenshot(path=str(SHOTS / "desk-doc-editors-slide-3.png"))
+    # The mark follows the reader: scrolling the deck back to the top hands it to the slide in view…
+    box = page.get_by_test_id("page-frame").bounding_box()
+    page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+    page.wait_for_timeout(400)
+    page.mouse.wheel(0, -4000)
+    try:
+        page.wait_for_function("() => document.querySelector('[data-testid=\"slide-strip\"]').dataset.current === '0'", timeout=5000)
+        back_to_view = True
+    except Exception:
+        back_to_view = False
+    after_scroll = page.evaluate(STRIP)
+    # …and a pick takes it again.
+    page.locator('[data-testid="slide-thumb"][data-slide="2"]').click()
+    page.wait_for_function("() => document.querySelector('[data-testid=\"slide-strip\"]').dataset.current === '2'", timeout=5000)
+    page.wait_for_timeout(400)
+    held = page.evaluate(STRIP)
     check("slide-subject", where.get("top") is not None and 0 <= where["top"] and where["bottom"] <= where["vh"]
-          and any(c["key"] == f"el:{DECK}/slide-2" and c["text"] == "about: slide 3 — “Staff stay in control”" for c in chips9),
-          title_in_frame=where, chips=chips9, strip=page.evaluate(STRIP))
+          and any(c["key"] == f"el:{DECK}/slide-2" and c["text"] == "about: slide 3 — “Staff stay in control”" for c in chips9)
+          and back_to_view and held["current"] == "2",
+          title_in_frame=where, chips=chips9, after_the_reader_scrolled_up=after_scroll, after_picking_again=held)
 
     # ── 10. a slide title edit is one version ──────────────────────────────────────
     frame.locator(f'[data-wid="{TITLE3}"]').click()
