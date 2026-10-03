@@ -104,6 +104,16 @@ export function anchorWords(wid: string, kind: EditorKind): string {
   return WORDLIKE.test(wid) ? `the ${wid.replace(/[-_]+/g, ' ').toLowerCase()}` : 'this part';
 }
 
+/** The host's words for a plugin's write (EP-P2): the elements it touched, named from the host's own
+ *  checked anchors ({@link anchorWords}) — never the plugin's `summary`, so a third-party editor cannot
+ *  label one change as another (codex r1). */
+export function writtenWords(anchors: readonly string[], kind: EditorKind = 'page'): string {
+  const [first, ...rest] = anchors;
+  if (first === undefined) return kind === 'deck' ? 'the deck' : kind === 'document' ? 'the document' : 'the page';
+  const words = anchorWords(first, kind);
+  return rest.length === 0 ? words : `${words} and ${rest.length} more`;
+}
+
 /** One block of the frame's inventory, as the models below read it. */
 export interface BlockText { text: string; composite: boolean }
 

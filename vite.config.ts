@@ -1,4 +1,5 @@
 import { readdirSync, readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 import { loadEnv } from 'vite';
 import { defineConfig, configDefaults, type Plugin } from 'vitest/config';
@@ -63,8 +64,25 @@ function editorFrameSrc(apiHost: string | undefined): Plugin {
   };
 }
 
+// EP-P2 (DES-EDITOR-PLUGINS-001 §8.6): the first-party editor plugins ship INSIDE studio's bundle —
+// `<outDir>/editors/<id>/{index.html,editor.json}`, one self-contained HTML file each, which crew's
+// registry discovers at boot and serves hash-pinned (scripts/build-editors.mjs). Every `vite build`
+// emits them, so a same-origin build for the journeys carries them too.
+function emitEditorBundles(): Plugin {
+  let outDir = resolve(process.cwd(), 'dist');
+  return {
+    name: 'emit-editor-bundles',
+    apply: 'build',
+    configResolved(config) { outDir = resolve(config.root, config.build.outDir); },
+    async closeBundle() {
+      const { buildEditors } = await import('./scripts/build-editors.mjs');
+      await buildEditors(outDir);
+    },
+  };
+}
+
 export default defineConfig(({ mode }) => ({
-  plugins: [react(), emitTestidInventory(), emitFontLicences(), editorFrameSrc(loadEnv(mode, process.cwd(), '').VITE_API_HOST)],
+  plugins: [react(), emitTestidInventory(), emitFontLicences(), emitEditorBundles(), editorFrameSrc(loadEnv(mode, process.cwd(), '').VITE_API_HOST)],
   server: { port: 4200, host: '127.0.0.1' },
   preview: { port: 4200 },
   test: {

@@ -704,8 +704,12 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          #   with the bundle CSP (DES-EDITOR-PLUGINS-001 §8.2) and refuses a hash that does not match;
          #   GET /api/v1/editors/<id>/grants answers `editor_grants`. shell_csp — the SPA shell is
          #   served with crew's `frame-src` policy (§8.2), so a plugin cannot navigate off-origin.
+         #   EP-P2: GET /api/v1/editors lists the first-party editors the served dist carries
+         #   (<dist>/editors/<id>/editor.json, hash-pinned as crew's registry does); their entry is served
+         #   from the dist with the same policy (` https:` for a first-party `network.media`, crew csp.ts);
+         #   the grants route answers crew's DECIDED shape ({permission, decision, ruleIds, token}).
          "editors": False, "editor_grants": ["artifact.read", "artifact.write", "selection.chip",
-                                              "composer.draft", "checks.contribute", "ui.fullscreen"],
+                                              "composer.draft", "checks.contribute", "ui.fullscreen", "network.media"],
          "shell_csp": False,
          # ── Sessions (DES-STUDIO-REBUILD-001 S6a, e2e/desk_session_test.py) ──
          # sessions — SESSION_RUNS are GET /runs (they REPLACE the corpus): r-pay-1 (completed, not a team run) and r-pay-2
@@ -6264,7 +6268,7 @@ class W2Handler(SimpleHTTPRequestHandler):
             with state_lock:
                 posts = list(capture_post_log)
             return self._json(200, {"posts": posts})
-        if path.startswith("/api/v1/editors/") and self._editor_routes(path):
+        if (path == "/api/v1/editors" or path.startswith("/api/v1/editors/")) and self._editor_routes(path):
             return None
         if self._api(path):
             return None
@@ -6281,27 +6285,73 @@ class W2Handler(SimpleHTTPRequestHandler):
                              f"frame-src http://{host}/api/v1/editors/ http://{host}/api/v1/projects/ blob: data:")
         super().end_headers()
 
+    def _studio_editors(self) -> list:
+        """The first-party editors the served dist carries, as crew's registry discovers them at boot
+        (EP-C1 `discoverStudioEditors`): <dist>/editors/<id>/editor.json beside ONE index.html, the entry's
+        sha256 and size pinned. Nothing else is first-party."""
+        root = Path(self.directory) / "editors"
+        out = []
+        if not root.is_dir():
+            return out
+        for d in sorted(root.iterdir()):
+            mf, entry = d / "editor.json", d / "index.html"
+            if not (d.is_dir() and mf.is_file() and entry.is_file()):
+                continue
+            manifest = json.loads(mf.read_text())
+            if manifest.get("id") != d.name or not re.match(r"^wicked-[a-z0-9]+(?:-[a-z0-9]+)*$", d.name):
+                continue
+            body = entry.read_bytes()
+            out.append({"manifest": manifest, "body": body, "sha256": hashlib.sha256(body).hexdigest()})
+        return out
+
     def _editor_routes(self, path: str) -> bool:
-        """EP-C1 stand-in: the editor bundle route (hash-pinned, with its CSP) and the grants route."""
+        """EP-C1 stand-in: the registry list, the editor bundle route (hash-pinned, with its CSP) and the
+        grants route (crew's decided shape)."""
         with state_lock:
             on = state["editors"]
             grants = list(state["editor_grants"])
         if not on:
             return False
         parts = path.split("/")
-        # /api/v1/editors/<id>/grants
+        # /api/v1/editors — the registry (EP-P2): the dist's first-party editors, the wire view crew sends.
+        if len(parts) == 4 and parts[3] == "editors":
+            editors = []
+            for e in self._studio_editors():
+                m = e["manifest"]
+                editors.append({"id": m["id"], "title": m["title"], "version": m["version"], "protocol": m["protocol"],
+                                "kinds": m["kinds"], "sizes": m["sizes"], "permissions": m["permissions"],
+                                "sha256": e["sha256"], "bytes": len(e["body"]), "first_party": True, "enabled": True,
+                                "source": "studio-bundle", "entry_url": f"/api/v1/editors/{m['id']}/{m['version']}/entry"})
+            self._json(200, {"editors": editors, "installs": "refused_until_conformance"})
+            return True
+        # /api/v1/editors/<id>/grants — crew's DECIDED set: {permission, decision, ruleIds, token} per permission.
         if len(parts) == 6 and parts[5] == "grants":
-            self._json(200, {"editor": parts[4], "grants": grants})
+            q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            version = (q.get("version") or [""])[0]
+            sha = (q.get("sha") or [""])[0]
+            self._json(200, {"editorId": parts[4], "version": version, "sha256": sha, "project": (q.get("project") or [None])[0],
+                             "firstParty": parts[4].startswith("wicked-"),
+                             "grants": [{"permission": g, "decision": "allow", "ruleIds": [],
+                                         "token": f"editor:{parts[4]}@{version}#{sha}/{g}"} for g in grants]})
             return True
         # /api/v1/editors/<id>/<version>/entry
         if len(parts) == 7 and parts[6] == "entry":
             files = {"acme-good": "good.html", "acme-hostile": "hostile.html"}
             name = files.get(parts[4])
-            if name is None or parts[5] != "0.1.0":
+            first_party = next((e for e in self._studio_editors() if e["manifest"]["id"] == parts[4]), None)
+            if first_party is not None:
+                if parts[5] != first_party["manifest"]["version"]:
+                    self._json(404, {"error": f"no editor {parts[4]}@{parts[5]}"})
+                    return True
+                body, sha = first_party["body"], first_party["sha256"]
+                media = " https:" if any(p.get("id") == "network.media" for p in first_party["manifest"]["permissions"]) else ""
+            elif name is None or parts[5] != "0.1.0":
                 self._json(404, {"error": f"no editor {parts[4]}@{parts[5]}"})
                 return True
-            body = (REPO / "e2e" / "editor-fixtures" / name).read_bytes()
-            sha = hashlib.sha256(body).hexdigest()
+            else:
+                body = (REPO / "e2e" / "editor-fixtures" / name).read_bytes()
+                sha = hashlib.sha256(body).hexdigest()
+                media = ""
             q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
             if (q.get("sha") or [""])[0] != sha:
                 self._json(409, {"error": "the entry's hash does not match the pinned hash", "code": "hash_mismatch"})
@@ -6311,7 +6361,7 @@ class W2Handler(SimpleHTTPRequestHandler):
             self.send_header("Content-Length", str(len(body)))
             self.send_header("Content-Security-Policy",
                              "sandbox allow-scripts; default-src 'none'; script-src 'unsafe-inline'; "
-                             "style-src 'unsafe-inline'; img-src data: blob:; media-src blob:; font-src data:; "
+                             f"style-src 'unsafe-inline'; img-src data: blob:{media}; media-src blob:; font-src data:{media}; "
                              "frame-src blob: data: about:; child-src blob: data: about:; connect-src 'none'; "
                              "form-action 'none'; base-uri 'none'; worker-src 'none'; manifest-src 'none'")
             self.send_header("Cross-Origin-Resource-Policy", "same-origin")

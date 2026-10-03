@@ -3,7 +3,7 @@ import { EditorHost, type HostLogEntry, type HostUi } from '../src/editors/host.
 import { FakeDocAdapter, SAMPLE_PAGE } from '../src/editors/fakeAdapter.js';
 import { CHORD_TABLE, isForwardable, isOneGrapheme, judgeKey, judgeTyped } from '../src/editors/keys.js';
 import { builtinDefaults, changedBy, chipsFor, elementLabel, resolveKind } from '../src/editors/model.js';
-import { checkOps, escapeText, inventoryOf, isColour, themeTokensOf } from '../src/editors/ops.js';
+import { checkOps, inventoryOf, isColour, themeTokensOf } from '../src/editors/ops.js';
 import { parseInbound, parseReady, type PermissionId } from '../src/editors/protocol.js';
 
 /**
@@ -64,10 +64,9 @@ describe('the strict parser', () => {
 describe('ops: text and colours, never markup', () => {
   const inv = inventoryOf(SAMPLE_PAGE);
 
-  it('escapes text, so markup lands as literal text', () => {
-    expect(escapeText(`<img src=x onerror="a('b')">&`)).toBe('&lt;img src=x onerror=&quot;a(&#39;b&#39;)&quot;&gt;&amp;');
+  it('sends text as typed — the engine lands a content-edit as text (interactive #250), so markup is literal', () => {
     const r = checkOps([{ op: 'text', anchor: 'hero-title', value: '<b>Hi</b>', before: 'Book a study room in under a minute' }], inv);
-    expect(r).toStrictEqual({ ok: true, items: [{ selector: '[data-wid="hero-title"]', type: 'content-edit', value: '&lt;b&gt;Hi&lt;/b&gt;', before: 'Book a study room in under a minute' }] });
+    expect(r).toStrictEqual({ ok: true, items: [{ selector: 'hero-title', type: 'content-edit', value: '<b>Hi</b>', before: 'Book a study room in under a minute' }] });
   });
 
   it('the colour grammar: each accepted and refused form', () => {
@@ -86,7 +85,7 @@ describe('ops: text and colours, never markup', () => {
   it('anchors come from the host inventory; structural-change is not an op; caps hold', () => {
     expect(checkOps([{ op: 'remove', anchor: 'ghost' }], inv)).toMatchObject({ ok: false, code: 'bad_request' });
     expect(checkOps([{ op: 'structural-change', anchor: 'cta' }], inv)).toMatchObject({ ok: false, code: 'bad_request' });
-    expect(checkOps([{ op: 'remove', anchor: 'cta' }], inv)).toStrictEqual({ ok: true, items: [{ selector: '[data-wid="cta"]', type: 'remove' }] });
+    expect(checkOps([{ op: 'remove', anchor: 'cta' }], inv)).toStrictEqual({ ok: true, items: [{ selector: 'cta', type: 'remove' }] });
     expect(checkOps(Array.from({ length: 201 }, () => ({ op: 'remove', anchor: 'cta' })), inv)).toMatchObject({ ok: false, code: 'too_large' });
     expect(checkOps([], inv)).toMatchObject({ ok: false });
   });
@@ -293,6 +292,36 @@ describe('the host controller', () => {
     expect((ui.chips as ReturnType<typeof vi.fn>).mock.calls[0]![0]).toStrictEqual([{ anchor: { kind: 'element', id: 'cta' }, label: '“Book a room”' }]);
     for (let i = 0; i < 3000; i++) fromFrame(env('selection.set', { anchors: [] }));
     expect(log.length).toBeLessThanOrEqual(2_000);
+    host.teardown('done');
+  });
+
+  it('codex r1: `written` carries the HOST-checked anchors; an undo the adapter refused without moving the head posts no artifact.changed and keeps the inventory', async () => {
+    const { host, ui, fromFrame, adapter } = makeHost(['artifact.read', 'artifact.write', 'selection.chip']);
+    const written = vi.fn();
+    ui.written = written;
+    let port: MessagePort | null = null;
+    vi.spyOn(host.frame.contentWindow!, 'postMessage').mockImplementation(((_m: unknown, _o: unknown, tr?: Transferable[]) => { port = (tr?.[0] as MessagePort) ?? null; }) as never);
+    fromFrame(env('plugin.ready', { editor: 'acme', version: '0.1.0', protocol: [1] }));
+    const toPlugin: { type?: string }[] = [];
+    port!.onmessage = (m) => toPlugin.push(m.data as { type?: string });
+    port!.postMessage(env('version.write', { base: 1, ops: [{ op: 'text', anchor: 'cta', value: 'Reserve', before: 'Book a room' }], summary: 'the price title' }, 'w1'));
+    await vi.waitFor(() => expect(toPlugin.find((m) => (m as { re?: string }).re === 'w1')).toBeDefined());
+    expect(toPlugin.find((m) => (m as { re?: string }).re === 'w1')).toMatchObject({ ok: true });
+    expect(written).toHaveBeenCalledTimes(1);
+    // The words come from the anchors the host checked, never the plugin's summary.
+    expect(written.mock.calls[0]![0]).toStrictEqual({ version: 2, base: 1, summary: 'the price title', anchors: ['cta'] });
+    // The inventory of version 2 is read once for a chip...
+    port!.postMessage(env('selection.set', { anchors: [{ kind: 'element', id: 'cta' }] }));
+    await vi.waitFor(() => expect(ui.chips).toHaveBeenCalledTimes(1));
+    const reads = adapter.reads;
+    // ...and stands after an undo the adapter refused with the head where it was: nothing changed, so
+    // the plugin hears nothing and the next chip needs no re-read.
+    vi.spyOn(adapter, 'undo').mockResolvedValue({ error: 'unavailable', message: 'The change was sent, but no new version appeared.' });
+    expect(await host.undo(2)).toMatchObject({ error: 'unavailable' });
+    expect(toPlugin.filter((m) => m.type === 'artifact.changed')).toHaveLength(0);
+    port!.postMessage(env('selection.set', { anchors: [{ kind: 'element', id: 'cta' }] }));
+    await vi.waitFor(() => expect(ui.chips).toHaveBeenCalledTimes(2));
+    expect(adapter.reads).toBe(reads);
     host.teardown('done');
   });
 

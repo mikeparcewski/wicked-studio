@@ -4,8 +4,8 @@ import type { WireItem } from './ops.js';
 /**
  * A scripted, in-memory `interactive-doc` adapter for the editor dev page and the conformance host
  * (DES-EDITOR-PLUGINS-001 §12.1, EP-P1). It applies the deterministic wire items the way interactive's
- * engine does (`content-edit` as HTML with the text `before` stale check, `style-edit`, `remove`), so a
- * plugin's edits become real versions here — and a `<img onerror>` sent as text lands as `&lt;img`.
+ * engine does (`content-edit` as TEXT with the text `before` stale check — interactive #250 —, `style-edit`,
+ * `remove`), so a plugin's edits become real versions here — and a `<img onerror>` sent as text lands as `&lt;img`.
  * The real adapter (crew's interactive proxy, versions, fork with `expect_head`) is EP-P2's.
  */
 
@@ -54,11 +54,11 @@ export class FakeDocAdapter implements HostAdapter {
     this.writes.push({ base, items, summary });
     const doc = new DOMParser().parseFromString(this.head.html, 'text/html');
     for (const it of items) {
-      const el = doc.querySelector(it.selector);
+      const el = doc.querySelector(`[data-wid="${it.selector}"]`); // the wire names the data-wid
       if (el === null) return { error: 'stale', message: 'Not changed: it moved while you typed' };
       if (it.type === 'content-edit') {
         if ((el.textContent ?? '').trim() !== it.before.trim()) return { error: 'stale', message: 'Not changed: it moved while you typed' };
-        el.innerHTML = it.value; // the engine applies content-edit as HTML: the host escaped it
+        el.textContent = it.value; // the engine lands a content-edit as TEXT (interactive #250): `<img` stays `&lt;img`
       } else if (it.type === 'style-edit') {
         for (const [k, v] of Object.entries(it.style)) (el as HTMLElement).style.setProperty(k, v);
       } else {
