@@ -53,3 +53,25 @@ describe('the committed inventory is the whole denominator', () => {
     for (const c of inv.computed) expect(c.expression, c.expression.slice(0, 60)).not.toMatch(/;/);
   });
 });
+
+describe('codex on the scanner', () => {
+  it('any property signature after a data-testid key is a type, not a declaration', () => {
+    for (const ty of ['TestId;', 'string | undefined;', "'a' | 'b';", 'string[];', 'Ids.Kind;']) {
+      const src = `interface P {\n  'data-testid': ${ty}\n  other: () => void;\n}\n<i data-testid="kept" />`;
+      expect(values(src, 'computed'), ty).toStrictEqual([]);
+      expect(values(src, 'static'), ty).toStrictEqual(['kept']);
+    }
+  });
+
+  it('a testId in a comment is not an id', () => {
+    const src = `// <Tile testId="from-a-comment" />\n/* testid: 'block-comment' */\n<Tile testId="real" />`;
+    expect(values(src, 'static')).toStrictEqual(['real']);
+  });
+});
+
+describe('comment masking never eats code', () => {
+  it('a glob or a URL in a string is not a comment', () => {
+    const src = `const g = 'src/**/*.ts'; <Tile testId="after-glob" /> const u = 'https://x.y/z'; <Tile testId="after-url" /> /* end */`;
+    expect(values(src, 'static')).toStrictEqual(['after-glob', 'after-url']);
+  });
+});

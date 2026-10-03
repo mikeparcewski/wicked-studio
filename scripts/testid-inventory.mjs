@@ -269,7 +269,7 @@ export function scanFileText(text) {
     const at = m.index + m[0].length;
     // `'data-testid': string;` in an interface or type literal is a TYPE, not a declaration:
     // reading it as a value swallowed the rest of Tech.tsx into one "computed" entry.
-    if (TYPE_ANNOTATION.test(text.slice(at, at + 40))) continue;
+    if (isTypeSignature(text, at)) continue;
     const end = valueExpressionEnd(text, at);
     occurrences++;
     entries.push(...classifyExpression(text.slice(at, end)));
@@ -282,22 +282,23 @@ export function scanFileText(text) {
   // `/* testid */` (a table or tuple the element reads by index). These ARE in the DOM verbatim (or as a pattern), so they join the
   // static/dynamic buckets; the forwarding expression itself stays a `computed` entry.
   const fwdRe = /(?<![-\w.'"])(?:testId|testid|tid|triggerTestId)\??\s*(=|:)\s*/g;
-  while ((m = fwdRe.exec(text)) !== null) {
+  const code = maskComments(text);
+  while ((m = fwdRe.exec(code)) !== null) {
     const at = m.index + m[0].length;
     let expr;
     if (m[1] === '=') {
-      const c = text[at];
+      const c = code[at];
       if (c === '"' || c === "'") {
-        const end = text.indexOf(c, at + 1);
+        const end = code.indexOf(c, at + 1);
         if (end === -1) continue;
-        expr = text.slice(at, end + 1);
+        expr = code.slice(at, end + 1);
       } else if (c === '{') {
-        const end = matchBrace(text, at);
+        const end = matchBrace(code, at);
         if (end === -1) continue;
-        expr = text.slice(at + 1, end);
+        expr = code.slice(at + 1, end);
       } else continue;
     } else {
-      expr = text.slice(at, valueExpressionEnd(text, at));
+      expr = code.slice(at, valueExpressionEnd(code, at));
     }
     const forwarded = literalUnion(expr) ?? classifyExpression(expr).filter((e) => e.kind !== 'computed');
     if (forwarded.length === 0) continue;
@@ -305,19 +306,34 @@ export function scanFileText(text) {
     entries.push(...forwarded);
   }
   const markRe = /\/\*\s*testid\s*\*\/\s*(['"])/g;
-  while ((m = markRe.exec(text)) !== null) {
+  while ((m = markRe.exec(code)) !== null) {
     const at = m.index + m[0].length - 1;
-    const end = text.indexOf(m[1], at + 1);
+    const end = code.indexOf(m[1], at + 1);
     if (end === -1) continue;
     occurrences++;
-    entries.push({ kind: 'static', value: text.slice(at + 1, end) });
+    entries.push({ kind: 'static', value: code.slice(at + 1, end) });
   }
 
   return { occurrences, entries };
 }
 
-/** A TS type where a value would be (`'data-testid': string;`). */
-const TYPE_ANNOTATION = /^(?:string|number|boolean|undefined|null)\b\s*[;,|}\n]/;
+/**
+ * A TS property signature where a value would be (`'data-testid': string;`, `TestId;`,
+ * `'a' | 'b';`): the rest of its line ends with `;` and carries no `,` — an object literal's
+ * value ends with `,` or `}`, never `;` (codex on the forwarded-ids PR).
+ */
+function isTypeSignature(text, at) {
+  const nl = text.indexOf('\n', at);
+  const line = text.slice(at, nl === -1 ? text.length : nl).replace(/\s*\/\/.*$/, '').trimEnd();
+  return line.endsWith(';') && !line.includes(',');
+}
+
+/** The text with every comment blanked to spaces (offsets kept), except `/* testid *\/` marks. */
+function maskComments(text) {
+  // A comment starts at a line start or after whitespace / an opening bracket / a separator, so a
+  // glob or a URL inside a string (`'src/**/*.ts'`, `'https://…'`) is never read as one.
+  return text.replace(/(?<=^|[\s{(,;])(?:\/\*[\s\S]*?\*\/|\/\/[^\n]*)/gm, (c) => (/^\/\*\s*testid\s*\*\/$/.test(c) ? c : c.replace(/[^\n]/g, ' ')));
+}
 
 /** `'a' | 'b'` (a parameter typed as the ids it may forward) → each as static; else null. */
 function literalUnion(expr) {
