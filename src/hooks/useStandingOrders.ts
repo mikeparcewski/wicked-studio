@@ -88,7 +88,7 @@ export function useStandingOrders(): StandingOrders {
       if (!failed) setError(null);
       window.dispatchEvent(new Event(ORDERS_CHANGED));
     },
-    [refresh],
+    [],
   );
 
   const parse = useCallback(
