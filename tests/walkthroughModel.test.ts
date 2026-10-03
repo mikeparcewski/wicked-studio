@@ -4,7 +4,7 @@ import type { DemoView } from '../src/api/demo.js';
 import type { WalkthroughChapter, WalkthroughView } from '../src/api/walkthrough.js';
 import {
   authorWaiting, checksTrack, chapterMarks, escalationOpen, exportOptions, failedChapter, fixNote, fmtTime, gateVerbs, playheadStart, recordingOf, recordingOfDemo,
-  seatLine, stateLine, underneathLines,
+  seatLine, stateLine, takeFingerprint, underneathLines,
 } from '../src/board/walkthroughModel.js';
 
 /**
@@ -116,6 +116,16 @@ describe('scene 19 — a failing chapter at its frame', () => {
     expect(gateVerbs(thin, false)).toEqual([]);
     expect(exportOptions(thin)).toEqual([]);
     expect(fixNote(thin)).toBe('The walkthrough failed at chapter 2 (02-rounding) at 0:08. Fix what it caught, then it records again.');
+  });
+  it('a newer take of the same step is another take: an action drawn from this one is not for it', () => {
+    const again = recordingOf(view({ state: 'failed', chapters: [chapter(1), chapter(2), chapter(3), { ...failed, takes: 3 }, chapter(5), chapter(6)] }));
+    const otherCheck = recordingOf(view({ state: 'failed', chapters: [chapter(1), chapter(2), chapter(3),
+      { ...failed, checks: failed.checks.map((k) => (k.id === 'c4-must' ? { ...k, passed: true } : k)) }, chapter(5), chapter(6)] }));
+    const same = recordingOf(view({ state: 'failed', chapters: [chapter(1), chapter(2), chapter(3), failed, chapter(5, { verdict: null, recorded: false, takes: 0 }), chapter(6, { verdict: null, recorded: false, takes: 0 })] }));
+    expect(takeFingerprint(same)).toBe(takeFingerprint(r));
+    expect(takeFingerprint(again)).not.toBe(takeFingerprint(r));
+    expect(takeFingerprint(otherCheck)).not.toBe(takeFingerprint(r));
+    expect(takeFingerprint(recordingOf(view({ state: 'recording', chapters: same.chapters.map(() => chapter(1)) })))).not.toBe(takeFingerprint(r));
   });
   it('without an author step there is no check to edit', () => {
     const noAuthor = recordingOf(view({ state: 'failed', planStepId: null, chapters: [chapter(1), failed] }));

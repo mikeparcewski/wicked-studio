@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { demoFileUrl, getDemo } from '../../api/demo.js';
 import { isWalkthroughUnsupported, walkthroughApi, walkthroughFileUrl, type DemoExportFormat } from '../../api/walkthrough.js';
 import type { ArtifactSize } from '../../board/artifactMorph.js';
 import {
   authorWaiting, chapterMarks, checksTrack, escalationOpen, exportOptions, failedChapter, fixNote, fmtTime, gateVerbs, isLive, playheadStart,
-  recordingOf, recordingOfDemo, seatLine, stateLine, underneathLines, type GateVerb, type Recording, type RecordingKind, type UnitLike,
+  recordingOf, recordingOfDemo, seatLine, stateLine, takeFingerprint, underneathLines, type GateVerb, type Recording, type RecordingKind, type UnitLike,
 } from '../../board/walkthroughModel.js';
 import { commitGateDecision, refreshGate } from '../../board/gateActions.js';
 import { useGateStore } from '../../store/gates.js';
@@ -156,8 +156,10 @@ function Body({ rec, size, morph, units, reload }: {
   useEffect(() => { live.current = true; return () => { live.current = false; }; }, []);
   // The run's units as of the LATEST render: a check made after an await must not read the units
   // the click handler closed over (the denial may have been cleared meanwhile).
+  // (A layout effect: it runs in the commit itself, so no awaited continuation can resume between a
+  // commit of newer units and this mirror of them.)
   const unitsRef = useRef(units);
-  useEffect(() => { unitsRef.current = units; }, [units]);
+  useLayoutEffect(() => { unitsRef.current = units; }, [units]);
 
   // A failed walkthrough's gate may predate this page (a late join): read it once, so the actions
   // the escalation allows are offered without a visit to the run page.
@@ -229,6 +231,15 @@ function Body({ rec, size, morph, units, reload }: {
     if (!live.current) throw new Error('Nothing was sent.');
     const now = useGateStore.getState().gates[rec.runId];
     if (!escalationOpen(rec, now?.ord ?? null, unitsRef.current)) throw new Error('This walkthrough is no longer waiting on you — nothing was sent.');
+    // The same step can escalate again for a NEWER take (it was recorded again and failed again):
+    // what is on screen — and the note built from it — is then the earlier take's. Read the take now
+    // and send only when it is still the one shown.
+    const fresh = recordingOf(await walkthroughApi.view(rec.runId, rec.step));
+    if (!live.current) throw new Error('Nothing was sent.');
+    if (takeFingerprint(fresh) !== takeFingerprint(rec)) {
+      reload();
+      throw new Error('The walkthrough changed since this was shown — nothing was sent. Look at it again.');
+    }
   };
   const decide = async (decision: Parameters<typeof commitGateDecision>[1]): Promise<void> => {
     await stillMine();

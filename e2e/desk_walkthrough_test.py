@@ -221,6 +221,7 @@ with sync_playwright() as p:
         f2 = page.evaluate(ART, "walkthrough")
         page.screenshot(path=str(SHOTS / "desk-walkthrough-full.png"))
         kinds = {c["kind"] for c in f2["checks"]}
+        walk_narration = page.get_by_test_id("walkthrough-narration").inner_text()
         failing = [c["kind"] for c in f2["checks"] if c["passed"] == "false"]
         # ⋯ on the failing events check: its evidence, through the contained file route.
         row = page.locator('[data-testid="walkthrough-check"][data-kind="events"]')
@@ -248,6 +249,7 @@ with sync_playwright() as p:
               # Nothing load-bearing below the fold at full screen: every check, and the verbs.
               and f2["size"] == "full" and f2["w"] == W and f2["h"] == H and len(f2["checks"]) == 12 and kinds == KINDS
               and 0 < f2["checksBottom"] <= H and f2["checksSeen"] == 12 and 0 < f2["verbsBottom"] <= H
+              and "Pay is pressed once; the button waits." in walk_narration
               and failing == ["events", "side_effects", "must_not_happen"]
               and "walkthrough/file?" in href and "step=walkthrough_review" in href and "events.json" in href and ev_status == 200 and other_status == 404
               and detail == "two charge events were emitted"
@@ -306,6 +308,8 @@ with sync_playwright() as p:
         page.locator('[data-testid="walkthrough-marker"]').nth(1).click()
         page.wait_for_function("""() => document.querySelector('[data-testid="walkthrough-video"]').currentTime >= 35""", timeout=5000)
         d1 = page.evaluate(ART, "demo-video")
+        # The presenter's script itself, not the label over it: open it and read the run of show.
+        page.get_by_test_id("walkthrough-narration").locator("summary").click()
         narration = page.get_by_test_id("walkthrough-narration").inner_text()
         page.get_by_test_id("walkthrough-export").click()
         page.get_by_test_id("walkthrough-export-gif").click()
@@ -317,7 +321,7 @@ with sync_playwright() as p:
         gif = fetch_of(gif_href)
         check("demo-video", d0["state"] == "✓ Ready to watch · 3 chapters" and d0["seats"] == "codex reviews, claude records"
               and d1["size"] == "pane" and d1["checks"] == [] and d1["sealed"] is None and 35 <= d1["video"]["t"] < 41
-              and "Narration" in narration
+              and "Run of show" in narration and "booking a room, start to finish" in narration
               and ids == ["walkthrough-export-mp4", "walkthrough-download-gif", "walkthrough-export-poster"]
               and exports == [{"format": "gif"}]
               and "demo/file?path=demo-video%2Fdemo.gif" in gif_href and gif[0] == 200 and gif[1] == "image/gif" and gif[2][:6] == b"GIF89a",

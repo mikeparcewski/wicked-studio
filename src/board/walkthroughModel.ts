@@ -283,6 +283,16 @@ export function fixNote(r: Recording): string {
   return `The walkthrough failed at ${where}.${lines.length > 0 ? ` ${lines.join(' ')}` : ''} Fix what it caught, then it records again.`;
 }
 
+/**
+ * Which take this is, in a string: the state and, per chapter, its verdict, take count, failing
+ * moment and each check's outcome. An action drawn from one take (the fix note names ITS failing
+ * checks) must not be sent after another take replaced it — the gate may even sit at the same step.
+ */
+export function takeFingerprint(r: Recording): string {
+  const chapters = r.chapters.map((c) => `${c.key}:${c.verdict ?? ''}:${c.takes}:${c.failedAtSec ?? ''}:${c.checks.map((k) => `${k.id}=${k.passed === null ? '' : k.passed ? 1 : 0}`).join(',')}`);
+  return `${r.kind}|${r.runId}|${r.step ?? ''}|${r.state}|${chapters.join(';')}`;
+}
+
 /** Whether the recording is still moving (poll it) or settled. */
 export function isLive(state: WalkthroughState): boolean {
   return state !== 'passed' && state !== 'failed' && state !== 'inconclusive';
