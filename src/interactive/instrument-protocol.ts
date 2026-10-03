@@ -167,7 +167,8 @@ export function parseInbound(data: unknown): BridgeToOverlayMsg | null {
     return {
       v: 1, type: 'scroll-ack', wid,
       ...(isFiniteNum(scrollX) && isFiniteNum(scrollY) ? { scrollX, scrollY } : {}),
-      ...(isFiniteNum(seq) ? { seq } : {}),
+      // Requests are numbered 1, 2, 3 …: anything else is not a request's number.
+      ...(typeof seq === 'number' && Number.isInteger(seq) && seq > 0 ? { seq } : {}),
     };
   }
 

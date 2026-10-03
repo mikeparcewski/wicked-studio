@@ -39,8 +39,9 @@ describe('parseInbound — well-formed v1 frames', () => {
     // …and names the request it answers, when the request was numbered.
     expect(parseInbound({ v: 1, type: 'scroll-ack', wid: 'h1', seq: 7, scrollX: 0, scrollY: 640 }))
       .toEqual({ v: 1, type: 'scroll-ack', wid: 'h1', seq: 7, scrollX: 0, scrollY: 640 });
-    expect(parseInbound({ v: 1, type: 'scroll-ack', wid: 'h1', seq: '7' }))
-      .toEqual({ v: 1, type: 'scroll-ack', wid: 'h1' });
+    for (const seq of ['7', -1, 0, 1.5, Number.NaN, null]) {
+      expect(parseInbound({ v: 1, type: 'scroll-ack', wid: 'h1', seq })).toEqual({ v: 1, type: 'scroll-ack', wid: 'h1' });
+    }
     expect(makeScrollToWid('h1', 7)).toEqual({ v: 1, type: 'scroll-to-wid', wid: 'h1', seq: 7 });
   });
 

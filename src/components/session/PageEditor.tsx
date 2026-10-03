@@ -127,6 +127,8 @@ export function PageEditor({ projectId, docId, composerKey, size, kind = 'page',
   const [jump, setJump] = useState<{ seq: number; scrollY: number | null }>({ seq: 0, scrollY: null });
   // The jumps asked of the frame, numbered; the bridge echoes the number on its confirmation.
   const asks = useRef(0);
+  // The newest jump number confirmed so far (the `jump` state's `seq`, readable in the handler).
+  const jumpSeq = useRef(0);
   // The frame's own height, measured — what stands beside the frame asks "which slide is in view".
   const [frameHeight, setFrameHeight] = useState(0);
   useEffect(() => {
@@ -184,6 +186,7 @@ export function PageEditor({ projectId, docId, composerKey, size, kind = 'page',
     armed.current = returnTo.current;
     returnTo.current = null;
     // A jump asked of the old frame is over, confirmed or not: nothing stands where it landed.
+    jumpSeq.current = asks.current;
     setJump({ seq: asks.current, scrollY: null });
     setInventory(null);
     setHover(null);
@@ -250,7 +253,11 @@ export function PageEditor({ projectId, docId, composerKey, size, kind = 'page',
         // The landing is known now: the ack is also the freshest scroll position. A confirmation
         // that does not name its request (a bridge that does not echo `seq`) confirms the latest
         // one asked and says nothing of where it landed.
+        // An older confirmation never replaces a newer one (one frame confirms in the order it
+        // was asked; this holds the line if a bridge does not).
         const { scrollX, scrollY: landedY, seq } = msg;
+        if (seq !== undefined && seq < jumpSeq.current) return;
+        jumpSeq.current = seq ?? asks.current;
         setJump(seq === undefined ? { seq: asks.current, scrollY: null } : { seq, scrollY: landedY ?? null });
         if (scrollX !== undefined && landedY !== undefined) setCurrent({ scrollX, scrollY: landedY });
       } else if (msg.type === 'wid-hover') {

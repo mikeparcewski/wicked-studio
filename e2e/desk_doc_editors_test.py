@@ -34,6 +34,9 @@ written document (`style: doc`) and a deck (`style: ppt`), anchored the way the 
   9. A SLIDE IS A SUBJECT: a click on slide 3 marks it, brings its title into view in the frame and
      puts "about: slide 3 — “Staff stay in control”" on the composer. The reader scrolling the deck
      back to the top hands the mark to the slide in view (slide 1); a pick takes it again and holds.
+     The LAST slide — too short to reach the middle of the frame, so the view alone marks slide 3
+     at the bottom — is marked when picked, gives the mark up when the reader scrolls away, and has
+     it again back at the bottom.
  10. A SLIDE TITLE EDIT IS ONE VERSION: typing on slide 3's title lands version 2 ("Changed slide
      3’s title — version 2.") with Undo; the strip names the slide by its new title, and the new
      version's frame is still on slide 3 — an edit does not throw the reader back to the top.
@@ -365,6 +368,30 @@ with sync_playwright() as p:
     except Exception:
         back_to_view = False
     after_scroll = page.evaluate(STRIP)
+    # The last slide is short — it cannot be brought to the middle of the frame, so at the bottom
+    # the view alone would mark slide 3. Picked, it is marked; scrolled away from, the view takes
+    # the mark; back at the bottom (where its jump landed) it is the last slide again.
+    WAIT_CURRENT = "(n) => document.querySelector('[data-testid=\"slide-strip\"]').dataset.current === n"
+    last: dict = {}
+    page.locator('[data-testid="slide-thumb"][data-slide="3"]').click()
+    page.wait_for_timeout(500)
+    last["picked"] = page.evaluate(STRIP)["current"]
+    t4 = frame_wid(page, "slide-3-heading-1")
+    # The premise: its title sits below the middle of the frame even at the bottom of the deck.
+    last["title_below_the_middle"] = t4.get("top") is not None and t4["top"] > t4["vh"] / 2
+    page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)  # the wheel turns over the deck
+    page.mouse.wheel(0, -4000)
+    try:
+        page.wait_for_function(WAIT_CURRENT, arg="0", timeout=5000)
+    except Exception:
+        pass
+    last["scrolled_up"] = page.evaluate(STRIP)["current"]
+    page.mouse.wheel(0, 8000)
+    try:
+        page.wait_for_function(WAIT_CURRENT, arg="3", timeout=5000)
+    except Exception:
+        pass
+    last["back_at_the_bottom"] = page.evaluate(STRIP)["current"]
     # …and a pick takes it again.
     page.locator('[data-testid="slide-thumb"][data-slide="2"]').click()
     page.wait_for_function("() => document.querySelector('[data-testid=\"slide-strip\"]').dataset.current === '2'", timeout=5000)
@@ -372,8 +399,8 @@ with sync_playwright() as p:
     held = page.evaluate(STRIP)
     check("slide-subject", where.get("top") is not None and 0 <= where["top"] and where["bottom"] <= where["vh"]
           and any(c["key"] == f"el:{DECK}/slide-2" and c["text"] == "about: slide 3 — “Staff stay in control”" for c in chips9)
-          and back_to_view and held["current"] == "2",
-          title_in_frame=where, chips=chips9, after_the_reader_scrolled_up=after_scroll, after_picking_again=held)
+          and back_to_view and held["current"] == "2" and last == {"picked": "3", "title_below_the_middle": True, "scrolled_up": "0", "back_at_the_bottom": "3"},
+          title_in_frame=where, chips=chips9, after_the_reader_scrolled_up=after_scroll, the_last_slide=last, after_picking_again=held)
 
     # ── 10. a slide title edit is one version ──────────────────────────────────────
     frame.locator(f'[data-wid="{TITLE3}"]').click()

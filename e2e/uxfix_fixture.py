@@ -3930,6 +3930,9 @@ def styled_doc_html(style: str, doc: str) -> str:
                 "<style>body{margin:0;font-family:Georgia,serif;background:#f4f1ea;color:#1b1b1b}"
                 ".wi-slide{width:min(86vw,880px);min-height:340px;margin:24px auto;padding:40px;box-sizing:border-box;"
                 "background:#fffdf7;border:1px solid #ddd6c4}h1{font-size:32px;margin:0 0 14px}"
+                # The last slide is short: it cannot be scrolled to the middle of the frame, so at the
+                # bottom "the slide in view" is the one before it — the case a pick must outrank.
+                ".wi-slide:last-of-type{min-height:0}"
                 "p{font-size:17px;color:#4a463c;margin:0}</style></head>"
                 f'<body data-wi-kind="deck">{body}</body></html>')
     return (f'<!doctype html><html><head><meta charset="utf-8"><title>{doc} v1</title>'
