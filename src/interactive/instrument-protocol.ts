@@ -57,9 +57,12 @@ export interface ScrollStateMsg {
   scrollX: number; scrollY: number;
 }
 
-/** Confirmation that a `scroll-to-wid` request was handled by the frame. */
+/** Confirmation that a `scroll-to-wid` request was handled by the frame. `scrollX`/`scrollY`
+ *  (when the bridge reports them) are where the frame stood right after the jump — its landing,
+ *  known without waiting for the scroll event that follows. */
 export interface ScrollAckMsg {
   v: 1; type: 'scroll-ack'; wid: string;
+  scrollX?: number; scrollY?: number;
 }
 
 /** The frame's own click landed on an instrumented block — the ORIGINAL interaction
@@ -156,6 +159,9 @@ export function parseInbound(data: unknown): BridgeToOverlayMsg | null {
   if (type === 'scroll-ack') {
     const wid = d['wid'];
     if (typeof wid !== 'string' || wid === '') return null;
+    const scrollX = d['scrollX'];
+    const scrollY = d['scrollY'];
+    if (isFiniteNum(scrollX) && isFiniteNum(scrollY)) return { v: 1, type: 'scroll-ack', wid, scrollX, scrollY };
     return { v: 1, type: 'scroll-ack', wid };
   }
 

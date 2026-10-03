@@ -88,7 +88,7 @@ const BRIDGE_SOURCE = `
     } else if (m.type === 'scroll-to-wid' && typeof m.wid === 'string') {
       var el = document.querySelector('[data-wid="' + m.wid.replace(/["\\\\]/g, '') + '"]');
       if (el && el.scrollIntoView) el.scrollIntoView({ block: 'center' });
-      post({ v: 1, type: 'scroll-ack', wid: m.wid });
+      post({ v: 1, type: 'scroll-ack', wid: m.wid, scrollX: window.scrollX, scrollY: window.scrollY });
     }
   });
   document.addEventListener('scroll', function (e) {

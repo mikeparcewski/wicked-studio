@@ -47,8 +47,10 @@ export interface FrameParts {
   tops: Readonly<Record<string, number>>;
   scrollY: number;
   frameHeight: number;
-  /** How many `scrollTo` jumps the frame has confirmed it performed (its `scroll-ack`s). */
-  jumps: number;
+  /** The `scrollTo` jumps the frame has confirmed (`n` of them), and where it stood right after
+   *  the last one — `null` when the bridge did not say, or once the frame re-measured (its content
+   *  moved in a way `scrollY` does not describe). */
+  jump: { n: number; scrollY: number | null };
   selected: string | null;
   /** Bring an anchor into view. */
   scrollTo: (wid: string) => void;
@@ -121,7 +123,7 @@ export function PageEditor({ projectId, docId, composerKey, size, kind = 'page',
   // late slide does not throw the reader back to the top.
   const returnTo = useRef<string | null>(null);
   const armed = useRef<string | null>(null);
-  const [jumps, setJumps] = useState(0);
+  const [jump, setJump] = useState<{ n: number; scrollY: number | null }>({ n: 0, scrollY: null });
   // The frame's own height, measured — what stands beside the frame asks "which slide is in view".
   const [frameHeight, setFrameHeight] = useState(0);
   useEffect(() => {
@@ -178,6 +180,8 @@ export function PageEditor({ projectId, docId, composerKey, size, kind = 'page',
     gen.current += 1;
     armed.current = returnTo.current;
     returnTo.current = null;
+    // A jump asked of the old frame is over, confirmed or not: nothing stands where it landed.
+    setJump((j) => ({ n: j.n + 1, scrollY: null }));
     setInventory(null);
     setHover(null);
     setSelected(null);
@@ -229,13 +233,17 @@ export function PageEditor({ projectId, docId, composerKey, size, kind = 'page',
         for (const t of timers.current) clearTimeout(t);
         setInventory({ widMap: msg.widMap, blocks: msg.blocks ?? {}, measured: { scrollX: msg.scrollX, scrollY: msg.scrollY } });
         setCurrent({ scrollX: msg.scrollX, scrollY: msg.scrollY });
+        setJump((j) => (j.scrollY === null ? j : { n: j.n, scrollY: null }));
         const back = armed.current;
         armed.current = null;
         if (back !== null && msg.widMap[back] !== undefined) post(makeScrollToWid(back));
       } else if (msg.type === 'scroll-state') {
         setCurrent({ scrollX: msg.scrollX, scrollY: msg.scrollY });
       } else if (msg.type === 'scroll-ack') {
-        setJumps((n) => n + 1);
+        // The landing is known now: the ack is also the freshest scroll position.
+        const { scrollX, scrollY: landedY } = msg;
+        setJump((j) => ({ n: j.n + 1, scrollY: landedY ?? null }));
+        if (scrollX !== undefined && landedY !== undefined) setCurrent({ scrollX, scrollY: landedY });
       } else if (msg.type === 'wid-hover') {
         setHover(msg.wid);
       } else if (msg.type === 'wid-click') {
@@ -376,11 +384,11 @@ export function PageEditor({ projectId, docId, composerKey, size, kind = 'page',
     tops: Object.fromEntries(Object.entries(inventory.widMap).map(([wid, r]) => [wid, r.top + inventory.measured.scrollY])),
     scrollY,
     frameHeight,
-    jumps,
+    jump,
     selected,
     scrollTo,
     pick,
-  }), [inventory, scrollY, frameHeight, jumps, selected, scrollTo, pick]);
+  }), [inventory, scrollY, frameHeight, jump, selected, scrollTo, pick]);
 
   return (
     <>

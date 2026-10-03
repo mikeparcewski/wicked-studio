@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { slideChip, slideInView, slidesOf } from '../../board/artifactMorph.js';
 import { addAboutChip } from '../../store/composerChips.js';
 import type { FrameParts } from './PageEditor.js';
@@ -15,22 +15,22 @@ import type { FrameParts } from './PageEditor.js';
  */
 
 /** A click on a slide outranks "the slide in view" (the last slides of a deck cannot be scrolled
- *  to the middle of the frame, so the view alone would mark the wrong one). The pick holds where
- *  its own jump landed, and any scroll away from there is the reader's, which hands the mark back
- *  to the view. The landing is the scroll the frame reports right behind its confirmation of the
- *  jump (`scroll-ack`, counted in `parts.jumps`) — this long behind it at most, so a jump that
- *  moved nothing does not let the reader's own scroll, a moment later, pass for the landing. The
- *  window starts at the confirmation, not at the click: a slow frame costs nothing. */
-const LANDING_WITHIN_MS = 150;
-
+ *  to the middle of the frame, so the view alone would mark the wrong one) — for as long as the
+ *  frame stands where that click's jump landed. No timer: the frame confirms the jump and says
+ *  where it landed (`parts.jump`); before the confirmation the pick holds, after it the pick holds
+ *  while the frame is still there. The reader scrolling away, another jump, or the frame
+ *  re-measuring hands the mark back to the view. A bridge that does not report the landing gets
+ *  the view's mark only. */
 interface Pick {
   index: number;
-  /** `parts.jumps` when the slide was clicked — the jump is confirmed once the count passes it. */
+  /** `parts.jump.n` when the slide was clicked: this pick's jump is number `asked + 1`. */
   asked: number;
-  /** When the confirmation was seen (`null` = not yet). */
-  confirmedAt: number | null;
-  /** Where the jump landed (`null` = no scroll reported for it, yet or at all). */
-  landedAt: number | null;
+}
+
+function holds(pick: Pick | null, parts: FrameParts): pick is Pick {
+  if (pick === null) return false;
+  if (parts.jump.n <= pick.asked) return true; // asked, not yet performed
+  return parts.jump.n === pick.asked + 1 && parts.jump.scrollY !== null && parts.jump.scrollY === parts.scrollY;
 }
 
 export function SlideStrip({ parts, docId, composerKey }: {
@@ -40,19 +40,8 @@ export function SlideStrip({ parts, docId, composerKey }: {
 }): React.ReactElement | null {
   const slides = useMemo(() => slidesOf(parts.blocks), [parts.blocks]);
   const [picked, setPicked] = useState<Pick | null>(null);
-  const { scrollY, jumps } = parts;
-  useEffect(() => {
-    setPicked((p) => (p !== null && p.confirmedAt === null && jumps > p.asked ? { ...p, confirmedAt: performance.now() } : p));
-  }, [jumps]);
-  useEffect(() => {
-    setPicked((p) => {
-      if (p === null || p.confirmedAt === null) return p; // the jump has not happened yet
-      if (p.landedAt === null) return performance.now() - p.confirmedAt <= LANDING_WITHIN_MS ? { ...p, landedAt: scrollY } : null;
-      return scrollY === p.landedAt ? p : null;
-    });
-  }, [scrollY]);
   if (slides.length === 0) return null;
-  const current = picked?.index ?? slideInView(slides, parts.tops, scrollY, parts.frameHeight);
+  const current = holds(picked, parts) ? picked.index : slideInView(slides, parts.tops, parts.scrollY, parts.frameHeight);
   return (
     <nav data-testid="slide-strip" data-count={slides.length} data-current={current ?? ''} aria-label="Slides" className="wk-artifact-side wk-slide-strip">
       {slides.map((s) => (
@@ -64,7 +53,7 @@ export function SlideStrip({ parts, docId, composerKey }: {
           aria-current={s.index === current ? 'true' : undefined}
           className={`wk-slide-thumb${s.index === current ? ' wk-slide-thumb--on' : ''}`}
           onClick={() => {
-            setPicked({ index: s.index, asked: jumps, confirmedAt: null, landedAt: null });
+            setPicked({ index: s.index, asked: parts.jump.n });
             parts.scrollTo(s.first);
             addAboutChip(composerKey, slideChip(s, docId));
           }}

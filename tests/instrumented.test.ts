@@ -68,4 +68,9 @@ describe('instrumentDocHtml', () => {
     expect(out).toContain('composite ? 400 : 20000');
     expect(out).toContain('.cut = true');
   });
+
+  it('the bridge says where a jump landed with its confirmation (S9: the slide strip needs no timer)', () => {
+    const out = instrumentDocHtml(PLAIN, BASE);
+    expect(out).toContain("type: 'scroll-ack', wid: m.wid, scrollX: window.scrollX, scrollY: window.scrollY");
+  });
 });
