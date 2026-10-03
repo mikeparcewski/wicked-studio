@@ -37,9 +37,10 @@ const HOME_HEAD =
 const PATH_RE = new RegExp(String.raw`^${HOME_HEAD}(?=$|[\\\/])`);
 /** In prose: starts at the text's start or after a prose delimiter — whitespace, a quote, an opening
  *  bracket, `=`, `:` or `,` (an allow-list: any other character, `/tmp/cache!/home/x` included, is
- *  inside a path) — and ends at the text's end, a separator, whitespace or punctuation (which
- *  stays in the text). */
-const TEXT_RE = new RegExp(String.raw`(^|[\s"'\`(\[<=:,])${HOME_HEAD}(?=$|[\\\/\s"'\`()\[\]<>,;:.!?])`, 'g');
+ *  inside a path) — and ends at the text's end, a separator, whitespace, a closing delimiter, or
+ *  sentence punctuation that itself ends the token (`/root.backup/repo` is one path; "in
+ *  /home/alice, then" keeps its comma). */
+const TEXT_RE = new RegExp(String.raw`(^|[\s"'\`(\[<=:,])${HOME_HEAD}(?=$|[\\\/\s"'\`()\[\]<>]|[,;:.!?](?=$|[\s"'\`()\[\]<>]))`, 'g');
 
 /** One path as the daemon reports it → its display form (`~/…` when it is under a home directory). */
 export function displayPath(path: string): string {
