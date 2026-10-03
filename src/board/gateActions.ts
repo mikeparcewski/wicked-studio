@@ -76,16 +76,21 @@ function patch(runId: string, part: Partial<GateActionState>): void {
   }));
 }
 
-// A gate ARRIVING for a run (first sight, or a new ord) is a fresh question —
-// drop any stale decision state so the fresh gate is answerable. The answered
-// state an OPEN decision leaves behind survives its own `clearGate` prune
-// (removal is not arrival), which is what keeps "approved · advancing…" on the
-// chip until the daemon's frame moves the run.
+// A gate ARRIVING for a run (first sight, a new ord, or the same ord asked again — a new gate
+// INSTANCE, studio#439) is a fresh question — drop any stale decision state so the fresh gate is
+// answerable. The answered state an OPEN decision leaves behind survives its own `clearGate` prune
+// (removal is not arrival), which is what keeps "approved · advancing…" on the chip until the
+// daemon's frame moves the run. Re-reading the SAME instance (same ord and receivedAt) is not an
+// arrival.
+const sameInstance = (a: { ord: number; receivedAt: number }, b: { ord: number; receivedAt: number }): boolean =>
+  a.ord === b.ord && a.receivedAt === b.receivedAt;
+
 useGateStore.subscribe((state, prev) => {
   if (state.gates === prev.gates) return;
   // Wave 2a round 3: a QUEUED decision is about one gate. If that gate leaves (answered elsewhere,
-  // the run moved on) or is replaced by a new one (a new ord), the decision is dropped unsent —
-  // before the stale-state reset below re-arms the run's controls for whatever is open now.
+  // the run moved on) or is replaced by a new one (a new ord, or the same ord asked again), the
+  // decision is dropped unsent — before the stale-state reset below re-arms the run's controls for
+  // whatever is open now.
   for (const [runId, w] of watched) {
     if (w.ord === undefined) continue;
     const now = state.gates[runId];
@@ -93,12 +98,14 @@ useGateStore.subscribe((state, prev) => {
       cancelDecision(w.id, `Not sent: the gate on ${gateLabel(runId)} was answered elsewhere or the run moved on.`);
     } else if (now.ord !== w.ord) {
       cancelDecision(w.id, `Not sent: a new gate opened on ${gateLabel(runId)} — your decision was for the one before it.`);
+    } else if (w.at !== undefined && now.receivedAt !== w.at) {
+      cancelDecision(w.id, `Not sent: the gate on ${gateLabel(runId)} was asked again — your decision was for the one before it.`);
     }
   }
   const stale = Object.entries(state.gates)
     .filter(([runId, gate]) => {
       const before = prev.gates[runId];
-      return before === undefined || before.ord !== gate.ord;
+      return before === undefined || !sameInstance(before, gate);
     })
     .map(([runId]) => runId)
     .filter((runId) => useGateActionStore.getState().byGate[runId] !== undefined);
@@ -137,8 +144,9 @@ export function decideGate(runId: string, decision: GateDecision): Promise<void>
  *  `undone` also reports a visible notice (`undoQueue` results) — never silent. */
 export type DecisionOutcome = 'sent' | 'undone' | 'cancelled' | 'dropped';
 
-/** Queued decisions watching their gate: run id → the decision's queue id and the gate's ord. */
-const watched = new Map<string, { id: number; ord: number | undefined }>();
+/** Queued decisions watching their gate: run id → the decision's queue id and the gate instance
+ *  (ord, and `receivedAt` — the same ord asked again is another gate, studio#439). */
+const watched = new Map<string, { id: number; ord: number | undefined; at?: number }>();
 
 /** Each run's work, in the Desk's words (`plainRunTitle`), as the one run list last read it
  *  (`useRuns` writes it; studio#443). Module state: the notices are made outside React. */
@@ -186,9 +194,9 @@ export function isDecisionPending(runId: string): boolean {
 export function watchDecision(id: number, runIds: readonly string[]): Record<string, number | undefined> {
   const ords: Record<string, number | undefined> = {};
   for (const runId of runIds) {
-    const ord = useGateStore.getState().gates[runId]?.ord;
-    ords[runId] = ord;
-    watched.set(runId, { id, ord });
+    const gate = useGateStore.getState().gates[runId];
+    ords[runId] = gate?.ord;
+    watched.set(runId, { id, ord: gate?.ord, ...(gate !== undefined ? { at: gate.receivedAt } : {}) });
   }
   return ords;
 }
@@ -231,7 +239,9 @@ export function commitGateDecision(
   const amend = decision.amend ?? null;
   // The gate this decision was made on — watched while queued, and sent so the daemon can refuse
   // a decision that outlived its gate (409 gate_changed).
-  const ord = useGateStore.getState().gates[runId]?.ord;
+  const gateNow = useGateStore.getState().gates[runId];
+  const ord = gateNow?.ord;
+  const at = gateNow?.receivedAt;
   return new Promise<DecisionOutcome>((resolve, reject) => {
     const id = queueDecision({
       verb,
@@ -264,7 +274,7 @@ export function commitGateDecision(
         resolve('cancelled');
       },
     });
-    watched.set(runId, { id, ord });
+    watched.set(runId, { id, ord, ...(at !== undefined ? { at } : {}) });
   });
 }
 
