@@ -347,6 +347,9 @@ interface WatchStore {
   /** The late-join read failed for a reason other than "this daemon has no registry": said, never
    *  read as an empty feed (the adoption-seam rule, `api/errors.ts` `isRouteUnsupported`). */
   feedError: string | null;
+  /** Whether this daemon serves the watch registry (`GET /watch`): `unknown` until the late-join read
+   *  answers, `absent` on a daemon before it (the feed is then studio's own fold). S14 says so. */
+  registry: 'unknown' | 'present' | 'absent';
   /** Every `/ws` frame: watch, team and watchdog inputs; everything else is a cheap miss. */
   ingest: (frame: { type: string } & Record<string, unknown>) => void;
   hydrate: (resp: WatchFeedResponse) => void;
@@ -358,6 +361,7 @@ interface WatchStore {
 export const useWatchStore = create<WatchStore>((set, get) => ({
   fold: EMPTY_WATCH,
   feedError: null,
+  registry: 'unknown',
   ingest: (frame) => {
     const before = get().fold;
     let next = before;
@@ -366,11 +370,11 @@ export const useWatchStore = create<WatchStore>((set, get) => ({
     else if (typeof frame['session'] === 'string') next = foldWatchdog(next, frame, Date.now());
     if (next !== before) set({ fold: next });
   },
-  hydrate: (resp) => set({ fold: foldFeed(get().fold, resp), feedError: null }),
-  failFeed: (error) => set({ feedError: error }),
+  hydrate: (resp) => set({ fold: foldFeed(get().fold, resp), feedError: null, registry: 'present' }),
+  failFeed: (error) => set(error === null ? { feedError: null, registry: 'absent' } : { feedError: error }),
   runs: (runs, projectOf) => {
     const next = foldRuns(get().fold, runs, projectOf);
     if (next !== get().fold) set({ fold: next });
   },
-  reset: () => set({ fold: EMPTY_WATCH, feedError: null }),
+  reset: () => set({ fold: EMPTY_WATCH, feedError: null, registry: 'unknown' }),
 }));

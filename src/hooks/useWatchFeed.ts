@@ -17,16 +17,21 @@ export function useWatchHydrate(): void {
   useEffect(() => {
     if (!connected) return;
     let cancelled = false;
-    api.getWatch({ limit: 200 })
-      .then((resp) => { if (!cancelled) useWatchStore.getState().hydrate(resp); })
-      .catch((e: unknown) => {
-        if (cancelled) return;
-        // A daemon without the registry (bare 404 / 501): the feed is studio's own fold, silently.
-        // Anything else is a failure the Watchtower says (Copilot).
-        useWatchStore.getState().failFeed(isRouteUnsupported(e) ? null : e instanceof Error ? e.message : String(e));
-      });
+    void readWatch(() => cancelled);
     return () => { cancelled = true; };
   }, [connected]);
+}
+
+/** One `GET /watch` page folded into the store — the late join, and the Watchtower's "Try again". */
+export function readWatch(cancelled: () => boolean = () => false): Promise<void> {
+  return api.getWatch({ limit: 200 })
+    .then((resp) => { if (!cancelled()) useWatchStore.getState().hydrate(resp); })
+    .catch((e: unknown) => {
+      if (cancelled()) return;
+      // A daemon without the registry (bare 404 / 501): the feed is studio's own fold, silently.
+      // Anything else is a failure the Watchtower says (Copilot).
+      useWatchStore.getState().failFeed(isRouteUnsupported(e) ? null : e instanceof Error ? e.message : String(e));
+    });
 }
 
 /** The Watchtower's rows, newest first, filtered by project and kind (S14 renders them). */

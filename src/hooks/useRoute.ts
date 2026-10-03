@@ -39,15 +39,16 @@ import { announceNavigateAway, inAppEntryState, isInAppEntry, replacedEntryState
 // `skills` is the Skills file manager (`/skills`, the skills keystone) — the catalog of the
 // daemon's effective plugin root. A flat panel with no sub-routes: the one skill a deep link
 // opens rides `?skill=<name>` in `search` (read via `readSkillDeepLink`), never a path segment.
+// `watch` is the Watchtower (`/watch`, DES-STUDIO-REBUILD-001 §5.4, slice S14): TR's feed. Flat.
 // `mcp` is the MCP tools page (`/mcp`, DES-MCP-TOOLS-001 §7): the registered servers, their tools and
 // the policy matrix. Flat like `skills`: one server row a deep link opens rides `?server=<name>`.
 // `run-events` / `run-files` (studio wave 1, "raw in one step"): a run's raw event JSON and its
 // worktree files/diff as REAL routes — `/runs/:id/events`, `/runs/:id/files` — so the palette
 // verb that opens them is one history entry and browser Back returns to where you were. The run
 // id rides in `artifactId` (NOT `runId`: no run-selected machinery, no legacy shell redirect).
-export type Panel = 'home' | 'runs' | 'run-events' | 'run-files' | 'workflows' | 'skills' | 'mcp' | 'steering' | 'testing' | 'repos' | 'system' | 'theme' | 'chats' | 'work' | 'repo-detail' | 'projects' | 'project-detail' | 'execute' | 'vibe' | 'demo' | 'session' | 'editors' | 'not-found';
+export type Panel = 'home' | 'runs' | 'run-events' | 'run-files' | 'workflows' | 'skills' | 'mcp' | 'steering' | 'testing' | 'repos' | 'system' | 'theme' | 'chats' | 'work' | 'repo-detail' | 'projects' | 'project-detail' | 'execute' | 'vibe' | 'demo' | 'session' | 'editors' | 'watch' | 'not-found';
 
-const PANELS: Panel[] = ['runs', 'workflows', 'skills', 'mcp', 'repos', 'system', 'theme', 'chats', 'work', 'repo-detail', 'projects', 'project-detail', 'execute', 'vibe', 'demo'];
+const PANELS: Panel[] = ['runs', 'workflows', 'skills', 'mcp', 'repos', 'system', 'theme', 'chats', 'work', 'repo-detail', 'projects', 'project-detail', 'execute', 'vibe', 'demo', 'watch'];
 
 /**
  * The four verbs on a project (DES-MERGE-001 §1.3). Mode is a ROUTE SEGMENT, not
@@ -378,6 +379,11 @@ function parse(pathname: string): Route {
 
 /** `replace` swaps the current history entry — used by redirects so Back never re-enters them. */
 export type Navigate = (path: string, opts?: { replace?: boolean }) => void;
+
+/** The pure address → route parse (tests and the palette's route coverage read it). */
+export function parseRoute(pathname: string): Pick<Route, 'panel'> & Partial<Route> {
+  return parse(pathname);
+}
 
 export function useRoute(): Route & {
   navigate: Navigate;

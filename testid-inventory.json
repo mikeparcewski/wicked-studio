@@ -10,9 +10,9 @@
   "version": 1,
   "studioVersion": "0.5.19",
   "counts": {
-    "files": 190,
-    "occurrences": 1891,
-    "static": 1655,
+    "files": 191,
+    "occurrences": 1903,
+    "static": 1668,
     "dynamic": 74,
     "computed": 8
   },
@@ -9902,6 +9902,84 @@
       "testId": "watch-pill",
       "files": [
         "src/components/desk/WatchPill.tsx"
+      ]
+    },
+    {
+      "testId": "watch-pill-card",
+      "files": [
+        "src/components/desk/WatchPill.tsx"
+      ]
+    },
+    {
+      "testId": "watch-pill-row",
+      "files": [
+        "src/components/desk/WatchPill.tsx"
+      ]
+    },
+    {
+      "testId": "watch-pill-wrap",
+      "files": [
+        "src/components/desk/WatchPill.tsx"
+      ]
+    },
+    {
+      "testId": "watchtower",
+      "files": [
+        "src/components/watch/WatchtowerPage.tsx"
+      ]
+    },
+    {
+      "testId": "watchtower-empty",
+      "files": [
+        "src/components/watch/WatchtowerPage.tsx"
+      ]
+    },
+    {
+      "testId": "watchtower-error",
+      "files": [
+        "src/components/watch/WatchtowerPage.tsx"
+      ]
+    },
+    {
+      "testId": "watchtower-jump",
+      "files": [
+        "src/components/watch/WatchtowerPage.tsx"
+      ]
+    },
+    {
+      "testId": "watchtower-kind",
+      "files": [
+        "src/components/watch/WatchtowerPage.tsx"
+      ]
+    },
+    {
+      "testId": "watchtower-no-registry",
+      "files": [
+        "src/components/watch/WatchtowerPage.tsx"
+      ]
+    },
+    {
+      "testId": "watchtower-open",
+      "files": [
+        "src/components/watch/WatchtowerPage.tsx"
+      ]
+    },
+    {
+      "testId": "watchtower-retry",
+      "files": [
+        "src/components/watch/WatchtowerPage.tsx"
+      ]
+    },
+    {
+      "testId": "watchtower-row",
+      "files": [
+        "src/components/watch/WatchtowerPage.tsx"
+      ]
+    },
+    {
+      "testId": "watchtower-sentence",
+      "files": [
+        "src/components/watch/WatchtowerPage.tsx"
       ]
     },
     {
