@@ -739,6 +739,16 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          #   GET /proposals carries the offered decision's review proposal (B12). Off: no /decisions
          #   route at all (a daemon before DC-S4a).
          "decisions": False, "decisions_mode": "on",
+         # walkthrough — WT-U1 (e2e/desk_walkthrough_test.py; needs `sessions`): adds WALK_RUNS to the
+         #   sessions corpus and answers crew's WT-W1..W3 wire for them: GET /runs/:id/walkthrough
+         #   (r-walk-rec recording chapter `walk_recorded`+1 of 6; r-walk-fail failed in chapter 4 with
+         #   its escalation gate open; r-walk-pass passed and sealed; r-walk-thin the thin result
+         #   garden 12.41.0 writes: keys and verdicts only), GET …/walkthrough/file, PUT
+         #   …/walkthrough/storyline (409 `no_open_escalation` unless that run's escalation is open),
+         #   and r-walk-demo, a finished demo run (GET /runs/:id/demo, …/demo/file, POST …/demo/export).
+         #   GET /health.capabilities.walkthroughRoots is true. Every write lands in GET
+         #   /__fixture/walkthrough-posts. Off: no /walkthrough route (a daemon before WT-W1).
+         "walkthrough": False, "walk_recorded": 3,
          }
 state_lock = threading.Lock()
 # Idea 9: every POST /governance/rules body the fixture received (GET /__fixture/rule-posts).
@@ -1247,6 +1257,258 @@ def proposal_team(rid: str) -> dict | None:
                     units=[{"ord": i, "transport": "bus", "reason": None, "rows": unit_rows[2 * i:2 * i + 2]}
                            for i in range(4)])
     return None
+
+
+# ── Walkthrough corpus (switch `walkthrough`, needs `sessions`; e2e/desk_walkthrough_test.py) ──
+# crew's WT-W1 view (`api/recording.ts` walkthroughView) over what a proof root holds. Units are
+# named `<run>:<step>` (crew's rule), the walkthrough pair is the floor's, the evaluator seat (agy)
+# is not the builder (codex). r-walk-fail waits at the recorder's escalation gate (the denied unit's
+# ord); a request_changes sends it back to the helpers, a storyline PUT + approve records it again.
+WALK_REC, WALK_FAIL, WALK_PASS, WALK_THIN, WALK_DEMO = "r-walk-rec", "r-walk-fail", "r-walk-pass", "r-walk-thin", "r-walk-demo"
+WALK_RULE = "your testing rule: checkout and payments get a walkthrough"
+WALK_STEPS = [
+    {"catalog": "understand", "id": "understand"},
+    {"catalog": "build", "id": "build"},
+    {"catalog": "test", "id": "test", "added_by": "floor", "floor_reason": "a change to payment code is tested"},
+    {"catalog": "walkthrough_plan", "id": "walkthrough_plan", "added_by": "floor", "floor_reason": WALK_RULE,
+     "floor_rule": "TST-1001"},
+    {"catalog": "walkthrough_review", "id": "walkthrough_review", "added_by": "floor", "floor_reason": WALK_RULE,
+     "floor_rule": "TST-1001"},
+    {"catalog": "deliver", "id": "deliver"},
+]
+WALK_REVIEW_ORD = 4
+WALK_ESC_PROMPT = ("Unit 4 failed its deterministic floor (walkthrough_failed): the walkthrough failed in chapter 4 "
+                   "(Pay for the order) — confirm to record it again, or reject to cancel the run")
+# (key, title, narration, start second in the stitched take)
+WALK_CHAPTERS = [
+    ("01-cart", "Add to the cart", "Two items go into the cart.", 0),
+    ("02-checkout", "Go to checkout", "The order summary shows the total.", 9),
+    ("03-card", "Enter the card", "A test card is typed in.", 21),
+    ("04-pay", "Pay for the order", "Pay is pressed once; the button waits.", 30),
+    ("05-receipt", "See the receipt", "The receipt shows one charge.", 48),
+    ("06-orders", "Find it in orders", "The order is in the history, paid once.", 60),
+]
+WALK_STORYLINE_DENIAL = "the walkthrough failed in chapter 4 (Pay for the order): the card was charged twice"
+walk_lock = threading.Lock()
+walk_phase: dict = {}     # run id -> "failed" | "fixing" | "rerecording" (absent = as launched)
+walk_posts: list = []     # every storyline PUT and demo export (GET /__fixture/walkthrough-posts)
+walk_exports: dict = {}   # run id -> {"gif": bool, "poster": bool}
+# A real JPEG (160x90, one colour): the poster a take wrote, served as what its name says it is.
+TINY_JPEG = base64.b64decode(
+    "/9j/4AAQSkZJRgABAgAAAQABAAD//gAQTGF2YzYyLjExLjEwMAD/2wBDAAgYGBwYHCEhISEhISckJygoKCcnJycoKCgrKyszMzMr"
+    "KysoKCsrMDAzMzc5NzQ0MzQ5OTw8PEhIRUVUVFdnZ3z/xABNAAEBAAAAAAAAAAAAAAAAAAAABgEBAQEAAAAAAAAAAAAAAAAAAAUG"
+    "EAEAAAAAAAAAAAAAAAAAAAAAEQEAAAAAAAAAAAAAAAAAAAAA/8AAEQgAWgCgAwEiAAIRAAMRAP/aAAwDAQACEQMRAD8AlwGnSgAA"
+    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+    "AAAAAAAAAAAAAAAH/9k=")
+_walk_take: list = [None]
+
+
+def walk_take() -> bytes:
+    """The stitched take: 72 s of one colour (fixtures/walk-72s.webm, 10 KB, a keyframe each second),
+    long enough that a seek to the failing moment (0:41) or a chapter is a real position."""
+    if _walk_take[0] is None:
+        _walk_take[0] = (Path(__file__).resolve().parent / "fixtures" / "walk-72s.webm").read_bytes()
+    return _walk_take[0]
+
+
+def walk_files(rid: str) -> set:
+    """Every proof-root path the run's view names (the take, the poster, the failing frame, each
+    check's evidence): the file route serves these and nothing else."""
+    view = walk_view(rid, None, 0) or {}
+    out = {p for p in (view.get("video", {}).get("mp4"), view.get("video", {}).get("poster")) if p}
+    for ch in view.get("chapters", []):
+        if ch.get("failedFrame"):
+            out.add(ch["failedFrame"])
+        for chk in ch.get("checks", []):
+            out.update(chk.get("evidence", []))
+    return out
+
+
+TINY_GIF = (b"GIF89a\x01\x00\x01\x00\x80\x00\x00\x00\x00\x00\xff\xff\xff!\xf9\x04\x01\x00\x00\x00\x00,"
+            b"\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02D\x01\x00;")
+
+
+def _walk_check(cid: str, kind: str, sentence: str, passed, at, evidence: list, detail=None, vault=None) -> dict:
+    return {"id": cid, "kind": kind, "sentence": sentence, "passed": passed, "atSec": at, "evidence": evidence,
+            "vaultEntry": vault, "detail": detail}
+
+
+def _walk_checks(key: str, failing: bool) -> list:
+    """Every check kind of §4.5 appears somewhere in the take (the seven kinds)."""
+    by = {
+        "01-cart": [_walk_check("cart-screen", "on_screen", "The cart shows two items", True, 4, [f"vault/{key}/evidence/cart.png"], vault="ve-101"),
+                    _walk_check("cart-saved", "saved_state", "The cart row holds two lines", True, 6, [f"vault/{key}/evidence/cart.json"], vault="ve-102")],
+        "02-checkout": [_walk_check("total-screen", "on_screen", "The total reads $42.00", True, 5, [f"vault/{key}/evidence/total.png"], vault="ve-201"),
+                        _walk_check("total-output", "output", "The summary request answers 200 with the same total", True, 7, [f"vault/{key}/evidence/summary.json"], vault="ve-202")],
+        "03-card": [_walk_check("card-screen", "on_screen", "The card field shows the test card", True, 5, [f"vault/{key}/evidence/card.png"], vault="ve-301")],
+        "04-pay": [_walk_check("pay-screen", "on_screen", "The Pay button waits after one press", True, 6, [f"vault/{key}/evidence/pay.png"], vault="ve-401"),
+                   _walk_check("pay-events", "events", "One charge event is emitted", not failing, 11, [f"vault/{key}/evidence/events.json"],
+                               detail="two charge events were emitted" if failing else None, vault="ve-402"),
+                   _walk_check("pay-effects", "side_effects", "The card is charged once at the provider", not failing, 11, [f"vault/{key}/evidence/provider.json"],
+                               detail="the provider recorded two charges of $42.00" if failing else None, vault="ve-403"),
+                   _walk_check("pay-never", "must_not_happen", "The customer is never charged twice", not failing, 11, [f"vault/{key}/evidence/charges.json"], vault="ve-404")],
+        "05-receipt": [_walk_check("receipt-screen", "on_screen", "The receipt shows one charge", True, 5, [f"vault/{key}/evidence/receipt.png"], vault="ve-501"),
+                       _walk_check("receipt-cross", "cross_check", "The receipt total matches the provider's record", True, 8, [f"vault/{key}/evidence/cross.json"], vault="ve-502")],
+        "06-orders": [_walk_check("orders-saved", "saved_state", "The order is saved as paid, once", True, 6, [f"vault/{key}/evidence/order.json"], vault="ve-601")],
+    }
+    return by[key]
+
+
+def _walk_chapter(i: int, **over) -> dict:
+    key, title, blurb, _start = WALK_CHAPTERS[i]
+    base = {"key": key, "title": title, "blurb": blurb, "tags": [], "resets": [], "recorded": True,
+            "index": i + 1, "total": len(WALK_CHAPTERS), "verdict": "PASS", "takes": 1, "failedAtSec": None,
+            "failedFrame": None, "proves": ["build"], "legs": [], "checks": _walk_checks(key, False)}
+    base.update(over)
+    return base
+
+
+def _walk_markers() -> list:
+    return [{"at": f"{st // 60}:{st % 60:02d}", "sec": st, "title": title} for _k, title, _b, st in WALK_CHAPTERS]
+
+
+def _walk_units(rid: str, statuses: list, denial: str | None = None) -> list:
+    clis = {"understand": "claude", "build": "codex", "test": "claude", "walkthrough_plan": "agy",
+            "walkthrough_review": None, "deliver": None}
+    roles = {"build": "creator", "walkthrough_plan": "evaluator"}
+    out = []
+    for i, (st, status) in enumerate(zip(WALK_STEPS, statuses)):
+        sid = st["id"]
+        unit = {"id": f"{rid}:{sid}", "session_id": rid, "ord": i, "description": sid.replace("_", " "),
+                "stage": "critique" if sid.startswith("walkthrough") else "produce", "assigned_cli": clis[sid],
+                "assigned_invocation": None, "council_task_ref": None, "routing": None,
+                "denial_reason": denial if sid == "walkthrough_review" and status == "rejected" else None,
+                "phase_ref": sid, "conformance_ref": None, "phase_status": None, "collection_scope": None,
+                "status": status}
+        if sid in roles:
+            unit["role"] = roles[sid]
+        if clis[sid] is None:
+            unit["tool_cmd"] = ["wicked-garden", sid]
+        out.append(unit)
+    return out
+
+
+def walk_runs() -> list:
+    """The corpus as it stands now (r-walk-fail moves with the operator's gate answers)."""
+    with walk_lock:
+        phase = walk_phase.get(WALK_FAIL, "failed")
+        thin_phase = walk_phase.get(WALK_THIN, "failed")
+
+    def run(rid: str, status: str, problem: str, statuses: list, created: int, denial=None, unit_ix=WALK_REVIEW_ORD) -> dict:
+        r = session(rid, status, problem, problem)
+        r["session"].update(created_at=created, unit_ix=unit_ix, evidence_root=f"/w/evidence/{rid}",
+                            team_plan={"rev": 1, "accepted_rev": 1, "preset": None}, human_confirm="all")
+        r["units"] = _walk_units(rid, statuses, denial)
+        return r
+    done3 = ["done", "done", "done"]
+    fail_statuses = {"failed": done3 + ["done", "rejected", "pending"],
+                     "fixing": ["done", "distributed", "pending", "pending", "pending", "pending"],
+                     "rerecording": done3 + ["done", "distributed", "pending"]}
+    out = [
+        run(WALK_REC, "executing", "stop the checkout charging twice, then walk me through it",
+            done3 + ["done", "distributed", "pending"], SESSION_T0 + 4000),
+        run(WALK_FAIL, "awaiting_human" if phase == "failed" else "executing",
+            "make Pay wait, so one press charges once", fail_statuses[phase], SESSION_T0 + 4300,
+            denial=WALK_STORYLINE_DENIAL, unit_ix=1 if phase == "fixing" else WALK_REVIEW_ORD),
+        run(WALK_PASS, "completed", "show the saved card on the pay page",
+            done3 + ["done", "done", "done"], SESSION_T0 + 4600, unit_ix=6),
+        run(WALK_THIN, "awaiting_human" if thin_phase == "failed" else "executing",
+            "round the totals the same way everywhere", fail_statuses[thin_phase], SESSION_T0 + 4900,
+            denial="the walkthrough failed in chapter 02-rounding", unit_ix=1 if thin_phase == "fixing" else WALK_REVIEW_ORD),
+    ]
+    out[2]["session"]["ended_at"] = SESSION_T0 + 5200
+    demo = demo_session(WALK_DEMO, WALK_DEMO_STATE)
+    demo["session"]["created_at"] = SESSION_T0 + 5400
+    for u in demo["units"]:  # the demo preset's phases, as crew names them on the unit
+        u["phase_ref"] = u["id"].split(":", 1)[1]
+    out.append(demo)
+    return out
+
+
+WALK_DEMO_STATE = {"pid": "notes", "url": "http://localhost:5173", "audience": "the library panel",
+                   "show": "booking a room, start to finish", "stage": "done", "script": None, "script_override": None,
+                   "plan_note": None, "recorded": [c["key"] for c in DEMO_CHAPTERS], "next_at": 0.0, "round": 2}
+WALK_DEMO_STATE["script"] = demo_script(WALK_DEMO_STATE)
+
+
+def walk_gate(rid: str) -> dict | None:
+    """The open gate of a walkthrough run: its recorder's escalation, while the take stands failed."""
+    with walk_lock:
+        phase = walk_phase.get(rid, "failed")
+    if rid in (WALK_FAIL, WALK_THIN) and phase == "failed":
+        prompt = WALK_ESC_PROMPT if rid == WALK_FAIL else \
+            "Unit 4 failed its deterministic floor (walkthrough_failed) — confirm to record it again, or reject to cancel the run"
+        return {"runId": rid, "ord": WALK_REVIEW_ORD, "lifecycle": "open", "prompt": prompt,
+                "receivedAt": iso((SESSION_T0 + 5000) * 1000), "options": None}
+    return None
+
+
+def walk_team(rid: str) -> dict | None:
+    blank = {"runId": rid, "streamFloor": None, "pending": None, "units": [], "rows": []}
+    if rid == WALK_DEMO:  # a preset run: not a team run, its chain renders from its units
+        return dict(blank, teamed=False, transport=None, reason=None, planRev=None, ended=True)
+    if rid not in (WALK_REC, WALK_FAIL, WALK_PASS, WALK_THIN):
+        return None
+    rows = [_team_row(971, "wicked.team.plan.accepted", rid, plan_rev=1, workflow_id=f"{rid}:plan-1", band="40-69",
+                      high_risk=False, mode="manual", steps=WALK_STEPS, override=None, proposal_id="p-walk")]
+    unit_rows = []
+    by_status = {u["id"].split(":", 1)[1]: u["status"] for r in walk_runs() if r["session"]["id"] == rid for u in r["units"]}
+    for i, st in enumerate(WALK_STEPS):
+        status = by_status.get(st["id"], "pending")
+        mine = []
+        if status in ("done", "distributed", "rejected"):
+            mine.append(_team_row(972 + 2 * i, "wicked.team.step.claimed", rid, ord=i, step_id=st["id"],
+                                  role="evaluator" if st["id"].startswith("walkthrough") else "creator", kind="agent",
+                                  phase=st["id"], criterion="", baseline_tree=None, repo=None, code_graph_db=None,
+                                  by="agy" if st["id"] == "walkthrough_plan" else "codex"))
+        if status in ("done", "rejected"):
+            mine.append(_team_row(973 + 2 * i, "wicked.team.step.completed", rid, ord=i, step_id=st["id"],
+                                  status="ok" if status == "done" else "failed", tree=None, output_bytes=10,
+                                  output_ref=f"u{i}", by="codex"))
+        unit_rows.append({"ord": i, "transport": "bus", "reason": None, "rows": mine})
+    return dict(blank, teamed=True, transport="bus", reason=None, planRev=1, ended=rid == WALK_PASS, rows=rows,
+                units=unit_rows)
+
+
+def walk_view(rid: str, step: str | None, recorded: int) -> dict | None:
+    """crew's WalkthroughView for the corpus; `None` = a `step` that names no walkthrough step (404)."""
+    if step not in (None, "walkthrough_review", "walkthrough_plan"):
+        return None
+    with walk_lock:
+        phase = walk_phase.get(rid, "failed")
+    n = len(WALK_CHAPTERS)
+    base = {"runId": rid, "stepId": "walkthrough_review", "planStepId": "walkthrough_plan", "cause": None,
+            "seat": {"evaluator": "agy", "builders": ["codex"]}, "tree": None, "stale": False, "sealed": False,
+            "video": {"mp4": None, "poster": None, "markers": []}, "chapters": [], "steps": []}
+    planned = [_walk_chapter(i, recorded=False, verdict=None, checks=[], proves=[]) for i in range(n)]
+    if rid == WALK_REC or (rid in (WALK_FAIL, WALK_THIN) and phase == "rerecording"):
+        got = max(0, min(n, recorded if rid == WALK_REC else 0))
+        return dict(base, state="recording",
+                    chapters=[dict(c, recorded=i < got) for i, c in enumerate(planned)])
+    if rid in (WALK_FAIL, WALK_THIN) and phase == "fixing":
+        return dict(base, state="authoring", seat={"evaluator": None, "builders": ["codex"]}, chapters=[])
+    if rid == WALK_FAIL:
+        chapters = [_walk_chapter(i) for i in range(n)]
+        chapters[3] = _walk_chapter(3, verdict="FAIL", takes=2, failedAtSec=11,
+                                    failedFrame="segments/04-pay/failed-2/frame.png", checks=_walk_checks("04-pay", True))
+        return dict(base, state="failed", tree="4b1c9e0a7d2f", sealed=True, chapters=chapters,
+                    video={"mp4": "demo-video/demo.mp4", "poster": None, "markers": _walk_markers()},
+                    steps=[{"stepId": "build", "checkState": "failed", "provedBy": [{"chapter": "04-pay", "atSec": 11}]}])
+    if rid == WALK_PASS:
+        return dict(base, state="passed", tree="9f8e7d6c5b4a", sealed=True, chapters=[_walk_chapter(i) for i in range(n)],
+                    video={"mp4": "demo-video/demo.mp4", "poster": "demo-video/poster.jpg", "markers": _walk_markers()},
+                    steps=[{"stepId": "build", "checkState": "checked", "provedBy": [{"chapter": "04-pay", "atSec": 11}]}])
+    if rid == WALK_THIN:
+        # What garden 12.41.0's walkthrough tool gives crew to read: result.json chapters of
+        # {key, verdict, failed_at_sec} only — no chapters.json, no checks, no frame, no stitched take.
+        thin = [("01-totals", "PASS", None), ("02-rounding", "FAIL", 7.5), ("03-receipt", "PASS", None)]
+        return dict(base, state="failed", sealed=True,
+                    chapters=[{"key": k, "title": k, "blurb": "", "tags": [], "resets": [], "recorded": False,
+                               "index": i + 1, "total": len(thin), "verdict": v, "takes": 1,
+                               "failedAtSec": at, "failedFrame": None, "proves": [], "legs": [], "checks": []}
+                              for i, (k, v, at) in enumerate(thin)])
+    return dict(base, stepId=None, planStepId=None, state="authoring", cause="no_walkthrough",
+                seat={"evaluator": None, "builders": []})
 
 
 # ── Reel corpus (switch `reel_runs`, needs `sessions`; e2e/desk_reel_words_test.py) ─────────
@@ -3566,6 +3828,8 @@ def assemble_runs() -> list:
                     for r in extra:
                         r["session"].pop("chat_id", None)
             extra = extra + json.loads(json.dumps(session_launched))
+            if state["walkthrough"]:
+                extra = extra + json.loads(json.dumps(walk_runs()))
             runs = extra  # the sessions corpus stands alone: the rail shows exactly these
         if state["demo_runs"] and not state["no_runs"]:
             with demo_lock:
@@ -4170,6 +4434,8 @@ class W2Handler(SimpleHTTPRequestHandler):
             with state_lock:
                 if state["run_chat_id"]:
                     caps["runChatId"] = True
+                if state["sessions"] and state["walkthrough"]:
+                    caps["walkthroughRoots"] = True  # WT-W1 (api-types 0.74.0)
             self._json(200, {"status": "ok", "version": "w2-fixture", "ping": "pong", "capabilities": caps})
             return True
         # Idea 15: the delivery freeze switch (crew#694).
@@ -4615,7 +4881,10 @@ class W2Handler(SimpleHTTPRequestHandler):
             with state_lock:
                 proposals_on = state["ship_proposals"]
                 reel_on = state["reel_runs"]
-            if sessions_on and reel_on and reel_team(rid) is not None:
+                walk_on = state["walkthrough"]
+            if sessions_on and walk_on and walk_team(rid) is not None:
+                self._json(200, walk_team(rid))
+            elif sessions_on and reel_on and reel_team(rid) is not None:
                 time.sleep(REEL_TEAM_DELAY_S)  # the session paints from its units first (studio#440)
                 self._json(200, reel_team(rid))
             elif sessions_on and proposals_on and proposal_team(rid) is not None:
@@ -5715,6 +5984,143 @@ class W2Handler(SimpleHTTPRequestHandler):
         self._json(405, {"error": f"w2 fixture: {method} {path}"})
         return True
 
+    def _walkthrough_route(self, method: str, body: dict) -> bool:
+        """WT-U1: crew's WT-W1..W3 wire for the walkthrough corpus, its escalation gate, and the
+        finished demo run (EP-C3 export). Off: `/walkthrough*` is the unknown-route 404."""
+        url = urllib.parse.urlparse(self.path)
+        m = re.fullmatch(r"/api/v1/runs/([^/]+)/(walkthrough|walkthrough/file|walkthrough/storyline|gate|demo|demo/file|demo/export)", url.path)
+        if not m:
+            return False
+        rid, what = urllib.parse.unquote(m.group(1)), m.group(2)
+        with state_lock:
+            on = state["sessions"] and state["walkthrough"]
+            recorded = state["walk_recorded"]
+        if not on:
+            if what.startswith("walkthrough"):
+                self._json(404, {"message": f"Route {method}:{url.path} not found", "error": "Not Found", "statusCode": 404})
+                return True
+            return False
+        walks = (WALK_REC, WALK_FAIL, WALK_PASS, WALK_THIN)
+        q = urllib.parse.parse_qs(url.query)
+        step = (q.get("step") or [None])[0]
+        if what == "walkthrough" and method == "GET":
+            if rid not in walks and rid != WALK_DEMO and rid not in {r["session"]["id"] for r in SESSION_RUNS}:
+                self._json(404, {"error": "no run with that id"})
+                return True
+            view = walk_view(rid, step, recorded)
+            if view is None:
+                self._json(404, {"error": f"run {rid} has no walkthrough step named {step}"})
+            else:
+                self._json(200, view)
+            return True
+        if what == "walkthrough/file" and method == "GET":
+            rel = (q.get("path") or [""])[0]
+            ext = os.path.splitext(rel)[1].lower()
+            if ext not in (".mp4", ".png", ".jpg", ".gif", ".md", ".json"):
+                self._json(400, {"error": "`path` must be one of .mp4, .png, .jpg, .gif, .md, .json"})
+                return True
+            if rid not in (WALK_FAIL, WALK_PASS) or step not in (None, "walkthrough_review", "walkthrough_plan"):
+                self._json(404, {"error": "this run has no recorded walkthrough there"})
+                return True
+            if rel not in walk_files(rid):
+                self._json(404, {"error": f"no such walkthrough file: {rel}"})
+                return True
+            if rel == "demo-video/demo.mp4":
+                # WebM bytes behind the take's name, said as such in the content type: Playwright's
+                # Chromium has no H.264 decoder, so an MP4 here could not be played by the journey
+                # (the demo fixture's take does the same).
+                self._media(walk_take(), "video/webm")
+            elif ext == ".jpg":
+                self._media(TINY_JPEG, "image/jpeg")
+            elif ext == ".png":
+                self._media(sheet_png(len(rel)), "image/png")
+            elif ext == ".json":
+                self._json(200, {"captured": rel, "run": rid, "note": "fixture evidence"})
+            else:
+                self._json(404, {"error": f"no such walkthrough file: {rel}"})
+            return True
+        if what == "walkthrough/storyline" and method == "PUT":
+            text = body.get("storyline")
+            if not isinstance(text, str) or text.strip() == "":
+                self._json(400, {"error": "`storyline` (the storyline module text) is required"})
+                return True
+            if rid not in walks:
+                self._json(404, {"error": "no run with that id"})
+                return True
+            if step not in (None, "walkthrough_review", "walkthrough_plan"):
+                self._json(404, {"error": f"run {rid} has no walkthrough step named {step}"})
+                return True
+            if walk_gate(rid) is None:
+                self._json(409, {"error": "the storyline can be edited only while this walkthrough's escalation is open: no gate is open",
+                                 "code": "no_open_escalation"})
+                return True
+            with walk_lock:
+                walk_posts.append({"route": "storyline", "runId": rid, "step": step, "storyline": text})
+            self._json(200, {"runId": rid, "planStepId": "walkthrough_plan",
+                             "sha256": hashlib.sha256(text.encode()).hexdigest(), "edited_by": "human",
+                             "at": iso(int(time.time() * 1000))})
+            return True
+        if what == "gate":
+            if rid not in (WALK_FAIL, WALK_THIN):
+                return False
+            gate = walk_gate(rid)
+            if method == "GET":
+                if gate is None:
+                    self._json(404, {"error": "no gate is open on this run"})
+                else:
+                    self._json(200, gate)
+                return True
+            if method == "POST":
+                with state_lock:
+                    gate_post_log.append({"runId": rid, "body": body, "at": time.time()})
+                if gate is None:
+                    self._json(409, {"error": "no gate is open on this run", "code": "gate_unknown"})
+                    return True
+                if "ord" in body and body.get("ord") != WALK_REVIEW_ORD:
+                    self._json(409, {"error": f"Gate changed: this decision names gate {body.get('ord')}, the open one is {WALK_REVIEW_ORD}",
+                                     "code": "gate_changed"})
+                    return True
+                with walk_lock:
+                    if body.get("approve") is True:
+                        walk_phase[rid] = "rerecording"   # the escalation's approve retries the recorder
+                    elif body.get("action") == "request_changes":
+                        walk_phase[rid] = "fixing"        # back to the creator, with the operator's note
+                self._json(200, {"status": "ok"})
+                return True
+            return False
+        if rid != WALK_DEMO:
+            return False
+        if what == "demo" and method == "GET":
+            self._json(200, demo_view(rid, WALK_DEMO_STATE))
+            return True
+        if what == "demo/file" and method == "GET":
+            rel = (q.get("path") or [""])[0]
+            with walk_lock:
+                made = dict(walk_exports.get(rid, {}))
+            if rel == "demo-video/demo.mp4":
+                self._media(walk_take(), "video/webm")
+            elif rel in ("review/chapters.png", "review/joins.png", "review/end.png"):
+                self._media(sheet_png(len(rel)), "image/png")
+            elif rel == "demo-video/demo.gif" and made.get("gif"):
+                self._media(TINY_GIF, "image/gif")
+            elif rel == "demo-video/poster.jpg" and made.get("poster"):
+                self._media(TINY_JPEG, "image/jpeg")
+            else:
+                self._json(404, {"error": f"no such demo file: {rel}"})
+            return True
+        if what == "demo/export" and method == "POST":
+            fmt = body.get("format")
+            if fmt not in ("gif", "poster") or set(body) - {"format", "atSec"}:
+                self._json(400, {"error": "Invalid export body"})
+                return True
+            rel = "demo-video/demo.gif" if fmt == "gif" else "demo-video/poster.jpg"
+            with walk_lock:
+                walk_exports.setdefault(rid, {})[fmt] = True
+                walk_posts.append({"route": "export", "runId": rid, "body": body})
+            self._json(200, {"format": fmt, "path": rel, "bytes": len(TINY_GIF) if fmt == "gif" else len(TINY_JPEG)})
+            return True
+        return False
+
     def _decisions_route(self, method: str, body: dict) -> bool:
         """Decision capture (DC-S6) on crew's DC-S4a/S4b wire: GET /decisions and the five POST verbs."""
         url = urllib.parse.urlparse(self.path)
@@ -5840,6 +6246,12 @@ class W2Handler(SimpleHTTPRequestHandler):
             with demo_lock:
                 posts = list(demo_post_log)
             return self._json(200, {"posts": posts})
+        if path == "/__fixture/walkthrough-posts":
+            with walk_lock:
+                posts = list(walk_posts)
+            return self._json(200, {"posts": posts})
+        if self._walkthrough_route("GET", {}):
+            return None
         if self._demo_route("GET", {}):
             return None
         if path == "/__fixture/decision-posts":
@@ -5934,6 +6346,11 @@ class W2Handler(SimpleHTTPRequestHandler):
             if body.get("reset_decisions"):
                 with decisions_lock:
                     reset_decisions()
+            if body.get("reset_walkthrough"):
+                with walk_lock:
+                    walk_phase.clear()
+                    walk_posts.clear()
+                    walk_exports.clear()
             if body.get("reset_rule_posts"):
                 with state_lock:
                     rule_post_log.clear()
@@ -6023,6 +6440,8 @@ class W2Handler(SimpleHTTPRequestHandler):
                 snapshot = dict(state)
             return self._json(200, {"ok": True, "state": snapshot})
         if self._capture_post(path, body if isinstance(body, dict) else {}):
+            return None
+        if self._walkthrough_route("POST", body if isinstance(body, dict) else {}):
             return None
         if self._demo_route("POST", body if isinstance(body, dict) else {}):
             return None
@@ -6580,6 +6999,8 @@ class W2Handler(SimpleHTTPRequestHandler):
     def do_PUT(self):  # noqa: N802 (stdlib naming)
         path = urllib.parse.urlparse(self.path).path
         body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
+        if self._walkthrough_route("PUT", body if isinstance(body, dict) else {}):
+            return None
         if self._demo_route("PUT", body if isinstance(body, dict) else {}):
             return None
         # Behaviour 10: PUT /standing-orders/away — turning it on sweeps the open gates.

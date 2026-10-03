@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.5.19",
   "counts": {
-    "files": 205,
-    "occurrences": 2222,
-    "static": 1941,
+    "files": 206,
+    "occurrences": 2268,
+    "static": 1982,
     "dynamic": 80,
     "computed": 7
   },
@@ -11511,6 +11511,252 @@
       "testId": "viewer-truncation-banner",
       "files": [
         "src/components/FileViewer.tsx"
+      ]
+    },
+    {
+      "testId": "walkthrough",
+      "files": [
+        "src/components/session/WalkthroughEditor.tsx"
+      ]
+    },
+    {
+      "testId": "walkthrough-absent",
+      "files": [
+        "src/components/session/WalkthroughEditor.tsx"
+      ]
+    },
+    {
+      "testId": "walkthrough-actions",
+      "files": [
+        "src/components/session/WalkthroughEditor.tsx"
+      ]
+    },
+    {
+      "testId": "walkthrough-chapter",
+      "files": [
+        "src/components/session/WalkthroughEditor.tsx"
+      ]
+    },
+    {
+      "testId": "walkthrough-chapters",
+      "files": [
+        "src/components/session/WalkthroughEditor.tsx"
+      ]
+    },
+    {
+      "testId": "walkthrough-check",
+      "files": [
+        "src/components/session/WalkthroughEditor.tsx"
+      ]
+    },
+    {
+      "testId": "walkthrough-check-detail",
+      "files": [
+        "src/components/session/WalkthroughEditor.tsx"
+      ]
+    },
+    {
+      "testId": "walkthrough-check-time",
+      "files": [
+        "src/components/session/WalkthroughEditor.tsx"
+      ]
+    },
+    {
+      "testId": "walkthrough-checks",
+      "files": [
+        "src/components/session/WalkthroughEditor.tsx"
+      ]
+    },
+    {
+      "testId": "walkthrough-download-gif",
+      "files": [
+        "src/components/session/WalkthroughEditor.tsx"
+      ]
+    },
+    {
+      "testId": "walkthrough-download-poster",
+      "files": [
+        "src/components/session/WalkthroughEditor.tsx"
+      ]
+    },
+    {
+      "testId": "walkthrough-edit",
+      "files": [
+        "src/components/session/WalkthroughEditor.tsx"
+      ]
+    },
+    {
+      "testId": "walkthrough-edit-check",
+      "files": [
+        "src/components/session/WalkthroughEditor.tsx"
+      ]
+    },
+    {
+      "testId": "walkthrough-error",
+      "files": [
+        "src/components/session/WalkthroughEditor.tsx"
+      ]
+    },
+    {
+      "testId": "walkthrough-evidence",
+      "files": [
+        "src/components/session/WalkthroughEditor.tsx"
+      ]
+    },
+    {
+      "testId": "walkthrough-evidence-file",
+      "files": [
+        "src/components/session/WalkthroughEditor.tsx"
+      ]
+    },
+    {
+      "testId": "walkthrough-evidence-toggle",
+      "files": [
+        "src/components/session/WalkthroughEditor.tsx"
+      ]
+    },
+    {
+      "testId": "walkthrough-export",
+      "files": [
+        "src/components/session/WalkthroughEditor.tsx"
+      ]
+    },
+    {
+      "testId": "walkthrough-export-gif",
+      "files": [
+        "src/components/session/WalkthroughEditor.tsx"
+      ]
+    },
+    {
+      "testId": "walkthrough-export-menu",
+      "files": [
+        "src/components/session/WalkthroughEditor.tsx"
+      ]
+    },
+    {
+      "testId": "walkthrough-export-mp4",
+      "files": [
+        "src/components/session/WalkthroughEditor.tsx"
+      ]
+    },
+    {
+      "testId": "walkthrough-export-poster",
+      "files": [
+        "src/components/session/WalkthroughEditor.tsx"
+      ]
+    },
+    {
+      "testId": "walkthrough-export-poster-file",
+      "files": [
+        "src/components/session/WalkthroughEditor.tsx"
+      ]
+    },
+    {
+      "testId": "walkthrough-fail-mark",
+      "files": [
+        "src/components/session/WalkthroughEditor.tsx"
+      ]
+    },
+    {
+      "testId": "walkthrough-failed-frame",
+      "files": [
+        "src/components/session/WalkthroughEditor.tsx"
+      ]
+    },
+    {
+      "testId": "walkthrough-fix",
+      "files": [
+        "src/components/session/WalkthroughEditor.tsx"
+      ]
+    },
+    {
+      "testId": "walkthrough-loading",
+      "files": [
+        "src/components/session/WalkthroughEditor.tsx"
+      ]
+    },
+    {
+      "testId": "walkthrough-marker",
+      "files": [
+        "src/components/session/WalkthroughEditor.tsx"
+      ]
+    },
+    {
+      "testId": "walkthrough-narration",
+      "files": [
+        "src/components/session/WalkthroughEditor.tsx"
+      ]
+    },
+    {
+      "testId": "walkthrough-no-video",
+      "files": [
+        "src/components/session/WalkthroughEditor.tsx"
+      ]
+    },
+    {
+      "testId": "walkthrough-note",
+      "files": [
+        "src/components/session/WalkthroughEditor.tsx"
+      ]
+    },
+    {
+      "testId": "walkthrough-sealed",
+      "files": [
+        "src/components/session/WalkthroughEditor.tsx"
+      ]
+    },
+    {
+      "testId": "walkthrough-seats",
+      "files": [
+        "src/components/session/WalkthroughEditor.tsx"
+      ]
+    },
+    {
+      "testId": "walkthrough-state",
+      "files": [
+        "src/components/session/WalkthroughEditor.tsx"
+      ]
+    },
+    {
+      "testId": "walkthrough-storyline",
+      "files": [
+        "src/components/session/WalkthroughEditor.tsx"
+      ]
+    },
+    {
+      "testId": "walkthrough-storyline-cancel",
+      "files": [
+        "src/components/session/WalkthroughEditor.tsx"
+      ]
+    },
+    {
+      "testId": "walkthrough-storyline-save",
+      "files": [
+        "src/components/session/WalkthroughEditor.tsx"
+      ]
+    },
+    {
+      "testId": "walkthrough-timeline",
+      "files": [
+        "src/components/session/WalkthroughEditor.tsx"
+      ]
+    },
+    {
+      "testId": "walkthrough-underneath",
+      "files": [
+        "src/components/session/WalkthroughEditor.tsx"
+      ]
+    },
+    {
+      "testId": "walkthrough-video",
+      "files": [
+        "src/components/session/WalkthroughEditor.tsx"
+      ]
+    },
+    {
+      "testId": "walkthrough-watch",
+      "files": [
+        "src/components/session/WalkthroughEditor.tsx"
       ]
     },
     {
