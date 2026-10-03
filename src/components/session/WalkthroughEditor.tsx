@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { demoFileUrl, getDemo } from '../../api/demo.js';
-import { isWalkthroughUnsupported, walkthroughApi, walkthroughFileUrl, type DemoExportFormat } from '../../api/walkthrough.js';
+import { isWalkthroughUnsupported, walkthroughApi, walkthroughFileUrl, type DemoExportFormat, type WalkthroughView } from '../../api/walkthrough.js';
 import type { ArtifactSize } from '../../board/artifactMorph.js';
 import {
   authorWaiting, chapterMarks, checksTrack, escalationOpen, exportOptions, failedChapter, fixNote, fmtTime, gateVerbs, isLive, playheadStart,
@@ -152,8 +152,10 @@ function Body({ rec, size, morph, units, reload }: {
   const [made, setMade] = useState<Partial<Record<DemoExportFormat, string>>>({});
   const src = rec.video === null ? null : fileUrl(rec, rec.video);
   const startAt = playheadStart(rec);
+  // Mounted, as of the commit: the cleanup runs inside the unmount's commit (a layout effect), so a
+  // read that resolves right after it never finds the flag still up.
   const live = useRef(true);
-  useEffect(() => { live.current = true; return () => { live.current = false; }; }, []);
+  useLayoutEffect(() => { live.current = true; return () => { live.current = false; }; }, []);
   // The run's units as of the LATEST render: a check made after an await must not read the units
   // the click handler closed over (the denial may have been cleared meanwhile).
   // (A layout effect: it runs in the commit itself, so no awaited continuation can resume between a
@@ -226,12 +228,16 @@ function Body({ rec, size, morph, units, reload }: {
       if (live.current) setBusy(false);
     }
   };
-  /** The gate, re-read now, is still this walkthrough's own escalation — else nothing may be sent:
-   *  the verbs were drawn from an older read, and another gate may have opened since. */
-  const stillMine = async (): Promise<void> => {
-    // Both reads first; every check after the LAST await, in one synchronous run with the send that
-    // follows it — nothing can change between a check and what it guards.
+  // The verbs were drawn from an older read: before anything is sent, the gate and the take are read
+  // again and the write goes out only if it is still this walkthrough's own escalation, for this take.
+  /** The gate and the take, read now. */
+  const readNow = async (): Promise<WalkthroughView> => {
     const [, view] = await Promise.all([refreshGate(rec.runId), walkthroughApi.view(rec.runId, rec.step)]);
+    return view;
+  };
+  /** SYNCHRONOUS, and called in the same run as the send it guards (never awaited): nothing can
+   *  change between a check and the write that follows it. Throws when the write must not go out. */
+  const assertMine = (view: WalkthroughView): void => {
     // Left the page while they were read: the operator is not looking at this any more.
     if (!live.current) throw new Error('Nothing was sent.');
     const now = useGateStore.getState().gates[rec.runId];
@@ -246,7 +252,8 @@ function Body({ rec, size, morph, units, reload }: {
     }
   };
   const decide = async (decision: Parameters<typeof commitGateDecision>[1]): Promise<void> => {
-    await stillMine();
+    const view = await readNow();
+    assertMine(view);
     const outcome = await commitGateDecision(rec.runId, decision);
     if (outcome === 'undone') throw new Error('Undone — nothing was sent.');
     if (outcome !== 'sent') throw new Error('Not sent — the gate changed or was already answered.');
@@ -258,7 +265,8 @@ function Body({ rec, size, morph, units, reload }: {
   const saveStoryline = (): Promise<void> => act('The check was changed; the walkthrough records again.', async () => {
     const stepId = rec.step ?? rec.planStep;
     if (stepId === null) throw new Error('This recording has no walkthrough step.');
-    await stillMine();
+    const view = await readNow();
+    assertMine(view);
     await walkthroughApi.putStoryline(rec.runId, stepId, storyline);
     if (!live.current) return; // the file is written; the approve is the operator's to send, on the gate
     try {
