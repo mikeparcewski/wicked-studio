@@ -1,10 +1,14 @@
 import { useState } from 'react';
 import { steeringTypeOf, type SteeringRule } from '../api/steering.js';
+import type { SessionView } from '../api/types.js';
+import { ruleSentence } from '../board/ruleOrigin.js';
 import { fmtWeight } from './SteeringGrid.js';
 import { parseProvenanceRef } from '../api/wiki.js';
 import { useModalEscape } from './Modal.js';
 import { EffectBadge, SeverityChip } from './SteeringChips.js';
 import { SteeringRetireModal } from './SteeringRetireModal.js';
+import { RuleOrigin } from './decisions/RuleOrigin.js';
+import { useProjectsStore } from '../store/projects.js';
 
 /**
  * The rule DRAWER — opened from a grid row's ID CELL; everything richer than the grid's common
@@ -64,7 +68,7 @@ function provenanceText(rule: SteeringRule): React.ReactNode {
 
 // ── The drawer ────────────────────────────────────────────────────────────────────────────────
 
-export function SteeringRuleDrawer({ rule, evidence, onClose, onEdit, onRetired }: {
+export function SteeringRuleDrawer({ rule, evidence, onClose, onEdit, onRetired, runs = [], navigate }: {
   rule: SteeringRule;
   /** From the scoreboard's per-rule evidence join, when the scoreboard is served. */
   evidence: { denial_claims: number; governs_evidence: number } | null;
@@ -72,9 +76,16 @@ export function SteeringRuleDrawer({ rule, evidence, onClose, onEdit, onRetired 
   onEdit: (rule: SteeringRule) => void;
   /** Fires after the retire wire succeeded — the shell reloads for the server's state. */
   onRetired: (rule: SteeringRule, reason: string) => void;
+  /** The app's runs — "Where it was considered" looks into the rule's project's recent steps (DC-S8). */
+  runs?: readonly SessionView[];
+  /** In-app navigation for the ORIGIN and where-considered links; absent = plain links. */
+  navigate?: (path: string) => void;
 }): React.ReactElement {
   const [retiring, setRetiring] = useState(false);
   useModalEscape(onClose);
+  const projects = useProjectsStore((s) => s.projects);
+  const projectName = rule.targets.project !== undefined ? projects.find((p) => p.id === rule.targets.project)?.name ?? null : null;
+  const go = navigate ?? ((path: string): void => { window.location.assign(path); });
 
   return (
     <aside
@@ -99,6 +110,9 @@ export function SteeringRuleDrawer({ rule, evidence, onClose, onEdit, onRetired 
           ✕
         </button>
       </div>
+
+      {/* DC-S8 (B11): scope and effect as one sentence, before the field rows. */}
+      <p data-testid="rule-sentence" className="m-0 text-[12px]" style={{ color: 'var(--ink-body)' }}>{ruleSentence(rule, projectName)}</p>
 
       <div data-testid="steering-rule-detail" className="flex flex-col gap-1.5">
         <DetailRow label="Statement" testid="steering-rule-statement">{rule.statement}</DetailRow>
@@ -162,6 +176,9 @@ export function SteeringRuleDrawer({ rule, evidence, onClose, onEdit, onRetired 
           </DetailRow>
         )}
       </div>
+
+      {/* DC-S8 (B11): ORIGIN from crew's ledger, history, and where it was considered. */}
+      <RuleOrigin rule={rule} runs={runs} navigate={go} />
 
       <div className="flex items-center justify-end gap-2 pt-1">
         {rule.retired === true ? (

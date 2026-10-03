@@ -1010,6 +1010,21 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
 .wk-decision-meta { font-size: var(--text-xs); color: var(--ink-muted); }
 .wk-decision-acts { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: 6px; }
 .wk-decision-chip { padding: 2px 10px; font-size: var(--text-xs); }
+
+/* DC-S8: the considered line under a reply or in a step's sheet — one quiet sentence that opens to rows. */
+.wk-considered { margin-top: 6px; font-size: var(--text-xs); color: var(--ink-muted); }
+.wk-considered-toggle { display: inline-flex; align-items: baseline; gap: 6px; padding: 0; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; text-align: left; }
+.wk-considered-toggle:hover .wk-considered-text { color: var(--ink-body); }
+.wk-considered-caret { font-size: 10px; color: var(--ink-dim); }
+.wk-considered-rows { list-style: none; margin: 4px 0 0 16px; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.wk-considered-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.wk-considered-rule { color: var(--ink-body); text-decoration: none; }
+.wk-considered-rule:hover { text-decoration: underline; }
+.wk-considered-rule--plain { font-family: var(--font-mono); color: var(--ink-muted); }
+.wk-considered-detail { color: var(--ink-muted); }
+.wk-considered-row--cited .wk-considered-detail { color: var(--status-gate); }
+.wk-considered-row--unverified .wk-considered-detail { color: var(--status-fail); }
+.wk-considered-note { color: var(--ink-dim); font-style: italic; }
 .wk-desk-rule { margin: 4px 0 0; font-size: var(--text-sm); color: var(--ink-muted); }
 /* S8: the morphing artifact (DESIGN-interaction rule 1 — the object is the control) and the page
    element editor (rule 3 — edit by touching). ONE element that changes size: inline in the thread,

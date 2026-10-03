@@ -297,6 +297,12 @@ export function unitPhaseId(u: { description?: string | null; phase_ref?: string
   return ref !== null && /^[A-Za-z0-9_-]+$/.test(ref) ? ref : null;
 }
 
+/** A step's plain name off its unit: the chain's word for its phase, else the stage ("Build", "Test plan"). */
+export function unitStepName(u: SessionView['units'][number]): string {
+  const phase = unitPhaseId(u);
+  return (phase !== null ? STEP_WORD[phase.toLowerCase()] : undefined) ?? (phase ?? u.stage).replace(/[-_]+/g, ' ').replace(/^./, (c) => c.toUpperCase());
+}
+
 export function chainFromUnits(view: SessionView, opts: ChainOptions = {}): ChainModel {
   // `distributed` means routed, not running: every unit is routed before any runs. The one unit
   // working is the one under the cursor while the run executes (api/run-state.ts).

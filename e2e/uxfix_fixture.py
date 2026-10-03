@@ -749,6 +749,11 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          #   GET /health.capabilities.walkthroughRoots is true. Every write lands in GET
          #   /__fixture/walkthrough-posts. Off: no /walkthrough route (a daemon before WT-W1).
          "walkthrough": False, "walk_recorded": 3,
+         # steering_rules — DC-S8 (e2e/desk_rules_test.py): GET /governance/rules answers the small
+         #   STEERING_RULES corpus (the rule dec-auto landed, project-scoped, plus one rule that applies
+         #   everywhere), so the Rules page can open a rule remembered from the operator's words. The
+         #   `/considered` reads ride the `decisions` switch (same corpus). Off: the standing 404.
+         "steering_rules": False,
          }
 state_lock = threading.Lock()
 # Idea 9: every POST /governance/rules body the fixture received (GET /__fixture/rule-posts).
@@ -852,6 +857,60 @@ def reset_decisions() -> None:
 
 
 reset_decisions()
+
+# ── Considered · set aside · cited (DC-S8; crew api-types 0.85.0 `Consideration`) ───────────
+# What chat-pay's seats were given per turn, and what r-pay-2's build step was given: the rule
+# dec-auto landed (project-scoped) and one rule that applies everywhere; a candidate from another
+# project set aside; d2's reply cites the in-force rule (unchecked) and one invented id (unverified).
+# d3 (never mind) is not served: crew answers 404 for a turn it holds no record of.
+RULE_AUTO = {"id": "proposal:pr-auto", "statement": "Always check the payment provider’s records, not just our database",
+             "severity": "warn", "steering_type": "development", "project": DECISION_PROJECT}
+RULE_GLOBAL = {"id": "PAT-100", "statement": "Name things in plain words", "severity": "info", "steering_type": "development"}
+SET_ASIDE_LEGACY = {"id": "proposal:pr-legacy", "statement": "Ship risky changes behind a flag", "reason": "out_of_scope"}
+CITE_LABEL = "cited by the step — unchecked"
+UNKNOWN_LABEL = "not a rule in force here"
+
+
+def consideration(subject: dict, key: str, cited: list, considered: list | None = None, set_aside: list | None = None) -> dict:
+    return {"subject": subject, "key": key, "project_id": DECISION_PROJECT,
+            "considered": [RULE_AUTO, RULE_GLOBAL] if considered is None else considered,
+            "set_aside": [SET_ASIDE_LEGACY] if set_aside is None else set_aside,
+            "cited": cited, "source": "considerRules"}
+
+
+def _turn_subject(turn: str) -> dict:
+    return {"kind": "chat", "chat_id": "chat-pay", "turn_id": turn}
+
+
+CONSIDERATIONS: dict = {
+    # t1 predates the rule: only the global one was in force.
+    "chat-pay:t1": consideration(_turn_subject("t1"), "considered:chat-pay:t1", [], considered=[RULE_GLOBAL], set_aside=[]),
+    "chat-pay:d1": consideration(_turn_subject("d1"), "considered:chat-pay:d1", [], considered=[RULE_GLOBAL], set_aside=[]),
+    "chat-pay:d2": consideration(_turn_subject("d2"), "considered:chat-pay:d2", [
+        {"id": "proposal:pr-auto", "by": "claude", "status": "unchecked", "label": CITE_LABEL},
+        {"id": "POL-999", "by": "claude", "status": "unverified", "label": UNKNOWN_LABEL}]),
+    "chat-pay:d4": consideration(_turn_subject("d4"), "considered:chat-pay:d4", []),
+    "chat-pay:d5": consideration(_turn_subject("d5"), "considered:chat-pay:d5", []),
+    "chat-pay:d6": consideration(_turn_subject("d6"), "considered:chat-pay:d6", []),
+    "chat-pay:d7": consideration(_turn_subject("d7"), "considered:chat-pay:d7", []),
+    "chat-pay:d8": consideration(_turn_subject("d8"), "considered:chat-pay:d8", []),
+    # r-pay-2's build step (ord 1) cited the rule; its understand step (ord 0) only considered it.
+    "r-pay-2:0": consideration({"kind": "unit", "run_id": "r-pay-2", "ord": 0, "attempt": 0}, "considered:r-pay-2:0:0", []),
+    "r-pay-2:1": consideration({"kind": "unit", "run_id": "r-pay-2", "ord": 1, "attempt": 0}, "considered:r-pay-2:1:0", [
+        {"id": "proposal:pr-auto", "by": "r-pay-2:u1", "status": "unchecked", "label": CITE_LABEL}]),
+}
+
+# GET /governance/rules under `steering_rules`: the landed rule (as crew's DC-S3 landing files it —
+# `source: chat`, project facet kept, `applies_to` empty = recall-only) and the global one.
+STEERING_RULES = [
+    {"id": "proposal:pr-auto", "rule_type": "policy", "statement": RULE_AUTO["statement"], "severity": "warn", "confidence": 0.9,
+     "targets": {"project": DECISION_PROJECT}, "provenance": {"source": "chat", "source_kinds": ["decision"]},
+     "steering_type": "development", "applies_to": [], "excludes": [], "weight": 1.0, "created_at": DEC_T0 // 1000 + 60},
+    {"id": "PAT-100", "rule_type": "pattern", "statement": RULE_GLOBAL["statement"], "severity": "info", "confidence": 0.8,
+     "targets": {}, "provenance": {"source": "ui", "source_kinds": ["doc"]},
+     "steering_type": "development", "applies_to": [], "excludes": [], "weight": 1.0},
+]
+
 # The operator turns chat-pay gains under `decisions` (after its existing t1 turn + notes), each with
 # its `decisions` record — except d7, whose record the journey pushes as a live chatDecisions frame.
 DECISION_TURN_WORDS = [(d["origin"]["turn_id"], d["origin"]["words"]) for d in DECISIONS.values()]
@@ -866,8 +925,12 @@ def decision_turns() -> list:
             # B6: the seat proposed; "lets do it" approved. The proposal came the turn before.
             rows.insert(len(rows) - 1, {"at": at - 20_000, "turnId": "d3b", "kind": "seat", "cliKey": "claude", "ok": True, "usage": None,
                                         "text": "I’ll treat every copy-only change as tests-only from now on — OK?"})
+        # DC-S8 (B10): the d2 reply cites the in-force rule and one invented id, so its considered
+        # line reads "cited 1 (unchecked) · 1 unverified citation" (see CONSIDERATIONS below).
+        reply = ("Noted — I’ll keep [rule:proposal:pr-auto] in mind, and [rule:POL-999] says the same." if turn == "d2"
+                 else "Noted." if turn != "d3" else "Skipping it.")
         rows.append({"at": at + 5_000, "turnId": turn, "kind": "seat", "cliKey": "claude", "ok": True, "usage": None,
-                     "text": "Noted." if turn != "d3" else "Skipping it."})
+                     "text": reply})
         if turn != "d7":
             items = [d for d in DECISIONS.values() if d["origin"]["turn_id"] == turn]
             rows.append({"at": at + 9_000, "turnId": turn, "kind": "decisions", "items": items})
@@ -4417,7 +4480,46 @@ class W2Handler(SimpleHTTPRequestHandler):
                     ws_chat_queues.remove(my_chat_queue)
         self.close_connection = True
 
+    def _considered_route(self, path: str) -> bool:
+        """DC-S8 reads on crew's DC-S7 wire: GET /chats/:id/turns/:turnId/considered and
+        GET /runs/:id/units/:unitKey/considered (operator+), and GET /governance/rules under
+        `steering_rules`. Off: the standing unknown-route 404 (a daemon predating them)."""
+        with state_lock:
+            on, rules_on = state["decisions"], state["steering_rules"]
+        if path == "/api/v1/governance/rules":
+            if not rules_on:
+                return False
+            self._json(200, {"rules": json.loads(json.dumps(STEERING_RULES))})
+            return True
+        m = re.fullmatch(r"/api/v1/chats/([^/]+)/turns/([^/]+)/considered", path)
+        if m:
+            if not on:
+                self._json(404, {"message": f"Route GET:{path} not found", "error": "Not Found", "statusCode": 404})
+                return True
+            cid, turn = urllib.parse.unquote(m.group(1)), urllib.parse.unquote(m.group(2))
+            c = CONSIDERATIONS.get(f"{cid}:{turn}")
+            if c is None:
+                self._json(404, {"error": f"chat {cid} holds no turn {turn}"})
+            else:
+                self._json(200, c)
+            return True
+        m = re.fullmatch(r"/api/v1/runs/([^/]+)/units/([^/]+)/considered", path)
+        if m:
+            if not on:
+                self._json(404, {"message": f"Route GET:{path} not found", "error": "Not Found", "statusCode": 404})
+                return True
+            rid, key = urllib.parse.unquote(m.group(1)), urllib.parse.unquote(m.group(2))
+            c = CONSIDERATIONS.get(f"{rid}:{key}")
+            if c is None:
+                self._json(404, {"error": f"run {rid} has no unit '{key}'"})
+            else:
+                self._json(200, c)
+            return True
+        return False
+
     def _api(self, path: str) -> bool:
+        if self._considered_route(path):
+            return True
         # Behaviour 10: GET /standing-orders. Switch off: fall through to the ideas 7/8/13 handler
         # below (its orders, or the unknown-route 404 of a daemon predating the surface).
         if path == "/api/v1/standing-orders":
@@ -6136,11 +6238,15 @@ class W2Handler(SimpleHTTPRequestHandler):
             q = urllib.parse.parse_qs(url.query)
             want_state = (q.get("state") or [None])[0]
             want_chat = (q.get("chat") or [None])[0]
+            want_project = (q.get("project") or [None])[0]
+            want_run = (q.get("run") or [None])[0]
             since = int((q.get("since") or ["0"])[0] or 0)
             with decisions_lock:
                 rows = [d for d in DECISIONS.values()
                         if (want_state is None or d["state"] == want_state)
                         and (want_chat is None or d["origin"].get("chat_id") == want_chat)
+                        and (want_project is None or d["project_id"] == want_project)
+                        and (want_run is None or d["origin"].get("run_id") == want_run)
                         and d["at"] >= since]
             rows.sort(key=lambda d: -d["at"])
             self._json(200, {"decisions": rows, "mode": mode})
