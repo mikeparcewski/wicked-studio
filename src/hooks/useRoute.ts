@@ -48,6 +48,11 @@ import { announceNavigateAway, inAppEntryState, isInAppEntry, replacedEntryState
 // id rides in `artifactId` (NOT `runId`: no run-selected machinery, no legacy shell redirect).
 export type Panel = 'home' | 'runs' | 'run-events' | 'run-files' | 'workflows' | 'skills' | 'mcp' | 'steering' | 'testing' | 'repos' | 'system' | 'theme' | 'chats' | 'work' | 'repo-detail' | 'projects' | 'project-detail' | 'execute' | 'vibe' | 'demo' | 'session' | 'editors' | 'watch' | 'not-found';
 
+/** Every panel, exhaustively (the compile-time check below fails when the union grows without it). */
+export const ALL_PANELS = ['home', 'runs', 'run-events', 'run-files', 'workflows', 'skills', 'mcp', 'steering', 'testing', 'repos', 'system', 'theme', 'chats', 'work', 'repo-detail', 'projects', 'project-detail', 'execute', 'vibe', 'demo', 'session', 'editors', 'watch', 'not-found'] as const satisfies readonly Panel[];
+type MissingPanel = Exclude<Panel, (typeof ALL_PANELS)[number]>;
+export const PANELS_EXHAUSTIVE: MissingPanel extends never ? true : MissingPanel = true;
+
 const PANELS: Panel[] = ['runs', 'workflows', 'skills', 'mcp', 'repos', 'system', 'theme', 'chats', 'work', 'repo-detail', 'projects', 'project-detail', 'execute', 'vibe', 'demo', 'watch'];
 
 /**
@@ -63,7 +68,7 @@ function asMode(s: string): Mode | null {
   return (MODES as readonly string[]).includes(s) ? (s as Mode) : null;
 }
 
-interface Route {
+export interface Route {
   panel: Panel;
   /** Non-null only when panel === 'runs' and a run is selected. */
   runId: string | null;
@@ -381,7 +386,7 @@ function parse(pathname: string): Route {
 export type Navigate = (path: string, opts?: { replace?: boolean }) => void;
 
 /** The pure address → route parse (tests and the palette's route coverage read it). */
-export function parseRoute(pathname: string): Pick<Route, 'panel'> & Partial<Route> {
+export function parseRoute(pathname: string): Route {
   return parse(pathname);
 }
 

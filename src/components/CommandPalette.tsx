@@ -10,6 +10,10 @@ import { launchPath } from '../hooks/ambientProject.js';
 import { modePath, projectPath, type Navigate } from '../hooks/useRoute.js';
 import type { ShortcutEntry } from '../hooks/useGlobalShortcuts.js';
 import { useMembershipStore } from '../store/membership.js';
+import { useLiveChatsStore } from '../store/liveChats.js';
+import { useCampaignsStore } from '../store/campaigns.js';
+import { useCapabilities } from '../store/capabilities.js';
+import { routeTargets } from '../palette/routeTargets.js';
 import { useProjectsStore } from '../store/projects.js';
 import { useGateStore } from '../store/gates.js';
 import { toggledTheme, useAppearanceStore } from '../theming/appearance.js';
@@ -35,7 +39,7 @@ const TERMINAL: ReadonlySet<string> = new Set(['completed', 'cancelled', 'failed
 const ACTIVE: ReadonlySet<string> = new Set(['planning', 'distributing', 'executing']);
 
 type Group =
-  | 'runs' | 'projects' | 'repos' | 'verbs'
+  | 'runs' | 'projects' | 'repos' | 'verbs' | 'go'
   // §5.2 search mode's corpora — grouped exactly as the corpus label names them.
   | 'search-runs' | 'search-gates' | 'search-decisions' | 'search-repos' | 'search-prompts';
 
@@ -44,6 +48,7 @@ const GROUP_LABEL: Record<Group, string> = {
   projects: 'PROJECTS',
   repos: 'REPOSITORIES',
   verbs: 'VERBS',
+  go: 'GO TO',
   'search-runs': 'RUNS',
   'search-gates': 'OPEN GATES',
   'search-decisions': 'DECISIONS',
@@ -267,6 +272,7 @@ export function CommandPalette({
     if (q.startsWith('p:')) return { scope: 'projects' as const, needle: q.slice(2).trim() };
     if (q.startsWith('run:')) return { scope: 'runs' as const, needle: q.slice(4).trim() };
     if (q.startsWith('repo:')) return { scope: 'repos' as const, needle: q.slice(5).trim() };
+    if (q.startsWith('go:')) return { scope: 'go' as const, needle: q.slice(3).trim() };
     return { scope: 'all' as const, needle: q.trim() };
   }, [query]);
 
@@ -286,6 +292,10 @@ export function CommandPalette({
   // §7.5 (slice Y2): the attach clock for run rows — the mirror the board
   // model already writes; a store read, never a fetch (§1.4's budget holds).
   const attachedAtByRun = useMembershipStore((s) => s.attachedAtByRun);
+  const projectIdByRun = useMembershipStore((s) => s.projectIdByRun);
+  const liveChats = useLiveChatsStore((s) => s.sessions);
+  const campaigns = useCampaignsStore((s) => s.campaigns);
+  const runChatId = useCapabilities((s) => s.runChatId);
   useEffect(() => {
     if (!searchMode) {
       setShowWhy(false);
@@ -304,6 +314,16 @@ export function CommandPalette({
     }
     return () => { cancelled = true; };
   }, [searchMode, projectId]);
+
+  // GO TO's rows, rebuilt only when what they are made of changes — never per keystroke.
+  const goTargets = useMemo(() => routeTargets({
+    projects: projects.filter((p) => p.status === 'active'),
+    runs,
+    projectIdByRun,
+    chats: Object.entries(liveChats).map(([id, c]) => ({ id, title: c.title ?? 'a chat' })),
+    campaigns: campaigns.map((c) => ({ id: c.id, label: c.def?.name ?? c.id })),
+    runChatId,
+  }), [projects, runs, projectIdByRun, liveChats, campaigns, runChatId]);
 
   const rows = useMemo(() => {
     // ── §5.2 search mode: the honest v1 corpus, grouped as the label names it.
@@ -559,12 +579,21 @@ export function CommandPalette({
       entries.push({ id: `verb-${v.name}`, group: 'verbs', label: v.name, context: 'verb', action: v.action, rank: i });
     });
 
+    // GO TO — every route the router serves, so each is reachable by ⌘K under every skin (the skin
+    // contract; COVERAGE.md finding 1). The destinations, then per held item for parametric ones.
+    // With nothing typed only the destinations list; the per-item rows (a run's events, a
+    // project's chronicle, …) are found by a word, so the open palette stays short (codex).
+    goTargets.forEach((t, i) => {
+      if (needle === '' && t.perItem) return;
+      entries.push({ id: `go-${t.href}`, group: 'go', label: t.label, context: t.href, href: t.href, rank: i });
+    });
+
     // Scope, fuzzy-rank, group (§1.3's group order; §1.5's scorer).
     const scoped = scope === 'all' ? entries : entries.filter((en) => en.group === scope);
     const matched = scoped
       .map((en) => ({ en, m: fuzzyMatch(needle, en.label) }))
       .filter((x): x is { en: Entry; m: { score: number; positions: number[] } } => x.m !== null);
-    const order: Group[] = ['runs', 'projects', 'repos', 'verbs'];
+    const order: Group[] = ['runs', 'projects', 'repos', 'verbs', 'go'];
     matched.sort((a, b) => {
       const g = order.indexOf(a.en.group) - order.indexOf(b.en.group);
       if (g !== 0) return g;
@@ -588,7 +617,7 @@ export function CommandPalette({
       return [...targeted, ...matched];
     }
     return matched;
-  }, [runs, projects, repos, gates, claims, prompts, projectNameByRun, attachedAtByRun, scope, needle, runPath, navigate, projectId, selectedRun, onKill]);
+  }, [runs, projects, repos, gates, claims, prompts, projectNameByRun, attachedAtByRun, goTargets, scope, needle, runPath, navigate, projectId, selectedRun, onKill]);
 
   // Clamp the selection whenever the row set changes.
   const selIx = Math.min(sel, Math.max(0, rows.length - 1));
@@ -673,7 +702,7 @@ export function CommandPalette({
                   setSel(0);
                 }}
                 onKeyDown={onKeyDown}
-                placeholder="type to search…  p: run: repo: > ?"
+                placeholder="type to search…  p: run: repo: go: > ?"
                 aria-label="Command palette search"
                 className="flex-1 bg-transparent outline-none"
                 style={{
