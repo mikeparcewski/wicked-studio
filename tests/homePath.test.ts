@@ -69,6 +69,7 @@ describe('displayText — every home path inside prose reads as ~', () => {
     expect(displayText('see /tmp/w2/studio-api/.codegraph and src/Users/list.ts')).toBe('see /tmp/w2/studio-api/.codegraph and src/Users/list.ts');
     expect(displayText('the /home of the brave')).toBe('the /home of the brave');
     expect(displayText('already ~/x and /var/root/y')).toBe('already ~/x and /var/root/y');
+    expect(displayText('cache at /tmp/(cache)/home/alice/file and /srv/[a]/Users/b')).toBe('cache at /tmp/(cache)/home/alice/file and /srv/[a]/Users/b');
     expect(displayText('')).toBe('');
   });
 });
