@@ -315,6 +315,16 @@ export function CommandPalette({
     return () => { cancelled = true; };
   }, [searchMode, projectId]);
 
+  // GO TO's rows, rebuilt only when what they are made of changes — never per keystroke.
+  const goTargets = useMemo(() => routeTargets({
+    projects: projects.filter((p) => p.status === 'active'),
+    runs,
+    projectIdByRun,
+    chats: Object.entries(liveChats).map(([id, c]) => ({ id, title: c.title ?? 'a chat' })),
+    campaigns: campaigns.map((c) => ({ id: c.id, label: c.def?.name ?? c.id })),
+    runChatId,
+  }), [projects, runs, projectIdByRun, liveChats, campaigns, runChatId]);
+
   const rows = useMemo(() => {
     // ── §5.2 search mode: the honest v1 corpus, grouped as the label names it.
     // Substring on prose (problems, prompts, claim subjects), fuzzy on names
@@ -571,14 +581,10 @@ export function CommandPalette({
 
     // GO TO — every route the router serves, so each is reachable by ⌘K under every skin (the skin
     // contract; COVERAGE.md finding 1). The destinations, then per held item for parametric ones.
-    routeTargets({
-      projects: projects.filter((p) => p.status === 'active'),
-      runs,
-      projectIdByRun,
-      chats: Object.entries(liveChats).map(([id, c]) => ({ id, title: c.title ?? 'a chat' })),
-      campaigns: campaigns.map((c) => ({ id: c.id, label: c.def?.name ?? c.id })),
-      runChatId,
-    }).forEach((t, i) => {
+    // With nothing typed only the destinations list; the per-item rows (a run's events, a
+    // project's chronicle, …) are found by a word, so the open palette stays short (codex).
+    goTargets.forEach((t, i) => {
+      if (needle === '' && t.perItem) return;
       entries.push({ id: `go-${t.href}`, group: 'go', label: t.label, context: t.href, href: t.href, rank: i });
     });
 
@@ -611,7 +617,7 @@ export function CommandPalette({
       return [...targeted, ...matched];
     }
     return matched;
-  }, [runs, projects, repos, gates, claims, prompts, projectNameByRun, attachedAtByRun, projectIdByRun, liveChats, campaigns, runChatId, scope, needle, runPath, navigate, projectId, selectedRun, onKill]);
+  }, [runs, projects, repos, gates, claims, prompts, projectNameByRun, attachedAtByRun, goTargets, scope, needle, runPath, navigate, projectId, selectedRun, onKill]);
 
   // Clamp the selection whenever the row set changes.
   const selIx = Math.min(sel, Math.max(0, rows.length - 1));

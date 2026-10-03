@@ -29,6 +29,13 @@ describe('the router, enumerated', () => {
     expect(new Set(ROUTE_SHAPES.map((s) => s.id)).size).toBe(ROUTE_SHAPES.length);
   });
 
+  it('each example matches exactly one shape (no two shapes claim one address)', () => {
+    for (const s of ROUTE_SHAPES) {
+      const r = parseRoute(s.example);
+      expect(ROUTE_SHAPES.filter((o) => o.is(r)).map((o) => o.id), s.example).toStrictEqual([s.id]);
+    }
+  });
+
   it('every shape has a ⌘K entry (GO TO, or the run / project / repo groups) whose address parses back to it', () => {
     const targets = routeTargets(DATA);
     for (const s of ROUTE_SHAPES) {
@@ -56,6 +63,35 @@ describe('the palette carries them', () => {
     expect(rows[0]!.getAttribute('href')).toBe('/system');
     fireEvent.keyDown(input, { key: 'Enter' });
     expect(navigate).toHaveBeenCalledWith('/system');
+    vi.unstubAllGlobals();
+  });
+
+  it('the run, project and repo groups carry the shapes GO TO leaves to them', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(new Response('{"repos":[{"id":"x1","name":"api","root_path":"/x","default_branch":"main","registered_at":1}]}', { status: 200, headers: { 'content-type': 'application/json' } }))));
+    const { clearPaletteRepoCache, CommandPalette } = await import('../src/components/CommandPalette.js');
+    const { useProjectsStore } = await import('../src/store/projects.js');
+    clearPaletteRepoCache();
+    useProjectsStore.setState({ projects: [{ id: 'kes', name: 'Kestrel', description: null, status: 'active', scope: 'project:kes', created_at: 1, updated_at: 1 }] });
+    render(<CommandPalette open onClose={() => {}} seed="" runs={DATA.runs} navigate={() => {}} runPath={(id) => `/runs/${id}`} projectId={null} selectedRun={null} onKill={() => {}} />);
+    await waitFor(() => expect(screen.getAllByTestId('palette-row').some((r) => r.dataset.group === 'repos')).toBe(true));
+    const hrefs = screen.getAllByTestId('palette-row').filter((r) => ['runs', 'projects', 'repos'].includes(r.dataset.group ?? '')).map((r) => r.getAttribute('href') ?? '');
+    for (const id of REACHED_BY_OTHER_GROUPS) {
+      const shape = ROUTE_SHAPES.find((s) => s.id === id)!;
+      expect(hrefs.some((h) => shape.is(parseRoute(h.split('#')[0]!))), id).toBe(true);
+    }
+    vi.unstubAllGlobals();
+  });
+
+  it('with nothing typed, GO TO lists the destinations only; a word finds the per-item rows', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(new Response('{"repos":[]}', { status: 200, headers: { 'content-type': 'application/json' } }))));
+    const { CommandPalette } = await import('../src/components/CommandPalette.js');
+    render(<CommandPalette open onClose={() => {}} seed="" runs={DATA.runs} navigate={() => {}} runPath={(id) => `/runs/${id}`} projectId={null} selectedRun={null} onKill={() => {}} />);
+    const input = screen.getByTestId('palette-input');
+    fireEvent.change(input, { target: { value: 'go:' } });
+    const empty = screen.getAllByTestId('palette-row').map((r) => r.getAttribute('href'));
+    expect(empty).not.toContain('/runs/r1/events');
+    fireEvent.change(input, { target: { value: 'go: double charge raw' } });
+    await waitFor(() => expect(screen.getAllByTestId('palette-row').map((r) => r.getAttribute('href'))).toContain('/runs/r1/events'));
     vi.unstubAllGlobals();
   });
 });

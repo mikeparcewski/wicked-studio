@@ -103,6 +103,8 @@ export interface RouteTarget {
   shape: string;
   label: string;
   href: string;
+  /** A row for one held item (a run, a project, a chat, a campaign), not a fixed destination. */
+  perItem?: true;
 }
 
 /** What the palette already holds (stores and props — never a fetch). */
@@ -121,6 +123,7 @@ export interface RouteTargetData {
 /** Every "Go to" row: the parameterless destinations, then per item for the parametric shapes. */
 export function routeTargets(d: RouteTargetData): RouteTarget[] {
   const out: RouteTarget[] = [...DESTINATIONS];
+  const at = out.length;
   const seenSessions = new Set<string>();
   for (const v of d.runs) {
     const id = v.session.id;
@@ -154,7 +157,7 @@ export function routeTargets(d: RouteTargetData): RouteTarget[] {
   for (const c of d.campaigns) {
     out.push({ shape: 'testing-campaign', label: `${c.label} · campaign`, href: `/testing/campaigns/${encodeURIComponent(c.id)}` });
   }
-  return out;
+  return out.map((t, i) => (i < at ? t : { ...t, perItem: true as const }));
 }
 
 /**

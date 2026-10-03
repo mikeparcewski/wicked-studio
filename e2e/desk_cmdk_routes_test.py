@@ -62,6 +62,10 @@ with sync_playwright() as p:
     page.add_init_script(
         "document.addEventListener('DOMContentLoaded', () => { const s = document.createElement('style'); "
         f"s.textContent = {json.dumps(HIDE_GATE_TOASTS)}; document.head.appendChild(s); }});")
+    # Every address the app pushes, in order: proves the row's own address was navigated to,
+    # whatever the page then does (a files view on a daemon without the files surface goes Back).
+    page.add_init_script("window.__nav = []; const _p = history.pushState.bind(history); "
+                         "history.pushState = (s, t, u) => { window.__nav.push(String(u)); return _p(s, t, u); };")
     set_fixture(origin, wave1=True, team_plan=True)
     page.goto(f"{origin}/", wait_until="networkidle")
     page.get_by_test_id("desk").wait_for(state="visible", timeout=15000)
@@ -74,37 +78,53 @@ with sync_playwright() as p:
         page.get_by_test_id("palette-input").fill(query)
         page.wait_for_timeout(150)
 
-    # ── 1. the GO TO group ──────────────────────────────────────────────────────────
+    # ── 1. the GO TO group (a word lists the per-item rows too) ─────────────────────
     open_palette("go:")
+    dest_rows = page.get_by_test_id("palette-row").count()
+    page.keyboard.press("Escape")
+    open_palette("go: ·")
     rows = page.get_by_test_id("palette-row").evaluate_all(
         "els => els.map(e => ({ group: e.dataset.group, href: e.getAttribute('href'), label: e.innerText.split('\\n')[0] }))")
     page.screenshot(path=str(SHOTS / "desk-cmdk-go.png"))
     page.keyboard.press("Escape")
     groups = {r["group"] for r in rows}
-    check("go-group", groups == {"go"} and len(rows) >= 24, groups=sorted(groups), rows=len(rows))
+    check("go-group", groups == {"go"} and dest_rows == 24 and len(rows) > 24, groups=sorted(groups), destinations=dest_rows, rows=len(rows))
 
     def reach(href: str, label: str) -> dict:
         open_palette(f"go: {label}")
-        hit = page.locator(f'[data-testid="palette-row"][href="{href}"]').first
-        try:
-            hit.wait_for(state="visible", timeout=3000)
-        except Exception:  # noqa: BLE001
+        # Reached by the keyboard, as an operator does: ↓ to the row, Enter.
+        hrefs = page.get_by_test_id("palette-row").evaluate_all("els => els.map(e => e.getAttribute('href'))")
+        if href not in hrefs:
             page.keyboard.press("Escape")
             return {"href": href, "label": label, "ok": False, "why": "row not found by its label"}
-        hit.click()
+        for _ in range(hrefs.index(href)):
+            page.keyboard.press("ArrowDown")
+        selected = page.locator('[data-testid="palette-row"][data-selected="true"]').get_attribute("href")
+        if selected != href:
+            page.keyboard.press("Escape")
+            return {"href": href, "label": label, "ok": False, "why": f"selection landed on {selected}"}
+        before = page.evaluate("() => window.__nav.length")
+        page.keyboard.press("Enter")
         page.wait_for_timeout(500)
         got = urllib.parse.urlparse(page.url)
         path = got.path + (f"?{got.query}" if got.query else "")
         dead = page.get_by_test_id("not-found").count() > 0
-        # A redirect may canonicalise the address (e.g. a run under its project); the row's own
-        # address must have been the one navigated to first, and the page must not be a dead one.
-        return {"href": href, "label": label, "ok": not dead, "landed": path}
+        # The row's own address must be the first one pushed, so a broken route that bounces
+        # somewhere valid still fails (codex); then the page must not be the not-found page.
+        pushed = page.evaluate("n => window.__nav.slice(n)", before)
+        first = urllib.parse.unquote(pushed[0]) if pushed else None
+        went = first == urllib.parse.unquote(href)
+        return {"href": href, "label": label, "ok": not dead and went, "pushed": pushed[:3], "landed": path}
 
     # ── 2. every parameterless destination ──────────────────────────────────────────
     FIXED = {"/", "/watch", "/work", "/chats", "/chat/new", "/projects", "/execute", "/vibe", "/demo", "/steering/dashboard",
              "/steering/policies", "/steering/memories", "/testing/campaigns", "/testing/evals", "/repos", "/repos/new",
              "/runs/new", "/workflows", "/skills", "/mcp", "/system", "/theme", "/editors/dev", "/editors/conformance"}
-    fixed = [r for r in rows if r["href"] in FIXED]
+    open_palette("go:")
+    fixed = page.get_by_test_id("palette-row").evaluate_all(
+        "els => els.map(e => ({ href: e.getAttribute('href'), label: e.innerText.split('\\n')[0] }))")
+    page.keyboard.press("Escape")
+    fixed = [r for r in fixed if r["href"] in FIXED]
     missing_fixed = sorted(FIXED - {r["href"] for r in fixed})
     results = [reach(r["href"], r["label"]) for r in fixed]
     bad = [r for r in results if not r["ok"]]
@@ -120,7 +140,7 @@ with sync_playwright() as p:
                 picked[w] = r
     presults = [reach(r["href"], r["label"]) for r in picked.values()]
     pbad = [r for r in presults if not r["ok"]]
-    check("parametric", not pbad and len(presults) >= 6, reached=[r["href"] for r in presults], bad=pbad)
+    check("parametric", not pbad and sorted(picked) == sorted(want), reached=[r["href"] for r in presults], bad=pbad)
 
     check("no-errors", not errors, errors=errors[:5])
     browser.close()
