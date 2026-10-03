@@ -19,6 +19,8 @@ The wave-1 corpus with a SIMPLE gate waiting on b1 (unit 3), answered from its D
   cards     with the trust + gate-move corpus: the DELIVER gate (r-trust-deliver) and the
             ESCALATION gate (r-review) offer no Answer — their row opens the card — while the plain
             gate (b1) beside them can be answered in its row.
+  re-ask    studio#439: 1 queues Approve; mid-window the SAME ord is asked again (a new
+            `awaitingHuman`): NO POST, the notice says it was asked again, the row asks afresh.
   C3        a gate carrying `recommended: 0` preselects Approve (marked "suggested"), and Enter is
             STILL inert until the operator moves.
 
@@ -213,6 +215,25 @@ with sync_playwright() as p:
               and not rows.get("gate:r-review", {}).get("answer")
               and rows.get("gate:b1", {}).get("answer") is True, rows=rows)
         page.screenshot(path=str(SHOTS / "desk-answer-cards.png"))
+        page.close()
+
+        # ── studio#439: the SAME ord asked again mid-window is a new gate ──────────────
+        page = desk(browser)
+        row = open_row(page)
+        page.keyboard.press("1")
+        page.get_by_test_id("undo-toast").wait_for(state="visible", timeout=3000)
+        pressed = time.monotonic()
+        page.wait_for_timeout(2500)
+        set_fixture(origin, extra_frames=[{"type": "awaitingHuman", "session": "b1", "ord": 3,
+                                           "prompt": "Approve unit 3 before it runs: build"}])
+        page.wait_for_timeout(max(0, int((pressed + 6.5 - time.monotonic()) * 1000)))
+        afresh = page.locator(ROW).locator('[data-testid="need-answer"]').count() == 1 \
+            and page.locator(ROW).locator('[data-testid="need-chosen"]').count() == 0
+        page.screenshot(path=str(SHOTS / "desk-answer-reask.png"))
+        check("reask-notice-and-asks-afresh", "was asked again" in notice(page) and afresh,
+              notice=notice(page), afresh=afresh)
+        page.wait_for_timeout(max(0, int((pressed + 12.0 - time.monotonic()) * 1000)))
+        check("reask-nothing-sent", len(server_posts(origin)) == 0, server=len(server_posts(origin)))
         page.close()
 
         # ── C3: a recommendation preselects, Enter still waits for a move ─────────────
