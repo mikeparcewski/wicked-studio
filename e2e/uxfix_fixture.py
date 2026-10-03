@@ -715,6 +715,11 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
 state_lock = threading.Lock()
 # Idea 9: every POST /governance/rules body the fixture received (GET /__fixture/rule-posts).
 rule_post_log: list = []
+# studio#446: every POST /runs body the sessions corpus received (GET /__fixture/launch-posts), and
+# the runs those launches minted — they join the sessions corpus, carrying `chat_id` from the body's
+# `chatId` when `run_chat_id` is on (crew stamps it the same way). Reset with `reset_gate_posts`.
+session_launch_log: list = []
+session_launched: list = []
 # Wave 2a: every POST /runs/:id/gate the fixture received (read over GET /__fixture/gate-posts).
 gate_post_log: list = []
 # Every POST /runs/:id/inject (a message to the team on a live run; GET /__fixture/inject-posts).
@@ -1215,7 +1220,9 @@ def reel_team(rid: str) -> dict | None:
 
 
 SESSION_CHATS = {
-    "chat-pay": {"chatId": "chat-pay", "seats": ["claude"], "scope": {"kind": "none", "repos": [], "cwd": "/w/chat-pay"},
+    "chat-pay": {"chatId": "chat-pay", "seats": ["claude"], "scope": {"kind": "none", "repos": [], "cwd": "/w/chat-pay",
+                                                  "graph": {"bound": False, "reason": "the chat names no project and no repos, so its seats see only their own scratch root and no code graph."},
+                                                  "dangling": []},
                  "refused": [], "messages": (
                      [{"at": (SESSION_T0 - 60) * 1000, "turnId": "t1", "kind": "user", "seats": ["claude"],
                        "text": "fix the double charge on checkout, then show me"},
@@ -1226,7 +1233,9 @@ SESSION_CHATS = {
                          "text": f"Note {i + 1}: the retry handler and the webhook both post the charge."}
                         for i in range(14)])},
     "chat-gone": {"chatId": "chat-gone", "seats": [], "scope": None, "refused": None, "messages": []},
-    "chat-ship": {"chatId": "chat-ship", "seats": ["claude"], "scope": {"kind": "none", "repos": [], "cwd": "/w/chat-ship"},
+    "chat-ship": {"chatId": "chat-ship", "seats": ["claude"], "scope": {"kind": "none", "repos": [], "cwd": "/w/chat-ship",
+                                                  "graph": {"bound": False, "reason": "the chat names no project and no repos, so its seats see only their own scratch root and no code graph."},
+                                                  "dangling": []},
                   "refused": [], "messages": [
                       {"at": (SESSION_T0 + 2900) * 1000, "turnId": "s1", "kind": "user", "seats": ["claude"],
                        "text": "where does free shipping start?"},
@@ -3398,6 +3407,7 @@ def assemble_runs() -> list:
                 if not state["run_chat_id"]:
                     for r in extra:
                         r["session"].pop("chat_id", None)
+            extra = extra + json.loads(json.dumps(session_launched))
             runs = extra  # the sessions corpus stands alone: the rail shows exactly these
         if state["demo_runs"] and not state["no_runs"]:
             with demo_lock:
@@ -5394,6 +5404,10 @@ class W2Handler(SimpleHTTPRequestHandler):
         path = urllib.parse.urlparse(self.path).path
         # Wave 2a: the SERVER-side record of every gate decision that arrived —
         # the only witness for "closing the tab during the undo window sends nothing".
+        if path == "/__fixture/launch-posts":
+            with state_lock:
+                posts = list(session_launch_log)
+            return self._json(200, {"posts": posts})
         if path == "/__fixture/gate-posts":
             with state_lock:
                 posts = list(gate_post_log)
@@ -5519,6 +5533,8 @@ class W2Handler(SimpleHTTPRequestHandler):
             if body.get("reset_gate_posts"):
                 with state_lock:
                     gate_post_log.clear()
+                    session_launch_log.clear()
+                    session_launched.clear()
                     inject_post_log.clear()
             if body.get("reset_rule_posts"):
                 with state_lock:
@@ -5764,6 +5780,17 @@ class W2Handler(SimpleHTTPRequestHandler):
                     return self._json(400, {
                         "error": f"retryOf names an unknown run: {retry_of} — "
                                  "lineage must point at an existing run id"})
+            with state_lock:
+                sessions_on = state["sessions"]
+                chat_on = state["run_chat_id"]
+                if sessions_on:
+                    session_launch_log.append(body)
+                    rid = f"r-chat-launch-{len(session_launch_log)}"
+                    chat = body.get("chatId") if chat_on else None
+                    session_launched.append(_session_run(rid, "executing", body.get("problem", ""), chat,
+                                                         NOW0 // 1000, None, [("build", "build", "distributed")]))
+            if sessions_on:
+                return self._json(200, {"runId": rid})
             with state_lock:
                 project_dto_on = state["project_dto"]
                 if project_dto_on:

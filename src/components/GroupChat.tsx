@@ -1565,6 +1565,8 @@ export function GroupChat({
     const ambient = projectId ?? selectedProjectRef.current;
     setRetryPrefill({
       retryOf: null,
+      // studio#446: the run is this chat's — it lands in the chat's session (S6a).
+      chatId: chatId ?? null,
       problem: `${headline}\n\n---\n${transcript}`,
       clis: (() => {
         const answered = Object.entries(seats).filter(([, st]) => st === 'replied').map(([k]) => k);

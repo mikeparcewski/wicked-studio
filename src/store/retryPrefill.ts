@@ -32,6 +32,13 @@ export interface RetryPrefill {
    * 400), keeps `deliver: 'pr'`, and names the PR in the confirm line. `null`/absent = a plain launch.
    */
   revisesPr?: { number: number; title: string; headRef: string } | null;
+  /**
+   * The chat this launch is promoted from ("Continue in Build", studio#446): the composer sends it
+   * as `chatId` (`LaunchRunBody.chatId`, crew#619) ONLY when `GET /health.capabilities.chatIdOnLaunch`
+   * is `true` (an older strict launch schema 400s on the key). The run then carries `chat_id` and
+   * belongs to that chat's session (S6a). `null`/absent = not from a chat.
+   */
+  chatId?: string | null;
 }
 
 let pending: RetryPrefill | null = null;

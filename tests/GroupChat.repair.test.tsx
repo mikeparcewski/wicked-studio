@@ -224,6 +224,8 @@ describe('the conversation→action bridge (§7.9)', () => {
     const prefill = peekRetryPrefill();
     expect(prefill).not.toBeNull();
     expect(prefill!.retryOf).toBeNull(); // chats are not runs — no lineage claim
+    // studio#446: but the run is this chat's — the composer sends its id as `chatId`.
+    expect(prefill!.chatId).toBe(chatId());
     // headline is the first user question (≤72 chars) as the problem's first line
     expect(prefill!.problem).toMatch(/^sketch the uploader/);
     // transcript appears below the --- separator
