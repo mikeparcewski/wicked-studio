@@ -6,30 +6,38 @@
  *
  * Studio is a browser client and is never told the daemon host's home directory, so the three
  * desktop spellings are recognised by shape: `/Users/<name>` (macOS), `/home/<name>` and `/root`
- * (Linux), `<drive>:\Users\<name>` (Windows, either slash, any case). Anything else (`/tmp/…`,
- * `/var/…`, a repo-relative `src/App.tsx`, an already-abbreviated `~/…`) is left exactly as it is.
+ * (Linux), `<drive>:\Users\<name>` (Windows, either slash, `Users` in any case). Anything else
+ * (`/tmp/…`, `/var/…`, a repo-relative `src/App.tsx`, an already-abbreviated `~/…`) is left exactly
+ * as it is.
  *
- * `<name>` is an account's short name: dot-separated words with no slash, whitespace, quote,
- * bracket or `,;:` — so prose punctuation after a bare home directory ("in /home/alice, then")
- * stays outside the match. Known limit: a Windows account name with a space in it is not
- * recognised (one word is).
+ * `<name>` is an account's short name: dot-separated words holding no separator, whitespace, quote,
+ * bracket or sentence punctuation, so the punctuation after a bare home directory in prose ("in
+ * /home/alice, then") stays in the text. A Windows name may also hold apostrophes (O'Neil) and,
+ * when a separator follows it, spaces (`C:\Users\Jane Doe\repo`). Known limit: a bare Windows
+ * name with a space and nothing after it ("saved under C:\Users\Jane Doe") abbreviates its first
+ * word only — prose cannot tell where such a name ends.
  *
  * Pure functions; the hooks in `hooks/useHomePath.ts` bind them to the technical-details pref.
  */
 
-/** One word of an account name: no separator, whitespace, quote, bracket or prose punctuation. */
-const WORD = String.raw`[^\/\\\s"'\`()\[\]<>,;:.]+`;
-/** A Windows account name may hold an apostrophe (O'Neil); a POSIX one never does. */
-const WIN_WORD = String.raw`[^\/\\\s"\`()\[\]<>,;:.]+`;
+/** One run of name characters: no separator, whitespace, quote, bracket or sentence punctuation. */
+const RUN = String.raw`[^\/\\\s"'\`()\[\]<>,;:.!?]+`;
+/** A POSIX account name: dot-separated runs (`michael.parcewski`, `ci-runner_2`). */
+const NAME = String.raw`${RUN}(?:\.${RUN})*`;
+/** A Windows account name: runs joined by dots or apostrophes (`O'Neil`, `jane.doe`). */
+const WIN_NAME = String.raw`${RUN}(?:['.]${RUN})*`;
+/** A Windows name with spaces, only when a separator follows (so prose after a bare one is safe). */
+const WIN_SPACED = String.raw`${WIN_NAME}(?: ${WIN_NAME})+(?=[\\\/])`;
+const USERS = String.raw`[Uu][Ss][Ee][Rr][Ss]`;
 /** The three spellings of a home directory, at the start of a path. */
 const HOME_HEAD =
-  String.raw`(?:\/Users\/${WORD}(?:\.${WORD})*|\/home\/${WORD}(?:\.${WORD})*|\/root|[A-Za-z]:[\\\/][Uu]sers[\\\/]${WIN_WORD}(?:\.${WIN_WORD})*)`;
+  String.raw`(?:\/Users\/${NAME}|\/home\/${NAME}|\/root|[A-Za-z]:[\\\/]${USERS}[\\\/](?:${WIN_SPACED}|${WIN_NAME}))`;
 
 /** A path field: the home directory is the whole path, or is followed by a separator. */
 const PATH_RE = new RegExp(String.raw`^${HOME_HEAD}(?=$|[\\\/])`);
 /** In prose: starts at the text's start or after a character no path contains, and ends at the
- *  text's end, a separator, whitespace or prose punctuation (which stays in the text). */
-const TEXT_RE = new RegExp(String.raw`(^|[^A-Za-z0-9_.~\\\/-])${HOME_HEAD}(?=$|[\\\/\s"'\`()\[\]<>,;:.])`, 'g');
+ *  text's end, a separator, whitespace or punctuation (which stays in the text). */
+const TEXT_RE = new RegExp(String.raw`(^|[^A-Za-z0-9_.~\\\/-])${HOME_HEAD}(?=$|[\\\/\s"'\`()\[\]<>,;:.!?])`, 'g');
 
 /** One path as the daemon reports it → its display form (`~/…` when it is under a home directory). */
 export function displayPath(path: string): string {
