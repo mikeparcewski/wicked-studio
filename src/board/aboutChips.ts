@@ -27,12 +27,15 @@ export function quoteLabel(selected: string): string | null {
 }
 
 /**
- * Add a chip. A subject that is already there is not added twice; a project REPLACES any other
- * project (a message goes to one place).
+ * Add a chip. A subject that is already there is not added twice — it stays where it is and takes
+ * the newer words (an element picked again after its text changed is quoted as it reads now); a
+ * project REPLACES any other project (a message goes to one place).
  */
 export function addChip(chips: readonly AboutChip[], chip: AboutChip): AboutChip[] {
   if (chip.kind === 'project') return [...chips.filter((c) => c.kind !== 'project'), chip];
-  if (chips.some((c) => c.kind === 'about' && c.key === chip.key)) return [...chips];
+  if (chips.some((c) => c.kind === 'about' && c.key === chip.key)) {
+    return chips.map((c) => (c.kind === 'about' && c.key === chip.key ? chip : c));
+  }
   return [...chips, chip];
 }
 

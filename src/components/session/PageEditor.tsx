@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { getVersions, HeadMovedError, interactiveDocUrl, postEvent, postFork } from '../../api/interactive.js';
 import { editedLine, elementChip, notUndoneLine, undoneLine, type ArtifactSize } from '../../board/artifactMorph.js';
 import { overlayBox, type OverlayBox, type ScrollState } from '../../interactive/anchoring.js';
@@ -180,9 +181,18 @@ export function PageEditor({ projectId, docId, composerKey, size, onHead }: {
 
   // ── edit by touching ───────────────────────────────────────────────────────────────
   const beginEdit = (wid: string, typed: string | null): void => {
-    const before = inventory?.blocks[wid]?.text ?? '';
-    setEditing({ wid, value: typed ?? before, before });
-    requestAnimationFrame(() => { input.current?.focus(); if (typed === null) input.current?.select(); });
+    // Only an element the frame measured has a field to open over it.
+    if (inventory === null || inventory.widMap[wid] === undefined) return;
+    const before = inventory.blocks[wid]?.text ?? '';
+    // The field exists and holds the focus before this key event returns: the characters typed
+    // right behind it land in the field. Waiting for an animation frame left them on the handle,
+    // where each one restarted the edit and the text was lost.
+    flushSync(() => setEditing({ wid, value: typed ?? before, before }));
+    const field = input.current;
+    if (field === null) return;
+    field.focus();
+    if (typed === null) field.select();
+    else field.setSelectionRange(field.value.length, field.value.length);
   };
 
   const onHandleKey = (e: React.KeyboardEvent<HTMLDivElement>): void => {

@@ -15,15 +15,19 @@ Against the in-process fixture: a document created on project `notes`, a run bou
   3. POINT: in the pane, a click on the headline picks it (`page-selected-box[data-wid=headline]`)
      and makes it the subject of the next message — an "about: “…”" chip on the session composer.
   4. EDIT BY TOUCHING: typing on the picked headline opens the edit field prefilled with the typed
-     character; the new text + Enter lands ONE version (`page-line[data-kind=edited]`, version 2,
-     the frame shows the new headline) with Undo.
+     character AND focused in the same turn — proved with every animation frame held back, so the
+     characters typed right behind the first land in the field (never back on the page, where each
+     would restart the edit); the new text + Enter lands ONE version
+     (`page-line[data-kind=edited]`, version 2, the frame shows the new headline) with Undo.
   5. UNDO: Undo forks the page before the change as version 3 (`page-line[data-kind=undone]`), and
      the frame shows the original headline again.
   6. NOT UNDONE: after a second touch edit (version 4), a helper's version lands in between (a
      feedback batch posted straight to the bridge → version 5); Undo is refused — `409 head_moved`
      — and the line reads "Not undone … (version 5)"; the helper's text is what the frame shows.
-  7. TEXT, NOT MARKUP: typing `<b>x</b>` on the headline lands as those characters: the frame's
-     headline text is literally `<b>x</b>` and holds no <b> element.
+  7. TEXT, NOT MARKUP: the headline picked again makes no second chip — the one chip now quotes the
+     helper's text; Enter opens the field focused with that text selected (frames held back), and
+     typing `<b>x</b>` lands as those characters: the frame's headline text is literally `<b>x</b>`
+     and holds no <b> element.
   8. 0 page errors, no horizontal scroll.
 
 Captures: e2e/shots/desk-page-editor-*.png. Env: FEEDBACK_PORT (default 4358).
@@ -124,10 +128,19 @@ def wait_line(page, kind: str, step: str, timeout_ms: int = 20000) -> str:
         page.screenshot(path=str(SHOTS / f"desk-page-editor-{step}-timeout.png"))
         found = page.evaluate("""() => { const l = document.querySelector('[data-testid="page-line"]');
           const e = document.querySelector('[data-testid="page-editor"]');
+          const i = document.querySelector('[data-testid="page-edit-input"]');
           return { kind: l ? l.dataset.kind : null, text: l ? l.innerText : null, head: e ? e.dataset.head : null,
-                   pickable: e ? e.dataset.pickable : null, editing: !!document.querySelector('[data-testid="page-edit-input"]') }; }""")
+                   pickable: e ? e.dataset.pickable : null, field: i ? { value: i.value, focused: document.activeElement === i } : null }; }""")
         fail(step, {"why": f"no page-line[data-kind={kind}] within {timeout_ms} ms", "found": found})
     return page.get_by_test_id("page-line").inner_text()
+
+
+HOLD_FRAMES = """() => { if (window.__heldFrames) return; window.__heldFrames = []; window.__raf = window.requestAnimationFrame;
+  window.requestAnimationFrame = (cb) => { window.__heldFrames.push(cb); return 0; }; }"""
+RELEASE_FRAMES = """() => { if (!window.__heldFrames) return; const held = window.__heldFrames; window.requestAnimationFrame = window.__raf;
+  window.__heldFrames = null; for (const cb of held) window.requestAnimationFrame(cb); }"""
+EDIT_FIELD = """() => { const i = document.querySelector('[data-testid="page-edit-input"]');
+  return i ? { value: i.value, focused: document.activeElement === i } : null; }"""
 
 
 def wait_headline(page, text: str, timeout_ms: int = 10000) -> dict:
@@ -206,17 +219,22 @@ with sync_playwright() as p:
     check("point", sel == "headline" and any(c["key"] == f"el:{DOC}/headline" and "Q3 was a quarter" in c["text"] for c in chips), selected=sel, chips=chips)
 
     # ── 4. edit by touching: type on the headline → one version ─────────────────────
+    # No animation frame fires while the text is typed: the field must hold the keys on its own.
+    page.evaluate(HOLD_FRAMES)
     page.keyboard.type("Q")
-    page.get_by_test_id("page-edit-input").wait_for(state="visible", timeout=5000)
-    prefilled = page.get_by_test_id("page-edit-input").input_value()
+    first = page.evaluate(EDIT_FIELD)
     page.keyboard.type("3: revenue up 18%")
+    typed = page.evaluate(EDIT_FIELD)
+    page.evaluate(RELEASE_FRAMES)
+    check("type-behind", first == {"value": "Q", "focused": True} and typed == {"value": "Q3: revenue up 18%", "focused": True},
+          after_first_key=first, after_the_rest=typed)
     page.keyboard.press("Enter")
     line1 = wait_line(page, "edited", "edit-by-touching")
     after1 = wait_headline(page, "Q3: revenue up 18%")
     v1 = page.evaluate(ARTIFACT)["version"]
     page.screenshot(path=str(SHOTS / "desk-page-editor-edited.png"))
-    check("edit-by-touching", prefilled == "Q" and "version 2" in line1 and "headline" in line1 and after1.get("text") == "Q3: revenue up 18%"
-          and "version 2" in v1, prefilled=prefilled, line=line1, headline=after1, version=v1)
+    check("edit-by-touching", "version 2" in line1 and "headline" in line1 and after1.get("text") == "Q3: revenue up 18%"
+          and "version 2" in v1, line=line1, headline=after1, version=v1)
 
     # ── 5. undo → version 3 is the page before ───────────────────────────────────────
     page.get_by_test_id("page-undo").click()
@@ -252,10 +270,18 @@ with sync_playwright() as p:
     wait_pickable(page, 5)
     frame.locator('[data-wid="headline"]').click()
     page.get_by_test_id("page-selected-box").wait_for(state="visible", timeout=5000)
+    rechips = page.evaluate("""() => [...document.querySelectorAll('[data-testid="composer-chip"]')]
+      .map(c => ({ key: c.dataset.key, text: c.innerText }))""")
+    check("chip-follows", len(rechips) == 1 and rechips[0]["key"] == f"el:{DOC}/headline" and "Q3, by the helper" in rechips[0]["text"], chips=rechips)
+    # Enter opens the field with the element's text selected — again with the frames held back.
+    page.evaluate(HOLD_FRAMES)
     page.keyboard.press("Enter")
-    page.get_by_test_id("page-edit-input").wait_for(state="visible", timeout=5000)
-    page.keyboard.press("ControlOrMeta+a")
+    opened = page.evaluate(EDIT_FIELD)
     page.keyboard.type("<b>x</b>")
+    replaced = page.evaluate(EDIT_FIELD)
+    page.evaluate(RELEASE_FRAMES)
+    check("enter-selects", opened == {"value": "Q3, by the helper", "focused": True} and replaced == {"value": "<b>x</b>", "focused": True},
+          after_enter=opened, after_typing=replaced)
     page.keyboard.press("Enter")
     wait_line(page, "edited", "text-not-markup")
     after5 = wait_headline(page, "<b>x</b>")

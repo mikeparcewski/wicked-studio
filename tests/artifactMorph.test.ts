@@ -1,5 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
+import { addChip } from '../src/board/aboutChips.js';
 import {
   editedLine, elementChip, grow, notUndoneLine, shrink, undoneLine,
 } from '../src/board/artifactMorph.js';
@@ -34,6 +35,12 @@ describe('elementChip — the picked element as an about-chip', () => {
   });
   it('is keyed by the document too, so the same anchor in two pages makes two chips', () => {
     expect(elementChip('headline', 'x', 'offsite-plan').key).toBe('el:offsite-plan/headline');
+  });
+  it('picked again after its text changed, the one chip quotes the element as it reads now', () => {
+    const other = { kind: 'about' as const, key: 'q:pay', label: '“the Pay button”' };
+    const first = addChip([elementChip('headline', 'Q3 was a quarter', 'offsite-plan'), other], elementChip('headline', 'Q3, by the helper', 'offsite-plan'));
+    expect(first.map((c) => c.key)).toStrictEqual(['el:offsite-plan/headline', 'q:pay']);
+    expect(first[0]!.label).toBe('“Q3, by the helper”');
   });
   it('falls back to the anchor id when the element has no text', () => {
     expect(elementChip('hero-image', '').label).toBe('hero-image');
