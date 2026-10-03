@@ -754,6 +754,10 @@ cancel_post_log: list = []
 gate_post_log: list = []
 # Every POST /runs/:id/inject (a message to the team on a live run; GET /__fixture/inject-posts).
 inject_post_log: list = []
+# S9: every `feedback.submitted` batch the bridge received — {pid, doc, version, items} — so a
+# journey can see what an edit SENT (one item, its `before` snapshot), not only what it showed
+# (GET /__fixture/feedback-posts).
+feedback_post_log: list = []
 # T9: every POST /plans/preview and POST /runs/:id/plan body (GET /__fixture/plan-posts), the
 # requestIds the "engine" has taken (requestId -> proposal_id), and the runs whose gate moved.
 plan_post_log: list = []
@@ -5366,6 +5370,9 @@ class W2Handler(SimpleHTTPRequestHandler):
             # items ({selector, type, value|instruction, before}).
             if body.get("event_type") == "wicked.interactive.feedback.submitted" and doc:
                 items = payload.get("items") or []
+                with state_lock:
+                    feedback_post_log.append({"pid": pid, "doc": doc, "version": payload.get("version"),
+                                              "author": payload.get("author"), "items": json.loads(json.dumps(items))})
                 src_msg = str(payload.get("source_message_id") or "")
                 applied: list = []
                 rejected: list = []
@@ -5789,6 +5796,10 @@ class W2Handler(SimpleHTTPRequestHandler):
         if path == "/__fixture/inject-posts":
             with state_lock:
                 posts = list(inject_post_log)
+            return self._json(200, {"posts": posts})
+        if path == "/__fixture/feedback-posts":
+            with state_lock:
+                posts = list(feedback_post_log)
             return self._json(200, {"posts": posts})
         if path == "/__fixture/onboard-posts":
             with chat_state_lock:

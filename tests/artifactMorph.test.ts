@@ -2,8 +2,8 @@
 import { describe, expect, it } from 'vitest';
 import { addChip } from '../src/board/aboutChips.js';
 import {
-  anchorWords, coverageLine, coverageOf, editedLine, editorKindOf, elementChip, grow, notUndoneLine, requirementChip,
-  shrink, slideChip, slideInView, slidesOf, undoneLine,
+  anchorWords, coverageLine, coverageOf, editedLine, editorKindOf, elementChip, grow, namesId, notUndoneLine,
+  requirementChip, shrink, slideChip, slideInView, slidesOf, undoneLine,
 } from '../src/board/artifactMorph.js';
 
 /**
@@ -68,7 +68,8 @@ describe('the lines under a touch edit', () => {
 describe('editorKindOf — the recorded style decides the editor', () => {
   it('a deck style is a deck, a document style is a document, anything else is a page', () => {
     expect(editorKindOf('ppt')).toBe('deck');
-    expect(editorKindOf('slides')).toBe('deck');
+    // Only the styles the bridge records decide (the host rule, `resolveKind`): no other spelling.
+    expect(editorKindOf('slides')).toBe('page');
     expect(editorKindOf('doc')).toBe('document');
     expect(editorKindOf('brochure')).toBe('document');
     expect(editorKindOf('web')).toBe('page');
@@ -94,9 +95,13 @@ describe('anchorWords — an anchor in plain words, never its raw id', () => {
     expect(anchorWords('slide-0-text-1', 'page')).toBe('line 1');
     expect(anchorWords('section-1', 'document')).toBe('section 2');
   });
-  it('an id the engine did not mint reads as its own words', () => {
+  it('an id the engine did not mint reads as its own words — when it is made of words', () => {
     expect(anchorWords('headline', 'page')).toBe('the headline');
     expect(anchorWords('hero_fact-strip', 'page')).toBe('the hero fact strip');
+    expect(anchorWords('Pricing-Table', 'document')).toBe('the pricing table');
+  });
+  it('an id that is not words is never shown', () => {
+    for (const wid of ['a8f09c', 'blk_12', 'x', 'el-3f', '9', 'slide-x-heading-1']) expect(anchorWords(wid, 'page')).toBe('this part');
   });
   it('no words hold the raw anchor grammar', () => {
     for (const wid of ['slide-0-heading-1', 'slide-4-block-2', 'section-0']) {
@@ -165,6 +170,13 @@ describe('coverageOf — the requirements read, and where the document names eac
     expect(rows[2]!.wid).toBeNull();
     expect(rows[3]!.wid).toBe('slide-0-paragraph-3');
     expect(coverageOf([{ key: 'k', reqId: 'R.3', title: 't', risk: false }], { p: { text: 'Rxx3', composite: false } })[0]!.wid).toBeNull();
+  });
+  it('an id inside a longer id does not name it', () => {
+    for (const longer of ['REQ-10', 'REQ-1-2', 'REQ-1_b', 'REQ-1.2', 'XREQ-1', 'pre-REQ-1', 'v2.REQ-1']) expect(namesId(`see ${longer} here`, 'REQ-1')).toBe(false);
+    for (const whole of ['(REQ-1).', 'REQ-1, then', 'req-1', 'ends with REQ-1.', 'REQ-1: two taps', '“REQ-1”']) expect(namesId(whole, 'REQ-1')).toBe(true);
+    // A later whole mention counts even after a longer id that only starts like it.
+    expect(namesId('REQ-10 and REQ-1', 'REQ-1')).toBe(true);
+    expect(namesId('anything', '')).toBe(false);
   });
   it('a container never counts, and a requirement with no id is never named', () => {
     expect(coverageOf([reqs[0]!], { 'section-0': blocks['section-0'] })[0]!.wid).toBeNull();

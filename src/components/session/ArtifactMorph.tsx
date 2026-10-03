@@ -51,6 +51,25 @@ export function ArtifactMorph({ artifactKey, title, projectId, docId, composerKe
   const growBtn = useRef<HTMLButtonElement | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
   const [exported, setExported] = useState<ExportLine | null>(null);
+  const exportBtn = useRef<HTMLButtonElement | null>(null);
+  const exportMenu = useRef<HTMLSpanElement | null>(null);
+  // The menu is a menu: opened, its first format holds the focus (arrows move, Enter chooses);
+  // closed — by Esc or by a choice — the focus is back on Export.
+  useEffect(() => {
+    if (exportOpen) exportMenu.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus();
+  }, [exportOpen]);
+  const closeExport = (): void => { setExportOpen(false); exportBtn.current?.focus(); };
+  const onExportKey = (e: React.KeyboardEvent<HTMLSpanElement>): void => {
+    if (!exportOpen) return;
+    // Esc closes the open menu first; it does not also shrink the artifact.
+    if (e.key === 'Escape') { e.stopPropagation(); closeExport(); return; }
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+    e.preventDefault();
+    const items = [...(exportMenu.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? [])];
+    if (items.length === 0) return;
+    const at = items.findIndex((b) => b === document.activeElement);
+    items[(at + (e.key === 'ArrowDown' ? 1 : items.length - 1) + items.length) % items.length]?.focus();
+  };
   const live = useRef(true);
   useEffect(() => { live.current = true; return () => { live.current = false; }; }, []);
 
@@ -65,7 +84,7 @@ export function ArtifactMorph({ artifactKey, title, projectId, docId, composerKe
 
   const exportAs = async (format: ExportFormat, label: string): Promise<void> => {
     if (head === null) return;
-    setExportOpen(false);
+    closeExport();
     setExported({ state: 'working', text: `Making the ${label} of version ${head}…` });
     const out = await runExport({ projectId, docId, version: head, format });
     if (!live.current) return;
@@ -130,14 +149,10 @@ export function ArtifactMorph({ artifactKey, title, projectId, docId, composerKe
         <span className="wk-artifact-title">{title}</span>
         <span data-testid="artifact-version">{head === null ? '' : `version ${head}`}</span>
         {exportsHere.length > 0 && head !== null && (
-          <span
-            className="wk-artifact-export"
-            // Esc closes the open menu first; it does not also shrink the artifact.
-            onKeyDown={(e) => { if (e.key === 'Escape' && exportOpen) { e.stopPropagation(); setExportOpen(false); } }}
-          >
-            <button type="button" data-testid="artifact-export" aria-haspopup="menu" aria-expanded={exportOpen} onClick={() => setExportOpen((o) => !o)} className="wk-artifact-btn">Export ▾</button>
+          <span className="wk-artifact-export" onKeyDown={onExportKey}>
+            <button ref={exportBtn} type="button" data-testid="artifact-export" aria-haspopup="menu" aria-expanded={exportOpen} onClick={() => setExportOpen((o) => !o)} className="wk-artifact-btn">Export ▾</button>
             {exportOpen && (
-              <span role="menu" data-testid="artifact-export-menu" className="wk-artifact-menu">
+              <span ref={exportMenu} role="menu" aria-label="Export as" data-testid="artifact-export-menu" className="wk-artifact-menu">
                 {exportsHere.map((x) => (
                   <button key={x.format} type="button" role="menuitem" data-testid="artifact-export-format" data-format={x.format} onClick={() => void exportAs(x.format, x.label)} className="wk-artifact-menu-item">{x.label}</button>
                 ))}

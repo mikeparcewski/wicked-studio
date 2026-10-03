@@ -18,12 +18,15 @@ written document (`style: doc`) and a deck (`style: ppt`), anchored the way the 
      on the composer and picks the paragraph that names it.
   4. A PARAGRAPH EDIT IS ONE VERSION: Enter on that paragraph — longer than 400 characters — opens
      the field holding its WHOLE text; new text + Enter lands version 2 ("Changed paragraph 2 —
-     version 2." — plain words, never the raw anchor id) with Undo.
-  5. UNDO: version 3 is the page before; the long paragraph is back.
+     version 2." — plain words, never the raw anchor id) with Undo. What was SENT is one batch of
+     one content-edit whose `before` is the paragraph's whole text (the engine's stale guard).
+  5. UNDO: version 3 is the page before; the long paragraph is back. The bridge's own manifest
+     holds exactly versions 1, 2 (the edit, off 1) and 3 (the fork of 1) — one version per act.
   6. A CONTAINER IS NOT TEXT: a section picked by its own edge says it holds other parts, and
      typing on it opens no field.
   7. COVERAGE ABSENT ELSEWHERE: a run with no repository, and a run on a repository with no
-     requirements read (404), show the document editor with NO coverage slot.
+     requirements read (404), show the document editor with NO coverage slot. A repository whose
+     read holds more than one page says so: "(the first 50 of 60)", total 60, 50 rows.
 
   THE SLIDE EDITOR
   8. KIND + STRIP: `artifact[data-kind=deck]`; the pane holds a strip of the deck's four slides,
@@ -33,9 +36,10 @@ written document (`style: doc`) and a deck (`style: ppt`), anchored the way the 
  10. A SLIDE TITLE EDIT IS ONE VERSION: typing on slide 3's title lands version 2 ("Changed slide
      3’s title — version 2.") with Undo; the strip names the slide by its new title, and the new
      version's frame is still on slide 3 — an edit does not throw the reader back to the top.
- 11. UNDO: version 3; the title and the strip are back.
- 12. EXPORT: Export ▾ offers PowerPoint and PDF; PowerPoint answers "PPTX export ready — …" with a
-     Download link.
+ 11. UNDO: version 3; the title and the strip are back; the manifest holds versions 1, 2, 3.
+ 12. EXPORT: Export ▾ offers PowerPoint and PDF, by keyboard too (the first format holds the
+     focus, ↓ moves, Esc closes the menu — not the artifact — and returns the focus); PowerPoint
+     answers "PPTX export ready — …" with a Download link.
  13. 0 page errors, no horizontal scroll.
 
 Captures: e2e/shots/desk-doc-editors-*.png. Env: FEEDBACK_PORT (default 4359).
@@ -169,6 +173,12 @@ def wait_line(page, kind: str, step: str, timeout_ms: int = 20000) -> str:
     return page.get_by_test_id("page-line").inner_text()
 
 
+def manifest(page, doc: str) -> list:
+    """The bridge's own version manifest for `doc`: [version, parent, deterministic?] per version."""
+    m = page.evaluate(f"""async () => {{ const r = await fetch('/api/v1/projects/{PID}/interactive/d/{doc}/api/versions'); return r.json(); }}""")
+    return [m["head"]] + [[v["version"], v["parent"], v["feedback_file"] is not None] for v in sorted(m["versions"], key=lambda v: v["version"])]
+
+
 def open_session(page, step: str) -> None:
     page.goto(f"{origin}/s/run%3A{RUN}", wait_until="networkidle")
     page.get_by_test_id("session").wait_for(state="visible", timeout=15000)
@@ -252,16 +262,22 @@ with sync_playwright() as p:
     after1 = wait_text(page, P2, NEW_P2)
     v1 = page.evaluate(ARTIFACT)["version"]
     page.screenshot(path=str(SHOTS / "desk-doc-editors-paragraph-edited.png"))
+    sent = [p for p in json.loads(urllib.request.urlopen(f"{origin}/__fixture/feedback-posts", timeout=10).read())["posts"] if p["doc"] == DOC]
+    one_edit = (len(sent) == 1 and sent[0]["version"] == 1 and len(sent[0]["items"]) == 1
+                and sent[0]["items"][0] == {"selector": P2, "type": "content-edit", "value": NEW_P2, "before": LONG_PARAGRAPH})
     check("paragraph-edit", line1.startswith("Changed paragraph 2 — version 2.") and "slide-0" not in line1
-          and after1.get("text") == NEW_P2 and "version 2" in v1, line=line1, paragraph=after1.get("text"), version=v1,
-          field_length=len(opened["value"]))
+          and after1.get("text") == NEW_P2 and "version 2" in v1 and one_edit, line=line1, paragraph=after1.get("text"), version=v1,
+          field_length=len(opened["value"]), batches_sent=len(sent),
+          sent=[{**i, "before": f"<{len(i.get('before') or '')} characters>"} for p in sent for i in p["items"]])
 
     # ── 5. undo ────────────────────────────────────────────────────────────────────
     page.get_by_test_id("page-undo").click()
     line2 = wait_line(page, "undone", "paragraph-undo")
     after2 = wait_text(page, P2, LONG_PARAGRAPH)
-    check("paragraph-undo", "version 3" in line2 and after2.get("text") == LONG_PARAGRAPH, line=line2,
-          paragraph_length=len(after2.get("text") or ""))
+    versions = manifest(page, DOC)
+    check("paragraph-undo", "version 3" in line2 and after2.get("text") == LONG_PARAGRAPH
+          and versions == [3, [1, None, False], [2, 1, True], [3, 1, False]], line=line2,
+          paragraph_length=len(after2.get("text") or ""), manifest=versions)
 
     # ── 6. a container is not text ─────────────────────────────────────────────────
     wait_pickable(page, 3)
@@ -290,7 +306,18 @@ with sync_playwright() as p:
         page.wait_for_timeout(600)  # the requirements read (when there is one) has answered by now
         absent[name] = page.evaluate(ARTIFACT)
     page.screenshot(path=str(SHOTS / "desk-doc-editors-no-coverage.png"))
-    check("coverage-absent-elsewhere", all(a["kind"] == "document" and a["size"] == "full" and a["coverage"] == 0 and not a["hscroll"] for a in absent.values()), **absent)
+    # More requirements than one page of the read: the slot says so instead of passing 50 off as all.
+    many = [{"key": f"booking::REQ-{n:03d}", "reqId": f"REQ-{n:03d}", "title": f"Requirement {n}"} for n in range(101, 161)]
+    set_fixture(origin, doc_bound_run={"pid": PID, "doc": DOC, "repo": "big-repo"}, requirements={REPO_ID: REQS, "big-repo": many})
+    open_session(page, "more-than-a-page")
+    page.get_by_test_id("artifact-open").click()
+    page.get_by_test_id("artifact-grow").click()
+    page.get_by_test_id("doc-coverage").wait_for(state="visible", timeout=10000)
+    paged = page.evaluate("""() => { const c = document.querySelector('[data-testid="doc-coverage"]');
+      return { total: c.dataset.total, rows: c.dataset.rows, shown: c.querySelectorAll('[data-testid="doc-coverage-row"]').length,
+               line: document.querySelector('[data-testid="doc-coverage-line"]').innerText }; }""")
+    check("coverage-absent-elsewhere", all(a["kind"] == "document" and a["size"] == "full" and a["coverage"] == 0 and not a["hscroll"] for a in absent.values())
+          and paged["total"] == "60" and paged["rows"] == "50" and paged["shown"] == 50 and "(the first 50 of 60)" in paged["line"], **absent, more_than_a_page=paged)
 
     # ════ THE SLIDE EDITOR ═══════════════════════════════════════════════════════════
     set_fixture(origin, doc_bound_run={"pid": PID, "doc": DECK})
@@ -358,12 +385,24 @@ with sync_playwright() as p:
     line4 = wait_line(page, "undone", "slide-title-undo")
     after4 = wait_text(page, TITLE3, "Staff stay in control")
     page.wait_for_function("() => [...document.querySelectorAll('[data-testid=\"slide-thumb\"]')].some(b => b.innerText.includes('Staff stay in control'))", timeout=10000)
-    check("slide-title-undo", "version 3" in line4 and after4.get("text") == "Staff stay in control", line=line4, strip=page.evaluate(STRIP))
+    deck_versions = manifest(page, DECK)
+    check("slide-title-undo", "version 3" in line4 and after4.get("text") == "Staff stay in control"
+          and deck_versions == [3, [1, None, False], [2, 1, True], [3, 1, False]], line=line4, strip=page.evaluate(STRIP), manifest=deck_versions)
 
     # ── 12. export ─────────────────────────────────────────────────────────────────
+    FOCUS = """() => { const a = document.activeElement; return a ? (a.dataset.format || a.dataset.testid || a.tagName) : null; }"""
     page.get_by_test_id("artifact-export").click()
     formats = page.evaluate("""() => [...document.querySelectorAll('[data-testid="artifact-export-format"]')].map(b => [b.dataset.format, b.innerText])""")
-    page.locator('[data-testid="artifact-export-format"][data-format="pptx"]').click()
+    first_focus = page.evaluate(FOCUS)
+    page.keyboard.press("ArrowDown")
+    next_focus = page.evaluate(FOCUS)
+    page.keyboard.press("Escape")
+    page.wait_for_timeout(200)
+    closed = {"menu": page.locator('[data-testid="artifact-export-menu"]').count(), "focus": page.evaluate(FOCUS), "size": page.evaluate(ARTIFACT)["size"]}
+    keys_ok = first_focus == "pptx" and next_focus == "pdf" and closed == {"menu": 0, "focus": "artifact-export", "size": "pane"}
+    page.keyboard.press("Enter")  # Export again, by keyboard: the menu opens on its first format
+    page.wait_for_selector('[data-testid="artifact-export-menu"]', timeout=5000)
+    page.keyboard.press("Enter")  # PowerPoint
     try:
         page.wait_for_selector('[data-testid="artifact-export-line"][data-state="ready"]', timeout=10000)
     except Exception:
@@ -376,9 +415,9 @@ with sync_playwright() as p:
     page.wait_for_timeout(400)
     d2 = page.evaluate(ARTIFACT)
     page.screenshot(path=str(SHOTS / "desk-doc-editors-deck-full.png"))
-    check("export", formats == [["pptx", "PowerPoint"], ["pdf", "PDF"]] and ex_line.startswith(f"PPTX export ready — {DECK}_v3.pptx")
+    check("export", keys_ok and formats == [["pptx", "PowerPoint"], ["pdf", "PDF"]] and ex_line.startswith(f"PPTX export ready — {DECK}_v3.pptx")
           and ex_line.endswith("Download") and "/api/export/file/" in (ex_href or "") and d2["size"] == "full" and d2["strip"] == 1 and not d2["hscroll"],
-          formats=formats, line=ex_line, href=ex_href, full=d2)
+          formats=formats, keyboard={"opened_on": first_focus, "after_down": next_focus, "after_esc": closed}, line=ex_line, href=ex_href, full=d2)
 
     check("no-errors", not errors, errors=errors[:5])
     browser.close()

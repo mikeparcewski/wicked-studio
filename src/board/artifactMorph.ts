@@ -57,8 +57,11 @@ export function notUndoneLine(head: number): string {
  *  markup. */
 export type EditorKind = 'page' | 'document' | 'deck';
 
+/** The editor host's own rule (`editors/model.ts` `resolveKind`, DES-EDITOR-PLUGINS-001 §5.1), for
+ *  the styles the bridge records: `ppt` is a deck, `doc` and `brochure` are documents, and anything
+ *  else — `web`, no style, a style this build does not know — is a page. */
 export function editorKindOf(style: string | null | undefined): EditorKind {
-  if (style === 'ppt' || style === 'slides') return 'deck';
+  if (style === 'ppt') return 'deck';
   if (style === 'doc' || style === 'brochure') return 'document';
   return 'page';
 }
@@ -81,8 +84,12 @@ export function slideIndexOf(wid: string): number | null {
  * An anchor in plain words — what the line under the page and the hint call the element. The raw
  * id (`slide-1-heading-1`) is never shown: in a deck it reads "slide 2’s title", in a page or a
  * document "heading 1" ("… in section 2" past the first section). An id the engine did not mint
- * (an author's own `data-wid`) reads as its own words: "the headline".
+ * (an author's own `data-wid`) reads as its own words when it is made of words — "the headline",
+ * "the hero fact strip" — and as "this part" when it is not (`a8f09c`, `blk_12`): an id that is not
+ * words is never shown.
  */
+const WORDLIKE = /^[A-Za-z]{2,}(?:[-_ ][A-Za-z]{2,})*$/;
+
 export function anchorWords(wid: string, kind: EditorKind): string {
   const m = ANCHOR.exec(wid);
   if (m !== null) {
@@ -94,7 +101,7 @@ export function anchorWords(wid: string, kind: EditorKind): string {
   }
   const sec = SECTION.exec(wid);
   if (sec !== null) return kind === 'deck' ? `slide ${Number(sec[1]) + 1}` : `section ${Number(sec[1]) + 1}`;
-  return `the ${wid.replace(/[-_]+/g, ' ').trim()}`;
+  return WORDLIKE.test(wid) ? `the ${wid.replace(/[-_]+/g, ' ').toLowerCase()}` : 'this part';
 }
 
 /** One block of the frame's inventory, as the models below read it. */
@@ -157,10 +164,29 @@ export function coverageOf(reqs: readonly RequirementRow[], blocks: Readonly<Rec
   return reqs.map((r) => {
     const id = r.reqId.trim();
     if (id === '') return { ...r, wid: null };
-    const named = new RegExp(`(^|[^A-Za-z0-9])${id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}($|[^A-Za-z0-9])`, 'i');
-    const hit = leaves.find(([, b]) => named.test(b.text));
+    const hit = leaves.find(([, b]) => namesId(b.text, id));
     return { ...r, wid: hit === undefined ? null : hit[0] };
   });
+}
+
+const ID_CHAR = /[A-Za-z0-9_-]/;
+const ALNUM = /[A-Za-z0-9]/;
+
+/** Whether `text` holds `id` as a whole id, in any letter case: not as the start, the end or the
+ *  middle of a longer one. `REQ-1` is not named by `REQ-10`, `REQ-1-2`, `REQ-1_b` or `REQ-1.2`;
+ *  it is named by "(REQ-1)." and "REQ-1, then". */
+export function namesId(text: string, id: string): boolean {
+  const hay = text.toLowerCase();
+  const needle = id.toLowerCase();
+  if (needle === '') return false;
+  for (let at = hay.indexOf(needle); at !== -1; at = hay.indexOf(needle, at + 1)) {
+    const before = hay.charAt(at - 1);
+    const after = hay.charAt(at + needle.length);
+    const joinedBefore = ID_CHAR.test(before) || (before === '.' && ALNUM.test(hay.charAt(at - 2)));
+    const joinedAfter = ID_CHAR.test(after) || (after === '.' && ALNUM.test(hay.charAt(at + needle.length + 1)));
+    if (!joinedBefore && !joinedAfter) return true;
+  }
+  return false;
 }
 
 /** The coverage slot's one sentence: how many of the read's requirements the document names. */

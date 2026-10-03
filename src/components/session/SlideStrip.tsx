@@ -14,9 +14,11 @@ import type { FrameParts } from './PageEditor.js';
  * have (EP-I3), so there is no drag and no notes field.
  */
 
-/** How long a click on a slide outranks "the slide in view": the scroll it starts is not the
- *  reader's. A later scroll hands the mark back to the view. */
-const PICK_HOLDS_MS = 700;
+/** A click on a slide outranks "the slide in view" (the last slides of a deck cannot be scrolled
+ *  to the middle of the frame, so the view alone would mark the wrong one). The pick holds where
+ *  its own jump landed — the first scroll within this window — and any scroll away from there is
+ *  the reader's, which hands the mark back to the view. */
+const JUMP_WINDOW_MS = 700;
 
 export function SlideStrip({ parts, docId, composerKey }: {
   parts: FrameParts;
@@ -24,10 +26,14 @@ export function SlideStrip({ parts, docId, composerKey }: {
   composerKey: string;
 }): React.ReactElement | null {
   const slides = useMemo(() => slidesOf(parts.blocks), [parts.blocks]);
-  const [picked, setPicked] = useState<{ index: number; until: number } | null>(null);
+  const [picked, setPicked] = useState<{ index: number; until: number; landedAt: number | null } | null>(null);
   const { scrollY } = parts;
   useEffect(() => {
-    setPicked((p) => (p !== null && performance.now() > p.until ? null : p));
+    setPicked((p) => {
+      if (p === null) return null;
+      if (p.landedAt === null) return performance.now() <= p.until ? { ...p, landedAt: scrollY } : null;
+      return scrollY === p.landedAt ? p : null;
+    });
   }, [scrollY]);
   if (slides.length === 0) return null;
   const current = picked?.index ?? slideInView(slides, parts.tops, scrollY, parts.frameHeight);
@@ -42,7 +48,7 @@ export function SlideStrip({ parts, docId, composerKey }: {
           aria-current={s.index === current ? 'true' : undefined}
           className={`wk-slide-thumb${s.index === current ? ' wk-slide-thumb--on' : ''}`}
           onClick={() => {
-            setPicked({ index: s.index, until: performance.now() + PICK_HOLDS_MS });
+            setPicked({ index: s.index, until: performance.now() + JUMP_WINDOW_MS, landedAt: null });
             parts.scrollTo(s.first);
             addAboutChip(composerKey, slideChip(s, docId));
           }}

@@ -119,6 +119,17 @@ export function PageEditor({ projectId, docId, composerKey, size, kind = 'page',
   // late slide does not throw the reader back to the top.
   const returnTo = useRef<string | null>(null);
   const armed = useRef<string | null>(null);
+  // The frame's own height, measured — what stands beside the frame asks "which slide is in view".
+  const [frameHeight, setFrameHeight] = useState(0);
+  useEffect(() => {
+    const el = frame.current;
+    if (el === null) return undefined;
+    setFrameHeight(el.clientHeight);
+    if (typeof ResizeObserver !== 'function') return undefined;
+    const seen = new ResizeObserver(() => setFrameHeight(el.clientHeight));
+    seen.observe(el);
+    return () => seen.disconnect();
+  }, []);
   // Whether this editor is still mounted — a poll or an Undo that outlives it writes nothing.
   const live = useRef(true);
   useEffect(() => { live.current = true; return () => { live.current = false; }; }, []);
@@ -359,12 +370,11 @@ export function PageEditor({ projectId, docId, composerKey, size, kind = 'page',
     blocks: inventory.blocks,
     tops: Object.fromEntries(Object.entries(inventory.widMap).map(([wid, r]) => [wid, r.top + inventory.measured.scrollY])),
     scrollY,
-    // Read when the inventory or the size changes — the frame is laid out by then.
-    frameHeight: frame.current?.clientHeight ?? 0,
+    frameHeight,
     selected,
     scrollTo,
     pick,
-  }), [inventory, scrollY, selected, scrollTo, pick, size]); // eslint-disable-line react-hooks/exhaustive-deps -- `size` re-reads the frame's height
+  }), [inventory, scrollY, frameHeight, selected, scrollTo, pick]);
 
   return (
     <>
