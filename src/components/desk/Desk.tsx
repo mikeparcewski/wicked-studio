@@ -14,6 +14,7 @@ import { useRoster } from '../../hooks/useRoster.js';
 import { HandoverPanel } from '../HandoverPanel.js';
 import { NeedsQueueSurface } from '../NeedsYouQueue.js';
 import { Composer, type ComposerSend } from '../session/Composer.js';
+import { DeskStateRows, useDeskStates } from './DeskStateRows.js';
 
 /** Project cards on the first screen (the concept's three); the rest are one link away. */
 const CARDS_MAX = 3;
@@ -51,6 +52,7 @@ export function Desk({ runs, needRows, now, navigate, onAsk }: {
     [items, unfiled, needRows, runChatId, deliveredNow],
   );
   const chores = useMemo(() => lapsedSeatChores(roster), [roster]);
+  const states = useDeskStates();
   const [text, setText] = useState('');
   const box = useRef<HTMLTextAreaElement | null>(null);
   const go = (path: string) => (e: React.MouseEvent): void => { e.preventDefault(); navigate(path); };
@@ -89,9 +91,10 @@ export function Desk({ runs, needRows, now, navigate, onAsk }: {
         <div className="wk-desk-cols">
           <div className="wk-desk-main">
             <NeedsQueueSurface rows={needRows} runs={runs} navigate={navigate} now={now} variant="desk" />
-            {chores.length > 0 && (
+            {(chores.length > 0 || states.frozen || states.away) && (
               <section data-testid="desk-chores" aria-label="For whoever runs studio" className="wk-desk-chores">
-                <p className="wk-desk-label">For whoever runs studio · {chores.length}</p>
+                <p className="wk-desk-label">For whoever runs studio{chores.length > 0 ? ` · ${chores.length}` : ''}</p>
+                <DeskStateRows frozen={states.frozen} away={states.away} />
                 {chores.map((c) => (
                   <div key={c.key} data-testid="desk-chore" data-seat={c.seat} className="wk-desk-need">
                     <span aria-hidden className="wk-desk-dot wk-desk-dot--blocked" />
