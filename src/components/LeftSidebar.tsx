@@ -24,6 +24,7 @@ import { ATTENTION_DOT } from './ProjectCard.js';
 import { ProjectSwitcher } from './ProjectSwitcher.js';
 import { phaseWord, RUN_DOT } from './RunsSection.js';
 import { SettingsShortcutRows } from './SettingsRailSection.js';
+import { useDisplayPath } from '../hooks/useHomePath.js';
 
 /**
  * The rail, re-architected around FIVE PRIMARY PATHS (DES-FEEDBACK-003 §2/§3,
@@ -619,6 +620,7 @@ function SteeringSectionRows({ navigate }: { navigate: (p: string) => void }): R
 const flatRunPath = (id: string): string => `/runs/${encodeURIComponent(id)}`;
 
 export function LeftSidebar({ runs, navigate, pathname, runPath = flatRunPath, immersive = false }: Props): React.ReactElement {
+  const showPath = useDisplayPath();
   // The skin's nav variant (theming/skins.ts): `icons` starts — and, on a live skin swap,
   // lands — collapsed to the glyph column; `full` is the accordion. The collapse toggle and
   // hover-expand stay the operator's either way.
@@ -931,7 +933,7 @@ export function LeftSidebar({ runs, navigate, pathname, runPath = flatRunPath, i
                     type="button"
                     data-testid="rail-repo"
                     onClick={() => navigate(`/repo-detail/${encodeURIComponent(repo.id)}`)}
-                    title={repo.root_path}
+                    title={showPath(repo.root_path)}
                     className="w-full text-left px-3 py-1.5 rounded-md transition-colors"
                     style={{ background: 'transparent' }}
                     onMouseEnter={e => { e.currentTarget.style.background = S.hover; }}
@@ -943,7 +945,7 @@ export function LeftSidebar({ runs, navigate, pathname, runPath = flatRunPath, i
                       </span>
                     </div>
                     <p className="text-[10px] mt-0.5 font-mono truncate" style={{ color: S.faint }}>
-                      {repo.root_path}
+                      {showPath(repo.root_path)}
                     </p>
                   </button>
                 ))}

@@ -6,6 +6,7 @@ import { useGateStore } from '../store/gates.js';
 import { useRuntimeStore, outputKey } from '../store/runtime.js';
 import { Markdown } from './Markdown.js';
 import { RoutingProvenance } from './RoutingProvenance.js';
+import { useDisplayText } from '../hooks/useHomePath.js';
 
 const STAGE_STYLE: Record<StageKind, { bg: string; color: string }> = {
   recon:   { bg: 'var(--accent-subtle)', color: 'var(--accent)' },
@@ -31,6 +32,7 @@ interface Props {
 }
 
 export function WorkUnitDetail({ runId, unit, isGated, onResolved, onOpenFile }: Props): React.ReactElement {
+  const showText = useDisplayText();
   const clearGate = useGateStore((s) => s.clearGate);
   const liveOutput = useRuntimeStore((s) => s.outputs[outputKey(runId, unit.ord)]);
   const [transcript, setTranscript] = useState<string | null>(null);
@@ -186,7 +188,7 @@ export function WorkUnitDetail({ runId, unit, isGated, onResolved, onOpenFile }:
                   className="whitespace-pre-wrap"
                   {...(onOpenFile !== undefined ? { onOpenFile } : {})}
                 >
-                  {transcript ?? ''}
+                  {showText(transcript ?? '')}
                 </Markdown>
               )}
           </div>

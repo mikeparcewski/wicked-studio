@@ -617,7 +617,7 @@ export function App(): React.ReactElement {
     if (panel === 'home') {
       // The Desk (skin `desk`, S4) replaces the command center; same fold, same stores.
       if (desk) {
-        return <Desk runs={runs} needRows={needRows} now={needsNow} navigate={navigate} onAsk={handToAsk} />;
+        return <Desk runs={runs} runsLoaded={runsLoaded} needRows={needRows} now={needsNow} navigate={navigate} onAsk={handToAsk} />;
       }
       // The board-level Ask invite opens the SAME dock the rail button opens.
       return <HomeBoard runs={runs} navigate={navigate} onOpenAsk={() => setAskOpen(true)} />;

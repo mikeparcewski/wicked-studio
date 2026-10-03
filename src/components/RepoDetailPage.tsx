@@ -7,6 +7,7 @@ import { LanguageBar } from './LanguageBar.js';
 import { RequirementsModal } from './RequirementsModal.js';
 import type { CodeGraphData, GitCommit, GitContributor, RepoEntry, SessionView } from '../api/types.js';
 import { RunLink } from './RunLink.js';
+import { useDisplayPath } from '../hooks/useHomePath.js';
 
 interface Props {
   repoId: string;
@@ -48,6 +49,7 @@ export function dedupeContributors(rows: readonly GitContributor[]): GitContribu
 }
 
 export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: Props): React.ReactElement {
+  const showPath = useDisplayPath();
   const [requirementsOpen, setRequirementsOpen] = useState(false);
   const [repo, setRepo] = useState<RepoEntry | null>(null);
   const [runs, setRuns] = useState<SessionView[]>([]);
@@ -216,7 +218,7 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
               <p className="text-[11px] font-mono mt-1" style={{ color: 'var(--status-fail)' }}>{onboardError}</p>
             )}
             <p className="text-xs font-mono mt-1 break-all" style={{ color: 'var(--ink-dim)' }}>
-              {repo.root_path}
+              {showPath(repo.root_path)}
             </p>
             {/* studio#251: the engine's checkout findings (wicked-core#406) — an ignored in-tree
                 graph, a graph-less repo — with "Re-run onboarding" wired to THIS page's onboarding

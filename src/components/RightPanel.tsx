@@ -22,6 +22,7 @@ import { Terminal } from './Terminal.js';
 import { WhatWhere } from './WhatWhere.js';
 import { PlanEditPanel } from './PlanEditPanel.js';
 import { planEditAvailability } from '../board/planModel.js';
+import { useDisplayText } from '../hooks/useHomePath.js';
 
 /** The sections a run has: delivery only where it can deliver, plan only on a live planned run. */
 export function runSections(view: SessionView, isSystemWorkflow: (id: string) => boolean | undefined): { id: AccordionId; label: string }[] {
@@ -322,6 +323,7 @@ export function RunTranscriptView({ runId, units, onOpenShell, live = null }: {
    */
   live?: { ord: number; phase: string } | null;
 }): React.ReactElement {
+  const showText = useDisplayText();
   const captured = [...units]
     .filter((u) => u.status === 'done' || u.status === 'rejected')
     .sort((a, b) => a.ord - b.ord);
@@ -362,7 +364,7 @@ export function RunTranscriptView({ runId, units, onOpenShell, live = null }: {
             className="rounded-lg p-2 text-[10px] leading-tight whitespace-pre-wrap font-mono overflow-x-auto"
             style={{ background: 'var(--surface-base)', color: 'var(--ink-body)' }}
           >
-            {texts[unit.ord] ?? 'Loading…'}
+            {showText(texts[unit.ord] ?? 'Loading…')}
           </pre>
         </div>
       ))}

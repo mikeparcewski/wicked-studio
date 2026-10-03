@@ -12,8 +12,8 @@
   "studioVersion": "0.5.19",
   "counts": {
     "files": 198,
-    "occurrences": 2181,
-    "static": 1904,
+    "occurrences": 2184,
+    "static": 1907,
     "dynamic": 79,
     "computed": 7
   },
@@ -2350,7 +2350,19 @@
       ]
     },
     {
+      "testId": "desk-loading",
+      "files": [
+        "src/components/desk/Desk.tsx"
+      ]
+    },
+    {
       "testId": "desk-project",
+      "files": [
+        "src/components/desk/Desk.tsx"
+      ]
+    },
+    {
+      "testId": "desk-projects-loading",
       "files": [
         "src/components/desk/Desk.tsx"
       ]
@@ -7845,6 +7857,12 @@
       "testId": "session-turn",
       "files": [
         "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
+      "testId": "settings-path",
+      "files": [
+        "src/components/SystemSettings.tsx"
       ]
     },
     {

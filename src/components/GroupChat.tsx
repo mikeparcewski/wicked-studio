@@ -46,6 +46,7 @@ import {
   type NarrationTone,
 } from './narrator.js';
 import { ProjectSwitcher } from './ProjectSwitcher.js';
+import { useDisplayPath } from '../hooks/useHomePath.js';
 
 // The transcript types and the §6 layout machinery moved to ChatThread.tsx
 // (DES-RUN-NARRATOR §11 — this file holds the machinery, that one the pixels);
@@ -382,6 +383,7 @@ const PARKED_CITATIONS_MAX = 8;
 export function GroupChat({
   repoId, onBack, projectId = null, navigate, routedChatId = null, reflectUrl = false, onComposerResize,
 }: Props): React.ReactElement {
+  const showPath = useDisplayPath();
   /** Where this surface remembers its live chat id — by repo, by project, or the flat `_` key. */
   const storageKey = chatStorageKey(repoId, projectId);
   /** The composer band (studio#333) — measured for the shell, see `onComposerResize`. */
@@ -2288,13 +2290,13 @@ export function GroupChat({
                         data-repo-id={r.id}
                         data-checked={checked}
                         data-at-cap={atCap}
-                        title={atCap ? `a chat scopes at most ${MAX_SCOPE_REPOS} repositories — remove one to add another` : r.root_path}
+                        title={atCap ? `a chat scopes at most ${MAX_SCOPE_REPOS} repositories — remove one to add another` : showPath(r.root_path)}
                         className={`flex items-center gap-2 text-[11px] font-mono ${atCap ? 'opacity-50' : 'cursor-pointer'}`}
                         style={{ color: checked ? 'var(--ink-high)' : 'var(--ink-muted)' }}
                       >
                         <input type="checkbox" checked={checked} disabled={atCap} onChange={() => toggleScopeRepo(r.id)} />
                         <span>{r.name}</span>
-                        <span className="truncate" style={{ color: 'var(--ink-dim)', minWidth: 0 }}>{r.root_path}</span>
+                        <span className="truncate" style={{ color: 'var(--ink-dim)', minWidth: 0 }}>{showPath(r.root_path)}</span>
                       </label>
                     );
                   })

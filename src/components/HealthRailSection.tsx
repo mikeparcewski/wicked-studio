@@ -10,6 +10,7 @@ import { useConnectionStore } from '../store/connection.js';
 import { setCachedRoster } from '../store/rosterCache.js';
 import { Modal } from './Modal.js';
 import { Terminal } from './Terminal.js';
+import { useDisplayPath } from '../hooks/useHomePath.js';
 
 /**
  * The rail-foot health section (DES-FEEDBACK-003 §6.2, slice O): the operator —
@@ -264,6 +265,7 @@ function stamp(ms: number): string {
 
 /** The governance registry group — one CheckRow per question, the findings as banners. */
 function GovernanceRows({ read }: { read: GovernanceRead }): React.ReactElement {
+  const showPath = useDisplayPath();
   if (read.kind === 'loading') return <CheckRow label="governance" ok={null} detail="checking…" />;
   if (read.kind === 'error') {
     return (
@@ -299,7 +301,7 @@ function GovernanceRows({ read }: { read: GovernanceRead }): React.ReactElement 
       ) : (
         <>
           <CheckRow label="store" ok detail={`via ${g.store.source}`} />
-          <DetailLine testId="rail-governance-store-path" label="path" value={g.store.path} />
+          <DetailLine testId="rail-governance-store-path" label="path" value={showPath(g.store.path)} />
         </>
       )}
       <CheckRow label="records" ok={g.records.total === null && g.records.sinceBoot === null ? null : true} detail={records} />
@@ -323,9 +325,9 @@ function GovernanceRows({ read }: { read: GovernanceRead }): React.ReactElement 
           />
         </>
       )}
-      {dl.path !== null && <DetailLine testId="rail-governance-outbox" label="outbox" value={dl.path} />}
+      {dl.path !== null && <DetailLine testId="rail-governance-outbox" label="outbox" value={showPath(dl.path)} />}
       {dl.legacyOutbox !== null && (
-        <DetailLine testId="rail-governance-legacy" label="legacy outbox" value={`${dl.legacyOutbox.path} · ${dl.legacyOutbox.bytes} bytes`} color="var(--status-gate)" />
+        <DetailLine testId="rail-governance-legacy" label="legacy outbox" value={`${showPath(dl.legacyOutbox.path)} · ${dl.legacyOutbox.bytes} bytes`} color="var(--status-gate)" />
       )}
       {g.findings.map((f, i) => (
         <p

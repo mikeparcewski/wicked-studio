@@ -21,6 +21,7 @@ import { LiveNarration } from '../LiveNarration.js';
 import { RunSectionBody, runSections, type AccordionId } from '../RightPanel.js';
 import { humanTitle } from '../runIdentity.js';
 import { Sheet } from './Sheet.js';
+import { useDisplayText } from '../../hooks/useHomePath.js';
 
 /** A run can take a message only while a helper is working in it (crew's inject surface). */
 const MESSAGEABLE = new Set(['executing', 'distributing', 'planning']);
@@ -100,6 +101,7 @@ function MessageBox({ runId, target, can }: { runId: string; target: string; can
 }
 
 function UnitOutput({ runId, unit }: { runId: string; unit: SessionView['units'][number] }): React.ReactElement {
+  const showText = useDisplayText();
   const [out, setOut] = useState<string | null>(null);
   useEffect(() => {
     let cancelled = false;
@@ -109,7 +111,7 @@ function UnitOutput({ runId, unit }: { runId: string; unit: SessionView['units']
       .catch((e: unknown) => { if (!cancelled) setOut(`Could not read what it did (${e instanceof Error ? e.message : String(e)}).`); });
     return () => { cancelled = true; };
   }, [runId, unit.id, unit.ord]);
-  return <pre data-testid="sheet-output" className="wk-sheet-pre">{out ?? 'Reading…'}</pre>;
+  return <pre data-testid="sheet-output" className="wk-sheet-pre">{showText(out ?? 'Reading…')}</pre>;
 }
 
 function StepSheet({ r, tab, runs, navigate }: { r: Extract<ObjectRef, { kind: 'step' }>; tab: string; runs: SessionView[]; navigate: Navigate }): React.ReactElement {

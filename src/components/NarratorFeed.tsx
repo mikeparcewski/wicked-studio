@@ -16,6 +16,7 @@ import {
   type NarrationTone,
   type NarratorContext,
 } from './narrator.js';
+import { useDisplayText } from '../hooks/useHomePath.js';
 
 /**
  * The narrated run feed (DES-RUN-NARRATOR §2, §4-§5): ONE chronological stream
@@ -114,6 +115,7 @@ export function NarratorFeed({
   scrollRef,
   jumpOrd = null,
 }: Props): React.ReactElement {
+  const showText = useDisplayText();
   const { session } = view;
   const events = useRunEventStore((s) => s.byRun[session.id]) ?? EMPTY_EVENTS;
   const terminalIds = useRuntimeStore((s) => s.terminalIds);
@@ -318,7 +320,7 @@ export function NarratorFeed({
                   <div className="mt-2.5 max-h-[28rem] overflow-y-auto">
                     {tc.loading
                       ? <span className="text-xs font-mono" style={{ color: 'var(--ink-muted)' }}>Loading output…</span>
-                      : <Markdown className="whitespace-pre-wrap" {...(onOpenFile !== undefined ? { onOpenFile } : {})}>{tc.text ?? ''}</Markdown>
+                      : <Markdown className="whitespace-pre-wrap" {...(onOpenFile !== undefined ? { onOpenFile } : {})}>{showText(tc.text ?? '')}</Markdown>
                     }
                   </div>
                 )}

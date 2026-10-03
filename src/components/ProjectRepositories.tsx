@@ -3,6 +3,7 @@ import { api } from '../api/client.js';
 import type { ProjectMember, RepoEntry } from '../api/types.js';
 import { fetchReposCached, getCachedRepos } from '../store/repoCache.js';
 import { RepoFindings, repoFindings } from './RepoFindings.js';
+import { useDisplayPath } from '../hooks/useHomePath.js';
 
 /**
  * The project's repositories — the one UI path that attaches a `crew.repo`
@@ -139,6 +140,7 @@ interface Props {
 }
 
 export function ProjectRepositories({ projectId, members, onMembersChange }: Props): React.ReactElement | null {
+  const showPath = useDisplayPath();
   const [repos, setRepos] = useState<RepoEntry[] | null>(getCachedRepos);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -353,7 +355,7 @@ export function ProjectRepositories({ projectId, members, onMembersChange }: Pro
               <div data-testid="project-repo-row" data-repo={m.member_ref} style={CSS.row}>
                 <span aria-hidden style={{ color: 'var(--ink-dim)' }}>⬡</span>
                 <span style={CSS.repoName} title={m.member_ref}>{label}</span>
-                <span style={CSS.repoPath} title={repo?.root_path}>{repo?.root_path ?? ''}</span>
+                <span style={CSS.repoPath} title={repo?.root_path && showPath(repo.root_path)}>{repo?.root_path ? showPath(repo.root_path) : ''}</span>
                 {isConfirming ? (
                   <>
                     <span style={CSS.rowMeta}>detach {label}?</span>
@@ -451,7 +453,7 @@ export function ProjectRepositories({ projectId, members, onMembersChange }: Pro
                   type="button"
                   data-testid="project-repo-option"
                   data-repo={r.id}
-                  title={r.root_path}
+                  title={showPath(r.root_path)}
                   disabled={busy}
                   onClick={() => void attach(r)}
                   style={{ ...CSS.option, opacity: attaching === r.id ? 0.5 : 1 }}

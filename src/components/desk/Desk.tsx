@@ -31,8 +31,11 @@ const CARDS_MAX = 3;
  * Render only: counts and sentences are `board/deskModel.ts` over `useNeedsRows`, `useBoardModel`,
  * `useHandover` and the roster.
  */
-export function Desk({ runs, needRows, now, navigate, onAsk }: {
+export function Desk({ runs, runsLoaded, needRows, now, navigate, onAsk }: {
   runs: SessionView[];
+  /** Whether the first `GET /runs` has answered (studio#459): before it, the Desk says it is still
+   *  looking — never "Nothing needs you" over a list that has not arrived. */
+  runsLoaded: boolean;
   needRows: NeedRow[];
   now: number;
   navigate: Navigate;
@@ -83,10 +86,15 @@ export function Desk({ runs, needRows, now, navigate, onAsk }: {
           <span aria-hidden className="wk-desk-avatar"><span className="wk-desk-dot wk-desk-dot--waiting" /></span>
           <div>
             <p className="wk-desk-who">Studio</p>
-            <p data-testid="desk-headline" data-count={count} className="wk-desk-sentence">
-              {count > 0 ? <mark className="wk-desk-mark">{needsHeadline(count)}</mark> : needsHeadline(count)}
-              {count === 0 && ' We’ll tap you when something needs a decision.'}
-            </p>
+            {runsLoaded ? (
+              <p data-testid="desk-headline" data-count={count} className="wk-desk-sentence">
+                {count > 0 ? <mark className="wk-desk-mark">{needsHeadline(count)}</mark> : needsHeadline(count)}
+                {count === 0 && ' We’ll tap you when something needs a decision.'}
+              </p>
+            ) : (
+              // studio#459: an honest loading line while /runs is in flight — the all-clear waits.
+              <p data-testid="desk-loading" aria-busy="true" className="wk-desk-sentence wk-desk-quiet">Checking what needs you…</p>
+            )}
           </div>
         </div>
         {handover.since !== null && (
@@ -95,7 +103,7 @@ export function Desk({ runs, needRows, now, navigate, onAsk }: {
 
         <div className="wk-desk-cols">
           <div className="wk-desk-main">
-            <NeedsQueueSurface rows={needRows} runs={runs} navigate={navigate} now={now} variant="desk" />
+            {runsLoaded && <NeedsQueueSurface rows={needRows} runs={runs} navigate={navigate} now={now} variant="desk" />}
             {(chores.length > 0 || states.frozen || states.away) && (
               <section data-testid="desk-chores" aria-label="For whoever runs studio" className="wk-desk-chores">
                 <p className="wk-desk-label">For whoever runs studio{chores.length > 0 ? ` · ${chores.length}` : ''}</p>
@@ -116,7 +124,9 @@ export function Desk({ runs, needRows, now, navigate, onAsk }: {
 
           <aside className="wk-desk-side" aria-label="Your projects">
             <p className="wk-desk-label">Your projects</p>
-            {cards.length === 0 && <p className="wk-desk-quiet">Nothing has been started yet.</p>}
+            {cards.length === 0 && (runsLoaded
+              ? <p className="wk-desk-quiet">Nothing has been started yet.</p>
+              : <p data-testid="desk-projects-loading" aria-busy="true" className="wk-desk-quiet">Checking…</p>)}
             {cards.slice(0, CARDS_MAX).map((card) => (
               <section key={card.projectId ?? 'unfiled'} data-testid="desk-project" data-project-id={card.projectId ?? ''} className="wk-desk-card">
                 <p className="wk-desk-card-title">
