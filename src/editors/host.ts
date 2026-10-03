@@ -58,8 +58,10 @@ export interface HostUi {
   status(line: string): void;
   notes(count: number): void;
   thread(line: string): void;
-  /** A write this editor made, structured, so a host can draw its own line and Undo (EP-P2). */
-  written?(w: { version: number; base: number; summary: string }): void;
+  /** A write this editor made, structured, so a host can draw its own line and Undo (EP-P2). `anchors`
+   *  are the HOST-checked ids the write touched — the words of the line come from them, never from
+   *  the plugin's `summary` (codex r1). */
+  written?(w: { version: number; base: number; summary: string; anchors: string[] }): void;
   fullscreen(): Promise<boolean>;
   torn(reason: string): void;
   log(entry: HostLogEntry): void;
@@ -294,7 +296,7 @@ export class EditorHost {
             this.log({ kind: 'written', version: r.version, items: checked.items });
             const summary = String(p['summary']).slice(0, LIMITS.summaryChars);
             this.o.ui.thread(`${this.o.firstParty ? 'You changed' : `${this.o.name} changed`} ${summary} · Version ${r.version}`);
-            this.o.ui.written?.({ version: r.version, base: p['base'] as number, summary });
+            this.o.ui.written?.({ version: r.version, base: p['base'] as number, summary, anchors: [...new Set(checked.items.map((it) => it.selector))] });
           }
           return r;
         } finally {
@@ -407,14 +409,18 @@ export class EditorHost {
    */
   async undo(version: number): Promise<AdapterResult<{ undone: true }>> {
     if (!this.ownVersions.has(version)) return { error: 'refused', message: 'only a version this editor wrote, this session' };
+    const was = this.o.adapter.artifact().head;
     const r = await this.o.adapter.undo(version);
     if (this.torn) return r;
     const head = this.o.adapter.artifact().head;
+    // Only a head that moved is news (the fork, or what moved under it); a refused or failed undo
+    // changed nothing, so the inventory and the plugin's page stand (codex r1).
+    if (head === was) return r;
     this.inventory = null;
     if (!('error' in r)) {
       this.ownVersions.add(head);
       this.post(event('artifact.changed', { version: head, head, by: 'this-editor', kind: 'fork' }));
-    } else if (r.error === 'head_moved') {
+    } else {
       this.post(event('artifact.changed', { version: head, head, by: 'other', kind: 'generated' }));
     }
     return r;

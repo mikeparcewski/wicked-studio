@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { addChip } from '../src/board/aboutChips.js';
 import {
   anchorWords, coverageLine, coverageOf, editedLine, editorKindOf, elementChip, grow, namesId, notUndoneLine,
-  requirementChip, shrink, slideChip, slideInView, slidesOf, undoneLine,
+  requirementChip, shrink, slideChip, slideInView, slidesOf, undoneLine, writtenWords,
 } from '../src/board/artifactMorph.js';
 
 /**
@@ -190,5 +190,15 @@ describe('coverageOf — the requirements read, and where the document names eac
   });
   it('a requirement is a subject', () => {
     expect(requirementChip(reqs[1]!)).toStrictEqual({ kind: 'about', key: 'req:booking::REQ-002', label: 'requirement REQ-002' });
+  });
+});
+
+describe('writtenWords — the host’s own words for a plugin write (EP-P2, codex r1)', () => {
+  it('names the touched elements from the checked anchors, never from the plugin’s summary', () => {
+    expect(writtenWords(['headline'])).toBe('the headline');
+    expect(writtenWords(['slide-0-heading-1', 'cta'])).toBe(`${anchorWords('slide-0-heading-1', 'page')} and 1 more`);
+    expect(writtenWords(['section-1'], 'deck')).toBe('slide 2');
+    expect(writtenWords([])).toBe('the page');
+    expect(writtenWords([], 'deck')).toBe('the deck');
   });
 });

@@ -39,7 +39,7 @@ describe('InteractiveDocAdapter', () => {
   it('a write is ONE feedback batch on the base, and its own deterministic child is the version returned', async () => {
     const heads: number[] = [];
     const a = new InteractiveDocAdapter('notes', 'plan', 'The plan', 'page', (h) => heads.push(h));
-    api.manifests = [{ head: 1, versions: [entry(1, null)] }, { head: 2, versions: [entry(1, null), entry(2, 1, true)] }];
+    api.manifests = [{ head: 1, versions: [entry(1, null)] }, { head: 1, versions: [entry(1, null)] }, { head: 2, versions: [entry(1, null), entry(2, 1, true)] }];
     await a.refresh();
     const r = await a.write(1, [{ selector: 'headline', type: 'content-edit', value: 'New', before: 'Old' }]);
     expect(r).toEqual({ version: 2 });
@@ -51,15 +51,43 @@ describe('InteractiveDocAdapter', () => {
   it('the head moving by another hand (no deterministic child of the base) is `stale`, and the head follows', async () => {
     // The landing window is the adapter's (20 s); here it is short, so the test waits it out.
     const a = new InteractiveDocAdapter('notes', 'plan', 'The plan', 'page', undefined, { pollForMs: 900 });
-    api.manifests = [{ head: 1, versions: [entry(1, null)] }, { head: 2, versions: [entry(1, null), entry(2, 1)] }];
+    api.manifests = [{ head: 1, versions: [entry(1, null)] }, { head: 1, versions: [entry(1, null)] }, { head: 2, versions: [entry(1, null), entry(2, 1)] }];
     await a.refresh();
     const r = await a.write(1, [{ selector: 'headline', type: 'content-edit', value: 'New', before: 'Old' }]);
     expect(r).toMatchObject({ error: 'stale', head: 2 });
     expect(a.head).toBe(2);
   });
+  it('codex r1: a deterministic child of the base that ALREADY existed before the post is never claimed as this write', async () => {
+    // Another tab made v2 off v1 before this edit was posted; the bridge records no correlation id (the
+    // real one drops source_message_id), so what exists before the post is the only fence.
+    const a = new InteractiveDocAdapter('notes', 'plan', 'The plan', 'page', undefined, { pollForMs: 900 });
+    api.manifests = [{ head: 2, versions: [entry(1, null), entry(2, 1, true)] }];
+    await a.refresh();
+    const r = await a.write(1, [{ selector: 'headline', type: 'content-edit', value: 'New', before: 'Old' }]);
+    expect(r).toMatchObject({ error: 'stale', head: 2 });
+    expect(a.writes.size).toBe(0);
+  });
+  it('codex r1: two new deterministic children of the base in the window cannot be told apart — neither is claimed, and it says so', async () => {
+    const a = new InteractiveDocAdapter('notes', 'plan', 'The plan', 'page', undefined, { pollForMs: 900 });
+    api.manifests = [{ head: 1, versions: [entry(1, null)] }, { head: 1, versions: [entry(1, null)] }, { head: 3, versions: [entry(1, null), entry(2, 1, true), entry(3, 1, true)] }];
+    await a.refresh();
+    const r = await a.write(1, [{ selector: 'headline', type: 'content-edit', value: 'New', before: 'Old' }]);
+    expect(r).toMatchObject({ error: 'unavailable', head: 3 });
+    expect((r as { message: string }).message).toContain('versions 2 and 3');
+    expect(a.writes.size).toBe(0);
+    expect(a.head).toBe(3);
+  });
+  it('codex r1: the head follows the manifest, not the match — this edit at v2 with a helper’s v3 already the head', async () => {
+    const a = new InteractiveDocAdapter('notes', 'plan', 'The plan', 'page');
+    api.manifests = [{ head: 1, versions: [entry(1, null)] }, { head: 1, versions: [entry(1, null)] }, { head: 3, versions: [entry(1, null), entry(2, 1, true), entry(3, 2)] }];
+    await a.refresh();
+    expect(await a.write(1, [{ selector: 'headline', type: 'content-edit', value: 'New', before: 'Old' }])).toEqual({ version: 2 });
+    expect(a.head).toBe(3);
+    expect(a.writes.get(2)).toBe(1);
+  });
   it('Undo forks the version BEFORE the change with expect_head = the change (C5); a helper in between is head_moved', async () => {
     const a = new InteractiveDocAdapter('notes', 'plan', 'The plan');
-    api.manifests = [{ head: 1, versions: [entry(1, null)] }, { head: 2, versions: [entry(1, null), entry(2, 1, true)] }];
+    api.manifests = [{ head: 1, versions: [entry(1, null)] }, { head: 1, versions: [entry(1, null)] }, { head: 2, versions: [entry(1, null), entry(2, 1, true)] }];
     await a.refresh();
     await a.write(1, [{ selector: 'headline', type: 'content-edit', value: 'New', before: 'Old' }]);
     api.forkAnswer = { version: 3 };

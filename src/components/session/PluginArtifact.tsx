@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { apiBase } from '../../api/client.js';
 import type { EditorView } from '../../api/editors.js';
 import { getVersions, interactiveDocUrl } from '../../api/interactive.js';
-import { editedLine, notUndoneLine, shrink, undoneLine, type ArtifactSize } from '../../board/artifactMorph.js';
+import { editedLine, notUndoneLine, shrink, undoneLine, writtenWords, type ArtifactSize } from '../../board/artifactMorph.js';
+import { focusBeside } from '../../editors/focus.js';
 import { EditorHost, type HostLogEntry } from '../../editors/host.js';
 import { InteractiveDocAdapter } from '../../editors/interactiveDocAdapter.js';
 import { bundleUrl, fetchGrants } from '../../editors/model.js';
@@ -23,7 +24,7 @@ import { useSessionDrafts } from '../../store/sessionDrafts.js';
 const IDLE_MS = 5_000;
 
 type Line =
-  | { kind: 'edited'; version: number; base: number; summary: string }
+  | { kind: 'edited'; version: number; base: number; what: string }
   | { kind: 'undone'; version: number }
   | { kind: 'not-undone'; head: number }
   | { kind: 'working' | 'failed' | 'status'; text: string }
@@ -113,14 +114,16 @@ export function PluginArtifact({ projectId, docId, title, composerKey, size, mor
             if (k === 'Escape') morphRef.current(shrink(sizeRef.current));
             else if (k === 'Mod+K') pressInHost({ key: 'k', code: 'KeyK', metaKey: true, ctrlKey: true });
             else if (k.startsWith('Alt+')) pressInHost({ key: k.slice(4).toLowerCase(), code: `Key${k.slice(4)}`, altKey: true });
-            else if (k === 'Tab' || k === 'Shift+Tab') (document.activeElement as HTMLElement | null)?.blur?.();
+            else if (k === 'Tab' || k === 'Shift+Tab') focusBeside(hostRef.current?.frame ?? null, k === 'Shift+Tab');
           },
           morph: (to) => morphRef.current(to),
           status: (l) => { if (live.current) setLine({ kind: 'status', text: l }); },
           notes: () => undefined,
           // The structured `written` draws the line with its Undo; the plain line is the dev page's.
           thread: () => undefined,
-          written: (w) => { if (live.current) setLine({ kind: 'edited', version: w.version, base: w.base, summary: w.summary }); },
+          // The line's words are the host's: the anchors it checked, named by it — a third-party editor's
+          // line also says who changed it. The plugin's summary never reaches the thread.
+          written: (w) => { if (live.current) setLine({ kind: 'edited', version: w.version, base: w.base, what: writtenWords(w.anchors) }); },
           fullscreen: async () => { morphRef.current('full'); return true; },
           torn: (reason) => { if (live.current) setTorn(reason); },
           log: (e) => { logRef.current.push(e); if (logRef.current.length > 200) logRef.current.shift(); },
@@ -187,7 +190,7 @@ export function PluginArtifact({ projectId, docId, title, composerKey, size, mor
         <p data-testid="page-line" data-kind={line.kind} className={`wk-artifact-line${line.kind === 'not-undone' || line.kind === 'failed' ? ' wk-artifact-line--bad' : ''}`}>
           {line.kind === 'edited' && (
             <>
-              {editedLine(line.version, line.summary)}{' '}
+              {editor.first_party ? editedLine(line.version, line.what) : `${editor.title} changed ${line.what} — version ${line.version}.`}{' '}
               <button type="button" data-testid="page-undo" disabled={busy} onClick={() => void undo()} className="wk-since-toggle">Undo</button>
             </>
           )}
