@@ -71,8 +71,9 @@ export function fmtTime(sec: number): string {
 /**
  * Each chapter's marker in the stitched take. The markers are in take order, so they are consumed in
  * order: a chapter takes the next unused marker with its title (two chapters with one title get one
- * each; a chapter that was never stitched gets none). Only when every chapter has a row is a
- * title mismatch read by position — and then all of them are.
+ * each; a chapter that was never stitched gets none). Only when the recorder's titles are a
+ * vocabulary of their own — no marker carries any chapter's title — and the counts agree are the
+ * chapters read by position; and then all of them are.
  */
 function markersFor(markers: readonly DemoMarker[], titles: readonly string[]): Array<DemoMarker | null> {
   let cursor = 0;
@@ -83,9 +84,10 @@ function markersFor(markers: readonly DemoMarker[], titles: readonly string[]): 
     return markers[at] ?? null;
   });
   // One reading for the whole take, never a mix (a positional guess could reuse a marker a later
-  // title claims): every chapter by its title, or — when a title has no row and the counts agree —
-  // every chapter by its position.
-  if (byTitle.every((m) => m !== null) || markers.length !== titles.length) return byTitle;
+  // title claims, or hand a chapter the take does not hold another chapter's marker): every chapter
+  // by its title whenever any title has a row, or — when none has and the counts agree — every
+  // chapter by its position.
+  if (byTitle.some((m) => m !== null) || markers.length !== titles.length) return byTitle;
   return titles.map((_, i) => markers[i] ?? null);
 }
 

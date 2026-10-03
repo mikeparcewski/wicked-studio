@@ -215,11 +215,24 @@ describe('chapter markers', () => {
     expect(chapterMarks(recordingOf(view({ chapters, video: { mp4: 'v.mp4', poster: null, markers: renamed } }))).map((m) => m.sec)).toEqual([0, 30]);
     expect(chapterMarks(recordingOf(view({ chapters, video: { mp4: 'v.mp4', poster: null, markers: renamed.slice(0, 1) } }))).map((m) => m.sec)).toEqual([null, null]);
   });
-  it('never mixes the two readings: a marker is not used twice', () => {
-    // One title has no row and the counts agree: all by position (not X by position AND A by title, both 0).
+  it('never mixes the two readings: a marker is not used twice, and a marker with a chapter’s title is that chapter’s', () => {
+    // One title has a row: every chapter is read by title (A is at 0:00); the chapter with no row has
+    // no place. Never X by position AND A by title (both 0), and never B read as X because the counts agree.
     const chapters = [chapter(1, { title: 'X' }), chapter(2, { title: 'A' })];
     const markers = [{ at: '0:00', sec: 0, title: 'A' }, { at: '0:30', sec: 30, title: 'B' }];
-    expect(chapterMarks(recordingOf(view({ chapters, video: { mp4: 'v.mp4', poster: null, markers } }))).map((m) => m.sec)).toEqual([0, 30]);
+    expect(chapterMarks(recordingOf(view({ chapters, video: { mp4: 'v.mp4', poster: null, markers } }))).map((m) => m.sec)).toEqual([null, 0]);
+  });
+  it('with the counts equal, a chapter whose title no marker carries still has no place in the take (codex r7)', () => {
+    // Cart, Pay, Receipt against markers Cart, Ads, Receipt: Ads is not Pay. Pay's 7 s stay its own —
+    // no absolute seek, no fail mark at Ads' 0:05 + 7.
+    const chapters = [chapter(1, { title: 'Cart' }), chapter(2, { title: 'Pay', verdict: 'FAIL', failedAtSec: 7 }), chapter(3, { title: 'Receipt' })];
+    const markers = [{ at: '0:00', sec: 0, title: 'Cart' }, { at: '0:05', sec: 5, title: 'Ads' }, { at: '0:12', sec: 12, title: 'Receipt' }];
+    const r = recordingOf(view({ state: 'failed', chapters, video: { mp4: 'take/video.mp4', poster: null, markers } }));
+    expect(chapterMarks(r).map((m) => m.sec)).toEqual([0, null, 12]);
+    expect(failedChapter(r)?.failedAbsSec).toBeNull();
+    expect(stateLine(r).text).toBe('Failed at 0:07 into chapter 2');
+    expect(playheadStart(r)).toBe(0);
+    expect(checksTrack(r).filter((k) => k.chapter.index === 2).every((k) => k.atAbsSec === null)).toBe(true);
   });
 });
 
