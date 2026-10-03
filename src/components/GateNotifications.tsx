@@ -4,6 +4,9 @@ import { sessionProjectId } from '../hooks/ambientProject.js';
 import { useGateStore } from '../store/gates.js';
 import type { OpenGate } from '../store/gates.js';
 import { useMembershipStore } from '../store/membership.js';
+import { plainGateQuestion, plainRunTitle } from '../board/deskWords.js';
+import { useSkin } from '../hooks/useSkin.js';
+import { deskShell } from '../theming/skins.js';
 import { RUNS_BAR_PX } from './RunsBottomPanel.js';
 
 /**
@@ -53,6 +56,9 @@ interface Props {
 
 export function GateNotifications({ onSelect, runId, projectId = null, runs = [] }: Props): React.ReactElement {
   const gates = useGateStore((s) => s.gates);
+  // studio#441: under the desk skin the toast speaks the Desk's words (the plain question, the
+  // work's title), in its palette — no run hash, engine ordinal, raw prompt, violet or mono.
+  const desk = deskShell(useSkin());
   const projectIdByRun = useMembershipStore((s) => s.projectIdByRun);
   // Expiry needs a re-render at the moment a dwell elapses; nothing else here
   // is stateful — the gate record itself lives (and stays) in the gate store.
@@ -103,6 +109,12 @@ export function GateNotifications({ onSelect, runId, projectId = null, runs = []
 
   if (visible.length === 0) return <></>;
 
+  const workOf = (id: string): string | null => {
+    const problem = runs.find((r) => r.session.id === id)?.session.problem ?? '';
+    const t = plainRunTitle(problem).trim();
+    return t === '' ? null : t;
+  };
+
   const cards = visible.slice(0, MAX_TOAST_CARDS);
 
   return (
@@ -114,7 +126,42 @@ export function GateNotifications({ onSelect, runId, projectId = null, runs = []
       // above the runs bar, never over its toggle or "All runs ›".
       style={{ bottom: RUNS_BAR_PX + 12, pointerEvents: 'none' }}
     >
-      {cards.map((gate) => (
+      {cards.map((gate) => desk ? (
+        <div
+          key={toastKey(gate)}
+          data-testid="gate-notification"
+          data-run-id={gate.runId}
+          data-variant="desk"
+          className="wk-desk-toast"
+        >
+          <button
+            type="button"
+            data-testid="toast-dismiss"
+            aria-label="Dismiss notification"
+            title="Dismiss — the question stays on the Desk"
+            onClick={() => { dismissed.add(toastKey(gate)); bump(); }}
+            className="wk-desk-toast-x"
+          >
+            ✕
+          </button>
+          <button
+            type="button"
+            onClick={() => onSelect(gate.runId)}
+            data-testid="gate-toast"
+            data-run-id={gate.runId}
+            className="wk-desk-toast-body"
+          >
+            <span className="wk-desk-toast-head">
+              <span aria-hidden className="wk-desk-dot wk-desk-dot--waiting" />
+              <b data-testid="gate-toast-question">{plainGateQuestion(gate.prompt, gate.gateKind)}</b>
+            </span>
+            {workOf(gate.runId) !== null && (
+              <span data-testid="gate-toast-work" className="wk-desk-toast-work">{workOf(gate.runId)}</span>
+            )}
+            <span className="wk-desk-toast-open">Open →</span>
+          </button>
+        </div>
+      ) : (
         <div
           key={toastKey(gate)}
           data-testid="gate-notification"
@@ -167,12 +214,14 @@ export function GateNotifications({ onSelect, runId, projectId = null, runs = []
       {visible.length > cards.length && (
         <p
           data-testid="gate-toast-overflow"
-          className="wk-toast wk-toast--gate wk-toast-line"
+          className={desk ? 'wk-toast wk-toast-line wk-desk-toast-more' : 'wk-toast wk-toast--gate wk-toast-line'}
           // Inert by design: the overflow line is a pointer, not a control —
           // the runs bar's gate count is the actionable record.
           style={{ pointerEvents: 'none', margin: 0 }}
         >
-          +{visible.length - cards.length} more waiting — see the runs bar
+          {desk
+            ? `+${visible.length - cards.length} more waiting on the Desk`
+            : `+${visible.length - cards.length} more waiting — see the runs bar`}
         </p>
       )}
     </div>

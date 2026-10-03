@@ -138,12 +138,12 @@ describe('chainFromTeam', () => {
     expect(chainFromTeam(f, { userPlan: true }).steps.map((s) => s.addedBy)).toEqual(['human', 'human', 'floor', 'human']);
   });
 
-  it('an unknown catalog id is a tool step labelled from the catalog, never hidden', () => {
+  it('an unknown catalog id is a tool step labelled from the catalog, never hidden (a known step id keeps its word, studio#442)', () => {
     const f = hydrateFold(EMPTY_FOLD, team([row('wicked.team.plan.accepted', {
       plan_rev: 1, steps: [{ catalog: 'pa-scope', id: 'pa-scope' }, { catalog: 'lint_it', id: 'lint_it' }],
     }, 80)]));
     const c = chainFromTeam(f, { catalogLabels: { lint_it: 'Lint the change' } });
-    expect(c.steps.map((s) => [s.block, s.label])).toEqual([['tool', 'Pa scope'], ['tool', 'Lint the change']]);
+    expect(c.steps.map((s) => [s.block, s.label])).toEqual([['tool', 'Scope'], ['tool', 'Lint the change']]);
   });
 });
 
@@ -154,7 +154,7 @@ describe('chainFromUnits (a run that is not a team run)', () => {
       units: units.map((u, ord) => ({ ord, phase_ref: null, stage: 'build', ...u })),
     } as unknown as SessionView;
   }
-  it('done → done, rejected → failed; only the cursor unit of an executing run is running', () => {
+  it('done → done, rejected → failed; only the cursor unit of an executing run is running (labels are the step words, never the description: studio#440)', () => {
     const c = chainFromUnits(view([
       { status: 'done', phase_ref: 'understand', description: 'read the code' },
       { status: 'distributed', phase_ref: 'build', description: 'fix it' },
@@ -164,8 +164,8 @@ describe('chainFromUnits (a run that is not a team run)', () => {
     ]));
     expect(c.source).toBe('units');
     expect(c.steps.map((s) => [s.block, s.state, s.label])).toEqual([
-      ['research', 'done', 'read the code'], ['build', 'running', 'fix it'],
-      ['review', 'todo', 'review it'], ['test', 'failed', 'odd one'],
+      ['research', 'done', 'Research'], ['build', 'running', 'Build'],
+      ['review', 'todo', 'Review'], ['test', 'failed', 'Test'],
     ]);
   });
   it('a run paused at a gate has no running unit', () => {
@@ -209,5 +209,115 @@ describe('the team-plan store releases a run nobody shows (codex)', () => {
     expect(useTeamPlanStore.getState().byRun['twice']).toBeUndefined();
     useTeamPlanStore.getState().ingest({ type: 'teamEvent', event: row('wicked.team.step.claimed', { step_id: 'b', run_id: 'twice' }, 600) });
     expect(useTeamPlanStore.getState().byRun['twice']).toBeUndefined();
+  });
+});
+
+/**
+ * Reel take 02/04/05 (studio#440, #442, #445): the shapes a live crew 0.7.46 run carries. A unit's
+ * `description` is `<phase id> — <problem> ||| <the phase's instruction>`; only the first unit's
+ * `phase_ref` is set, and it is a workflow address, not a catalog id.
+ */
+describe('one vocabulary for a run’s steps (studio#440, #442, #445)', () => {
+  const PROBLEM = 'Add a SAVE20 discount code to applyDiscount in src/cart.js (20% off).';
+  const PHASES = ['pa-scope', 'clarify', 'design', 'build', 'adversarial-review', 'test', 'review', 'deliver'];
+  const STAGES = ['recon', 'recon', 'recon', 'build', 'review', 'test', 'review', 'build'];
+  const INSTR: Record<string, string> = {
+    'pa-scope': ' ||| Scope this run before anything changes (READ ONLY: edit nothing). End with exactly one line: SCOPE {"touch":[]}',
+    clarify: ' ||| PHASE SCOPE: this is the clarify phase.',
+    deliver: ' ||| Pushes branch wicked/7816ee54-a0bc-434a-84a7-adcedf8839ff to origin (/var/repos/origins/checkout-demo.git) — a local path, so no pull request can be opened against it. Push identity: none configured.',
+  };
+  function liveView(status: string, unitStatus: (ord: number) => string, unitIx = 0, n = 8): SessionView {
+    return {
+      session: { id: '7816ee54-a0bc-434a-84a7-adcedf8839ff', status, problem: PROBLEM, unit_ix: unitIx },
+      units: PHASES.slice(0, n).map((ph, i) => ({
+        ord: i + 1, stage: STAGES[i], status: unitStatus(i + 1),
+        phase_ref: i === 0 ? 'wf-7816ee54-a0bc-434a-84a7-adcedf8839ff:unit-1' : null,
+        description: `${ph} — ${PROBLEM}${INSTR[ph] ?? ''}`,
+      })),
+    } as unknown as SessionView;
+  }
+  const TEAM_STEPS = [
+    { catalog: 'understand', id: 'pa-scope' }, { catalog: 'understand', id: 'clarify' }, { catalog: 'design', id: 'design' },
+    { catalog: 'build', id: 'build' }, { catalog: 'review', id: 'adversarial-review' }, { catalog: 'test', id: 'test' },
+    { catalog: 'critique', id: 'review' },
+  ];
+  const WORDS = ['Scope', 'Clarify', 'Plan', 'Build', 'Challenge', 'Test', 'Review'];
+
+  it('#440: before the team fold, the units read as the same words — never the unit prompt, the phase id or a path', () => {
+    const c = chainFromUnits(liveView('executing', (o) => (o < 4 ? 'done' : 'distributed'), 3));
+    expect(c.steps.map((s) => s.label)).toEqual([...WORDS, 'Deliver']);
+    for (const s of c.steps) expect(s.label).not.toMatch(/\|\|\||—|\/|SAVE20|pa-scope/);
+    expect(c.steps.map((s) => s.block)).toEqual(['research', 'research', 'plan', 'build', 'review', 'test', 'review', 'deliver']);
+  });
+
+  it('#442: the team fold names each step once, distinct within the run', () => {
+    const f = hydrateFold(EMPTY_FOLD, team([row('wicked.team.plan.accepted', { plan_rev: 2, steps: TEAM_STEPS }, 300)]));
+    const c = chainFromTeam(f);
+    expect(c.steps.map((s) => s.label)).toEqual(WORDS);
+    expect(new Set(c.steps.map((s) => s.label)).size).toBe(c.steps.length);
+  });
+
+  it('#442: two steps of one block that the table does not name are still told apart', () => {
+    const f = hydrateFold(EMPTY_FOLD, team([row('wicked.team.plan.accepted', {
+      plan_rev: 1, steps: [{ catalog: 'review', id: 'security-pass' }, { catalog: 'critique', id: 'final-pass' }, { catalog: 'run', id: 'index' }, { catalog: 'run', id: 'annotate' }],
+    }, 310)]));
+    const labels = chainFromTeam(f, { catalogLabels: { run: 'Run a command' } }).steps.map((s) => s.label);
+    expect(new Set(labels).size).toBe(4);
+    expect(labels).toEqual(['Security pass', 'Final pass', 'Index', 'Annotate']);
+  });
+
+  it('#440: the status sentence before the fold names the running step in words', () => {
+    // statusSentence reads the running step's label; the label itself is the guard.
+    const c = chainFromUnits(liveView('executing', (o) => (o < 4 ? 'done' : 'distributed'), 3, 7));
+    expect(c.steps.find((s) => s.state === 'running')?.label).toBe('Build');
+    expect(chainSentence(c)).toBe('3 of 7 done');
+  });
+
+  it('#445: a delivered team run counts its deliver step done from the unit, 8 of 8', () => {
+    const steps = [...TEAM_STEPS, { catalog: 'deliver', id: 'deliver' }];
+    const rows: TeamRow[] = [row('wicked.team.plan.accepted', { plan_rev: 2, steps }, 400)];
+    let id = 401;
+    for (const s of TEAM_STEPS) { // the deliver Tool unit never reaches the team bus
+      rows.push(row('wicked.team.step.claimed', { step_id: s.id }, id++));
+      rows.push(row('wicked.team.step.completed', { step_id: s.id, status: 'ok' }, id++));
+    }
+    const f = hydrateFold(EMPTY_FOLD, team(rows));
+    const c = chainOf(liveView('completed', () => 'done', 8), f);
+    expect(c.source).toBe('team');
+    expect(c.steps.at(-1)).toMatchObject({ id: 'deliver', label: 'Deliver', state: 'done' });
+    expect(chainSentence(c)).toBe('8 of 8 done');
+  });
+
+  it('#445: a unit not yet done never marks its step done', () => {
+    const steps = [...TEAM_STEPS, { catalog: 'deliver', id: 'deliver' }];
+    const f = hydrateFold(EMPTY_FOLD, team([row('wicked.team.plan.accepted', { plan_rev: 2, steps }, 500)]));
+    const c = chainOf(liveView('awaiting_human', (o) => (o < 8 ? 'done' : 'pending'), 7), f);
+    expect(c.steps.at(-1)?.state).toBe('todo');
+    expect(c.steps.slice(0, 7).every((s) => s.state === 'done')).toBe(true);
+    expect(chainSentence(c)).toBe('7 of 8 done');
+  });
+
+  it('#442: a newer proposal than the accepted plan is the chain’s pending plan, in the same words', () => {
+    const f = hydrateFold(EMPTY_FOLD, team([
+      row('wicked.team.plan.accepted', { plan_rev: 1, steps: [{ catalog: 'understand', id: 'pa-scope' }] }, 600),
+      row('wicked.team.plan.proposed', { steps: TEAM_STEPS }, 601),
+    ]));
+    const c = chainFromTeam(f);
+    expect(c.pending?.map((s) => s.label)).toEqual(WORDS);
+  });
+});
+
+describe('studio#442: the line lists what the plan gate asks about', () => {
+  it('the proposal’s new steps follow the accepted ones, not started, with one label each', () => {
+    const f = hydrateFold(EMPTY_FOLD, team([
+      row('wicked.team.plan.accepted', { plan_rev: 1, steps: [{ catalog: 'understand', id: 'pa-scope' }] }, 700),
+      row('wicked.team.step.claimed', { step_id: 'pa-scope' }, 701),
+      row('wicked.team.step.completed', { step_id: 'pa-scope', status: 'ok' }, 702),
+      row('wicked.team.plan.proposed', { steps: [{ catalog: 'understand', id: 'pa-scope' }, { catalog: 'understand', id: 'clarify' }, { catalog: 'review', id: 'adversarial-review' }, { catalog: 'critique', id: 'review' }] }, 703),
+    ]));
+    const c = chainFromTeam(f);
+    expect(c.steps.map((s) => [s.label, s.state])).toEqual([['Scope', 'done'], ['Clarify', 'todo'], ['Challenge', 'todo'], ['Review', 'todo']]);
+    expect(c.pending?.map((s) => s.label)).toEqual(c.steps.map((s) => s.label));
+    expect(chainSentence(c)).toBe('1 of 4 done');
   });
 });

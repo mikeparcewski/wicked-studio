@@ -26,7 +26,7 @@ export interface PendingDecision {
   verb: DecisionVerb;
   /** The runs this decision answers — one for a single gate, N for a batch. */
   runIds: string[];
-  /** Which gate, in words: "beta · b1" (project · run); null for a batch. */
+  /** Which gate, in words: "the plan for “Fix the double charge”" (`gateLabel`); null for a batch. */
   label: string | null;
   /** The note riding the decision, if any — handed back on Undo so it is never lost. */
   amend: string | null;
@@ -225,7 +225,7 @@ const HEADLINE_VERB: Record<DecisionVerb, string> = {
   'request-changes': 'Requesting changes',
 };
 
-/** "Approving beta · b1 in 8 s" / "Rejecting 3 gates in 4 s". */
+/** "Approving the plan for “Fix the double charge” in 8 s" / "Rejecting 3 gates in 4 s". */
 export function undoHeadline(p: PendingDecision, now: number): string {
   const verb = HEADLINE_VERB[p.verb];
   const what = p.runIds.length > 1 ? ` ${p.runIds.length} gates` : p.label !== null ? ` ${p.label}` : '';

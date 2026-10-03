@@ -2,9 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import type { SessionView } from '../../api/types.js';
 import type { ChainModel } from '../../board/chainModel.js';
 import { commitGateDecision, IDLE_GATE_ACTION, useGateActionStore } from '../../board/gateActions.js';
-import { gateInstance, proposalCard, type ProposalKind } from '../../board/proposalCard.js';
+import { deliverCardOf, deliverLine, gateInstance, proposalCard, type ProposalKind } from '../../board/proposalCard.js';
 import { useGateStore } from '../../store/gates.js';
-import { deliverTargetOf } from '../gateMoveModel.js';
+import { Tech } from '../Tech.js';
 
 /**
  * THE PROPOSAL CARD (DES-STUDIO-REBUILD-001 §3 scenes 07/08/24/42, slice S6b): a run's plan or
@@ -49,8 +49,9 @@ export function ProposalCard({ view, chain }: { view: SessionView; chain: ChainM
     if (sending.current || gate === undefined) return; // double clicks are ignored
     sending.current = true;
     setUi((u) => ({ ...u, confirming: null }));
+    // studio#444: the undo notice repeats the card's plain sentence, never the engine's card.
     const deliver = card.kind === 'deliver'
-      ? { deliver: { branch: (view.session as unknown as { run_branch?: string }).run_branch ?? null, repo: null, card: deliverTargetOf(view.units, gate.ord) } }
+      ? { deliver: { branch: (view.session as unknown as { run_branch?: string }).run_branch ?? null, repo: null, card: deliverLine(view, gate) } }
       : {};
     // The pressed button goes away as the card becomes progress: the card keeps keyboard focus.
     requestAnimationFrame(() => cardRef.current?.focus());
@@ -70,6 +71,8 @@ export function ProposalCard({ view, chain }: { view: SessionView; chain: ChainM
         <>
           <p data-testid="session-proposal-text" className="wk-prop-text">{card.text}</p>
           {card.why !== null && card.state === 'ask' && <p data-testid="session-proposal-why" className="wk-prop-why">{card.why}</p>}
+          {/* The engine's own card (the origin's path, the run branch): underneath only (studio#444). */}
+          {card.kind === 'deliver' && <Tech data-testid="tech-proposal-deliver-card" parts={[deliverCardOf(view, gate)]} block />}
           {card.state === 'confirm' && card.confirm !== null ? (
             <div data-testid="session-proposal-confirm" role="alertdialog" aria-label={`Are you sure? ${card.confirm.q}`} className="wk-prop-confirm">
               <p className="wk-prop-why"><b>Are you sure? {card.confirm.q}</b> {card.confirm.w}</p>

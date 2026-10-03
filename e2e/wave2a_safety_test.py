@@ -4,7 +4,7 @@ wave2a_safety_test.py — studio wave 2a round 3: A QUEUED DECISION IS ABOUT ONE
 
 REAL 10 s window throughout. Against the `wave1` corpus with a SIMPLE gate waiting on b1 (unit 3).
 
-  label     j, a on the board: the toast reads "Approving beta · b1 in 10 s".
+  label     j, a on the board: the toast reads "Approving “migrate beta's settings page to the new form kit” in 10 s".
   peek      with that decision queued, P does NOT resurface b1 (nothing else needs you).
   elsewhere the gate is answered elsewhere mid-window (a live `resumed` frame, the run moves on):
             NO POST ever reaches the daemon, and the notice reads "Not sent: … answered elsewhere".
@@ -94,7 +94,7 @@ with sync_playwright() as p:
     page = board(browser)
     pressed = approve_on_board(page)
     text = page.get_by_test_id("undo-toast").text_content() or ""
-    check("toast-names-the-gate", "Approving beta · b1 in 10 s" in text, text=text)
+    check("toast-names-the-gate", "Approving “migrate beta's settings page to the new form kit” in 10 s" in text, text=text)
     page.keyboard.press("Alt+p")
     page.get_by_test_id("peek-card").wait_for(state="visible", timeout=3000)
     check("peek-skips-queued-gate", page.get_by_test_id("peek-card").get_attribute("data-run-id") != "b1"
@@ -106,7 +106,7 @@ with sync_playwright() as p:
                 extra_frames=[{"type": "resumed", "session": "b1"}])
     page.wait_for_timeout(max(0, int((pressed + 6.5 - time.monotonic()) * 1000)))  # the frame lands within ~1 s
     page.screenshot(path=str(SHOTS / "wave2a-safety-elsewhere.png"))
-    check("elsewhere-notice", "not-sent: Not sent: the gate on beta · b1 was answered elsewhere" in notice(page),
+    check("elsewhere-notice", "not-sent: Not sent: the gate on “migrate beta's settings page to the new form kit” was answered elsewhere" in notice(page),
           notice=notice(page))
     page.wait_for_timeout(max(0, int((pressed + 12.0 - time.monotonic()) * 1000)))
     check("elsewhere-nothing-sent", len(server_posts(origin)) == 0, server=len(server_posts(origin)))
@@ -119,7 +119,7 @@ with sync_playwright() as p:
     set_fixture(origin, extra_gates=[{"session": "b1", "ord": 4, "prompt": "Approve unit 4 before it runs: ship it"}])
     page.wait_for_timeout(max(0, int((pressed + 6.5 - time.monotonic()) * 1000)))
     page.screenshot(path=str(SHOTS / "wave2a-safety-newgate.png"))
-    check("newgate-notice", "not-sent: Not sent: a new gate opened on beta · b1" in notice(page), notice=notice(page))
+    check("newgate-notice", "not-sent: Not sent: a new gate opened on “migrate beta's settings page to the new form kit”" in notice(page), notice=notice(page))
     page.wait_for_timeout(max(0, int((pressed + 12.0 - time.monotonic()) * 1000)))
     check("newgate-nothing-sent", len(server_posts(origin)) == 0, server=len(server_posts(origin)))
     page.close()
@@ -133,7 +133,7 @@ with sync_playwright() as p:
     posts = server_posts(origin)
     check("ord-one-post-names-gate", len(posts) == 1 and posts[0]["body"] == {"approve": True, "ord": 3},
           posts=[q["body"] for q in posts])
-    check("sent-result", "sent: Approved beta · b1." in notice(page), notice=notice(page))
+    check("sent-result", "sent: Approved “migrate beta's settings page to the new form kit”." in notice(page), notice=notice(page))
     page.close()
 
     # ── the gate card shows the shared queued state ─────────────────────────────

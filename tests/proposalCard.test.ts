@@ -40,7 +40,7 @@ describe('the proposal: the plan, in one sentence, with Go / Not now', () => {
     const c = proposalCard({ view: run('r1', 'awaiting_human'), gate: planGate(), chain: EMPTY, action: IDLE_GATE_ACTION, ui: NO_UI })!;
     expect(c.kind).toBe('plan');
     expect(c.state).toBe('ask');
-    expect(c.text).toBe('Here’s the plan: Understand → Build → Test → Review → Deliver (5 steps).');
+    expect(c.text).toBe('Here’s the plan: Research → Build → Test → Review → Deliver (5 steps).');
     expect(c.act).toBe('Go');
     expect(c.text).not.toMatch(/rev|unit|band|mode/);
   });
@@ -107,11 +107,11 @@ describe('the proposal: the plan, in one sentence, with Go / Not now', () => {
 describe('Copilot r1 on the proposal model', () => {
   it('a plan prompt’s trailing instruction is not a step; a units chain or an accepted plan never stands in for the proposal', () => {
     const prompt = 'Approve plan rev 2 before unit 2 runs (manual mode; band 70-100; manual mode): understand → design → deliver. Approve, approve with an edited plan, or reject.';
-    expect(planSteps(EMPTY, prompt)).toStrictEqual(['Understand', 'Design', 'Deliver']);
+    expect(planSteps(EMPTY, prompt)).toStrictEqual(['Research', 'Plan', 'Deliver']);
     const units: ChainModel = { ...EMPTY, source: 'units', steps: [step('u0', 'raw unit description', 'todo')], total: 1 };
-    expect(planSteps(units, prompt)).toStrictEqual(['Understand', 'Design', 'Deliver']);
+    expect(planSteps(units, prompt)).toStrictEqual(['Research', 'Plan', 'Deliver']);
     const accepted = chain([step('a', 'Old step', 'done')]);
-    expect(planSteps(accepted, prompt)).toStrictEqual(['Understand', 'Design', 'Deliver']);
+    expect(planSteps(accepted, prompt)).toStrictEqual(['Research', 'Plan', 'Deliver']);
   });
 
   it('a plan gate is classified first, and an escalation on the deliver unit is never a hand-over', () => {
@@ -191,7 +191,7 @@ describe('Copilot r3 (past the cap: small, user-visible)', () => {
 describe('the deliver card: the one "Are you sure?"', () => {
   const units = [
     makeUnit({ id: 'r9:build', session_id: 'r9', ord: 1, status: 'done', phase_ref: 'build' }),
-    makeUnit({ id: 'r9:deliver', session_id: 'r9', ord: 2, status: 'pending', phase_ref: 'deliver', description: 'deliver — Fix it ||| Pushes branch wicked/r9 to origin and opens a pull request on acme/shop. Push identity: gh' }),
+    makeUnit({ id: 'r9:deliver', session_id: 'r9', ord: 2, status: 'pending', phase_ref: 'deliver', description: 'deliver — Fix it ||| Pushes branch wicked/r9 to acme/shop on GitHub and opens a pull request there; merge stays human. Push identity: gh' }),
   ];
   const gate = openGate({ runId: 'r9', prompt: 'Approve unit 2 before it runs: deliver', ord: 2, gateKind: 'deliver' });
 
@@ -201,7 +201,8 @@ describe('the deliver card: the one "Are you sure?"', () => {
     const ask = proposalCard({ view: v, gate, chain: EMPTY, action: IDLE_GATE_ACTION, ui: NO_UI })!;
     expect(ask.state).toBe('ask');
     expect(ask.act).toBe('Deliver');
-    expect(ask.why).toBe('Pushes branch wicked/r9 to origin and opens a pull request on acme/shop.');
+    // studio#444: one plain sentence from the card's parts, never the card's own words.
+    expect(ask.why).toBe('Pushes your changes as a new branch to acme/shop on GitHub and opens a pull request there. Merging stays yours.');
     const sure = proposalCard({ view: v, gate, chain: EMPTY, action: IDLE_GATE_ACTION, ui: { dismissed: null, confirming: gateInstance(gate) } })!;
     expect(sure.state).toBe('confirm');
     expect(sure.confirm).toStrictEqual({ q: 'This leaves studio.', w: ask.why, a: 'Yes, deliver' });
@@ -210,7 +211,7 @@ describe('the deliver card: the one "Are you sure?"', () => {
   it('without the unit’s target sentence the pull request is a condition, never a promise', () => {
     const bare = [units[0]!, makeUnit({ id: 'r9:deliver', session_id: 'r9', ord: 2, status: 'pending', phase_ref: 'deliver', description: 'deliver' })];
     const ask = proposalCard({ view: run('r9', 'awaiting_human', bare), gate, chain: EMPTY, action: IDLE_GATE_ACTION, ui: NO_UI })!;
-    expect(ask.why).toMatch(/a pull request opens only if that origin is a GitHub repository/);
+    expect(ask.why).toMatch(/a pull request opens only if that origin is on GitHub/);
   });
 });
 
@@ -277,5 +278,17 @@ describe('sources: "Based on N sources", hover, the passage', () => {
     expect(w.map((l) => l.n)).toStrictEqual([13, 14, 15, 16, 17]);
     expect(w.filter((l) => l.hit).map((l) => l.n)).toStrictEqual([15]);
     expect(passageWindow(text, null, 1).length).toBe(3);
+  });
+});
+
+describe('studio#442: the proposal names the steps the chain names', () => {
+  const REEL_PROMPT = 'Approve plan rev 2 before unit 2 runs (manual mode; band 0-19; manual mode): pa-scope → clarify → design → build → adversarial-review → test → review';
+  it('the prompt fallback says each step id in the chain’s words, never "Pa scope"', () => {
+    expect(planSteps(EMPTY, REEL_PROMPT)).toStrictEqual(['Scope', 'Clarify', 'Plan', 'Build', 'Challenge', 'Test', 'Review']);
+  });
+  it('a pending proposal on the team bus is the plan the card proposes, in the chain’s labels', () => {
+    const pending = [step('pa-scope', 'Scope', 'todo'), step('build', 'Build', 'todo')];
+    const accepted = chain([step('pa-scope', 'Scope', 'done')], { pending });
+    expect(planSteps(accepted, REEL_PROMPT)).toStrictEqual(['Scope', 'Build']);
   });
 });

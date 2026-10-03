@@ -8,14 +8,14 @@ The wave-1 corpus with a SIMPLE gate waiting on b1 (unit 3), answered from its D
   open      "Answer" opens the row's choices (Approve / Reject); C3 absent: nothing is preselected.
   enter     Enter with nothing moved to sends nothing and queues nothing (§5.6 rule 3).
   undo      ↓ then Enter queues Approve: the row folds to "You chose Approve · Undo N s"; the toast
-            names the gate ("Approving beta · b1 in 10 s"); Undo restores the row; 12 s later the
+            names the gate ("Approving “migrate beta's settings page to the new form kit” in 10 s"); Undo restores the row; 12 s later the
             daemon has received NOTHING.
   elsewhere the digit 1 queues Approve; mid-window the gate is answered elsewhere (a live `resumed`
             frame): NO POST, the notice reads "Not sent: … answered elsewhere".
   new gate  fresh page, 1 again; mid-window a NEW gate opens on b1: NO POST, the notice says so.
   close     fresh page, 1 again, then the page is reloaded inside the window: NO POST.
   ord       fresh page, a click on Approve, no interference: exactly ONE POST after 10 s,
-            body {approve: true, ord: 3}, and "Approved beta · b1." is reported.
+            body {approve: true, ord: 3}, and "Approved “migrate beta's settings page to the new form kit”." is reported.
   cards     with the trust + gate-move corpus: the DELIVER gate (r-trust-deliver) and the
             ESCALATION gate (r-review) offer no Answer — their row opens the card — while the plain
             gate (b1) beside them can be answered in its row.
@@ -130,7 +130,7 @@ with sync_playwright() as p:
         pressed = time.monotonic()
         line = row.locator('[data-testid="need-chosen-line"]').inner_text()
         toast = page.get_by_test_id("undo-toast").text_content() or ""
-        check("folded", line.startswith("You chose Approve · Undo ") and "Approving beta · b1 in" in toast,
+        check("folded", line.startswith("You chose Approve · Undo ") and "Approving “migrate beta's settings page to the new form kit” in" in toast,
               line=line, toast=toast)
         page.screenshot(path=str(SHOTS / "desk-answer-chosen.png"))
         row.locator('[data-testid="need-chosen-undo"]').click()
@@ -149,7 +149,7 @@ with sync_playwright() as p:
         set_fixture(origin, status_over={"b1": "executing"}, gate_now=[],
                     extra_frames=[{"type": "resumed", "session": "b1"}])
         page.wait_for_timeout(max(0, int((pressed + 6.5 - time.monotonic()) * 1000)))
-        check("elsewhere-notice", "not-sent: Not sent: the gate on beta · b1 was answered elsewhere" in notice(page),
+        check("elsewhere-notice", "not-sent: Not sent: the gate on “migrate beta's settings page to the new form kit” was answered elsewhere" in notice(page),
               notice=notice(page))
         page.wait_for_timeout(max(0, int((pressed + 12.0 - time.monotonic()) * 1000)))
         check("elsewhere-nothing-sent", len(server_posts(origin)) == 0, server=len(server_posts(origin)))
@@ -164,7 +164,7 @@ with sync_playwright() as p:
         page.wait_for_timeout(3000)
         set_fixture(origin, extra_gates=[{"session": "b1", "ord": 4, "prompt": "Approve unit 4 before it runs: ship it"}])
         page.wait_for_timeout(max(0, int((pressed + 6.5 - time.monotonic()) * 1000)))
-        check("newgate-notice", "not-sent: Not sent: a new gate opened on beta · b1" in notice(page), notice=notice(page))
+        check("newgate-notice", "not-sent: Not sent: a new gate opened on “migrate beta's settings page to the new form kit”" in notice(page), notice=notice(page))
         page.wait_for_timeout(max(0, int((pressed + 12.0 - time.monotonic()) * 1000)))
         check("newgate-nothing-sent", len(server_posts(origin)) == 0, server=len(server_posts(origin)))
         page.close()
@@ -191,7 +191,7 @@ with sync_playwright() as p:
         posts = server_posts(origin)
         check("ord-one-post-names-gate", len(posts) == 1 and posts[0]["body"] == {"approve": True, "ord": 3},
               posts=[q["body"] for q in posts])
-        check("sent-result", "sent: Approved beta · b1." in notice(page), notice=notice(page))
+        check("sent-result", "sent: Approved “migrate beta's settings page to the new form kit”." in notice(page), notice=notice(page))
         # The row says it was sent while the run has no gate (Copilot): never falls back to Open.
         sent_line = page.evaluate("() => [...document.querySelectorAll('[data-testid=\"need-chosen-line\"]')].map(e => e.innerText)")
         check("sent-row", sent_line in ([], ["You chose Approve · sent"]), sent_line=sent_line)

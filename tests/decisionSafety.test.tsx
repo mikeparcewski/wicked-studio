@@ -56,7 +56,7 @@ describe('the gate moves under a queued decision', () => {
     void decideGate('b1', { approve: true });
     await vi.advanceTimersByTimeAsync(4_000);
     act(() => { useGateStore.getState().ingest({ type: 'resumed', session: 'b1' } as never); });
-    expect(results()).toEqual(['not-sent: Not sent: the gate on beta · b1 was answered elsewhere or the run moved on.']);
+    expect(results()).toEqual(['not-sent: Not sent: the gate on a run in beta was answered elsewhere or the run moved on.']);
     await vi.advanceTimersByTimeAsync(UNDO_WINDOW_MS);
     expect(confirmGate).not.toHaveBeenCalled();
     expect(useUndoQueue.getState().pending).toEqual([]);
@@ -70,7 +70,7 @@ describe('the gate moves under a queued decision', () => {
     act(() => {
       useGateStore.getState().ingest({ type: 'awaitingHuman', session: 'b1', ord: 4, prompt: 'Approve unit 4?' } as never);
     });
-    expect(results()[0]).toMatch(/^not-sent: Not sent: a new gate opened on beta · b1/);
+    expect(results()[0]).toMatch(/^not-sent: Not sent: a new gate opened on a run in beta/);
     await vi.advanceTimersByTimeAsync(UNDO_WINDOW_MS);
     expect(confirmGate).not.toHaveBeenCalled();
     // The new gate is answerable afresh.
@@ -87,7 +87,7 @@ describe('the gate moves under a queued decision', () => {
     expect(confirmGate).not.toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(1);
     expect(confirmGate).toHaveBeenCalledWith('b1', { approve: false, amend: 'wrong branch', ord: 3 });
-    expect(results()).toEqual(['sent: Rejected beta · b1.']);
+    expect(results()).toEqual(['sent: Rejected a run in beta.']);
   });
 
   it("a failed send is a visible result (the daemon's 409 gate_changed)", async () => {
@@ -95,7 +95,7 @@ describe('the gate moves under a queued decision', () => {
     confirmGate.mockRejectedValueOnce(new ApiError(409, 'Gate changed: this decision was made on the gate before unit 3, but the open gate is before unit 4'));
     void decideGate('b1', { approve: true });
     await vi.advanceTimersByTimeAsync(UNDO_WINDOW_MS);
-    expect(results()[0]).toMatch(/^failed: Not sent: beta · b1 — .*Gate changed/);
+    expect(results()[0]).toMatch(/^failed: Not sent: a run in beta — .*Gate changed/);
   });
 });
 
@@ -105,7 +105,7 @@ describe('never silent', () => {
     void decideGate('b1', { approve: true });
     void decideGate('b1', { approve: false });
     expect(useUndoQueue.getState().pending).toHaveLength(1);
-    expect(results()).toEqual(['not-sent: Not sent: beta · b1 already has a decision that is waiting to send (see its Undo toast).']);
+    expect(results()).toEqual(['not-sent: Not sent: a run in beta already has a decision that is waiting to send (see its Undo toast).']);
   });
 
   it('the gate card shows the shared queued state with its controls disabled', () => {
@@ -115,7 +115,7 @@ describe('never silent', () => {
     expect(screen.getByTestId('steering-queued').textContent).toBe('queued · undo in toast');
     expect(screen.getByTestId('steering-approve')).toBeDisabled();
     expect(screen.getByTestId('steering-reject')).toBeDisabled();
-    expect(screen.getByTestId('undo-toast').textContent).toContain('Approving beta · b1 in 10 s');
+    expect(screen.getByTestId('undo-toast').textContent).toContain('Approving a run in beta in 10 s');
   });
 });
 
@@ -162,7 +162,7 @@ describe('a refused send is a visible "Not sent" with the server\'s reason — n
     const [only, ...rest] = useUndoQueue.getState().results;
     expect(rest).toEqual([]);
     expect(only?.kind).toBe('failed');
-    expect(only?.text.startsWith('Not sent: beta · b1 — ')).toBe(true);
+    expect(only?.text.startsWith('Not sent: a run in beta — ')).toBe(true);
     expect(only?.text).toContain(wire);
   });
 
