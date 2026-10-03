@@ -6,6 +6,7 @@ import { parseSessionId, runChatIdOf } from '../../board/sessionModel.js';
 import { useRoster } from '../../hooks/useRoster.js';
 import { useCapabilities } from '../../store/capabilities.js';
 import { useSheets } from '../../store/sheets.js';
+import { isTypingContext } from '../../hooks/useGlobalShortcuts.js';
 import { seatStandingWord } from '../HealthRailSection.js';
 import { humanTitle } from '../runIdentity.js';
 
@@ -52,7 +53,8 @@ export function AltPeek({ runs, needCount }: { runs: SessionView[]; needCount: n
   const [held, setHeld] = useState(false);
   useEffect(() => {
     const down = (e: KeyboardEvent): void => {
-      if (e.key === 'Alt' && !e.ctrlKey && !e.metaKey && !e.shiftKey) setHeld(true);
+      // ⌥ inside a text field is typing (or a chord there), never a peek (codex on S11).
+      if (e.key === 'Alt' && !e.ctrlKey && !e.metaKey && !e.shiftKey && !isTypingContext(e)) setHeld(true);
       else setHeld(false);
     };
     const up = (e: KeyboardEvent): void => { if (e.key === 'Alt') setHeld(false); };

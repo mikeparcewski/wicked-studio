@@ -37,21 +37,39 @@ export function sameObject(a: ObjectRef | null, b: ObjectRef | null): boolean {
 }
 
 /**
- * Track the pointed object: the nearest `[data-object]` under the pointer or holding focus. Mounted
- * once by App; returns the cleanup.
+ * Track the pointed object: the nearest `[data-object]` under the pointer, else the one holding
+ * focus. The pointer leaving the page, or focus leaving the object, lets go of it (codex on S11).
+ * Mounted once by App; returns the cleanup.
  */
 export function trackPointedObject(): () => void {
-  const from = (t: EventTarget | null): void => {
+  let hovered: ObjectRef | null = null;
+  let focused: ObjectRef | null = null;
+  const refOf = (t: EventTarget | null): ObjectRef | null => {
     const el = t instanceof Element ? t.closest('[data-object]') : null;
-    const ref = parseObject(el?.getAttribute('data-object'));
-    if (!sameObject(ref, useSheets.getState().pointed)) useSheets.setState({ pointed: ref });
+    return parseObject(el?.getAttribute('data-object'));
   };
-  const over = (e: Event): void => from(e.target);
+  const publish = (): void => {
+    const next = hovered ?? focused;
+    if (!sameObject(next, useSheets.getState().pointed) && !(next === null && useSheets.getState().pointed === null)) {
+      useSheets.setState({ pointed: next });
+    }
+  };
+  const over = (e: Event): void => { hovered = refOf(e.target); publish(); };
+  const leave = (): void => { hovered = null; publish(); };
+  const focusIn = (e: Event): void => { focused = refOf(e.target); publish(); };
+  const focusOut = (e: FocusEvent): void => { focused = refOf(e.relatedTarget); publish(); };
+  const blur = (): void => { hovered = null; focused = null; publish(); };
   document.addEventListener('mouseover', over);
-  document.addEventListener('focusin', over);
+  document.addEventListener('mouseleave', leave);
+  document.addEventListener('focusin', focusIn);
+  document.addEventListener('focusout', focusOut);
+  window.addEventListener('blur', blur);
   return () => {
     document.removeEventListener('mouseover', over);
-    document.removeEventListener('focusin', over);
+    document.removeEventListener('mouseleave', leave);
+    document.removeEventListener('focusin', focusIn);
+    document.removeEventListener('focusout', focusOut);
+    window.removeEventListener('blur', blur);
   };
 }
 
@@ -65,8 +83,14 @@ export function cmdkObject(): ObjectRef | null {
  * Stop a run — after 10 s with Undo (DESIGN-interaction rule 4; DESIGN-simple §4 "Stop it (10 s
  * undo)"). Undo inside the window sends nothing; after it, one `POST /runs/:id/cancel`.
  */
-export function stopRun(runIds: readonly string[], label: string): number {
-  const ids = [...runIds];
+export function stopRun(runIds: readonly string[], label: string): number | null {
+  // A run already in its Stop window is not queued again: one cancel at most (codex on S11).
+  const pending = useSheets.getState().stopping;
+  const ids = runIds.filter((id) => pending[id] === undefined);
+  if (ids.length === 0) {
+    reportDecision('not-sent', `Already stopping ${label} — Undo is on the notice above.`);
+    return null;
+  }
   const clear = (): void => useSheets.setState((s) => {
     const stopping = { ...s.stopping };
     for (const id of ids) delete stopping[id];

@@ -72,7 +72,7 @@ describe('every raw control of the dense mode is reachable (DESIGN-simple §5, e
 
 describe('Stop waits 10 s with Undo', () => {
   it('Undo inside the window sends nothing; after it, one cancel', async () => {
-    const id = stopRun(['r1'], '“fix the double charge”');
+    const id = stopRun(['r1'], '“fix the double charge”')!;
     expect(useUndoQueue.getState().pending[0]?.verb).toBe('stop');
     act(() => undoDecision(id));
     await act(async () => { await flushDecisionsForTest(); });
@@ -135,3 +135,43 @@ describe('⌥ peek says one telling fact', () => {
     expect(peekFact({ kind: 'session', sessionId: 'run:r1' }, ctx)).toBe('fix the double charge · being worked on');
   });
 });
+
+describe('codex on S11', () => {
+  it('a second Stop on a run already stopping queues nothing more (one cancel at most)', async () => {
+    stopRun(['r1'], '“a”');
+    stopRun(['r1'], '“a”');
+    expect(useUndoQueue.getState().pending).toHaveLength(1);
+    await act(async () => { await flushDecisionsForTest(); });
+    expect(posts).toStrictEqual(['/runs/r1/cancel']);
+  });
+
+  it('pointing leaves with the pointer and with focus', async () => {
+    const { trackPointedObject } = await import('../src/store/sheets.js');
+    const stop = trackPointedObject();
+    document.body.innerHTML = '<div data-object="desk"><button id="b">x</button></div><p id="out">y</p>';
+    const b = document.getElementById('b')!;
+    b.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+    expect(useSheets.getState().pointed).toStrictEqual({ kind: 'desk' });
+    document.dispatchEvent(new MouseEvent('mouseleave'));
+    expect(useSheets.getState().pointed).toBeNull();
+    b.focus();
+    expect(useSheets.getState().pointed).toStrictEqual({ kind: 'desk' });
+    b.blur();
+    expect(useSheets.getState().pointed).toBeNull();
+    stop();
+  });
+
+  it('⌥ held inside a text field shows no peek', () => {
+    useSheets.setState({ pointed: { kind: 'desk' } });
+    render(<><input data-testid="field" /><AltPeekHost /></>);
+    const field = screen.getByTestId('field');
+    field.focus();
+    fireEvent.keyDown(field, { key: 'Alt' });
+    expect(screen.queryByTestId('alt-peek')).toBeNull();
+    fireEvent.keyDown(document.body, { key: 'Alt' });
+    expect(screen.getByTestId('alt-peek')).toBeTruthy();
+  });
+});
+
+import { AltPeek } from '../src/components/sheets/AltPeek.js';
+function AltPeekHost(): React.ReactElement { return <AltPeek runs={[RUN]} needCount={1} />; }
