@@ -17,8 +17,10 @@ import type { FrameParts } from './PageEditor.js';
 /** A click on a slide outranks "the slide in view" (the last slides of a deck cannot be scrolled
  *  to the middle of the frame, so the view alone would mark the wrong one). The pick holds where
  *  its own jump landed — the first scroll within this window — and any scroll away from there is
- *  the reader's, which hands the mark back to the view. */
-const JUMP_WINDOW_MS = 700;
+ *  the reader's, which hands the mark back to the view. The window is only as long as the jump
+ *  takes to report (the frame posts its scroll within a frame or two): a jump that moves nothing
+ *  must not let the reader's own first scroll, a moment later, pass for the landing. */
+const JUMP_WINDOW_MS = 200;
 
 export function SlideStrip({ parts, docId, composerKey }: {
   parts: FrameParts;
