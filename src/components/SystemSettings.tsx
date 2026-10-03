@@ -8,6 +8,7 @@ import { setCachedRoster } from '../store/rosterCache.js';
 import { Modal } from './Modal.js';
 import { NotificationSettings } from './NotificationSettings.js';
 import { Terminal } from './Terminal.js';
+import { useDisplayPath } from '../hooks/useHomePath.js';
 
 const CLI_DEFAULTS_KEY = 'wicked_default_clis';
 
@@ -86,6 +87,7 @@ interface SystemSettingsProps {
 }
 
 export function SystemSettings({ navigate = (p) => { history.pushState(null, '', p); window.dispatchEvent(new PopStateEvent('popstate')); } }: SystemSettingsProps): React.ReactElement {
+  const showPath = useDisplayPath();
   const [settings, setSettings] = useState<Settings | null>(null);
   const [dirty, setDirty] = useState<Partial<LocalSettings>>({});
   const [saving, setSaving] = useState(false);
@@ -210,12 +212,11 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
         <h1 className="wk-page-title">System</h1>
         <p className="text-sm mt-1" style={{ color: 'var(--ink-muted)' }}>
           Settings are saved to{' '}
-          <code
-            className="font-mono text-xs rounded px-1 py-0.5"
-            style={{ background: 'var(--surface-raised)', color: 'var(--ink-muted)' }}
-          >
-            {settingsPath ?? "the daemon's settings file"}
-          </code>
+          {/* studio#458: the default layer never prints the home directory (`~/…`); "Show technical
+              details" shows the full path. Plain type, not monospace (the desk type rule, studio#425). */}
+          <span data-testid="settings-path">
+            {settingsPath === null ? "the daemon's settings file" : showPath(settingsPath)}
+          </span>
           {settingsPath === null && ' (this daemon does not report the path — crew 0.7.36 does)'}.
         </p>
       </div>
@@ -273,7 +274,7 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
 
         <SettingRow
           label="Show technical details"
-          description="Adds ids, versions and helper names in small grey type: run ids, commit shas and seat names on the run header, the run rows and the gate card. Same screens; nothing else changes."
+          description="Adds ids, versions and helper names in small grey type: run ids, commit shas and seat names on the run header, the run rows and the gate card — and the full path of anything under your home folder, which otherwise reads as ~/. Same screens; nothing else changes."
         >
           <div className="flex flex-col items-end gap-1">
             <input

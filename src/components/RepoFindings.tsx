@@ -1,4 +1,5 @@
 import type { RepoEntry, RepoFinding } from '../api/types.js';
+import { useDisplayPath, useDisplayText } from '../hooks/useHomePath.js';
 
 /**
  * The engine's per-repo findings (`RepoEntry.findings[]`, wicked-core#406 via crew#517 —
@@ -90,6 +91,8 @@ interface Props {
 export function RepoFindings({
   findings, onRerunOnboarding, rerunning = false, disabled = false, compact = false, testId = 'repo-findings',
 }: Props): React.ReactElement | null {
+  const showPath = useDisplayPath();
+  const showText = useDisplayText();
   if (findings === undefined || findings.length === 0) return null;
   return (
     <div
@@ -112,7 +115,7 @@ export function RepoFindings({
             data-code={f.code}
             data-severity={severity}
             data-reonboard={reonboard}
-            title={compact ? `${f.message}${f.path !== null ? `\n${f.path}` : ''}` : (f.path ?? undefined)}
+            title={compact ? `${showText(f.message)}${f.path !== null ? `\n${showPath(f.path)}` : ''}` : (f.path === null ? undefined : showPath(f.path))}
             style={{
               display: 'flex', alignItems: compact ? 'center' : 'flex-start', gap: '8px', minWidth: 0,
               padding: compact ? '2px 0' : '6px 10px',
@@ -138,7 +141,7 @@ export function RepoFindings({
                 whiteSpace: compact ? 'nowrap' : 'normal', overflowWrap: compact ? undefined : 'anywhere',
               }}
             >
-              {f.message}
+              {showText(f.message)}
             </span>
             {reonboard && onRerunOnboarding !== undefined && (
               <button

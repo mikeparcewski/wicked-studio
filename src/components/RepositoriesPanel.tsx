@@ -20,6 +20,7 @@ import { ago } from './ProjectCard.js';
 import { ProjectSwitcher } from './ProjectSwitcher.js';
 import { RepoFindings } from './RepoFindings.js';
 import { useNeedsSources } from '../store/needsSources.js';
+import { useDisplayPath } from '../hooks/useHomePath.js';
 
 type SourceMode = 'local' | 'remote';
 
@@ -120,6 +121,7 @@ const GRAPH_STATE_TITLE =
   'Derived from the repo\'s newest onboarding run AND the engine\'s checkout findings (RepoEntry.findings): a finding that says no live graph has been indexed outranks a completed onboard — the repos wire carries no index-freshness field';
 
 export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, ambientProject = null }: Props): React.ReactElement {
+  const showPath = useDisplayPath();
   const [repos, setRepos] = useState<RepoEntry[]>([]);
   const [runs, setRuns] = useState<SessionView[]>([]);
   const [loading, setLoading] = useState(true);
@@ -791,9 +793,9 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
                   <p
                     className="text-[11px] font-mono truncate"
                     style={{ color: 'var(--ink-dim)', margin: 0 }}
-                    title={repo.root_path}
+                    title={showPath(repo.root_path)}
                   >
-                    {repo.root_path}
+                    {showPath(repo.root_path)}
                   </p>
 
                   {/* The graph state — the run history, corrected by the engine's findings (F-2R2-003) */}

@@ -34,6 +34,7 @@ import { SkillFilesMapModal } from './SkillFilesMapModal.js';
 import { SkillFindings } from './SkillFindings.js';
 import { SkillsGrid, SKILLS_FACETS_DEFAULT, type SkillsFacets } from './SkillsGrid.js';
 import type { SkillsWriter } from './skillsWriter.js';
+import { useDisplayPath } from '../hooks/useHomePath.js';
 
 /**
  * The Skills surface (`/skills`, the skills keystone) — a FILE MANAGER over the daemon's one
@@ -106,6 +107,7 @@ export function SkillsPage({ navigate, search = '' }: {
   /** The URL search string — `?skill=<name>` addresses one skill's drawer. */
   search?: string;
 }): React.ReactElement {
+  const showPath = useDisplayPath();
   const [catalog, setCatalog] = useState<SkillsCatalog | null>(null);
   const [state, setState] = useState<LoadState>({ kind: 'loading' });
   const [facets, setFacets] = useState<SkillsFacets>(SKILLS_FACETS_DEFAULT);
@@ -468,7 +470,7 @@ export function SkillsPage({ navigate, search = '' }: {
             </p>
             {catalog !== null && (
               <p data-testid="skills-root" className="mt-1 font-mono text-[10px]" style={{ color: 'var(--ink-dim)' }} title="the resolved skills root on the daemon host (<state home>/skills — not configurable)">
-                root {catalog.root}
+                root {showPath(catalog.root)}
               </p>
             )}
             {baseline !== null && (
@@ -477,7 +479,7 @@ export function SkillsPage({ navigate, search = '' }: {
                 data-venv={baseline.venv}
                 className="mt-0.5 font-mono text-[10px]"
                 style={{ color: 'var(--ink-dim)' }}
-                title={`captured from ${baseline.source.path}`}
+                title={`captured from ${showPath(baseline.source.path)}`}
               >
                 baseline {baseline.plugin_version} · {baseline.source.kind} · {baseline.hash.slice(0, 12)}
                 {baseline.git_sha !== null && ` · ${baseline.git_sha.slice(0, 10)}`}
@@ -492,7 +494,7 @@ export function SkillsPage({ navigate, search = '' }: {
                 data-unpublished={unpublished}
                 className="mt-0.5 font-mono text-[10px]"
                 style={{ color: unpublished > 0 ? 'var(--status-run)' : 'var(--ink-dim)' }}
-                title={current === null ? undefined : current.path}
+                title={current === null ? undefined : showPath(current.path)}
               >
                 {current === null
                   ? 'never published — no snapshot to hand to workers yet'
@@ -507,7 +509,7 @@ export function SkillsPage({ navigate, search = '' }: {
                 data-state={engine.state}
                 className="mt-0.5 font-mono text-[10px]"
                 style={{ color: ENGINE_STATE_COLOR[engine.state] }}
-                title={engine.engineInput === null ? 'WICKED_SKILLS_SNAPSHOT is unset' : `WICKED_SKILLS_SNAPSHOT=${engine.engineInput}`}
+                title={engine.engineInput === null ? 'WICKED_SKILLS_SNAPSHOT is unset' : `WICKED_SKILLS_SNAPSHOT=${showPath(engine.engineInput)}`}
               >
                 engine {SKILLS_ENGINE_STATE_COPY[engine.state]}
                 {engine.current !== null && ` · gen ${engine.current.gen}`}
@@ -688,7 +690,7 @@ export function SkillsPage({ navigate, search = '' }: {
                     : 'A publish carries the whole root, so files no skill owns — scripts, schemas, the plugin manifest — are part of what a worker runs. These differ from the published snapshot, and the per-skill badges cannot show them: they are judged over the files a SKILL owns. Publish hands this root to workers.'}
                 </p>
                 {drift?.state === 'behind' && (
-                  <p data-testid="skills-behind-detail" className="font-mono text-[10px]" style={{ color: 'var(--ink-dim)' }} title={drift.installed.source.path}>
+                  <p data-testid="skills-behind-detail" className="font-mono text-[10px]" style={{ color: 'var(--ink-dim)' }} title={showPath(drift.installed.source.path)}>
                     installed {drift.installed.source.plugin_version} · {drift.installed.source.kind} · {(drift.installed.baseline ?? '').slice(0, 12)}
                     {drift.installed.git_sha !== null && ` · ${drift.installed.git_sha.slice(0, 10)}`}
                     {baseline !== null && ` · baseline ${baseline.plugin_version} · ${baseline.hash.slice(0, 12)}`}

@@ -254,6 +254,14 @@ def iso(ms: int) -> str:
 
 # Mutable fixture switches, flipped over POST /__fixture between page loads.
 state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
+         # home_paths — (e2e/desk_home_paths_test.py; studio#458/#460/#462) every path this fixture
+         #   serves moves under a home directory (`/tmp/w2/…` → FAKE_HOME + `/w2/…` in every JSON
+         #   body), GET /settings carries `path`, GET /skills serves a catalog rooted there, GET
+         #   /diagnostics carries a `skills` block, and every unit output route answers the index
+         #   line with the graph file's absolute path. Default False: no other corpus changes.
+         # runs_delay_ms — GET /runs answers only after this delay (studio#459: the Desk's loading
+         #   state is observable). Default 0.
+         "home_paths": False, "runs_delay_ms": 0,
          "no_runs": False, "usage_ws": False, "long_prompt": False,
          "extra_narration": [], "demo": False,
          "repo": False, "metrics_ws": False,
@@ -3106,6 +3114,38 @@ DIAGNOSTICS_BASE = {
     "daemon": {"uptimeMs": 60_000, "startedAt": NOW0 - 60 * SEC, "port": 7701},
     "stores": [], "recentErrors": [], "acp": {"byCli": {}},
 }
+# ── home_paths (studio#458/#460/#462, e2e/desk_home_paths_test.py) ─────────────
+# A home directory as macOS spells it; every `/tmp/w2/…` path this fixture serves moves under it
+# (`_json` rewrites the body), so a surface that prints a path verbatim is caught by the journey.
+FAKE_HOME = "/Users/reel-operator"
+HOME_STATE = "/tmp/w2/state"  # → FAKE_HOME/w2/state on the wire
+HOME_SETTINGS_PATH = f"{HOME_STATE}/settings.json"
+HOME_SKILLS_ROOT = f"{HOME_STATE}/skills"
+HOME_SNAPSHOT = f"{HOME_SKILLS_ROOT}/snapshots/000003"
+HOME_INDEX_OUTPUT = (f"indexed /tmp/reel-repos/offsite-plan ({HOME_STATE}/repo-graphs/offsite-plan-9c1e/estate.db) "
+                     "→ 4 nodes, 2 edges, 2 files")
+_HOME_BASELINE = "b" * 16
+_HOME_RECORD = {"baselineHash": "a" * 8, "effectiveHash": "a" * 8, "lastPublishedHash": "a" * 8, "conflict": False}
+HOME_SKILLS_CATALOG = {
+    "manifest": {
+        "version": 2, "revision": 3, "baseline": _HOME_BASELINE,
+        "baselines": {_HOME_BASELINE: {
+            "plugin_version": "12.40.0",
+            "source": {"kind": "claude-plugin-cache", "path": f"{FAKE_HOME}/.claude/plugins/cache/wicked-garden/12.40.0"},
+            "git_sha": "abcdef0123456789", "captured_at": "2026-10-01T00:00:00Z", "venv": "synced"}},
+        "skills": {"wicked-garden-repo-learn": {
+            "dir": "skills/repo-learn", "kind": "router", "core": True, "portable": True, "enabled": True,
+            "provenance": "shipped", "editedAt": None, "upgradeAvailable": False, "conflict": False, "upstreamDir": None}},
+        "files": {"skills/repo-learn/SKILL.md": dict(_HOME_RECORD), ".claude-plugin/plugin.json": dict(_HOME_RECORD)},
+        "published": {"gen": 3, "contentHash": "p" * 16, "at": "2026-10-01T00:00:00Z", "snapshotHash": "s" * 16},
+    },
+    "revision": 3, "root": HOME_SKILLS_ROOT, "current": {"gen": 3, "path": HOME_SNAPSHOT}, "installed": None,
+}
+HOME_DIAGNOSTICS_SKILLS = {
+    "state": "published", "root": HOME_SKILLS_ROOT, "current": {"gen": 3, "path": HOME_SNAPSHOT},
+    "engineInput": HOME_SNAPSHOT, "stateHome": HOME_STATE, "findings": [], "baseSkill": None,
+}
+
 GOVERNANCE_BLOCKS = {
     "healthy": {
         "store": {"path": GOV_STORE, "source": "core-db-sidecar"},
@@ -3763,7 +3803,12 @@ class W2Handler(SimpleHTTPRequestHandler):
         pass
 
     def _json(self, status: int, payload) -> None:
-        body = json.dumps(payload).encode()
+        text = json.dumps(payload)
+        # Read without the lock: callers may already hold it, and a bool read is atomic.
+        if state["home_paths"]:
+            # home_paths: every fixture path lives under the operator's home directory.
+            text = text.replace("/tmp/w2", f"{FAKE_HOME}/w2")
+        body = text.encode()
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
@@ -4002,7 +4047,19 @@ class W2Handler(SimpleHTTPRequestHandler):
         if path == "/api/v1/settings":
             with state_lock:
                 snapshot = json.loads(json.dumps(settings_store))
-            self._json(200, {"settings": snapshot})
+                home_on = state["home_paths"]
+            # api-types 0.38.0 `SettingsResponse.path` (crew 0.7.36) — only under home_paths, so the
+            # standing rigs keep seeing a daemon that predates the field.
+            self._json(200, {"settings": snapshot, **({"path": HOME_SETTINGS_PATH} if home_on else {})})
+            return True
+        # home_paths (studio#460): the skills catalog, rooted under the home directory.
+        if path == "/api/v1/skills":
+            with state_lock:
+                home_on = state["home_paths"]
+            if not home_on:
+                self._json(404, {"error": f"w2 fixture: no such endpoint {path}"})
+            else:
+                self._json(200, HOME_SKILLS_CATALOG)
             return True
         # The slice-7 rig's custom-logo asset (served same-origin, §3.1).
         if path == "/__assets/logo-test.svg":
@@ -4013,6 +4070,10 @@ class W2Handler(SimpleHTTPRequestHandler):
             self.wfile.write(LOGO_TEST_SVG)
             return True
         if path == "/api/v1/runs":
+            with state_lock:
+                runs_delay = state["runs_delay_ms"]
+            if runs_delay:
+                time.sleep(runs_delay / 1000)
             self._json(200, {"runs": assemble_runs()})
             return True
         # T9: the engine's phase catalog and the presets (crew 0.47.0), switch-gated.
@@ -4140,12 +4201,14 @@ class W2Handler(SimpleHTTPRequestHandler):
             with state_lock:
                 gov = state["governance"]
                 sheets_on = state["sheets"]
-            if gov is None and sheets_on:
-                self._json(200, DIAGNOSTICS_BASE)  # S11: the Desk sheet's Studio itself / This computer
+                home_on = state["home_paths"]
+            skills_block = {"skills": HOME_DIAGNOSTICS_SKILLS} if home_on else {}
+            if gov is None and (sheets_on or home_on):
+                self._json(200, {**DIAGNOSTICS_BASE, **skills_block})  # S11: the Desk sheet's Studio itself / This computer
             elif gov is None:
                 self._json(404, {"error": "not found"})
             else:
-                self._json(200, {**DIAGNOSTICS_BASE, "governance": GOVERNANCE_BLOCKS[gov]})
+                self._json(200, {**DIAGNOSTICS_BASE, **skills_block, "governance": GOVERNANCE_BLOCKS[gov]})
             return True
         # The slice-E repo profile reads (all real crew routes, switch-gated).
         m = re.match(r"^/api/v1/repos/([^/]+)/(graph|git-history|contributors)$", path)
@@ -4571,6 +4634,11 @@ class W2Handler(SimpleHTTPRequestHandler):
                 return True
             with state_lock:
                 sheets_on = state["sheets"]
+                home_on = state["home_paths"]
+            if home_on and not (forensics_on and rid == "r-auth"):
+                # studio#462: the onboarding index unit's output, the graph file by its absolute path.
+                self._json(200, {"output": HOME_INDEX_OUTPUT})
+                return True
             if sheets_on and not (forensics_on and rid == "r-auth"):
                 # S11: a step sheet's "What it did" — the unit's captured output, as crew serves it.
                 self._json(200, {"output": f"[{key}] read the module, changed 2 files, ran the unit tests: 14 passed."})
