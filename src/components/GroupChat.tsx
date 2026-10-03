@@ -2203,15 +2203,15 @@ export function GroupChat({
                     style={{ border: '1px solid var(--surface-raised)', borderRadius: 'var(--radius-md)', padding: '1px' }}
                   >
                     {([
-                      ['system', 'chat-scope-system', 'System',
+                      ['system', /* testid */ 'chat-scope-system', 'System',
                         'The platform itself — daemon, seats, runs, configuration. No repositories, no code graph'],
-                      ['everything', 'chat-scope-everything', 'Everything',
+                      ['everything', /* testid */ 'chat-scope-everything', 'Everything',
                         'Every registered repository, across all projects, read-only (no single code graph spans them)'],
-                      ['project', 'chat-scope-project', boundProjectId !== null ? 'All project repos' : 'Project repos',
+                      ['project', /* testid */ 'chat-scope-project', boundProjectId !== null ? 'All project repos' : 'Project repos',
                         boundProjectId !== null
                           ? 'Every repository attached to the project, read-only, grounded on the project graph'
                           : 'Pick a project first — its repositories become the scope'],
-                      ['repos', 'chat-scope-repos', `Choose repos…${scopeMode === 'repos' && scopeRepoIds.length > 0 ? ` ${scopeRepoIds.length}` : ''}`,
+                      ['repos', /* testid */ 'chat-scope-repos', `Choose repos…${scopeMode === 'repos' && scopeRepoIds.length > 0 ? ` ${scopeRepoIds.length}` : ''}`,
                         'Name the repositories the agents may read (by registry id)'],
                     ] as const).map(([mode, tid, label, title]) => {
                       const active = scopeMode === mode;

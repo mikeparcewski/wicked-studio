@@ -16,6 +16,10 @@
 //   - {cond ? A : B} with literal/undefined branches     → each branch classified on its own
 //   - anything else (e.g. {a.testId})                    → computed (raw expression recorded)
 //
+// Forwarded ids (a literal handed through a testId-like prop to the component that renders it,
+// or marked `/* testid */`) are classified the same way and join static/dynamic: they are in
+// the DOM. The forwarding attribute itself (`data-testid={testId}`) stays a computed entry.
+//
 // Determinism (the whole point of a lintable contract): files walked in sorted order,
 // paths normalised to forward slashes, every list sorted by plain codepoint comparison
 // (never localeCompare — locale-dependent), so the same tree yields byte-identical JSON
@@ -35,6 +39,7 @@ export const INVENTORY_DOC = [
   'The build also emits this file as dist/testid-inventory.json (vite.config.ts), so generators verify against the BUILT dist actually served — never source recon alone.',
   'Drift strategy: a selector miss in the deterministic executor FAILS the run — the model-free runner never decides what to click, so there is NO agentic fallback inside it. On failure the authoring agent re-authors the spec against the live DOM, the runner re-records deterministically, and the selector substitution lands in the spec diff for review.',
   "Entry kinds: `static` values appear verbatim in the DOM; `dynamic` are template-literal testids with each ${expr} normalised to '*'; `computed` carry the raw JSX expression — dynamic/computed resolve only against a live DOM.",
+  'Forwarded ids count: a literal handed to a component through a testId-like prop or key (`testId`, `testid`, `tid`, `triggerTestId`), a parameter typed as a union of id literals, or a string literal marked `/* testid */` is listed as static/dynamic at the call site — the component renders it — so static + dynamic is the whole denominator of ids a surface can show.',
 ];
 
 const SOURCE_EXT = /\.(ts|tsx|js|jsx)$/;
@@ -262,13 +267,79 @@ export function scanFileText(text) {
   const keyRe = /['"]data-testid['"]\s*:\s*/g;
   while ((m = keyRe.exec(text)) !== null) {
     const at = m.index + m[0].length;
+    // `'data-testid': string;` in an interface or type literal is a TYPE, not a declaration:
+    // reading it as a value swallowed the rest of Tech.tsx into one "computed" entry.
+    if (isTypeSignature(text, at)) continue;
     const end = valueExpressionEnd(text, at);
     occurrences++;
     entries.push(...classifyExpression(text.slice(at, end)));
     keyRe.lastIndex = end;
   }
 
+  // Forwarded ids: a literal handed to a component through a testId-like prop or key, which
+  // the component puts on an element (`<MetricTile testId="stat-repos" …>`, `{ testid: 'x' }`,
+  // a parameter typed `testId: 'need-row' | 'need-member'`), and any string literal marked
+  // `/* testid */` (a table or tuple the element reads by index). These ARE in the DOM verbatim (or as a pattern), so they join the
+  // static/dynamic buckets; the forwarding expression itself stays a `computed` entry.
+  const fwdRe = /(?<![-\w.'"])(?:testId|testid|tid|triggerTestId)\??\s*(=|:)\s*/g;
+  const code = maskComments(text);
+  while ((m = fwdRe.exec(code)) !== null) {
+    const at = m.index + m[0].length;
+    let expr;
+    if (m[1] === '=') {
+      const c = code[at];
+      if (c === '"' || c === "'") {
+        const end = code.indexOf(c, at + 1);
+        if (end === -1) continue;
+        expr = code.slice(at, end + 1);
+      } else if (c === '{') {
+        const end = matchBrace(code, at);
+        if (end === -1) continue;
+        expr = code.slice(at + 1, end);
+      } else continue;
+    } else {
+      expr = code.slice(at, valueExpressionEnd(code, at));
+    }
+    const forwarded = literalUnion(expr) ?? classifyExpression(expr).filter((e) => e.kind !== 'computed');
+    if (forwarded.length === 0) continue;
+    occurrences++;
+    entries.push(...forwarded);
+  }
+  const markRe = /\/\*\s*testid\s*\*\/\s*(['"])/g;
+  while ((m = markRe.exec(code)) !== null) {
+    const at = m.index + m[0].length - 1;
+    const end = code.indexOf(m[1], at + 1);
+    if (end === -1) continue;
+    occurrences++;
+    entries.push({ kind: 'static', value: code.slice(at + 1, end) });
+  }
+
   return { occurrences, entries };
+}
+
+/**
+ * A TS property signature where a value would be (`'data-testid': string;`, `TestId;`,
+ * `'a' | 'b';`): the rest of its line ends with `;` and carries no `,` — an object literal's
+ * value ends with `,` or `}`, never `;` (codex on the forwarded-ids PR).
+ */
+function isTypeSignature(text, at) {
+  const nl = text.indexOf('\n', at);
+  const line = text.slice(at, nl === -1 ? text.length : nl).replace(/\s*\/\/.*$/, '').trimEnd();
+  return line.endsWith(';') && !line.includes(',');
+}
+
+/** The text with every comment blanked to spaces (offsets kept), except `/* testid *\/` marks. */
+function maskComments(text) {
+  // A comment starts at a line start or after whitespace / an opening bracket / a separator, so a
+  // glob or a URL inside a string (`'src/**/*.ts'`, `'https://…'`) is never read as one.
+  return text.replace(/(?<=^|[\s{(,;])(?:\/\*[\s\S]*?\*\/|\/\/[^\n]*)/gm, (c) => (/^\/\*\s*testid\s*\*\/$/.test(c) ? c : c.replace(/[^\n]/g, ' ')));
+}
+
+/** `'a' | 'b'` (a parameter typed as the ids it may forward) → each as static; else null. */
+function literalUnion(expr) {
+  const t = expr.trim();
+  if (!/^('[^'\n]*'|"[^"\n]*")(\s*\|\s*('[^'\n]*'|"[^"\n]*"))+$/.test(t)) return null;
+  return t.split('|').map((x) => ({ kind: 'static', value: unquote(x.trim()) }));
 }
 
 /**
