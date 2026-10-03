@@ -283,6 +283,14 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          #                         exists" for a name already created this lifetime — F-4R2-003.
          "export_report": False, "doc_fail_floor": False, "doc_heartbeat_ms": 0,
          "doc_bound_run": None, "create_409_existing": False,
+         # S9 (the document and slide editors):
+         #   doc_bound_run gains an optional "repo" — the bound run's `repo_ref`, the
+         #                 repository its requirement coverage is read from.
+         #   requirements — {repoId: [{key, reqId, title, risk?}, …]}: GET
+         #                 /repos/<repoId>/requirements serves crew's RequirementsPage for
+         #                 the repos named here; every other repo answers the 404 a repo
+         #                 with no requirements read does. Default None (no repo is served).
+         "requirements": None,
          # Slice P (DES-FEEDBACK-003 §10.2 fixture additions, switch-gated so
          # no standing rig's board grows rows it never asserted):
          #   chat_runs — 2 chat runs ride GET /runs: one 'chat'-stamped live
@@ -746,6 +754,10 @@ cancel_post_log: list = []
 gate_post_log: list = []
 # Every POST /runs/:id/inject (a message to the team on a live run; GET /__fixture/inject-posts).
 inject_post_log: list = []
+# S9: every `feedback.submitted` batch the bridge received — {pid, doc, version, items} — so a
+# journey can see what an edit SENT (one item, its `before` snapshot), not only what it showed
+# (GET /__fixture/feedback-posts).
+feedback_post_log: list = []
 # T9: every POST /plans/preview and POST /runs/:id/plan body (GET /__fixture/plan-posts), the
 # requestIds the "engine" has taken (requestId -> proposal_id), and the runs whose gate moved.
 plan_post_log: list = []
@@ -3519,6 +3531,8 @@ def assemble_runs() -> list:
             bound_run["session"]["extra_write_roots"] = [
                 f"/w5/state/interactive-drafts/{bound['doc']}"]
             bound_run["session"]["project_id"] = bound["pid"]
+            if isinstance(bound.get("repo"), str):
+                bound_run["session"]["repo_ref"] = bound["repo"]
             runs = runs + [bound_run]
         # Wave 6: the completed governed test + every New test launched this lifetime
         # (each awaiting its intake gate) ride BOTH wires (list + detail).
@@ -3674,6 +3688,7 @@ docs_created: dict = {}
 # wicked-interactive handlers.js materializeFeedback → applyFeedbackItems. The
 # landed HTML lives here, keyed by version; the doc GET route serves it verbatim.
 doc_html_overrides: dict = {}  # (pid, doc, version) -> html
+doc_styles: dict = {}          # (pid, doc) -> the style the doc was created with (S9)
 # The batch's write 2 is a chat.posted inject carrying the SAME source_message_id.
 # The real answerer does not regenerate on it (the batch already landed its own
 # version), so the fixture must not mint a steer version for that inject either.
@@ -3883,6 +3898,55 @@ color:#8a8471;letter-spacing:.08em;text-transform:uppercase}}</style></head><bod
 <p>Pipeline grew in every segment; churn held under 2%.</p>
 <p>Focus for Q4: enterprise onboarding and the pricing revamp.</p>
 <footer>Q3 review deck · version {version}</footer></main></body></html>"""
+
+
+# S9: a document created with a recorded style renders as what it is, anchored the way the real
+# engine anchors (`slide-{slideIndex}-{role}-{ordinal}`, `section-{i}` containers — interactive
+# instrument.js). The written document carries one paragraph LONGER than the 400 characters the
+# client's bridge used to cut block text at: the engine calls an edit stale unless `before` equals
+# the element's whole text, so that paragraph is the one a cut snapshot can never change.
+LONG_PARAGRAPH = (
+    "Residents book a study room in two taps, and the rooms that are free right now come first, so nobody "
+    "scrolls past a list of rooms they cannot have. A booking is held for five minutes while the resident "
+    "confirms, a reminder goes out an hour before, and a room that is not claimed within ten minutes of its "
+    "start goes back to the list for the next person. Staff can see the whole day for a branch at a glance, "
+    "hold a room for a class or an event, and release it again with one tap when plans change (REQ-002).")
+assert len(LONG_PARAGRAPH) > 400
+
+
+def styled_doc_html(style: str, doc: str) -> str:
+    if style == "ppt":
+        slides = [
+            ("Library room booking", "A study room in two taps."),
+            ("Residents first", "Free rooms come first; nobody scrolls past full ones."),
+            ("Staff stay in control", "The whole day at a glance, per branch."),
+            ("The pilot", "Central branch, eight weeks, then every branch."),
+        ]
+        body = "".join(
+            f'<section class="wi-slide" data-wid="section-{i}"><h1 data-wid="slide-{i}-heading-1">{h}</h1>'
+            f'<p data-wid="slide-{i}-paragraph-1">{p}</p></section>'
+            for i, (h, p) in enumerate(slides))
+        return (f'<!doctype html><html><head><meta charset="utf-8"><title>{doc} v1</title>'
+                "<style>body{margin:0;font-family:Georgia,serif;background:#f4f1ea;color:#1b1b1b}"
+                ".wi-slide{width:min(86vw,880px);min-height:340px;margin:24px auto;padding:40px;box-sizing:border-box;"
+                "background:#fffdf7;border:1px solid #ddd6c4}h1{font-size:32px;margin:0 0 14px}"
+                # The last slide is short: it cannot be scrolled to the middle of the frame, so at the
+                # bottom "the slide in view" is the one before it — the case a pick must outrank.
+                ".wi-slide:last-of-type{min-height:0}"
+                "p{font-size:17px;color:#4a463c;margin:0}</style></head>"
+                f'<body data-wi-kind="deck">{body}</body></html>')
+    return (f'<!doctype html><html><head><meta charset="utf-8"><title>{doc} v1</title>'
+            "<style>body{margin:0;font-family:Georgia,serif;background:#f4f1ea;color:#1b1b1b}"
+            "main{max-width:720px;margin:32px auto;padding:48px;background:#fffdf7;border:1px solid #ddd6c4}"
+            "h1{font-size:30px;margin:0 0 18px}h2{font-size:20px;margin:20px 0 8px}section{padding:8px 0}"
+            "p{font-size:16px;line-height:1.5;color:#4a463c;margin:0 0 10px}</style></head><body><main>"
+            '<h1 data-wid="slide-0-heading-1">Library room booking — our response</h1>'
+            '<section data-wid="section-0"><h2 data-wid="slide-0-heading-2">What we will build</h2>'
+            '<p data-wid="slide-0-paragraph-1">One app for residents and one day view for staff (REQ-001).</p>'
+            f'<p data-wid="slide-0-paragraph-2">{LONG_PARAGRAPH}</p></section>'
+            '<section data-wid="section-1"><h2 data-wid="slide-1-heading-1">What it costs</h2>'
+            '<p data-wid="slide-1-paragraph-1">One fixed fee for the build and the first year.</p></section>'
+            "</main></body></html>")
 
 
 def ws_frame(payload: dict) -> bytes:
@@ -4286,6 +4350,26 @@ class W2Handler(SimpleHTTPRequestHandler):
                         if p["id"] == "upload-endpoint" else p for p in rows]
             self._json(200, {"projects": rows})
             return True
+        # S9: GET /api/v1/repos/<id>/requirements — crew's RequirementsPage for the repos the
+        # `requirements` switch names; any other repo answers 404 (no requirements read).
+        m = re.match(r"^/api/v1/repos/([^/]+)/requirements$", path)
+        if m:
+            rid = urllib.parse.unquote(m.group(1))
+            with state_lock:
+                served = (state["requirements"] or {}).get(rid)
+            if served is None:
+                self._json(404, {"error": f"no requirements for {rid}"})
+                return True
+            qs = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            offset = int((qs.get("offset") or ["0"])[0])
+            limit = int((qs.get("limit") or ["50"])[0])
+            items = [{"key": r["key"], "domain": "booking", "reqId": r["reqId"], "title": r["title"],
+                      "category": "functional", "statement": r["title"], "status": "active",
+                      "risk": bool(r.get("risk")), "riskSource": "data" if r.get("risk") else None,
+                      "edited": False} for r in served]
+            self._json(200, {"total": len(items), "corpus": len(items), "offset": offset, "limit": limit,
+                             "items": items[offset:offset + limit], "source": "store"})
+            return True
         if path == "/api/v1/repos":
             with state_lock:
                 repo_on = state["repo"]
@@ -4505,7 +4589,10 @@ class W2Handler(SimpleHTTPRequestHandler):
             pid = urllib.parse.unquote(path.split("/")[4])
             with docs_lock:
                 created = [
-                    {"name": doc, "kind": "doc", "head": max(e["version"] for e in vs),
+                    {"name": doc, "kind": "doc",
+                     # The real bridge's row: `style` only when one was recorded (server.js listDocs).
+                     **({"style": doc_styles[(pid, doc)]} if (pid, doc) in doc_styles else {}),
+                     "head": max(e["version"] for e in vs),
                      "versions": len(vs), "updated_at": vs[-1]["created_at"]}
                     for doc, vs in docs_created.get(pid, {}).items()
                 ]
@@ -5091,6 +5178,15 @@ class W2Handler(SimpleHTTPRequestHandler):
                     docs_created.setdefault(pid, {})[doc] = [
                         {"version": 1, "parent": None, "feedback_file": None,
                          "html_file": "v1.html", "created_at": iso(NOW0)}]
+            # S9: the recorded style (server.js accepts exactly these four; anything else records
+            # none), and a first version that is what the style says it is.
+            style = body.get("style") if body.get("style") in ("web", "ppt", "brochure", "doc") else None
+            with docs_lock:
+                doc_styles.pop((pid, doc), None)
+                if style is not None:
+                    doc_styles[(pid, doc)] = style
+                    if style != "web" and not v0_mirror:
+                        doc_html_overrides[(pid, doc, 1)] = styled_doc_html(style, doc)
             brief = str(body.get("brief") or "")
             if brief:
                 # The brief IS the doc's first user line in the announce history
@@ -5277,6 +5373,9 @@ class W2Handler(SimpleHTTPRequestHandler):
             # items ({selector, type, value|instruction, before}).
             if body.get("event_type") == "wicked.interactive.feedback.submitted" and doc:
                 items = payload.get("items") or []
+                with state_lock:
+                    feedback_post_log.append({"pid": pid, "doc": doc, "version": payload.get("version"),
+                                              "author": payload.get("author"), "items": json.loads(json.dumps(items))})
                 src_msg = str(payload.get("source_message_id") or "")
                 applied: list = []
                 rejected: list = []
@@ -5293,7 +5392,16 @@ class W2Handler(SimpleHTTPRequestHandler):
                             if typ == "content-edit":
                                 pat = re.compile(
                                     r'(data-wid="' + re.escape(sel) + r'"[^>]*>)([^<]*)')
-                                if sel and pat.search(html):
+                                found = pat.search(html) if sel else None
+                                # The engine's stale check (regenerate.js AC-10): an item whose
+                                # `before` is not the element's text lands nothing. Checked only
+                                # where the element's whole text is in hand (it holds no child tag).
+                                whole = found is not None and html[found.end():found.end() + 2] == "</"
+                                norm = lambda t: " ".join(html_mod.unescape(str(t)).split())  # noqa: E731
+                                if (whole and item.get("before") is not None
+                                        and norm(found.group(2)) != norm(item.get("before"))):
+                                    rejected.append({"selector": sel, "reason": "stale"})
+                                elif sel and pat.search(html):
                                     # interactive #247: a content-edit lands as TEXT — typed
                                     # `<b>x</b>` is those characters, never markup.
                                     new_text = html_mod.escape(str(item.get("value") or ""), quote=False)
@@ -5691,6 +5799,10 @@ class W2Handler(SimpleHTTPRequestHandler):
         if path == "/__fixture/inject-posts":
             with state_lock:
                 posts = list(inject_post_log)
+            return self._json(200, {"posts": posts})
+        if path == "/__fixture/feedback-posts":
+            with state_lock:
+                posts = list(feedback_post_log)
             return self._json(200, {"posts": posts})
         if path == "/__fixture/onboard-posts":
             with chat_state_lock:

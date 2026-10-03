@@ -59,4 +59,20 @@ describe('instrumentDocHtml', () => {
     expect(out).toContain('preventDefault');
     expect(out).toContain('composite');
   });
+
+  it('a block that holds no other block carries its whole text; only a cut text is marked (S9)', () => {
+    const out = instrumentDocHtml(PLAIN, BASE);
+    // The engine calls an edit stale unless `before` equals the element's text, so a paragraph
+    // cut at 400 characters could never be changed. The script itself is proven in a browser
+    // (e2e/desk_doc_editors_test.py edits a paragraph longer than that).
+    expect(out).toContain('composite ? 400 : 20000');
+    expect(out).toContain('.cut = true');
+  });
+
+  it('the bridge says where a jump landed with its confirmation (S9: the slide strip needs no timer)', () => {
+    const out = instrumentDocHtml(PLAIN, BASE);
+    expect(out).toContain("type: 'scroll-ack', wid: m.wid, seq: m.seq, scrollX: window.scrollX, scrollY: window.scrollY");
+    // An instant jump, so the position reported with the confirmation is the landing.
+    expect(out).toContain("behavior: 'instant'");
+  });
 });

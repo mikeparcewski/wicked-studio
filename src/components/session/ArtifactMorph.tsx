@@ -1,8 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
-import { grow, shrink, type ArtifactSize } from '../../board/artifactMorph.js';
+import { interactiveUrl, type ExportFormat } from '../../api/interactive.js';
+import { grow, shrink, type ArtifactSize, type EditorKind } from '../../board/artifactMorph.js';
+import { exportReadyText, runExport } from '../../interactive/exportWire.js';
 import { artifactSizeOf, setArtifactSize, topmostArtifact, useArtifactSizes } from '../../store/artifactSizes.js';
-import { PageEditor } from './PageEditor.js';
+import { DocCoverage } from './DocCoverage.js';
+import { PageEditor, type FrameParts } from './PageEditor.js';
+import { SlideStrip } from './SlideStrip.js';
 
 /**
  * S8 — the morphing artifact (DESIGN-interaction rule 1: the object is the control). ONE element
@@ -11,21 +15,85 @@ import { PageEditor } from './PageEditor.js';
  * same `<section>` changes class, so the frame inside keeps its state and the shared-element morph
  * (View Transitions where the browser has them; nothing animates under reduced motion) is honest.
  *
- * The kind slot: a `doc` artifact hosts the built-in {@link PageEditor}; EP-P2 lets it host a
- * `PluginHost` for the same kind behind the same chrome.
+ * The kind slot: a page hosts the built-in {@link PageEditor}; a written document and a deck (S9)
+ * host the same editor with what stands beside its frame — the document's requirement coverage at
+ * full screen, the deck's slide strip — and an Export in the header. EP-P2 / EP-P4 let the slot
+ * host a `PluginHost` for the same kinds behind the same chrome.
  */
-export function ArtifactMorph({ artifactKey, title, projectId, docId, composerKey }: {
+
+/** What each kind exports to, in the order offered (interactive's own formats). */
+const EXPORTS: Readonly<Record<EditorKind, ReadonlyArray<{ format: ExportFormat; label: string }>>> = {
+  page: [],
+  document: [{ format: 'pdf', label: 'PDF' }, { format: 'html', label: 'Web page' }],
+  deck: [{ format: 'pptx', label: 'PowerPoint' }, { format: 'pdf', label: 'PDF' }],
+};
+
+type ExportLine =
+  | { state: 'working'; text: string }
+  | { state: 'ready'; text: string; href: string; file: string }
+  | { state: 'failed'; text: string };
+
+export function ArtifactMorph({ artifactKey, title, projectId, docId, composerKey, kind = 'page', repoId = null }: {
   artifactKey: string;
   title: string;
   projectId: string;
   docId: string;
   composerKey: string;
+  /** Which editor the document opens in (S9) — from the style it was created with. */
+  kind?: EditorKind;
+  /** The run's repository, when it has one: where a document's requirement coverage is read. */
+  repoId?: string | null;
 }): React.ReactElement {
   const size = useArtifactSizes((s) => artifactSizeOf(s, artifactKey));
   const topmost = useArtifactSizes((s) => topmostArtifact(s) === artifactKey);
   const [head, setHead] = useState<number | null>(null);
   const shrinkBtn = useRef<HTMLButtonElement | null>(null);
   const growBtn = useRef<HTMLButtonElement | null>(null);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [exported, setExported] = useState<ExportLine | null>(null);
+  const exportBtn = useRef<HTMLButtonElement | null>(null);
+  const exportMenu = useRef<HTMLSpanElement | null>(null);
+  // The menu is a menu: opened, its first format holds the focus (arrows move, Enter chooses);
+  // closed — by Esc or by a choice — the focus is back on Export.
+  useEffect(() => {
+    if (exportOpen) exportMenu.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus();
+  }, [exportOpen]);
+  const closeExport = (): void => { setExportOpen(false); exportBtn.current?.focus(); };
+  const onExportKey = (e: React.KeyboardEvent<HTMLSpanElement>): void => {
+    if (!exportOpen) return;
+    // Esc closes the open menu first; it does not also shrink the artifact.
+    if (e.key === 'Escape') { e.stopPropagation(); closeExport(); return; }
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+    e.preventDefault();
+    const items = [...(exportMenu.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? [])];
+    if (items.length === 0) return;
+    const at = items.findIndex((b) => b === document.activeElement);
+    items[(at + (e.key === 'ArrowDown' ? 1 : items.length - 1) + items.length) % items.length]?.focus();
+  };
+  const live = useRef(true);
+  useEffect(() => { live.current = true; return () => { live.current = false; }; }, []);
+
+  // What stands beside the frame: a deck's slides whenever it is open, a document's requirements
+  // at full screen (the pane has no room for a column) and only for a run that has a repository.
+  const side = useCallback((parts: FrameParts | null): React.ReactNode => {
+    if (parts === null) return null;
+    if (kind === 'deck' && size !== 'inline') return <SlideStrip parts={parts} docId={docId} composerKey={composerKey} />;
+    if (kind === 'document' && size === 'full' && repoId !== null) return <DocCoverage parts={parts} repoId={repoId} composerKey={composerKey} />;
+    return null;
+  }, [kind, size, repoId, docId, composerKey]);
+
+  const exportAs = async (format: ExportFormat, label: string): Promise<void> => {
+    if (head === null) return;
+    closeExport();
+    setExported({ state: 'working', text: `Making the ${label} of version ${head}…` });
+    const out = await runExport({ projectId, docId, version: head, format });
+    if (!live.current) return;
+    if (out.ok) setExported({ state: 'ready', text: exportReadyText(format, out.file, out.report), href: interactiveUrl(projectId, out.result.download), file: out.file });
+    else setExported({ state: 'failed', text: `The ${label} was not made — ${out.hint}` });
+  };
+  const exportsHere = size === 'inline' ? [] : EXPORTS[kind];
+  // Folded back to the preview, the menu is gone — it must not be open when the artifact grows again.
+  useEffect(() => { if (size === 'inline') setExportOpen(false); }, [size]);
 
   const morph = useCallback((to: ArtifactSize): void => {
     const apply = (): void => flushSync(() => setArtifactSize(artifactKey, to));
@@ -72,7 +140,7 @@ export function ArtifactMorph({ artifactKey, title, projectId, docId, composerKe
       data-object={`artifact:${artifactKey}`}
       data-size={size}
       data-doc={docId}
-      data-kind="doc"
+      data-kind={kind}
       aria-label={`${title} — ${size === 'inline' ? 'preview' : size === 'pane' ? 'open beside the thread' : 'full screen'}`}
       className={`wk-artifact wk-artifact--${size}`}
       style={{ viewTransitionName: `artifact-${slug}` } as React.CSSProperties}
@@ -80,6 +148,18 @@ export function ArtifactMorph({ artifactKey, title, projectId, docId, composerKe
       <header className="wk-artifact-head">
         <span className="wk-artifact-title">{title}</span>
         <span data-testid="artifact-version">{head === null ? '' : `version ${head}`}</span>
+        {exportsHere.length > 0 && head !== null && (
+          <span className="wk-artifact-export" onKeyDown={onExportKey}>
+            <button ref={exportBtn} type="button" data-testid="artifact-export" aria-haspopup="menu" aria-expanded={exportOpen} onClick={() => setExportOpen((o) => !o)} className="wk-artifact-btn">Export ▾</button>
+            {exportOpen && (
+              <span ref={exportMenu} role="menu" aria-label="Export as" data-testid="artifact-export-menu" className="wk-artifact-menu">
+                {exportsHere.map((x) => (
+                  <button key={x.format} type="button" role="menuitem" data-testid="artifact-export-format" data-format={x.format} onClick={() => void exportAs(x.format, x.label)} className="wk-artifact-menu-item">{x.label}</button>
+                ))}
+              </span>
+            )}
+          </span>
+        )}
         {size !== 'full' && (
           <button ref={growBtn} type="button" data-testid="artifact-grow" aria-label={size === 'inline' ? 'Open beside the thread' : 'Full screen'} title={size === 'inline' ? 'Open' : 'Full screen'} onClick={() => morph(grow(size))} className="wk-artifact-btn">⤢</button>
         )}
@@ -87,7 +167,15 @@ export function ArtifactMorph({ artifactKey, title, projectId, docId, composerKe
           <button ref={shrinkBtn} type="button" data-testid="artifact-shrink" aria-label={size === 'full' ? 'Back to the pane' : 'Back to the thread'} title="Esc" onClick={() => morph(shrink(size))} className="wk-artifact-btn">{size === 'full' ? '⤡' : '×'}</button>
         )}
       </header>
-      <PageEditor projectId={projectId} docId={docId} composerKey={composerKey} size={size} onHead={setHead} />
+      <PageEditor projectId={projectId} docId={docId} composerKey={composerKey} size={size} kind={kind} side={side} onHead={setHead} />
+      {exported !== null && size !== 'inline' && (
+        <p data-testid="artifact-export-line" data-state={exported.state} className={`wk-artifact-line${exported.state === 'failed' ? ' wk-artifact-line--bad' : ''}`}>
+          {exported.text}
+          {exported.state === 'ready' && (
+            <> <a data-testid="artifact-export-download" href={exported.href} download={exported.file} className="wk-since-toggle">Download</a></>
+          )}
+        </p>
+      )}
       {size === 'inline' && (
         <button type="button" data-testid="artifact-open" aria-label={`Open ${title}`} className="wk-artifact-catch" onClick={() => morph('pane')} />
       )}

@@ -29,11 +29,37 @@ describe('parseInbound — well-formed v1 frames', () => {
       .toEqual({ v: 1, type: 'scroll-state', scrollX: 5, scrollY: 6 });
     expect(parseInbound({ v: 1, type: 'scroll-ack', wid: 'h1' }))
       .toEqual({ v: 1, type: 'scroll-ack', wid: 'h1' });
+    // S9: an ack may say where the frame landed; a half-said or non-finite landing is dropped.
+    expect(parseInbound({ v: 1, type: 'scroll-ack', wid: 'h1', scrollX: 0, scrollY: 640 }))
+      .toEqual({ v: 1, type: 'scroll-ack', wid: 'h1', scrollX: 0, scrollY: 640 });
+    expect(parseInbound({ v: 1, type: 'scroll-ack', wid: 'h1', scrollY: 640 }))
+      .toEqual({ v: 1, type: 'scroll-ack', wid: 'h1' });
+    expect(parseInbound({ v: 1, type: 'scroll-ack', wid: 'h1', scrollX: 0, scrollY: Number.NaN }))
+      .toEqual({ v: 1, type: 'scroll-ack', wid: 'h1' });
+    // …and names the request it answers, when the request was numbered.
+    expect(parseInbound({ v: 1, type: 'scroll-ack', wid: 'h1', seq: 7, scrollX: 0, scrollY: 640 }))
+      .toEqual({ v: 1, type: 'scroll-ack', wid: 'h1', seq: 7, scrollX: 0, scrollY: 640 });
+    for (const seq of ['7', -1, 0, 1.5, Number.NaN, null]) {
+      expect(parseInbound({ v: 1, type: 'scroll-ack', wid: 'h1', seq })).toEqual({ v: 1, type: 'scroll-ack', wid: 'h1' });
+    }
+    expect(makeScrollToWid('h1', 7)).toEqual({ v: 1, type: 'scroll-to-wid', wid: 'h1', seq: 7 });
   });
 
   it('an empty inventory is VALID — a document with no anchors is a real document', () => {
     expect(parseInbound({ v: 1, type: 'wid-inventory', widMap: {}, scrollX: 0, scrollY: 0 }))
       .toEqual({ v: 1, type: 'wid-inventory', widMap: {}, scrollX: 0, scrollY: 0 });
+  });
+
+  it('carries `cut` only when the bridge cut a block\'s text (S9: a cut text is never a `before`)', () => {
+    const msg = parseInbound({
+      v: 1, type: 'wid-inventory', widMap: { a: RECT, b: RECT, c: RECT }, scrollX: 0, scrollY: 0,
+      blocks: { a: { text: 'whole', composite: false }, b: { text: 'opening…', composite: true, cut: true }, c: { text: 'x', composite: false, cut: 'yes' } },
+    });
+    expect(msg).not.toBeNull();
+    const blocks = (msg as { blocks: Record<string, unknown> }).blocks;
+    expect(blocks['a']).toStrictEqual({ text: 'whole', composite: false });
+    expect(blocks['b']).toStrictEqual({ text: 'opening…', composite: true, cut: true });
+    expect(blocks['c']).toStrictEqual({ text: 'x', composite: false });
   });
 
   it('accepts an inventory carrying `blocks` (the injected bridge) and one without (fixture bridges)', () => {

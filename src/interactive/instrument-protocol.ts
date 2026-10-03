@@ -31,7 +31,13 @@ export interface WidRect {
  *  deterministic Change-text mode (interactive's `describe()` `before` snapshot);
  *  `composite` marks an element that nests other instrumented blocks, for which a
  *  destructive text replace would flatten the subtree (InlineComment hides the mode). */
-export interface WidBlock { text: string; composite: boolean }
+export interface WidBlock {
+  text: string;
+  composite: boolean;
+  /** The bridge cut `text` short (a container's opening, or a very long block): it is not the
+   *  element's whole text, so it must not be used as a `before` snapshot. Absent = whole. */
+  cut?: boolean;
+}
 
 /** Full inventory: all [data-wid] rects plus current frame scroll. Posted in
  *  response to `request-inventory` and whenever the inventory changes substantially.
@@ -51,9 +57,14 @@ export interface ScrollStateMsg {
   scrollX: number; scrollY: number;
 }
 
-/** Confirmation that a `scroll-to-wid` request was handled by the frame. */
+/** Confirmation that a `scroll-to-wid` request was handled by the frame. `scrollX`/`scrollY`
+ *  (when the bridge reports them) are where the frame stood right after the jump — its landing,
+ *  known without waiting for the scroll event that follows. `seq` echoes the request's own
+ *  number, so a confirmation names the request it answers. */
 export interface ScrollAckMsg {
   v: 1; type: 'scroll-ack'; wid: string;
+  scrollX?: number; scrollY?: number;
+  seq?: number;
 }
 
 /** The frame's own click landed on an instrumented block — the ORIGINAL interaction
@@ -75,7 +86,7 @@ export type BridgeToOverlayMsg =
 export interface RequestInventoryMsg { v: 1; type: 'request-inventory' }
 
 /** Ask the bridge to scroll the [data-wid=wid] element into view. */
-export interface ScrollToWidMsg { v: 1; type: 'scroll-to-wid'; wid: string }
+export interface ScrollToWidMsg { v: 1; type: 'scroll-to-wid'; wid: string; seq?: number }
 
 export type OverlayToBridgeMsg = RequestInventoryMsg | ScrollToWidMsg;
 
@@ -135,7 +146,7 @@ export function parseInbound(data: unknown): BridgeToOverlayMsg | null {
     const blocks: Record<string, WidBlock> = {};
     for (const [wid, block] of Object.entries(rawBlocks as Record<string, unknown>)) {
       if (!isWidBlock(block)) return null;
-      blocks[wid] = { text: block.text, composite: block.composite };
+      blocks[wid] = { text: block.text, composite: block.composite, ...(block.cut === true ? { cut: true } : {}) };
     }
     return { v: 1, type: 'wid-inventory', widMap, scrollX, scrollY, blocks };
   }
@@ -150,7 +161,15 @@ export function parseInbound(data: unknown): BridgeToOverlayMsg | null {
   if (type === 'scroll-ack') {
     const wid = d['wid'];
     if (typeof wid !== 'string' || wid === '') return null;
-    return { v: 1, type: 'scroll-ack', wid };
+    const scrollX = d['scrollX'];
+    const scrollY = d['scrollY'];
+    const seq = d['seq'];
+    return {
+      v: 1, type: 'scroll-ack', wid,
+      ...(isFiniteNum(scrollX) && isFiniteNum(scrollY) ? { scrollX, scrollY } : {}),
+      // Requests are numbered 1, 2, 3 …: anything else is not a request's number.
+      ...(typeof seq === 'number' && Number.isInteger(seq) && seq > 0 ? { seq } : {}),
+    };
   }
 
   if (type === 'wid-click') {
@@ -173,6 +192,7 @@ export function parseInbound(data: unknown): BridgeToOverlayMsg | null {
 /** Frozen singleton — safe to compare by reference in tests. */
 export const REQUEST_INVENTORY: RequestInventoryMsg = Object.freeze({ v: 1 as const, type: 'request-inventory' as const });
 
-export function makeScrollToWid(wid: string): ScrollToWidMsg {
-  return { v: 1, type: 'scroll-to-wid', wid };
+/** `seq` numbers the request; a bridge that knows of it echoes it on the `scroll-ack`. */
+export function makeScrollToWid(wid: string, seq?: number): ScrollToWidMsg {
+  return seq === undefined ? { v: 1, type: 'scroll-to-wid', wid } : { v: 1, type: 'scroll-to-wid', wid, seq };
 }
