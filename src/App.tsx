@@ -45,6 +45,7 @@ import { SkinRightRail } from './components/SkinRightRail.js';
 import { Desk } from './components/desk/Desk.js';
 import { SessionRail } from './components/desk/SessionRail.js';
 import { SessionPage } from './components/session/SessionView.js';
+import type { ComposerSend } from './components/session/Composer.js';
 import { NeedsQueueSurface } from './components/NeedsYouQueue.js';
 import { useSkin } from './hooks/useSkin.js';
 import { useNeedsClock, useNeedsRows } from './hooks/useNeedsRows.js';
@@ -319,13 +320,13 @@ export function App(): React.ReactElement {
   // the moment the dock takes it (`onHandoffTaken`), and again whenever the dock closes, so no
   // reopen or re-render can send it twice or shadow letters typed to open the dock.
   const [askKey, setAskKey] = useState(0);
-  const [askHandoff, setAskHandoff] = useState<string | null>(null);
+  const [askHandoff, setAskHandoff] = useState<{ text: string } & ComposerSend | null>(null);
   useEffect(() => {
     if (!askOpen) setAskHandoff(null);
   }, [askOpen]);
-  const handToAsk = useCallback((text: string) => {
+  const handToAsk = useCallback((text: string, opts: ComposerSend = {}) => {
     setAskKey((k) => k + 1);
-    setAskHandoff(text);
+    setAskHandoff({ text, ...opts });
     setAskOpen(true);
   }, []);
   const takeHandoff = useCallback(() => setAskHandoff(null), []);
@@ -845,7 +846,12 @@ export function App(): React.ReactElement {
             pathname={pathname}
             navigate={navigate}
             onClose={() => setAskOpen(false)}
-            {...(askHandoff !== null ? { sendText: askHandoff, onHandoffTaken: takeHandoff } : {})}
+            {...(askHandoff !== null ? {
+              sendText: askHandoff.text,
+              onHandoffTaken: takeHandoff,
+              ...(askHandoff.projectId !== undefined ? { sendProjectId: askHandoff.projectId } : {}),
+              ...(askHandoff.fresh === true ? { sendFresh: true } : {}),
+            } : {})}
           />
         )}
       </AskLauncher>

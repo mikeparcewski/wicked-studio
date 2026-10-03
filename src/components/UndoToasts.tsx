@@ -38,7 +38,7 @@ export function UndoToasts(): React.ReactElement | null {
           aria-live="polite"
           data-testid="undo-toast"
           data-verb={t.verb}
-          className={`wk-toast wk-toast--${t.verb === 'approve' ? 'approve' : 'reject'} flex items-center gap-3`}
+          className={`wk-toast wk-toast--${t.verb === 'approve' || t.verb === 'edit-plan' ? 'approve' : 'reject'} flex items-center gap-3`}
           style={{ padding: '10px 12px 10px 16px', maxWidth: 480 }}
         >
           <div className="flex flex-col gap-0.5 min-w-0">
@@ -46,7 +46,7 @@ export function UndoToasts(): React.ReactElement | null {
               data-testid="undo-headline"
               style={{
                 margin: 0, fontSize: 'var(--text-sm)', fontWeight: 'var(--weight-semi)',
-                color: t.verb === 'approve' ? 'var(--status-run)' : 'var(--status-fail)',
+                color: t.verb === 'approve' || t.verb === 'edit-plan' ? 'var(--status-run)' : 'var(--status-fail)',
               }}
             >
               {t.headline}

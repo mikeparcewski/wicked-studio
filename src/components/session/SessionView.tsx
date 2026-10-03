@@ -19,6 +19,12 @@ import { ChainLine, useRunChain } from './ChainLine.js';
 import { ProposalCard } from './ProposalCard.js';
 import { SourceChips } from './SourceChips.js';
 import { SinceYouLeft } from './SinceYouLeft.js';
+import { Composer, type ComposerSend } from './Composer.js';
+import { quoteLabel } from '../../board/aboutChips.js';
+import { addAboutChip } from '../../store/composerChips.js';
+import { usePlanDrafts } from '../../store/planDrafts.js';
+import { wordOf } from '../../board/planDraft.js';
+import { undoDecision } from '../../board/undoQueue.js';
 
 /**
  * A SESSION (`/s/:id`, DES-STUDIO-REBUILD-001 §5.4, slice S6a): the goal sentence, the thread (the
@@ -32,8 +38,9 @@ import { SinceYouLeft } from './SinceYouLeft.js';
  *  - R4: the draft and the thread's scroll survive switching sessions and coming back.
  *  - R2: opened after 4 h away, the since-you-left card overlays the top of the thread; it
  *    collapses to one line and never pushes the thread down.
- *  - The composer's send hands the message to the Ask dock (as the Desk's does) until S7 brings
- *    the session's own launch path.
+ *  - The composer (S7) hands the message to the Ask dock (as the Desk's does), led by its
+ *    about-chips; its `/` adds a step to the newest live run as a plan draft, and a selection in
+ *    the thread becomes an "about: “…”" chip.
  */
 
 interface ChatDetail {
@@ -64,7 +71,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
   runsLoaded: boolean;
   needRows: NeedRow[];
   navigate: Navigate;
-  onAsk: (text: string) => void;
+  onAsk: (text: string, opts: ComposerSend) => void;
 }): React.ReactElement {
   const ref = useMemo(() => parseSessionId(sessionId), [sessionId]);
   const runChatId = useCapabilities((s) => s.runChatId);
@@ -170,12 +177,6 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
     if (el !== null) el.scrollTop = top ?? 0;
   }, [sessionId, ready]);
 
-  const send = (): void => {
-    const body = draft.trim();
-    if (body === '') return;
-    onAsk(body);
-    setDraft(sessionId, '');
-  };
   const go = (path: string) => (e: React.MouseEvent): void => { e.preventDefault(); navigate(path); };
   // Where a source's passage can be read from: the session's runs with a worktree, newest first.
   const readers = useMemo(() => [...mine].reverse().map((v) => ({
@@ -204,6 +205,15 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
           data-testid="session-thread"
           className="wk-session-thread"
           onScroll={(e) => setScroll(sessionId, e.currentTarget.scrollTop)}
+          // DESIGN-interaction rule 2: selecting a sentence in the work makes it the subject of the
+          // next message — an "about: “…”" chip on the composer (never a button row).
+          onMouseUp={(e) => {
+            const sel = window.getSelection();
+            const node = sel?.anchorNode ?? null;
+            if (sel === null || node === null || !e.currentTarget.contains(node)) return;
+            const label = quoteLabel(sel.toString());
+            if (label !== null) addAboutChip(sessionId, { kind: 'about', key: `q:${label}`, label });
+          }}
         >
           {conversation === 'closed' && mine.length > 0 && (
             <p data-testid="session-closed-line" className="wk-session-grey">{CLOSED_LINE}</p>
@@ -234,22 +244,18 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
         </div>
       </div>
 
-      <form className="wk-desk-composer wk-session-composer" onSubmit={(e) => { e.preventDefault(); send(); }}>
-        <textarea
-          data-testid="session-composer-input"
-          data-type-target="page"
-          aria-label="Ask or tell studio what to do next"
-          rows={1}
-          value={draft}
-          onChange={(e) => setDraft(sessionId, e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); send(); }
-          }}
-          placeholder="Ask about this, or tell studio what to do next"
-          className="wk-desk-input"
-        />
-        <button type="submit" data-testid="session-composer-send" aria-label="Send" disabled={draft.trim() === ''} className="wk-desk-send">↑</button>
-      </form>
+      <Composer
+        composerKey={sessionId}
+        text={draft}
+        setText={(t) => setDraft(sessionId, t)}
+        onSend={onAsk}
+        runs={mine}
+        started={entries.length > 0}
+        className="wk-session-composer"
+        ariaLabel="Ask or tell studio what to do next"
+        placeholder="Ask about this, or tell studio what to do next — / adds a step, @ names a project or a helper"
+        variant="session"
+      />
     </div>
   );
 }
@@ -275,8 +281,32 @@ function RunBlock({ view, badge, go }: {
       {/* S6b: the run's ONE status sentence, then its proposal (the plan, the hand-over). */}
       <p data-testid="session-status-sentence" role="status" className="wk-session-status-sentence">{statusSentence(view, chain, gate, action)}</p>
       <ProposalCard view={view} chain={chain} />
+      <PlanStepLines runId={id} />
       <ChainLine chain={chain} runId={id} teamError={teamError} onRetry={retry} />
       <a href={page} onClick={go(page)} data-testid="session-run-open" className="wk-session-link">Open the run page →</a>
     </section>
+  );
+}
+
+/**
+ * S7: the steps a `/` command added mid-run, in the run's own block — "Adding Test · Undo" while the
+ * 10 s window is open, then "Added Test" with no Undo (a running plan only grows).
+ */
+function PlanStepLines({ runId }: { runId: string }): React.ReactElement | null {
+  const queued = usePlanDrafts((s) => s.queued[runId]);
+  const added = usePlanDrafts((s) => s.added[runId]);
+  if ((queued?.length ?? 0) === 0 && (added?.length ?? 0) === 0) return null;
+  return (
+    <div className="wk-session-steps">
+      {(added ?? []).map((c, i) => (
+        <p key={`a${i}`} data-testid="session-step-added" data-catalog={c} className="wk-session-grey">Added {wordOf(c)} — it stays: a running plan only grows.</p>
+      ))}
+      {(queued ?? []).map((q) => (
+        <p key={`q${q.id}`} data-testid="session-step-queued" data-catalog={q.catalog} className="wk-session-grey">
+          Adding {wordOf(q.catalog)} ·{' '}
+          <button type="button" data-testid="session-step-undo" onClick={() => undoDecision(q.id)} className="wk-since-toggle">Undo</button>
+        </p>
+      ))}
+    </div>
   );
 }

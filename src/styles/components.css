@@ -838,7 +838,7 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
 .wk-since-cols p { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wk-since-col { font-size: var(--text-xs); font-weight: var(--weight-semi); color: var(--ink-high); }
 .wk-since-none { color: var(--ink-dim); }
-[data-testid="session"] a:focus-visible, [data-testid="session"] button:focus-visible, .wk-session-composer:focus-within {
+[data-testid="session"] a:focus-visible, [data-testid="session"] button:focus-visible, .wk-session-composer .wk-desk-composer:focus-within {
   outline: 2px solid transparent; outline-offset: 2px; box-shadow: var(--focus-ring);
 }
 
@@ -913,3 +913,31 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
 /* The rail's Notifications count is harbor, not the gate violet (studio#441). */
 [data-skin="desk"] [data-testid="session-rail"] [data-testid="bell-unread-count"] { background: var(--accent) !important; color: var(--accent-fg) !important; }
 [data-skin="desk"] [data-testid="session-rail"] [data-nav-dest="notifications"] { color: var(--ink-muted) !important; }
+
+/* ── S7: the composer's about-chips, notes and `/` `@` menus (desk + session) ─────────────── */
+.wk-composer { position: relative; display: flex; flex-direction: column; gap: 6px; }
+.wk-composer-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.wk-composer-chip {
+  display: inline-flex; align-items: center; gap: 4px; padding: 2px 4px 2px 10px; border-radius: 999px;
+  background: var(--accent-subtle); color: var(--ink-high); font-size: var(--text-xs);
+}
+.wk-composer-chip-x { border: 0; background: transparent; color: var(--ink-muted); cursor: pointer; padding: 0 4px; font-size: var(--text-sm); line-height: 1; }
+.wk-composer-chip-x:hover { color: var(--ink-high); }
+.wk-composer-note { font-size: var(--text-xs); color: var(--ink-muted); }
+.wk-composer-note--bad { color: var(--status-fail); }
+.wk-composer-menu {
+  position: absolute; left: 0; bottom: calc(100% + 6px); z-index: 30; min-width: 360px; max-width: 560px;
+  background: var(--surface-card); border: 1px solid var(--surface-raised); border-radius: 10px;
+  box-shadow: var(--shadow-raised); padding: 4px; display: flex; flex-direction: column;
+}
+.wk-composer-menu-head { margin: 0; padding: 6px 8px; font-size: var(--text-2xs); color: var(--ink-dim); }
+.wk-composer-menu-empty { margin: 0; padding: 8px; font-size: var(--text-xs); color: var(--ink-dim); }
+.wk-composer-menu-item {
+  display: flex; align-items: baseline; gap: 10px; text-align: left; border: 0; background: transparent;
+  padding: 6px 8px; border-radius: 6px; cursor: pointer; color: var(--ink-high); font-size: var(--text-sm);
+}
+.wk-composer-menu-item small { color: var(--ink-muted); font-size: var(--text-xs); }
+.wk-composer-menu-item--on { background: var(--accent-subtle); }
+.wk-composer-menu-item--off { color: var(--ink-dim); cursor: not-allowed; }
+.wk-composer-cmd { font-family: inherit; color: var(--accent); min-width: 72px; }
+.wk-session-steps { display: flex; flex-direction: column; gap: 2px; }

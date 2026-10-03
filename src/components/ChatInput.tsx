@@ -14,6 +14,7 @@ import { clearSteerPrefill, peekSteerPrefill } from '../store/steerPrefill.js';
 import { setCachedRoster } from '../store/rosterCache.js';
 import { seatStandingWord } from './HealthRailSection.js';
 import { noCarryingSeatReason } from './gateVerdictModel.js';
+import { detectWorkflow, launchSubmit } from '../board/launchModel.js';
 import { isSystemWorkflowIn, setCachedWorkflows } from '../store/workflowCache.js';
 import { presetSystemFlag, usePlanCatalog } from '../store/planCatalog.js';
 import { ContextPopover } from './ContextPopover.js';
@@ -72,18 +73,6 @@ interface Props {
 const INJECT_STATUSES = new Set(['executing', 'distributing', 'planning']);
 /** The repo picker's placeholder value while several repos are attached and none is the target. */
 const SEVERAL_REPOS = '__several__';
-
-function detectWorkflow(text: string): string | null {
-  const lower = text.toLowerCase();
-  if (/\b(bug|fix|broken|error|crash|issue)\b/.test(lower)) return 'bug';
-  if (
-    /\b(feature|implement|add|create)\b/.test(lower) &&
-    !/\b(bug|fix|broken|error|crash|issue)\b/.test(lower)
-  )
-    return 'feature';
-  if (/\b(migrate|upgrade|migration|move)\b/.test(lower)) return 'migration';
-  return null;
-}
 
 /** Small × pill for active non-default options */
 function ActivePill({
@@ -1011,8 +1000,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   // studio#315 (F-RC2-041): the roster SAYS no selected seat can take the work — every one benched
   // or not council-eligible. Such a launch fails at distribution ("no eligible seat"), so Send
   // refuses and names why; a cold roster or an unknown seat is never a refusal.
-  const noSeatReason = noCarryingSeatReason(selectedClis, roster);
-  const canSubmit = problem.trim().length > 0 && selectedClis.size > 0 && !submitting && !targetRequired && noSeatReason === null;
+  const { canSubmit, noSeatReason } = launchSubmit({ problem, selectedClis, submitting, targetRequired, roster });
   // A composed plan replaces the workflow, so a detected workflow is no suggestion while one is in hand.
   const showDetection =
     detectedWorkflow !== null && !workflowDismissed && !workflow && !workflowOverride && !selection.composing;

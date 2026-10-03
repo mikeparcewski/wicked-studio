@@ -55,7 +55,7 @@ function scopeField(scope: ChatScope | null): { scope?: ChatScope } {
   return scope !== null ? { scope } : {};
 }
 
-export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoffTaken }: {
+export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoffTaken, sendProjectId, sendFresh = false }: {
   runs: SessionView[];
   pathname: string;
   /** Collapsing the dock closes Ask entirely — the launcher bubble/shortcut reopen it. */
@@ -68,6 +68,11 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
   /** Called once the dock has taken `sendText` (it is in the dock's own state and being sent):
    *  the caller drops it, so nothing can hand it over a second time. */
   onHandoffTaken?: () => void;
+  /** S7: the project an `@project` chip named — the handed-over message's chat is scoped to it. */
+  sendProjectId?: string;
+  /** S7: the handed-over message starts a NEW session (an `@project` after the first send), never
+   *  the one this dock would resume. */
+  sendFresh?: boolean;
 }): React.ReactElement {
   // The letters that opened the dock (type-to-composer, §5.6 rule 4): read on mount, cleared
   // in an effect (a StrictMode double initializer must not read an already-emptied seed).
@@ -131,7 +136,16 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
   /** The session this dock RESUMES (studio#323 R3): the dock unmounts on close, so the
    *  id lives in sessionStorage — reopening Ask rejoins it instead of minting a second
    *  session and orphaning the first. Read once per mount. */
-  const [resumed] = useState(() => readAskSession());
+  // A fresh handoff (S7) forgets the stored session first, so its message opens a new one. A
+  // handoff naming a project is always fresh: an open chat's scope cannot change, so the project
+  // is honoured by a chat opened in it (before the composer's first send that IS its chat).
+  const [resumed] = useState(() => {
+    if (sendText !== undefined && (sendFresh || sendProjectId !== undefined)) {
+      forgetAskSession();
+      return null;
+    }
+    return readAskSession();
+  });
   /** The live chat session this dock opened — later sends reuse its warm seats. */
   const chatIdRef = useRef<string | null>(resumed?.chatId ?? null);
   /** True once the context pack LANDED with a message — it seeds the first successful
@@ -148,7 +162,8 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
   // Ask stays mounted across navigation (codex round 3 on #327): an UNTOUCHED choice is derived
   // from the CURRENT route each render; only a manual pick is state, and it survives navigation.
   // `ambientProjectId` is the one project-from-route rule (`/p/default` = Unfiled = none).
-  const [manualScope, setManualScope] = useState<AskScopeChoice | null>(null);
+  const [manualScope, setManualScope] = useState<AskScopeChoice | null>(() =>
+    (sendProjectId !== undefined ? `project:${sendProjectId}` : null));
   const scopeChoice: AskScopeChoice = manualScope ?? defaultAskScope(ambientProjectId(pathname));
   const scopeChoiceRef = useRef(scopeChoice);
   scopeChoiceRef.current = scopeChoice;
