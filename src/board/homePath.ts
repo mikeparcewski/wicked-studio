@@ -6,20 +6,30 @@
  *
  * Studio is a browser client and is never told the daemon host's home directory, so the three
  * desktop spellings are recognised by shape: `/Users/<name>` (macOS), `/home/<name>` and `/root`
- * (Linux), `<drive>:\Users\<name>` (Windows, either slash). Anything else (`/tmp/…`, `/var/…`, a
- * repo-relative `src/App.tsx`, an already-abbreviated `~/…`) is left exactly as it is.
+ * (Linux), `<drive>:\Users\<name>` (Windows, either slash, any case). Anything else (`/tmp/…`,
+ * `/var/…`, a repo-relative `src/App.tsx`, an already-abbreviated `~/…`) is left exactly as it is.
+ *
+ * `<name>` is an account's short name: dot-separated words with no slash, whitespace, quote,
+ * bracket or `,;:` — so prose punctuation after a bare home directory ("in /home/alice, then")
+ * stays outside the match. Known limit: a Windows account name with a space in it is not
+ * recognised (one word is).
  *
  * Pure functions; the hooks in `hooks/useHomePath.ts` bind them to the technical-details pref.
  */
 
-/** A home directory, at the start of a path. `<name>` is one segment: no slash, no whitespace. */
-const HOME_HEAD = String.raw`(?:\/Users\/[^\/\\\s"'\`()\[\]<>]+|\/home\/[^\/\\\s"'\`()\[\]<>]+|\/root|[A-Za-z]:[\\\/]Users[\\\/][^\/\\\s"'\`()\[\]<>]+)`;
-/** What may follow the home directory for it to be the directory itself: the end, or a separator. */
-const HOME_TAIL = String.raw`(?=$|[\\\/\s"'\`()\[\]<>,;:])`;
+/** One word of an account name: no separator, whitespace, quote, bracket or prose punctuation. */
+const WORD = String.raw`[^\/\\\s"'\`()\[\]<>,;:.]+`;
+/** A Windows account name may hold an apostrophe (O'Neil); a POSIX one never does. */
+const WIN_WORD = String.raw`[^\/\\\s"\`()\[\]<>,;:.]+`;
+/** The three spellings of a home directory, at the start of a path. */
+const HOME_HEAD =
+  String.raw`(?:\/Users\/${WORD}(?:\.${WORD})*|\/home\/${WORD}(?:\.${WORD})*|\/root|[A-Za-z]:[\\\/][Uu]sers[\\\/]${WIN_WORD}(?:\.${WIN_WORD})*)`;
 
-const PATH_RE = new RegExp(`^${HOME_HEAD}${HOME_TAIL}`);
-/** In prose: the path must start at the text's start or after a character no path contains. */
-const TEXT_RE = new RegExp(String.raw`(^|[^A-Za-z0-9_.~\\\/-])${HOME_HEAD}${HOME_TAIL}`, 'g');
+/** A path field: the home directory is the whole path, or is followed by a separator. */
+const PATH_RE = new RegExp(String.raw`^${HOME_HEAD}(?=$|[\\\/])`);
+/** In prose: starts at the text's start or after a character no path contains, and ends at the
+ *  text's end, a separator, whitespace or prose punctuation (which stays in the text). */
+const TEXT_RE = new RegExp(String.raw`(^|[^A-Za-z0-9_.~\\\/-])${HOME_HEAD}(?=$|[\\\/\s"'\`()\[\]<>,;:.])`, 'g');
 
 /** One path as the daemon reports it → its display form (`~/…` when it is under a home directory). */
 export function displayPath(path: string): string {
@@ -29,10 +39,4 @@ export function displayPath(path: string): string {
 /** Free text (a unit's output, a finding's message, a deliver card) with every home path → `~/…`. */
 export function displayText(text: string): string {
   return text.replace(TEXT_RE, '$1~');
-}
-
-/** Whether the text still carries a home path — what the desk journey asserts is never rendered. */
-export function hasHomePath(text: string): boolean {
-  TEXT_RE.lastIndex = 0;
-  return TEXT_RE.test(text);
 }

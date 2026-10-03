@@ -103,7 +103,9 @@ export function Desk({ runs, runsLoaded, needRows, now, navigate, onAsk }: {
 
         <div className="wk-desk-cols">
           <div className="wk-desk-main">
-            {runsLoaded && <NeedsQueueSurface rows={needRows} runs={runs} navigate={navigate} now={now} variant="desk" />}
+            {/* Rows already known (an elicitation, a memory proposal) show at once; only the fold's
+                calm copy waits for the first /runs answer (studio#459). */}
+            {(runsLoaded || needRows.length > 0) && <NeedsQueueSurface rows={needRows} runs={runs} navigate={navigate} now={now} variant="desk" />}
             {(chores.length > 0 || states.frozen || states.away) && (
               <section data-testid="desk-chores" aria-label="For whoever runs studio" className="wk-desk-chores">
                 <p className="wk-desk-label">For whoever runs studio{chores.length > 0 ? ` · ${chores.length}` : ''}</p>

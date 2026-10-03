@@ -15,9 +15,9 @@ graph file's absolute path — plus the wave-1 and team corpora, and proves:
      opened; then document.body.innerText and every [title] attribute are free of the home directory.
   2. THE FORMATTER RAN: /system and /skills print `~/` — the fixture's paths were abbreviated, not
      left out — and the technical-details switch is off (the default layer is what was scanned).
-  3. #459: with GET /runs held 2.5 s, a fresh `/` shows `desk-loading` and no headline, no needs-you
-     fold, no "Nothing has been started yet."; when /runs answers, the headline appears, the loading
-     line goes, and the projects sentence is back.
+  3. #459: with GET /runs held 2.5 s, a fresh `/` shows `desk-loading` and no headline, no calm copy
+     in the needs-you fold (rows already known may show), no "Nothing has been started yet."; when
+     /runs answers, the headline appears, the loading line goes, and the projects sentence is back.
   4. 0 page errors.
 
 Captures: e2e/shots/desk-home-paths-*.png. Env: FEEDBACK_PORT (default 4356).
@@ -182,7 +182,9 @@ with sync_playwright() as p:
       };
     }""")
     page.screenshot(path=str(SHOTS / "desk-home-paths-loading.png"))
-    check("desk-holds-its-verdict", held["loading"] and held["headline"] == 0 and held["calm"] == 0 and held["fold"] == 0
+    # Rows already known before /runs answers (the corpus's standing elicitation) may show; the
+    # fold's calm copy, the headline's all-clear and the projects sentence may not.
+    check("desk-holds-its-verdict", held["loading"] and held["headline"] == 0 and held["calm"] == 0
           and not held["nothingNeeds"] and not held["nothingStarted"] and held["projectsLoading"] == 1, **held)
     page.get_by_test_id("desk-headline").wait_for(state="visible", timeout=15000)
     after = page.evaluate("""() => ({
