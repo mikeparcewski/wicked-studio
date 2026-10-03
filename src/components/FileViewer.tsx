@@ -104,9 +104,9 @@ const DIFF_STYLE: Record<DiffLineKind, CSSProperties> = {
 };
 
 const DIFF_TESTID: Partial<Record<DiffLineKind, string>> = {
-  add: 'diff-line-add',
-  del: 'diff-line-del',
-  hunk: 'diff-line-hunk',
+  add: /* testid */ 'diff-line-add',
+  del: /* testid */ 'diff-line-del',
+  hunk: /* testid */ 'diff-line-hunk',
 };
 
 const CODE_STYLE: CSSProperties = {
