@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { unitConsideredKey } from '../../api/considered.js';
 import { decisionsApi, isDecisionsUnsupported, type DecisionView } from '../../api/decisions.js';
 import type { SteeringRule } from '../../api/steering.js';
 import type { SessionView } from '../../api/types.js';
@@ -22,7 +23,8 @@ import { Tech } from '../Tech.js';
  */
 
 const PROBE_CAP = 12;
-const FINISHED = new Set(['done', 'completed', 'failed', 'denied', 'rejected', 'accepted', 'distributed', 'executing', 'running']);
+/** Steps worth a look: anything dispatched (a live step was given its rules at dispatch, like the step sheet shows). Never `pending`. */
+const PROBED = new Set(['done', 'completed', 'failed', 'denied', 'rejected', 'accepted', 'distributed', 'executing', 'running']);
 
 type Read = { kind: 'loading' } | { kind: 'ok'; decisions: DecisionView[] } | { kind: 'unsupported' } | { kind: 'failed'; message: string };
 
@@ -78,22 +80,41 @@ export function RuleOrigin({ rule, runs, navigate }: {
     return () => { cancelled = true; };
   }, [rule.id, rule.targets.project]);
 
-  // A bounded look into the project's recent steps, through the same store the thread's lines use.
+  // A bounded look into the project's recent steps, through the same store the thread's lines use:
+  // ONCE per rule opened (the runs list refreshes every few seconds and must not re-probe), one
+  // read at a time, stopping the moment the daemon turns out to have no such route, and skipping
+  // steps already read. Units carry no attempt on this wire, so a step is read at attempt 0 — the
+  // step sheet reads the same key; crew computes the Consideration from the step's persisted
+  // output at read time, the attempt only labels the key.
   const [probed, setProbed] = useState(0);
   const project = rule.targets.project;
+  const runsRef = useRef(runs);
+  runsRef.current = runs;
   useEffect(() => {
-    let n = 0;
-    const store = useConsideredStore.getState();
-    outer: for (const v of runsFor(project, runs)) {
+    let cancelled = false;
+    const picked: Array<{ runId: string; ord: number }> = [];
+    outer: for (const v of runsFor(project, runsRef.current)) {
       for (const u of [...v.units].sort((a, b) => a.ord - b.ord)) {
-        if (!FINISHED.has(u.status)) continue;
-        void store.loadUnit(v.session.id, u.ord);
-        n += 1;
-        if (n >= PROBE_CAP) break outer;
+        if (!PROBED.has(u.status)) continue;
+        picked.push({ runId: v.session.id, ord: u.ord });
+        if (picked.length >= PROBE_CAP) break outer;
       }
     }
-    setProbed(n);
-  }, [rule.id, project, runs]);
+    setProbed(0);
+    void (async () => {
+      let n = 0;
+      for (const { runId, ord } of picked) {
+        const store = useConsideredStore.getState();
+        if (cancelled || store.unsupported) break;
+        if (unitConsideredKey(runId, ord) in store.byKey) { n += 1; setProbed(n); continue; }
+        await store.loadUnit(runId, ord);
+        if (cancelled) break;
+        n += 1;
+        setProbed(n);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [rule.id, project]);
 
   const byKey = useConsideredStore((s) => s.byKey);
   const unsupported = useConsideredStore((s) => s.unsupported);

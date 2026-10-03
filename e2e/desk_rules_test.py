@@ -181,6 +181,9 @@ with sync_playwright() as p:
 
     # ── 7. B11: where it was considered — the turns and the step read this session ─────
     where = drawer.get_by_test_id("rule-where")
+    # The rows come from the Considerations read this session (7 turns + the Build step); wait for the
+    # block to hold them all so the count is read settled, not mid-render.
+    page.wait_for_function("() => Number(document.querySelector('[data-testid=\"rule-where\"]')?.dataset.count ?? 0) >= 7", timeout=10000)
     where_rows = where.locator('[data-testid="rule-where-row"]')
     kinds = [(where_rows.nth(i).get_attribute("data-kind"), where_rows.nth(i).get_attribute("data-verdict"),
               where_rows.nth(i).get_by_test_id("rule-where-open").inner_text()) for i in range(where_rows.count())]

@@ -52,8 +52,8 @@ export function ConsideredLine({ consideration, navigate, subject }: {
       </button>
       {open && (
         <ul data-testid="considered-rows" className="wk-considered-rows">
-          {line.rows.map((r) => (
-            <li key={`${r.verdict}:${r.id}`} data-testid="considered-row" data-verdict={r.verdict} data-rule-id={r.id} className={`wk-considered-row wk-considered-row--${r.verdict}`}>
+          {line.rows.map((r, i) => (
+            <li key={`${r.verdict}:${r.id}:${i}`} data-testid="considered-row" data-verdict={r.verdict} data-rule-id={r.id} className={`wk-considered-row wk-considered-row--${r.verdict}`}>
               {r.opens ? (
                 <a href={rulePath(r.id)} data-testid="considered-row-open" onClick={go(r)} className="wk-considered-rule">{r.statement}</a>
               ) : (

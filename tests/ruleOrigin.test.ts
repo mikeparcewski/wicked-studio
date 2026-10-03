@@ -26,6 +26,20 @@ function decision(over: Partial<DecisionView> = {}): DecisionView {
   };
 }
 
+/** A later decision that only restates the rule (no landed rule of its own). */
+function restatement(id: string): DecisionView {
+  const d = decision({ id, state: 'restated', route: 'restated', restates_rule_id: 'proposal:pr-auto' });
+  delete d.rule_id;
+  delete d.how;
+  return d;
+}
+/** The rule made to apply everywhere (crew records no `how` on a widening). */
+function widened(id: string, at: number): DecisionView {
+  const d = decision({ id, at, state: 'widened' });
+  delete d.how;
+  return d;
+}
+
 describe('ruleSentence — scope and effect in one sentence', () => {
   it('a recall-only project rule', () => {
     expect(ruleSentence(rule(), 'Kestrel')).toBe('A Development rule for Kestrel — helpers are told about it when it applies; it never blocks.');
@@ -66,7 +80,7 @@ describe('ruleOrigin — ORIGIN only from the ledger', () => {
     expect(ruleOrigin(rule(), [])).toBeNull();
   });
   it('ignores a decision that merely restates or conflicts with the rule', () => {
-    expect(ruleOrigin(rule(), [decision({ id: 'd2', state: 'restated', route: 'restated', restates_rule_id: 'proposal:pr-auto', rule_id: undefined })])).toBeNull();
+    expect(ruleOrigin(rule(), [restatement('d2')])).toBeNull();
   });
   it('picks the newest landing decision; keeps the words when the statement was edited; flags a bare approval', () => {
     const older = decision({ id: 'old', at: 1, state: 'undone' });
@@ -79,7 +93,8 @@ describe('ruleOrigin — ORIGIN only from the ledger', () => {
     expect(yes?.approvedProposal).toBe(true);
   });
   it('places a gate decision at the run’s gate', () => {
-    const o = ruleOrigin(rule(), [decision({ host: 'gate', origin: { ...decision().origin, chat_id: undefined, turn_id: undefined, run_id: 'r-1', gate_id: 'g-1', words: 'always X', choice: 'approve' } })]);
+    const { chat_id: _c, turn_id: _t, ...rest } = decision().origin;
+    const o = ruleOrigin(rule(), [decision({ host: 'gate', origin: { ...rest, run_id: 'r-1', gate_id: 'g-1', words: 'always X', choice: 'approve' } })]);
     expect(o?.where).toEqual({ kind: 'gate', runId: 'r-1', gateId: 'g-1', href: '/s/run%3Ar-1' });
     expect(o?.choice).toBe('approve');
   });
@@ -88,9 +103,9 @@ describe('ruleOrigin — ORIGIN only from the ledger', () => {
 describe('ruleHistory — the outcomes in time order', () => {
   it('remembered, then undone, then restated, then widened; plus what it replaces', () => {
     const rows = ruleHistory(rule({ supersedes: ['proposal:pr-old'] }), [
-      decision({ id: 'c', at: 30, state: 'widened', how: undefined }),
+      widened('c', 30),
       decision({ id: 'a', at: 10, how: 'chip' }),
-      decision({ id: 'b', at: 20, state: 'restated', route: 'restated', rule_id: undefined, restates_rule_id: 'proposal:pr-auto' }),
+      { ...restatement('b'), at: 20 },
     ]);
     expect(rows.map((r) => r.text)).toEqual([
       'Replaces proposal:pr-old',

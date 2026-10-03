@@ -29,8 +29,6 @@ export interface ConsideredRow {
   verdict: ConsideredVerdict;
   /** The verdict in words: "Considered", "Cited by codex — unchecked", "Set aside — other project". */
   detail: string;
-  /** Who cited it (a seat's cliKey or a unit id); cited rows only. */
-  by: string | null;
   /** Whether the row can open the rule on the Rules page (unverified citations cannot). */
   opens: boolean;
 }
@@ -70,24 +68,24 @@ export function consideredLine(c: Consideration): ConsideredLineModel | null {
   for (const r of c.considered) {
     const by = citedBy.get(r.id);
     rows.push(by === undefined
-      ? { id: r.id, statement: r.statement, verdict: 'considered', detail: 'Considered', by: null, opens: true }
-      : { id: r.id, statement: r.statement, verdict: 'cited', detail: `Cited by ${[...new Set(by.map(whoWords))].join(' and ')} — unchecked`, by: by[0] ?? null, opens: true });
+      ? { id: r.id, statement: r.statement, verdict: 'considered', detail: 'Considered', opens: true }
+      : { id: r.id, statement: r.statement, verdict: 'cited', detail: `Cited by ${[...new Set(by.map(whoWords))].join(' and ')} — unchecked`, opens: true });
   }
   // A cited id in force but not in the considered list (crew's read says in force; the list is the
   // same set, so this is defensive): still a cited row, by its id.
   for (const x of unchecked) {
     if (!c.considered.some((r) => r.id === x.id) && !rows.some((row) => row.id === x.id)) {
-      rows.push({ id: x.id, statement: x.id, verdict: 'cited', detail: `Cited by ${whoWords(x.by)} — unchecked`, by: x.by, opens: true });
+      rows.push({ id: x.id, statement: x.id, verdict: 'cited', detail: `Cited by ${whoWords(x.by)} — unchecked`, opens: true });
     }
   }
   for (const s of c.set_aside) {
-    rows.push({ id: s.id, statement: s.statement, verdict: 'set-aside', detail: SET_ASIDE_WORDS[s.reason] ?? 'Set aside', by: null, opens: s.reason !== 'not_confirmed' });
+    rows.push({ id: s.id, statement: s.statement, verdict: 'set-aside', detail: SET_ASIDE_WORDS[s.reason] ?? 'Set aside', opens: s.reason !== 'not_confirmed' });
   }
   const seenUnverified = new Set<string>();
   for (const x of unverified) {
     if (seenUnverified.has(x.id)) continue;
     seenUnverified.add(x.id);
-    rows.push({ id: x.id, statement: `[rule:${x.id}]`, verdict: 'unverified', detail: `Unverified citation by ${whoWords(x.by)} — not a rule in force here`, by: x.by, opens: false });
+    rows.push({ id: x.id, statement: `[rule:${x.id}]`, verdict: 'unverified', detail: `Unverified citation by ${whoWords(x.by)} — not a rule in force here`, opens: false });
   }
 
   const parts: string[] = [];

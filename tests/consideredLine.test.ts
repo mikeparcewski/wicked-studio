@@ -106,7 +106,9 @@ describe('B4: the word "Followed" is not used anywhere in the product', () => {
   function walk(dir: string, out: string[] = []): string[] {
     for (const name of readdirSync(dir)) {
       const p = join(dir, name);
-      if (statSync(p).isDirectory()) walk(p, out);
+      let dirEntry = false;
+      try { dirEntry = statSync(p).isDirectory(); } catch { continue; } // an editor's swap file vanishing mid-walk
+      if (dirEntry) walk(p, out);
       else if (/\.(ts|tsx|css)$/.test(name)) out.push(p);
     }
     return out;

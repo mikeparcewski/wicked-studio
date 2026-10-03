@@ -173,9 +173,11 @@ export interface WhereContext {
 export function whereConsidered(ruleId: string, considerations: readonly Consideration[], ctx: WhereContext): WhereRow[] {
   const rows: WhereRow[] = [];
   for (const c of considerations) {
-    const verdict: WhereRow['verdict'] = c.cited.some((x) => x.id === ruleId && x.status === 'unchecked') ? 'cited'
+    // A Consideration that does not name the rule is not a place it was considered — whatever the caller passed.
+    const verdict: WhereRow['verdict'] | null = c.cited.some((x) => x.id === ruleId && x.status === 'unchecked') ? 'cited'
       : c.considered.some((r) => r.id === ruleId) ? 'considered'
-        : c.set_aside.some((s) => s.id === ruleId) ? 'set-aside' : 'considered';
+        : c.set_aside.some((s) => s.id === ruleId) ? 'set-aside' : null;
+    if (verdict === null) continue;
     if (c.subject.kind === 'chat') {
       rows.push({ key: c.key, kind: 'chat', label: 'A conversation', verdict, href: sessionPath(c.subject.chat_id), object: null });
     } else {

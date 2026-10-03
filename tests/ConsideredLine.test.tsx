@@ -96,6 +96,15 @@ describe('TurnConsidered — the read', () => {
     expect(screen.queryByTestId('considered-line')).toBeNull();
   });
 
+  it('a 501 (the route exists, nothing stands behind it yet) is unsupported too', async () => {
+    apiFetch.mockRejectedValue(new ApiError(501, 'Not Implemented'));
+    render(<UnitConsidered runId="r-pay-2" ord={0} navigate={navigate} />);
+    await waitFor(() => expect(useConsideredStore.getState().unsupported).toBe(true));
+    render(<TurnConsidered chatId="chat-pay" turnId="d2" replies={1} navigate={navigate} />);
+    await act(async () => { await Promise.resolve(); });
+    expect(apiFetch).toHaveBeenCalledTimes(1);
+  });
+
   it('a refused read (403) draws nothing and claims nothing', async () => {
     apiFetch.mockRejectedValue(new ApiError(403, "Insufficient trust: considered needs 'operator'", "Insufficient trust: considered needs 'operator'"));
     render(<UnitConsidered runId="r-pay-2" ord={1} navigate={navigate} />);

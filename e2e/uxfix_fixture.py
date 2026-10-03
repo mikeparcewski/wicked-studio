@@ -4509,10 +4509,19 @@ class W2Handler(SimpleHTTPRequestHandler):
                 self._json(404, {"message": f"Route GET:{path} not found", "error": "Not Found", "statusCode": 404})
                 return True
             rid, key = urllib.parse.unquote(m.group(1)), urllib.parse.unquote(m.group(2))
+            q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            raw = (q.get("attempt") or ["0"])[0] or "0"
+            if not raw.isdigit():
+                self._json(400, {"error": "`attempt` must be a non-negative integer"})
+                return True
+            attempt = int(raw)
             c = CONSIDERATIONS.get(f"{rid}:{key}")
             if c is None:
                 self._json(404, {"error": f"run {rid} has no unit '{key}'"})
             else:
+                # crew computes the Consideration from the unit's persisted output; the attempt labels
+                # the subject and the key (`considered:<run>:<ord>:<attempt>`), as crew's forUnit does.
+                c = dict(c, subject=dict(c["subject"], attempt=attempt), key=f"considered:{rid}:{c['subject']['ord']}:{attempt}")
                 self._json(200, c)
             return True
         return False
