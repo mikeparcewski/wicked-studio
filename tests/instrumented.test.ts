@@ -71,6 +71,8 @@ describe('instrumentDocHtml', () => {
 
   it('the bridge says where a jump landed with its confirmation (S9: the slide strip needs no timer)', () => {
     const out = instrumentDocHtml(PLAIN, BASE);
-    expect(out).toContain("type: 'scroll-ack', wid: m.wid, scrollX: window.scrollX, scrollY: window.scrollY");
+    expect(out).toContain("type: 'scroll-ack', wid: m.wid, seq: m.seq, scrollX: window.scrollX, scrollY: window.scrollY");
+    // An instant jump, so the position reported with the confirmation is the landing.
+    expect(out).toContain("behavior: 'instant'");
   });
 });

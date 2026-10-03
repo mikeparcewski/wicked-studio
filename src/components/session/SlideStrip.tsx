@@ -16,21 +16,22 @@ import type { FrameParts } from './PageEditor.js';
 
 /** A click on a slide outranks "the slide in view" (the last slides of a deck cannot be scrolled
  *  to the middle of the frame, so the view alone would mark the wrong one) — for as long as the
- *  frame stands where that click's jump landed. No timer: the frame confirms the jump and says
- *  where it landed (`parts.jump`); before the confirmation the pick holds, after it the pick holds
- *  while the frame is still there. The reader scrolling away, another jump, or the frame
- *  re-measuring hands the mark back to the view. A bridge that does not report the landing gets
- *  the view's mark only. */
+ *  frame stands where that click's jump landed. No timer: every jump has a number, the frame
+ *  confirms it by that number and says where it landed (`parts.jump`). Before its confirmation
+ *  the pick holds; after it, the pick holds while the frame stands at the landing — so it gives
+ *  way when the reader scrolls elsewhere and holds again at that exact position, where the picked
+ *  slide is still the answer. A later jump, a re-measure or a new frame ends it. A bridge that
+ *  does not report the landing gets the view's mark only. */
 interface Pick {
   index: number;
-  /** `parts.jump.n` when the slide was clicked: this pick's jump is number `asked + 1`. */
-  asked: number;
+  /** The number of this pick's own jump (`scrollTo`'s return). */
+  jump: number;
 }
 
 function holds(pick: Pick | null, parts: FrameParts): pick is Pick {
   if (pick === null) return false;
-  if (parts.jump.n <= pick.asked) return true; // asked, not yet performed
-  return parts.jump.n === pick.asked + 1 && parts.jump.scrollY !== null && parts.jump.scrollY === parts.scrollY;
+  if (parts.jump.seq < pick.jump) return true; // asked, not yet confirmed
+  return parts.jump.seq === pick.jump && parts.jump.scrollY !== null && parts.jump.scrollY === parts.scrollY;
 }
 
 export function SlideStrip({ parts, docId, composerKey }: {
@@ -53,8 +54,7 @@ export function SlideStrip({ parts, docId, composerKey }: {
           aria-current={s.index === current ? 'true' : undefined}
           className={`wk-slide-thumb${s.index === current ? ' wk-slide-thumb--on' : ''}`}
           onClick={() => {
-            setPicked({ index: s.index, asked: parts.jump.n });
-            parts.scrollTo(s.first);
+            setPicked({ index: s.index, jump: parts.scrollTo(s.first) });
             addAboutChip(composerKey, slideChip(s, docId));
           }}
         >

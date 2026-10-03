@@ -59,10 +59,12 @@ export interface ScrollStateMsg {
 
 /** Confirmation that a `scroll-to-wid` request was handled by the frame. `scrollX`/`scrollY`
  *  (when the bridge reports them) are where the frame stood right after the jump — its landing,
- *  known without waiting for the scroll event that follows. */
+ *  known without waiting for the scroll event that follows. `seq` echoes the request's own
+ *  number, so a confirmation names the request it answers. */
 export interface ScrollAckMsg {
   v: 1; type: 'scroll-ack'; wid: string;
   scrollX?: number; scrollY?: number;
+  seq?: number;
 }
 
 /** The frame's own click landed on an instrumented block — the ORIGINAL interaction
@@ -84,7 +86,7 @@ export type BridgeToOverlayMsg =
 export interface RequestInventoryMsg { v: 1; type: 'request-inventory' }
 
 /** Ask the bridge to scroll the [data-wid=wid] element into view. */
-export interface ScrollToWidMsg { v: 1; type: 'scroll-to-wid'; wid: string }
+export interface ScrollToWidMsg { v: 1; type: 'scroll-to-wid'; wid: string; seq?: number }
 
 export type OverlayToBridgeMsg = RequestInventoryMsg | ScrollToWidMsg;
 
@@ -161,8 +163,12 @@ export function parseInbound(data: unknown): BridgeToOverlayMsg | null {
     if (typeof wid !== 'string' || wid === '') return null;
     const scrollX = d['scrollX'];
     const scrollY = d['scrollY'];
-    if (isFiniteNum(scrollX) && isFiniteNum(scrollY)) return { v: 1, type: 'scroll-ack', wid, scrollX, scrollY };
-    return { v: 1, type: 'scroll-ack', wid };
+    const seq = d['seq'];
+    return {
+      v: 1, type: 'scroll-ack', wid,
+      ...(isFiniteNum(scrollX) && isFiniteNum(scrollY) ? { scrollX, scrollY } : {}),
+      ...(isFiniteNum(seq) ? { seq } : {}),
+    };
   }
 
   if (type === 'wid-click') {
@@ -185,6 +191,7 @@ export function parseInbound(data: unknown): BridgeToOverlayMsg | null {
 /** Frozen singleton — safe to compare by reference in tests. */
 export const REQUEST_INVENTORY: RequestInventoryMsg = Object.freeze({ v: 1 as const, type: 'request-inventory' as const });
 
-export function makeScrollToWid(wid: string): ScrollToWidMsg {
-  return { v: 1, type: 'scroll-to-wid', wid };
+/** `seq` numbers the request; a bridge that knows of it echoes it on the `scroll-ack`. */
+export function makeScrollToWid(wid: string, seq?: number): ScrollToWidMsg {
+  return seq === undefined ? { v: 1, type: 'scroll-to-wid', wid } : { v: 1, type: 'scroll-to-wid', wid, seq };
 }

@@ -47,13 +47,14 @@ export interface FrameParts {
   tops: Readonly<Record<string, number>>;
   scrollY: number;
   frameHeight: number;
-  /** The `scrollTo` jumps the frame has confirmed (`n` of them), and where it stood right after
-   *  the last one — `null` when the bridge did not say, or once the frame re-measured (its content
-   *  moved in a way `scrollY` does not describe). */
-  jump: { n: number; scrollY: number | null };
+  /** The last jump the frame confirmed — the number `scrollTo` gave it — and where the frame stood
+   *  right after it: `null` when the bridge did not say, once the frame re-measured (its content
+   *  moved in a way `scrollY` does not describe), or when the frame was replaced. */
+  jump: { seq: number; scrollY: number | null };
   selected: string | null;
-  /** Bring an anchor into view. */
-  scrollTo: (wid: string) => void;
+  /** Bring an anchor into view. Returns the jump's number: `jump.seq` reaches it when the frame
+   *  has performed it. */
+  scrollTo: (wid: string) => number;
   /** Bring an anchor into view and pick it, as a click on it does. */
   pick: (wid: string) => void;
 }
@@ -123,7 +124,9 @@ export function PageEditor({ projectId, docId, composerKey, size, kind = 'page',
   // late slide does not throw the reader back to the top.
   const returnTo = useRef<string | null>(null);
   const armed = useRef<string | null>(null);
-  const [jump, setJump] = useState<{ n: number; scrollY: number | null }>({ n: 0, scrollY: null });
+  const [jump, setJump] = useState<{ seq: number; scrollY: number | null }>({ seq: 0, scrollY: null });
+  // The jumps asked of the frame, numbered; the bridge echoes the number on its confirmation.
+  const asks = useRef(0);
   // The frame's own height, measured — what stands beside the frame asks "which slide is in view".
   const [frameHeight, setFrameHeight] = useState(0);
   useEffect(() => {
@@ -181,7 +184,7 @@ export function PageEditor({ projectId, docId, composerKey, size, kind = 'page',
     armed.current = returnTo.current;
     returnTo.current = null;
     // A jump asked of the old frame is over, confirmed or not: nothing stands where it landed.
-    setJump((j) => ({ n: j.n + 1, scrollY: null }));
+    setJump({ seq: asks.current, scrollY: null });
     setInventory(null);
     setHover(null);
     setSelected(null);
@@ -219,7 +222,11 @@ export function PageEditor({ projectId, docId, composerKey, size, kind = 'page',
     handle.current?.focus();
   }, [composerKey, docId]);
 
-  const scrollTo = useCallback((wid: string): void => post(makeScrollToWid(wid)), [post]);
+  const scrollTo = useCallback((wid: string): number => {
+    asks.current += 1;
+    post(makeScrollToWid(wid, asks.current));
+    return asks.current;
+  }, [post]);
   const pick = useCallback((wid: string): void => { scrollTo(wid); select(wid); }, [scrollTo, select]);
 
   // ── bridge → editor ────────────────────────────────────────────────────────────────
@@ -233,16 +240,18 @@ export function PageEditor({ projectId, docId, composerKey, size, kind = 'page',
         for (const t of timers.current) clearTimeout(t);
         setInventory({ widMap: msg.widMap, blocks: msg.blocks ?? {}, measured: { scrollX: msg.scrollX, scrollY: msg.scrollY } });
         setCurrent({ scrollX: msg.scrollX, scrollY: msg.scrollY });
-        setJump((j) => (j.scrollY === null ? j : { n: j.n, scrollY: null }));
+        setJump((j) => (j.scrollY === null ? j : { seq: j.seq, scrollY: null }));
         const back = armed.current;
         armed.current = null;
-        if (back !== null && msg.widMap[back] !== undefined) post(makeScrollToWid(back));
+        if (back !== null && msg.widMap[back] !== undefined) scrollTo(back);
       } else if (msg.type === 'scroll-state') {
         setCurrent({ scrollX: msg.scrollX, scrollY: msg.scrollY });
       } else if (msg.type === 'scroll-ack') {
-        // The landing is known now: the ack is also the freshest scroll position.
-        const { scrollX, scrollY: landedY } = msg;
-        setJump((j) => ({ n: j.n + 1, scrollY: landedY ?? null }));
+        // The landing is known now: the ack is also the freshest scroll position. A confirmation
+        // that does not name its request (a bridge that does not echo `seq`) confirms the latest
+        // one asked and says nothing of where it landed.
+        const { scrollX, scrollY: landedY, seq } = msg;
+        setJump(seq === undefined ? { seq: asks.current, scrollY: null } : { seq, scrollY: landedY ?? null });
         if (scrollX !== undefined && landedY !== undefined) setCurrent({ scrollX, scrollY: landedY });
       } else if (msg.type === 'wid-hover') {
         setHover(msg.wid);
@@ -253,7 +262,7 @@ export function PageEditor({ projectId, docId, composerKey, size, kind = 'page',
     };
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [size, select, post]);
+  }, [size, select, scrollTo]);
 
   // ── edit by touching ───────────────────────────────────────────────────────────────
   /** Whether typing can replace this element's text — and when not, why: the frame has not
