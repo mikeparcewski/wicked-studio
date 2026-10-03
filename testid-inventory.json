@@ -11,10 +11,10 @@
   "version": 1,
   "studioVersion": "0.5.19",
   "counts": {
-    "files": 198,
-    "occurrences": 2184,
-    "static": 1907,
-    "dynamic": 79,
+    "files": 200,
+    "occurrences": 2196,
+    "static": 1917,
+    "dynamic": 80,
     "computed": 7
   },
   "static": [
@@ -1803,6 +1803,54 @@
       ]
     },
     {
+      "testId": "decision-approved",
+      "files": [
+        "src/components/decisions/DecisionLine.tsx"
+      ]
+    },
+    {
+      "testId": "decision-error",
+      "files": [
+        "src/components/decisions/DecisionLine.tsx"
+      ]
+    },
+    {
+      "testId": "decision-line",
+      "files": [
+        "src/components/decisions/DecisionLine.tsx"
+      ]
+    },
+    {
+      "testId": "decision-lines",
+      "files": [
+        "src/components/decisions/DecisionLine.tsx"
+      ]
+    },
+    {
+      "testId": "decision-rule",
+      "files": [
+        "src/components/decisions/DecisionLine.tsx"
+      ]
+    },
+    {
+      "testId": "decision-scope",
+      "files": [
+        "src/components/decisions/DecisionLine.tsx"
+      ]
+    },
+    {
+      "testId": "decision-see",
+      "files": [
+        "src/components/decisions/DecisionLine.tsx"
+      ]
+    },
+    {
+      "testId": "decision-text",
+      "files": [
+        "src/components/decisions/DecisionLine.tsx"
+      ]
+    },
+    {
       "testId": "decisions-ledger",
       "files": [
         "src/components/DecisionsLedger.tsx"
@@ -2409,6 +2457,18 @@
       "testId": "desk-rail-start",
       "files": [
         "src/components/desk/SessionRail.tsx"
+      ]
+    },
+    {
+      "testId": "desk-rule-line",
+      "files": [
+        "src/components/desk/DeskRuleLine.tsx"
+      ]
+    },
+    {
+      "testId": "desk-rule-see",
+      "files": [
+        "src/components/desk/DeskRuleLine.tsx"
       ]
     },
     {
@@ -11743,6 +11803,12 @@
       "pattern": "dashboard-mode-*",
       "files": [
         "src/components/ProjectDashboard.tsx"
+      ]
+    },
+    {
+      "pattern": "decision-*",
+      "files": [
+        "src/components/decisions/DecisionLine.tsx"
       ]
     },
     {

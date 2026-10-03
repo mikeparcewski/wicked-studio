@@ -998,3 +998,16 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
   background: var(--surface-card); border: 1px solid var(--surface-raised); box-shadow: var(--shadow-raised);
   font-size: var(--text-xs); color: var(--ink-high);
 }
+
+/* DC-S6: the decision line under the operator's message (remembered, offered as one Remember chip,
+   or nothing), and the Desk's one sentence about a rule remembered from your words. Tokens only. */
+.wk-decisions { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
+.wk-decision { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 10px; font-size: var(--text-sm); color: var(--ink-muted); }
+.wk-decision--remembered .wk-decision-text, .wk-decision--restated .wk-decision-text { color: var(--ink-body); }
+.wk-decision--failed .wk-decision-text, .wk-decision--conflict .wk-decision-text { color: var(--status-fail); }
+.wk-decision-text { margin: 0; }
+.wk-decision-rule { color: var(--ink-high); font-weight: var(--weight-semi); }
+.wk-decision-meta { font-size: var(--text-xs); color: var(--ink-muted); }
+.wk-decision-acts { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: 6px; }
+.wk-decision-chip { padding: 2px 10px; font-size: var(--text-xs); }
+.wk-desk-rule { margin: 4px 0 0; font-size: var(--text-sm); color: var(--ink-muted); }

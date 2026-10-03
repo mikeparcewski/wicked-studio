@@ -77,6 +77,7 @@ import { useRuntimeStore } from './store/runtime.js';
 import { useRunEventStore } from './store/events.js';
 import { useDocThreadStore } from './store/docThread.js';
 import { useCapabilities } from './store/capabilities.js';
+import { useDecisionsStore } from './store/decisions.js';
 import { useTeamPlanStore } from './store/teamPlan.js';
 import { useWatchStore } from './store/watch.js';
 import { useWatchHydrate } from './hooks/useWatchFeed.js';
@@ -162,6 +163,8 @@ export function App(): React.ReactElement {
       ingestLiveChat(event);
       // Wave 2b: the watchdog's needs-a-human escalations feed the needs-you queue.
       ingestStallEscalation(event);
+      // DC-S6: `chatDecisions` (the line under the operator's message) and `decisionChanged` (ids only).
+      useDecisionsStore.getState().ingest(event as unknown as { type: string } & Record<string, unknown>);
       // TH-14: fold core's Campaign* frames (a cheap prefix miss for everything else) so the
       // campaign scoreboard's node status is live the moment the daemon relays them (TH-9).
       ingestCampaign(event);
@@ -204,6 +207,8 @@ export function App(): React.ReactElement {
     void useDeliveryFreezeStore.getState().load();
     // S6a: `capabilities.runChatId` (C1) — whether runs carry the chat they were launched from.
     void useCapabilities.getState().load();
+    // DC-S6: the daemon's `WICKED_DECISIONS` mode (`GET /decisions`); `off` without the route.
+    void useDecisionsStore.getState().load();
   }, []);
 
   // Pre-merge bookmarks (`/runs/:id`, `/projects/:id`) redirect into the shell (§1.5).

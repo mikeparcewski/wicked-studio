@@ -15,6 +15,7 @@ import { HandoverPanel } from '../HandoverPanel.js';
 import { NeedsQueueSurface } from '../NeedsYouQueue.js';
 import { Composer, type ComposerSend } from '../session/Composer.js';
 import { DeskStateRows, useDeskStates } from './DeskStateRows.js';
+import { DeskRuleLine } from './DeskRuleLine.js';
 import { openSheet } from '../../store/sheets.js';
 
 /** Project cards on the first screen (the concept's three); the rest are one link away. */
@@ -95,6 +96,8 @@ export function Desk({ runs, runsLoaded, needRows, now, navigate, onAsk }: {
               // studio#459: an honest loading line while /runs is in flight — the all-clear waits.
               <p data-testid="desk-loading" aria-busy="true" className="wk-desk-sentence wk-desk-quiet">Checking what needs you…</p>
             )}
+            {/* DC-S6 (B9): a rule remembered from your words since you last looked, said once. */}
+            <DeskRuleLine navigate={navigate} />
           </div>
         </div>
         {handover.since !== null && (

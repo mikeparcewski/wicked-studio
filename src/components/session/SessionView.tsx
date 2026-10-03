@@ -26,6 +26,9 @@ import { usePlanDrafts } from '../../store/planDrafts.js';
 import { wordOf } from '../../board/planDraft.js';
 import { undoDecision } from '../../board/undoQueue.js';
 import { openSheet } from '../../store/sheets.js';
+import type { DecisionView } from '../../api/decisions.js';
+import { turnKey, useDecisionsStore } from '../../store/decisions.js';
+import { DecisionLine } from '../decisions/DecisionLine.js';
 
 /**
  * A SESSION (`/s/:id`, DES-STUDIO-REBUILD-001 §5.4, slice S6a): the goal sentence, the thread (the
@@ -48,13 +51,14 @@ interface ChatDetail {
   scope?: unknown;
   messages?: Array<{
     at?: number; kind: string; text?: string; cliKey?: string; ok?: boolean; turnId?: string;
-    /** A `citations` record (crew#561, api-types 0.68.0): the verdicts of the earlier reply with the same turn + seat. */
-    verified?: number; unverifiable?: number; corrected?: number; unchecked?: number; items?: ChatCitations['items'];
+    /** A `citations` record (crew#561, api-types 0.68.0): the verdicts of the earlier reply with the same turn + seat;
+     *  a `decisions` record (DC-S4b, api-types 0.84.0): what crew recorded from the turn's operator message. */
+    verified?: number; unverifiable?: number; corrected?: number; unchecked?: number; items?: ChatCitations['items'] | DecisionView[];
   }>;
 }
 
 type ThreadEntry =
-  | { kind: 'turn'; key: string; at: number; who: 'you' | string; text: string; ok: boolean; citations?: ChatCitations }
+  | { kind: 'turn'; key: string; at: number; who: 'you' | string; text: string; ok: boolean; citations?: ChatCitations; turnId: string | null }
   | { kind: 'run'; key: string; at: number; view: RunView };
 
 const STATE_WORD: Record<SessionState, string> = {
@@ -146,21 +150,41 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
         if (e !== undefined && e.kind === 'turn') {
           e.citations = {
             verified: m.verified ?? 0, unverifiable: m.unverifiable ?? 0, corrected: m.corrected ?? 0,
-            unchecked: m.unchecked ?? 0, items: m.items ?? [],
+            unchecked: m.unchecked ?? 0, items: (m.items ?? []) as ChatCitations['items'],
           };
         }
         return;
       }
+      // DC-S6: a `decisions` record is folded onto its turn through the decisions store (below), so
+      // the line under the operator's message is the same whether it came from a reload or live.
+      if (m.kind === 'decisions') return;
       if ((m.kind !== 'user' && m.kind !== 'seat') || typeof m.text !== 'string') return;
       if (m.kind === 'seat') seatAt.set(`${m.turnId ?? ''}:${m.cliKey ?? ''}`, out.length);
       out.push({
         kind: 'turn', key: `m${i}`, at: typeof m.at === 'number' ? m.at : 0,
         who: m.kind === 'user' ? 'you' : (m.cliKey ?? 'helper'), text: m.text, ok: m.ok !== false,
+        turnId: typeof m.turnId === 'string' ? m.turnId : null,
       });
     });
     for (const v of mine) out.push({ kind: 'run', key: `r:${v.session.id}`, at: launchedMs(v), view: v });
     return out.map((e, i) => ({ e, i })).sort((a, b) => a.e.at - b.e.at || a.i - b.i).map((x) => x.e);
   }, [messages, mine]);
+
+  // DC-S6: the transcript's `decisions` records (one per operator turn crew read) feed the store,
+  // so a reload restores every decision line; live `chatDecisions` frames land in the same place.
+  useEffect(() => {
+    if (ref.kind !== 'chat') return;
+    let any = false;
+    for (const m of messages) {
+      if (m.kind === 'decisions' && typeof m.turnId === 'string' && Array.isArray(m.items)) {
+        useDecisionsStore.getState().ingestTurn(ref.chatId, m.turnId, m.items as DecisionView[]);
+        any = true;
+      }
+    }
+    // The records hold the state at recording time; the ledger's current views win (remembered,
+    // undone, dismissed since) — one read per chat.
+    if (any) void useDecisionsStore.getState().syncChat(ref.chatId);
+  }, [ref, messages]);
 
   // R4: scroll and draft per session.
   const scroller = useRef<HTMLDivElement | null>(null);
@@ -241,6 +265,8 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
                 <p className="wk-session-who">{e.who === 'you' ? 'You' : e.who}</p>
                 <p className={`wk-session-text${e.ok ? '' : ' wk-session-grey'}`}>{e.text}</p>
                 {e.who !== 'you' && <SourceChips citations={e.citations} runs={readers} />}
+                {/* DC-S6: what crew made of the operator's words — remembered, offered, or nothing. */}
+                {e.who === 'you' && ref.kind === 'chat' && e.turnId !== null && <TurnDecisions chatId={ref.chatId} turnId={e.turnId} navigate={navigate} />}
               </div>
             )
             : <RunBlock key={e.key} view={e.view} badge={badges[e.view.session.id] ?? 0} go={go} />))}
@@ -261,6 +287,15 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
       />
     </div>
   );
+}
+
+/** DC-S6: the decisions crew recorded from one operator turn, live or from the transcript. */
+function TurnDecisions({ chatId, turnId, navigate }: { chatId: string; turnId: string; navigate: Navigate }): React.ReactElement | null {
+  const ids = useDecisionsStore((s) => s.byTurn[turnKey(chatId, turnId)]);
+  const byId = useDecisionsStore((s) => s.byId);
+  const decisions = useMemo(() => (ids ?? []).map((id) => byId[id]).filter((d): d is DecisionView => d !== undefined), [ids, byId]);
+  if (decisions.length === 0) return null;
+  return <DecisionLine decisions={decisions} navigate={navigate} />;
 }
 
 function RunBlock({ view, badge, go }: {

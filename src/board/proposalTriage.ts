@@ -37,8 +37,19 @@ export type CaptureClass = 'intent' | 'decision' | 'memory' | 'rule';
 
 export function captureClass(p: Proposal): CaptureClass | null {
   const cls = typeof p.payload === 'object' && p.payload !== null ? (p.payload as Record<string, unknown>).capture : undefined;
-  if (p.kind_type.startsWith('policy:')) return cls === 'rule' ? 'rule' : null;
+  // DC-S6: a policy proposal a DECISION filed (`payload.capture: "decision"`, DES-DECISION-CAPTURE
+  // §4.2.4) is the operator's own rule in their words — B12's Needs You row says so.
+  if (p.kind_type.startsWith('policy:')) return cls === 'rule' ? 'rule' : cls === 'decision' ? 'decision' : null;
   return cls === 'intent' || cls === 'decision' || cls === 'memory' ? cls : null;
+}
+
+/** The decision a policy proposal was filed from (`payload.decision.id`, DC §4.2.4) — the id only;
+ *  the words live in crew's ledger, never here. */
+export function decisionIdOf(p: Proposal): string | null {
+  const payload = typeof p.payload === 'object' && p.payload !== null ? (p.payload as Record<string, unknown>) : null;
+  const d = payload?.decision;
+  const id = typeof d === 'object' && d !== null ? (d as Record<string, unknown>).id : undefined;
+  return typeof id === 'string' && id !== '' ? id : null;
 }
 
 /** A member row's line: the consequence of accepting it, first — and, for a row a capture filed,
@@ -55,6 +66,8 @@ export function proposalConsequenceLine(p: Proposal): string {
     const type = policySteeringType(p);
     const sev = policyPayload(p).severity;
     const what = `${type !== null ? `a ${type} rule` : 'a steering rule'}${sev !== null ? ` (${sev})` : ''}`;
+    // A `capture: "decision"` payload says nothing by itself (anyone can write one): only a row the
+    // ledger backs says "From your words" (needsYou.ts, with the ledger's own statement).
     return `Changes enforcement — lands ${what}${captured === 'rule' ? ' from your capture' : ''}`;
   }
   return `Unknown kind "${p.kind_type}" — review it`;

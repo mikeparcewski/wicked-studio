@@ -723,6 +723,13 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          #   names a local origin by its path, and a delivered run whose deliver step never reached the
          #   bus. Their GET /runs/:id/team answers after REEL_TEAM_DELAY_S.
          "reel_runs": False,
+         # decisions — DC-S6 (e2e/desk_decisions_test.py; needs `sessions`): GET /decisions on crew's
+         #   DC-S4a wire (mode `decisions_mode`), the five POST verbs (recorded in GET
+         #   /__fixture/decision-posts, each queueing a decisionChanged frame), chat-pay's transcript
+         #   grows the DECISION_TURNS (user turns + their `decisions` records, api-types 0.84.0), and
+         #   GET /proposals carries the offered decision's review proposal (B12). Off: no /decisions
+         #   route at all (a daemon before DC-S4a).
+         "decisions": False, "decisions_mode": "on",
          }
 state_lock = threading.Lock()
 # Idea 9: every POST /governance/rules body the fixture received (GET /__fixture/rule-posts).
@@ -762,6 +769,96 @@ CAPTURE_IMAGE_TYPES = {"image/png", "image/jpeg", "image/gif", "image/webp"}
 demo_lock = threading.Lock()
 demo_runs: dict = {}
 demo_post_log: list = []
+
+# ── Decision capture corpus (switch `decisions`, DC-S6) ─────────────────────────────────────
+# One DecisionView per operator turn of chat-pay (crew api-types 0.80.0 / 0.84.0), each the scene it
+# plays: rule-auto (26) → dec-auto; rule-offer (27) → dec-offer; never-mind (44) → dec-none; an
+# approval (B6) → dec-approve; a restatement (B7) → dec-maybe; decided in two projects (B8) →
+# dec-widen; a turn with no record yet (its chatDecisions frame is pushed live by the journey) →
+# dec-live; a clear rule under auth=off (Q1) → dec-authoff. `project_id` is upload-endpoint.
+decisions_lock = threading.Lock()
+decision_posts: list = []
+DECISION_PROJECT = "upload-endpoint"
+DEC_T0 = NOW0 - 30 * 60 * 1000  # half an hour ago, epoch ms
+
+
+def _dec(id_, turn, words, statement, route, state, **over):
+    d = {"id": id_, "at": DEC_T0 + int(turn[1:]) * 60_000, "project_id": DECISION_PROJECT, "host": "studio-chat",
+         "origin": {"actor": {"id": "operator", "kind": "human", "trust": "operator"}, "auth_mode": "required",
+                    "chat_id": "chat-pay", "turn_id": turn, "words": words, "words_source": "typed", "redacted": False},
+         "derived": {"statement": statement, "polarity": "do" if statement else None,
+                     "key": re.sub(r"[^a-z]+", "-", (statement or "").lower()).strip("-") or None,
+                     "scope": "project", "steering_type": "development", "template": "T1-always" if route == "auto" else ("in-your-words" if statement else None),
+                     "exclusions": [] if statement else ["one-off"]},
+         "route": route, "state": state}
+    d.update(over)
+    return d
+
+
+DECISIONS: dict = {}
+DECISION_TURNS: list = []
+
+
+def reset_decisions() -> None:
+    DECISIONS.clear()
+    items = [
+        _dec("dec-auto", "d1", "from now on, always check the payment provider’s records, not just our database",
+             "Always check the payment provider’s records, not just our database", "auto", "remembered", how="auto",
+             rule_id="proposal:pr-auto", proposal_id="pr-auto"),
+        _dec("dec-offer", "d2", "demos for the panel should feel calmer", "Demos for the panel should feel calmer", "offer", "offered",
+             proposal_id="pr-offer", derived_steering="design-ux"),
+        _dec("dec-none", "d3", "never mind, skip that for now", None, "ledger", "recorded"),
+        _dec("dec-approve", "d4", "lets do it", "Treat every copy-only change as tests-only", "offer", "offered", proposal_id="pr-approve"),
+        _dec("dec-maybe", "d5", "check the provider records every single time", "Check the provider records every time",
+             "maybe-restated", "recorded", restates_rule_id="proposal:pr-auto"),
+        _dec("dec-widen", "d6", "always run the repo’s checks before a walkthrough", "Always run the repo’s checks before a walkthrough",
+             "offer", "offered", proposal_id="pr-widen", widen={"projects": [DECISION_PROJECT, "legacy-spike"]}),
+        _dec("dec-live", "d7", "always tag the release before pushing", "Always tag the release before pushing", "offer", "offered",
+             proposal_id="pr-live"),
+        _dec("dec-authoff", "d8", "from now on, never push on a Friday", "Never push on a Friday", "offer", "offered", proposal_id="pr-authoff"),
+    ]
+    for d in items:
+        if "derived_steering" in d:
+            d["derived"]["steering_type"] = d.pop("derived_steering")
+        if d["id"] == "dec-authoff":
+            d["origin"]["auth_mode"] = "off"
+            d["derived"]["template"] = "T2-never"
+            d["derived"]["polarity"] = "dont"
+        DECISIONS[d["id"]] = d
+    decision_posts.clear()
+
+
+reset_decisions()
+# The operator turns chat-pay gains under `decisions` (after its existing t1 turn + notes), each with
+# its `decisions` record — except d7, whose record the journey pushes as a live chatDecisions frame.
+DECISION_TURN_WORDS = [(d["origin"]["turn_id"], d["origin"]["words"]) for d in DECISIONS.values()]
+
+
+def decision_turns() -> list:
+    rows = []
+    for turn, words in DECISION_TURN_WORDS:
+        at = DEC_T0 + int(turn[1:]) * 60_000
+        rows.append({"at": at, "turnId": turn, "kind": "user", "seats": ["claude"], "text": words})
+        if turn == "d4":
+            # B6: the seat proposed; "lets do it" approved. The proposal came the turn before.
+            rows.insert(len(rows) - 1, {"at": at - 20_000, "turnId": "d3b", "kind": "seat", "cliKey": "claude", "ok": True, "usage": None,
+                                        "text": "I’ll treat every copy-only change as tests-only from now on — OK?"})
+        rows.append({"at": at + 5_000, "turnId": turn, "kind": "seat", "cliKey": "claude", "ok": True, "usage": None,
+                     "text": "Noted." if turn != "d3" else "Skipping it."})
+        if turn != "d7":
+            items = [d for d in DECISIONS.values() if d["origin"]["turn_id"] == turn]
+            rows.append({"at": at + 9_000, "turnId": turn, "kind": "decisions", "items": items})
+    return rows
+
+
+def decision_proposal_row() -> dict:
+    """B12: the offered decision's review proposal, as crew files it (§4.2.4): capture 'decision', the id only."""
+    d = DECISIONS["dec-offer"]
+    return {"id": "pr-offer", "kind_type": "policy:design-ux",
+            "payload": {"rule": d["derived"]["statement"], "severity": "warn", "capture": "decision", "decision": {"id": "dec-offer"}},
+            "facets": {"project": DECISION_PROJECT}, "provenance": {"source": "decision", "ref": "dec-offer"},
+            "state": "pending" if d["state"] == "offered" else "approved", "created_at": d["at"] // 1000}
+
 demo_seq = [0]
 DEMO_CHAPTERS = [
     {"key": "01-intake", "title": "A request arrives", "blurb": "Where new work lands and who sees it first.",
@@ -4260,6 +4357,10 @@ class W2Handler(SimpleHTTPRequestHandler):
         if path == "/api/v1/proposals":
             with state_lock:
                 rows = state["proposals"]
+                decisions_on = state["decisions"]
+            if decisions_on:
+                with decisions_lock:
+                    rows = list(rows or []) + [decision_proposal_row()]
             if rows is None:
                 self._json(404, {"error": f"w2 fixture: no such endpoint {path}"})
             else:
@@ -4301,7 +4402,13 @@ class W2Handler(SimpleHTTPRequestHandler):
             with state_lock:
                 sessions_on = state["sessions"]
             if sessions_on and cid in SESSION_CHATS:
-                self._json(200, SESSION_CHATS[cid])
+                detail = SESSION_CHATS[cid]
+                with state_lock:
+                    decisions_on = state["decisions"]
+                if decisions_on and cid == "chat-pay":
+                    with decisions_lock:
+                        detail = dict(detail, messages=list(detail["messages"]) + decision_turns())
+                self._json(200, detail)
                 return True
             with chat_state_lock:
                 seats = [k for k in chat_warm_seats.get(cid, [])
@@ -5487,6 +5594,69 @@ class W2Handler(SimpleHTTPRequestHandler):
         self._json(405, {"error": f"w2 fixture: {method} {path}"})
         return True
 
+    def _decisions_route(self, method: str, body: dict) -> bool:
+        """Decision capture (DC-S6) on crew's DC-S4a/S4b wire: GET /decisions and the five POST verbs."""
+        url = urllib.parse.urlparse(self.path)
+        path = url.path
+        if not path.startswith("/api/v1/decisions"):
+            return False
+        with state_lock:
+            on, mode = state["decisions"], state["decisions_mode"]
+        if not on:
+            self._json(404, {"message": f"Route {method}:{path} not found", "error": "Not Found", "statusCode": 404})
+            return True
+        if path == "/api/v1/decisions" and method == "GET":
+            q = urllib.parse.parse_qs(url.query)
+            want_state = (q.get("state") or [None])[0]
+            want_chat = (q.get("chat") or [None])[0]
+            since = int((q.get("since") or ["0"])[0] or 0)
+            with decisions_lock:
+                rows = [d for d in DECISIONS.values()
+                        if (want_state is None or d["state"] == want_state)
+                        and (want_chat is None or d["origin"].get("chat_id") == want_chat)
+                        and d["at"] >= since]
+            rows.sort(key=lambda d: -d["at"])
+            self._json(200, {"decisions": rows, "mode": mode})
+            return True
+        m = re.fullmatch(r"/api/v1/decisions/([^/]+)/(remember|undo|dismiss|same|widen)", path)
+        if not m or method != "POST":
+            self._json(404, {"error": "no such decision route"})
+            return True
+        did, verb = urllib.parse.unquote(m.group(1)), m.group(2)
+        with decisions_lock:
+            d = DECISIONS.get(did)
+            if d is None:
+                self._json(404, {"error": f"no decision {did}"})
+                return True
+            decision_posts.append({"id": did, "verb": verb, "body": body})
+            if verb == "remember":
+                d["state"], d["how"], d["rule_id"] = "remembered", "chip", f"proposal:{d.get('proposal_id', did)}"
+                if isinstance(body.get("statement"), str):
+                    d["edits"] = {"statement": body["statement"]}
+                answer = {"rule_id": d["rule_id"], "proposal_id": d.get("proposal_id", did), "project": DECISION_PROJECT}
+            elif verb == "undo":
+                d["state"] = "undone"
+                answer = {"ok": True}
+            elif verb == "dismiss":
+                d["state"] = "dismissed"
+                answer = {"ok": True}
+            elif verb == "same":
+                if body.get("same") is True:
+                    d["state"], d["route"] = "restated", "restated"
+                else:
+                    d["route"] = "offer"
+                answer = {"ok": True}
+            else:  # widen
+                d["state"], d["rule_id"] = "widened", "proposal:pr-everywhere"
+                answer = {"rule_id": d["rule_id"]}
+            frame = {"type": "decisionChanged", "id": did, "state": d["state"], "project_id": d["project_id"]}
+            if "rule_id" in d:
+                frame["rule_id"] = d["rule_id"]
+        with state_lock:
+            state["extra_frames"].append(frame)
+        self._json(200, answer)
+        return True
+
     def do_GET(self):  # noqa: N802 (stdlib naming)
         if self.headers.get("Upgrade", "").lower() == "websocket":
             return self._ws()
@@ -5546,6 +5716,12 @@ class W2Handler(SimpleHTTPRequestHandler):
                 posts = list(demo_post_log)
             return self._json(200, {"posts": posts})
         if self._demo_route("GET", {}):
+            return None
+        if path == "/__fixture/decision-posts":
+            with decisions_lock:
+                posts = list(decision_posts)
+            return self._json(200, {"posts": posts})
+        if self._decisions_route("GET", {}):
             return None
         if path == "/__fixture/capture-posts":
             with state_lock:
@@ -5630,6 +5806,9 @@ class W2Handler(SimpleHTTPRequestHandler):
                     session_launch_log.clear()
                     session_launched.clear()
                     inject_post_log.clear()
+            if body.get("reset_decisions"):
+                with decisions_lock:
+                    reset_decisions()
             if body.get("reset_rule_posts"):
                 with state_lock:
                     rule_post_log.clear()
@@ -5721,6 +5900,8 @@ class W2Handler(SimpleHTTPRequestHandler):
         if self._capture_post(path, body if isinstance(body, dict) else {}):
             return None
         if self._demo_route("POST", body if isinstance(body, dict) else {}):
+            return None
+        if self._decisions_route("POST", body if isinstance(body, dict) else {}):
             return None
         # The slice-6 document journey's writes (create / fork / bus emit).
         if self._interactive_post(path, body if isinstance(body, dict) else {}):
