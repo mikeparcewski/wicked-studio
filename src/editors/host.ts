@@ -35,7 +35,13 @@ export interface ArtifactRef {
   lockedParts: AnchorRef[];
 }
 
-export type AdapterResult<T> = T | { error: ErrorCode; message: string; head?: number };
+/** The head moved on past what the plugin is about to be told (EP-P2, codex r2): a write that landed
+ *  while a helper's later version was already the head, or a match that could not be told apart. The
+ *  host strips it from the reply and posts `artifact.changed` for it right after, so the plugin shows
+ *  the head and never stays on the version it wrote. */
+export interface MovedOn { head: number; kind: VersionKind }
+
+export type AdapterResult<T> = (T & { moved?: MovedOn }) | { error: ErrorCode; message: string; head?: number; moved?: MovedOn };
 
 /** What the host can do with the artifact. A method an artifact does not support answers `unsupported`. */
 export interface HostAdapter {
@@ -247,6 +253,13 @@ export class EditorHost {
         if (settled) return;
         settled = true;
         clearTimeout(timer);
+        // A head that moved on is the host's to announce, after the reply, never a field of it (codex r2).
+        let moved: MovedOn | undefined;
+        if (r !== null && typeof r === 'object' && 'moved' in r) {
+          const { moved: m, ...rest } = r as { moved?: MovedOn };
+          moved = m;
+          r = rest;
+        }
         if (r !== null && typeof r === 'object' && 'error' in r && typeof (r as { error: unknown }).error === 'string') {
           const e = r as { error: ErrorCode; message: string; head?: number };
           this.log({ kind: 'refused', type: msg.type, code: e.error, why: e.message });
@@ -254,6 +267,7 @@ export class EditorHost {
         } else {
           this.post(reply(id, r));
         }
+        if (moved !== undefined) this.artifactChanged(moved.head, moved.kind);
       })
       .catch((e: unknown) => {
         if (settled) return;

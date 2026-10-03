@@ -58,11 +58,7 @@ export class InteractiveDocAdapter implements HostAdapter {
     if (m.head === this.head) return null;
     const was = this.head;
     this.moveHead(m.head);
-    const e = m.versions.find((v) => v.version === m.head);
-    const kind: VersionKind = e === undefined ? 'generated'
-      : e.feedback_file !== null ? 'deterministic'
-        : was !== 0 && e.parent !== null && e.parent !== was ? 'fork' : 'generated';
-    return { head: m.head, kind };
+    return { head: m.head, kind: this.kindOf(m.head, was) };
   }
 
   async read(version?: number): Promise<AdapterResult<{ version: number; content: { type: 'html'; html: string } }>> {
@@ -111,13 +107,21 @@ export class InteractiveDocAdapter implements HostAdapter {
   }
 
   async write(base: number, items: WireItem[]): Promise<AdapterResult<{ version: number }>> {
-    // What exists before the post: a version already there can never be the one this post makes.
-    let before = new Set<number>(this.entries.map((v) => v.version));
+    // What exists before the post: a version already there can never be the one this post makes. The
+    // read is fail-CLOSED — without it, a child another tab made meanwhile could be claimed (codex r2)
+    // — and a head already past the base means the edit is stale before it is sent.
+    let before: Set<number>;
     try {
       const m = await getVersions(this.projectId, this.docId);
       this.entries = m.versions;
+      if (m.head !== base) {
+        this.moveHead(m.head);
+        return { error: 'head_moved', message: `The page changed (version ${m.head}) before your edit was sent; nothing was changed.`, head: m.head };
+      }
       before = new Set(m.versions.map((v) => v.version));
-    } catch { /* the last manifest read stands */ }
+    } catch {
+      return { error: 'unavailable', message: 'The page could not be read before sending, so nothing was changed.' };
+    }
     await postEvent(this.projectId, {
       event_type: FEEDBACK_EVENT,
       payload: { document_id: this.docId, version: base, author: 'studio', items },
@@ -129,11 +133,23 @@ export class InteractiveDocAdapter implements HostAdapter {
       return { error: 'stale', message: `The page changed (version ${landed.other}), but not by your edit — it may have been stale.`, head: landed.other };
     }
     this.moveHead(landed.head);
+    // The head moved on past what the plugin will be told: the host announces it after the reply.
+    // (how the head came to be is judged against the version just before it: this edit's own, or the base)
+    const mine = 'version' in landed ? landed.version : base;
+    const moved = landed.head !== mine ? { head: landed.head, kind: this.kindOf(landed.head, mine) } : undefined;
     if ('ambiguous' in landed) {
-      return { error: 'unavailable', message: `Two edits landed from version ${base} at once (versions ${landed.ambiguous.join(' and ')}); which is yours cannot be told, so nothing here offers to undo it.`, head: landed.head };
+      return { error: 'unavailable', message: `Two edits landed from version ${base} at once (versions ${landed.ambiguous.join(' and ')}); which is yours cannot be told, so nothing here offers to undo it.`, head: landed.head, ...(moved !== undefined ? { moved } : {}) };
     }
     this.writes.set(landed.version, base);
-    return { version: landed.version };
+    return { version: landed.version, ...(moved !== undefined ? { moved } : {}) };
+  }
+
+  /** How a version came to be, as the plugin is told (`artifact.changed.kind`), from the manifest. */
+  private kindOf(version: number, was: number): VersionKind {
+    const e = this.entries.find((v) => v.version === version);
+    return e === undefined ? 'generated'
+      : e.feedback_file !== null ? 'deterministic'
+        : was !== 0 && e.parent !== null && e.parent !== was ? 'fork' : 'generated';
   }
 
   async undo(version: number): Promise<AdapterResult<{ undone: true }>> {

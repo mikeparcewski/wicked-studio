@@ -26,6 +26,12 @@ describe('focusBeside', () => {
     expect(focusBeside(frame, false)?.id).toBe('first');
     expect(focusBeside(frame, true)?.id).toBe('first');
   });
+  it('codex r2: a control inside a disabled fieldset is not in the ring — Tab reaches the enabled control after it', () => {
+    document.body.innerHTML = '<button id="before">a</button><iframe id="f" title="plugin"></iframe><fieldset disabled><button id="unavailable">Unavailable</button></fieldset><button id="after">Undo</button>';
+    const frame = document.getElementById('f')!;
+    expect(focusBeside(frame, false)?.id).toBe('after');
+    expect(document.activeElement?.id).toBe('after');
+  });
   it('with no frame to stand beside: Tab goes to the first control, Shift+Tab to the last', () => {
     document.body.innerHTML = '<button id="a">a</button><button id="z">z</button>';
     expect(focusBeside(null, false)?.id).toBe('a');

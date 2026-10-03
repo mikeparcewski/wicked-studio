@@ -325,6 +325,28 @@ describe('the host controller', () => {
     host.teardown('done');
   });
 
+  it('codex r2: a write that landed under a helper’s newer head — the reply says the version written, then artifact.changed says the head', async () => {
+    const { host, fromFrame, adapter } = makeHost(['artifact.read', 'artifact.write']);
+    let port: MessagePort | null = null;
+    vi.spyOn(host.frame.contentWindow!, 'postMessage').mockImplementation(((_m: unknown, _o: unknown, tr?: Transferable[]) => { port = (tr?.[0] as MessagePort) ?? null; }) as never);
+    fromFrame(env('plugin.ready', { editor: 'acme', version: '0.1.0', protocol: [1] }));
+    const toPlugin: { type?: string; re?: string; payload?: unknown }[] = [];
+    port!.onmessage = (m) => toPlugin.push(m.data as { type?: string; re?: string; payload?: unknown });
+    // The adapter: this edit is v2, but the manifest already has a helper's v3 as the head.
+    const ref = adapter.artifact();
+    const artifact = vi.spyOn(adapter, 'artifact').mockReturnValue({ ...ref, version: 1, head: 1 });
+    vi.spyOn(adapter, 'write').mockImplementation(async () => {
+      artifact.mockReturnValue({ ...ref, version: 3, head: 3 }); // the adapter's head follows the manifest
+      return { version: 2, moved: { head: 3, kind: 'generated' } };
+    });
+    port!.postMessage(env('version.write', { base: 1, ops: [{ op: 'text', anchor: 'cta', value: 'Reserve', before: 'Book a room' }], summary: 'cta' }, 'w1'));
+    await vi.waitFor(() => expect(toPlugin.filter((m) => m.type === 'artifact.changed')).toHaveLength(1));
+    const i = toPlugin.findIndex((m) => m.re === 'w1');
+    expect(toPlugin[i]!.payload).toStrictEqual({ version: 2 }); // never a `moved` field on the wire
+    expect(toPlugin[i + 1]).toMatchObject({ type: 'artifact.changed', payload: { version: 3, head: 3, by: 'agent', kind: 'generated' } });
+    host.teardown('done');
+  });
+
   it('a second load of the frame is a teardown', () => {
     const { host, ui } = makeHost();
     host.frame.dispatchEvent(new Event('load'));

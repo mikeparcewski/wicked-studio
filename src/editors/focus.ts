@@ -7,9 +7,14 @@
  */
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
+/** The real disabled state — a control inside a `<fieldset disabled>` is disabled too (codex r2). */
+function disabled(el: HTMLElement): boolean {
+  return el.matches(':disabled') || el.closest('fieldset[disabled]') !== null;
+}
+
 export function focusBeside(frame: Element | null, backwards: boolean, root: ParentNode = document): HTMLElement | null {
   const ring = Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE))
-    .filter((el) => el !== frame && el.tabIndex >= 0 && el.offsetParent !== null && el.closest('[inert],[hidden]') === null && !(frame?.contains(el) ?? false));
+    .filter((el) => el !== frame && el.tabIndex >= 0 && el.offsetParent !== null && !disabled(el) && el.closest('[inert],[hidden]') === null && !(frame?.contains(el) ?? false));
   let next: HTMLElement | undefined;
   if (frame === null) {
     next = backwards ? ring[ring.length - 1] : ring[0];

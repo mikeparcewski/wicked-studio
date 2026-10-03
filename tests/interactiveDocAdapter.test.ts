@@ -59,12 +59,14 @@ describe('InteractiveDocAdapter', () => {
   });
   it('codex r1: a deterministic child of the base that ALREADY existed before the post is never claimed as this write', async () => {
     // Another tab made v2 off v1 before this edit was posted; the bridge records no correlation id (the
-    // real one drops source_message_id), so what exists before the post is the only fence.
+    // real one drops source_message_id), so the manifest read before the post is the fence: the head is
+    // already past the base, nothing is sent (r2), and v2 is nobody's to undo here.
     const a = new InteractiveDocAdapter('notes', 'plan', 'The plan', 'page', undefined, { pollForMs: 900 });
     api.manifests = [{ head: 2, versions: [entry(1, null), entry(2, 1, true)] }];
     await a.refresh();
     const r = await a.write(1, [{ selector: 'headline', type: 'content-edit', value: 'New', before: 'Old' }]);
-    expect(r).toMatchObject({ error: 'stale', head: 2 });
+    expect(r).toMatchObject({ error: 'head_moved', head: 2 });
+    expect(api.events).toHaveLength(0);
     expect(a.writes.size).toBe(0);
   });
   it('codex r1: two new deterministic children of the base in the window cannot be told apart — neither is claimed, and it says so', async () => {
@@ -72,18 +74,37 @@ describe('InteractiveDocAdapter', () => {
     api.manifests = [{ head: 1, versions: [entry(1, null)] }, { head: 1, versions: [entry(1, null)] }, { head: 3, versions: [entry(1, null), entry(2, 1, true), entry(3, 1, true)] }];
     await a.refresh();
     const r = await a.write(1, [{ selector: 'headline', type: 'content-edit', value: 'New', before: 'Old' }]);
-    expect(r).toMatchObject({ error: 'unavailable', head: 3 });
+    expect(r).toMatchObject({ error: 'unavailable', head: 3, moved: { head: 3, kind: 'deterministic' } });
     expect((r as { message: string }).message).toContain('versions 2 and 3');
     expect(a.writes.size).toBe(0);
     expect(a.head).toBe(3);
   });
-  it('codex r1: the head follows the manifest, not the match — this edit at v2 with a helper’s v3 already the head', async () => {
+  it('codex r1: the head follows the manifest, not the match — this edit at v2 with a helper’s v3 already the head; r2: the result says the head moved on, so the plugin is told', async () => {
     const a = new InteractiveDocAdapter('notes', 'plan', 'The plan', 'page');
     api.manifests = [{ head: 1, versions: [entry(1, null)] }, { head: 1, versions: [entry(1, null)] }, { head: 3, versions: [entry(1, null), entry(2, 1, true), entry(3, 2)] }];
     await a.refresh();
-    expect(await a.write(1, [{ selector: 'headline', type: 'content-edit', value: 'New', before: 'Old' }])).toEqual({ version: 2 });
+    expect(await a.write(1, [{ selector: 'headline', type: 'content-edit', value: 'New', before: 'Old' }])).toEqual({ version: 2, moved: { head: 3, kind: 'generated' } });
     expect(a.head).toBe(3);
     expect(a.writes.get(2)).toBe(1);
+  });
+  it('codex r2: the manifest read before the post failing is fail-CLOSED — nothing is sent, nothing can be claimed', async () => {
+    const a = new InteractiveDocAdapter('notes', 'plan', 'The plan', 'page', undefined, { pollForMs: 900 });
+    api.manifests = [{ head: 1, versions: [entry(1, null)] }];
+    await a.refresh();
+    api.manifests = []; // the next read throws
+    const r = await a.write(1, [{ selector: 'headline', type: 'content-edit', value: 'New', before: 'Old' }]);
+    expect(r).toMatchObject({ error: 'unavailable' });
+    expect((r as { message: string }).message).toContain('nothing was changed');
+    expect(api.events).toHaveLength(0);
+    expect(a.writes.size).toBe(0);
+  });
+  it('codex r2: a head that already moved past the base before the post is head_moved — nothing is sent', async () => {
+    const a = new InteractiveDocAdapter('notes', 'plan', 'The plan', 'page');
+    api.manifests = [{ head: 1, versions: [entry(1, null)] }, { head: 2, versions: [entry(1, null), entry(2, 1)] }];
+    await a.refresh();
+    expect(await a.write(1, [{ selector: 'headline', type: 'content-edit', value: 'New', before: 'Old' }])).toMatchObject({ error: 'head_moved', head: 2 });
+    expect(api.events).toHaveLength(0);
+    expect(a.head).toBe(2);
   });
   it('Undo forks the version BEFORE the change with expect_head = the change (C5); a helper in between is head_moved', async () => {
     const a = new InteractiveDocAdapter('notes', 'plan', 'The plan');
