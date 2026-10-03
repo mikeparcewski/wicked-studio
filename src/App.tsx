@@ -57,7 +57,7 @@ import { useProjectVisits } from './hooks/useProjectVisits.js';
 import { usePeekJump } from './hooks/usePeekJump.js';
 import { usePlacePanel } from './hooks/usePlacePanel.js';
 import { useRunsPanelStore } from './store/runsPanel.js';
-import { setShortcutsPaletteOpen, useGlobalShortcuts } from './hooks/useGlobalShortcuts.js';
+import { altChord, setShortcutsPaletteOpen, useGlobalShortcuts } from './hooks/useGlobalShortcuts.js';
 import { useTypeToComposer } from './hooks/useTypeToComposer.js';
 import { useLegacyRedirect, useMakeRedirect, useRetiredSettingsRedirect, useSteeringRedirect, useTestingRedirect } from './hooks/useLegacyRedirect.js';
 import { modePath, routedVersion, useRoute, type Mode } from './hooks/useRoute.js';
@@ -76,6 +76,8 @@ import { useCapabilities } from './store/capabilities.js';
 import { useTeamPlanStore } from './store/teamPlan.js';
 import { useWatchStore } from './store/watch.js';
 import { useWatchHydrate } from './hooks/useWatchFeed.js';
+import { WatchtowerPage } from './components/watch/WatchtowerPage.js';
+import { needCount } from './board/needsQueue.js';
 import type { CoreEvent, RepoEntry } from './api/types.js';
 import { readSteeringTypeFilter } from './api/steering.js';
 import { isTestingSubPage, readLaunchIntent } from './api/testing.js';
@@ -370,8 +372,19 @@ export function App(): React.ReactElement {
           setAskOpen((v) => !v);
         },
       },
+      // ⌥W — the Watchtower's full feed (S14, DESIGN-interaction rule 10), from anywhere.
+      {
+        id: 'open-watchtower',
+        chord: altChord('w'),
+        group: 'navigate' as const,
+        description: 'Open the Watchtower (the full feed)',
+        handler: (e: KeyboardEvent) => {
+          e.preventDefault();
+          navigate('/watch');
+        },
+      },
     ],
-    [runId, runs, onKill],
+    [runId, runs, onKill, navigate],
   );
   useGlobalShortcuts(shortcutEntries);
 
@@ -648,6 +661,14 @@ export function App(): React.ReactElement {
       return (
         <div className="flex flex-1 overflow-hidden">
           <SkillsPage navigate={navigate} search={search} />
+        </div>
+      );
+    }
+    // `/watch` — the Watchtower (S14): TR's feed under every skin; its sentence is the needs-you count.
+    if (panel === 'watch') {
+      return (
+        <div className="flex flex-1 overflow-hidden">
+          <WatchtowerPage count={needCount(needRows)} runs={runs} navigate={navigate} now={needsNow} />
         </div>
       );
     }

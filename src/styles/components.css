@@ -941,3 +941,23 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
 .wk-composer-menu-item--off { color: var(--ink-dim); cursor: not-allowed; }
 .wk-composer-cmd { font-family: inherit; color: var(--accent); min-width: 72px; }
 .wk-session-steps { display: flex; flex-direction: column; gap: 2px; }
+/* ── S14: the Watchtower page and the pill's card ─────────────────────────────────────────── */
+.wk-watchtower { display: flex; flex-direction: column; flex: 1; min-width: 0; overflow: hidden; }
+.wk-watchtower-head { padding: 20px 32px 12px 52px; border-bottom: 1px solid var(--border-subtle); }
+.wk-watchtower-body { flex: 1; overflow-y: auto; padding: 12px 32px 24px 52px; display: flex; flex-direction: column; gap: 10px; }
+.wk-watchtower-kinds { display: flex; flex-wrap: wrap; gap: 6px; }
+.wk-desk-chip--on { background: var(--accent-subtle); color: var(--ink-high); }
+.wk-watchtower-feed { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.wk-watchtower-row { display: flex; align-items: flex-start; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--border-subtle); }
+.wk-watchtower-row .wk-desk-dot { margin-top: 6px; }
+.wk-watchtower-sentence { color: var(--ink-high); font-size: var(--text-sm); }
+.wk-watch-pill-wrap { position: relative; }
+.wk-watch-card {
+  display: none; position: absolute; left: calc(100% + 8px); bottom: 0; z-index: 40; width: 300px;
+  padding: 10px 12px; border-radius: 10px; background: var(--surface-card); border: 1px solid var(--surface-raised);
+  box-shadow: var(--shadow-raised);
+}
+.wk-watch-pill-wrap:hover .wk-watch-card, .wk-watch-pill-wrap:has(:focus-visible) .wk-watch-card, .wk-watch-pill-wrap--open .wk-watch-card { display: block; }
+.wk-watch-card-sentence { margin: 0 0 6px; font-size: var(--text-sm); font-weight: var(--weight-semi); color: var(--ink-high); }
+.wk-watch-card-row { margin: 0 0 4px; font-size: var(--text-xs); color: var(--ink-body); }
+.wk-watch-card-foot { margin: 6px 0 0; font-size: var(--text-2xs); color: var(--ink-dim); }
