@@ -1,5 +1,7 @@
 import type { Campaign } from '../api/campaigns.js';
 import { memoryPayload, policyPayload, proposalKind, type Proposal } from '../api/proposals.js';
+import type { DecisionView } from '../api/decisions.js';
+import { decisionRowText, statementOf } from './decisionLine.js';
 import type { RepoEntry, SessionView } from '../api/types.js';
 import { deliveryOf } from '../components/delivery.js';
 import { narrate, narrateStranded, type NarrationTone } from '../components/narrator.js';
@@ -13,7 +15,7 @@ import { outcomeOf, runStats } from './metrics.js';
 import { repoOnboard } from './repoStats.js';
 import { onboardEstimate, type OnboardEstimate } from './repairMoves.js';
 import { plausibleClock } from './ageHonesty.js';
-import { captureClass, proposalConsequence, proposalConsequenceLine, type ProposalConsequence } from './proposalTriage.js';
+import { captureClass, decisionIdOf, proposalConsequence, proposalConsequenceLine, type ProposalConsequence } from './proposalTriage.js';
 
 /**
  * THE needs-you queue fold (DES-HOME-COMMAND-CENTER §3) — the home page's spine.
@@ -258,6 +260,11 @@ export interface NeedsYouInputs {
   stallEscalations?: Record<string, StallEscalationLite>;
   /** Pending governed-knowledge proposals (`GET /proposals?state=pending`); empty when unsupported. */
   proposals?: readonly Proposal[];
+  /** DC-S6 (B12): the decisions crew's ledger holds, by id (human actors, under `WICKED_DECISIONS=on`).
+   *  A policy proposal filed by a decision reads "From your words" only when the ledger's view names
+   *  this proposal, and the words shown are the view's derived statement — a proposal payload is
+   *  writable by anyone, so nothing in it is ever quoted as the operator's (DC §4.2.4). */
+  decisions?: Readonly<Record<string, DecisionView>>;
   /** Runs with a post-hoc delivery tried this session (in flight or failed): never "kept locally". */
   deliveryAttempted?: ReadonlySet<string>;
   /** Runs whose post-hoc delivery LANDED this session: no stranded row, whatever the stale DTO says. */
@@ -608,6 +615,14 @@ export function needsYouRows(inputs: NeedsYouInputs): NeedRow[] {
     if (p.state !== 'pending') continue;
     const kind = proposalKind(p);
     const body = kind === 'memory' ? memoryPayload(p).content : kind === 'policy' ? policyPayload(p).rule : null;
+    // DC-S6 (B12): a decision's review proposal is the SAME object the chat's Remember chip answers —
+    // the row says it is the operator's rule, in their words; answering either resolves both. Only
+    // when the ledger holds that decision: the payload alone proves nothing (a forged one shows as
+    // an ordinary policy proposal).
+    const decisionId = decisionIdOf(p);
+    const view = kind === 'policy' && captureClass(p) === 'decision' && decisionId !== null ? inputs.decisions?.[decisionId] : undefined;
+    const decision = view !== undefined && view.origin.actor.kind === 'human' && view.proposal_id === p.id ? view : null;
+    const statement = decision !== null ? statementOf(decision) : null;
     rows.push({
       key: `proposal:${p.id}`,
       kind: 'proposal',
@@ -615,9 +630,9 @@ export function needsYouRows(inputs: NeedsYouInputs): NeedRow[] {
       stakes: 1,
       groupKey: 'proposal',
       proposal: { id: p.id, consequence: proposalConsequence(p), captured: captureClass(p) !== null },
-      subject: body !== null && body !== '' ? clipLine(body, 80) : p.id,
+      subject: statement !== null ? clipLine(statement, 80) : body !== null && body !== '' ? clipLine(body, 80) : p.id,
       // The consequence of accepting comes first (Wave B, idea 4).
-      text: proposalConsequenceLine(p),
+      text: decision !== null ? decisionRowText(statement, decision.edits?.steering_type ?? decision.derived.steering_type) : proposalConsequenceLine(p),
       tone: 'gate',
       at: typeof p.created_at === 'number' ? p.created_at * 1000 : null,
       subjectPath: '/steering/dashboard',

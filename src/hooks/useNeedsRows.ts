@@ -10,6 +10,7 @@ import { useElicitationStore } from '../store/elicitations.js';
 import { useFailureClocks } from '../store/failureClocks.js';
 import { useGateStore } from '../store/gates.js';
 import { useMembershipStore } from '../store/membership.js';
+import { useDecisionsStore } from '../store/decisions.js';
 import { useNeedsSources } from '../store/needsSources.js';
 import { useNotificationStore } from '../store/notifications.js';
 import { useStallEscalationStore } from '../store/stallEscalations.js';
@@ -30,6 +31,8 @@ import { useStallEscalationStore } from '../store/stallEscalations.js';
  * The hook reads; it fetches nothing itself beyond asking the source to load wires it has never
  * read (a no-op once the shell has loaded them). Pure given its inputs, `now` included.
  */
+const NO_DECISIONS: Readonly<Record<string, never>> = Object.freeze({});
+
 export function useNeedsRows(runs: SessionView[], now: number): NeedRow[] {
   const gates = useGateStore((s) => s.gates);
   const failedAt = useFailureClocks((s) => s.failedAtByRun);
@@ -52,6 +55,12 @@ export function useNeedsRows(runs: SessionView[], now: number): NeedRow[] {
   );
   // Landed this session: the stale DTO's stranded row goes, as the rail's line says delivered (#438).
   const deliveredNow = useDeliveredNow();
+  // DC-S6 (B12): a decision's review proposal reads "From your words" only when crew's ledger holds
+  // that decision and names this proposal (a forged payload has no view), with the ledger's own
+  // statement — and only under `on` (`ledger` offers nothing, so no such proposal exists).
+  const decisionMode = useDecisionsStore((s) => s.mode);
+  const decisionViews = useDecisionsStore((s) => s.byId);
+  const decisions = useMemo(() => (decisionMode === 'on' ? decisionViews : NO_DECISIONS), [decisionMode, decisionViews]);
 
   useEffect(() => {
     void useNeedsSources.getState().load();
@@ -88,11 +97,12 @@ export function useNeedsRows(runs: SessionView[], now: number): NeedRow[] {
         steerRequests,
         stallEscalations,
         proposals: proposals ?? [],
+        decisions,
         deliveryAttempted,
         deliveredNow,
         now,
       }),
-    [runs, gates, failedAt, attachedAt, projectIds, chats, repos, campaigns, stalledAt, elicitations, steerRequests, stallEscalations, proposals, deliveryAttempted, deliveredNow, now],
+    [runs, gates, failedAt, attachedAt, projectIds, chats, repos, campaigns, stalledAt, elicitations, steerRequests, stallEscalations, proposals, decisions, deliveryAttempted, deliveredNow, now],
   );
 }
 
