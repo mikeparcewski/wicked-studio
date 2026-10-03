@@ -141,7 +141,7 @@ describe('the toast and the chip render the queue', () => {
     );
     act(() => { fireEvent.click(screen.getByTestId('gate-approve-r1')); });
     const toast = screen.getByTestId('undo-toast');
-    expect(toast.textContent).toContain('Approving r1 in 10 s');
+    expect(toast.textContent).toContain('Approving this run in 10 s');
     expect(screen.getByTestId('undo-preview').textContent).toBe('The run resumes past this gate.');
     expect(screen.getByTestId('undo-close-note').textContent).toBe(CLOSE_NOTE);
     expect(screen.getByTestId('gate-queued-r1')).toBeTruthy();

@@ -14,7 +14,7 @@ reply whose citations record confirms three places) and proves:
   3. REFUSED: with the daemon refusing the plan (400 + reason), a DOUBLE click on Go posts the gate
      ONCE (after the 10 s undo window); the card says "Didn't work" with the reason and keeps its
      buttons. Try again, accepted, posts exactly once more and the card reads "Going".
-  4. DELIVER: r-ship-deliver's card shows the deliver unit's own target sentence; Deliver asks
+  4. DELIVER: r-ship-deliver's card says the deliver unit's target in one plain sentence (studio#444); Deliver asks
      "Are you sure? This leaves studio."; Cancel sends nothing; Yes posts approve exactly once.
   5. SOURCES: the reply shows "Based on 3 sources" (the unverified citation is not a source); the
      corrected chip's hover names where it really is; a chip opens the passage with the cited line
@@ -166,7 +166,7 @@ with sync_playwright() as p:
     page.wait_for_timeout(800)
     delivered = posts("r-ship-deliver")
     check("deliver-are-you-sure",
-          why == "Pushes branch wicked/r-ship-deliver to origin and opens a pull request on acme/shop."
+          why == "Pushes your changes as a new branch to acme/shop on GitHub and opens a pull request there. Merging stays yours."
           and "Are you sure? This leaves studio." in sure and why in sure
           and after_cancel == 0 and state_cancel == "ask"
           and len(delivered) == 1 and delivered[0]["body"].get("approve") is True and focus_after_yes == "session-proposal",

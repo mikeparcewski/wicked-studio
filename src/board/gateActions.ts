@@ -3,7 +3,8 @@ import { api } from '../api/client.js';
 import { ApiError } from '../api/errors.js';
 import { isDeliveriesFrozen } from '../api/deliveryFreeze.js';
 import { useDeliveryFreezeStore } from '../store/deliveryFreeze.js';
-import type { GateDecision } from '../api/types.js';
+import type { GateDecision, SessionView } from '../api/types.js';
+import { plainGateQuestion, plainRunTitle } from './deskWords.js';
 import type { LaunchPlan } from '../api/teamPlan.js';
 import { modePath } from '../hooks/useRoute.js';
 import { choicesOf, recommendedOf, useGateStore } from '../store/gates.js';
@@ -139,10 +140,39 @@ export type DecisionOutcome = 'sent' | 'undone' | 'cancelled' | 'dropped';
 /** Queued decisions watching their gate: run id → the decision's queue id and the gate's ord. */
 const watched = new Map<string, { id: number; ord: number | undefined }>();
 
-/** "beta · b1" — the gate in words, for the toast and the notices. */
+/** Each run's work, in the Desk's words (`plainRunTitle`), as the one run list last read it
+ *  (`useRuns` writes it; studio#443). Module state: the notices are made outside React. */
+const workTitles = new Map<string, string>();
+
+/** Replace the run → work-title mirror from a fresh run list. */
+export function rememberWorkTitles(runs: readonly SessionView[]): void {
+  workTitles.clear();
+  for (const v of runs) {
+    const title = plainRunTitle(v.session.problem ?? '').trim();
+    if (title !== '') workTitles.set(v.session.id, title);
+  }
+}
+
+/**
+ * The gate in words, for the undo notice and the sent / not-sent reports (studio#443): what is
+ * being answered, about which piece of work — "the plan for “Fix the double charge”", "the
+ * hand-over of “…”", "the review for “…”" — never the run id.
+ */
 export function gateLabel(runId: string): string {
+  const title = workTitles.get(runId);
+  const gate = useGateStore.getState().gates[runId];
+  if (title !== undefined) {
+    const prompt = gate?.prompt ?? '';
+    if (gate?.gateKind === 'plan_approval' || /^\s*Approve plan rev \d+/i.test(prompt)) return `the plan for “${title}”`;
+    if (gate?.gateKind === 'deliver' || /^\s*Approve delivery\b/i.test(prompt)) return `the hand-over of “${title}”`;
+    // Any other gate: its question's noun ("Approve the review" → "the review for “…”"), when it has one.
+    const noun = gate === undefined ? undefined : /^Approve the ([^:()]+?)\s*$/.exec(plainGateQuestion(gate.prompt, gate.gateKind))?.[1];
+    return noun !== undefined ? `the ${noun} for “${title}”` : `“${title}”`;
+  }
+  // Before the run list has the run (or it has no words): the project, else "this run" — never
+  // the id, which stays under technical details (studio#443, codex).
   const name = useMembershipStore.getState().projectNameByRun[runId];
-  return name !== undefined && name !== '' ? `${name} · ${runId}` : runId;
+  return name !== undefined && name !== '' ? `a run in ${name}` : 'this run';
 }
 
 /** True while `runId` has a decision queued, in flight, or landed — peek, triage and batch skip it. */

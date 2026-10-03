@@ -11,8 +11,8 @@
   "studioVersion": "0.5.19",
   "counts": {
     "files": 189,
-    "occurrences": 1871,
-    "static": 1639,
+    "occurrences": 1878,
+    "static": 1643,
     "dynamic": 74,
     "computed": 8
   },
@@ -459,6 +459,12 @@
     },
     {
       "testId": "bell-popover",
+      "files": [
+        "src/components/NotificationBell.tsx"
+      ]
+    },
+    {
+      "testId": "bell-unread-count",
       "files": [
         "src/components/NotificationBell.tsx"
       ]
@@ -3123,6 +3129,18 @@
     },
     {
       "testId": "gate-toast-overflow",
+      "files": [
+        "src/components/GateNotifications.tsx"
+      ]
+    },
+    {
+      "testId": "gate-toast-question",
+      "files": [
+        "src/components/GateNotifications.tsx"
+      ]
+    },
+    {
+      "testId": "gate-toast-work",
       "files": [
         "src/components/GateNotifications.tsx"
       ]
@@ -8804,6 +8822,12 @@
       "testId": "tech-need-prompt",
       "files": [
         "src/components/NeedsYouQueue.tsx"
+      ]
+    },
+    {
+      "testId": "tech-proposal-deliver-card",
+      "files": [
+        "src/components/session/ProposalCard.tsx"
       ]
     },
     {

@@ -706,6 +706,11 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          #   src/checkout.ts from its worktree. proposal_refuse — POST /runs/r-ship-plan/gate answers
          #   crew's 400 with a reason (the refused-plan case).
          "ship_proposals": False, "proposal_refuse": False,
+         # reel_runs — (studio#440-#445, e2e/desk_reel_words_test.py; needs `sessions`) adds REEL_RUNS to
+         #   the sessions corpus: a plan gate at rev 2 after the scope step, a deliver gate whose card
+         #   names a local origin by its path, and a delivered run whose deliver step never reached the
+         #   bus. Their GET /runs/:id/team answers after REEL_TEAM_DELAY_S.
+         "reel_runs": False,
          }
 state_lock = threading.Lock()
 # Idea 9: every POST /governance/rules body the fixture received (GET /__fixture/rule-posts).
@@ -1061,7 +1066,8 @@ def session_team(rid: str) -> dict | None:
 SHIP_WORKDIR = "/w/r-ship-deliver"
 SHIP_PLAN_PROMPT = ("Approve plan rev 1 before unit 0 runs (manual mode; band 20-39; manual mode): "
                     "understand → build → test → review")
-SHIP_DELIVER_CARD = "Pushes branch wicked/r-ship-deliver to origin and opens a pull request on acme/shop."
+SHIP_DELIVER_CARD = ("Pushes branch wicked/r-ship-deliver to acme/shop on GitHub and opens a pull request there; "
+                     "merge stays human.")  # crew newPrTargetSentence (github)
 PROPOSAL_RUNS = [
     _session_run("r-ship-plan", "awaiting_human", "add a FREESHIP code to the checkout", "chat-ship",
                  SESSION_T0 + 3000, None,
@@ -1112,6 +1118,100 @@ def proposal_team(rid: str) -> dict | None:
                     units=[{"ord": i, "transport": "bus", "reason": None, "rows": unit_rows[2 * i:2 * i + 2]}
                            for i in range(4)])
     return None
+
+
+# ── Reel corpus (switch `reel_runs`, needs `sessions`; e2e/desk_reel_words_test.py) ─────────
+# The shapes the wave-4 reel takes met on crew 0.7.46 (studio#440-#445): unit descriptions are
+# `<phase> — <problem> ||| <the phase's instruction>`, run ids are UUIDs, the deliver unit's card
+# names an origin on this machine by its absolute path, and the deliver Tool unit never reaches
+# the team bus. GET /runs/:id/team answers these runs after REEL_TEAM_DELAY_S, so the session first
+# paints from the units (the window #440's flash lived in).
+REEL_PLAN = "5d0c1e2a-9f3b-4c6d-8e7f-0a1b2c3d4e5f"
+REEL_DELIVER = "6e1d2f3b-0a4c-4d7e-9f80-1b2c3d4e5f60"
+REEL_DONE = "7f2e304c-1b5d-4e8f-a091-2c3d4e5f6071"
+REEL_TEAM_DELAY_S = 3.0
+REEL_ORIGIN = "/var/repos/origins/checkout-demo.git"
+REEL_PHASES = [("pa-scope", "recon", "understand"), ("clarify", "recon", "understand"), ("design", "recon", "design"),
+               ("build", "build", "build"), ("adversarial-review", "review", "review"), ("test", "test", "test"),
+               ("review", "review", "critique"), ("deliver", "build", "deliver")]
+REEL_INSTR = {
+    "pa-scope": "Scope this run before anything changes (READ ONLY: edit nothing). End with exactly one line: SCOPE {\"touch\":[]}",
+    "clarify": "PHASE SCOPE: this is the clarify phase. Ask what the plan needs answered.",
+    "design": "PHASE SCOPE: this is the design phase.",
+}
+
+
+def reel_card(rid: str) -> str:
+    return (f"Pushes branch wicked/{rid} to origin ({REEL_ORIGIN}) — a local path, so no pull request can be opened "
+            "against it: unless another remote in this checkout is a GitHub repository gh resolves, the pushed "
+            "branch IS the delivery.")
+
+
+def _reel_run(rid: str, status: str, problem: str, n: int, done_upto: int, created_s: int) -> dict:
+    r = session(rid, status, problem, problem)
+    r["session"].update(created_at=created_s, repo_ref="checkout-demo", run_branch=f"wicked/{rid}",
+                        workflow_id=f"wf-{rid}", human_confirm="all" if status == "awaiting_human" else "none",
+                        unit_ix=min(done_upto, n - 1))
+    units = []
+    for i, (ph, stage, _cat) in enumerate(REEL_PHASES[:n]):
+        instr = reel_card(rid) + " Push identity: none configured — pushes as whatever login gh holds." \
+            if ph == "deliver" else REEL_INSTR.get(ph)
+        desc = f"{ph} — {problem}" + (f" ||| {instr}" if instr else "")
+        units.append(dict(r["units"][0], id=f"{rid}:{ph}", ord=i + 1, description=desc, stage=stage,
+                          phase_ref=f"wf-{rid}:unit-1" if i == 0 else None,
+                          status="done" if i < done_upto else "distributed"))
+    r["units"] = units
+    return r
+
+
+REEL_RUNS = [
+    _reel_run(REEL_PLAN, "awaiting_human", "Add a short \"Rules for booking\" section to PROPOSAL.md: how long one booking can last.",
+              7, 1, SESSION_T0 + 3600),
+    _reel_run(REEL_DELIVER, "awaiting_human", "Add a SAVE20 discount code to applyDiscount in src/cart.js (20% off).",
+              8, 7, SESSION_T0 + 3700),
+    _reel_run(REEL_DONE, "completed", "Add a SAVE30 discount code to applyDiscount in src/cart.js (30% off).",
+              8, 8, SESSION_T0 + 3800),
+]
+REEL_RUNS[2]["session"]["ended_at"] = SESSION_T0 + 4400
+REEL_RUNS[2]["session"]["delivery"] = "pushed"
+REEL_PLAN_PROMPT = ("Approve plan rev 2 before unit 2 runs (manual mode; band 0-19; manual mode): "
+                    "pa-scope → clarify → design → build → adversarial-review → test → review")
+REEL_GATES = {
+    REEL_PLAN: (2, REEL_PLAN_PROMPT),
+    REEL_DELIVER: (8, "Approve delivery before unit 8 runs. " + reel_card(REEL_DELIVER)
+                   + " Push identity: none configured — pushes as whatever login gh holds."),
+}
+
+
+def reel_team(rid: str) -> dict | None:
+    blank = {"runId": rid, "streamFloor": None, "pending": None, "units": [], "rows": []}
+    steps = [{"catalog": cat, "id": ph} for ph, _s, cat in REEL_PHASES]
+    eid = {REEL_PLAN: 1100, REEL_DELIVER: 1200, REEL_DONE: 1300}.get(rid)
+    if eid is None:
+        return None
+
+    def done_rows(start: int, ids: list) -> list:
+        out = []
+        for i, sid in enumerate(ids):
+            out.append(_team_row(start + 2 * i, "wicked.team.step.claimed", rid, ord=i + 1, step_id=sid, role="creator",
+                                 kind="agent", phase=sid, criterion="", baseline_tree=None, repo=None,
+                                 code_graph_db=None, by="claude#1"))
+            out.append(_team_row(start + 2 * i + 1, "wicked.team.step.completed", rid, ord=i + 1, step_id=sid,
+                                 status="ok", tree=None, output_bytes=10, output_ref=f"u{i + 1}", by="claude#1"))
+        return out
+    if rid == REEL_PLAN:
+        rows = [_team_row(eid, "wicked.team.plan.accepted", rid, plan_rev=1, workflow_id=f"{rid}:plan-1", band="0-19",
+                          high_risk=False, mode="manual", steps=steps[:1], override=None, proposal_id="p-r1")]
+        rows += done_rows(eid + 1, ["pa-scope"])
+        rows.append(_team_row(eid + 5, "wicked.team.plan.proposed", rid, proposal_id="p-r2", base_rev=1, kind="revision",
+                              preset=None, steps=steps[:7], monitors={"asked": 1}, asks=[], touch=["PROPOSAL.md"],
+                              override=None, rationale="", by="claude#1"))
+        return dict(blank, teamed=True, transport="bus", reason=None, planRev=1, ended=False, rows=rows)
+    rows = [_team_row(eid, "wicked.team.plan.accepted", rid, plan_rev=2, workflow_id=f"{rid}:plan-2", band="0-19",
+                      high_risk=False, mode="manual", steps=steps, override=None, proposal_id="p-r2")]
+    # Seven agent steps reach the bus; the deliver Tool unit never does (studio#445).
+    rows += done_rows(eid + 1, [ph for ph, _s, _c in REEL_PHASES[:7]])
+    return dict(blank, teamed=True, transport="bus", reason=None, planRev=2, ended=rid == REEL_DONE, rows=rows)
 
 
 SESSION_CHATS = {
@@ -3291,6 +3391,8 @@ def assemble_runs() -> list:
             if not state["run_chat_id"]:
                 for r in extra:  # a daemon before C1 carries no chat_id
                     r["session"].pop("chat_id", None)
+            if state["reel_runs"]:
+                extra = extra + json.loads(json.dumps(REEL_RUNS))
             if state["ship_proposals"]:
                 extra = extra + json.loads(json.dumps(PROPOSAL_RUNS))
                 if not state["run_chat_id"]:
@@ -4229,7 +4331,11 @@ class W2Handler(SimpleHTTPRequestHandler):
                 sessions_on = state["sessions"]
             with state_lock:
                 proposals_on = state["ship_proposals"]
-            if sessions_on and proposals_on and proposal_team(rid) is not None:
+                reel_on = state["reel_runs"]
+            if sessions_on and reel_on and reel_team(rid) is not None:
+                time.sleep(REEL_TEAM_DELAY_S)  # the session paints from its units first (studio#440)
+                self._json(200, reel_team(rid))
+            elif sessions_on and proposals_on and proposal_team(rid) is not None:
                 self._json(200, proposal_team(rid))
             elif sessions_on and session_team(rid) is not None:
                 self._json(200, session_team(rid))
@@ -4244,6 +4350,13 @@ class W2Handler(SimpleHTTPRequestHandler):
             with state_lock:
                 plan_gate_on = state["plan_gate"]
                 proposals_open = state["sessions"] and state["ship_proposals"]
+            with state_lock:
+                reel_open = state["sessions"] and state["reel_runs"]
+            if reel_open and rid in REEL_GATES:
+                g_ord, g_prompt = REEL_GATES[rid]
+                self._json(200, {"runId": rid, "ord": g_ord, "lifecycle": "open", "prompt": g_prompt,
+                                 "receivedAt": iso((SESSION_T0 + 3900) * 1000)})
+                return True
             if proposals_open and rid in PROPOSAL_GATES:
                 g_ord, g_prompt = PROPOSAL_GATES[rid]
                 self._json(200, {"runId": rid, "ord": g_ord, "lifecycle": "open", "prompt": g_prompt,

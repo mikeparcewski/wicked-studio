@@ -33,6 +33,8 @@ export function plainGateQuestion(prompt: string | undefined, gateKind: string |
     const steps = list === undefined ? 0 : list.split('→').map((s) => s.trim()).filter((s) => s !== '').length;
     return steps > 1 ? `Approve the plan (${steps} steps)` : 'Approve the plan';
   }
+  // A deliver gate (crew's "Approve delivery before unit N runs. <card>"): the hand-over (studio#441).
+  if (gateKind === 'deliver' || /^Approve delivery\b/i.test(p)) return 'Approve the hand-over';
   const phase = /^Approve the output of unit \d+\s*\(\s*([A-Za-z0-9_-]+)/i.exec(p)?.[1];
   if (phase !== undefined) {
     const noun = STEP_NOUN[phase.toLowerCase()];
@@ -78,3 +80,41 @@ export const KEPT_LINE = 'Finished · kept on this machine, not pushed';
 
 /** A finished run whose post-hoc delivery landed this session. */
 export const DELIVERED_LINE = 'Finished · delivered';
+
+// ── studio#444: what a hand-over sends, in one plain sentence ───────────────────────────────
+
+/**
+ * The deliver gate's target in one plain sentence, built from the parts of the engine's card
+ * (crew `newPrTargetSentence` / the revise-PR line). Never the card itself: that carries the
+ * origin's absolute local path, the run branch (a run UUID) and engine words ("gh resolves", "IS
+ * the delivery"). The card stays underneath, behind "Show technical details". `repo` (the run's
+ * `repo_ref`) names whose origin; `null` says "the repository".
+ */
+export function plainDeliverSentence(card: string | null | undefined, repo: string | null): string {
+  const c = (card ?? '').trim();
+  const whose = repo !== null && repo !== '' ? `${repo}’s origin` : 'the repository’s origin';
+  const pr = /onto pull request #(\d+)/.exec(c)?.[1];
+  if (pr !== undefined) return `Adds your changes to pull request #${pr}.`;
+  if (/has no `?origin`? remote/.test(c)) {
+    return `${repo !== null && repo !== '' ? repo : 'This repository'} has no origin to push to, so nothing would be delivered. Add the remote first.`;
+  }
+  const gh = /^Pushes .+? to ([\w.-]+\/[\w.-]+) on GitHub and opens a pull request there/.exec(c)?.[1];
+  if (gh !== undefined) return `Pushes your changes as a new branch to ${gh} on GitHub and opens a pull request there. Merging stays yours.`;
+  if (/\) — a local path, so no pull request/.test(c)) {
+    return `Pushes your changes as a new branch to ${whose} on this machine. There is no pull request: the branch is the delivery.`;
+  }
+  const host = /^Pushes .+? to origin \(([^)\s]+)\) and opens a pull request only if/.exec(c)?.[1];
+  if (host !== undefined) {
+    return `Pushes your changes as a new branch to ${whose} on ${host}. A pull request opens only if that is a GitHub host you’re signed in to; otherwise the branch is the delivery.`;
+  }
+  if (/^Pushes .+? to origin and opens a pull request/.test(c)) {
+    return `Pushes your changes as a new branch to ${whose} and opens a pull request. Merging stays yours.`;
+  }
+  return `Pushes your changes as a new branch to ${whose}; a pull request opens only if that origin is on GitHub.`;
+}
+
+/** A run's repository name as the registry knows it (`repo_ref`), when it is a plain name. */
+export function repoNameOf(view: SessionView): string | null {
+  const ref = (view.session as { repo_ref?: unknown }).repo_ref;
+  return typeof ref === 'string' && /^[\w.-]+$/.test(ref) ? ref : null;
+}

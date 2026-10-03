@@ -890,3 +890,26 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
 .wk-editor-composer { display: flex; flex-direction: column; gap: 6px; padding: 8px; background: var(--surface-card); border: 1px solid var(--border); border-radius: var(--radius-lg); }
 .wk-editor-chips { margin: 0; display: flex; flex-wrap: wrap; gap: 6px; }
 .wk-editor-drafted { margin: 0; padding: 4px 8px; font-size: var(--text-sm); color: var(--ink-muted); border-left: 2px solid var(--border-strong); }
+
+/* studio#441: the gate toast under the desk skin — the Desk's question and the work, in the wicked
+   palette: a harbor "needs you" dot, sans type, no violet, no run hash or engine ordinal. */
+.wk-desk-toast {
+  position: relative; width: 18rem; padding: 10px 12px; pointer-events: auto;
+  background: var(--surface-card); border: 1px solid var(--border); border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-overlay); font-family: var(--font-sans);
+}
+.wk-desk-toast:hover { border-color: var(--accent); }
+.wk-desk-toast-x {
+  position: absolute; top: 6px; right: 6px; width: 20px; height: 20px; display: flex; align-items: center;
+  justify-content: center; border-radius: var(--radius-sm); font-size: var(--text-xs); color: var(--ink-dim);
+  background: transparent; cursor: pointer;
+}
+.wk-desk-toast-x:hover { color: var(--ink-high); }
+.wk-desk-toast-body { display: flex; flex-direction: column; gap: 3px; width: 100%; text-align: left; padding-right: 18px; background: transparent; cursor: pointer; font-family: var(--font-sans); }
+.wk-desk-toast-head { display: flex; align-items: center; gap: 8px; font-size: var(--text-sm); color: var(--ink-high); }
+.wk-desk-toast-work { font-size: var(--text-xs); color: var(--ink-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wk-desk-toast-open { font-size: var(--text-xs); color: var(--accent); }
+.wk-desk-toast-more { box-shadow: inset 3px 0 0 var(--accent), var(--shadow-overlay); font-family: var(--font-sans); }
+/* The rail's Notifications count is harbor, not the gate violet (studio#441). */
+[data-skin="desk"] [data-testid="session-rail"] [data-testid="bell-unread-count"] { background: var(--accent) !important; color: var(--accent-fg) !important; }
+[data-skin="desk"] [data-testid="session-rail"] [data-nav-dest="notifications"] { color: var(--ink-muted) !important; }

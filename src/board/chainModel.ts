@@ -47,6 +47,9 @@ export interface ChainModel {
   total: number;
   /** `null` until a step carries `check_state` (never, before WT). */
   checked: number | null;
+  /** A team run's plan proposal NEWER than its accepted plan (the plan gate's question), labelled
+   *  in the same words as the chain, so the proposal card and the line agree (studio#442). */
+  pending?: ChainStep[];
 }
 
 // ── The block table (catalog ids at wicked-core src/catalog.rs) ────────────────────────────
@@ -78,10 +81,58 @@ function humanize(id: string): string {
   return s === '' ? 'Step' : s[0]!.toUpperCase() + s.slice(1);
 }
 
-/** A step's label: its block's word; a tool step is labelled from the catalog, else by its own id. */
+/**
+ * A step's ONE word (studio#442): the chain, the status sentence and the proposal card all read
+ * it, so the same step is never "Pa scope" in one place and "Research" in another. Keyed by the
+ * step id (the engine's phase id: a team plan step's `id`, a unit's `<phase> — …` head). An id not
+ * listed falls back to its block's word; a tool step to the catalog's label, else its id in words.
+ */
+const STEP_WORD: Readonly<Record<string, string>> = {
+  'pa-scope': 'Scope', scope: 'Scope', clarify: 'Clarify',
+  design: 'Plan', plan: 'Plan', architecture: 'Plan', 'test-plan': 'Test plan', test_plan: 'Test plan',
+  build: 'Build', implement: 'Build', fix: 'Fix', produce: 'Write',
+  'adversarial-review': 'Challenge', critique: 'Review', review: 'Review', 'code-review': 'Review',
+  'security-review': 'Security check', security_review: 'Security check',
+  test: 'Test', verify: 'Check', domain_coverage: 'Coverage',
+  walkthrough: 'Walkthrough', walkthrough_review: 'Walkthrough',
+  deliver: 'Deliver', understand: 'Research', research: 'Research', recon: 'Research',
+};
+
+/** A step's label: its id's word, else its block's word; a tool step is labelled from the catalog,
+ *  else by its own id. */
 function labelOf(block: Block, id: string, catalog: string, catalogLabels: Record<string, string>): string {
+  const word = STEP_WORD[id.toLowerCase()];
+  if (word !== undefined) return word;
   if (block !== 'tool') return BLOCK_LABEL[block];
   return catalogLabels[catalog] ?? humanize(id || catalog);
+}
+
+/** A step id (a plan gate prompt's arrow list) named as the chain names it: its id's word, else
+ *  its catalog block's word, else the id in words. */
+export function stepLabelOf(id: string, catalogLabels: Record<string, string> = {}): string {
+  return labelOf(blockOf(id), id, id, catalogLabels);
+}
+
+/** Two steps of one run never share a label (studio#442: "Research, Research", "Review, Review").
+ *  A repeated label falls back to each step's own id in words; if that still repeats, it is
+ *  numbered in plan order ("Review 2"). Mutates and returns `steps`. */
+export function distinctLabels<T extends { id: string; label: string }>(steps: T[]): T[] {
+  const count = (xs: readonly T[]): Map<string, number> => {
+    const m = new Map<string, number>();
+    for (const x of xs) m.set(x.label, (m.get(x.label) ?? 0) + 1);
+    return m;
+  };
+  const first = count(steps);
+  for (const s of steps) if ((first.get(s.label) ?? 0) > 1) s.label = humanize(s.id);
+  const second = count(steps);
+  const seen = new Map<string, number>();
+  for (const s of steps) {
+    if ((second.get(s.label) ?? 0) <= 1) continue;
+    const n = (seen.get(s.label) ?? 0) + 1;
+    seen.set(s.label, n);
+    if (n > 1) s.label = `${s.label} ${n}`;
+  }
+  return steps;
 }
 
 // ── From the team fold ─────────────────────────────────────────────────────────────────────
@@ -159,6 +210,8 @@ export function chainFromTeam(fold: TeamFold, opts: ChainOptions = {}): ChainMod
     }
   }
   const base = accepted ?? proposed;
+  // A proposal that came after the accepted plan (manual mode's rev 2 at its plan gate).
+  const newer = accepted !== null && proposed !== null && proposed.event_id > accepted.event_id ? proposed : null;
   const steps: ChainStep[] = [];
   const byId = new Map<string, ChainStep>();
   const add = (s: ChainStep | null): void => {
@@ -212,10 +265,18 @@ export function chainFromTeam(fold: TeamFold, opts: ChainOptions = {}): ChainMod
     }
   }
 
+  const pending = newer === null ? null
+    : distinctLabels(stepsOf(newer.payload, 'steps').map((w) => toStep(w, opts, false, null)).filter((x): x is ChainStep => x !== null));
+  // The line shows what the plan gate asks about: the proposal's steps the accepted plan does not
+  // have yet follow it, not started — so the line and the proposal card list the same steps.
+  for (const p of pending ?? []) add({ ...p });
+  distinctLabels(steps);
+  if (pending !== null) for (const p of pending) p.label = byId.get(p.id)?.label ?? p.label;
   const snap = fold.snapshot;
   return {
     source: 'team',
     steps,
+    ...(pending !== null && pending.length > 0 ? { pending } : {}),
     proposed: accepted === null && proposed !== null,
     transportLine: snap === null ? null : transportLineOf(snap.transport, snap.reason),
     ...counts(steps),
@@ -226,25 +287,61 @@ export function chainFromTeam(fold: TeamFold, opts: ChainOptions = {}): ChainMod
 
 const STAGE_CATALOG: Record<string, string> = { recon: 'understand', build: 'build', review: 'review', test: 'test' };
 
+/** A unit's phase id: the head of its description (`<phase> — <problem> ||| …`, crew's unit
+ *  naming), else a plain `phase_ref`. Never the description itself (studio#440): that is the
+ *  engine's instruction, with the problem, phase prompts and local paths in it. */
+export function unitPhaseId(u: { description?: string | null; phase_ref?: string | null }): string | null {
+  const head = /^([A-Za-z0-9_-]+) — /.exec(u.description ?? '')?.[1];
+  if (head !== undefined) return head;
+  const ref = u.phase_ref ?? null;
+  return ref !== null && /^[A-Za-z0-9_-]+$/.test(ref) ? ref : null;
+}
+
 export function chainFromUnits(view: SessionView, opts: ChainOptions = {}): ChainModel {
   // `distributed` means routed, not running: every unit is routed before any runs. The one unit
   // working is the one under the cursor while the run executes (api/run-state.ts).
   const running = executingOrd(view.session, view.units);
-  const steps: ChainStep[] = [...view.units]
-    .sort((a, b) => a.ord - b.ord)
-    .map((u) => {
-      const catalog = u.phase_ref ?? STAGE_CATALOG[u.stage] ?? 'run';
-      const block = blockOf(catalog);
-      const state: ChainStepState = u.status === 'done' ? 'done'
-        : u.status === 'rejected' ? 'failed'
-          : u.ord === running ? 'running' : 'todo';
-      return {
-        id: `u${u.ord}`, catalog, block,
-        label: u.description || labelOf(block, catalog, catalog, opts.catalogLabels ?? {}),
-        state, addedBy: 'pa' as const,
-      };
-    });
+  const sorted = [...view.units].sort((a, b) => a.ord - b.ord);
+  const phases = sorted.map((u) => unitPhaseId(u));
+  const steps: ChainStep[] = sorted.map((u, i) => {
+    const phase = phases[i] ?? null;
+    const ref = u.phase_ref ?? null;
+    // The block: the phase id when it is a catalog id, else a catalog `phase_ref`, else the stage.
+    const catalog = phase !== null && BLOCKS[phase] !== undefined ? phase
+      : ref !== null && BLOCKS[ref] !== undefined ? ref
+        : STAGE_CATALOG[u.stage] ?? 'run';
+    const block = blockOf(catalog);
+    const state: ChainStepState = u.status === 'done' ? 'done'
+      : u.status === 'rejected' ? 'failed'
+        : u.ord === running ? 'running' : 'todo';
+    return {
+      id: `u${u.ord}`, catalog, block,
+      label: labelOf(block, phase ?? catalog, catalog, opts.catalogLabels ?? {}),
+      state, addedBy: 'pa' as const,
+    };
+  });
+  // Told apart by phase id (the step's own name), never by the `u<ord>` key.
+  const named = distinctLabels(steps.map((s, i) => ({ id: phases[i] ?? s.catalog, label: s.label })));
+  steps.forEach((s, i) => { s.label = named[i]!.label; });
   return { source: 'units', steps, proposed: false, transportLine: null, ...counts(steps) };
+}
+
+/** studio#445: a team step whose unit the run reports `done` is done, whether or not a
+ *  `step.completed` row reached the bus (the deliver Tool unit emits none). Matched by phase id. */
+function withUnitStates(c: ChainModel, units: SessionView['units']): ChainModel {
+  if (c.proposed) return c;
+  const done = new Set<string>();
+  for (const u of units) {
+    const phase = unitPhaseId(u);
+    if (u.status === 'done' && phase !== null) done.add(phase);
+  }
+  if (done.size === 0) return c;
+  let changed = false;
+  const steps = c.steps.map((s) => {
+    if ((s.state === 'todo' || s.state === 'running') && done.has(s.id)) { changed = true; return { ...s, state: 'done' as const }; }
+    return s;
+  });
+  return changed ? { ...c, steps, ...counts(steps) } : c;
 }
 
 /** The run's chain: the team fold when the route says it is a team run, else its units. */
@@ -252,9 +349,9 @@ export function chainOf(view: SessionView, fold: TeamFold | null, opts: ChainOpt
   if (fold !== null && fold.snapshot !== null && fold.snapshot.teamed) {
     const c = chainFromTeam(fold, opts);
     // A team run whose plan has not reached the bus yet still shows its units, never an empty line.
-    return c.steps.length === 0 && c.transportLine === null && view.units.length > 0 ? chainFromUnits(view, opts) : c;
+    return c.steps.length === 0 && c.transportLine === null && view.units.length > 0 ? chainFromUnits(view, opts) : withUnitStates(c, view.units);
   }
-  if (fold !== null && fold.snapshot === null && fold.rows.length > 0) return chainFromTeam(fold, opts);
+  if (fold !== null && fold.snapshot === null && fold.rows.length > 0) return withUnitStates(chainFromTeam(fold, opts), view.units);
   return chainFromUnits(view, opts);
 }
 

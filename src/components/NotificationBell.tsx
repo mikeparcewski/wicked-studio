@@ -163,6 +163,7 @@ export function NotificationBell({ navigate, collapsed = false }: Props): React.
         {unreadCount > 0 && (
           <span
             aria-hidden
+            data-testid="bell-unread-count"
             className="flex items-center justify-center rounded-full text-[9px] font-bold"
             style={{
               minWidth: '14px',

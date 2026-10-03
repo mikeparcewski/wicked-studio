@@ -4,8 +4,8 @@ import { deliverUnit, deliveryOf } from '../components/delivery.js';
 import { deliverTargetOf, isDeliverGate } from '../components/gateMoveModel.js';
 import type { OpenGate } from '../store/gates.js';
 import type { GateActionState } from './gateActions.js';
-import type { ChainModel } from './chainModel.js';
-import { deliverPreview } from './undoQueue.js';
+import { distinctLabels, stepLabelOf, type ChainModel } from './chainModel.js';
+import { plainDeliverSentence, repoNameOf } from './deskWords.js';
 
 /**
  * THE PROPOSAL CARD (DES-STUDIO-REBUILD-001 §3 scenes 07/08/24/42, slice S6b). Pure.
@@ -18,8 +18,8 @@ import { deliverPreview } from './undoQueue.js';
  *    Desk row (S5) or on its card; the card says nothing for them.
  *  - Go goes through `commitGateDecision` (the one decision path: 10 s undo, one decision per gate,
  *    a double click dropped). Deliver asks the one "Are you sure?" first (DESIGN-interaction §1),
- *    with what it sends off the machine (`deliverPreview` over the deliver unit's own target
- *    sentence, `deliverTargetOf`).
+ *    with what it sends off the machine in one plain sentence (`plainDeliverSentence` over the
+ *    deliver unit's own target card, `deliverTargetOf`; the card itself only under technical details).
  *  - A refused answer (the daemon's 4xx) is said with its reason and the buttons stay.
  *  - "Not now" sends nothing: the proposal is kept in the thread, with "Bring it back".
  */
@@ -76,19 +76,19 @@ export function gateInstance(gate: OpenGate | undefined): string | null {
   return gate === undefined ? null : `${gate.ord ?? '-'}:${gate.receivedAt}`;
 }
 
-/** A plan's steps in words: the PROPOSED team chain when it has reached the bus (never the units,
- *  never an older accepted revision), else the gate prompt's own arrow list (`… : a → b → c`), each
- *  id said as words, with the gate's trailing instruction sentence dropped (Copilot). */
+/** A plan's steps in words, in the chain's own labels (studio#442: one name per step, from one
+ *  source): a proposal newer than the accepted plan (`chain.pending`, the plan gate's question),
+ *  else the PROPOSED team chain when it has reached the bus (never the units, never an older
+ *  accepted revision), else the gate prompt's own arrow list (`… : a → b → c`), each id named as
+ *  the chain names it, with the gate's trailing instruction sentence dropped (Copilot). */
 export function planSteps(chain: ChainModel, prompt: string | undefined): string[] {
+  if (chain.source === 'team' && chain.pending !== undefined && chain.pending.length > 0) return chain.pending.map((s) => s.label);
   if (chain.source === 'team' && chain.proposed && chain.steps.length > 0) return chain.steps.map((s) => s.label);
   const list = /\):\s*(.+)$/s.exec(prompt ?? '')?.[1];
   if (list === undefined) return [];
   const steps = list.split('→').map((s) => s.trim()).filter((s) => s !== '');
   if (steps.length > 0) steps[steps.length - 1] = steps[steps.length - 1]!.split(/[.;]\s/)[0]!.replace(/[.;]$/, '').trim();
-  return steps.filter((s) => s !== '').map((id) => {
-    const w = id.replace(/[-_]+/g, ' ');
-    return w[0]!.toUpperCase() + w.slice(1);
-  });
+  return distinctLabels(steps.filter((s) => s !== '').map((id) => ({ id, label: stepLabelOf(id) }))).map((s) => s.label);
 }
 
 /** "Here's the plan: Research → Build → Test (3 steps)." */
@@ -154,14 +154,17 @@ export interface ProposalInput {
   lastKind?: ProposalKind | null;
 }
 
-/** What the deliver approve sends off the machine, in the gate card's own words when it has them. */
+/** What the deliver approve sends off the machine, in one plain sentence (studio#444): the target
+ *  from the deliver unit's own card, never the card's words, path or run branch. */
 export function deliverLine(view: SessionView, gate: OpenGate | undefined, repoName: string | null = null): string {
-  const branch = (view.session as unknown as { run_branch?: unknown }).run_branch;
-  return deliverPreview({
-    branch: typeof branch === 'string' ? branch : null,
-    repo: repoName,
-    card: deliverTargetOf(view.units, gate?.ord),
-  });
+  // No card (a def authored without one): the push, with the pull request as the condition it is.
+  return plainDeliverSentence(deliverTargetOf(view.units, gate?.ord), repoName ?? repoNameOf(view));
+}
+
+/** The engine's own card (with its path and run branch), for the technical handle under the
+ *  hand-over: shown only with "Show technical details" on. */
+export function deliverCardOf(view: SessionView, gate: OpenGate | undefined): string | null {
+  return deliverTargetOf(view.units, gate?.ord);
 }
 
 /** A late join's memory of a hand-over: the run's deliver unit is under way or done. */

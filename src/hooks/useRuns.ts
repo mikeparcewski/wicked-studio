@@ -4,6 +4,7 @@ import type { SessionView } from '../api/types.js';
 import { useConnectionStore } from '../store/connection.js';
 import { choicesOf, recommendedOf, useGateStore } from '../store/gates.js';
 import { useElicitationStore } from '../store/elicitations.js';
+import { rememberWorkTitles } from '../board/gateActions.js';
 
 /**
  * Owns the run list + the late-join reconcile (DES-STUDIO-001 §2.1, §3.3). A
@@ -63,6 +64,8 @@ export function useRuns(): { runs: SessionView[]; refresh: () => void; loaded: b
       if (cancelled) return;
       setRuns(fetched);
       setLoaded(true);
+      // studio#443: the decision notices name the work, not the run id.
+      rememberWorkTitles(fetched);
 
       const awaiting = fetched
         .filter((v) => v.session.status === 'awaiting_human')
