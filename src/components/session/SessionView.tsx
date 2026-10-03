@@ -25,6 +25,7 @@ import { addAboutChip } from '../../store/composerChips.js';
 import { usePlanDrafts } from '../../store/planDrafts.js';
 import { wordOf } from '../../board/planDraft.js';
 import { undoDecision } from '../../board/undoQueue.js';
+import { openSheet } from '../../store/sheets.js';
 
 /**
  * A SESSION (`/s/:id`, DES-STUDIO-REBUILD-001 §5.4, slice S6a): the goal sentence, the thread (the
@@ -185,7 +186,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
   const missing = ready && mine.length === 0 && (conversation === 'closed' || conversation === 'none');
 
   return (
-    <div data-testid="session" data-session-id={sessionId} data-conversation={conversation} data-state={state} className="wk-session">
+    <div data-testid="session" data-object={`session:${sessionId}`} data-session-id={sessionId} data-conversation={conversation} data-state={state} className="wk-session">
       <header className="wk-session-head">
         <span aria-hidden className={`wk-desk-dot wk-desk-dot--${state}`} />
         <div className="wk-session-head-body">
@@ -196,6 +197,8 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
             {badge > 0 && <> · <mark className="wk-desk-mark">{badge === 1 ? '1 needs you' : `${badge} need you`}</mark></>}
           </p>
         </div>
+        {/* S11: look underneath the session — goal, helpers, activity, sign-ins and the run's sections. */}
+        <button type="button" data-testid="session-sheet-open" aria-label="Look underneath this session" title="Look underneath (⌘K for everything else)" onClick={() => openSheet({ kind: 'session', sessionId })} className="wk-sheet-open">⋯</button>
       </header>
 
       <div className="wk-session-body">
@@ -282,7 +285,8 @@ function RunBlock({ view, badge, go }: {
       <p data-testid="session-status-sentence" role="status" className="wk-session-status-sentence">{statusSentence(view, chain, gate, action)}</p>
       <ProposalCard view={view} chain={chain} />
       <PlanStepLines runId={id} />
-      <ChainLine chain={chain} runId={id} teamError={teamError} onRetry={retry} />
+      <ChainLine chain={chain} runId={id} units={view.units} teamError={teamError} onRetry={retry} />
+      <RunHelpers view={view} />
       <a href={page} onClick={go(page)} data-testid="session-run-open" className="wk-session-link">Open the run page →</a>
     </section>
   );
@@ -308,5 +312,31 @@ function PlanStepLines({ runId }: { runId: string }): React.ReactElement | null 
         </p>
       ))}
     </div>
+  );
+}
+
+/** S11: the helpers working on a run, each a way into its sheet (terminal, what it did, sign-in). */
+function RunHelpers({ view }: { view: RunView }): React.ReactElement | null {
+  const clis = [...new Set(view.units.map((u) => u.assigned_cli).filter((c): c is string => typeof c === 'string' && c !== ''))];
+  if (clis.length === 0) return null;
+  return (
+    <p data-testid="session-run-helpers" className="wk-session-grey">
+      Helpers:{' '}
+      {clis.map((cli, i) => (
+        <span key={cli}>
+          {i > 0 && ' · '}
+          <button
+            type="button"
+            data-testid="session-run-helper"
+            data-cli={cli}
+            data-object={`helper:${view.session.id}:${cli}`}
+            onClick={() => openSheet({ kind: 'helper', runId: view.session.id, cli })}
+            className="wk-since-toggle"
+          >
+            {cli}
+          </button>
+        </span>
+      ))}
+    </p>
   );
 }

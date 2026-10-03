@@ -46,6 +46,10 @@ import { Desk } from './components/desk/Desk.js';
 import { SessionRail } from './components/desk/SessionRail.js';
 import { SessionPage } from './components/session/SessionView.js';
 import type { ComposerSend } from './components/session/Composer.js';
+import { ObjectSheet } from './components/sheets/ObjectSheet.js';
+import { AltPeek } from './components/sheets/AltPeek.js';
+import { objectCommands, type ObjectCommands } from './components/sheets/objectCommands.js';
+import { cmdkObject, trackPointedObject } from './store/sheets.js';
 import { NeedsQueueSurface } from './components/NeedsYouQueue.js';
 import { useSkin } from './hooks/useSkin.js';
 import { useNeedsClock, useNeedsRows } from './hooks/useNeedsRows.js';
@@ -308,6 +312,10 @@ export function App(): React.ReactElement {
   // §5.2 (slice J): Cmd+Shift+F opens the palette in SEARCH mode — the seed is
   // the pre-typed `?` prefix; the plain toggles seed nothing.
   const [paletteSeed, setPaletteSeed] = useState('');
+  const [paletteObject, setPaletteObject] = useState<ObjectCommands | null>(null);
+  const runsRef = useRef(runs);
+  runsRef.current = runs;
+  useEffect(() => trackPointedObject(), []);
   const paletteOpenRef = useRef(paletteOpen);
   useEffect(() => {
     paletteOpenRef.current = paletteOpen;
@@ -346,6 +354,10 @@ export function App(): React.ReactElement {
         isOpen: () => paletteOpenRef.current,
         setOpen: (next: boolean) => {
           setPaletteSeed('');
+          // S11: ⌘K acts on what you are pointing at (the open sheet's object, else the hovered or
+          // focused one); with nothing pointed it is the plain palette.
+          const obj = next ? cmdkObject() : null;
+          setPaletteObject(obj === null ? null : objectCommands(obj, { runs: runsRef.current, navigate, runChatId: useCapabilities.getState().runChatId }));
           setPaletteOpen(next);
         },
         openSearch: () => {
@@ -877,6 +889,10 @@ export function App(): React.ReactElement {
         )}
       </AskLauncher>
 
+      {/* S11: the open "look underneath" sheet (a step, a helper, a session, the Desk). */}
+      <ObjectSheet runs={runs} navigate={navigate} needCount={needCount(needRows)} />
+      <AltPeek runs={runs} needCount={needCount(needRows)} />
+
       {/* The universal command palette (DES-FEEDBACK-002 §1, slice G) — corpus
           from already-loaded stores + the runs prop; repos cached on first open. */}
       <CommandPalette
@@ -889,6 +905,7 @@ export function App(): React.ReactElement {
         projectId={projectId}
         selectedRun={selected}
         onKill={(id) => void onKill(id)}
+        object={paletteObject}
       />
 
       {/* The runs bottom panel (DES-FEEDBACK-003 §5, slice N): a fourth reader

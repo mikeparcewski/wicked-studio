@@ -20,7 +20,7 @@ import type { GateDecision } from '../api/types.js';
 export const UNDO_WINDOW_MS = 10_000;
 
 /** `edit-plan`: a mid-run plan step from the composer's `/` (S7) — queued the same way, never a gate answer. */
-export type DecisionVerb = 'approve' | 'reject' | 'request-changes' | 'edit-plan';
+export type DecisionVerb = 'approve' | 'reject' | 'request-changes' | 'edit-plan' | 'stop';
 
 export interface PendingDecision {
   id: number;
@@ -225,6 +225,7 @@ const HEADLINE_VERB: Record<DecisionVerb, string> = {
   reject: 'Rejecting',
   'request-changes': 'Requesting changes',
   'edit-plan': 'Adding',
+  stop: 'Stopping',
 };
 
 /** "Approving the plan for “Fix the double charge” in 8 s" / "Rejecting 3 gates in 4 s". */

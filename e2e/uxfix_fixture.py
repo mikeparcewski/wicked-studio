@@ -699,6 +699,10 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          # run_chat_id — GET /health.capabilities.runChatId (C1). Off: a daemon before C1 (and the
          #   runs then carry no chat_id either).
          "sessions": False, "run_chat_id": False,
+         # sheets — S11 (e2e/desk_sheets_test.py): every run's units name a seat
+         #   ("claude" where the corpus left none), so a session shows its helpers; POST
+         #   /runs/:id/cancel answers crew's 200 and is recorded (GET /__fixture/cancel-posts).
+         "sheets": False,
          # ship_proposals — (S6b, e2e/desk_proposal_test.py; needs `sessions`) adds chat-ship's two runs to
          #   the sessions corpus: r-ship-plan waits at its plan gate (the team plan proposed, not
          #   accepted), r-ship-deliver waits at its deliver gate (every other step done); chat-ship's
@@ -720,6 +724,8 @@ rule_post_log: list = []
 # `chatId` when `run_chat_id` is on (crew stamps it the same way). Reset with `reset_gate_posts`.
 session_launch_log: list = []
 session_launched: list = []
+# S11: every POST /runs/:id/cancel the fixture received under `sheets` (GET /__fixture/cancel-posts).
+cancel_post_log: list = []
 # Wave 2a: every POST /runs/:id/gate the fixture received (read over GET /__fixture/gate-posts).
 gate_post_log: list = []
 # Every POST /runs/:id/inject (a message to the team on a live run; GET /__fixture/inject-posts).
@@ -3414,6 +3420,12 @@ def assemble_runs() -> list:
                 for d in demo_runs.values():
                     demo_tick(d)
                 runs = runs + [demo_session(rid, d) for rid, d in demo_runs.items()]
+        if state["sheets"] and not state["no_runs"]:
+            runs = json.loads(json.dumps(runs))
+            for r in runs:
+                for u in r.get("units", []):
+                    if not u.get("assigned_cli"):
+                        u["assigned_cli"] = "claude"
     if viewer_on or repo_refs_on or forensics_on or provenance_on or project_dto_on \
             or chronicle_on or nerve_on or gate_now or guidance or wire433_on:
         runs = json.loads(json.dumps(runs))
@@ -4127,7 +4139,10 @@ class W2Handler(SimpleHTTPRequestHandler):
         if path == "/api/v1/diagnostics":
             with state_lock:
                 gov = state["governance"]
-            if gov is None:
+                sheets_on = state["sheets"]
+            if gov is None and sheets_on:
+                self._json(200, DIAGNOSTICS_BASE)  # S11: the Desk sheet's Studio itself / This computer
+            elif gov is None:
                 self._json(404, {"error": "not found"})
             else:
                 self._json(200, {**DIAGNOSTICS_BASE, "governance": GOVERNANCE_BLOCKS[gov]})
@@ -4553,6 +4568,12 @@ class W2Handler(SimpleHTTPRequestHandler):
                 esc_on = state["escalation_arms"]
             if esc_on and (rid, key) in ESC_OUTPUTS:
                 self._json(200, ESC_OUTPUTS[(rid, key)])
+                return True
+            with state_lock:
+                sheets_on = state["sheets"]
+            if sheets_on and not (forensics_on and rid == "r-auth"):
+                # S11: a step sheet's "What it did" — the unit's captured output, as crew serves it.
+                self._json(200, {"output": f"[{key}] read the module, changed 2 files, ran the unit tests: 14 passed."})
                 return True
             if not forensics_on or rid != "r-auth":
                 self._json(404, {"error": "Run not found"})
@@ -5408,6 +5429,10 @@ class W2Handler(SimpleHTTPRequestHandler):
             with state_lock:
                 posts = list(session_launch_log)
             return self._json(200, {"posts": posts})
+        if path == "/__fixture/cancel-posts":
+            with state_lock:
+                posts = list(cancel_post_log)
+            return self._json(200, {"posts": posts})
         if path == "/__fixture/gate-posts":
             with state_lock:
                 posts = list(gate_post_log)
@@ -5532,6 +5557,7 @@ class W2Handler(SimpleHTTPRequestHandler):
                     proposal_posts.clear()
             if body.get("reset_gate_posts"):
                 with state_lock:
+                    cancel_post_log.clear()
                     gate_post_log.clear()
                     session_launch_log.clear()
                     session_launched.clear()
@@ -5738,6 +5764,15 @@ class W2Handler(SimpleHTTPRequestHandler):
             if not (body.get("plan") or {}).get("steps"):
                 return self._json(400, {"error": "Invalid request body"})
             return self._json(200, team_preview(body))
+        # S11: POST /runs/:id/cancel under `sheets` — crew's 200, recorded (the Stop it undo window).
+        m = re.match(r"^/api/v1/runs/([^/]+)/cancel$", path)
+        if m:
+            with state_lock:
+                on = state["sheets"]
+                if on:
+                    cancel_post_log.append({"runId": urllib.parse.unquote(m.group(1)), "at": time.time()})
+            if on:
+                return self._json(200, {"status": "cancelled"})
         # T9: POST /runs/:id/plan — a mid-run edit, idempotent by requestId (crew team/routes.ts).
         m = re.match(r"^/api/v1/runs/([^/]+)/plan$", path)
         if m:

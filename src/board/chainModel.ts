@@ -87,7 +87,7 @@ function humanize(id: string): string {
  * step id (the engine's phase id: a team plan step's `id`, a unit's `<phase> — …` head). An id not
  * listed falls back to its block's word; a tool step to the catalog's label, else its id in words.
  */
-const STEP_WORD: Readonly<Record<string, string>> = {
+export const STEP_WORD: Readonly<Record<string, string>> = {
   'pa-scope': 'Scope', scope: 'Scope', clarify: 'Clarify',
   design: 'Plan', plan: 'Plan', architecture: 'Plan', 'test-plan': 'Test plan', test_plan: 'Test plan',
   build: 'Build', implement: 'Build', fix: 'Fix', produce: 'Write',
