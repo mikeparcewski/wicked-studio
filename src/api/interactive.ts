@@ -420,11 +420,34 @@ export function postFork(
   docId: string,
   version: number,
   sourceMessageId?: string,
+  expectHead?: number,
 ): Promise<ForkResult> {
   return iFetch<ForkResult>(
     `${docBase(projectId, docId)}/api/fork`,
-    jsonPost({ from: version, ...(sourceMessageId ? { source_message_id: sourceMessageId } : {}) }),
-  );
+    jsonPost({
+      from: version,
+      ...(sourceMessageId ? { source_message_id: sourceMessageId } : {}),
+      // C5 (interactive 0.10.0): the head the caller believes is current. The bridge answers
+      // `409 {error: "head_moved", head}` and creates nothing when another version landed.
+      ...(expectHead === undefined ? {} : { expect_head: expectHead }),
+    }),
+  ).catch((e: unknown) => {
+    if (e instanceof ApiError && e.status === 409) {
+      const b = e.body as { error?: unknown; head?: unknown } | undefined;
+      if (b?.error === 'head_moved' && typeof b.head === 'number') throw new HeadMovedError(b.head);
+    }
+    throw e;
+  });
+}
+
+/** `POST /api/fork` with `expect_head` refused: a version landed since. `head` is the current one. */
+export class HeadMovedError extends ApiError {
+  readonly head: number;
+  constructor(head: number) {
+    super(409, 'head_moved', { error: 'head_moved', head });
+    this.name = 'HeadMovedError';
+    this.head = head;
+  }
 }
 
 /** `POST /d/:docId/api/export` — renders the artifact and returns its download URL. */

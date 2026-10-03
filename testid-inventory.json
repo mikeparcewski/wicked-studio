@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.5.19",
   "counts": {
-    "files": 200,
-    "occurrences": 2196,
-    "static": 1917,
+    "files": 203,
+    "occurrences": 2210,
+    "static": 1930,
     "dynamic": 80,
     "computed": 7
   },
@@ -195,15 +195,40 @@
       ]
     },
     {
+      "testId": "artifact",
+      "files": [
+        "src/components/session/ArtifactMorph.tsx"
+      ]
+    },
+    {
       "testId": "artifact-card",
       "files": [
         "src/components/ArtifactCard.tsx"
       ]
     },
     {
+      "testId": "artifact-grow",
+      "files": [
+        "src/components/session/ArtifactMorph.tsx"
+      ]
+    },
+    {
       "testId": "artifact-open",
       "files": [
-        "src/components/ArtifactCard.tsx"
+        "src/components/ArtifactCard.tsx",
+        "src/components/session/ArtifactMorph.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-shrink",
+      "files": [
+        "src/components/session/ArtifactMorph.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-version",
+      "files": [
+        "src/components/session/ArtifactMorph.tsx"
       ]
     },
     {
@@ -5840,6 +5865,54 @@
       ]
     },
     {
+      "testId": "page-edit-input",
+      "files": [
+        "src/components/session/PageEditor.tsx"
+      ]
+    },
+    {
+      "testId": "page-editor",
+      "files": [
+        "src/components/session/PageEditor.tsx"
+      ]
+    },
+    {
+      "testId": "page-frame",
+      "files": [
+        "src/components/session/PageEditor.tsx"
+      ]
+    },
+    {
+      "testId": "page-handle",
+      "files": [
+        "src/components/session/PageEditor.tsx"
+      ]
+    },
+    {
+      "testId": "page-hover-box",
+      "files": [
+        "src/components/session/PageEditor.tsx"
+      ]
+    },
+    {
+      "testId": "page-line",
+      "files": [
+        "src/components/session/PageEditor.tsx"
+      ]
+    },
+    {
+      "testId": "page-selected-box",
+      "files": [
+        "src/components/session/PageEditor.tsx"
+      ]
+    },
+    {
+      "testId": "page-undo",
+      "files": [
+        "src/components/session/PageEditor.tsx"
+      ]
+    },
+    {
       "testId": "palette-input",
       "files": [
         "src/components/CommandPalette.tsx"
@@ -7238,6 +7311,12 @@
       "testId": "run-archive-yes",
       "files": [
         "src/components/ChatPanel.tsx"
+      ]
+    },
+    {
+      "testId": "run-artifacts",
+      "files": [
+        "src/components/session/RunArtifacts.tsx"
       ]
     },
     {
