@@ -1,7 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useDeliveredNow } from '../../store/postHocDeliver.js';
-import { api } from '../../api/client.js';
-import type { RosterSeat, SessionView } from '../../api/types.js';
+import type { SessionView } from '../../api/types.js';
 import {
   deskGreeting, deskProjects, lapsedSeatChores, needsByRun, needsHeadline, needTextByRun, railGroups, START_CHIPS,
 } from '../../board/deskModel.js';
@@ -11,9 +10,10 @@ import { useBoardModel } from '../../hooks/useBoardModel.js';
 import { useCapabilities } from '../../store/capabilities.js';
 import { useHandover } from '../../hooks/useHandover.js';
 import type { Navigate } from '../../hooks/useRoute.js';
-import { getCachedRoster, setCachedRoster } from '../../store/rosterCache.js';
+import { useRoster } from '../../hooks/useRoster.js';
 import { HandoverPanel } from '../HandoverPanel.js';
 import { NeedsQueueSurface } from '../NeedsYouQueue.js';
+import { Composer, type ComposerSend } from '../session/Composer.js';
 
 /** Project cards on the first screen (the concept's three); the rest are one link away. */
 const CARDS_MAX = 3;
@@ -34,8 +34,9 @@ export function Desk({ runs, needRows, now, navigate, onAsk }: {
   needRows: NeedRow[];
   now: number;
   navigate: Navigate;
-  /** The composer's send: hands the operator's message to the Ask session (App's dock). */
-  onAsk: (text: string) => void;
+  /** The composer's send: hands the operator's message to the Ask session (App's dock), with the
+   *  project an `@project` chip named (S7). */
+  onAsk: (text: string, opts: ComposerSend) => void;
 }): React.ReactElement {
   const { items, unfiled, failedAt } = useBoardModel(runs);
   const handover = useHandover(runs, failedAt);
@@ -62,12 +63,6 @@ export function Desk({ runs, needRows, now, navigate, onAsk }: {
       el.focus();
       el.setSelectionRange(s.length, s.length);
     });
-  };
-  const send = (): void => {
-    const body = text.trim();
-    if (body === '') return;
-    onAsk(body);
-    setText('');
   };
 
   return (
@@ -147,41 +142,17 @@ export function Desk({ runs, needRows, now, navigate, onAsk }: {
             </button>
           ))}
         </div>
-        <form
-          className="wk-desk-composer"
-          onSubmit={(e) => { e.preventDefault(); send(); }}
-        >
-          <textarea
-            ref={box}
-            data-testid="desk-composer-input"
-            data-type-target="page"
-            aria-label="Ask or tell studio what to do"
-            rows={1}
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); send(); }
-            }}
-            placeholder="Ask anything across your projects, or tell one what to do"
-            className="wk-desk-input"
-          />
-          <button type="submit" data-testid="desk-composer-send" aria-label="Send" disabled={text.trim() === ''} className="wk-desk-send">↑</button>
-        </form>
+        <Composer
+          composerKey="desk"
+          text={text}
+          setText={setText}
+          onSend={onAsk}
+          inputRef={box}
+          ariaLabel="Ask or tell studio what to do"
+          placeholder="Ask anything across your projects, or tell one what to do"
+          variant="desk"
+        />
       </div>
     </div>
   );
-}
-
-/** The roster, from the shared cache when any surface already read it; one `GET /roster` otherwise. */
-function useRoster(): RosterSeat[] | null {
-  const [roster, setRoster] = useState<RosterSeat[] | null>(() => getCachedRoster());
-  useEffect(() => {
-    if (roster !== null) return;
-    let cancelled = false;
-    api.getRoster()
-      .then(({ roster: r }) => { setCachedRoster(r); if (!cancelled) setRoster(r); })
-      .catch(() => { /* no roster, no chore — never a guessed one */ });
-    return () => { cancelled = true; };
-  }, [roster]);
-  return roster;
 }

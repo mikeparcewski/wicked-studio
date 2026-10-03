@@ -212,7 +212,7 @@ function dropNotice(runId: string, cur: GateActionState): string {
   return `Not sent: ${gateLabel(runId)} already has a decision that ${state}.`;
 }
 
-const PAST: Record<string, string> = { approve: 'Approved', reject: 'Rejected', 'request-changes': 'Requested changes on' };
+const PAST: Record<string, string> = { approve: 'Approved', reject: 'Rejected', 'request-changes': 'Requested changes on', 'edit-plan': 'Added' };
 
 /**
  * THE decision path, for callers that own their own UI around it (the thread's

@@ -10,9 +10,9 @@
   "version": 1,
   "studioVersion": "0.5.19",
   "counts": {
-    "files": 189,
-    "occurrences": 1878,
-    "static": 1643,
+    "files": 190,
+    "occurrences": 1891,
+    "static": 1655,
     "dynamic": 74,
     "computed": 8
   },
@@ -1352,6 +1352,48 @@
       ]
     },
     {
+      "testId": "composer",
+      "files": [
+        "src/components/session/Composer.tsx"
+      ]
+    },
+    {
+      "testId": "composer-chip",
+      "files": [
+        "src/components/session/Composer.tsx"
+      ]
+    },
+    {
+      "testId": "composer-chip-remove",
+      "files": [
+        "src/components/session/Composer.tsx"
+      ]
+    },
+    {
+      "testId": "composer-menu",
+      "files": [
+        "src/components/session/Composer.tsx"
+      ]
+    },
+    {
+      "testId": "composer-menu-item",
+      "files": [
+        "src/components/session/Composer.tsx"
+      ]
+    },
+    {
+      "testId": "composer-note",
+      "files": [
+        "src/components/session/Composer.tsx"
+      ]
+    },
+    {
+      "testId": "composer-refused",
+      "files": [
+        "src/components/session/Composer.tsx"
+      ]
+    },
+    {
       "testId": "conformance-claim",
       "files": [
         "src/components/GovernanceAudit.tsx"
@@ -2116,13 +2158,13 @@
     {
       "testId": "desk-composer-input",
       "files": [
-        "src/components/desk/Desk.tsx"
+        "src/components/session/Composer.tsx"
       ]
     },
     {
       "testId": "desk-composer-send",
       "files": [
-        "src/components/desk/Desk.tsx"
+        "src/components/session/Composer.tsx"
       ]
     },
     {
@@ -6885,13 +6927,13 @@
     {
       "testId": "session-composer-input",
       "files": [
-        "src/components/session/SessionView.tsx"
+        "src/components/session/Composer.tsx"
       ]
     },
     {
       "testId": "session-composer-send",
       "files": [
-        "src/components/session/SessionView.tsx"
+        "src/components/session/Composer.tsx"
       ]
     },
     {
@@ -6944,6 +6986,18 @@
     },
     {
       "testId": "session-proposal-confirm-yes",
+      "files": [
+        "src/components/session/ProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "session-proposal-draft",
+      "files": [
+        "src/components/session/ProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "session-proposal-drop-draft",
       "files": [
         "src/components/session/ProposalCard.tsx"
       ]
@@ -7034,6 +7088,24 @@
     },
     {
       "testId": "session-status-sentence",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
+      "testId": "session-step-added",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
+      "testId": "session-step-queued",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
+      "testId": "session-step-undo",
       "files": [
         "src/components/session/SessionView.tsx"
       ]
