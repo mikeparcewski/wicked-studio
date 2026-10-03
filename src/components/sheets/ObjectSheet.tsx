@@ -374,7 +374,7 @@ function DeskSheet({ tab, runs, navigate, needCount }: { tab: string; runs: Sess
       {tab === 'hold' && (
         <div data-testid="sheet-hold" className="wk-sheet-section">
           <p className="wk-sheet-hint">Holds every hand-over: nothing is pushed until you let it go. It asks you first.</p>
-          <DeliveryFreezeSwitch />
+          <DeliveryFreezeSwitch placement="inline" />
         </div>
       )}
     </Sheet>
