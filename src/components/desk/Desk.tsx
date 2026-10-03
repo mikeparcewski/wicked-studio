@@ -9,6 +9,7 @@ import type { NeedRow } from '../../board/needsYou.js';
 import { useBoardModel } from '../../hooks/useBoardModel.js';
 import { useCapabilities } from '../../store/capabilities.js';
 import { useHandover } from '../../hooks/useHandover.js';
+import { useDisplayText } from '../../hooks/useHomePath.js';
 import type { Navigate } from '../../hooks/useRoute.js';
 import { useRoster } from '../../hooks/useRoster.js';
 import { HandoverPanel } from '../HandoverPanel.js';
@@ -32,11 +33,16 @@ const CARDS_MAX = 3;
  * Render only: counts and sentences are `board/deskModel.ts` over `useNeedsRows`, `useBoardModel`,
  * `useHandover` and the roster.
  */
-export function Desk({ runs, runsLoaded, needRows, now, navigate, onAsk }: {
+export function Desk({ runs, runsLoaded, runsError = null, onRetryRuns, needRows, now, navigate, onAsk }: {
   runs: SessionView[];
   /** Whether the first `GET /runs` has answered (studio#459): before it, the Desk says it is still
    *  looking — never "Nothing needs you" over a list that has not arrived. */
   runsLoaded: boolean;
+  /** The newest `GET /runs` failed, in the daemon's words (studio#466). With no list yet, the Desk
+   *  says the read failed and offers to try again — it does not keep "checking" forever, and it
+   *  says nothing about what needs you or what has been started. */
+  runsError?: string | null;
+  onRetryRuns?: () => void;
   needRows: NeedRow[];
   now: number;
   navigate: Navigate;
@@ -48,6 +54,7 @@ export function Desk({ runs, runsLoaded, needRows, now, navigate, onAsk }: {
   const handover = useHandover(runs, failedAt);
   const roster = useRoster();
   const count = needCount(needRows);
+  const displayText = useDisplayText();
   const { hello, date } = deskGreeting(now);
   const runChatId = useCapabilities((s) => s.runChatId);
   const deliveredNow = useDeliveredNow();
@@ -92,6 +99,12 @@ export function Desk({ runs, runsLoaded, needRows, now, navigate, onAsk }: {
                 {count > 0 ? <mark className="wk-desk-mark">{needsHeadline(count)}</mark> : needsHeadline(count)}
                 {count === 0 && ' We’ll tap you when something needs a decision.'}
               </p>
+            ) : runsError !== null ? (
+              // studio#466: the read failed — say so, with the way to try again. No verdict.
+              <p data-testid="desk-runs-failed" role="alert" className="wk-desk-sentence">
+                I couldn’t read your work from the daemon, so I can’t say what needs you ({displayText(runsError)}).{' '}
+                {onRetryRuns !== undefined && <button type="button" data-testid="desk-runs-retry" onClick={onRetryRuns} className="wk-since-toggle">Try again</button>}
+              </p>
             ) : (
               // studio#459: an honest loading line while /runs is in flight — the all-clear waits.
               <p data-testid="desk-loading" aria-busy="true" className="wk-desk-sentence wk-desk-quiet">Checking what needs you…</p>
@@ -131,7 +144,9 @@ export function Desk({ runs, runsLoaded, needRows, now, navigate, onAsk }: {
             <p className="wk-desk-label">Your projects</p>
             {cards.length === 0 && (runsLoaded
               ? <p className="wk-desk-quiet">Nothing has been started yet.</p>
-              : <p data-testid="desk-projects-loading" aria-busy="true" className="wk-desk-quiet">Checking…</p>)}
+              : runsError !== null
+                ? <p data-testid="desk-projects-unread" className="wk-desk-quiet">Not read yet.</p>
+                : <p data-testid="desk-projects-loading" aria-busy="true" className="wk-desk-quiet">Checking…</p>)}
             {cards.slice(0, CARDS_MAX).map((card) => (
               <section key={card.projectId ?? 'unfiled'} data-testid="desk-project" data-project-id={card.projectId ?? ''} className="wk-desk-card">
                 <p className="wk-desk-card-title">

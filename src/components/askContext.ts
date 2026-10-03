@@ -117,7 +117,10 @@ function diagnosticsSection(diag: DiagnosticsState): string[] {
   );
   if (d.stores.length > 0) {
     lines.push(
-      `  stores: ${d.stores.map((s) => `${s.name} ${fmtBytes(s.bytes)} (${s.path})`).join(' · ')}`,
+      // studio#468: names and sizes only. The pack rides the operator's message and is stored with
+      // it; a store's absolute path put the home directory in every transcript, and a seat that
+      // needs one reads the diagnostics itself.
+      `  stores: ${d.stores.map((s) => `${s.name} ${fmtBytes(s.bytes)}`).join(' · ')}`,
     );
   } else {
     lines.push('  stores: none reported');
@@ -145,6 +148,20 @@ function diagnosticsSection(diag: DiagnosticsState): string[] {
     lines.push('  acp: no session/fallback events recorded');
   }
   return lines;
+}
+
+/** How the pack is joined to what the operator typed (AskDock's first send), and how it opens. */
+export const PACK_JOIN = '\n\n---\n';
+export const PACK_OPENING = '[studio context pack — assembled ';
+
+/**
+ * A stored operator message → what the operator typed, and the context pack studio sent with it
+ * (`null` when there was none). The split is at the pack's own opening, so a message in which the
+ * operator typed a `---` line of their own stays whole.
+ */
+export function splitAskContext(text: string): { typed: string; pack: string | null } {
+  const at = text.indexOf(`${PACK_JOIN}${PACK_OPENING}`);
+  return at === -1 ? { typed: text, pack: null } : { typed: text.slice(0, at), pack: text.slice(at + PACK_JOIN.length) };
 }
 
 /**

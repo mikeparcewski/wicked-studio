@@ -33,7 +33,7 @@ import { useStallEscalationStore } from '../store/stallEscalations.js';
  */
 const NO_DECISIONS: Readonly<Record<string, never>> = Object.freeze({});
 
-export function useNeedsRows(runs: SessionView[], now: number): NeedRow[] {
+export function useNeedsRows(runs: SessionView[], now: number, runsKnown = true): NeedRow[] {
   const gates = useGateStore((s) => s.gates);
   const failedAt = useFailureClocks((s) => s.failedAtByRun);
   const lastEventAt = useActivityClocks((s) => s.lastEventAtByRun);
@@ -44,7 +44,11 @@ export function useNeedsRows(runs: SessionView[], now: number): NeedRow[] {
   const stallEscalations = useStallEscalationStore((s) => s.escalations);
   const chats = useNeedsSources((s) => s.chats);
   const proposals = useNeedsSources((s) => s.proposals);
-  const repos = useNeedsSources((s) => s.repos);
+  // studio#466: "this repo was never indexed" is a claim about the runs list — every repo looks
+  // never indexed over a list that has not arrived or could not be read. Until the first runs
+  // answer is in, no repo row is derived (and so no "Index all N repos" batch launch is offered).
+  const allRepos = useNeedsSources((s) => s.repos);
+  const repos = useMemo(() => (runsKnown ? allRepos : []), [runsKnown, allRepos]);
   // The needs-you rows read the ENGINE campaigns (a label group has no gate of its own).
   const campaigns = useCampaignsStore((s) => s.campaigns);
   // studio#424: a post-hoc delivery tried this session (in flight or failed) keeps its run a need.

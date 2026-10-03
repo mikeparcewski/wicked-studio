@@ -209,6 +209,28 @@ describe('Terminal (DES-TERMINAL-001 §6 — the web bridge)', () => {
     expect(ws.send).toHaveBeenCalledWith('claude login\n');
   });
 
+  it('concealHome draws the named home directory as ~ in the output, text and binary frames alike (studio#467)', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      render(<Terminal cwd="." initialInput={'CLAUDE_CONFIG_DIR="/Users/reel-operator/.wicked-worker/claude" claude\n'} concealHome={['/Users/reel-operator']} />);
+      await waitFor(() => expect(FakeWebSocket.last).toBeTruthy());
+      const term = h.terminals[0]!;
+      const ws = FakeWebSocket.last!;
+      // What is typed into the shell is the line as given — only the drawing changes.
+      await waitFor(() => expect(ws.send).toHaveBeenCalledWith('CLAUDE_CONFIG_DIR="/Users/reel-operator/.wicked-worker/claude" claude\n'));
+
+      act(() => ws.onmessage?.({ data: '% CLAUDE_CONFIG_DIR="/Users/reel-' }));
+      act(() => ws.onmessage?.({ data: new TextEncoder().encode('operator/.wicked-worker/claude" claude\r\n').buffer }));
+      act(() => { vi.advanceTimersByTime(60); });
+
+      const drawn = term.write.mock.calls.map((c) => c[0] as unknown).filter((x): x is string => typeof x === 'string').join('');
+      expect(drawn).toBe('% CLAUDE_CONFIG_DIR="~/.wicked-worker/claude" claude\r\n');
+      expect(drawn).not.toContain('reel-operator');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('surfaces the ungoverned operator shell loudly in the UI (§7)', () => {
     const { rerender } = render(<Terminal cwd="/work" governed />);
     expect(screen.getByTestId('terminal-governed')).toHaveTextContent('governed');

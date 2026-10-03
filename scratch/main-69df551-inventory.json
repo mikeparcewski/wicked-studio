@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.5.19",
   "counts": {
-    "files": 206,
-    "occurrences": 2229,
-    "static": 1948,
+    "files": 205,
+    "occurrences": 2222,
+    "static": 1941,
     "dynamic": 80,
     "computed": 7
   },
@@ -1612,24 +1612,6 @@
       ]
     },
     {
-      "testId": "context-sent",
-      "files": [
-        "src/components/OperatorMessage.tsx"
-      ]
-    },
-    {
-      "testId": "context-sent-pack",
-      "files": [
-        "src/components/OperatorMessage.tsx"
-      ]
-    },
-    {
-      "testId": "context-sent-toggle",
-      "files": [
-        "src/components/OperatorMessage.tsx"
-      ]
-    },
-    {
       "testId": "context-sources",
       "files": [
         "src/components/ComposerContext.tsx"
@@ -2489,12 +2471,6 @@
       ]
     },
     {
-      "testId": "desk-projects-unread",
-      "files": [
-        "src/components/desk/Desk.tsx"
-      ]
-    },
-    {
       "testId": "desk-rail-badge",
       "files": [
         "src/board/objectActions.ts",
@@ -2548,18 +2524,6 @@
       "testId": "desk-rule-see",
       "files": [
         "src/components/desk/DeskRuleLine.tsx"
-      ]
-    },
-    {
-      "testId": "desk-runs-failed",
-      "files": [
-        "src/components/desk/Desk.tsx"
-      ]
-    },
-    {
-      "testId": "desk-runs-retry",
-      "files": [
-        "src/components/desk/Desk.tsx"
       ]
     },
     {
@@ -8303,12 +8267,6 @@
       "files": [
         "src/board/objectActions.ts",
         "src/components/ShortcutOverlay.tsx"
-      ]
-    },
-    {
-      "testId": "signin-line",
-      "files": [
-        "src/components/HealthRailSection.tsx"
       ]
     },
     {

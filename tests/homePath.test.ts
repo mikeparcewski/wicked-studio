@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
-import { displayPath, displayText } from '../src/board/homePath.js';
+import { displayPath, displayText, homeDirsIn, homeMasker } from '../src/board/homePath.js';
 
 /**
  * The one formatter for paths the daemon reports (studio#458, #460, #462; the rule #444 set): in the
@@ -74,5 +74,59 @@ describe('displayText — every home path inside prose reads as ~', () => {
     expect(displayText('indexed /root.backup/repo (4 nodes) and /home/alice.d/x')).toBe('indexed /root.backup/repo (4 nodes) and ~/x');
     expect(displayText('root=/Users/mika, db:/home/ci/x.db')).toBe('root=~, db:~/x.db');
     expect(displayText('')).toBe('');
+  });
+});
+
+/**
+ * studio#467: a live terminal echoes the sign-in line — `CLAUDE_CONFIG_DIR="<home>/.wicked-worker/claude" claude`
+ * — so its output is drawn with that home directory as `~`. The directories come from the line; the
+ * stream arrives in chunks cut anywhere.
+ */
+describe('homeDirsIn — the home directories a text names', () => {
+  it('finds each one once, as written', () => {
+    expect(homeDirsIn('CLAUDE_CONFIG_DIR="/Users/reel-operator/.wicked-worker/claude" claude')).toStrictEqual(['/Users/reel-operator']);
+    expect(homeDirsIn('cp /home/ann/a /home/ann/b && ls /root')).toStrictEqual(['/home/ann', '/root']);
+    expect(homeDirsIn('claude login')).toStrictEqual([]);
+    expect(homeDirsIn('cd /tmp/Users/x')).toStrictEqual([]);
+  });
+});
+
+describe('homeMasker — a live stream with the home directory drawn as ~', () => {
+  const HOME = '/Users/reel-operator';
+  it('masks a directory inside one chunk, wherever it sits', () => {
+    const m = homeMasker([HOME]);
+    expect(m.push(`% CLAUDE_CONFIG_DIR="${HOME}/.wicked-worker/claude" claude\r\n`)).toBe('% CLAUDE_CONFIG_DIR="~/.wicked-worker/claude" claude\r\n');
+    expect(m.flush()).toBe('');
+  });
+  it('masks a directory cut across chunks at every possible point', () => {
+    const line = `saved to ${HOME}/.wicked-worker/claude/.credentials.json\r\n`;
+    for (let cut = 1; cut < line.length; cut++) {
+      const m = homeMasker([HOME]);
+      const out = m.push(line.slice(0, cut)) + m.push(line.slice(cut)) + m.flush();
+      expect(out).toBe('saved to ~/.wicked-worker/claude/.credentials.json\r\n');
+    }
+  });
+  it('holds an unfinished directory until the next chunk, and draws it on flush when nothing follows', () => {
+    const m = homeMasker([HOME]);
+    expect(m.push('cd /Users/reel-')).toBe('cd ');
+    expect(m.push('operator')).toBe('');           // whole, but the next character decides
+    expect(m.flush()).toBe('~');                   // nothing followed: it was the directory
+    const n = homeMasker([HOME]);
+    expect(n.push('cd /Users/reel-')).toBe('cd ');
+    expect(n.flush()).toBe('/Users/reel-');        // nothing followed: it was not one
+  });
+  it('leaves a longer name that only starts like the directory alone', () => {
+    const m = homeMasker(['/Users/ann']);
+    expect(m.push('ls /Users/annabel/x /Users/ann/x') + m.flush()).toBe('ls /Users/annabel/x ~/x');
+  });
+  it('with nothing to mask, passes every chunk through untouched', () => {
+    const m = homeMasker([]);
+    expect(m.push('/Users/reel-operator/x')).toBe('/Users/reel-operator/x');
+    expect(m.flush()).toBe('');
+  });
+  it('masks a directory a coloured prompt ends with an escape sequence, and keeps every other byte', () => {
+    const m = homeMasker([HOME]);
+    const chunk = `\u001b[32m${HOME}\u001b[0m \u001b[1m%\u001b[0m ls ${HOME}/repo`;
+    expect(m.push(chunk) + m.flush()).toBe('\u001b[32m~\u001b[0m \u001b[1m%\u001b[0m ls ~/repo');
   });
 });

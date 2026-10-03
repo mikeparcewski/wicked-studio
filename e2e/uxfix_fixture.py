@@ -263,6 +263,9 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          # runs_delay_ms — GET /runs answers only after this delay (studio#459: the Desk's loading
          #   state is observable). Default 0.
          "home_paths": False, "runs_delay_ms": 0,
+         # runs_fail — GET /runs answers 500 with the daemon's error shape (studio#466: a failed
+         #             read is not an empty list — no "N repos never indexed", no batch launch).
+         "runs_fail": False,
          "no_runs": False, "usage_ws": False, "long_prompt": False,
          "extra_narration": [], "demo": False,
          "repo": False, "metrics_ws": False,
@@ -1357,6 +1360,19 @@ SESSION_CHATS = {
                          "text": f"Note {i + 1}: the retry handler and the webhook both post the charge."}
                         for i in range(14)])},
     "chat-gone": {"chatId": "chat-gone", "seats": [], "scope": None, "refused": None, "messages": []},
+    # studio#468: a chat opened by Ask BEFORE the context pack dropped its store paths — the pack
+    # rides the operator's stored message, absolute paths and all (`home_paths` moves `/tmp/w2`
+    # under the fake home on the wire).
+    "chat-ask": {"chatId": "chat-ask", "seats": ["claude"], "scope": None, "refused": [], "messages": [
+        {"at": (SESSION_T0 + 3100) * 1000, "turnId": "a1", "kind": "user", "seats": ["claude"],
+         "text": ("why is the build slow?\n\n---\n[studio context pack — assembled 2026-10-03T14:00:00.000Z]\n"
+                  "where: Desk (/)\n"
+                  "runs (the studio's live list): 5 total — 1 active, 2 awaiting a human, 2 failed, 0 done, 0 cancelled\n"
+                  "diagnostics (GET /api/v1/diagnostics):\n"
+                  "  stores: core.db 11.8 MB (/tmp/w2/state/core.db) · estate.db 240.0 MB (/tmp/w2/state/estate/estate.db)\n"
+                  "Answer from what you can actually read.")},
+        {"at": (SESSION_T0 + 3110) * 1000, "turnId": "a1", "kind": "seat", "cliKey": "claude", "ok": True,
+         "usage": None, "text": "The test step runs twice; the second pass is the slow one."}]},
     "chat-ship": {"chatId": "chat-ship", "seats": ["claude"], "scope": {"kind": "none", "repos": [], "cwd": "/w/chat-ship",
                                                   "graph": {"bound": False, "reason": "the chat names no project and no repos, so its seats see only their own scratch root and no code graph."},
                                                   "dangling": []},
@@ -4234,8 +4250,12 @@ class W2Handler(SimpleHTTPRequestHandler):
         if path == "/api/v1/runs":
             with state_lock:
                 runs_delay = state["runs_delay_ms"]
+                runs_fail = state["runs_fail"]
             if runs_delay:
                 time.sleep(runs_delay / 1000)
+            if runs_fail:
+                self._json(500, {"error": "the run store did not answer"})
+                return True
             self._json(200, {"runs": assemble_runs()})
             return True
         # T9: the engine's phase catalog and the presets (crew 0.47.0), switch-gated.

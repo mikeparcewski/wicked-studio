@@ -146,6 +146,10 @@ describe('the context pack — diagnostics presence-gated, both fixtures', () =>
     expect(message).toContain('diagnostics (GET /api/v1/diagnostics):');
     expect(message).toContain('crew 0.7.6');
     expect(message).toContain('core.db 11.8 MB');
+    // studio#468: the pack rides the operator's stored message — a store's name and size, never
+    // its absolute path (the home directory in every transcript).
+    expect(message).not.toContain('/home/x');
+    expect(message).not.toContain('.wicked-crew/core.db');
     expect(message).toContain('claude 160 sessions/85 fallbacks');
     expect(message).toContain('recent errors: 1 recorded — newest [daemon] ECONNRESET on /ws');
   });

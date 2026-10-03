@@ -1,0 +1,31 @@
+artifact: a run's walkthrough and a demo's video open in the session (WT-U1)
+
+The artifact slot S8 added hosts two more kinds beside the page
+(DES-WALKTHROUGH-PROOF-001 §3, scenes 18-20, 23 and 41).
+
+walkthrough: a run whose chain has the walkthrough_review step, on a daemon
+that mints evidence roots (health.capabilities.walkthroughRoots), shows its
+recording inline: the state in one line, who checks apart from who builds, the
+chapter marks with their verdicts, what happened underneath, the failing frame.
+Opened (pane, full, Esc back; the same element) it is the video editor: the
+take with the playhead on the failing moment, chapters as seek points, every
+check at its moment with its evidence through the contained file route, the
+red mark on the timeline, Export. At a failed walkthrough's OWN escalation
+gate (crew's rule: the run parked on a denied unit of the pair, re-read at
+send time) it offers Watch, Ask helpers to fix (one request_changes with what
+the walkthrough caught, through the 10 s Undo) and Edit the check (the
+storyline PUT, then one approve). Any other open gate offers neither.
+
+demo-video: a demo run's video in the same slot, without checks: play, full
+screen, chapter seek, narration, Export Video / GIF / Poster.
+
+ArtifactMorph gains `kind` and a `children(size, morph)` body; the page editor
+stays its default body. The wire is hand-mirrored in src/api/walkthrough.ts
+until studio bumps wicked-crew-api-types. Words and geometry are pure in
+src/board/walkthroughModel.ts. A result that carries verdicts only (what the
+recorder writes today, wicked-garden#1208) reads honestly.
+
+Journey: e2e/desk_walkthrough_test.py (DESK) on the fixture's `walkthrough`
+switch, with a 72 s take so every seek is asserted at its real position.
+
+Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>

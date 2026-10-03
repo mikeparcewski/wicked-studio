@@ -159,8 +159,9 @@ with sync_playwright() as p:
           and tech is False,
           settings_line=settings_line, skills_root=skills_root, technical_details=str(tech))
 
-    # ── 3. #459: the Desk while /runs is held ────────────────────────────────────────
-    set_fixture(origin, runs_delay_ms=2500)
+    # ── 3. #459 / #466: the Desk while /runs is held — with repositories that have no onboarding
+    #    run on record, so a repo row derived from the missing list would show ────────────────────
+    set_fixture(origin, runs_delay_ms=2500, never_indexed=3)
     page.goto(f"{origin}/", wait_until="commit")
     try:
         page.get_by_test_id("desk-loading").wait_for(state="visible", timeout=6000)
@@ -179,13 +180,16 @@ with sync_playwright() as p:
         nothingNeeds: t.includes('Nothing needs you'),
         nothingStarted: t.includes('Nothing has been started yet'),
         projectsLoading: document.querySelectorAll('[data-testid="desk-projects-loading"]').length,
+        neverIndexed: /never indexed/i.test(t),
+        batchLaunch: document.querySelectorAll('[data-testid="need-batch-act"]').length,
       };
     }""")
     page.screenshot(path=str(SHOTS / "desk-home-paths-loading.png"))
     # Rows already known before /runs answers (the corpus's standing elicitation) may show; the
     # fold's calm copy, the headline's all-clear and the projects sentence may not.
     check("desk-holds-its-verdict", held["loading"] and held["headline"] == 0 and held["calm"] == 0
-          and not held["nothingNeeds"] and not held["nothingStarted"] and held["projectsLoading"] == 1, **held)
+          and not held["nothingNeeds"] and not held["nothingStarted"] and held["projectsLoading"] == 1
+          and not held["neverIndexed"] and held["batchLaunch"] == 0, **held)
     page.get_by_test_id("desk-headline").wait_for(state="visible", timeout=15000)
     after = page.evaluate("""() => ({
       loading: document.querySelectorAll('[data-testid="desk-loading"], [data-testid="desk-projects-loading"]').length,
@@ -196,6 +200,74 @@ with sync_playwright() as p:
     page.screenshot(path=str(SHOTS / "desk-home-paths-loaded.png"))
     check("desk-answers-once-runs-arrive", after["loading"] == 0 and after["headline"] != "" and after["fold"] == 1 and after["projects"] >= 1, **after)
     set_fixture(origin, runs_delay_ms=0)
+
+    # ── 4. #466: GET /runs FAILS — the Desk says so, with a retry; no verdict, no chore, no launch ──
+    READ = """() => {
+      const d = document.querySelector('[data-testid="desk"]');
+      const t = d ? d.innerText : '';
+      const f = document.querySelector('[data-testid="desk-runs-failed"]');
+      return {
+        failed: f ? f.innerText : null,
+        retry: document.querySelectorAll('[data-testid="desk-runs-retry"]').length,
+        loading: document.querySelectorAll('[data-testid="desk-loading"]').length,
+        headline: document.querySelectorAll('[data-testid="desk-headline"]').length,
+        neverIndexed: /never indexed/i.test(t),
+        batchLaunch: document.querySelectorAll('[data-testid="need-batch-act"]').length,
+        nothingNeeds: t.includes('Nothing needs you'),
+        nothingStarted: t.includes('Nothing has been started yet'),
+      };
+    }"""
+    set_fixture(origin, runs_fail=True, never_indexed=3)
+    page.goto(f"{origin}/", wait_until="commit")
+    try:
+        page.get_by_test_id("desk-runs-failed").wait_for(state="visible", timeout=8000)
+    except Exception:
+        page.screenshot(path=str(SHOTS / "desk-home-paths-failed-missing.png"))
+        fail("desk-says-the-read-failed", {"why": "no [data-testid=desk-runs-failed] while GET /runs answers 500", "found": page.evaluate(READ)})
+    page.wait_for_timeout(600)  # the repos read has answered: a repo row would be up by now
+    failed = page.evaluate(READ)
+    page.screenshot(path=str(SHOTS / "desk-home-paths-read-failed.png"))
+    check("desk-says-the-read-failed", failed["failed"] is not None and "couldn’t read your work" in failed["failed"]
+          and "the run store did not answer" in failed["failed"] and failed["retry"] == 1 and failed["loading"] == 0
+          and failed["headline"] == 0 and not failed["neverIndexed"] and failed["batchLaunch"] == 0
+          and not failed["nothingNeeds"] and not failed["nothingStarted"], **failed)
+    # The daemon answers again; Try again reads the list and the Desk gives its verdict.
+    set_fixture(origin, runs_fail=False)
+    page.get_by_test_id("desk-runs-retry").click()
+    page.get_by_test_id("desk-headline").wait_for(state="visible", timeout=15000)
+    retried = page.evaluate(READ)
+    check("try-again-reads-the-list", retried["failed"] is None and retried["headline"] == 1 and retried["neverIndexed"] and retried["batchLaunch"] == 1, **retried)
+    set_fixture(origin, never_indexed=0)
+
+    # ── 5. #468: a stored Ask message — the operator's words; the context pack folded behind one
+    #    line; no home directory, closed or open (the pack was stored with absolute store paths) ──
+    set_fixture(origin, sessions=True, run_chat_id=True)
+    ask: dict = {}
+    for name, href, sel in (("session", "/s/chat-ask", '[data-testid="session-turn"][data-who="you"]'),
+                            ("full-chat", "/chat/chat-ask", '[data-testid="user-bubble"]')):
+        page.goto(f"{origin}{href}", wait_until="networkidle")
+        mine = page.locator(sel).first
+        try:
+            mine.wait_for(state="visible", timeout=10000)
+        except Exception:
+            page.screenshot(path=str(SHOTS / f"desk-home-paths-ask-{name}-missing.png"))
+            fail("ask-context-is-folded", {"why": f"no operator message ({sel}) on {href}"})
+        closed_scan = page.evaluate(SCAN, FAKE_HOME)
+        words = mine.inner_text()
+        toggle = mine.locator('[data-testid="context-sent-toggle"]')
+        folded = toggle.count() == 1
+        pack = ""
+        if folded:
+            toggle.click()
+            pack = mine.locator('[data-testid="context-sent-pack"]').inner_text()
+        opened_scan = page.evaluate(SCAN, FAKE_HOME)
+        page.screenshot(path=str(SHOTS / f"desk-home-paths-ask-{name}.png"))
+        ask[name] = {"words": words[:160], "folded": folded, "pack_has_tilde": "(~/w2/state/core.db)" in pack,
+                     "leak_closed": closed_scan["text"], "leak_open": opened_scan["text"]}
+    check("ask-context-is-folded", all(a["words"].startswith("why is the build slow?") and "studio context pack" not in a["words"]
+                                       and a["folded"] and a["pack_has_tilde"] and a["leak_closed"] is None and a["leak_open"] is None
+                                       for a in ask.values()), **ask)
+    set_fixture(origin, sessions=False, run_chat_id=False)
 
     check("no-errors", not errors, errors=errors[:5])
     browser.close()

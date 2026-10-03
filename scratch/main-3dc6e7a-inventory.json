@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.5.19",
   "counts": {
-    "files": 206,
-    "occurrences": 2229,
-    "static": 1948,
+    "files": 203,
+    "occurrences": 2210,
+    "static": 1930,
     "dynamic": 80,
     "computed": 7
   },
@@ -204,36 +204,6 @@
       "testId": "artifact-card",
       "files": [
         "src/components/ArtifactCard.tsx"
-      ]
-    },
-    {
-      "testId": "artifact-export",
-      "files": [
-        "src/components/session/ArtifactMorph.tsx"
-      ]
-    },
-    {
-      "testId": "artifact-export-download",
-      "files": [
-        "src/components/session/ArtifactMorph.tsx"
-      ]
-    },
-    {
-      "testId": "artifact-export-format",
-      "files": [
-        "src/components/session/ArtifactMorph.tsx"
-      ]
-    },
-    {
-      "testId": "artifact-export-line",
-      "files": [
-        "src/components/session/ArtifactMorph.tsx"
-      ]
-    },
-    {
-      "testId": "artifact-export-menu",
-      "files": [
-        "src/components/session/ArtifactMorph.tsx"
       ]
     },
     {
@@ -1612,24 +1582,6 @@
       ]
     },
     {
-      "testId": "context-sent",
-      "files": [
-        "src/components/OperatorMessage.tsx"
-      ]
-    },
-    {
-      "testId": "context-sent-pack",
-      "files": [
-        "src/components/OperatorMessage.tsx"
-      ]
-    },
-    {
-      "testId": "context-sent-toggle",
-      "files": [
-        "src/components/OperatorMessage.tsx"
-      ]
-    },
-    {
       "testId": "context-sources",
       "files": [
         "src/components/ComposerContext.tsx"
@@ -2489,12 +2441,6 @@
       ]
     },
     {
-      "testId": "desk-projects-unread",
-      "files": [
-        "src/components/desk/Desk.tsx"
-      ]
-    },
-    {
       "testId": "desk-rail-badge",
       "files": [
         "src/board/objectActions.ts",
@@ -2548,18 +2494,6 @@
       "testId": "desk-rule-see",
       "files": [
         "src/components/desk/DeskRuleLine.tsx"
-      ]
-    },
-    {
-      "testId": "desk-runs-failed",
-      "files": [
-        "src/components/desk/Desk.tsx"
-      ]
-    },
-    {
-      "testId": "desk-runs-retry",
-      "files": [
-        "src/components/desk/Desk.tsx"
       ]
     },
     {
@@ -2748,24 +2682,6 @@
       "testId": "doc-council-line",
       "files": [
         "src/components/DocumentThread.tsx"
-      ]
-    },
-    {
-      "testId": "doc-coverage",
-      "files": [
-        "src/components/session/DocCoverage.tsx"
-      ]
-    },
-    {
-      "testId": "doc-coverage-line",
-      "files": [
-        "src/components/session/DocCoverage.tsx"
-      ]
-    },
-    {
-      "testId": "doc-coverage-row",
-      "files": [
-        "src/components/session/DocCoverage.tsx"
       ]
     },
     {
@@ -5973,12 +5889,6 @@
       ]
     },
     {
-      "testId": "page-hint",
-      "files": [
-        "src/components/session/PageEditor.tsx"
-      ]
-    },
-    {
       "testId": "page-hover-box",
       "files": [
         "src/components/session/PageEditor.tsx"
@@ -8306,12 +8216,6 @@
       ]
     },
     {
-      "testId": "signin-line",
-      "files": [
-        "src/components/HealthRailSection.tsx"
-      ]
-    },
-    {
       "testId": "signin-warning",
       "files": [
         "src/components/ChatInput.tsx"
@@ -9078,18 +8982,6 @@
       "testId": "skip-link",
       "files": [
         "src/components/SkipLink.tsx"
-      ]
-    },
-    {
-      "testId": "slide-strip",
-      "files": [
-        "src/components/session/SlideStrip.tsx"
-      ]
-    },
-    {
-      "testId": "slide-thumb",
-      "files": [
-        "src/components/session/SlideStrip.tsx"
       ]
     },
     {

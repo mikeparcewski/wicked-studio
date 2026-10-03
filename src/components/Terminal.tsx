@@ -3,6 +3,7 @@ import { Terminal as XTerm } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
 import { api, terminalWsUrl } from '../api/client.js';
+import { homeMasker } from '../board/homePath.js';
 import { resolveToken } from '../styles/resolveToken.js';
 
 interface Props {
@@ -23,6 +24,12 @@ interface Props {
    * echoing visibly so they can complete the CLI's URL/paste flow in this terminal.
    */
   initialInput?: string;
+  /**
+   * Home directories to draw as `~` in this terminal's output (studio#467): the sign-in line
+   * names the worker home under the operator's home directory, and the shell echoes it. Display
+   * only — what is typed and what runs is unchanged. Omit (or pass none) to draw the bytes as-is.
+   */
+  concealHome?: readonly string[];
 }
 
 /**
@@ -38,17 +45,18 @@ interface Props {
  * A terminal is a stateful session: it opens ONCE for the component's lifetime.
  * Remount with a React `key` to start a fresh terminal (e.g. a different cwd).
  */
-export function Terminal({ cwd, cmd, governed = true, initialInput }: Props): React.ReactElement {
+export function Terminal({ cwd, cmd, governed = true, initialInput, concealHome }: Props): React.ReactElement {
   const hostRef = useRef<HTMLDivElement>(null);
   // Snapshot the open-time props; the session opens once (see effect deps: []).
-  const propsRef = useRef({ cwd, cmd, governed, initialInput });
-  propsRef.current = { cwd, cmd, governed, initialInput };
+  const propsRef = useRef({ cwd, cmd, governed, initialInput, concealHome });
+  propsRef.current = { cwd, cmd, governed, initialInput, concealHome };
 
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
 
     let disposed = false;
+    let idle: ReturnType<typeof setTimeout> | undefined;
     let socket: WebSocket | undefined;
     let terminalId: string | undefined;
 
@@ -140,17 +148,37 @@ export function Terminal({ cwd, cmd, governed = true, initialInput }: Props): Re
           if (ws.readyState === WebSocket.OPEN) ws.send(line);
           else ws.onopen = () => ws.send(line);
         }
-        ws.onmessage = (ev: MessageEvent) => {
-          // Raw PTY output: binary frame → exact bytes; text frame → string.
-          if (typeof ev.data === 'string') term.write(ev.data);
-          else term.write(new Uint8Array(ev.data as ArrayBuffer));
-        };
+        const conceal = propsRef.current.concealHome ?? [];
+        if (conceal.length === 0) {
+          ws.onmessage = (ev: MessageEvent) => {
+            // Raw PTY output: binary frame → exact bytes; text frame → string.
+            if (typeof ev.data === 'string') term.write(ev.data);
+            else term.write(new Uint8Array(ev.data as ArrayBuffer));
+          };
+        } else {
+          // The same output, with the named home directories drawn as `~`. A chunk can end inside
+          // one, so the masker holds that tail; an idle moment draws whatever it still holds.
+          const masker = homeMasker(conceal);
+          const decoder = new TextDecoder('utf-8');
+          ws.onmessage = (ev: MessageEvent) => {
+            const text = typeof ev.data === 'string' ? ev.data : decoder.decode(new Uint8Array(ev.data as ArrayBuffer), { stream: true });
+            const out = masker.push(text);
+            if (out !== '') term.write(out);
+            if (idle !== undefined) clearTimeout(idle);
+            idle = setTimeout(() => {
+              idle = undefined;
+              const rest = masker.flush();
+              if (rest !== '' && !disposed) term.write(rest);
+            }, 40);
+          };
+        }
         socket = ws;
       })();
     });
 
     return () => {
       disposed = true;
+      if (idle !== undefined) clearTimeout(idle);
       cancelAnimationFrame(rafHandle);
       observe?.disconnect();
       dataSub.dispose();

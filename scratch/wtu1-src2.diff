@@ -1,0 +1,2169 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 75e5090..8e998b8 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -13,6 +13,7 @@ npm publish dates. Every version listed here exists on
+ ## [Unreleased]
+ 
+ ### Added
++- **A run's walkthrough, and a demo's video, open in the session like its page does (DES-WALKTHROUGH-PROOF-001 §3 scenes 18–20, 23 and 41; slice WT-U1).** The artifact slot S8 added now hosts two more kinds beside the page (`ArtifactMorph` takes a `kind` and a body; `RunArtifacts` adds them to the run's block). **`walkthrough`**: a run whose plan carries the `walkthrough_review` step shows its recording inline — the state in one line ("● Recording · chapter 4 of 6", "✗ Failed at 0:41", "✓ Passed · 6 chapters"), who checks apart from who builds, the chapter marks with their verdicts, what happened underneath in red and the failing frame — read from crew's `GET /runs/:id/walkthrough` (polled while it moves, re-read when the run's status changes), offered only where the daemon mints evidence roots (`health.capabilities.walkthroughRoots`). Opened (pane, then full screen, Esc back) it is the video editor: the take with the playhead on the failing moment, chapters as seek points, the narration, every check at its moment with its kind and its evidence under ⋯ (through the contained file route), the red mark on the timeline, and **Export** (the video, and the poster when the take wrote one). At a failed walkthrough's own escalation gate — crew's rule, the run parked on a denied unit of the pair — it offers **Watch · Ask helpers to fix · Edit the check**: fix is one `request_changes` carrying what the walkthrough caught in words (through the same 10 s Undo as every gate answer), edit is the storyline `PUT` then one approve. Any other open gate offers neither. **`demo-video`**: a demo run's video in the same slot, without checks — play, full screen, chapter seek, the narration, and Export Video / GIF / Poster (`POST /runs/:id/demo/export`, only while the daemon will make them). Nothing here says "checked": that word is the acceptance read's (WT-U2). A result that carries verdicts only (what the recorder writes today, wicked-garden#1208) reads honestly: the failure and its chapter, no invented checks, nothing to watch. Words and geometry are pure in `src/board/walkthroughModel.ts` (`tests/walkthroughModel.test.ts`); the wire is hand-mirrored in `src/api/walkthrough.ts` until studio bumps `wicked-crew-api-types`. Journey: `e2e/desk_walkthrough_test.py` (in `DESK`) on the fixture's new `walkthrough` switch.
+ - **The page a run is producing is in the session, and it is the control (DES-STUDIO-REBUILD-001 §11 S8; DESIGN-interaction rules 1–3).** A run's block in the session thread now shows the document its draft seam is writing (the project's documents whose bound run it is, `runBinding.isDocRun`) as a live preview (`artifact[data-size=inline]`). A click grows it to a **pane** beside the thread (the thread and composer make room), ⤢ to **full screen**, Esc shrinks one step — the same element throughout, never re-parented (DOC-1), morphed with View Transitions where the browser has them and not at all under reduced motion (`ArtifactMorph`, `store/artifactSizes.ts`). Inside it, the built-in **page element editor** (`PageEditor`) renders the head version in a sandboxed `allow-scripts` frame instrumented with the `data-wid` bridge: pointing highlights an element; a click picks it and makes it the subject of the next message — an "about: “…”" chip on the session composer; typing on the picked element edits it in place and lands ONE deterministic `content-edit` (`feedback.submitted`, `before` as the staleness guard) → one version, with a line under the page ("Changed headline — version 2. Undo"). **Undo** forks the page before the change as the new head with `expect_head` (interactive 0.10.0, C5; `postFork` gains the argument and a `HeadMovedError`): when a helper's version landed in between the bridge refuses with `409 head_moved` and the line reads "Not undone — a helper changed the page since (version N)" — the helper's work is never buried. What you type is text: `<b>x</b>` lands as those characters, never markup (interactive #247). Pure model + tests: `src/board/artifactMorph.ts`, `tests/artifactMorph.test.ts`. Journey (DESK): `e2e/desk_page_editor_test.py` — inline → pane → full → Esc ×2, the pick and its chip, the touch edit, Undo (version 3), Not undone (a helper's version 5 posted straight to the bridge), `<b>x</b>` as text; the fixture's fork learns `expect_head` and its content-edits land as text.
+ 
+ ### Fixed
+diff --git a/e2e/desk_walkthrough_test.py b/e2e/desk_walkthrough_test.py
+new file mode 100644
+index 0000000..8e0a66e
+--- /dev/null
++++ b/e2e/desk_walkthrough_test.py
+@@ -0,0 +1,360 @@
++#!/usr/bin/env python3
++"""
++desk_walkthrough_test.py — WT-U1, the walkthrough / demo-video artifact (DES-WALKTHROUGH-PROOF-001 §3
++scenes 18, 19, 20, 23 and 41) at 1440x700 under STUDIO_SKIN=desk.
++
++Against the in-process fixture's `walkthrough` corpus — crew's WT-W1..W3 wire (`GET
++/runs/:id/walkthrough`, `…/walkthrough/file`, `PUT …/walkthrough/storyline`) and a finished demo run
++(`GET /runs/:id/demo`, `POST …/demo/export`) — it proves, in the session thread:
++
++  a1. WALK-RUNNING (18): `/s/run:r-walk-rec` shows the run's walkthrough inline — "● Recording ·
++      chapter 4 of 6", "agy checks, codex builds" (evaluator apart from the builder), six chapter
++      marks with the fourth current — and it is live: when the recorder finishes a chapter the line
++      moves to "chapter 5 of 6" without a reload. No gate verb while it records.
++  a2. WALK-FAIL (19): `/s/run:r-walk-fail` shows "✗ Failed at 0:41", what happened underneath in
++      red, the failing frame, and Watch · Ask helpers to fix · Edit the check — all above the fold.
++  a3. WALK-FULL (20): Watch opens the pane with the playhead on the failing moment; ⤢ grows it to
++      full screen (the same element); the checks track holds every check with the seven kinds, the
++      failing ones marked; the timeline carries the red mark; ⋯ opens a check's evidence through the
++      contained file route; Esc shrinks one step each time.
++  a4. PASSED + EXPORT (23): `/s/run:r-walk-pass` reads "✓ Passed · 6 chapters", sealed; Export ▾
++      offers the Video and the Poster the take wrote (no GIF: a walkthrough exports what is on
++      disk), and no gate verb. Esc closes the menu before it shrinks the artifact.
++  a5. THIN: the result garden 12.41.0 writes (keys and verdicts only) still reads honestly — the
++      failure and its chapter, no invented checks, no Watch (nothing to watch).
++  a6. DEMO-VIDEO (41): `/s/run:r-walk-demo` opens the demo's video in the same slot, without
++      checks: play in place, chapter seek, the narration, Export ▾ Video / GIF / Poster; GIF is made
++      by `POST /demo/export {format: "gif"}` and then downloads through the file route.
++  b1. ASK HELPERS TO FIX: one `request_changes` on the escalation gate, carrying what the
++      walkthrough caught in words; the artifact re-reads ("Not started yet": the work is back with the
++      builder) and the verbs go.
++  b2. EDIT THE CHECK: the storyline PUT (crew's `{storyline}` body, `?step=walkthrough_review`) then
++      ONE approve; the artifact re-reads ("● Recording · chapter 1 of 6").
++  z.  0 page errors, no horizontal scroll.
++
++Captures: e2e/shots/desk-walkthrough-*.png. Env: FEEDBACK_PORT (default 4361); DESK_WALK_PART=a|b
++runs one half (b waits out two 10 s undo windows).
++"""
++
++import json
++import os
++import sys
++import urllib.request
++
++from uxfix_fixture import HIDE_GATE_TOASTS, REPO, STUDIO_SKIN, ensure_build, set_fixture, start_server
++
++PORT = int(os.environ.get("FEEDBACK_PORT", "4361"))
++PART = os.environ.get("DESK_WALK_PART", "")
++W, H = 1440, 700
++SHOTS = REPO / "e2e" / "shots"
++KINDS = {"on_screen", "saved_state", "events", "side_effects", "output", "must_not_happen", "cross_check"}
++
++report: dict = {"ok": False, "skin": STUDIO_SKIN, "part": PART or "all", "steps": {}}
++
++
++def fail(step: str, why) -> None:
++    report["steps"][step] = {"ok": False, "error": why}
++    print(json.dumps(report, indent=2))
++    sys.exit(1)
++
++
++def check(step: str, ok: bool, **detail) -> None:
++    report["steps"][step] = {"ok": bool(ok), **detail}
++    if not ok:
++        print(json.dumps(report, indent=2))
++        sys.exit(1)
++
++
++def get_json(url: str) -> dict:
++    with urllib.request.urlopen(url, timeout=10) as res:
++        return json.loads(res.read() or b"{}")
++
++
++def status_of(href: str) -> int:
++    url = origin + href if href.startswith("/") else href
++    try:
++        with urllib.request.urlopen(url, timeout=10) as res:
++            return res.status
++    except urllib.error.HTTPError as e:  # type: ignore[attr-defined]
++        return e.code
++
++
++if STUDIO_SKIN != "desk":
++    fail("skin", f"desk journeys run under STUDIO_SKIN=desk, not {STUDIO_SKIN}")
++if PART not in ("", "a", "b"):
++    fail("part", f"DESK_WALK_PART is {PART!r}: it names one half, a or b (empty runs both)")
++
++dist = ensure_build(fail)
++origin = start_server(PORT, dist)
++
++from playwright.sync_api import sync_playwright  # noqa: E402
++
++SHOTS.mkdir(parents=True, exist_ok=True)
++errors: list[str] = []
++
++ART = """(kind) => {
++  const a = document.querySelector(`[data-testid="artifact"][data-kind="${kind}"]`);
++  if (!a) return null;
++  const r = a.getBoundingClientRect();
++  const q = (id) => a.querySelector(`[data-testid="${id}"]`);
++  const txt = (id) => { const e = q(id); return e ? e.innerText.replace(/\\s+/g, ' ').trim() : null; };
++  const v = q('walkthrough-video');
++  const frame = q('walkthrough-failed-frame');
++  const verbs = ['walkthrough-watch', 'walkthrough-fix', 'walkthrough-edit-check'].filter((id) => q(id));
++  return {
++    size: a.dataset.size, object: a.dataset.object, node: a.__sameNode || null, w: Math.round(r.width), h: Math.round(r.height),
++    top: Math.round(r.top), bottom: Math.round(r.bottom),
++    state: txt('walkthrough-state'), dataState: (q('walkthrough') || {dataset: {}}).dataset.state || null,
++    seats: txt('walkthrough-seats'), sealed: txt('walkthrough-sealed'), note: txt('walkthrough-note'),
++    chapters: [...a.querySelectorAll('[data-testid="walkthrough-chapter"]')].map((c) => ({
++      key: c.dataset.key, verdict: c.dataset.verdict, current: c.dataset.current, text: c.innerText.replace(/\\s+/g, ' ').trim() })),
++    under: [...a.querySelectorAll('[data-testid="walkthrough-underneath"] li')].map((l) => l.innerText.trim()),
++    frame: frame ? { loaded: frame.naturalWidth > 0, bottom: Math.round(frame.getBoundingClientRect().bottom) } : null,
++    verbs, verbsBottom: Math.max(0, ...verbs.map((id) => Math.round(q(id).getBoundingClientRect().bottom))),
++    video: v ? { playhead: v.dataset.playhead, t: v.currentTime, d: v.duration, ready: v.readyState } : null,
++    checks: [...a.querySelectorAll('[data-testid="walkthrough-check"]')].map((c) => ({ kind: c.dataset.kind, passed: c.dataset.passed })),
++    checksBottom: Math.max(0, ...[...a.querySelectorAll('[data-testid="walkthrough-check"]')].map((c) => Math.round(c.getBoundingClientRect().bottom))),
++    failingBottom: Math.max(0, ...[...a.querySelectorAll('[data-testid="walkthrough-check"][data-passed="false"]')].map((c) => Math.round(c.getBoundingClientRect().bottom))),
++    failMark: q('walkthrough-fail-mark') ? parseFloat(q('walkthrough-fail-mark').style.left) : null, timeline: !!q('walkthrough-timeline'),
++    exportBtn: !!q('walkthrough-export'),
++    hscroll: document.documentElement.scrollWidth > document.documentElement.clientWidth,
++  };
++}"""
++
++
++def open_session(page, run: str, kind: str = "walkthrough") -> dict:
++    page.goto(f"{origin}/s/run%3A{run}", wait_until="networkidle")
++    page.get_by_test_id("session").wait_for(state="visible", timeout=15000)
++    try:
++        page.locator(f'[data-testid="artifact"][data-kind="{kind}"] [data-testid="walkthrough"]').wait_for(state="visible", timeout=15000)
++    except Exception:
++        page.screenshot(path=str(SHOTS / f"desk-walkthrough-{run}-missing.png"))
++        found = page.evaluate("""() => ({ artifacts: [...document.querySelectorAll('[data-testid="artifact"]')].map(a => a.dataset.kind),
++          run: !!document.querySelector('[data-testid="session-run"]'),
++          quiet: [...document.querySelectorAll('[data-testid^="walkthrough-"]')].map(e => e.dataset.testid + ': ' + e.innerText.slice(0, 80)) })""")
++        fail(f"{run}-renders", {"why": f"no [data-testid=artifact][data-kind={kind}] holding a recording in the session's run block", "found": found})
++    return page.evaluate(ART, kind)
++
++
++def wait_state(page, kind: str, text: str, step: str, timeout_ms: int = 15000) -> dict:
++    try:
++        page.wait_for_function(
++            """([kind, text]) => { const e = document.querySelector(`[data-testid="artifact"][data-kind="${kind}"] [data-testid="walkthrough-state"]`);
++              return !!e && e.innerText.replace(/\\s+/g, ' ').includes(text); }""", arg=[kind, text], timeout=timeout_ms)
++    except Exception:
++        page.screenshot(path=str(SHOTS / f"desk-walkthrough-{step}-timeout.png"))
++        fail(step, {"why": f"the state line never read {text!r} within {timeout_ms} ms", "found": page.evaluate(ART, kind)})
++    return page.evaluate(ART, kind)
++
++
++def gate_posts(run: str) -> list:
++    return [p["body"] for p in get_json(f"{origin}/__fixture/gate-posts")["posts"] if p["runId"] == run]
++
++
++with sync_playwright() as p:
++    browser = p.chromium.launch()
++    page = browser.new_page(viewport={"width": W, "height": H}, device_scale_factor=1)
++    page.on("pageerror", lambda e: errors.append(str(e)))
++    page.add_init_script(
++        "document.addEventListener('DOMContentLoaded', () => { const s = document.createElement('style'); "
++        f"s.textContent = {json.dumps(HIDE_GATE_TOASTS)}; document.head.appendChild(s); }});")
++    set_fixture(origin, sessions=True, run_chat_id=True, walkthrough=True, walk_recorded=3, extra_frames=[],
++                reset_walkthrough=True, reset_gate_posts=True)
++
++    if PART in ("", "a"):
++        # ── a1. walk-running (scene 18) ─────────────────────────────────────────────────
++        rec = open_session(page, "r-walk-rec")
++        page.screenshot(path=str(SHOTS / "desk-walkthrough-running.png"))
++        check("walk-running", rec["size"] == "inline" and rec["state"] == "● Recording · chapter 4 of 6"
++              and rec["seats"] == "agy checks, codex builds" and len(rec["chapters"]) == 6
++              and [c["current"] for c in rec["chapters"]] == ["false"] * 3 + ["true"] + ["false"] * 2
++              and rec["verbs"] == [] and rec["bottom"] <= H and not rec["hscroll"], artifact=rec)
++        set_fixture(origin, walk_recorded=4)
++        live = wait_state(page, "walkthrough", "chapter 5 of 6", "walk-running-live", 12000)
++        check("walk-running-live", live["state"] == "● Recording · chapter 5 of 6", state=live["state"])
++
++        # ── a2. walk-fail (scene 19) ────────────────────────────────────────────────────
++        f0 = open_session(page, "r-walk-fail")
++        page.wait_for_function("""() => { const i = document.querySelector('[data-testid="walkthrough-failed-frame"]'); return !!i && i.naturalWidth > 0; }""", timeout=10000)
++        page.get_by_test_id("walkthrough-fix").wait_for(state="visible", timeout=10000)
++        # Mark the DOM node itself: the mark is still there at every size only if it is never replaced.
++        page.evaluate("""() => { document.querySelector('[data-testid="artifact"][data-kind="walkthrough"]').__sameNode = 'marked-inline'; }""")
++        f0 = page.evaluate(ART, "walkthrough")
++        page.screenshot(path=str(SHOTS / "desk-walkthrough-fail.png"))
++        check("walk-fail", f0["size"] == "inline" and f0["state"] == "✗ Failed at 0:41"
++              and f0["under"] == ["One charge event is emitted — two charge events were emitted",
++                                  "The card is charged once at the provider — the provider recorded two charges of $42.00",
++                                  "The customer is never charged twice"]
++              and f0["frame"] is not None and f0["frame"]["loaded"]
++              and f0["verbs"] == ["walkthrough-watch", "walkthrough-fix", "walkthrough-edit-check"]
++              and 0 < f0["verbsBottom"] <= H and f0["bottom"] <= H
++              and [c["verdict"] for c in f0["chapters"]] == ["PASS", "PASS", "PASS", "FAIL", "PASS", "PASS"]
++              and not f0["hscroll"], artifact=f0)
++
++        # ── a3. walk-full (scene 20): Watch → pane on the failing moment → full → Esc, Esc ─
++        page.get_by_test_id("walkthrough-watch").click()
++        page.get_by_test_id("walkthrough-video").wait_for(state="visible", timeout=10000)
++        page.wait_for_function("""() => { const v = document.querySelector('[data-testid="walkthrough-video"]'); return !!v && v.readyState >= 1 && v.currentTime >= 41; }""", timeout=10000)
++        page.get_by_test_id("walkthrough-fail-mark").wait_for(state="attached", timeout=10000)
++        page.wait_for_timeout(700)  # the morph's cross-fade settles before the shot
++        f1 = page.evaluate(ART, "walkthrough")
++        # A check's time seeks the take to its moment (the first check: 0:04).
++        page.evaluate("""() => document.querySelector('[data-testid="walkthrough-video"]').pause()""")
++        page.locator('[data-testid="walkthrough-check-time"]').first.click()
++        page.wait_for_timeout(300)
++        seek_t = page.evaluate("""() => { const v = document.querySelector('[data-testid="walkthrough-video"]'); v.pause(); return v.currentTime; }""")
++        page.screenshot(path=str(SHOTS / "desk-walkthrough-pane.png"))
++        page.get_by_test_id("artifact-grow").click()
++        page.wait_for_timeout(700)
++        f2 = page.evaluate(ART, "walkthrough")
++        page.screenshot(path=str(SHOTS / "desk-walkthrough-full.png"))
++        kinds = {c["kind"] for c in f2["checks"]}
++        failing = [c["kind"] for c in f2["checks"] if c["passed"] == "false"]
++        # ⋯ on the failing events check: its evidence, through the contained file route.
++        row = page.locator('[data-testid="walkthrough-check"][data-kind="events"]')
++        row.get_by_test_id("walkthrough-evidence-toggle").click()
++        link = row.get_by_test_id("walkthrough-evidence-file").first
++        link.wait_for(state="visible", timeout=5000)
++        href = link.get_attribute("href") or ""
++        detail = row.get_by_test_id("walkthrough-check-detail").inner_text()
++        page.screenshot(path=str(SHOTS / "desk-walkthrough-evidence.png"))
++        ev_status = status_of(href)
++        # The file route serves what the view names and nothing else: the 200 above is not a catch-all.
++        other_status = status_of(href.replace("events.json", "not-in-the-view.json"))
++        page.keyboard.press("Escape")
++        page.wait_for_timeout(400)
++        f3 = page.evaluate(ART, "walkthrough")
++        page.keyboard.press("Escape")
++        page.wait_for_timeout(400)
++        f4 = page.evaluate(ART, "walkthrough")
++        check("walk-full",
++              # Watch opened the take AT the failing moment and played from it (a 72 s take: 0:41 is a real position).
++              f1["size"] == "pane" and f1["video"] is not None and f1["video"]["playhead"] == "41" and 41 <= f1["video"]["t"] < 47
++              and abs(f1["video"]["d"] - 72) < 0.5 and f1["failMark"] is not None and abs(f1["failMark"] - 100 * 41 / 72) < 1.5
++              and 4 <= seek_t < 8
++              and f1["timeline"] and 0 < f1["failingBottom"] <= H and 0 < f1["verbsBottom"] <= H
++              # Nothing load-bearing below the fold at full screen: every check, and the verbs.
++              and f2["size"] == "full" and f2["w"] == W and f2["h"] == H and len(f2["checks"]) == 12 and kinds == KINDS
++              and 0 < f2["checksBottom"] <= H and 0 < f2["verbsBottom"] <= H
++              and failing == ["events", "side_effects", "must_not_happen"]
++              and "walkthrough/file?" in href and "step=walkthrough_review" in href and "events.json" in href and ev_status == 200 and other_status == 404
++              and detail == "two charge events were emitted"
++              and f3["size"] == "pane" and f4["size"] == "inline"
++              and f0["object"] == f1["object"] == f2["object"] == f3["object"] == f4["object"]
++              and f0["node"] == f1["node"] == f2["node"] == f3["node"] == f4["node"] == "marked-inline" and not f2["hscroll"],
++              pane={k: f1[k] for k in ("size", "w", "h", "video", "failMark", "timeline", "failingBottom", "verbsBottom", "node")}, seek_t=seek_t,
++              full={k: f2[k] for k in ("size", "w", "h", "state", "sealed", "checksBottom", "verbsBottom")}, kinds=sorted(kinds), failing=failing,
++              evidence={"href": href, "status": ev_status, "other": other_status, "detail": detail}, back=[f3["size"], f4["size"]])
++
++        # ── a4. passed + export (scene 23) ─────────────────────────────────────────────
++        p0 = open_session(page, "r-walk-pass")
++        page.get_by_test_id("artifact-open").click()
++        page.get_by_test_id("walkthrough-export").wait_for(state="visible", timeout=10000)
++        page.get_by_test_id("walkthrough-export").click()
++        menu = page.get_by_test_id("walkthrough-export-menu")
++        menu.wait_for(state="visible", timeout=5000)
++        items = page.evaluate("""() => [...document.querySelectorAll('[data-testid="walkthrough-export-menu"] > *')].map(e => ({
++          id: e.dataset.testid, tag: e.tagName, href: e.getAttribute('href'), download: e.hasAttribute('download'), text: e.innerText.replace(/\\s+/g, ' ').trim() }))""")
++        p1 = page.evaluate(ART, "walkthrough")
++        page.screenshot(path=str(SHOTS / "desk-walkthrough-export.png"))
++        mp4 = next((i for i in items if i["id"] == "walkthrough-export-mp4"), None)
++        check("walk-pass-export", p0["state"] == "✓ Passed · 6 chapters" and p0["verbs"] == [] and p1["size"] == "pane"
++              and (p1["sealed"] or "").startswith("Sealed") and p1["verbs"] == []
++              and [i["id"] for i in items] == ["walkthrough-export-mp4", "walkthrough-export-poster-file"]
++              and mp4 is not None and mp4["download"] and "path=demo-video%2Fdemo.mp4" in (mp4["href"] or "")
++              and status_of(mp4["href"]) == 200, inline=p0["state"], sealed=p1["sealed"], items=items)
++        # Esc closes the menu first; the artifact stays where it is. A second Esc shrinks it.
++        page.keyboard.press("Escape")
++        page.wait_for_timeout(300)
++        closed = {"menu": page.get_by_test_id("walkthrough-export-menu").count(), "size": page.evaluate(ART, "walkthrough")["size"]}
++        page.keyboard.press("Escape")
++        page.wait_for_timeout(400)
++        check("export-esc", closed == {"menu": 0, "size": "pane"} and page.evaluate(ART, "walkthrough")["size"] == "inline", closed=closed)
++
++        # ── a5. the thin result garden writes today ───────────────────────────────────
++        t0 = open_session(page, "r-walk-thin")
++        page.get_by_test_id("walkthrough-fix").wait_for(state="visible", timeout=10000)
++        t0 = page.evaluate(ART, "walkthrough")
++        page.screenshot(path=str(SHOTS / "desk-walkthrough-thin.png"))
++        check("walk-thin", t0["state"] == "✗ Failed at 0:08" and t0["under"] == [] and t0["frame"] is None
++              and [c["key"] for c in t0["chapters"]] == ["01-totals", "02-rounding", "03-receipt"]
++              and t0["verbs"] == ["walkthrough-fix", "walkthrough-edit-check"], artifact=t0)
++
++        # ── a6. the demo video in the same slot (scene 41) ─────────────────────────────
++        d0 = open_session(page, "r-walk-demo", "demo-video")
++        page.locator('[data-testid="artifact"][data-kind="demo-video"] [data-testid="artifact-open"]').click()
++        page.get_by_test_id("walkthrough-video").wait_for(state="visible", timeout=10000)
++        page.wait_for_function("""() => { const v = document.querySelector('[data-testid="walkthrough-video"]'); return !!v && v.readyState >= 1; }""", timeout=10000)
++        page.locator('[data-testid="walkthrough-marker"]').nth(1).click()
++        page.wait_for_function("""() => document.querySelector('[data-testid="walkthrough-video"]').currentTime >= 35""", timeout=5000)
++        d1 = page.evaluate(ART, "demo-video")
++        narration = page.get_by_test_id("walkthrough-narration").inner_text()
++        page.get_by_test_id("walkthrough-export").click()
++        page.get_by_test_id("walkthrough-export-gif").click()
++        page.get_by_test_id("walkthrough-download-gif").wait_for(state="visible", timeout=10000)
++        gif_href = page.get_by_test_id("walkthrough-download-gif").get_attribute("href") or ""
++        ids = page.evaluate("""() => [...document.querySelectorAll('[data-testid="walkthrough-export-menu"] > *')].map(e => e.dataset.testid)""")
++        page.screenshot(path=str(SHOTS / "desk-walkthrough-demo.png"))
++        exports = [x["body"] for x in get_json(f"{origin}/__fixture/walkthrough-posts")["posts"] if x["route"] == "export"]
++        check("demo-video", d0["state"] == "✓ Ready to watch · 3 chapters" and d0["seats"] == "codex reviews, claude records"
++              and d1["size"] == "pane" and d1["checks"] == [] and d1["sealed"] is None and 35 <= d1["video"]["t"] < 41
++              and "Narration" in narration
++              and ids == ["walkthrough-export-mp4", "walkthrough-download-gif", "walkthrough-export-poster"]
++              and exports == [{"format": "gif"}]
++              and "demo/file?path=demo-video%2Fdemo.gif" in gif_href and status_of(gif_href) == 200,
++              inline=d0["state"], seats=d0["seats"], pane={k: d1[k] for k in ("size", "state")}, menu=ids, exports=exports, gif=gif_href)
++        page.keyboard.press("Escape")
++
++    if PART in ("", "b"):
++        # ── b1. Ask helpers to fix → one request_changes with what the walkthrough caught ──
++        set_fixture(origin, reset_walkthrough=True, reset_gate_posts=True)
++        open_session(page, "r-walk-fail")
++        page.get_by_test_id("walkthrough-fix").wait_for(state="visible", timeout=10000)
++        page.get_by_test_id("walkthrough-fix").click()
++        page.wait_for_timeout(1500)
++        early = gate_posts("r-walk-fail")
++        try:
++            page.wait_for_function("""() => { const n = document.querySelector('[data-testid="walkthrough-note"]'); return !!n && n.innerText.startsWith('Sent back'); }""", timeout=25000)
++        except Exception:
++            page.screenshot(path=str(SHOTS / "desk-walkthrough-fix-timeout.png"))
++            fail("ask-fix", {"why": "no 'Sent back to the helpers' note within 25 s", "found": page.evaluate(ART, "walkthrough"), "posts": gate_posts("r-walk-fail")})
++        after = page.evaluate(ART, "walkthrough")
++        sent = gate_posts("r-walk-fail")
++        page.screenshot(path=str(SHOTS / "desk-walkthrough-fix-sent.png"))
++        # The run list refreshes on the daemon's frames (the fixture pushes none): a fresh read of the
++        # session shows the work back with the builder, and the walkthrough not started yet.
++        fresh = open_session(page, "r-walk-fail")
++        amend = (sent[0].get("amend") or "") if sent else ""
++        check("ask-fix", early == [] and len(sent) == 1 and sent[0].get("approve") is False and sent[0].get("action") == "request_changes"
++              and sent[0].get("ord") == 4 and "chapter 4 (Pay for the order) at 0:41" in amend
++              and "two charge events were emitted" in amend and after["verbs"] == [] and after["dataState"] == "authoring"
++              and (after["note"] or "").startswith("Sent back to the helpers")
++              and fresh["state"] == "○ Not started yet" and fresh["verbs"] == [],
++              early=early, sent=sent, after=after["state"], note=after["note"], fresh=fresh["state"])
++
++        # ── b2. Edit the check → the storyline PUT, then one approve ───────────────────
++        set_fixture(origin, reset_walkthrough=True, reset_gate_posts=True)
++        open_session(page, "r-walk-fail")
++        page.get_by_test_id("walkthrough-edit-check").wait_for(state="visible", timeout=10000)
++        page.get_by_test_id("walkthrough-edit-check").click()
++        page.get_by_test_id("walkthrough-storyline").wait_for(state="visible", timeout=10000)
++        size_edit = page.evaluate(ART, "walkthrough")["size"]
++        story = "export default { title: 'Pay once', segments: [{ key: '04-pay', checks: [{ id: 'pay-events', kind: 'events', sentence: 'Exactly one charge event is emitted' }] }] };"
++        page.get_by_test_id("walkthrough-storyline").fill(story)
++        page.wait_for_timeout(700)  # the morph's cross-fade settles before the shot
++        save_bottom = page.evaluate("""() => Math.round(document.querySelector('[data-testid="walkthrough-storyline-save"]').getBoundingClientRect().bottom)""")
++        page.screenshot(path=str(SHOTS / "desk-walkthrough-edit.png"))
++        page.get_by_test_id("walkthrough-storyline-save").click()
++        again = wait_state(page, "walkthrough", "Recording · chapter 1 of 6", "edit-check", 20000)
++        puts = [x for x in get_json(f"{origin}/__fixture/walkthrough-posts")["posts"] if x["route"] == "storyline"]
++        approved = gate_posts("r-walk-fail")
++        check("edit-check", size_edit == "pane" and 0 < save_bottom <= H and len(puts) == 1 and puts[0]["storyline"] == story and puts[0]["step"] == "walkthrough_review"
++              and len(approved) == 1 and approved[0].get("approve") is True and approved[0].get("ord") == 4
++              and again["verbs"] == [], puts=puts, approved=approved, after=again["state"], save_bottom=save_bottom)
++
++    check("no-errors", not errors, errors=errors[:5])
++    browser.close()
++
++report["ok"] = all(s.get("ok") for s in report["steps"].values())
++print(json.dumps(report, indent=2))
++sys.exit(0 if report["ok"] else 1)
+diff --git a/e2e/run_journeys.py b/e2e/run_journeys.py
+index 2aded6e..283739c 100644
+--- a/e2e/run_journeys.py
++++ b/e2e/run_journeys.py
+@@ -51,7 +51,7 @@ BEHAVIOUR = [
+ # The desk journeys (DES-STUDIO-REBUILD-001 §6.2): they assert the `desk` skin, so they run only
+ # under STUDIO_SKIN=desk (CI's `journeys (desk)` leg, skipped while this list is empty). A desk
+ # slice adds its journey here and never to BEHAVIOUR, which runs under [studio, compact-rail].
+-DESK: list[str] = ["desk_home", "desk_session", "desk_answer", "desk_look", "desk_watch", "desk_proposal", "editor_conformance", "desk_reel_words", "desk_chat_launch", "desk_composer", "desk_watchtower", "desk_cmdk_routes", "desk_controls", "desk_sheets", "desk_home_paths", "desk_decisions", "desk_page_editor"]
++DESK: list[str] = ["desk_home", "desk_session", "desk_answer", "desk_look", "desk_watch", "desk_proposal", "editor_conformance", "desk_reel_words", "desk_chat_launch", "desk_composer", "desk_watchtower", "desk_cmdk_routes", "desk_controls", "desk_sheets", "desk_home_paths", "desk_decisions", "desk_page_editor", "desk_walkthrough"]
+ 
+ LISTS = {"behaviour": BEHAVIOUR, "desk": DESK}
+ 
+diff --git a/e2e/uxfix_fixture.py b/e2e/uxfix_fixture.py
+index e3ef183..8f68add 100644
+--- a/e2e/uxfix_fixture.py
++++ b/e2e/uxfix_fixture.py
+@@ -731,6 +731,16 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
+          #   GET /proposals carries the offered decision's review proposal (B12). Off: no /decisions
+          #   route at all (a daemon before DC-S4a).
+          "decisions": False, "decisions_mode": "on",
++         # walkthrough — WT-U1 (e2e/desk_walkthrough_test.py; needs `sessions`): adds WALK_RUNS to the
++         #   sessions corpus and answers crew's WT-W1..W3 wire for them: GET /runs/:id/walkthrough
++         #   (r-walk-rec recording chapter `walk_recorded`+1 of 6; r-walk-fail failed in chapter 4 with
++         #   its escalation gate open; r-walk-pass passed and sealed; r-walk-thin the thin result
++         #   garden 12.41.0 writes: keys and verdicts only), GET …/walkthrough/file, PUT
++         #   …/walkthrough/storyline (409 `no_open_escalation` unless that run's escalation is open),
++         #   and r-walk-demo, a finished demo run (GET /runs/:id/demo, …/demo/file, POST …/demo/export).
++         #   GET /health.capabilities.walkthroughRoots is true. Every write lands in GET
++         #   /__fixture/walkthrough-posts. Off: no /walkthrough route (a daemon before WT-W1).
++         "walkthrough": False, "walk_recorded": 3,
+          }
+ state_lock = threading.Lock()
+ # Idea 9: every POST /governance/rules body the fixture received (GET /__fixture/rule-posts).
+@@ -1237,6 +1247,251 @@ def proposal_team(rid: str) -> dict | None:
+     return None
+ 
+ 
++# ── Walkthrough corpus (switch `walkthrough`, needs `sessions`; e2e/desk_walkthrough_test.py) ──
++# crew's WT-W1 view (`api/recording.ts` walkthroughView) over what a proof root holds. Units are
++# named `<run>:<step>` (crew's rule), the walkthrough pair is the floor's, the evaluator seat (agy)
++# is not the builder (codex). r-walk-fail waits at the recorder's escalation gate (the denied unit's
++# ord); a request_changes sends it back to the helpers, a storyline PUT + approve records it again.
++WALK_REC, WALK_FAIL, WALK_PASS, WALK_THIN, WALK_DEMO = "r-walk-rec", "r-walk-fail", "r-walk-pass", "r-walk-thin", "r-walk-demo"
++WALK_RULE = "your testing rule: checkout and payments get a walkthrough"
++WALK_STEPS = [
++    {"catalog": "understand", "id": "understand"},
++    {"catalog": "build", "id": "build"},
++    {"catalog": "test", "id": "test", "added_by": "floor", "floor_reason": "a change to payment code is tested"},
++    {"catalog": "walkthrough_plan", "id": "walkthrough_plan", "added_by": "floor", "floor_reason": WALK_RULE,
++     "floor_rule": "TST-1001"},
++    {"catalog": "walkthrough_review", "id": "walkthrough_review", "added_by": "floor", "floor_reason": WALK_RULE,
++     "floor_rule": "TST-1001"},
++    {"catalog": "deliver", "id": "deliver"},
++]
++WALK_REVIEW_ORD = 4
++WALK_ESC_PROMPT = ("Unit 4 failed its deterministic floor (walkthrough_failed): the walkthrough failed in chapter 4 "
++                   "(Pay for the order) — confirm to record it again, or reject to cancel the run")
++# (key, title, narration, start second in the stitched take)
++WALK_CHAPTERS = [
++    ("01-cart", "Add to the cart", "Two items go into the cart.", 0),
++    ("02-checkout", "Go to checkout", "The order summary shows the total.", 9),
++    ("03-card", "Enter the card", "A test card is typed in.", 21),
++    ("04-pay", "Pay for the order", "Pay is pressed once; the button waits.", 30),
++    ("05-receipt", "See the receipt", "The receipt shows one charge.", 48),
++    ("06-orders", "Find it in orders", "The order is in the history, paid once.", 60),
++]
++WALK_STORYLINE_DENIAL = "the walkthrough failed in chapter 4 (Pay for the order): the card was charged twice"
++walk_lock = threading.Lock()
++walk_phase: dict = {}     # run id -> "failed" | "fixing" | "rerecording" (absent = as launched)
++walk_posts: list = []     # every storyline PUT and demo export (GET /__fixture/walkthrough-posts)
++walk_exports: dict = {}   # run id -> {"gif": bool, "poster": bool}
++_walk_take: list = [None]
++
++
++def walk_take() -> bytes:
++    """The stitched take: 72 s of one colour (fixtures/walk-72s.webm, 10 KB, a keyframe each second),
++    long enough that a seek to the failing moment (0:41) or a chapter is a real position."""
++    if _walk_take[0] is None:
++        _walk_take[0] = (Path(__file__).resolve().parent / "fixtures" / "walk-72s.webm").read_bytes()
++    return _walk_take[0]
++
++
++def walk_files(rid: str) -> set:
++    """Every proof-root path the run's view names (the take, the poster, the failing frame, each
++    check's evidence): the file route serves these and nothing else."""
++    view = walk_view(rid, None, 0) or {}
++    out = {p for p in (view.get("video", {}).get("mp4"), view.get("video", {}).get("poster")) if p}
++    for ch in view.get("chapters", []):
++        if ch.get("failedFrame"):
++            out.add(ch["failedFrame"])
++        for chk in ch.get("checks", []):
++            out.update(chk.get("evidence", []))
++    return out
++
++
++TINY_GIF = (b"GIF89a\x01\x00\x01\x00\x80\x00\x00\x00\x00\x00\xff\xff\xff!\xf9\x04\x01\x00\x00\x00\x00,"
++            b"\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02D\x01\x00;")
++
++
++def _walk_check(cid: str, kind: str, sentence: str, passed, at, evidence: list, detail=None, vault=None) -> dict:
++    return {"id": cid, "kind": kind, "sentence": sentence, "passed": passed, "atSec": at, "evidence": evidence,
++            "vaultEntry": vault, "detail": detail}
++
++
++def _walk_checks(key: str, failing: bool) -> list:
++    """Every check kind of §4.5 appears somewhere in the take (the seven kinds)."""
++    by = {
++        "01-cart": [_walk_check("cart-screen", "on_screen", "The cart shows two items", True, 4, [f"vault/{key}/evidence/cart.png"], vault="ve-101"),
++                    _walk_check("cart-saved", "saved_state", "The cart row holds two lines", True, 6, [f"vault/{key}/evidence/cart.json"], vault="ve-102")],
++        "02-checkout": [_walk_check("total-screen", "on_screen", "The total reads $42.00", True, 5, [f"vault/{key}/evidence/total.png"], vault="ve-201"),
++                        _walk_check("total-output", "output", "The summary request answers 200 with the same total", True, 7, [f"vault/{key}/evidence/summary.json"], vault="ve-202")],
++        "03-card": [_walk_check("card-screen", "on_screen", "The card field shows the test card", True, 5, [f"vault/{key}/evidence/card.png"], vault="ve-301")],
++        "04-pay": [_walk_check("pay-screen", "on_screen", "The Pay button waits after one press", True, 6, [f"vault/{key}/evidence/pay.png"], vault="ve-401"),
++                   _walk_check("pay-events", "events", "One charge event is emitted", not failing, 11, [f"vault/{key}/evidence/events.json"],
++                               detail="two charge events were emitted" if failing else None, vault="ve-402"),
++                   _walk_check("pay-effects", "side_effects", "The card is charged once at the provider", not failing, 11, [f"vault/{key}/evidence/provider.json"],
++                               detail="the provider recorded two charges of $42.00" if failing else None, vault="ve-403"),
++                   _walk_check("pay-never", "must_not_happen", "The customer is never charged twice", not failing, 11, [f"vault/{key}/evidence/charges.json"], vault="ve-404")],
++        "05-receipt": [_walk_check("receipt-screen", "on_screen", "The receipt shows one charge", True, 5, [f"vault/{key}/evidence/receipt.png"], vault="ve-501"),
++                       _walk_check("receipt-cross", "cross_check", "The receipt total matches the provider's record", True, 8, [f"vault/{key}/evidence/cross.json"], vault="ve-502")],
++        "06-orders": [_walk_check("orders-saved", "saved_state", "The order is saved as paid, once", True, 6, [f"vault/{key}/evidence/order.json"], vault="ve-601")],
++    }
++    return by[key]
++
++
++def _walk_chapter(i: int, **over) -> dict:
++    key, title, blurb, _start = WALK_CHAPTERS[i]
++    base = {"key": key, "title": title, "blurb": blurb, "tags": [], "resets": [], "recorded": True,
++            "index": i + 1, "total": len(WALK_CHAPTERS), "verdict": "PASS", "takes": 1, "failedAtSec": None,
++            "failedFrame": None, "proves": ["build"], "legs": [], "checks": _walk_checks(key, False)}
++    base.update(over)
++    return base
++
++
++def _walk_markers() -> list:
++    return [{"at": f"{st // 60}:{st % 60:02d}", "sec": st, "title": title} for _k, title, _b, st in WALK_CHAPTERS]
++
++
++def _walk_units(rid: str, statuses: list, denial: str | None = None) -> list:
++    clis = {"understand": "claude", "build": "codex", "test": "claude", "walkthrough_plan": "agy",
++            "walkthrough_review": None, "deliver": None}
++    roles = {"build": "creator", "walkthrough_plan": "evaluator"}
++    out = []
++    for i, (st, status) in enumerate(zip(WALK_STEPS, statuses)):
++        sid = st["id"]
++        unit = {"id": f"{rid}:{sid}", "session_id": rid, "ord": i, "description": sid.replace("_", " "),
++                "stage": "critique" if sid.startswith("walkthrough") else "produce", "assigned_cli": clis[sid],
++                "assigned_invocation": None, "council_task_ref": None, "routing": None,
++                "denial_reason": denial if sid == "walkthrough_review" and status == "rejected" else None,
++                "phase_ref": sid, "conformance_ref": None, "phase_status": None, "collection_scope": None,
++                "status": status}
++        if sid in roles:
++            unit["role"] = roles[sid]
++        if clis[sid] is None:
++            unit["tool_cmd"] = ["wicked-garden", sid]
++        out.append(unit)
++    return out
++
++
++def walk_runs() -> list:
++    """The corpus as it stands now (r-walk-fail moves with the operator's gate answers)."""
++    with walk_lock:
++        phase = walk_phase.get(WALK_FAIL, "failed")
++        thin_phase = walk_phase.get(WALK_THIN, "failed")
++
++    def run(rid: str, status: str, problem: str, statuses: list, created: int, denial=None, unit_ix=WALK_REVIEW_ORD) -> dict:
++        r = session(rid, status, problem, problem)
++        r["session"].update(created_at=created, unit_ix=unit_ix, evidence_root=f"/w/evidence/{rid}",
++                            team_plan={"rev": 1, "accepted_rev": 1, "preset": None}, human_confirm="all")
++        r["units"] = _walk_units(rid, statuses, denial)
++        return r
++    done3 = ["done", "done", "done"]
++    fail_statuses = {"failed": done3 + ["done", "rejected", "pending"],
++                     "fixing": ["done", "distributed", "pending", "pending", "pending", "pending"],
++                     "rerecording": done3 + ["done", "distributed", "pending"]}
++    out = [
++        run(WALK_REC, "executing", "stop the checkout charging twice, then walk me through it",
++            done3 + ["done", "distributed", "pending"], SESSION_T0 + 4000),
++        run(WALK_FAIL, "awaiting_human" if phase == "failed" else "executing",
++            "make Pay wait, so one press charges once", fail_statuses[phase], SESSION_T0 + 4300,
++            denial=WALK_STORYLINE_DENIAL, unit_ix=1 if phase == "fixing" else WALK_REVIEW_ORD),
++        run(WALK_PASS, "completed", "show the saved card on the pay page",
++            done3 + ["done", "done", "done"], SESSION_T0 + 4600, unit_ix=6),
++        run(WALK_THIN, "awaiting_human" if thin_phase == "failed" else "executing",
++            "round the totals the same way everywhere", fail_statuses[thin_phase], SESSION_T0 + 4900,
++            denial="the walkthrough failed in chapter 02-rounding", unit_ix=1 if thin_phase == "fixing" else WALK_REVIEW_ORD),
++    ]
++    out[2]["session"]["ended_at"] = SESSION_T0 + 5200
++    demo = demo_session(WALK_DEMO, WALK_DEMO_STATE)
++    demo["session"]["created_at"] = SESSION_T0 + 5400
++    for u in demo["units"]:  # the demo preset's phases, as crew names them on the unit
++        u["phase_ref"] = u["id"].split(":", 1)[1]
++    out.append(demo)
++    return out
++
++
++WALK_DEMO_STATE = {"pid": "notes", "url": "http://localhost:5173", "audience": "the library panel",
++                   "show": "booking a room, start to finish", "stage": "done", "script": None, "script_override": None,
++                   "plan_note": None, "recorded": [c["key"] for c in DEMO_CHAPTERS], "next_at": 0.0, "round": 2}
++WALK_DEMO_STATE["script"] = demo_script(WALK_DEMO_STATE)
++
++
++def walk_gate(rid: str) -> dict | None:
++    """The open gate of a walkthrough run: its recorder's escalation, while the take stands failed."""
++    with walk_lock:
++        phase = walk_phase.get(rid, "failed")
++    if rid in (WALK_FAIL, WALK_THIN) and phase == "failed":
++        prompt = WALK_ESC_PROMPT if rid == WALK_FAIL else \
++            "Unit 4 failed its deterministic floor (walkthrough_failed) — confirm to record it again, or reject to cancel the run"
++        return {"runId": rid, "ord": WALK_REVIEW_ORD, "lifecycle": "open", "prompt": prompt,
++                "receivedAt": iso((SESSION_T0 + 5000) * 1000), "options": None}
++    return None
++
++
++def walk_team(rid: str) -> dict | None:
++    blank = {"runId": rid, "streamFloor": None, "pending": None, "units": [], "rows": []}
++    if rid == WALK_DEMO:  # a preset run: not a team run, its chain renders from its units
++        return dict(blank, teamed=False, transport=None, reason=None, planRev=None, ended=True)
++    if rid not in (WALK_REC, WALK_FAIL, WALK_PASS, WALK_THIN):
++        return None
++    rows = [_team_row(971, "wicked.team.plan.accepted", rid, plan_rev=1, workflow_id=f"{rid}:plan-1", band="40-69",
++                      high_risk=False, mode="manual", steps=WALK_STEPS, override=None, proposal_id="p-walk")]
++    unit_rows = []
++    by_status = {u["id"].split(":", 1)[1]: u["status"] for r in walk_runs() if r["session"]["id"] == rid for u in r["units"]}
++    for i, st in enumerate(WALK_STEPS):
++        status = by_status.get(st["id"], "pending")
++        mine = []
++        if status in ("done", "distributed", "rejected"):
++            mine.append(_team_row(972 + 2 * i, "wicked.team.step.claimed", rid, ord=i, step_id=st["id"],
++                                  role="evaluator" if st["id"].startswith("walkthrough") else "creator", kind="agent",
++                                  phase=st["id"], criterion="", baseline_tree=None, repo=None, code_graph_db=None,
++                                  by="agy" if st["id"] == "walkthrough_plan" else "codex"))
++        if status in ("done", "rejected"):
++            mine.append(_team_row(973 + 2 * i, "wicked.team.step.completed", rid, ord=i, step_id=st["id"],
++                                  status="ok" if status == "done" else "failed", tree=None, output_bytes=10,
++                                  output_ref=f"u{i}", by="codex"))
++        unit_rows.append({"ord": i, "transport": "bus", "reason": None, "rows": mine})
++    return dict(blank, teamed=True, transport="bus", reason=None, planRev=1, ended=rid == WALK_PASS, rows=rows,
++                units=unit_rows)
++
++
++def walk_view(rid: str, step: str | None, recorded: int) -> dict | None:
++    """crew's WalkthroughView for the corpus; `None` = a `step` that names no walkthrough step (404)."""
++    if step not in (None, "walkthrough_review", "walkthrough_plan"):
++        return None
++    with walk_lock:
++        phase = walk_phase.get(rid, "failed")
++    n = len(WALK_CHAPTERS)
++    base = {"runId": rid, "stepId": "walkthrough_review", "planStepId": "walkthrough_plan", "cause": None,
++            "seat": {"evaluator": "agy", "builders": ["codex"]}, "tree": None, "stale": False, "sealed": False,
++            "video": {"mp4": None, "poster": None, "markers": []}, "chapters": [], "steps": []}
++    planned = [_walk_chapter(i, recorded=False, verdict=None, checks=[], proves=[]) for i in range(n)]
++    if rid == WALK_REC or (rid in (WALK_FAIL, WALK_THIN) and phase == "rerecording"):
++        got = max(0, min(n, recorded if rid == WALK_REC else 0))
++        return dict(base, state="recording",
++                    chapters=[dict(c, recorded=i < got) for i, c in enumerate(planned)])
++    if rid in (WALK_FAIL, WALK_THIN) and phase == "fixing":
++        return dict(base, state="authoring", seat={"evaluator": None, "builders": ["codex"]}, chapters=[])
++    if rid == WALK_FAIL:
++        chapters = [_walk_chapter(i) for i in range(n)]
++        chapters[3] = _walk_chapter(3, verdict="FAIL", takes=2, failedAtSec=11,
++                                    failedFrame="segments/04-pay/failed-2/frame.png", checks=_walk_checks("04-pay", True))
++        return dict(base, state="failed", tree="4b1c9e0a7d2f", sealed=True, chapters=chapters,
++                    video={"mp4": "demo-video/demo.mp4", "poster": None, "markers": _walk_markers()},
++                    steps=[{"stepId": "build", "checkState": "failed", "provedBy": [{"chapter": "04-pay", "atSec": 11}]}])
++    if rid == WALK_PASS:
++        return dict(base, state="passed", tree="9f8e7d6c5b4a", sealed=True, chapters=[_walk_chapter(i) for i in range(n)],
++                    video={"mp4": "demo-video/demo.mp4", "poster": "demo-video/poster.jpg", "markers": _walk_markers()},
++                    steps=[{"stepId": "build", "checkState": "checked", "provedBy": [{"chapter": "04-pay", "atSec": 11}]}])
++    if rid == WALK_THIN:
++        # What garden 12.41.0's walkthrough tool gives crew to read: result.json chapters of
++        # {key, verdict, failed_at_sec} only — no chapters.json, no checks, no frame, no stitched take.
++        thin = [("01-totals", "PASS", None), ("02-rounding", "FAIL", 7.5), ("03-receipt", "PASS", None)]
++        return dict(base, state="failed", sealed=True,
++                    chapters=[{"key": k, "title": k, "blurb": "", "tags": [], "resets": [], "recorded": False,
++                               "index": i + 1, "total": len(thin), "verdict": v, "takes": 1,
++                               "failedAtSec": at, "failedFrame": None, "proves": [], "legs": [], "checks": []}
++                              for i, (k, v, at) in enumerate(thin)])
++    return dict(base, stepId=None, planStepId=None, state="authoring", cause="no_walkthrough",
++                seat={"evaluator": None, "builders": []})
++
++
+ # ── Reel corpus (switch `reel_runs`, needs `sessions`; e2e/desk_reel_words_test.py) ─────────
+ # The shapes the wave-4 reel takes met on crew 0.7.46 (studio#440-#445): unit descriptions are
+ # `<phase> — <problem> ||| <the phase's instruction>`, run ids are UUIDs, the deliver unit's card
+@@ -3552,6 +3807,8 @@ def assemble_runs() -> list:
+                     for r in extra:
+                         r["session"].pop("chat_id", None)
+             extra = extra + json.loads(json.dumps(session_launched))
++            if state["walkthrough"]:
++                extra = extra + json.loads(json.dumps(walk_runs()))
+             runs = extra  # the sessions corpus stands alone: the rail shows exactly these
+         if state["demo_runs"] and not state["no_runs"]:
+             with demo_lock:
+@@ -4106,6 +4363,8 @@ class W2Handler(SimpleHTTPRequestHandler):
+             with state_lock:
+                 if state["run_chat_id"]:
+                     caps["runChatId"] = True
++                if state["sessions"] and state["walkthrough"]:
++                    caps["walkthroughRoots"] = True  # WT-W1 (api-types 0.74.0)
+             self._json(200, {"status": "ok", "version": "w2-fixture", "ping": "pong", "capabilities": caps})
+             return True
+         # Idea 15: the delivery freeze switch (crew#694).
+@@ -4528,7 +4787,10 @@ class W2Handler(SimpleHTTPRequestHandler):
+             with state_lock:
+                 proposals_on = state["ship_proposals"]
+                 reel_on = state["reel_runs"]
+-            if sessions_on and reel_on and reel_team(rid) is not None:
++                walk_on = state["walkthrough"]
++            if sessions_on and walk_on and walk_team(rid) is not None:
++                self._json(200, walk_team(rid))
++            elif sessions_on and reel_on and reel_team(rid) is not None:
+                 time.sleep(REEL_TEAM_DELAY_S)  # the session paints from its units first (studio#440)
+                 self._json(200, reel_team(rid))
+             elif sessions_on and proposals_on and proposal_team(rid) is not None:
+@@ -5607,6 +5869,138 @@ class W2Handler(SimpleHTTPRequestHandler):
+         self._json(405, {"error": f"w2 fixture: {method} {path}"})
+         return True
+ 
++    def _walkthrough_route(self, method: str, body: dict) -> bool:
++        """WT-U1: crew's WT-W1..W3 wire for the walkthrough corpus, its escalation gate, and the
++        finished demo run (EP-C3 export). Off: `/walkthrough*` is the unknown-route 404."""
++        url = urllib.parse.urlparse(self.path)
++        m = re.fullmatch(r"/api/v1/runs/([^/]+)/(walkthrough|walkthrough/file|walkthrough/storyline|gate|demo|demo/file|demo/export)", url.path)
++        if not m:
++            return False
++        rid, what = urllib.parse.unquote(m.group(1)), m.group(2)
++        with state_lock:
++            on = state["sessions"] and state["walkthrough"]
++            recorded = state["walk_recorded"]
++        if not on:
++            if what.startswith("walkthrough"):
++                self._json(404, {"message": f"Route {method}:{url.path} not found", "error": "Not Found", "statusCode": 404})
++                return True
++            return False
++        walks = (WALK_REC, WALK_FAIL, WALK_PASS, WALK_THIN)
++        q = urllib.parse.parse_qs(url.query)
++        step = (q.get("step") or [None])[0]
++        if what == "walkthrough" and method == "GET":
++            if rid not in walks and rid != WALK_DEMO and rid not in {r["session"]["id"] for r in SESSION_RUNS}:
++                self._json(404, {"error": "no run with that id"})
++                return True
++            view = walk_view(rid, step, recorded)
++            if view is None:
++                self._json(404, {"error": f"run {rid} has no walkthrough step named {step}"})
++            else:
++                self._json(200, view)
++            return True
++        if what == "walkthrough/file" and method == "GET":
++            rel = (q.get("path") or [""])[0]
++            ext = os.path.splitext(rel)[1].lower()
++            if ext not in (".mp4", ".png", ".jpg", ".gif", ".md", ".json"):
++                self._json(400, {"error": "`path` must be one of .mp4, .png, .jpg, .gif, .md, .json"})
++                return True
++            if rid not in (WALK_FAIL, WALK_PASS) or step not in (None, "walkthrough_review", "walkthrough_plan"):
++                self._json(404, {"error": "this run has no recorded walkthrough there"})
++                return True
++            if rel not in walk_files(rid):
++                self._json(404, {"error": f"no such walkthrough file: {rel}"})
++                return True
++            if rel == "demo-video/demo.mp4":
++                self._media(walk_take(), "video/webm")
++            elif ext in (".png", ".jpg"):
++                self._media(sheet_png(len(rel)), "image/png")
++            elif ext == ".json":
++                self._json(200, {"captured": rel, "run": rid, "note": "fixture evidence"})
++            else:
++                self._json(404, {"error": f"no such walkthrough file: {rel}"})
++            return True
++        if what == "walkthrough/storyline" and method == "PUT":
++            text = body.get("storyline")
++            if not isinstance(text, str) or text.strip() == "":
++                self._json(400, {"error": "`storyline` (the storyline module text) is required"})
++                return True
++            if rid not in walks:
++                self._json(404, {"error": "no run with that id"})
++                return True
++            if step not in (None, "walkthrough_review", "walkthrough_plan"):
++                self._json(404, {"error": f"run {rid} has no walkthrough step named {step}"})
++                return True
++            if walk_gate(rid) is None:
++                self._json(409, {"error": "the storyline can be edited only while this walkthrough's escalation is open: no gate is open",
++                                 "code": "no_open_escalation"})
++                return True
++            with walk_lock:
++                walk_posts.append({"route": "storyline", "runId": rid, "step": step, "storyline": text})
++            self._json(200, {"runId": rid, "planStepId": "walkthrough_plan",
++                             "sha256": hashlib.sha256(text.encode()).hexdigest(), "edited_by": "human",
++                             "at": iso(int(time.time() * 1000))})
++            return True
++        if what == "gate":
++            if rid not in (WALK_FAIL, WALK_THIN):
++                return False
++            gate = walk_gate(rid)
++            if method == "GET":
++                if gate is None:
++                    self._json(404, {"error": "no gate is open on this run"})
++                else:
++                    self._json(200, gate)
++                return True
++            if method == "POST":
++                with state_lock:
++                    gate_post_log.append({"runId": rid, "body": body, "at": time.time()})
++                if gate is None:
++                    self._json(409, {"error": "no gate is open on this run", "code": "gate_unknown"})
++                    return True
++                if "ord" in body and body.get("ord") != WALK_REVIEW_ORD:
++                    self._json(409, {"error": f"Gate changed: this decision names gate {body.get('ord')}, the open one is {WALK_REVIEW_ORD}",
++                                     "code": "gate_changed"})
++                    return True
++                with walk_lock:
++                    if body.get("approve") is True:
++                        walk_phase[rid] = "rerecording"   # the escalation's approve retries the recorder
++                    elif body.get("action") == "request_changes":
++                        walk_phase[rid] = "fixing"        # back to the creator, with the operator's note
++                self._json(200, {"status": "ok"})
++                return True
++            return False
++        if rid != WALK_DEMO:
++            return False
++        if what == "demo" and method == "GET":
++            self._json(200, demo_view(rid, WALK_DEMO_STATE))
++            return True
++        if what == "demo/file" and method == "GET":
++            rel = (q.get("path") or [""])[0]
++            with walk_lock:
++                made = dict(walk_exports.get(rid, {}))
++            if rel == "demo-video/demo.mp4":
++                self._media(walk_take(), "video/webm")
++            elif rel in ("review/chapters.png", "review/joins.png", "review/end.png"):
++                self._media(sheet_png(len(rel)), "image/png")
++            elif rel == "demo-video/demo.gif" and made.get("gif"):
++                self._media(TINY_GIF, "image/gif")
++            elif rel == "demo-video/poster.jpg" and made.get("poster"):
++                self._media(sheet_png(1), "image/png")
++            else:
++                self._json(404, {"error": f"no such demo file: {rel}"})
++            return True
++        if what == "demo/export" and method == "POST":
++            fmt = body.get("format")
++            if fmt not in ("gif", "poster") or set(body) - {"format", "atSec"}:
++                self._json(400, {"error": "Invalid export body"})
++                return True
++            rel = "demo-video/demo.gif" if fmt == "gif" else "demo-video/poster.jpg"
++            with walk_lock:
++                walk_exports.setdefault(rid, {})[fmt] = True
++                walk_posts.append({"route": "export", "runId": rid, "body": body})
++            self._json(200, {"format": fmt, "path": rel, "bytes": len(TINY_GIF) if fmt == "gif" else len(sheet_png(1))})
++            return True
++        return False
++
+     def _decisions_route(self, method: str, body: dict) -> bool:
+         """Decision capture (DC-S6) on crew's DC-S4a/S4b wire: GET /decisions and the five POST verbs."""
+         url = urllib.parse.urlparse(self.path)
+@@ -5728,6 +6122,12 @@ class W2Handler(SimpleHTTPRequestHandler):
+             with demo_lock:
+                 posts = list(demo_post_log)
+             return self._json(200, {"posts": posts})
++        if path == "/__fixture/walkthrough-posts":
++            with walk_lock:
++                posts = list(walk_posts)
++            return self._json(200, {"posts": posts})
++        if self._walkthrough_route("GET", {}):
++            return None
+         if self._demo_route("GET", {}):
+             return None
+         if path == "/__fixture/decision-posts":
+@@ -5822,6 +6222,11 @@ class W2Handler(SimpleHTTPRequestHandler):
+             if body.get("reset_decisions"):
+                 with decisions_lock:
+                     reset_decisions()
++            if body.get("reset_walkthrough"):
++                with walk_lock:
++                    walk_phase.clear()
++                    walk_posts.clear()
++                    walk_exports.clear()
+             if body.get("reset_rule_posts"):
+                 with state_lock:
+                     rule_post_log.clear()
+@@ -5912,6 +6317,8 @@ class W2Handler(SimpleHTTPRequestHandler):
+             return self._json(200, {"ok": True, "state": snapshot})
+         if self._capture_post(path, body if isinstance(body, dict) else {}):
+             return None
++        if self._walkthrough_route("POST", body if isinstance(body, dict) else {}):
++            return None
+         if self._demo_route("POST", body if isinstance(body, dict) else {}):
+             return None
+         if self._decisions_route("POST", body if isinstance(body, dict) else {}):
+@@ -6468,6 +6875,8 @@ class W2Handler(SimpleHTTPRequestHandler):
+     def do_PUT(self):  # noqa: N802 (stdlib naming)
+         path = urllib.parse.urlparse(self.path).path
+         body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
++        if self._walkthrough_route("PUT", body if isinstance(body, dict) else {}):
++            return None
+         if self._demo_route("PUT", body if isinstance(body, dict) else {}):
+             return None
+         # Behaviour 10: PUT /standing-orders/away — turning it on sweeps the open gates.
+diff --git a/src/api/walkthrough.ts b/src/api/walkthrough.ts
+new file mode 100644
+index 0000000..fb6efdc
+--- /dev/null
++++ b/src/api/walkthrough.ts
+@@ -0,0 +1,127 @@
++/**
++ * The walkthrough's wire (DES-WALKTHROUGH-PROOF-001 §4.10, crew slices WT-W1..W3; api-types
++ * 0.74.0 / 0.75.0 / 0.82.0): a recorded, chaptered walk through the real app by an evaluator seat,
++ * with a check under every chapter — the proof the acceptance gate reads, and the demo you send.
++ *
++ *   GET /runs/:id/walkthrough?step=            → WalkthroughView (200 for every known run; the newest pair by default)
++ *   GET /runs/:id/walkthrough/file?step=&path= → one proof-root file (mp4, png, jpg, json, md), Range-served
++ *   PUT /runs/:id/walkthrough/storyline?step=  → "Edit the check" — accepted only while that pair's escalation gate is open (409 otherwise)
++ *   POST /runs/:id/demo/export {format, atSec?} → a demo run's GIF or poster (EP-C3; `demo-video` kind only)
++ *
++ * The gate actions are the run's own gate (`POST /runs/:id/gate`): "Ask helpers to fix" is a
++ * `request_changes`, "Edit the check" is the storyline PUT then an approve.
++ *
++ * ── INTEGRATION POINT ─────────────────────────────────────────────────────────────────────────
++ * Hand-mirrored from crew api-types because studio's installed `wicked-crew-api-types` predates
++ * them — delete these declarations and re-export from the contract package when studio bumps
++ * (the `./demo.ts` precedent).
++ */
++
++import { apiBase, apiFetch } from './client.js';
++import type { DemoChapter, DemoMarker } from './demo.js';
++import { isRouteUnsupported } from './errors.js';
++
++export type WalkthroughState = 'authoring' | 'linting' | 'starting_app' | 'recording' | 'judging' | 'passed' | 'failed' | 'inconclusive';
++export type WalkthroughVerdict = 'PASS' | 'FAIL' | 'INCONCLUSIVE';
++/** The seven check kinds (§4.5). */
++export type WalkthroughCheckKind = 'on_screen' | 'saved_state' | 'events' | 'side_effects' | 'output' | 'must_not_happen' | 'cross_check';
++
++export interface WalkthroughCheck {
++  id: string;
++  kind: WalkthroughCheckKind | string;
++  /** The plain sentence the check proves. */
++  sentence: string;
++  /** `null` when the check never ran. */
++  passed: boolean | null;
++  /** Seconds into the CHAPTER when it was captured; `null` when it never ran. */
++  atSec: number | null;
++  /** Proof-root-relative paths. */
++  evidence: string[];
++  vaultEntry: string | null;
++  detail: string | null;
++}
++
++export interface WalkthroughLeg {
++  leg: string;
++  claim_level: string;
++  reason: string;
++}
++
++export interface WalkthroughChapter extends DemoChapter {
++  index: number;
++  total: number;
++  verdict: WalkthroughVerdict | null;
++  takes: number;
++  failedAtSec: number | null;
++  failedFrame: string | null;
++  proves: string[];
++  legs: WalkthroughLeg[];
++  checks: WalkthroughCheck[];
++}
++
++export type WalkthroughCheckState = 'checked' | 'failed' | 'claimed' | 'owned_by_you';
++
++export interface WalkthroughStepState {
++  stepId: string;
++  checkState: WalkthroughCheckState;
++  provedBy: Array<{ chapter: string; atSec: number | null }>;
++}
++
++export interface WalkthroughView {
++  runId: string;
++  /** The `walkthrough_review` step id; `null` when the run has no walkthrough step. */
++  stepId: string | null;
++  planStepId: string | null;
++  state: WalkthroughState;
++  cause: string | null;
++  seat: { evaluator: string | null; builders: string[] };
++  tree: string | null;
++  stale: false;
++  sealed: boolean;
++  video: { mp4: string | null; poster: string | null; markers: DemoMarker[] };
++  chapters: WalkthroughChapter[];
++  steps: WalkthroughStepState[];
++}
++
++/** `PUT /runs/:id/walkthrough/storyline` → 200: crew wrote the author's `storyline.mjs`, marked `edited_by: human`. */
++export interface PutStorylineResponse {
++  runId: string;
++  planStepId: string;
++  sha256: string;
++  edited_by: 'human';
++  /** ISO-8601. */
++  at: string;
++}
++
++export type DemoExportFormat = 'gif' | 'poster';
++
++export interface DemoExportResponse {
++  format: DemoExportFormat;
++  path: string;
++  bytes: number;
++}
++
++const enc = encodeURIComponent;
++
++export const walkthroughApi = {
++  view: (runId: string, step?: string | null) =>
++    apiFetch<WalkthroughView>(`/runs/${enc(runId)}/walkthrough${step != null ? `?step=${enc(step)}` : ''}`),
++  /** The body is crew's `PutStorylineBody`: `{storyline}` — the whole storyline module text. */
++  putStoryline: (runId: string, step: string, storyline: string) =>
++    apiFetch<PutStorylineResponse>(`/runs/${enc(runId)}/walkthrough/storyline?step=${enc(step)}`, { method: 'PUT', body: JSON.stringify({ storyline }) }),
++  demoExport: (runId: string, format: DemoExportFormat, atSec?: number) =>
++    apiFetch<DemoExportResponse>(`/runs/${enc(runId)}/demo/export`, { method: 'POST', body: JSON.stringify(atSec === undefined ? { format } : { format, atSec }) }),
++};
++
++/** The contained file route of one proof-root file (a frame, the stitched take, a check's evidence). */
++export function walkthroughFileUrl(runId: string, step: string | null, path: string): string {
++  const q = new URLSearchParams();
++  if (step !== null) q.set('step', step);
++  q.set('path', path);
++  return `${apiBase()}/runs/${enc(runId)}/walkthrough/file?${q.toString()}`;
++}
++
++/** A daemon before WT-W1 has no `/walkthrough` route: the artifact is simply absent. */
++export function isWalkthroughUnsupported(e: unknown): boolean {
++  return isRouteUnsupported(e);
++}
+diff --git a/src/board/walkthroughModel.ts b/src/board/walkthroughModel.ts
+new file mode 100644
+index 0000000..3f63792
+--- /dev/null
++++ b/src/board/walkthroughModel.ts
+@@ -0,0 +1,283 @@
++import type { DemoMarker, DemoView } from '../api/demo.js';
++import type { WalkthroughCheck, WalkthroughState, WalkthroughVerdict, WalkthroughView } from '../api/walkthrough.js';
++
++/**
++ * The walkthrough artifact's words and geometry (DES-WALKTHROUGH-PROOF-001 §3 scenes 18–23 and
++ * 41, slice WT-U1), pure. One {@link Recording} shape hosts both kinds the artifact opens:
++ *
++ *  - `walkthrough`: `GET /runs/:id/walkthrough` — chapters WITH checks, a verdict per chapter, the
++ *    failing moment and frame, the evaluator apart from the builders, the gate actions.
++ *  - `demo-video`: `GET /runs/:id/demo` (EP-D3) — the same player without checks: play in place,
++ *    full screen, chapters as seek points, download mp4 / GIF / poster.
++ *
++ * Nothing here claims "checked": that word is the acceptance read's (`steps[].checkState`, WT-U2).
++ */
++
++export type RecordingKind = 'walkthrough' | 'demo-video';
++
++export interface RecordingCheck extends WalkthroughCheck {
++  /** Seconds into the stitched take (the chapter's marker + the check's own offset); `null` when it never ran. */
++  atAbsSec: number | null;
++}
++
++export interface RecordingChapter {
++  key: string;
++  title: string;
++  blurb: string;
++  index: number;
++  total: number;
++  /** The chapter's start in the stitched take, from its marker; `null` without one. */
++  startSec: number | null;
++  verdict: WalkthroughVerdict | null;
++  /** The chapter's segment is on disk (crew floors `takes` at 1, so `takes` never says this). */
++  recorded: boolean;
++  takes: number;
++  failedAtSec: number | null;
++  /** Absolute seconds of the failing moment in the stitched take. */
++  failedAbsSec: number | null;
++  failedFrame: string | null;
++  checks: RecordingCheck[];
++  proves: string[];
++}
++
++export interface Recording {
++  kind: RecordingKind;
++  runId: string;
++  step: string | null;
++  /** The author step (`walkthrough_plan`) whose storyline "Edit the check" rewrites; `null` for a demo. */
++  planStep: string | null;
++  state: WalkthroughState;
++  cause: string | null;
++  seat: { evaluator: string | null; builders: string[] };
++  sealed: boolean;
++  /** Proof-root-relative (walkthrough) or demo-root-relative (demo) path of the stitched take. */
++  video: string | null;
++  poster: string | null;
++  markers: DemoMarker[];
++  chapters: RecordingChapter[];
++  /** The presenter's script (demo) — a walkthrough's narration is each chapter's blurb. */
++  script: string | null;
++  /** A demo's GIF / poster can be made now (`POST /demo/export` answers only at the review gate or
++   *  once the run has ended); always false for a walkthrough, whose media is what the take wrote. */
++  exportable: boolean;
++}
++
++/** "0:41" */
++export function fmtTime(sec: number): string {
++  const s = Math.max(0, Math.round(sec));
++  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
++}
++
++/**
++ * Each chapter's marker in the stitched take. The markers are in take order, so they are consumed in
++ * order: a chapter takes the next unused marker with its title (two chapters with one title get one
++ * each; a chapter that was never stitched gets none). Only when every chapter has a row is a
++ * title mismatch read by position.
++ */
++function markersFor(markers: readonly DemoMarker[], titles: readonly string[]): Array<DemoMarker | null> {
++  let cursor = 0;
++  return titles.map((title, i) => {
++    const at = markers.findIndex((m, j) => j >= cursor && m.title === title);
++    if (at >= 0) { cursor = at + 1; return markers[at] ?? null; }
++    return markers.length === titles.length ? markers[i] ?? null : null;
++  });
++}
++
++export function recordingOf(view: WalkthroughView): Recording {
++  const markers = view.video.markers;
++  const starts = markersFor(markers, view.chapters.map((c) => c.title));
++  const chapters: RecordingChapter[] = view.chapters.map((c, i) => {
++    const startSec = starts[i]?.sec ?? null;
++    const abs = (at: number | null): number | null => (at === null ? null : startSec === null ? at : startSec + at);
++    return {
++      key: c.key, title: c.title, blurb: c.blurb, index: c.index, total: c.total, startSec,
++      verdict: c.verdict, recorded: c.recorded, takes: c.takes,
++      failedAtSec: c.failedAtSec, failedAbsSec: abs(c.failedAtSec), failedFrame: c.failedFrame,
++      checks: c.checks.map((k) => ({ ...k, atAbsSec: abs(k.atSec) })),
++      proves: c.proves,
++    };
++  });
++  return {
++    kind: 'walkthrough', runId: view.runId, step: view.stepId, planStep: view.planStepId, state: view.state, cause: view.cause, seat: view.seat,
++    sealed: view.sealed, video: view.video.mp4, poster: view.video.poster, markers, chapters, script: null, exportable: false,
++  };
++}
++
++/** A demo run as the same artifact, without checks (EP-D3): the stages map onto the recording states. */
++export function recordingOfDemo(view: DemoView): Recording {
++  const state: WalkthroughState = view.stage === 'failed' ? 'failed'
++    : view.stage === 'done' ? 'passed'
++      : view.stage === 'recording' ? 'recording'
++        : view.stage === 'reviewing' || view.stage === 'review_gate' ? 'judging'
++          : 'authoring';
++  const markers = view.markers;
++  const total = view.chapters.length;
++  const starts = markersFor(markers, view.chapters.map((c) => c.title));
++  const chapters: RecordingChapter[] = view.chapters.map((c, i) => ({
++    key: c.key, title: c.title, blurb: c.blurb, index: i + 1, total, startSec: starts[i]?.sec ?? null,
++    verdict: null, recorded: c.recorded, takes: c.recorded ? 1 : 0, failedAtSec: null, failedAbsSec: null, failedFrame: null,
++    checks: [], proves: [],
++  }));
++  return {
++    kind: 'demo-video', runId: view.runId, step: null, planStep: null, state, cause: null,
++    seat: { evaluator: view.seats.reviewer, builders: view.seats.recorder === null ? [] : [view.seats.recorder] },
++    sealed: false, video: view.video?.path ?? null, poster: null, markers, chapters, script: view.script,
++    exportable: view.stage === 'review_gate' || view.stage === 'done' || view.stage === 'failed',
++  };
++}
++
++/** The chapter being recorded now: the first one without a take. */
++export function currentChapter(r: Recording): RecordingChapter | null {
++  return r.chapters.find((c) => !c.recorded) ?? null;
++}
++
++/** The first chapter that failed. */
++export function failedChapter(r: Recording): RecordingChapter | null {
++  return r.chapters.find((c) => c.verdict === 'FAIL') ?? null;
++}
++
++/** Scene 18: "● Recording · chapter 4 of 6"; scene 19: "✗ Failed at 0:41"; scene 21: "✓ Passed · 6 chapters". */
++export function stateLine(r: Recording, opts: { authorWaiting?: boolean } = {}): { mark: string; text: string; tone: 'live' | 'bad' | 'ok' | 'quiet' } {
++  switch (r.state) {
++    case 'recording': {
++      const c = currentChapter(r);
++      return { mark: '●', text: c === null ? 'Recording' : `Recording · chapter ${c.index} of ${c.total}`, tone: 'live' };
++    }
++    case 'failed': {
++      // The moment in the take (the chapter's start + the check's own offset): what the player's
++      // clock reads there. Without a marker for the chapter, its own seconds.
++      const at = failedChapter(r)?.failedAbsSec ?? null;
++      return { mark: '✗', text: at === null ? 'Failed' : `Failed at ${fmtTime(at)}`, tone: 'bad' };
++    }
++    case 'passed': {
++      const n = r.chapters.length;
++      return { mark: '✓', text: r.kind === 'demo-video' ? `Ready to watch · ${n} chapter${n === 1 ? '' : 's'}` : `Passed · ${n} chapter${n === 1 ? '' : 's'}`, tone: 'ok' };
++    }
++    case 'inconclusive':
++      return { mark: '?', text: `Inconclusive${r.cause !== null ? ` — ${r.cause}` : ''}`, tone: 'bad' };
++    // `authoring` is also the state of a walkthrough whose author has not been reached yet (the work
++    // before it is still going, or went back to the helpers): nobody is writing checks then.
++    case 'authoring': return { mark: '○', text: r.kind === 'demo-video' ? 'Planning the story' : opts.authorWaiting === true ? 'Not started yet' : 'Writing the checks', tone: 'quiet' };
++    case 'linting': return { mark: '○', text: 'Checking the storyline', tone: 'quiet' };
++    case 'starting_app': return { mark: '○', text: 'Starting the app', tone: 'quiet' };
++    case 'judging': return { mark: '○', text: r.kind === 'demo-video' ? 'Being reviewed' : 'Judging the take', tone: 'quiet' };
++    default: return { mark: '○', text: r.state, tone: 'quiet' };
++  }
++}
++
++/** "Antigravity checks, Codex builds" — the evaluator apart from the creators (evaluator ≠ creator). */
++export function seatLine(r: Recording): string | null {
++  const ev = r.seat.evaluator;
++  const builders = r.seat.builders;
++  if (ev === null && builders.length === 0) return null;
++  const parts: string[] = [];
++  if (ev !== null) parts.push(`${ev} ${r.kind === 'demo-video' ? 'reviews' : 'checks'}`);
++  if (builders.length > 0) parts.push(`${builders.join(' and ')} ${r.kind === 'demo-video' ? 'records' : builders.length === 1 ? 'builds' : 'build'}`);
++  return parts.join(', ');
++}
++
++/** Scene 19's red lines: what happened underneath at the failing moment. */
++export function underneathLines(r: Recording): string[] {
++  const c = failedChapter(r);
++  if (c === null) return [];
++  const failed = c.checks.filter((k) => k.passed === false);
++  return failed.map((k) => `${k.sentence}${k.detail !== null && k.detail !== '' ? ` — ${k.detail}` : ''}`);
++}
++
++/** Every check of the take in time order, for the checks track; its position on the timeline when known. */
++export function checksTrack(r: Recording): Array<RecordingCheck & { chapter: RecordingChapter }> {
++  const out: Array<RecordingCheck & { chapter: RecordingChapter }> = [];
++  for (const c of r.chapters) for (const k of c.checks) out.push({ ...k, chapter: c });
++  return out;
++}
++
++/** Where the playhead opens: the failing moment when the take failed, else the start. */
++export function playheadStart(r: Recording): number {
++  return failedChapter(r)?.failedAbsSec ?? 0;
++}
++
++/** The marks along the chapter track: one per chapter, with its verdict. */
++export function chapterMarks(r: Recording): Array<{ key: string; index: number; title: string; sec: number | null; verdict: WalkthroughVerdict | null; recorded: boolean; current: boolean }> {
++  const cur = currentChapter(r);
++  return r.chapters.map((c) => ({ key: c.key, index: c.index, title: c.title, sec: c.startSec, verdict: c.verdict, recorded: c.recorded, current: r.state === 'recording' && cur?.key === c.key }));
++}
++
++export interface ExportOption {
++  format: 'mp4' | 'gif' | 'poster';
++  label: string;
++  /** On disk already (the take, a walkthrough's poster), or made on request by the daemon (a demo's
++   *  GIF and poster, `POST /runs/:id/demo/export`). */
++  how: 'download' | 'request';
++  /** The root-relative file of a `download`. */
++  path?: string;
++}
++
++/** Scene 23 / 41: what can leave the machine — only media, never captures (§7). A walkthrough
++ *  exports what its take wrote (the video; the poster when the recorder made one); a demo's GIF and
++ *  poster are made on request, and only while the daemon will make them ({@link Recording.exportable}). */
++export function exportOptions(r: Recording): ExportOption[] {
++  if (r.video === null) return [];
++  const out: ExportOption[] = [{ format: 'mp4', label: 'Video', how: 'download', path: r.video }];
++  if (r.kind === 'demo-video') {
++    if (r.exportable) out.push({ format: 'gif', label: 'GIF', how: 'request' }, { format: 'poster', label: 'Poster', how: 'request' });
++  } else if (r.poster !== null) {
++    out.push({ format: 'poster', label: 'Poster', how: 'download', path: r.poster });
++  }
++  return out;
++}
++
++export type GateVerb = 'watch' | 'fix' | 'edit';
++
++/** One unit of the run, as much as the escalation check reads. */
++export interface UnitLike {
++  id: string;
++  ord: number;
++  denial_reason?: string | null;
++  status?: string;
++}
++
++/** The walkthrough's author step has not been dispatched yet (its unit is still `pending`). */
++export function authorWaiting(r: Recording, units: readonly UnitLike[]): boolean {
++  if (r.kind !== 'walkthrough' || r.planStep === null) return false;
++  return units.some((u) => u.id === `${r.runId}:${r.planStep}` && u.status === 'pending');
++}
++
++/**
++ * Whether the gate open on the run is THIS walkthrough's escalation — crew's own rule for the
++ * storyline PUT (`recording.ts`): the run is parked on a denied unit of the pair, and the open gate
++ * is that unit's. Any other open gate (a later deliver gate on a run whose failed walkthrough was
++ * waved through) is not the walkthrough's to answer.
++ */
++export function escalationOpen(r: Recording, gateOrd: number | null, units: readonly UnitLike[]): boolean {
++  if (r.kind !== 'walkthrough' || gateOrd === null) return false;
++  const ids = [r.step, r.planStep].filter((s): s is string => s !== null).map((s) => `${r.runId}:${s}`);
++  return units.some((u) => ids.includes(u.id) && u.ord === gateOrd && u.denial_reason !== null && u.denial_reason !== undefined);
++}
++
++/** Scene 19's actions: Watch whenever there is something to watch (a take, or the failing frame);
++ *  Ask helpers to fix · Edit the check only while the walkthrough's own escalation gate is open. */
++export function gateVerbs(r: Recording, gateOpen: boolean): GateVerb[] {
++  if (r.kind !== 'walkthrough' || r.state !== 'failed') return [];
++  const out: GateVerb[] = [];
++  if (r.video !== null || failedChapter(r)?.failedFrame != null) out.push('watch');
++  if (gateOpen) {
++    out.push('fix');
++    if (r.planStep !== null) out.push('edit');
++  }
++  return out;
++}
++
++export const GATE_VERB_LABEL: Record<GateVerb, string> = { watch: 'Watch', fix: 'Ask helpers to fix', edit: 'Edit the check' };
++
++/** The note "Ask helpers to fix" sends with the request_changes: the failing checks, in words. */
++export function fixNote(r: Recording): string {
++  const c = failedChapter(r);
++  const lines = underneathLines(r);
++  const where = c === null ? 'the walkthrough' : `chapter ${c.index} (${c.title})${c.failedAbsSec !== null ? ` at ${fmtTime(c.failedAbsSec)}` : ''}`;
++  return `The walkthrough failed at ${where}.${lines.length > 0 ? ` ${lines.join(' ')}` : ''} Fix what it caught, then it records again.`;
++}
++
++/** Whether the recording is still moving (poll it) or settled. */
++export function isLive(state: WalkthroughState): boolean {
++  return state !== 'passed' && state !== 'failed' && state !== 'inconclusive';
++}
+diff --git a/src/components/session/ArtifactMorph.tsx b/src/components/session/ArtifactMorph.tsx
+index cb83b5e..a967604 100644
+--- a/src/components/session/ArtifactMorph.tsx
++++ b/src/components/session/ArtifactMorph.tsx
+@@ -4,6 +4,9 @@ import { grow, shrink, type ArtifactSize } from '../../board/artifactMorph.js';
+ import { artifactSizeOf, setArtifactSize, topmostArtifact, useArtifactSizes } from '../../store/artifactSizes.js';
+ import { PageEditor } from './PageEditor.js';
+ 
++/** The kinds the slot hosts: a run's page (S8), its walkthrough and a demo's video (WT-U1, EP-D3). */
++export type ArtifactKind = 'doc' | 'walkthrough' | 'demo-video';
++
+ /**
+  * S8 — the morphing artifact (DESIGN-interaction rule 1: the object is the control). ONE element
+  * that is the page's live preview in the thread, grows to a pane beside it on a click and to full
+@@ -14,12 +17,17 @@ import { PageEditor } from './PageEditor.js';
+  * The kind slot: a `doc` artifact hosts the built-in {@link PageEditor}; EP-P2 lets it host a
+  * `PluginHost` for the same kind behind the same chrome.
+  */
+-export function ArtifactMorph({ artifactKey, title, projectId, docId, composerKey }: {
++export function ArtifactMorph({ artifactKey, title, projectId, docId, composerKey, kind = 'doc', children }: {
+   artifactKey: string;
+   title: string;
+   projectId: string;
+   docId: string;
+   composerKey: string;
++  /** What the slot hosts (default: the page a run produces, in the built-in page editor). */
++  kind?: ArtifactKind;
++  /** The body of a kind other than `doc`, drawn at the artifact's size; `morph` lets a control
++   *  inside it change the size (the walkthrough's Watch opens the pane). */
++  children?: (size: ArtifactSize, morph: (to: ArtifactSize) => void) => React.ReactNode;
+ }): React.ReactElement {
+   const size = useArtifactSizes((s) => artifactSizeOf(s, artifactKey));
+   const topmost = useArtifactSizes((s) => topmostArtifact(s) === artifactKey);
+@@ -72,7 +80,7 @@ export function ArtifactMorph({ artifactKey, title, projectId, docId, composerKe
+       data-object={`artifact:${artifactKey}`}
+       data-size={size}
+       data-doc={docId}
+-      data-kind="doc"
++      data-kind={kind}
+       aria-label={`${title} — ${size === 'inline' ? 'preview' : size === 'pane' ? 'open beside the thread' : 'full screen'}`}
+       className={`wk-artifact wk-artifact--${size}`}
+       style={{ viewTransitionName: `artifact-${slug}` } as React.CSSProperties}
+@@ -87,7 +95,9 @@ export function ArtifactMorph({ artifactKey, title, projectId, docId, composerKe
+           <button ref={shrinkBtn} type="button" data-testid="artifact-shrink" aria-label={size === 'full' ? 'Back to the pane' : 'Back to the thread'} title="Esc" onClick={() => morph(shrink(size))} className="wk-artifact-btn">{size === 'full' ? '⤡' : '×'}</button>
+         )}
+       </header>
+-      <PageEditor projectId={projectId} docId={docId} composerKey={composerKey} size={size} onHead={setHead} />
++      {children !== undefined
++        ? children(size, morph)
++        : <PageEditor projectId={projectId} docId={docId} composerKey={composerKey} size={size} onHead={setHead} />}
+       {size === 'inline' && (
+         <button type="button" data-testid="artifact-open" aria-label={`Open ${title}`} className="wk-artifact-catch" onClick={() => morph('pane')} />
+       )}
+diff --git a/src/components/session/RunArtifacts.tsx b/src/components/session/RunArtifacts.tsx
+index fd6a871..7eaddab 100644
+--- a/src/components/session/RunArtifacts.tsx
++++ b/src/components/session/RunArtifacts.tsx
+@@ -1,9 +1,13 @@
+ import { useEffect, useState } from 'react';
++import { isDemoRun } from '../../api/demo.js';
+ import { listDocs, type DocSummary } from '../../api/interactive.js';
+ import type { SessionView } from '../../api/types.js';
++import type { ChainModel } from '../../board/chainModel.js';
+ import { isDocRun } from '../../interactive/runBinding.js';
+ import { artifactKey } from '../../store/artifactSizes.js';
++import { useCapabilities } from '../../store/capabilities.js';
+ import { ArtifactMorph } from './ArtifactMorph.js';
++import { WalkthroughEditor } from './WalkthroughEditor.js';
+ 
+ /**
+  * S8 — the artifacts a run is producing, in its block of the session thread: the project's
+@@ -30,8 +34,21 @@ export function resetRunArtifactsCache(): void {
+   docsByProject.clear();
+ }
+ 
+-export function RunArtifacts({ view, composerKey }: { view: SessionView; composerKey: string }): React.ReactElement | null {
++/** WT-U1: the walkthrough step of a run's plan, when the daemon can record one (`walkthroughRoots`). */
++function walkthroughStepOf(chain: ChainModel | undefined, roots: boolean): string | null {
++  if (!roots || chain === undefined) return null;
++  const s = chain.steps.find((x) => x.catalog === 'walkthrough_review' && x.state !== 'struck' && x.state !== 'replaced');
++  return s === undefined ? null : s.id;
++}
++
++export function RunArtifacts({ view, composerKey, chain }: { view: SessionView; composerKey: string; chain?: ChainModel }): React.ReactElement | null {
+   const projectId = typeof view.session.project_id === 'string' && view.session.project_id !== '' ? view.session.project_id : null;
++  const runId = view.session.id;
++  const roots = useCapabilities((s) => s.walkthroughRoots);
++  // WT-U1 / EP-D3: the run's walkthrough (its `walkthrough_review` step) and a demo run's video open
++  // in the same slot — a recording is a run's artifact whether or not the run is filed.
++  const walkStep = walkthroughStepOf(chain, roots);
++  const demo = isDemoRun(view);
+   const [docs, setDocs] = useState<DocSummary[]>([]);
+   useEffect(() => {
+     if (projectId === null) return undefined;
+@@ -42,12 +59,22 @@ export function RunArtifacts({ view, composerKey }: { view: SessionView; compose
+     const timer = setInterval(read, FRESH_MS);
+     return () => { cancelled = true; clearInterval(timer); };
+   }, [projectId, view.session.id, view.session.status]);
+-  if (projectId === null) return null;
+-  const mine = docs.filter((d) => d.kind === 'doc' && isDocRun(view, d.name));
+-  if (mine.length === 0) return null;
++  const mine = projectId === null ? [] : docs.filter((d) => d.kind === 'doc' && isDocRun(view, d.name));
++  const count = mine.length + (walkStep !== null ? 1 : 0) + (demo ? 1 : 0);
++  if (count === 0) return null;
+   return (
+-    <div data-testid="run-artifacts" data-run-id={view.session.id} data-count={mine.length}>
+-      {mine.map((d) => (
++    <div data-testid="run-artifacts" data-run-id={runId} data-count={count}>
++      {walkStep !== null && (
++        <ArtifactMorph artifactKey={artifactKey('run', 'walkthrough', runId)} title="Walkthrough" projectId={projectId ?? ''} docId="" composerKey={composerKey} kind="walkthrough">
++          {(size, morph) => <WalkthroughEditor runId={runId} kind="walkthrough" step={walkStep} size={size} morph={morph} units={view.units} runStatus={view.session.status} />}
++        </ArtifactMorph>
++      )}
++      {demo && (
++        <ArtifactMorph artifactKey={artifactKey('run', 'demo-video', runId)} title="Demo video" projectId={projectId ?? ''} docId="" composerKey={composerKey} kind="demo-video">
++          {(size, morph) => <WalkthroughEditor runId={runId} kind="demo-video" step={null} size={size} morph={morph} units={view.units} runStatus={view.session.status} />}
++        </ArtifactMorph>
++      )}
++      {projectId !== null && mine.map((d) => (
+         <ArtifactMorph
+           key={d.name}
+           artifactKey={artifactKey(projectId, d.name, view.session.id)}
+diff --git a/src/components/session/SessionView.tsx b/src/components/session/SessionView.tsx
+index dd5e68b..a1b65d0 100644
+--- a/src/components/session/SessionView.tsx
++++ b/src/components/session/SessionView.tsx
+@@ -330,7 +330,7 @@ function RunBlock({ view, badge, go, sessionId }: {
+       <PlanStepLines runId={id} />
+       <ChainLine chain={chain} runId={id} units={view.units} teamError={teamError} onRetry={retry} />
+       {/* S8: the page the run is producing — a live preview that morphs inline → pane → full. */}
+-      <RunArtifacts view={view} composerKey={sessionId} />
++      <RunArtifacts view={view} composerKey={sessionId} chain={chain} />
+       <RunHelpers view={view} />
+       <a href={page} onClick={go(page)} data-testid="session-run-open" className="wk-session-link">Open the run page →</a>
+     </section>
+diff --git a/src/components/session/WalkthroughEditor.tsx b/src/components/session/WalkthroughEditor.tsx
+new file mode 100644
+index 0000000..c023d83
+--- /dev/null
++++ b/src/components/session/WalkthroughEditor.tsx
+@@ -0,0 +1,413 @@
++import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
++import { demoFileUrl, getDemo } from '../../api/demo.js';
++import { isWalkthroughUnsupported, walkthroughApi, walkthroughFileUrl, type DemoExportFormat } from '../../api/walkthrough.js';
++import type { ArtifactSize } from '../../board/artifactMorph.js';
++import {
++  authorWaiting, chapterMarks, checksTrack, escalationOpen, exportOptions, failedChapter, fixNote, fmtTime, gateVerbs, isLive, playheadStart,
++  recordingOf, recordingOfDemo, seatLine, stateLine, underneathLines, type GateVerb, type Recording, type RecordingKind, type UnitLike,
++} from '../../board/walkthroughModel.js';
++import { commitGateDecision, refreshGate } from '../../board/gateActions.js';
++import { useGateStore } from '../../store/gates.js';
++
++/**
++ * THE WALKTHROUGH ARTIFACT (DES-WALKTHROUGH-PROOF-001 §3 scenes 18–23 and 41, slice WT-U1): the
++ * body of {@link ArtifactMorph}'s kind slot for the `walkthrough` and `demo-video` kinds.
++ *
++ *  - inline: the state line ("● Recording · chapter 4 of 6", "✗ Failed at 0:41"), who checks and who
++ *    builds, the chapter marks with their verdicts, what happened underneath in red, the failing
++ *    frame, and the actions the open escalation allows — nothing load-bearing below the fold.
++ *  - pane / full: the video editor — the stitched take with the playhead on the failing moment, the
++ *    chapters as seek points, the narration, the checks track (each check at its moment, with its
++ *    evidence under ⋯), the red mark where it failed, the same actions, and Export.
++ *
++ * The actions are the run's own gate: "Ask helpers to fix" is a `request_changes` with what the
++ * walkthrough caught; "Edit the check" is the storyline PUT then an approve. Both are offered only
++ * while the open gate is THIS walkthrough's escalation (crew refuses the PUT otherwise).
++ *
++ * Everything shown is read from `GET /runs/:id/walkthrough` (polled while it moves, re-read when the
++ * run's status changes) or, for the `demo-video` kind, `GET /runs/:id/demo`; the files come through
++ * the contained file routes. Nothing here says "checked" — that word is the acceptance read's (WT-U2).
++ */
++
++const POLL_MS = 2500;
++/** A read that keeps failing is retried this many times (5 s apart), then left: the line says it failed. */
++const MAX_FAILED_READS = 5;
++
++type Load = { kind: 'loading' } | { kind: 'absent' } | { kind: 'failed'; message: string } | { kind: 'ready'; rec: Recording };
++
++export function useRecording(runId: string, kind: RecordingKind, step: string | null, runStatus: string): { load: Load; reload: () => void } {
++  // What is read belongs to ONE (kind, run, step): after any of them changes, the previous
++  // recording is never shown — or acted on — under the new identity, not even while the new read fails.
++  const ident = `${kind}\u0000${runId}\u0000${step ?? ''}`;
++  const [held, setHeld] = useState<{ ident: string; load: Load }>({ ident, load: { kind: 'loading' } });
++  const load: Load = held.ident === ident ? held.load : { kind: 'loading' };
++  const [tick, setTick] = useState(0);
++  useEffect(() => {
++    const setLoad = (next: Load | ((was: Load) => Load)): void => setHeld((h) => {
++      const was: Load = h.ident === ident ? h.load : { kind: 'loading' };
++      return { ident, load: typeof next === 'function' ? next(was) : next };
++    });
++    let cancelled = false;
++    let timer: ReturnType<typeof setTimeout> | null = null;
++    let fails = 0;
++    const read = async (): Promise<void> => {
++      try {
++        const rec = kind === 'demo-video' ? recordingOfDemo(await getDemo(runId)) : recordingOf(await walkthroughApi.view(runId, step));
++        if (cancelled) return;
++        fails = 0;
++        setLoad(kind === 'walkthrough' && rec.step === null && rec.planStep === null ? { kind: 'absent' } : { kind: 'ready', rec });
++        if (isLive(rec.state)) timer = setTimeout(() => void read(), POLL_MS);
++      } catch (e) {
++        if (cancelled) return;
++        // A read that fails while a recording is on screen keeps it (a blip must not blank the take).
++        setLoad((was) => (isWalkthroughUnsupported(e) ? { kind: 'absent' }
++          : was.kind === 'ready' ? was : { kind: 'failed', message: e instanceof Error ? e.message : String(e) }));
++        fails += 1;
++        if (!isWalkthroughUnsupported(e) && fails < MAX_FAILED_READS) timer = setTimeout(() => void read(), POLL_MS * 2);
++      }
++    };
++    void read();
++    return () => { cancelled = true; if (timer !== null) clearTimeout(timer); };
++  }, [runId, kind, step, runStatus, tick, ident]);
++  const reload = useCallback(() => setTick((t) => t + 1), []);
++  return { load, reload };
++}
++
++function fileUrl(rec: Recording, path: string): string {
++  return rec.kind === 'demo-video' ? demoFileUrl(rec.runId, path) : walkthroughFileUrl(rec.runId, rec.step, path);
++}
++
++export function WalkthroughEditor({ runId, kind, step, size, morph, units, runStatus }: {
++  runId: string;
++  kind: RecordingKind;
++  /** The walkthrough step (`walkthrough_review` id); `null` = the newest pair. */
++  step: string | null;
++  size: ArtifactSize;
++  morph: (to: ArtifactSize) => void;
++  /** The run's units — which one is denied says whether the open gate is this walkthrough's. */
++  units: readonly UnitLike[];
++  /** The run's status: a change (a gate answered, the run moving again) re-reads the recording. */
++  runStatus: string;
++}): React.ReactElement {
++  const { load, reload } = useRecording(runId, kind, step, runStatus);
++  if (load.kind === 'loading') return <p data-testid="walkthrough-loading" className="wk-walk-quiet wk-walk-pad">Reading the recording…</p>;
++  if (load.kind === 'absent') return <p data-testid="walkthrough-absent" className="wk-walk-quiet wk-walk-pad">No recording for this run on this daemon.</p>;
++  if (load.kind === 'failed') return <p data-testid="walkthrough-error" role="alert" className="wk-walk-quiet wk-walk-bad wk-walk-pad">Could not read the recording: {load.message}</p>;
++  return <Body rec={load.rec} size={size} morph={morph} units={units} reload={reload} />;
++}
++
++function ChapterMarks({ rec, onSeek }: { rec: Recording; onSeek?: (sec: number) => void }): React.ReactElement | null {
++  const marks = chapterMarks(rec);
++  if (marks.length === 0) return null;
++  return (
++    <ol data-testid="walkthrough-chapters" className="wk-walk-chapters" aria-label="Chapters">
++      {marks.map((m) => {
++        const inner = (
++          <>
++            <span aria-hidden className={`wk-walk-chip wk-walk-chip--${m.verdict === 'FAIL' ? 'fail' : m.verdict === 'PASS' ? 'pass' : m.current ? 'live' : m.recorded ? 'done' : 'todo'}`}>
++              {m.verdict === 'FAIL' ? '✗' : m.verdict === 'PASS' ? '✓' : m.current ? '●' : String(m.index)}
++            </span>
++            <span className="wk-walk-chapter-title">{m.title}</span>
++            {m.sec !== null && <span className="wk-walk-quiet">{fmtTime(m.sec)}</span>}
++          </>
++        );
++        return (
++          <li key={m.key} data-testid="walkthrough-chapter" data-key={m.key} data-verdict={m.verdict ?? ''} data-current={m.current ? 'true' : 'false'} className="wk-walk-chapter">
++            {onSeek !== undefined && m.sec !== null
++              ? <button type="button" data-testid="walkthrough-marker" data-sec={String(m.sec)} onClick={() => onSeek(m.sec as number)} className="wk-walk-chapter-btn">{inner}</button>
++              : <span className="wk-walk-chapter-btn">{inner}</span>}
++          </li>
++        );
++      })}
++    </ol>
++  );
++}
++
++/** One component at every size, so what the operator started (an edit, a made export, a note)
++ *  survives the morph — only the layout changes. */
++function Body({ rec, size, morph, units, reload }: {
++  rec: Recording;
++  size: ArtifactSize;
++  morph: (to: ArtifactSize) => void;
++  units: readonly UnitLike[];
++  reload: () => void;
++}): React.ReactElement {
++  const video = useRef<HTMLVideoElement | null>(null);
++  const wantPlay = useRef(false);
++  const line = stateLine(rec, { authorWaiting: authorWaiting(rec, units) });
++  const seats = seatLine(rec);
++  const failed = failedChapter(rec);
++  const under = underneathLines(rec);
++  const track = useMemo(() => checksTrack(rec), [rec]);
++  const gate = useGateStore((s) => s.gates[rec.runId]);
++  const verbs = gateVerbs(rec, escalationOpen(rec, gate?.ord ?? null, units));
++  const options = exportOptions(rec);
++  const [duration, setDuration] = useState<number | null>(null);
++  const [raw, setRaw] = useState<string | null>(null);
++  const [editing, setEditing] = useState(false);
++  const [storyline, setStoryline] = useState('');
++  const [note, setNote] = useState<{ tone: 'ok' | 'bad'; text: string } | null>(null);
++  const [busy, setBusy] = useState(false);
++  const [exportOpen, setExportOpen] = useState(false);
++  const [made, setMade] = useState<Partial<Record<DemoExportFormat, string>>>({});
++  const src = rec.video === null ? null : fileUrl(rec, rec.video);
++  const startAt = playheadStart(rec);
++  const live = useRef(true);
++  useEffect(() => { live.current = true; return () => { live.current = false; }; }, []);
++
++  // A failed walkthrough's gate may predate this page (a late join): read it once, so the actions
++  // the escalation allows are offered without a visit to the run page.
++  const failedWalk = rec.kind === 'walkthrough' && rec.state === 'failed';
++  useEffect(() => {
++    if (failedWalk && useGateStore.getState().gates[rec.runId] === undefined) void refreshGate(rec.runId);
++  }, [failedWalk, rec.runId]);
++
++  // Esc closes the export menu before it shrinks the artifact (the artifact's own listener skips a
++  // prevented event); a click elsewhere closes it too.
++  useEffect(() => {
++    if (!exportOpen) return undefined;
++    const onKey = (e: KeyboardEvent): void => {
++      if (e.key !== 'Escape') return;
++      e.preventDefault();
++      setExportOpen(false);
++    };
++    const onDown = (e: MouseEvent): void => {
++      const t = e.target as HTMLElement | null;
++      if (t === null || t.closest('.wk-walk-export') === null) setExportOpen(false);
++    };
++    document.addEventListener('keydown', onKey, true);
++    document.addEventListener('mousedown', onDown);
++    return () => { document.removeEventListener('keydown', onKey, true); document.removeEventListener('mousedown', onDown); };
++  }, [exportOpen]);
++
++  const seek = useCallback((sec: number, play = true): void => {
++    const el = video.current;
++    if (el === null) return;
++    el.currentTime = sec;
++    if (play) void el.play().catch(() => undefined);
++  }, []);
++
++  // The playhead opens on the failing moment (scene 19 → 20), each time the player appears; a
++  // Watch pressed at the inline size plays from there once the player is up.
++  const open = size !== 'inline';
++  useEffect(() => {
++    const el = video.current;
++    if (!open || el === null) return undefined;
++    const place = (): void => {
++      el.currentTime = startAt;
++      if (wantPlay.current) { wantPlay.current = false; void el.play().catch(() => undefined); }
++    };
++    if (el.readyState >= 1) { place(); return undefined; }
++    el.addEventListener('loadedmetadata', place, { once: true });
++    // Closed (or re-sourced) before the metadata came: the pending Watch is dropped, never replayed
++    // on a later open.
++    return () => { el.removeEventListener('loadedmetadata', place); wantPlay.current = false; };
++  }, [open, src, startAt]);
++
++  const act = async (done: string, fn: () => Promise<void>): Promise<void> => {
++    if (busy) return;
++    setBusy(true);
++    setNote(null);
++    try {
++      await fn();
++      if (live.current) setNote({ tone: 'ok', text: done });
++    } catch (e) {
++      if (live.current) setNote({ tone: 'bad', text: e instanceof Error ? e.message : String(e) });
++    } finally {
++      if (live.current) setBusy(false);
++    }
++  };
++  /** The gate, re-read now, is still this walkthrough's own escalation — else nothing may be sent:
++   *  the verbs were drawn from an older read, and another gate may have opened since. */
++  const stillMine = async (): Promise<void> => {
++    await refreshGate(rec.runId);
++    // Left the page while the gate was re-read: the operator is not looking at this any more.
++    if (!live.current) throw new Error('Nothing was sent.');
++    const now = useGateStore.getState().gates[rec.runId];
++    if (!escalationOpen(rec, now?.ord ?? null, units)) throw new Error('This walkthrough is no longer waiting on you — nothing was sent.');
++  };
++  const decide = async (decision: Parameters<typeof commitGateDecision>[1]): Promise<void> => {
++    await stillMine();
++    const outcome = await commitGateDecision(rec.runId, decision);
++    if (outcome === 'undone') throw new Error('Undone — nothing was sent.');
++    if (outcome !== 'sent') throw new Error('Not sent — the gate changed or was already answered.');
++  };
++  const fix = (): Promise<void> => act('Sent back to the helpers with what the walkthrough caught.', async () => {
++    await decide({ approve: false, action: 'request_changes', amend: fixNote(rec) });
++    reload();
++  });
++  const saveStoryline = (): Promise<void> => act('The check was changed; the walkthrough records again.', async () => {
++    const stepId = rec.step ?? rec.planStep;
++    if (stepId === null) throw new Error('This recording has no walkthrough step.');
++    await stillMine();
++    await walkthroughApi.putStoryline(rec.runId, stepId, storyline);
++    if (!live.current) return; // the file is written; the approve is the operator's to send, on the gate
++    try {
++      await decide({ approve: true });
++    } catch (e) {
++      // The file is written; only the approve did not go out. Say both, so the gate is not left a mystery.
++      throw new Error(`The check was saved, but it was not sent to record again: ${e instanceof Error ? e.message : String(e)} Approve the gate to record it.`);
++    }
++    if (live.current) setEditing(false);
++    reload();
++  });
++  const exportAs = (format: DemoExportFormat): Promise<void> => act(`${format === 'gif' ? 'GIF' : 'Poster'} made.`, async () => {
++    const r = await walkthroughApi.demoExport(rec.runId, format);
++    if (live.current) setMade((m) => ({ ...m, [format]: r.path }));
++  });
++  const onVerb = (v: GateVerb): void => {
++    if (v === 'watch') {
++      if (open) seek(startAt);
++      else { wantPlay.current = src !== null; morph('pane'); }
++    } else if (v === 'fix') void fix();
++    else {
++      setEditing((e) => !e || !open);
++      if (!open) morph('pane');
++    }
++  };
++
++  const actions = verbs.length > 0 && (
++    <div data-testid="walkthrough-actions" className="wk-walk-actions">
++      {verbs.includes('watch') && <button type="button" data-testid="walkthrough-watch" onClick={() => onVerb('watch')} className="wk-prop-btn wk-prop-btn--ghost">Watch</button>}
++      {verbs.includes('fix') && <button type="button" data-testid="walkthrough-fix" disabled={busy} onClick={() => onVerb('fix')} className="wk-prop-btn wk-prop-btn--primary">Ask helpers to fix</button>}
++      {verbs.includes('edit') && <button type="button" data-testid="walkthrough-edit-check" disabled={busy} aria-expanded={editing && open} onClick={() => onVerb('edit')} className="wk-prop-btn wk-prop-btn--ghost">Edit the check</button>}
++    </div>
++  );
++  const noteLine = note !== null && (
++    <p data-testid="walkthrough-note" data-tone={note.tone} role={note.tone === 'bad' ? 'alert' : 'status'} className={`wk-walk-quiet${note.tone === 'bad' ? ' wk-walk-bad' : ''}`}>{note.text}</p>
++  );
++
++  if (!open) {
++    return (
++      <div data-testid="walkthrough" data-kind={rec.kind} data-state={rec.state} data-run-id={rec.runId} data-size={size} className="wk-walk wk-walk--preview">
++        <div className="wk-walk-cols">
++          <div className="wk-walk-main">
++            <p data-testid="walkthrough-state" data-tone={line.tone} className={`wk-walk-state wk-walk-state--${line.tone}`}>
++              <span aria-hidden className="wk-walk-mark">{line.mark}</span> {line.text}
++            </p>
++            {seats !== null && <p data-testid="walkthrough-seats" className="wk-walk-quiet">{seats}</p>}
++            <ChapterMarks rec={rec} />
++            {under.length > 0 && (
++              <ul data-testid="walkthrough-underneath" className="wk-walk-under">
++                {under.map((u, i) => <li key={i} className="wk-walk-bad">{u}</li>)}
++              </ul>
++            )}
++            {actions}
++            {noteLine}
++          </div>
++          {failed?.failedFrame != null && (
++            <img data-testid="walkthrough-failed-frame" src={fileUrl(rec, failed.failedFrame)} alt={`The failing frame of chapter ${failed.index}`} className="wk-walk-frame" />
++          )}
++        </div>
++      </div>
++    );
++  }
++
++  const mark = (sec: number | null): number | null => (sec === null || duration === null || duration <= 0 ? null : Math.min(100, Math.max(0, (sec / duration) * 100)));
++  const failMark = failed === null ? null : mark(failed.failedAbsSec);
++  return (
++    <div data-testid="walkthrough" data-kind={rec.kind} data-state={rec.state} data-run-id={rec.runId} data-size={size} className={`wk-walk wk-walk--${size}`}>
++      <div className="wk-walk-head">
++        <p data-testid="walkthrough-state" data-tone={line.tone} className={`wk-walk-state wk-walk-state--${line.tone}`}><span aria-hidden className="wk-walk-mark">{line.mark}</span> {line.text}</p>
++        {seats !== null && <p data-testid="walkthrough-seats" className="wk-walk-quiet">{seats}</p>}
++        {rec.kind === 'walkthrough' && rec.video !== null && <p data-testid="walkthrough-sealed" data-sealed={rec.sealed ? 'true' : 'false'} className="wk-walk-quiet">{rec.sealed ? 'Sealed: the take matches the files on disk.' : 'Not sealed.'}</p>}
++        {options.length > 0 && (
++          <span className="wk-walk-export">
++            <button type="button" data-testid="walkthrough-export" aria-expanded={exportOpen} aria-controls="wk-walk-export-list" onClick={() => setExportOpen((o) => !o)} className="wk-prop-btn wk-prop-btn--ghost">Export ▾</button>
++            {exportOpen && (
++              <span id="wk-walk-export-list" data-testid="walkthrough-export-menu" className="wk-walk-export-menu">
++                {options.map((o) => {
++                  if (o.format === 'mp4') return <a key="mp4" href={src ?? '#'} download data-testid="walkthrough-export-mp4" className="wk-walk-export-item">Video<small>the take, as recorded</small></a>;
++                  if (o.how === 'download' && o.path !== undefined) return <a key="poster" href={fileUrl(rec, o.path)} download data-testid="walkthrough-export-poster-file" className="wk-walk-export-item">Poster<small>one still frame</small></a>;
++                  if (o.format === 'gif') {
++                    return made.gif !== undefined
++                      ? <a key="gif" href={fileUrl(rec, made.gif)} download data-testid="walkthrough-download-gif" className="wk-walk-export-item">Download the GIF</a>
++                      : <button key="gif" type="button" data-testid="walkthrough-export-gif" disabled={busy} onClick={() => void exportAs('gif')} className="wk-walk-export-item">GIF<small>a short loop</small></button>;
++                  }
++                  return made.poster !== undefined
++                    ? <a key="poster" href={fileUrl(rec, made.poster)} download data-testid="walkthrough-download-poster" className="wk-walk-export-item">Download the poster</a>
++                    : <button key="poster" type="button" data-testid="walkthrough-export-poster" disabled={busy} onClick={() => void exportAs('poster')} className="wk-walk-export-item">Poster<small>one still frame</small></button>;
++                })}
++              </span>
++            )}
++          </span>
++        )}
++      </div>
++      <div className="wk-walk-grid">
++      <div className="wk-walk-stage">
++        {src !== null ? (
++          <video
++            ref={video}
++            data-testid="walkthrough-video"
++            data-playhead={String(startAt)}
++            src={src}
++            poster={rec.poster !== null ? fileUrl(rec, rec.poster) : undefined}
++            controls
++            preload="metadata"
++            className="wk-walk-video"
++            onLoadedMetadata={(e) => setDuration(Number.isFinite(e.currentTarget.duration) ? e.currentTarget.duration : null)}
++          />
++        ) : failed?.failedFrame != null ? (
++          <img data-testid="walkthrough-failed-frame" src={fileUrl(rec, failed.failedFrame)} alt={`The failing frame of chapter ${failed.index}`} className="wk-walk-video" />
++        ) : (
++          <p data-testid="walkthrough-no-video" className="wk-walk-quiet">No take to play yet.</p>
++        )}
++        {/* The timeline: a mark per chapter, a red mark at the failing moment. */}
++        {duration !== null && (
++          <div data-testid="walkthrough-timeline" className="wk-walk-timeline" aria-hidden>
++            {chapterMarks(rec).map((m) => { const p = mark(m.sec); return p === null ? null : <span key={m.key} className="wk-walk-tick" style={{ left: `${p}%` }} title={m.title} />; })}
++            {failed !== null && failMark !== null && <span data-testid="walkthrough-fail-mark" className="wk-walk-tick wk-walk-tick--fail" style={{ left: `${failMark}%` }} title={`Failed at ${fmtTime(failed.failedAbsSec ?? 0)}`} />}
++          </div>
++        )}
++        <ChapterMarks rec={rec} onSeek={(sec) => seek(sec)} />
++      </div>
++      {/* Beside the take at full screen, under it in the pane: what to do, then every check — above the fold. */}
++      <div className="wk-walk-side">
++      {actions}
++      {editing && verbs.includes('edit') && (
++        <div data-testid="walkthrough-edit" className="wk-walk-edit">
++          <p className="wk-walk-quiet">Paste the storyline with your change to the check (the author’s <code>storyline.mjs</code>, whole). Saving re-checks it and the walkthrough records again.</p>
++          <textarea data-testid="walkthrough-storyline" value={storyline} onChange={(e) => setStoryline(e.target.value)} rows={4} className="wk-walk-storyline" aria-label="The storyline" />
++          <div className="wk-prop-btns">
++            <button type="button" data-testid="walkthrough-storyline-save" disabled={busy || storyline.trim() === ''} onClick={() => void saveStoryline()} className="wk-prop-btn wk-prop-btn--primary">Save and record again</button>
++            <button type="button" data-testid="walkthrough-storyline-cancel" onClick={() => setEditing(false)} className="wk-prop-btn wk-prop-btn--ghost">Cancel</button>
++          </div>
++        </div>
++      )}
++      {noteLine}
++      {track.length > 0 && (
++        <ol data-testid="walkthrough-checks" className="wk-walk-checks" aria-label="Checks">
++          {track.map((k) => (
++            <li key={`${k.chapter.key}/${k.id}`} data-testid="walkthrough-check" data-kind={k.kind} data-passed={k.passed === null ? '' : String(k.passed)} className={`wk-walk-check${k.passed === false ? ' wk-walk-check--fail' : ''}`}>
++              <span aria-hidden className={`wk-walk-chip${k.passed === true ? ' wk-walk-chip--pass' : k.passed === false ? ' wk-walk-chip--fail' : ''}`}>{k.passed === true ? '✓' : k.passed === false ? '✗' : '·'}</span>
++              <span className="wk-walk-check-text">{k.sentence}</span>
++              <span className="wk-walk-quiet">{k.kind.replace(/_/g, ' ')}</span>
++              {k.atAbsSec !== null && <button type="button" data-testid="walkthrough-check-time" data-sec={String(k.atAbsSec)} aria-label={`Play from ${fmtTime(k.atAbsSec)}`} onClick={() => seek(k.atAbsSec as number)} className="wk-walk-time">{fmtTime(k.atAbsSec)} ▸</button>}
++              {k.evidence.length > 0 && (
++                <button type="button" data-testid="walkthrough-evidence-toggle" aria-expanded={raw === `${k.chapter.key}/${k.id}`} aria-label={`Evidence for: ${k.sentence}`} onClick={() => setRaw((r) => (r === `${k.chapter.key}/${k.id}` ? null : `${k.chapter.key}/${k.id}`))} className="wk-walk-time">⋯</button>
++              )}
++              {k.detail !== null && k.detail !== '' && <span data-testid="walkthrough-check-detail" className="wk-walk-bad wk-walk-detail">{k.detail}</span>}
++              {raw === `${k.chapter.key}/${k.id}` && (
++                <ul data-testid="walkthrough-evidence" className="wk-walk-evidence">
++                  {k.evidence.map((p) => <li key={p}><a href={fileUrl(rec, p)} target="_blank" rel="noreferrer" data-testid="walkthrough-evidence-file">{p}</a></li>)}
++                  {k.vaultEntry !== null && <li className="wk-walk-quiet">vault {k.vaultEntry}</li>}
++                </ul>
++              )}
++            </li>
++          ))}
++        </ol>
++      )}
++      {rec.script !== null && <details data-testid="walkthrough-narration" className="wk-walk-narration"><summary>Narration</summary><pre className="wk-walk-pre">{rec.script}</pre></details>}
++      {rec.script === null && rec.chapters.some((c) => c.blurb !== '') && (
++        <details data-testid="walkthrough-narration" className="wk-walk-narration" open={size === 'full'}>
++          <summary>Narration</summary>
++          <ol className="wk-walk-narration-list">
++            {rec.chapters.map((c) => (c.blurb === '' ? null : <li key={c.key}><b>{c.title}</b> — {c.blurb}</li>))}
++          </ol>
++        </details>
++      )}
++      </div>
++      </div>
++    </div>
++  );
++}
+diff --git a/src/store/capabilities.ts b/src/store/capabilities.ts
+index 84077ad..6880760 100644
+--- a/src/store/capabilities.ts
++++ b/src/store/capabilities.ts
+@@ -9,6 +9,9 @@ import { api } from '../api/client.js';
+ interface CapabilitiesStore {
+   loaded: boolean;
+   runChatId: boolean;
++  /** `walkthroughRoots` (WT-W1, api-types 0.74.0) — repo-bound runs get an evidence root, so a
++   *  walkthrough step can record; absent, the walkthrough artifact is not offered. */
++  walkthroughRoots: boolean;
+   load: () => Promise<void>;
+ }
+ 
+@@ -17,14 +20,15 @@ let inflight: Promise<void> | null = null;
+ export const useCapabilities = create<CapabilitiesStore>((set, get) => ({
+   loaded: false,
+   runChatId: false,
++  walkthroughRoots: false,
+   load: () => {
+     if (get().loaded) return Promise.resolve();
+     inflight ??= Promise.resolve().then(() => api.getHealth())
+       .then((h) => {
+         const caps = ((h as unknown as { capabilities?: Record<string, unknown> }).capabilities) ?? {};
+-        set({ loaded: true, runChatId: caps['runChatId'] === true });
++        set({ loaded: true, runChatId: caps['runChatId'] === true, walkthroughRoots: caps['walkthroughRoots'] === true });
+       })
+-      .catch(() => { set({ loaded: true, runChatId: false }); })
++      .catch(() => { set({ loaded: true, runChatId: false, walkthroughRoots: false }); })
+       .finally(() => { inflight = null; });
+     return inflight;
+   },
+diff --git a/src/styles/components.css b/src/styles/components.css
+index 12a4806..c54974b 100644
+--- a/src/styles/components.css
++++ b/src/styles/components.css
+@@ -1037,3 +1037,69 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
+ @media (prefers-reduced-motion: no-preference) {
+   .wk-artifact { transition: height 220ms ease, width 220ms ease, box-shadow 220ms ease; }
+ }
++
++/* WT-U1: the walkthrough artifact — the preview in the thread (state, seats, chapter marks, the
++   failing frame) and the video editor at pane / full (the take, the timeline with the failing moment,
++   chapters as seek points, the checks track, the gate verbs, export). Tokens only. */
++.wk-walk { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; min-height: 0; overflow: auto; flex: 1 1 auto; }
++.wk-walk--preview { height: 100%; box-sizing: border-box; }
++.wk-walk-cols { display: flex; gap: 10px; align-items: flex-start; min-width: 0; }
++.wk-walk-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
++.wk-walk-frame { flex: 0 0 auto; max-height: 150px; max-width: 42%; border: 1px solid var(--status-fail); border-radius: var(--radius-sm); object-fit: contain; background: var(--surface-card); }
++.wk-walk-state { margin: 0; font-size: var(--text-sm); font-weight: var(--weight-semi); color: var(--ink-high); }
++.wk-walk-state--live .wk-walk-mark { color: var(--status-run); }
++.wk-walk-state--bad { color: var(--status-fail); }
++.wk-walk-state--ok .wk-walk-mark { color: var(--status-done); }
++.wk-walk-quiet { margin: 0; font-size: var(--text-xs); color: var(--ink-muted); }
++.wk-walk-bad { color: var(--status-fail); }
++.wk-walk-under { margin: 2px 0 0; padding-left: 14px; font-size: var(--text-xs); }
++.wk-walk-chapters { display: flex; flex-wrap: wrap; gap: 4px 10px; margin: 0; padding: 0; list-style: none; }
++.wk-walk-chapter-btn { display: inline-flex; align-items: center; gap: 5px; background: none; border: 0; padding: 0; font: inherit; font-size: var(--text-xs); color: var(--ink-body); cursor: default; }
++button.wk-walk-chapter-btn { cursor: pointer; }
++button.wk-walk-chapter-btn:hover .wk-walk-chapter-title { text-decoration: underline; }
++.wk-walk-chip { display: inline-flex; align-items: center; justify-content: center; min-width: 16px; height: 16px; padding: 0 4px; border-radius: var(--radius-full); border: 1px solid var(--border); font-size: 10px; color: var(--ink-muted); }
++.wk-walk-chip--pass { color: var(--status-done); border-color: var(--status-done); }
++.wk-walk-chip--fail { color: var(--status-fail); border-color: var(--status-fail); }
++.wk-walk-chip--live { color: var(--status-run); border-color: var(--status-run); }
++.wk-walk-chip--done { color: var(--ink-high); background: var(--surface-raised); }
++.wk-walk-chip--todo { border-style: dashed; opacity: .6; }
++.wk-walk-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
++.wk-walk-grid { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
++.wk-walk-stage { position: relative; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
++.wk-walk-side { display: flex; flex-direction: column; gap: 6px; min-width: 0; min-height: 0; }
++.wk-walk-video { display: block; width: 100%; max-height: 30vh; object-fit: contain; background: var(--surface-card); border-radius: var(--radius-sm); }
++/* Full screen: the take on the left, what to do and every check beside it — nothing load-bearing below the fold. */
++.wk-walk--full { overflow: hidden; }
++.wk-walk--full .wk-walk-grid { display: grid; grid-template-columns: minmax(0, 3fr) minmax(340px, 2fr); gap: 14px; flex: 1 1 auto; }
++.wk-walk--full .wk-walk-side { overflow: auto; }
++.wk-walk--full .wk-walk-video { max-height: calc(100vh - 190px); }
++.wk-walk-timeline { position: relative; height: 6px; border-radius: 3px; background: var(--surface-raised); }
++.wk-walk-tick { position: absolute; top: -2px; width: 2px; height: 10px; background: var(--ink-dim); transform: translateX(-1px); }
++.wk-walk-tick--fail { background: var(--status-fail); width: 3px; height: 12px; top: -3px; }
++.wk-walk-checks { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 3px; }
++.wk-walk-check { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; font-size: var(--text-xs); color: var(--ink-body); }
++.wk-walk-check--fail .wk-walk-check-text { color: var(--status-fail); font-weight: var(--weight-semi); }
++.wk-walk-check-text { flex: 1 1 auto; min-width: 0; }
++.wk-walk-time { background: none; border: 0; padding: 0; font: inherit; font-size: var(--text-xs); color: var(--ink-muted); cursor: pointer; }
++.wk-walk-time:hover { color: var(--ink-high); text-decoration: underline; }
++.wk-walk-evidence { flex-basis: 100%; margin: 0; padding-left: 22px; font-size: var(--text-xs); color: var(--ink-muted); }
++.wk-walk-evidence a { color: var(--accent); }
++.wk-walk-narration { font-size: var(--text-xs); color: var(--ink-muted); }
++.wk-walk-narration-list { margin: 0; padding-left: 16px; font-size: var(--text-xs); color: var(--ink-muted); }
++.wk-walk-pre { white-space: pre-wrap; margin: 4px 0 0; color: var(--ink-body); }
++.wk-walk-actions { display: flex; flex-wrap: wrap; gap: 6px; }
++/* Inline, the whole preview is one control (the catch above it opens the pane): the actions sit over the catch. */
++.wk-artifact--inline .wk-walk-actions { position: relative; z-index: 1; }
++.wk-artifact--inline .wk-walk-actions .wk-prop-btn { padding: 2px 10px; font-size: var(--text-xs); }
++.wk-walk-edit { display: flex; flex-direction: column; gap: 6px; }
++.wk-walk-edit .wk-prop-btns { margin-top: 0; }
++.wk-walk-storyline { width: 100%; box-sizing: border-box; font: inherit; font-size: var(--text-sm); padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-base); color: var(--ink-high); resize: vertical; }
++.wk-walk-storyline:focus-visible { outline: 2px solid transparent; box-shadow: var(--focus-ring); }
++.wk-walk-pad { padding: 8px 10px; }
++.wk-walk-detail { flex-basis: 100%; padding-left: 22px; }
++.wk-walk-export { position: relative; margin-left: auto; }
++.wk-walk-export-menu { position: absolute; right: 0; top: calc(100% + 4px); z-index: 2; display: flex; flex-direction: column; min-width: 190px; padding: 4px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-card); box-shadow: var(--shadow-card); }
++.wk-walk-export-item { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 5px 8px; border: 0; border-radius: var(--radius-sm); background: none; font: inherit; font-size: var(--text-sm); color: var(--ink-high); text-align: left; text-decoration: none; cursor: pointer; }
++.wk-walk-export-item:hover:not(:disabled) { background: var(--surface-raised); }
++.wk-walk-export-item:disabled { color: var(--ink-dim); cursor: default; }
++.wk-walk-export-item small { font-size: var(--text-xs); color: var(--ink-muted); }
+diff --git a/tests/walkthroughModel.test.ts b/tests/walkthroughModel.test.ts
+new file mode 100644
+index 0000000..86a68d3
+--- /dev/null
++++ b/tests/walkthroughModel.test.ts
+@@ -0,0 +1,205 @@
++// @vitest-environment node
++import { describe, expect, it } from 'vitest';
++import type { DemoView } from '../src/api/demo.js';
++import type { WalkthroughChapter, WalkthroughView } from '../src/api/walkthrough.js';
++import {
++  authorWaiting, checksTrack, chapterMarks, escalationOpen, exportOptions, failedChapter, fixNote, fmtTime, gateVerbs, playheadStart, recordingOf, recordingOfDemo,
++  seatLine, stateLine, underneathLines,
++} from '../src/board/walkthroughModel.js';
++
++/**
++ * The walkthrough artifact's words and geometry (DES-WALKTHROUGH-PROOF-001 §3 scenes 18–23, 41;
++ * slice WT-U1), pure: each case is one scene of concept-studio.html.
++ */
++
++function chapter(i: number, over: Partial<WalkthroughChapter> = {}): WalkthroughChapter {
++  return {
++    key: `ch${i}`, title: `Chapter ${i}`, blurb: `What chapter ${i} shows`, tags: [], resets: [], recorded: true,
++    index: i, total: 6, verdict: 'PASS', takes: 1, failedAtSec: null, failedFrame: null, proves: ['build'], legs: [],
++    checks: [
++      { id: `c${i}-screen`, kind: 'on_screen', sentence: `The screen says ${i}`, passed: true, atSec: 3, evidence: [`ch${i}/screen.png`], vaultEntry: null, detail: null },
++      { id: `c${i}-state`, kind: 'saved_state', sentence: `The order ${i} is saved`, passed: true, atSec: 9, evidence: [`ch${i}/state.json`], vaultEntry: null, detail: null },
++    ],
++    ...over,
++  };
++}
++
++function view(over: Partial<WalkthroughView> = {}): WalkthroughView {
++  const chapters = [1, 2, 3, 4, 5, 6].map((i) => chapter(i));
++  return {
++    runId: 'r-walk', stepId: 'walkthrough_review', planStepId: 'walkthrough_plan', state: 'passed', cause: null,
++    seat: { evaluator: 'agy', builders: ['codex'] }, tree: 'a1b2c3d', stale: false, sealed: true,
++    video: { mp4: 'take/video.mp4', poster: 'take/poster.jpg', markers: chapters.map((c, i) => ({ at: fmtTime(i * 10), sec: i * 10, title: c.title })) },
++    chapters, steps: [{ stepId: 'build', checkState: 'checked', provedBy: [{ chapter: 'ch4', atSec: 34 }] }],
++    ...over,
++  };
++}
++
++describe('scene 18 — recording', () => {
++  it('says the chapter being recorded, and who checks and who builds', () => {
++    const chapters = [1, 2, 3, 4, 5, 6].map((i) => chapter(i, { recorded: i < 4, takes: i < 4 ? 1 : 0, verdict: null }));
++    const r = recordingOf(view({ state: 'recording', chapters, sealed: false, video: { mp4: null, poster: null, markers: [] } }));
++    expect(stateLine(r)).toEqual({ mark: '●', text: 'Recording · chapter 4 of 6', tone: 'live' });
++    expect(seatLine(r)).toBe('agy checks, codex builds');
++    expect(chapterMarks(r).map((m) => m.current)).toEqual([false, false, false, true, false, false]);
++    expect(exportOptions(r)).toEqual([]);
++    expect(gateVerbs(r, true)).toEqual([]);
++  });
++  it('reads "recorded" off the wire’s own flag: crew floors `takes` at 1 for every chapter', () => {
++    const chapters = [1, 2, 3, 4, 5, 6].map((i) => chapter(i, { recorded: i < 4, takes: 1, verdict: null }));
++    const r = recordingOf(view({ state: 'recording', chapters, sealed: false, video: { mp4: null, poster: null, markers: [] } }));
++    expect(stateLine(r).text).toBe('Recording · chapter 4 of 6');
++  });
++});
++
++describe('before the recording', () => {
++  it('says "Writing the checks" only while the author is at it; a walkthrough not reached yet says so', () => {
++    const r = recordingOf(view({ state: 'authoring', chapters: [], sealed: false, video: { mp4: null, poster: null, markers: [] } }));
++    const unit = (status: string) => [{ id: 'r-walk:walkthrough_plan', ord: 3, denial_reason: null, status }];
++    expect(authorWaiting(r, unit('pending'))).toBe(true);
++    expect(authorWaiting(r, unit('distributed'))).toBe(false);
++    expect(authorWaiting(r, [{ id: 'r-other:walkthrough_plan', ord: 3, status: 'pending' }])).toBe(false);
++    expect(stateLine(r, { authorWaiting: true })).toEqual({ mark: '○', text: 'Not started yet', tone: 'quiet' });
++    expect(stateLine(r)).toEqual({ mark: '○', text: 'Writing the checks', tone: 'quiet' });
++  });
++});
++
++describe('scene 19 — a failing chapter at its frame', () => {
++  const failed = chapter(4, {
++    verdict: 'FAIL', failedAtSec: 11, failedFrame: 'ch4/fail.png', takes: 2,
++    checks: [
++      { id: 'c4-screen', kind: 'on_screen', sentence: 'Pay for your order shows', passed: true, atSec: 2, evidence: ['ch4/screen.png'], vaultEntry: null, detail: null },
++      { id: 'c4-events', kind: 'events', sentence: 'One charge event is emitted', passed: false, atSec: 11, evidence: ['ch4/events.json'], vaultEntry: null, detail: 'two charge events were emitted' },
++      { id: 'c4-must', kind: 'must_not_happen', sentence: 'The customer is never charged twice', passed: false, atSec: 11, evidence: ['ch4/charges.json'], vaultEntry: null, detail: null },
++    ],
++  });
++  const r = recordingOf(view({ state: 'failed', chapters: [chapter(1), chapter(2), chapter(3), failed, chapter(5, { verdict: null, recorded: false, takes: 0 }), chapter(6, { verdict: null, recorded: false, takes: 0 })] }));
++  it('says where it failed, on the take’s clock (the chapter’s start + its own seconds), and what happened underneath', () => {
++    expect(stateLine(r)).toEqual({ mark: '✗', text: 'Failed at 0:41', tone: 'bad' });
++    expect(underneathLines(r)).toEqual(['One charge event is emitted — two charge events were emitted', 'The customer is never charged twice']);
++    expect(failedChapter(r)?.failedFrame).toBe('ch4/fail.png');
++  });
++  it('the playhead opens at the failing moment of the stitched take (the chapter’s marker 0:30 + 0:11)', () => {
++    expect(playheadStart(r)).toBe(30 + 11);
++    const track = checksTrack(r).filter((k) => k.chapter.key === 'ch4');
++    expect(track.map((k) => [k.passed, k.atAbsSec])).toEqual([[true, 32], [false, 41], [false, 41]]);
++  });
++  it('the open gate is this walkthrough’s only when the run is parked on a denied unit of its pair', () => {
++    const units = [
++      { id: 'r-walk:build', ord: 1, denial_reason: null },
++      { id: 'r-walk:walkthrough_plan', ord: 3, denial_reason: null },
++      { id: 'r-walk:walkthrough_review', ord: 4, denial_reason: 'the walkthrough failed in chapter 4' },
++      { id: 'r-walk:deliver', ord: 5, denial_reason: null },
++    ];
++    expect(escalationOpen(r, 4, units)).toBe(true);
++    // A later gate (the deliver gate of a run whose failed walkthrough was waved through) is not it.
++    expect(escalationOpen(r, 5, units)).toBe(false);
++    // No gate open; and a recorder that was never denied (a plan gate before it ran).
++    expect(escalationOpen(r, null, units)).toBe(false);
++    expect(escalationOpen(r, 4, units.map((u) => ({ ...u, denial_reason: null })))).toBe(false);
++    // The author's own escalation (its storyline was refused) is the pair's too.
++    expect(escalationOpen(r, 3, units.map((u) => (u.ord === 3 ? { ...u, denial_reason: 'storyline_refused' } : { ...u, denial_reason: null })))).toBe(true);
++    // Another run's unit with the same step name is not this run's.
++    expect(escalationOpen(r, 4, [{ id: 'r-other:walkthrough_review', ord: 4, denial_reason: 'x' }])).toBe(false);
++  });
++  it('the thin result (keys and verdicts only: no checks, frame, markers or take) still says what failed, and offers nothing to watch', () => {
++    const thin = recordingOf(view({
++      state: 'failed', video: { mp4: null, poster: null, markers: [] },
++      chapters: [
++        chapter(1, { key: '01-totals', title: '01-totals', blurb: '', recorded: false, checks: [], proves: [], total: 2 }),
++        chapter(2, { key: '02-rounding', title: '02-rounding', blurb: '', recorded: false, verdict: 'FAIL', failedAtSec: 7.5, checks: [], proves: [], total: 2 }),
++      ],
++    }));
++    expect(stateLine(thin)).toEqual({ mark: '✗', text: 'Failed at 0:08', tone: 'bad' });
++    expect(underneathLines(thin)).toEqual([]);
++    expect(gateVerbs(thin, true)).toEqual(['fix', 'edit']);
++    expect(gateVerbs(thin, false)).toEqual([]);
++    expect(exportOptions(thin)).toEqual([]);
++    expect(fixNote(thin)).toBe('The walkthrough failed at chapter 2 (02-rounding) at 0:08. Fix what it caught, then it records again.');
++  });
++  it('without an author step there is no check to edit', () => {
++    const noAuthor = recordingOf(view({ state: 'failed', planStepId: null, chapters: [chapter(1), failed] }));
++    expect(gateVerbs(noAuthor, true)).toEqual(['watch', 'fix']);
++  });
++  it('offers Watch, and the two gate moves only while the escalation gate is open', () => {
++    expect(gateVerbs(r, true)).toEqual(['watch', 'fix', 'edit']);
++    expect(gateVerbs(r, false)).toEqual(['watch']);
++    expect(fixNote(r)).toBe('The walkthrough failed at chapter 4 (Chapter 4) at 0:41. One charge event is emitted — two charge events were emitted The customer is never charged twice Fix what it caught, then it records again.');
++  });
++});
++
++describe('scenes 21 / 23 — passed, exported', () => {
++  const r = recordingOf(view());
++  it('passed names the chapter count; the export is what the take wrote: the video, and the poster when there is one', () => {
++    expect(stateLine(r)).toEqual({ mark: '✓', text: 'Passed · 6 chapters', tone: 'ok' });
++    expect(exportOptions(r)).toEqual([
++      { format: 'mp4', label: 'Video', how: 'download', path: 'take/video.mp4' },
++      { format: 'poster', label: 'Poster', how: 'download', path: 'take/poster.jpg' },
++    ]);
++    expect(exportOptions(recordingOf(view({ video: { mp4: 'take/video.mp4', poster: null, markers: [] } }))).map((o) => o.format)).toEqual(['mp4']);
++    expect(playheadStart(r)).toBe(0);
++    expect(gateVerbs(r, true)).toEqual([]);
++  });
++  it('never says "checked" on its own (that word is the acceptance read’s)', () => {
++    expect(JSON.stringify(stateLine(r)) + seatLine(r)).not.toMatch(/checked/);
++  });
++});
++
++describe('scene 41 — the demo video in the same editor, without checks', () => {
++  const demo: DemoView = {
++    runId: 'r-demo', url: 'http://127.0.0.1:4000/', audience: 'the panel', stage: 'done', script: '# Script',
++    chapters: [{ key: 'a', title: 'A request arrives', blurb: '', tags: [], resets: [], recorded: true }, { key: 'b', title: 'It ships', blurb: '', tags: [], resets: [], recorded: true }],
++    markers: [{ at: '0:00', sec: 0, title: 'A request arrives' }, { at: '1:05', sec: 65, title: 'It ships' }],
++    sheets: [], video: { path: 'demo-video/demo.mp4', bytes: 10 }, recording: { readOnly: true },
++    review: { verdict: 'accept', findings: [], text: null, rejected: false }, seats: { recorder: 'claude', reviewer: 'codex' }, syntheticLabelled: true,
++  };
++  const r = recordingOfDemo(demo);
++  it('reads as ready to watch, with chapters as seek points and GIF / poster on request', () => {
++    expect(r.kind).toBe('demo-video');
++    expect(stateLine(r)).toEqual({ mark: '✓', text: 'Ready to watch · 2 chapters', tone: 'ok' });
++    expect(seatLine(r)).toBe('codex reviews, claude records');
++    expect(chapterMarks(r).map((m) => m.sec)).toEqual([0, 65]);
++    expect(exportOptions(r).map((o) => [o.format, o.how])).toEqual([['mp4', 'download'], ['gif', 'request'], ['poster', 'request']]);
++    expect(checksTrack(r)).toEqual([]);
++    expect(gateVerbs(r, true)).toEqual([]);
++    expect(escalationOpen(r, 3, [{ id: 'r-demo:review', ord: 3, denial_reason: 'x' }])).toBe(false);
++  });
++  it('offers GIF / poster only while the daemon will make them (the review gate, or an ended run)', () => {
++    const at = (stage: DemoView['stage']) => exportOptions(recordingOfDemo({ ...demo, stage })).map((o) => o.format);
++    expect(at('review_gate')).toEqual(['mp4', 'gif', 'poster']);
++    expect(at('failed')).toEqual(['mp4', 'gif', 'poster']);
++    expect(at('recording')).toEqual(['mp4']);
++    expect(exportOptions(recordingOfDemo({ ...demo, video: null }))).toEqual([]);
++  });
++});
++
++describe('chapter markers', () => {
++  it('two chapters with one title each get their own marker, in take order', () => {
++    const chapters = [chapter(1, { title: 'Pay' }), chapter(2, { title: 'Pay' }), chapter(3, { title: 'Receipt' })];
++    const markers = [{ at: '0:00', sec: 0, title: 'Pay' }, { at: '0:20', sec: 20, title: 'Pay' }, { at: '0:45', sec: 45, title: 'Receipt' }];
++    const r = recordingOf(view({ chapters, video: { mp4: 'take/video.mp4', poster: null, markers } }));
++    expect(chapterMarks(r).map((m) => m.sec)).toEqual([0, 20, 45]);
++  });
++  it('a chapter the take does not hold (never stitched) gets no marker, and the ones after it keep theirs', () => {
++    const chapters = [chapter(1, { title: 'Cart' }), chapter(2, { title: 'Pay', verdict: 'FAIL', failedAtSec: 7 }), chapter(3, { title: 'Receipt' })];
++    const markers = [{ at: '0:00', sec: 0, title: 'Cart' }, { at: '0:12', sec: 12, title: 'Receipt' }];
++    const r = recordingOf(view({ state: 'failed', chapters, video: { mp4: 'take/video.mp4', poster: null, markers } }));
++    expect(chapterMarks(r).map((m) => m.sec)).toEqual([0, null, 12]);
++    // With no marker the failing moment is the chapter's own seconds, never another chapter's start + them.
++    expect(stateLine(r).text).toBe('Failed at 0:07');
++  });
++  it('a title mismatch is read by position only when every chapter has a row', () => {
++    const chapters = [chapter(1, { title: 'One' }), chapter(2, { title: 'Two' })];
++    const renamed = [{ at: '0:00', sec: 0, title: 'Intro' }, { at: '0:30', sec: 30, title: 'Outro' }];
++    expect(chapterMarks(recordingOf(view({ chapters, video: { mp4: 'v.mp4', poster: null, markers: renamed } }))).map((m) => m.sec)).toEqual([0, 30]);
++    expect(chapterMarks(recordingOf(view({ chapters, video: { mp4: 'v.mp4', poster: null, markers: renamed.slice(0, 1) } }))).map((m) => m.sec)).toEqual([null, null]);
++  });
++});
++
++describe('fmtTime', () => {
++  it('reads minutes and seconds', () => {
++    expect(fmtTime(0)).toBe('0:00');
++    expect(fmtTime(41)).toBe('0:41');
++    expect(fmtTime(131.4)).toBe('2:11');
++  });
++});
