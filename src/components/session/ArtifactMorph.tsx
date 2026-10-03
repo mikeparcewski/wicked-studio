@@ -6,7 +6,9 @@ import { exportReadyText, runExport } from '../../interactive/exportWire.js';
 import { artifactSizeOf, setArtifactSize, topmostArtifact, useArtifactSizes } from '../../store/artifactSizes.js';
 import { DocCoverage } from './DocCoverage.js';
 import { PageEditor, type FrameParts } from './PageEditor.js';
+import { NoEditorPage, PluginArtifact } from './PluginArtifact.js';
 import { SlideStrip } from './SlideStrip.js';
+import { useEditorFor, useEditors } from '../../store/editors.js';
 
 /** WT-U1: a body other than the page-editor family — a run's walkthrough, a demo's video (EP-D3) —
  *  behind the same chrome: its kind (the artifact's `data-kind`) and the body drawn at each size.
@@ -23,10 +25,12 @@ export interface ArtifactSlot {
  * same `<section>` changes class, so the frame inside keeps its state and the shared-element morph
  * (View Transitions where the browser has them; nothing animates under reduced motion) is honest.
  *
- * The kind slot: a page hosts the built-in {@link PageEditor}; a written document and a deck (S9)
- * host the same editor with what stands beside its frame — the document's requirement coverage at
- * full screen, the deck's slide strip — and an Export in the header. EP-P2 / EP-P4 let the slot
- * host a `PluginHost` for the same kinds behind the same chrome.
+ * The kind slot: a page is opened by the editor PLUGIN crew's registry names for `page` — the
+ * built-in `wicked-page`, hash-pinned in studio's own bundle (EP-P2, {@link PluginArtifact}); with
+ * no registry, or none claiming the kind, the page is shown read-only and the sentence says so
+ * (DES-EDITOR-PLUGINS-001 §3.1). A written document and a deck (S9) host the studio editor with what
+ * stands beside its frame — the document's requirement coverage at full screen, the deck's slide
+ * strip — and an Export in the header, until EP-P4 re-hosts them the same way.
  */
 
 /** What each kind exports to, in the order offered (interactive's own formats). */
@@ -57,6 +61,9 @@ export function ArtifactMorph({ artifactKey, title, projectId, docId, composerKe
   const size = useArtifactSizes((s) => artifactSizeOf(s, artifactKey));
   const topmost = useArtifactSizes((s) => topmostArtifact(s) === artifactKey);
   const [head, setHead] = useState<number | null>(null);
+  // EP-P2: which plugin opens a page here (`undefined` while the registry is read; `null` = none).
+  const pageEditor = useEditorFor('page');
+  const noEditorReason = useEditors((s) => s.reason);
   const shrinkBtn = useRef<HTMLButtonElement | null>(null);
   const growBtn = useRef<HTMLButtonElement | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
@@ -179,7 +186,13 @@ export function ArtifactMorph({ artifactKey, title, projectId, docId, composerKe
       </header>
       {slot !== undefined
         ? slot.body(size, morph)
-        : <PageEditor projectId={projectId} docId={docId} composerKey={composerKey} size={size} kind={kind} side={side} onHead={setHead} />}
+        : kind === 'page'
+          ? (pageEditor === undefined
+            ? <div className="wk-artifact-body" data-testid="artifact-opening" />
+            : pageEditor === null
+              ? <NoEditorPage projectId={projectId} docId={docId} size={size} reason={noEditorReason} onHead={setHead} />
+              : <PluginArtifact projectId={projectId} docId={docId} title={title} composerKey={composerKey} size={size} morph={morph} editor={pageEditor} onHead={setHead} />)
+          : <PageEditor projectId={projectId} docId={docId} composerKey={composerKey} size={size} kind={kind} side={side} onHead={setHead} />}
       {exported !== null && size !== 'inline' && (
         <p data-testid="artifact-export-line" data-state={exported.state} className={`wk-artifact-line${exported.state === 'failed' ? ' wk-artifact-line--bad' : ''}`}>
           {exported.text}

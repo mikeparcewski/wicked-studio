@@ -3,7 +3,7 @@ import { EditorHost, type HostLogEntry, type HostUi } from '../src/editors/host.
 import { FakeDocAdapter, SAMPLE_PAGE } from '../src/editors/fakeAdapter.js';
 import { CHORD_TABLE, isForwardable, isOneGrapheme, judgeKey, judgeTyped } from '../src/editors/keys.js';
 import { builtinDefaults, changedBy, chipsFor, elementLabel, resolveKind } from '../src/editors/model.js';
-import { checkOps, escapeText, inventoryOf, isColour, themeTokensOf } from '../src/editors/ops.js';
+import { checkOps, inventoryOf, isColour, themeTokensOf } from '../src/editors/ops.js';
 import { parseInbound, parseReady, type PermissionId } from '../src/editors/protocol.js';
 
 /**
@@ -64,10 +64,9 @@ describe('the strict parser', () => {
 describe('ops: text and colours, never markup', () => {
   const inv = inventoryOf(SAMPLE_PAGE);
 
-  it('escapes text, so markup lands as literal text', () => {
-    expect(escapeText(`<img src=x onerror="a('b')">&`)).toBe('&lt;img src=x onerror=&quot;a(&#39;b&#39;)&quot;&gt;&amp;');
+  it('sends text as typed — the engine lands a content-edit as text (interactive #250), so markup is literal', () => {
     const r = checkOps([{ op: 'text', anchor: 'hero-title', value: '<b>Hi</b>', before: 'Book a study room in under a minute' }], inv);
-    expect(r).toStrictEqual({ ok: true, items: [{ selector: '[data-wid="hero-title"]', type: 'content-edit', value: '&lt;b&gt;Hi&lt;/b&gt;', before: 'Book a study room in under a minute' }] });
+    expect(r).toStrictEqual({ ok: true, items: [{ selector: 'hero-title', type: 'content-edit', value: '<b>Hi</b>', before: 'Book a study room in under a minute' }] });
   });
 
   it('the colour grammar: each accepted and refused form', () => {
@@ -86,7 +85,7 @@ describe('ops: text and colours, never markup', () => {
   it('anchors come from the host inventory; structural-change is not an op; caps hold', () => {
     expect(checkOps([{ op: 'remove', anchor: 'ghost' }], inv)).toMatchObject({ ok: false, code: 'bad_request' });
     expect(checkOps([{ op: 'structural-change', anchor: 'cta' }], inv)).toMatchObject({ ok: false, code: 'bad_request' });
-    expect(checkOps([{ op: 'remove', anchor: 'cta' }], inv)).toStrictEqual({ ok: true, items: [{ selector: '[data-wid="cta"]', type: 'remove' }] });
+    expect(checkOps([{ op: 'remove', anchor: 'cta' }], inv)).toStrictEqual({ ok: true, items: [{ selector: 'cta', type: 'remove' }] });
     expect(checkOps(Array.from({ length: 201 }, () => ({ op: 'remove', anchor: 'cta' })), inv)).toMatchObject({ ok: false, code: 'too_large' });
     expect(checkOps([], inv)).toMatchObject({ ok: false });
   });
