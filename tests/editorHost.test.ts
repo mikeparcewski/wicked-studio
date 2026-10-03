@@ -295,6 +295,36 @@ describe('the host controller', () => {
     host.teardown('done');
   });
 
+  it('codex r1: `written` carries the HOST-checked anchors; an undo the adapter refused without moving the head posts no artifact.changed and keeps the inventory', async () => {
+    const { host, ui, fromFrame, adapter } = makeHost(['artifact.read', 'artifact.write', 'selection.chip']);
+    const written = vi.fn();
+    ui.written = written;
+    let port: MessagePort | null = null;
+    vi.spyOn(host.frame.contentWindow!, 'postMessage').mockImplementation(((_m: unknown, _o: unknown, tr?: Transferable[]) => { port = (tr?.[0] as MessagePort) ?? null; }) as never);
+    fromFrame(env('plugin.ready', { editor: 'acme', version: '0.1.0', protocol: [1] }));
+    const toPlugin: { type?: string }[] = [];
+    port!.onmessage = (m) => toPlugin.push(m.data as { type?: string });
+    port!.postMessage(env('version.write', { base: 1, ops: [{ op: 'text', anchor: 'cta', value: 'Reserve', before: 'Book a room' }], summary: 'the price title' }, 'w1'));
+    await vi.waitFor(() => expect(toPlugin.find((m) => (m as { re?: string }).re === 'w1')).toBeDefined());
+    expect(toPlugin.find((m) => (m as { re?: string }).re === 'w1')).toMatchObject({ ok: true });
+    expect(written).toHaveBeenCalledTimes(1);
+    // The words come from the anchors the host checked, never the plugin's summary.
+    expect(written.mock.calls[0]![0]).toStrictEqual({ version: 2, base: 1, summary: 'the price title', anchors: ['cta'] });
+    // The inventory of version 2 is read once for a chip...
+    port!.postMessage(env('selection.set', { anchors: [{ kind: 'element', id: 'cta' }] }));
+    await vi.waitFor(() => expect(ui.chips).toHaveBeenCalledTimes(1));
+    const reads = adapter.reads;
+    // ...and stands after an undo the adapter refused with the head where it was: nothing changed, so
+    // the plugin hears nothing and the next chip needs no re-read.
+    vi.spyOn(adapter, 'undo').mockResolvedValue({ error: 'unavailable', message: 'The change was sent, but no new version appeared.' });
+    expect(await host.undo(2)).toMatchObject({ error: 'unavailable' });
+    expect(toPlugin.filter((m) => m.type === 'artifact.changed')).toHaveLength(0);
+    port!.postMessage(env('selection.set', { anchors: [{ kind: 'element', id: 'cta' }] }));
+    await vi.waitFor(() => expect(ui.chips).toHaveBeenCalledTimes(2));
+    expect(adapter.reads).toBe(reads);
+    host.teardown('done');
+  });
+
   it('a second load of the frame is a teardown', () => {
     const { host, ui } = makeHost();
     host.frame.dispatchEvent(new Event('load'));

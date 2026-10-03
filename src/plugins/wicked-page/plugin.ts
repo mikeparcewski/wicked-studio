@@ -38,7 +38,7 @@ interface Inventory {
 
 const MARKUP = `
 <div data-testid="page-editor" id="editor" class="editor" data-kind="page" data-head="" data-pickable="false" data-selected="" data-size="pane" tabindex="0" role="application" aria-label="The page">
-  <iframe data-testid="page-frame" id="frame" class="frame" sandbox="allow-scripts" title="The page"></iframe>
+  <div id="stage" class="stage"></div>
   <div data-testid="page-hover-box" id="hover" class="box box--hover" hidden></div>
   <div data-testid="page-selected-box" id="selected" class="box" data-wid="" hidden></div>
   <textarea data-testid="page-edit-input" id="input" class="input" rows="1" aria-label="New text" hidden></textarea>
@@ -69,7 +69,11 @@ function capital(s: string): string {
 export function start(): void {
   document.body.insertAdjacentHTML('afterbegin', MARKUP);
   const editor = el<HTMLDivElement>('editor');
-  const frame = el<HTMLIFrameElement>('frame');
+  const stage = el<HTMLDivElement>('stage');
+  // The nested frame for the version on screen. Every version gets a NEW element (never a srcdoc swap on
+  // the old one): a message is accepted only from the current element's own window, so a late load or a
+  // forged message from a previous document has no element to speak for (codex r1).
+  let frame: HTMLIFrameElement | null = null;
   const hoverBox = el<HTMLDivElement>('hover');
   const selBox = el<HTMLDivElement>('selected');
   const input = el<HTMLTextAreaElement>('input');
@@ -113,13 +117,25 @@ export function start(): void {
   // A version asked for while another is being read: the newest wins, once that read is done.
   let queued: { version?: number } | null = null;
 
-  const postToFrame = (msg: unknown): void => { frame.contentWindow?.postMessage(msg, '*'); };
-  const askInventory = (): void => {
+  const postToFrame = (msg: unknown): void => { frame?.contentWindow?.postMessage(msg, '*'); };
+  /** The current element loaded its document: ask it for the inventory a few times. */
+  const askInventory = (loaded: HTMLIFrameElement): void => {
+    if (loaded !== frame) return; // a previous version's element, finishing late: not this document
     readyGen = gen;
     for (const t of timers) clearTimeout(t);
     timers = ASK_AT_MS.map((ms) => setTimeout(() => postToFrame(REQUEST_INVENTORY), ms));
   };
-  frame.addEventListener('load', askInventory);
+  const mountFrame = (srcdoc: string): void => {
+    const next = document.createElement('iframe');
+    for (const [k, v] of Object.entries({ 'data-testid': 'page-frame', sandbox: 'allow-scripts', title: 'The page', class: 'frame' })) next.setAttribute(k, v);
+    next.addEventListener('load', () => askInventory(next));
+    const old = frame;
+    frame = next;
+    for (const t of timers) clearTimeout(t);
+    next.srcdoc = srcdoc;
+    stage.appendChild(next);
+    old?.remove();
+  };
 
   const box = (wid: string | null): OverlayBox | null => {
     if (wid === null || inventory === null) return null;
@@ -194,7 +210,7 @@ export function start(): void {
       selected = null;
       cancelEdit();
       draw();
-      frame.srcdoc = hasInstrumentBridge(html) ? html : appendInstrumentBridge(html);
+      mountFrame(hasInstrumentBridge(html) ? html : appendInstrumentBridge(html));
     } finally {
       rendering = false;
       if (queued !== null) {
@@ -207,7 +223,7 @@ export function start(): void {
 
   // ── bridge → plugin (the nested frame's own window, this document's generation only) ──
   window.addEventListener('message', (e: MessageEvent) => {
-    if (frame.contentWindow === null || e.source !== frame.contentWindow || readyGen !== gen) return;
+    if (frame === null || frame.contentWindow === null || e.source !== frame.contentWindow || readyGen !== gen) return;
     const msg = parseBridge(e.data);
     if (msg === null) return;
     if (msg.type === 'wid-inventory') {

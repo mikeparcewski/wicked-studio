@@ -81,20 +81,28 @@ export class InteractiveDocAdapter implements HostAdapter {
     return { versions: m.versions.map((v) => ({ version: v.version, parent: v.parent, createdAt: v.created_at })), head: m.head };
   }
 
-  /** The version THIS edit made: a deterministic version branched off `base` — the lowest such one.
-   *  `{other}` when the head moved without one, `null` when nothing landed in the window. */
-  private async waitForLanded(base: number): Promise<{ version: number } | { other: number } | null> {
+  /**
+   * The version THIS edit made. The bridge records no correlation id on a feedback-made version (the
+   * real bridge drops `source_message_id`; the fixture mirrors it), so the only signal is the shape: a
+   * deterministic version branched off `base`. It is claimed only when it is NEW since the post (a
+   * version another tab made before it is never ours — codex r1) and ALONE: two new deterministic
+   * children of the base in the window cannot be told apart, and then neither is claimed. `{other}`
+   * when the head moved without one, `null` when nothing landed in the window; the manifest's head is
+   * returned beside the match, because a later version may already be the head.
+   */
+  private async waitForLanded(base: number, before: ReadonlySet<number>): Promise<{ version: number; head: number } | { ambiguous: number[]; head: number } | { other: number } | null> {
     const until = Date.now() + this.pollForMs;
     let moved: number | null = null;
     while (Date.now() < until) {
       try {
         const m = await getVersions(this.projectId, this.docId);
         this.entries = m.versions;
-        const mine = m.versions
-          .filter((v) => v.version > base && v.parent === base && v.feedback_file !== null)
+        const fresh = m.versions
+          .filter((v) => v.parent === base && v.feedback_file !== null && !before.has(v.version))
           .map((v) => v.version)
-          .sort((a, b) => a - b)[0];
-        if (mine !== undefined) return { version: mine };
+          .sort((a, b) => a - b);
+        if (fresh.length === 1) return { version: fresh[0]!, head: m.head };
+        if (fresh.length > 1) return { ambiguous: fresh, head: m.head };
         if (m.head > base) moved = m.head;
       } catch { /* re-read on the next tick */ }
       await new Promise((r) => setTimeout(r, POLL_MS));
@@ -103,18 +111,28 @@ export class InteractiveDocAdapter implements HostAdapter {
   }
 
   async write(base: number, items: WireItem[]): Promise<AdapterResult<{ version: number }>> {
+    // What exists before the post: a version already there can never be the one this post makes.
+    let before = new Set<number>(this.entries.map((v) => v.version));
+    try {
+      const m = await getVersions(this.projectId, this.docId);
+      this.entries = m.versions;
+      before = new Set(m.versions.map((v) => v.version));
+    } catch { /* the last manifest read stands */ }
     await postEvent(this.projectId, {
       event_type: FEEDBACK_EVENT,
       payload: { document_id: this.docId, version: base, author: 'studio', items },
     });
-    const landed = await this.waitForLanded(base);
+    const landed = await this.waitForLanded(base, before);
     if (landed === null) return { error: 'unavailable', message: 'The change was sent, but no new version appeared.' };
     if ('other' in landed) {
       this.moveHead(landed.other);
       return { error: 'stale', message: `The page changed (version ${landed.other}), but not by your edit — it may have been stale.`, head: landed.other };
     }
+    this.moveHead(landed.head);
+    if ('ambiguous' in landed) {
+      return { error: 'unavailable', message: `Two edits landed from version ${base} at once (versions ${landed.ambiguous.join(' and ')}); which is yours cannot be told, so nothing here offers to undo it.`, head: landed.head };
+    }
     this.writes.set(landed.version, base);
-    this.moveHead(landed.version);
     return { version: landed.version };
   }
 
