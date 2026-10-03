@@ -12,6 +12,8 @@ import { anyModalOpen, useLayerStore } from '../../store/layers.js';
 import { HealthRailSection } from '../HealthRailSection.js';
 import { NotificationBell } from '../NotificationBell.js';
 import { WatchPill } from './WatchPill.js';
+import { StandingOrdersPanel } from '../StandingOrdersPanel.js';
+import { DeliveryFreezeSwitch } from '../DeliveryFreezeSwitch.js';
 
 /**
  * THE SESSION RAIL (skin `desk`, DES-STUDIO-REBUILD-001 §4.2, slice S4) — 236 px, on every route.
@@ -134,6 +136,12 @@ export function SessionRail({ runs, needRows, navigate, pathname }: {
                   {d.label}
                 </a>
               ))}
+              {/* COVERAGE.md finding 2: the two switches that change what studio does while you
+                  are away — never lost at the flip. On, the Desk says so too (DeskStateRows). */}
+              <div data-testid="desk-rail-controls" aria-label="Standing orders and deliveries" role="group" className="wk-rail-controls">
+                <StandingOrdersPanel />
+                <DeliveryFreezeSwitch placement="inline" />
+              </div>
             </div>
           )}
         </div>

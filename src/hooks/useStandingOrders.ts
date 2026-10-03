@@ -39,6 +39,9 @@ export interface StandingOrders {
  * rule the person CONFIRMED is ever sent to be stored; a rule the invariant refuses cannot be
  * confirmed (the refusal is said instead).
  */
+/** Fired after any standing-orders write, so every mount re-reads. */
+export const ORDERS_CHANGED = 'wicked:standing-orders-changed';
+
 export function useStandingOrders(): StandingOrders {
   const projects = useProjectsStore((s) => s.projects);
   const [state, setState] = useState<StandingOrdersState | null | 'unavailable'>(null);
@@ -64,6 +67,11 @@ export function useStandingOrders(): StandingOrders {
 
   useEffect(() => {
     void refresh();
+    // Every surface holding the orders re-reads when one of them writes (the desk's rail and the
+    // Desk's "you are away" row are two mounts of this hook).
+    const onChange = (): void => { void refresh(true); };
+    window.addEventListener(ORDERS_CHANGED, onChange);
+    return () => window.removeEventListener(ORDERS_CHANGED, onChange);
   }, [refresh]);
 
   const act = useCallback(
@@ -75,10 +83,12 @@ export function useStandingOrders(): StandingOrders {
         failed = true;
         setError(e instanceof Error ? e.message : String(e));
       }
-      // A refused write stays said after the re-read (codex on #347).
-      await refresh(failed);
+      // A refused write stays said after the re-read (codex on #347): only a success clears it.
+      // Every mount — this one included — re-reads once on the event (codex: no second GET).
+      if (!failed) setError(null);
+      window.dispatchEvent(new Event(ORDERS_CHANGED));
     },
-    [refresh],
+    [],
   );
 
   const parse = useCallback(

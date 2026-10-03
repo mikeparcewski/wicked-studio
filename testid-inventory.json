@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.5.19",
   "counts": {
-    "files": 193,
-    "occurrences": 2122,
-    "static": 1859,
+    "files": 194,
+    "occurrences": 2128,
+    "static": 1863,
     "dynamic": 79,
     "computed": 7
   },
@@ -2349,6 +2349,12 @@
       ]
     },
     {
+      "testId": "desk-rail-controls",
+      "files": [
+        "src/components/desk/SessionRail.tsx"
+      ]
+    },
+    {
       "testId": "desk-rail-everything",
       "files": [
         "src/components/desk/SessionRail.tsx"
@@ -2394,6 +2400,24 @@
       "testId": "desk-start-row",
       "files": [
         "src/components/desk/Desk.tsx"
+      ]
+    },
+    {
+      "testId": "desk-state",
+      "files": [
+        "src/components/desk/DeskStateRows.tsx"
+      ]
+    },
+    {
+      "testId": "desk-state-back",
+      "files": [
+        "src/components/desk/DeskStateRows.tsx"
+      ]
+    },
+    {
+      "testId": "desk-state-line",
+      "files": [
+        "src/components/desk/DeskStateRows.tsx"
       ]
     },
     {

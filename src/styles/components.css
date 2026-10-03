@@ -961,3 +961,7 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
 .wk-watch-card-sentence { margin: 0 0 6px; font-size: var(--text-sm); font-weight: var(--weight-semi); color: var(--ink-high); }
 .wk-watch-card-row { margin: 0 0 4px; font-size: var(--text-xs); color: var(--ink-body); }
 .wk-watch-card-foot { margin: 6px 0 0; font-size: var(--text-2xs); color: var(--ink-dim); }
+
+/* ── The desk's standing states and the rail's controls (coverage finding 2) ──────────────── */
+.wk-rail-controls { display: flex; flex-direction: column; gap: 8px; padding: 8px 10px 4px; margin-top: 6px; border-top: 1px solid var(--border-subtle); }
+.wk-rail-controls .wk-orders { flex-wrap: wrap; white-space: normal; font-family: inherit; }
