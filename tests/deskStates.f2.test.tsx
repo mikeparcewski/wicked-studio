@@ -22,7 +22,8 @@ beforeEach(() => {
       puts.push({ path, body });
       if (path.startsWith('/standing-orders')) orders = { ...orders, away: body['away'] === true };
     }
-    const answer = path.startsWith('/standing-orders') ? orders : {};
+    const answer = path.startsWith('/standing-orders') ? orders
+      : path === '/deliveries/freeze' ? { frozen: false, since: null, by: null, reason: null } : {};
     return Promise.resolve(new Response(JSON.stringify(answer), { status: 200, headers: { 'content-type': 'application/json' } }));
   }));
   useDeliveryFreezeStore.setState({ status: 'ready', state: { frozen: false, since: null, by: null, reason: null }, busy: false, error: null });
@@ -55,6 +56,9 @@ describe('frozen', () => {
     expect(confirm.className).not.toMatch(/\bfixed\b/); // in place, not floating over the bar
     expect(confirm.getAttribute('data-action')).toBe('unfreeze');
     expect(puts).toStrictEqual([]); // the click only opened the consequence
+    await act(async () => { fireEvent.click(screen.getByTestId('delivery-freeze-confirm-btn')); });
+    expect(puts).toStrictEqual([{ path: '/deliveries/freeze', body: { frozen: false } }]);
+    await waitFor(() => expect(screen.queryByTestId('desk-state')).toBeNull());
   });
 
   it('the status bar keeps its floating confirm', () => {
@@ -71,8 +75,12 @@ describe('away', () => {
     const row = await screen.findByTestId('desk-state');
     expect(row.getAttribute('data-state')).toBe('away');
     expect(screen.getByTestId('desk-state-line').textContent).toBe('No standing orders: every question waits for you.');
+    const gets = (): number => (fetch as unknown as { mock: { calls: Array<[string, RequestInit?]> } }).mock.calls
+      .filter(([u, i]) => u.includes('/standing-orders') && (i?.method ?? 'GET') === 'GET').length;
+    const before = gets();
     await act(async () => { fireEvent.click(screen.getByTestId('desk-state-back')); });
     expect(puts.some((p) => p.path.startsWith('/standing-orders') && (p.body as { away?: unknown }).away === false)).toBe(true);
+    await waitFor(() => expect(gets() - before).toBe(2)); // one re-read per mount (the Harness holds two), not three
     await waitFor(() => expect(screen.queryByTestId('desk-state')).toBeNull());
   });
 });

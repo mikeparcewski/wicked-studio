@@ -83,8 +83,9 @@ export function useStandingOrders(): StandingOrders {
         failed = true;
         setError(e instanceof Error ? e.message : String(e));
       }
-      // A refused write stays said after the re-read (codex on #347).
-      await refresh(failed);
+      // A refused write stays said after the re-read (codex on #347): only a success clears it.
+      // Every mount — this one included — re-reads once on the event (codex: no second GET).
+      if (!failed) setError(null);
       window.dispatchEvent(new Event(ORDERS_CHANGED));
     },
     [refresh],
