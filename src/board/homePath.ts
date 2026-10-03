@@ -35,10 +35,11 @@ const HOME_HEAD =
 
 /** A path field: the home directory is the whole path, or is followed by a separator. */
 const PATH_RE = new RegExp(String.raw`^${HOME_HEAD}(?=$|[\\\/])`);
-/** In prose: starts at the text's start or after a character no path contains (a closing bracket
- *  is one — `/tmp/(cache)/home/x` is one path), and ends at the text's end, a separator,
- *  whitespace or punctuation (which stays in the text). */
-const TEXT_RE = new RegExp(String.raw`(^|[^A-Za-z0-9_.~\\\/)\]-])${HOME_HEAD}(?=$|[\\\/\s"'\`()\[\]<>,;:.!?])`, 'g');
+/** In prose: starts at the text's start or after a prose delimiter — whitespace, a quote, an opening
+ *  bracket, `=`, `:` or `,` (an allow-list: any other character, `/tmp/cache!/home/x` included, is
+ *  inside a path) — and ends at the text's end, a separator, whitespace or punctuation (which
+ *  stays in the text). */
+const TEXT_RE = new RegExp(String.raw`(^|[\s"'\`(\[<=:,])${HOME_HEAD}(?=$|[\\\/\s"'\`()\[\]<>,;:.!?])`, 'g');
 
 /** One path as the daemon reports it → its display form (`~/…` when it is under a home directory). */
 export function displayPath(path: string): string {

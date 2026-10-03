@@ -70,6 +70,8 @@ describe('displayText — every home path inside prose reads as ~', () => {
     expect(displayText('the /home of the brave')).toBe('the /home of the brave');
     expect(displayText('already ~/x and /var/root/y')).toBe('already ~/x and /var/root/y');
     expect(displayText('cache at /tmp/(cache)/home/alice/file and /srv/[a]/Users/b')).toBe('cache at /tmp/(cache)/home/alice/file and /srv/[a]/Users/b');
+    expect(displayText('odd but one path: /tmp/cache!/home/alice/file')).toBe('odd but one path: /tmp/cache!/home/alice/file');
+    expect(displayText('root=/Users/mika, db:/home/ci/x.db')).toBe('root=~, db:~/x.db');
     expect(displayText('')).toBe('');
   });
 });
