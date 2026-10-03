@@ -118,14 +118,19 @@ describe('scene 19 — a failing chapter at its frame', () => {
     expect(fixNote(thin)).toBe('The walkthrough failed at chapter 2 (02-rounding) at 0:08. Fix what it caught, then it records again.');
   });
   it('a newer take of the same step is another take: an action drawn from this one is not for it', () => {
-    const again = recordingOf(view({ state: 'failed', chapters: [chapter(1), chapter(2), chapter(3), { ...failed, takes: 3 }, chapter(5), chapter(6)] }));
-    const otherCheck = recordingOf(view({ state: 'failed', chapters: [chapter(1), chapter(2), chapter(3),
-      { ...failed, checks: failed.checks.map((k) => (k.id === 'c4-must' ? { ...k, passed: true } : k)) }, chapter(5), chapter(6)] }));
-    const same = recordingOf(view({ state: 'failed', chapters: [chapter(1), chapter(2), chapter(3), failed, chapter(5, { verdict: null, recorded: false, takes: 0 }), chapter(6, { verdict: null, recorded: false, takes: 0 })] }));
-    expect(takeFingerprint(same)).toBe(takeFingerprint(r));
-    expect(takeFingerprint(again)).not.toBe(takeFingerprint(r));
-    expect(takeFingerprint(otherCheck)).not.toBe(takeFingerprint(r));
-    expect(takeFingerprint(recordingOf(view({ state: 'recording', chapters: same.chapters.map(() => chapter(1)) })))).not.toBe(takeFingerprint(r));
+    // Each variant differs from `r` in exactly ONE thing, so each inequality proves that one guard.
+    const rest = [chapter(5, { verdict: null, recorded: false, takes: 0 }), chapter(6, { verdict: null, recorded: false, takes: 0 })];
+    const withFourth = (c: WalkthroughChapter, over: Partial<WalkthroughView> = {}) =>
+      recordingOf(view({ state: 'failed', chapters: [chapter(1), chapter(2), chapter(3), c, ...rest], ...over }));
+    expect(takeFingerprint(withFourth(failed))).toBe(takeFingerprint(r));
+    expect(takeFingerprint(withFourth({ ...failed, takes: 3 }))).not.toBe(takeFingerprint(r));
+    expect(takeFingerprint(withFourth({ ...failed, failedAtSec: 12 }))).not.toBe(takeFingerprint(r));
+    expect(takeFingerprint(withFourth({ ...failed, verdict: 'INCONCLUSIVE' }))).not.toBe(takeFingerprint(r));
+    expect(takeFingerprint(withFourth({ ...failed, checks: failed.checks.map((k) => (k.id === 'c4-must' ? { ...k, passed: true } : k)) }))).not.toBe(takeFingerprint(r));
+    expect(takeFingerprint(withFourth(failed, { state: 'inconclusive' }))).not.toBe(takeFingerprint(r));
+    expect(takeFingerprint(withFourth(failed, { stepId: 'walkthrough_review_2' }))).not.toBe(takeFingerprint(r));
+    // What does not make it another take: where the files are, who sat where, the seal.
+    expect(takeFingerprint(withFourth(failed, { sealed: false, seat: { evaluator: 'pi', builders: [] } }))).toBe(takeFingerprint(r));
   });
   it('without an author step there is no check to edit', () => {
     const noAuthor = recordingOf(view({ state: 'failed', planStepId: null, chapters: [chapter(1), failed] }));

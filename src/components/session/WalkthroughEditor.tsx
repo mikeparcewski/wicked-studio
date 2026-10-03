@@ -160,6 +160,9 @@ function Body({ rec, size, morph, units, reload }: {
   // commit of newer units and this mirror of them.)
   const unitsRef = useRef(units);
   useLayoutEffect(() => { unitsRef.current = units; }, [units]);
+  // The take on screen as of the latest commit, for the same reason.
+  const recRef = useRef(rec);
+  useLayoutEffect(() => { recRef.current = rec; }, [rec]);
 
   // A failed walkthrough's gate may predate this page (a late join): read it once, so the actions
   // the escalation allows are offered without a visit to the run page.
@@ -226,17 +229,18 @@ function Body({ rec, size, morph, units, reload }: {
   /** The gate, re-read now, is still this walkthrough's own escalation — else nothing may be sent:
    *  the verbs were drawn from an older read, and another gate may have opened since. */
   const stillMine = async (): Promise<void> => {
-    await refreshGate(rec.runId);
-    // Left the page while the gate was re-read: the operator is not looking at this any more.
+    // Both reads first; every check after the LAST await, in one synchronous run with the send that
+    // follows it — nothing can change between a check and what it guards.
+    const [, view] = await Promise.all([refreshGate(rec.runId), walkthroughApi.view(rec.runId, rec.step)]);
+    // Left the page while they were read: the operator is not looking at this any more.
     if (!live.current) throw new Error('Nothing was sent.');
     const now = useGateStore.getState().gates[rec.runId];
     if (!escalationOpen(rec, now?.ord ?? null, unitsRef.current)) throw new Error('This walkthrough is no longer waiting on you — nothing was sent.');
-    // The same step can escalate again for a NEWER take (it was recorded again and failed again):
-    // what is on screen — and the note built from it — is then the earlier take's. Read the take now
-    // and send only when it is still the one shown.
-    const fresh = recordingOf(await walkthroughApi.view(rec.runId, rec.step));
-    if (!live.current) throw new Error('Nothing was sent.');
-    if (takeFingerprint(fresh) !== takeFingerprint(rec)) {
+    // The same step can escalate again for a NEWER take (recorded again, failed again): the take the
+    // click was made on (`rec`: the fix note is built from it), the take on screen now and the take
+    // the daemon holds now must be one and the same.
+    const clicked = takeFingerprint(rec);
+    if (takeFingerprint(recordingOf(view)) !== clicked || takeFingerprint(recRef.current) !== clicked) {
       reload();
       throw new Error('The walkthrough changed since this was shown — nothing was sent. Look at it again.');
     }
