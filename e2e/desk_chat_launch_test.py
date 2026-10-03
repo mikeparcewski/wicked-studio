@@ -78,6 +78,14 @@ with sync_playwright() as p:
     except Exception as e:  # noqa: BLE001
         page.screenshot(path=str(SHOTS / "desk-chat-launch-no-promote.png"))
         fail("promote-visible", str(e))
+    # The promote carries the seats that replied; a click before the transcript marked claude as
+    # replied carries none and Send stays off (main CI 1cf9702). Wait for the replied seat first.
+    try:
+        page.locator('[data-testid="seat-chip"][data-agent="claude"][data-state="replied"]').wait_for(
+            state="visible", timeout=15000)
+    except Exception as e:  # noqa: BLE001
+        page.screenshot(path=str(SHOTS / "desk-chat-launch-no-seat.png"))
+        fail("chat-seat-selected", str(e))
     page.get_by_test_id("chat-promote").click()
     page.get_by_test_id("launch-problem").wait_for(state="visible", timeout=10000)
     problem = page.get_by_test_id("launch-problem").input_value()
@@ -90,9 +98,13 @@ with sync_playwright() as p:
     if page.get_by_test_id("preflight-override").count() > 0:
         page.get_by_test_id("preflight-override").click()
     submit = page.get_by_test_id("launch-submit")
-    page.wait_for_function(
-        "() => { const b = document.querySelector('[data-testid=\"launch-submit\"]'); return b && !b.disabled; }",
-        timeout=10000)
+    try:
+        page.wait_for_function(
+            "() => { const b = document.querySelector('[data-testid=\"launch-submit\"]'); return b && !b.disabled; }",
+            timeout=20000)
+    except Exception as e:  # noqa: BLE001
+        page.screenshot(path=str(SHOTS / "desk-chat-launch-send-off.png"))
+        fail("send-enabled", str(e))
     submit.click()
     deadline = time.time() + 10
     while time.time() < deadline and not launches():
