@@ -39,6 +39,10 @@ export type ExportFormat = 'html' | 'pdf' | 'pptx';
 export interface DocSummary {
   name: string;
   kind: DocKind;
+  /** The style the document was created with (`web` | `doc` | `ppt` | `brochure`), when one was
+   *  recorded — the author's declaration of what it is (the bridge omits the field otherwise).
+   *  Typed open: a newer bridge may name another. */
+  style?: string;
   head: number;
   versions: number;
   updated_at: string | null;

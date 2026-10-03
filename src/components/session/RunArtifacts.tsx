@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { listDocs, type DocSummary } from '../../api/interactive.js';
 import type { SessionView } from '../../api/types.js';
 import { isDocRun } from '../../interactive/runBinding.js';
+import { editorKindOf } from '../../board/artifactMorph.js';
+import { repoNameOf } from '../../board/deskWords.js';
 import { artifactKey } from '../../store/artifactSizes.js';
 import { ArtifactMorph } from './ArtifactMorph.js';
 
@@ -55,6 +57,8 @@ export function RunArtifacts({ view, composerKey }: { view: SessionView; compose
           projectId={projectId}
           docId={d.name}
           composerKey={composerKey}
+          kind={editorKindOf(d.style)}
+          repoId={repoNameOf(view)}
         />
       ))}
     </div>

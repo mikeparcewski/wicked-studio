@@ -27,7 +27,11 @@
 //     original's move) and reported (`wid-click`) — click-to-edit, no mode toggle;
 //   · the inventory carries per-block `text` (the Change-text seed / `before`
 //     snapshot) and `composite` (nested anchors — text replace hidden, as the
-//     original InlineComment hides it).
+//     original InlineComment hides it). A block that holds no other block carries
+//     its WHOLE text: the engine calls an edit stale unless `before` equals the
+//     element's text, so a paragraph cut at 400 characters could never be changed
+//     (S9). A container carries only its opening, and `cut` marks any text that
+//     was cut — a cut text is never a `before`.
 
 /** Marker every bridge answers to — presence in served HTML means "already bridged". */
 const BRIDGE_MARK = 'request-inventory';
@@ -67,8 +71,10 @@ const BRIDGE_SOURCE = `
       widMap[wid] = { x: r.x, y: r.y, width: r.width, height: r.height,
                       top: r.top, left: r.left, right: r.right, bottom: r.bottom };
       var text = (el.textContent || '').replace(/\\s+/g, ' ').trim();
-      blocks[wid] = { text: text.length > 400 ? text.slice(0, 400) : text,
-                      composite: el.querySelector('[data-wid]') !== null };
+      var composite = el.querySelector('[data-wid]') !== null;
+      var cap = composite ? 400 : 20000;
+      blocks[wid] = { text: text.length > cap ? text.slice(0, cap) : text, composite: composite };
+      if (text.length > cap) blocks[wid].cut = true;
     }
     return { v: 1, type: 'wid-inventory', widMap: widMap, blocks: blocks,
              scrollX: window.scrollX, scrollY: window.scrollY };

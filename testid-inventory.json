@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.5.19",
   "counts": {
-    "files": 203,
-    "occurrences": 2210,
-    "static": 1930,
+    "files": 205,
+    "occurrences": 2222,
+    "static": 1941,
     "dynamic": 80,
     "computed": 7
   },
@@ -204,6 +204,36 @@
       "testId": "artifact-card",
       "files": [
         "src/components/ArtifactCard.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-export",
+      "files": [
+        "src/components/session/ArtifactMorph.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-export-download",
+      "files": [
+        "src/components/session/ArtifactMorph.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-export-format",
+      "files": [
+        "src/components/session/ArtifactMorph.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-export-line",
+      "files": [
+        "src/components/session/ArtifactMorph.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-export-menu",
+      "files": [
+        "src/components/session/ArtifactMorph.tsx"
       ]
     },
     {
@@ -2682,6 +2712,24 @@
       "testId": "doc-council-line",
       "files": [
         "src/components/DocumentThread.tsx"
+      ]
+    },
+    {
+      "testId": "doc-coverage",
+      "files": [
+        "src/components/session/DocCoverage.tsx"
+      ]
+    },
+    {
+      "testId": "doc-coverage-line",
+      "files": [
+        "src/components/session/DocCoverage.tsx"
+      ]
+    },
+    {
+      "testId": "doc-coverage-row",
+      "files": [
+        "src/components/session/DocCoverage.tsx"
       ]
     },
     {
@@ -5889,6 +5937,12 @@
       ]
     },
     {
+      "testId": "page-hint",
+      "files": [
+        "src/components/session/PageEditor.tsx"
+      ]
+    },
+    {
       "testId": "page-hover-box",
       "files": [
         "src/components/session/PageEditor.tsx"
@@ -8982,6 +9036,18 @@
       "testId": "skip-link",
       "files": [
         "src/components/SkipLink.tsx"
+      ]
+    },
+    {
+      "testId": "slide-strip",
+      "files": [
+        "src/components/session/SlideStrip.tsx"
+      ]
+    },
+    {
+      "testId": "slide-thumb",
+      "files": [
+        "src/components/session/SlideStrip.tsx"
       ]
     },
     {

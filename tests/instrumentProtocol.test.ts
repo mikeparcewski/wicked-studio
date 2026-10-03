@@ -36,6 +36,18 @@ describe('parseInbound — well-formed v1 frames', () => {
       .toEqual({ v: 1, type: 'wid-inventory', widMap: {}, scrollX: 0, scrollY: 0 });
   });
 
+  it('carries `cut` only when the bridge cut a block\'s text (S9: a cut text is never a `before`)', () => {
+    const msg = parseInbound({
+      v: 1, type: 'wid-inventory', widMap: { a: RECT, b: RECT, c: RECT }, scrollX: 0, scrollY: 0,
+      blocks: { a: { text: 'whole', composite: false }, b: { text: 'opening…', composite: true, cut: true }, c: { text: 'x', composite: false, cut: 'yes' } },
+    });
+    expect(msg).not.toBeNull();
+    const blocks = (msg as { blocks: Record<string, unknown> }).blocks;
+    expect(blocks['a']).toStrictEqual({ text: 'whole', composite: false });
+    expect(blocks['b']).toStrictEqual({ text: 'opening…', composite: true, cut: true });
+    expect(blocks['c']).toStrictEqual({ text: 'x', composite: false });
+  });
+
   it('accepts an inventory carrying `blocks` (the injected bridge) and one without (fixture bridges)', () => {
     const blocks = { h1: { text: 'Q3 review', composite: false } };
     expect(parseInbound({

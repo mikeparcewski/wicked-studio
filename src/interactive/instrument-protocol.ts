@@ -31,7 +31,13 @@ export interface WidRect {
  *  deterministic Change-text mode (interactive's `describe()` `before` snapshot);
  *  `composite` marks an element that nests other instrumented blocks, for which a
  *  destructive text replace would flatten the subtree (InlineComment hides the mode). */
-export interface WidBlock { text: string; composite: boolean }
+export interface WidBlock {
+  text: string;
+  composite: boolean;
+  /** The bridge cut `text` short (a container's opening, or a very long block): it is not the
+   *  element's whole text, so it must not be used as a `before` snapshot. Absent = whole. */
+  cut?: boolean;
+}
 
 /** Full inventory: all [data-wid] rects plus current frame scroll. Posted in
  *  response to `request-inventory` and whenever the inventory changes substantially.
@@ -135,7 +141,7 @@ export function parseInbound(data: unknown): BridgeToOverlayMsg | null {
     const blocks: Record<string, WidBlock> = {};
     for (const [wid, block] of Object.entries(rawBlocks as Record<string, unknown>)) {
       if (!isWidBlock(block)) return null;
-      blocks[wid] = { text: block.text, composite: block.composite };
+      blocks[wid] = { text: block.text, composite: block.composite, ...(block.cut === true ? { cut: true } : {}) };
     }
     return { v: 1, type: 'wid-inventory', widMap, scrollX, scrollY, blocks };
   }

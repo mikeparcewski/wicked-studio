@@ -1,12 +1,14 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { getVersions, HeadMovedError, interactiveDocUrl, postEvent, postFork } from '../../api/interactive.js';
-import { editedLine, elementChip, notUndoneLine, undoneLine, type ArtifactSize } from '../../board/artifactMorph.js';
+import {
+  anchorWords, editedLine, elementChip, notUndoneLine, undoneLine, type ArtifactSize, type EditorKind,
+} from '../../board/artifactMorph.js';
 import { overlayBox, type OverlayBox, type ScrollState } from '../../interactive/anchoring.js';
 import { FEEDBACK_EVENT, toWireItem } from '../../interactive/feedbackBatch.js';
 import { hasInstrumentBridge, instrumentDocHtml } from '../../interactive/instrumented.js';
 import {
-  REQUEST_INVENTORY, parseInbound, type WidBlock, type WidRect,
+  REQUEST_INVENTORY, makeScrollToWid, parseInbound, type WidBlock, type WidRect,
 } from '../../interactive/instrument-protocol.js';
 import { addAboutChip } from '../../store/composerChips.js';
 
@@ -28,7 +30,35 @@ import { addAboutChip } from '../../store/composerChips.js';
  * Versions are read from `GET /api/versions` (polled after a write until the head moves — the
  * bridge's `version.created` frame is the thread's, not this editor's). EP-P2 re-hosts this as the
  * `wicked-page` plugin behind the same slot (`ArtifactMorph`'s kind slot accepts a PluginHost).
+ *
+ * S9: the document and slide editors are this editor with another `kind` — the same frame, the
+ * same touch edit, the same Undo — plus what stands beside the frame (`side`: a deck's slide strip,
+ * a document's requirement coverage). The element is named in plain words (`anchorWords`: "slide
+ * 2’s title", "paragraph 3"), never by its raw anchor id. The field opens only over text that is
+ * the element's own and whole: a container of other parts, or a text the bridge had to cut, cannot
+ * be replaced by typing (the engine would refuse the first and call the second stale).
  */
+
+/** What stands beside the frame reads the frame through this — the measured inventory and two
+ *  moves. `null` until the frame has answered. */
+export interface FrameParts {
+  blocks: Readonly<Record<string, WidBlock>>;
+  /** Each anchor's top edge in the document (not the viewport). */
+  tops: Readonly<Record<string, number>>;
+  scrollY: number;
+  frameHeight: number;
+  selected: string | null;
+  /** Bring an anchor into view. */
+  scrollTo: (wid: string) => void;
+  /** Bring an anchor into view and pick it, as a click on it does. */
+  pick: (wid: string) => void;
+}
+
+const HINT: Readonly<Record<EditorKind, string>> = {
+  page: 'Click an element to make it the subject · type on it to change it',
+  document: 'Click a paragraph to make it the subject · type on it to change it · Enter keeps it',
+  deck: 'Click a slide’s words to make them the subject · type on them to change them',
+};
 
 /** The bridge script runs on the frame's load; ask a few times before giving up. */
 const ASK_AT_MS = [0, 250, 750, 1500];
@@ -51,12 +81,16 @@ interface Inventory {
   measured: ScrollState;
 }
 
-export function PageEditor({ projectId, docId, composerKey, size, onHead }: {
+export function PageEditor({ projectId, docId, composerKey, size, kind = 'page', side, onHead }: {
   projectId: string;
   docId: string;
   /** The composer the picked element's chip goes to (the session id). */
   composerKey: string;
   size: ArtifactSize;
+  /** Which editor this is — a page, a written document, or a deck (S9). */
+  kind?: EditorKind;
+  /** What stands beside the frame at this size, if anything (the slide strip, the coverage). */
+  side?: (parts: FrameParts | null) => React.ReactNode;
   /** The head version, whenever it is (re)read — the morph's header shows it. */
   onHead?: (head: number) => void;
 }): React.ReactElement {
@@ -74,12 +108,17 @@ export function PageEditor({ projectId, docId, composerKey, size, onHead }: {
   const [busy, setBusy] = useState(false);
   const frame = useRef<HTMLIFrameElement | null>(null);
   const handle = useRef<HTMLDivElement | null>(null);
-  const input = useRef<HTMLInputElement | null>(null);
+  const input = useRef<HTMLTextAreaElement | null>(null);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   // The frame's document generation: bumped for every new head, marked ready on that frame's load.
   // A message from the previous document (the WindowProxy survives a navigation) is ignored.
   const gen = useRef(0);
   const readyGen = useRef(-1);
+  // The element the operator's last write touched. The frame for the new head opens scrolled to
+  // it (`armed`, set when that head's frame is requested), so an edit far down a document or on a
+  // late slide does not throw the reader back to the top.
+  const returnTo = useRef<string | null>(null);
+  const armed = useRef<string | null>(null);
   // Whether this editor is still mounted — a poll or an Undo that outlives it writes nothing.
   const live = useRef(true);
   useEffect(() => { live.current = true; return () => { live.current = false; }; }, []);
@@ -123,6 +162,8 @@ export function PageEditor({ projectId, docId, composerKey, size, onHead }: {
     let cancelled = false;
     // A new head is a new frame: what was pointed at belongs to the old one.
     gen.current += 1;
+    armed.current = returnTo.current;
+    returnTo.current = null;
     setInventory(null);
     setHover(null);
     setSelected(null);
@@ -151,6 +192,18 @@ export function PageEditor({ projectId, docId, composerKey, size, onHead }: {
 
   useEffect(() => () => { for (const t of timers.current) clearTimeout(t); }, []);
 
+  /** An element becomes the subject: picked, a chip on the composer, and typing reaches studio. */
+  const select = useCallback((wid: string): void => {
+    setSelected(wid);
+    setEditing(null);
+    addAboutChip(composerKey, elementChip(wid, inventoryRef.current?.blocks[wid]?.text ?? '', docId));
+    // Typing must reach THIS document, not the frame the click focused.
+    handle.current?.focus();
+  }, [composerKey, docId]);
+
+  const scrollTo = useCallback((wid: string): void => post(makeScrollToWid(wid)), [post]);
+  const pick = useCallback((wid: string): void => { scrollTo(wid); select(wid); }, [scrollTo, select]);
+
   // ── bridge → editor ────────────────────────────────────────────────────────────────
   useEffect(() => {
     const onMessage = (e: MessageEvent): void => {
@@ -162,27 +215,35 @@ export function PageEditor({ projectId, docId, composerKey, size, onHead }: {
         for (const t of timers.current) clearTimeout(t);
         setInventory({ widMap: msg.widMap, blocks: msg.blocks ?? {}, measured: { scrollX: msg.scrollX, scrollY: msg.scrollY } });
         setCurrent({ scrollX: msg.scrollX, scrollY: msg.scrollY });
+        const back = armed.current;
+        armed.current = null;
+        if (back !== null && msg.widMap[back] !== undefined) post(makeScrollToWid(back));
       } else if (msg.type === 'scroll-state') {
         setCurrent({ scrollX: msg.scrollX, scrollY: msg.scrollY });
       } else if (msg.type === 'wid-hover') {
         setHover(msg.wid);
       } else if (msg.type === 'wid-click') {
         if (size === 'inline') return; // the preview is one control: it opens, it does not pick
-        setSelected(msg.wid);
-        setEditing(null);
-        addAboutChip(composerKey, elementChip(msg.wid, inventoryRef.current?.blocks[msg.wid]?.text ?? '', docId));
-        // Typing must reach THIS document, not the frame the click focused.
-        handle.current?.focus();
+        select(msg.wid);
       }
     };
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [composerKey, size, docId]);
+  }, [size, select, post]);
 
   // ── edit by touching ───────────────────────────────────────────────────────────────
+  /** Whether typing can replace this element's text — and when not, why: the frame has not
+   *  measured it, it holds other parts (the engine refuses to flatten them), or its text was cut
+   *  (not the whole `before` the engine checks). */
+  const typingOn = (wid: string): 'yes' | 'unmeasured' | 'container' | 'cut' => {
+    const block = inventory?.blocks[wid];
+    if (inventory === null || inventory.widMap[wid] === undefined || block === undefined) return 'unmeasured';
+    if (block.composite) return 'container';
+    return block.cut === true ? 'cut' : 'yes';
+  };
+
   const beginEdit = (wid: string, typed: string | null): void => {
-    // Only an element the frame measured has a field to open over it.
-    if (inventory === null || inventory.widMap[wid] === undefined) return;
+    if (inventory === null || typingOn(wid) !== 'yes') return;
     const before = inventory.blocks[wid]?.text ?? '';
     // The field exists and holds the focus before this key event returns: the characters typed
     // right behind it land in the field. Waiting for an animation frame left them on the handle,
@@ -227,11 +288,14 @@ export function PageEditor({ projectId, docId, composerKey, size, onHead }: {
 
   const commit = async (): Promise<void> => {
     if (editing === null || head === null) return;
-    const { wid, value, before } = editing;
+    const { wid, before } = editing;
+    // One line of text: a pasted line break is a space, as the page would render it.
+    const value = editing.value.replace(/\s*\n\s*/g, ' ');
+    const what = anchorWords(wid, kind);
     setEditing(null);
     if (value === before) return;
     setBusy(true);
-    setLine({ kind: 'working', text: `Changing ${wid}…` });
+    setLine({ kind: 'working', text: `Changing ${what}…` });
     try {
       // The base is the head NOW, not the one read at mount: a helper may have landed since.
       const base = (await readHead()) ?? head;
@@ -247,11 +311,11 @@ export function PageEditor({ projectId, docId, composerKey, size, onHead }: {
       });
       const landed = await waitForLanded(base);
       if (!live.current) return;
-      if (landed === null) setLine({ kind: 'failed', text: `The change was sent, but no new version appeared for ${wid}.` });
-      else if ('other' in landed) { setLine({ kind: 'failed', text: `The page changed (version ${landed.other}), but not by your edit to ${wid} — it may have been stale.` }); setHead(landed.other); }
-      else { setLine({ kind: 'edited', version: landed.version, parent: base, wid }); setHead(landed.version); }
+      if (landed === null) setLine({ kind: 'failed', text: `The change was sent, but no new version appeared for ${what}.` });
+      else if ('other' in landed) { setLine({ kind: 'failed', text: `The page changed (version ${landed.other}), but not by your edit to ${what} — it may have been stale.` }); returnTo.current = wid; setHead(landed.other); }
+      else { setLine({ kind: 'edited', version: landed.version, parent: base, wid }); returnTo.current = wid; setHead(landed.version); }
     } catch (e: unknown) {
-      if (live.current) setLine({ kind: 'failed', text: `Could not change ${wid}: ${e instanceof Error ? e.message : String(e)}` });
+      if (live.current) setLine({ kind: 'failed', text: `Could not change ${what}: ${e instanceof Error ? e.message : String(e)}` });
     } finally {
       if (live.current) setBusy(false);
     }
@@ -260,16 +324,17 @@ export function PageEditor({ projectId, docId, composerKey, size, onHead }: {
   const undo = async (): Promise<void> => {
     if (line === null || line.kind !== 'edited') return;
     setBusy(true);
-    const { parent, version } = line;
+    const { parent, version, wid } = line;
     setLine({ kind: 'working', text: 'Undoing…' });
     try {
       const r = await postFork(projectId, docId, parent, undefined, version);
       if (!live.current) return;
       setLine({ kind: 'undone', version: r.version });
+      returnTo.current = wid;
       setHead(r.version);
     } catch (e: unknown) {
       if (!live.current) return;
-      if (e instanceof HeadMovedError) { setLine({ kind: 'not-undone', head: e.head }); setHead(e.head); }
+      if (e instanceof HeadMovedError) { setLine({ kind: 'not-undone', head: e.head }); returnTo.current = wid; setHead(e.head); }
       else setLine({ kind: 'failed', text: `Could not undo: ${e instanceof Error ? e.message : String(e)}` });
     } finally {
       if (live.current) setBusy(false);
@@ -285,10 +350,27 @@ export function PageEditor({ projectId, docId, composerKey, size, onHead }: {
   const hoverBox = hover !== selected ? box(hover) : null;
   const editBox = editing === null ? null : box(editing.wid);
   const pickable = size !== 'inline' && inventory !== null;
+  const selectedWords = selected === null ? '' : anchorWords(selected, kind);
+  const SelectedWords = `${selectedWords.charAt(0).toUpperCase()}${selectedWords.slice(1)}`;
+  const typing = selected === null ? 'unmeasured' : typingOn(selected);
+
+  const scrollY = current.scrollY;
+  const parts = useMemo<FrameParts | null>(() => (inventory === null ? null : {
+    blocks: inventory.blocks,
+    tops: Object.fromEntries(Object.entries(inventory.widMap).map(([wid, r]) => [wid, r.top + inventory.measured.scrollY])),
+    scrollY,
+    // Read when the inventory or the size changes — the frame is laid out by then.
+    frameHeight: frame.current?.clientHeight ?? 0,
+    selected,
+    scrollTo,
+    pick,
+  }), [inventory, scrollY, selected, scrollTo, pick, size]); // eslint-disable-line react-hooks/exhaustive-deps -- `size` re-reads the frame's height
 
   return (
     <>
-      <div className="wk-artifact-body" data-testid="page-editor" data-doc={docId} data-head={head ?? ''} data-pickable={pickable} data-selected={selected ?? ''}>
+      <div className="wk-artifact-row">
+      {side?.(parts)}
+      <div className="wk-artifact-body" data-testid="page-editor" data-kind={kind} data-doc={docId} data-head={head ?? ''} data-pickable={pickable} data-selected={selected ?? ''}>
         <iframe
           ref={frame}
           title={`${docId} version ${head ?? ''}`}
@@ -301,13 +383,14 @@ export function PageEditor({ projectId, docId, composerKey, size, onHead }: {
         {hoverBox !== null && editing === null && <div data-testid="page-hover-box" className="wk-artifact-box wk-artifact-box--hover" style={hoverBox} />}
         {selBox !== null && editing === null && <div data-testid="page-selected-box" data-wid={selected ?? ''} className="wk-artifact-box" style={selBox} />}
         {editing !== null && editBox !== null && (
-          <input
+          <textarea
             ref={input}
             data-testid="page-edit-input"
             data-wid={editing.wid}
-            aria-label={`New text for ${editing.wid}`}
+            aria-label={`New text for ${anchorWords(editing.wid, kind)}`}
             className="wk-artifact-input"
-            style={{ left: editBox.left, top: editBox.top, width: Math.max(editBox.width, 160), minHeight: editBox.height }}
+            rows={1}
+            style={{ left: editBox.left, top: editBox.top, width: Math.max(editBox.width, 160), height: Math.max(editBox.height, 30) }}
             value={editing.value}
             onChange={(e) => setEditing({ ...editing, value: e.target.value })}
             onKeyDown={(e) => {
@@ -320,17 +403,23 @@ export function PageEditor({ projectId, docId, composerKey, size, onHead }: {
         {/* Where typing lands after a pick: focus moves here from the frame (the frame keeps the click). */}
         <div ref={handle} tabIndex={-1} data-testid="page-handle" className="wk-artifact-handle" onKeyDown={onHandleKey} />
         {pickable && selected === null && editing === null && (
-          <p className="wk-artifact-hint">Click an element to make it the subject · type on it to change it</p>
+          <p className="wk-artifact-hint" data-testid="page-hint">{HINT[kind]}</p>
         )}
         {pickable && selected !== null && editing === null && (
-          <p className="wk-artifact-hint">Type to change {selected} · Enter to edit its text · Esc to let go</p>
+          <p className="wk-artifact-hint" data-testid="page-hint" data-editable={typing === 'yes'}>
+            {typing === 'yes' && `Type to change ${selectedWords} · Enter to edit its text · Esc to let go`}
+            {typing === 'container' && `${SelectedWords} holds other parts — click a line of text inside it to change the words · Esc to let go`}
+            {typing === 'cut' && `${SelectedWords} is too long to change by typing — say what to change in the message box · Esc to let go`}
+            {typing === 'unmeasured' && `${SelectedWords} can’t be changed by typing — say what to change in the message box · Esc to let go`}
+          </p>
         )}
+      </div>
       </div>
       {line !== null && (
         <p data-testid="page-line" data-kind={line.kind} className={`wk-artifact-line${line.kind === 'not-undone' || line.kind === 'failed' ? ' wk-artifact-line--bad' : ''}`}>
           {line.kind === 'edited' && (
             <>
-              {editedLine(line.version, line.wid)}{' '}
+              {editedLine(line.version, anchorWords(line.wid, kind))}{' '}
               <button type="button" data-testid="page-undo" disabled={busy} onClick={() => void undo()} className="wk-since-toggle">Undo</button>
             </>
           )}
