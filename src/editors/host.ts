@@ -58,6 +58,8 @@ export interface HostUi {
   status(line: string): void;
   notes(count: number): void;
   thread(line: string): void;
+  /** A write this editor made, structured, so a host can draw its own line and Undo (EP-P2). */
+  written?(w: { version: number; base: number; summary: string }): void;
   fullscreen(): Promise<boolean>;
   torn(reason: string): void;
   log(entry: HostLogEntry): void;
@@ -292,6 +294,7 @@ export class EditorHost {
             this.log({ kind: 'written', version: r.version, items: checked.items });
             const summary = String(p['summary']).slice(0, LIMITS.summaryChars);
             this.o.ui.thread(`${this.o.firstParty ? 'You changed' : `${this.o.name} changed`} ${summary} · Version ${r.version}`);
+            this.o.ui.written?.({ version: r.version, base: p['base'] as number, summary });
           }
           return r;
         } finally {
@@ -396,6 +399,26 @@ export class EditorHost {
   setTheme(theme: Record<string, string>): void { this.post(event('host.theme', { theme, artifactTheme: null })); }
   setGrants(grants: readonly PermissionId[]): void { this.grants = new Set(grants); }
   selectionCleared(): void { this.post(event('selection.cleared', {})); }
+
+  /**
+   * The host's own Undo (the thread line's button, EP-P2): the same rule as `version.undo` — only a
+   * version this editor wrote this session — and the plugin hears the outcome as `artifact.changed`
+   * either way: the fork as its own, or the head that moved under it.
+   */
+  async undo(version: number): Promise<AdapterResult<{ undone: true }>> {
+    if (!this.ownVersions.has(version)) return { error: 'refused', message: 'only a version this editor wrote, this session' };
+    const r = await this.o.adapter.undo(version);
+    if (this.torn) return r;
+    const head = this.o.adapter.artifact().head;
+    this.inventory = null;
+    if (!('error' in r)) {
+      this.ownVersions.add(head);
+      this.post(event('artifact.changed', { version: head, head, by: 'this-editor', kind: 'fork' }));
+    } else if (r.error === 'head_moved') {
+      this.post(event('artifact.changed', { version: head, head, by: 'other', kind: 'generated' }));
+    }
+    return r;
+  }
 
   /** A new version landed (interactive `version.created`): the plugin hears who wrote it. */
   artifactChanged(version: number, kind: VersionKind): void {

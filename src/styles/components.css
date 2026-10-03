@@ -1047,6 +1047,12 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
 .wk-artifact-menu-item { padding: 5px 8px; text-align: left; font: inherit; color: var(--ink-high); background: none; border: 0; border-radius: var(--radius-sm); cursor: pointer; }
 .wk-artifact-menu-item:hover { background: var(--surface-base); }
 .wk-artifact-frame { display: block; width: 100%; height: 100%; border: 0; background: var(--surface-base); }
+/* EP-P2: the plugin's frame fills the kind slot; its box changes with the size, the element does not. */
+.wk-plugin-body { display: flex; flex-direction: column; }
+.wk-plugin-frame-box { flex: 1 1 auto; min-height: 0; display: flex; }
+.wk-artifact .wk-editor-frame { flex: 1 1 auto; width: 100%; height: 100%; min-height: 0; border: 0; background: var(--surface-base); }
+.wk-artifact--inline .wk-editor-frame { pointer-events: none; }
+.wk-plugin-note { pointer-events: auto; }
 .wk-artifact--inline .wk-artifact-frame { pointer-events: none; }
 .wk-artifact-catch { position: absolute; inset: 0; background: transparent; border: 0; cursor: zoom-in; width: 100%; }
 .wk-artifact-box { position: absolute; pointer-events: none; border: 2px solid var(--accent); border-radius: 3px; box-sizing: border-box; }
