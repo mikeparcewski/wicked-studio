@@ -211,6 +211,7 @@ A rig that never flips them gets the default W2 board.
 
 import base64
 import hashlib
+import html as html_mod
 import json
 import os
 import re
@@ -5124,12 +5125,22 @@ class W2Handler(SimpleHTTPRequestHandler):
         if m:
             pid, doc = (urllib.parse.unquote(g) for g in m.groups())
             frm = int(body.get("from") or 0)
+            # C5 (interactive 0.10.0): `expect_head` — the head the caller believes is current;
+            # a different head answers 409 head_moved and creates nothing (S8's Undo).
+            expect_head = body.get("expect_head")
+            if expect_head is not None and not isinstance(expect_head, int):
+                self._json(400, {"error": "expect_head must be a version number"})
+                return True
             with docs_lock:
                 versions = docs_created.get(pid, {}).get(doc)
                 if versions is None:
                     self._json(404, {"error": f"no such doc {doc}"})
                     return True
-                v = max(e["version"] for e in versions) + 1
+                head_now = max(e["version"] for e in versions)
+                if expect_head is not None and head_now != expect_head:
+                    self._json(409, {"error": "head_moved", "head": head_now})
+                    return True
+                v = head_now + 1
                 # Slice T (§8.4.1): no meta.sourceMessageId — the bridge drops it.
                 versions.append(
                     {"version": v, "parent": frm, "feedback_file": None,
@@ -5283,7 +5294,9 @@ class W2Handler(SimpleHTTPRequestHandler):
                                 pat = re.compile(
                                     r'(data-wid="' + re.escape(sel) + r'"[^>]*>)([^<]*)')
                                 if sel and pat.search(html):
-                                    new_text = str(item.get("value") or "")
+                                    # interactive #247: a content-edit lands as TEXT — typed
+                                    # `<b>x</b>` is those characters, never markup.
+                                    new_text = html_mod.escape(str(item.get("value") or ""), quote=False)
                                     html = pat.sub(
                                         lambda mm: mm.group(1) + new_text, html, count=1)
                                     applied.append(sel)

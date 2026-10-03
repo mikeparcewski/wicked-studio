@@ -29,6 +29,8 @@ import { openSheet } from '../../store/sheets.js';
 import type { DecisionView } from '../../api/decisions.js';
 import { turnKey, useDecisionsStore } from '../../store/decisions.js';
 import { DecisionLine } from '../decisions/DecisionLine.js';
+import { collapseArtifacts, paneOpen, useArtifactSizes } from '../../store/artifactSizes.js';
+import { RunArtifacts } from './RunArtifacts.js';
 
 /**
  * A SESSION (`/s/:id`, DES-STUDIO-REBUILD-001 §5.4, slice S6a): the goal sentence, the thread (the
@@ -208,9 +210,14 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
     id: v.session.id, workdir: typeof v.session.workdir === 'string' ? v.session.workdir : null,
   })).filter((r) => r.workdir !== null), [mine]);
   const missing = ready && mine.length === 0 && (conversation === 'closed' || conversation === 'none');
+  // S8: an artifact open as a pane sits beside the thread; the thread and composer make room.
+  // Leaving the session (or switching to another) folds them back: a remembered pane from
+  // another session must not narrow this one.
+  const pane = useArtifactSizes(paneOpen);
+  useEffect(() => () => collapseArtifacts(), [sessionId]);
 
   return (
-    <div data-testid="session" data-object={`session:${sessionId}`} data-session-id={sessionId} data-conversation={conversation} data-state={state} className="wk-session">
+    <div data-testid="session" data-object={`session:${sessionId}`} data-session-id={sessionId} data-conversation={conversation} data-state={state} data-pane={pane} className={`wk-session${pane ? ' wk-session--pane' : ''}`}>
       <header className="wk-session-head">
         <span aria-hidden className={`wk-desk-dot wk-desk-dot--${state}`} />
         <div className="wk-session-head-body">
@@ -269,7 +276,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
                 {e.who === 'you' && ref.kind === 'chat' && e.turnId !== null && <TurnDecisions chatId={ref.chatId} turnId={e.turnId} navigate={navigate} />}
               </div>
             )
-            : <RunBlock key={e.key} view={e.view} badge={badges[e.view.session.id] ?? 0} go={go} />))}
+            : <RunBlock key={e.key} view={e.view} badge={badges[e.view.session.id] ?? 0} go={go} sessionId={sessionId} />))}
         </div>
       </div>
 
@@ -298,10 +305,11 @@ function TurnDecisions({ chatId, turnId, navigate }: { chatId: string; turnId: s
   return <DecisionLine decisions={decisions} navigate={navigate} />;
 }
 
-function RunBlock({ view, badge, go }: {
+function RunBlock({ view, badge, go, sessionId }: {
   view: RunView;
   badge: number;
   go: (path: string) => (e: React.MouseEvent) => void;
+  sessionId: string;
 }): React.ReactElement {
   const { chain, teamError, retry } = useRunChain(view);
   const id = view.session.id;
@@ -321,6 +329,8 @@ function RunBlock({ view, badge, go }: {
       <ProposalCard view={view} chain={chain} />
       <PlanStepLines runId={id} />
       <ChainLine chain={chain} runId={id} units={view.units} teamError={teamError} onRetry={retry} />
+      {/* S8: the page the run is producing — a live preview that morphs inline → pane → full. */}
+      <RunArtifacts view={view} composerKey={sessionId} />
       <RunHelpers view={view} />
       <a href={page} onClick={go(page)} data-testid="session-run-open" className="wk-session-link">Open the run page →</a>
     </section>
