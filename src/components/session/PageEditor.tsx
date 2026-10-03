@@ -10,7 +10,7 @@ import { hasInstrumentBridge, instrumentDocHtml } from '../../interactive/instru
 import {
   REQUEST_INVENTORY, makeScrollToWid, parseInbound, type WidBlock, type WidRect,
 } from '../../interactive/instrument-protocol.js';
-import { addAboutChip } from '../../store/composerChips.js';
+import { addAboutChip, chipsOf, relabelAboutChip, useComposerChips } from '../../store/composerChips.js';
 
 /**
  * S8 — the built-in page element editor (DES-STUDIO-REBUILD-001 §11 S8; DESIGN-interaction rules
@@ -270,6 +270,20 @@ export function PageEditor({ projectId, docId, composerKey, size, kind = 'page',
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
   }, [size, select, scrollTo]);
+
+  // A chip quotes its element as the page reads NOW: when the frame re-measures (a new version —
+  // the operator's own edit, an Undo, a helper's change), the chips already on the composer for
+  // this document's elements take the current words. A chip that is not there is not added.
+  useEffect(() => {
+    if (inventory === null) return;
+    const prefix = `el:${docId}/`;
+    for (const chip of chipsOf(useComposerChips.getState(), composerKey)) {
+      if (chip.kind !== 'about' || !chip.key.startsWith(prefix)) continue;
+      const wid = chip.key.slice(prefix.length);
+      const block = inventory.blocks[wid];
+      if (block !== undefined) relabelAboutChip(composerKey, elementChip(wid, block.text, docId));
+    }
+  }, [inventory, composerKey, docId]);
 
   // ── edit by touching ───────────────────────────────────────────────────────────────
   /** Whether typing can replace this element's text — and when not, why: the frame has not

@@ -38,8 +38,9 @@ written document (`style: doc`) and a deck (`style: ppt`), anchored the way the 
      at the bottom — is marked when picked, gives the mark up when the reader scrolls away, and has
      it again back at the bottom.
  10. A SLIDE TITLE EDIT IS ONE VERSION: typing on slide 3's title lands version 2 ("Changed slide
-     3’s title — version 2.") with Undo; the strip names the slide by its new title, and the new
-     version's frame is still on slide 3 — an edit does not throw the reader back to the top.
+     3’s title — version 2.") with Undo; the strip names the slide by its new title, the new
+     version's frame is still on slide 3 — an edit does not throw the reader back to the top —
+     and the chips already on the composer quote the slide and its title as they read now.
  11. UNDO: version 3; the title and the strip are back; the manifest holds versions 1, 2, 3.
  12. EXPORT: Export ▾ offers PowerPoint and PDF, by keyboard too (the first format holds the
      focus, ↓ moves, Esc closes the menu — not the artifact — and returns the focus); PowerPoint
@@ -421,9 +422,13 @@ with sync_playwright() as p:
             break
         page.wait_for_timeout(150)
     stays = after3.get("top") is not None and 0 <= after3["top"] and after3["bottom"] <= after3["vh"]
+    # The chips already on the composer quote the slide and its title as they read now.
+    chips10 = {c["key"]: c["text"] for c in page.evaluate(CHIPS)}
+    chips_follow = (chips10.get(f"el:{DECK}/slide-2") == "about: slide 3 — “Staff are in charge”"
+                    and chips10.get(f"el:{DECK}/{TITLE3}") == "about: “Staff are in charge”")
     check("slide-title-edit", hint10.startswith("Type to change slide 3’s title") and line3.startswith("Changed slide 3’s title — version 2.")
-          and after3.get("text") == "Staff are in charge" and s3["titles"][2] == "3 Staff are in charge" and s3["count"] == "4" and stays,
-          hint=hint10, line=line3, title=after3, still_on_slide_3=stays, strip=s3)
+          and after3.get("text") == "Staff are in charge" and s3["titles"][2] == "3 Staff are in charge" and s3["count"] == "4" and stays and chips_follow,
+          hint=hint10, line=line3, title=after3, still_on_slide_3=stays, strip=s3, chips=chips10)
 
     # ── 11. undo ───────────────────────────────────────────────────────────────────
     page.get_by_test_id("page-undo").click()
@@ -431,8 +436,11 @@ with sync_playwright() as p:
     after4 = wait_text(page, TITLE3, "Staff stay in control")
     page.wait_for_function("() => [...document.querySelectorAll('[data-testid=\"slide-thumb\"]')].some(b => b.innerText.includes('Staff stay in control'))", timeout=10000)
     deck_versions = manifest(page, DECK)
+    chips11 = {c["key"]: c["text"] for c in page.evaluate(CHIPS)}
     check("slide-title-undo", "version 3" in line4 and after4.get("text") == "Staff stay in control"
-          and deck_versions == [3, [1, None, False], [2, 1, True], [3, 1, False]], line=line4, strip=page.evaluate(STRIP), manifest=deck_versions)
+          and deck_versions == [3, [1, None, False], [2, 1, True], [3, 1, False]]
+          and chips11.get(f"el:{DECK}/slide-2") == "about: slide 3 — “Staff stay in control”" and chips11.get(f"el:{DECK}/{TITLE3}") == "about: “Staff stay in control”",
+          line=line4, strip=page.evaluate(STRIP), manifest=deck_versions, chips=chips11)
 
     # ── 12. export ─────────────────────────────────────────────────────────────────
     FOCUS = """() => { const a = document.activeElement; return a ? (a.dataset.format || a.dataset.testid || a.tagName) : null; }"""

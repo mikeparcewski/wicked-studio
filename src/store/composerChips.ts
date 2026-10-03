@@ -26,6 +26,16 @@ export function addAboutChip(key: string, chip: AboutChip): void {
   put(key, addChip(chipsOf(useComposerChips.getState(), key), chip));
 }
 
+/** A subject that is already on the composer takes its words as they read now (the element was
+ *  changed since it was picked). A subject that is not there is NOT added — a chip the operator
+ *  removed stays removed. */
+export function relabelAboutChip(key: string, chip: AboutChip): void {
+  const chips = chipsOf(useComposerChips.getState(), key);
+  const at = chips.findIndex((c) => c.kind === 'about' && c.key === chip.key);
+  if (at === -1 || chips[at]?.label === chip.label) return;
+  put(key, chips.map((c, i) => (i === at ? chip : c)));
+}
+
 export function removeAboutChip(key: string, chipKey: string): void {
   put(key, removeChip(chipsOf(useComposerChips.getState(), key), chipKey));
 }

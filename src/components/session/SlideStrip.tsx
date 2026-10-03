@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { slideChip, slideInView, slidesOf } from '../../board/artifactMorph.js';
-import { addAboutChip } from '../../store/composerChips.js';
+import { addAboutChip, relabelAboutChip } from '../../store/composerChips.js';
 import type { FrameParts } from './PageEditor.js';
 
 /**
@@ -41,6 +41,10 @@ export function SlideStrip({ parts, docId, composerKey }: {
 }): React.ReactElement | null {
   const slides = useMemo(() => slidesOf(parts.blocks), [parts.blocks]);
   const [picked, setPicked] = useState<Pick | null>(null);
+  // A slide chip already on the composer names the slide by its title as it reads now.
+  useEffect(() => {
+    for (const s of slides) relabelAboutChip(composerKey, slideChip(s, docId));
+  }, [slides, composerKey, docId]);
   if (slides.length === 0) return null;
   const current = holds(picked, parts) ? picked.index : slideInView(slides, parts.tops, parts.scrollY, parts.frameHeight);
   return (
