@@ -144,25 +144,19 @@ function Body({ rec, size, morph, units, reload }: {
   const options = exportOptions(rec);
   const [duration, setDuration] = useState<number | null>(null);
   const [raw, setRaw] = useState<string | null>(null);
-  const [editing, setEditing] = useState(false);
-  const [storyline, setStoryline] = useState('');
+  // An Edit-the-check draft belongs to the take it was opened on, BY CONSTRUCTION: it carries that
+  // take's fingerprint, and on any other take there is no open box and no text — in the same render
+  // that shows the other take, with no effect in between. It can never be saved over a newer take.
+  const [draft, setDraft] = useState<{ take: string; text: string } | null>(null);
   const [note, setNote] = useState<{ tone: 'ok' | 'bad'; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [made, setMade] = useState<Partial<Record<DemoExportFormat, string>>>({});
   const src = rec.video === null ? null : fileUrl(rec, rec.video);
   const startAt = playheadStart(rec);
-  // A draft belongs to the take it was opened on: when another take replaces it on screen (recorded
-  // again by someone else, failed again), the box closes and its text goes — it must never be saved
-  // over the newer take's storyline.
   const take = takeFingerprint(rec);
-  const draftFor = useRef(take);
-  useEffect(() => {
-    if (draftFor.current === take) return;
-    draftFor.current = take;
-    setEditing(false);
-    setStoryline('');
-  }, [take]);
+  const editing = draft !== null && draft.take === take;
+  const storyline = editing ? draft.text : '';
   // Mounted, as of the commit: the cleanup runs inside the unmount's commit (a layout effect), so a
   // read that resolves right after it never finds the flag still up.
   const live = useRef(true);
@@ -224,7 +218,7 @@ function Body({ rec, size, morph, units, reload }: {
     // Closed (or re-sourced) before the metadata came: the pending Watch is dropped, never replayed
     // on a later open.
     return () => { el.removeEventListener('loadedmetadata', place); wantPlay.current = false; };
-  }, [open, src, startAt]);
+  }, [open, src, startAt, take]);
 
   const act = async (done: string, fn: () => Promise<void>): Promise<void> => {
     if (busy) return;
@@ -286,7 +280,7 @@ function Body({ rec, size, morph, units, reload }: {
       // The file is written; only the approve did not go out. Say both, so the gate is not left a mystery.
       throw new Error(`The check was saved, but it was not sent to record again: ${e instanceof Error ? e.message : String(e)} Approve the gate to record it.`);
     }
-    if (live.current) setEditing(false);
+    if (live.current) setDraft(null);
     reload();
   });
   const exportAs = (format: DemoExportFormat): Promise<void> => act(`${format === 'gif' ? 'GIF' : 'Poster'} made.`, async () => {
@@ -299,7 +293,8 @@ function Body({ rec, size, morph, units, reload }: {
       else { wantPlay.current = src !== null; morph('pane'); }
     } else if (v === 'fix') void fix();
     else {
-      setEditing((e) => !e || !open);
+      // Opens the box for THIS take (at the inline size it also opens the pane); pressed again, closes it.
+      setDraft(editing && open ? null : { take, text: storyline });
       if (!open) morph('pane');
     }
   };
@@ -375,6 +370,7 @@ function Body({ rec, size, morph, units, reload }: {
       <div className="wk-walk-stage">
         {src !== null ? (
           <video
+            key={take}
             ref={video}
             data-testid="walkthrough-video"
             data-playhead={String(startAt)}
@@ -405,10 +401,10 @@ function Body({ rec, size, morph, units, reload }: {
       {editing && verbs.includes('edit') && (
         <div data-testid="walkthrough-edit" className="wk-walk-edit">
           <p className="wk-walk-quiet">Paste the storyline with your change to the check (the author’s <code>storyline.mjs</code>, whole). Saving re-checks it and the walkthrough records again.</p>
-          <textarea data-testid="walkthrough-storyline" value={storyline} onChange={(e) => setStoryline(e.target.value)} rows={4} className="wk-walk-storyline" aria-label="The storyline" />
+          <textarea data-testid="walkthrough-storyline" value={storyline} onChange={(e) => setDraft({ take, text: e.target.value })} rows={4} className="wk-walk-storyline" aria-label="The storyline" />
           <div className="wk-prop-btns">
             <button type="button" data-testid="walkthrough-storyline-save" disabled={busy || storyline.trim() === ''} onClick={() => void saveStoryline()} className="wk-prop-btn wk-prop-btn--primary">Save and record again</button>
-            <button type="button" data-testid="walkthrough-storyline-cancel" onClick={() => setEditing(false)} className="wk-prop-btn wk-prop-btn--ghost">Cancel</button>
+            <button type="button" data-testid="walkthrough-storyline-cancel" onClick={() => setDraft(null)} className="wk-prop-btn wk-prop-btn--ghost">Cancel</button>
           </div>
         </div>
       )}
