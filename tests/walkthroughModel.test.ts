@@ -200,8 +200,14 @@ describe('chapter markers', () => {
     const markers = [{ at: '0:00', sec: 0, title: 'Cart' }, { at: '0:12', sec: 12, title: 'Receipt' }];
     const r = recordingOf(view({ state: 'failed', chapters, video: { mp4: 'take/video.mp4', poster: null, markers } }));
     expect(chapterMarks(r).map((m) => m.sec)).toEqual([0, null, 12]);
-    // With no marker the failing moment is the chapter's own seconds, never another chapter's start + them.
-    expect(stateLine(r).text).toBe('Failed at 0:07');
+    // The failing chapter has no place in the take: its 7 s are its own, said as such — never read as
+    // the take's 0:07 (that is Cart). Watch does not seek there and no mark is drawn there.
+    expect(stateLine(r).text).toBe('Failed at 0:07 into chapter 2');
+    expect(failedChapter(r)?.failedAbsSec).toBeNull();
+    expect(playheadStart(r)).toBe(0);
+    expect(checksTrack(r).filter((k) => k.chapter.index === 2).every((k) => k.atAbsSec === null)).toBe(true);
+    expect(checksTrack(r).filter((k) => k.chapter.index === 3).map((k) => k.atAbsSec)).toEqual([15, 21]);
+    expect(fixNote(r)).toContain('chapter 2 (Pay), 0:07 into it.');
   });
   it('a title mismatch is read by position only when every chapter has a row', () => {
     const chapters = [chapter(1, { title: 'One' }), chapter(2, { title: 'Two' })];

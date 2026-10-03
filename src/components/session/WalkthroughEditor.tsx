@@ -152,6 +152,17 @@ function Body({ rec, size, morph, units, reload }: {
   const [made, setMade] = useState<Partial<Record<DemoExportFormat, string>>>({});
   const src = rec.video === null ? null : fileUrl(rec, rec.video);
   const startAt = playheadStart(rec);
+  // A draft belongs to the take it was opened on: when another take replaces it on screen (recorded
+  // again by someone else, failed again), the box closes and its text goes — it must never be saved
+  // over the newer take's storyline.
+  const take = takeFingerprint(rec);
+  const draftFor = useRef(take);
+  useEffect(() => {
+    if (draftFor.current === take) return;
+    draftFor.current = take;
+    setEditing(false);
+    setStoryline('');
+  }, [take]);
   // Mounted, as of the commit: the cleanup runs inside the unmount's commit (a layout effect), so a
   // read that resolves right after it never finds the flag still up.
   const live = useRef(true);

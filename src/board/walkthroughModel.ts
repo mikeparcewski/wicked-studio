@@ -33,7 +33,7 @@ export interface RecordingChapter {
   recorded: boolean;
   takes: number;
   failedAtSec: number | null;
-  /** Absolute seconds of the failing moment in the stitched take. */
+  /** Seconds of the failing moment in the stitched take; `null` when the take does not hold the chapter. */
   failedAbsSec: number | null;
   failedFrame: string | null;
   checks: RecordingCheck[];
@@ -94,7 +94,11 @@ export function recordingOf(view: WalkthroughView): Recording {
   const starts = markersFor(markers, view.chapters.map((c) => c.title));
   const chapters: RecordingChapter[] = view.chapters.map((c, i) => {
     const startSec = starts[i]?.sec ?? null;
-    const abs = (at: number | null): number | null => (at === null ? null : startSec === null ? at : startSec + at);
+    // A moment's place in the stitched take: the chapter's marker + its own seconds. A chapter the
+    // take does not hold (markers exist, none is its) has NO place in it — its seconds are never read
+    // as take seconds (that would point into another chapter). With no markers at all there is one
+    // clock only, the chapter's.
+    const abs = (at: number | null): number | null => (at === null ? null : startSec !== null ? startSec + at : markers.length === 0 ? at : null);
     return {
       key: c.key, title: c.title, blurb: c.blurb, index: c.index, total: c.total, startSec,
       verdict: c.verdict, recorded: c.recorded, takes: c.takes,
@@ -151,8 +155,12 @@ export function stateLine(r: Recording, opts: { authorWaiting?: boolean } = {}):
     }
     case 'failed': {
       // The moment in the take (the chapter's start + the check's own offset): what the player's
-      // clock reads there. Without a marker for the chapter, its own seconds.
-      const at = failedChapter(r)?.failedAbsSec ?? null;
+      // clock reads there. A chapter the take does not hold says its own seconds, as its own.
+      const c = failedChapter(r);
+      if (c !== null && c.failedAbsSec === null && c.failedAtSec !== null) {
+        return { mark: '✗', text: `Failed at ${fmtTime(c.failedAtSec)} into chapter ${c.index}`, tone: 'bad' };
+      }
+      const at = c?.failedAbsSec ?? null;
       return { mark: '✗', text: at === null ? 'Failed' : `Failed at ${fmtTime(at)}`, tone: 'bad' };
     }
     case 'passed': {
@@ -279,7 +287,8 @@ export const GATE_VERB_LABEL: Record<GateVerb, string> = { watch: 'Watch', fix: 
 export function fixNote(r: Recording): string {
   const c = failedChapter(r);
   const lines = underneathLines(r);
-  const where = c === null ? 'the walkthrough' : `chapter ${c.index} (${c.title})${c.failedAbsSec !== null ? ` at ${fmtTime(c.failedAbsSec)}` : ''}`;
+  const when = c === null ? '' : c.failedAbsSec !== null ? ` at ${fmtTime(c.failedAbsSec)}` : c.failedAtSec !== null ? `, ${fmtTime(c.failedAtSec)} into it` : '';
+  const where = c === null ? 'the walkthrough' : `chapter ${c.index} (${c.title})${when}`;
   return `The walkthrough failed at ${where}.${lines.length > 0 ? ` ${lines.join(' ')}` : ''} Fix what it caught, then it records again.`;
 }
 
