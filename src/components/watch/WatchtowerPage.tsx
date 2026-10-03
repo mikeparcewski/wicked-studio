@@ -93,7 +93,7 @@ export function WatchtowerPage({ count, runs, navigate, now }: {
             </button>
           </p>
         )}
-        {rows.length === 0 && (
+        {rows.length === 0 && feedError === null && (
           <p data-testid="watchtower-empty" className="wk-session-grey">
             {kind === null
               ? 'Nothing to show yet. The Watchtower opens itself only for something that needs you.'

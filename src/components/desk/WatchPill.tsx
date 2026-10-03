@@ -49,7 +49,9 @@ export function WatchPill({ needRows, runs, navigate }: { needRows: NeedRow[]; r
   const recent = useWatchFeed({}).filter((r) => r.state === 'open').slice(0, 2);
   const [self, setSelf] = useState(false);
   const since = useRef(Date.now());
-  const seen = useRef<Set<string>>(new Set());
+  // What was there on the first render is never news, whatever its clock says (codex on S14).
+  const [firstRows] = useState(needRows);
+  const seen = useRef<Set<string>>(new Set(flat(firstRows).map((r) => r.key)));
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     const opens = selfOpens(seen.current, needRows, since.current);

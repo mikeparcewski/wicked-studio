@@ -94,3 +94,19 @@ describe('the page', () => {
     expect(ago(NOW - 3 * 3_600_000, NOW)).toBe('3 h ago');
   });
 });
+
+describe('codex on S14', () => {
+  it('a failed read is never also "nothing to show"', () => {
+    useWatchStore.getState().failFeed('500 boom');
+    render(<WatchtowerPage count={0} runs={[]} navigate={() => {}} now={NOW} />);
+    expect(screen.getByTestId('watchtower-error')).toBeTruthy();
+    expect(screen.queryByTestId('watchtower-empty')).toBeNull();
+  });
+
+  it('rows present on the first render never open the card, whatever their clock says', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+    render(<WatchPill needRows={[need('skewed', NOW + 5_000)]} runs={[]} navigate={() => {}} />);
+    expect(screen.getByTestId('watch-pill-wrap').getAttribute('data-open')).toBe('false');
+  });
+});
