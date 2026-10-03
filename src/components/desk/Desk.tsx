@@ -15,6 +15,7 @@ import { HandoverPanel } from '../HandoverPanel.js';
 import { NeedsQueueSurface } from '../NeedsYouQueue.js';
 import { Composer, type ComposerSend } from '../session/Composer.js';
 import { DeskStateRows, useDeskStates } from './DeskStateRows.js';
+import { openSheet } from '../../store/sheets.js';
 
 /** Project cards on the first screen (the concept's three); the rest are one link away. */
 const CARDS_MAX = 3;
@@ -68,10 +69,14 @@ export function Desk({ runs, needRows, now, navigate, onAsk }: {
   };
 
   return (
-    <div data-testid="desk" className="wk-desk">
+    <div data-testid="desk" data-object="desk" className="wk-desk">
       <div className="wk-desk-scroll">
         <header className="wk-desk-head">
-          <h1 className="wk-desk-hello">{hello}</h1>
+          <div className="wk-desk-head-row">
+            <h1 className="wk-desk-hello">{hello}</h1>
+            {/* S11: look underneath the Desk — studio itself, this computer, sign-ins, all helpers, hold deliveries. */}
+            <button type="button" data-testid="desk-sheet-open" aria-label="Look underneath the Desk" title="Look underneath (⌘K for everything else)" onClick={() => openSheet({ kind: 'desk' })} className="wk-sheet-open">⋯</button>
+          </div>
           <p className="wk-desk-date">{date}</p>
         </header>
         <div className="wk-desk-studio">

@@ -114,7 +114,7 @@ export function SessionRail({ runs, needRows, navigate, pathname }: {
 
       <div className="wk-rail-foot">
         <WatchPill needRows={needRows} runs={runs} navigate={navigate} />
-        <a href="/steering/policies" onClick={go('/steering/policies')} className="wk-rail-link">Rules</a>
+        <a href="/steering/policies" onClick={go('/steering/policies')} data-testid="desk-rail-rules" className="wk-rail-link">Rules</a>
         <HealthRailSection open={healthOpen} onToggle={() => setHealthOpen((v) => !v)} />
         <div ref={moreRef}>
           <button

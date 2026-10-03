@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import type { SessionView } from '../../api/types.js';
 import { isRouteUnsupported } from '../../api/errors.js';
 import { runIdentityOf, teamPlanApi } from '../../api/teamPlan.js';
-import { chainOf, chainSentence, type ChainModel, type ChainStep } from '../../board/chainModel.js';
+import { chainOf, chainSentence, unitPhaseId, type ChainModel, type ChainStep } from '../../board/chainModel.js';
+import { openSheet } from '../../store/sheets.js';
 import { useConnectionStore } from '../../store/connection.js';
 import { loadCatalog, usePlanCatalog } from '../../store/planCatalog.js';
 import { useTeamPlanStore } from '../../store/teamPlan.js';
@@ -68,6 +69,14 @@ export function useRunChain(view: SessionView): RunChain {
   };
 }
 
+/** The unit a step ran as: a units-chain step is `u<ord>`; a team step's id is its unit's phase id. */
+export function stepUnitOrd(s: ChainStep, units: readonly SessionView['units'][number][]): number | null {
+  const m = /^u(\d+)$/.exec(s.id);
+  if (m !== null) return units.some((u) => u.ord === Number(m[1])) ? Number(m[1]) : null;
+  const u = units.find((x) => unitPhaseId(x) === s.id);
+  return u?.ord ?? null;
+}
+
 const STATE_WORD: Record<ChainStep['state'], string> = {
   todo: 'not started', running: 'working', done: 'done', checked: 'checked', failed: 'stopped',
   replaced: 'replaced', struck: 'removed',
@@ -81,9 +90,11 @@ function whyOf(s: ChainStep): string {
   return [ADDED_WORD[s.addedBy], s.reason].filter(Boolean).join(' — ');
 }
 
-export function ChainLine({ chain, runId, teamError = null, onRetry }: {
+export function ChainLine({ chain, runId, units = [], teamError = null, onRetry }: {
   chain: ChainModel;
   runId: string;
+  /** The run's units: a step that has one opens its sheet (S11). */
+  units?: SessionView['units'];
   teamError?: string | null;
   onRetry?: () => void;
 }): React.ReactElement {
@@ -91,8 +102,11 @@ export function ChainLine({ chain, runId, teamError = null, onRetry }: {
     <div data-testid="chain" data-run-id={runId} data-source={chain.source} data-proposed={chain.proposed ? 'true' : 'false'} className="wk-chain">
       {chain.steps.length > 0 && (
         <ol data-testid="chain-line" aria-label={chain.proposed ? 'Proposed steps' : 'Steps'} className="wk-chain-line">
-          {chain.steps.map((s, i) => (
+          {chain.steps.map((s, i) => {
+            const ord = stepUnitOrd(s, units);
+            return (
             <li
+              {...(ord !== null ? { 'data-object': `step:${runId}:${ord}` } : {})}
               key={s.id}
               data-testid="chain-step"
               data-step-id={s.id}
@@ -106,10 +120,15 @@ export function ChainLine({ chain, runId, teamError = null, onRetry }: {
             >
               {i > 0 && <span aria-hidden className="wk-chain-join" />}
               <span aria-hidden className={`wk-chain-dot wk-chain-dot--${s.state}`} />
-              <span className="wk-chain-label">{s.label}</span>
+              {ord !== null ? (
+                <button type="button" data-testid="chain-step-open" onClick={() => openSheet({ kind: 'step', runId, ord })} aria-label={`Look underneath ${s.label}`} className="wk-chain-label wk-chain-open">{s.label}</button>
+              ) : (
+                <span className="wk-chain-label">{s.label}</span>
+              )}
               {s.late && <span className="wk-chain-late">added</span>}
             </li>
-          ))}
+            );
+          })}
         </ol>
       )}
       {(chain.total > 0 || chain.transportLine === null) && (

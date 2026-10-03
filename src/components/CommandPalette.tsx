@@ -39,11 +39,12 @@ const TERMINAL: ReadonlySet<string> = new Set(['completed', 'cancelled', 'failed
 const ACTIVE: ReadonlySet<string> = new Set(['planning', 'distributing', 'executing']);
 
 type Group =
-  | 'runs' | 'projects' | 'repos' | 'verbs' | 'go'
+  | 'actions' | 'runs' | 'projects' | 'repos' | 'verbs' | 'go'
   // §5.2 search mode's corpora — grouped exactly as the corpus label names them.
   | 'search-runs' | 'search-gates' | 'search-decisions' | 'search-repos' | 'search-prompts';
 
 const GROUP_LABEL: Record<Group, string> = {
+  actions: 'ACTIONS FOR THIS',
   runs: 'RUNS & GATES',
   projects: 'PROJECTS',
   repos: 'REPOSITORIES',
@@ -211,10 +212,12 @@ interface Props {
   onKill: (id: string) => void;
   /** Pre-typed query on OPEN (§5.2: Cmd+Shift+F seeds `?` — search mode). */
   seed?: string;
+  /** S11: the object ⌘K was pressed on (the open sheet's, else the pointed one) — its actions lead. */
+  object?: { title: string; rows: Array<{ id: string; label: string; run: () => void; disabled: string | null }> } | null;
 }
 
 export function CommandPalette({
-  open, onClose, runs, navigate, runPath, projectId, selectedRun, onKill, seed = '',
+  open, onClose, runs, navigate, runPath, projectId, selectedRun, onKill, seed = '', object = null,
 }: Props): React.ReactElement | null {
   const [query, setQuery] = useState('');
   const [sel, setSel] = useState(0);
@@ -502,6 +505,15 @@ export function CommandPalette({
       });
     }
 
+    // S11: the pointed object's actions lead (DESIGN-interaction rule 9). A row that cannot run now
+    // says why in its context and does nothing.
+    object?.rows.forEach((r, i) => {
+      entries.push({
+        id: `act-${r.id}`, group: 'actions', label: r.label, context: r.disabled ?? '',
+        action: r.disabled === null ? r.run : () => {}, rank: i,
+      });
+    });
+
     // Verbs (§1.3's table — each names its existing mechanism, none invents one).
     const verbs: Array<{ name: string; action: () => void; when?: boolean }> = [
       // Slice S: the pre-bound-vs-flat fork is the shared `launchPath` spelling
@@ -593,7 +605,7 @@ export function CommandPalette({
     const matched = scoped
       .map((en) => ({ en, m: fuzzyMatch(needle, en.label) }))
       .filter((x): x is { en: Entry; m: { score: number; positions: number[] } } => x.m !== null);
-    const order: Group[] = ['runs', 'projects', 'repos', 'verbs', 'go'];
+    const order: Group[] = ['actions', 'runs', 'projects', 'repos', 'verbs', 'go'];
     matched.sort((a, b) => {
       const g = order.indexOf(a.en.group) - order.indexOf(b.en.group);
       if (g !== 0) return g;
@@ -617,7 +629,7 @@ export function CommandPalette({
       return [...targeted, ...matched];
     }
     return matched;
-  }, [runs, projects, repos, gates, claims, prompts, projectNameByRun, attachedAtByRun, goTargets, scope, needle, runPath, navigate, projectId, selectedRun, onKill]);
+  }, [runs, projects, repos, gates, claims, prompts, projectNameByRun, attachedAtByRun, goTargets, object, scope, needle, runPath, navigate, projectId, selectedRun, onKill]);
 
   // Clamp the selection whenever the row set changes.
   const selIx = Math.min(sel, Math.max(0, rows.length - 1));
@@ -871,7 +883,7 @@ export function CommandPalette({
                           letterSpacing: '0.08em',
                         }}
                       >
-                        {GROUP_LABEL[row.en.group]}
+                        {row.en.group === 'actions' && object !== null ? `ACTIONS FOR ${object.title.toUpperCase()}` : GROUP_LABEL[row.en.group]}
                       </p>
                     )}
                     {row.en.href !== undefined ? (

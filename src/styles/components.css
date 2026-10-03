@@ -965,3 +965,36 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
 /* ── The desk's standing states and the rail's controls (coverage finding 2) ──────────────── */
 .wk-rail-controls { display: flex; flex-direction: column; gap: 8px; padding: 8px 10px 4px; margin-top: 6px; border-top: 1px solid var(--border-subtle); }
 .wk-rail-controls .wk-orders { flex-wrap: wrap; white-space: normal; font-family: inherit; }
+/* ── S11: look-underneath sheets, the ⋯ openers, ⌥ peek ─────────────────────────────────── */
+.wk-sheet {
+  position: fixed; top: 0; right: 0; bottom: 0; z-index: 45; width: min(560px, 92vw);
+  display: flex; flex-direction: column; background: var(--surface-card);
+  border-left: 1px solid var(--surface-raised); box-shadow: var(--shadow-overlay); outline: none;
+}
+.wk-sheet-head { display: flex; align-items: flex-start; gap: 12px; padding: 16px 20px 8px; }
+.wk-sheet-head-body { flex: 1; min-width: 0; }
+.wk-sheet-title { margin: 0; font-size: var(--text-lg); font-weight: var(--weight-semi); color: var(--ink-high); }
+.wk-sheet-sub { margin: 2px 0 0; font-size: var(--text-xs); color: var(--ink-muted); }
+.wk-sheet-x { border: 0; background: transparent; color: var(--ink-muted); font-size: var(--text-lg); cursor: pointer; line-height: 1; }
+.wk-sheet-tabs { display: flex; flex-wrap: wrap; gap: 4px; padding: 0 16px 8px; border-bottom: 1px solid var(--border-subtle); }
+.wk-sheet-tab { border: 0; background: transparent; padding: 4px 10px; border-radius: 999px; font-size: var(--text-xs); color: var(--ink-muted); cursor: pointer; }
+.wk-sheet-tab--on { background: var(--accent-subtle); color: var(--ink-high); }
+.wk-sheet-body { flex: 1; overflow-y: auto; padding: 12px 20px; display: flex; flex-direction: column; gap: 10px; }
+.wk-sheet-foot { display: flex; align-items: center; gap: 12px; padding: 10px 20px; border-top: 1px solid var(--border-subtle); }
+.wk-sheet-hint { font-size: var(--text-2xs); color: var(--ink-dim); }
+.wk-sheet-section { display: flex; flex-direction: column; gap: 6px; }
+.wk-sheet-fill { min-height: 320px; }
+.wk-sheet-line { margin: 0; font-size: var(--text-sm); color: var(--ink-body); }
+.wk-sheet-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.wk-sheet-pre { margin: 0; white-space: pre-wrap; word-break: break-word; font-size: var(--text-xs); color: var(--ink-body); max-height: 52vh; overflow: auto; }
+.wk-sheet-message { display: flex; flex-direction: column; gap: 6px; }
+.wk-sheet-open { border: 0; background: transparent; color: var(--ink-muted); font-size: var(--text-lg); cursor: pointer; padding: 0 6px; border-radius: var(--radius-sm); line-height: 1; }
+.wk-sheet-open:hover { color: var(--ink-high); background: var(--surface-raised); }
+.wk-desk-head-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.wk-chain-open { border: 0; background: transparent; padding: 0; color: inherit; font: inherit; cursor: pointer; }
+.wk-chain-open:hover { text-decoration: underline; }
+.wk-alt-peek {
+  position: fixed; z-index: 60; max-width: 330px; padding: 6px 10px; border-radius: 8px; pointer-events: none;
+  background: var(--surface-card); border: 1px solid var(--surface-raised); box-shadow: var(--shadow-raised);
+  font-size: var(--text-xs); color: var(--ink-high);
+}

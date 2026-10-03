@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.5.19",
   "counts": {
-    "files": 194,
-    "occurrences": 2128,
-    "static": 1863,
+    "files": 198,
+    "occurrences": 2181,
+    "static": 1904,
     "dynamic": 79,
     "computed": 7
   },
@@ -132,6 +132,12 @@
       "testId": "all-runs-link",
       "files": [
         "src/components/HomeBoard.tsx"
+      ]
+    },
+    {
+      "testId": "alt-peek",
+      "files": [
+        "src/components/sheets/AltPeek.tsx"
       ]
     },
     {
@@ -970,6 +976,12 @@
     },
     {
       "testId": "chain-step",
+      "files": [
+        "src/components/session/ChainLine.tsx"
+      ]
+    },
+    {
+      "testId": "chain-step-open",
       "files": [
         "src/components/session/ChainLine.tsx"
       ]
@@ -2333,6 +2345,7 @@
     {
       "testId": "desk-headline",
       "files": [
+        "src/board/objectActions.ts",
         "src/components/desk/Desk.tsx"
       ]
     },
@@ -2345,6 +2358,7 @@
     {
       "testId": "desk-rail-badge",
       "files": [
+        "src/board/objectActions.ts",
         "src/components/desk/SessionRail.tsx"
       ]
     },
@@ -2373,6 +2387,13 @@
       ]
     },
     {
+      "testId": "desk-rail-rules",
+      "files": [
+        "src/board/objectActions.ts",
+        "src/components/desk/SessionRail.tsx"
+      ]
+    },
+    {
       "testId": "desk-rail-start",
       "files": [
         "src/components/desk/SessionRail.tsx"
@@ -2381,11 +2402,18 @@
     {
       "testId": "desk-see-everything",
       "files": [
+        "src/board/objectActions.ts",
         "src/components/desk/Desk.tsx"
       ]
     },
     {
       "testId": "desk-session",
+      "files": [
+        "src/components/desk/Desk.tsx"
+      ]
+    },
+    {
+      "testId": "desk-sheet-open",
       "files": [
         "src/components/desk/Desk.tsx"
       ]
@@ -2399,6 +2427,7 @@
     {
       "testId": "desk-start-row",
       "files": [
+        "src/board/objectActions.ts",
         "src/components/desk/Desk.tsx"
       ]
     },
@@ -5506,6 +5535,7 @@
     {
       "testId": "need-row",
       "files": [
+        "src/board/objectActions.ts",
         "src/components/NeedsYouQueue.tsx"
       ]
     },
@@ -5800,6 +5830,7 @@
     {
       "testId": "peek-card",
       "files": [
+        "src/board/objectActions.ts",
         "src/components/PeekCard.tsx"
       ]
     },
@@ -7731,7 +7762,25 @@
       ]
     },
     {
+      "testId": "session-run-helper",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
+      "testId": "session-run-helpers",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
       "testId": "session-run-open",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
+      "testId": "session-sheet-open",
       "files": [
         "src/components/session/SessionView.tsx"
       ]
@@ -7751,12 +7800,14 @@
     {
       "testId": "session-status",
       "files": [
+        "src/board/objectActions.ts",
         "src/components/session/SessionView.tsx"
       ]
     },
     {
       "testId": "session-status-sentence",
       "files": [
+        "src/board/objectActions.ts",
         "src/components/session/SessionView.tsx"
       ]
     },
@@ -7797,8 +7848,213 @@
       ]
     },
     {
+      "testId": "sheet",
+      "files": [
+        "src/components/sheets/Sheet.tsx"
+      ]
+    },
+    {
+      "testId": "sheet-activity",
+      "files": [
+        "src/components/sheets/ObjectSheet.tsx"
+      ]
+    },
+    {
+      "testId": "sheet-body",
+      "files": [
+        "src/components/sheets/Sheet.tsx"
+      ]
+    },
+    {
+      "testId": "sheet-changes",
+      "files": [
+        "src/components/sheets/ObjectSheet.tsx"
+      ]
+    },
+    {
+      "testId": "sheet-close",
+      "files": [
+        "src/components/sheets/Sheet.tsx"
+      ]
+    },
+    {
+      "testId": "sheet-computer",
+      "files": [
+        "src/components/sheets/ObjectSheet.tsx"
+      ]
+    },
+    {
+      "testId": "sheet-did",
+      "files": [
+        "src/components/sheets/ObjectSheet.tsx"
+      ]
+    },
+    {
+      "testId": "sheet-did-row",
+      "files": [
+        "src/components/sheets/ObjectSheet.tsx"
+      ]
+    },
+    {
+      "testId": "sheet-events",
+      "files": [
+        "src/components/sheets/ObjectSheet.tsx"
+      ]
+    },
+    {
+      "testId": "sheet-events-empty",
+      "files": [
+        "src/components/sheets/ObjectSheet.tsx"
+      ]
+    },
+    {
+      "testId": "sheet-goal",
+      "files": [
+        "src/components/sheets/ObjectSheet.tsx"
+      ]
+    },
+    {
+      "testId": "sheet-happening",
+      "files": [
+        "src/components/sheets/ObjectSheet.tsx"
+      ]
+    },
+    {
+      "testId": "sheet-helper-open",
+      "files": [
+        "src/components/sheets/ObjectSheet.tsx"
+      ]
+    },
+    {
+      "testId": "sheet-helpers",
+      "files": [
+        "src/components/sheets/ObjectSheet.tsx"
+      ]
+    },
+    {
+      "testId": "sheet-hold",
+      "files": [
+        "src/components/sheets/ObjectSheet.tsx"
+      ]
+    },
+    {
+      "testId": "sheet-message",
+      "files": [
+        "src/components/sheets/ObjectSheet.tsx"
+      ]
+    },
+    {
+      "testId": "sheet-message-error",
+      "files": [
+        "src/components/sheets/ObjectSheet.tsx"
+      ]
+    },
+    {
+      "testId": "sheet-message-input",
+      "files": [
+        "src/components/sheets/ObjectSheet.tsx"
+      ]
+    },
+    {
+      "testId": "sheet-message-send",
+      "files": [
+        "src/components/sheets/ObjectSheet.tsx"
+      ]
+    },
+    {
+      "testId": "sheet-message-sent",
+      "files": [
+        "src/components/sheets/ObjectSheet.tsx"
+      ]
+    },
+    {
+      "testId": "sheet-output",
+      "files": [
+        "src/components/sheets/ObjectSheet.tsx"
+      ]
+    },
+    {
+      "testId": "sheet-primary",
+      "files": [
+        "src/components/sheets/Sheet.tsx"
+      ]
+    },
+    {
+      "testId": "sheet-primary-why",
+      "files": [
+        "src/components/sheets/Sheet.tsx"
+      ]
+    },
+    {
+      "testId": "sheet-record",
+      "files": [
+        "src/components/sheets/ObjectSheet.tsx"
+      ]
+    },
+    {
+      "testId": "sheet-seat",
+      "files": [
+        "src/components/sheets/ObjectSheet.tsx"
+      ]
+    },
+    {
+      "testId": "sheet-section",
+      "files": [
+        "src/components/sheets/ObjectSheet.tsx"
+      ]
+    },
+    {
+      "testId": "sheet-signin-row",
+      "files": [
+        "src/components/sheets/ObjectSheet.tsx"
+      ]
+    },
+    {
+      "testId": "sheet-signins",
+      "files": [
+        "src/components/sheets/ObjectSheet.tsx"
+      ]
+    },
+    {
+      "testId": "sheet-studio",
+      "files": [
+        "src/components/sheets/ObjectSheet.tsx"
+      ]
+    },
+    {
+      "testId": "sheet-sub",
+      "files": [
+        "src/components/sheets/Sheet.tsx"
+      ]
+    },
+    {
+      "testId": "sheet-tab",
+      "files": [
+        "src/components/sheets/Sheet.tsx"
+      ]
+    },
+    {
+      "testId": "sheet-terminal",
+      "files": [
+        "src/components/sheets/ObjectSheet.tsx"
+      ]
+    },
+    {
+      "testId": "sheet-terminal-typing",
+      "files": [
+        "src/components/sheets/ObjectSheet.tsx"
+      ]
+    },
+    {
+      "testId": "sheet-title",
+      "files": [
+        "src/components/sheets/Sheet.tsx"
+      ]
+    },
+    {
       "testId": "shortcut-overlay",
       "files": [
+        "src/board/objectActions.ts",
         "src/components/ShortcutOverlay.tsx"
       ]
     },
@@ -11091,6 +11347,7 @@
     {
       "testId": "watchtower",
       "files": [
+        "src/board/objectActions.ts",
         "src/components/watch/WatchtowerPage.tsx"
       ]
     },

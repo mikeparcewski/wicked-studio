@@ -23,6 +23,68 @@ import { WhatWhere } from './WhatWhere.js';
 import { PlanEditPanel } from './PlanEditPanel.js';
 import { planEditAvailability } from '../board/planModel.js';
 
+/** The sections a run has: delivery only where it can deliver, plan only on a live planned run. */
+export function runSections(view: SessionView, isSystemWorkflow: (id: string) => boolean | undefined): { id: AccordionId; label: string }[] {
+  const delivery = hasDeliverySection(view, isSystemWorkflow);
+  const plan = planEditAvailability(view.session).show;
+  return ACCORDIONS.filter((a) => (a.id !== 'delivery' || delivery) && (a.id !== 'plan' || plan));
+}
+
+/**
+ * One section's body — the rail's accordion and the session sheet's tabs (S11) render the same
+ * component, so a section never forks. Delivery and Plan read `view` alone; the rest wait on the model.
+ */
+export function RunSectionBody({ id, view, model, provenance, retriedAs, navigate, onSelectRun }: {
+  id: AccordionId;
+  view: SessionView;
+  model: RunModel | null;
+  provenance: NonNullable<Parameters<typeof WhatWhere>[0]['provenance']> | null;
+  retriedAs: string[];
+  navigate?: (path: string) => void;
+  onSelectRun?: (id: string) => void;
+}): React.ReactElement {
+  if (id === 'delivery') {
+    return (
+      <div className="px-4 py-3" style={{ background: 'var(--surface-base)' }}>
+        <RunDelivery view={view} {...(navigate !== undefined ? { navigate } : {})} />
+      </div>
+    );
+  }
+  if (id === 'plan') {
+    return (
+      <div className="px-4 py-3" style={{ background: 'var(--surface-base)' }}>
+        <PlanEditPanel view={view} />
+      </div>
+    );
+  }
+  if (!model) {
+    return (
+      <div className="px-4 py-3">
+        <p className="text-xs font-mono" style={{ color: 'var(--ink-dim)' }}>Loading…</p>
+      </div>
+    );
+  }
+  return (
+    <div className="px-4 py-3" style={{ background: 'var(--surface-base)' }}>
+      {id === 'decisions' && <DecisionsLedger model={model} />}
+      {id === 'governance' && <GovernanceAudit model={model} />}
+      {id === 'burn' && <Burn model={model} />}
+      {id === 'data' && <DataUsed model={model} />}
+      {id === 'steering' && <SteeringTimeline runId={model.session.id} />}
+      {id === 'whatwhere' && (
+        <WhatWhere
+          model={model}
+          provenance={provenance}
+          retriedAs={retriedAs}
+          {...(onSelectRun !== undefined ? { onSelectRun } : {})}
+        />
+      )}
+      {id === 'assumptions' && <AssumptionsPanel model={model} />}
+      {id === 'files' && <FilesPanel model={model} />}
+    </div>
+  );
+}
+
 interface Props {
   view: SessionView;
   /** The loaded run index (App's one `useRuns()` array) — forward lineage only, no new fetch. */
@@ -31,7 +93,7 @@ interface Props {
   navigate?: (path: string) => void;
 }
 
-type AccordionId =
+export type AccordionId =
   | 'decisions'
   | 'governance'
   | 'burn'
@@ -66,7 +128,7 @@ type AccordionId =
  * is not a changeset and never was (run 665a9aeb reported 13 under
  * "MODIFIED / CREATED" while its deliver phase pushed an empty branch).
  */
-const ACCORDIONS: { id: AccordionId; label: string }[] = [
+export const ACCORDIONS: { id: AccordionId; label: string }[] = [
   { id: 'whatwhere', label: 'What / Where' },
   { id: 'plan', label: 'Plan' },
   { id: 'decisions', label: 'Decisions' },
@@ -248,7 +310,7 @@ function FilePath({ path, opKind, runId, root }: {
  * Fetches ride the same sanctioned wire the run view uses
  * (`GET /runs/:id/units/:unitKey/output`), gesture-gated on opening the modal.
  */
-function RunTranscriptView({ runId, units, onOpenShell, live = null }: {
+export function RunTranscriptView({ runId, units, onOpenShell, live = null }: {
   runId: string;
   units: SessionView['units'];
   onOpenShell: () => void;
@@ -552,14 +614,7 @@ export function RightPanel({ view, runs, onSelectRun, navigate }: Props): React.
   // delivery DERIVATION reads `session.workflow_id` (EC61) — the classification
   // half is a visibility gate, not a wire read.
   const isSystemWorkflow = useIsSystemWorkflow();
-  const sections = useMemo(
-    () => {
-      const delivery = hasDeliverySection(view, isSystemWorkflow);
-      const plan = planEditAvailability(view.session).show;
-      return ACCORDIONS.filter((a) => (a.id !== 'delivery' || delivery) && (a.id !== 'plan' || plan));
-    },
-    [view, isSystemWorkflow],
-  );
+  const sections = useMemo(() => runSections(view, isSystemWorkflow), [view, isSystemWorkflow]);
 
   /**
    * The EFFECTIVE open section (Copilot on #125). `openAccordion` is mount-scoped state and the
@@ -724,39 +779,16 @@ export function RightPanel({ view, runs, onSelectRun, navigate }: Props): React.
                 section, not after the re-hydrate lands. The deliver-lift block
                 it also renders (wicked-core#431) reads the run event store the
                 page already hydrated — still zero requests of its own. */}
-            {openId === id && id === 'delivery' && (
-              <div className="px-4 py-3" style={{ background: 'var(--surface-base)' }}>
-                <RunDelivery view={view} {...(navigate !== undefined ? { navigate } : {})} />
-              </div>
-            )}
-            {openId === id && id === 'plan' && (
-              <div className="px-4 py-3" style={{ background: 'var(--surface-base)' }}>
-                <PlanEditPanel view={view} />
-              </div>
-            )}
-            {openId === id && id !== 'delivery' && id !== 'plan' && model && (
-              <div className="px-4 py-3" style={{ background: 'var(--surface-base)' }}>
-                {id === 'decisions' && <DecisionsLedger model={model} />}
-                {id === 'governance' && <GovernanceAudit model={model} />}
-                {id === 'burn' && <Burn model={model} />}
-                {id === 'data' && <DataUsed model={model} />}
-                {id === 'steering' && <SteeringTimeline runId={model.session.id} />}
-                {id === 'whatwhere' && (
-                  <WhatWhere
-                    model={model}
-                    provenance={provenance}
-                    retriedAs={retriedAs}
-                    {...(onSelectRun !== undefined ? { onSelectRun } : {})}
-                  />
-                )}
-                {id === 'assumptions' && <AssumptionsPanel model={model} />}
-                {id === 'files' && <FilesPanel model={model} />}
-              </div>
-            )}
-            {openId === id && id !== 'delivery' && !model && (
-              <div className="px-4 py-3">
-                <p className="text-xs font-mono" style={{ color: 'var(--ink-dim)' }}>Loading…</p>
-              </div>
+            {openId === id && (
+              <RunSectionBody
+                id={id}
+                view={view}
+                model={model}
+                provenance={provenance}
+                retriedAs={retriedAs}
+                {...(navigate !== undefined ? { navigate } : {})}
+                {...(onSelectRun !== undefined ? { onSelectRun } : {})}
+              />
             )}
           </div>
         ))}
