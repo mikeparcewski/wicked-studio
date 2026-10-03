@@ -175,3 +175,25 @@ describe('codex on S11', () => {
 
 import { AltPeek } from '../src/components/sheets/AltPeek.js';
 function AltPeekHost(): React.ReactElement { return <AltPeek runs={[RUN]} needCount={1} />; }
+
+describe('codex on S11, the sheet itself', () => {
+  it('a session with no run here shows no run tabs; a tab that went away falls back to the first', () => {
+    render(<ObjectSheet runs={[]} navigate={() => {}} needCount={0} />);
+    act(() => useSheets.setState({ open: { ref: { kind: 'session', sessionId: 'run:gone' }, tab: 'governance' } }));
+    expect(screen.getAllByTestId('sheet-tab').map((t) => t.getAttribute('data-tab'))).toStrictEqual(['goal', 'helpers', 'activity', 'signins']);
+    expect(screen.getByTestId('sheet-body').getAttribute('data-tab')).toBe('goal');
+  });
+
+  it('tabs are one stop: arrows, Home and End move the selection, panels are linked', () => {
+    render(<ObjectSheet runs={[RUN]} navigate={() => {}} needCount={0} />);
+    act(() => openSheet({ kind: 'desk' }));
+    const tabs = screen.getAllByTestId('sheet-tab');
+    expect(tabs.filter((t) => t.tabIndex === 0)).toHaveLength(1);
+    fireEvent.keyDown(tabs[0]!, { key: 'ArrowRight' });
+    expect(useSheets.getState().open?.tab).toBe('computer');
+    fireEvent.keyDown(tabs[0]!, { key: 'End' });
+    expect(useSheets.getState().open?.tab).toBe('hold');
+    const panel = screen.getByTestId('sheet-body');
+    expect(panel.getAttribute('aria-labelledby')).toBe(screen.getAllByTestId('sheet-tab').find((t) => t.getAttribute('data-tab') === 'hold')!.id);
+  });
+});

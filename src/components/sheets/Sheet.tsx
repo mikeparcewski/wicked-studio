@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useId, useRef } from 'react';
 import type { SheetTab } from '../../board/objectActions.js';
 
 /**
@@ -20,6 +20,7 @@ export function Sheet({ title, sub, objectAttr, tabs, tab, onTab, primary, onClo
   children: React.ReactNode;
 }): React.ReactElement {
   const ref = useRef<HTMLDivElement | null>(null);
+  const uid = useId().replace(/:/g, '');
   useEffect(() => {
     const prev = document.activeElement as HTMLElement | null;
     ref.current?.focus();
@@ -49,13 +50,31 @@ export function Sheet({ title, sub, objectAttr, tabs, tab, onTab, primary, onClo
         </div>
         <button type="button" data-testid="sheet-close" aria-label="Close" onClick={onClose} className="wk-sheet-x">×</button>
       </header>
-      <div role="tablist" aria-label={`${title}: look underneath`} className="wk-sheet-tabs">
+      <div
+        role="tablist"
+        aria-label={`${title}: look underneath`}
+        className="wk-sheet-tabs"
+        onKeyDown={(e) => {
+          // A composite control's own keys (keyboard model rule 2): arrows, Home and End move the tab.
+          const i = tabs.findIndex((t) => t.id === tab);
+          const to = e.key === 'ArrowRight' ? (i + 1) % tabs.length
+            : e.key === 'ArrowLeft' ? (i - 1 + tabs.length) % tabs.length
+              : e.key === 'Home' ? 0 : e.key === 'End' ? tabs.length - 1 : -1;
+          if (to < 0) return;
+          e.preventDefault();
+          onTab(tabs[to]!.id);
+          requestAnimationFrame(() => document.getElementById(`${uid}-tab-${tabs[to]!.id}`)?.focus());
+        }}
+      >
         {tabs.map((t) => (
           <button
             key={t.id}
+            id={`${uid}-tab-${t.id}`}
             type="button"
             role="tab"
             aria-selected={t.id === tab}
+            aria-controls={`${uid}-panel`}
+            tabIndex={t.id === tab ? 0 : -1}
             data-testid="sheet-tab"
             data-tab={t.id}
             onClick={() => onTab(t.id)}
@@ -65,7 +84,7 @@ export function Sheet({ title, sub, objectAttr, tabs, tab, onTab, primary, onClo
           </button>
         ))}
       </div>
-      <div role="tabpanel" data-testid="sheet-body" data-tab={tab} className="wk-sheet-body">{children}</div>
+      <div id={`${uid}-panel`} role="tabpanel" aria-labelledby={`${uid}-tab-${tab}`} data-testid="sheet-body" data-tab={tab} className="wk-sheet-body">{children}</div>
       <footer className="wk-sheet-foot">
         {primary !== null && (
           <button

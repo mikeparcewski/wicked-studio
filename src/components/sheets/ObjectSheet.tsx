@@ -3,7 +3,7 @@ import { api } from '../../api/client.js';
 import { executingOrd } from '../../api/run-state.js';
 import type { RosterSeat, SessionView } from '../../api/types.js';
 import { getDiagnostics, type Diagnostics } from '../../api/diagnostics.js';
-import { objectAttr, OBJECT_ACTIONS, primaryAction, SHEET_TABS, type ObjectRef } from '../../board/objectActions.js';
+import { objectAttr, OBJECT_ACTIONS, primaryAction, RUN_SECTION_TABS, SHEET_TABS, type ObjectRef } from '../../board/objectActions.js';
 import { parseSessionId, runChatIdOf } from '../../board/sessionModel.js';
 import { STEP_WORD, unitPhaseId } from '../../board/chainModel.js';
 import { useRunModel } from '../../hooks/useRunModel.js';
@@ -228,14 +228,18 @@ function HelperSheet({ r, tab, runs }: { r: Extract<ObjectRef, { kind: 'helper' 
   );
 }
 
-function SessionSheet({ r, tab, runs, navigate }: { r: Extract<ObjectRef, { kind: 'session' }>; tab: string; runs: SessionView[]; navigate: Navigate }): React.ReactElement {
+function SessionSheet({ r, tab: asked, runs, navigate }: { r: Extract<ObjectRef, { kind: 'session' }>; tab: string; runs: SessionView[]; navigate: Navigate }): React.ReactElement {
   const runChatId = useCapabilities((s) => s.runChatId);
   const mine = useMemo(() => sessionRuns(r.sessionId, runs, runChatId), [r.sessionId, runs, runChatId]);
   const newest = mine[mine.length - 1] ?? null;
   const roster = useRoster();
   const isSystem = useIsSystemWorkflow();
   const sections = newest !== null ? runSections(newest, isSystem) : [];
-  const tabs = SHEET_TABS.session.filter((t) => !sections.length || !['whatwhere', 'plan', 'decisions', 'governance', 'burn', 'data', 'steering', 'assumptions', 'files', 'delivery'].includes(t.id) || sections.some((s) => s.id === t.id));
+  // The run's sections only where the run has them (none when no run of it is on this daemon).
+  const runTab = new Set<string>(RUN_SECTION_TABS.map((t) => t.id));
+  const tabs = SHEET_TABS.session.filter((t) => !runTab.has(t.id) || sections.some((x) => x.id === t.id));
+  // A tab that went away under the open sheet (the run finished, Plan left) falls back to the first.
+  const tab = tabs.some((t) => t.id === asked) ? asked : tabs[0]!.id;
   const title = newest !== null ? humanTitle(mine[0]!.session.problem || mine[0]!.session.id) : 'This session';
   const record = newest !== null ? `/runs/${encodeURIComponent(newest.session.id)}` : null;
   return (
