@@ -366,9 +366,15 @@ export function start(): void {
           return;
         case 'artifact.changed': {
           // A version landed — the operator's own (the host already told us the number), a helper's or
-          // another tab's: the page shows the newest, scrolled back to what was being looked at.
+          // another tab's: the page shows the newest, scrolled back to what was being looked at. Our own
+          // version arriving this way means the write's reply was lost to the 10 s window (the host
+          // announces a late landing): the line that said "Not changed" is corrected.
           const v = p['version'];
-          if (typeof v === 'number' && v !== head) { returnTo = returnTo ?? selected; void render(v); }
+          if (typeof v === 'number' && v !== head) {
+            if (p['by'] === 'this-editor' && p['kind'] === 'deterministic') status(`Changed after all · version ${v}`);
+            returnTo = returnTo ?? selected;
+            void render(v);
+          }
           return;
         }
         case 'selection.cleared':

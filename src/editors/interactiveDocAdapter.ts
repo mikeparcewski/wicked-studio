@@ -1,7 +1,7 @@
 import { getVersions, HeadMovedError, interactiveDocUrl, postEvent, postFork, type VersionEntry } from '../api/interactive.js';
 import { notUndoneLine } from '../board/artifactMorph.js';
 import { FEEDBACK_EVENT } from '../interactive/feedbackBatch.js';
-import type { AdapterResult, ArtifactRef, HostAdapter } from './host.js';
+import type { AdapterResult, ArtifactRef, HostAdapter, MovedOn } from './host.js';
 import type { VersionKind } from './model.js';
 import type { WireItem } from './ops.js';
 
@@ -49,6 +49,18 @@ export class InteractiveDocAdapter implements HostAdapter {
     if (head === this.head) return;
     this.head = head;
     this.onHead?.(head);
+  }
+
+  /**
+   * The head moved to a version the reply itself does not make the plugin's current one: said as
+   * `moved` (head + how it came to be), which the host announces as `artifact.changed` after the reply —
+   * or alone, when the reply already timed out (a write's landing window is 20 s, the reply's 10 s;
+   * codex r3). Judged against the head as it stood before the move.
+   */
+  private movedTo(head: number): MovedOn {
+    const was = this.head;
+    this.moveHead(head);
+    return { head, kind: this.kindOf(head, was) };
   }
 
   /** Re-read the manifest. When the head moved, says to what and how (as the plugin is told). */
@@ -115,8 +127,8 @@ export class InteractiveDocAdapter implements HostAdapter {
       const m = await getVersions(this.projectId, this.docId);
       this.entries = m.versions;
       if (m.head !== base) {
-        this.moveHead(m.head);
-        return { error: 'head_moved', message: `The page changed (version ${m.head}) before your edit was sent; nothing was changed.`, head: m.head };
+        const moved = this.movedTo(m.head);
+        return { error: 'head_moved', message: `The page changed (version ${m.head}) before your edit was sent; nothing was changed.`, head: m.head, moved };
       }
       before = new Set(m.versions.map((v) => v.version));
     } catch {
@@ -129,8 +141,8 @@ export class InteractiveDocAdapter implements HostAdapter {
     const landed = await this.waitForLanded(base, before);
     if (landed === null) return { error: 'unavailable', message: 'The change was sent, but no new version appeared.' };
     if ('other' in landed) {
-      this.moveHead(landed.other);
-      return { error: 'stale', message: `The page changed (version ${landed.other}), but not by your edit — it may have been stale.`, head: landed.other };
+      const moved = this.movedTo(landed.other);
+      return { error: 'stale', message: `The page changed (version ${landed.other}), but not by your edit — it may have been stale.`, head: landed.other, moved };
     }
     this.moveHead(landed.head);
     // The head moved on past what the plugin will be told: the host announces it after the reply.
@@ -158,11 +170,19 @@ export class InteractiveDocAdapter implements HostAdapter {
     try {
       const r = await postFork(this.projectId, this.docId, parent, undefined, version);
       this.moveHead(r.version);
-      return { undone: true };
+      return { undone: true, moved: { head: r.version, kind: 'fork' } };
     } catch (e: unknown) {
       if (e instanceof HeadMovedError) {
-        this.moveHead(e.head);
-        return { error: 'head_moved', message: notUndoneLine(e.head), head: e.head };
+        // The manifest is re-read so `moved` can say HOW the head came to be (a helper's version, a fork);
+        // when it cannot be read, the head the server named stands and its kind is unknown ('generated').
+        let head = e.head;
+        try {
+          const m = await getVersions(this.projectId, this.docId);
+          this.entries = m.versions;
+          head = Math.max(head, m.head);
+        } catch { /* the server's head stands */ }
+        const moved = this.movedTo(head);
+        return { error: 'head_moved', message: notUndoneLine(head), head, moved };
       }
       return { error: 'unavailable', message: `Could not undo: ${e instanceof Error ? e.message : String(e)}` };
     }

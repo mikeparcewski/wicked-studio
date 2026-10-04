@@ -112,7 +112,7 @@ describe('InteractiveDocAdapter', () => {
     await a.refresh();
     await a.write(1, [{ selector: 'headline', type: 'content-edit', value: 'New', before: 'Old' }]);
     api.forkAnswer = { version: 3 };
-    expect(await a.undo(2)).toEqual({ undone: true });
+    expect(await a.undo(2)).toEqual({ undone: true, moved: { head: 3, kind: 'fork' } });
     expect(api.forks).toEqual([{ from: 1, expectHead: 2 }]);
     expect(a.head).toBe(3);
     api.forkAnswer = { headMoved: 5 };
@@ -120,6 +120,26 @@ describe('InteractiveDocAdapter', () => {
     expect(r).toMatchObject({ error: 'head_moved', head: 5 });
     expect(a.head).toBe(5);
     expect(await a.undo(42)).toMatchObject({ error: 'refused' });
+  });
+  it('codex r3: every head the adapter moves to that the reply does not name is carried as `moved` (head + kind) — stale, head_moved before the post, a head that moved under an undo', async () => {
+    // The host announces `moved` after the reply — or alone, when the reply already timed out (a write's
+    // poll window is 20 s, the reply's 10 s): a plugin that heard "timeout" still learns where the head went.
+    const a = new InteractiveDocAdapter('notes', 'plan', 'The plan', 'page', undefined, { pollForMs: 900 });
+    api.manifests = [{ head: 1, versions: [entry(1, null)] }, { head: 1, versions: [entry(1, null)] }, { head: 2, versions: [entry(1, null), entry(2, 1)] }];
+    await a.refresh();
+    expect(await a.write(1, [{ selector: 'headline', type: 'content-edit', value: 'New', before: 'Old' }])).toMatchObject({ error: 'stale', head: 2, moved: { head: 2, kind: 'generated' } });
+    const b = new InteractiveDocAdapter('notes', 'plan', 'The plan');
+    api.manifests = [{ head: 1, versions: [entry(1, null)] }, { head: 3, versions: [entry(1, null), entry(2, 1, true), entry(3, 1)] }];
+    await b.refresh();
+    expect(await b.write(1, [{ selector: 'headline', type: 'content-edit', value: 'New', before: 'Old' }])).toMatchObject({ error: 'head_moved', head: 3, moved: { head: 3, kind: 'generated' } });
+    const c = new InteractiveDocAdapter('notes', 'plan', 'The plan');
+    api.manifests = [{ head: 1, versions: [entry(1, null)] }, { head: 1, versions: [entry(1, null)] }, { head: 2, versions: [entry(1, null), entry(2, 1, true)] }];
+    await c.refresh();
+    await c.write(1, [{ selector: 'headline', type: 'content-edit', value: 'New', before: 'Old' }]);
+    api.manifests = [{ head: 5, versions: [entry(1, null), entry(2, 1, true), entry(5, 2, true)] }];
+    api.forkAnswer = { headMoved: 5 };
+    expect(await c.undo(2)).toMatchObject({ error: 'head_moved', head: 5, moved: { head: 5, kind: 'deterministic' } }); // the manifest is re-read for the kind
+    expect(c.head).toBe(5);
   });
   it('refresh says how the head moved: a deterministic version, a generated one, or a fork', async () => {
     const a = new InteractiveDocAdapter('notes', 'plan', 'The plan');

@@ -35,10 +35,11 @@ export interface ArtifactRef {
   lockedParts: AnchorRef[];
 }
 
-/** The head moved on past what the plugin is about to be told (EP-P2, codex r2): a write that landed
- *  while a helper's later version was already the head, or a match that could not be told apart. The
- *  host strips it from the reply and posts `artifact.changed` for it right after, so the plugin shows
- *  the head and never stays on the version it wrote. */
+/** The head moved to a version the reply itself does not make the plugin's current one (EP-P2, codex
+ *  r2/r3): a write that landed while a helper's later version was already the head, a match that could
+ *  not be told apart, a stale edit's new head, the fork an undo made. The host strips it from the reply
+ *  and posts `artifact.changed` for it right after — or alone, when the reply already timed out — so the
+ *  plugin shows the head and never stays on the version it wrote or was looking at. */
 export interface MovedOn { head: number; kind: VersionKind }
 
 export type AdapterResult<T> = (T & { moved?: MovedOn }) | { error: ErrorCode; message: string; head?: number; moved?: MovedOn };
@@ -250,7 +251,10 @@ export class EditorHost {
     const timer = setTimeout(() => { if (!settled) { settled = true; this.post(refuse(id, 'timeout', 'no answer in 10 s')); } }, LIMITS.replyMs);
     this.handleRequest(msg.type, msg.payload)
       .then((r) => {
-        if (settled) return;
+        // Settled by the timer: the plugin heard "timeout" and no second reply follows — but what the
+        // adapter did meanwhile is real (a write's landing window is 20 s, the reply's 10 s; codex r3), so
+        // a version it made, and any head it moved to, still reach the plugin as `artifact.changed`.
+        const late = settled;
         settled = true;
         clearTimeout(timer);
         // A head that moved on is the host's to announce, after the reply, never a field of it (codex r2).
@@ -260,7 +264,11 @@ export class EditorHost {
           moved = m;
           r = rest;
         }
-        if (r !== null && typeof r === 'object' && 'error' in r && typeof (r as { error: unknown }).error === 'string') {
+        const failed = r !== null && typeof r === 'object' && 'error' in r && typeof (r as { error: unknown }).error === 'string';
+        if (late) {
+          const made = (msg.type === 'version.write' || msg.type === 'version.fork') && !failed && typeof (r as { version?: unknown }).version === 'number';
+          if (made) this.artifactChanged((r as { version: number }).version, msg.type === 'version.fork' ? 'fork' : 'deterministic');
+        } else if (failed) {
           const e = r as { error: ErrorCode; message: string; head?: number };
           this.log({ kind: 'refused', type: msg.type, code: e.error, why: e.message });
           this.post({ ...refuse(id, e.error, e.message), ...(e.head !== undefined ? { payload: { head: e.head } } : {}) });
@@ -320,7 +328,11 @@ export class EditorHost {
       case 'version.undo': {
         const v = p['version'] as number;
         if (!this.ownVersions.has(v)) return { error: 'refused', message: 'only a version this editor wrote, this session' };
-        return a.undo(v);
+        const r = await a.undo(v);
+        // The fork an undo makes is this editor's (as the host-side Undo counts it); it reaches the plugin
+        // as `moved`, since the reply itself names no version.
+        if (!('error' in r) && r.moved !== undefined) this.ownVersions.add(r.moved.head);
+        return r;
       }
       case 'version.fork': {
         const r = await a.fork(p['from'] as number);

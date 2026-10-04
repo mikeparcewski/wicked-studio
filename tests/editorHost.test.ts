@@ -4,7 +4,7 @@ import { FakeDocAdapter, SAMPLE_PAGE } from '../src/editors/fakeAdapter.js';
 import { CHORD_TABLE, isForwardable, isOneGrapheme, judgeKey, judgeTyped } from '../src/editors/keys.js';
 import { builtinDefaults, changedBy, chipsFor, elementLabel, resolveKind } from '../src/editors/model.js';
 import { checkOps, inventoryOf, isColour, themeTokensOf } from '../src/editors/ops.js';
-import { parseInbound, parseReady, type PermissionId } from '../src/editors/protocol.js';
+import { LIMITS, parseInbound, parseReady, type PermissionId } from '../src/editors/protocol.js';
 
 /**
  * EP-P1 (DES-EDITOR-PLUGINS-001 §12.2): the protocol parser, the grants, the op mapping with text
@@ -345,6 +345,67 @@ describe('the host controller', () => {
     expect(toPlugin[i]!.payload).toStrictEqual({ version: 2 }); // never a `moved` field on the wire
     expect(toPlugin[i + 1]).toMatchObject({ type: 'artifact.changed', payload: { version: 3, head: 3, by: 'agent', kind: 'generated' } });
     host.teardown('done');
+  });
+
+  it('codex r3: a write that lands AFTER the reply timed out is still announced — the plugin heard "timeout", then hears its own version as artifact.changed', async () => {
+    // The adapter polls the manifest for up to 20 s; the reply window is 10 s (here 60 ms). A landing in
+    // between must not be discarded with the reply: the host line already says "You changed …", so the
+    // plugin's page has to follow.
+    const limits = LIMITS as { replyMs: number };
+    const was = limits.replyMs;
+    limits.replyMs = 60;
+    try {
+      const { host, fromFrame, adapter } = makeHost(['artifact.read', 'artifact.write']);
+      let port: MessagePort | null = null;
+      vi.spyOn(host.frame.contentWindow!, 'postMessage').mockImplementation(((_m: unknown, _o: unknown, tr?: Transferable[]) => { port = (tr?.[0] as MessagePort) ?? null; }) as never);
+      fromFrame(env('plugin.ready', { editor: 'acme', version: '0.1.0', protocol: [1] }));
+      const toPlugin: { type?: string; re?: string; ok?: boolean; error?: { code: string }; payload?: unknown }[] = [];
+      port!.onmessage = (m) => toPlugin.push(m.data as (typeof toPlugin)[number]);
+      const ref = adapter.artifact();
+      const artifact = vi.spyOn(adapter, 'artifact').mockReturnValue({ ...ref, version: 1, head: 1 });
+      let land: ((r: { version: number }) => void) | null = null;
+      vi.spyOn(adapter, 'write').mockImplementation(() => new Promise((resolve) => { land = resolve; }));
+      port!.postMessage(env('version.write', { base: 1, ops: [{ op: 'text', anchor: 'cta', value: 'Reserve', before: 'Book a room' }], summary: 'cta' }, 'w1'));
+      await vi.waitFor(() => expect(toPlugin.find((m) => m.re === 'w1')).toMatchObject({ ok: false, error: { code: 'timeout' } }));
+      expect(land).not.toBeNull();
+      // 2 s later (well inside the poll window) the version lands: the adapter's head follows it.
+      artifact.mockReturnValue({ ...ref, version: 2, head: 2 });
+      land!({ version: 2 });
+      await vi.waitFor(() => expect(toPlugin.filter((m) => m.type === 'artifact.changed')).toHaveLength(1));
+      expect(toPlugin.at(-1)).toMatchObject({ type: 'artifact.changed', payload: { version: 2, head: 2, by: 'this-editor', kind: 'deterministic' } });
+      expect(toPlugin.filter((m) => m.re === 'w1')).toHaveLength(1); // no second reply to a settled request
+      host.teardown('done');
+    } finally {
+      limits.replyMs = was;
+    }
+  });
+
+  it('codex r3: a late stale answer carries where the head went (moved) — the plugin hears that too, and nothing else', async () => {
+    const limits = LIMITS as { replyMs: number };
+    const was = limits.replyMs;
+    limits.replyMs = 60;
+    try {
+      const { host, fromFrame, adapter } = makeHost(['artifact.read', 'artifact.write']);
+      let port: MessagePort | null = null;
+      vi.spyOn(host.frame.contentWindow!, 'postMessage').mockImplementation(((_m: unknown, _o: unknown, tr?: Transferable[]) => { port = (tr?.[0] as MessagePort) ?? null; }) as never);
+      fromFrame(env('plugin.ready', { editor: 'acme', version: '0.1.0', protocol: [1] }));
+      const toPlugin: { type?: string; re?: string; ok?: boolean; error?: { code: string }; payload?: unknown }[] = [];
+      port!.onmessage = (m) => toPlugin.push(m.data as (typeof toPlugin)[number]);
+      const ref = adapter.artifact();
+      const artifact = vi.spyOn(adapter, 'artifact').mockReturnValue({ ...ref, version: 1, head: 1 });
+      let answer: ((r: { error: 'stale'; message: string; head: number; moved: { head: number; kind: 'generated' } }) => void) | null = null;
+      vi.spyOn(adapter, 'write').mockImplementation(() => new Promise((resolve) => { answer = resolve as typeof answer; }));
+      port!.postMessage(env('version.write', { base: 1, ops: [{ op: 'text', anchor: 'cta', value: 'Reserve', before: 'Book a room' }], summary: 'cta' }, 'w1'));
+      await vi.waitFor(() => expect(toPlugin.find((m) => m.re === 'w1')).toMatchObject({ ok: false, error: { code: 'timeout' } }));
+      artifact.mockReturnValue({ ...ref, version: 2, head: 2 });
+      answer!({ error: 'stale', message: 'The page changed (version 2), but not by your edit', head: 2, moved: { head: 2, kind: 'generated' } });
+      await vi.waitFor(() => expect(toPlugin.filter((m) => m.type === 'artifact.changed')).toHaveLength(1));
+      expect(toPlugin.at(-1)).toMatchObject({ type: 'artifact.changed', payload: { version: 2, head: 2, by: 'agent', kind: 'generated' } });
+      expect(toPlugin.filter((m) => m.re === 'w1')).toHaveLength(1);
+      host.teardown('done');
+    } finally {
+      limits.replyMs = was;
+    }
   });
 
   it('a second load of the frame is a teardown', () => {
