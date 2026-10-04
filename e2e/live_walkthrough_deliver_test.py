@@ -406,12 +406,12 @@ def main(p) -> None:  # noqa: ANN001, C901
                     return
                 redirects.append(redact(f"{method} {url} -> {resp.status} {target}"))
                 url, hops = target, hops + 1
-                if resp.status in (307, 308):
-                    resp = route.fetch(url=url, max_redirects=0)  # the method and body travel with the hop
+                if resp.status not in (307, 308):
+                    method = "GET"  # 301/302/303: the browser would re-issue as a GET with no body — so does the script
+                if method == route.request.method:
+                    resp = route.fetch(url=url, max_redirects=0)  # 307/308 before any method change: the original method and body travel
                 else:
-                    # 301/302/303: the browser would re-issue as a GET with no body — so does the script.
-                    method = "GET"
-                    resp = route.fetch(url=url, method="GET", post_data=None, max_redirects=0)
+                    resp = route.fetch(url=url, method="GET", post_data="", max_redirects=0)  # a GET hop, and every hop after it, carries no body
             route.fulfill(response=resp)
         except Exception:  # noqa: BLE001 — the page navigated away mid-request
             route.abort()
@@ -567,7 +567,10 @@ def main(p) -> None:  # noqa: ANN001, C901
                         k = state_kind(a.get("state"))
                         if k == "passed":
                             return True
-                        return k == "failed" and (a.get("state") != art["state"] or takes(v) != takes0)
+                        # A failed verdict counts only as a NEW TAKE's: some chapter's take count grew. A changed
+                        # label alone, or a shrunken count, is not evidence of a re-record.
+                        now = takes(v)
+                        return k == "failed" and len(now) == len(takes0) and any(n > b for n, b in zip(now, takes0)) and all(n >= b for n, b in zip(now, takes0))
                     if not takes0:
                         # No take baseline from the wire before the click: a later verdict cannot be shown to be a NEW take's.
                         cap("rerecord", "GET /runs/:id/walkthrough gave no chapters before the click — the re-record has no baseline to be judged against")
