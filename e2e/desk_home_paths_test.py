@@ -18,7 +18,14 @@ graph file's absolute path — plus the wave-1 and team corpora, and proves:
   3. #459: with GET /runs held 2.5 s, a fresh `/` shows `desk-loading` and no headline, no calm copy
      in the needs-you fold (rows already known may show), no "Nothing has been started yet."; when
      /runs answers, the headline appears, the loading line goes, and the projects sentence is back.
-  4. 0 page errors.
+  4. #464: the Desk row of a run paused before its first unit (crew's unit prompt: the goal and the
+     ` ||| PHASE SCOPE:` scaffold) reads "Approve the triage step"; no "|||" on the Desk.
+  5. #479: the delivered run's page — What / Where (worktree), Files referenced, Data used, Delivery (the push
+     target) and every unit output (the deliver unit's push line) — names no home directory.
+  6. #467: Health → pi's sign-in move: the "Running …" line reads `~/…`; no home directory in the panel.
+  7. #468: a chat whose first message carries Ask's context pack (stores by absolute path) shows what
+     the operator typed, the pack folded behind one line; opened, it reads `~/…`.
+  8. 0 page errors.
 
 Captures: e2e/shots/desk-home-paths-*.png. Env: FEEDBACK_PORT (default 4356).
 """
@@ -196,6 +203,90 @@ with sync_playwright() as p:
     page.screenshot(path=str(SHOTS / "desk-home-paths-loaded.png"))
     check("desk-answers-once-runs-arrive", after["loading"] == 0 and after["headline"] != "" and after["fold"] == 1 and after["projects"] >= 1, **after)
     set_fixture(origin, runs_delay_ms=0)
+
+    def scan_now(where: str) -> dict:
+        got = page.evaluate(SCAN, FAKE_HOME)
+        if got["text"] is not None or got["titles"]:
+            page.screenshot(path=str(SHOTS / f"desk-home-paths-leak-{where}.png"))
+        return got
+
+    def open_outputs() -> None:
+        for sel in OPENERS:
+            for btn in page.locator(sel).all():
+                try:
+                    btn.click(timeout=1500)
+                except Exception:
+                    pass
+        page.wait_for_timeout(600)
+
+    # ── 4. #464: the pre-unit gate's Desk row says the step, never the engine's unit prompt ──
+    page.goto(f"{origin}/", wait_until="networkidle")
+    page.get_by_test_id("desk-headline").wait_for(state="visible", timeout=15000)
+    page.wait_for_timeout(500)
+    desk_text = page.evaluate("() => (document.querySelector('[data-testid=\"desk\"]') || document.body).innerText")
+    page.screenshot(path=str(SHOTS / "desk-home-paths-prerun-gate.png"))
+    check("prerun-gate-says-the-step", "Approve the triage step" in desk_text and "|||" not in desk_text
+          and "PHASE SCOPE" not in desk_text,
+          snippet=desk_text[max(0, desk_text.find("SAVE20") - 40):desk_text.find("SAVE20") + 200] if "SAVE20" in desk_text else desk_text[:300])
+
+    # ── 5. #479: the delivered run's page — rail sections and outputs ───────────────
+    page.goto(f"{origin}/runs/r-home-done", wait_until="networkidle")
+    page.wait_for_timeout(600)
+    run_leaks: dict = {}
+    sections: list[str] = []
+    for acc in ("whatwhere", "files", "data", "delivery"):
+        btn = page.get_by_test_id(f"rail-accordion-{acc}")
+        if btn.count() == 0:
+            continue
+        sections.append(acc)
+        if btn.first.get_attribute("aria-expanded") != "true":
+            btn.first.click()
+            page.wait_for_timeout(400)
+        got = scan_now(f"run-{acc}")
+        if got["text"] is not None or got["titles"]:
+            run_leaks[acc] = {"text": got["text"], "titles": got["titles"]}
+    open_outputs()
+    got = scan_now("run-outputs")
+    if got["text"] is not None or got["titles"]:
+        run_leaks["outputs"] = {"text": got["text"], "titles": got["titles"]}
+    run_text = page.evaluate("() => document.body.innerText")
+    check("run-page-no-home-path", not run_leaks and {"whatwhere", "files", "data", "delivery"} <= set(sections)
+          and "~/w2/" in run_text, sections=sections, leaks=run_leaks)
+
+    # ── 6. #467: the sign-in panel's line ──────────────────────────────────────────
+    set_fixture(origin, seat_week=True)
+    page.goto(f"{origin}/", wait_until="networkidle")
+    toggle = page.get_by_test_id("rail-health-toggle")
+    toggle.wait_for(state="visible", timeout=15000)
+    if toggle.get_attribute("aria-expanded") != "true":
+        toggle.click()
+    pi_move = page.locator('[data-testid="rail-seat-move"][data-seat="pi"] [data-testid="rail-seat-move-button"]')
+    pi_move.wait_for(state="visible", timeout=15000)
+    pi_move.click()
+    page.get_by_test_id("signin-line").wait_for(state="visible", timeout=10000)
+    line = page.get_by_test_id("signin-line").inner_text()
+    got = scan_now("signin")
+    page.screenshot(path=str(SHOTS / "desk-home-paths-signin.png"))
+    check("signin-line-no-home-path", line.startswith('PI_CONFIG_DIR="~/w2/.wicked-worker/pi"') and got["text"] is None
+          and not got["titles"], line=line, leak=got["text"])
+    page.keyboard.press("Escape")
+    set_fixture(origin, seat_week=False)
+
+    # ── 7. #468: the operator's message keeps what they typed; the pack folds and says ~ ──
+    set_fixture(origin, sessions=True)
+    page.goto(f"{origin}/s/chat-pay", wait_until="networkidle")
+    first = page.locator('[data-testid="session-turn"][data-who="you"]').first
+    first.wait_for(state="visible", timeout=15000)
+    folded = first.inner_text()
+    got_folded = scan_now("ask-pack-folded")
+    first.get_by_test_id("context-sent-toggle").click()
+    pack = first.get_by_test_id("context-sent-pack").inner_text()
+    got_open = scan_now("ask-pack-open")
+    page.screenshot(path=str(SHOTS / "desk-home-paths-ask-pack.png"))
+    check("ask-pack-folded-and-tilde", "fix the double charge on checkout" in folded and "studio context pack" not in folded
+          and got_folded["text"] is None and "studio context pack" in pack and "~/w2/state/core.db" in pack
+          and got_open["text"] is None, folded=folded[:200], pack=pack[:300], leak=got_open["text"])
+    set_fixture(origin, sessions=False)
 
     check("no-errors", not errors, errors=errors[:5])
     browser.close()

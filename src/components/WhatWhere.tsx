@@ -7,6 +7,7 @@ import { ProvenanceLine } from './ProvenanceLine.js';
 import { runBase, runBaseLine } from './runBaseModel.js';
 import { RunTimes } from './runIdentity.js';
 import { TrustReceipt } from './TrustReceipt.js';
+import { useDisplayPath, useDisplayText } from '../hooks/useHomePath.js';
 
 const EMPTY_EVENTS: CoreEvent[] = [];
 
@@ -54,6 +55,11 @@ export function WhatWhere({ model, provenance, retriedAs, onSelectRun }: Props):
   // A resumed run and a pre-0.33.0 daemon send none: the row is then absent, never a guessed base.
   const events = useRunEventStore((s) => s.byRun[session.id]) ?? EMPTY_EVENTS;
   const base = useMemo(() => runBase(events), [events]);
+  // studio#479: the worktree (and the base's note) under the home directory read `~/…` in the
+  // default layer, the hover included; "Show technical details" gives the full path.
+  const showPath = useDisplayPath();
+  const showText = useDisplayText();
+  const workdir = session.workdir !== undefined && session.workdir !== null ? showPath(session.workdir) : null;
 
   return (
     <div data-testid="what-where" className="flex flex-col gap-1.5">
@@ -73,7 +79,7 @@ export function WhatWhere({ model, provenance, retriedAs, onSelectRun }: Props):
           header strip (DES-RUN-NARRATOR §8, revised 2026-08-31): the header
           condensed to one row and this is where the run's context rows live. */}
       <RunTimes runId={session.id} status={session.status} session={session} />
-      <Row label="intent" value={session.problem} />
+      <Row label="intent" value={showText(session.problem)} />
       <Row label="repo" value={session.repo_ref ?? '—'} mono />
       {/* §7.10: the compact tail, full path on hover — never the 5-line wrap.
           The DTO debug note that used to sit below ("work_output pending daemon
@@ -81,9 +87,9 @@ export function WhatWhere({ model, provenance, retriedAs, onSelectRun }: Props):
           behind Files → Full diff. */}
       <Row
         label="worktree"
-        value={session.workdir !== undefined && session.workdir !== null ? compactPath(session.workdir) : '—'}
+        value={workdir !== null ? compactPath(workdir) : '—'}
         mono
-        {...(session.workdir !== undefined && session.workdir !== null ? { title: session.workdir } : {})}
+        {...(workdir !== null ? { title: workdir } : {})}
       />
       {base !== null && (
         <Row
@@ -91,7 +97,7 @@ export function WhatWhere({ model, provenance, retriedAs, onSelectRun }: Props):
           value={runBaseLine(base)}
           mono
           testId="run-base"
-          {...(base.note !== null ? { title: base.note } : {})}
+          {...(base.note !== null ? { title: showText(base.note) } : {})}
         />
       )}
       <Row label="roster" value={session.clis.length > 0 ? session.clis.join(', ') : '—'} mono />

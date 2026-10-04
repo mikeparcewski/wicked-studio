@@ -14,6 +14,7 @@ import { getCachedRoster, setCachedRoster } from '../store/rosterCache.js';
 import {
   askPrompts,
   buildContextPack,
+  PACK_JOIN,
   contextPackSummary,
   sectionLabel,
   type DiagnosticsState,
@@ -177,7 +178,7 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
       send: async (text) => {
         let id = chatIdRef.current;
         if (id !== null && resumed !== null && id === resumed.chatId) {
-          const message = seededRef.current ? text : `${text}\n\n---\n${buildContextPack(packInputs.current)}`;
+          const message = seededRef.current ? text : `${text}${PACK_JOIN}${buildContextPack(packInputs.current)}`;
           try {
             await api.sendChatMessage(id, message);
             if (!seededRef.current) {
@@ -243,7 +244,7 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
           // /chats, labelled with where it came from and what was asked (studio#323 R2).
           useLiveChatsStore.getState().upsert(id, ready, { origin: 'ask', title: text });
         }
-        const message = seededRef.current ? text : `${text}\n\n---\n${buildContextPack(packInputs.current)}`;
+        const message = seededRef.current ? text : `${text}${PACK_JOIN}${buildContextPack(packInputs.current)}`;
         await api.sendChatMessage(id, message);
         if (!seededRef.current) {
           seededRef.current = true;

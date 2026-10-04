@@ -209,6 +209,75 @@ describe('Terminal (DES-TERMINAL-001 §6 — the web bridge)', () => {
     expect(ws.send).toHaveBeenCalledWith('claude login\n');
   });
 
+  it('concealHome draws the named home directory as ~ in the output, text and binary frames alike (studio#467)', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      render(<Terminal cwd="." initialInput={'CLAUDE_CONFIG_DIR="/Users/reel-operator/.wicked-worker/claude" claude\n'} concealHome={['/Users/reel-operator']} />);
+      await waitFor(() => expect(FakeWebSocket.last).toBeTruthy());
+      const term = h.terminals[0]!;
+      const ws = FakeWebSocket.last!;
+      // What is typed into the shell is the line as given — only the drawing changes.
+      await waitFor(() => expect(ws.send).toHaveBeenCalledWith('CLAUDE_CONFIG_DIR="/Users/reel-operator/.wicked-worker/claude" claude\n'));
+
+      act(() => ws.onmessage?.({ data: '% CLAUDE_CONFIG_DIR="/Users/reel-' }));
+      act(() => ws.onmessage?.({ data: new TextEncoder().encode('operator/.wicked-worker/claude" claude\r\n').buffer }));
+      act(() => { vi.advanceTimersByTime(60); });
+
+      const drawn = term.write.mock.calls.map((c) => c[0] as unknown).filter((x): x is string => typeof x === 'string').join('');
+      expect(drawn).toBe('% CLAUDE_CONFIG_DIR="~/.wicked-worker/claude" claude\r\n');
+      expect(drawn).not.toContain('reel-operator');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('concealHome passes a frame that is not UTF-8 through as its exact bytes (codex on #484)', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      render(<Terminal cwd="." concealHome={['/Users/reel-operator']} />);
+      await waitFor(() => expect(FakeWebSocket.last).toBeTruthy());
+      const term = h.terminals[0]!;
+      const ws = FakeWebSocket.last!;
+      act(() => ws.onmessage?.({ data: 'ok ' }));
+      act(() => ws.onmessage?.({ data: new Uint8Array([0xff, 0xfe, 0x41]).buffer }));
+      act(() => { vi.advanceTimersByTime(60); });
+      const out: number[] = [];
+      for (const [x] of term.write.mock.calls as unknown[][]) {
+        if (typeof x === 'string') out.push(...new TextEncoder().encode(x));
+        else if (x instanceof Uint8Array) out.push(...x);
+      }
+      // Every byte, in order: the text, the two bytes that are not UTF-8 as they came, the valid 'A'.
+      expect(out).toStrictEqual([...new TextEncoder().encode('ok '), 0xff, 0xfe, 0x41]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('concealHome keeps every byte across frames and masks a directory completed inside a frame that also holds a non-UTF-8 byte (codex r2 on #484)', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      render(<Terminal cwd="." concealHome={['/Users/reel-operator']} />);
+      await waitFor(() => expect(FakeWebSocket.last).toBeTruthy());
+      const term = h.terminals[0]!;
+      const ws = FakeWebSocket.last!;
+      // A valid lead byte held by one frame, then a frame whose next byte cannot continue it.
+      act(() => ws.onmessage?.({ data: new Uint8Array([0xe2]).buffer }));
+      act(() => ws.onmessage?.({ data: new Uint8Array([0x82, 0xff]).buffer }));
+      // A held directory prefix, completed by a frame that ends in an invalid byte.
+      act(() => ws.onmessage?.({ data: ' /Users/reel-' }));
+      act(() => ws.onmessage?.({ data: new Uint8Array([...new TextEncoder().encode('operator/.wicked-worker/pi'), 0xff]).buffer }));
+      act(() => { vi.advanceTimersByTime(60); });
+      const out: number[] = [];
+      for (const [x] of term.write.mock.calls as unknown[][]) {
+        if (typeof x === 'string') out.push(...new TextEncoder().encode(x));
+        else if (x instanceof Uint8Array) out.push(...x);
+      }
+      expect(out).toStrictEqual([0xe2, 0x82, 0xff, ...new TextEncoder().encode(' ~/.wicked-worker/pi'), 0xff]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('surfaces the ungoverned operator shell loudly in the UI (§7)', () => {
     const { rerender } = render(<Terminal cwd="/work" governed />);
     expect(screen.getByTestId('terminal-governed')).toHaveTextContent('governed');

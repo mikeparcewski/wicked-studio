@@ -4,6 +4,7 @@ import { newestFailedRun, type NeedRow } from '../board/needsYou.js';
 import { statusCounts } from '../board/windowStats.js';
 import { headingForPath } from './LeftSidebar.js';
 import { humanTitle } from './runIdentity.js';
+import { PACK_OPENING } from '../board/askPack.js';
 
 /**
  * The ASK context pack (the app-wide Ask feature) — pure derivations, pinned by unit test.
@@ -117,7 +118,10 @@ function diagnosticsSection(diag: DiagnosticsState): string[] {
   );
   if (d.stores.length > 0) {
     lines.push(
-      `  stores: ${d.stores.map((s) => `${s.name} ${fmtBytes(s.bytes)} (${s.path})`).join(' · ')}`,
+      // studio#468: names and sizes only. The pack rides the operator's message and is stored with
+      // it; a store's absolute path put the home directory in every transcript, and a seat that
+      // needs one reads the diagnostics itself.
+      `  stores: ${d.stores.map((s) => `${s.name} ${fmtBytes(s.bytes)}`).join(' · ')}`,
     );
   } else {
     lines.push('  stores: none reported');
@@ -147,6 +151,8 @@ function diagnosticsSection(diag: DiagnosticsState): string[] {
   return lines;
 }
 
+export { PACK_JOIN, PACK_OPENING, splitAskContext } from '../board/askPack.js';
+
 /**
  * Assemble the pack that rides the first send. Everything in it is something the app
  * actually holds or the wire actually answered — counts from the one runs list, the
@@ -163,7 +169,7 @@ export function buildContextPack(args: {
   const at = new Date(args.now ?? Date.now()).toISOString();
   const c = statusCounts(runs);
   const lines: string[] = [
-    `[studio context pack — assembled ${at}]`,
+    `${PACK_OPENING}${at}]`,
     `where: ${sectionLabel(pathname)} (${pathname})`,
     `runs (the studio's live list): ${c.total} total — ${c.active} active, ${c.gates} awaiting a human, ${c.failed} failed, ${c.done} done, ${c.cancelled} cancelled`,
     `live chat sessions this client knows about: ${liveChatCount}`,

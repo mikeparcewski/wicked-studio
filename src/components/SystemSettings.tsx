@@ -8,7 +8,8 @@ import { setCachedRoster } from '../store/rosterCache.js';
 import { Modal } from './Modal.js';
 import { NotificationSettings } from './NotificationSettings.js';
 import { Terminal } from './Terminal.js';
-import { useDisplayPath } from '../hooks/useHomePath.js';
+import { useDisplayPath, useDisplayText } from '../hooks/useHomePath.js';
+import { homeDirsIn } from '../board/homePath.js';
 
 const CLI_DEFAULTS_KEY = 'wicked_default_clis';
 
@@ -88,6 +89,7 @@ interface SystemSettingsProps {
 
 export function SystemSettings({ navigate = (p) => { history.pushState(null, '', p); window.dispatchEvent(new PopStateEvent('popstate')); } }: SystemSettingsProps): React.ReactElement {
   const showPath = useDisplayPath();
+  const showText = useDisplayText();
   const [settings, setSettings] = useState<Settings | null>(null);
   const [dirty, setDirty] = useState<Partial<LocalSettings>>({});
   const [saving, setSaving] = useState(false);
@@ -656,7 +658,7 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
                 className="rounded px-1 py-0.5"
                 style={{ background: 'var(--surface-raised)', color: 'var(--ink-high)' }}
               >
-                {seatAction.line}
+                {showText(seatAction.line)}
               </code>{' '}
               in your shell — complete the flow below, then close this panel.
             </p>
@@ -664,6 +666,7 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
               key={`${seatAction.seat.key}:${seatAction.title}`}
               cwd="."
               initialInput={`${seatAction.line}\n`}
+              concealHome={techDetails ? [] : homeDirsIn(seatAction.line)}
             />
           </div>
         </Modal>

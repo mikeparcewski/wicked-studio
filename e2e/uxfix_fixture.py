@@ -3585,6 +3585,54 @@ HOME_DIAGNOSTICS_SKILLS = {
     "engineInput": HOME_SNAPSHOT, "stateHome": HOME_STATE, "findings": [], "baseSkill": None,
 }
 
+# studio#464/#479 (home_paths): a run paused before its first unit on crew's unit prompt (the goal and
+# the ` ||| PHASE SCOPE:` scaffold in it), and a delivered run whose worktree, referenced files, push
+# target and deliver output all live under the home directory.
+HOME_GATE_PROMPT = ("Approve unit 1 before it runs: triage — SAVE20 should give twenty percent off, not twenty "
+                    "pounds off ||| PHASE SCOPE: this is the triage phase; read the code and say what is wrong")
+HOME_WORKTREE = "/tmp/w2/wicked-worktrees/r-home-done"
+HOME_ORIGIN = "/tmp/w2/origins/checkout-demo.git"
+HOME_DELIVER_OUTPUT = (f"deliver: pushed wicked/r-home-done to origin ({HOME_ORIGIN})\n"
+                       f"To {HOME_ORIGIN}\n * [new branch]      wicked/r-home-done -> wicked/r-home-done")
+HOME_T0 = NOW0 - 40 * 60_000
+
+
+def _home_runs() -> list:
+    gate = session("r-home-gate", "awaiting_human", "SAVE20 should give twenty percent off, not twenty pounds off",
+                   "triage")
+    gate["session"]["human_confirm"] = "before:1"
+    gate["units"] = [dict(gate["units"][0], id="r-home-gate:triage", ord=1, stage="triage", phase_ref="triage")]
+    done = session("r-home-done", "completed", "show the free-shipping banner on the cart", "build the banner")
+    done["session"].update({"workdir": HOME_WORKTREE, "repo_ref": "checkout-demo", "delivery": "pushed",
+                            "deliverBranch": "wicked/r-home-done", "deliverRemote": HOME_ORIGIN,
+                            "run_branch": "wicked/r-home-done"})
+    done["units"] = [dict(done["units"][0], status="done", assigned_cli="claude"),
+                     dict(done["units"][0], id="r-home-done:deliver", ord=1, description="deliver", stage="deliver",
+                          phase_ref="deliver", status="done", assigned_cli="claude")]
+    return [gate, done]
+
+
+HOME_EVENTS = {
+    "r-home-gate": [
+        {"type": "sessionStarted", "session": "r-home-gate", "problem": "SAVE20 should give twenty percent off",
+         "workflowId": "bug", "cliCount": 1, "governed": True, "entityMode": "shared", "ts": HOME_T0, "seq": 1},
+        {"type": "awaitingHuman", "session": "r-home-gate", "ord": 1, "ts": HOME_T0 + 1000, "seq": 2,
+         "prompt": HOME_GATE_PROMPT, "reviewingOrd": None, "gateKind": "def"},
+    ],
+    "r-home-done": [
+        {"type": "sessionStarted", "session": "r-home-done", "problem": "show the free-shipping banner on the cart",
+         "workflowId": "feature", "cliCount": 1, "governed": True, "entityMode": "shared", "ts": HOME_T0, "seq": 1},
+        {"type": "unitDispatched", "session": "r-home-done", "ord": 0, "attempt": 0, "ts": HOME_T0 + 1000, "seq": 2},
+        {"type": "dataUsed", "session": "r-home-done", "ord": 0, "ts": HOME_T0 + 2000, "seq": 3,
+         "files": [f"{HOME_WORKTREE}/src/cart/Banner.tsx", "/tmp/w2/repos/checkout-demo/src/checkout.ts"]},
+        {"type": "unitDone", "session": "r-home-done", "ord": 0, "ts": HOME_T0 + 60_000, "seq": 4},
+        {"type": "unitDone", "session": "r-home-done", "ord": 1, "ts": HOME_T0 + 90_000, "seq": 5},
+    ],
+}
+
+HOME_ASK_PACK = ("\n\n---\n[studio context pack — assembled 2026-10-03T14:00:00.000Z]\nwhere: Desk (/)\n"
+                 "diagnostics (GET /api/v1/diagnostics):\n  stores: core.db 11.8 MB (/tmp/w2/state/core.db)")
+
 GOVERNANCE_BLOCKS = {
     "healthy": {
         "store": {"path": GOV_STORE, "source": "core-db-sidecar"},
@@ -3882,6 +3930,8 @@ def assemble_runs() -> list:
             runs = runs + json.loads(json.dumps(RUN_PAGE_RUNS))
         if state["home_runs"] and not state["no_runs"]:
             runs = runs + [json.loads(json.dumps(REUSE_RUN))]
+        if state["home_paths"] and not state["no_runs"]:
+            runs = runs + _home_runs()
         if state["sessions"] and not state["no_runs"]:
             extra = json.loads(json.dumps(SESSION_RUNS))
             if not state["run_chat_id"]:
@@ -4802,7 +4852,10 @@ class W2Handler(SimpleHTTPRequestHandler):
             else:
                 with state_lock:
                     week = state["seat_week"]
-                roster = ([{**s, "login_invocation": "pi login"} if s["key"] == "pi" else s for s in ROSTER]
+                    home_login = state["home_paths"]
+                # studio#467: under home_paths the sign-in line names the worker home by its absolute path.
+                login = 'PI_CONFIG_DIR="/tmp/w2/.wicked-worker/pi" pi login' if home_login else "pi login"
+                roster = ([{**s, "login_invocation": login} if s["key"] == "pi" else s for s in ROSTER]
                           if week else ROSTER)
                 self._json(200, {"roster": roster})
             return True
@@ -4869,6 +4922,12 @@ class W2Handler(SimpleHTTPRequestHandler):
                 sessions_on = state["sessions"]
             if sessions_on and cid in SESSION_CHATS:
                 detail = SESSION_CHATS[cid]
+                with state_lock:
+                    home_pack = state["home_paths"]
+                if home_pack and cid == "chat-pay":
+                    # studio#468: Ask's context pack rides the first message and is stored with it.
+                    first = dict(detail["messages"][0], text=detail["messages"][0]["text"] + HOME_ASK_PACK)
+                    detail = dict(detail, messages=[first] + list(detail["messages"][1:]))
                 with state_lock:
                     decisions_on = state["decisions"]
                 if decisions_on and cid == "chat-pay":
@@ -5019,6 +5078,12 @@ class W2Handler(SimpleHTTPRequestHandler):
                 proposals_open = state["sessions"] and state["ship_proposals"]
             with state_lock:
                 reel_open = state["sessions"] and state["reel_runs"]
+            with state_lock:
+                home_gate = state["home_paths"] and rid == "r-home-gate"
+            if home_gate:
+                self._json(200, {"runId": rid, "ord": 1, "lifecycle": "open", "prompt": HOME_GATE_PROMPT,
+                                 "receivedAt": iso(HOME_T0 + 1000), "gateKind": "def"})
+                return True
             if reel_open and rid in REEL_GATES:
                 g_ord, g_prompt = REEL_GATES[rid]
                 self._json(200, {"runId": rid, "ord": g_ord, "lifecycle": "open", "prompt": g_prompt,
@@ -5137,6 +5202,9 @@ class W2Handler(SimpleHTTPRequestHandler):
             rid = urllib.parse.unquote(parts[4])
             events = list(RUN_EVENTS.get(rid, []))
             with state_lock:
+                if state["home_paths"] and rid in HOME_EVENTS:
+                    events = list(HOME_EVENTS[rid])
+            with state_lock:
                 if state["wave1"] and rid == "r1":
                     events = list(WAVE1_R1_STALL_EVENTS if state["wave1_stall"] else WAVE1_R1_EVENTS)
                     if state["wave2a_feed"]:
@@ -5214,6 +5282,10 @@ class W2Handler(SimpleHTTPRequestHandler):
             with state_lock:
                 sheets_on = state["sheets"]
                 home_on = state["home_paths"]
+            if home_on and rid == "r-home-done" and key.endswith("deliver"):
+                # studio#479: the deliver unit's output names the push target by its absolute path.
+                self._json(200, {"output": HOME_DELIVER_OUTPUT})
+                return True
             if home_on and not (forensics_on and rid == "r-auth"):
                 # studio#462: the onboarding index unit's output, the graph file by its absolute path.
                 self._json(200, {"output": HOME_INDEX_OUTPUT})

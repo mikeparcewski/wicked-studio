@@ -5,6 +5,7 @@ import { api, apiWire, isRouteAbsent } from '../api/client.js';
 import type { RunDiff, RunFileContent } from '../api/types.js';
 import { diffSource, type RunDiffSource } from '../api/wave6-wire.js';
 import { classifyDiff, isDimLine } from '../viewer/colorize.js';
+import { useDisplayPath } from '../hooks/useHomePath.js';
 import type { DiffLineKind } from '../viewer/colorize.js';
 
 /**
@@ -143,6 +144,7 @@ function LoadingPane(): React.ReactElement {
 
 export function FileViewer({ runId, path, defaultTab, base, onClose, onUnsupported }: Props): React.ReactElement {
   const [tab, setTab] = useState<ViewerTab>(path === undefined ? 'diff' : defaultTab);
+  const showPath = useDisplayPath();
   const [file, setFile] = useState<Fetched<RunFileContent> | null>(null);
   const [diff, setDiff] = useState<DiffFetched | null>(null);
   /** Bumped by the retry affordance: resets `diff` so the fetch effect re-fires. */
@@ -241,7 +243,9 @@ export function FileViewer({ runId, path, defaultTab, base, onClose, onUnsupport
     void navigator.clipboard.writeText(path).catch(() => { /* clipboard unavailable */ });
   }
 
-  const title = path ?? 'whole-run diff';
+  // studio#479: the header and the hovers say `~/…` for a path under the home directory in the
+  // default layer; the absolute path still drives the reads, the open and the copy.
+  const title = path !== undefined ? showPath(path) : 'whole-run diff';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'var(--scrim)' }}>
@@ -309,8 +313,8 @@ export function FileViewer({ runId, path, defaultTab, base, onClose, onUnsupport
                 <button
                   type="button"
                   onClick={handleOpenExternally}
-                  aria-label={`Open externally: ${path}`}
-                  title={`Open with system default app: ${path}`}
+                  aria-label={`Open externally: ${title}`}
+                  title={`Open with system default app: ${title}`}
                   className="text-[11px] font-mono transition-opacity hover:opacity-70"
                   style={{ color: 'var(--ink-dim)' }}
                 >
@@ -319,7 +323,7 @@ export function FileViewer({ runId, path, defaultTab, base, onClose, onUnsupport
                 <button
                   type="button"
                   onClick={handleCopy}
-                  aria-label={`Copy path ${path}`}
+                  aria-label={`Copy path ${title}`}
                   title="Copy path"
                   className="text-[11px] font-mono transition-opacity hover:opacity-70"
                   style={{ color: 'var(--ink-dim)' }}

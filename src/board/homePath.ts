@@ -51,3 +51,64 @@ export function displayPath(path: string): string {
 export function displayText(text: string): string {
   return text.replace(TEXT_RE, '$1~');
 }
+
+/** The home directories a text names, as written (`/Users/reel-operator`) — distinct, in order. */
+export function homeDirsIn(text: string): string[] {
+  const out: string[] = [];
+  for (const m of text.matchAll(TEXT_RE)) {
+    const dir = m[0].slice((m[1] ?? '').length);
+    if (dir !== '' && !out.includes(dir)) out.push(dir);
+  }
+  return out;
+}
+
+/** What may follow a home directory in a stream for it to be one: a separator, whitespace, a quote,
+ *  a closing bracket, or the start of an escape sequence (a coloured prompt ends its path with
+ *  one) — so `/Users/ann` inside `/Users/annabel` is left alone. */
+const AFTER_HOME = /[\/\\\s"'`)\]>\u001b]/;
+
+/**
+ * A LIVE stream (a terminal's output — studio#467) with each of `dirs` drawn as `~`. The stream
+ * arrives in chunks cut anywhere, so the end of a chunk that could be the start of a directory —
+ * or a whole directory whose next character has not arrived — is held back until the next chunk,
+ * or until `flush` (the caller's idle timer: nothing more is coming, so the held text is drawn,
+ * a whole directory as `~`). Display only: what is typed and run is untouched.
+ */
+export function homeMasker(dirs: readonly string[]): { push: (chunk: string) => string; flush: () => string } {
+  const needles = [...new Set(dirs)].filter((d) => d.length > 1).sort((a, b) => b.length - a.length);
+  let carry = '';
+  const mask = (s: string, atEnd: boolean): { out: string; held: string } => {
+    let out = '';
+    let i = 0;
+    while (i < s.length) {
+      const hit = needles.find((n) => s.startsWith(n, i));
+      if (hit !== undefined) {
+        const next = s.charAt(i + hit.length);
+        if (next === '') {
+          if (atEnd) { out += '~'; i += hit.length; continue; }
+          return { out, held: s.slice(i) }; // the next character decides
+        }
+        if (AFTER_HOME.test(next)) { out += '~'; i += hit.length; continue; }
+      } else if (!atEnd) {
+        const rest = s.slice(i);
+        if (needles.some((n) => n.length > rest.length && n.startsWith(rest))) return { out, held: rest };
+      }
+      out += s.charAt(i);
+      i += 1;
+    }
+    return { out, held: '' };
+  };
+  return {
+    push(chunk: string): string {
+      if (needles.length === 0) return chunk;
+      const { out, held } = mask(carry + chunk, false);
+      carry = held;
+      return out;
+    },
+    flush(): string {
+      const { out } = mask(carry, true);
+      carry = '';
+      return out;
+    },
+  };
+}

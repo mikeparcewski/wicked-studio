@@ -22,7 +22,7 @@ import { Terminal } from './Terminal.js';
 import { WhatWhere } from './WhatWhere.js';
 import { PlanEditPanel } from './PlanEditPanel.js';
 import { planEditAvailability } from '../board/planModel.js';
-import { useDisplayText } from '../hooks/useHomePath.js';
+import { useDisplayPath, useDisplayText } from '../hooks/useHomePath.js';
 
 /** The sections a run has: delivery only where it can deliver, plan only on a live planned run. */
 export function runSections(view: SessionView, isSystemWorkflow: (id: string) => boolean | undefined): { id: AccordionId; label: string }[] {
@@ -182,7 +182,12 @@ function FilePath({ path, opKind, runId, root }: {
   const rowRef = useRef<HTMLButtonElement | null>(null);
   const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (resetTimerRef.current !== null) clearTimeout(resetTimerRef.current); }, []);
-  const display = relativeToRoot(path, root);
+  // studio#479: worktree-relative when it is inside the worktree; otherwise a path under the home
+  // directory reads `~/…` in the default layer — the row, its hovers and its labels alike. The
+  // absolute `path` still drives the viewer, the open and the copy.
+  const showPath = useDisplayPath();
+  const shown = showPath(path);
+  const display = relativeToRoot(path, root) === path ? shown : relativeToRoot(path, root);
   const parts = display.replace(/\\/g, '/').split('/');
   const name = parts.pop() ?? display;
   const dir = parts.length > 0 ? `${parts.join('/')}/` : '';
@@ -243,7 +248,7 @@ function FilePath({ path, opKind, runId, root }: {
   }
 
   return (
-    <li title={path} className="group flex items-start gap-1.5 min-w-0">
+    <li title={shown} className="group flex items-start gap-1.5 min-w-0">
       <span className="shrink-0 mt-0.5 text-[9px] font-mono select-none" style={{ color: glyphColor }}>
         {glyph}
       </span>
@@ -252,7 +257,7 @@ function FilePath({ path, opKind, runId, root }: {
         ref={rowRef}
         onClick={() => setViewerOpen(true)}
         className="min-w-0 flex-1 leading-5 font-mono text-[10px] break-all text-left transition-opacity hover:opacity-70"
-        title={`View ${path}`}
+        title={`View ${shown}`}
         style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
       >
         {dir && <span style={{ color: 'var(--ink-dim)' }}>{dir}</span>}
@@ -272,8 +277,8 @@ function FilePath({ path, opKind, runId, root }: {
       <button
         type="button"
         onClick={handleOpen}
-        aria-label={`Open externally: ${path}`}
-        title={`Open with system default app: ${path}`}
+        aria-label={`Open externally: ${shown}`}
+        title={`Open with system default app: ${shown}`}
         className="shrink-0 mt-0.5 text-[9px] font-mono leading-5 transition-opacity hover:opacity-70 opacity-0 group-hover:opacity-100 focus:opacity-100"
         style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--ink-dim)' }}
       >
@@ -282,7 +287,7 @@ function FilePath({ path, opKind, runId, root }: {
       <button
         type="button"
         onClick={handleCopy}
-        aria-label={`Copy path ${path}`}
+        aria-label={`Copy path ${shown}`}
         title="Copy path"
         className="shrink-0 mt-0.5 text-[9px] font-mono leading-5 transition-opacity hover:opacity-70 opacity-0 group-hover:opacity-100 focus:opacity-100"
         style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--ink-dim)' }}

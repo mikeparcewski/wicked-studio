@@ -59,6 +59,16 @@ describe('#422 a gate says its question in plain words', () => {
     expect(plainGateQuestion('Approve the output of unit 3 (some_new-phase — x)', 'def')).toBe('Approve the some new phase step');
   });
 
+  it('studio#464: the pre-execution form with the goal and the engine\'s phase scope reads as the step', () => {
+    const prompt = 'Approve unit 1 before it runs: triage — SAVE20 should give twenty percent off, not twenty pounds off ||| PHASE SCOPE: this is the triage phase; read the code';
+    expect(plainGateQuestion(prompt, 'def')).toBe('Approve the triage step');
+    expect(plainGateQuestion('Approve unit 2 before it runs: fix — Fix issue #12 ||| PHASE SCOPE: fix only', undefined)).toBe('Approve the fix');
+    // Words with no phase id: the engine's scaffold is cut, the words are kept.
+    expect(plainGateQuestion('Approve unit 3 before it runs: apply the review fixes ||| PHASE SCOPE: x', 'def')).toBe('Approve the next step: apply the review fixes');
+    // Never the scaffold, whatever the form.
+    expect(plainGateQuestion('Check this ||| PHASE SCOPE: y', undefined)).not.toContain('|||');
+  });
+
   it('a question an author wrote in words is kept; engine text never shows', () => {
     expect(plainGateQuestion('Approve the TTL bump?', undefined)).toBe('Approve the TTL bump?');
     // A long authored question is kept whole: the Desk truncates the line, its hover keeps it (Copilot).

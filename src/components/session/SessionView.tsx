@@ -32,6 +32,7 @@ import { DecisionLine } from '../decisions/DecisionLine.js';
 import { TurnConsidered } from '../decisions/ConsideredLine.js';
 import { collapseArtifacts, paneOpen, useArtifactSizes } from '../../store/artifactSizes.js';
 import { RunArtifacts } from './RunArtifacts.js';
+import { OperatorMessage } from '../OperatorMessage.js';
 
 /**
  * A SESSION (`/s/:id`, DES-STUDIO-REBUILD-001 §5.4, slice S6a): the goal sentence, the thread (the
@@ -284,7 +285,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
             ? (
               <div key={e.key} data-testid="session-turn" data-who={e.who === 'you' ? 'you' : 'helper'} className={`wk-session-turn wk-session-turn--${e.who === 'you' ? 'you' : 'helper'}`}>
                 <p className="wk-session-who">{e.who === 'you' ? 'You' : e.who}</p>
-                <p className={`wk-session-text${e.ok ? '' : ' wk-session-grey'}`}>{e.text}</p>
+                <p className={`wk-session-text${e.ok ? '' : ' wk-session-grey'}`}>{e.who === 'you' ? <OperatorMessage text={e.text} /> : e.text}</p>
                 {e.who !== 'you' && <SourceChips citations={e.citations} runs={readers} />}
                 {/* DC-S8: the rules the turn's seats were given — considered · set aside · cited (unchecked). */}
                 {e.who !== 'you' && ref.kind === 'chat' && e.turnId !== null && replies.last.get(e.turnId) === e.key && (

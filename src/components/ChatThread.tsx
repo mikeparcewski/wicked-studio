@@ -1,3 +1,4 @@
+import { OperatorMessage } from './OperatorMessage.js';
 import { useState } from 'react';
 import type { ChatTranscriptRecord, ChatUsage } from '../api/types.js';
 import type { ChatCitations, ChatCitationsRecord } from '../api/chat-wire.js';
@@ -304,7 +305,7 @@ function userBubble(m: UserMsg, key: React.Key): React.ReactElement {
       className="self-end max-w-[70%] rounded-xl px-4 py-2 text-[13px]"
       style={{ background: 'transparent', border: '1px solid var(--surface-raised)', color: 'var(--ink-high)' }}
     >
-      {m.text}
+      <OperatorMessage text={m.text} />
     </div>
   );
 }
