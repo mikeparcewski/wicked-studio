@@ -8,7 +8,7 @@ import { gateInstance } from '../../board/proposalCard.js';
 import { useGateStore } from '../../store/gates.js';
 import { loadCatalog, usePlanCatalog } from '../../store/planCatalog.js';
 import { addGateDraftStep, gateDraftFor, queueMidRunStep, reorderGateDraft, usePlanDrafts } from '../../store/planDrafts.js';
-import { usePlanGate, usePlanGateStore } from '../../store/planGates.js';
+import { usePlanGate } from '../../store/planGates.js';
 import { humanTitle } from '../runIdentity.js';
 
 /**
@@ -31,7 +31,6 @@ export function PlanOrderEditor({ view, chain, size }: { view: SessionView; chai
   const planGate = usePlanGate(runId, waiting);
   const gate = useGateStore((s) => s.gates[runId]);
   const gateKey = gateInstance(gate);
-  const readFor = usePlanGateStore((s) => s.readFor[runId]);
   const drafts = usePlanDrafts((s) => s.gate);
   const catalogState = usePlanCatalog((s) => s.catalog);
   const entries = usePlanCatalog((s) => s.entries);
@@ -43,8 +42,9 @@ export function PlanOrderEditor({ view, chain, size }: { view: SessionView; chai
     runId,
     status,
     planned: plannedRun(view),
-    planGate: planGate.isPlanGate && planGate.view !== null ? { seed: planGate.view.editSeed } : null,
-    gatePending: planGate.pending,
+    // Seeded only from a view read for THIS gate instance (codex r1/r2), as the composer does.
+    planGate: planGate.isPlanGate && planGate.view !== null && planGate.fresh ? { seed: planGate.view.editSeed } : null,
+    gatePending: planGate.pending || (planGate.isPlanGate && !planGate.fresh),
   };
   const target = draftTarget([state]);
   const title = humanTitle(view.session.problem || runId);
@@ -53,11 +53,6 @@ export function PlanOrderEditor({ view, chain, size }: { view: SessionView; chai
     return <p data-testid="plan-order-none" className="wk-plan-line wk-plan-pad">{target.reason}</p>;
   }
 
-  // codex r1 P1: the view must have been read for THIS gate instance — a successor gate's draft is
-  // never seeded from its predecessor's plan. Until the re-read lands, the editor waits.
-  if (target.kind === 'gate-amend' && (planGate.view === null || gateKey === null || readFor !== gateKey)) {
-    return <p data-testid="plan-order-reading" className="wk-plan-line wk-plan-pad">Reading the plan at this gate…</p>;
-  }
   const atGate = target.kind === 'gate-amend' && planGate.view !== null && gateKey !== null;
   const g = planGate.view;
   const draft = atGate && g !== null ? gateDraftFor(drafts, runId, gateKey) : null;

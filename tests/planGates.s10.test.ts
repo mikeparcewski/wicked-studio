@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { teamPlanApi } from '../src/api/teamPlan.js';
-import { loadPlanGate, usePlanGateStore } from '../src/store/planGates.js';
+import { isPlanGateNow, loadPlanGate, planGateFresh, usePlanGateStore } from '../src/store/planGates.js';
 import { useGateStore } from '../src/store/gates.js';
 
 /** S10 codex r1 P1: a plan view is read FOR a gate instance; a successor gate must not take a draft
@@ -36,5 +36,27 @@ describe('which gate a plan view was read for', () => {
     answers[0]!({ rows: [], units: [] });
     await first;
     expect((usePlanGateStore.getState() as unknown as { readFor: Record<string, string | null> }).readFor['r1']).toBe('2:9');
+  });
+});
+
+describe('codex r2', () => {
+  it('a view is fresh only when it was read for the gate instance open now', () => {
+    const gate = { ord: 2, receivedAt: 9 };
+    expect(planGateFresh('2:9', gate)).toBe(true);
+    expect(planGateFresh('2:5', gate)).toBe(false);
+    expect(planGateFresh(undefined, gate)).toBe(false);
+    expect(planGateFresh(null, undefined)).toBe(false);
+  });
+  it('isPlanGateNow honours a live plan_approval frame that arrived while its own read was dropped', async () => {
+    const answers: ((v: unknown) => void)[] = [];
+    const fails: ((e: unknown) => void)[] = [];
+    vi.spyOn(teamPlanApi, 'team').mockImplementation(() => new Promise((resolve, reject) => { answers.push(resolve); fails.push(reject); }) as never);
+    const now = isPlanGateNow('r1');
+    open(9);
+    const newer = loadPlanGate('r1');
+    fails[1]!(new Error('503'));
+    await newer;
+    answers[0]!({ rows: [], units: [] });
+    expect(await now).toBe(true);
   });
 });

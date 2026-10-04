@@ -70,7 +70,7 @@ beforeEach(() => {
   resetPlanCatalog();
   useComposerChips.setState({ byComposer: {} });
   useGateStore.setState({ gates: {} });
-  usePlanGateStore.setState({ byRun: {} });
+  usePlanGateStore.setState({ byRun: {}, readFor: {} } as never);
   useProjectsStore.setState({ projects: [{ id: 'kes', name: 'Kestrel', description: null, status: 'active', scope: 'project:kes', created_at: 0, updated_at: 0 }] });
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); resetDecisionsForTest(); });
@@ -96,6 +96,23 @@ describe('/ with a plan gate open: a draft on the gate card, never a POST from t
     expect(posts).toHaveLength(1);
     expect(posts[0]!.path).toBe('/runs/r1/gate');
     expect(posts[0]!.body).toMatchObject({ approve: true, plan: { steps: [{ catalog: 'understand' }, { catalog: 'build' }, { catalog: 'test' }] } });
+  });
+});
+
+describe('S10 codex r2: a successor gate never takes its predecessor\u2019s plan', () => {
+  it('while the read for the open gate has not landed, / says it is reading — no draft from the cached seed', async () => {
+    const run = makeView({ id: 'r1', status: 'awaiting_human', problem: 'Fix the double charge', run_identity: PLANNED } as never);
+    vi.stubGlobal('fetch', vi.fn(() => new Promise(() => { /* the successor's read never lands */ })));
+    useGateStore.setState({ gates: { r1: { runId: 'r1', ord: 2, prompt: 'Approve plan rev 2 before unit 2 runs', lifecycle: 'open', receivedAt: 9, gateKind: 'plan_approval' } } });
+    usePlanGateStore.setState({
+      byRun: { r1: { gateId: 'g1', ord: 2, planRev: 1, band: '20-39', highRisk: false, reason: 'manual_mode', score: null, reasons: [], floorAdded: [], editSeed: ['understand', 'build'], planSteps: [] } as never },
+      readFor: { r1: '2:5' },
+    } as never);
+    render(<><Harness runs={[run]} onSend={() => {}} /><ProposalCard view={run} chain={EMPTY} /></>);
+    type('/te');
+    await screen.findByTestId('composer-menu');
+    key('Enter');
+    expect(screen.queryByTestId('session-proposal-draft')).toBeNull();
   });
 });
 
