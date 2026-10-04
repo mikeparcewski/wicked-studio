@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.5.19",
   "counts": {
-    "files": 211,
-    "occurrences": 2331,
-    "static": 2035,
+    "files": 212,
+    "occurrences": 2335,
+    "static": 2039,
     "dynamic": 80,
     "computed": 7
   },
@@ -1681,6 +1681,24 @@
       "testId": "context-mode",
       "files": [
         "src/components/ProjectShell.tsx"
+      ]
+    },
+    {
+      "testId": "context-sent",
+      "files": [
+        "src/components/OperatorMessage.tsx"
+      ]
+    },
+    {
+      "testId": "context-sent-pack",
+      "files": [
+        "src/components/OperatorMessage.tsx"
+      ]
+    },
+    {
+      "testId": "context-sent-toggle",
+      "files": [
+        "src/components/OperatorMessage.tsx"
       ]
     },
     {
@@ -8576,6 +8594,12 @@
       "files": [
         "src/board/objectActions.ts",
         "src/components/ShortcutOverlay.tsx"
+      ]
+    },
+    {
+      "testId": "signin-line",
+      "files": [
+        "src/components/HealthRailSection.tsx"
       ]
     },
     {
