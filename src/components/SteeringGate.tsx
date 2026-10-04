@@ -61,6 +61,8 @@ interface Props {
   /** The run's deliver posture (`session.auto_deliver`, F-E2E-030) for the intake plan's deliver
    *  row; `null`/absent = the engine predates the deliver gate. */
   autoDeliver?: boolean | null;
+  /** The run's `run_identity.kind` for the intake plan's heading (studio#429). */
+  identityKind?: string | null;
   /** The run's project and accepted plan band, and the gate's engine kind (brainstorm ideas 7, 8).
    *  A host that passes `trust` gets the creator seat's track record on the button and the
    *  "make it a rule" offer; without it the card reads no history. */
@@ -139,7 +141,7 @@ function coverageLabel(r: CoverageReport): string {
   return `Coverage: ${pct} · ${r.behavior_bearing.toLocaleString()} nodes · ${r.unaccounted} unaccounted${resolvedPct}`;
 }
 
-export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, clis, baseCommit, workflow, onResolved, autoDeliver, trust, delivery }: Props): React.ReactElement {
+export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, clis, baseCommit, workflow, onResolved, autoDeliver, identityKind, trust, delivery }: Props): React.ReactElement {
   const clearGate = useGateStore((s) => s.clearGate);
   const recordSteering = useSteeringStore((s) => s.record);
   // D10 / D11: a PLAN gate (`plan_approval`) decides the plan, not a unit. The daemon takes an
@@ -701,7 +703,7 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
           planned phase with its executor, skill and seat — what "approve" launches — instead of the
           brief echoed back. Read off the run's units snapshot (+ the def when the host knows it). */}
       {intake && (
-        <IntakePlan runId={runId} units={units ?? EMPTY_UNITS} clis={pool ?? undefined} workflow={workflow ?? null} autoDeliver={autoDeliver ?? null} />
+        <IntakePlan runId={runId} units={units ?? EMPTY_UNITS} clis={pool ?? undefined} workflow={workflow ?? null} autoDeliver={autoDeliver ?? null} identityKind={identityKind ?? null} />
       )}
 
       {/* The evaluator verdict this gate is about (F-3R2-006): pass/deny, criterion, the judge's

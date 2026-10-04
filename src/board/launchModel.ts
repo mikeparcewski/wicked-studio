@@ -29,18 +29,27 @@ export interface LaunchSubmitInput {
   /** Build-kind work with several repos attached and no target chosen (F-028). */
   targetRequired: boolean;
   roster: readonly RosterSeat[] | null;
+  /** studio#429: a launch on a repository with no steps, preset or workflow — the engine runs it as
+   *  ONE neutral unit (no PA scope, no evaluator, no deliver). A designed launch (a repo as context,
+   *  D2), so it still sends; the form says what it will be. Absent ⇒ false. */
+  planMissing?: boolean;
 }
+
+/** studio#429: what a repository launch with nothing that plans the work will run as. */
+export const PLAN_MISSING_NOTE =
+  'This runs as one step on the repository — no PA scope, no review, no delivery. Pick the steps (or a preset) to have it planned and reviewed.';
 
 /**
  * Whether the launch form may send, and the studio#315 reason when the roster SAYS no selected seat
  * can take the work (benched or not council-eligible). A cold roster or an unknown seat is never a
  * refusal.
  */
-export function launchSubmit(input: LaunchSubmitInput): { canSubmit: boolean; noSeatReason: string | null } {
+export function launchSubmit(input: LaunchSubmitInput): { canSubmit: boolean; noSeatReason: string | null; planNote: string | null } {
   const noSeatReason = noCarryingSeatReason(input.selectedClis, input.roster);
+  const planNote = input.planMissing === true ? PLAN_MISSING_NOTE : null;
   const canSubmit = input.problem.trim().length > 0 && input.selectedClis.size > 0 && !input.submitting
     && !input.targetRequired && noSeatReason === null;
-  return { canSubmit, noSeatReason };
+  return { canSubmit, noSeatReason, planNote };
 }
 
 /**

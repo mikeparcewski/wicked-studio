@@ -19,8 +19,7 @@ import {
   requestPreview,
   usePlanCatalog,
   type LoadState,
-  type PreviewState,
-} from '../store/planCatalog.js';
+  type PreviewState, previewAnswer } from '../store/planCatalog.js';
 
 /** The phase selection (the picker's state) and the plan it composes. */
 export interface PhaseSelection {
@@ -142,7 +141,8 @@ export function useLaunchPreview(input: LaunchPreviewInput): LaunchPreviewModel 
   const resolveHumanConfirm = useCallback(async (): Promise<string | undefined> => {
     const unshifted = humanConfirmFor(input.mode, input.confirm, input.beforeOrd, 0);
     if (unshifted === undefined || !unshifted.startsWith('before:') || previewBody === null) return unshifted;
-    const st = await requestPreview(previewBody);
+    // The engine's answer, however long it takes — a slow preview is not a failed one (studio#431).
+    const st = await previewAnswer(previewBody);
     // The preview is the only word on whether the PA's scope step is ord 1, so a failed preview
     // refuses the launch instead of guessing: an unshifted before:N would pause on the scope step
     // and let unit N run unpaused. `unsupported` is an older daemon, whose engine has no scope step.

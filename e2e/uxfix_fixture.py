@@ -268,6 +268,8 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          # repo_graph — studio#461 (e2e/desk_repo_page_test.py): None serves REPO_GRAPH; "docs" a built
          #   graph of a Markdown-only repo (totals 7 symbols / 2 files, no nodes shown); "fail" a 502.
          "repo_graph": None,
+         # preview_delay_ms — POST /plans/preview answers only after this delay (studio#431). Default 0.
+         "preview_delay_ms": 0,
          # reject_note — a run whose plan the operator rejected with a note: the daemon ended it
          #   cancelled and audited `gate.decided {approve:false, amend}` (studio#478).
          "reject_note": False,
@@ -7148,6 +7150,10 @@ class W2Handler(SimpleHTTPRequestHandler):
                 return self._json(404, {"error": f"w2 fixture: no such endpoint {path}"})
             if not (body.get("plan") or {}).get("steps"):
                 return self._json(400, {"error": "Invalid request body"})
+            with state_lock:
+                preview_delay = state["preview_delay_ms"]
+            if preview_delay:
+                time.sleep(preview_delay / 1000)  # studio#431: an engine slow to answer under load
             return self._json(200, team_preview(body))
         # S11: POST /runs/:id/cancel under `sheets` — crew's 200, recorded (the Stop it undo window).
         m = re.match(r"^/api/v1/runs/([^/]+)/cancel$", path)

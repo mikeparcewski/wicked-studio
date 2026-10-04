@@ -30,6 +30,9 @@ export interface IntakePlanProps {
    * (auto-deliver). `null`/absent — the engine predates the deliver gate, so NO promise is made.
    */
   autoDeliver?: boolean | null | undefined;
+  /** The run's `run_identity.kind` (studio#429, codex): `free_text` is the daemon's own word for a
+   *  launch with no plan, preset or workflow. Absent ⇒ unknown, and nothing is claimed. */
+  identityKind?: string | null | undefined;
 }
 
 /** The run's deliver posture off the session DTO (`AgentSession.auto_deliver`, additive since
@@ -56,7 +59,7 @@ function executorOf(unit: WorkUnit, phase: WorkflowDef['phases'][number] | undef
   return 'agent';
 }
 
-export function IntakePlan({ runId, units, clis, workflow, autoDeliver }: IntakePlanProps): React.ReactElement | null {
+export function IntakePlan({ runId, units, clis, workflow, autoDeliver, identityKind }: IntakePlanProps): React.ReactElement | null {
   if (units.length === 0) return null;
   const ordered = [...units].sort((a, b) => a.ord - b.ord);
   const pool = (clis ?? []).filter((c) => c !== '');
@@ -68,8 +71,12 @@ export function IntakePlan({ runId, units, clis, workflow, autoDeliver }: Intake
       className="rounded-lg p-2.5 mb-3 flex flex-col gap-1 font-mono"
       style={{ background: 'var(--surface-raised)', border: '1px solid var(--surface-raised)' }}
     >
-      <p className="text-xs font-semibold" style={{ color: 'var(--ink-high)' }}>
-        The plan you are approving — {ordered.length} phase{ordered.length === 1 ? '' : 's'}
+      <p data-testid="intake-plan-head" className="text-xs font-semibold" style={{ color: 'var(--ink-high)' }}>
+        {/* studio#429: a lone neutral unit with no workflow is not a plan — a launch with a repo and no
+            steps; say what is being approved. */}
+        {ordered.length === 1 && identityKind === 'free_text' && ordered[0]!.role === 'neutral'
+          ? 'One unplanned step — no PA scope, no review, no delivery'
+          : `The plan you are approving — ${ordered.length} phase${ordered.length === 1 ? '' : 's'}`}
         {workflow ? <span style={{ color: 'var(--ink-muted)' }}> · workflow {workflow.id}</span> : null}
       </p>
       <ol className="flex flex-col gap-0.5 text-[11px]" style={{ color: 'var(--ink-body)' }}>

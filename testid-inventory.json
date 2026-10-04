@@ -12,8 +12,8 @@
   "studioVersion": "0.5.19",
   "counts": {
     "files": 214,
-    "occurrences": 2384,
-    "static": 2085,
+    "occurrences": 2386,
+    "static": 2087,
     "dynamic": 80,
     "computed": 7
   },
@@ -4456,6 +4456,12 @@
       ]
     },
     {
+      "testId": "intake-plan-head",
+      "files": [
+        "src/components/IntakePlan.tsx"
+      ]
+    },
+    {
       "testId": "intake-plan-seat",
       "files": [
         "src/components/IntakePlan.tsx"
@@ -4583,6 +4589,12 @@
     },
     {
       "testId": "launch-no-seat",
+      "files": [
+        "src/components/ChatInput.tsx"
+      ]
+    },
+    {
+      "testId": "launch-plan-note",
       "files": [
         "src/components/ChatInput.tsx"
       ]

@@ -1000,7 +1000,11 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   // studio#315 (F-RC2-041): the roster SAYS no selected seat can take the work — every one benched
   // or not council-eligible. Such a launch fails at distribution ("no eligible seat"), so Send
   // refuses and names why; a cold roster or an unknown seat is never a refusal.
-  const { canSubmit, noSeatReason } = launchSubmit({ problem, selectedClis, submitting, targetRequired, roster });
+  // studio#429: a repository launch with no steps, preset or workflow is one neutral unit at the
+  // engine — no PA scope, no evaluator, no deliver. It still sends (a repo as context, D2); the form
+  // says what it will be before it does, instead of promising a planned run.
+  const planMissing = targetRepoRef !== null && selection.plan === null && launchWorkflow === '';
+  const { canSubmit, noSeatReason, planNote } = launchSubmit({ problem, selectedClis, submitting, targetRequired, roster, planMissing });
   // A composed plan replaces the workflow, so a detected workflow is no suggestion while one is in hand.
   const showDetection =
     detectedWorkflow !== null && !workflowDismissed && !workflow && !workflowOverride && !selection.composing;
@@ -1443,6 +1447,16 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
         >
           Send is off: no selected seat can take this run — {noSeatReason}. Sign a seat in from Settings or select another
           seat, then send.
+        </p>
+      )}
+      {planNote !== null && problem.trim() !== '' && (
+        <p
+          data-testid="launch-plan-note"
+          role="status"
+          className="text-xs rounded-xl px-4 py-2 font-mono"
+          style={{ background: 'var(--surface-rail)', border: '1px solid var(--status-gate)', color: 'var(--ink-high)', margin: 0 }}
+        >
+          {planNote}
         </p>
       )}
       {noSeatReason === null && ineligibleSelected.length > 0 && (

@@ -18,7 +18,7 @@ vi.mock('../src/api/client.js', async () => {
 const client = await import('../src/api/client.js');
 const { ApiError } = await import('../src/api/errors.js');
 const { proposePlanEdit, retryPlanEdit, resetPlanEdits, usePlanEdits } = await import('../src/store/planEdits.js');
-const { loadCatalog, requestPreview, resetPlanCatalog, usePlanCatalog } = await import('../src/store/planCatalog.js');
+const { loadCatalog, requestPreview, previewAnswer, resetPlanCatalog, usePlanCatalog, PREVIEW_TIMEOUT_MS, PREVIEW_ANSWER_WAIT_MS } = await import('../src/store/planCatalog.js');
 const { useLaunchPreview } = await import('../src/hooks/useLaunchPlan.js');
 const { renderHook } = await import('@testing-library/react');
 const { GATE_MOVED_TEXT, sendGateDecision, useGateActionStore } = await import('../src/board/gateActions.js');
@@ -90,6 +90,88 @@ describe('the preview cache and the catalog', () => {
     apiFetch.mockResolvedValueOnce({ steps: [], graph: 'ready' });
     expect((await requestPreview(body)).status).toBe('ready');
     expect(apiFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('studio#431: a preview the engine does not answer in time says so; a late answer still lands', async () => {
+    vi.useFakeTimers();
+    try {
+      const body = { plan: { steps: [{ catalog: 'review' }] } };
+      let answer: (v: unknown) => void = () => undefined;
+      apiFetch.mockImplementationOnce(() => new Promise((r) => { answer = r; }));
+      const p = requestPreview(body);
+      await vi.advanceTimersByTimeAsync(PREVIEW_TIMEOUT_MS + 10);
+      const st = await p;
+      expect(st.status).toBe('error');
+      expect(st.status === 'error' ? st.error : '').toMatch(/didn’t answer in \d+ s/);
+      expect(st.status === 'error' ? st.error : '').toMatch(/studio’s own reading/);
+      answer({ steps: [], graph: 'ready' });
+      await vi.advanceTimersByTimeAsync(1);
+      const key = JSON.stringify(body);
+      expect(usePlanCatalog.getState().previews[key]?.status).toBe('ready');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('codex on #431: what places a gate waits for the engine\'s answer — a timeout is not a failed preview', async () => {
+    vi.useFakeTimers();
+    try {
+      const body = { plan: { steps: [{ catalog: 'test' }] } };
+      let answer: (v: unknown) => void = () => undefined;
+      apiFetch.mockImplementationOnce(() => new Promise((r) => { answer = r; }));
+      const p = previewAnswer(body);
+      await vi.advanceTimersByTimeAsync(PREVIEW_TIMEOUT_MS + 10);
+      // Asking again after the timeout joins the answer still coming — no second request.
+      const again = previewAnswer(body);
+      answer({ steps: [], graph: 'ready' });
+      expect((await p).status).toBe('ready');
+      expect((await again).status).toBe('ready');
+      expect(apiFetch).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('codex r2 on #431: an engine that never answers does not hang Send — the wait is bounded', async () => {
+    vi.useFakeTimers();
+    try {
+      const body = { plan: { steps: [{ catalog: 'clarify' }] } };
+      apiFetch.mockImplementationOnce(() => new Promise(() => undefined)); // never settles
+      const p = previewAnswer(body);
+      await vi.advanceTimersByTimeAsync(PREVIEW_ANSWER_WAIT_MS + PREVIEW_TIMEOUT_MS + 10);
+      const st = await p;
+      expect(st.status).toBe('error');
+      expect(st.status === 'error' ? st.error : '').toMatch(/still hasn’t answered/);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('codex r2 on #431: only the newest request\'s late answer lands', async () => {
+    vi.useFakeTimers();
+    try {
+      const body = { plan: { steps: [{ catalog: 'design' }] } };
+      let a: (v: unknown) => void = () => undefined;
+      let b: (v: unknown) => void = () => undefined;
+      apiFetch.mockImplementationOnce(() => new Promise((r) => { a = r; }))
+        .mockImplementationOnce(() => new Promise((r) => { b = r; }));
+      const pa = requestPreview(body);
+      await vi.advanceTimersByTimeAsync(PREVIEW_TIMEOUT_MS + 10);
+      await pa;
+      const pb = requestPreview(body); // asked again after the timeout
+      await vi.advanceTimersByTimeAsync(PREVIEW_TIMEOUT_MS + 10);
+      await pb;
+      a({ steps: [{ id: 'old' }], graph: 'ready' }); // the older answer, late
+      await vi.advanceTimersByTimeAsync(1);
+      const key = JSON.stringify(body);
+      expect(usePlanCatalog.getState().previews[key]?.status).toBe('error');
+      b({ steps: [{ id: 'new' }], graph: 'ready' });
+      await vi.advanceTimersByTimeAsync(1);
+      const st = usePlanCatalog.getState().previews[key];
+      expect(st?.status === 'ready' ? (st.preview as { steps: { id: string }[] }).steps[0]!.id : null).toBe('new');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('a 501 preview is unsupported, not an error', async () => {
