@@ -64,10 +64,24 @@ from pathlib import Path
 BASE = os.environ.get("STUDIO_URL", "http://localhost:7701").rstrip("/")
 RUN = os.environ.get("WALK_RUN", "")
 LEGS = {s.strip() for s in os.environ.get("WALK_LEGS", "inline,failed,fix,passed,export,deliver").split(",") if s.strip()}
-WAIT_S = int(os.environ.get("WALK_WAIT_S", "1800"))
+ENV_ERRORS: list[str] = []
+
+
+def env_int(name: str, default: int) -> int:
+    raw = os.environ.get(name, "")
+    if raw == "":
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        ENV_ERRORS.append(f"{name}={raw!r} is not a whole number of seconds")
+        return default
+
+
+WAIT_S = env_int("WALK_WAIT_S", 1800)
 # How long to follow the re-record after "Ask helpers to fix" (default: WAIT_S). 0 = not followed, said so
 # (the self-test's fixture cannot re-record; the proof lane follows it to its verdict).
-RERECORD_S = int(os.environ.get("WALK_RERECORD_S", str(WAIT_S)))
+RERECORD_S = env_int("WALK_RERECORD_S", WAIT_S)
 FIX = os.environ.get("LIVE_FIX", "yes") == "yes"
 APPROVE = os.environ.get("LIVE_APPROVE_DELIVER", "no") == "yes"
 W, H = 1440, 700
@@ -138,6 +152,8 @@ def cap(leg: str, why: str, **detail) -> None:
     report["capped"].append(f"{leg}: {why}")
 
 
+if ENV_ERRORS:
+    fail("env", "; ".join(ENV_ERRORS))
 if not RUN:
     fail("env", "WALK_RUN names the run (its id) whose walkthrough this script follows")
 host = urllib.parse.urlparse(BASE)
@@ -344,8 +360,6 @@ def state_kind(state: str | None) -> str | None:
     return "other"
 
 
-from playwright.sync_api import sync_playwright  # noqa: E402
-
 errors: list[str] = []
 
 
@@ -366,11 +380,16 @@ def main(p) -> None:  # noqa: ANN001, C901
         if off_origin(route.request.url):
             blocked.append(redact(route.request.url))
             route.abort()
-        else:
-            route.continue_()
+            return
+        try:
+            # Fetched by the script, redirects NOT followed: a 3xx is handed to the browser as it is, so its
+            # Location becomes a NEW request through this handler — and an off-origin one is aborted above,
+            # never contacted. (`continue_` would let the browser follow the hop unrouted.)
+            route.fulfill(response=route.fetch(max_redirects=0))
+        except Exception:  # noqa: BLE001 — the page navigated away mid-request
+            route.abort()
     page.route("**/*", only_the_daemon)
-    # A redirect's next hop is not routed again (Playwright follows it), so every request — hops included —
-    # is also RECORDED here; one off-origin request, contacted or not, fails the run at the end.
+    # Belt and braces: every request the browser makes is also recorded; one off-origin request fails the run.
     page.on("request", lambda req: blocked.append(redact(req.url)) if off_origin(req.url) and redact(req.url) not in blocked else None)
 
     # Evidence the daemon serves (or not) — decided once, named in the report.
@@ -393,6 +412,8 @@ def main(p) -> None:  # noqa: ANN001, C901
         fail("inline", f"/s/run:{RUN} never showed the session: {e}", blocked=blocked)
     if origin_of(page.url) != DAEMON_ORIGIN:
         fail("env", f"the page left the daemon's origin: {redact(page.url)}", blocked=blocked)
+    # Every click is inside THIS run's block (a session thread may hold other runs with their own artifacts).
+    block = page.locator(f'[data-testid="session-run"][data-run-id="{RUN}"]')
     # The walkthrough legs need the run's walkthrough on screen; `deliver` alone does not (a plan whose
     # override left end-to-end testing to the operator has none — its chip says so).
     WALK_LEGS = LEGS & {"inline", "failed", "fix", "passed", "export"}
@@ -439,9 +460,9 @@ def main(p) -> None:  # noqa: ANN001, C901
             else:
                 check("failed-underneath", (len(art["under"]) >= 1 or len(checks_failed) == 0) and (art["frame"] or not frame_expected),
                       under=art["under"], wire_failed_checks=len(checks_failed), frame=art["frame"], frame_expected=frame_expected)
-            node_before = page.evaluate("""() => { const a = document.querySelector('[data-testid="artifact"][data-kind="walkthrough"]'); if (a) a.__sameNode = 'mark-' + Date.now(); return a ? a.__sameNode : null; }""")
+            node_before = page.evaluate("""() => { const b = document.querySelector('[data-testid="session-run"][data-run-id=' + JSON.stringify(window.__walkRun) + ']'); const a = (b || document).querySelector('[data-testid="artifact"][data-kind="walkthrough"]'); if (a) a.__sameNode = 'mark-' + Date.now(); return a ? a.__sameNode : null; }""")
             if "walkthrough-watch" in art["verbs"]:
-                page.get_by_test_id("walkthrough-watch").first.click()
+                block.get_by_test_id("walkthrough-watch").first.click()
                 # The playhead sits ON the moment (within the poll interval), not merely past it.
                 got, a1, _ = wait_for(page, "the pane with the playhead on the failing moment",
                                       lambda a, c: a.get("size") == "pane" and a.get("video") and a["video"]["ready"] >= 1 and (fail_sec is None or fail_sec - 0.6 <= a["video"]["t"] <= fail_sec + 4), 30)
@@ -456,7 +477,7 @@ def main(p) -> None:  # noqa: ANN001, C901
                     else:
                         check("failed-moment", abs(wire_fail - fail_sec) < 1, ui_sec=fail_sec, wire_sec=wire_fail, chapter=failing.get("key"))
                 shot(page, "pane")
-                page.get_by_test_id("artifact-grow").first.click()
+                block.get_by_test_id("artifact-grow").first.click()
                 got2, a2, _ = wait_for(page, "full screen", lambda a, c: a.get("size") == "full", 15)
                 shot(page, "full")
                 page.keyboard.press("Escape")
@@ -483,7 +504,7 @@ def main(p) -> None:  # noqa: ANN001, C901
                     """Every chapter's take count — a new take anywhere is a new take."""
                     return [c.get("takes") or 0 for c in (v or {}).get("chapters", [])] if isinstance(v, dict) else []
                 takes0 = takes(walkthrough_view())  # BEFORE the click: a fast re-record cannot slip under the baseline
-                page.get_by_test_id("walkthrough-fix").first.click()
+                block.get_by_test_id("walkthrough-fix").first.click()
                 got, a1, _ = wait_for(page, "the 'Sent back to the helpers' note", lambda a, c: (a.get("note") or "").startswith("Sent back"), 30)
                 shot(page, "fix-sent")
                 after_trail = trail_now("fix")
@@ -506,11 +527,23 @@ def main(p) -> None:  # noqa: ANN001, C901
                 else:
                     # A NEW verdict: a pass, or a failure from a new take (some chapter's take count grew — the
                     # state line alone cannot tell a re-recorded failure at the same moment from the old one).
+                    lost = {"view": False}
+
                     def new_verdict(a, c):  # noqa: ANN001
                         k = state_kind(a.get("state"))
-                        return k == "passed" or (k == "failed" and (a.get("state") != art["state"] or takes(walkthrough_view()) != takes0))
+                        if k == "passed":
+                            return True
+                        if k != "failed":
+                            return False
+                        v = walkthrough_view()
+                        if v is None and takes0:
+                            lost["view"] = True  # the wire went silent: no take count to compare — evidence lost, not a verdict
+                            return False
+                        return a.get("state") != art["state"] or (v is not None and takes(v) != takes0)
                     got, art, chain = wait_for(page, "the re-record's verdict", new_verdict, RERECORD_S)
-                    if not got:
+                    if lost["view"] and not got:
+                        cap("rerecord", "GET /runs/:id/walkthrough stopped answering while the re-record was followed — a new take could not be told from the old", state=art.get("state"))
+                    elif not got:
                         cap("rerecord", f"the re-record reached no new verdict within {RERECORD_S} s (state: {art.get('state')!r})", state=art.get("state"))
                     else:
                         check("rerecord", True, state=art.get("state"), takes_before=takes0, takes_after=takes(walkthrough_view()))
@@ -525,6 +558,13 @@ def main(p) -> None:  # noqa: ANN001, C901
         got, art, chain = wait_for(page, "the acceptance read on the block and a timed chip",
                                    lambda a, c: c and c.get("acceptanceRead") == "read" and any(ch["check"] == "checked" and ch["sec"] is not None for ch in c["chips"]), 60)
         shot(page, "passed")
+        # "checked" rests on a SEALED take (WT §4.9): the wire says so, or the leg is capped — judged whatever
+        # the acceptance read holds.
+        view_s = walkthrough_view()
+        if view_s is None:
+            cap("passed-sealed", "GET /runs/:id/walkthrough is not served — the seal behind the chips could not be read")
+        else:
+            check("passed-sealed", view_s.get("sealed") is True, sealed=view_s.get("sealed"), tree=view_s.get("tree"))
         chips = chain["chips"] if chain else []
         checked_chips = [ch for ch in chips if ch["check"] == "checked"]
         steps = ((acc or {}).get("walkthrough") or {}).get("steps") if acc else None
@@ -546,12 +586,6 @@ def main(p) -> None:  # noqa: ANN001, C901
                   and sentence == expected and checked_n == len(checked_chips),
                   chips=chips, checked_steps=[s.get("stepId") for s in checked_steps], sentence=chain.get("sentence"), expected=expected, sealed=art.get("sealed"), followed=chain.get("followed"))
             check("no-followed", not chain.get("followed"), followed=chain.get("followed"))
-            # "checked" rests on a SEALED take (WT §4.9): the wire says so, or the leg is capped.
-            view_s = walkthrough_view()
-            if view_s is None:
-                cap("passed-sealed", "GET /runs/:id/walkthrough is not served — the seal behind the chips could not be read")
-            else:
-                check("passed-sealed", view_s.get("sealed") is True, sealed=view_s.get("sealed"), tree=view_s.get("tree"))
             # Each chip's moment is the start of one of the chapters crew says proved that step, in the take
             # the UI already reads (crew asserts no atSec on today's wire — WT §4.9).
             view = walkthrough_view()
@@ -565,7 +599,7 @@ def main(p) -> None:  # noqa: ANN001, C901
                 check("checked-moment", all(ch["sec"] is not None and float(ch["sec"]) in moments.get(ch["step"], []) for ch in checked_chips), moments=moments, chips=chips)
         if checked_chips:
             want = float(checked_chips[0]["sec"] or 0)
-            page.locator('[data-testid="chain-step-check"][data-check="checked"]').first.click()
+            block.locator('[data-testid="chain-step-check"][data-check="checked"]').first.click()
             got, a1, _ = wait_for(page, "the chip's pane at its moment", lambda a, c: a.get("size") == "pane" and a.get("video") and a["video"]["ready"] >= 1 and want - 0.6 <= a["video"]["t"] <= want + 4, 30)
             shot(page, "chip-pane")
             check("checked-link", bool(got), want=want, t=(a1.get("video") or {}).get("t"))
@@ -577,17 +611,26 @@ def main(p) -> None:  # noqa: ANN001, C901
         view = walkthrough_view()
         mp4_path = ((view or {}).get("video") or {}).get("mp4") if view else None
         if not art.get("exportBtn"):
-            page.get_by_test_id("artifact-grow").first.click()
+            block.get_by_test_id("artifact-grow").first.click()
             wait_for(page, "the pane (Export lives there)", lambda a, c: a.get("size") == "pane", 10)
-        page.get_by_test_id("walkthrough-export").first.click()
+        block.get_by_test_id("walkthrough-export").first.click()
         try:
-            page.get_by_test_id("walkthrough-export-mp4").wait_for(state="visible", timeout=10000)
+            block.get_by_test_id("walkthrough-export-mp4").wait_for(state="visible", timeout=10000)
         except Exception as e:  # noqa: BLE001
             shot(page, "no-export")
             fail("export", f"Export ▾ offers no Video: {e}")
-        href = page.get_by_test_id("walkthrough-export-mp4").get_attribute("href") or ""
+        href = block.get_by_test_id("walkthrough-export-mp4").get_attribute("href") or ""
+        # The UI's Video is CLICKED: what the browser downloads is what is hashed (not a re-fetch of the href).
+        try:
+            with page.expect_download(timeout=20000) as dl:
+                block.get_by_test_id("walkthrough-export-mp4").click()
+            saved = dl.value.path()
+            data = Path(saved).read_bytes() if saved else b""
+            ui = (200 if data else 0, "download", hashlib.sha256(data).hexdigest() if data else None, len(data))
+        except Exception as e:  # noqa: BLE001
+            shot(page, "no-download")
+            fail("export", f"clicking Video produced no download: {redact(str(e))}", href=redact(href))
         page.keyboard.press("Escape")
-        ui = sha256_of(href if href.startswith("http") else f"{BASE}{href}")
         if mp4_path is None:
             # No take to compare with — but the download itself must still be a real file.
             check("export-download", ui[0] == 200 and ui[2] is not None and ui[3] > 0, ui={"href": href, "status": ui[0], "type": ui[1], "bytes": ui[3]})
@@ -674,11 +717,15 @@ def main(p) -> None:  # noqa: ANN001, C901
     browser.close()
 
 
-with sync_playwright() as p:
-    try:
+try:
+    from playwright.sync_api import sync_playwright  # noqa: E402
+except ImportError as e:
+    fail("env", f"playwright is not installed: {e}")
+try:
+    with sync_playwright() as p:  # the browser's start, too, is inside the handler: no exit without a report
         main(p)
-    except SystemExit:
-        raise
-    except Exception as e:  # noqa: BLE001 — a Playwright timeout or a page gone: the report is still written, every requested leg accounted for
-        fail("script", f"{type(e).__name__}: {e}")
+except SystemExit:
+    raise
+except Exception as e:  # noqa: BLE001 — a Playwright timeout or a page gone: the report is still written, every requested leg accounted for
+    fail("script", redact(f"{type(e).__name__}: {e}"))
 finish(all(leg.get("ok") for leg in report["legs"].values()))
