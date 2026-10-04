@@ -45,9 +45,12 @@ export function langMeta(lang: string): { label: string; color: string } {
 interface Props {
   /** lowercase `lang` → files indexed, or `null` when the graph is not built. */
   breakdown: Record<string, number> | null;
+  /** studio#461: what to say when there is no mix to draw — the page knows whether the graph was
+   *  never built, built with no code in it, or not read. Defaults to the not-built sentence. */
+  emptyText?: string;
 }
 
-export function LanguageBar({ breakdown }: Props): React.ReactElement {
+export function LanguageBar({ breakdown, emptyText }: Props): React.ReactElement {
   const entries = breakdown === null ? [] : Object.entries(breakdown).filter(([, n]) => n > 0);
   const total = entries.reduce((a, [, n]) => a + n, 0);
 
@@ -55,7 +58,7 @@ export function LanguageBar({ breakdown }: Props): React.ReactElement {
     return (
       <div data-testid="language-bar" data-state="empty">
         <p className="text-sm font-mono italic" style={{ color: 'var(--ink-dim)', margin: 0 }}>
-          Language mix not indexed yet — run onboarding to build the code graph.
+          {emptyText ?? 'Language mix not indexed yet — run onboarding to build the code graph.'}
         </p>
       </div>
     );
