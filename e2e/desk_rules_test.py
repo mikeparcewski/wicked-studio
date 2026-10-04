@@ -216,7 +216,8 @@ with sync_playwright() as p:
           sentence=sentence, rows=rows)
     page.screenshot(path=str(SHOTS / "desk-rules-page.png"))
     # ── 8. N7: no Hold control on a decision rule — judged while ITS drawer is open ─────────
-    check("no-hold", page.get_by_test_id("steering-rule-drawer").count() == 1 and page.get_by_text("Hold work to it").count() == 0)
+    drawers, holds = page.get_by_test_id("steering-rule-drawer").count(), page.get_by_text("Hold work to it").count()
+    check("no-hold", drawers == 1 and holds == 0, drawers=drawers, holds=holds, path=page.evaluate("() => location.pathname"))
     # Esc closes the rule and the address returns to /rules.
     page.keyboard.press("Escape")
     page.wait_for_function("() => location.pathname === '/rules'", timeout=8000)

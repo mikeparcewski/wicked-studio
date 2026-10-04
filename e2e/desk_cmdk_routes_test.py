@@ -88,7 +88,7 @@ with sync_playwright() as p:
     page.screenshot(path=str(SHOTS / "desk-cmdk-go.png"))
     page.keyboard.press("Escape")
     groups = {r["group"] for r in rows}
-    check("go-group", groups == {"go"} and dest_rows == 24 and len(rows) > 24, groups=sorted(groups), destinations=dest_rows, rows=len(rows))
+    check("go-group", groups == {"go"} and dest_rows == 25 and len(rows) > 25, groups=sorted(groups), destinations=dest_rows, rows=len(rows))
 
     def reach(href: str, label: str) -> dict:
         open_palette(f"go: {label}")
