@@ -13,7 +13,7 @@ with the stored appearance set to wicked-light + the harbor accent, and proves:
   2. NO MONOSPACE in the default layer: no visible text in the session rail or the Desk computes
      to a monospace font-family while "Show technical details" is off. With it on, a technical
      handle ([data-tech]) keeps the mono face.
-  3. EVERYTHING ELSE FITS (studio#421): opening "Everything else" at 1440x900 covers neither the
+  3. EVERYTHING ELSE FITS (studio#421): opening "Additional settings" at 1440x900 covers neither the
      sessions nor "+ Start something", and every destination is reachable — on screen, or in a
      scroller of its own — and still navigates.
   4. 0 page errors, no horizontal scroll.
@@ -112,7 +112,7 @@ EVERYTHING = """(h) => {
     const hit = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2);
     return !!hit && (hit === el || el.contains(hit));
   };
-  const list = document.querySelector('[data-testid="desk-rail-everything"]');
+  const list = document.querySelector('[data-testid="desk-rail-additional"]');
   const start = document.querySelector('[data-testid="desk-rail-start"]');
   const sessions = [...document.querySelectorAll('[data-testid="rail-session"]')];
   const unreachable = [];
@@ -179,37 +179,37 @@ with sync_playwright() as p:
     page.wait_for_function("() => document.querySelectorAll('[data-testid=\"rail-session\"]').length >= 6",
                            timeout=10000)
 
-    # ── 3. "Everything else" at 1440x900 ──────────────────────────────────────────
+    # ── 3. "Additional settings" at 1440x900 ──────────────────────────────────────────
     page.get_by_test_id("desk-rail-more").click()
-    page.get_by_test_id("desk-rail-everything").wait_for(state="visible", timeout=5000)
+    page.get_by_test_id("desk-rail-additional").wait_for(state="visible", timeout=5000)
     page.wait_for_timeout(200)
     page.screenshot(path=str(SHOTS / "desk-look-everything.png"))
     ev = page.evaluate(EVERYTHING, H)
     check("everything-else-fits", ev["listInView"] and ev["startShown"] and ev["sessions"] >= 6
           and ev["sessionsShown"] >= 6 and not ev["unreachable"], **ev)
-    # The overlay contract: Escape from inside closes it and returns focus to "Everything else";
+    # The overlay contract: Escape from inside closes it and returns focus to "Additional settings";
     # an Escape a higher layer owns (the shortcut overlay) closes only that layer (Copilot r1).
-    page.locator('[data-testid="desk-rail-everything"] [data-nav-dest="section:projects"]').focus()
+    page.locator('[data-testid="desk-rail-additional"] [data-nav-dest="settings:/system"]').focus()
     page.keyboard.press("Escape")
     page.wait_for_timeout(150)
-    esc = page.evaluate("""() => ({open: !!document.querySelector('[data-testid="desk-rail-everything"]'),
+    esc = page.evaluate("""() => ({open: !!document.querySelector('[data-testid="desk-rail-additional"]'),
       focus: document.activeElement?.dataset?.testid ?? null})""")
     page.get_by_test_id("desk-rail-more").click()
-    page.get_by_test_id("desk-rail-everything").wait_for(state="visible", timeout=5000)
+    page.get_by_test_id("desk-rail-additional").wait_for(state="visible", timeout=5000)
     page.evaluate("() => document.activeElement && document.activeElement.blur()")
     page.keyboard.press("Alt+/")
     page.get_by_test_id("shortcut-overlay").wait_for(state="visible", timeout=5000)
     page.keyboard.press("Escape")
     page.wait_for_timeout(200)
     layered = page.evaluate("""() => ({overlay: !!document.querySelector('[data-testid="shortcut-overlay"]'),
-      open: !!document.querySelector('[data-testid="desk-rail-everything"]')})""")
+      open: !!document.querySelector('[data-testid="desk-rail-additional"]')})""")
     check("everything-else-escape", not esc["open"] and esc["focus"] == "desk-rail-more"
           and not layered["overlay"] and layered["open"], esc=esc, layered=layered)
-    last = page.locator('[data-testid="desk-rail-everything"] [data-nav-dest="settings:/system"]')
+    last = page.locator('[data-testid="desk-rail-additional"] [data-nav-dest="settings:/theme"]')
     last.scroll_into_view_if_needed()
     last.click()
-    page.wait_for_function("() => window.location.pathname === '/system'", timeout=5000)
-    closed = page.evaluate("() => !document.querySelector('[data-testid=\"desk-rail-everything\"]')")
+    page.wait_for_function("() => window.location.pathname === '/theme'", timeout=5000)
+    closed = page.evaluate("() => !document.querySelector('[data-testid=\"desk-rail-additional\"]')")
     check("everything-else-navigates", closed, closed=closed)
 
     hs = page.evaluate("() => document.documentElement.scrollWidth > document.documentElement.clientWidth")

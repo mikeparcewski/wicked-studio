@@ -48,10 +48,11 @@ describe('useRoute — dead addresses parse to the not-found panel', () => {
 
   it('every real page still parses to itself', () => {
     expect(routeAt('/').current.panel).toBe('home');
-    expect(routeAt('/work').current.panel).toBe('work');
-    expect(routeAt('/execute').current.panel).toBe('execute');
-    expect(routeAt('/vibe').current.panel).toBe('vibe');
-    expect(routeAt('/demo').current.panel).toBe('demo');
+    expect(routeAt('/work').current.panel).toBe('everything'); // moved onto /everything (S15c)
+    expect(routeAt('/execute').current.panel).toBe('everything'); // moved (S15c)
+    expect(routeAt('/vibe').current.panel).toBe('everything'); // moved (S15c)
+    expect(routeAt('/demo').current.panel).toBe('everything'); // moved (S15c)
+    expect(routeAt('/everything').current.panel).toBe('everything');
     expect(routeAt('/steering').current.panel).toBe('steering');
     expect(routeAt('/steering/security').current.panel).toBe('steering');
     expect(routeAt('/skills').current.panel).toBe('skills');
@@ -61,8 +62,8 @@ describe('useRoute — dead addresses parse to the not-found panel', () => {
   });
 
   it('the retired addresses still parse to their destinations (moves, not typos)', () => {
-    expect(routeAt('/runs').current.panel).toBe('runs'); // → /work via useLegacyRedirect
-    expect(routeAt('/make').current.panel).toBe('execute'); // → /execute via useMakeRedirect
+    expect(routeAt('/runs').current.panel).toBe('everything'); // → /everything?tab=sessions via useMovedRoutes (S15c)
+    expect(routeAt('/make').current.panel).toBe('everything'); // → /everything?tab=sessions via useMovedRoutes
     expect(routeAt('/wiki').current.panel).toBe('steering');
     expect(routeAt('/coverage').current.panel).toBe('system');
     expect(routeAt('/campaigns').current).toMatchObject({ panel: 'testing', testingPage: 'campaigns' });
@@ -95,10 +96,10 @@ describe('NotFoundPage — the honest dead-address view', () => {
     render(<NotFoundPage pathname="/zzz" navigate={navigate} />);
     const links = screen.getAllByTestId('not-found-link');
     expect(links.map((l) => l.getAttribute('data-path'))).toEqual([
-      '/', '/work', '/steering', '/testing/campaigns',
+      '/', '/everything', '/steering', '/testing/campaigns',
     ]);
     // Real hrefs (middle-click / copy-link work) AND SPA navigation on click.
-    expect(links[1]).toHaveAttribute('href', '/work');
+    expect(links[1]).toHaveAttribute('href', '/everything');
     fireEvent.click(links[2]!);
     expect(navigate).toHaveBeenCalledWith('/steering');
   });

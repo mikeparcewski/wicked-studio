@@ -263,6 +263,12 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          # runs_delay_ms — GET /runs answers only after this delay (studio#459: the Desk's loading
          #   state is observable). Default 0.
          "home_paths": False, "runs_delay_ms": 0,
+         # roster_signed_in — (e2e/desk_signin_test.py; Amendment 5 decision 5) {key: bool} laid over
+         #   ROSTER's `signed_in`, so a journey can sign every seat out (the first-run Desk) and then sign
+         #   one back in between reads ("I've signed in — check again"). Default {}: ROSTER as written.
+         # roster_login_lines — {key: line} laid over each seat's `login_invocation` (the daemon's own
+         #   command, worker home included). Default {}: only pi's under seat_week.
+         "roster_signed_in": {}, "roster_login_lines": {},
          # runs_fail — GET /runs answers 500 (studio#466: a failed read is not an empty list).
          "runs_fail": False,
          # gate_move_tail — studio#430 (e2e/desk_gate_moves_test.py; needs `gate_move`): r-review's
@@ -5162,10 +5168,18 @@ class W2Handler(SimpleHTTPRequestHandler):
                 with state_lock:
                     week = state["seat_week"]
                     home_login = state["home_paths"]
+                    signed_over = dict(state["roster_signed_in"])
+                    lines_over = dict(state["roster_login_lines"])
                 # studio#467: under home_paths the sign-in line names the worker home by its absolute path.
                 login = 'PI_CONFIG_DIR="/tmp/w2/.wicked-worker/pi" pi login' if home_login else "pi login"
                 roster = ([{**s, "login_invocation": login} if s["key"] == "pi" else s for s in ROSTER]
                           if week else ROSTER)
+                # Amendment 5 (desk_signin): a journey's sign-in states and login lines, laid over.
+                roster = [{**s,
+                           **({"signed_in": signed_over[s["key"]], "auth": "signed_in" if signed_over[s["key"]] else "signed_out"}
+                              if s["key"] in signed_over else {}),
+                           **({"login_invocation": lines_over[s["key"]]} if s["key"] in lines_over else {})}
+                          for s in roster]
                 self._json(200, {"roster": roster})
             return True
         if path == "/api/v1/roster/record":

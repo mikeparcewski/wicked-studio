@@ -5,9 +5,9 @@ import { useViewPrefsStore } from '../src/store/viewPrefs.js';
 import { ROSTER, WEEK } from './fixtures/seatWeek.js';
 
 /**
- * studio#467: the sign-in panel printed the worker home's absolute path twice — in its "Running …"
- * sentence and as the shell's echo of the line. The sentence now reads `~/…` in the default layer,
- * and the terminal is told which home directory to draw as `~`. What RUNS is the line as given.
+ * studio#467: the sign-in panel printed the worker home's absolute path. The line reads `~/…` in the
+ * default layer; what Copy carries is the line as the daemon gave it (Amendment 5: studio shows the
+ * command, the operator runs it — no terminal here).
  */
 const LINE = 'PI_CONFIG_DIR="/Users/reel-operator/.wicked-worker/pi" pi login';
 
@@ -20,11 +20,6 @@ vi.mock('../src/api/client.js', () => ({
   },
   apiFetch: () => Promise.resolve({}),
 }));
-vi.mock('../src/components/Terminal.js', () => ({
-  Terminal: ({ initialInput, concealHome }: { initialInput?: string; concealHome?: readonly string[] }) => (
-    <pre data-testid="fake-terminal" data-conceal={JSON.stringify(concealHome ?? null)}>{initialInput}</pre>
-  ),
-}));
 
 const { HealthRailSection } = await import('../src/components/HealthRailSection.js');
 
@@ -32,7 +27,7 @@ const openSignIn = async (): Promise<void> => {
   render(<HealthRailSection open onToggle={() => undefined} />);
   const moves = await screen.findAllByTestId('rail-seat-move');
   fireEvent.click(within(moves.find((m) => m.getAttribute('data-seat') === 'pi')!).getByTestId('rail-seat-move-button'));
-  await screen.findByTestId('fake-terminal');
+  await screen.findByTestId('signin-line');
 };
 
 beforeEach(() => {
@@ -42,22 +37,16 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe('the sign-in panel never prints the home directory in the default layer', () => {
-  it('the sentence reads ~/…, the terminal runs the line as given and is told what to draw as ~', async () => {
+  it('the line reads ~/…; Copy carries the line as given (Amendment 5: the panel shows, the operator runs)', async () => {
     await openSignIn();
     expect(screen.getByTestId('signin-line')).toHaveTextContent('PI_CONFIG_DIR="~/.wicked-worker/pi" pi login');
-    // The panel's own words (everything but the terminal, which is told what to conceal) name no home.
-    const dialog = screen.getByRole('dialog').cloneNode(true) as HTMLElement;
-    dialog.querySelector('[data-testid="fake-terminal"]')?.remove();
-    expect(dialog.textContent).not.toContain('/Users/reel-operator');
-    const term = screen.getByTestId('fake-terminal');
-    expect(term).toHaveTextContent(LINE);
-    expect(term.getAttribute('data-conceal')).toBe('["/Users/reel-operator"]');
+    expect(screen.getByRole('dialog').textContent).not.toContain('/Users/reel-operator');
+    expect(screen.getByTestId('copy-command')).toHaveAttribute('aria-label', `copy ${LINE}`);
   });
 
-  it('with technical details on, the full path shows and nothing is concealed', async () => {
+  it('with technical details on, the full path shows', async () => {
     useViewPrefsStore.setState((s) => ({ prefs: { ...s.prefs, technical_details: true } }));
     await openSignIn();
     expect(screen.getByTestId('signin-line')).toHaveTextContent(LINE);
-    expect(screen.getByTestId('fake-terminal').getAttribute('data-conceal')).toBe('[]');
   });
 });

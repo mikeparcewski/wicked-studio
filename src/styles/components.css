@@ -648,7 +648,7 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
   width: 100%; margin-top: 12px; padding: 8px; border: 1px dashed var(--border); border-radius: var(--radius-md);
   background: none; color: var(--ink-muted); cursor: pointer; font: inherit;
 }
-.wk-rail-bell { margin: 0 10px 4px; position: relative; z-index: 30; }
+.wk-rail-watch { margin: 0 10px 4px; position: relative; z-index: 30; }
 .wk-rail-foot { position: relative; border-top: 1px solid var(--border); padding: 8px 10px; display: flex; flex-direction: column; gap: 2px; }
 .wk-rail-link {
   display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 5px 10px;
@@ -736,6 +736,28 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
 .wk-desk-session-title { color: var(--ink-high); font-size: var(--text-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wk-desk-underline { text-decoration: underline; text-decoration-color: var(--accent); text-decoration-thickness: 2px; }
 .wk-desk-more, .wk-desk-quiet { font-size: var(--text-sm); color: var(--ink-muted); }
+
+/* ── "See everything" (/everything, S15c): the Desk's palette, four tabs, plain rows. ── */
+.wk-everything-head { margin-bottom: 8px; }
+.wk-everything-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0 0; border-bottom: 1px solid var(--border-subtle); }
+.wk-everything-tab {
+  background: none; border: none; border-bottom: 2px solid transparent; margin-bottom: -1px;
+  padding: 6px 10px; font: inherit; font-size: var(--text-sm); color: var(--ink-muted); cursor: pointer;
+}
+.wk-everything-tab:hover { color: var(--ink-high); }
+.wk-everything-tab[aria-selected="true"] { color: var(--ink-high); font-weight: var(--weight-semi); border-bottom-color: var(--accent); }
+.wk-everything-tab:focus-visible { outline: 2px solid transparent; box-shadow: var(--focus-ring); border-radius: var(--radius-md); }
+.wk-everything-panel { display: flex; flex-direction: column; gap: 10px; padding-top: 10px; max-width: 920px; }
+.wk-everything-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.wk-everything-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.wk-everything-scope { margin: 0; font-size: var(--text-sm); color: var(--ink-muted); }
+.wk-everything-scope a, .wk-everything-aside a, .wk-everything-row a { color: var(--ink-muted); }
+.wk-everything-scope a:hover, .wk-everything-aside a:hover, .wk-everything-row a:hover { color: var(--ink-high); }
+.wk-everything-group { padding-bottom: 6px; }
+.wk-everything-list { list-style: none; margin: 0; padding: 0; }
+.wk-everything-list > li { border-top: 1px solid var(--border-subtle); }
+.wk-everything-list > li:first-child { border-top: none; }
+.wk-everything-row { border-top: none; padding: 6px 0; }
 
 .wk-desk-bottom { flex-shrink: 0; padding: 8px 32px 12px 52px; border-top: 1px solid var(--border-subtle); }
 .wk-desk-start { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 8px; }

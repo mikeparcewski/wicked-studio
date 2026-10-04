@@ -18,8 +18,9 @@ proves the S4 acceptance:
   6. LETTERS TYPE: a letter typed with the body focused lands in the Desk composer; the Start row's
      Test chip puts "Test " in it; neither sends anything. The composer's own Send hands the message
      to the Ask dock, which sends it exactly once — closing and reopening the dock sends nothing.
-  7. EVERY DESTINATION: the rail's "Everything else" reaches every nav destination (the restated
-     skin contract), and a destination navigates.
+  7. THE RAIL (Amendment 5): Desk · Watchtower · sessions · Skills · MCP tools · Steering · Health ·
+     "Additional settings" (Configuration, Repositories, Workflows, Evals, Theme), in that order, no
+     Notifications entry; a destination navigates.
   8. 0 page errors, no horizontal scroll.
 
 Captures: e2e/shots/desk-home.png, desk-home-away.png. Env: FEEDBACK_PORT (default 4346).
@@ -220,16 +221,15 @@ with sync_playwright() as p:
     page.keyboard.press("Control+Shift+A")
     page.wait_for_function("() => !document.querySelector('[data-testid=\"ask-panel\"]')", timeout=5000)
 
-    # ── 7. every destination reachable from the rail ──────────────────────────────
+    # ── 7. the rail (Amendment 5, as revised): Desk · Watchtower · sessions · Skills · MCP tools ·
+    #       Steering · Health · "Additional settings" (Configuration, Repositories, Workflows, Evals,
+    #       Theme); no Notifications entry; the rest of the routes are ⌘K's (desk_cmdk_routes).
     page.get_by_test_id("desk-rail-more").click()
-    page.get_by_test_id("desk-rail-everything").wait_for(state="visible", timeout=5000)
-    dests = sorted(page.evaluate("""() => [...document.querySelectorAll(
-      '[data-testid="session-rail"] [data-nav-dest]')].map(e => e.dataset.navDest)"""))
-    expected = sorted([
-        "section:projects", "section:execute", "section:test", "section:vibe", "section:demo",
-        "section:chat", "section:repos", "section:skills", "section:mcp", "section:steering", "section:testing",
-        "settings:/theme", "settings:/workflows", "settings:/system", "notifications", "health",
-    ])
+    page.get_by_test_id("desk-rail-additional").wait_for(state="visible", timeout=5000)
+    dests = page.evaluate("""() => [...document.querySelectorAll(
+      '[data-testid="session-rail"] [data-nav-dest]')].map(e => e.dataset.navDest)""")
+    expected = ["watch", "section:skills", "section:mcp", "section:steering", "health",
+                "settings:/system", "section:repos", "settings:/workflows", "section:testing", "settings:/theme"]
     page.locator('[data-testid="session-rail"] [data-nav-dest="settings:/theme"]').click()
     page.wait_for_function("() => window.location.pathname === '/theme'", timeout=5000)
     check("every-destination", dests == expected, dests=dests, expected=expected)

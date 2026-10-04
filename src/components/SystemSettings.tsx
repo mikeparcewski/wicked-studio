@@ -8,6 +8,8 @@ import { setCachedRoster } from '../store/rosterCache.js';
 import { Modal } from './Modal.js';
 import { NotificationSettings } from './NotificationSettings.js';
 import { Terminal } from './Terminal.js';
+import { SignInPanel } from './SignInPanel.js';
+import { testingPath } from '../api/testing.js';
 import { useDisplayPath, useDisplayText } from '../hooks/useHomePath.js';
 import { homeDirsIn } from '../board/homePath.js';
 
@@ -106,6 +108,8 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
   const [seatAction, setSeatAction] = useState<
     { seat: RosterSeat; line: string; title: string } | null
   >(null);
+  /** The seat whose sign-in panel is open (Amendment 5: plain words, the one command, Copy, check again). */
+  const [signInSeat, setSignInSeat] = useState<RosterSeat | null>(null);
   /** Daemon 400 from a save whose patch included worker_config_root — rendered inline at the field. */
   const [workerRootError, setWorkerRootError] = useState<string | null>(null);
   const [deliverIdentityError, setDeliverIdentityError] = useState<string | null>(null);
@@ -258,6 +262,13 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
           crew-persisted (`studio.notifications`), permission asked only on
           the toggle's own gesture (EC25). */}
       <NotificationSettings />
+
+      {/* ── Testing (Amendment 5 §4): the campaigns page has no rail entry; it is reached from here and ⌘K. */}
+      <p data-testid="settings-testing-link" className="text-xs mb-6" style={{ color: 'var(--ink-muted)' }}>
+        Looking for test campaigns? They have their own page:{' '}
+        <a href={testingPath('campaigns')} onClick={(e) => { e.preventDefault(); navigate(testingPath('campaigns')); }} style={{ color: 'var(--accent)' }}>Testing campaigns →</a>
+        {' '}(also in ⌘K).
+      </p>
 
       {/* ── View (DES-studio-rebuild S3) ───────────────────────────────────────
           "Show technical details": one preference, off by default. Crew-persisted under
@@ -493,8 +504,8 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
         </h2>
         <p className="text-xs mb-4" style={{ color: 'var(--ink-dim)' }}>
           Checked CLIs are pre-selected when you open the launch form (takes effect on the next new
-          session). The status shows whether each seat looks signed in; Sign in opens that CLI&apos;s
-          own login flow in a terminal, and Log out runs its logout so you can re-authenticate.
+          session). The status shows whether each seat looks signed in; Sign in shows the one command
+          that signs that CLI in (you run it in a terminal), and Log out runs its logout so you can re-authenticate.
         </p>
         {roster.length === 0 ? (
           <p className="text-xs italic pb-4 font-mono" style={{ color: 'var(--ink-dim)' }}>Loading roster…</p>
@@ -582,7 +593,7 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
                           {offerLogin && (
                             <button
                               type="button"
-                              onClick={() => setSeatAction({ seat, line: seat.login_invocation as string, title: `Sign in — ${seat.display_name}` })}
+                              onClick={() => setSignInSeat(seat)}
                               aria-label={`${verb} ${seat.display_name}`}
                               className="px-2.5 py-1 rounded-lg text-xs font-medium shrink-0"
                               style={{ background: 'var(--status-gate-dim)', color: 'var(--status-gate)', border: '1px solid var(--status-gate-dim)' }}
@@ -646,6 +657,9 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
           and log-out (derived) — no daemon route exists for either (F-E2E-040).
           The operator completes the CLI's URL/paste flow right here. Keyed by
           seat + title so switching seat or action starts a fresh session. */}
+      {signInSeat !== null && (
+        <SignInPanel seat={signInSeat} onClose={() => setSignInSeat(null)} onChecked={(r) => setRoster(r)} />
+      )}
       {seatAction !== null && (
         <Modal
           title={seatAction.title}

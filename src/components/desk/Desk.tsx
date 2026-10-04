@@ -7,7 +7,7 @@ import { useDeadletterReplay } from '../../hooks/useRepairMoves.js';
 import { ReplayMove } from '../DeckKpiRibbon.js';
 import { StandingOrdersPanel } from '../StandingOrdersPanel.js';
 import {
-  deskGreeting, deskProjects, deskReadState, lapsedSeatChores, needsByRun, needsHeadline, needTextByRun, railGroups,
+  deskGreeting, deskProjects, deskReadState, lapsedSeatChores, needsByRun, needsHeadline, needTextByRun, noSignedInHelper, railGroups,
   START_CHIPS,
 } from '../../board/deskModel.js';
 import { needCount } from '../../board/needsQueue.js';
@@ -19,6 +19,8 @@ import { useHistoryScroll } from '../../hooks/useHistoryState.js';
 import { useDisplayText } from '../../hooks/useHomePath.js';
 import type { Navigate } from '../../hooks/useRoute.js';
 import { useRoster } from '../../hooks/useRoster.js';
+import { SignInPanel } from '../SignInPanel.js';
+import type { RosterSeat } from '../../api/types.js';
 import { CaptureDrop } from '../CaptureDrop.js';
 import { HandoverPanel } from '../HandoverPanel.js';
 import { FocusLockToggle, NeedsQueueSurface } from '../NeedsYouQueue.js';
@@ -84,6 +86,10 @@ export function Desk({ runs, runsLoaded, runsError = null, onRetryRuns, needRows
     [items, unfiled, needRows, runChatId, deliveredNow],
   );
   const chores = useMemo(() => lapsedSeatChores(roster), [roster]);
+  // Amendment 5, decision 5: a first-run Desk with no signed-in helper leads with the sign-in; and
+  // every "needs signing in again" row opens the one plain-words panel in place.
+  const leadWithSignIn = noSignedInHelper(roster) && chores.length > 0;
+  const [signIn, setSignIn] = useState<RosterSeat | null>(null);
   // S15a: the Command Deck's repair move for dead-lettered governance events, as a chore.
   const { governance, reread } = useGovernance();
   const dead = deadletterChore(governance);
@@ -96,6 +102,42 @@ export function Desk({ runs, runsLoaded, runsError = null, onRetryRuns, needRows
   const scroller = useRef<HTMLDivElement | null>(null);
   useHistoryScroll(scroller, 'desk.scroll');
   const go = (path: string) => (e: React.MouseEvent): void => { e.preventDefault(); navigate(path); };
+  const chores_block = (
+    <>
+            {(chores.length > 0 || states.frozen || states.away || dead !== null || replaying) && (
+              <section data-testid="desk-chores" aria-label="For whoever runs studio" data-lead={leadWithSignIn ? 'true' : 'false'} className="wk-desk-chores">
+                <p className="wk-desk-label">For whoever runs studio{chores.length > 0 ? ` · ${chores.length}` : ''}</p>
+                {leadWithSignIn && (
+                  <p data-testid="desk-signin-lead" className="wk-desk-sentence">
+                    No AI helper is signed in yet, so nothing can run. Each helper is a CLI on this computer — pick one
+                    below and Sign in shows the one command to run.
+                  </p>
+                )}
+                <DeskStateRows frozen={states.frozen} away={states.away} />
+                {(dead !== null || replaying) && (
+                  <div data-testid="desk-chore" data-chore="deadletters" className="wk-desk-need">
+                    <span aria-hidden className="wk-desk-dot wk-desk-dot--blocked" />
+                    <span className="wk-desk-need-body">
+                      <span className="wk-desk-need-title">{dead?.title ?? 'Governance evidence'}</span>
+                      <span data-testid="desk-chore-line" className="wk-desk-need-line" title={dead?.line}>{dead?.line ?? 'Replayed — re-reading what the daemon says.'}</span>
+                    </span>
+                    <ReplayMove replay={replay} />
+                  </div>
+                )}
+                {chores.map((c) => (
+                  <div key={c.key} data-testid="desk-chore" data-seat={c.seat} className="wk-desk-need">
+                    <span aria-hidden className="wk-desk-dot wk-desk-dot--blocked" />
+                    <span className="wk-desk-need-body">
+                      <span className="wk-desk-need-title">{c.title}</span>
+                      <span className="wk-desk-need-line">{c.line}</span>
+                    </span>
+                    <a href={c.action.path} data-testid="desk-chore-signin" onClick={(e) => { e.preventDefault(); setSignIn(c.rosterSeat); }} className="wk-need-act">{c.action.label}</a>
+                  </div>
+                ))}
+              </section>
+            )}
+    </>
+  );
 
   const seed = (s: string): void => {
     setText(s);
@@ -161,33 +203,9 @@ export function Desk({ runs, runsLoaded, runsError = null, onRetryRuns, needRows
           <div className="wk-desk-main">
             {/* Rows already known (an elicitation, a memory proposal) show at once; only the fold's
                 calm copy waits for the first /runs answer (studio#459). */}
+            {leadWithSignIn && chores_block}
             {(runsLoaded || needRows.length > 0) && <NeedsQueueSurface rows={needRows} runs={runs} navigate={navigate} now={now} variant="desk" />}
-            {(chores.length > 0 || states.frozen || states.away || dead !== null || replaying) && (
-              <section data-testid="desk-chores" aria-label="For whoever runs studio" className="wk-desk-chores">
-                <p className="wk-desk-label">For whoever runs studio{chores.length > 0 ? ` · ${chores.length}` : ''}</p>
-                <DeskStateRows frozen={states.frozen} away={states.away} />
-                {(dead !== null || replaying) && (
-                  <div data-testid="desk-chore" data-chore="deadletters" className="wk-desk-need">
-                    <span aria-hidden className="wk-desk-dot wk-desk-dot--blocked" />
-                    <span className="wk-desk-need-body">
-                      <span className="wk-desk-need-title">{dead?.title ?? 'Governance evidence'}</span>
-                      <span data-testid="desk-chore-line" className="wk-desk-need-line" title={dead?.line}>{dead?.line ?? 'Replayed — re-reading what the daemon says.'}</span>
-                    </span>
-                    <ReplayMove replay={replay} />
-                  </div>
-                )}
-                {chores.map((c) => (
-                  <div key={c.key} data-testid="desk-chore" data-seat={c.seat} className="wk-desk-need">
-                    <span aria-hidden className="wk-desk-dot wk-desk-dot--blocked" />
-                    <span className="wk-desk-need-body">
-                      <span className="wk-desk-need-title">{c.title}</span>
-                      <span className="wk-desk-need-line">{c.line}</span>
-                    </span>
-                    <a href={c.action.path} onClick={go(c.action.path)} className="wk-need-act">{c.action.label}</a>
-                  </div>
-                ))}
-              </section>
-            )}
+            {!leadWithSignIn && chores_block}
           </div>
 
           <aside className="wk-desk-side" aria-label="Your projects">
@@ -216,11 +234,12 @@ export function Desk({ runs, runsLoaded, runsError = null, onRetryRuns, needRows
                 ))}
               </section>
             ))}
-            <a href="/projects" onClick={go('/projects')} data-testid="desk-see-everything" className="wk-desk-more">See everything →</a>
+            <a href="/everything" onClick={go('/everything')} data-testid="desk-see-everything" className="wk-desk-more">See everything →</a>
           </aside>
         </div>
       </div>
 
+      {signIn !== null && <SignInPanel seat={signIn} onClose={() => setSignIn(null)} />}
       <div className="wk-desk-bottom">
         <div data-testid="desk-start-row" className="wk-desk-start">
           <span className="wk-desk-start-label">Start something:</span>

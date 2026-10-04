@@ -4,21 +4,17 @@ import { CenterDashboard } from './components/CenterDashboard.js';
 import { AskDock } from './components/AskDock.js';
 import { AskLauncher } from './components/AskLauncher.js';
 import { CommandPalette, paletteShortcutEntries } from './components/CommandPalette.js';
-import { ChatsPage } from './components/ChatsPage.js';
 import { GateNotifications } from './components/GateNotifications.js';
 import { HomeBoard } from './components/HomeBoard.js';
-import { MadeDashboard } from './components/MadeDashboard.js';
 import { ProjectCampaignsView } from './components/ProjectCampaignsView.js';
 import { LeftSidebar } from './components/LeftSidebar.js';
 import { DocumentCanvas } from './components/DocumentCanvas.js';
 import { DocumentThread } from './components/DocumentThread.js';
 import { DemoMode } from './components/DemoMode.js';
 import { NotFoundPage } from './components/NotFoundPage.js';
-import { ProjectDashboard } from './components/ProjectDashboard.js';
 import { SkipLink } from './components/SkipLink.js';
 import { ProjectShell } from './components/ProjectShell.js';
 import { ProjectDetailPage } from './components/ProjectDetailPage.js';
-import { ProjectsPage } from './components/ProjectsPage.js';
 import { RepositoriesPanel } from './components/RepositoriesPanel.js';
 import { RepoDetailPage } from './components/RepoDetailPage.js';
 import { RepoGraphModal } from './components/RepoGraphModal.js';
@@ -34,7 +30,6 @@ import { RunsBottomPanel, RUNS_BAR_PX } from './components/RunsBottomPanel.js';
 import { ChatPanel } from './components/ChatPanel.js';
 import { GroupChat } from './components/GroupChat.js';
 import { WorkflowViewer } from './components/WorkflowViewer.js';
-import { WorkPage } from './components/WorkPage.js';
 import { ShortcutOverlay } from './components/ShortcutOverlay.js';
 import { PeekCard } from './components/PeekCard.js';
 import { UndoToasts } from './components/UndoToasts.js';
@@ -63,7 +58,10 @@ import { usePlacePanel } from './hooks/usePlacePanel.js';
 import { useRunsPanelStore } from './store/runsPanel.js';
 import { altChord, setShortcutsPaletteOpen, useGlobalShortcuts } from './hooks/useGlobalShortcuts.js';
 import { useTypeToComposer } from './hooks/useTypeToComposer.js';
-import { useLegacyRedirect, useMakeRedirect, useRetiredSettingsRedirect, useSteeringRedirect, useTestingRedirect } from './hooks/useLegacyRedirect.js';
+import { useLegacyRedirect, useRetiredSettingsRedirect, useSteeringRedirect, useTestingRedirect } from './hooks/useLegacyRedirect.js';
+import { useMovedRoutes } from './hooks/useMovedRoutes.js';
+import { EverythingPage } from './components/everything/EverythingPage.js';
+import { everythingPath } from './board/everythingModel.js';
 import { modePath, routedVersion, useRoute, type Mode } from './hooks/useRoute.js';
 import { useRuns } from './hooks/useRuns.js';
 import { useAnnotationStore } from './store/annotations.js';
@@ -119,8 +117,9 @@ const RIGHT_PANEL_PX = 288;
 const DESK_COMPOSER_PX = 96;
 
 export function App(): React.ReactElement {
-  const { panel, runId, repoId, projectId, mode, artifactId, showLaunch, showRegisterRepo, chatMode, chronicleView, campaignsView, campaignId, steeringSection, testingPage, ruleId, navigate, search, pathname } = useRoute();
+  const { panel, runId, repoId, projectId, mode, artifactId, showLaunch, showRegisterRepo, chatMode, campaignsView, campaignId, steeringSection, testingPage, ruleId, navigate, search, pathname } = useRoute();
   const { runs, refresh, loaded: runsLoaded, error: runsError } = useRuns();
+  const movedRunChatId = useCapabilities((s) => s.runChatId);
   const ingestGate = useGateStore((s) => s.ingest);
   const ingestCampaign = useCampaignsStore((s) => s.ingest);
   const ingestAnnotation = useAnnotationStore((s) => s.ingest);
@@ -228,9 +227,11 @@ export function App(): React.ReactElement {
   // (the nav-reorg's renamed section home; Campaigns moved into the project shell).
   useTestingRedirect(panel, testingPage, pathname, navigate);
 
-  // The retired `/make` address (the nav-reorg split Make into Execute/Vibe/Demo) normalizes
-  // onto `/execute`.
-  useMakeRedirect(pathname, navigate);
+  // S15c (§5.4): the list and dashboard addresses that moved onto "See everything" — `/projects`,
+  // `/chats`, `/work`, `/execute`, `/vibe`, `/demo`, `/make`, the bare `/runs`, `/p/:id/chronicle` —
+  // are replaced with the live address; `/p/:id` goes to the project's newest session once the
+  // runs are read. Not skin-scoped: an address is not a skin concern.
+  useMovedRoutes({ panel, projectId, pathname, search, runs, runsLoaded, runsError, runChatId: movedRunChatId, navigate });
 
   // FINDING-013: /ws has no late-join replay, so a page reloaded against a run shows an empty Burn
   // panel even though usage was durably recorded. When the selected run has no frames yet (a reload
@@ -291,7 +292,7 @@ export function App(): React.ReactElement {
   // `/runs` listing retired into a redirect): `/` is a different surface, not this
   // one's parent.
   const onNavigateBack = useCallback(
-    () => navigate(projectId && mode ? modePath(projectId, mode) : '/work'),
+    () => navigate(projectId && mode ? modePath(projectId, mode) : everythingPath({ tab: 'sessions' })),
     [navigate, projectId, mode],
   );
 
@@ -449,9 +450,9 @@ export function App(): React.ReactElement {
         onRejectGate={onDashboardRejectGate}
         navigate={navigate}
         projectId={projectId}
-        // Slice BE (DES-UX-002 §5.2): the Runs|Chronicle view is ROUTE state —
-        // `/p/:id/chronicle` — so the chronicle is deep-linkable and Back works.
-        chronicleView={chronicleView}
+        // The chronicle moved onto "See everything" (S15c): `/p/:id/chronicle` is a redirect, so
+        // this dashboard never opens in its chronicle view any more.
+        chronicleView={false}
       />
     </div>
   );
@@ -577,15 +578,14 @@ export function App(): React.ReactElement {
     if (projectId !== null && campaignsView) {
       return <ProjectCampaignsView projectId={projectId} runs={runs} navigate={navigate} />;
     }
-    // `/p/:projectId` with NO mode segment is the PROJECT DASHBOARD (DES-FEEDBACK-001
-    // §4.1, slice D) — context before actions, replacing the last-used-mode redirect.
-    // Not a fifth mode: no shell, no switcher tab; the mode verbs live in its header.
-    // (`panel === 'project-detail'` is the legacy `/projects/:id` page, which keeps
-    // its own branch below while `useLegacyRedirect` replaces it with this route.)
-    if (projectId !== null && panel !== 'project-detail') {
+    // "See everything" (`/everything`, S15c) — and the tick a moved address (`/projects`, `/work`,
+    // `/chats`, `/execute`, `/vibe`, `/demo`, the bare `/runs`, `/p/:id[/chronicle]`) spends here
+    // before `useMovedRoutes` replaces it. `/p/:id` renders the project's Sessions tab while the
+    // newest session is found; with none, that tab is where it stays.
+    if (panel === 'everything') {
       return (
-        <div className="flex-1 overflow-y-auto">
-          <ProjectDashboard projectId={projectId} runs={runs} navigate={navigate} />
+        <div className="flex-1 overflow-hidden">
+          <EverythingPage runs={runs} runsLoaded={runsLoaded} runsError={runsError} onRetryRuns={refresh} needRows={needRows} navigate={navigate} search={search} routeProjectId={projectId} />
         </div>
       );
     }
@@ -732,40 +732,6 @@ export function App(): React.ReactElement {
             navigate={navigate}
             onOpenGraph={openGraphModal}
           />
-        </div>
-      );
-    }
-    if (panel === 'chats') {
-      return (
-        <div className="flex-1 overflow-y-auto">
-          <ChatsPage runs={runs} onSelect={selectRun} navigate={navigate} />
-        </div>
-      );
-    }
-    if (panel === 'work') {
-      return (
-        <div className="flex-1 overflow-y-auto">
-          {/* `search` carries §7.4's context-sensitive entry (slice Y): arriving
-              from a failure context (`?filter=failed`) lands with that tab active. */}
-          <WorkPage runs={runs} selectedRunId={runId} onSelect={selectRun} navigate={navigate} search={search} onRefresh={refresh} />
-        </div>
-      );
-    }
-    if (panel === 'projects') {
-      return (
-        <div className="flex-1 overflow-y-auto">
-          <ProjectsPage runs={runs} navigate={navigate} />
-        </div>
-      );
-    }
-    // `/execute` · `/vibe` · `/demo` — the three Made command surfaces the nav-reorg split the
-    // former `/make` dashboard into (build → Execute, document → Vibe, video → Demo). ONE
-    // parameterized MadeDashboard, not three copies. `/make` parses here (panel 'execute') for
-    // the pre-redirect tick before `useMakeRedirect` replaces it with `/execute`.
-    if (panel === 'execute' || panel === 'vibe' || panel === 'demo') {
-      return (
-        <div className="flex-1 overflow-y-auto" data-testid={`${panel}-dashboard`}>
-          <MadeDashboard mode={panel} runs={runs} navigate={navigate} runPath={runPath} pathname={pathname} search={search} />
         </div>
       );
     }

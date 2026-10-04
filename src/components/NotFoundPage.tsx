@@ -13,7 +13,7 @@ import type { Navigate } from '../hooks/useRoute.js';
 
 const LINKS: { label: string; path: string }[] = [
   { label: 'Home', path: '/' },
-  { label: 'Work', path: '/work' },
+  { label: 'Everything', path: '/everything' },
   { label: 'Steering', path: '/steering' },
   { label: 'Testing', path: '/testing/campaigns' },
 ];

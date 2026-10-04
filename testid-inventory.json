@@ -11,11 +11,11 @@
   "version": 1,
   "studioVersion": "0.6.0",
   "counts": {
-    "files": 214,
-    "occurrences": 2396,
-    "static": 2099,
-    "dynamic": 80,
-    "computed": 7
+    "files": 216,
+    "occurrences": 2442,
+    "static": 2140,
+    "dynamic": 79,
+    "computed": 8
   },
   "static": [
     {
@@ -2609,6 +2609,12 @@
       ]
     },
     {
+      "testId": "desk-chore-signin",
+      "files": [
+        "src/components/desk/Desk.tsx"
+      ]
+    },
+    {
       "testId": "desk-chores",
       "files": [
         "src/components/desk/Desk.tsx"
@@ -2658,6 +2664,12 @@
       ]
     },
     {
+      "testId": "desk-rail-additional",
+      "files": [
+        "src/components/desk/SessionRail.tsx"
+      ]
+    },
+    {
       "testId": "desk-rail-badge",
       "files": [
         "src/board/objectActions.ts",
@@ -2671,15 +2683,15 @@
       ]
     },
     {
-      "testId": "desk-rail-everything",
+      "testId": "desk-rail-home",
       "files": [
         "src/components/desk/SessionRail.tsx"
       ]
     },
     {
-      "testId": "desk-rail-home",
+      "testId": "desk-rail-mcp",
       "files": [
-        "src/components/desk/SessionRail.tsx"
+        "src/board/deskModel.ts"
       ]
     },
     {
@@ -2691,12 +2703,29 @@
     {
       "testId": "desk-rail-rules",
       "files": [
-        "src/board/objectActions.ts",
-        "src/components/desk/SessionRail.tsx"
+        "src/board/objectActions.ts"
+      ]
+    },
+    {
+      "testId": "desk-rail-skills",
+      "files": [
+        "src/board/deskModel.ts"
       ]
     },
     {
       "testId": "desk-rail-start",
+      "files": [
+        "src/components/desk/SessionRail.tsx"
+      ]
+    },
+    {
+      "testId": "desk-rail-steering",
+      "files": [
+        "src/board/deskModel.ts"
+      ]
+    },
+    {
+      "testId": "desk-rail-watch",
       "files": [
         "src/components/desk/SessionRail.tsx"
       ]
@@ -2740,6 +2769,12 @@
     },
     {
       "testId": "desk-sheet-open",
+      "files": [
+        "src/components/desk/Desk.tsx"
+      ]
+    },
+    {
+      "testId": "desk-signin-lead",
       "files": [
         "src/components/desk/Desk.tsx"
       ]
@@ -3313,6 +3348,180 @@
       "testId": "event-log",
       "files": [
         "src/components/LiveOutput.tsx"
+      ]
+    },
+    {
+      "testId": "everything",
+      "files": [
+        "src/components/everything/EverythingPage.tsx"
+      ]
+    },
+    {
+      "testId": "everything-checking",
+      "files": [
+        "src/components/everything/EverythingPage.tsx"
+      ]
+    },
+    {
+      "testId": "everything-empty",
+      "files": [
+        "src/components/everything/EverythingPage.tsx"
+      ]
+    },
+    {
+      "testId": "everything-failed",
+      "files": [
+        "src/components/everything/EverythingPage.tsx"
+      ]
+    },
+    {
+      "testId": "everything-filter",
+      "files": [
+        "src/components/everything/EverythingPage.tsx"
+      ]
+    },
+    {
+      "testId": "everything-group",
+      "files": [
+        "src/components/everything/EverythingPage.tsx"
+      ]
+    },
+    {
+      "testId": "everything-group-details",
+      "files": [
+        "src/components/everything/EverythingPage.tsx"
+      ]
+    },
+    {
+      "testId": "everything-group-tests",
+      "files": [
+        "src/components/everything/EverythingPage.tsx"
+      ]
+    },
+    {
+      "testId": "everything-handed",
+      "files": [
+        "src/components/everything/EverythingPage.tsx"
+      ]
+    },
+    {
+      "testId": "everything-handed-open",
+      "files": [
+        "src/components/everything/EverythingPage.tsx"
+      ]
+    },
+    {
+      "testId": "everything-handed-pr",
+      "files": [
+        "src/components/everything/EverythingPage.tsx"
+      ]
+    },
+    {
+      "testId": "everything-handed-row",
+      "files": [
+        "src/components/everything/EverythingPage.tsx"
+      ]
+    },
+    {
+      "testId": "everything-helper",
+      "files": [
+        "src/components/everything/EverythingPage.tsx"
+      ]
+    },
+    {
+      "testId": "everything-helper-signin",
+      "files": [
+        "src/components/everything/EverythingPage.tsx"
+      ]
+    },
+    {
+      "testId": "everything-helpers",
+      "files": [
+        "src/components/everything/EverythingPage.tsx"
+      ]
+    },
+    {
+      "testId": "everything-kind",
+      "files": [
+        "src/components/everything/EverythingPage.tsx"
+      ]
+    },
+    {
+      "testId": "everything-made",
+      "files": [
+        "src/components/everything/EverythingPage.tsx"
+      ]
+    },
+    {
+      "testId": "everything-made-census",
+      "files": [
+        "src/components/everything/EverythingPage.tsx"
+      ]
+    },
+    {
+      "testId": "everything-made-load",
+      "files": [
+        "src/components/everything/EverythingPage.tsx"
+      ]
+    },
+    {
+      "testId": "everything-made-row",
+      "files": [
+        "src/components/everything/EverythingPage.tsx"
+      ]
+    },
+    {
+      "testId": "everything-made-unavailable",
+      "files": [
+        "src/components/everything/EverythingPage.tsx"
+      ]
+    },
+    {
+      "testId": "everything-panel",
+      "files": [
+        "src/components/everything/EverythingPage.tsx"
+      ]
+    },
+    {
+      "testId": "everything-retry",
+      "files": [
+        "src/components/everything/EverythingPage.tsx"
+      ]
+    },
+    {
+      "testId": "everything-scope",
+      "files": [
+        "src/components/everything/EverythingPage.tsx"
+      ]
+    },
+    {
+      "testId": "everything-scope-clear",
+      "files": [
+        "src/components/everything/EverythingPage.tsx"
+      ]
+    },
+    {
+      "testId": "everything-session",
+      "files": [
+        "src/components/everything/EverythingPage.tsx"
+      ]
+    },
+    {
+      "testId": "everything-sessions",
+      "files": [
+        "src/components/everything/EverythingPage.tsx"
+      ]
+    },
+    {
+      "testId": "everything-show-all",
+      "files": [
+        "src/components/everything/EverythingPage.tsx"
+      ]
+    },
+    {
+      "testId": "everything-tab",
+      "files": [
+        "src/components/everything/EverythingPage.tsx"
       ]
     },
     {
@@ -8651,6 +8860,12 @@
       ]
     },
     {
+      "testId": "settings-testing-link",
+      "files": [
+        "src/components/SystemSettings.tsx"
+      ]
+    },
+    {
       "testId": "sheet",
       "files": [
         "src/components/sheets/Sheet.tsx"
@@ -8904,9 +9119,33 @@
       ]
     },
     {
+      "testId": "signin-check",
+      "files": [
+        "src/components/SignInPanel.tsx"
+      ]
+    },
+    {
       "testId": "signin-line",
       "files": [
-        "src/components/HealthRailSection.tsx"
+        "src/components/SignInPanel.tsx"
+      ]
+    },
+    {
+      "testId": "signin-no-line",
+      "files": [
+        "src/components/SignInPanel.tsx"
+      ]
+    },
+    {
+      "testId": "signin-panel",
+      "files": [
+        "src/components/SignInPanel.tsx"
+      ]
+    },
+    {
+      "testId": "signin-result",
+      "files": [
+        "src/components/SignInPanel.tsx"
       ]
     },
     {
@@ -11254,6 +11493,12 @@
       ]
     },
     {
+      "testId": "tech-session-row",
+      "files": [
+        "src/components/everything/EverythingPage.tsx"
+      ]
+    },
+    {
       "testId": "term-open-shell",
       "files": [
         "src/components/RightPanel.tsx"
@@ -12740,12 +12985,6 @@
       ]
     },
     {
-      "pattern": "*-dashboard",
-      "files": [
-        "src/App.tsx"
-      ]
-    },
-    {
       "pattern": "*-doc-row",
       "files": [
         "src/components/MadeDashboard.tsx"
@@ -13173,6 +13412,12 @@
       "expression": "a.testId",
       "files": [
         "src/components/ComposerContext.tsx"
+      ]
+    },
+    {
+      "expression": "l.testId",
+      "files": [
+        "src/components/desk/SessionRail.tsx"
       ]
     },
     {

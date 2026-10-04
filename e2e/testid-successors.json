@@ -4,6 +4,9 @@
     "Empty until the S16 deletion slices: before then a removal fails. Add entries as \"<removed>\": \"<successor>\" in the PR that removes the testid."
   ],
   "successors": {
-    "session-run-open": "session-run-look"
+    "session-run-open": "session-run-look",
+    "desk-rail-rules": "desk-rail-steering",
+    "desk-rail-everything": "desk-rail-additional",
+    "*-dashboard": "everything"
   }
 }

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useDeliveredNow } from '../../store/postHocDeliver.js';
 import type { SessionView } from '../../api/types.js';
-import { DESK_DESTINATIONS, needsByRun, needTextByRun, railGroups } from '../../board/deskModel.js';
+import { ADDITIONAL_SETTINGS, DESK_RAIL_LINKS, needsByRun, needTextByRun, railGroups } from '../../board/deskModel.js';
 import { needCount } from '../../board/needsQueue.js';
 import type { NeedRow } from '../../board/needsYou.js';
 import { useBoardModel } from '../../hooks/useBoardModel.js';
@@ -10,21 +10,24 @@ import type { Navigate } from '../../hooks/useRoute.js';
 import { SESSION_RAIL_PX } from '../../theming/skins.js';
 import { anyModalOpen, useLayerStore } from '../../store/layers.js';
 import { HealthRailSection } from '../HealthRailSection.js';
-import { NotificationBell } from '../NotificationBell.js';
 import { WatchPill } from './WatchPill.js';
 import { StandingOrdersPanel } from '../StandingOrdersPanel.js';
 import { DeliveryFreezeSwitch } from '../DeliveryFreezeSwitch.js';
 
 /**
- * THE SESSION RAIL (skin `desk`, DES-STUDIO-REBUILD-001 §4.2, slice S4) — 236 px, on every route.
+ * THE SESSION RAIL (skin `desk`, DES-STUDIO-REBUILD-001 §4.2, slice S4; Amendment 5 as revised,
+ * S15c) — 236 px, on every route. Top to bottom:
  *
  *  - Desk, with the needs-you count as its badge (the fold's `needCount`, the Desk sentence's
  *    number — one source, so they never disagree).
+ *  - Watchtower — the quiet pill (rule 10), where the bell was. There is no Notifications entry:
+ *    the Desk is the notification surface, and Watchtower is the full feed.
  *  - Sessions grouped by project (the board model's order), each with a state dot and the count
  *    of needs-you items that name it. A session is a chat and its runs when the daemon stamps
  *    `chat_id` (C1, `capabilities.runChatId`), else one run; each opens `/s/:id` (S6a).
- *  - The foot: Watchtower (one quiet sentence), Rules, the bell, Health, and "Everything else" —
- *    every destination the other skins' nav reaches (the restated skin contract).
+ *  - Skills · MCP tools · Steering — they change what in-flight work does, so they are one click
+ *    away (`DESK_RAIL_LINKS`). Health. Then "Additional settings" — Configuration, Repositories,
+ *    Workflows, Evals, Theme (`ADDITIONAL_SETTINGS`) and the orders/away and freeze controls.
  *
  * Render only: the groups are `railGroups` (board/deskModel.ts) over `useBoardModel` + the fold.
  */
@@ -47,7 +50,7 @@ export function SessionRail({ runs, needRows, navigate, pathname }: {
   const moreRef = useRef<HTMLDivElement | null>(null);
   const moreTrigger = useRef<HTMLButtonElement | null>(null);
   const go = (path: string) => (e: React.MouseEvent): void => { e.preventDefault(); setMore(false); navigate(path); };
-  // "Everything else" is a popover beside the rail (studio#421), on the overlay contract
+  // "Additional settings" is a popover beside the rail (studio#421), on the overlay contract
   // (hooks/useDismissable): a click outside closes it; Escape closes it and returns focus to its
   // trigger — but only when no higher layer owns that Escape (store/layers.ts precedence: the
   // shortcut overlay, an open modal, or a surface that already handled it, like the palette).
@@ -71,6 +74,7 @@ export function SessionRail({ runs, needRows, navigate, pathname }: {
     navigate('/');
     requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>('[data-testid="desk-composer-input"]')?.focus());
   };
+  const current = (path: string): 'page' | undefined => (pathname === path || pathname.startsWith(`${path}/`) ? 'page' : undefined);
 
   return (
     <nav data-testid="session-rail" aria-label="Sessions" className="wk-rail" style={{ width: SESSION_RAIL_PX }}>
@@ -79,8 +83,10 @@ export function SessionRail({ runs, needRows, navigate, pathname }: {
         <span>Desk</span>
         {count > 0 && <span data-testid="desk-rail-badge" className="wk-rail-badge" aria-label={`${count} need you`}>{count}</span>}
       </a>
-      {/* Outside every scroller, so its popover is never clipped. */}
-      <div className="wk-rail-bell"><NotificationBell navigate={navigate} /></div>
+      {/* Watchtower, where the bell was — outside every scroller, so its card is never clipped. */}
+      <div className="wk-rail-watch" data-testid="desk-rail-watch" data-nav-dest="watch">
+        <WatchPill needRows={needRows} runs={runs} navigate={navigate} />
+      </div>
 
       <div className="wk-rail-groups">
         {groups.map((g) => (
@@ -113,8 +119,11 @@ export function SessionRail({ runs, needRows, navigate, pathname }: {
       </div>
 
       <div className="wk-rail-foot">
-        <WatchPill needRows={needRows} runs={runs} navigate={navigate} />
-        <a href="/steering/policies" onClick={go('/steering/policies')} data-testid="desk-rail-rules" className="wk-rail-link">Rules</a>
+        {DESK_RAIL_LINKS.map((l) => (
+          <a key={l.dest} href={l.path} onClick={go(l.path)} data-testid={l.testId} data-nav-dest={l.dest} aria-current={current(l.path)} className="wk-rail-link">
+            {l.label}
+          </a>
+        ))}
         <HealthRailSection open={healthOpen} onToggle={() => setHealthOpen((v) => !v)} />
         <div ref={moreRef}>
           <button
@@ -122,16 +131,16 @@ export function SessionRail({ runs, needRows, navigate, pathname }: {
             type="button"
             data-testid="desk-rail-more"
             aria-expanded={more}
-            aria-controls={more ? 'desk-rail-everything' : undefined}
+            aria-controls={more ? 'desk-rail-additional' : undefined}
             onClick={() => setMore((v) => !v)}
             className="wk-rail-link"
             style={{ width: '100%' }}
           >
-            {more ? 'Everything else ▸' : 'Everything else ▾'}
+            {more ? 'Additional settings ▸' : 'Additional settings ▾'}
           </button>
           {more && (
-            <div id="desk-rail-everything" data-testid="desk-rail-everything" className="wk-rail-everything">
-              {DESK_DESTINATIONS.map((d) => (
+            <div id="desk-rail-additional" data-testid="desk-rail-additional" className="wk-rail-everything">
+              {ADDITIONAL_SETTINGS.map((d) => (
                 <a key={d.dest} href={d.path} data-nav-dest={d.dest} onClick={go(d.path)} className="wk-rail-link">
                   {d.label}
                 </a>

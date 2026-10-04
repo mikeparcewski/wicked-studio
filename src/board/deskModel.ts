@@ -1,7 +1,6 @@
 import type { RosterSeat, SessionView } from '../api/types.js';
 import { mcpPath } from '../api/mcp.js';
 import { skillsPath } from '../api/skills.js';
-import { steeringDashboardPath } from '../api/steering.js';
 import { testingPath } from '../api/testing.js';
 import type { NeedRow } from './needsYou.js';
 import { DELIVERED_LINE, KEPT_LINE, keptLocally } from './deskWords.js';
@@ -238,8 +237,11 @@ export function deskProjects(groups: readonly RailGroup[], perCard = 2): DeskPro
 export interface DeskChore {
   key: string;
   seat: string;
+  /** The roster row itself — the sign-in panel reads its `login_invocation`. */
+  rosterSeat: RosterSeat;
   title: string;
   line: string;
+  /** The fallback address (Configuration); the Desk opens the sign-in panel in place instead. */
   action: { label: string; path: string };
 }
 
@@ -249,6 +251,16 @@ export function signInLapsed(seat: RosterSeat): boolean {
   const auth = (seat as Record<string, unknown>)['auth'];
   if (typeof auth === 'string') return auth === 'signed_out';
   return seat.signed_in === false;
+}
+
+/**
+ * A FIRST-RUN DESK WITH NO SIGNED-IN HELPER leads with the sign-in (Amendment 5, decision 5): the
+ * roster is known and not one seat is usable — every seat's sign-in has lapsed, or the roster is
+ * empty. `null` roster (not read yet, or unreadable) → false: never a guessed first run.
+ */
+export function noSignedInHelper(roster: readonly RosterSeat[] | null): boolean {
+  if (roster === null) return false;
+  return roster.every(signInLapsed);
 }
 
 /** A seat whose sign-in lapsed is the one chore the wire can state today. */
@@ -261,6 +273,7 @@ export function lapsedSeatChores(roster: readonly RosterSeat[] | null): DeskChor
       return {
         key: `seat:${s.key}`,
         seat: s.key,
+        rosterSeat: s,
         title: `An AI helper (${name}) needs signing in again`,
         line: 'No sign-in seen for it — work given to it may pause or move to another helper',
         action: { label: 'Sign in', path: '/system' },
@@ -283,23 +296,26 @@ export const START_CHIPS: readonly { label: string; seed: string }[] = [
 ];
 
 /**
- * Every destination the other skins' nav reaches (the skin contract: every route reachable under
- * every skin, by its nav or ⌘K). The Desk rail lists them under "Everything else"; the old pages
- * keep rendering until the flip (S15b).
+ * THE RAIL'S FIXED ENTRIES (DES-STUDIO-REBUILD-001 Amendment 5, as revised). Skills, MCP tools and
+ * Steering sit in the rail itself — they change what in-flight work does, so they are one click
+ * away; Steering is the Rules page (`/rules`, S12), the steering grid one link behind it.
  */
-export const DESK_DESTINATIONS: readonly { dest: string; label: string; path: string }[] = [
-  { dest: 'section:projects', label: 'Projects', path: '/projects' },
-  { dest: 'section:execute', label: 'Execute', path: '/execute' },
-  { dest: 'section:test', label: 'Test', path: testingPath('campaigns') },
-  { dest: 'section:vibe', label: 'Vibe', path: '/vibe' },
-  { dest: 'section:demo', label: 'Demo', path: '/demo' },
-  { dest: 'section:chat', label: 'Chats', path: '/chats' },
+export const DESK_RAIL_LINKS: readonly { dest: string; label: string; path: string; testId: string }[] = [
+  { dest: 'section:skills', label: 'Skills', path: skillsPath(), testId: 'desk-rail-skills' },
+  { dest: 'section:mcp', label: 'MCP tools', path: mcpPath(), testId: 'desk-rail-mcp' },
+  { dest: 'section:steering', label: 'Steering', path: '/rules', testId: 'desk-rail-steering' },
+];
+
+/**
+ * "ADDITIONAL SETTINGS" (Amendment 5, as revised), in this order: Configuration (today's Settings),
+ * Repositories, Workflows, Evals, Theme — plus the orders/away and freeze controls the rail renders
+ * under them. Nothing that redirects is here; Testing (campaigns) is reached by ⌘K and from
+ * Configuration.
+ */
+export const ADDITIONAL_SETTINGS: readonly { dest: string; label: string; path: string }[] = [
+  { dest: 'settings:/system', label: 'Configuration', path: '/system' },
   { dest: 'section:repos', label: 'Repositories', path: '/repos' },
-  { dest: 'section:skills', label: 'Skills', path: skillsPath() },
-  { dest: 'section:mcp', label: 'MCP tools', path: mcpPath() },
-  { dest: 'section:steering', label: 'Rules (steering)', path: steeringDashboardPath() },
+  { dest: 'settings:/workflows', label: 'Workflows', path: '/workflows' },
   { dest: 'section:testing', label: 'Evals', path: testingPath('evals') },
   { dest: 'settings:/theme', label: 'Theme', path: '/theme' },
-  { dest: 'settings:/workflows', label: 'Workflows', path: '/workflows' },
-  { dest: 'settings:/system', label: 'Settings', path: '/system' },
 ];

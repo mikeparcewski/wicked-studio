@@ -8,7 +8,7 @@ import { ROSTER, WEEK } from './fixtures/seatWeek.js';
  * Wave B, idea 9 — the weekly 1:1 per agent on the Health panel's seat rows: each seat's week off
  * `GET /roster/record`, and ONE move whose consequence sits above its button. The route-away move
  * calls the real rule route (`POST /governance/rules` via `api.upsertConformanceRule`); the sign-in
- * move opens the seat's own sign-in line in a terminal.
+ * move opens the sign-in panel with the seat's own line.
  */
 
 let recordAnswer: () => Promise<unknown> = () => Promise.resolve(WEEK);
@@ -103,11 +103,13 @@ describe('the move calls the real route', () => {
     expect(result).toHaveTextContent('rule refused: bad id');
   });
 
-  it('sign-in opens the seat\'s own sign-in line in a terminal', async () => {
+  it('sign-in opens the plain-words panel with the seat\'s own line (Amendment 5) — never a terminal', async () => {
     render(<HealthRailSection open onToggle={() => undefined} />);
     fireEvent.click(within(await moveOf('pi')).getByTestId('rail-seat-move-button'));
-    expect(await screen.findByTestId('fake-terminal')).toHaveTextContent('pi login');
+    expect(await screen.findByTestId('signin-line')).toHaveTextContent('pi login');
     expect(screen.getByRole('dialog')).toHaveTextContent('Sign in — Pi');
+    expect(screen.getByTestId('signin-check')).toBeInTheDocument();
+    expect(screen.queryByTestId('fake-terminal')).toBeNull();
     expect(upsertConformanceRule).not.toHaveBeenCalled();
   });
 });
