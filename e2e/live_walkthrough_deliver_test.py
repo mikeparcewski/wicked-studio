@@ -352,7 +352,9 @@ def wait_for(page, what: str, pred, timeout_s: float, every_s: float = 2.0):
         if got:
             report["waits"].append({"what": what, "seconds": round(time.time() - t0, 1), "seen": last})
             return got, art, chain
-        time.sleep(every_s)
+        # Wait THROUGH the page, never with time.sleep: the route gate below runs on this thread's event loop,
+        # and a sleeping script would stall every request the browser makes (on a slow runner, fatally).
+        page.wait_for_timeout(every_s * 1000)
     report["waits"].append({"what": what, "seconds": round(time.time() - t0, 1), "seen": last, "timed_out": True})
     return None, page.evaluate(ART), page.evaluate(CHAIN)
 
@@ -777,7 +779,7 @@ def main(p) -> None:  # noqa: ANN001, C901
             fail("deliver", "a gate decision landed before the yes", before=len(before), after_click=len(mid))
         if not APPROVE:
             card.get_by_test_id("session-proposal-confirm-cancel").click()
-            time.sleep(1.5)
+            page.wait_for_timeout(1500)
             after = gate_decisions(trail_now("deliver"))
             if before_trail is None:
                 cap("deliver", "the yes is the operator's (LIVE_APPROVE_DELIVER=no); the daemon serves no event trail, so 'nothing sent' rests on the UI alone",
@@ -794,7 +796,7 @@ def main(p) -> None:  # noqa: ANN001, C901
                 status = run_status()
                 if status in ("completed", "delivered", "failed", "cancelled"):
                     break
-                time.sleep(5)
+                page.wait_for_timeout(5000)
             report["waits"].append({"what": "the run's terminal state after the yes", "seconds": round(time.time() - t0, 1), "seen": status})
             shot(page, "delivered")
             after = gate_decisions(trail_now("deliver"))  # read AFTER the run ended: a decision during the wait is counted
