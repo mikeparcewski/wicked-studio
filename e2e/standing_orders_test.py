@@ -36,7 +36,7 @@ import sys
 import time
 import urllib.request
 
-from uxfix_fixture import HIDE_GATE_TOASTS, REPO, STUDIO_SKIN, ensure_build, set_fixture, start_server
+from uxfix_fixture import HIDE_GATE_TOASTS, REPO, SKIN_SHELL, STUDIO_SKIN, ensure_build, set_fixture, start_server, wait_for_skin
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4347"))
 W, H = 1440, 700
@@ -95,8 +95,11 @@ with sync_playwright() as p:
 
     set_fixture(origin, wave1=True, wave2b=True, simple_gates=["g1", "g2"], gate_now=[],
                 status_over={}, extra_frames=[], audit_delay_ms=0, standing_orders=True,
-                reset_standing=True, standing_seed=SEED)
+                reset_standing=True, standing_seed=SEED, settings_delay_ms=1500)
     page.goto(f"{origin}/", wait_until="domcontentloaded")
+    # GET /settings is slowed (settings_delay_ms) so the default skin's first paint is on screen
+    # long enough to be read by mistake; every read below waits for this journey's skin first.
+    wait_for_skin(page)
     try:
         page.get_by_test_id("standing-orders-panel").wait_for(state="visible", timeout=15000)
     except Exception:
@@ -107,10 +110,14 @@ with sync_playwright() as p:
     # ── 0. one line in the header; the Away switch's consequence, before it is flipped ──
     line = page.evaluate("""() => { const e = document.querySelector('[data-testid="standing-orders-panel"]');
         const r = e.getBoundingClientRect();
-        return { inHeader: !!e.closest('header'), variant: e.dataset.variant, height: r.height,
+        return { shell: document.querySelector('[data-shell]')?.getAttribute('data-shell') ?? null,
+                 inHeader: !!e.closest('header'), variant: e.dataset.variant, height: r.height,
                  count: e.querySelector('[data-testid="standing-orders-count"]').innerText,
                  summary: e.querySelector('[data-testid="standing-orders-summary"]').textContent,
                  title: e.getAttribute('title') }; }""")
+    # The panel read is this skin's: the first paint is the default skin (desk since S15b) until
+    # studio.appearance lands, and the Desk's header carries the same panel.
+    check("read-under-this-skin", line["shell"] == SKIN_SHELL[STUDIO_SKIN], shell=line["shell"], skin=STUDIO_SKIN)
     check("one-line-in-the-header",
           line["inHeader"] and line["variant"] == "line" and line["height"] <= 32
           and line["count"] == "2 orders active"
@@ -199,6 +206,7 @@ with sync_playwright() as p:
 
     # ── 5. the handover names the order ───────────────────────────────────────
     page.reload(wait_until="domcontentloaded")
+    wait_for_skin(page)
     try:
         page.get_by_test_id("handover-panel").wait_for(state="visible", timeout=15000)
         page.wait_for_function(
