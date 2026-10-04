@@ -486,8 +486,14 @@ def main(p) -> None:  # noqa: ANN001, C901
             if view0 is None:
                 cap("failed-underneath", "GET /runs/:id/walkthrough is not served — what the failure says underneath could not be compared", under=art["under"], frame=art["frame"])
             else:
-                check("failed-underneath", (len(art["under"]) >= 1 or len(checks_failed) == 0) and (art["frame"] or not frame_expected),
-                      under=art["under"], wire_failed_checks=len(checks_failed), frame=art["frame"], frame_expected=frame_expected)
+                # EACH failed check the wire names is on screen (its statement in one of the underneath lines) —
+                # not merely "some line"; a check the wire names without words counts by number.
+                def words_of(c: dict) -> str:
+                    return next((str(c[k]) for k in ("statement", "label", "name", "text", "title") if isinstance(c.get(k), str) and c[k].strip()), "")
+                named = [words_of(c) for c in checks_failed]
+                shown = all(any(w in u for u in art["under"]) for w in named if w) and len(art["under"]) >= len(checks_failed)
+                check("failed-underneath", shown and (art["frame"] or not frame_expected),
+                      under=art["under"], wire_failed_checks=named, frame=art["frame"], frame_expected=frame_expected)
             node_before = page.evaluate("""() => { const b = document.querySelector('[data-testid="session-run"][data-run-id=' + JSON.stringify(window.__walkRun) + ']'); const a = (b || document).querySelector('[data-testid="artifact"][data-kind="walkthrough"]'); if (a) a.__sameNode = 'mark-' + Date.now(); return a ? a.__sameNode : null; }""")
             if "walkthrough-watch" in art["verbs"]:
                 block.get_by_test_id("walkthrough-watch").first.click()
@@ -546,11 +552,13 @@ def main(p) -> None:  # noqa: ANN001, C901
                 else:
                     new = after[len(before):] if len(after) >= len(before) else after
                     summary = [{k: e.get(k) for k in ("type", "ord", "allow", "action", "decision", "verdict") if k in e} for e in new]
-                    # Exactly one new decision; it refuses (`allow` false — crew's `gateDecided`); and it is THIS
-                    # gate's (its ord), when the daemon served the open gate.
-                    changes = len(new) == 1 and new[0].get("allow") is False and (gate_ord is None or new[0].get("ord") == gate_ord)
+                    # Exactly one new decision; it refuses (`allow` false — crew's `gateDecided`) as a REQUEST FOR
+                    # CHANGES when the event names its action; and it is THIS gate's (its ord), when the daemon
+                    # served the open gate.
+                    changes = (len(new) == 1 and new[0].get("allow") is False and new[0].get("action", "request_changes") == "request_changes"
+                               and (gate_ord is None or new[0].get("ord") == gate_ord))
                     check("fix", bool(got) and len(after) == len(before) + 1 and changes,
-                          decisions_before=len(before), decisions_after=len(after), new=summary, gate_ord=gate_ord, note=a1.get("note"))
+                          decisions_before=len(before), decisions_after=len(after), new=summary, gate_ord=gate_ord, action_on_wire="action" in (new[0] if new else {}), note=a1.get("note"))
                 # The re-record: follow it to its verdict (W1 again), bounded; WALK_RERECORD_S=0 = not followed.
                 if RERECORD_S <= 0:
                     cap("rerecord", "the re-record was not followed (WALK_RERECORD_S=0)", state=page.evaluate(ART).get("state"))
