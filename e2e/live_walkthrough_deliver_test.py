@@ -395,18 +395,23 @@ def main(p) -> None:  # noqa: ANN001, C901
             # it never follows a redirect itself (routed or not). Each hop's Location is judged HERE: off-origin
             # or missing → aborted and recorded, never contacted; in-origin → fetched in turn (at most 5 hops).
             resp = route.fetch(max_redirects=0)
-            url = route.request.url
+            url, method = route.request.url, route.request.method
             hops = 0
             while 300 <= resp.status < 400:
                 loc = resp.headers.get("location") or ""
                 target = urllib.parse.urljoin(url, loc) if loc else ""
-                if target == "" or off_origin(target) or hops >= 5:
+                if target == "" or off_origin(target) or hops >= 5 or resp.status == 304:
                     blocked.append(redact(f"{url} -> {target or '(no Location)'}"))
                     route.abort()
                     return
-                redirects.append(redact(f"{url} -> {target}"))
+                redirects.append(redact(f"{method} {url} -> {resp.status} {target}"))
                 url, hops = target, hops + 1
-                resp = route.fetch(url=url, max_redirects=0)
+                if resp.status in (307, 308):
+                    resp = route.fetch(url=url, max_redirects=0)  # the method and body travel with the hop
+                else:
+                    # 301/302/303: the browser would re-issue as a GET with no body — so does the script.
+                    method = "GET"
+                    resp = route.fetch(url=url, method="GET", post_data=None, max_redirects=0)
             route.fulfill(response=resp)
         except Exception:  # noqa: BLE001 — the page navigated away mid-request
             route.abort()
@@ -555,18 +560,23 @@ def main(p) -> None:  # noqa: ANN001, C901
                     lost = {"view": False}
 
                     def new_verdict(a, c):  # noqa: ANN001
+                        v = walkthrough_view()  # sampled on EVERY poll, recording included
+                        if v is None:
+                            lost["view"] = True  # the wire went silent: no take to tie a verdict to — evidence lost, not a verdict
+                            return False
                         k = state_kind(a.get("state"))
-                        if k not in ("passed", "failed"):
-                            return False
-                        v = walkthrough_view()
-                        if v is None and takes0:
-                            lost["view"] = True  # the wire went silent: no take to tie the verdict to — evidence lost, not a verdict
-                            return False
                         if k == "passed":
                             return True
-                        return a.get("state") != art["state"] or (v is not None and takes(v) != takes0)
-                    got, art, chain = wait_for(page, "the re-record's verdict", new_verdict, RERECORD_S)
-                    if lost["view"]:
+                        return k == "failed" and (a.get("state") != art["state"] or takes(v) != takes0)
+                    if not takes0:
+                        # No take baseline from the wire before the click: a later verdict cannot be shown to be a NEW take's.
+                        cap("rerecord", "GET /runs/:id/walkthrough gave no chapters before the click — the re-record has no baseline to be judged against")
+                        got = None
+                    else:
+                        got, art, chain = wait_for(page, "the re-record's verdict", new_verdict, RERECORD_S)
+                    if "rerecord" in report["legs"]:
+                        pass
+                    elif lost["view"]:
                         # Whatever the screen showed afterwards, the wire went silent mid-follow: the verdict seen
                         # cannot be tied to a new take — evidence lost, said so.
                         cap("rerecord", "GET /runs/:id/walkthrough stopped answering while the re-record was followed — a new take could not be told from the old", state=art.get("state"), seen_pass=bool(got))
