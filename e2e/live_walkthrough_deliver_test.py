@@ -489,11 +489,18 @@ def main(p) -> None:  # noqa: ANN001, C901
                 # EACH failed check the wire names is on screen (its statement in one of the underneath lines) —
                 # not merely "some line"; a check the wire names without words counts by number.
                 def words_of(c: dict) -> str:
-                    return next((str(c[k]) for k in ("statement", "label", "name", "text", "title") if isinstance(c.get(k), str) and c[k].strip()), "")
+                    return next((str(c[k]) for k in ("sentence", "statement", "label", "name", "text", "title") if isinstance(c.get(k), str) and c[k].strip()), "")
                 named = [words_of(c) for c in checks_failed]
-                shown = all(any(w in u for u in art["under"]) for w in named if w) and len(art["under"]) >= len(checks_failed)
-                check("failed-underneath", shown and (art["frame"] or not frame_expected),
-                      under=art["under"], wire_failed_checks=named, frame=art["frame"], frame_expected=frame_expected)
+                # A failed check the wire names without words cannot be matched — that is a cap, not a pass.
+                if any(w == "" for w in named):
+                    cap("failed-underneath", "a failed check on the wire carries no words to find on screen", under=art["under"], wire_failed_checks=named)
+                    named = None
+                shown = named is not None and all(any(w in u for u in art["under"]) for w in named) and len(art["under"]) >= len(checks_failed)
+                if named is None:
+                    pass
+                else:
+                    check("failed-underneath", shown and (art["frame"] or not frame_expected),
+                          under=art["under"], wire_failed_checks=named, frame=art["frame"], frame_expected=frame_expected)
             node_before = page.evaluate("""() => { const b = document.querySelector('[data-testid="session-run"][data-run-id=' + JSON.stringify(window.__walkRun) + ']'); const a = (b || document).querySelector('[data-testid="artifact"][data-kind="walkthrough"]'); if (a) a.__sameNode = 'mark-' + Date.now(); return a ? a.__sameNode : null; }""")
             if "walkthrough-watch" in art["verbs"]:
                 block.get_by_test_id("walkthrough-watch").first.click()
@@ -573,12 +580,14 @@ def main(p) -> None:  # noqa: ANN001, C901
                             lost["view"] = True  # the wire went silent: no take to tie a verdict to — evidence lost, not a verdict
                             return False
                         k = state_kind(a.get("state"))
-                        if k == "passed":
-                            return True
-                        # A failed verdict counts only as a NEW TAKE's: some chapter's take count grew. A changed
-                        # label alone, or a shrunken count, is not evidence of a re-record.
+                        # Either verdict counts only as a NEW TAKE's, on the wire: some chapter's take count grew
+                        # (none shrank), and for a pass the wire's own state is passed. A changed label alone, or
+                        # a screen the wire does not back, is not evidence of a re-record.
                         now = takes(v)
-                        return k == "failed" and len(now) == len(takes0) and any(n > b for n, b in zip(now, takes0)) and all(n >= b for n, b in zip(now, takes0))
+                        grew = len(now) == len(takes0) and any(n > b for n, b in zip(now, takes0)) and all(n >= b for n, b in zip(now, takes0))
+                        if k == "passed":
+                            return grew and v.get("state") == "passed"
+                        return k == "failed" and grew
                     if not takes0:
                         # No take baseline from the wire before the click: a later verdict cannot be shown to be a NEW take's.
                         cap("rerecord", "GET /runs/:id/walkthrough gave no chapters before the click — the re-record has no baseline to be judged against")
@@ -761,7 +770,8 @@ def main(p) -> None:  # noqa: ANN001, C901
             else:
                 new = after[len(before):]
                 # Exactly one new decision, an APPROVE (`allow` true) of THIS gate (its ord, when served), and the run ended.
-                approved = len(new) == 1 and new[0].get("allow") is True and (gate_ord is None or new[0].get("ord") == gate_ord)
+                approved = (len(new) == 1 and new[0].get("allow") is True and (gate_ord is None or new[0].get("ord") == gate_ord)
+                            and str(new[0].get("action", "approve")).lower() not in ("request_changes", "reject", "rejected", "deny", "denied"))
                 check("deliver", bool(got) and len(after) == len(before) + 1 and approved and acc_line["tone"] == "ok" and status in ("completed", "delivered"),
                       acceptance=acc_line, sure=sure, decisions_before=len(before), decisions_after=len(after), status=status, gate_ord=gate_ord,
                       new=[{k: e.get(k) for k in ("type", "ord", "allow", "action") if k in e} for e in new])
