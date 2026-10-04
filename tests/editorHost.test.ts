@@ -380,6 +380,40 @@ describe('the host controller', () => {
     }
   });
 
+  it('codex r4: a write’s timeout is the HOST’s line, said when the timer fires — so a later landing’s written line (with Undo) comes after it and stays', async () => {
+    // The plugin used to say "Not changed: no answer in 10 s" itself, on hearing the timeout reply; a
+    // landing just after the timer could post the host's written line FIRST, and the plugin's late status
+    // then replaced it (Undo gone, a false "Not changed" left). The host now says it, in its own order.
+    const limits = LIMITS as { replyMs: number };
+    const was = limits.replyMs;
+    limits.replyMs = 60;
+    try {
+      const { host, fromFrame, adapter, ui } = makeHost(['artifact.read', 'artifact.write']);
+      const order: string[] = [];
+      (ui.status as ReturnType<typeof vi.fn>).mockImplementation((line: string) => { order.push(`status:${line}`); });
+      ui.written = vi.fn((w: { version: number }) => { order.push(`written:${w.version}`); });
+      let port: MessagePort | null = null;
+      vi.spyOn(host.frame.contentWindow!, 'postMessage').mockImplementation(((_m: unknown, _o: unknown, tr?: Transferable[]) => { port = (tr?.[0] as MessagePort) ?? null; }) as never);
+      fromFrame(env('plugin.ready', { editor: 'acme', version: '0.1.0', protocol: [1] }));
+      const toPlugin: { type?: string; re?: string; ok?: boolean; error?: { code: string }; payload?: unknown }[] = [];
+      port!.onmessage = (m) => toPlugin.push(m.data as (typeof toPlugin)[number]);
+      const ref = adapter.artifact();
+      const artifact = vi.spyOn(adapter, 'artifact').mockReturnValue({ ...ref, version: 1, head: 1 });
+      let land: ((r: { version: number }) => void) | null = null;
+      vi.spyOn(adapter, 'write').mockImplementation(() => new Promise((resolve) => { land = resolve; }));
+      port!.postMessage(env('version.write', { base: 1, ops: [{ op: 'text', anchor: 'cta', value: 'Reserve', before: 'Book a room' }], summary: 'cta' }, 'w1'));
+      await vi.waitFor(() => expect(toPlugin.find((m) => m.re === 'w1')).toMatchObject({ ok: false, error: { code: 'timeout' } }));
+      expect(order).toHaveLength(1);
+      expect(order[0]).toMatch(/^status:.*no answer in 10 s/i);
+      artifact.mockReturnValue({ ...ref, version: 2, head: 2 });
+      land!({ version: 2 });
+      await vi.waitFor(() => expect(order.at(-1)).toBe('written:2'));
+      host.teardown('done');
+    } finally {
+      limits.replyMs = was;
+    }
+  });
+
   it('codex r3: a late stale answer carries where the head went (moved) — the plugin hears that too, and nothing else', async () => {
     const limits = LIMITS as { replyMs: number };
     const was = limits.replyMs;

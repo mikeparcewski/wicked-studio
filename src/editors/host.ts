@@ -248,7 +248,15 @@ export class EditorHost {
     }
     const id = msg.id;
     let settled = false;
-    const timer = setTimeout(() => { if (!settled) { settled = true; this.post(refuse(id, 'timeout', 'no answer in 10 s')); } }, LIMITS.replyMs);
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      // A write's timeout is the host's line, said NOW, in the host's own order (codex r4): a landing just
+      // after the timer puts its written line (with Undo) after this one. Were the plugin to say it on
+      // hearing the reply, its status could arrive after that written line and replace it.
+      if (msg.type === 'version.write') this.o.ui.status('Not changed yet: no answer in 10 s — it may still land');
+      this.post(refuse(id, 'timeout', 'no answer in 10 s'));
+    }, LIMITS.replyMs);
     this.handleRequest(msg.type, msg.payload)
       .then((r) => {
         // Settled by the timer: the plugin heard "timeout" and no second reply follows — but what the

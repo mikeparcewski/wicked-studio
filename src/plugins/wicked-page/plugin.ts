@@ -293,6 +293,8 @@ export function start(): void {
         returnTo = wid;
         const moved = r.payload?.['head'];
         if (typeof moved === 'number' && moved !== head) await render(moved);
+      } else if (r.error.code === 'timeout') {
+        // The host said it when its timer fired, before any late landing's line (codex r4): no echo here.
       } else if (r.error.code === 'refused') {
         status(r.error.message || 'Nothing changed');
       } else {
