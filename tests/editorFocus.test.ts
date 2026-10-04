@@ -32,6 +32,15 @@ describe('focusBeside', () => {
     expect(focusBeside(frame, false)?.id).toBe('after');
     expect(document.activeElement?.id).toBe('after');
   });
+  it('codex r3: a disabled fieldset disables only its form controls — the button in its first legend and a link inside it stay in the ring', () => {
+    // HTML: `fieldset[disabled]` disables descendant form controls EXCEPT those in its first <legend>;
+    // an <a href> is never a form control, so it is never disabled by one.
+    document.body.innerHTML = '<button id="before">a</button><iframe id="f" title="plugin"></iframe><fieldset disabled><legend><button id="enable">Enable section</button></legend><a href="#help" id="help">Help</a><button id="blocked">Blocked</button></fieldset><button id="after">Undo</button>';
+    const frame = document.getElementById('f')!;
+    expect(focusBeside(frame, false)?.id).toBe('enable');
+    expect(focusBeside(document.getElementById('enable'), false)?.id).toBe('help');
+    expect(focusBeside(document.getElementById('help'), false)?.id).toBe('after');
+  });
   it('with no frame to stand beside: Tab goes to the first control, Shift+Tab to the last', () => {
     document.body.innerHTML = '<button id="a">a</button><button id="z">z</button>';
     expect(focusBeside(null, false)?.id).toBe('a');

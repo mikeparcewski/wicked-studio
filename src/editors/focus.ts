@@ -7,9 +7,11 @@
  */
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
-/** The real disabled state — a control inside a `<fieldset disabled>` is disabled too (codex r2). */
+/** The real disabled state, as HTML defines it (`:disabled`): a form control inside a `<fieldset disabled>`
+ *  is disabled too (codex r2) — except one in the fieldset's first `<legend>`, and a link is never a form
+ *  control (codex r3: `closest('fieldset[disabled]')` dropped both from the ring). */
 function disabled(el: HTMLElement): boolean {
-  return el.matches(':disabled') || el.closest('fieldset[disabled]') !== null;
+  return el.matches(':disabled');
 }
 
 export function focusBeside(frame: Element | null, backwards: boolean, root: ParentNode = document): HTMLElement | null {

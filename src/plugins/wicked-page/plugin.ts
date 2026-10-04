@@ -114,6 +114,8 @@ export function start(): void {
   let asks = 0;
   let timers: ReturnType<typeof setTimeout>[] = [];
   let rendering = false;
+  /** The version the render in flight is reading (`null` = the head). */
+  let reading: number | null = null;
   // A version asked for while another is being read: the newest wins, once that read is done.
   let queued: { version?: number } | null = null;
 
@@ -193,8 +195,16 @@ export function start(): void {
 
   /** Render one version: the host's HTML, the bridge appended, in the nested sandboxed frame. */
   const render = async (version?: number): Promise<void> => {
-    if (rendering) { queued = version === undefined ? {} : { version }; return; }
+    // The same version announced twice (a stale reply names it AND `moved` carries it; the idle refresh
+    // crossing a result) is read and mounted once: a second mount would throw away what was typed
+    // meanwhile (codex r3). A version on its way is never queued; a queued one already shown never runs.
+    if (rendering) {
+      if (version !== undefined && version === reading) return;
+      queued = version === undefined ? {} : { version };
+      return;
+    }
     rendering = true;
+    reading = version ?? null;
     try {
       const r = await req('artifact.read', version === undefined ? {} : { version });
       if (!r.ok) { note.hidden = false; note.textContent = r.error.code === 'not_granted' ? 'This editor may not read the page here.' : `The page could not be read (${r.error.code}).`; return; }
@@ -213,10 +223,11 @@ export function start(): void {
       mountFrame(hasInstrumentBridge(html) ? html : appendInstrumentBridge(html));
     } finally {
       rendering = false;
+      reading = null;
       if (queued !== null) {
         const next = queued;
         queued = null;
-        void render(next.version);
+        if (next.version === undefined || next.version !== head) void render(next.version);
       }
     }
   };
@@ -365,16 +376,12 @@ export function start(): void {
           applyTheme(p['theme']);
           return;
         case 'artifact.changed': {
-          // A version landed — the operator's own (the host already told us the number), a helper's or
-          // another tab's: the page shows the newest, scrolled back to what was being looked at. Our own
-          // version arriving this way means the write's reply was lost to the 10 s window (the host
-          // announces a late landing): the line that said "Not changed" is corrected.
+          // A version landed — the operator's own (the host already told us the number, or announces it
+          // now: a landing after the write's 10 s reply window), a helper's or another tab's: the page
+          // shows the newest, scrolled back to what was being looked at. No `ui.status` here: the words
+          // about an own version are the host's written line (with Undo), which a status would replace.
           const v = p['version'];
-          if (typeof v === 'number' && v !== head) {
-            if (p['by'] === 'this-editor' && p['kind'] === 'deterministic') status(`Changed after all · version ${v}`);
-            returnTo = returnTo ?? selected;
-            void render(v);
-          }
+          if (typeof v === 'number' && v !== head) { returnTo = returnTo ?? selected; void render(v); }
           return;
         }
         case 'selection.cleared':
