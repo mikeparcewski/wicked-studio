@@ -658,8 +658,12 @@ def main(p) -> None:  # noqa: ANN001, C901
             done_n = sum(1 for st in live_steps if st[1] in ("done", "checked"))
             total_n, checked_n = len(live_steps), sum(1 for st in live_steps if st[1] == "checked")
             expected = f"{done_n} of {total_n} done and checked" if checked_n == total_n else f"{done_n} of {total_n} done · {checked_n} checked"
+            # A chip's words say the moment its data-sec holds — "checked at 0:30 ▸" for 30 — never another time.
+            def mmss(sec) -> str:
+                n = int(float(sec)); return f"{n // 60}:{n % 60:02d}"
+            words_ok = all(ch["button"] and ch["sec"] is not None and ch["text"] == f"checked at {mmss(ch['sec'])} ▸" for ch in checked_chips)
             check("passed", bool(got) and sorted(ch["step"] or "" for ch in checked_chips) == sorted(s.get("stepId") or "" for s in checked_steps) and len(checked_chips) >= 1
-                  and all(ch["button"] and ch["text"].startswith("checked at ") for ch in checked_chips)
+                  and words_ok
                   and sentence == expected and checked_n == len(checked_chips),
                   chips=chips, checked_steps=[s.get("stepId") for s in checked_steps], sentence=chain.get("sentence"), expected=expected, sealed=art.get("sealed"), followed=chain.get("followed"))
             check("no-followed", not chain.get("followed"), followed=chain.get("followed"))
