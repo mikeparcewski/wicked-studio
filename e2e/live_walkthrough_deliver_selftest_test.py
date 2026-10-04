@@ -84,6 +84,9 @@ check("fail-legs", r1.get("ok") is True and legs.get("inline", {}).get("ok") and
       and legs.get("failed", {}).get("ok") and not legs.get("failed", {}).get("capped")
       and legs.get("failed", {}).get("failing_sec") == 41 and isinstance(pane_t, (int, float)) and 40.4 <= pane_t <= 45
       and legs.get("failed-moment", {}).get("ok") and not legs.get("failed-moment", {}).get("capped") and legs.get("failed-moment", {}).get("wire_sec") == 41
+      and legs.get("failed-underneath", {}).get("ok") and not legs.get("failed-underneath", {}).get("capped")
+      and legs.get("failed-underneath", {}).get("wire_failed_checks") == ["One charge event is emitted", "The card is charged once at the provider", "The customer is never charged twice"]
+      and legs.get("failed-underneath", {}).get("frame") is True
       and legs.get("failed", {}).get("full", {}).get("same_node") is True and legs.get("failed", {}).get("back") == ["pane", "inline"]
       and legs.get("fix", {}).get("ok") and not legs.get("fix", {}).get("capped")
       and legs.get("fix", {}).get("decisions_before") == 0 and legs.get("fix", {}).get("decisions_after") == 1

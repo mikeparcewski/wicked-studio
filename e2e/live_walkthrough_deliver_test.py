@@ -585,9 +585,11 @@ def main(p) -> None:  # noqa: ANN001, C901
                         # a screen the wire does not back, is not evidence of a re-record.
                         now = takes(v)
                         grew = len(now) == len(takes0) and any(n > b for n, b in zip(now, takes0)) and all(n >= b for n, b in zip(now, takes0))
+                        # … and the wire's own state agrees with the screen's verdict: a lingering old failure over a
+                        # take still recording is not a verdict.
                         if k == "passed":
                             return grew and v.get("state") == "passed"
-                        return k == "failed" and grew
+                        return k == "failed" and grew and v.get("state") == "failed"
                     if not takes0:
                         # No take baseline from the wire before the click: a later verdict cannot be shown to be a NEW take's.
                         cap("rerecord", "GET /runs/:id/walkthrough gave no chapters before the click — the re-record has no baseline to be judged against")
