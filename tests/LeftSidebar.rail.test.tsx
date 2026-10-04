@@ -208,19 +208,20 @@ describe('the eleven heading rows (§3.1 + nav-reorg + usability wave + skills)'
     const hrefOf = (k: string): string | null =>
       within(screen.getByTestId(`rail-heading-${k}`))
         .getByTestId('heading-dashboard').getAttribute('href');
-    expect(hrefOf('projects')).toBe('/projects');
-    expect(hrefOf('execute')).toBe('/execute');
-    expect(hrefOf('vibe')).toBe('/vibe');
-    expect(hrefOf('demo')).toBe('/demo');
+    // S15c: the list dashboards moved onto "See everything" — the ▦ points at the live address.
+    expect(hrefOf('projects')).toBe('/everything');
+    expect(hrefOf('execute')).toBe('/everything?tab=sessions');
+    expect(hrefOf('vibe')).toBe('/everything?tab=made&kind=documents');
+    expect(hrefOf('demo')).toBe('/everything?tab=made&kind=videos');
     expect(hrefOf('testing')).toBe('/testing/evals');
-    expect(hrefOf('chat')).toBe('/chats');
+    expect(hrefOf('chat')).toBe('/everything?tab=sessions');
     expect(hrefOf('repos')).toBe('/repos');
     expect(hrefOf('skills')).toBe('/skills');
     expect(hrefOf('mcp')).toBe('/mcp');
     expect(hrefOf('steering')).toBe('/steering/dashboard');
 
     fireEvent.click(within(screen.getByTestId('rail-heading-execute')).getByTestId('heading-dashboard'));
-    expect(navigate).toHaveBeenCalledWith('/execute');
+    expect(navigate).toHaveBeenCalledWith('/everything?tab=sessions');
     // The ▦ never toggles expansion (§3.1).
     expect(expandedKeys()).toEqual([]);
   });
@@ -383,7 +384,7 @@ describe('accordion contents (§3.3)', () => {
     expect(rows.map((r) => r.dataset.projectId)).toEqual([
       'q3-review-deck', 'api-migration', 'auth-refactor', 'upload-endpoint', 'notes', 'smoke-tests',
     ]);
-    expect(within(section).getByTestId('rail-view-all')).toHaveAttribute('href', '/projects');
+    expect(within(section).getByTestId('rail-view-all')).toHaveAttribute('href', '/everything');
   });
 
   it('partitions runs: a workflow-less run is a CHAT, never double-listed under Execute', async () => {
@@ -539,7 +540,7 @@ describe('the collapsed rail (§3.2)', () => {
     const glyphs = screen.getAllByTestId('rail-collapsed-glyph');
     expect(glyphs).toHaveLength(11);
     expect(glyphs.map((g) => g.getAttribute('href'))).toEqual([
-      '/projects', '/execute', '/testing/campaigns', '/vibe', '/demo', '/chats', '/repos', '/skills', '/mcp', '/steering/dashboard', '/testing/evals',
+      '/everything', '/everything?tab=sessions', '/testing/campaigns', '/everything?tab=made&kind=documents', '/everything?tab=made&kind=videos', '/everything?tab=sessions', '/repos', '/skills', '/mcp', '/steering/dashboard', '/testing/evals',
     ]);
     // Settings keeps all three of its pages reachable at icon width (the skin rule: every
     // destination the full rail exposes is reachable from the icon column).
