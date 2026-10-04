@@ -156,8 +156,12 @@ if ENV_ERRORS:
     fail("env", "; ".join(ENV_ERRORS))
 if not RUN:
     fail("env", "WALK_RUN names the run (its id) whose walkthrough this script follows")
-host = urllib.parse.urlparse(BASE)
-if host.scheme not in ("http", "https") or host.hostname is None or host.port in FORBIDDEN_PORTS or host.username or host.password:
+try:
+    host = urllib.parse.urlparse(BASE)
+    _port = host.port  # a malformed port raises here, inside the handler
+except ValueError as e:
+    fail("env", f"STUDIO_URL {redact(BASE)} is not a URL this script can read: {e}")
+if host.scheme not in ("http", "https") or host.hostname is None or _port in FORBIDDEN_PORTS or host.username or host.password:
     fail("env", f"STUDIO_URL {redact(BASE)} is the rig, the dev server, or carries an account; the proof runs on its own daemon")
 
 
@@ -171,8 +175,12 @@ OPENER = urllib.request.build_opener(_NoRedirect)
 
 
 def origin_of(url: str) -> tuple:
-    u = urllib.parse.urlparse(url)
-    return (u.scheme, u.hostname, u.port or (443 if u.scheme == "https" else 80))
+    """(scheme, host, port) — a URL that cannot be parsed is an origin of its own (never the daemon's)."""
+    try:
+        u = urllib.parse.urlparse(url)
+        return (u.scheme, u.hostname, u.port or (443 if u.scheme == "https" else 80))
+    except ValueError:
+        return ("invalid", url, 0)
 
 
 DAEMON_ORIGIN = origin_of(BASE)
@@ -382,10 +390,19 @@ def main(p) -> None:  # noqa: ANN001, C901
             route.abort()
             return
         try:
-            # Fetched by the script, redirects NOT followed: a 3xx is handed to the browser as it is, so its
-            # Location becomes a NEW request through this handler — and an off-origin one is aborted above,
-            # never contacted. (`continue_` would let the browser follow the hop unrouted.)
-            route.fulfill(response=route.fetch(max_redirects=0))
+            # Fetched by the script, redirects NOT followed. A 3xx's Location is judged HERE, before the browser
+            # ever sees it: off-origin → aborted and recorded, never contacted; in-origin → handed back as-is,
+            # and the hop arrives as a new request through this same gate. (`continue_` would let the browser
+            # follow the hop unrouted.)
+            resp = route.fetch(max_redirects=0)
+            if 300 <= resp.status < 400:
+                loc = resp.headers.get("location") or ""
+                target = urllib.parse.urljoin(route.request.url, loc) if loc else ""
+                if target == "" or off_origin(target):
+                    blocked.append(redact(f"{route.request.url} -> {target or '(no Location)'}"))
+                    route.abort()
+                    return
+            route.fulfill(response=resp)
         except Exception:  # noqa: BLE001 — the page navigated away mid-request
             route.abort()
     page.route("**/*", only_the_daemon)
@@ -414,6 +431,7 @@ def main(p) -> None:  # noqa: ANN001, C901
         fail("env", f"the page left the daemon's origin: {redact(page.url)}", blocked=blocked)
     # Every click is inside THIS run's block (a session thread may hold other runs with their own artifacts).
     block = page.locator(f'[data-testid="session-run"][data-run-id="{RUN}"]')
+    walk_art = block.locator('[data-testid="artifact"][data-kind="walkthrough"]')
     # The walkthrough legs need the run's walkthrough on screen; `deliver` alone does not (a plan whose
     # override left end-to-end testing to the operator has none — its chip says so).
     WALK_LEGS = LEGS & {"inline", "failed", "fix", "passed", "export"}
@@ -477,7 +495,7 @@ def main(p) -> None:  # noqa: ANN001, C901
                     else:
                         check("failed-moment", abs(wire_fail - fail_sec) < 1, ui_sec=fail_sec, wire_sec=wire_fail, chapter=failing.get("key"))
                 shot(page, "pane")
-                block.get_by_test_id("artifact-grow").first.click()
+                walk_art.get_by_test_id("artifact-grow").first.click()
                 got2, a2, _ = wait_for(page, "full screen", lambda a, c: a.get("size") == "full", 15)
                 shot(page, "full")
                 page.keyboard.press("Escape")
@@ -541,8 +559,10 @@ def main(p) -> None:  # noqa: ANN001, C901
                             return False
                         return a.get("state") != art["state"] or (v is not None and takes(v) != takes0)
                     got, art, chain = wait_for(page, "the re-record's verdict", new_verdict, RERECORD_S)
-                    if lost["view"] and not got:
-                        cap("rerecord", "GET /runs/:id/walkthrough stopped answering while the re-record was followed — a new take could not be told from the old", state=art.get("state"))
+                    if lost["view"]:
+                        # Whatever the screen showed afterwards, the wire went silent mid-follow: the verdict seen
+                        # cannot be tied to a new take — evidence lost, said so.
+                        cap("rerecord", "GET /runs/:id/walkthrough stopped answering while the re-record was followed — a new take could not be told from the old", state=art.get("state"), seen_pass=bool(got))
                     elif not got:
                         cap("rerecord", f"the re-record reached no new verdict within {RERECORD_S} s (state: {art.get('state')!r})", state=art.get("state"))
                     else:
@@ -611,7 +631,7 @@ def main(p) -> None:  # noqa: ANN001, C901
         view = walkthrough_view()
         mp4_path = ((view or {}).get("video") or {}).get("mp4") if view else None
         if not art.get("exportBtn"):
-            block.get_by_test_id("artifact-grow").first.click()
+            walk_art.get_by_test_id("artifact-grow").first.click()
             wait_for(page, "the pane (Export lives there)", lambda a, c: a.get("size") == "pane", 10)
         block.get_by_test_id("walkthrough-export").first.click()
         try:
@@ -620,6 +640,12 @@ def main(p) -> None:  # noqa: ANN001, C901
             shot(page, "no-export")
             fail("export", f"Export ▾ offers no Video: {e}")
         href = block.get_by_test_id("walkthrough-export-mp4").get_attribute("href") or ""
+        # The link is the run's walkthrough FILE route (same origin), naming the take's own mp4 — not some other
+        # endpoint that happens to serve the same bytes.
+        hp = urllib.parse.urlparse(urllib.parse.urljoin(BASE, href))
+        hq = urllib.parse.parse_qs(hp.query)
+        route_ok = origin_of(urllib.parse.urljoin(BASE, href)) == DAEMON_ORIGIN and hp.path == f"/api/v1/runs/{urllib.parse.quote(RUN, safe='')}/walkthrough/file"
+        check("export-route", route_ok and (mp4_path is None or hq.get("path") == [mp4_path]), href=redact(href), path=hq.get("path"), take_mp4=mp4_path)
         # The UI's Video is CLICKED: what the browser downloads is what is hashed (not a re-fetch of the href).
         try:
             with page.expect_download(timeout=20000) as dl:
