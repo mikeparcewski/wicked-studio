@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { planCommit } from '../board/steeringCommit.js';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import {
   authorSteeringRules,
@@ -186,17 +187,28 @@ export function SteeringPage({ type, navigate, search = '', runs = [] }: {
     afterSaved(id, pageType);
   };
 
-  /** A grid cell commit: OPTIMISTIC apply, per-row revert on error, server reload on success. */
-  const commitRule = (next: SteeringRule, prev: SteeringRule): void => {
+  /** A grid cell commit: OPTIMISTIC apply, per-row revert on error, server reload on success —
+   *  planned against the row as it is now (studio#476: never a stale copy sent or reverted to). */
+  const rulesRef = useRef(rules);
+  rulesRef.current = rules;
+  const commitRule = (made: SteeringRule, prev: SteeringRule): void => {
     setCommitError(null);
     setSavedNote(null);
+    const plan = planCommit(made, prev, rulesRef.current.find((r) => r.id === prev.id));
+    if (plan.kind === 'nothing') return;
+    if (plan.kind === 'stale') {
+      setCommitError(`${prev.id}: not saved — its ${plan.fields.join(', ')} changed since this edit began; the row shows the daemon's value, edit it again`);
+      return;
+    }
+    const { rule: next, revertTo } = plan;
     setRules((cur) => cur.map((r) => (r.id === prev.id ? next : r)));
     void api
       .upsertConformanceRule(next)
       .then(() => afterSaved(next.id, steeringTypeOf(next)))
       .catch((e: unknown) => {
-        // Revert exactly the one row — the server refused, the sheet must not lie.
-        setRules((cur) => cur.map((r) => (r.id === prev.id ? prev : r)));
+        // Revert exactly the one row, to what it was when this save was made — the server
+        // refused, the sheet must not lie (and must not resurrect an older copy).
+        setRules((cur) => cur.map((r) => (r.id === prev.id ? revertTo : r)));
         setCommitError(`${next.id}: ${e instanceof Error ? e.message : String(e)}`);
       });
   };

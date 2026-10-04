@@ -1,4 +1,5 @@
-import { commitGateDecision } from '../board/gateActions.js';
+import { commitGateDecision, commitGateReassign } from '../board/gateActions.js';
+import { reportDecision } from '../board/undoQueue.js';
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api/client.js';
 import type { RosterSeat } from '../api/types.js';
@@ -118,6 +119,28 @@ export function ReassignControl({
       setPhase('done');
       onDone(cli);
     } catch (e: unknown) {
+      const why = e instanceof Error ? e.message : String(e);
+      setError(why);
+      setPhase('failed');
+      // studio#480: after an approve the gate card may be gone by now — the refusal is said where
+      // the operator is too, as a notice.
+      reportDecision('failed', `The retry was approved; the reassign to ${cli} did not land — ${why}`);
+    }
+  }
+
+  /** studio#480: no steer to carry — the seat rides the decision in ONE call (crew approves and
+   *  reassigns together, and refuses a bad seat before approving: the gate stays open). */
+  async function moveInOneCall(cli: string, seatLabel: string): Promise<void> {
+    setPhase('approving');
+    setError(null);
+    try {
+      const outcome = await commitGateReassign(runId, cli, seatLabel);
+      if (outcome !== 'sent') { setPhase('idle'); return; }
+      setApproved(true);
+      recordSteering({ runId, action: 'reassign', cli, ...(typeof ord === 'number' ? { ord } : {}) });
+      setPhase('done');
+      onDone(cli);
+    } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
       setPhase('failed');
     }
@@ -127,6 +150,7 @@ export function ReassignControl({
     if (busy || chosen === undefined) return;
     const cli = chosen.cli;
     setError(null);
+    if (!approved && (amend?.trim() ?? '') === '') { await moveInOneCall(cli, chosen.label); return; }
     try {
       if (!approved) {
         setPhase('approving');
@@ -216,11 +240,11 @@ export function ReassignControl({
       {error !== null && (
         <div className="flex items-center gap-2 flex-wrap">
           <span data-testid="steering-reassign-error" style={{ ...mono, color: 'var(--status-fail)' }}>{error}</span>
-          {approved && chosen !== undefined && (
+          {chosen !== undefined && (
             <button
               type="button"
               data-testid="steering-reassign-retry"
-              onClick={() => void reassignOnly(chosen.cli)}
+              onClick={() => void (approved ? reassignOnly(chosen.cli) : go())}
               className="underline"
               style={{ ...mono, background: 'transparent', border: 'none', color: 'var(--status-fail)', cursor: 'pointer', padding: 0 }}
             >
