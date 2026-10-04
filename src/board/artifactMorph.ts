@@ -34,9 +34,12 @@ export function elementChip(wid: string, text: string, docId = ''): AboutChip {
 
 /** Under the page after a touch edit landed: the version it made. The Undo sits beside it. `what`
  *  is the element in plain words ({@link anchorWords}). */
-export function editedLine(version: number, what: string): string {
-  return `Changed ${what} — version ${version}.`;
+export function editedLine(version: number, what: string, verb: WriteVerb = 'changed'): string {
+  return `${verb.charAt(0).toUpperCase()}${verb.slice(1)} ${what} — version ${version}.`;
 }
+
+/** What one write did (EP-P3): a text edit (or a mix) "changed", a remove "removed", a colour "restyled". */
+export type WriteVerb = 'changed' | 'removed' | 'restyled';
 
 /** Undo forked the page before the change as a new head. */
 export function undoneLine(version: number): string {

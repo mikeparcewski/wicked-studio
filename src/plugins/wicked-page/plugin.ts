@@ -4,6 +4,7 @@ import {
   REQUEST_INVENTORY, makeScrollToWid, parseInbound as parseBridge, type WidBlock, type WidRect,
 } from '../../interactive/instrument-protocol.js';
 import { appendInstrumentBridge, hasInstrumentBridge } from '../../interactive/instrumented.js';
+import { DEFAULT_COLOUR, themeSwatches, type Swatch } from '../../editors/swatches.js';
 
 /**
  * `wicked-page` — the built-in page element editor as a `wicked.editor/1` plugin (DES-EDITOR-PLUGINS-001
@@ -14,6 +15,11 @@ import { appendInstrumentBridge, hasInstrumentBridge } from '../../interactive/i
  * (ONE `version.write` with `before` as the staleness guard; the host escapes the text, posts the
  * batch and draws the thread line with Undo), and what the operator types is text, never markup.
  *
+ * EP-P3 (§7.1 R-a…R-d), each act-first with the host's Undo: a picked element's peek offers Remove
+ * (also ⌘⌫ / Ctrl+Backspace — bare Backspace never removes), a fill and a text colour from the page's
+ * own theme plus Default, and the whole section (also ⌥↑, or a second click); the header sets the
+ * page's width (Phone 390 / Tablet 820 / Desktop 1280) — only the nested frame's width changes.
+ *
  * The plugin never learns a URL, an id's mount or a run root: it reads the artifact through the host,
  * and every write, chip and key goes through the host's checks (§5.6, §5.7, §5.10). Framework-free,
  * bundled by `scripts/build-editors.mjs` into ONE self-contained HTML file beside its `editor.json`.
@@ -22,6 +28,11 @@ import { appendInstrumentBridge, hasInstrumentBridge } from '../../interactive/i
 const PROTOCOL = 'wicked.editor';
 const PROTOCOL_VERSION = 1;
 const EDITOR = 'wicked-page';
+
+/** EP-P3 (R-d): the device widths the header offers; `null` = the page fills the editor. */
+const WIDTHS: readonly (readonly [number, string])[] = [[390, 'Phone'], [820, 'Tablet'], [1280, 'Desktop']];
+/** The header's height at pane and full size: the stage sits below it. */
+const TOOLS_H = 34;
 
 /** The bridge script runs on the nested frame's load; ask a few times before giving up. */
 const ASK_AT_MS = [0, 250, 750, 1500];
@@ -37,7 +48,10 @@ interface Inventory {
 }
 
 const MARKUP = `
-<div data-testid="page-editor" id="editor" class="editor" data-kind="page" data-head="" data-pickable="false" data-selected="" data-size="pane" tabindex="0" role="application" aria-label="The page">
+<div data-testid="page-editor" id="editor" class="editor" data-kind="page" data-head="" data-pickable="false" data-selected="" data-size="pane" data-width="" tabindex="0" role="application" aria-label="The page">
+  <div data-testid="page-tools" id="tools" class="tools" role="toolbar" aria-label="Page width">
+    ${WIDTHS.map(([w, word]) => `<button type="button" data-testid="page-width" data-width="${w}" aria-pressed="false" title="${word} · ${w} px wide">${word} ${w}</button>`).join('')}
+  </div>
   <div id="stage" class="stage"></div>
   <div data-testid="page-hover-box" id="hover" class="box box--hover" hidden></div>
   <div data-testid="page-selected-box" id="selected" class="box" data-wid="" hidden></div>
@@ -45,6 +59,12 @@ const MARKUP = `
   <div data-testid="page-handle" id="handle" class="handle" tabindex="-1"></div>
   <p data-testid="page-hint" id="hint" class="hint" hidden></p>
   <p data-testid="page-note" id="note" class="note" hidden></p>
+  <div data-testid="page-peek" id="peek" class="peek" role="group" aria-label="The picked element" hidden>
+    <button type="button" data-testid="page-section" id="to-section" hidden>Whole section</button>
+    <button type="button" data-testid="page-remove" id="remove" class="danger" title="Remove it (⌘⌫ / Ctrl+Backspace) — Undo puts it back">Remove</button>
+    <span class="swatches" data-testid="page-swatches" data-prop="background" id="fills"><span class="word">Fill</span></span>
+    <span class="swatches" data-testid="page-swatches" data-prop="color" id="inks"><span class="word">Text</span></span>
+  </div>
 </div>`;
 
 function el<T extends HTMLElement>(id: string): T {
@@ -80,6 +100,12 @@ export function start(): void {
   const handle = el<HTMLDivElement>('handle');
   const hint = el<HTMLParagraphElement>('hint');
   const note = el<HTMLParagraphElement>('note');
+  const tools = el<HTMLDivElement>('tools');
+  const peek = el<HTMLDivElement>('peek');
+  const toSection = el<HTMLButtonElement>('to-section');
+  const removeBtn = el<HTMLButtonElement>('remove');
+  const fills = el<HTMLSpanElement>('fills');
+  const inks = el<HTMLSpanElement>('inks');
 
   // ── the port ────────────────────────────────────────────────────────────────────────
   let port: MessagePort | null = null;
@@ -104,6 +130,9 @@ export function start(): void {
   let selected: string | null = null;
   let editing: { wid: string; before: string } | null = null;
   let busy = false;
+  /** EP-P3: the page's own theme colours (this version's `--wi-*`), and the width the page is shown at. */
+  let swatches: Swatch[] = [];
+  let width: number | null = null;
   // The frame's document generation: bumped for every new version, marked ready on that document's
   // load. A message from the previous document (the WindowProxy survives a navigation) is ignored.
   let gen = 0;
@@ -137,12 +166,39 @@ export function start(): void {
     next.srcdoc = srcdoc;
     stage.appendChild(next);
     old?.remove();
+    applyWidth();
+  };
+
+  /** Where the page's frame sits in the editor, and its scale (a width wider than the editor is shown
+   *  whole, scaled down — the page still lays out at that width). Boxes map through it. */
+  const geom = (): { x: number; y: number; s: number } => {
+    const y = size === 'inline' ? 0 : TOOLS_H;
+    if (width === null) return { x: 0, y, s: 1 };
+    const avail = stage.clientWidth;
+    const s = avail > 0 ? Math.min(1, avail / width) : 1;
+    return { x: Math.max(0, (avail - width * s) / 2), y, s };
+  };
+  const applyWidth = (): void => {
+    stage.style.top = `${size === 'inline' ? 0 : TOOLS_H}px`;
+    editor.dataset['width'] = width === null ? '' : String(width);
+    for (const b of Array.from(tools.querySelectorAll<HTMLButtonElement>('[data-width]'))) b.setAttribute('aria-pressed', String(Number(b.dataset['width']) === width));
+    if (frame === null) return;
+    if (width === null) {
+      frame.style.cssText = '';
+      return;
+    }
+    const g = geom();
+    const h = stage.clientHeight > 0 ? stage.clientHeight / g.s : 0;
+    frame.style.cssText = `position:absolute;left:${g.x}px;top:0;width:${width}px;${h > 0 ? `height:${h}px;` : ''}transform:scale(${g.s});transform-origin:0 0`;
   };
 
   const box = (wid: string | null): OverlayBox | null => {
     if (wid === null || inventory === null) return null;
     const rect = inventory.widMap[wid];
-    return rect === undefined ? null : overlayBox(rect, inventory.measured, current);
+    if (rect === undefined) return null;
+    const b = overlayBox(rect, inventory.measured, current);
+    const g = geom();
+    return { left: g.x + b.left * g.s, top: g.y + b.top * g.s, width: b.width * g.s, height: b.height * g.s };
   };
   const place = (node: HTMLElement, b: OverlayBox | null, minW = 0, minH = 0): void => {
     if (b === null) { node.hidden = true; return; }
@@ -164,6 +220,8 @@ export function start(): void {
     selBox.dataset['wid'] = selected ?? '';
     place(selBox, editing === null ? box(selected) : null);
     if (editing !== null) place(input, box(editing.wid), 160, 30); else input.hidden = true;
+    tools.hidden = size === 'inline';
+    drawPeek();
     // The hint: what the pick lets you do (S8 words), or why typing cannot change this element.
     if (!pickable() || editing !== null) { hint.hidden = true; return; }
     hint.hidden = false;
@@ -175,6 +233,43 @@ export function start(): void {
       : typing === 'container' ? `${capital(words)} holds other parts — click a line of text inside it to change the words · Esc to let go`
         : typing === 'cut' ? `${capital(words)} is too long to change by typing — say what to change in the message box · Esc to let go`
           : `${capital(words)} can’t be changed by typing — say what to change in the message box · Esc to let go`;
+  };
+
+  /** The picked element's peek: below its box (above when there is no room), at pane and full size. */
+  const drawPeek = (): void => {
+    const b = pickable() && editing === null && !busy ? box(selected) : null;
+    if (b === null || selected === null) { peek.hidden = true; return; }
+    peek.hidden = false;
+    toSection.hidden = inventory?.blocks[selected]?.section === undefined;
+    const h = peek.offsetHeight || 30;
+    const below = b.top + b.height + 6;
+    const room = editor.clientHeight === 0 || below + h <= editor.clientHeight - 4;
+    // Kept inside the editor (codex r1): an element at the right edge opens its peek leftwards.
+    const w = peek.offsetWidth;
+    const maxLeft = editor.clientWidth > 0 ? editor.clientWidth - w - 4 : Infinity;
+    peek.style.left = `${Math.max(4, Math.min(b.left, maxLeft))}px`;
+    peek.style.top = `${room ? below : Math.max(TOOLS_H + 2, b.top - h - 6)}px`;
+  };
+
+  /** One row of swatches: the page's theme colours, then Default. */
+  const fillSwatches = (row: HTMLSpanElement, prop: 'background' | 'color'): void => {
+    for (const old of Array.from(row.querySelectorAll('button'))) old.remove();
+    const add = (value: string, label: string): void => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = value === DEFAULT_COLOUR ? 'swatch swatch--default' : 'swatch';
+      for (const [k, v] of Object.entries({ 'data-testid': 'page-swatch' })) b.setAttribute(k, v);
+      b.dataset['prop'] = prop;
+      b.dataset['value'] = value;
+      b.title = `${prop === 'background' ? 'Fill' : 'Text'}: ${label}`;
+      b.setAttribute('aria-label', b.title);
+      if (value === DEFAULT_COLOUR) b.textContent = 'Default';
+      else b.style.setProperty('--swatch', value);
+      b.addEventListener('click', () => { if (selected !== null) void restyle(selected, prop, value, label); });
+      row.appendChild(b);
+    };
+    for (const sw of swatches) add(sw.value, sw.label);
+    add(DEFAULT_COLOUR, 'Default');
   };
 
   const cancelEdit = (): void => { if (editing === null) return; editing = null; input.hidden = true; input.value = ''; draw(); };
@@ -212,6 +307,9 @@ export function start(): void {
       const content = r.payload['content'] as { type?: unknown; html?: unknown } | undefined;
       const html = typeof content?.html === 'string' ? content.html : '';
       head = typeof r.payload['version'] === 'number' ? r.payload['version'] : head;
+      swatches = themeSwatches(html);
+      fillSwatches(fills, 'background');
+      fillSwatches(inks, 'color');
       gen += 1;
       armed = returnTo;
       returnTo = null;
@@ -255,7 +353,9 @@ export function start(): void {
       draw();
     } else if (msg.type === 'wid-click') {
       if (size === 'inline') return; // the preview is one control: the host's catch opens it
-      select(msg.wid);
+      // R-c: a second click on the picked element picks its section.
+      const up = msg.wid === selected ? inventory?.blocks[msg.wid]?.section : undefined;
+      select(up !== undefined && inventory?.widMap[up] !== undefined ? up : msg.wid);
     }
   });
 
@@ -273,18 +373,16 @@ export function start(): void {
     else input.setSelectionRange(input.value.length, input.value.length);
   };
 
-  const commit = async (): Promise<void> => {
-    if (editing === null || head === null || busy) return;
-    const { wid, before } = editing;
-    // One line of text: a pasted line break is a space, as the page would render it.
-    const value = input.value.replace(/\s*\n\s*/g, ' ');
-    cancelEdit();
-    handle.focus();
-    if (value === before) return;
+  /** One write — a text edit, a remove, a restyle — and what its answer means for the page on screen.
+   *  `back` is the element the next version opens scrolled to. */
+  const write = async (ops: unknown[], summary: string, saying: string, back: string | null): Promise<void> => {
+    if (head === null || busy) return;
     busy = true;
-    status(`Changing ${anchorWords(wid, 'page')}…`);
+    draw();
+    status(saying);
+    const wid = back;
     try {
-      const r = await req('version.write', { base: head, ops: [{ op: 'text', anchor: wid, value, before }], summary: anchorWords(wid, 'page') });
+      const r = await req('version.write', { base: head, ops, summary });
       if (r.ok) {
         returnTo = wid;
         await render(typeof r.payload['version'] === 'number' ? r.payload['version'] : undefined);
@@ -303,8 +401,59 @@ export function start(): void {
       }
     } finally {
       busy = false;
+      draw();
     }
   };
+
+  const commit = async (): Promise<void> => {
+    if (editing === null || head === null || busy) return;
+    const { wid, before } = editing;
+    // One line of text: a pasted line break is a space, as the page would render it.
+    const value = input.value.replace(/\s*\n\s*/g, ' ');
+    cancelEdit();
+    handle.focus();
+    if (value === before) return;
+    const words = anchorWords(wid, 'page');
+    await write([{ op: 'text', anchor: wid, value, before }], words, `Changing ${words}…`, wid);
+  };
+
+  /** R-a: remove the picked element — one version; the host's Undo puts it back. */
+  const remove = async (wid: string): Promise<void> => {
+    if (busy || inventory?.widMap[wid] === undefined) return;
+    const words = anchorWords(wid, 'page');
+    const section = inventory.blocks[wid]?.section ?? null;
+    handle.focus();
+    await write([{ op: 'remove', anchor: wid }], words, `Removing ${words}…`, section);
+  };
+
+  /** R-b: one colour on the picked element — one version, with Undo. */
+  const restyle = async (wid: string, prop: 'background' | 'color', value: string, label: string): Promise<void> => {
+    if (busy || inventory?.widMap[wid] === undefined) return;
+    const words = anchorWords(wid, 'page');
+    handle.focus();
+    await write([{ op: 'style', anchor: wid, style: { [prop]: value } }], words, `${prop === 'background' ? 'Filling' : 'Colouring the text of'} ${words}: ${label.toLowerCase()}…`, wid);
+  };
+
+  /** R-c: the picked element's section becomes the subject. */
+  const toSectionOf = (wid: string): boolean => {
+    const up = inventory?.blocks[wid]?.section;
+    if (up === undefined || inventory?.widMap[up] === undefined) return false;
+    select(up);
+    return true;
+  };
+
+  toSection.addEventListener('click', () => { if (selected !== null) toSectionOf(selected); });
+  removeBtn.addEventListener('click', () => { if (selected !== null) void remove(selected); });
+  for (const b of Array.from(tools.querySelectorAll<HTMLButtonElement>('[data-width]'))) {
+    b.addEventListener('click', () => {
+      const w = Number(b.dataset['width']);
+      // The pressed width again: the page fills the editor.
+      width = width === w ? null : w;
+      applyWidth();
+      draw();
+    });
+  }
+  window.addEventListener('resize', () => { applyWidth(); draw(); });
 
   input.addEventListener('keydown', (e) => {
     e.stopPropagation();
@@ -313,8 +462,18 @@ export function start(): void {
   input.addEventListener('blur', () => { cancelEdit(); });
 
   // ── keys on the page (not in the field): S8's grammar + the contract's forwarding (§5.10) ──
+  /** The plugin's own controls, in order, that can take focus now (§5.10 rule 5). */
+  const ring = (): HTMLElement[] => [
+    ...Array.from(tools.querySelectorAll<HTMLButtonElement>('button')).filter(() => !tools.hidden),
+    handle,
+    ...Array.from(peek.querySelectorAll<HTMLButtonElement>('button')).filter((b) => !peek.hidden && !b.hidden),
+  ];
+
   editor.addEventListener('keydown', (e) => {
     if (e.target === input) return;
+    const onButton = (e.target as HTMLElement | null)?.tagName === 'BUTTON';
+    // A button's own keys are the button's (Enter / Space press it).
+    if (onButton && (e.key === 'Enter' || e.key === ' ')) return;
     if (e.key === 'Escape') {
       // Something of our own to dismiss first; else the host's (one step smaller).
       if (selected !== null) { e.preventDefault(); select(null); return; }
@@ -323,14 +482,32 @@ export function start(): void {
       return;
     }
     if ((e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === 'k') { e.preventDefault(); send('ui.key', { key: 'Mod+K' }); return; }
+    // R-a: ⌘⌫ / Ctrl+Backspace removes the picked element (bare Backspace never does).
+    if ((e.metaKey || e.ctrlKey) && !e.altKey && (e.key === 'Backspace' || e.key === 'Delete')) {
+      e.preventDefault();
+      if (selected !== null && !busy) void remove(selected);
+      return;
+    }
+    // R-c: ⌥↑ picks the section the picked element is in.
+    if (e.altKey && !e.metaKey && !e.ctrlKey && e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (selected !== null) toSectionOf(selected);
+      return;
+    }
     if (e.altKey && !e.metaKey && !e.ctrlKey && /^Key[A-Z]$/.test(e.code)) { e.preventDefault(); send('ui.key', { key: `Alt+${e.code.slice(3)}` }); return; }
     if (e.key === 'Tab') {
-      // The page is one control: Tab leaves it either way (§5.10 rule 5).
+      // Tab moves through the plugin's own controls; past either end it returns to the host (§5.10 rule 5).
       e.preventDefault();
-      send('ui.key', { key: e.shiftKey ? 'Shift+Tab' : 'Tab' });
+      const r = ring();
+      const at = r.indexOf(document.activeElement as HTMLElement);
+      // From the root (where a Tab into the frame lands), forward Tab enters the first control (codex r1).
+      const next = at === -1 && document.activeElement === editor && !e.shiftKey ? 0 : at + (e.shiftKey ? -1 : 1);
+      if ((at === -1 && next !== 0) || next < 0 || next >= r.length) { send('ui.key', { key: e.shiftKey ? 'Shift+Tab' : 'Tab' }); return; }
+      r[next]!.focus();
       return;
     }
     if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (onButton && e.key.length !== 1) return;
     if (e.key === 'Enter') { if (selected !== null && !busy) { e.preventDefault(); beginEdit(selected, null); } return; }
     // Bare Backspace / Delete never remove anything (§7.1 R-a).
     if (e.key.length !== 1) return;
@@ -345,6 +522,7 @@ export function start(): void {
     size = to;
     document.body.dataset['size'] = to;
     if (to === 'inline') { cancelEdit(); select(null); (document.activeElement as HTMLElement | null)?.blur?.(); }
+    applyWidth();
     draw();
   };
   const applyTheme = (theme: unknown): void => {

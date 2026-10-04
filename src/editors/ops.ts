@@ -21,12 +21,14 @@ const COLOUR = new RegExp(
   + `|rgba?\\((?:${NUM},){2}${NUM}(?:,${NUM})?\\)`
   + `|hsla?\\(\\s*-?\\d+(?:\\.\\d+)?(?:deg)?\\s*,${NUM},${NUM}(?:,${NUM})?\\)`
   + '|var\\(--wi-[a-z0-9-]{1,40}\\)'
+  // EP-P3 "Default": back to the document's own stylesheet (an inline `revert-layer`).
+  + '|revert-layer'
   + ')$',
   'i',
 );
 
-/** A colour the host lets through: hex, numeric rgb/hsl, or a learned-theme token `var(--wi-*)` the
- *  document defines. Anything else (`url(`, `;`, `}`, `expression`, a second declaration) is refused. */
+/** A colour the host lets through: hex, numeric rgb/hsl, `revert-layer` ("Default"), or a learned-theme
+ *  token `var(--wi-*)` the document defines. Anything else (`url(`, `;`, `}`, `expression`, a second declaration) is refused. */
 export function isColour(value: string, themeTokens: ReadonlySet<string> = new Set()): boolean {
   if (!COLOUR.test(value)) return false;
   const tok = /^var\((--wi-[a-z0-9-]+)\)$/i.exec(value);
@@ -44,8 +46,14 @@ const SAFE_WID = /^[A-Za-z0-9_.:-]{1,100}$/;
 /** The host's own anchor inventory, from the version HTML it already holds. `DOMParser` runs no script.
  *  An id the selector could not name exactly, or one two elements share, is left out: an op on it
  *  could change the wrong element, or several (codex). */
+/** Elements whose text is a part of its own: in a label their words are kept apart (EP-P3 — a picked
+ *  section's chip read "How it worksFree rooms…" from the raw `textContent`). Inline parts stay joined. */
+const BLOCK_PARTS = 'address,article,aside,blockquote,br,dd,div,dl,dt,figcaption,figure,footer,h1,h2,h3,h4,h5,h6,header,hr,li,main,nav,ol,p,pre,section,table,td,th,tr,ul';
+
 export function inventoryOf(html: string): Inventory {
   const doc = new DOMParser().parseFromString(html, 'text/html');
+  // Labels only: the parsed copy is the host's own, and no `before` is ever read from it.
+  for (const el of Array.from(doc.querySelectorAll(BLOCK_PARTS))) el.append(doc.createTextNode(' '));
   const wids = new Map<string, { slide: string | null; section: string | null; text: string }>();
   const seen = new Map<string, number>();
   for (const el of Array.from(doc.querySelectorAll('[data-wid]'))) {
@@ -57,7 +65,7 @@ export function inventoryOf(html: string): Inventory {
     if (id === null || !SAFE_WID.test(id) || (seen.get(id) ?? 0) > 1 || wids.has(id)) continue;
     const slide = el.parentElement?.closest('[data-wid^="slide-"]')?.getAttribute('data-wid') ?? null;
     const section = el.parentElement?.closest('section[data-wid], [data-wid^="section-"]')?.getAttribute('data-wid') ?? null;
-    wids.set(id, { slide, section, text: (el.textContent ?? '').trim().slice(0, 200) });
+    wids.set(id, { slide, section, text: (el.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, 200) });
   }
   return { wids };
 }

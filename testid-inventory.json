@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.5.19",
   "counts": {
-    "files": 212,
-    "occurrences": 2347,
-    "static": 2050,
+    "files": 213,
+    "occurrences": 2366,
+    "static": 2067,
     "dynamic": 80,
     "computed": 7
   },
@@ -204,6 +204,66 @@
       "testId": "artifact-card",
       "files": [
         "src/components/ArtifactCard.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-check",
+      "files": [
+        "src/components/session/ChecksPanel.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-check-by",
+      "files": [
+        "src/components/session/ChecksPanel.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-check-finding",
+      "files": [
+        "src/components/session/ChecksPanel.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-check-older",
+      "files": [
+        "src/components/session/ChecksPanel.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-check-point",
+      "files": [
+        "src/components/session/ChecksPanel.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-check-state",
+      "files": [
+        "src/components/session/ChecksPanel.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-checks",
+      "files": [
+        "src/components/session/ChecksPanel.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-checks-note",
+      "files": [
+        "src/components/session/ChecksPanel.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-checks-refresh",
+      "files": [
+        "src/components/session/ChecksPanel.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-checks-summary",
+      "files": [
+        "src/components/session/ChecksPanel.tsx"
       ]
     },
     {
@@ -6064,9 +6124,45 @@
       ]
     },
     {
+      "testId": "page-peek",
+      "files": [
+        "src/plugins/wicked-page/plugin.ts"
+      ]
+    },
+    {
+      "testId": "page-remove",
+      "files": [
+        "src/plugins/wicked-page/plugin.ts"
+      ]
+    },
+    {
+      "testId": "page-section",
+      "files": [
+        "src/plugins/wicked-page/plugin.ts"
+      ]
+    },
+    {
       "testId": "page-selected-box",
       "files": [
         "src/components/session/PageEditor.tsx",
+        "src/plugins/wicked-page/plugin.ts"
+      ]
+    },
+    {
+      "testId": "page-swatch",
+      "files": [
+        "src/plugins/wicked-page/plugin.ts"
+      ]
+    },
+    {
+      "testId": "page-swatches",
+      "files": [
+        "src/plugins/wicked-page/plugin.ts"
+      ]
+    },
+    {
+      "testId": "page-tools",
+      "files": [
         "src/plugins/wicked-page/plugin.ts"
       ]
     },
@@ -6075,6 +6171,12 @@
       "files": [
         "src/components/session/PageEditor.tsx",
         "src/components/session/PluginArtifact.tsx"
+      ]
+    },
+    {
+      "testId": "page-width",
+      "files": [
+        "src/plugins/wicked-page/plugin.ts"
       ]
     },
     {

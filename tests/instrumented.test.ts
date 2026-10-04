@@ -69,6 +69,13 @@ describe('instrumentDocHtml', () => {
     expect(out).toContain('.cut = true');
   });
 
+  it('EP-P3 (R-c): the bridge reports each block\'s section ancestor — the engine\'s section anchors', () => {
+    const out = instrumentDocHtml(PLAIN, BASE);
+    expect(out).toContain('section[data-wid], [data-wid^="section-"]');
+    expect(out).toContain('blocks[wid].section = secWid');
+    expect(out).toContain('/^[A-Za-z0-9_.:-]{1,100}$/.test(secWid)');
+  });
+
   it('the bridge says where a jump landed with its confirmation (S9: the slide strip needs no timer)', () => {
     const out = instrumentDocHtml(PLAIN, BASE);
     expect(out).toContain("type: 'scroll-ack', wid: m.wid, seq: m.seq, scrollX: window.scrollX, scrollY: window.scrollY");

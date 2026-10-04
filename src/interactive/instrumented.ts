@@ -75,6 +75,10 @@ const BRIDGE_SOURCE = `
       var cap = composite ? 400 : 20000;
       blocks[wid] = { text: text.length > cap ? text.slice(0, cap) : text, composite: composite };
       if (text.length > cap) blocks[wid].cut = true;
+      var sec = el.parentElement ? el.parentElement.closest('section[data-wid], [data-wid^="section-"]') : null;
+      var secWid = sec ? sec.getAttribute('data-wid') : null;
+      // Only an id the parent's parser accepts: an odd one would invalidate the whole inventory.
+      if (secWid && /^[A-Za-z0-9_.:-]{1,100}$/.test(secWid)) blocks[wid].section = secWid;
     }
     return { v: 1, type: 'wid-inventory', widMap: widMap, blocks: blocks,
              scrollX: window.scrollX, scrollY: window.scrollY };

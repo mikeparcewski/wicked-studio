@@ -52,6 +52,9 @@ describe('elementChip — the picked element as an about-chip', () => {
 describe('the lines under a touch edit', () => {
   it('names the version and the element, and offers Undo', () => {
     expect(editedLine(2, 'the headline')).toBe('Changed the headline — version 2.');
+    // EP-P3: the line says what the write did.
+    expect(editedLine(3, 'the headline', 'removed')).toBe('Removed the headline — version 3.');
+    expect(editedLine(4, 'the headline', 'restyled')).toBe('Restyled the headline — version 4.');
     expect(editedLine(2, anchorWords('slide-1-heading-1', 'deck'))).toBe('Changed slide 2’s title — version 2.');
   });
   it('says what Undo did, or why it did not', () => {

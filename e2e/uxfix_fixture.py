@@ -291,6 +291,11 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          #                 the repos named here; every other repo answers the 404 a repo
          #                 with no requirements read does. Default None (no repo is served).
          "requirements": None,
+         # EP-P3 (the page editor's acts + the checks panel):
+         #   doc_checks — {docId: [DocCheck, …]}: GET /projects/<pid>/interactive/docs/<doc>/checks
+         #                serves crew's DocChecksResponse (EP-C2) for a listed doc (200 {checks: []}
+         #                for any other); None = the route is absent (an older daemon: no panel).
+         "doc_checks": None,
          # Slice P (DES-FEEDBACK-003 §10.2 fixture additions, switch-gated so
          # no standing rig's board grows rows it never asserted):
          #   chat_runs — 2 chat runs ride GET /runs: one 'chat'-stamped live
@@ -4335,6 +4340,76 @@ def doc_versions(pid: str, doc: str) -> list:
         return list(docs_created.get(pid, {}).get(doc, []))
 
 
+# EP-P3: a page the way interactive renders one — its theme as `--wi-*` custom properties (theme.js
+# themeCss) and its parts in `section-{i}` containers with `slide-{i}-{role}-{n}` anchors
+# (instrument.js) — so the editor's swatches, "whole section" and widths have something real to act on.
+LAUNCH_PAGE = "launch-page"
+
+
+def launch_page_html(version: int) -> str:
+    return (f'<!doctype html><html><head><meta charset="utf-8"><title>{LAUNCH_PAGE} v{version}</title>'
+            "<style>:root{--wi-bg:#f4f1ea;--wi-surface:#fffdf7;--wi-primary:#1f3a5f;--wi-secondary:#2f6f8f;"
+            "--wi-accent:#e4572e;--wi-text:#1b1b1b;--wi-text-secondary:#4a463c;--wi-muted:#8a8471;"
+            "--wi-border:#ddd6c4;--wi-card-bg:#fffdf7}"
+            "body{margin:0;font-family:Georgia,serif;background:var(--wi-bg);color:var(--wi-text)}"
+            "main{max-width:880px;margin:0 auto;padding:28px}section{padding:18px;margin:0 0 14px;"
+            "background:var(--wi-surface);border:1px solid var(--wi-border)}"
+            "h1{font-size:30px;color:var(--wi-primary);margin:0 0 10px}h2{font-size:20px;color:var(--wi-primary);margin:0 0 8px}"
+            "p{font-size:16px;line-height:1.5;color:var(--wi-text-secondary);margin:0 0 8px}"
+            ".cols{display:flex;gap:14px}.cols>p{flex:1}"
+            "@media (max-width:600px){.cols{flex-direction:column}}</style></head><body><main>"
+            '<section data-wid="section-0"><h1 data-wid="slide-0-heading-1">Book a study room in under a minute</h1>'
+            '<p data-wid="slide-0-paragraph-1">From your phone, without calling the front desk.</p></section>'
+            '<section data-wid="section-1"><h2 data-wid="slide-1-heading-1">How it works</h2><div class="cols">'
+            '<p data-wid="slide-1-paragraph-1">Free rooms come first, so nobody scrolls past full ones.</p>'
+            '<p data-wid="slide-1-paragraph-2">A booking is held for five minutes while you confirm.</p></div></section>'
+            '<section data-wid="section-2"><h2 data-wid="slide-2-heading-1">One fixed fee</h2>'
+            '<p data-wid="slide-2-paragraph-1">Support is included, with answers within one working day.</p></section>'
+            "</main></body></html>")
+
+
+def _element_span(html: str, wid: str):
+    """(start, end) of the element carrying data-wid="<wid>": its opening tag through its matching close
+    (same-name nesting counted), or None. The fixture's pages are regular; this is not a parser."""
+    m = re.search(r'<([a-zA-Z][a-zA-Z0-9]*)\b[^>]*\bdata-wid="' + re.escape(wid) + r'"[^>]*>', html)
+    if m is None:
+        return None
+    tag = m.group(1).lower()
+    depth = 1
+    for t in re.finditer(r'<(/?)' + tag + r'\b[^>]*>', html[m.end():], re.I):
+        depth += -1 if t.group(1) else 1
+        if depth == 0:
+            return (m.start(), m.end() + t.end(), m.end())
+    return None
+
+
+def apply_style_edit(html: str, wid: str, style: dict) -> str | None:
+    """regenerate.js applyStyle: merge the declarations into the element's inline style attribute."""
+    span = _element_span(html, wid)
+    if span is None:
+        return None
+    start, _end, open_end = span
+    tag = html[start:open_end]
+    m = re.search(r'\sstyle="([^"]*)"', tag)
+    decls: dict = {}
+    if m:
+        for d in m.group(1).split(";"):
+            if ":" in d:
+                k, v = d.split(":", 1)
+                decls[k.strip()] = v.strip()
+    for k, v in style.items():
+        decls[str(k)] = str(v)
+    attr = "; ".join(f"{k}: {v}" for k, v in decls.items())
+    new_tag = (tag[:m.start()] + f' style="{attr}"' + tag[m.end():]) if m else tag[:-1] + f' style="{attr}">'
+    return html[:start] + new_tag + html[open_end:]
+
+
+def apply_remove(html: str, wid: str) -> str | None:
+    """regenerate.js remove: the element and its subtree go."""
+    span = _element_span(html, wid)
+    return None if span is None else html[:span[0]] + html[span[1]:]
+
+
 def doc_html(doc: str, version: int) -> str:
     """The rendered document at one version — a light deck slide, so the canvas reads
     as a document against the app chrome and the v1→v2 headline change is visible.
@@ -4349,6 +4424,8 @@ def doc_html(doc: str, version: int) -> str:
                 "<p class=\"lead\">Reading your brief and drafting your document. "
                 "This view updates automatically the moment the first draft is ready.</p>"
                 "</section></body></html>")
+    if doc == LAUNCH_PAGE:
+        return launch_page_html(version)
     headline = HEADLINES.get(version, TIGHT_HEADLINE)
     return f"""<!doctype html><html><head><meta charset="utf-8"><title>{doc} v{version}</title>
 <style>body{{margin:0;font-family:Georgia,serif;background:#f4f1ea;color:#1b1b1b;
@@ -5528,6 +5605,21 @@ class W2Handler(SimpleHTTPRequestHandler):
         if m:
             self._json(404, {"error": f"no such route on the bridge: {path}"})
             return True
+        # EP-P3 / crew EP-C2: GET /projects/<pid>/interactive/docs/<doc>/checks — crew's DocChecksResponse.
+        # Absent (404 Not Found, an older daemon) unless `doc_checks` is set.
+        m = re.match(r"^/api/v1/projects/([^/]+)/interactive/docs/([^/]+)/checks$", path)
+        if m:
+            pid, doc = (urllib.parse.unquote(g) for g in m.groups())
+            with state_lock:
+                table = state["doc_checks"]
+            if table is None:
+                self._json(404, {"error": "Not Found"})
+                return True
+            qv = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query).get("version", [None])[0]
+            version = int(qv) if qv is not None and qv.isdigit() else None
+            checks = [c for c in table.get(doc, []) if version is None or int(c.get("version", 0)) <= version]
+            self._json(200, {"document_id": doc, "version": version, "checks": checks})
+            return True
         # The REAL learned-theme readback (interactive#181): 404 with the route's
         # OWN JSON body until the doc's learn has ripened, then the tokens
         # verbatim — exactly the shapes the contract check pins on the bridge.
@@ -5952,6 +6044,22 @@ class W2Handler(SimpleHTTPRequestHandler):
                                 else:
                                     rejected.append({"selector": sel,
                                                      "reason": "selector-not-found"})
+                            elif typ == "style-edit" and isinstance(item.get("style"), dict):
+                                # EP-P3: regenerate.js applyStyle (the grammar check is the engine's;
+                                # the host already refused anything outside the colour grammar).
+                                nxt = apply_style_edit(html, sel, item["style"]) if sel else None
+                                if nxt is None:
+                                    rejected.append({"selector": sel, "reason": "selector-not-found"})
+                                else:
+                                    html = nxt
+                                    applied.append(sel)
+                            elif typ == "remove":
+                                nxt = apply_remove(html, sel) if sel else None
+                                if nxt is None:
+                                    rejected.append({"selector": sel, "reason": "selector-not-found"})
+                                else:
+                                    html = nxt
+                                    applied.append(sel)
                             elif typ == "structural-change":
                                 structural.append({"selector": sel, "type": typ,
                                                    "instruction": str(item.get("instruction") or "")})
