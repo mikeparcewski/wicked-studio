@@ -1,0 +1,99 @@
+{
+ "runId": "c5dcefc5-e987-4000-a6e7-2dd027ad8865",
+ "url": "http://127.0.0.1:5199/",
+ "audience": "A new team lead who has never seen the Request Board",
+ "stage": "done",
+ "script": "# Request Board demo script\n\nFor the presenter and new team leads. Rehearsed on 2026-09-28 against http://127.0.0.1:5199/\n(static single-page app, no backend, no model). All navigation is hash-routing and renders\nsynchronously; page-transition timings are marked **estimate** because they were not timed in\na browser session \u2014 team to validate on the demo machine.\n\n**Changes since the rehearsal.** None yet.\n\n---\n\n## 1. Pitch\n\n(cut for the fixture)\n",
+ "chapters": [
+  {
+   "key": "01-intake",
+   "title": "Incoming requests",
+   "blurb": "The Intake list shows every new request, who raised it, and whether it has been triaged.",
+   "tags": [
+    "Intake",
+    "Triage",
+    "Queue view"
+   ],
+   "resets": [],
+   "recorded": true
+  },
+  {
+   "key": "02-approvals",
+   "title": "Waiting for approval",
+   "blurb": "The Approvals queue shows what is blocked on a human decision, with the Approve button visible but never pressed.",
+   "tags": [
+    "Approvals",
+    "Human gate",
+    "Read-only"
+   ],
+   "resets": [],
+   "recorded": true
+  },
+  {
+   "key": "03-shipped",
+   "title": "Shipped with lead times",
+   "blurb": "The Shipped list records what was delivered and how long it took from approval to ship.",
+   "tags": [
+    "Shipped",
+    "Lead time",
+    "Delivery history"
+   ],
+   "resets": [],
+   "recorded": true
+  }
+ ],
+ "markers": [
+  {
+   "at": "0:00",
+   "sec": 0,
+   "title": "Introduction"
+  },
+  {
+   "at": "0:07",
+   "sec": 7,
+   "title": "Incoming requests"
+  },
+  {
+   "at": "0:42",
+   "sec": 42,
+   "title": "Waiting for approval"
+  },
+  {
+   "at": "1:15",
+   "sec": 75,
+   "title": "Shipped with lead times"
+  }
+ ],
+ "sheets": [
+  {
+   "name": "chapters",
+   "path": "review/chapters.png"
+  },
+  {
+   "name": "joins",
+   "path": "review/joins.png"
+  },
+  {
+   "name": "end",
+   "path": "review/end.png"
+  }
+ ],
+ "video": {
+  "path": "demo-video/demo.mp4",
+  "bytes": 3185047
+ },
+ "recording": {
+  "readOnly": true
+ },
+ "review": {
+  "verdict": "accept",
+  "findings": [],
+  "text": "No findings.\n\n- MP4: H.264, 1920\u00d71080, 30 fps, 3,185,047 bytes, 1:45.067.\n- Four ordered, titled chapters present.\n- Joins at 0:07/0:08, 0:42/0:43, and 1:15/1:16 transition cleanly through the plain background.\n- Closing card remains visible through 1:44.8.\n- Captions match their pictured views and callouts.\n- Synthetic data is labelled in the app, introduction, and closing card.\n- Recording metadata confirms read-only capture.\n\nASSUMPTION[external-transform] library=FFmpeg transform=H.264-frame-decoding-and-contact-sheet-composition confidence=known :: FFmpeg decodes selected MP4 frames and arranges them into timestamped review images without changing the source recording.\nASSUMPTION[external-transform] library=ffprobe transform=MP4-container-metadata-parsing confidence=known :: ffprobe reads the container and stream metadata to report chapters, duration, file size, codec, dimensions, pixel format, and frame rate.\n\n```json\n{\"verdict\":\"accept\",\"findings\":[]}\n```\nVERDICT: PASS\n",
+  "rejected": false
+ },
+ "seats": {
+  "recorder": "claude",
+  "reviewer": "codex"
+ },
+ "syntheticLabelled": true
+}

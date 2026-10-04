@@ -1006,6 +1006,9 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
 .wk-sheet-message { display: flex; flex-direction: column; gap: 6px; }
 .wk-sheet-open { border: 0; background: transparent; color: var(--ink-muted); font-size: var(--text-lg); cursor: pointer; padding: 0 6px; border-radius: var(--radius-sm); line-height: 1; }
 .wk-sheet-open:hover { color: var(--ink-high); background: var(--surface-raised); }
+/* S15d: the run block's own way underneath (steps, changes, evidence) — quiet until hovered. */
+.wk-sheet-open--run { margin-left: 6px; font-size: var(--text-sm); opacity: .7; }
+.wk-session-run:hover .wk-sheet-open--run, .wk-sheet-open--run:focus-visible { opacity: 1; }
 .wk-desk-head-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 .wk-desk-orders { margin-left: auto; min-width: 0; display: flex; align-items: baseline; gap: 8px; }
 .wk-chain-open { border: 0; background: transparent; padding: 0; color: inherit; font: inherit; cursor: pointer; }
@@ -1114,9 +1117,14 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
    failing frame) and the video editor at pane / full (the take, the timeline with the failing moment,
    chapters as seek points, the checks track, the gate verbs, export). Tokens only. */
 .wk-walk { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; min-height: 0; overflow: auto; flex: 1 1 auto; }
-.wk-walk--preview { height: 100%; box-sizing: border-box; }
-.wk-walk-cols { display: flex; gap: 10px; align-items: flex-start; min-width: 0; }
-.wk-walk-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.wk-walk--preview { height: 100%; box-sizing: border-box; overflow: hidden; }
+/* S15d: inline, the take sits left (playable in place — it, the chapters and the actions ride above the
+   artifact's catch; everything else is the catch, which opens the editor) and the words right. */
+.wk-walk--preview .wk-walk-grid { flex-direction: row; gap: 12px; align-items: flex-start; min-height: 0; }
+.wk-walk--preview .wk-walk-stage { flex: 0 0 auto; width: min(38%, 280px); }
+.wk-walk--preview .wk-walk-side { flex: 1 1 auto; gap: 4px; }
+.wk-walk--preview .wk-walk-video { max-height: 150px; }
+.wk-walk--preview .wk-walk-video, .wk-walk--preview .wk-walk-chapter-btn, .wk-walk--preview .wk-walk-actions, .wk-walk--preview .wk-walk-time { position: relative; z-index: 1; }
 .wk-walk-frame { flex: 0 0 auto; max-height: 150px; max-width: 42%; border: 1px solid var(--status-fail); border-radius: var(--radius-sm); object-fit: contain; background: var(--surface-card); }
 .wk-walk-state { margin: 0; font-size: var(--text-sm); font-weight: var(--weight-semi); color: var(--ink-high); }
 .wk-walk-state--live .wk-walk-mark { color: var(--status-run); }

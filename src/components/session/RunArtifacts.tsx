@@ -79,13 +79,13 @@ export function RunArtifacts({ view, composerKey, chain }: { view: SessionView; 
       {walkStep !== null && (
         <ArtifactMorph
           artifactKey={artifactKey('run', 'walkthrough', runId)} title="Walkthrough" projectId={projectId ?? ''} docId="" composerKey={composerKey}
-          slot={{ kind: 'walkthrough', body: (size, morph) => <WalkthroughEditor runId={runId} kind="walkthrough" step={walkStep} size={size} morph={morph} units={view.units} runStatus={view.session.status} /> }}
+          slot={{ kind: 'walkthrough', body: (size, morph) => <WalkthroughEditor runId={runId} kind="walkthrough" step={walkStep} size={size} morph={morph} units={view.units} runStatus={view.session.status} composerKey={composerKey} /> }}
         />
       )}
       {demo && (
         <ArtifactMorph
           artifactKey={artifactKey('run', 'demo-video', runId)} title="Demo video" projectId={projectId ?? ''} docId="" composerKey={composerKey}
-          slot={{ kind: 'demo-video', body: (size, morph) => <WalkthroughEditor runId={runId} kind="demo-video" step={null} size={size} morph={morph} units={view.units} runStatus={view.session.status} /> }}
+          slot={{ kind: 'demo-video', body: (size, morph) => <WalkthroughEditor runId={runId} kind="demo-video" step={null} size={size} morph={morph} units={view.units} runStatus={view.session.status} composerKey={composerKey} /> }}
         />
       )}
       {projectId !== null && mine.map((d) => (

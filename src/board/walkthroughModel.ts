@@ -60,6 +60,9 @@ export interface Recording {
   /** A demo's GIF / poster can be made now (`POST /demo/export` answers only at the review gate or
    *  once the run has ended); always false for a walkthrough, whose media is what the take wrote. */
   exportable: boolean;
+  /** S15d: the presenter's script can be rewritten now — only while the demo's plan gate is open
+   *  (`PUT /demo/script` answers 409 before and after: the recorder has read it). Never for a walkthrough. */
+  scriptEditable: boolean;
 }
 
 /** "0:41" */
@@ -111,7 +114,7 @@ export function recordingOf(view: WalkthroughView): Recording {
   });
   return {
     kind: 'walkthrough', runId: view.runId, step: view.stepId, planStep: view.planStepId, state: view.state, cause: view.cause, seat: view.seat,
-    sealed: view.sealed, video: view.video.mp4, poster: view.video.poster, markers, chapters, script: null, exportable: false,
+    sealed: view.sealed, video: view.video.mp4, poster: view.video.poster, markers, chapters, script: null, exportable: false, scriptEditable: false,
   };
 }
 
@@ -135,6 +138,7 @@ export function recordingOfDemo(view: DemoView): Recording {
     seat: { evaluator: view.seats.reviewer, builders: view.seats.recorder === null ? [] : [view.seats.recorder] },
     sealed: false, video: view.video?.path ?? null, poster: null, markers, chapters, script: view.script,
     exportable: view.stage === 'review_gate' || view.stage === 'done' || view.stage === 'failed',
+    scriptEditable: view.stage === 'plan_gate',
   };
 }
 

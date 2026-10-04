@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { demoFileUrl, getDemo } from '../../api/demo.js';
+import { demoFileUrl, getDemo, putDemoScript } from '../../api/demo.js';
 import { isWalkthroughUnsupported, walkthroughApi, walkthroughFileUrl, type DemoExportFormat, type WalkthroughView } from '../../api/walkthrough.js';
 import type { ArtifactSize } from '../../board/artifactMorph.js';
 import {
@@ -10,17 +10,25 @@ import { commitGateDecision, refreshGate } from '../../board/gateActions.js';
 import { useGateStore } from '../../store/gates.js';
 import { publishRecording, withdrawRecording } from '../../store/recordings.js';
 import { consumeWalkthroughSeek, useWalkthroughSeek } from '../../store/walkthroughSeek.js';
+import { addAboutChip } from '../../store/composerChips.js';
 
 /**
  * THE WALKTHROUGH ARTIFACT (DES-WALKTHROUGH-PROOF-001 §3 scenes 18–23 and 41, slice WT-U1): the
  * body of {@link ArtifactMorph}'s kind slot for the `walkthrough` and `demo-video` kinds.
  *
- *  - inline: the state line ("● Recording · chapter 4 of 6", "✗ Failed at 0:41"), who checks and who
- *    builds, the chapter marks with their verdicts, what happened underneath in red, the failing
- *    frame, and the actions the open escalation allows — nothing load-bearing below the fold.
+ *  - inline: the take itself, playable in place (S15d, Amendment 5 item 2 — the preview IS the video;
+ *    a failed walkthrough shows its failing frame instead), beside the state line ("● Recording ·
+ *    chapter 4 of 6", "✗ Failed at 0:41", "✓ Ready to watch · 3 chapters · 1:45"), who checks and who
+ *    builds, the chapter marks (each a seek point), what happened underneath in red, and the actions
+ *    the open escalation allows — nothing load-bearing below the fold.
  *  - pane / full: the video editor — the stitched take with the playhead on the failing moment, the
- *    chapters as seek points, the narration, the checks track (each check at its moment, with its
- *    evidence under ⋯), the red mark where it failed, the same actions, and Export.
+ *    chapters as seek points, the narration (a demo's script, editable while its plan gate is open —
+ *    crew accepts the PUT only then), the checks track (each check at its moment, with its evidence
+ *    under ⋯), the red mark where it failed, the same actions, and Export.
+ *
+ * ONE tree at every size: the `<video>` keeps its place in it, so the morph never remounts the player
+ * (what is playing inline keeps playing in the pane). Picking a chapter seeks AND makes it the subject
+ * of the next message (DESIGN-interaction rule 2: an "about: chapter 2 · …" chip on the composer).
  *
  * The actions are the run's own gate: "Ask helpers to fix" is a `request_changes` with what the
  * walkthrough caught; "Edit the check" is the storyline PUT then an approve. Both are offered only
@@ -81,7 +89,7 @@ function fileUrl(rec: Recording, path: string): string {
   return rec.kind === 'demo-video' ? demoFileUrl(rec.runId, path) : walkthroughFileUrl(rec.runId, rec.step, path);
 }
 
-export function WalkthroughEditor({ runId, kind, step, size, morph, units, runStatus }: {
+export function WalkthroughEditor({ runId, kind, step, size, morph, units, runStatus, composerKey = null }: {
   runId: string;
   kind: RecordingKind;
   /** The walkthrough step (`walkthrough_review` id); `null` = the newest pair. */
@@ -92,15 +100,19 @@ export function WalkthroughEditor({ runId, kind, step, size, morph, units, runSt
   units: readonly UnitLike[];
   /** The run's status: a change (a gate answered, the run moving again) re-reads the recording. */
   runStatus: string;
+  /** The session composer a picked chapter becomes the subject of (rule 2); `null` = no chip. */
+  composerKey?: string | null;
 }): React.ReactElement {
   const { load, reload } = useRecording(runId, kind, step, runStatus);
   if (load.kind === 'loading') return <p data-testid="walkthrough-loading" className="wk-walk-quiet wk-walk-pad">Reading the recording…</p>;
   if (load.kind === 'absent') return <p data-testid="walkthrough-absent" className="wk-walk-quiet wk-walk-pad">No recording for this run on this daemon.</p>;
   if (load.kind === 'failed') return <p data-testid="walkthrough-error" role="alert" className="wk-walk-quiet wk-walk-bad wk-walk-pad">Could not read the recording: {load.message}</p>;
-  return <Body rec={load.rec} size={size} morph={morph} units={units} reload={reload} />;
+  return <Body rec={load.rec} size={size} morph={morph} units={units} reload={reload} composerKey={composerKey} />;
 }
 
-function ChapterMarks({ rec, onSeek }: { rec: Recording; onSeek?: (sec: number) => void }): React.ReactElement | null {
+type ChapterMark = ReturnType<typeof chapterMarks>[number];
+
+function ChapterMarks({ rec, onSeek }: { rec: Recording; onSeek?: (m: ChapterMark) => void }): React.ReactElement | null {
   const marks = chapterMarks(rec);
   if (marks.length === 0) return null;
   return (
@@ -118,7 +130,7 @@ function ChapterMarks({ rec, onSeek }: { rec: Recording; onSeek?: (sec: number) 
         return (
           <li key={m.key} data-testid="walkthrough-chapter" data-key={m.key} data-verdict={m.verdict ?? ''} data-current={m.current ? 'true' : 'false'} className="wk-walk-chapter">
             {onSeek !== undefined && m.sec !== null
-              ? <button type="button" data-testid="walkthrough-marker" data-sec={String(m.sec)} onClick={() => onSeek(m.sec as number)} className="wk-walk-chapter-btn">{inner}</button>
+              ? <button type="button" data-testid="walkthrough-marker" data-sec={String(m.sec)} onClick={() => onSeek(m)} className="wk-walk-chapter-btn">{inner}</button>
               : <span className="wk-walk-chapter-btn">{inner}</span>}
           </li>
         );
@@ -129,12 +141,13 @@ function ChapterMarks({ rec, onSeek }: { rec: Recording; onSeek?: (sec: number) 
 
 /** One component at every size, so what the operator started (an edit, a made export, a note)
  *  survives the morph — only the layout changes. */
-function Body({ rec, size, morph, units, reload }: {
+function Body({ rec, size, morph, units, reload, composerKey }: {
   rec: Recording;
   size: ArtifactSize;
   morph: (to: ArtifactSize) => void;
   units: readonly UnitLike[];
   reload: () => void;
+  composerKey: string | null;
 }): React.ReactElement {
   const video = useRef<HTMLVideoElement | null>(null);
   const wantPlay = useRef(false);
@@ -210,8 +223,22 @@ function Body({ rec, size, morph, units, reload }: {
     const el = video.current;
     if (el === null) return;
     el.currentTime = sec;
-    if (play) void el.play().catch(() => undefined);
+    if (play) void safePlay(el);
   }, []);
+  // Rule 2: a picked chapter is what the next message is about — one chip per chapter, relabelled
+  // in place when the same chapter is picked again.
+  const pickChapter = useCallback((m: ChapterMark): void => {
+    if (m.sec !== null) seek(m.sec);
+    if (composerKey !== null) addAboutChip(composerKey, { kind: 'about', key: `chapter:${rec.runId}:${m.key}`, label: `chapter ${m.index} · ${m.title}` });
+  }, [seek, composerKey, rec.runId]);
+  // S15d: the presenter's script, rewritten at the plan gate (crew refuses the PUT at any other stage).
+  const [scriptDraft, setScriptDraft] = useState<{ take: string; text: string } | null>(null);
+  const scriptText = scriptDraft !== null && scriptDraft.take === take ? scriptDraft.text : (rec.script ?? '');
+  const saveScript = (): Promise<void> => act('Script saved — the recorder reads it when you approve the plan.', async () => {
+    await putDemoScript(rec.runId, scriptText);
+    if (live.current) setScriptDraft(null);
+    reload();
+  });
 
   // The playhead opens on the failing moment (scene 19 → 20), each time the player appears; a
   // Watch pressed at the inline size plays from there once the player is up.
@@ -220,9 +247,12 @@ function Body({ rec, size, morph, units, reload }: {
     const el = video.current;
     if (!open || el === null) return undefined;
     const place = (): void => {
-      el.currentTime = pendingSeek.current ?? startAt;
+      // A take already playing inline (S15d) keeps its place through the morph; a player that is at
+      // its start (just mounted, or never played) opens on the failing moment.
+      const target = pendingSeek.current ?? (el.currentTime > 0.5 ? null : startAt);
+      if (target !== null) el.currentTime = target;
       pendingSeek.current = null;
-      if (wantPlay.current) { wantPlay.current = false; void el.play().catch(() => undefined); }
+      if (wantPlay.current) { wantPlay.current = false; void safePlay(el); }
     };
     if (el.readyState >= 1) { place(); return undefined; }
     el.addEventListener('loadedmetadata', place, { once: true });
@@ -327,42 +357,46 @@ function Body({ rec, size, morph, units, reload }: {
   const noteLine = note !== null && (
     <p data-testid="walkthrough-note" data-tone={note.tone} role={note.tone === 'bad' ? 'alert' : 'status'} className={`wk-walk-quiet${note.tone === 'bad' ? ' wk-walk-bad' : ''}`}>{note.text}</p>
   );
-
-  if (!open) {
-    return (
-      <div data-testid="walkthrough" data-kind={rec.kind} data-state={rec.state} data-run-id={rec.runId} data-size={size} className="wk-walk wk-walk--preview">
-        <div className="wk-walk-cols">
-          <div className="wk-walk-main">
-            <p data-testid="walkthrough-state" data-tone={line.tone} className={`wk-walk-state wk-walk-state--${line.tone}`}>
-              <span aria-hidden className="wk-walk-mark">{line.mark}</span> {line.text}
-            </p>
-            {seats !== null && <p data-testid="walkthrough-seats" className="wk-walk-quiet">{seats}</p>}
-            <ChapterMarks rec={rec} />
-            {under.length > 0 && (
-              <ul data-testid="walkthrough-underneath" className="wk-walk-under">
-                {under.map((u, i) => <li key={i} className="wk-walk-bad">{u}</li>)}
-              </ul>
-            )}
-            {actions}
-            {noteLine}
-          </div>
-          {failed?.failedFrame != null && (
-            <img data-testid="walkthrough-failed-frame" src={fileUrl(rec, failed.failedFrame)} alt={`The failing frame of chapter ${failed.index}`} className="wk-walk-frame" />
-          )}
-        </div>
-      </div>
-    );
-  }
-
+  // The take is the preview (rule 1). A failed walkthrough's preview is its failing frame instead —
+  // the moment that matters; the pane opens the player on it.
+  const showVideo = src !== null && (open || rec.kind === 'demo-video' || failed === null);
+  const lineText = rec.state === 'passed' && duration !== null && duration > 0 ? `${line.text} · ${fmtTime(Math.round(duration))}` : line.text;
   const mark = (sec: number | null): number | null => (sec === null || duration === null || duration <= 0 ? null : Math.min(100, Math.max(0, (sec / duration) * 100)));
   const failMark = failed === null ? null : mark(failed.failedAbsSec);
+  const chapters = showVideo ? <ChapterMarks rec={rec} onSeek={pickChapter} /> : <ChapterMarks rec={rec} />;
+  const narration = open && (rec.script !== null
+    ? rec.kind === 'demo-video' && rec.scriptEditable
+      ? (
+        <div data-testid="demo-script-box" className="wk-walk-edit">
+          <p className="wk-walk-quiet">The presenter’s script. Change it here before anything records; the recorder reads it when you approve the plan.</p>
+          <textarea data-testid="demo-script" value={scriptText} onChange={(e) => setScriptDraft({ take, text: e.target.value })} rows={6} className="wk-walk-storyline" aria-label="The presenter’s script" />
+          <div className="wk-prop-btns">
+            <button type="button" data-testid="demo-script-save" disabled={busy || scriptText.trim() === '' || scriptText === (rec.script ?? '')} onClick={() => void saveScript()} className="wk-prop-btn wk-prop-btn--primary">Save the script</button>
+          </div>
+        </div>
+      )
+      : (
+        <>
+          <details data-testid="walkthrough-narration" className="wk-walk-narration"><summary>Narration</summary><pre className="wk-walk-pre">{rec.script}</pre></details>
+          {rec.kind === 'demo-video' && <p data-testid="demo-script-fixed" className="wk-walk-quiet">Fixed when the demo recorded — pick a chapter and ask in the composer for another take.</p>}
+        </>
+      )
+    : rec.chapters.some((c) => c.blurb !== '') && (
+      <details data-testid="walkthrough-narration" className="wk-walk-narration" open={size === 'full'}>
+        <summary>Narration</summary>
+        <ol className="wk-walk-narration-list">
+          {rec.chapters.map((c) => (c.blurb === '' ? null : <li key={c.key}><b>{c.title}</b> — {c.blurb}</li>))}
+        </ol>
+      </details>
+    ));
+
   return (
-    <div data-testid="walkthrough" data-kind={rec.kind} data-state={rec.state} data-run-id={rec.runId} data-size={size} className={`wk-walk wk-walk--${size}`}>
+    <div data-testid="walkthrough" data-kind={rec.kind} data-state={rec.state} data-run-id={rec.runId} data-size={size} className={`wk-walk wk-walk--${size}${open ? '' : ' wk-walk--preview'}`}>
       <div className="wk-walk-head">
-        <p data-testid="walkthrough-state" data-tone={line.tone} className={`wk-walk-state wk-walk-state--${line.tone}`}><span aria-hidden className="wk-walk-mark">{line.mark}</span> {line.text}</p>
+        <p data-testid="walkthrough-state" data-tone={line.tone} className={`wk-walk-state wk-walk-state--${line.tone}`}><span aria-hidden className="wk-walk-mark">{line.mark}</span> {lineText}</p>
         {seats !== null && <p data-testid="walkthrough-seats" className="wk-walk-quiet">{seats}</p>}
-        {rec.kind === 'walkthrough' && rec.video !== null && <p data-testid="walkthrough-sealed" data-sealed={rec.sealed ? 'true' : 'false'} className="wk-walk-quiet">{rec.sealed ? 'Sealed: the take matches the files on disk.' : 'Not sealed.'}</p>}
-        {options.length > 0 && (
+        {open && rec.kind === 'walkthrough' && rec.video !== null && <p data-testid="walkthrough-sealed" data-sealed={rec.sealed ? 'true' : 'false'} className="wk-walk-quiet">{rec.sealed ? 'Sealed: the take matches the files on disk.' : 'Not sealed.'}</p>}
+        {open && options.length > 0 && (
           <span className="wk-walk-export">
             <button type="button" data-testid="walkthrough-export" aria-expanded={exportOpen} aria-controls="wk-walk-export-list" onClick={() => setExportOpen((o) => !o)} className="wk-prop-btn wk-prop-btn--ghost">Export ▾</button>
             {exportOpen && (
@@ -385,81 +419,87 @@ function Body({ rec, size, morph, units, reload }: {
         )}
       </div>
       <div className="wk-walk-grid">
-      <div className="wk-walk-stage">
-        {src !== null ? (
-          <video
-            key={take}
-            ref={video}
-            data-testid="walkthrough-video"
-            data-playhead={String(startAt)}
-            src={src}
-            poster={rec.poster !== null ? fileUrl(rec, rec.poster) : undefined}
-            controls
-            preload="metadata"
-            className="wk-walk-video"
-            onLoadedMetadata={(e) => setDuration(Number.isFinite(e.currentTarget.duration) ? e.currentTarget.duration : null)}
-          />
-        ) : failed?.failedFrame != null ? (
-          <img data-testid="walkthrough-failed-frame" src={fileUrl(rec, failed.failedFrame)} alt={`The failing frame of chapter ${failed.index}`} className="wk-walk-video" />
-        ) : (
-          <p data-testid="walkthrough-no-video" className="wk-walk-quiet">No take to play yet.</p>
-        )}
-        {/* The timeline: a mark per chapter, a red mark at the failing moment. */}
-        {duration !== null && (
-          <div data-testid="walkthrough-timeline" className="wk-walk-timeline" aria-hidden>
-            {chapterMarks(rec).map((m) => { const p = mark(m.sec); return p === null ? null : <span key={m.key} className="wk-walk-tick" style={{ left: `${p}%` }} title={m.title} />; })}
-            {failed !== null && failMark !== null && <span data-testid="walkthrough-fail-mark" className="wk-walk-tick wk-walk-tick--fail" style={{ left: `${failMark}%` }} title={`Failed at ${fmtTime(failed.failedAbsSec ?? 0)}`} />}
-          </div>
-        )}
-        <ChapterMarks rec={rec} onSeek={(sec) => seek(sec)} />
-      </div>
-      {/* Beside the take at full screen, under it in the pane: what to do, then every check — above the fold. */}
-      <div className="wk-walk-side">
-      {actions}
-      {editing && verbs.includes('edit') && (
-        <div data-testid="walkthrough-edit" className="wk-walk-edit">
-          <p className="wk-walk-quiet">Paste the storyline with your change to the check (the author’s <code>storyline.mjs</code>, whole). Saving re-checks it and the walkthrough records again.</p>
-          <textarea data-testid="walkthrough-storyline" value={storyline} onChange={(e) => setDraft({ take, text: e.target.value })} rows={4} className="wk-walk-storyline" aria-label="The storyline" />
-          <div className="wk-prop-btns">
-            <button type="button" data-testid="walkthrough-storyline-save" disabled={busy || storyline.trim() === ''} onClick={() => void saveStoryline()} className="wk-prop-btn wk-prop-btn--primary">Save and record again</button>
-            <button type="button" data-testid="walkthrough-storyline-cancel" onClick={() => setDraft(null)} className="wk-prop-btn wk-prop-btn--ghost">Cancel</button>
-          </div>
+        <div className="wk-walk-stage">
+          {showVideo ? (
+            <video
+              key={take}
+              ref={video}
+              data-testid="walkthrough-video"
+              data-playhead={String(startAt)}
+              src={src ?? undefined}
+              poster={rec.poster !== null ? fileUrl(rec, rec.poster) : undefined}
+              controls
+              preload="metadata"
+              playsInline
+              className="wk-walk-video"
+              onLoadedMetadata={(e) => setDuration(Number.isFinite(e.currentTarget.duration) ? e.currentTarget.duration : null)}
+            />
+          ) : failed?.failedFrame != null ? (
+            <img data-testid="walkthrough-failed-frame" src={fileUrl(rec, failed.failedFrame)} alt={`The failing frame of chapter ${failed.index}`} className={open ? 'wk-walk-video' : 'wk-walk-frame'} />
+          ) : open ? (
+            <p data-testid="walkthrough-no-video" className="wk-walk-quiet">No take to play yet.</p>
+          ) : null}
+          {/* The timeline: a mark per chapter, a red mark at the failing moment. */}
+          {open && duration !== null && (
+            <div data-testid="walkthrough-timeline" className="wk-walk-timeline" aria-hidden>
+              {chapterMarks(rec).map((m) => { const p = mark(m.sec); return p === null ? null : <span key={m.key} className="wk-walk-tick" style={{ left: `${p}%` }} title={m.title} />; })}
+              {failed !== null && failMark !== null && <span data-testid="walkthrough-fail-mark" className="wk-walk-tick wk-walk-tick--fail" style={{ left: `${failMark}%` }} title={`Failed at ${fmtTime(failed.failedAbsSec ?? 0)}`} />}
+            </div>
+          )}
+          {open && chapters}
         </div>
-      )}
-      {noteLine}
-      {track.length > 0 && (
-        <ol data-testid="walkthrough-checks" className="wk-walk-checks" aria-label="Checks">
-          {track.map((k) => (
-            <li key={`${k.chapter.key}/${k.id}`} data-testid="walkthrough-check" data-kind={k.kind} data-passed={k.passed === null ? '' : String(k.passed)} className={`wk-walk-check${k.passed === false ? ' wk-walk-check--fail' : ''}`}>
-              <span aria-hidden className={`wk-walk-chip${k.passed === true ? ' wk-walk-chip--pass' : k.passed === false ? ' wk-walk-chip--fail' : ''}`}>{k.passed === true ? '✓' : k.passed === false ? '✗' : '·'}</span>
-              <span className="wk-walk-check-text">{k.sentence}</span>
-              <span className="wk-walk-quiet">{k.kind.replace(/_/g, ' ')}</span>
-              {k.atAbsSec !== null && <button type="button" data-testid="walkthrough-check-time" data-sec={String(k.atAbsSec)} aria-label={`Play from ${fmtTime(k.atAbsSec)}`} onClick={() => seek(k.atAbsSec as number)} className="wk-walk-time">{fmtTime(k.atAbsSec)} ▸</button>}
-              {k.evidence.length > 0 && (
-                <button type="button" data-testid="walkthrough-evidence-toggle" aria-expanded={raw === `${k.chapter.key}/${k.id}`} aria-label={`Evidence for: ${k.sentence}`} onClick={() => setRaw((r) => (r === `${k.chapter.key}/${k.id}` ? null : `${k.chapter.key}/${k.id}`))} className="wk-walk-time">⋯</button>
-              )}
-              {k.detail !== null && k.detail !== '' && <span data-testid="walkthrough-check-detail" className="wk-walk-bad wk-walk-detail">{k.detail}</span>}
-              {raw === `${k.chapter.key}/${k.id}` && (
-                <ul data-testid="walkthrough-evidence" className="wk-walk-evidence">
-                  {k.evidence.map((p) => <li key={p}><a href={fileUrl(rec, p)} target="_blank" rel="noreferrer" data-testid="walkthrough-evidence-file">{p}</a></li>)}
-                  {k.vaultEntry !== null && <li className="wk-walk-quiet">vault {k.vaultEntry}</li>}
-                </ul>
-              )}
-            </li>
-          ))}
-        </ol>
-      )}
-      {rec.script !== null && <details data-testid="walkthrough-narration" className="wk-walk-narration"><summary>Narration</summary><pre className="wk-walk-pre">{rec.script}</pre></details>}
-      {rec.script === null && rec.chapters.some((c) => c.blurb !== '') && (
-        <details data-testid="walkthrough-narration" className="wk-walk-narration" open={size === 'full'}>
-          <summary>Narration</summary>
-          <ol className="wk-walk-narration-list">
-            {rec.chapters.map((c) => (c.blurb === '' ? null : <li key={c.key}><b>{c.title}</b> — {c.blurb}</li>))}
-          </ol>
-        </details>
-      )}
-      </div>
+        {/* Beside the take inline and at full screen, under it in the pane: what to do, then every check — above the fold. */}
+        <div className="wk-walk-side">
+          {!open && chapters}
+          {/* Inline, the red lines say what happened underneath; open, the checks track carries them. */}
+          {!open && under.length > 0 && (
+            <ul data-testid="walkthrough-underneath" className="wk-walk-under">
+              {under.map((u, i) => <li key={i} className="wk-walk-bad">{u}</li>)}
+            </ul>
+          )}
+          {actions}
+          {open && editing && verbs.includes('edit') && (
+            <div data-testid="walkthrough-edit" className="wk-walk-edit">
+              <p className="wk-walk-quiet">Paste the storyline with your change to the check (the author’s <code>storyline.mjs</code>, whole). Saving re-checks it and the walkthrough records again.</p>
+              <textarea data-testid="walkthrough-storyline" value={storyline} onChange={(e) => setDraft({ take, text: e.target.value })} rows={4} className="wk-walk-storyline" aria-label="The storyline" />
+              <div className="wk-prop-btns">
+                <button type="button" data-testid="walkthrough-storyline-save" disabled={busy || storyline.trim() === ''} onClick={() => void saveStoryline()} className="wk-prop-btn wk-prop-btn--primary">Save and record again</button>
+                <button type="button" data-testid="walkthrough-storyline-cancel" onClick={() => setDraft(null)} className="wk-prop-btn wk-prop-btn--ghost">Cancel</button>
+              </div>
+            </div>
+          )}
+          {noteLine}
+          {open && track.length > 0 && (
+            <ol data-testid="walkthrough-checks" className="wk-walk-checks" aria-label="Checks">
+              {track.map((k) => (
+                <li key={`${k.chapter.key}/${k.id}`} data-testid="walkthrough-check" data-kind={k.kind} data-passed={k.passed === null ? '' : String(k.passed)} className={`wk-walk-check${k.passed === false ? ' wk-walk-check--fail' : ''}`}>
+                  <span aria-hidden className={`wk-walk-chip${k.passed === true ? ' wk-walk-chip--pass' : k.passed === false ? ' wk-walk-chip--fail' : ''}`}>{k.passed === true ? '✓' : k.passed === false ? '✗' : '·'}</span>
+                  <span className="wk-walk-check-text">{k.sentence}</span>
+                  <span className="wk-walk-quiet">{k.kind.replace(/_/g, ' ')}</span>
+                  {k.atAbsSec !== null && <button type="button" data-testid="walkthrough-check-time" data-sec={String(k.atAbsSec)} aria-label={`Play from ${fmtTime(k.atAbsSec)}`} onClick={() => seek(k.atAbsSec as number)} className="wk-walk-time">{fmtTime(k.atAbsSec)} ▸</button>}
+                  {k.evidence.length > 0 && (
+                    <button type="button" data-testid="walkthrough-evidence-toggle" aria-expanded={raw === `${k.chapter.key}/${k.id}`} aria-label={`Evidence for: ${k.sentence}`} onClick={() => setRaw((r) => (r === `${k.chapter.key}/${k.id}` ? null : `${k.chapter.key}/${k.id}`))} className="wk-walk-time">⋯</button>
+                  )}
+                  {k.detail !== null && k.detail !== '' && <span data-testid="walkthrough-check-detail" className="wk-walk-bad wk-walk-detail">{k.detail}</span>}
+                  {raw === `${k.chapter.key}/${k.id}` && (
+                    <ul data-testid="walkthrough-evidence" className="wk-walk-evidence">
+                      {k.evidence.map((p) => <li key={p}><a href={fileUrl(rec, p)} target="_blank" rel="noreferrer" data-testid="walkthrough-evidence-file">{p}</a></li>)}
+                      {k.vaultEntry !== null && <li className="wk-walk-quiet">vault {k.vaultEntry}</li>}
+                    </ul>
+                  )}
+                </li>
+              ))}
+            </ol>
+          )}
+          {narration}
+        </div>
       </div>
     </div>
   );
+}
+
+/** `play()` returns a promise in browsers (rejected when autoplay is blocked) and nothing in jsdom. */
+function safePlay(el: HTMLVideoElement): void {
+  const p = el.play() as unknown;
+  if (p instanceof Promise) p.catch(() => undefined);
 }

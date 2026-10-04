@@ -223,7 +223,6 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
     if (el !== null) el.scrollTop = top ?? 0;
   }, [sessionId, ready]);
 
-  const go = (path: string) => (e: React.MouseEvent): void => { e.preventDefault(); navigate(path); };
   // Where a source's passage can be read from: the session's runs with a worktree, newest first.
   const readers = useMemo(() => [...mine].reverse().map((v) => ({
     id: v.session.id, workdir: typeof v.session.workdir === 'string' ? v.session.workdir : null,
@@ -299,7 +298,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
                 {e.who === 'you' && ref.kind === 'chat' && e.turnId !== null && <TurnDecisions chatId={ref.chatId} turnId={e.turnId} navigate={navigate} />}
               </div>
             )
-            : <RunBlock key={e.key} view={e.view} badge={badges[e.view.session.id] ?? 0} go={go} sessionId={sessionId} />))}
+            : <RunBlock key={e.key} view={e.view} badge={badges[e.view.session.id] ?? 0} sessionId={sessionId} />))}
         </div>
       </div>
 
@@ -328,10 +327,9 @@ function TurnDecisions({ chatId, turnId, navigate }: { chatId: string; turnId: s
   return <DecisionLine decisions={decisions} navigate={navigate} />;
 }
 
-function RunBlock({ view, badge, go, sessionId }: {
+function RunBlock({ view, badge, sessionId }: {
   view: RunView;
   badge: number;
-  go: (path: string) => (e: React.MouseEvent) => void;
   sessionId: string;
 }): React.ReactElement {
   const { chain: planChain, teamError, retry } = useRunChain(view);
@@ -339,7 +337,6 @@ function RunBlock({ view, badge, go, sessionId }: {
   const state = sessionState(view.session.status);
   const gate = useGateStore((s) => s.gates[id]);
   const action = useGateActionStore((s) => s.byGate[id] ?? IDLE_GATE_ACTION);
-  const page = `/runs/${encodeURIComponent(id)}`;
   // WT-U2: "checked" comes only from the acceptance read (crew's per-step check state); the chips'
   // moments from the walkthrough the artifact below reads; the deliver card's line is crew's summary.
   const acceptance = useRunAcceptance(view, planChain, gate);
@@ -353,6 +350,10 @@ function RunBlock({ view, badge, go, sessionId }: {
         <span aria-hidden className={`wk-desk-dot wk-desk-dot--${state}`} />
         <span className="wk-session-run-title">{humanTitle(view.session.problem || id)}</span>
         <span className="wk-session-run-state">{badge > 0 ? 'Needs you' : STATE_WORD[state]}</span>
+        {/* S15d (Amendment 5 item 1): the run stays in the thread — its depth (every step and what it did,
+            the changes, the evidence) is the look-underneath sheet of THIS run (its own `run:` session,
+            not the chat's: a chat's sheet would show its newest run), never a page of its own. */}
+        <button type="button" data-testid="session-run-look" aria-label="Look underneath this run: its steps, changes and evidence" title="Steps, changes, evidence" onClick={() => openSheet({ kind: 'session', sessionId: `run:${id}` }, 'steps')} className="wk-sheet-open wk-sheet-open--run">⋯</button>
       </p>
       {/* S6b: the run's ONE status sentence, then its proposal (the plan, the hand-over). */}
       <p data-testid="session-status-sentence" role="status" className="wk-session-status-sentence">{statusSentence(view, chain, gate, action)}</p>
@@ -362,7 +363,6 @@ function RunBlock({ view, badge, go, sessionId }: {
       {/* S8: the page the run is producing — a live preview that morphs inline → pane → full. */}
       <RunArtifacts view={view} composerKey={sessionId} chain={chain} />
       <RunHelpers view={view} />
-      <a href={page} onClick={go(page)} data-testid="session-run-open" className="wk-session-link">Open the run page →</a>
     </section>
   );
 }
