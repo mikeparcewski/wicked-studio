@@ -380,6 +380,7 @@ def main(p) -> None:  # noqa: ANN001, C901
     # The browser, too, speaks only to the daemon at STUDIO_URL: a request to any other origin (a redirect,
     # a link, an asset) is aborted and named — the proof never touches the rig or another host.
     blocked: list[str] = []
+    redirects: list[str] = []  # in-origin hops the script followed on the browser's behalf (recorded)
 
     def off_origin(url: str) -> bool:
         return urllib.parse.urlparse(url).scheme not in ("data", "blob", "about") and origin_of(url) != DAEMON_ORIGIN
@@ -390,18 +391,22 @@ def main(p) -> None:  # noqa: ANN001, C901
             route.abort()
             return
         try:
-            # Fetched by the script, redirects NOT followed. A 3xx's Location is judged HERE, before the browser
-            # ever sees it: off-origin → aborted and recorded, never contacted; in-origin → handed back as-is,
-            # and the hop arrives as a new request through this same gate. (`continue_` would let the browser
-            # follow the hop unrouted.)
+            # Fetched by the script with redirects NOT followed; the browser is handed only a NON-3xx response, so
+            # it never follows a redirect itself (routed or not). Each hop's Location is judged HERE: off-origin
+            # or missing → aborted and recorded, never contacted; in-origin → fetched in turn (at most 5 hops).
             resp = route.fetch(max_redirects=0)
-            if 300 <= resp.status < 400:
+            url = route.request.url
+            hops = 0
+            while 300 <= resp.status < 400:
                 loc = resp.headers.get("location") or ""
-                target = urllib.parse.urljoin(route.request.url, loc) if loc else ""
-                if target == "" or off_origin(target):
-                    blocked.append(redact(f"{route.request.url} -> {target or '(no Location)'}"))
+                target = urllib.parse.urljoin(url, loc) if loc else ""
+                if target == "" or off_origin(target) or hops >= 5:
+                    blocked.append(redact(f"{url} -> {target or '(no Location)'}"))
                     route.abort()
                     return
+                redirects.append(redact(f"{url} -> {target}"))
+                url, hops = target, hops + 1
+                resp = route.fetch(url=url, max_redirects=0)
             route.fulfill(response=resp)
         except Exception:  # noqa: BLE001 — the page navigated away mid-request
             route.abort()
@@ -527,10 +532,12 @@ def main(p) -> None:  # noqa: ANN001, C901
                 shot(page, "fix-sent")
                 after_trail = trail_now("fix")
                 after = gate_decisions(after_trail)
-                if after_trail is None:
-                    cap("fix", "the daemon serves no event trail (GET /runs/:id/events) — the request_changes could not be read back independently", note=a1.get("note"), sent_note=bool(got))
-                    if not got:
-                        fail("fix", "no 'Sent back' note after Ask helpers to fix", art=a1)
+                if not got:
+                    fail("fix", "no 'Sent back' note after Ask helpers to fix", art=a1)
+                if before_trail is None or after_trail is None:
+                    # No trail before the click, or none after: "exactly one new decision" has nothing to count from.
+                    cap("fix", "GET /runs/:id/events was not served both before and after the click — the request_changes could not be read back independently",
+                        note=a1.get("note"), trail_before=before_trail is not None, trail_after=after_trail is not None)
                 else:
                     new = after[len(before):] if len(after) >= len(before) else after
                     summary = [{k: e.get(k) for k in ("type", "ord", "allow", "action", "decision", "verdict") if k in e} for e in new]
@@ -549,14 +556,14 @@ def main(p) -> None:  # noqa: ANN001, C901
 
                     def new_verdict(a, c):  # noqa: ANN001
                         k = state_kind(a.get("state"))
-                        if k == "passed":
-                            return True
-                        if k != "failed":
+                        if k not in ("passed", "failed"):
                             return False
                         v = walkthrough_view()
                         if v is None and takes0:
-                            lost["view"] = True  # the wire went silent: no take count to compare — evidence lost, not a verdict
+                            lost["view"] = True  # the wire went silent: no take to tie the verdict to — evidence lost, not a verdict
                             return False
+                        if k == "passed":
+                            return True
                         return a.get("state") != art["state"] or (v is not None and takes(v) != takes0)
                     got, art, chain = wait_for(page, "the re-record's verdict", new_verdict, RERECORD_S)
                     if lost["view"]:
@@ -739,7 +746,7 @@ def main(p) -> None:  # noqa: ANN001, C901
                       new=[{k: e.get(k) for k in ("type", "ord", "allow", "action") if k in e} for e in new])
 
     hs = page.evaluate("() => document.documentElement.scrollWidth > document.documentElement.clientWidth")
-    check("no-errors-no-hscroll", not errors and not hs and not blocked, errors=errors, blocked=blocked)
+    check("no-errors-no-hscroll", not errors and not hs and not blocked, errors=errors, blocked=blocked, redirects=redirects)
     browser.close()
 
 
