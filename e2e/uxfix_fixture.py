@@ -271,6 +271,10 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          # floor_plan — a team run at its plan gate: the bus holds the PA's 8-step proposal, the gate
          #   asks about the floor-filled 11 (studio#470).
          "floor_plan": False,
+         # seat_escalation — a run paused on a seat-failure escalation (unit 1 failed on codex); POST
+         #   /runs/r-seat/reassign is recorded (GET /__fixture/reassign-posts) and, while
+         #   `reassign_refuse` > 0, refused with crew's 400 (studio#480).
+         "seat_escalation": False, "reassign_refuse": 0,
          "no_runs": False, "usage_ws": False, "long_prompt": False,
          "extra_narration": [], "demo": False,
          "repo": False, "metrics_ws": False,
@@ -792,6 +796,8 @@ session_launched: list = []
 cancel_post_log: list = []
 # Wave 2a: every POST /runs/:id/gate the fixture received (read over GET /__fixture/gate-posts).
 gate_post_log: list = []
+# studio#480: every POST /runs/:id/reassign (GET /__fixture/reassign-posts); reset with reset_gate_posts.
+reassign_post_log: list = []
 # S13 (e2e/live_walkthrough_deliver_test.py): the `gateDecided` event a POST /runs/:id/gate on the walkthrough
 # corpus appends to that run's trail — crew writes one per decision; GET /runs/:id/events serves it after the
 # recorded events. Cleared with `reset_gate_posts`.
@@ -3770,6 +3776,30 @@ def _rejected_run() -> dict:
     return r
 
 
+# ── seat_escalation (studio#480, e2e/desk_gate_moves_test.py) ─────────────────
+SEAT_PROMPT = "Unit 1 failed and triage escalated: codex exited 1 (the seat failed)"
+SEAT_T0 = NOW0 - 10 * 60_000
+
+
+def _seat_run() -> dict:
+    r = session("r-seat", "awaiting_human", "Fix the flaky importer", "fix the flaky importer")
+    r["session"]["clis"] = ["codex", "claude"]
+    r["session"]["unit_ix"] = 1
+    r["units"] = [dict(r["units"][0], id="r-seat:fix", ord=1, stage="build", phase_ref="fix",
+                       status="pending", assigned_cli="codex")]
+    return r
+
+
+SEAT_EVENTS = [
+    {"type": "sessionStarted", "session": "r-seat", "problem": "Fix the flaky importer", "workflowId": "bug",
+     "cliCount": 2, "governed": True, "entityMode": "shared", "ts": SEAT_T0, "seq": 1},
+    {"type": "unitDispatched", "session": "r-seat", "ord": 1, "cli": "codex", "attempt": 0, "ts": SEAT_T0 + 1000, "seq": 2},
+    {"type": "stepFailed", "session": "r-seat", "ord": 1, "detail": "codex exited 1", "ts": SEAT_T0 + 60_000, "seq": 3},
+    {"type": "awaitingHuman", "session": "r-seat", "ord": 1, "prompt": SEAT_PROMPT, "reviewingOrd": None,
+     "gateKind": "escalation", "ts": SEAT_T0 + 61_000, "seq": 4},
+]
+
+
 GOVERNANCE_BLOCKS = {
     "healthy": {
         "store": {"path": GOV_STORE, "source": "core-db-sidecar"},
@@ -4071,6 +4101,8 @@ def assemble_runs() -> list:
             runs = runs + [_rejected_run()]
         if state["floor_plan"] and not state["no_runs"]:
             runs = runs + [json.loads(json.dumps(FLOOR_RUN))]
+        if state["seat_escalation"] and not state["no_runs"]:
+            runs = runs + [_seat_run()]
         if state["home_paths"] and not state["no_runs"]:
             runs = runs + _home_runs()
         if state["sessions"] and not state["no_runs"]:
@@ -5316,6 +5348,12 @@ class W2Handler(SimpleHTTPRequestHandler):
                 self._json(200, {"runId": rid, "ord": 1, "lifecycle": "open", "prompt": HOME_GATE_PROMPT,
                                  "receivedAt": iso(HOME_T0 + 1000), "gateKind": "def"})
                 return True
+            with state_lock:
+                seat_gate = state["seat_escalation"] and rid == "r-seat"
+            if seat_gate:
+                self._json(200, {"runId": rid, "ord": 1, "lifecycle": "open", "prompt": SEAT_PROMPT,
+                                 "receivedAt": iso(NOW0 - 60_000), "gateKind": "escalation"})
+                return True
             if reel_open and rid in REEL_GATES:
                 g_ord, g_prompt = REEL_GATES[rid]
                 self._json(200, {"runId": rid, "ord": g_ord, "lifecycle": "open", "prompt": g_prompt,
@@ -5433,6 +5471,9 @@ class W2Handler(SimpleHTTPRequestHandler):
         if len(parts) == 6 and parts[3] == "runs" and parts[5] == "events":
             rid = urllib.parse.unquote(parts[4])
             events = list(RUN_EVENTS.get(rid, []))
+            with state_lock:
+                if state["seat_escalation"] and rid == "r-seat":
+                    events = list(SEAT_EVENTS)
             with state_lock:
                 if state["home_paths"] and rid in HOME_EVENTS:
                     events = list(HOME_EVENTS[rid])
@@ -6685,6 +6726,10 @@ class W2Handler(SimpleHTTPRequestHandler):
             with state_lock:
                 posts = list(cancel_post_log)
             return self._json(200, {"posts": posts})
+        if path == "/__fixture/reassign-posts":
+            with state_lock:
+                rposts = list(reassign_post_log)
+            return self._json(200, {"posts": rposts})
         if path == "/__fixture/gate-posts":
             with state_lock:
                 posts = list(gate_post_log)
@@ -6873,6 +6918,7 @@ class W2Handler(SimpleHTTPRequestHandler):
                 with state_lock:
                     cancel_post_log.clear()
                     gate_post_log.clear()
+                    reassign_post_log.clear()
                     walk_gate_decided.clear()
                     session_launch_log.clear()
                     session_launched.clear()
@@ -7191,6 +7237,16 @@ class W2Handler(SimpleHTTPRequestHandler):
         # ("approved · advancing…") renders truthfully after a triage key or a
         # chip click; the rigs assert the request BODY off the browser tap.
         parts = path.split("/")
+        if len(parts) == 6 and parts[3] == "runs" and parts[5] == "reassign":
+            rid = urllib.parse.unquote(parts[4])
+            with state_lock:
+                reassign_post_log.append({"runId": rid, "body": body, "at": time.time()})
+                refuse = state["reassign_refuse"] > 0
+                if refuse:
+                    state["reassign_refuse"] -= 1
+            if refuse:
+                return self._json(400, {"error": f'cli "{body.get("cli")}" is not in this run\'s seat pool (codex)'})
+            return self._json(200, {"status": "ok", "ord": 1, "cli": body.get("cli"), "approved": True})
         if len(parts) == 6 and parts[3] == "runs" and parts[5] == "gate":
             rid = urllib.parse.unquote(parts[4])
             with state_lock:

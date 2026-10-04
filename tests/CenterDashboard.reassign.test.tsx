@@ -102,7 +102,7 @@ describe('the inbox gate card on a failure escalation', () => {
     expect(within(card).queryByTestId('gate-verdict')).toBeNull();
   });
 
-  it('F-7R2-007: offers Reassign to <seat> + retry from the run\'s pool minus the failed seat, and drives approve → reassign', async () => {
+  it('F-7R2-007: offers Reassign to <seat> + retry from the run\'s pool minus the failed seat, and moves it in one call (studio#480)', async () => {
     dash();
     const card = await screen.findByTestId('gate-inbox-card');
     const row = await within(card).findByTestId('steering-reassign-row');
@@ -112,8 +112,9 @@ describe('the inbox gate card on a failure escalation', () => {
     expect(within(card).getByRole('button', { name: 'Approve (retry on codex)' })).toBeInTheDocument();
 
     fireEvent.click(within(row).getByTestId('steering-reassign'));
-    await waitFor(() => expect(confirmGate).toHaveBeenCalledWith(RUN, { approve: true, ord: 3 }));
+    // studio#480: one call carries the seat with the decision; the gate is never approved first.
     await waitFor(() => expect(reassignRun).toHaveBeenCalledWith(RUN, 'claude'));
+    expect(confirmGate).not.toHaveBeenCalled();
     await waitFor(() => expect(useGateStore.getState().gates[RUN]).toBeUndefined());
   });
 });

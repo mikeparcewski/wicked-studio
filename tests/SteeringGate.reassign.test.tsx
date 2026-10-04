@@ -10,6 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as client from '../src/api/client.js';
 import type { CoreEvent, RosterSeat } from '../src/api/types.js';
 import { reassignPolling } from '../src/components/ReassignControl.js';
+import { useUndoQueue } from '../src/board/undoQueue.js';
 import { SteeringGate } from '../src/components/SteeringGate.js';
 import { useAnnotationStore } from '../src/store/annotations.js';
 import { useRunEventStore } from '../src/store/events.js';
@@ -107,12 +108,50 @@ describe('F-7R2-007: Reassign to <seat> + retry', () => {
     expect(entry).toMatchObject({ runId: RUN, action: 'reassign', cli: 'claude', ord: 3 });
   });
 
-  it('a refused reassign leaves the approve standing, shows the daemon\'s sentence and offers the reassign alone again', async () => {
+  it('studio#480: with no steer, the move is ONE call that carries the seat with the decision — the gate is never approved first', async () => {
+    const getRun = vi.spyOn(client.api, 'getRun');
+    const onResolved = mount();
+    fireEvent.change(screen.getByTestId('steering-reassign-seat'), { target: { value: 'claude' } });
+    fireEvent.click(screen.getByTestId('steering-reassign'));
+    await waitFor(() => expect(client.api.reassignRun).toHaveBeenCalledWith(RUN, 'claude'), { timeout: 3000 });
+    expect(client.api.confirmGate).not.toHaveBeenCalled();
+    expect(getRun).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.getByTestId('steering-reassign-row')).toHaveAttribute('data-phase', 'done'));
+    expect(onResolved).toHaveBeenCalledTimes(1);
+    expect(useGateStore.getState().gates[RUN]).toBeUndefined();
+    expect(useSteeringStore.getState().entries.at(-1)).toMatchObject({ runId: RUN, action: 'reassign', cli: 'claude', ord: 3 });
+  });
+
+  it('studio#480: a refused move keeps the gate open and the card up — the daemon\'s sentence, a notice, and the move again', async () => {
+    vi.spyOn(client.api, 'reassignRun')
+      .mockRejectedValueOnce(new Error('the daemon refused this — cli "claude" is not in this run\'s seat pool'))
+      .mockResolvedValueOnce({ status: 'ok', ord: 3, cli: 'claude' });
+    const onResolved = mount();
+    fireEvent.change(screen.getByTestId('steering-reassign-seat'), { target: { value: 'claude' } });
+    fireEvent.click(screen.getByTestId('steering-reassign'));
+
+    const err = await screen.findByTestId('steering-reassign-error', {}, { timeout: 3000 });
+    expect(err).toHaveTextContent('not in this run\'s seat pool');
+    expect(screen.getByTestId('steering-reassign-row')).toHaveAttribute('data-approved', 'false');
+    expect(screen.getByTestId('steering-reassign-status')).toHaveTextContent('nothing changed');
+    expect(client.api.confirmGate).not.toHaveBeenCalled();
+    expect(useGateStore.getState().gates[RUN]).toBeDefined();
+    expect(onResolved).not.toHaveBeenCalled();
+    expect(useUndoQueue.getState().results.some((r) => r.kind === 'failed' && /not in this run/.test(r.text))).toBe(true);
+
+    await act(async () => { fireEvent.click(screen.getByTestId('steering-reassign-retry')); });
+    await waitFor(() => expect(client.api.reassignRun).toHaveBeenCalledTimes(2), { timeout: 3000 });
+    expect(client.api.confirmGate).not.toHaveBeenCalled();
+    await waitFor(() => expect(onResolved).toHaveBeenCalledTimes(1));
+  });
+
+  it('with a steer, the approve carries it first; a reassign refused after it is said on the card AND as a notice, and is offered alone again', async () => {
     vi.spyOn(client.api, 'getRun').mockResolvedValue({ run: makeView({ id: RUN, status: 'executing', clis: POOL }, UNITS) });
     vi.spyOn(client.api, 'reassignRun')
       .mockRejectedValueOnce(new Error('the daemon refused this — cli "claude" is not in this run\'s seat pool'))
       .mockResolvedValueOnce({ status: 'ok', ord: 3, cli: 'claude' });
     const onResolved = mount();
+    fireEvent.change(screen.getByTestId('steering-amend'), { target: { value: 'use the other seat' } });
     fireEvent.change(screen.getByTestId('steering-reassign-seat'), { target: { value: 'claude' } });
     fireEvent.click(screen.getByTestId('steering-reassign'));
 
@@ -121,6 +160,7 @@ describe('F-7R2-007: Reassign to <seat> + retry', () => {
     expect(screen.getByTestId('steering-reassign-row')).toHaveAttribute('data-approved', 'true');
     expect(screen.getByTestId('steering-reassign-status')).toHaveTextContent('the retry was approved; the reassign did not land');
     expect(client.api.confirmGate).toHaveBeenCalledTimes(1);
+    expect(useUndoQueue.getState().results.some((r) => r.kind === 'failed' && /reassign/i.test(r.text))).toBe(true);
     expect(onResolved).not.toHaveBeenCalled();
 
     await act(async () => { fireEvent.click(screen.getByTestId('steering-reassign-retry')); });
@@ -130,9 +170,10 @@ describe('F-7R2-007: Reassign to <seat> + retry', () => {
     await waitFor(() => expect(onResolved).toHaveBeenCalledTimes(1));
   });
 
-  it('a run that ends before it resumes is said, not retried into', async () => {
+  it('a run that ends before it resumes is said, not retried into (the steered path, which waits for the resume)', async () => {
     vi.spyOn(client.api, 'getRun').mockResolvedValue({ run: makeView({ id: RUN, status: 'failed', clis: POOL }, UNITS) });
     mount();
+    fireEvent.change(screen.getByTestId('steering-amend'), { target: { value: 'use the other seat' } });
     fireEvent.click(screen.getByTestId('steering-reassign'));
     const err = await screen.findByTestId('steering-reassign-error');
     expect(err).toHaveTextContent('the run is failed — nothing left to reassign');

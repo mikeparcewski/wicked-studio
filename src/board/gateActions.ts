@@ -279,6 +279,51 @@ export function commitGateDecision(
 }
 
 /**
+ * studio#480: "move this unit to <seat> and retry" from an escalation gate as ONE decision. crew's
+ * `POST /runs/:id/reassign` on an `awaiting_human` run approves the gate and reassigns the cursor
+ * unit in one call, refusing a seat outside the run's pool BEFORE it approves — so a refused move
+ * leaves the gate open and the card that asked it on screen. Same undo window, same per-gate state
+ * (no double submit with another approve path), and a refusal is also said as a notice.
+ */
+export function commitGateReassign(runId: string, cli: string, seatLabel: string): Promise<DecisionOutcome> {
+  const cur = useGateActionStore.getState().byGate[runId] ?? IDLE_GATE_ACTION;
+  if (cur.queued || cur.busy || cur.answered !== null) {
+    reportDecision('not-sent', dropNotice(runId, cur));
+    return Promise.resolve('dropped');
+  }
+  patch(runId, { queued: true, error: null });
+  const label = gateLabel(runId);
+  const gateNow = useGateStore.getState().gates[runId];
+  return new Promise<DecisionOutcome>((resolve, reject) => {
+    const id = queueDecision({
+      verb: 'approve',
+      runIds: [runId],
+      preview: `the retry moves to ${seatLabel}`,
+      label,
+      commit: async () => {
+        watched.delete(runId);
+        patch(runId, { queued: false, busy: true });
+        try {
+          await api.reassignRun(runId, cli);
+          patch(runId, { busy: false, answered: 'approved' });
+          useGateStore.getState().clearGate(runId);
+          reportDecision('sent', `Moved ${label} to ${seatLabel}; the retry runs there.`);
+          resolve('sent');
+        } catch (e) {
+          const why = e instanceof Error ? e.message : String(e);
+          patch(runId, { busy: false, error: why });
+          reportDecision('failed', `Not moved: ${label} — ${why}`);
+          reject(new Error(why));
+        }
+      },
+      onUndo: () => { watched.delete(runId); patch(runId, { queued: false }); resolve('undone'); },
+      onCancel: () => { watched.delete(runId); patch(runId, { queued: false }); resolve('cancelled'); },
+    });
+    watched.set(runId, { id, ord: gateNow?.ord, ...(gateNow?.receivedAt !== undefined ? { at: gateNow.receivedAt } : {}) });
+  });
+}
+
+/**
  * The SEND half — the one `POST /runs/:id/gate` every studio gate decision goes
  * through once its undo window has closed (`decideGate` above, the batch
  * fan-out). Same double-submit guard: a call while a POST is open, or after it
