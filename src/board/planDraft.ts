@@ -1,4 +1,5 @@
 import type { LaunchPlan } from '../api/teamPlan.js';
+import { stepLabelOf } from './chainModel.js';
 import { DELIVER_STEP, planFromSelection } from './planModel.js';
 
 /**
@@ -110,18 +111,60 @@ export function slashItems(query: string, target: DraftTarget, catalog: readonly
     }));
 }
 
-/** A gate-amend draft: the held plan's authored steps plus the ones added. */
+/** One authored step as the operator has it: the catalog, whether it was added at this gate, and an
+ *  id given once that follows it through moves (`<catalog>#<n>` for the n-th seed occurrence,
+ *  `+<catalog>#<n>` for the n-th added one) — so a repeated step keeps its own row. */
+export interface DraftStep { id: string; catalog: string; added: boolean }
+
+function withIds(catalogs: readonly string[], added: boolean): DraftStep[] {
+  const seen = new Map<string, number>();
+  return catalogs.map((catalog) => {
+    const n = (seen.get(catalog) ?? 0) + 1;
+    seen.set(catalog, n);
+    return { id: `${added ? '+' : ''}${catalog}#${n}`, catalog, added };
+  });
+}
+
+/** The id the next added `catalog` gets (its occurrence among the added ones). */
+export function addedStep(added: readonly string[], catalog: string): DraftStep {
+  return { id: `+${catalog}#${added.filter((c) => c === catalog).length + 1}`, catalog, added: true };
+}
+
+/** A gate-amend draft: the held plan's authored steps plus the ones added — in the operator's order (S10). */
 export interface GateDraft {
   runId: string;
   /** The gate instance the draft was made on (`ord:receivedAt`): a new gate drops it. */
   gateKey: string;
+  /** The held plan's authored steps, in the engine's order. */
   seed: string[];
+  /** What was added at this gate, in order of adding (a `/` command, the editor's Add). */
   added: string[];
+  /** The authored plan in the operator's order (S10: every seed step, maybe moved, and every added
+   *  one); `null` until a move — the seed, then the added steps. */
+  order: DraftStep[] | null;
 }
 
-/** The plan a gate-amend draft sends with the card's approve. */
-export function gateDraftPlan(d: Pick<GateDraft, 'seed' | 'added'>): LaunchPlan {
-  return planFromSelection([...d.seed, ...d.added].map((catalog) => ({ catalog })), []);
+/** The authored steps as the draft has them: `order` when one was made, else seed then added. */
+export function draftSteps(d: Pick<GateDraft, 'seed' | 'added' | 'order'>): DraftStep[] {
+  return d.order ?? [...withIds(d.seed, false), ...withIds(d.added, true)];
+}
+
+/** Whether the order the card sends differs from the engine's with the added steps at the end — a
+ *  moved seed step, or an added step placed anywhere but last (codex r1: that is an order too). */
+export function orderChanged(d: Pick<GateDraft, 'seed' | 'added' | 'order'>): boolean {
+  if (d.order === null) return false;
+  const plain = draftSteps({ ...d, order: null });
+  return d.order.length !== plain.length || d.order.some((s, i) => s.id !== plain[i]!.id);
+}
+
+/** A draft that changes something: a step added, or the order. */
+export function draftChanges(d: Pick<GateDraft, 'seed' | 'added' | 'order'>): boolean {
+  return d.added.length > 0 || orderChanged(d);
+}
+
+/** The plan a gate-amend draft sends with the card's approve: the authored steps in the draft's order. */
+export function gateDraftPlan(d: Pick<GateDraft, 'seed' | 'added' | 'order'>): LaunchPlan {
+  return planFromSelection(draftSteps(d).map(({ catalog }) => ({ catalog })), []);
 }
 
 /** The plan a mid-run edit POSTs: the added steps only (the engine appends them). */
@@ -129,9 +172,14 @@ export function midRunPlan(catalog: string): LaunchPlan {
   return planFromSelection([{ catalog }], []);
 }
 
-/** "The steps change: + Test, + Review" — the gate card's line for a draft. */
-export function draftLine(added: readonly string[]): string {
-  return `The steps change: ${added.map((c) => `+ ${wordOf(c)}`).join(', ')}.`;
+/** "The steps change: + Test, + Review." — the gate card's line for a draft; with a new order (S10),
+ *  "The order changes: Research → Review → Build." — the whole authored order, in the chain's words,
+ *  so nothing about what is sent is left to guess. */
+export function draftLine(d: Pick<GateDraft, 'seed' | 'added' | 'order'>): string {
+  const parts: string[] = [];
+  if (d.added.length > 0) parts.push(`The steps change: ${d.added.map((c) => `+ ${wordOf(c)}`).join(', ')}.`);
+  if (orderChanged(d)) parts.push(`The order changes: ${draftSteps(d).map((s) => stepLabelOf(s.catalog)).join(' → ')}.`);
+  return parts.join(' ');
 }
 
 /** A catalog id's word (the command's, else the id itself). */

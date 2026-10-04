@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.5.19",
   "counts": {
-    "files": 211,
-    "occurrences": 2335,
-    "static": 2038,
+    "files": 212,
+    "occurrences": 2347,
+    "static": 2050,
     "dynamic": 80,
     "computed": 7
   },
@@ -6259,6 +6259,18 @@
       ]
     },
     {
+      "testId": "plan-add",
+      "files": [
+        "src/components/session/PlanOrderEditor.tsx"
+      ]
+    },
+    {
+      "testId": "plan-add-item",
+      "files": [
+        "src/components/session/PlanOrderEditor.tsx"
+      ]
+    },
+    {
       "testId": "plan-edit",
       "files": [
         "src/components/PlanEditPanel.tsx"
@@ -6370,6 +6382,66 @@
       "testId": "plan-gate-why",
       "files": [
         "src/components/PlanGateSummary.tsx"
+      ]
+    },
+    {
+      "testId": "plan-order",
+      "files": [
+        "src/components/session/PlanOrderEditor.tsx"
+      ]
+    },
+    {
+      "testId": "plan-order-line",
+      "files": [
+        "src/components/session/PlanOrderEditor.tsx"
+      ]
+    },
+    {
+      "testId": "plan-order-none",
+      "files": [
+        "src/components/session/PlanOrderEditor.tsx"
+      ]
+    },
+    {
+      "testId": "plan-order-note",
+      "files": [
+        "src/components/session/PlanOrderEditor.tsx"
+      ]
+    },
+    {
+      "testId": "plan-order-steps",
+      "files": [
+        "src/components/session/PlanOrderEditor.tsx"
+      ]
+    },
+    {
+      "testId": "plan-step",
+      "files": [
+        "src/components/session/PlanOrderEditor.tsx"
+      ]
+    },
+    {
+      "testId": "plan-step-added",
+      "files": [
+        "src/components/session/PlanOrderEditor.tsx"
+      ]
+    },
+    {
+      "testId": "plan-step-down",
+      "files": [
+        "src/components/session/PlanOrderEditor.tsx"
+      ]
+    },
+    {
+      "testId": "plan-step-fixed",
+      "files": [
+        "src/components/session/PlanOrderEditor.tsx"
+      ]
+    },
+    {
+      "testId": "plan-step-up",
+      "files": [
+        "src/components/session/PlanOrderEditor.tsx"
       ]
     },
     {
