@@ -385,10 +385,19 @@ def main(p) -> None:  # noqa: ANN001, C901
     def off_origin(url: str) -> bool:
         return urllib.parse.urlparse(url).scheme not in ("data", "blob", "about") and origin_of(url) != DAEMON_ORIGIN
 
+    ASSET_TYPES = ("script", "stylesheet", "font", "image", "media")
+
     def only_the_daemon(route):  # noqa: ANN001
         if off_origin(route.request.url):
             blocked.append(redact(route.request.url))
             route.abort()
+            return
+        if route.request.resource_type in ASSET_TYPES:
+            # The bundle's own assets (hundreds of same-origin GETs) go straight through: proxying each one
+            # through this handler serialises them and, on a slow runner, starves the page of its data. They
+            # carry no decision and cannot be redirected by the daemon's API; were one ever redirected
+            # off-origin, the request listener below records the hop and the run fails.
+            route.continue_()
             return
         try:
             # Fetched by the script with redirects NOT followed; the browser is handed only a NON-3xx response, so

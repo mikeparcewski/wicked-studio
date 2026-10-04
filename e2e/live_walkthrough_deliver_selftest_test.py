@@ -58,7 +58,9 @@ def gate_posts(run: str) -> list:
 
 
 def live(run: str, legs: str, **env) -> dict:
-    e = {**os.environ, "STUDIO_URL": origin, "WALK_RUN": run, "WALK_LEGS": legs, "WALK_WAIT_S": "20", "LIVE_APPROVE_DELIVER": "no", **env}
+    """The live script, pointed at the fixture: 45 s per state change (CI's runner is slow; the fixture itself
+    answers at once), the deliver yes never pressed."""
+    e = {**os.environ, "STUDIO_URL": origin, "WALK_RUN": run, "WALK_LEGS": legs, "WALK_WAIT_S": "45", "LIVE_APPROVE_DELIVER": "no", **env}
     proc = subprocess.run([sys.executable, str(REPO / "e2e" / "live_walkthrough_deliver_test.py")], env=e, capture_output=True, text=True, timeout=400)
     out = proc.stdout.strip()
     try:
