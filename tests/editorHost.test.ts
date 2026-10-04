@@ -218,6 +218,25 @@ describe('EP-P3: the host hands the written line its verb', () => {
   });
 });
 
+describe('codex r1 (EP-P3): the host says which version the plugin read — the one it shows', () => {
+  it('a successful artifact.read reports its version; a failed read reports nothing', async () => {
+    const { host, fromFrame, adapter, ui } = makeHost(['artifact.read']);
+    const shown: number[] = [];
+    ui.shown = vi.fn((v: number) => { shown.push(v); });
+    let port: MessagePort | null = null;
+    vi.spyOn(host.frame.contentWindow!, 'postMessage').mockImplementation(((_m: unknown, _o: unknown, tr?: Transferable[]) => { port = (tr?.[0] as MessagePort) ?? null; }) as never);
+    fromFrame(env('plugin.ready', { editor: 'acme', version: '0.1.0', protocol: [1] }));
+    const replies: { re?: string; ok?: boolean }[] = [];
+    port!.onmessage = (m) => replies.push(m.data as { re?: string; ok?: boolean });
+    port!.postMessage(env('artifact.read', {}, 'r1'));
+    await vi.waitFor(() => expect(replies.find((m) => m.re === 'r1')).toMatchObject({ ok: true }));
+    port!.postMessage(env('artifact.read', { version: 99 }, 'r2'));
+    await vi.waitFor(() => expect(replies.find((m) => m.re === 'r2')).toMatchObject({ ok: false }));
+    expect(shown).toStrictEqual([adapter.artifact().head]);
+    host.teardown('done');
+  });
+});
+
 describe('the host controller', () => {
   it('creates exactly a sandbox="allow-scripts" frame with no allow= features', () => {
     const { host } = makeHost();

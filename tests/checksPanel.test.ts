@@ -23,6 +23,12 @@ describe('the rows', () => {
     expect(rows[1]!.by).toBe('Reviewed by claude, which also wrote it — not an independent review.');
     expect(rows[2]!.by).toMatch(/not on record/);
   });
+  it('codex r1: a reviewer with no recorded seat is never said to have written it — independence is not known', () => {
+    const [row] = checkRows([check({ by: { seat: null, evaluator: false, excluded_seats: ['claude'], author_known: true } })], 3);
+    expect(row!.by).not.toMatch(/also wrote it/);
+    expect(row!.by).toMatch(/not known/);
+    expect(row!.independent).toBe(false);
+  });
   it('a verdict on an older version says so; findings are named as the editor names elements', () => {
     const [row] = checkRows([check({ version: 2, findings: [{ wid: 'slide-0-heading-1', severity: 'high', sentence: 'Too long.' }, { wid: null, severity: 'low', sentence: 'Tone.' }] })], 4);
     expect(row!.onVersion).toBe('on version 2');

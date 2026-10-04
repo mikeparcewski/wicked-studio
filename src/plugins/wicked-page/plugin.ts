@@ -244,7 +244,10 @@ export function start(): void {
     const h = peek.offsetHeight || 30;
     const below = b.top + b.height + 6;
     const room = editor.clientHeight === 0 || below + h <= editor.clientHeight - 4;
-    peek.style.left = `${Math.max(4, b.left)}px`;
+    // Kept inside the editor (codex r1): an element at the right edge opens its peek leftwards.
+    const w = peek.offsetWidth;
+    const maxLeft = editor.clientWidth > 0 ? editor.clientWidth - w - 4 : Infinity;
+    peek.style.left = `${Math.max(4, Math.min(b.left, maxLeft))}px`;
     peek.style.top = `${room ? below : Math.max(TOOLS_H + 2, b.top - h - 6)}px`;
   };
 
@@ -497,8 +500,9 @@ export function start(): void {
       e.preventDefault();
       const r = ring();
       const at = r.indexOf(document.activeElement as HTMLElement);
-      const next = at + (e.shiftKey ? -1 : 1);
-      if (at === -1 || next < 0 || next >= r.length) { send('ui.key', { key: e.shiftKey ? 'Shift+Tab' : 'Tab' }); return; }
+      // From the root (where a Tab into the frame lands), forward Tab enters the first control (codex r1).
+      const next = at === -1 && document.activeElement === editor && !e.shiftKey ? 0 : at + (e.shiftKey ? -1 : 1);
+      if ((at === -1 && next !== 0) || next < 0 || next >= r.length) { send('ui.key', { key: e.shiftKey ? 'Shift+Tab' : 'Tab' }); return; }
       r[next]!.focus();
       return;
     }

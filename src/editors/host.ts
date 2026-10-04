@@ -70,6 +70,8 @@ export interface HostUi {
    *  are the HOST-checked ids the write touched — the words of the line come from them, never from
    *  the plugin's `summary` (codex r1). */
   written?(w: { version: number; base: number; summary: string; anchors: string[]; verb: WriteVerb }): void;
+  /** EP-P3 (codex r1): the version the plugin read — the one it shows, which the checks panel describes. */
+  shown?(version: number): void;
   fullscreen(): Promise<boolean>;
   torn(reason: string): void;
   log(entry: HostLogEntry): void;
@@ -340,7 +342,11 @@ export class EditorHost {
   private async handleRequest(type: keyof typeof REQUESTS, p: Record<string, unknown>): Promise<unknown> {
     const a = this.o.adapter;
     switch (type) {
-      case 'artifact.read': return a.read(typeof p['version'] === 'number' ? p['version'] : undefined);
+      case 'artifact.read': {
+        const r = await a.read(typeof p['version'] === 'number' ? p['version'] : undefined);
+        if (!('error' in r) && !this.torn) this.o.ui.shown?.(r.version);
+        return r;
+      }
       case 'artifact.versions': return a.versions();
       case 'version.write': {
         if (this.writing) return { error: 'rate_limited', message: 'one write at a time' };

@@ -46,7 +46,9 @@ export interface CheckRow {
 }
 
 function byLine(c: DocCheck): string {
-  const seat = c.by.seat ?? 'an unnamed seat';
+  // No recorded seat: nothing can be said about who it was (codex r1) — never "also wrote it".
+  if (c.by.seat === null) return 'Reviewed by a seat that was not recorded, so whether the reviewer is independent is not known.';
+  const seat = c.by.seat;
   if (!c.by.author_known) return `Reviewed by ${seat}. Who wrote this version is not on record, so whether the reviewer is independent is not known.`;
   return c.by.evaluator ? `Reviewed by ${seat}, which did not write it.` : `Reviewed by ${seat}, which also wrote it — not an independent review.`;
 }
@@ -62,7 +64,7 @@ export function checkRows(checks: readonly DocCheck[], head: number): CheckRow[]
     sentence: c.sentence,
     onVersion: c.version < head ? `on version ${c.version}` : null,
     by: byLine(c),
-    independent: c.by.author_known && c.by.evaluator,
+    independent: c.by.seat !== null && c.by.author_known && c.by.evaluator,
     findings: c.findings.map((f) => ({ wid: f.wid, where: f.wid === null ? 'the page as a whole' : anchorWords(f.wid, 'page'), severity: f.severity, sentence: f.sentence })),
   }));
 }

@@ -63,8 +63,9 @@ export function PluginArtifact({ projectId, docId, title, composerKey, size, mor
   const [note, setNote] = useState<string | null>(null);
   const [mountKey, setMountKey] = useState(0);
   const [busy, setBusy] = useState(false);
-  // The version on screen, for the checks panel (EP-P3): the reviews read for this version.
-  const [head, setHead] = useState<number | null>(null);
+  // The version the plugin shows (the one it read), for the checks panel (EP-P3, codex r1): the reviews
+  // are read for that version — never for a head the page has not loaded yet.
+  const [shown, setShown] = useState<number | null>(null);
   const sizeRef = useRef(size);
   sizeRef.current = size;
   const morphRef = useRef(morph);
@@ -75,7 +76,7 @@ export function PluginArtifact({ projectId, docId, title, composerKey, size, mor
   useEffect(() => { live.current = true; return () => { live.current = false; }; }, []);
 
   const adapter = useMemo(
-    () => new InteractiveDocAdapter(projectId, docId, title, 'page', (h) => { if (live.current) { onHeadRef.current?.(h); setHead(h); } }),
+    () => new InteractiveDocAdapter(projectId, docId, title, 'page', (h) => { if (live.current) onHeadRef.current?.(h); }),
     [projectId, docId, title],
   );
 
@@ -127,6 +128,7 @@ export function PluginArtifact({ projectId, docId, title, composerKey, size, mor
           // The line's words are the host's: the anchors it checked, named by it — a third-party editor's
           // line also says who changed it. The plugin's summary never reaches the thread.
           written: (w) => { if (live.current) setLine({ kind: 'edited', version: w.version, base: w.base, what: writtenWords(w.anchors), verb: w.verb }); },
+          shown: (v) => { if (live.current) setShown(v); },
           fullscreen: async () => { morphRef.current('full'); return true; },
           torn: (reason) => { if (live.current) setTorn(reason); },
           log: (e) => { logRef.current.push(e); if (logRef.current.length > 200) logRef.current.shift(); },
@@ -205,8 +207,8 @@ export function PluginArtifact({ projectId, docId, title, composerKey, size, mor
           {line.kind === 'drafted' && <>Suggested by {line.editor}: {line.text}</>}
         </p>
       )}
-      {size !== 'inline' && head !== null && (
-        <ChecksPanel projectId={projectId} docId={docId} head={head} pointAt={pointAt} />
+      {size !== 'inline' && shown !== null && (
+        <ChecksPanel projectId={projectId} docId={docId} head={shown} pointAt={pointAt} />
       )}
     </>
   );
