@@ -1572,7 +1572,17 @@ export function GroupChat({
       problem: `${headline}\n\n---\n${transcript}`,
       clis: (() => {
         const answered = Object.entries(seats).filter(([, st]) => st === 'replied').map(([k]) => k);
-        return answered.length > 0 ? answered : selectedAgentsRef.current;
+        if (answered.length > 0) return answered;
+        // studio#451: no seat has replied yet (a rejoined chat before its transcript marks them) —
+        // the chat's own warm seats (not one still connecting, not one the chat refused), then this
+        // mount's chip selection.
+        const live = Object.entries(seats)
+          .filter(([k, st]) => WARM_STATES.has(st) && !refusedRef.current.has(k))
+          .map(([k]) => k);
+        // The chip selection (main's fallback, the operator's own pick for the launch) minus any seat
+        // the chat refused. Not filtered by warmth: Build's seats name the CLIs for a new run, not
+        // warm chat sessions, and an empty list would turn Send off (the defect #451 fixes).
+        return live.length > 0 ? live : selectedAgentsRef.current.filter((k) => !refusedRef.current.has(k));
       })(),
       workflowId: null,
       repoRef: repoId ?? null,

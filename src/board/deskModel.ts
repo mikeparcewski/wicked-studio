@@ -22,6 +22,18 @@ import { sessionIdOf, sessionPath, summarize, type SessionState } from './sessio
 
 // ── The greeting and the one sentence ────────────────────────────────────────
 
+/**
+ * What the Desk can say about its work, from the runs read alone (studio#459, #466):
+ * `checking` before the first answer, `failed` when the first read failed (nothing to show),
+ * `stale` when a later read failed (the last good list stays, said to be the last read), `known`
+ * otherwise. A failed read is never an empty list.
+ */
+export type DeskReadState = 'checking' | 'failed' | 'stale' | 'known';
+export function deskReadState(runsLoaded: boolean, runsError: string | null): DeskReadState {
+  if (runsError !== null) return runsLoaded ? 'stale' : 'failed';
+  return runsLoaded ? 'known' : 'checking';
+}
+
 export function deskGreeting(now: number): { hello: string; date: string } {
   const d = new Date(now);
   const h = d.getHours();

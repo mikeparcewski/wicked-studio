@@ -138,7 +138,7 @@ export function GateChip({ runId, projectId, gate, navigate }: Props): React.Rea
         data-testid={`gate-reject-${runId}`}
         onClick={() => answer(false)}
         disabled={busy}
-        title={error !== null ? 'Retry reject' : `Reject this gate — ${decisionPreview('reject', 1)}`}
+        title={error !== null ? 'Retry reject' : `Reject this gate — ${decisionPreview('reject', 1)}. To say why, select the row and press ⌥R`}
         className={BTN_CLASS.reject}
       >
         Reject

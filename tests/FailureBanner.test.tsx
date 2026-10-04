@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { FailureBanner } from '../src/components/FailureBanner.js';
+import { useProvenanceStore } from '../src/store/provenance.js';
 import type { LoggedEvent } from '../src/store/runtime.js';
 import { makeView, makeUnit } from './factories.js';
 
@@ -80,5 +81,23 @@ describe('FailureBanner (§11.5 — run-halted explainer)', () => {
   it('omits the link when no navigate is wired (no dead affordance)', () => {
     render(<FailureBanner view={makeView({ status: 'failed' })} log={errorLog} />);
     expect(screen.queryByTestId('failure-all-runs')).toBeNull();
+  });
+});
+
+describe('a rejected plan ends cancelled (studio#478)', () => {
+  it('the all-runs link follows the banner: a cancelled run lands on the Cancelled filter', () => {
+    const navigate = vi.fn();
+    render(<FailureBanner view={makeView({ status: 'cancelled' })} log={[]} navigate={navigate} />);
+    const link = screen.getByTestId('failure-all-runs');
+    expect(link).toHaveAttribute('href', '/work?filter=cancelled');
+    fireEvent.click(link);
+    expect(navigate).toHaveBeenCalledWith('/work?filter=cancelled');
+  });
+
+  it('the operator\'s reject note is on the cancelled banner, in their words', () => {
+    const view = makeView({ status: 'cancelled' });
+    useProvenanceStore.setState((s) => ({ rejectNotes: { ...s.rejectNotes, [view.session.id]: 'not this week' } }));
+    render(<FailureBanner view={view} log={[]} />);
+    expect(screen.getByTestId('failure-reject-note')).toHaveTextContent('You rejected it: “not this week”');
   });
 });

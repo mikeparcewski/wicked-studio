@@ -1,5 +1,6 @@
 import type { SessionView } from '../api/types.js';
 import type { LoggedEvent } from '../store/runtime.js';
+import { useProvenanceStore } from '../store/provenance.js';
 import { denialAdvice, denialHeadline, parseDenial, type StructuredDenial } from './denialCopy.js';
 
 interface Props {
@@ -11,13 +12,16 @@ interface Props {
   navigate?: (path: string) => void;
 }
 
-/** The failure-context all-runs entry (§7.4): /work, Failed filter active. */
-function AllRunsLink({ navigate }: { navigate: (path: string) => void }): React.ReactElement {
+/** The failure-context all-runs entry (§7.4): /work with the banner's own filter active — Failed for
+ *  a halted run, Cancelled for a cancelled one (studio#478: a rejected plan ends cancelled, and the
+ *  Failed list does not hold it). */
+function AllRunsLink({ navigate, filter }: { navigate: (path: string) => void; filter: 'failed' | 'cancelled' }): React.ReactElement {
+  const href = `/work?filter=${filter}`;
   return (
     <a
-      href="/work?filter=failed"
+      href={href}
       data-testid="failure-all-runs"
-      onClick={(e) => { e.preventDefault(); navigate('/work?filter=failed'); }}
+      onClick={(e) => { e.preventDefault(); navigate(href); }}
       className="mt-2 inline-block transition-opacity hover:opacity-80"
       style={{ color: 'var(--accent)', textDecoration: 'none' }}
     >
@@ -28,6 +32,8 @@ function AllRunsLink({ navigate }: { navigate: (path: string) => void }): React.
 
 export function FailureBanner({ view, log, navigate }: Props): React.ReactElement | null {
   const { status } = view.session;
+  // studio#478: the note the operator rejected with (crew's gate audit; the run page loads it once).
+  const rejectNote = useProvenanceStore((s) => s.rejectNotes[view.session.id] ?? null);
   if (status !== 'failed' && status !== 'cancelled') return null;
 
   const lastError = [...log].reverse().find((e) => e.type === 'error');
@@ -46,7 +52,12 @@ export function FailureBanner({ view, log, navigate }: Props): React.ReactElemen
         }}
       >
         Run cancelled.
-        {navigate !== undefined && <div><AllRunsLink navigate={navigate} /></div>}
+        {rejectNote !== null && (
+          <p data-testid="failure-reject-note" className="mt-1" style={{ color: 'var(--ink-body)', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
+            You rejected it: “{rejectNote}”
+          </p>
+        )}
+        {navigate !== undefined && <div><AllRunsLink navigate={navigate} filter="cancelled" /></div>}
       </div>
     );
   }
@@ -102,7 +113,7 @@ export function FailureBanner({ view, log, navigate }: Props): React.ReactElemen
           })}
         </div>
       )}
-      {navigate !== undefined && <AllRunsLink navigate={navigate} />}
+      {navigate !== undefined && <AllRunsLink navigate={navigate} filter="failed" />}
     </div>
   );
 }

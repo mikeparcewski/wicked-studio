@@ -15,7 +15,8 @@ vi.mock('../src/api/client.js', () => ({
   api: { createProject: (body: unknown) => createProject(body) },
 }));
 
-const { NewProjectModal, PROJECT_NAME_RE, startPath } = await import('../src/components/NewProjectModal.js');
+const { NewProjectModal, startPath } = await import('../src/components/NewProjectModal.js');
+const { projectNameProblem } = await import('../src/board/projectName.js');
 
 beforeEach(() => {
   createProject.mockReset();
@@ -23,16 +24,25 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
-describe('PROJECT_NAME_RE (§1.3 slug rule)', () => {
-  it('accepts lowercase slugs with spaces, dashes, underscores (max 64)', () => {
-    for (const ok of ['a', 'api migration', 'q3-deck', 'x_1', 'a'.repeat(64)]) {
-      expect(PROJECT_NAME_RE.test(ok)).toBe(true);
+describe('one project-name rule, the daemon\'s (studio#463)', () => {
+  it('accepts every name the daemon and the Projects page accept — capitals, punctuation, 1–120 chars', () => {
+    for (const ok of ['a', 'api migration', 'Team offsite 2', 'Recipe cards', 'Q3: the deck!', 'ümlaut', 'a'.repeat(120), '  padded  ']) {
+      expect(projectNameProblem(ok)).toBeNull();
     }
   });
-  it('rejects uppercase, leading separators, empties and overlong names', () => {
-    for (const bad of ['', 'API', '-lead', ' lead', 'ümlaut', 'a'.repeat(65)]) {
-      expect(PROJECT_NAME_RE.test(bad)).toBe(false);
-    }
+  it('refuses only an empty or overlong name, and says why', () => {
+    expect(projectNameProblem('')).toBe('A project needs a name.');
+    expect(projectNameProblem('   ')).toBe('A project needs a name.');
+    expect(projectNameProblem('a'.repeat(121))).toBe('Keep the name to 120 characters.');
+  });
+  it('the modal creates "Team offsite 2" as typed (trimmed)', async () => {
+    const navigate = vi.fn();
+    render(<NewProjectModal navigate={navigate} onClose={() => undefined} />);
+    fireEvent.change(screen.getByTestId('new-project-name'), { target: { value: ' Team offsite 2 ' } });
+    expect(screen.queryByTestId('new-project-name-invalid')).toBeNull();
+    expect(screen.getByTestId('new-project-create')).not.toBeDisabled();
+    fireEvent.click(screen.getByTestId('new-project-create'));
+    await waitFor(() => expect(createProject).toHaveBeenCalledWith({ name: 'Team offsite 2' }));
   });
 });
 
@@ -61,15 +71,15 @@ describe('NewProjectModal', () => {
     expect(screen.getByTestId('new-project-create')).toBeDisabled();
   });
 
-  it('gates Create on the client-side slug rule — the UX gate, no silent 400', () => {
+  it('gates Create on the daemon\'s rule only — a blank name is refused, capitals and punctuation are not (studio#463)', () => {
     render(<NewProjectModal navigate={() => {}} onClose={() => {}} />);
-    fireEvent.change(screen.getByTestId('new-project-name'), { target: { value: 'Not A Slug!' } });
-    expect(screen.getByTestId('new-project-name-invalid')).toBeInTheDocument();
+    fireEvent.change(screen.getByTestId('new-project-name'), { target: { value: '   ' } });
+    expect(screen.getByTestId('new-project-name-invalid')).toHaveTextContent('A project needs a name.');
     expect(screen.getByTestId('new-project-create')).toBeDisabled();
     fireEvent.click(screen.getByTestId('new-project-create'));
     expect(createProject).not.toHaveBeenCalled();
 
-    fireEvent.change(screen.getByTestId('new-project-name'), { target: { value: 'api migration' } });
+    fireEvent.change(screen.getByTestId('new-project-name'), { target: { value: 'Not A Slug!' } });
     expect(screen.queryByTestId('new-project-name-invalid')).toBeNull();
     expect(screen.getByTestId('new-project-create')).toBeEnabled();
   });

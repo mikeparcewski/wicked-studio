@@ -124,6 +124,10 @@ export function paletteShortcutEntries(opts: {
   kill: () => void;
 }): ShortcutEntry[] {
   const toggle = (e: KeyboardEvent): void => {
+    // studio#473: the chords reach the palette from a focused field too (a modifier chord is never
+    // typed text). A field that handled the chord itself — the palette's own input closes on it, an
+    // editor may bind ⌘K — said so with preventDefault, and keeps it.
+    if (e.defaultPrevented) return;
     e.preventDefault(); // Ctrl+P must suppress browser print
     opts.setOpen(!opts.isOpen());
   };
@@ -135,6 +139,7 @@ export function paletteShortcutEntries(opts: {
       description: 'Open the command palette',
       handler: toggle,
       allowWhilePaletteOpen: true,
+      allowInTypingContext: true,
     },
     {
       id: 'palette-toggle-p',
@@ -143,6 +148,7 @@ export function paletteShortcutEntries(opts: {
       description: 'Open the command palette',
       handler: toggle,
       allowWhilePaletteOpen: true,
+      allowInTypingContext: true,
     },
     {
       // §5.2: global search is the palette's DEEP MODE — Cmd+Shift+F opens the
@@ -152,9 +158,11 @@ export function paletteShortcutEntries(opts: {
       chord: { key: 'f', ctrlOrMeta: true, shift: true },
       description: 'Global search',
       handler: (e) => {
+        if (e.defaultPrevented) return; // studio#473: a field that handled the chord keeps it
         e.preventDefault(); // suppress the browser's find-in-page variants
         opts.openSearch();
       },
+      allowInTypingContext: true,
     },
     {
       id: 'kill-run',

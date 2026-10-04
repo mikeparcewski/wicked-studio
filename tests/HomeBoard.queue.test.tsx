@@ -178,3 +178,21 @@ describe('HomeBoard — the needs-you queue', () => {
     expect(onOpenAsk).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('HomeBoard — a runs list that has not been read (studio#466, codex on #486)', () => {
+  beforeEach(() => { projects = []; chats = []; repos = [{ id: 'r-svc', name: 'svc' }]; });
+  afterEach(() => cleanup());
+
+  it('derives no never-indexed row and no batch launch until the runs are known', async () => {
+    render(<HomeBoard runs={[]} runsLoaded={false} navigate={vi.fn()} onOpenAsk={() => undefined} />);
+    await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
+    expect(document.querySelectorAll('[data-kind="repo-graph"]').length).toBe(0);
+    expect(document.body.textContent ?? '').not.toMatch(/never indexed|Index all/i);
+  });
+
+  it('once the runs are known, the same register does row the repo', async () => {
+    render(<HomeBoard runs={[makeView({ id: 'r-other', status: 'completed' })]} runsLoaded navigate={vi.fn()} onOpenAsk={() => undefined} />);
+    await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
+    expect(document.querySelectorAll('[data-kind="repo-graph"]').length).toBeGreaterThan(0);
+  });
+});

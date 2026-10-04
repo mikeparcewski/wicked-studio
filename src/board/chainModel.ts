@@ -361,6 +361,87 @@ export function chainOf(view: SessionView, fold: TeamFold | null, opts: ChainOpt
   return chainFromUnits(view, opts);
 }
 
+/**
+ * A plan gate's own plan (studio#470), parsed from core's `gate_prompt`
+ * (`Approve plan rev N before unit K runs (…): a → b (floor) → c. Floor added: b`): the step ids the
+ * run will run, in order, and which the floor added. The PA's proposal on the team bus predates the
+ * floor fill, so this — what Go approves — is the source of WHICH steps; the chain's words name them.
+ * `null` when the prompt carries no step list.
+ */
+export function gatePlanOf(prompt: string | undefined): { ids: string[]; floor: string[] } | null {
+  const list = /\):\s*(.+)$/s.exec(prompt ?? '')?.[1];
+  if (list === undefined) return null;
+  const raw = list.split('→').map((x) => x.trim()).filter((x) => x !== '');
+  if (raw.length === 0) return null;
+  // The last step carries the prompt's trailing sentences (". Floor added: …", ". Floor override: …").
+  raw[raw.length - 1] = raw[raw.length - 1]!.split(/[.;]\s/)[0]!.replace(/[.;]$/, '').trim();
+  const ids: string[] = [];
+  const floor: string[] = [];
+  for (const r of raw) {
+    const m = /^(.*?)\s*\(floor\)$/.exec(r);
+    const id = (m === null ? r : m[1]!).trim();
+    if (id === '') continue;
+    ids.push(id);
+    if (m !== null) floor.push(id);
+  }
+  return ids.length === 0 ? null : { ids, floor };
+}
+
+/** The steps of a gate's plan, labelled by the chain's own rule (its id's word, distinct), keeping
+ *  what the chain already knows about a step (its state, its origin). */
+function gatePlanSteps(plan: { ids: string[]; floor: string[] }, known: readonly ChainStep[], opts: ChainOptions): ChainStep[] {
+  const byId = new Map(known.map((s) => [s.id, s]));
+  const steps = plan.ids.map((id): ChainStep => {
+    const had = byId.get(id);
+    const floor = plan.floor.includes(id);
+    if (had !== undefined) return { ...had, ...(floor ? { addedBy: 'floor' as const } : {}) };
+    const block = blockOf(id);
+    return { id, catalog: id, block, label: '', state: 'todo', addedBy: floor ? 'floor' : opts.userPlan === true ? 'human' : 'pa' };
+  });
+  for (const s of steps) s.label = labelOf(s.block, s.id, s.catalog, opts.catalogLabels ?? {});
+  return distinctLabels(steps);
+}
+
+/**
+ * A proposed team chain shown as the plan gate asks it (studio#470): while no plan is accepted,
+ * the line lists the gate's steps — floor additions included, marked as the floor's — so the
+ * proposal, the line and "N of M" agree before Go and after it. An accepted plan is the run's own
+ * and is returned as it is.
+ */
+export function withGatePlan(c: ChainModel, prompt: string | undefined, opts: ChainOptions = {}): ChainModel {
+  const pendingOpen = c.pending !== undefined && c.pending.length > 0;
+  if (c.source !== 'team' || !(c.proposed || pendingOpen)) return c;
+  const plan = gatePlanOf(prompt);
+  if (plan === null) return c;
+  const planned = gatePlanSteps(plan, c.steps, opts);
+  if (c.proposed) return { ...c, steps: planned, ...counts(planned) };
+  // A newer plan over an accepted one (manual mode's rev 2 at its gate, codex on #486). Only when the
+  // prompt carries every step of the bus's pending plan — an older prompt never overrides a newer
+  // proposal. The accepted line is not reordered: the gate's added steps (the floor's) are put in
+  // after the step they follow, and `pending` is the gate's plan with each step's real state.
+  const pendingIds = (c.pending ?? []).map((p) => p.id);
+  const pendingSet = new Set(pendingIds);
+  const inPrompt = plan.ids.filter((id) => pendingSet.has(id));
+  // Every pending step, in the same order (codex r3: same ids in an older order is a stale prompt).
+  if (inPrompt.length !== pendingIds.length || inPrompt.some((id, i) => id !== pendingIds[i])) return c;
+  const steps = c.steps.map((s) => (plan.floor.includes(s.id) ? { ...s, addedBy: 'floor' as const } : s));
+  plan.ids.forEach((id, i) => {
+    if (steps.some((s) => s.id === id)) return;
+    const prev = plan.ids.slice(0, i).reverse().find((p) => steps.some((s) => s.id === p));
+    const at = prev === undefined ? 0 : steps.findIndex((s) => s.id === prev) + 1;
+    steps.splice(at, 0, planned[i]!);
+  });
+  return { ...c, steps, pending: planned, ...counts(steps) };
+}
+
+/** A gate plan's step labels, in the chain's words (the proposal card's list). */
+export function gatePlanLabels(prompt: string | undefined, known: readonly ChainStep[] = []): { labels: string[]; floor: string[] } | null {
+  const plan = gatePlanOf(prompt);
+  if (plan === null) return null;
+  const steps = gatePlanSteps(plan, known, {});
+  return { labels: steps.map((s) => s.label), floor: steps.filter((s) => plan.floor.includes(s.id)).map((s) => s.label) };
+}
+
 /** "2 of 5 done" — and "· 1 checked" only once a step carries `check_state`. */
 export function chainSentence(c: ChainModel): string {
   if (c.total === 0) return c.transportLine ?? 'No steps yet';

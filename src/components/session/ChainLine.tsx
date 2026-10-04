@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import type { SessionView } from '../../api/types.js';
 import { isRouteUnsupported } from '../../api/errors.js';
 import { runIdentityOf, teamPlanApi } from '../../api/teamPlan.js';
-import { chainOf, chainSentence, unitPhaseId, type ChainModel, type ChainStep } from '../../board/chainModel.js';
+import { chainOf, chainSentence, unitPhaseId, withGatePlan, type ChainModel, type ChainStep } from '../../board/chainModel.js';
+import { useGateStore } from '../../store/gates.js';
 import { checkChip, checkedSentence, type MomentOf } from '../../board/checkState.js';
 import type { WalkthroughStepState } from '../../api/types.js';
 import { openSheet } from '../../store/sheets.js';
@@ -33,6 +34,9 @@ export function useRunChain(view: SessionView): RunChain {
   const fold = useTeamPlanStore((s) => s.byRun[runId] ?? null);
   const connected = useConnectionStore((s) => s.status === 'connected');
   const entries = usePlanCatalog((s) => s.entries);
+  // studio#470: while a plan gate waits, the line lists the plan the gate asks about.
+  const gate = useGateStore((s) => s.gates[runId]);
+  const planPrompt = gate !== undefined && (gate.gateKind === 'plan_approval' || /^\s*Approve plan rev \d+/i.test(gate.prompt)) ? gate.prompt : undefined;
   const moved = `${view.session.status}:${view.session.unit_ix}`;
 
   useEffect(() => {
@@ -67,8 +71,9 @@ export function useRunChain(view: SessionView): RunChain {
   for (const e of entries) {
     if (e.description !== null && e.description.length <= 40) labels[e.id] = e.description;
   }
+  const opts = { userPlan: runIdentityOf(view.session)?.kind === 'user_plan', catalogLabels: labels };
   return {
-    chain: chainOf(view, fold, { userPlan: runIdentityOf(view.session)?.kind === 'user_plan', catalogLabels: labels }),
+    chain: withGatePlan(chainOf(view, fold, opts), planPrompt, opts),
     teamError,
     retry: () => setAttempt((n) => n + 1),
   };
