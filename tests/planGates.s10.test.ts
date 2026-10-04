@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { teamPlanApi } from '../src/api/teamPlan.js';
-import { isPlanGateNow, loadPlanGate, planGateFresh, usePlanGateStore } from '../src/store/planGates.js';
+import { isPlanGateNow, loadPlanGate, planGateFresh, planGateReading, usePlanGateStore } from '../src/store/planGates.js';
 import { useGateStore } from '../src/store/gates.js';
 
 /** S10 codex r1 P1: a plan view is read FOR a gate instance; a successor gate must not take a draft
@@ -58,5 +58,14 @@ describe('codex r2', () => {
     await newer;
     answers[0]!({ rows: [], units: [] });
     expect(await now).toBe(true);
+  });
+});
+
+describe('codex r3: a read still on its way vs a read with no gate instance', () => {
+  it('reading only while the open instance has no read of its own; a landed read with no instance is not reading', () => {
+    expect(planGateReading('2:5', { ord: 2, receivedAt: 9 })).toBe(true);
+    expect(planGateReading('2:9', { ord: 2, receivedAt: 9 })).toBe(false);
+    expect(planGateReading(undefined, undefined)).toBe(true);
+    expect(planGateReading(null, undefined)).toBe(false);
   });
 });

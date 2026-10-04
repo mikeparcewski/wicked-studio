@@ -31,6 +31,15 @@ export function planGateFresh(readFor: string | null | undefined, gate: { ord?: 
   return key !== null && readFor === key;
 }
 
+/** Whether a read for the gate instance open now is still on its way (codex r3): with a live gate,
+ *  until a read made for that instance lands; with none known (a gate seen only by the team read),
+ *  until any read lands — a landed read with no instance is not "still reading", it simply cannot key
+ *  a draft. */
+export function planGateReading(readFor: string | null | undefined, gate: { ord?: number | null; receivedAt: number } | undefined): boolean {
+  const key = instanceOf(gate);
+  return key === null ? readFor === undefined : readFor !== key;
+}
+
 /** Per run: the last read asked for, and the newest that has landed — an older read landing late
  *  changes nothing (its view and gate would be the predecessor's). */
 const asked: Record<string, number> = {};
@@ -67,21 +76,25 @@ export function usePlanGate(runId: string | null | undefined, active: boolean): 
   view: PlanGateView | null;
   /** The view was read for the gate instance open now: a draft may be seeded from it. */
   fresh: boolean;
+  /** A plan gate whose read for the open instance is still on its way: callers say so and wait. */
+  reading: boolean;
 } {
   const gate = useGateStore((s) => (runId ? s.gates[runId] : undefined));
   const view = usePlanGateStore((s) => (runId ? s.byRun[runId] : undefined));
   const readFor = usePlanGateStore((s) => (runId ? s.readFor[runId] : undefined));
+  const isPlanGate = gate?.gateKind === 'plan_approval' || (view !== undefined && view !== null);
   const gateKey = gate === undefined ? '' : `${gate.ord}:${gate.receivedAt}`;
   useEffect(() => {
     if (!runId || !active) return;
     void loadPlanGate(runId);
   }, [runId, active, gateKey]);
-  if (!runId || !active) return { isPlanGate: false, pending: false, view: null, fresh: false };
+  if (!runId || !active) return { isPlanGate: false, pending: false, view: null, fresh: false, reading: false };
   return {
-    isPlanGate: gate?.gateKind === 'plan_approval' || (view !== undefined && view !== null),
+    isPlanGate,
     pending: gate?.gateKind === undefined && view === undefined,
     view: view ?? null,
     fresh: planGateFresh(readFor, gate),
+    reading: isPlanGate && planGateReading(readFor, gate),
   };
 }
 

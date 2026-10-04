@@ -116,6 +116,22 @@ describe('S10 codex r2: a successor gate never takes its predecessor\u2019s plan
   });
 });
 
+describe('S10 codex r3: a plan gate known only from the team read (no live frame) never reads as still loading', () => {
+  it('the menu says to answer the run first — not "Reading the open question first…"', async () => {
+    const run = makeView({ id: 'r1', status: 'awaiting_human', problem: 'Fix the double charge', run_identity: PLANNED } as never);
+    vi.stubGlobal('fetch', vi.fn(() => new Promise(() => { /* no further read lands */ })));
+    usePlanGateStore.setState({
+      byRun: { r1: { gateId: 'g1', ord: 2, planRev: 1, band: '20-39', highRisk: false, reason: 'manual_mode', score: null, reasons: [], floorAdded: [], editSeed: ['understand', 'build'], planSteps: [] } as never },
+      readFor: { r1: null },
+    } as never);
+    render(<Harness runs={[run]} onSend={() => {}} />);
+    type('/te');
+    const menu = await screen.findByTestId('composer-menu');
+    expect(menu.textContent ?? '').not.toMatch(/Reading the open question/);
+    expect(menu.textContent ?? '').toMatch(/answer it first/);
+  });
+});
+
 describe('/ mid-run: 10 s with Undo, then exactly one plan POST with a requestId', () => {
   const live = (): SessionView => makeView({ id: 'r2', status: 'executing', problem: 'Add a limiter', run_identity: PLANNED } as never);
 

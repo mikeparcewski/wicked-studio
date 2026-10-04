@@ -44,7 +44,7 @@ export function PlanOrderEditor({ view, chain, size }: { view: SessionView; chai
     planned: plannedRun(view),
     // Seeded only from a view read for THIS gate instance (codex r1/r2), as the composer does.
     planGate: planGate.isPlanGate && planGate.view !== null && planGate.fresh ? { seed: planGate.view.editSeed } : null,
-    gatePending: planGate.pending || (planGate.isPlanGate && !planGate.fresh),
+    gatePending: planGate.pending || planGate.reading,
   };
   const target = draftTarget([state]);
   const title = humanTitle(view.session.problem || runId);

@@ -56,7 +56,7 @@ function useDraftTarget(runs: readonly SessionView[]): { target: DraftTarget; ga
     planned: plannedRun(v),
     // S10 codex r2: seeded only from a view read for THIS gate instance; until it lands, reading.
     planGate: v.session.id === liveId && planGate.isPlanGate && planGate.view !== null && planGate.fresh ? { seed: planGate.view.editSeed } : null,
-    gatePending: v.session.id === liveId && (planGate.pending || (planGate.isPlanGate && !planGate.fresh)),
+    gatePending: v.session.id === liveId && (planGate.pending || planGate.reading),
   }));
   return {
     target: draftTarget(states),
