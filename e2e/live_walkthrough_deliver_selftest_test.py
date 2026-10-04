@@ -68,9 +68,10 @@ def live(run: str, legs: str, **env) -> dict:
     except json.JSONDecodeError:
         rep = {}
     rep["_exit"] = proc.returncode
-    if not rep.get("legs"):
+    if not rep.get("legs") or proc.returncode != 0:
         rep["_stderr"] = proc.stderr[-2000:]
-        rep["_stdout"] = out[-2000:]
+        if not rep.get("legs"):
+            rep["_stdout"] = out[-2000:]
     return rep
 
 
@@ -95,7 +96,7 @@ check("fail-legs", r1.get("ok") is True and legs.get("inline", {}).get("ok") and
       and (legs.get("fix", {}).get("new") or [{}])[0] == {"type": "gateDecided", "ord": 4, "allow": False, "action": "request_changes"}
       and legs.get("fix", {}).get("gate_ord") == 4
       and legs.get("rerecord", {}).get("capped") == "machinery-verified",
-      legs=legs, exit=r1.get("_exit"), stderr=r1.get("_stderr"))
+      legs=legs, exit=r1.get("_exit"), stderr=r1.get("_stderr"), report={k: v for k, v in r1.items() if k not in ("legs",)})
 check("fail-wire", len(posts) == 1 and posts[0].get("approve") is False and (posts[0].get("amend") or posts[0].get("note") or ""),
       posts=posts)
 

@@ -389,6 +389,9 @@ def main(p) -> None:  # noqa: ANN001, C901
     # a link, an asset) is aborted and named — the proof never touches the rig or another host.
     blocked: list[str] = []
     redirects: list[str] = []  # in-origin hops the script followed on the browser's behalf (recorded)
+    proxy_errors: list[str] = []  # a request the script could not fetch on the browser's behalf (aborted, recorded)
+    console: list[str] = []
+    page.on("console", lambda m: console.append(f"{m.type}: {m.text[:200]}") if m.type in ("error", "warning") else None)
 
     def off_origin(url: str) -> bool:
         return urllib.parse.urlparse(url).scheme not in ("data", "blob", "about") and origin_of(url) != DAEMON_ORIGIN
@@ -431,8 +434,12 @@ def main(p) -> None:  # noqa: ANN001, C901
                 else:
                     resp = route.fetch(url=url, method="GET", post_data="", max_redirects=0)  # a GET hop, and every hop after it, carries no body
             route.fulfill(response=resp)
-        except Exception:  # noqa: BLE001 — the page navigated away mid-request
-            route.abort()
+        except Exception as e:  # noqa: BLE001 — the page navigated away mid-request, or the fetch itself failed
+            proxy_errors.append(redact(f"{route.request.method} {route.request.url}: {type(e).__name__}: {str(e)[:160]}"))
+            try:
+                route.abort()
+            except Exception:  # noqa: BLE001
+                pass
     page.route("**/*", only_the_daemon)
     # Belt and braces: every request the browser makes is also recorded; one off-origin request fails the run.
     page.on("request", lambda req: blocked.append(redact(req.url)) if off_origin(req.url) and redact(req.url) not in blocked else None)
@@ -468,7 +475,11 @@ def main(p) -> None:  # noqa: ANN001, C901
         got, art, chain = wait_for(page, "the walkthrough artifact", lambda a, c: a.get("present") and a.get("state"), min(WAIT_S, 600))
         if not got:
             shot(page, "no-artifact")
-            fail("inline", "no walkthrough artifact with a state line in the run's block", art=art, chain=chain)
+            found = page.evaluate("""() => ({ runs: [...document.querySelectorAll('[data-testid="session-run"]')].map((b) => b.dataset.runId),
+              artifacts: [...document.querySelectorAll('[data-testid="artifact"]')].map((a) => a.dataset.kind),
+              session: document.querySelector('[data-testid="session"]')?.innerText.replace(/\s+/g, ' ').slice(0, 400) ?? null })""")
+            fail("inline", "no walkthrough artifact with a state line in the run's block", art=art, chain=chain, found=found,
+                 blocked=blocked, redirects=redirects[:10], proxy_errors=proxy_errors[:10], console=console[:10], page_errors=errors[:5])
         shot(page, "inline")
     if "inline" in LEGS:
         kind = state_kind(art["state"])
@@ -801,7 +812,7 @@ def main(p) -> None:  # noqa: ANN001, C901
                       new=[{k: e.get(k) for k in ("type", "ord", "allow", "action") if k in e} for e in new])
 
     hs = page.evaluate("() => document.documentElement.scrollWidth > document.documentElement.clientWidth")
-    check("no-errors-no-hscroll", not errors and not hs and not blocked, errors=errors, blocked=blocked, redirects=redirects)
+    check("no-errors-no-hscroll", not errors and not hs and not blocked and not proxy_errors, errors=errors, blocked=blocked, redirects=redirects, proxy_errors=proxy_errors)
     browser.close()
 
 
