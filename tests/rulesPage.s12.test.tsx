@@ -244,6 +244,24 @@ describe('the page', () => {
     expect(screen.queryByTestId('steering-rule-hold-pick')).toBeNull();
   });
 
+  it('a late save closes only the editor that started it — Cancel, reopen the SAME rule, type: the new draft stays (codex r3)', async () => {
+    listConformanceRules.mockResolvedValue({ rules: [PATTERN, TESTING, WORDS] });
+    let finishA: (v: unknown) => void = () => {};
+    upsertConformanceRule.mockImplementationOnce(() => new Promise((r) => { finishA = r; }));
+    render(<RulesPage ruleId="proposal:pr-auto" runs={[]} navigate={vi.fn()} />);
+    const drawer = await screen.findByTestId('steering-rule-drawer');
+    fireEvent.click(drawer.querySelector('[data-testid="steering-edit-open"]') as HTMLElement);
+    fireEvent.click(screen.getByTestId('steering-form-save')); // the first editor's save is in flight
+    fireEvent.click(screen.getByTestId('steering-form-cancel'));
+    expect(screen.queryByTestId('steering-rule-form')).toBeNull();
+    fireEvent.click(drawer.querySelector('[data-testid="steering-edit-open"]') as HTMLElement); // the same rule, opened again
+    fireEvent.change(screen.getByTestId('steering-form-statement'), { target: { value: 'My second unsaved draft' } });
+    finishA({});
+    await new Promise((r) => setTimeout(r, 30));
+    expect(screen.queryByTestId('steering-rule-form')).not.toBeNull();
+    expect((screen.getByTestId('steering-form-statement') as HTMLTextAreaElement).value).toBe('My second unsaved draft');
+  });
+
   it('a rule the daemon does not list is said to be missing, with the rest of the page still there', async () => {
     listConformanceRules.mockResolvedValue({ rules: [PATTERN] });
     render(<RulesPage ruleId="proposal:pr-gone" runs={[]} navigate={vi.fn()} />);

@@ -26,7 +26,8 @@ type Read = { kind: 'loading' } | { kind: 'ok'; rules: SteeringRule[] } | { kind
  * not list is said to be missing while the rest of the page stands. Reads commit in order (a
  * reload after Hold or Retire is never overwritten by an older read; StrictMode replays the mount
  * read); the drawer is the addressed rule's (keyed by it) and the editor closes when the address
- * changes — a save that completes late closes only its own editor. DC §5.2's "landed without its project"
+ * changes — a save that completes late closes only the opening that started it, never a later editor
+ * (even of the same rule). DC §5.2's "landed without its project"
  * is NOT said here: the rule alone cannot tell a legacy global landing from one the operator
  * scoped `everywhere` or widened — that needs a crew marker.
  */
@@ -38,7 +39,11 @@ export function RulesPage({ ruleId, runs, navigate }: {
   navigate: Navigate;
 }): React.ReactElement {
   const [read, setRead] = useState<Read>({ kind: 'loading' });
-  const [editing, setEditing] = useState<SteeringRule | null>(null);
+  /** The open editor: the rule and this OPENING's token — a save that completes after Cancel and a reopen
+   *  (even of the same rule) belongs to an older opening and closes nothing. */
+  const [editing, setEditing] = useState<{ rule: SteeringRule; token: number } | null>(null);
+  const opened = useRef(0);
+  const edit = (r: SteeringRule): void => setEditing({ rule: r, token: ++opened.current });
   /** The newest read's number: an older read that answers later commits nothing. */
   const seq = useRef(0);
   const projects = useProjectsStore((s) => s.projects);
@@ -110,7 +115,7 @@ export function RulesPage({ ruleId, runs, navigate }: {
           rule={open}
           evidence={null}
           onClose={() => navigate(RULES_PATH)}
-          onEdit={setEditing}
+          onEdit={edit}
           onRetired={() => { void load(); }}
           runs={runs}
           navigate={navigate}
@@ -119,11 +124,13 @@ export function RulesPage({ ruleId, runs, navigate }: {
       )}
       {editing !== null && (
         <SteeringRuleFormModal
-          type={steeringTypeOf(editing)}
-          initial={editing}
+          key={editing.token}
+          type={steeringTypeOf(editing.rule)}
+          initial={editing.rule}
           onClose={() => setEditing(null)}
-          // A save that completes late (the address moved on, another editor is open) closes only ITS editor.
-          onSaved={(id) => { setEditing((cur) => (cur !== null && cur.id === id ? null : cur)); void load(); }}
+          // A save that completes late (the address moved on; Cancel and a reopen) closes only the opening
+          // that started it — `token` is this render's, the one the form's submit closure saw.
+          onSaved={() => { const mine = editing.token; setEditing((cur) => (cur !== null && cur.token === mine ? null : cur)); void load(); }}
         />
       )}
     </div>
