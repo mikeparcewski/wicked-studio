@@ -10,6 +10,7 @@ import { considerationsNaming, useConsideredStore } from '../../store/considered
 import { openSheet } from '../../store/sheets.js';
 import { humanTitle } from '../runIdentity.js';
 import { Tech } from '../Tech.js';
+import { useDisplayText } from '../../hooks/useHomePath.js';
 
 /**
  * ORIGIN, history and "Where it was considered" on the rule page (DES-DECISION-CAPTURE §3 B11,
@@ -135,6 +136,9 @@ export function RuleOrigin({ rule, runs, navigate }: {
   const origin = read.kind === 'ok' ? ruleOrigin(rule, read.decisions) : null;
   const history = read.kind === 'ok' ? ruleHistory(rule, read.decisions) : [];
   const go = (href: string) => (e: React.MouseEvent): void => { e.preventDefault(); navigate(href); };
+  // A run's problem, a conversation's title and the operator's own words are free text: in the
+  // default layer a home path in them reads ~/… (studio#458), the full text under technical details.
+  const showText = useDisplayText();
 
   return (
     <div data-testid="rule-origin-block" data-read={read.kind} className="flex flex-col gap-3">
@@ -152,7 +156,7 @@ export function RuleOrigin({ rule, runs, navigate }: {
           <h3 className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--ink-dim)' }}>Origin — your words</h3>
           {origin.words !== '' && (
             <blockquote data-testid="rule-origin-words" className="m-0 text-[12px]" style={{ color: 'var(--ink-high)', borderLeft: '2px solid var(--border-strong)', paddingLeft: 8 }}>
-              “{origin.words}”
+              “{showText(origin.words)}”
             </blockquote>
           )}
           {origin.choice !== null && <p data-testid="rule-origin-choice" className="m-0 text-[11px]" style={{ color: 'var(--ink-muted)' }}>You chose: {origin.choice}</p>}
@@ -201,7 +205,7 @@ export function RuleOrigin({ rule, runs, navigate }: {
             <ul className="m-0 flex list-none flex-col gap-0.5 p-0 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
               {where.map((w) => (
                 <li key={w.key} data-testid="rule-where-row" data-kind={w.kind} data-verdict={w.verdict} {...(w.object !== null ? { 'data-object': w.object } : {})}>
-                  <a href={w.href} data-testid="rule-where-open" onClick={go(w.href)} className="wk-since-toggle">{w.label}</a>
+                  <a href={w.href} data-testid="rule-where-open" onClick={go(w.href)} className="wk-since-toggle">{showText(w.label)}</a>
                   {' — '}
                   <span data-testid="rule-where-verdict">{WHERE_VERDICT_WORDS[w.verdict]}</span>
                   {w.object !== null && (

@@ -146,3 +146,30 @@ describe('RuleOrigin — the look takes the newest steps', () => {
     expect(consideredCalls()).not.toContain('/runs/r-long/units/0/considered?attempt=0');
   });
 });
+
+describe('RuleOrigin — titles and words in the default layer carry no home path (codex r4)', () => {
+  it('a step row named by a run whose problem names a home path reads ~/…; the remembered words too', async () => {
+    apiFetch.mockImplementation((path: unknown) => {
+      const p = String(path);
+      if (p.startsWith('/decisions')) {
+        return Promise.resolve({ decisions: [{
+          id: 'dec-y', at: 1_700_000_000_000, project_id: 'upload-endpoint', host: 'studio-chat',
+          origin: { actor: { id: 'operator', kind: 'human', trust: 'operator' }, auth_mode: 'required', chat_id: 'chat-pay', turn_id: 'd1', words: 'always check /Users/alice/repo/payments first', words_source: 'typed', redacted: false },
+          derived: { statement: 'Always check', polarity: 'do', key: 'k', scope: 'project', steering_type: 'development', template: 'T1-always', exclusions: [] },
+          route: 'auto', state: 'remembered', how: 'auto', rule_id: 'proposal:pr-auto',
+        }] });
+      }
+      const m = /^\/runs\/([^/]+)\/units\/(\d+)\/considered/.exec(p);
+      if (m !== null) return Promise.resolve(unitConsideration(m[1]!, Number(m[2])));
+      return Promise.reject(new ApiError(404, 'Not Found'));
+    });
+    const v = view('r-home', [{ ord: 1, status: 'done' }]);
+    (v.session as { problem: string }).problem = 'Fix the upload in /Users/alice/repo/payments';
+    const { container } = render(<RuleOrigin rule={rule()} runs={[v]} navigate={navigate} />);
+    await waitFor(() => expect(container.querySelector('[data-testid="rule-where-row"]')).not.toBeNull());
+    await waitFor(() => expect(container.querySelector('[data-testid="rule-origin-words"]')).not.toBeNull());
+    expect(container.querySelector('[data-testid="rule-where-open"]')?.textContent).toContain('~/repo');
+    expect(container.querySelector('[data-testid="rule-origin-words"]')?.textContent).toContain('~/repo/payments');
+    expect(container.textContent).not.toContain('/Users/alice');
+  });
+});
