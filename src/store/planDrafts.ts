@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { draftChanges, gateDraftPlan, midRunPlan, wordOf, type DraftStep, type GateDraft } from '../board/planDraft.js';
+import { addedStep, draftChanges, gateDraftPlan, midRunPlan, wordOf, type DraftStep, type GateDraft } from '../board/planDraft.js';
 import { onDecisionTestReset, queueDecision, reportDecision } from '../board/undoQueue.js';
 import { proposePlanEdit, usePlanEdits } from './planEdits.js';
 
@@ -35,7 +35,7 @@ function draftOn(cur: GateDraft | undefined, runId: string, gateKey: string, see
 export function addGateDraftStep(runId: string, gateKey: string, seed: readonly string[], catalog: string): void {
   usePlanDrafts.setState((s) => {
     const base = draftOn(s.gate[runId], runId, gateKey, seed);
-    const order = base.order === null ? null : [...base.order, { catalog, added: true }];
+    const order = base.order === null ? null : [...base.order, addedStep(base.added, catalog)];
     return { gate: { ...s.gate, [runId]: { ...base, added: [...base.added, catalog], order } } };
   });
 }

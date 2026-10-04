@@ -1,7 +1,8 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
 import { draftChanges, draftLine, draftSteps, gateDraftPlan, orderChanged, type GateDraft } from '../src/board/planDraft.js';
-import { fixedAt, gateRows, midRunRows, moveStep, orderContext, orderWords } from '../src/board/planOrder.js';
+import { fixedAt, gateRows, hasPlanEditor, midRunRows, moveStep, orderContext, orderWords } from '../src/board/planOrder.js';
+import type { SessionView } from '../src/api/types.js';
 import type { ChainModel } from '../src/board/chainModel.js';
 import type { PlanGateView } from '../src/board/planModel.js';
 
@@ -17,6 +18,9 @@ const gate = (over: Partial<PlanGateView> = {}): PlanGateView => ({
   ],
   ...over,
 });
+
+/** A draft step with its persistent id (codex r1: identity follows the step through moves). */
+const st = (catalog: string, added = false, n = 1): { id: string; catalog: string; added: boolean } => ({ id: `${added ? '+' : ''}${catalog}#${n}`, catalog, added });
 
 const draft = (over: Partial<GateDraft> = {}): GateDraft => ({ runId: 'r1', gateKey: '2:9', seed: gate().editSeed, added: [], order: null, ...over });
 
@@ -43,7 +47,7 @@ describe('moving a step', () => {
   const ctx = orderContext(gate());
   it('swaps with its neighbour and keeps everything else', () => {
     const r = moveStep(draftSteps(draft()), 2, -1, ctx);
-    expect(r).toStrictEqual({ steps: [{ catalog: 'understand', added: false }, { catalog: 'build', added: false }, { catalog: 'design', added: false }, { catalog: 'security_review', added: false }, { catalog: 'review', added: false }] });
+    expect(r).toStrictEqual({ steps: [st('understand'), st('build'), st('design'), st('security_review'), st('review')] });
   });
   it('is refused, with the reason, past a floor step, off either end, and for a step that ran', () => {
     const steps = draftSteps(draft());
@@ -76,9 +80,13 @@ describe('the draft that carries an order', () => {
   });
   it('an added step keeps S7’s line; with a move, both are said', () => {
     expect(draftLine(draft({ added: ['test'] }))).toBe('The steps change: + Test.');
-    const both = draft({ added: ['test'], order: [{ catalog: 'understand', added: false }, { catalog: 'test', added: true }, { catalog: 'design', added: false }, { catalog: 'build', added: false }, { catalog: 'security_review', added: false }, { catalog: 'review', added: false }] });
-    expect(orderChanged(both)).toBe(false); // the seed stands as the engine had it; only Test was placed
-    expect(draftLine(both)).toBe('The steps change: + Test.');
+    // codex r1: an added step placed anywhere but last IS an order the card sends — say it.
+    const both = draft({ added: ['test'], order: [st('understand'), st('test', true), st('design'), st('build'), st('security_review'), st('review')] });
+    expect(orderChanged(both)).toBe(true);
+    expect(draftLine(both)).toBe('The steps change: + Test. The order changes: Research → Test → Plan → Build → Security check → Review.');
+    const last = draft({ added: ['test'], order: [st('understand'), st('design'), st('build'), st('security_review'), st('review'), st('test', true)] });
+    expect(orderChanged(last)).toBe(false);
+    expect(draftLine(last)).toBe('The steps change: + Test.');
     expect(gateDraftPlan(both).steps.map((s) => s.catalog)).toStrictEqual(['understand', 'test', 'design', 'build', 'security_review', 'review']);
   });
 });
@@ -92,9 +100,16 @@ describe('the rows the editor draws', () => {
     expect(rows.map((r) => r.key)).toStrictEqual(['scope', 'understand#1', 'design#1', 'build#1', 'security_review#1', 'review#1', 'deliver']);
   });
   it('with a draft, the rows are the draft’s order and the added step says so', () => {
-    const rows = gateRows(gate(), draft({ added: ['review'], order: [{ catalog: 'review', added: true }, { catalog: 'understand', added: false }, { catalog: 'design', added: false }, { catalog: 'build', added: false }, { catalog: 'security_review', added: false }, { catalog: 'review', added: false }] }));
-    expect(rows.slice(1, 3).map((r) => [r.key, r.added])).toStrictEqual([['review#1', true], ['understand#1', false]]);
-    expect(rows.at(-2)!.key).toBe('review#2');
+    const rows = gateRows(gate(), draft({ added: ['review'], order: [st('review', true), st('understand'), st('design'), st('build'), st('security_review'), st('review')] }));
+    expect(rows.slice(1, 3).map((r) => [r.key, r.added])).toStrictEqual([['+review#1', true], ['understand#1', false]]);
+    expect(rows.at(-2)!.key).toBe('review#1');
+  });
+  it('codex r1: a repeated step keeps its own key through a move — keys follow steps, not positions', () => {
+    const g = gate({ floorAdded: [], editSeed: ['review', 'review', 'build'] });
+    const moved = moveStep(draftSteps(draft({ seed: ['review', 'review', 'build'] })), 0, 1, orderContext(g));
+    expect('steps' in moved && moved.steps.map((s) => s.id)).toStrictEqual(['review#2', 'review#1', 'build#1']);
+    const rows = gateRows(g, draft({ seed: ['review', 'review', 'build'], order: 'steps' in moved ? moved.steps : null }));
+    expect(rows.slice(1, 3).map((r) => r.key)).toStrictEqual(['review#2', 'review#1']);
   });
   it('mid-run: every row is fixed — done, hand-over, or set — and struck steps are not drawn', () => {
     const chain: ChainModel = {
@@ -109,5 +124,20 @@ describe('the rows the editor draws', () => {
     };
     expect(midRunRows(chain).map((r) => [r.label, r.fixed])).toStrictEqual([['Research', 'done'], ['Build', 'set'], ['Test', 'set'], ['Deliver', 'deliver']]);
     expect(orderWords(chain.steps)).toBe('Research → Build → Review → Test → Deliver');
+  });
+});
+
+describe('which runs get the plan artifact', () => {
+  const view = (status: string, kind: string | null): SessionView => ({ session: { id: 'r1', status, ...(kind !== null ? { run_identity: { kind } } : {}) } } as unknown as SessionView);
+  const units: ChainModel = { source: 'units', proposed: false, transportLine: null, done: 0, total: 1, checked: null, steps: [] };
+  it('a planned run that is going — even when its team plan could not be read (the chain is the run’s own units), as S7 decides', () => {
+    expect(hasPlanEditor(view('executing', 'preset'), units)).toBe(true);
+    expect(hasPlanEditor(view('awaiting_human', 'user_plan'), { ...units, source: 'team' })).toBe(true);
+  });
+  it('not a fixed workflow, not a finished run, not before the chain is read', () => {
+    expect(hasPlanEditor(view('executing', 'workflow'), units)).toBe(false);
+    expect(hasPlanEditor(view('executing', null), units)).toBe(false);
+    expect(hasPlanEditor(view('completed', 'preset'), units)).toBe(false);
+    expect(hasPlanEditor(view('executing', 'preset'), undefined)).toBe(false);
   });
 });

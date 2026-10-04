@@ -6,10 +6,11 @@ import type { ChainModel } from '../../board/chainModel.js';
 import { isDocRun } from '../../interactive/runBinding.js';
 import { editorKindOf } from '../../board/artifactMorph.js';
 import { repoNameOf } from '../../board/deskWords.js';
+import { hasPlanEditor } from '../../board/planOrder.js';
 import { artifactKey } from '../../store/artifactSizes.js';
 import { useCapabilities } from '../../store/capabilities.js';
 import { ArtifactMorph } from './ArtifactMorph.js';
-import { hasPlanEditor, PlanOrderEditor } from './PlanOrderEditor.js';
+import { PlanOrderEditor } from './PlanOrderEditor.js';
 import { WalkthroughEditor } from './WalkthroughEditor.js';
 
 /**

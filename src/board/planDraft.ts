@@ -111,8 +111,24 @@ export function slashItems(query: string, target: DraftTarget, catalog: readonly
     }));
 }
 
-/** One authored step as the operator has it: the catalog, and whether it was added at this gate. */
-export interface DraftStep { catalog: string; added: boolean }
+/** One authored step as the operator has it: the catalog, whether it was added at this gate, and an
+ *  id given once that follows it through moves (`<catalog>#<n>` for the n-th seed occurrence,
+ *  `+<catalog>#<n>` for the n-th added one) — so a repeated step keeps its own row. */
+export interface DraftStep { id: string; catalog: string; added: boolean }
+
+function withIds(catalogs: readonly string[], added: boolean): DraftStep[] {
+  const seen = new Map<string, number>();
+  return catalogs.map((catalog) => {
+    const n = (seen.get(catalog) ?? 0) + 1;
+    seen.set(catalog, n);
+    return { id: `${added ? '+' : ''}${catalog}#${n}`, catalog, added };
+  });
+}
+
+/** The id the next added `catalog` gets (its occurrence among the added ones). */
+export function addedStep(added: readonly string[], catalog: string): DraftStep {
+  return { id: `+${catalog}#${added.filter((c) => c === catalog).length + 1}`, catalog, added: true };
+}
 
 /** A gate-amend draft: the held plan's authored steps plus the ones added — in the operator's order (S10). */
 export interface GateDraft {
@@ -130,14 +146,15 @@ export interface GateDraft {
 
 /** The authored steps as the draft has them: `order` when one was made, else seed then added. */
 export function draftSteps(d: Pick<GateDraft, 'seed' | 'added' | 'order'>): DraftStep[] {
-  return d.order ?? [...d.seed.map((catalog) => ({ catalog, added: false })), ...d.added.map((catalog) => ({ catalog, added: true }))];
+  return d.order ?? [...withIds(d.seed, false), ...withIds(d.added, true)];
 }
 
-/** Whether the draft's seed steps stand in another order than the engine's. */
+/** Whether the order the card sends differs from the engine's with the added steps at the end — a
+ *  moved seed step, or an added step placed anywhere but last (codex r1: that is an order too). */
 export function orderChanged(d: Pick<GateDraft, 'seed' | 'added' | 'order'>): boolean {
   if (d.order === null) return false;
-  const seedNow = d.order.filter((s) => !s.added).map((s) => s.catalog);
-  return seedNow.length !== d.seed.length || seedNow.some((c, i) => c !== d.seed[i]);
+  const plain = draftSteps({ ...d, order: null });
+  return d.order.length !== plain.length || d.order.some((s, i) => s.id !== plain[i]!.id);
 }
 
 /** A draft that changes something: a step added, or the order. */

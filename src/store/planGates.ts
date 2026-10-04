@@ -12,19 +12,33 @@ import { useGateStore } from './gates.js';
  */
 interface PlanGateStore {
   byRun: Record<string, PlanGateView | null | undefined>;
+  /** The gate instance (`ord:receivedAt`, as `gateInstance`) open when each run's view was asked
+   *  for; `null` = none was open. A draft is made only on a view read for the gate it answers (S10). */
+  readFor: Record<string, string | null>;
 }
 
-export const usePlanGateStore = create<PlanGateStore>(() => ({ byRun: {} }));
+export const usePlanGateStore = create<PlanGateStore>(() => ({ byRun: {}, readFor: {} }));
+
+/** Per run: the last read asked for, and the newest that has landed — an older read landing late
+ *  changes nothing (its view and gate would be the predecessor's). */
+const asked: Record<string, number> = {};
+const landed: Record<string, number> = {};
 
 /** Re-read a run's team state for its open plan gate. */
 export async function loadPlanGate(runId: string): Promise<void> {
+  const g = useGateStore.getState().gates[runId];
+  const key = g === undefined ? null : `${g.ord ?? '-'}:${g.receivedAt}`;
+  const n = (asked[runId] ?? 0) + 1;
+  asked[runId] = n;
   let view: PlanGateView | null = null;
   try {
     view = planGateOf(await teamPlanApi.team(runId));
   } catch {
     view = null;
   }
-  usePlanGateStore.setState((s) => ({ byRun: { ...s.byRun, [runId]: view } }));
+  if (n < (landed[runId] ?? 0)) return;
+  landed[runId] = n;
+  usePlanGateStore.setState((s) => ({ byRun: { ...s.byRun, [runId]: view }, readFor: { ...s.readFor, [runId]: key } }));
 }
 
 /**

@@ -1,3 +1,4 @@
+import type { SessionView } from '../api/types.js';
 import { stepLabelOf, type ChainModel } from './chainModel.js';
 import { draftSteps, type DraftStep, type GateDraft } from './planDraft.js';
 import { DELIVER_STEP, PA_SCOPE_STEP, type PlanGateView } from './planModel.js';
@@ -31,7 +32,7 @@ export const FIXED_WORD: Readonly<Record<Fixed, string>> = {
 };
 
 export interface OrderRow {
-  /** A key that follows the step through moves: `<catalog>#<n>` (its n-th occurrence). */
+  /** A key that follows the step through moves: the draft step's id (mid-run: `<catalog>#<n>`). */
   key: string;
   catalog: string;
   label: string;
@@ -87,9 +88,8 @@ function keyed(steps: readonly { catalog: string }[]): string[] {
 /** The editor's rows at a plan gate: the fixed scope row, the editable steps, the fixed hand-over. */
 export function gateRows(gate: Pick<PlanGateView, 'ord' | 'floorAdded' | 'planSteps' | 'editSeed'>, draft: GateDraft | null): OrderRow[] {
   const ctx = orderContext(gate);
-  const steps = draft !== null ? draftSteps(draft) : gate.editSeed.map((catalog) => ({ catalog, added: false }));
-  const keys = keyed(steps);
-  const rows: OrderRow[] = steps.map((s, i) => ({ key: keys[i]!, catalog: s.catalog, label: stepLabelOf(s.catalog), fixed: fixedAt(steps, i, ctx), added: s.added, index: i }));
+  const steps = draftSteps(draft ?? { seed: gate.editSeed, added: [], order: null });
+  const rows: OrderRow[] = steps.map((s, i) => ({ key: s.id, catalog: s.catalog, label: stepLabelOf(s.catalog), fixed: fixedAt(steps, i, ctx), added: s.added, index: i }));
   if (ctx.scope) rows.unshift({ key: 'scope', catalog: PA_SCOPE_STEP, label: stepLabelOf(PA_SCOPE_STEP), fixed: 'scope', added: false, index: null });
   if (ctx.deliver) rows.push({ key: 'deliver', catalog: DELIVER_STEP, label: stepLabelOf(DELIVER_STEP), fixed: 'deliver', added: false, index: null });
   return rows;
@@ -138,4 +138,19 @@ export function moveStep(steps: readonly DraftStep[], i: number, dir: -1 | 1, ct
 /** "Research → Plan → Review → Build": the authored order in the chain's own words. */
 export function orderWords(steps: readonly { catalog: string }[]): string {
   return steps.map((s) => stepLabelOf(s.catalog)).join(' → ');
+}
+
+const TERMINAL = new Set(['completed', 'failed', 'cancelled']);
+
+/** A preset or user plan (`run_identity`): only a planned run takes plan edits (S7's rule). */
+export function plannedRun(v: SessionView): boolean {
+  const id = (v.session as unknown as { run_identity?: { kind?: unknown } }).run_identity;
+  return typeof id === 'object' && id !== null && (id.kind === 'preset' || id.kind === 'user_plan');
+}
+
+/** Whether a run gets the plan artifact at all: a planned run (`run_identity`, as S7 decides) that is
+ *  still going. The chain's source does not decide it: when the team plan cannot be read the chain is
+ *  the run's own units, and the chain line already says so. */
+export function hasPlanEditor(v: SessionView, chain: ChainModel | undefined): boolean {
+  return chain !== undefined && plannedRun(v) && !TERMINAL.has(v.session.status);
 }

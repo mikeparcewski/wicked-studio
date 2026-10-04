@@ -1184,4 +1184,4 @@ button.wk-walk-chapter-btn:hover .wk-walk-chapter-title { text-decoration: under
 .wk-plan-note { margin: 0; font-size: var(--text-xs); color: var(--ink-high); }
 .wk-plan-add { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
 .wk-plan-add-word { font-size: var(--text-xs); color: var(--ink-muted); margin-right: 2px; }
-.wk-artifact--inline .wk-plan-add, .wk-artifact--inline .wk-plan-note { display: none; }
+.wk-artifact--inline .wk-plan-add { display: none; }

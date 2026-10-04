@@ -3,12 +3,12 @@ import type { SessionView } from '../../api/types.js';
 import type { ArtifactSize } from '../../board/artifactMorph.js';
 import type { ChainModel } from '../../board/chainModel.js';
 import { draftLine, draftSteps, draftTarget, slashItems, wordOf, type DraftRunState } from '../../board/planDraft.js';
-import { FIXED_WORD, gateRows, midRunRows, moveStep, orderContext, type Fixed, type OrderRow } from '../../board/planOrder.js';
+import { FIXED_WORD, gateRows, midRunRows, moveStep, plannedRun, orderContext, type Fixed, type OrderRow } from '../../board/planOrder.js';
 import { gateInstance } from '../../board/proposalCard.js';
 import { useGateStore } from '../../store/gates.js';
 import { loadCatalog, usePlanCatalog } from '../../store/planCatalog.js';
 import { addGateDraftStep, gateDraftFor, queueMidRunStep, reorderGateDraft, usePlanDrafts } from '../../store/planDrafts.js';
-import { usePlanGate } from '../../store/planGates.js';
+import { usePlanGate, usePlanGateStore } from '../../store/planGates.js';
 import { humanTitle } from '../runIdentity.js';
 
 /**
@@ -21,18 +21,6 @@ import { humanTitle } from '../runIdentity.js';
  * Words and moves are {@link gateRows} / {@link moveStep}; this component only renders them.
  */
 
-const TERMINAL = new Set(['completed', 'failed', 'cancelled']);
-
-function plannedRun(v: SessionView): boolean {
-  const id = (v.session as unknown as { run_identity?: { kind?: unknown } }).run_identity;
-  return typeof id === 'object' && id !== null && (id.kind === 'preset' || id.kind === 'user_plan');
-}
-
-/** Whether a run gets the plan artifact at all: a planned run that is still going. */
-export function hasPlanEditor(v: SessionView, chain: ChainModel | undefined): boolean {
-  return chain !== undefined && chain.source === 'team' && plannedRun(v) && !TERMINAL.has(v.session.status);
-}
-
 /** The one word on a fixed row; the reason is its title. */
 const FIXED_SHORT: Readonly<Record<Fixed, string>> = { scope: 'first', deliver: 'last', done: 'ran', floor: 'required', set: 'set' };
 
@@ -43,6 +31,7 @@ export function PlanOrderEditor({ view, chain, size }: { view: SessionView; chai
   const planGate = usePlanGate(runId, waiting);
   const gate = useGateStore((s) => s.gates[runId]);
   const gateKey = gateInstance(gate);
+  const readFor = usePlanGateStore((s) => s.readFor[runId]);
   const drafts = usePlanDrafts((s) => s.gate);
   const catalogState = usePlanCatalog((s) => s.catalog);
   const entries = usePlanCatalog((s) => s.entries);
@@ -64,6 +53,11 @@ export function PlanOrderEditor({ view, chain, size }: { view: SessionView; chai
     return <p data-testid="plan-order-none" className="wk-plan-line wk-plan-pad">{target.reason}</p>;
   }
 
+  // codex r1 P1: the view must have been read for THIS gate instance — a successor gate's draft is
+  // never seeded from its predecessor's plan. Until the re-read lands, the editor waits.
+  if (target.kind === 'gate-amend' && (planGate.view === null || gateKey === null || readFor !== gateKey)) {
+    return <p data-testid="plan-order-reading" className="wk-plan-line wk-plan-pad">Reading the plan at this gate…</p>;
+  }
   const atGate = target.kind === 'gate-amend' && planGate.view !== null && gateKey !== null;
   const g = planGate.view;
   const draft = atGate && g !== null ? gateDraftFor(drafts, runId, gateKey) : null;
@@ -72,7 +66,7 @@ export function PlanOrderEditor({ view, chain, size }: { view: SessionView; chai
 
   const move = (index: number, dir: -1 | 1): void => {
     if (!atGate || g === null || gateKey === null) return;
-    const steps = draft !== null ? draftSteps(draft) : g.editSeed.map((c) => ({ catalog: c, added: false }));
+    const steps = draftSteps(draft ?? { seed: g.editSeed, added: [], order: null });
     const r = moveStep(steps, index, dir, orderContext(g));
     if ('refused' in r) { setNote(r.refused); return; }
     reorderGateDraft(runId, gateKey, g.editSeed, r.steps);
@@ -108,8 +102,8 @@ export function PlanOrderEditor({ view, chain, size }: { view: SessionView; chai
               <span data-testid="plan-step-fixed" className="wk-plan-fixed" title={`${r.label} ${FIXED_WORD[r.fixed]}.`} aria-label={`${r.label} stays where it is: it ${FIXED_WORD[r.fixed]}.`}>{FIXED_SHORT[r.fixed]}</span>
             ) : r.index !== null ? (
               <span className="wk-plan-moves">
-                <button type="button" data-testid="plan-step-up" aria-label={`Move ${r.label} up`} title="Move up" onClick={() => move(r.index!, -1)} className="wk-plan-btn">↑</button>
-                <button type="button" data-testid="plan-step-down" aria-label={`Move ${r.label} down`} title="Move down" onClick={() => move(r.index!, 1)} className="wk-plan-btn">↓</button>
+                <button type="button" data-testid="plan-step-up" aria-label={`Move ${r.label} (step ${i + 1}) up`} title="Move up" onClick={() => move(r.index!, -1)} className="wk-plan-btn">↑</button>
+                <button type="button" data-testid="plan-step-down" aria-label={`Move ${r.label} (step ${i + 1}) down`} title="Move down" onClick={() => move(r.index!, 1)} className="wk-plan-btn">↓</button>
               </span>
             ) : null}
           </li>
