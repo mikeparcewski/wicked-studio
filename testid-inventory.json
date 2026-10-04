@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.5.19",
   "counts": {
-    "files": 206,
-    "occurrences": 2268,
-    "static": 1982,
+    "files": 208,
+    "occurrences": 2302,
+    "static": 2015,
     "dynamic": 80,
     "computed": 7
   },
@@ -1585,6 +1585,60 @@
       "testId": "connection-status",
       "files": [
         "src/components/ConnectionStatus.tsx"
+      ]
+    },
+    {
+      "testId": "considered-line",
+      "files": [
+        "src/components/decisions/ConsideredLine.tsx"
+      ]
+    },
+    {
+      "testId": "considered-note",
+      "files": [
+        "src/components/decisions/ConsideredLine.tsx"
+      ]
+    },
+    {
+      "testId": "considered-row",
+      "files": [
+        "src/components/decisions/ConsideredLine.tsx"
+      ]
+    },
+    {
+      "testId": "considered-row-detail",
+      "files": [
+        "src/components/decisions/ConsideredLine.tsx"
+      ]
+    },
+    {
+      "testId": "considered-row-id",
+      "files": [
+        "src/components/decisions/ConsideredLine.tsx"
+      ]
+    },
+    {
+      "testId": "considered-row-open",
+      "files": [
+        "src/components/decisions/ConsideredLine.tsx"
+      ]
+    },
+    {
+      "testId": "considered-rows",
+      "files": [
+        "src/components/decisions/ConsideredLine.tsx"
+      ]
+    },
+    {
+      "testId": "considered-text",
+      "files": [
+        "src/components/decisions/ConsideredLine.tsx"
+      ]
+    },
+    {
+      "testId": "considered-toggle",
+      "files": [
+        "src/components/decisions/ConsideredLine.tsx"
       ]
     },
     {
@@ -7332,6 +7386,132 @@
       ]
     },
     {
+      "testId": "rule-history",
+      "files": [
+        "src/components/decisions/RuleOrigin.tsx"
+      ]
+    },
+    {
+      "testId": "rule-history-row",
+      "files": [
+        "src/components/decisions/RuleOrigin.tsx"
+      ]
+    },
+    {
+      "testId": "rule-origin",
+      "files": [
+        "src/components/decisions/RuleOrigin.tsx"
+      ]
+    },
+    {
+      "testId": "rule-origin-approved",
+      "files": [
+        "src/components/decisions/RuleOrigin.tsx"
+      ]
+    },
+    {
+      "testId": "rule-origin-authoff",
+      "files": [
+        "src/components/decisions/RuleOrigin.tsx"
+      ]
+    },
+    {
+      "testId": "rule-origin-block",
+      "files": [
+        "src/components/decisions/RuleOrigin.tsx"
+      ]
+    },
+    {
+      "testId": "rule-origin-choice",
+      "files": [
+        "src/components/decisions/RuleOrigin.tsx"
+      ]
+    },
+    {
+      "testId": "rule-origin-edited",
+      "files": [
+        "src/components/decisions/RuleOrigin.tsx"
+      ]
+    },
+    {
+      "testId": "rule-origin-error",
+      "files": [
+        "src/components/decisions/RuleOrigin.tsx"
+      ]
+    },
+    {
+      "testId": "rule-origin-meta",
+      "files": [
+        "src/components/decisions/RuleOrigin.tsx"
+      ]
+    },
+    {
+      "testId": "rule-origin-redacted",
+      "files": [
+        "src/components/decisions/RuleOrigin.tsx"
+      ]
+    },
+    {
+      "testId": "rule-origin-where",
+      "files": [
+        "src/components/decisions/RuleOrigin.tsx"
+      ]
+    },
+    {
+      "testId": "rule-origin-words",
+      "files": [
+        "src/components/decisions/RuleOrigin.tsx"
+      ]
+    },
+    {
+      "testId": "rule-sentence",
+      "files": [
+        "src/components/SteeringRuleDrawer.tsx"
+      ]
+    },
+    {
+      "testId": "rule-where",
+      "files": [
+        "src/components/decisions/RuleOrigin.tsx"
+      ]
+    },
+    {
+      "testId": "rule-where-empty",
+      "files": [
+        "src/components/decisions/RuleOrigin.tsx"
+      ]
+    },
+    {
+      "testId": "rule-where-open",
+      "files": [
+        "src/components/decisions/RuleOrigin.tsx"
+      ]
+    },
+    {
+      "testId": "rule-where-probe",
+      "files": [
+        "src/components/decisions/RuleOrigin.tsx"
+      ]
+    },
+    {
+      "testId": "rule-where-row",
+      "files": [
+        "src/components/decisions/RuleOrigin.tsx"
+      ]
+    },
+    {
+      "testId": "rule-where-step",
+      "files": [
+        "src/components/decisions/RuleOrigin.tsx"
+      ]
+    },
+    {
+      "testId": "rule-where-verdict",
+      "files": [
+        "src/components/decisions/RuleOrigin.tsx"
+      ]
+    },
+    {
       "testId": "run-archive",
       "files": [
         "src/components/ChatPanel.tsx"
@@ -10527,6 +10707,24 @@
       "testId": "tech-proposal-deliver-card",
       "files": [
         "src/components/session/ProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "tech-rule-history-detail",
+      "files": [
+        "src/components/decisions/RuleOrigin.tsx"
+      ]
+    },
+    {
+      "testId": "tech-rule-origin",
+      "files": [
+        "src/components/decisions/RuleOrigin.tsx"
+      ]
+    },
+    {
+      "testId": "tech-rule-origin-error",
+      "files": [
+        "src/components/decisions/RuleOrigin.tsx"
       ]
     },
     {

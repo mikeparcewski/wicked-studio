@@ -151,6 +151,14 @@ export type SteeringRule = ConformanceRule & {
   trigger?: { contains?: string | null };
   obligations?: string[];
   criteria?: string;
+  /**
+   * Facets, plus `project` (api-types 0.77.0, DC-S1/DC-S3; engine ≥ wicked-core-ts 0.7.35):
+   * ASYMMETRIC — a rule with no project applies everywhere; a rule with one is recalled only for
+   * that project. A rule remembered from the operator's words in a project chat carries it.
+   */
+  targets: ConformanceRule['targets'] & { project?: string };
+  /** (api-types 0.77.0) The rule ids this rule replaces — a widened or restated successor. */
+  supersedes?: string[];
 };
 
 /**

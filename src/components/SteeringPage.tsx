@@ -479,6 +479,8 @@ export function SteeringPage({ type, navigate, search = '', runs = [] }: {
           onClose={() => setSelectedId(null)}
           onEdit={setEditing}
           onRetired={onRetired}
+          runs={runs}
+          navigate={navigate}
         />
       )}
 

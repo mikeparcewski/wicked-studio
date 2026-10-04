@@ -5,7 +5,8 @@ import type { RosterSeat, SessionView } from '../../api/types.js';
 import { getDiagnostics, type Diagnostics } from '../../api/diagnostics.js';
 import { objectAttr, OBJECT_ACTIONS, primaryAction, RUN_SECTION_TABS, SHEET_TABS, type ObjectRef } from '../../board/objectActions.js';
 import { parseSessionId, runChatIdOf } from '../../board/sessionModel.js';
-import { STEP_WORD, unitPhaseId } from '../../board/chainModel.js';
+import { unitStepName } from '../../board/chainModel.js';
+import { UnitConsidered } from '../decisions/ConsideredLine.js';
 import { useRunModel } from '../../hooks/useRunModel.js';
 import type { Navigate } from '../../hooks/useRoute.js';
 import { useRoster } from '../../hooks/useRoster.js';
@@ -32,10 +33,7 @@ const UNIT_WORD: Record<string, string> = {
 };
 
 /** A step's plain name off its unit: the chain's word for its phase, else the stage. */
-function stepName(u: SessionView['units'][number]): string {
-  const phase = unitPhaseId(u);
-  return (phase !== null ? STEP_WORD[phase.toLowerCase()] : undefined) ?? (phase ?? u.stage).replace(/[-_]+/g, ' ').replace(/^./, (c) => c.toUpperCase());
-}
+const stepName = unitStepName;
 
 /** The runs a session holds, oldest first. */
 function sessionRuns(sessionId: string, runs: readonly SessionView[], runChatId: boolean): SessionView[] {
@@ -141,6 +139,8 @@ function StepSheet({ r, tab, runs, navigate }: { r: Extract<ObjectRef, { kind: '
           <p className="wk-sheet-line"><b>{name}</b> is {unit !== null ? (unit.ord === live ? 'working' : UNIT_WORD[unit.status] ?? unit.status) : 'not started'}{unit?.assigned_cli ? ` · ${unit.assigned_cli}` : ''}.</p>
           {unit !== null && unit.ord === live && <LiveNarration runId={r.runId} ord={unit.ord} phase={name} />}
           {unit === null && <p className="wk-session-grey">Nothing has run for this step yet.</p>}
+          {/* DC-S8 (B10): the rules this step was given — considered · set aside · cited (unchecked). */}
+          {unit !== null && unit.status !== 'pending' && <UnitConsidered runId={r.runId} ord={unit.ord} status={unit.status} navigate={navigate} />}
         </div>
       )}
       {tab === 'events' && (

@@ -29,6 +29,7 @@ import { openSheet } from '../../store/sheets.js';
 import type { DecisionView } from '../../api/decisions.js';
 import { turnKey, useDecisionsStore } from '../../store/decisions.js';
 import { DecisionLine } from '../decisions/DecisionLine.js';
+import { TurnConsidered } from '../decisions/ConsideredLine.js';
 import { collapseArtifacts, paneOpen, useArtifactSizes } from '../../store/artifactSizes.js';
 import { RunArtifacts } from './RunArtifacts.js';
 
@@ -172,6 +173,19 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
     return out.map((e, i) => ({ e, i })).sort((a, b) => a.e.at - b.e.at || a.i - b.i).map((x) => x.e);
   }, [messages, mine]);
 
+  // DC-S8: the considered line sits under the LAST reply of each turn (one Consideration per turn,
+  // whatever the number of seats); it is re-read when the turn gains a reply.
+  const replies = useMemo(() => {
+    const last = new Map<string, string>();
+    const count = new Map<string, number>();
+    for (const e of entries) {
+      if (e.kind !== 'turn' || e.who === 'you' || e.turnId === null) continue;
+      last.set(e.turnId, e.key);
+      count.set(e.turnId, (count.get(e.turnId) ?? 0) + 1);
+    }
+    return { last, count };
+  }, [entries]);
+
   // DC-S6: the transcript's `decisions` records (one per operator turn crew read) feed the store,
   // so a reload restores every decision line; live `chatDecisions` frames land in the same place.
   useEffect(() => {
@@ -272,6 +286,10 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
                 <p className="wk-session-who">{e.who === 'you' ? 'You' : e.who}</p>
                 <p className={`wk-session-text${e.ok ? '' : ' wk-session-grey'}`}>{e.text}</p>
                 {e.who !== 'you' && <SourceChips citations={e.citations} runs={readers} />}
+                {/* DC-S8: the rules the turn's seats were given — considered · set aside · cited (unchecked). */}
+                {e.who !== 'you' && ref.kind === 'chat' && e.turnId !== null && replies.last.get(e.turnId) === e.key && (
+                  <TurnConsidered chatId={ref.chatId} turnId={e.turnId} replies={replies.count.get(e.turnId) ?? 0} navigate={navigate} />
+                )}
                 {/* DC-S6: what crew made of the operator's words — remembered, offered, or nothing. */}
                 {e.who === 'you' && ref.kind === 'chat' && e.turnId !== null && <TurnDecisions chatId={ref.chatId} turnId={e.turnId} navigate={navigate} />}
               </div>
