@@ -12,8 +12,8 @@
   "studioVersion": "0.5.19",
   "counts": {
     "files": 214,
-    "occurrences": 2386,
-    "static": 2087,
+    "occurrences": 2387,
+    "static": 2088,
     "dynamic": 80,
     "computed": 7
   },
@@ -3904,6 +3904,12 @@
     },
     {
       "testId": "gate-verdict-ungated",
+      "files": [
+        "src/components/GateVerdict.tsx"
+      ]
+    },
+    {
+      "testId": "gate-verdict-who-denied",
       "files": [
         "src/components/GateVerdict.tsx"
       ]

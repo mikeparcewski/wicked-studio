@@ -6,8 +6,7 @@ import {
   formatDuration,
   shortId,
   splitBackticks,
-  type GateVerdictView,
-} from './gateVerdictModel.js';
+  type GateVerdictView, layerLine } from './gateVerdictModel.js';
 
 /**
  * The evaluator's verdict ON the gate card (wicked-studio#250, F-3R2-006): what the operator is
@@ -92,6 +91,13 @@ export function GateVerdict({ view, phase }: { view: GateVerdictView; phase: str
           {view.agentVerdict !== null && <span className="font-semibold">judge: {view.agentVerdict}</span>}
           {view.agentVerdict !== null && view.agentReasoning !== null && ' — '}
           {view.agentReasoning}
+        </p>
+      )}
+
+      {/* studio#430: the judge passed and the evaluator's own verdict denied — said, by name. */}
+      {layerLine(view) !== null && (
+        <p className="text-[11px]" data-testid="gate-verdict-who-denied" style={{ color: 'var(--status-fail)' }}>
+          {layerLine(view)}
         </p>
       )}
 

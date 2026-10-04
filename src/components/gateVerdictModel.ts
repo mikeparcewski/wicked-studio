@@ -854,3 +854,19 @@ export function splitBackticks(text: string): string[] {
 export function shortId(id: string, n = 10): string {
   return id.length > n ? id.slice(0, n) : id;
 }
+
+/**
+ * studio#430: which layer denied, when the card's lines would otherwise read as a contradiction — a
+ * DENIED head over "judge: pass" and an evaluator-policy layer that passed, because the evaluator
+ * UNIT's own `VERDICT:` was not PASS (`denial.source: evaluator_verdict`). `null` when nothing
+ * disagrees.
+ */
+export function layerLine(view: GateVerdictView): string | null {
+  if (view.outcome !== 'fail' || view.denial?.source !== 'evaluator_verdict') return null;
+  // A judge that did not run passed nothing (codex on #430).
+  if (view.judgeSkipped !== null && view.judgeSkipped !== undefined) return null;
+  const judge = (view.agentVerdict ?? '').trim().toLowerCase();
+  if (judge !== 'pass') return null;
+  return `judge${view.judgeCli !== null ? ` (${view.judgeCli})` : ''}: pass · evaluator’s own verdict: FAIL — the evaluator is what denied it`;
+}
+

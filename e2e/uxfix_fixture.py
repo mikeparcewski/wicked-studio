@@ -265,6 +265,10 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          "home_paths": False, "runs_delay_ms": 0,
          # runs_fail — GET /runs answers 500 (studio#466: a failed read is not an empty list).
          "runs_fail": False,
+         # gate_move_tail — studio#430 (e2e/desk_gate_moves_test.py; needs `gate_move`): r-review's
+         #   escalation carries the engine's head-cut TAIL of the verdict ("…" + from the second finding)
+         #   as its denial reason and summary; the critique unit's output stays whole.
+         "gate_move_tail": False,
          # repo_graph — studio#461 (e2e/desk_repo_page_test.py): None serves REPO_GRAPH; "docs" a built
          #   graph of a Markdown-only repo (totals 7 symbols / 2 files, no nodes shown); "fail" a 502.
          "repo_graph": None,
@@ -2052,6 +2056,19 @@ GATE_MOVE_EVENTS = [
     {"type": "awaitingHuman", "session": "r-review", "ord": 2, "ts": GATE_MOVE_T0 + 9 * MIN + SEC, "seq": 8,
      "prompt": GATE_MOVE_PROMPT, "reviewingOrd": 2},
 ]
+GATE_MOVE_TAIL = "…" + GATE_MOVE_REASON[GATE_MOVE_REASON.index("- src/app.ts"):]
+
+
+def _tail_cut(e: dict) -> dict:
+    """studio#430: the engine keeps the 4 KB tail of a long verdict, head-cut with "…"."""
+    if e.get("type") == "gateEvaluated" and isinstance(e.get("denial"), dict):
+        e["denial"]["reason"] = GATE_MOVE_TAIL
+        e["denialReason"] = GATE_MOVE_TAIL
+    if e.get("type") == "gateEscalated":
+        e["verdictSummary"] = GATE_MOVE_TAIL
+    return e
+
+
 GATE_MOVE_OUTPUTS = {
     "produce": {"output": GATE_MOVE_CREATOR_OUTPUT},
     "critique": {"output": GATE_MOVE_REASON},
@@ -5528,6 +5545,8 @@ class W2Handler(SimpleHTTPRequestHandler):
             with state_lock:
                 if state["gate_move"] and rid == "r-review":
                     events = list(GATE_MOVE_EVENTS)
+                    if state["gate_move_tail"]:
+                        events = [_tail_cut(e) for e in json.loads(json.dumps(events))]
                 if state["escalation_arms"] and rid in ESC_EVENTS:
                     events = list(ESC_EVENTS[rid])
                 if state["trust_rules"] and rid in TRUST_GATES:
