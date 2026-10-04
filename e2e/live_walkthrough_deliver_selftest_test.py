@@ -79,11 +79,16 @@ set_fixture(origin, sessions=True, run_chat_id=True, walkthrough=True, walk_reco
 r1 = live("r-walk-fail", "inline,failed,fix", WALK_RERECORD_S="0")  # the fixture cannot re-record: not followed, said so
 legs = r1.get("legs", {})
 posts = gate_posts("r-walk-fail")
-check("fail-legs", r1.get("ok") is True and legs.get("inline", {}).get("ok") and legs.get("failed", {}).get("ok")
+pane_t = ((legs.get("failed", {}).get("pane") or {}).get("t"))
+check("fail-legs", r1.get("ok") is True and legs.get("inline", {}).get("ok") and legs.get("inline", {}).get("state") == "✗ Failed at 0:41"
+      and legs.get("failed", {}).get("ok") and not legs.get("failed", {}).get("capped")
+      and legs.get("failed", {}).get("failing_sec") == 41 and isinstance(pane_t, (int, float)) and 40.4 <= pane_t <= 45
+      and legs.get("failed-moment", {}).get("ok") and not legs.get("failed-moment", {}).get("capped") and legs.get("failed-moment", {}).get("wire_sec") == 41
       and legs.get("failed", {}).get("full", {}).get("same_node") is True and legs.get("failed", {}).get("back") == ["pane", "inline"]
       and legs.get("fix", {}).get("ok") and not legs.get("fix", {}).get("capped")
       and legs.get("fix", {}).get("decisions_before") == 0 and legs.get("fix", {}).get("decisions_after") == 1
-      and (legs.get("fix", {}).get("new") or [{}])[0].get("allow") is False
+      and (legs.get("fix", {}).get("new") or [{}])[0] == {"type": "gateDecided", "ord": 4, "allow": False, "action": "request_changes"}
+      and legs.get("fix", {}).get("gate_ord") == 4
       and legs.get("rerecord", {}).get("capped") == "machinery-verified",
       legs=legs, exit=r1.get("_exit"), stderr=r1.get("_stderr"))
 check("fail-wire", len(posts) == 1 and posts[0].get("approve") is False and (posts[0].get("amend") or posts[0].get("note") or ""),
@@ -93,9 +98,13 @@ check("fail-wire", len(posts) == 1 and posts[0].get("approve") is False and (pos
 set_fixture(origin, reset_walkthrough=True, reset_gate_posts=True)
 r2 = live("r-walk-pass", "passed,export")
 legs = r2.get("legs", {})
+chip_t = legs.get("checked-link", {}).get("t")
 check("pass-legs", r2.get("ok") is True and legs.get("passed", {}).get("ok") and not legs.get("passed", {}).get("capped")
-      and legs.get("passed", {}).get("checked_steps") == ["build"] and (legs.get("passed", {}).get("sentence") or "").startswith("6 of 6 done")
-      and legs.get("checked-link", {}).get("ok") and legs.get("export", {}).get("ok") and not legs.get("export", {}).get("capped")
+      and legs.get("passed", {}).get("checked_steps") == ["build"] and legs.get("passed", {}).get("sentence") == "6 of 6 done · 1 checked"
+      and legs.get("passed", {}).get("chips") == [{"step": "build", "check": "checked", "sec": "30", "text": "checked at 0:30 ▸", "button": True}]
+      and legs.get("checked-moment", {}).get("ok") and not legs.get("checked-moment", {}).get("capped") and legs.get("checked-moment", {}).get("moments") == {"build": [30, 48]}
+      and legs.get("checked-link", {}).get("ok") and isinstance(chip_t, (int, float)) and 29.4 <= chip_t <= 34
+      and legs.get("export", {}).get("ok") and not legs.get("export", {}).get("capped")
       and legs.get("export", {}).get("ui", {}).get("sha256") == legs.get("export", {}).get("take", {}).get("sha256"),
       legs=legs, exit=r2.get("_exit"), stderr=r2.get("_stderr"))
 
@@ -104,7 +113,9 @@ set_fixture(origin, reset_gate_posts=True)
 r3 = live("r-walk-yours", "deliver")
 legs = r3.get("legs", {})
 check("deliver-legs", r3.get("ok") is True and legs.get("deliver", {}).get("ok") and not legs.get("deliver", {}).get("capped")
-      and legs.get("deliver", {}).get("decisions") == 0
+      and legs.get("deliver", {}).get("decisions") == 0 and legs.get("deliver-card", {}).get("ok")
+      and legs.get("deliver-line", {}).get("ok") and not legs.get("deliver-line", {}).get("capped")
+      and (legs.get("deliver-line", {}).get("wire") or {}).get("line") == "Accepted: the checks this run had to pass have passed."
       and (legs.get("deliver", {}).get("acceptance") or {}).get("tone") == "ok"
       and (legs.get("deliver", {}).get("sure") or "").startswith("Are you sure?")
       and legs.get("deliver-yes", {}).get("capped") == "machinery-verified",
