@@ -18,7 +18,7 @@ vi.mock('../src/api/client.js', () => ({
 
 const { api } = await import('../src/api/client.js');
 const {
-  APPEARANCE_KEY, DEFAULT_APPEARANCE, sanitizeAppearance, useAppearanceStore,
+  APPEARANCE_KEY, DEFAULT_APPEARANCE, NEW_INSTALL_APPEARANCE, sanitizeAppearance, useAppearanceStore,
 } = await import('../src/theming/appearance.js');
 
 const getApp = vi.mocked(api.getAppearanceSettings);
@@ -62,11 +62,11 @@ describe('load (§3.3 startup)', () => {
     expect(putApp).not.toHaveBeenCalled();
   });
 
-  it('a store without the key applies the defaults (dark, no logo, 230/74/68)', async () => {
+  it('a store without the key is a new install: wicked-light, harbor 200/47/25, no logo (S15b)', async () => {
     await useAppearanceStore.getState().load();
-    expect(root().style.getPropertyValue('--_accent-h')).toBe('230');
+    expect(root().style.getPropertyValue('--_accent-h')).toBe('200');
     expect(root().style.getPropertyValue('--logo-url')).toBe('');
-    expect(root().hasAttribute('data-theme')).toBe(false);
+    expect(root().getAttribute('data-theme')).toBe('wicked-light');
   });
 
   it('a failed GET leaves the stylesheet defaults standing — silently', async () => {
@@ -80,8 +80,8 @@ describe('load (§3.3 startup)', () => {
 describe('sanitizeAppearance (external store — never trusted)', () => {
   it('clamps channels, defaults junk, and empties logo/theme correctly', () => {
     expect(sanitizeAppearance({ accent_h: 999, accent_s: -4, accent_l: 'x', logo_url: '', theme: 'sepia' }))
-      .toEqual({ accent_h: 359, accent_s: 0, accent_l: 68, logo_url: null, theme: 'dark', site_name: null, skin: 'studio' });
-    expect(sanitizeAppearance(null)).toEqual(DEFAULT_APPEARANCE);
+      .toEqual({ accent_h: 359, accent_s: 0, accent_l: 68, logo_url: null, theme: 'dark', site_name: null, skin: 'desk', skin_migrated: true });
+    expect(sanitizeAppearance(null)).toEqual(NEW_INSTALL_APPEARANCE);
     expect(sanitizeAppearance({ accent_h: 179.6 }).accent_h).toBe(180);
     // site_name: a blank/whitespace value is the default (null); a real name is kept.
     expect(sanitizeAppearance({ site_name: '   ' }).site_name).toBeNull();

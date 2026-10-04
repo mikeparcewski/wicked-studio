@@ -54,6 +54,7 @@ import time
 from datetime import datetime, timezone
 
 from uxfix_fixture import (
+    DEFAULT_APPEARANCE,
     HIDE_GATE_TOASTS,
     OPEN_WORKING_BAND,
     NARRATION,
@@ -102,8 +103,10 @@ INLINE = """() => ({
 
 # The stored appearance scene A seeds (a NON-default hue, so "load applies the
 # store" is distinguishable from the stylesheet default) and scene B's teal.
-STORED_A = {"accent_h": 200, "accent_s": 60, "accent_l": 55, "logo_url": None, "theme": "dark"}
-STORED_B = {"accent_h": 180, "accent_s": 70, "accent_l": 58, "logo_url": None, "theme": "dark"}
+# Built on the fixture's record so the skin it was chosen under (and `skin_migrated`, S15b) rides
+# along: a bare record predates the flip and would boot the Desk, not this journey's classic board.
+STORED_A = {**DEFAULT_APPEARANCE, "accent_h": 200, "accent_s": 60, "accent_l": 55, "logo_url": None, "theme": "dark"}
+STORED_B = {**DEFAULT_APPEARANCE, "accent_h": 180, "accent_s": 70, "accent_l": 58, "logo_url": None, "theme": "dark"}
 LOGO_URL = "/__assets/logo-test.svg"
 
 report: dict = {"ok": False, "steps": {}}

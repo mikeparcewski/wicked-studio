@@ -41,15 +41,15 @@ afterEach(() => {
 });
 
 describe('the skin in studio.appearance', () => {
-  it('defaults to `studio` and sanitizes an unknown skin back to it', () => {
-    expect(DEFAULT_APPEARANCE.skin).toBe('studio');
-    expect(sanitizeAppearance({}).skin).toBe('studio');
-    expect(sanitizeAppearance({ skin: 'neon' }).skin).toBe('studio');
-    expect(sanitizeAppearance({ skin: 'compact-rail' }).skin).toBe('compact-rail');
+  it('defaults to `desk` (S15b) and sanitizes an unknown skin back to it', () => {
+    expect(DEFAULT_APPEARANCE.skin).toBe('desk');
+    expect(sanitizeAppearance({}).skin).toBe('desk');
+    expect(sanitizeAppearance({ skin: 'neon', skin_migrated: true }).skin).toBe('desk');
+    expect(sanitizeAppearance({ skin: 'compact-rail', skin_migrated: true }).skin).toBe('compact-rail');
   });
 
   it('load applies a stored skin: data-skin beside data-theme, tokens inline', async () => {
-    getApp.mockResolvedValue({ settings: { [APPEARANCE_KEY]: { theme: 'light', skin: 'compact-rail' } } });
+    getApp.mockResolvedValue({ settings: { [APPEARANCE_KEY]: { theme: 'light', skin: 'compact-rail', skin_migrated: true } } });
     await useAppearanceStore.getState().load();
     expect(root().getAttribute('data-skin')).toBe('compact-rail');
     expect(root().getAttribute('data-theme')).toBe('light');
@@ -59,7 +59,8 @@ describe('the skin in studio.appearance', () => {
     expect(useAppearanceStore.getState().appearance.skin).toBe('compact-rail');
   });
 
-  it('the default skin still stamps data-skin="studio" and writes no overrides', async () => {
+  it('the studio skin still stamps data-skin="studio" and writes no overrides', async () => {
+    getApp.mockResolvedValue({ settings: { [APPEARANCE_KEY]: { skin: 'studio', skin_migrated: true } } });
     await useAppearanceStore.getState().load();
     expect(root().getAttribute('data-skin')).toBe('studio');
     for (const name of Object.keys(COMPACT.tokens)) {

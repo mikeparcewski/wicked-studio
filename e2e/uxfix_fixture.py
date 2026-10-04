@@ -1143,10 +1143,12 @@ def capture_rows(run_id: str, project_id: str) -> list:
 # STUDIO_SKIN (env) — the skin every rig boots under (src/theming/skins.ts). It rides the
 # stored `studio.appearance.skin`, the SAME path the Theme page's picker persists through,
 # so `STUDIO_SKIN=compact-rail python3 e2e/wave2b_queue_test.py` runs a behaviour journey
-# under the proof skin with no rig change. Unset = `studio`, the current look.
+# under the proof skin with no rig change. Unset = `studio`, the classic look. The record is
+# past the flip (`skin_migrated`, S15b), so the stored skin is honoured as chosen — a record
+# without it would resolve to `desk`, the default since the flip.
 STUDIO_SKIN = os.environ.get("STUDIO_SKIN", "studio")
 DEFAULT_APPEARANCE = {"accent_h": 230, "accent_s": 74, "accent_l": 68,
-                      "logo_url": None, "theme": "dark", "skin": STUDIO_SKIN}
+                      "logo_url": None, "theme": "dark", "skin": STUDIO_SKIN, "skin_migrated": True}
 settings_store: dict = {"graphNodeLimit": 150,
                         "studio.appearance": dict(DEFAULT_APPEARANCE)}
 

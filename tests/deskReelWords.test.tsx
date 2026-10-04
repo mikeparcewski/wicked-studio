@@ -94,6 +94,7 @@ describe('studio#441: desk-skin gate toasts speak the Desk’s words', () => {
     expect(screen.getByTestId('gate-toast-overflow').textContent).toBe('+1 more waiting on the Desk');
   });
   it('the studio skin keeps its toast as it was', () => {
+    useAppearanceStore.setState({ appearance: { ...DEFAULT_APPEARANCE, skin: 'studio' }, loaded: true });
     useGateStore.setState({ gates: { [UUID]: gate() } });
     render(<GateNotifications onSelect={() => {}} />);
     expect(screen.getByTestId('gate-notification').textContent).toContain('Run awaiting human');

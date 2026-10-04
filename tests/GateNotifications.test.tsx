@@ -15,6 +15,7 @@ import {
 import { useGateStore } from '../src/store/gates.js';
 import type { OpenGate } from '../src/store/gates.js';
 import { useMembershipStore } from '../src/store/membership.js';
+import { DEFAULT_APPEARANCE, useAppearanceStore } from '../src/theming/appearance.js';
 import { makeView } from './factories.js';
 
 function gate(runId: string, over: Partial<OpenGate> = {}): OpenGate {
@@ -31,6 +32,9 @@ beforeEach(() => {
   resetToastLedger();
   useGateStore.setState({ gates: {} });
   useMembershipStore.setState({ projectIdByRun: {} });
+  // These pin the studio skin's toast (the Desk's variant: deskReelWords.test.tsx); desk is the
+  // default since the flip (S15b).
+  useAppearanceStore.setState({ appearance: { ...DEFAULT_APPEARANCE, skin: 'studio' }, loaded: true });
 });
 
 afterEach(() => {

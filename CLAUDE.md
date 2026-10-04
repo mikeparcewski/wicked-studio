@@ -29,6 +29,9 @@ answer HITL gates, browse projects/evidence/coverage, watch live CoreEvents.
   every behaviour journey (S15a). A desk journey goes in `DESK_ONLY`, never in `BEHAVIOUR`; a new
   behaviour journey runs under desk too (branch on `STUDIO_SKIN` where the Desk differs), or names its
   desk counterpart in `DESK_COUNTERPARTS` — `--check-desk` (run by CI) fails otherwise.
+  The Desk is the default skin (S15b). A rig that walks the classic shell picks `studio` the way
+  the Theme page does: a stored `studio.appearance` with `skin_migrated: true` (the fixture's record
+  carries it); a record without the marker predates the flip and opens the Desk.
 - `testid-inventory.json` — regenerate with `npm run manifest:testids`, never hand-merge it.
   Removing a testid fails `tests/testidRemovals.test.ts` unless `e2e/testid-successors.json`
   names its successor.
