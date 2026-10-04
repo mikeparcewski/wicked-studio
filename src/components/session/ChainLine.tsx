@@ -3,6 +3,8 @@ import type { SessionView } from '../../api/types.js';
 import { isRouteUnsupported } from '../../api/errors.js';
 import { runIdentityOf, teamPlanApi } from '../../api/teamPlan.js';
 import { chainOf, chainSentence, unitPhaseId, type ChainModel, type ChainStep } from '../../board/chainModel.js';
+import { checkChip, checkedSentence, type MomentOf } from '../../board/checkState.js';
+import type { WalkthroughStepState } from '../../api/types.js';
 import { openSheet } from '../../store/sheets.js';
 import { useConnectionStore } from '../../store/connection.js';
 import { loadCatalog, usePlanCatalog } from '../../store/planCatalog.js';
@@ -14,7 +16,10 @@ import { useTeamPlanStore } from '../../store/teamPlan.js';
  * It hydrates from `GET /runs/:id/team` when it mounts, again when the run's status or unit moves
  * (the refresh a daemon with no team relay needs: it sends no `teamEvent` frames), and again after
  * a `/ws` reconnect; live `teamEvent` frames fold in between (App feeds the store). A run that is
- * not a team run renders from its units. Never "checked" without `check_state` (board/chainModel).
+ * not a team run renders from its units. Never "checked" without `check_state` (board/chainModel):
+ * WT-U2 hands the acceptance read's per-step states in as `checks`, and each step wears its chip —
+ * "checked at 0:34 ▸" (opens the walkthrough there), "check failed at 0:41", "end-to-end testing is
+ * yours" — with the moment from the take's chapter marks (`momentOf`), never invented.
  */
 export interface RunChain {
   chain: ChainModel;
@@ -90,13 +95,19 @@ function whyOf(s: ChainStep): string {
   return [ADDED_WORD[s.addedBy], s.reason].filter(Boolean).join(' — ');
 }
 
-export function ChainLine({ chain, runId, units = [], teamError = null, onRetry }: {
+export function ChainLine({ chain, runId, units = [], teamError = null, onRetry, checks = null, momentOf, onOpenAt }: {
   chain: ChainModel;
   runId: string;
   /** The run's units: a step that has one opens its sheet (S11). */
   units?: SessionView['units'];
   teamError?: string | null;
   onRetry?: () => void;
+  /** WT-U2: the acceptance read's per-step check states (`chain` already folded them — these give the chips their words). */
+  checks?: readonly WalkthroughStepState[] | null;
+  /** WT-U2: the take's chapter moments; absent = chips with nothing to open. */
+  momentOf?: MomentOf;
+  /** WT-U2: a chip with a moment asks the run's walkthrough to open there. */
+  onOpenAt?: (sec: number) => void;
 }): React.ReactElement {
   return (
     <div data-testid="chain" data-run-id={runId} data-source={chain.source} data-proposed={chain.proposed ? 'true' : 'false'} className="wk-chain">
@@ -104,6 +115,7 @@ export function ChainLine({ chain, runId, units = [], teamError = null, onRetry 
         <ol data-testid="chain-line" aria-label={chain.proposed ? 'Proposed steps' : 'Steps'} className="wk-chain-line">
           {chain.steps.map((s, i) => {
             const ord = stepUnitOrd(s, units);
+            const chip = checkChip(s, checks, momentOf);
             return (
             <li
               {...(ord !== null ? { 'data-object': `step:${runId}:${ord}` } : {})}
@@ -126,13 +138,18 @@ export function ChainLine({ chain, runId, units = [], teamError = null, onRetry 
                 <span className="wk-chain-label">{s.label}</span>
               )}
               {s.late && <span className="wk-chain-late">added</span>}
+              {chip !== null && (chip.atSec === null || onOpenAt === undefined ? (
+                <span data-testid="chain-step-check" data-check={chip.kind} className={`wk-chain-check wk-chain-check--${chip.kind}`}>{chip.text}</span>
+              ) : (
+                <button type="button" data-testid="chain-step-check" data-check={chip.kind} data-sec={String(chip.atSec)} onClick={() => onOpenAt(chip.atSec as number)} aria-label={`${chip.text} — open the walkthrough there`} className={`wk-chain-check wk-chain-check--${chip.kind} wk-chain-check--open`}>{chip.text} ▸</button>
+              ))}
             </li>
             );
           })}
         </ol>
       )}
       {(chain.total > 0 || chain.transportLine === null) && (
-        <p data-testid="chain-sentence" className="wk-chain-sentence">{chainSentence(chain)}</p>
+        <p data-testid="chain-sentence" className="wk-chain-sentence">{checkedSentence(chain) ?? chainSentence(chain)}</p>
       )}
       {teamError !== null && (
         <p data-testid="chain-team-error" className="wk-chain-transport">

@@ -758,10 +758,18 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          #   everywhere), so the Rules page can open a rule remembered from the operator's words. The
          #   `/considered` reads ride the `decisions` switch (same corpus). Off: the standing 404.
          "steering_rules": False,
+         # acceptance_wt — WT-U2 (e2e/desk_checks_test.py; needs `walkthrough`): GET /runs/:id/acceptance for
+         #   the walkthrough corpus carries crew's WT-W2 `walkthrough` block (per-step checkState from the
+         #   newest sealed take) and WT-W3 `summary` (the deliver card's line). Off: the body has neither
+         #   (a daemon before WT-W2/W3) — no chips, no line.
+         "acceptance_wt": True,
          }
 state_lock = threading.Lock()
 # Idea 9: every POST /governance/rules body the fixture received (GET /__fixture/rule-posts).
 rule_post_log: list = []
+# WT-U2: under `steering_rules`, a POST /governance/rules upserts here (by id) and GET serves it over
+# the corpus — the Hold switch reloads for the server's answer, so the server must answer with it.
+steering_rule_overlay: dict = {}
 # studio#446: every POST /runs body the sessions corpus received (GET /__fixture/launch-posts), and
 # the runs those launches minted — they join the sessions corpus, carrying `chat_id` from the body's
 # `chatId` when `run_chat_id` is on (crew stamps it the same way). Reset with `reset_gate_posts`.
@@ -913,6 +921,12 @@ STEERING_RULES = [
     {"id": "PAT-100", "rule_type": "pattern", "statement": RULE_GLOBAL["statement"], "severity": "info", "confidence": 0.8,
      "targets": {}, "provenance": {"source": "ui", "source_kinds": ["doc"]},
      "steering_type": "development", "applies_to": [], "excludes": [], "weight": 1.0},
+    # WT-U2: core's testing starter TST-1002 as it ships (seed/testing/rules/testing-starter.json) — advisory:
+    # a trigger and obligations, NO effect. "Hold work to it" adds `effect: allow_with_conditions`.
+    {"id": "TST-1002", "rule_type": "policy", "statement": "A change to code or config gets Test plus a walkthrough review by a different helper.",
+     "severity": "warn", "confidence": 0.9, "steering_type": "testing", "applies_to": ["plan.compose"], "excludes": [], "weight": 1.0,
+     "trigger": {"contains": "\"kinds\":\\[[^\\]]*\"(code|config)\""}, "obligations": ["step:test", "step:walkthrough"],
+     "targets": {}, "provenance": {"ref": "crates/wicked-governance/seed/testing/rules/testing-starter.json#TST-1002", "source_kinds": ["doc"]}},
 ]
 
 # The operator turns chat-pay gains under `decisions` (after its existing t1 turn + notes), each with
@@ -1344,6 +1358,13 @@ WALK_STEPS = [
     {"catalog": "deliver", "id": "deliver"},
 ]
 WALK_REVIEW_ORD = 4
+# WT-U2 (scene 28 qa-yours): a run whose accepted plan's floor override REMOVED the walkthrough pair —
+# end-to-end testing is the operator's; it waits at its deliver gate.
+WALK_YOURS = "r-walk-yours"
+WALK_STEPS_YOURS = [s for s in WALK_STEPS if not s["id"].startswith("walkthrough")]
+WALK_YOURS_DELIVER_ORD = 3
+WALK_YOURS_OVERRIDE = {"remove": ["walkthrough_plan", "walkthrough_review"], "reason": "our QA team tests end to end"}
+WALK_TREE = "9f3c2ab4c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6"  # the tree the sealed take recorded against
 WALK_ESC_PROMPT = ("Unit 4 failed its deterministic floor (walkthrough_failed): the walkthrough failed in chapter 4 "
                    "(Pay for the order) — confirm to record it again, or reject to cancel the run")
 # (key, title, narration, start second in the stitched take)
@@ -1434,12 +1455,12 @@ def _walk_markers() -> list:
     return [{"at": f"{st // 60}:{st % 60:02d}", "sec": st, "title": title} for _k, title, _b, st in WALK_CHAPTERS]
 
 
-def _walk_units(rid: str, statuses: list, denial: str | None = None) -> list:
+def _walk_units(rid: str, statuses: list, denial: str | None = None, steps: list = WALK_STEPS) -> list:
     clis = {"understand": "claude", "build": "codex", "test": "claude", "walkthrough_plan": "agy",
             "walkthrough_review": None, "deliver": None}
     roles = {"build": "creator", "walkthrough_plan": "evaluator"}
     out = []
-    for i, (st, status) in enumerate(zip(WALK_STEPS, statuses)):
+    for i, (st, status) in enumerate(zip(steps, statuses)):
         sid = st["id"]
         unit = {"id": f"{rid}:{sid}", "session_id": rid, "ord": i, "description": sid.replace("_", " "),
                 "stage": "critique" if sid.startswith("walkthrough") else "produce", "assigned_cli": clis[sid],
@@ -1461,11 +1482,12 @@ def walk_runs() -> list:
         phase = walk_phase.get(WALK_FAIL, "failed")
         thin_phase = walk_phase.get(WALK_THIN, "failed")
 
-    def run(rid: str, status: str, problem: str, statuses: list, created: int, denial=None, unit_ix=WALK_REVIEW_ORD) -> dict:
+    def run(rid: str, status: str, problem: str, statuses: list, created: int, denial=None, unit_ix=WALK_REVIEW_ORD,
+            steps: list = WALK_STEPS) -> dict:
         r = session(rid, status, problem, problem)
         r["session"].update(created_at=created, unit_ix=unit_ix, evidence_root=f"/w/evidence/{rid}",
                             team_plan={"rev": 1, "accepted_rev": 1, "preset": None}, human_confirm="all")
-        r["units"] = _walk_units(rid, statuses, denial)
+        r["units"] = _walk_units(rid, statuses, denial, steps)
         return r
     done3 = ["done", "done", "done"]
     fail_statuses = {"failed": done3 + ["done", "rejected", "pending"],
@@ -1484,6 +1506,11 @@ def walk_runs() -> list:
             denial="the walkthrough failed in chapter 02-rounding", unit_ix=1 if thin_phase == "fixing" else WALK_REVIEW_ORD),
     ]
     out[2]["session"]["ended_at"] = SESSION_T0 + 5200
+    # WT-U2: the pair removed by the operator's plan override; waiting at its deliver gate.
+    yours = run(WALK_YOURS, "awaiting_human", "let the cashier void one line of an order",
+                ["done", "done", "done", "pending"], SESSION_T0 + 5100, unit_ix=WALK_YOURS_DELIVER_ORD, steps=WALK_STEPS_YOURS)
+    yours["session"]["team_plan"]["accepted"] = {"floor_override": WALK_YOURS_OVERRIDE}
+    out.append(yours)
     demo = demo_session(WALK_DEMO, WALK_DEMO_STATE)
     demo["session"]["created_at"] = SESSION_T0 + 5400
     for u in demo["units"]:  # the demo preset's phases, as crew names them on the unit
@@ -1498,6 +1525,55 @@ WALK_DEMO_STATE = {"pid": "notes", "url": "http://localhost:5173", "audience": "
 WALK_DEMO_STATE["script"] = demo_script(WALK_DEMO_STATE)
 
 
+def walk_acceptance(rid: str, wt: bool = True) -> dict:
+    """crew's GET /runs/:id/acceptance for the corpus (qe/acceptance.ts): the gate, the WT-W2 `walkthrough`
+    block — one root per walkthrough_review step the requirement names, re-verified against its seal, and
+    the per-CREATOR-step `checkState` from the newest sealed take (crew asserts no `atSec`: the moment is
+    not sealed) — and the WT-W3 `summary`, the deliver card's one line. `wt` False = a daemon before
+    WT-W2/W3: neither block. The yours run (WT §4.9 `owned_by_you`) carries its step state with no root."""
+    with walk_lock:
+        phase = walk_phase.get(rid, "failed")
+    tree = WALK_TREE
+
+    def body(gate: dict, steps: list, roots: list | None, line: str, counts: dict | None) -> dict:
+        out = {"runId": rid, "gate": gate}
+        if wt:
+            if roots is not None:
+                out["walkthrough"] = {"roots": roots, "sealed": all(r["sealed"] for r in roots), "steps": steps}
+            out["summary"] = {"required": gate["required"], "satisfied": gate["satisfied"], "line": line, "walkthrough": counts}
+        return out
+
+    if rid == WALK_PASS:
+        reason = "walkthrough_review: 6 of 6 chapters PASS; the seal held"
+        return body({"required": True, "satisfied": True, "verdict": "PASS", "reason": reason},
+                    [{"stepId": "build", "checkState": "checked",
+                      "provedBy": [{"chapter": "04-pay", "atSec": None}, {"chapter": "05-receipt", "atSec": None}]}],
+                    [{"stepId": "walkthrough_review", "sealed": True, "satisfied": True, "reason": reason}],
+                    f"Checked by a walkthrough: 1 of 1 step at {tree[:7]}.",
+                    {"checked": 1, "failed": 0, "ownedByYou": 0, "steps": 1, "sealed": True, "tree": tree})
+    if rid == WALK_FAIL and phase == "failed":
+        return body({"required": True, "satisfied": False, "verdict": "FAIL", "reason": WALK_STORYLINE_DENIAL},
+                    [{"stepId": "build", "checkState": "failed", "provedBy": [{"chapter": "04-pay", "atSec": None}]}],
+                    [{"stepId": "walkthrough_review", "sealed": True, "satisfied": False, "reason": WALK_STORYLINE_DENIAL}],
+                    f"Not accepted yet: {WALK_STORYLINE_DENIAL}",
+                    {"checked": 0, "failed": 1, "ownedByYou": 0, "steps": 1, "sealed": True, "tree": tree})
+    if rid == WALK_YOURS:
+        return body({"required": True, "satisfied": True, "verdict": "PASS", "reason": "the repo's checks passed; the plan's override left the walkthrough to you"},
+                    [{"stepId": "build", "checkState": "owned_by_you", "provedBy": []}], [],
+                    "Accepted: the checks this run had to pass have passed.", None)
+    if rid == WALK_THIN:
+        reason = "walkthrough_review: the result carries no seal line, so nothing it says can be verified"
+        return body({"required": True, "satisfied": False, "verdict": None, "reason": reason},
+                    [{"stepId": "build", "checkState": "claimed", "provedBy": []}],
+                    [{"stepId": "walkthrough_review", "sealed": False, "satisfied": False, "reason": reason}],
+                    f"Not accepted yet: {reason}", {"checked": 0, "failed": 0, "ownedByYou": 0, "steps": 1, "sealed": False, "tree": None})
+    reason = "walkthrough_review has not sealed a take"  # recording, fixing, re-recording
+    return body({"required": True, "satisfied": False, "verdict": None, "reason": reason},
+                [{"stepId": "build", "checkState": "claimed", "provedBy": []}],
+                [{"stepId": "walkthrough_review", "sealed": False, "satisfied": False, "reason": reason}],
+                f"Not accepted yet: {reason}.", {"checked": 0, "failed": 0, "ownedByYou": 0, "steps": 1, "sealed": False, "tree": None})
+
+
 def walk_gate(rid: str) -> dict | None:
     """The open gate of a walkthrough run: its recorder's escalation, while the take stands failed."""
     with walk_lock:
@@ -1507,6 +1583,10 @@ def walk_gate(rid: str) -> dict | None:
             "Unit 4 failed its deterministic floor (walkthrough_failed) — confirm to record it again, or reject to cancel the run"
         return {"runId": rid, "ord": WALK_REVIEW_ORD, "lifecycle": "open", "prompt": prompt,
                 "receivedAt": iso((SESSION_T0 + 5000) * 1000), "options": None}
+    if rid == WALK_YOURS:  # WT-U2: the hand-over waits on the operator
+        return {"runId": rid, "ord": WALK_YOURS_DELIVER_ORD, "lifecycle": "open",
+                "prompt": "deliver: push the run branch and open a PR on origin — confirm to deliver, reject to keep it local",
+                "receivedAt": iso((SESSION_T0 + 5300) * 1000), "options": None}
     return None
 
 
@@ -1514,13 +1594,15 @@ def walk_team(rid: str) -> dict | None:
     blank = {"runId": rid, "streamFloor": None, "pending": None, "units": [], "rows": []}
     if rid == WALK_DEMO:  # a preset run: not a team run, its chain renders from its units
         return dict(blank, teamed=False, transport=None, reason=None, planRev=None, ended=True)
-    if rid not in (WALK_REC, WALK_FAIL, WALK_PASS, WALK_THIN):
+    if rid not in (WALK_REC, WALK_FAIL, WALK_PASS, WALK_THIN, WALK_YOURS):
         return None
+    steps = WALK_STEPS_YOURS if rid == WALK_YOURS else WALK_STEPS
     rows = [_team_row(971, "wicked.team.plan.accepted", rid, plan_rev=1, workflow_id=f"{rid}:plan-1", band="40-69",
-                      high_risk=False, mode="manual", steps=WALK_STEPS, override=None, proposal_id="p-walk")]
+                      high_risk=False, mode="manual", steps=steps, override=WALK_YOURS_OVERRIDE if rid == WALK_YOURS else None,
+                      proposal_id="p-walk")]
     unit_rows = []
     by_status = {u["id"].split(":", 1)[1]: u["status"] for r in walk_runs() if r["session"]["id"] == rid for u in r["units"]}
-    for i, st in enumerate(WALK_STEPS):
+    for i, st in enumerate(steps):
         status = by_status.get(st["id"], "pending")
         mine = []
         if status in ("done", "distributed", "rejected"):
@@ -1539,7 +1621,7 @@ def walk_team(rid: str) -> dict | None:
 
 def walk_view(rid: str, step: str | None, recorded: int) -> dict | None:
     """crew's WalkthroughView for the corpus; `None` = a `step` that names no walkthrough step (404)."""
-    if step not in (None, "walkthrough_review", "walkthrough_plan"):
+    if rid == WALK_YOURS or step not in (None, "walkthrough_review", "walkthrough_plan"):
         return None
     with walk_lock:
         phase = walk_phase.get(rid, "failed")
@@ -4543,7 +4625,10 @@ class W2Handler(SimpleHTTPRequestHandler):
         if path == "/api/v1/governance/rules":
             if not rules_on:
                 return False
-            self._json(200, {"rules": json.loads(json.dumps(STEERING_RULES))})
+            with state_lock:
+                over = dict(steering_rule_overlay)
+            rules = [over.pop(r["id"], r) for r in STEERING_RULES] + list(over.values())
+            self._json(200, {"rules": json.loads(json.dumps(rules))})
             return True
         m = re.fullmatch(r"/api/v1/chats/([^/]+)/turns/([^/]+)/considered", path)
         if m:
@@ -6175,21 +6260,29 @@ class W2Handler(SimpleHTTPRequestHandler):
         """WT-U1: crew's WT-W1..W3 wire for the walkthrough corpus, its escalation gate, and the
         finished demo run (EP-C3 export). Off: `/walkthrough*` is the unknown-route 404."""
         url = urllib.parse.urlparse(self.path)
-        m = re.fullmatch(r"/api/v1/runs/([^/]+)/(walkthrough|walkthrough/file|walkthrough/storyline|gate|demo|demo/file|demo/export)", url.path)
+        m = re.fullmatch(r"/api/v1/runs/([^/]+)/(walkthrough|walkthrough/file|walkthrough/storyline|gate|demo|demo/file|demo/export|acceptance)", url.path)
         if not m:
             return False
         rid, what = urllib.parse.unquote(m.group(1)), m.group(2)
         with state_lock:
             on = state["sessions"] and state["walkthrough"]
             recorded = state["walk_recorded"]
+            acceptance_wt = state["acceptance_wt"]
         if not on:
             if what.startswith("walkthrough"):
                 self._json(404, {"message": f"Route {method}:{url.path} not found", "error": "Not Found", "statusCode": 404})
                 return True
             return False
-        walks = (WALK_REC, WALK_FAIL, WALK_PASS, WALK_THIN)
+        walks = (WALK_REC, WALK_FAIL, WALK_PASS, WALK_THIN, WALK_YOURS)
         q = urllib.parse.parse_qs(url.query)
         step = (q.get("step") or [None])[0]
+        if what == "acceptance":
+            # WT-U2: only the corpus answers here; any other run falls through to the unknown-route 404,
+            # which studio renders as nothing (no chip, no line), never as a verdict.
+            if method != "GET" or rid not in walks:
+                return False
+            self._json(200, walk_acceptance(rid, acceptance_wt))
+            return True
         if what == "walkthrough" and method == "GET":
             if rid not in walks and rid != WALK_DEMO and rid not in {r["session"]["id"] for r in SESSION_RUNS}:
                 self._json(404, {"error": "no run with that id"})
@@ -6248,7 +6341,9 @@ class W2Handler(SimpleHTTPRequestHandler):
                              "at": iso(int(time.time() * 1000))})
             return True
         if what == "gate":
-            if rid not in (WALK_FAIL, WALK_THIN):
+            # r-walk-yours: its hand-over is READ here (WT-U2's deliver card); an answer to it goes the
+            # ordinary way (the journey asserts none is sent).
+            if rid not in (WALK_FAIL, WALK_THIN, WALK_YOURS) or (rid == WALK_YOURS and method != "GET"):
                 return False
             gate = walk_gate(rid)
             if method == "GET":
@@ -6263,8 +6358,8 @@ class W2Handler(SimpleHTTPRequestHandler):
                 if gate is None:
                     self._json(409, {"error": "no gate is open on this run", "code": "gate_unknown"})
                     return True
-                if "ord" in body and body.get("ord") != WALK_REVIEW_ORD:
-                    self._json(409, {"error": f"Gate changed: this decision names gate {body.get('ord')}, the open one is {WALK_REVIEW_ORD}",
+                if "ord" in body and body.get("ord") != gate["ord"]:
+                    self._json(409, {"error": f"Gate changed: this decision names gate {body.get('ord')}, the open one is {gate['ord']}",
                                      "code": "gate_changed"})
                     return True
                 with walk_lock:
@@ -6591,6 +6686,7 @@ class W2Handler(SimpleHTTPRequestHandler):
             if body.get("reset_rule_posts"):
                 with state_lock:
                     rule_post_log.clear()
+                    steering_rule_overlay.clear()
             if body.get("reset_home_runs"):
                 with state_lock:
                     preset_put_log.clear()
@@ -7059,7 +7155,10 @@ class W2Handler(SimpleHTTPRequestHandler):
             with state_lock:
                 rule_post_log.append(body)
                 week = state["seat_week"]
-            if not week:
+                rules_on = state["steering_rules"]
+                if rules_on and isinstance(body, dict) and isinstance(body.get("id"), str):
+                    steering_rule_overlay[body["id"]] = body  # WT-U2: the upsert the GET then serves
+            if not week and not rules_on:
                 return self._json(404, {"error": f"w2 fixture: no such endpoint {path}"})
             return self._json(200, {"status": "ok"})
         # crew#686: POST /standing-orders {text, rule} — the invariant refuses an approve of the

@@ -481,6 +481,7 @@ export function SteeringPage({ type, navigate, search = '', runs = [] }: {
           onRetired={onRetired}
           runs={runs}
           navigate={navigate}
+          onHeld={() => { void loadRules(); }}
         />
       )}
 
