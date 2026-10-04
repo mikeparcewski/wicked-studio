@@ -1,3 +1,4 @@
+import { unitKey } from './NarratorFeed.js';
 import { commitGateDecision, IDLE_GATE_ACTION, useGateActionStore } from '../board/gateActions.js';
 import { WatchGateLine } from './WatchLines.js';
 import { reportDecision } from '../board/undoQueue.js';
@@ -319,14 +320,49 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
 
   // Brainstorm idea 1 — the ONE recommended move, from the gate's kind and its verdict: the primary
   // button names it, the consequence line above says what it does, the note arrives pre-filled.
-  const verdictSummary = useMemo(() => escalationSummaryFor(events, verdict?.ord ?? ord), [events, verdict, ord]);
+  const tailSummary = useMemo(() => escalationSummaryFor(events, verdict?.ord ?? ord), [events, verdict, ord]);
+  // studio#430: the engine keeps the 4 KB TAIL of a long verdict (head-cut with "…"): the first
+  // findings are not in it. The card reads the reviewed unit's whole output once and works from that.
+  const headCut = verdict !== null && verdict.outcome === 'fail'
+    && [tailSummary, verdict.denial?.reason ?? null].some((t) => t !== null && /^\s*(…|\.\.\.)/.test(t));
+  const reviewedUnit = verdict !== null ? (units ?? EMPTY_UNITS).find((u) => u.ord === verdict.ord) : undefined;
+  const fullKey = headCut && reviewedUnit !== undefined ? unitKey(runId, reviewedUnit.id, reviewedUnit.ord) : null;
+  // Keyed by run AND unit key: two runs share step names (codex on #430).
+  const fullId = fullKey === null ? null : `${runId}\u0000${fullKey}`;
+  const [fullVerdict, setFullVerdict] = useState<{ id: string; text: string } | null>(null);
+  const keptTail = [tailSummary, verdict?.denial?.reason ?? null].find((t): t is string => t !== null && /^\s*(…|\.\.\.)/.test(t)) ?? null;
+  useEffect(() => {
+    if (fullId === null || fullKey === null || fullVerdict?.id === fullId) return;
+    let cancelled = false;
+    api.getUnitOutput(runId, fullKey)
+      .then(({ output }) => {
+        if (cancelled || typeof output !== 'string' || output.trim() === '') return;
+        // Only the verdict the engine cut: the output must END with the tail it kept (codex on #430) —
+        // anything else is not that document, and the tail stands.
+        const tail = (keptTail ?? '').replace(/^\s*(…|\.\.\.)/, '').trim();
+        if (tail !== '' && output.trimEnd().endsWith(tail)) setFullVerdict({ id: fullId, text: output });
+      })
+      .catch(() => { /* the tail stands: the card still recommends from what the engine kept */ });
+    return () => { cancelled = true; };
+  }, [runId, fullId, fullKey, keptTail, fullVerdict?.id]);
+  const full = fullVerdict !== null && fullVerdict.id === fullId ? fullVerdict.text : null;
+  // Without the whole verdict, the tail is read without the engine's "…" — it otherwise glues itself
+  // to the first kept finding ("…- item 5"), which then is not read as one.
+  const uncut = (t: string | null): string | null => (t === null ? null : t.replace(/^\s*(…|\.\.\.)\s*/, ''));
+  const verdictSummary = full ?? uncut(tailSummary);
+  const verdictForMove = useMemo(
+    () => (verdict !== null && verdict.denial !== null && /^\s*(…|\.\.\.)/.test(verdict.denial.reason ?? '')
+      ? { ...verdict, denial: { ...verdict.denial, reason: full ?? verdict.denial.reason.replace(/^\s*(…|\.\.\.)\s*/, '') } }
+      : verdict),
+    [full, verdict],
+  );
   const move = useMemo(
     () => recommendGateMove({
-      runId, ord, units: units ?? EMPTY_UNITS, verdict, verdictSummary, escalationGate,
+      runId, ord, units: units ?? EMPTY_UNITS, verdict: verdictForMove, verdictSummary, escalationGate,
       hasLift, restoredRetry, isPlanGate, planView: planGate.view,
       diffstat: runDiff !== null ? diffstatLabel(runDiff.diff) : null,
     }),
-    [runId, ord, units, verdict, verdictSummary, escalationGate, hasLift, restoredRetry, isPlanGate, planGate.view, runDiff],
+    [runId, ord, units, verdictForMove, verdictSummary, escalationGate, hasLift, restoredRetry, isPlanGate, planGate.view, runDiff],
   );
   const hidden = duplicateOf(move, escalationGate);
   // studio#232: a pre-run gate leads with the finished phase it asks the operator to approve.

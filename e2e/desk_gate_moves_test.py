@@ -12,7 +12,9 @@ against the in-process fixture:
   3. #476 ONE SAVE PER EDIT: on /steering/policies, adding `vendor` to PAT-100's excludes with Enter
      and moving to the next cell sends exactly one `POST /governance/rules` (excludes [vendor]); the row
      then reads the daemon's value, and no later save carries the earlier excludes.
-  4. 0 page errors.
+  4. #430 THE WHOLE VERDICT: on an escalation whose denial reason and summary are the engine's head-cut
+     tail, the send-back note carries the FIRST finding too (read from the unit's own output).
+  5. 0 page errors.
 
 Captures: e2e/shots/desk-gate-moves-*.png. Env: FEEDBACK_PORT (default 4358).
 """
@@ -132,6 +134,21 @@ with sync_playwright() as p:
     page.screenshot(path=str(SHOTS / "desk-gate-moves-steering-grid.png"))
     check("one-save-no-stale-resend", len(sent) == 1 and sent[0].get("excludes") == ["vendor"] and "vendor" in shown,
           sent=[b.get("excludes") for b in sent], shown=shown)
+
+    # ── 4. #430: the send-back carries the whole verdict ─────────────────────────
+    set_fixture(origin, gate_move=True, gate_move_tail=True)
+    page.goto(f"{origin}/runs/r-review", wait_until="networkidle")
+    try:
+        page.wait_for_function("""() => { const f = document.querySelector('[data-testid="amend-prepopulated"], [data-testid="steering-amend"]');
+          return f && f.value.includes('still reads'); }""", timeout=15000)
+        page.wait_for_timeout(800)
+        note = page.evaluate("""() => document.querySelector('[data-testid="amend-prepopulated"], [data-testid="steering-amend"]').value""")
+    except Exception:
+        note = None
+    page.screenshot(path=str(SHOTS / "desk-gate-moves-full-verdict.png"))
+    check("send-back-carries-the-first-finding", note is not None and "the regression test is missing" in note
+          and "still reads" in note, note=note)
+    set_fixture(origin, gate_move=False, gate_move_tail=False)
 
     check("no-errors", not errors, errors=errors[:5])
     browser.close()
