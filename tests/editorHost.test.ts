@@ -237,6 +237,35 @@ describe('codex r1 (EP-P3): the host says which version the plugin read — the 
   });
 });
 
+describe('codex r2 (EP-P3): a read the plugin never heard is not the version shown', () => {
+  it('an artifact.read that answers after the reply window reports no shown version', async () => {
+    const limits = LIMITS as { replyMs: number };
+    const was = limits.replyMs;
+    limits.replyMs = 60;
+    try {
+      const { host, fromFrame, adapter, ui } = makeHost(['artifact.read']);
+      const shown: number[] = [];
+      ui.shown = vi.fn((v: number) => { shown.push(v); });
+      let port: MessagePort | null = null;
+      vi.spyOn(host.frame.contentWindow!, 'postMessage').mockImplementation(((_m: unknown, _o: unknown, tr?: Transferable[]) => { port = (tr?.[0] as MessagePort) ?? null; }) as never);
+      fromFrame(env('plugin.ready', { editor: 'acme', version: '0.1.0', protocol: [1] }));
+      const replies: { re?: string; ok?: boolean; error?: { code: string } }[] = [];
+      port!.onmessage = (m) => replies.push(m.data as (typeof replies)[number]);
+      let answer: (() => void) | null = null;
+      const real = adapter.read.bind(adapter);
+      vi.spyOn(adapter, 'read').mockImplementation((v?: number) => new Promise((resolve) => { answer = () => { void real(v).then(resolve); }; }));
+      port!.postMessage(env('artifact.read', {}, 'r1'));
+      await vi.waitFor(() => expect(replies.find((m) => m.re === 'r1')).toMatchObject({ ok: false, error: { code: 'timeout' } }));
+      answer!();
+      await new Promise((r) => setTimeout(r, 50));
+      expect(shown).toStrictEqual([]);
+      host.teardown('done');
+    } finally {
+      limits.replyMs = was;
+    }
+  });
+});
+
 describe('the host controller', () => {
   it('creates exactly a sandbox="allow-scripts" frame with no allow= features', () => {
     const { host } = makeHost();

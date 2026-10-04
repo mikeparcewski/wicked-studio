@@ -306,6 +306,9 @@ export class EditorHost {
           this.post({ ...refuse(id, e.error, e.message), ...(e.head !== undefined ? { payload: { head: e.head } } : {}) });
         } else {
           this.post(reply(id, r));
+          // EP-P3 (codex r1/r2): the version the plugin now shows is the one a read answered IN TIME —
+          // a late read's reply is suppressed above, so the plugin never shows it.
+          if (msg.type === 'artifact.read' && !this.torn && typeof (r as { version?: unknown }).version === 'number') this.o.ui.shown?.((r as { version: number }).version);
         }
         if (moved !== undefined) this.artifactChanged(moved.head, moved.kind);
       })
@@ -342,11 +345,7 @@ export class EditorHost {
   private async handleRequest(type: keyof typeof REQUESTS, p: Record<string, unknown>): Promise<unknown> {
     const a = this.o.adapter;
     switch (type) {
-      case 'artifact.read': {
-        const r = await a.read(typeof p['version'] === 'number' ? p['version'] : undefined);
-        if (!('error' in r) && !this.torn) this.o.ui.shown?.(r.version);
-        return r;
-      }
+      case 'artifact.read': return a.read(typeof p['version'] === 'number' ? p['version'] : undefined);
       case 'artifact.versions': return a.versions();
       case 'version.write': {
         if (this.writing) return { error: 'rate_limited', message: 'one write at a time' };

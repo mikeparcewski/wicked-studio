@@ -17,7 +17,8 @@ editor registry stand-in, and crew's checks read (EP-C2) serving four reviewers'
      Undo" — and the element wears the colour; Undo forks the page before it, the colour is gone.
   5. REMOVE: bare Backspace on a picked paragraph removes nothing; Ctrl+Backspace lands ONE version
      ("Removed …"), the paragraph is gone; Undo brings it back.
-  6. 0 page errors; no horizontal scroll.
+  6. A NARROW PANE (a 640 px window): a picked element's peek stays inside the editor.
+  7. 0 page errors; no horizontal scroll.
 
 Captures: e2e/shots/desk-page-acts-*.png. Env: FEEDBACK_PORT (default 4362).
 """
@@ -289,6 +290,19 @@ with sync_playwright() as p:
     check("remove", head_after_bare == "3" and still is True and removed.startswith("Removed paragraph 1 in section 3 — version 4.")
           and gone is True and back is True,
           head_after_bare=head_after_bare, still=still, line=removed, gone=gone, back=back)
+
+    # ── 6. a narrow pane: the peek stays inside the editor (codex r1/r2) ──────────────────
+    page.set_viewport_size({"width": 640, "height": 700})
+    page.wait_for_timeout(600)
+    wait_pickable(page, 5)
+    doc.locator('[data-wid="slide-1-paragraph-2"]').click()
+    page.wait_for_timeout(400)
+    fit = plugin_frame(page).evaluate("""() => { const p = document.getElementById('peek'); const r = p.getBoundingClientRect();
+      return { hidden: p.hidden, left: Math.round(r.left), right: Math.round(r.right), width: document.documentElement.clientWidth }; }""")
+    page.screenshot(path=str(SHOTS / "desk-page-acts-narrow-peek.png"))
+    page.set_viewport_size({"width": W, "height": H})
+    page.wait_for_timeout(400)
+    check("peek-fits", fit is not None and fit["hidden"] is False and fit["left"] >= 0 and fit["right"] <= fit["width"], peek=fit)
 
     overflow = page.evaluate("() => document.documentElement.scrollWidth > document.documentElement.clientWidth")
     check("no-errors", not errors and not overflow, errors=errors, overflow=overflow)
