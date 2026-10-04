@@ -624,6 +624,9 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          # audit_delay_ms — GET /audit answers only after this delay (the handover's
          #   in-flight state is observable).
          "wave2b": False, "simple_gates": [], "audit_delay_ms": 0,
+         # settings_delay_ms — GET /settings answers only after this delay, so the page's first
+         #   paint (the default skin, before studio.appearance lands) is observable.
+         "settings_delay_ms": 0,
          # handover_many — ADDS to wave2b (turn all three on): a handover with about three items
          #   per chip — g3 (gamma, a third simple gate: pair with simple_gates), f2/f3 failed and
          #   d2/d3 completed inside the last three hours (d3's units carry catalog steps, so it can
@@ -1147,6 +1150,19 @@ def capture_rows(run_id: str, project_id: str) -> list:
 # past the flip (`skin_migrated`, S15b), so the stored skin is honoured as chosen — a record
 # without it would resolve to `desk`, the default since the flip.
 STUDIO_SKIN = os.environ.get("STUDIO_SKIN", "studio")
+# Each skin's shell (src/theming/skins.ts `shell`), as App's root stamps it in `data-shell`.
+SKIN_SHELL = {"studio": "classic", "compact-rail": "right-rail", "desk": "desk"}
+
+
+def wait_for_skin(page, timeout: int = 15000) -> None:
+    """Wait until the page renders under STUDIO_SKIN. The first paint is the default skin (the
+    Desk since S15b) until GET /settings lands `studio.appearance`; an element both shells carry
+    can be visible in that first paint and then remount. Waits for `<html data-skin>` and App's
+    `data-shell` together, so React has committed the swap."""
+    page.wait_for_function(
+        """([skin, shell]) => document.documentElement.getAttribute('data-skin') === skin
+            && document.querySelector('[data-shell]')?.getAttribute('data-shell') === shell""",
+        arg=[STUDIO_SKIN, SKIN_SHELL[STUDIO_SKIN]], timeout=timeout)
 DEFAULT_APPEARANCE = {"accent_h": 230, "accent_s": 74, "accent_l": 68,
                       "logo_url": None, "theme": "dark", "skin": STUDIO_SKIN, "skin_migrated": True}
 settings_store: dict = {"graphNodeLimit": 150,
@@ -4913,6 +4929,9 @@ class W2Handler(SimpleHTTPRequestHandler):
             with state_lock:
                 snapshot = json.loads(json.dumps(settings_store))
                 home_on = state["home_paths"]
+                settings_delay = state["settings_delay_ms"]
+            if settings_delay:
+                time.sleep(settings_delay / 1000)
             # api-types 0.38.0 `SettingsResponse.path` (crew 0.7.36) — only under home_paths, so the
             # standing rigs keep seeing a daemon that predates the field.
             self._json(200, {"settings": snapshot, **({"path": HOME_SETTINGS_PATH} if home_on else {})})
