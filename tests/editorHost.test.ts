@@ -414,6 +414,92 @@ describe('the host controller', () => {
     }
   });
 
+  describe('codex r5: the host’s timeout line after the timer', () => {
+    async function timedOut(landing: (resolve: (r: unknown) => void, reject: (e: unknown) => void) => void) {
+      const { host, fromFrame, adapter, ui } = makeHost(['artifact.read', 'artifact.write']);
+      const order: string[] = [];
+      (ui.status as ReturnType<typeof vi.fn>).mockImplementation((line: string) => { order.push(`status:${line}`); });
+      ui.written = vi.fn((w: { version: number }) => { order.push(`written:${w.version}`); });
+      let port: MessagePort | null = null;
+      vi.spyOn(host.frame.contentWindow!, 'postMessage').mockImplementation(((_m: unknown, _o: unknown, tr?: Transferable[]) => { port = (tr?.[0] as MessagePort) ?? null; }) as never);
+      fromFrame(env('plugin.ready', { editor: 'acme', version: '0.1.0', protocol: [1] }));
+      const toPlugin: { type?: string; re?: string; ok?: boolean; error?: { code: string }; payload?: unknown }[] = [];
+      port!.onmessage = (m) => toPlugin.push(m.data as (typeof toPlugin)[number]);
+      const ref = adapter.artifact();
+      vi.spyOn(adapter, 'artifact').mockReturnValue({ ...ref, version: 1, head: 1 });
+      const write = vi.spyOn(adapter, 'write').mockImplementation(() => new Promise((resolve, reject) => { landing(resolve as (r: unknown) => void, reject); }));
+      port!.postMessage(env('version.write', { base: 1, ops: [{ op: 'text', anchor: 'cta', value: 'Reserve', before: 'Book a room' }], summary: 'cta' }, 'w1'));
+      return { host, order, toPlugin, port: port! as MessagePort, write };
+    }
+
+    it('a late definite refusal replaces "it may still land" with what happened', async () => {
+      const limits = LIMITS as { replyMs: number };
+      const was = limits.replyMs;
+      limits.replyMs = 60;
+      try {
+        let settle: ((r: unknown) => void) | null = null;
+        const { host, order, toPlugin } = await timedOut((resolve) => { settle = resolve; });
+        await vi.waitFor(() => expect(toPlugin.find((m) => m.re === 'w1')).toMatchObject({ ok: false, error: { code: 'timeout' } }));
+        settle!({ error: 'head_moved', message: 'the artifact changed since', head: 2 });
+        await vi.waitFor(() => expect(order.at(-1)).toMatch(/^status:Not changed: the artifact changed since/));
+        expect(toPlugin.filter((m) => m.re === 'w1')).toHaveLength(1);
+        host.teardown('done');
+      } finally {
+        limits.replyMs = was;
+      }
+    });
+
+    it('a late throw replaces it too', async () => {
+      const limits = LIMITS as { replyMs: number };
+      const was = limits.replyMs;
+      limits.replyMs = 60;
+      try {
+        let fail: ((e: unknown) => void) | null = null;
+        const { host, order, toPlugin } = await timedOut((_resolve, reject) => { fail = reject; });
+        await vi.waitFor(() => expect(toPlugin.find((m) => m.re === 'w1')).toMatchObject({ ok: false, error: { code: 'timeout' } }));
+        fail!(new Error('HTTP 503'));
+        await vi.waitFor(() => expect(order.at(-1)).toMatch(/^status:Not changed: HTTP 503/));
+        host.teardown('done');
+      } finally {
+        limits.replyMs = was;
+      }
+    });
+
+    it('a later line owns the line: a late refusal after it says nothing', async () => {
+      const limits = LIMITS as { replyMs: number };
+      const was = limits.replyMs;
+      limits.replyMs = 60;
+      try {
+        let settle: ((r: unknown) => void) | null = null;
+        const { host, order, toPlugin, port } = await timedOut((resolve) => { settle = resolve; });
+        await vi.waitFor(() => expect(toPlugin.find((m) => m.re === 'w1')).toMatchObject({ ok: false, error: { code: 'timeout' } }));
+        port.postMessage(env('ui.status', { line: 'Something else happened' }));
+        await vi.waitFor(() => expect(order.at(-1)).toBe('status:Something else happened'));
+        settle!({ error: 'stale', message: 'the element changed' });
+        await new Promise((r) => setTimeout(r, 30));
+        expect(order.filter((l) => l.startsWith('status:Not changed:'))).toHaveLength(0);
+        host.teardown('done');
+      } finally {
+        limits.replyMs = was;
+      }
+    });
+
+    it('a torn host’s timer says nothing (its replacement owns the line)', async () => {
+      const limits = LIMITS as { replyMs: number };
+      const was = limits.replyMs;
+      limits.replyMs = 60;
+      try {
+        const { host, order, write } = await timedOut(() => { /* never lands */ });
+        await vi.waitFor(() => expect(write).toHaveBeenCalled());
+        host.teardown('reloaded');
+        await new Promise((r) => setTimeout(r, 120));
+        expect(order.filter((l) => /no answer/.test(l))).toHaveLength(0);
+      } finally {
+        limits.replyMs = was;
+      }
+    });
+  });
+
   it('codex r3: a late stale answer carries where the head went (moved) — the plugin hears that too, and nothing else', async () => {
     const limits = LIMITS as { replyMs: number };
     const was = limits.replyMs;

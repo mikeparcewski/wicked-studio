@@ -115,6 +115,8 @@ export class EditorHost {
   private port: MessagePort | null = null;
   private handshaken = false;
   private torn = false;
+  /** The write request whose timeout line the host is showing, while no later line replaced it (codex r5). */
+  private timeoutLine: string | null = null;
   private loads = 0;
   private readyTimer: ReturnType<typeof setTimeout> | null = null;
   private pingTimer: ReturnType<typeof setInterval> | null = null;
@@ -254,7 +256,11 @@ export class EditorHost {
       // A write's timeout is the host's line, said NOW, in the host's own order (codex r4): a landing just
       // after the timer puts its written line (with Undo) after this one. Were the plugin to say it on
       // hearing the reply, its status could arrive after that written line and replace it.
-      if (msg.type === 'version.write') this.o.ui.status('Not changed yet: no answer in 10 s — it may still land');
+      // A torn host says nothing: its replacement owns the line now (codex r5).
+      if (msg.type === 'version.write' && !this.torn) {
+        this.o.ui.status('Not changed yet: no answer in 10 s — it may still land');
+        this.timeoutLine = id;
+      }
       this.post(refuse(id, 'timeout', 'no answer in 10 s'));
     }, LIMITS.replyMs);
     this.handleRequest(msg.type, msg.payload)
@@ -276,6 +282,8 @@ export class EditorHost {
         if (late) {
           const made = (msg.type === 'version.write' || msg.type === 'version.fork') && !failed && typeof (r as { version?: unknown }).version === 'number';
           if (made) this.artifactChanged((r as { version: number }).version, msg.type === 'version.fork' ? 'fork' : 'deterministic');
+          // A definite "no" after the timer replaces "it may still land" — while that line is still shown.
+          else if (failed) this.lateNo(id, (r as { message: string }).message);
         } else if (failed) {
           const e = r as { error: ErrorCode; message: string; head?: number };
           this.log({ kind: 'refused', type: msg.type, code: e.error, why: e.message });
@@ -286,11 +294,18 @@ export class EditorHost {
         if (moved !== undefined) this.artifactChanged(moved.head, moved.kind);
       })
       .catch((e: unknown) => {
-        if (settled) return;
+        if (settled) { this.lateNo(id, e instanceof Error ? e.message : String(e)); return; }
         settled = true;
         clearTimeout(timer);
         this.post(refuse(id, 'unavailable', e instanceof Error ? e.message : String(e)));
       });
+  }
+
+  /** The timed-out write `id` ended without a version: say so, if its timeout line is still the one shown. */
+  private lateNo(id: string, why: string): void {
+    if (this.torn || this.timeoutLine !== id) return;
+    this.timeoutLine = null;
+    this.o.ui.status(`Not changed: ${why}`.slice(0, LIMITS.statusChars));
   }
 
   private async currentInventory(): Promise<{ inv: Inventory; tokens: Set<string>; version: number } | { error: ErrorCode; message: string }> {
@@ -325,6 +340,7 @@ export class EditorHost {
             this.ownVersions.add(r.version);
             this.log({ kind: 'written', version: r.version, items: checked.items });
             const summary = String(p['summary']).slice(0, LIMITS.summaryChars);
+            this.timeoutLine = null;
             this.o.ui.thread(`${this.o.firstParty ? 'You changed' : `${this.o.name} changed`} ${summary} · Version ${r.version}`);
             this.o.ui.written?.({ version: r.version, base: p['base'] as number, summary, anchors: [...new Set(checked.items.map((it) => it.selector))] });
           }
@@ -406,6 +422,7 @@ export class EditorHost {
         return;
       }
       case 'ui.status':
+        this.timeoutLine = null;
         this.o.ui.status(String(p['line']).slice(0, LIMITS.statusChars));
         return;
       default:
