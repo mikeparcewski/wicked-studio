@@ -39,9 +39,10 @@ e2e/shots/live-walk-*.png.
 
 Boundary: the browser and the script speak to STUDIO_URL's origin only — every other request is aborted
 before it is sent (other hosts do not even resolve), redirects are judged by the script hop by hop and
-never followed by the browser (the page itself is judged first and then fetched by the browser, so it
-keeps its loopback address space), and the one gap (a static asset the daemon itself redirected to
-another port of its host) is recorded and fails the run after a single contact. No git auth; no deliver yes
+never followed by the browser for the daemon's API. Two gaps, said plainly, each recorded and failing
+the run after a single contact: the page itself is judged by the script and then fetched by the browser
+(so it keeps its loopback address space — a daemon that answered THAT second fetch with a redirect to
+another port of its host would be followed once), and a static asset the daemon redirected likewise. No git auth; no deliver yes
 unless LIVE_APPROVE_DELIVER=yes.
 
 Env: STUDIO_URL (default http://localhost:7701 — never :60785 or :4200, the rig and the dev server);
@@ -425,6 +426,8 @@ def main(p) -> None:  # noqa: ANN001, C901
                 # The page itself: judged (no redirect), then fetched by the BROWSER — a document the script
                 # fulfilled would put the page in an unknown address space, and Chromium's local-network-access
                 # check then refuses the page's own WebSocket to the loopback daemon (CI: 'Lost the connection').
+                # THE GAP, said plainly: were the daemon to answer this second fetch with a redirect, the browser
+                # would follow it once; the goto's redirect chain and the request listener then fail the run.
                 route.continue_()
                 return
             while 300 <= resp.status < 400:
