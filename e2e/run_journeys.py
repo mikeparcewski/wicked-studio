@@ -51,14 +51,14 @@ BEHAVIOUR = [
 # The desk journeys (DES-STUDIO-REBUILD-001 §6.2): they assert the `desk` skin, so they run only
 # under STUDIO_SKIN=desk (CI's `journeys (desk)` leg, skipped while this list is empty). A desk
 # slice adds its journey here and never to BEHAVIOUR, which runs under [studio, compact-rail].
-DESK: list[str] = ["desk_home", "desk_session", "desk_answer", "desk_look", "desk_watch", "desk_proposal", "editor_conformance", "desk_reel_words", "desk_chat_launch", "desk_composer", "desk_watchtower", "desk_cmdk_routes", "desk_controls", "desk_sheets", "desk_home_paths", "desk_decisions", "desk_page_editor", "desk_doc_editors", "desk_walkthrough", "desk_rules", "desk_checks", "desk_plan_order", "desk_page_acts", "desk_run_state", "desk_gate_moves", "desk_repo_page", "desk_launch"]
+DESK: list[str] = ["desk_home", "desk_session", "desk_answer", "desk_look", "desk_watch", "desk_proposal", "editor_conformance", "desk_reel_words", "desk_chat_launch", "desk_composer", "desk_watchtower", "desk_cmdk_routes", "desk_controls", "desk_sheets", "desk_home_paths", "desk_decisions", "desk_page_editor", "desk_doc_editors", "desk_walkthrough", "desk_rules", "desk_checks", "desk_plan_order", "desk_page_acts", "desk_run_state", "desk_gate_moves", "desk_repo_page", "desk_launch", "live_walkthrough_deliver_selftest"]
 
 LISTS = {"behaviour": BEHAVIOUR, "desk": DESK}
 
 # Journeys that need a live daemon or bridge: a real wicked-crew daemon (seed_surfaces,
 # studio_standalone, test_feature_live) or a sibling wicked-interactive checkout
 # (interactive_wire_contract). Operator-run only; never part of --all or CI.
-LIVE = ["seed_surfaces", "studio_standalone", "test_feature_live", "interactive_wire_contract"]
+LIVE = ["seed_surfaces", "studio_standalone", "test_feature_live", "interactive_wire_contract", "live_walkthrough_deliver"]
 
 TIMEOUT_S = 240
 
