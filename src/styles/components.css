@@ -967,7 +967,6 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
 .wk-rules-statement { color: var(--ink-high); font-size: var(--text-sm); text-decoration: none; overflow-wrap: anywhere; }
 .wk-rules-statement:hover, .wk-rules-statement:focus-visible { text-decoration: underline; }
 .wk-rules-line { color: var(--ink-muted); font-size: var(--text-xs); }
-.wk-rules-aside { color: var(--ink-dim); font-size: var(--text-xs); }
 .wk-watch-pill-wrap { position: relative; }
 .wk-watch-card {
   display: none; position: absolute; left: calc(100% + 8px); bottom: 0; z-index: 40; width: 300px;

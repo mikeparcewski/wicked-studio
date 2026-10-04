@@ -49,7 +49,7 @@ describe('ConsideredLine', () => {
     expect(rows.map((r) => r.dataset['verdict'])).toEqual(['cited', 'considered', 'set-aside']);
     expect(rows[0]?.querySelector('[data-testid="considered-row-detail"]')?.textContent).toBe('Cited by claude — unchecked');
     await userEvent.click(rows[0]!.querySelector('[data-testid="considered-row-open"]')!);
-    expect(navigate).toHaveBeenCalledWith('/steering/policies?rule=proposal%3Apr-auto');
+    expect(navigate).toHaveBeenCalledWith('/rules/proposal%3Apr-auto');
     expect(document.body.textContent).not.toMatch(/\bFollowed\b/);
   });
 

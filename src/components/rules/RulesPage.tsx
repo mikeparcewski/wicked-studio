@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../../api/client.js';
 import { RULES_PATH, rulePath } from '../../api/decisions.js';
 import { policiesPath, steeringTypeOf, type SteeringRule } from '../../api/steering.js';
 import type { SessionView } from '../../api/types.js';
 import { ruleSentence } from '../../board/ruleOrigin.js';
-import { GROUP_LABELS, GROUP_ORDER, groupOf, landedWithoutProject, orderRules, rulesSentence, type RulesGroup } from '../../board/rulesPage.js';
+import { GROUP_LABELS, GROUP_ORDER, groupOf, orderRules, rulesSentence, type RulesGroup } from '../../board/rulesPage.js';
 import type { Navigate } from '../../hooks/useRoute.js';
 import { useProjectsStore } from '../../store/projects.js';
 import { SteeringRuleDrawer } from '../SteeringRuleDrawer.js';
@@ -23,7 +23,11 @@ type Read = { kind: 'loading' } | { kind: 'ok'; rules: SteeringRule[] } | { kind
  * as "All rules". A route for every skin; no rule model is derived in this repo.
  *
  * A failed read says so with Try again and is never shown as "no rules"; a rule the daemon does
- * not list is said to be missing while the rest of the page stands.
+ * not list is said to be missing while the rest of the page stands. Reads commit in order (a
+ * reload after Hold or Retire is never overwritten by an older read; StrictMode replays the mount
+ * read), and the editor closes when the address changes. DC §5.2's "landed without its project"
+ * is NOT said here: the rule alone cannot tell a legacy global landing from one the operator
+ * scoped `everywhere` or widened — that needs a crew marker.
  */
 export function RulesPage({ ruleId, runs, navigate }: {
   /** The rule open on the page (`/rules/:ruleId`), or null on `/rules`. */
@@ -34,18 +38,23 @@ export function RulesPage({ ruleId, runs, navigate }: {
 }): React.ReactElement {
   const [read, setRead] = useState<Read>({ kind: 'loading' });
   const [editing, setEditing] = useState<SteeringRule | null>(null);
+  /** The newest read's number: an older read that answers later commits nothing. */
+  const seq = useRef(0);
   const projects = useProjectsStore((s) => s.projects);
   const projectName = (id: string | undefined): string | null => (id === undefined ? null : projects.find((p) => p.id === id)?.name ?? null);
 
   const load = useCallback(async (): Promise<void> => {
+    const mine = ++seq.current;
     try {
       const { rules } = await api.listConformanceRules();
-      setRead({ kind: 'ok', rules: rules as SteeringRule[] });
+      if (mine === seq.current) setRead({ kind: 'ok', rules: rules as SteeringRule[] });
     } catch (e) {
-      setRead({ kind: 'failed', message: e instanceof Error ? e.message : String(e) });
+      if (mine === seq.current) setRead({ kind: 'failed', message: e instanceof Error ? e.message : String(e) });
     }
   }, []);
   useEffect(() => { void load(); }, [load]);
+  // The address changed (Back, another rule, the list): whatever editor was open belonged to the old one.
+  useEffect(() => { setEditing(null); }, [ruleId]);
 
   const go = (path: string) => (e: React.MouseEvent): void => { e.preventDefault(); navigate(path); };
   const rules = read.kind === 'ok' ? read.rules : [];
@@ -58,9 +67,6 @@ export function RulesPage({ ruleId, runs, navigate }: {
     <li key={r.id} data-testid="rules-row" data-rule-id={r.id} data-group={groupOf(r)} data-retired={r.retired === true} className="wk-rules-row">
       <a href={rulePath(r.id)} onClick={go(rulePath(r.id))} data-testid="rules-row-open" className="wk-rules-statement">{r.statement}</a>
       <span data-testid="rules-row-line" className="wk-rules-line">{ruleSentence(r, projectName(r.targets.project))}</span>
-      {landedWithoutProject(r) && (
-        <span data-testid="rules-row-aside" className="wk-rules-aside">Landed without its project — it applies everywhere until you scope it on the grid.</span>
-      )}
     </li>
   );
 

@@ -202,9 +202,10 @@ with sync_playwright() as p:
     page.screenshot(path=str(SHOTS / "desk-decisions-desk.png"))
     desk_line = page.get_by_test_id("desk-rule-line").inner_text()
     page.get_by_test_id("desk-rule-see").click()
-    page.wait_for_function("() => location.pathname === '/steering/policies'", timeout=8000)
+    # S12: "see it" lands on the Rules page, the rule open on its own address.
+    page.wait_for_function("() => decodeURIComponent(location.pathname) === '/rules/proposal:pr-offer'", timeout=8000)
     check("desk-rule", desk_line == "One new rule for upload-endpoint, from your words — see it"
-          and "rule=proposal%3Apr-offer" in page.evaluate("() => location.search"), text=desk_line)
+          and page.get_by_test_id("rules-page").count() == 1, text=desk_line)
 
     # ── 13. LEDGER: nothing drawn ───────────────────────────────────────────────────────
     set_fixture(origin, decisions_mode="ledger")

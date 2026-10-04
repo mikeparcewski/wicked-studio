@@ -292,6 +292,8 @@ function parse(pathname: string): Route {
   // address the old RuleManager held is a REAL route again, for every skin — DC's rule components
   // on one page frame; the steering grid stays reachable from it as "All rules".
   if (first === 'rules') {
+    // `/rules/:ruleId/anything` names no page — not-found, never a silent swap onto the rule.
+    if (third) return route({ panel: 'not-found' });
     return route({ panel: 'rules', ruleId: second ? safeDecode(second) : null });
   }
   // The RETIRED governance addresses: `/wiki` (the old Architecture Wiki page), `/policies` (the

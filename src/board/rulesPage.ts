@@ -18,28 +18,21 @@ export const GROUP_LABELS: Record<RulesGroup, string> = {
 };
 
 /**
- * A rule crew landed from a decision — the operator's words (DC §4.2.4: `policyProposalToRule`
- * names it `proposal:<id>` and stamps provenance source_kinds `decision`; either mark is enough,
- * so an older crew that set only one still counts).
+ * A rule crew landed from a decision — the operator's words. Read from the rule's PROVENANCE
+ * (DC §4.2.4: a decision landing stamps source_kinds `decision`; the proposal row it rides
+ * carries source `decision`), never from the `proposal:<id>` namespace: an agent-proposed policy
+ * the operator approved on the queue lands under the same ids (api/proposals.ts) and is not the
+ * operator's words.
  */
 export function fromYourWords(rule: SteeringRule): boolean {
-  return rule.id.startsWith('proposal:') || (rule.provenance.source_kinds ?? []).includes('decision');
+  const p = rule.provenance;
+  return (p.source_kinds ?? []).includes('decision') || p.source === 'decision';
 }
 
 export function groupOf(rule: SteeringRule): RulesGroup {
   if (fromYourWords(rule)) return 'words';
   if (steeringTypeOf(rule) === 'testing') return 'testing';
   return 'other';
-}
-
-/**
- * DC §5.2: a policy that landed from a decision before project scoping (DC-S3) is global by
- * accident (E3). It is listed once as "landed without its project"; re-scoping it is a human click
- * on the grid. A retired one is history, not a warning.
- */
-export function landedWithoutProject(rule: SteeringRule): boolean {
-  const project = rule.targets.project;
-  return fromYourWords(rule) && rule.rule_type === 'policy' && (project === undefined || project === '') && rule.retired !== true;
 }
 
 /** Crew stamps `created_at` (seconds) on a landed rule; a seeded rule may carry none. */

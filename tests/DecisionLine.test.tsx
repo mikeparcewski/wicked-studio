@@ -85,7 +85,7 @@ describe('DecisionLine', () => {
   it('see it opens the rule on the Rules page', async () => {
     render(<DecisionLine decisions={[view()]} navigate={navigate} />);
     await userEvent.click(screen.getByTestId('decision-see'));
-    expect(navigate).toHaveBeenCalledWith('/steering/policies?rule=proposal%3Apr-1');
+    expect(navigate).toHaveBeenCalledWith('/rules/proposal%3Apr-1');
   });
   it('draws nothing under ledger mode, and nothing for a "never mind"', () => {
     useDecisionsStore.setState({ mode: 'ledger' });

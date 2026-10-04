@@ -1,8 +1,9 @@
+import { StrictMode } from 'react';
 import { cleanup, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { RULES_PATH, rulePath } from '../src/api/decisions.js';
 import type { SteeringRule } from '../src/api/steering.js';
-import { fromYourWords, groupOf, landedWithoutProject, orderRules, rulesSentence } from '../src/board/rulesPage.js';
+import { fromYourWords, groupOf, orderRules, rulesSentence } from '../src/board/rulesPage.js';
 import { RulesPage } from '../src/components/rules/RulesPage.js';
 import { useSteeringRedirect } from '../src/hooks/useLegacyRedirect.js';
 import { parseRoute } from '../src/hooks/useRoute.js';
@@ -79,6 +80,8 @@ describe('the route', () => {
   it('/rules and /rules/:ruleId are REAL routes (S12) — the retired fold into steering is gone for them', () => {
     expect(parseRoute('/rules')).toMatchObject({ panel: 'rules', ruleId: null });
     expect(parseRoute('/rules/proposal%3Apr-auto')).toMatchObject({ panel: 'rules', ruleId: 'proposal:pr-auto' });
+    // A longer address is nobody's: not-found, never a silent swap onto the rule (codex r1).
+    expect(parseRoute('/rules/proposal%3Apr-auto/extra').panel).toBe('not-found');
     // The other retired governance addresses still fold.
     expect(parseRoute('/wiki')).toMatchObject({ panel: 'steering', steeringSection: null });
     expect(parseRoute('/policies')).toMatchObject({ panel: 'steering', steeringSection: null });
@@ -106,20 +109,18 @@ describe('the route', () => {
 });
 
 describe('the words (no rule model: grouping and counts over crew’s rules)', () => {
-  it('a rule crew landed from a decision is "from your words"; a testing rule is testing; the rest are other', () => {
+  it('a rule crew landed from a decision is "from your words" — by its provenance, never by the shared proposal: id namespace', () => {
     expect(fromYourWords(WORDS)).toBe(true);
     expect(fromYourWords(PATTERN)).toBe(false);
-    expect(fromYourWords(rule({ id: 'proposal:pr-9', provenance: { source: 'chat', source_kinds: [] } }))).toBe(true);
+    // An agent-proposed policy the operator approved on the queue also lands as `proposal:<id>`
+    // (api/proposals.ts, the fixture's /approve): not the operator's words (codex r1).
+    const agent = rule({ id: 'proposal:agent-policy', rule_type: 'policy', provenance: { source: 'agent', source_kinds: ['doc'] } as SteeringRule['provenance'] });
+    expect(fromYourWords(agent)).toBe(false);
+    expect(groupOf(agent)).toBe('other');
+    expect(groupOf(rule({ ...agent, steering_type: 'testing' }))).toBe('testing');
     expect(groupOf(WORDS)).toBe('words');
     expect(groupOf(TESTING)).toBe('testing');
     expect(groupOf(PATTERN)).toBe('other');
-  });
-
-  it('DC §5.2: a decision policy that landed without its project is said so once — never a scoped one, a pattern, or a retired one', () => {
-    expect(landedWithoutProject(rule({ ...WORDS, targets: {} }))).toBe(true);
-    expect(landedWithoutProject(WORDS)).toBe(false);
-    expect(landedWithoutProject(PATTERN)).toBe(false);
-    expect(landedWithoutProject(rule({ ...WORDS, targets: {}, retired: true }))).toBe(false);
   });
 
   it('orders: from your words, testing, other — newest first inside a group — retired last', () => {
@@ -162,10 +163,17 @@ describe('the page', () => {
     expect(document.body.textContent).not.toContain('Followed');
   });
 
-  it('says once when a decision policy landed without its project', async () => {
-    listConformanceRules.mockResolvedValue({ rules: [rule({ ...WORDS, targets: {} })] });
-    render(<RulesPage ruleId={null} runs={[]} navigate={vi.fn()} />);
-    await waitFor(() => expect(screen.getByTestId('rules-row-aside').textContent).toContain('Landed without its project'));
+  it('a newer read is never overwritten by an older one (StrictMode replays the mount read; a reload after Hold or Retire must win)', async () => {
+    let first: (v: { rules: SteeringRule[] }) => void = () => {};
+    listConformanceRules
+      .mockImplementationOnce(() => new Promise((r) => { first = r; }))
+      .mockResolvedValueOnce({ rules: [PATTERN, TESTING] });
+    render(<StrictMode><RulesPage ruleId={null} runs={[]} navigate={vi.fn()} /></StrictMode>);
+    await waitFor(() => expect(screen.getAllByTestId('rules-row')).toHaveLength(2));
+    first({ rules: [PATTERN] });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.getAllByTestId('rules-row')).toHaveLength(2);
+    expect(screen.getByTestId('rules-sentence').textContent).toBe('2 rules in force · 1 testing rule');
   });
 
   it('/rules/:ruleId opens the rule as DC’s components — the sentence, ORIGIN, no Hold on a decision rule; closing returns to /rules', async () => {
@@ -190,6 +198,17 @@ describe('the page', () => {
     const drawer = await screen.findByTestId('steering-rule-drawer');
     expect(drawer.textContent).toContain('Hold work to it');
     expect(screen.getAllByText('Hold work to it')).toHaveLength(1);
+  });
+
+  it('the editor belongs to the address: Back to the list (or another rule) closes an open edit form (codex r1)', async () => {
+    listConformanceRules.mockResolvedValue({ rules: [PATTERN, TESTING, WORDS] });
+    const { rerender } = render(<RulesPage ruleId="proposal:pr-auto" runs={[]} navigate={vi.fn()} />);
+    const drawer = await screen.findByTestId('steering-rule-drawer');
+    fireEvent.click(drawer.querySelector('[data-testid="steering-edit-open"]') as HTMLElement);
+    expect(screen.getByTestId('steering-rule-form')).toBeTruthy();
+    rerender(<RulesPage ruleId={null} runs={[]} navigate={vi.fn()} />);
+    expect(screen.queryByTestId('steering-rule-form')).toBeNull();
+    expect(screen.queryByTestId('steering-rule-drawer')).toBeNull();
   });
 
   it('a rule the daemon does not list is said to be missing, with the rest of the page still there', async () => {

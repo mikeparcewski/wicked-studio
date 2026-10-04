@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.5.19",
   "counts": {
-    "files": 213,
-    "occurrences": 2366,
-    "static": 2067,
+    "files": 214,
+    "occurrences": 2377,
+    "static": 2078,
     "dynamic": 80,
     "computed": 7
   },
@@ -7810,12 +7810,6 @@
     },
     {
       "testId": "rules-row",
-      "files": [
-        "src/components/rules/RulesPage.tsx"
-      ]
-    },
-    {
-      "testId": "rules-row-aside",
       "files": [
         "src/components/rules/RulesPage.tsx"
       ]

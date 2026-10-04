@@ -1,5 +1,6 @@
 import { Fragment, useState } from 'react';
 import type { SessionView } from '../api/types.js';
+import { rulePath } from '../api/decisions.js';
 import { STEERING_TYPE_LABELS, STEERING_TYPES } from '../api/steering.js';
 import {
   importEvalCorpus,
@@ -93,10 +94,8 @@ function GapNearestRules({ result, navigate }: {
   navigate: (path: string) => void;
 }): React.ReactElement {
   const nearest = result.nearest_rules ?? [];
-  // Where a nearest-rule link lands (qe finding: hints become LINKS): the unified Policies view,
-  // FILTERED to the sample's type (`?type=`), with `?rule=<id>` opening that rule's drawer.
-  const rulePath = (id: string): string =>
-    `/steering/policies?type=${encodeURIComponent(result.sample.steering_type)}&rule=${encodeURIComponent(id)}`;
+  // Where a nearest-rule link lands (qe finding: hints become LINKS): the Rules page, the rule open
+  // on its own address (`rulePath`, S12) — the one place every rule link in studio lands.
   return (
     <div
       data-testid="testing-evals-nearest"
