@@ -339,7 +339,7 @@ CHAIN = """() => {
 }"""
 
 
-def wait_for(page, what: str, pred, timeout_s: float, every_s: float = 2.0):
+def wait_for(page, what: str, pred, timeout_s: float, every_s: float = 1.0):
     """Poll the page until `pred(art, chain)` returns a truthy value; every wait is recorded."""
     t0 = time.time()
     last = None
@@ -451,7 +451,9 @@ def main(p) -> None:  # noqa: ANN001, C901
     report["evidence"] = {"events": trail is not None, "acceptance": acceptance() is not None, "walkthrough": walkthrough_view() is not None}
 
     # ── W1. the walkthrough, inline, in the run's block ───────────────────────────────────
-    first = page.goto(f"{BASE}/s/run%3A{urllib.parse.quote(RUN, safe='')}", wait_until="networkidle")
+    # `domcontentloaded`, not `networkidle`: the session keeps talking to the daemon, and what the proof needs
+    # on screen is waited for explicitly below.
+    first = page.goto(f"{BASE}/s/run%3A{urllib.parse.quote(RUN, safe='')}", wait_until="domcontentloaded")
     hop = first.request.redirected_from if first is not None else None
     hops = []
     while hop is not None:
