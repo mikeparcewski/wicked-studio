@@ -1150,3 +1150,14 @@ button.wk-walk-chapter-btn:hover .wk-walk-chapter-title { text-decoration: under
 .wk-walk-export-item:hover:not(:disabled) { background: var(--surface-raised); }
 .wk-walk-export-item:disabled { color: var(--ink-dim); cursor: default; }
 .wk-walk-export-item small { font-size: var(--text-xs); color: var(--ink-muted); }
+
+/* ── WT-U2: check chips on the chain, the deliver card's acceptance line ───────────────────── */
+.wk-chain-check { font-size: var(--text-2xs); border-radius: var(--radius-sm); padding: 0 5px; border: 1px solid var(--border); color: var(--ink-muted); white-space: nowrap; }
+.wk-chain-check--checked { border-color: var(--status-ok); color: var(--status-ok); }
+.wk-chain-check--failed { border-color: var(--status-fail); color: var(--status-fail); }
+.wk-chain-check--yours { border-style: dashed; }
+.wk-chain-check--open { background: none; font: inherit; font-size: var(--text-2xs); cursor: pointer; }
+.wk-chain-check--open:hover { text-decoration: underline; }
+.wk-prop-accept--ok { color: var(--status-ok); }
+.wk-prop-accept--bad { color: var(--status-fail); }
+.wk-prop-accept--quiet { color: var(--ink-dim); }

@@ -8,6 +8,8 @@ import {
 } from '../../board/walkthroughModel.js';
 import { commitGateDecision, refreshGate } from '../../board/gateActions.js';
 import { useGateStore } from '../../store/gates.js';
+import { publishRecording, withdrawRecording } from '../../store/recordings.js';
+import { consumeWalkthroughSeek, useWalkthroughSeek } from '../../store/walkthroughSeek.js';
 
 /**
  * THE WALKTHROUGH ARTIFACT (DES-WALKTHROUGH-PROOF-001 §3 scenes 18–23 and 41, slice WT-U1): the
@@ -55,10 +57,12 @@ export function useRecording(runId: string, kind: RecordingKind, step: string | 
         const rec = kind === 'demo-video' ? recordingOfDemo(await getDemo(runId)) : recordingOf(await walkthroughApi.view(runId, step));
         if (cancelled) return;
         fails = 0;
+        publishRecording(rec); // WT-U2: the chain's chips place their moments by this take's chapter marks
         setLoad(kind === 'walkthrough' && rec.step === null && rec.planStep === null ? { kind: 'absent' } : { kind: 'ready', rec });
         if (isLive(rec.state)) timer = setTimeout(() => void read(), POLL_MS);
       } catch (e) {
         if (cancelled) return;
+        if (kind === 'walkthrough') withdrawRecording(runId); // WT-U2: no chip moment from a take not re-read
         // A read that fails while a recording is on screen keeps it (a blip must not blank the take).
         setLoad((was) => (isWalkthroughUnsupported(e) ? { kind: 'absent' }
           : was.kind === 'ready' ? was : { kind: 'failed', message: e instanceof Error ? e.message : String(e) }));
@@ -134,6 +138,12 @@ function Body({ rec, size, morph, units, reload }: {
 }): React.ReactElement {
   const video = useRef<HTMLVideoElement | null>(null);
   const wantPlay = useRef(false);
+  // WT-U2 (scene 22): a "checked at 0:34 ▸" chip on the chain asks for a moment. Open, the player
+  // seeks; inline, the pane opens and the playhead is placed there (instead of the failing moment)
+  // once the player is up.
+  const seekReq = useWalkthroughSeek((s) => s.byRun[rec.runId]);
+  const seenSeek = useRef(0);
+  const pendingSeek = useRef<number | null>(null);
   const line = stateLine(rec, { authorWaiting: authorWaiting(rec, units) });
   const seats = seatLine(rec);
   const failed = failedChapter(rec);
@@ -210,7 +220,8 @@ function Body({ rec, size, morph, units, reload }: {
     const el = video.current;
     if (!open || el === null) return undefined;
     const place = (): void => {
-      el.currentTime = startAt;
+      el.currentTime = pendingSeek.current ?? startAt;
+      pendingSeek.current = null;
       if (wantPlay.current) { wantPlay.current = false; void el.play().catch(() => undefined); }
     };
     if (el.readyState >= 1) { place(); return undefined; }
@@ -219,6 +230,13 @@ function Body({ rec, size, morph, units, reload }: {
     // on a later open.
     return () => { el.removeEventListener('loadedmetadata', place); wantPlay.current = false; };
   }, [open, src, startAt, take]);
+  useEffect(() => {
+    if (rec.kind !== 'walkthrough' || seekReq === undefined || seekReq.n === seenSeek.current) return;
+    seenSeek.current = seekReq.n;
+    consumeWalkthroughSeek(rec.runId, seekReq.n);
+    if (open) seek(seekReq.sec);
+    else { pendingSeek.current = seekReq.sec; wantPlay.current = src !== null; morph('pane'); }
+  }, [seekReq, open, src, seek, morph, rec.kind, rec.runId]);
 
   const act = async (done: string, fn: () => Promise<void>): Promise<void> => {
     if (busy) return;

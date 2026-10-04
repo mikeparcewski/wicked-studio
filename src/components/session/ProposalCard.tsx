@@ -3,6 +3,8 @@ import type { SessionView } from '../../api/types.js';
 import type { ChainModel } from '../../board/chainModel.js';
 import { commitGateDecision, IDLE_GATE_ACTION, useGateActionStore, type GateAnswer } from '../../board/gateActions.js';
 import { deliverCardOf, deliverLine, gateInstance, proposalCard, type ProposalKind } from '../../board/proposalCard.js';
+import { deliverAcceptance } from '../../board/checkState.js';
+import type { RunAcceptanceSummary } from '../../api/types.js';
 import { useGateStore } from '../../store/gates.js';
 import { Tech } from '../Tech.js';
 import { draftLine } from '../../board/planDraft.js';
@@ -22,8 +24,14 @@ import { dropGateDraft, gateDraftFor, gateDraftPlan, usePlanDrafts } from '../..
  *  deliver unit then says so (`proposalCard`'s late-join evidence). */
 const lastKinds = new Map<string, ProposalKind>();
 
-export function ProposalCard({ view, chain }: { view: SessionView; chain: ChainModel }): React.ReactElement | null {
+export function ProposalCard({ view, chain, acceptance = null }: {
+  view: SessionView;
+  chain: ChainModel;
+  /** WT-U2 / WT-W3: crew's acceptance summary for the run — the deliver card's one line, verbatim. */
+  acceptance?: RunAcceptanceSummary | null;
+}): React.ReactElement | null {
   const runId = view.session.id;
+  const accept = deliverAcceptance(acceptance);
   const gate = useGateStore((s) => s.gates[runId]);
   const action = useGateActionStore((s) => s.byGate[runId] ?? IDLE_GATE_ACTION);
   const [ui, setUi] = useState<{ dismissed: string | null; confirming: string | null }>({ dismissed: null, confirming: null });
@@ -82,6 +90,10 @@ export function ProposalCard({ view, chain }: { view: SessionView; chain: ChainM
         <>
           <p data-testid="session-proposal-text" className="wk-prop-text">{card.text}</p>
           {card.why !== null && card.state === 'ask' && <p data-testid="session-proposal-why" className="wk-prop-why">{card.why}</p>}
+          {/* WT-U2: what the acceptance gate says before the hand-over — crew's line, studio's tone. */}
+          {card.kind === 'deliver' && accept !== null && (
+            <p data-testid="session-proposal-acceptance" data-tone={accept.tone} className={`wk-prop-why wk-prop-accept wk-prop-accept--${accept.tone}`}>{accept.text}</p>
+          )}
           {/* The engine's own card (the origin's path, the run branch): underneath only (studio#444). */}
           {card.kind === 'deliver' && <Tech data-testid="tech-proposal-deliver-card" parts={[deliverCardOf(view, gate)]} block />}
           {card.state === 'confirm' && card.confirm !== null ? (

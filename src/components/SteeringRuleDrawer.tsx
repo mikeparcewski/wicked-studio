@@ -9,6 +9,9 @@ import { EffectBadge, SeverityChip } from './SteeringChips.js';
 import { SteeringRetireModal } from './SteeringRetireModal.js';
 import { RuleOrigin } from './decisions/RuleOrigin.js';
 import { useProjectsStore } from '../store/projects.js';
+import { api } from '../api/client.js';
+import { advisoryRule, heldRule, HOLD_VOCAB, holdWords, isHeld, isHoldable, knownObligations } from '../board/holdRule.js';
+import { Tech } from './Tech.js';
 
 /**
  * The rule DRAWER — opened from a grid row's ID CELL; everything richer than the grid's common
@@ -66,12 +69,117 @@ function provenanceText(rule: SteeringRule): React.ReactNode {
   return <span title="this rule carries no provenance">—</span>;
 }
 
+// ── "Hold work to it" (WT-U2) ─────────────────────────────────────────────────────────────────
+
+/**
+ * Off = advisory (no `effect`; the trigger and obligations stay, inert). On = `allow_with_conditions`
+ * + obligations from the closed vocabulary (WT §4.12): the engine inserts them as floor steps when
+ * the rule fires. A rule that carries known obligations is held to those with one click; one that
+ * carries none asks what to hold it to first. Every write is ONE `POST /governance/rules` (the
+ * shipping upsert); the drawer never shows a state the server has not confirmed.
+ */
+function HoldSwitch({ rule, onHeld }: { rule: SteeringRule; onHeld?: (rule: SteeringRule) => void }): React.ReactElement {
+  const held = isHeld(rule);
+  const known = knownObligations(rule);
+  const [picking, setPicking] = useState(false);
+  const [picked, setPicked] = useState<string[]>(known);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const write = async (next: SteeringRule): Promise<void> => {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.upsertConformanceRule(next);
+      setPicking(false);
+      onHeld?.(next);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const toggle = (): void => {
+    if (busy) return;
+    if (held) { void write(advisoryRule(rule)); return; }
+    const ready = heldRule(rule, known);
+    if (ready !== null) { void write(ready); return; }
+    setPicked([]);
+    setPicking(true);
+  };
+  const pick = heldRule(rule, picked);
+  return (
+    <DetailRow label="Hold work to it" testid="steering-rule-hold">
+      <div className="flex flex-col gap-1">
+        <label className="inline-flex items-start gap-2">
+          <input
+            type="checkbox"
+            role="switch"
+            data-testid="steering-rule-hold-switch"
+            checked={held}
+            aria-checked={held}
+            disabled={busy}
+            onChange={toggle}
+          />
+          <span data-testid="steering-rule-hold-words">{holdWords(rule)}</span>
+        </label>
+        {picking && !held && (
+          <div data-testid="steering-rule-hold-pick" className="flex flex-col gap-1 pl-5">
+            <p className="m-0">Hold it to what? When the rule fires, the plan gets:</p>
+            {HOLD_VOCAB.map((v) => (
+              <label key={v.token} className="inline-flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  data-testid="steering-rule-hold-token"
+                  data-token={v.token}
+                  checked={picked.includes(v.token)}
+                  disabled={busy}
+                  onChange={(e) => setPicked((p) => (e.target.checked ? [...p, v.token] : p.filter((t) => t !== v.token)))}
+                />
+                <span>{v.label}</span>
+                <code className="font-mono text-[10px]" style={{ color: 'var(--ink-dim)' }}>{v.token}</code>
+              </label>
+            ))}
+            <div className="flex gap-2">
+              <button
+                type="button"
+                data-testid="steering-rule-hold-confirm"
+                disabled={pick === null || busy}
+                onClick={() => { if (pick !== null) void write(pick); }}
+                className="rounded px-2 py-1 text-[10px] font-semibold"
+                style={{ background: 'var(--accent)', color: 'var(--on-accent)', opacity: pick === null || busy ? 0.5 : 1 }}
+              >
+                Hold
+              </button>
+              <button
+                type="button"
+                data-testid="steering-rule-hold-cancel"
+                onClick={() => setPicking(false)}
+                className="rounded px-2 py-1 text-[10px]"
+                style={{ border: '1px solid var(--border)', color: 'var(--ink-muted)' }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+        {error !== null && (
+          <p data-testid="steering-rule-hold-error" role="alert" className="m-0" style={{ color: 'var(--status-fail)' }}>
+            Could not save the hold; the rule is as it was. <Tech data-testid="tech-rule-hold-error" parts={[error]} />
+          </p>
+        )}
+      </div>
+    </DetailRow>
+  );
+}
+
 // ── The drawer ────────────────────────────────────────────────────────────────────────────────
 
-export function SteeringRuleDrawer({ rule, evidence, onClose, onEdit, onRetired, runs = [], navigate }: {
+export function SteeringRuleDrawer({ rule, evidence, onClose, onEdit, onRetired, runs = [], navigate, onHeld }: {
   rule: SteeringRule;
   /** From the scoreboard's per-rule evidence join, when the scoreboard is served. */
   evidence: { denial_claims: number; governs_evidence: number } | null;
+  /** WT-U2: fires after a Hold switch write succeeded — the shell reloads for the server's state. */
+  onHeld?: (rule: SteeringRule) => void;
   onClose: () => void;
   onEdit: (rule: SteeringRule) => void;
   /** Fires after the retire wire succeeded — the shell reloads for the server's state. */
@@ -147,6 +255,8 @@ export function SteeringRuleDrawer({ rule, evidence, onClose, onEdit, onRetired,
             <ChipList values={rule.obligations ?? []} />
           </DetailRow>
         )}
+        {/* WT-U2 (WT §4.12): the one explicit switch on a testing rule. A decision rule shows none (DC N7). */}
+        {isHoldable(rule) && <HoldSwitch rule={rule} {...(onHeld !== undefined ? { onHeld } : {})} />}
         {rule.criteria !== undefined && rule.criteria !== '' && (
           <DetailRow label="Criteria" testid="steering-rule-criteria">{rule.criteria}</DetailRow>
         )}

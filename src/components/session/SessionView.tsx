@@ -33,6 +33,10 @@ import { TurnConsidered } from '../decisions/ConsideredLine.js';
 import { collapseArtifacts, paneOpen, useArtifactSizes } from '../../store/artifactSizes.js';
 import { RunArtifacts } from './RunArtifacts.js';
 import { OperatorMessage } from '../OperatorMessage.js';
+import { applyCheckState } from '../../board/checkState.js';
+import { useRunAcceptance } from '../../hooks/useRunAcceptance.js';
+import { momentOfRecording, useRecordingsStore } from '../../store/recordings.js';
+import { requestWalkthroughSeek } from '../../store/walkthroughSeek.js';
 
 /**
  * A SESSION (`/s/:id`, DES-STUDIO-REBUILD-001 §5.4, slice S6a): the goal sentence, the thread (the
@@ -330,14 +334,21 @@ function RunBlock({ view, badge, go, sessionId }: {
   go: (path: string) => (e: React.MouseEvent) => void;
   sessionId: string;
 }): React.ReactElement {
-  const { chain, teamError, retry } = useRunChain(view);
+  const { chain: planChain, teamError, retry } = useRunChain(view);
   const id = view.session.id;
   const state = sessionState(view.session.status);
   const gate = useGateStore((s) => s.gates[id]);
   const action = useGateActionStore((s) => s.byGate[id] ?? IDLE_GATE_ACTION);
   const page = `/runs/${encodeURIComponent(id)}`;
+  // WT-U2: "checked" comes only from the acceptance read (crew's per-step check state); the chips'
+  // moments from the walkthrough the artifact below reads; the deliver card's line is crew's summary.
+  const acceptance = useRunAcceptance(view, planChain, gate);
+  const checks = acceptance?.walkthrough?.steps ?? null;
+  const chain = useMemo(() => applyCheckState(planChain, checks), [planChain, checks]);
+  const recording = useRecordingsStore((s) => s.byRun[id]);
+  const momentOf = useMemo(() => momentOfRecording(recording), [recording]);
   return (
-    <section data-testid="session-run" data-run-id={id} data-state={state} className="wk-session-run">
+    <section data-testid="session-run" data-run-id={id} data-state={state} {...(acceptance !== null ? { 'data-acceptance': 'read' } : {})} className="wk-session-run">
       <p className="wk-session-run-head">
         <span aria-hidden className={`wk-desk-dot wk-desk-dot--${state}`} />
         <span className="wk-session-run-title">{humanTitle(view.session.problem || id)}</span>
@@ -345,9 +356,9 @@ function RunBlock({ view, badge, go, sessionId }: {
       </p>
       {/* S6b: the run's ONE status sentence, then its proposal (the plan, the hand-over). */}
       <p data-testid="session-status-sentence" role="status" className="wk-session-status-sentence">{statusSentence(view, chain, gate, action)}</p>
-      <ProposalCard view={view} chain={chain} />
+      <ProposalCard view={view} chain={chain} acceptance={acceptance?.summary ?? null} />
       <PlanStepLines runId={id} />
-      <ChainLine chain={chain} runId={id} units={view.units} teamError={teamError} onRetry={retry} />
+      <ChainLine chain={chain} runId={id} units={view.units} teamError={teamError} onRetry={retry} checks={checks} momentOf={momentOf} onOpenAt={(sec) => requestWalkthroughSeek(id, sec)} />
       {/* S8: the page the run is producing — a live preview that morphs inline → pane → full. */}
       <RunArtifacts view={view} composerKey={sessionId} chain={chain} />
       <RunHelpers view={view} />

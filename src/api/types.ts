@@ -201,12 +201,50 @@ export interface AcceptanceGate {
   reason: string;
 }
 
+/**
+ * Per plan step, whether a sealed walkthrough proves it (DES-walkthrough-proof §4.9; api-types 0.75.0,
+ * WT-W2): `checked` / `failed` / `claimed` / `owned_by_you`, computed by crew at every read, never
+ * stored. The one declaration is `./walkthrough.ts` (WT-U1 mirrored it for the WalkthroughView's
+ * `steps`); the acceptance read serves the same shape.
+ */
+import type { WalkthroughStepState } from './walkthrough.js';
+export type { WalkthroughCheckState, WalkthroughStepState } from './walkthrough.js';
+
+/** `GET /runs/:id/acceptance` → `walkthrough` (api-types 0.75.0): the walkthrough half of the gate,
+ *  ABSENT when the run's requirement names no walkthrough step. */
+export interface RunAcceptanceWalkthrough {
+  roots: Array<{ stepId: string; sealed: boolean; satisfied: boolean; reason: string }>;
+  sealed: boolean;
+  /** Per creator step, from the NEWEST walkthrough of the run. */
+  steps: WalkthroughStepState[];
+}
+
+/** `GET /runs/:id/acceptance` → `summary` (api-types 0.82.0, WT-W3): the deliver card's ONE
+ *  acceptance line, in crew's words — counts and the tree, never a path. */
+export interface RunAcceptanceSummary {
+  required: boolean;
+  satisfied: boolean;
+  line: string;
+  walkthrough: {
+    checked: number;
+    failed: number;
+    ownedByYou: number;
+    steps: number;
+    sealed: boolean;
+    tree: string | null;
+  } | null;
+}
+
 /** The subset of `GET /runs/:id/acceptance` studio reads. */
 export interface RunAcceptanceView {
   runId: string;
   gate: AcceptanceGate;
   /** Absent on daemons older than the conformance section (crew < 0.8). */
   conformance?: AcceptanceConformance;
+  /** WT-W2 (crew ≥ 0.7.47): absent before it, and absent when the requirement names no walkthrough step. */
+  walkthrough?: RunAcceptanceWalkthrough;
+  /** WT-W3 (crew ≥ 0.7.48): absent before it. */
+  summary?: RunAcceptanceSummary;
 }
 
 // ── DELETE /projects/:id/interactive/docs/:doc (crew#338 / studio#119) ────────
