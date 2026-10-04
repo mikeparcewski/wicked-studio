@@ -140,8 +140,17 @@ export function instrumentDocHtml(html: string, baseHref: string): string {
       ? out.replace(/<head[^>]*>/i, (m) => `${m}${baseTag}`)
       : `${baseTag}${out}`;
   }
+  return appendInstrumentBridge(out);
+}
+
+/**
+ * The bridge alone, appended at the end of `<body>` — for a document framed where no base is wanted:
+ * inside the `wicked-page` plugin (EP-P2) the nested frame inherits the bundle's policy, which lets
+ * nothing relative load, so a base would only name an address the document can never reach.
+ */
+export function appendInstrumentBridge(html: string): string {
   const scriptTag = `<script>${BRIDGE_SOURCE}<\/script>`;
-  return /<\/body>/i.test(out)
-    ? out.replace(/<\/body>/i, () => `${scriptTag}</body>`)
-    : `${out}${scriptTag}`;
+  return /<\/body>/i.test(html)
+    ? html.replace(/<\/body>/i, () => `${scriptTag}</body>`)
+    : `${html}${scriptTag}`;
 }

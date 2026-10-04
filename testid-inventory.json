@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.5.19",
   "counts": {
-    "files": 208,
-    "occurrences": 2302,
-    "static": 2015,
+    "files": 210,
+    "occurrences": 2319,
+    "static": 2023,
     "dynamic": 80,
     "computed": 7
   },
@@ -243,9 +243,27 @@
       ]
     },
     {
+      "testId": "artifact-no-editor",
+      "files": [
+        "src/components/session/PluginArtifact.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-no-editor-note",
+      "files": [
+        "src/components/session/PluginArtifact.tsx"
+      ]
+    },
+    {
       "testId": "artifact-open",
       "files": [
         "src/components/ArtifactCard.tsx",
+        "src/components/session/ArtifactMorph.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-opening",
+      "files": [
         "src/components/session/ArtifactMorph.tsx"
       ]
     },
@@ -5969,55 +5987,70 @@
     {
       "testId": "page-edit-input",
       "files": [
-        "src/components/session/PageEditor.tsx"
+        "src/components/session/PageEditor.tsx",
+        "src/plugins/wicked-page/plugin.ts"
       ]
     },
     {
       "testId": "page-editor",
       "files": [
-        "src/components/session/PageEditor.tsx"
+        "src/components/session/PageEditor.tsx",
+        "src/plugins/wicked-page/plugin.ts"
       ]
     },
     {
       "testId": "page-frame",
       "files": [
-        "src/components/session/PageEditor.tsx"
+        "src/components/session/PageEditor.tsx",
+        "src/plugins/wicked-page/plugin.ts"
       ]
     },
     {
       "testId": "page-handle",
       "files": [
-        "src/components/session/PageEditor.tsx"
+        "src/components/session/PageEditor.tsx",
+        "src/plugins/wicked-page/plugin.ts"
       ]
     },
     {
       "testId": "page-hint",
       "files": [
-        "src/components/session/PageEditor.tsx"
+        "src/components/session/PageEditor.tsx",
+        "src/plugins/wicked-page/plugin.ts"
       ]
     },
     {
       "testId": "page-hover-box",
       "files": [
-        "src/components/session/PageEditor.tsx"
+        "src/components/session/PageEditor.tsx",
+        "src/plugins/wicked-page/plugin.ts"
       ]
     },
     {
       "testId": "page-line",
       "files": [
-        "src/components/session/PageEditor.tsx"
+        "src/components/session/PageEditor.tsx",
+        "src/components/session/PluginArtifact.tsx"
+      ]
+    },
+    {
+      "testId": "page-note",
+      "files": [
+        "src/plugins/wicked-page/plugin.ts"
       ]
     },
     {
       "testId": "page-selected-box",
       "files": [
-        "src/components/session/PageEditor.tsx"
+        "src/components/session/PageEditor.tsx",
+        "src/plugins/wicked-page/plugin.ts"
       ]
     },
     {
       "testId": "page-undo",
       "files": [
-        "src/components/session/PageEditor.tsx"
+        "src/components/session/PageEditor.tsx",
+        "src/components/session/PluginArtifact.tsx"
       ]
     },
     {
@@ -6319,6 +6352,30 @@
       "testId": "plan-touch",
       "files": [
         "src/components/PhasePicker.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-artifact",
+      "files": [
+        "src/components/session/PluginArtifact.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-grants-note",
+      "files": [
+        "src/components/session/PluginArtifact.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-reload",
+      "files": [
+        "src/components/session/PluginArtifact.tsx"
+      ]
+    },
+    {
+      "testId": "plugin-torn",
+      "files": [
+        "src/components/session/PluginArtifact.tsx"
       ]
     },
     {

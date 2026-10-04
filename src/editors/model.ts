@@ -77,6 +77,36 @@ export function builtinDefaults(editorId: string): PermissionId[] {
   return PERMISSIONS.filter((p) => p !== 'network.media' || editorId === 'wicked-page');
 }
 
+/** One decided grant as crew answers it (api-types `EditorGrant`, EP-C1): the permission, the engine's
+ *  decision with the steering rules behind it, and the ledger token an operator's "allow" would add. */
+export interface DecidedGrant { permission: string; decision: 'allow' | 'ask' | 'deny'; ruleIds?: string[]; token?: string }
+
+/** The granted set out of crew's answer: only an `allow` grants; `ask` waits for the operator (Settings →
+ *  Editors) and `deny` dominates. The EP-P1 fixture's bare list of permission ids is read as allowed. */
+export function grantedOf(raw: unknown): { grants: PermissionId[]; asking: PermissionId[] } {
+  // Every decision for a permission is read before any is honoured: one deny anywhere in the list
+  // outweighs every allow (and silences an ask) for it — whichever order crew listed them (codex r1).
+  const decided = new Map<PermissionId, 'allow' | 'ask' | 'deny'>();
+  const worse = (a: 'allow' | 'ask' | 'deny' | undefined, b: 'allow' | 'ask' | 'deny'): 'allow' | 'ask' | 'deny' => {
+    const rank = { allow: 0, ask: 1, deny: 2 } as const;
+    return a === undefined || rank[b] > rank[a] ? b : a;
+  };
+  if (!Array.isArray(raw)) return { grants: [], asking: [] };
+  for (const g of raw) {
+    if (typeof g === 'string') { if (PERMISSIONS.includes(g as PermissionId)) decided.set(g as PermissionId, worse(decided.get(g as PermissionId), 'allow')); continue; }
+    if (typeof g !== 'object' || g === null) continue;
+    const d = g as Partial<DecidedGrant>;
+    if (typeof d.permission !== 'string' || !PERMISSIONS.includes(d.permission as PermissionId)) continue;
+    if (d.decision !== 'allow' && d.decision !== 'ask' && d.decision !== 'deny') continue;
+    const p = d.permission as PermissionId;
+    decided.set(p, worse(decided.get(p), d.decision));
+  }
+  const grants: PermissionId[] = [];
+  const asking: PermissionId[] = [];
+  for (const [p, d] of decided) { if (d === 'allow') grants.push(p); else if (d === 'ask') asking.push(p); }
+  return { grants, asking };
+}
+
 /** `GET /api/v1/editors/:id/grants?project=` (crew EP-C1): the engine's decided set (deny dominates).
  *  A daemon without the route grants a built-in editor its default set and a third-party editor
  *  NOTHING (fail closed). Any other failure grants nothing and says why. */
@@ -85,8 +115,8 @@ export async function fetchGrants(editorId: string, version: string, sha: string
   if (projectId !== null) q.set('project', projectId);
   try {
     const r = await apiFetch<{ grants?: unknown }>(`/editors/${encodeURIComponent(editorId)}/grants?${q.toString()}`);
-    const grants = Array.isArray(r.grants) ? r.grants.filter((g): g is PermissionId => PERMISSIONS.includes(g as PermissionId)) : [];
-    return { grants, note: null };
+    const { grants, asking } = grantedOf(r.grants);
+    return { grants, note: asking.length === 0 ? null : `This editor asks for ${asking.join(', ')} — allow it under Settings → Editors.` };
   } catch (e) {
     if (isRouteUnsupported(e)) {
       return editorId.startsWith('wicked-')

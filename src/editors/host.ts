@@ -35,7 +35,14 @@ export interface ArtifactRef {
   lockedParts: AnchorRef[];
 }
 
-export type AdapterResult<T> = T | { error: ErrorCode; message: string; head?: number };
+/** The head moved to a version the reply itself does not make the plugin's current one (EP-P2, codex
+ *  r2/r3): a write that landed while a helper's later version was already the head, a match that could
+ *  not be told apart, a stale edit's new head, the fork an undo made. The host strips it from the reply
+ *  and posts `artifact.changed` for it right after — or alone, when the reply already timed out — so the
+ *  plugin shows the head and never stays on the version it wrote or was looking at. */
+export interface MovedOn { head: number; kind: VersionKind }
+
+export type AdapterResult<T> = (T & { moved?: MovedOn }) | { error: ErrorCode; message: string; head?: number; moved?: MovedOn };
 
 /** What the host can do with the artifact. A method an artifact does not support answers `unsupported`. */
 export interface HostAdapter {
@@ -58,6 +65,10 @@ export interface HostUi {
   status(line: string): void;
   notes(count: number): void;
   thread(line: string): void;
+  /** A write this editor made, structured, so a host can draw its own line and Undo (EP-P2). `anchors`
+   *  are the HOST-checked ids the write touched — the words of the line come from them, never from
+   *  the plugin's `summary` (codex r1). */
+  written?(w: { version: number; base: number; summary: string; anchors: string[] }): void;
   fullscreen(): Promise<boolean>;
   torn(reason: string): void;
   log(entry: HostLogEntry): void;
@@ -99,11 +110,16 @@ export interface HostOptions {
 
 const NO_ACTIVATION = (): boolean => (navigator as Navigator & { userActivation?: { isActive: boolean } }).userActivation?.isActive === true;
 
+/** Write refusals the host or adapter makes before anything is sent: nothing was written. */
+const UNSENT: ReadonlySet<ErrorCode> = new Set<ErrorCode>(['not_granted', 'bad_request', 'too_large', 'unsupported', 'rate_limited', 'refused', 'head_moved']);
+
 export class EditorHost {
   readonly frame: HTMLIFrameElement;
   private port: MessagePort | null = null;
   private handshaken = false;
   private torn = false;
+  /** The write request whose timeout line the host is showing, while no later line replaced it (codex r5). */
+  private timeoutLine: string | null = null;
   private loads = 0;
   private readyTimer: ReturnType<typeof setTimeout> | null = null;
   private pingTimer: ReturnType<typeof setInterval> | null = null;
@@ -237,26 +253,66 @@ export class EditorHost {
     }
     const id = msg.id;
     let settled = false;
-    const timer = setTimeout(() => { if (!settled) { settled = true; this.post(refuse(id, 'timeout', 'no answer in 10 s')); } }, LIMITS.replyMs);
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      // A write's timeout is the host's line, said NOW, in the host's own order (codex r4): a landing just
+      // after the timer puts its written line (with Undo) after this one. Were the plugin to say it on
+      // hearing the reply, its status could arrive after that written line and replace it.
+      // A torn host says nothing: its replacement owns the line now (codex r5).
+      if (msg.type === 'version.write' && !this.torn) {
+        this.o.ui.status('Not changed yet: no answer in 10 s — it may still land');
+        this.timeoutLine = id;
+      }
+      this.post(refuse(id, 'timeout', 'no answer in 10 s'));
+    }, LIMITS.replyMs);
     this.handleRequest(msg.type, msg.payload)
       .then((r) => {
-        if (settled) return;
+        // Settled by the timer: the plugin heard "timeout" and no second reply follows — but what the
+        // adapter did meanwhile is real (a write's landing window is 20 s, the reply's 10 s; codex r3), so
+        // a version it made, and any head it moved to, still reach the plugin as `artifact.changed`.
+        const late = settled;
         settled = true;
         clearTimeout(timer);
-        if (r !== null && typeof r === 'object' && 'error' in r && typeof (r as { error: unknown }).error === 'string') {
+        // A head that moved on is the host's to announce, after the reply, never a field of it (codex r2).
+        let moved: MovedOn | undefined;
+        if (r !== null && typeof r === 'object' && 'moved' in r) {
+          const { moved: m, ...rest } = r as { moved?: MovedOn };
+          moved = m;
+          r = rest;
+        }
+        const failed = r !== null && typeof r === 'object' && 'error' in r && typeof (r as { error: unknown }).error === 'string';
+        if (late) {
+          const made = (msg.type === 'version.write' || msg.type === 'version.fork') && !failed && typeof (r as { version?: unknown }).version === 'number';
+          if (made) this.artifactChanged((r as { version: number }).version, msg.type === 'version.fork' ? 'fork' : 'deterministic');
+          // A definite "no" after the timer replaces "it may still land" — while that line is still shown.
+          else if (failed) this.lateEnd(id, (r as { error: ErrorCode }).error, (r as { message: string }).message);
+        } else if (failed) {
           const e = r as { error: ErrorCode; message: string; head?: number };
           this.log({ kind: 'refused', type: msg.type, code: e.error, why: e.message });
           this.post({ ...refuse(id, e.error, e.message), ...(e.head !== undefined ? { payload: { head: e.head } } : {}) });
         } else {
           this.post(reply(id, r));
         }
+        if (moved !== undefined) this.artifactChanged(moved.head, moved.kind);
       })
       .catch((e: unknown) => {
-        if (settled) return;
+        if (settled) { this.lateEnd(id, null, e instanceof Error ? e.message : String(e)); return; }
         settled = true;
         clearTimeout(timer);
         this.post(refuse(id, 'unavailable', e instanceof Error ? e.message : String(e)));
       });
+  }
+
+  /** The timed-out write `id` ended without a version: say how, if its timeout line is still the one
+   *  shown. Only a refusal made BEFORE the write was sent says "Not changed" (codex r6/r7); what follows
+   *  sending (`stale`, `unavailable`: what landed cannot be fully told) is said in the adapter's own
+   *  words, and a throw says the outcome is not known. */
+  private lateEnd(id: string, code: ErrorCode | null, why: string): void {
+    if (this.torn || this.timeoutLine !== id) return;
+    this.timeoutLine = null;
+    const line = code === null ? `Whether it changed is not known: ${why}` : UNSENT.has(code) ? `Not changed: ${why}` : why;
+    this.o.ui.status(line.slice(0, LIMITS.statusChars));
   }
 
   private async currentInventory(): Promise<{ inv: Inventory; tokens: Set<string>; version: number } | { error: ErrorCode; message: string }> {
@@ -291,7 +347,9 @@ export class EditorHost {
             this.ownVersions.add(r.version);
             this.log({ kind: 'written', version: r.version, items: checked.items });
             const summary = String(p['summary']).slice(0, LIMITS.summaryChars);
+            this.timeoutLine = null;
             this.o.ui.thread(`${this.o.firstParty ? 'You changed' : `${this.o.name} changed`} ${summary} · Version ${r.version}`);
+            this.o.ui.written?.({ version: r.version, base: p['base'] as number, summary, anchors: [...new Set(checked.items.map((it) => it.selector))] });
           }
           return r;
         } finally {
@@ -301,7 +359,11 @@ export class EditorHost {
       case 'version.undo': {
         const v = p['version'] as number;
         if (!this.ownVersions.has(v)) return { error: 'refused', message: 'only a version this editor wrote, this session' };
-        return a.undo(v);
+        const r = await a.undo(v);
+        // The fork an undo makes is this editor's (as the host-side Undo counts it); it reaches the plugin
+        // as `moved`, since the reply itself names no version.
+        if (!('error' in r) && r.moved !== undefined) this.ownVersions.add(r.moved.head);
+        return r;
       }
       case 'version.fork': {
         const r = await a.fork(p['from'] as number);
@@ -367,6 +429,7 @@ export class EditorHost {
         return;
       }
       case 'ui.status':
+        this.timeoutLine = null;
         this.o.ui.status(String(p['line']).slice(0, LIMITS.statusChars));
         return;
       default:
@@ -396,6 +459,30 @@ export class EditorHost {
   setTheme(theme: Record<string, string>): void { this.post(event('host.theme', { theme, artifactTheme: null })); }
   setGrants(grants: readonly PermissionId[]): void { this.grants = new Set(grants); }
   selectionCleared(): void { this.post(event('selection.cleared', {})); }
+
+  /**
+   * The host's own Undo (the thread line's button, EP-P2): the same rule as `version.undo` — only a
+   * version this editor wrote this session — and the plugin hears the outcome as `artifact.changed`
+   * either way: the fork as its own, or the head that moved under it.
+   */
+  async undo(version: number): Promise<AdapterResult<{ undone: true }>> {
+    if (!this.ownVersions.has(version)) return { error: 'refused', message: 'only a version this editor wrote, this session' };
+    const was = this.o.adapter.artifact().head;
+    const r = await this.o.adapter.undo(version);
+    if (this.torn) return r;
+    const head = this.o.adapter.artifact().head;
+    // Only a head that moved is news (the fork, or what moved under it); a refused or failed undo
+    // changed nothing, so the inventory and the plugin's page stand (codex r1).
+    if (head === was) return r;
+    this.inventory = null;
+    if (!('error' in r)) {
+      this.ownVersions.add(head);
+      this.post(event('artifact.changed', { version: head, head, by: 'this-editor', kind: 'fork' }));
+    } else {
+      this.post(event('artifact.changed', { version: head, head, by: 'other', kind: 'generated' }));
+    }
+    return r;
+  }
 
   /** A new version landed (interactive `version.created`): the plugin hears who wrote it. */
   artifactChanged(version: number, kind: VersionKind): void {

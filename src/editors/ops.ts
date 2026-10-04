@@ -5,16 +5,14 @@ import { LIMITS, type Op } from './protocol.js';
  * EP-P1). Ops are TEXT and COLOURS, never markup: the engine applies `content-edit` as HTML and
  * `style-edit` verbatim, so the host is the one gate.
  *
- *  - `text.value` is HTML-escaped (`& < > " '`).
+ *  - `text.value` is sent as the operator typed it: the engine lands a content-edit as TEXT
+ *    (interactive #250 — `<b>x</b>` is those characters, never markup), so escaping here would show
+ *    the escapes on the page (EP-P2 found the double escape against the fixture that mirrors it).
  *  - `style` takes only `background` / `color`, each matching the colour grammar.
  *  - every anchor must be in the HOST's inventory of the current version (parsed with `DOMParser`,
  *    which runs no scripts) — never the plugin's own bridge.
  *  - `structural-change` is not an op; anything needing judgement goes through the composer.
  */
-
-export function escapeText(value: string): string {
-  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-}
 
 const NUM = String.raw`\s*-?(?:\d+(?:\.\d+)?|\.\d+)%?\s*`;
 const COLOUR = new RegExp(
@@ -69,7 +67,9 @@ export function themeTokensOf(html: string): Set<string> {
   return new Set(Array.from(html.matchAll(/(--wi-[a-z0-9-]{1,40})\s*:/gi), (m) => m[1]!.toLowerCase()));
 }
 
-/** One wire item on interactive's deterministic feedback vocabulary (`feedbackBatch.ts`). */
+/** One wire item on interactive's deterministic feedback vocabulary (`feedbackBatch.ts`). `selector`
+ *  is the element's `data-wid` itself — what the engine resolves (`regenerate.js`) and what studio's
+ *  own batches send (`toWireItem`), never a CSS selector. */
 export type WireItem =
   | { selector: string; type: 'content-edit'; value: string; before: string }
   | { selector: string; type: 'style-edit'; style: { background?: string; color?: string } }
@@ -77,8 +77,8 @@ export type WireItem =
 
 export type OpsCheck = { ok: true; items: WireItem[] } | { ok: false; code: 'bad_request' | 'too_large'; message: string };
 
-// Only inventory ids reach here, and those match SAFE_WID: nothing to escape.
-const selectorOf = (wid: string): string => `[data-wid="${wid}"]`;
+// Only inventory ids reach here, and those match SAFE_WID: the id is the wire's selector.
+const selectorOf = (wid: string): string => wid;
 
 /** Validate a plugin's ops against the host's inventory and map them to wire items, or refuse all. */
 export function checkOps(ops: unknown[], inv: Inventory, themeTokens: ReadonlySet<string> = new Set()): OpsCheck {
@@ -100,7 +100,7 @@ export function checkOps(ops: unknown[], inv: Inventory, themeTokens: ReadonlySe
     switch (o['op']) {
       case 'text': {
         if (typeof o['value'] !== 'string' || typeof before !== 'string') return { ok: false, code: 'bad_request', message: 'a text op needs value and before' };
-        items.push({ selector: selectorOf(anchor), type: 'content-edit', value: escapeText(o['value']), before });
+        items.push({ selector: selectorOf(anchor), type: 'content-edit', value: o['value'], before });
         break;
       }
       case 'style': {

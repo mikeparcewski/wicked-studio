@@ -3,8 +3,8 @@ import { EditorHost, type HostLogEntry, type HostUi } from '../src/editors/host.
 import { FakeDocAdapter, SAMPLE_PAGE } from '../src/editors/fakeAdapter.js';
 import { CHORD_TABLE, isForwardable, isOneGrapheme, judgeKey, judgeTyped } from '../src/editors/keys.js';
 import { builtinDefaults, changedBy, chipsFor, elementLabel, resolveKind } from '../src/editors/model.js';
-import { checkOps, escapeText, inventoryOf, isColour, themeTokensOf } from '../src/editors/ops.js';
-import { parseInbound, parseReady, type PermissionId } from '../src/editors/protocol.js';
+import { checkOps, inventoryOf, isColour, themeTokensOf } from '../src/editors/ops.js';
+import { LIMITS, parseInbound, parseReady, type PermissionId } from '../src/editors/protocol.js';
 
 /**
  * EP-P1 (DES-EDITOR-PLUGINS-001 §12.2): the protocol parser, the grants, the op mapping with text
@@ -64,10 +64,9 @@ describe('the strict parser', () => {
 describe('ops: text and colours, never markup', () => {
   const inv = inventoryOf(SAMPLE_PAGE);
 
-  it('escapes text, so markup lands as literal text', () => {
-    expect(escapeText(`<img src=x onerror="a('b')">&`)).toBe('&lt;img src=x onerror=&quot;a(&#39;b&#39;)&quot;&gt;&amp;');
+  it('sends text as typed — the engine lands a content-edit as text (interactive #250), so markup is literal', () => {
     const r = checkOps([{ op: 'text', anchor: 'hero-title', value: '<b>Hi</b>', before: 'Book a study room in under a minute' }], inv);
-    expect(r).toStrictEqual({ ok: true, items: [{ selector: '[data-wid="hero-title"]', type: 'content-edit', value: '&lt;b&gt;Hi&lt;/b&gt;', before: 'Book a study room in under a minute' }] });
+    expect(r).toStrictEqual({ ok: true, items: [{ selector: 'hero-title', type: 'content-edit', value: '<b>Hi</b>', before: 'Book a study room in under a minute' }] });
   });
 
   it('the colour grammar: each accepted and refused form', () => {
@@ -86,7 +85,7 @@ describe('ops: text and colours, never markup', () => {
   it('anchors come from the host inventory; structural-change is not an op; caps hold', () => {
     expect(checkOps([{ op: 'remove', anchor: 'ghost' }], inv)).toMatchObject({ ok: false, code: 'bad_request' });
     expect(checkOps([{ op: 'structural-change', anchor: 'cta' }], inv)).toMatchObject({ ok: false, code: 'bad_request' });
-    expect(checkOps([{ op: 'remove', anchor: 'cta' }], inv)).toStrictEqual({ ok: true, items: [{ selector: '[data-wid="cta"]', type: 'remove' }] });
+    expect(checkOps([{ op: 'remove', anchor: 'cta' }], inv)).toStrictEqual({ ok: true, items: [{ selector: 'cta', type: 'remove' }] });
     expect(checkOps(Array.from({ length: 201 }, () => ({ op: 'remove', anchor: 'cta' })), inv)).toMatchObject({ ok: false, code: 'too_large' });
     expect(checkOps([], inv)).toMatchObject({ ok: false });
   });
@@ -294,6 +293,271 @@ describe('the host controller', () => {
     for (let i = 0; i < 3000; i++) fromFrame(env('selection.set', { anchors: [] }));
     expect(log.length).toBeLessThanOrEqual(2_000);
     host.teardown('done');
+  });
+
+  it('codex r1: `written` carries the HOST-checked anchors; an undo the adapter refused without moving the head posts no artifact.changed and keeps the inventory', async () => {
+    const { host, ui, fromFrame, adapter } = makeHost(['artifact.read', 'artifact.write', 'selection.chip']);
+    const written = vi.fn();
+    ui.written = written;
+    let port: MessagePort | null = null;
+    vi.spyOn(host.frame.contentWindow!, 'postMessage').mockImplementation(((_m: unknown, _o: unknown, tr?: Transferable[]) => { port = (tr?.[0] as MessagePort) ?? null; }) as never);
+    fromFrame(env('plugin.ready', { editor: 'acme', version: '0.1.0', protocol: [1] }));
+    const toPlugin: { type?: string }[] = [];
+    port!.onmessage = (m) => toPlugin.push(m.data as { type?: string });
+    port!.postMessage(env('version.write', { base: 1, ops: [{ op: 'text', anchor: 'cta', value: 'Reserve', before: 'Book a room' }], summary: 'the price title' }, 'w1'));
+    await vi.waitFor(() => expect(toPlugin.find((m) => (m as { re?: string }).re === 'w1')).toBeDefined());
+    expect(toPlugin.find((m) => (m as { re?: string }).re === 'w1')).toMatchObject({ ok: true });
+    expect(written).toHaveBeenCalledTimes(1);
+    // The words come from the anchors the host checked, never the plugin's summary.
+    expect(written.mock.calls[0]![0]).toStrictEqual({ version: 2, base: 1, summary: 'the price title', anchors: ['cta'] });
+    // The inventory of version 2 is read once for a chip...
+    port!.postMessage(env('selection.set', { anchors: [{ kind: 'element', id: 'cta' }] }));
+    await vi.waitFor(() => expect(ui.chips).toHaveBeenCalledTimes(1));
+    const reads = adapter.reads;
+    // ...and stands after an undo the adapter refused with the head where it was: nothing changed, so
+    // the plugin hears nothing and the next chip needs no re-read.
+    vi.spyOn(adapter, 'undo').mockResolvedValue({ error: 'unavailable', message: 'The change was sent, but no new version appeared.' });
+    expect(await host.undo(2)).toMatchObject({ error: 'unavailable' });
+    expect(toPlugin.filter((m) => m.type === 'artifact.changed')).toHaveLength(0);
+    port!.postMessage(env('selection.set', { anchors: [{ kind: 'element', id: 'cta' }] }));
+    await vi.waitFor(() => expect(ui.chips).toHaveBeenCalledTimes(2));
+    expect(adapter.reads).toBe(reads);
+    host.teardown('done');
+  });
+
+  it('codex r2: a write that landed under a helper’s newer head — the reply says the version written, then artifact.changed says the head', async () => {
+    const { host, fromFrame, adapter } = makeHost(['artifact.read', 'artifact.write']);
+    let port: MessagePort | null = null;
+    vi.spyOn(host.frame.contentWindow!, 'postMessage').mockImplementation(((_m: unknown, _o: unknown, tr?: Transferable[]) => { port = (tr?.[0] as MessagePort) ?? null; }) as never);
+    fromFrame(env('plugin.ready', { editor: 'acme', version: '0.1.0', protocol: [1] }));
+    const toPlugin: { type?: string; re?: string; payload?: unknown }[] = [];
+    port!.onmessage = (m) => toPlugin.push(m.data as { type?: string; re?: string; payload?: unknown });
+    // The adapter: this edit is v2, but the manifest already has a helper's v3 as the head.
+    const ref = adapter.artifact();
+    const artifact = vi.spyOn(adapter, 'artifact').mockReturnValue({ ...ref, version: 1, head: 1 });
+    vi.spyOn(adapter, 'write').mockImplementation(async () => {
+      artifact.mockReturnValue({ ...ref, version: 3, head: 3 }); // the adapter's head follows the manifest
+      return { version: 2, moved: { head: 3, kind: 'generated' } };
+    });
+    port!.postMessage(env('version.write', { base: 1, ops: [{ op: 'text', anchor: 'cta', value: 'Reserve', before: 'Book a room' }], summary: 'cta' }, 'w1'));
+    await vi.waitFor(() => expect(toPlugin.filter((m) => m.type === 'artifact.changed')).toHaveLength(1));
+    const i = toPlugin.findIndex((m) => m.re === 'w1');
+    expect(toPlugin[i]!.payload).toStrictEqual({ version: 2 }); // never a `moved` field on the wire
+    expect(toPlugin[i + 1]).toMatchObject({ type: 'artifact.changed', payload: { version: 3, head: 3, by: 'agent', kind: 'generated' } });
+    host.teardown('done');
+  });
+
+  it('codex r3: a write that lands AFTER the reply timed out is still announced — the plugin heard "timeout", then hears its own version as artifact.changed', async () => {
+    // The adapter polls the manifest for up to 20 s; the reply window is 10 s (here 60 ms). A landing in
+    // between must not be discarded with the reply: the host line already says "You changed …", so the
+    // plugin's page has to follow.
+    const limits = LIMITS as { replyMs: number };
+    const was = limits.replyMs;
+    limits.replyMs = 60;
+    try {
+      const { host, fromFrame, adapter } = makeHost(['artifact.read', 'artifact.write']);
+      let port: MessagePort | null = null;
+      vi.spyOn(host.frame.contentWindow!, 'postMessage').mockImplementation(((_m: unknown, _o: unknown, tr?: Transferable[]) => { port = (tr?.[0] as MessagePort) ?? null; }) as never);
+      fromFrame(env('plugin.ready', { editor: 'acme', version: '0.1.0', protocol: [1] }));
+      const toPlugin: { type?: string; re?: string; ok?: boolean; error?: { code: string }; payload?: unknown }[] = [];
+      port!.onmessage = (m) => toPlugin.push(m.data as (typeof toPlugin)[number]);
+      const ref = adapter.artifact();
+      const artifact = vi.spyOn(adapter, 'artifact').mockReturnValue({ ...ref, version: 1, head: 1 });
+      let land: ((r: { version: number }) => void) | null = null;
+      vi.spyOn(adapter, 'write').mockImplementation(() => new Promise((resolve) => { land = resolve; }));
+      port!.postMessage(env('version.write', { base: 1, ops: [{ op: 'text', anchor: 'cta', value: 'Reserve', before: 'Book a room' }], summary: 'cta' }, 'w1'));
+      await vi.waitFor(() => expect(toPlugin.find((m) => m.re === 'w1')).toMatchObject({ ok: false, error: { code: 'timeout' } }));
+      expect(land).not.toBeNull();
+      // 2 s later (well inside the poll window) the version lands: the adapter's head follows it.
+      artifact.mockReturnValue({ ...ref, version: 2, head: 2 });
+      land!({ version: 2 });
+      await vi.waitFor(() => expect(toPlugin.filter((m) => m.type === 'artifact.changed')).toHaveLength(1));
+      expect(toPlugin.at(-1)).toMatchObject({ type: 'artifact.changed', payload: { version: 2, head: 2, by: 'this-editor', kind: 'deterministic' } });
+      expect(toPlugin.filter((m) => m.re === 'w1')).toHaveLength(1); // no second reply to a settled request
+      host.teardown('done');
+    } finally {
+      limits.replyMs = was;
+    }
+  });
+
+  it('codex r4: a write’s timeout is the HOST’s line, said when the timer fires — so a later landing’s written line (with Undo) comes after it and stays', async () => {
+    // The plugin used to say "Not changed: no answer in 10 s" itself, on hearing the timeout reply; a
+    // landing just after the timer could post the host's written line FIRST, and the plugin's late status
+    // then replaced it (Undo gone, a false "Not changed" left). The host now says it, in its own order.
+    const limits = LIMITS as { replyMs: number };
+    const was = limits.replyMs;
+    limits.replyMs = 60;
+    try {
+      const { host, fromFrame, adapter, ui } = makeHost(['artifact.read', 'artifact.write']);
+      const order: string[] = [];
+      (ui.status as ReturnType<typeof vi.fn>).mockImplementation((line: string) => { order.push(`status:${line}`); });
+      ui.written = vi.fn((w: { version: number }) => { order.push(`written:${w.version}`); });
+      let port: MessagePort | null = null;
+      vi.spyOn(host.frame.contentWindow!, 'postMessage').mockImplementation(((_m: unknown, _o: unknown, tr?: Transferable[]) => { port = (tr?.[0] as MessagePort) ?? null; }) as never);
+      fromFrame(env('plugin.ready', { editor: 'acme', version: '0.1.0', protocol: [1] }));
+      const toPlugin: { type?: string; re?: string; ok?: boolean; error?: { code: string }; payload?: unknown }[] = [];
+      port!.onmessage = (m) => toPlugin.push(m.data as (typeof toPlugin)[number]);
+      const ref = adapter.artifact();
+      const artifact = vi.spyOn(adapter, 'artifact').mockReturnValue({ ...ref, version: 1, head: 1 });
+      let land: ((r: { version: number }) => void) | null = null;
+      vi.spyOn(adapter, 'write').mockImplementation(() => new Promise((resolve) => { land = resolve; }));
+      port!.postMessage(env('version.write', { base: 1, ops: [{ op: 'text', anchor: 'cta', value: 'Reserve', before: 'Book a room' }], summary: 'cta' }, 'w1'));
+      await vi.waitFor(() => expect(toPlugin.find((m) => m.re === 'w1')).toMatchObject({ ok: false, error: { code: 'timeout' } }));
+      expect(order).toHaveLength(1);
+      expect(order[0]).toMatch(/^status:.*no answer in 10 s/i);
+      artifact.mockReturnValue({ ...ref, version: 2, head: 2 });
+      land!({ version: 2 });
+      await vi.waitFor(() => expect(order.at(-1)).toBe('written:2'));
+      host.teardown('done');
+    } finally {
+      limits.replyMs = was;
+    }
+  });
+
+  describe('codex r5: the host’s timeout line after the timer', () => {
+    async function timedOut(landing: (resolve: (r: unknown) => void, reject: (e: unknown) => void) => void) {
+      const { host, fromFrame, adapter, ui } = makeHost(['artifact.read', 'artifact.write']);
+      const order: string[] = [];
+      (ui.status as ReturnType<typeof vi.fn>).mockImplementation((line: string) => { order.push(`status:${line}`); });
+      ui.written = vi.fn((w: { version: number }) => { order.push(`written:${w.version}`); });
+      let port: MessagePort | null = null;
+      vi.spyOn(host.frame.contentWindow!, 'postMessage').mockImplementation(((_m: unknown, _o: unknown, tr?: Transferable[]) => { port = (tr?.[0] as MessagePort) ?? null; }) as never);
+      fromFrame(env('plugin.ready', { editor: 'acme', version: '0.1.0', protocol: [1] }));
+      const toPlugin: { type?: string; re?: string; ok?: boolean; error?: { code: string }; payload?: unknown }[] = [];
+      port!.onmessage = (m) => toPlugin.push(m.data as (typeof toPlugin)[number]);
+      const ref = adapter.artifact();
+      vi.spyOn(adapter, 'artifact').mockReturnValue({ ...ref, version: 1, head: 1 });
+      const write = vi.spyOn(adapter, 'write').mockImplementation(() => new Promise((resolve, reject) => { landing(resolve as (r: unknown) => void, reject); }));
+      port!.postMessage(env('version.write', { base: 1, ops: [{ op: 'text', anchor: 'cta', value: 'Reserve', before: 'Book a room' }], summary: 'cta' }, 'w1'));
+      return { host, order, toPlugin, port: port! as MessagePort, write };
+    }
+
+    it('a late definite refusal replaces "it may still land" with what happened', async () => {
+      const limits = LIMITS as { replyMs: number };
+      const was = limits.replyMs;
+      limits.replyMs = 60;
+      try {
+        let settle: ((r: unknown) => void) | null = null;
+        const { host, order, toPlugin } = await timedOut((resolve) => { settle = resolve; });
+        await vi.waitFor(() => expect(toPlugin.find((m) => m.re === 'w1')).toMatchObject({ ok: false, error: { code: 'timeout' } }));
+        settle!({ error: 'head_moved', message: 'the artifact changed since', head: 2 });
+        await vi.waitFor(() => expect(order.at(-1)).toMatch(/^status:Not changed: the artifact changed since/));
+        expect(toPlugin.filter((m) => m.re === 'w1')).toHaveLength(1);
+        host.teardown('done');
+      } finally {
+        limits.replyMs = was;
+      }
+    });
+
+    it('a late throw replaces it too', async () => {
+      const limits = LIMITS as { replyMs: number };
+      const was = limits.replyMs;
+      limits.replyMs = 60;
+      try {
+        let fail: ((e: unknown) => void) | null = null;
+        const { host, order, toPlugin } = await timedOut((_resolve, reject) => { fail = reject; });
+        await vi.waitFor(() => expect(toPlugin.find((m) => m.re === 'w1')).toMatchObject({ ok: false, error: { code: 'timeout' } }));
+        fail!(new Error('HTTP 503'));
+        await vi.waitFor(() => expect(order.at(-1)).toMatch(/^status:Whether it changed is not known: HTTP 503/));
+        host.teardown('done');
+      } finally {
+        limits.replyMs = was;
+      }
+    });
+
+    it('codex r6: a late "unavailable" (the outcome is not known) is said as it is — never "Not changed"', async () => {
+      const limits = LIMITS as { replyMs: number };
+      const was = limits.replyMs;
+      limits.replyMs = 60;
+      try {
+        let settle: ((r: unknown) => void) | null = null;
+        const { host, order, toPlugin } = await timedOut((resolve) => { settle = resolve; });
+        await vi.waitFor(() => expect(toPlugin.find((m) => m.re === 'w1')).toMatchObject({ ok: false, error: { code: 'timeout' } }));
+        settle!({ error: 'unavailable', message: 'Two edits landed from version 1 at once (versions 2 and 3); which is yours cannot be told.' });
+        await vi.waitFor(() => expect(order.at(-1)).toBe('status:Two edits landed from version 1 at once (versions 2 and 3); which is yours cannot be told.'));
+        host.teardown('done');
+      } finally {
+        limits.replyMs = was;
+      }
+    });
+
+    it('codex r7: a late "stale" comes after the write was sent — said in the adapter’s words, never "Not changed"', async () => {
+      const limits = LIMITS as { replyMs: number };
+      const was = limits.replyMs;
+      limits.replyMs = 60;
+      try {
+        let settle: ((r: unknown) => void) | null = null;
+        const { host, order, toPlugin } = await timedOut((resolve) => { settle = resolve; });
+        await vi.waitFor(() => expect(toPlugin.find((m) => m.re === 'w1')).toMatchObject({ ok: false, error: { code: 'timeout' } }));
+        settle!({ error: 'stale', message: 'The page changed (version 2) while your edit was on its way.', head: 2 });
+        await vi.waitFor(() => expect(order.at(-1)).toBe('status:The page changed (version 2) while your edit was on its way.'));
+        host.teardown('done');
+      } finally {
+        limits.replyMs = was;
+      }
+    });
+
+    it('a later line owns the line: a late refusal after it says nothing', async () => {
+      const limits = LIMITS as { replyMs: number };
+      const was = limits.replyMs;
+      limits.replyMs = 60;
+      try {
+        let settle: ((r: unknown) => void) | null = null;
+        const { host, order, toPlugin, port } = await timedOut((resolve) => { settle = resolve; });
+        await vi.waitFor(() => expect(toPlugin.find((m) => m.re === 'w1')).toMatchObject({ ok: false, error: { code: 'timeout' } }));
+        port.postMessage(env('ui.status', { line: 'Something else happened' }));
+        await vi.waitFor(() => expect(order.at(-1)).toBe('status:Something else happened'));
+        settle!({ error: 'stale', message: 'the element changed' });
+        await new Promise((r) => setTimeout(r, 30));
+        expect(order.filter((l) => l.startsWith('status:Not changed:'))).toHaveLength(0);
+        host.teardown('done');
+      } finally {
+        limits.replyMs = was;
+      }
+    });
+
+    it('a torn host’s timer says nothing (its replacement owns the line)', async () => {
+      const limits = LIMITS as { replyMs: number };
+      const was = limits.replyMs;
+      limits.replyMs = 60;
+      try {
+        const { host, order, write } = await timedOut(() => { /* never lands */ });
+        await vi.waitFor(() => expect(write).toHaveBeenCalled());
+        host.teardown('reloaded');
+        await new Promise((r) => setTimeout(r, 120));
+        expect(order.filter((l) => /no answer/.test(l))).toHaveLength(0);
+      } finally {
+        limits.replyMs = was;
+      }
+    });
+  });
+
+  it('codex r3: a late stale answer carries where the head went (moved) — the plugin hears that too, and nothing else', async () => {
+    const limits = LIMITS as { replyMs: number };
+    const was = limits.replyMs;
+    limits.replyMs = 60;
+    try {
+      const { host, fromFrame, adapter } = makeHost(['artifact.read', 'artifact.write']);
+      let port: MessagePort | null = null;
+      vi.spyOn(host.frame.contentWindow!, 'postMessage').mockImplementation(((_m: unknown, _o: unknown, tr?: Transferable[]) => { port = (tr?.[0] as MessagePort) ?? null; }) as never);
+      fromFrame(env('plugin.ready', { editor: 'acme', version: '0.1.0', protocol: [1] }));
+      const toPlugin: { type?: string; re?: string; ok?: boolean; error?: { code: string }; payload?: unknown }[] = [];
+      port!.onmessage = (m) => toPlugin.push(m.data as (typeof toPlugin)[number]);
+      const ref = adapter.artifact();
+      const artifact = vi.spyOn(adapter, 'artifact').mockReturnValue({ ...ref, version: 1, head: 1 });
+      let answer: ((r: { error: 'stale'; message: string; head: number; moved: { head: number; kind: 'generated' } }) => void) | null = null;
+      vi.spyOn(adapter, 'write').mockImplementation(() => new Promise((resolve) => { answer = resolve as typeof answer; }));
+      port!.postMessage(env('version.write', { base: 1, ops: [{ op: 'text', anchor: 'cta', value: 'Reserve', before: 'Book a room' }], summary: 'cta' }, 'w1'));
+      await vi.waitFor(() => expect(toPlugin.find((m) => m.re === 'w1')).toMatchObject({ ok: false, error: { code: 'timeout' } }));
+      artifact.mockReturnValue({ ...ref, version: 2, head: 2 });
+      answer!({ error: 'stale', message: 'The page changed (version 2), but not by your edit', head: 2, moved: { head: 2, kind: 'generated' } });
+      await vi.waitFor(() => expect(toPlugin.filter((m) => m.type === 'artifact.changed')).toHaveLength(1));
+      expect(toPlugin.at(-1)).toMatchObject({ type: 'artifact.changed', payload: { version: 2, head: 2, by: 'agent', kind: 'generated' } });
+      expect(toPlugin.filter((m) => m.re === 'w1')).toHaveLength(1);
+      host.teardown('done');
+    } finally {
+      limits.replyMs = was;
+    }
   });
 
   it('a second load of the frame is a teardown', () => {
