@@ -481,6 +481,22 @@ describe('the host controller', () => {
       }
     });
 
+    it('codex r7: a late "stale" comes after the write was sent — said in the adapter’s words, never "Not changed"', async () => {
+      const limits = LIMITS as { replyMs: number };
+      const was = limits.replyMs;
+      limits.replyMs = 60;
+      try {
+        let settle: ((r: unknown) => void) | null = null;
+        const { host, order, toPlugin } = await timedOut((resolve) => { settle = resolve; });
+        await vi.waitFor(() => expect(toPlugin.find((m) => m.re === 'w1')).toMatchObject({ ok: false, error: { code: 'timeout' } }));
+        settle!({ error: 'stale', message: 'The page changed (version 2) while your edit was on its way.', head: 2 });
+        await vi.waitFor(() => expect(order.at(-1)).toBe('status:The page changed (version 2) while your edit was on its way.'));
+        host.teardown('done');
+      } finally {
+        limits.replyMs = was;
+      }
+    });
+
     it('a later line owns the line: a late refusal after it says nothing', async () => {
       const limits = LIMITS as { replyMs: number };
       const was = limits.replyMs;

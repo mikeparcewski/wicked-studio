@@ -142,7 +142,7 @@ export class InteractiveDocAdapter implements HostAdapter {
     if (landed === null) return { error: 'unavailable', message: 'The change was sent, but no new version appeared.' };
     if ('other' in landed) {
       const moved = this.movedTo(landed.other);
-      return { error: 'stale', message: `The page changed (version ${landed.other}), but not by your edit — it may have been stale.`, head: landed.other, moved };
+      return { error: 'stale', message: `The page changed (version ${landed.other}) while your edit was on its way; it was not seen land as its own version — see the versions.`, head: landed.other, moved };
     }
     this.moveHead(landed.head);
     // The head moved on past what the plugin will be told: the host announces it after the reply.

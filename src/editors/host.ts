@@ -110,6 +110,9 @@ export interface HostOptions {
 
 const NO_ACTIVATION = (): boolean => (navigator as Navigator & { userActivation?: { isActive: boolean } }).userActivation?.isActive === true;
 
+/** Write refusals the host or adapter makes before anything is sent: nothing was written. */
+const UNSENT: ReadonlySet<ErrorCode> = new Set<ErrorCode>(['not_granted', 'bad_request', 'too_large', 'unsupported', 'rate_limited', 'refused', 'head_moved']);
+
 export class EditorHost {
   readonly frame: HTMLIFrameElement;
   private port: MessagePort | null = null;
@@ -302,12 +305,13 @@ export class EditorHost {
   }
 
   /** The timed-out write `id` ended without a version: say how, if its timeout line is still the one
-   *  shown. Only a code that means nothing was written says "Not changed"; `unavailable` (sent, but what
-   *  landed cannot be told) is said in its own words, and a throw says the outcome is not known (codex r6). */
+   *  shown. Only a refusal made BEFORE the write was sent says "Not changed" (codex r6/r7); what follows
+   *  sending (`stale`, `unavailable`: what landed cannot be fully told) is said in the adapter's own
+   *  words, and a throw says the outcome is not known. */
   private lateEnd(id: string, code: ErrorCode | null, why: string): void {
     if (this.torn || this.timeoutLine !== id) return;
     this.timeoutLine = null;
-    const line = code === null ? `Whether it changed is not known: ${why}` : code === 'unavailable' ? why : `Not changed: ${why}`;
+    const line = code === null ? `Whether it changed is not known: ${why}` : UNSENT.has(code) ? `Not changed: ${why}` : why;
     this.o.ui.status(line.slice(0, LIMITS.statusChars));
   }
 

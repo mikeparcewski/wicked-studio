@@ -289,7 +289,8 @@ export function start(): void {
         returnTo = wid;
         await render(typeof r.payload['version'] === 'number' ? r.payload['version'] : undefined);
       } else if (r.error.code === 'stale' || r.error.code === 'head_moved') {
-        status('Not changed: it moved while you typed');
+        // head_moved is refused before sending; stale comes after (codex r7): the adapter's words, then.
+        status(r.error.code === 'stale' && r.error.message ? r.error.message : 'Not changed: it moved while you typed');
         returnTo = wid;
         const moved = r.payload?.['head'];
         if (typeof moved === 'number' && moved !== head) await render(moved);
