@@ -67,11 +67,11 @@ export interface SkinManifest {
   variants: Readonly<SkinVariants>;
 }
 
-/** The current look — no overrides, the classic shell, every default variant. */
+/** The classic look (the default until the flip, S15b) — no overrides, the classic shell, every default variant. */
 const STUDIO: SkinManifest = {
   id: 'studio',
   name: 'Studio',
-  description: 'The standard layout — the queue in the command center, the full nav rail.',
+  description: 'The classic layout — the queue in the command center, the full nav rail.',
   tokens: {},
   shell: 'classic',
   variants: {
@@ -122,9 +122,10 @@ const COMPACT_RAIL: SkinManifest = {
  * The DESK (DES-STUDIO-REBUILD-001 §5.1, slice S4): the concept's shape — a 236 px session rail
  * (sessions grouped by project, with badges), and on `/` the Desk: the greeting, "N things need
  * you", the needs-you list as plain rows, the chores "for whoever runs studio", "Your projects" in
- * sentences, the Start row and the composer. Opt-in until the flip (S15b). Tokens: the type face
+ * sentences, the Start row and the composer. Tokens: the type face
  * and the softer radii of DESIGN-simple §1a — never a colour (the wicked themes own colour, and a
- * skin never selects a theme).
+ * skin never selects a theme). The default since the flip (S15b); `studio` and `compact-rail` stay
+ * selectable on the Theme page.
  */
 const DESK: SkinManifest = {
   id: 'desk',
@@ -146,7 +147,8 @@ export const SKINS: readonly SkinManifest[] = [STUDIO, COMPACT_RAIL, DESK];
 
 export type SkinId = 'studio' | 'compact-rail' | 'desk';
 
-export const DEFAULT_SKIN_ID: SkinId = 'studio';
+/** The flip (S15b): the Desk is the default. Rollback = revert S15b, or pick another skin on the Theme page. */
+export const DEFAULT_SKIN_ID: SkinId = 'desk';
 
 export function isSkinId(v: unknown): v is SkinId {
   return typeof v === 'string' && SKINS.some((s) => s.id === v);
@@ -154,7 +156,7 @@ export function isSkinId(v: unknown): v is SkinId {
 
 /** The manifest for `id`; anything unknown resolves to the default skin. */
 export function skinById(id: unknown): SkinManifest {
-  return SKINS.find((s) => s.id === id) ?? STUDIO;
+  return SKINS.find((s) => s.id === id) ?? SKINS.find((s) => s.id === DEFAULT_SKIN_ID)!;
 }
 
 /** Every token any skin overrides — what a swap must clear before applying the next. */

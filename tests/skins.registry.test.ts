@@ -25,16 +25,16 @@ const RAW_COLOR = /#[0-9a-fA-F]{3,8}\b|\brgba?\(\s*\d|\bhsla?\(\s*[\d.]/;
 const COLOUR_FAMILY = /^--(surface|ink|accent|status|section|scrim|shadow)/;
 
 describe('the skin registry', () => {
-  it('ships the current look as `studio` (the default), the proof skin `compact-rail`, and `desk`', () => {
-    expect(DEFAULT_SKIN_ID).toBe('studio');
+  it('ships the classic look `studio`, the proof skin `compact-rail`, and `desk` (the default since S15b)', () => {
+    expect(DEFAULT_SKIN_ID).toBe('desk');
     expect(SKINS.map((s) => s.id)).toEqual(['studio', 'compact-rail', 'desk']);
   });
 
   it('ids are unique and resolve; an unknown id falls back to the default skin', () => {
     expect(new Set(SKINS.map((s) => s.id)).size).toBe(SKINS.length);
     for (const s of SKINS) expect(skinById(s.id)).toBe(s);
-    expect(skinById('nope').id).toBe('studio');
-    expect(skinById(undefined).id).toBe('studio');
+    expect(skinById('nope').id).toBe('desk');
+    expect(skinById(undefined).id).toBe('desk');
     expect(isSkinId('compact-rail')).toBe(true);
     expect(isSkinId('desk')).toBe(true);
     expect(isSkinId('Compact-Rail')).toBe(false);

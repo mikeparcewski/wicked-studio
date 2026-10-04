@@ -1912,6 +1912,14 @@ class Rig:
         if ready.get("stub") is not False:
             raise SetupFailure("daemon", f"daemon reports stub={ready.get('stub')!r} — the seed suite requires a REAL engine")
         _, health = api("GET", "/health")
+        # The suite walks the classic shell (the left rail's headings, the project board). Desk is
+        # the default since the flip (S15b), so pick `studio` the way the Theme page does: a stored
+        # record past the flip (`skin_migrated`), which the app honours as chosen.
+        skin_status, _ = api("PUT", "/settings", {"studio.appearance": {
+            "accent_h": 230, "accent_s": 74, "accent_l": 68, "logo_url": None, "theme": "dark",
+            "site_name": None, "skin": "studio", "skin_migrated": True}})
+        if skin_status != 200:
+            raise SetupFailure("daemon", f"PUT /settings studio.appearance (classic skin) → {skin_status}")
         _, diagnostics = api("GET", "/diagnostics")
         _, roster = api("GET", "/roster")
         self.report["setup"]["daemon"] = {

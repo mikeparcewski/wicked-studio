@@ -326,6 +326,16 @@ try:
         pre_status = res.status
     report["steps"]["cors"] = {"ok": True, "allow_origin_echoed": echoed, "preflight_status": pre_status}
 
+    # ── 4b. The classic skin: this smoke walks the classic shell (project board, left rail).
+    # Desk is the default since the flip (S15b), so the rig picks `studio` the way the Theme page
+    # does — a stored record past the flip (`skin_migrated`), which the app honours as chosen.
+    status, _, _ = http_json("PUT", f"{API}/settings", {"studio.appearance": {
+        "accent_h": 230, "accent_s": 74, "accent_l": 68, "logo_url": None, "theme": "dark",
+        "site_name": None, "skin": "studio", "skin_migrated": True}}, origin=STUDIO_ORIGIN)
+    if status != 200:
+        fail("classic-skin", f"PUT /settings studio.appearance → {status}")
+    report["steps"]["classic-skin"] = {"ok": True}
+
     # ── 5. The project surface (#243) answers cross-origin ────────────────────
     status, _, projects = http_json("GET", f"{API}/projects", origin=STUDIO_ORIGIN)
     if status != 200 or not isinstance(projects.get("projects"), list):

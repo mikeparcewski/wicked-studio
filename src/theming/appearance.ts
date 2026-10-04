@@ -28,8 +28,12 @@ export interface StudioAppearance {
    *  wordmark (`DEFAULT_SITE_NAME`); a non-empty string overrides it. */
   site_name: string | null;
   /** The skin (theming/skins.ts) — shape over the one behaviour layer. Applied as
-   *  `data-skin` on <html> next to `data-theme`; `studio` is the current look. */
+   *  `data-skin` on <html> next to `data-theme`; `desk` is the default since the flip (S15b). */
   skin: SkinId;
+  /** True once the record is past the flip (S15b): its skin is the operator's choice. A record
+   *  without it predates the flip, so its skin (stamped with the old default) resolves to `desk`;
+   *  reading never writes (§3.3), so the record is rewritten by the operator's next change. */
+  skin_migrated: boolean;
 }
 
 export const APPEARANCE_KEY = 'studio.appearance';
@@ -81,6 +85,15 @@ export const DEFAULT_APPEARANCE: StudioAppearance = {
   theme: 'dark',
   site_name: null,
   skin: DEFAULT_SKIN_ID,
+  skin_migrated: true,
+};
+
+/** A new install — nothing stored (S15b, BUILD-PLAN Q-R3): the Desk on wicked-light with the
+ *  harbor accent the wicked themes assume. A stored theme is never rewritten. */
+export const NEW_INSTALL_APPEARANCE: StudioAppearance = {
+  ...DEFAULT_APPEARANCE,
+  theme: 'wicked-light',
+  ...HARBOR_ACCENT,
 };
 
 const PERSIST_DEBOUNCE_MS = 400;
@@ -91,9 +104,12 @@ function clamp(raw: unknown, lo: number, hi: number, fallback: number): number {
   return Math.min(hi, Math.max(lo, n));
 }
 
-/** Never trust the stored shape (§3.3 is an external store): clamp and default. */
+/** Never trust the stored shape (§3.3 is an external store): clamp and default. Nothing stored
+ *  is a new install (`NEW_INSTALL_APPEARANCE`); a record from before the flip gets `desk`. */
 export function sanitizeAppearance(raw: unknown): StudioAppearance {
-  const o = (raw !== null && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  if (raw === null || typeof raw !== 'object') return { ...NEW_INSTALL_APPEARANCE };
+  const o = raw as Record<string, unknown>;
+  const migrated = o.skin_migrated === true;
   return {
     accent_h: clamp(o.accent_h, 0, 359, DEFAULT_APPEARANCE.accent_h),
     accent_s: clamp(o.accent_s, 0, 100, DEFAULT_APPEARANCE.accent_s),
@@ -101,7 +117,8 @@ export function sanitizeAppearance(raw: unknown): StudioAppearance {
     logo_url: typeof o.logo_url === 'string' && o.logo_url !== '' ? o.logo_url : null,
     theme: isThemeId(o.theme) ? o.theme : 'dark',
     site_name: typeof o.site_name === 'string' && o.site_name.trim() !== '' ? o.site_name.trim() : null,
-    skin: isSkinId(o.skin) ? o.skin : DEFAULT_SKIN_ID,
+    skin: migrated && isSkinId(o.skin) ? o.skin : DEFAULT_SKIN_ID,
+    skin_migrated: true,
   };
 }
 
