@@ -625,7 +625,9 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          #   in-flight state is observable).
          "wave2b": False, "simple_gates": [], "audit_delay_ms": 0,
          # settings_delay_ms — GET /settings answers only after this delay, so the page's first
-         #   paint (the default skin, before studio.appearance lands) is observable.
+         #   paint (the default skin, before studio.appearance lands) is observable. Like every key
+         #   here it holds until a later set_fixture passes it again (0 clears it); the state lives
+         #   in one journey's process, so it never reaches another journey.
          "settings_delay_ms": 0,
          # handover_many — ADDS to wave2b (turn all three on): a handover with about three items
          #   per chip — g3 (gamma, a third simple gate: pair with simple_gates), f2/f3 failed and
