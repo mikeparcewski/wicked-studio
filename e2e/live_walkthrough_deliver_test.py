@@ -37,6 +37,12 @@ Every wait is recorded (what, how long, what was seen). A leg whose evidence the
 certified. Report: e2e/artifacts/live-walkthrough-deliver-<utc>.json (also printed) and screenshots
 e2e/shots/live-walk-*.png.
 
+Boundary: the browser and the script speak to STUDIO_URL's origin only — every other request is aborted
+before it is sent (other hosts do not even resolve), redirects are judged by the script hop by hop and
+never followed by the browser, and the one gap (a static asset the daemon itself redirected to another
+port of its host) is recorded and fails the run after a single contact. No git auth; no deliver yes
+unless LIVE_APPROVE_DELIVER=yes.
+
 Env: STUDIO_URL (default http://localhost:7701 — never :60785 or :4200, the rig and the dev server);
 WALK_RUN (required: the run id); WALK_LEGS (comma list of inline,failed,fix,passed,export,deliver;
 default all — the self-test runs one corpus run per leg group; `deliver` alone needs no walkthrough on
@@ -372,7 +378,9 @@ errors: list[str] = []
 
 
 def main(p) -> None:  # noqa: ANN001, C901
-    browser = p.chromium.launch()
+    # Other HOSTS do not resolve at all for this browser (the daemon's host excepted); other PORTS on the
+    # daemon's host are refused by the request gate below. Together: the proof's browser speaks to STUDIO_URL.
+    browser = p.chromium.launch(args=[f"--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE {host.hostname}"])
     page = browser.new_page(viewport={"width": W, "height": H}, device_scale_factor=1)
     page.on("pageerror", lambda e: errors.append(str(e)))
     page.add_init_script(f"window.__walkRun = {json.dumps(RUN)};")
@@ -395,8 +403,9 @@ def main(p) -> None:  # noqa: ANN001, C901
         if route.request.resource_type in ASSET_TYPES:
             # The bundle's own assets (hundreds of same-origin GETs) go straight through: proxying each one
             # through this handler serialises them and, on a slow runner, starves the page of its data. They
-            # carry no decision and cannot be redirected by the daemon's API; were one ever redirected
-            # off-origin, the request listener below records the hop and the run fails.
+            # carry no decision. THE ONE GAP, said plainly: were the daemon to answer an asset with a redirect
+            # to another port of its own host, the browser would follow it once before the request listener
+            # below records the hop and fails the run (other hosts do not resolve, see the launch flags).
             route.continue_()
             return
         try:
