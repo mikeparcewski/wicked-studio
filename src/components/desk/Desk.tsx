@@ -1,6 +1,11 @@
-import { useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useDeliveredNow } from '../../store/postHocDeliver.js';
-import type { SessionView } from '../../api/types.js';
+import type { DiagnosticsGovernance, SessionView } from '../../api/types.js';
+import { getDiagnostics } from '../../api/diagnostics.js';
+import { deadletterChore } from '../../board/repairMoves.js';
+import { useDeadletterReplay } from '../../hooks/useRepairMoves.js';
+import { ReplayMove } from '../DeckKpiRibbon.js';
+import { StandingOrdersPanel } from '../StandingOrdersPanel.js';
 import {
   deskGreeting, deskProjects, deskReadState, lapsedSeatChores, needsByRun, needsHeadline, needTextByRun, railGroups,
   START_CHIPS,
@@ -10,15 +15,28 @@ import type { NeedRow } from '../../board/needsYou.js';
 import { useBoardModel } from '../../hooks/useBoardModel.js';
 import { useCapabilities } from '../../store/capabilities.js';
 import { useHandover } from '../../hooks/useHandover.js';
+import { useHistoryScroll } from '../../hooks/useHistoryState.js';
 import { useDisplayText } from '../../hooks/useHomePath.js';
 import type { Navigate } from '../../hooks/useRoute.js';
 import { useRoster } from '../../hooks/useRoster.js';
+import { CaptureDrop } from '../CaptureDrop.js';
 import { HandoverPanel } from '../HandoverPanel.js';
-import { NeedsQueueSurface } from '../NeedsYouQueue.js';
+import { FocusLockToggle, NeedsQueueSurface } from '../NeedsYouQueue.js';
 import { Composer, type ComposerSend } from '../session/Composer.js';
 import { DeskStateRows, useDeskStates } from './DeskStateRows.js';
 import { DeskRuleLine } from './DeskRuleLine.js';
 import { openSheet } from '../../store/sheets.js';
+
+/** The daemon's governance self-report, read once per mount (and again after a replay changed it).
+ *  A daemon without `/diagnostics` (or predating `governance`) yields null: no chore, never a guess. */
+function useGovernance(): { governance: DiagnosticsGovernance | null; reread: () => void } {
+  const [governance, setGovernance] = useState<DiagnosticsGovernance | null>(null);
+  const reread = useCallback(() => {
+    getDiagnostics().then((d) => setGovernance(d.governance ?? null), () => undefined);
+  }, []);
+  useEffect(reread, [reread]);
+  return { governance, reread };
+}
 
 /** Project cards on the first screen (the concept's three); the rest are one link away. */
 const CARDS_MAX = 3;
@@ -66,9 +84,17 @@ export function Desk({ runs, runsLoaded, runsError = null, onRetryRuns, needRows
     [items, unfiled, needRows, runChatId, deliveredNow],
   );
   const chores = useMemo(() => lapsedSeatChores(roster), [roster]);
+  // S15a: the Command Deck's repair move for dead-lettered governance events, as a chore.
+  const { governance, reread } = useGovernance();
+  const dead = deadletterChore(governance);
+  const replay = useDeadletterReplay(reread);
+  const replaying = replay.state.phase !== 'idle';
   const states = useDeskStates();
   const [text, setText] = useState('');
   const box = useRef<HTMLTextAreaElement | null>(null);
+  // S15a (wave 1 behaviour 2, "raw in one step"): Back to the Desk puts its scroll back, as Home did.
+  const scroller = useRef<HTMLDivElement | null>(null);
+  useHistoryScroll(scroller, 'desk.scroll');
   const go = (path: string) => (e: React.MouseEvent): void => { e.preventDefault(); navigate(path); };
 
   const seed = (s: string): void => {
@@ -83,10 +109,18 @@ export function Desk({ runs, runsLoaded, runsError = null, onRetryRuns, needRows
 
   return (
     <div data-testid="desk" data-object="desk" className="wk-desk">
-      <div className="wk-desk-scroll">
+      {/* S15a: the Desk's scroller opts into place (peek/jump/Back put its scroll back, store/place.ts). */}
+      <div ref={scroller} className="wk-desk-scroll" data-place-scroll="desk">
         <header className="wk-desk-head">
           <div className="wk-desk-head-row">
             <h1 className="wk-desk-hello">{hello}</h1>
+            {/* S15a: what Home's header carried — standing orders with "Mark me away" (Studio OS
+                behaviour 10) and "Just the top one" — sit in the Desk's header, never a row of their own. */}
+            <span className="wk-desk-orders">
+              <StandingOrdersPanel />
+              {/* Idea 10: hold just the highest-consequence item; the rest return when it clears. */}
+              {readState === 'known' && <FocusLockToggle items={needRows.length} />}
+            </span>
             {/* S11: look underneath the Desk — studio itself, this computer, sign-ins, all helpers, hold deliveries. */}
             <button type="button" data-testid="desk-sheet-open" aria-label="Look underneath the Desk" title="Look underneath (⌘K for everything else)" onClick={() => openSheet({ kind: 'desk' })} className="wk-sheet-open">⋯</button>
           </div>
@@ -128,10 +162,20 @@ export function Desk({ runs, runsLoaded, runsError = null, onRetryRuns, needRows
             {/* Rows already known (an elicitation, a memory proposal) show at once; only the fold's
                 calm copy waits for the first /runs answer (studio#459). */}
             {(runsLoaded || needRows.length > 0) && <NeedsQueueSurface rows={needRows} runs={runs} navigate={navigate} now={now} variant="desk" />}
-            {(chores.length > 0 || states.frozen || states.away) && (
+            {(chores.length > 0 || states.frozen || states.away || dead !== null || replaying) && (
               <section data-testid="desk-chores" aria-label="For whoever runs studio" className="wk-desk-chores">
                 <p className="wk-desk-label">For whoever runs studio{chores.length > 0 ? ` · ${chores.length}` : ''}</p>
                 <DeskStateRows frozen={states.frozen} away={states.away} />
+                {(dead !== null || replaying) && (
+                  <div data-testid="desk-chore" data-chore="deadletters" className="wk-desk-need">
+                    <span aria-hidden className="wk-desk-dot wk-desk-dot--blocked" />
+                    <span className="wk-desk-need-body">
+                      <span className="wk-desk-need-title">{dead?.title ?? 'Governance evidence'}</span>
+                      <span data-testid="desk-chore-line" className="wk-desk-need-line" title={dead?.line}>{dead?.line ?? 'Replayed — re-reading what the daemon says.'}</span>
+                    </span>
+                    <ReplayMove replay={replay} />
+                  </div>
+                )}
                 {chores.map((c) => (
                   <div key={c.key} data-testid="desk-chore" data-seat={c.seat} className="wk-desk-need">
                     <span aria-hidden className="wk-desk-dot wk-desk-dot--blocked" />
@@ -185,6 +229,9 @@ export function Desk({ runs, runsLoaded, runsError = null, onRetryRuns, needRows
               {c.label}
             </button>
           ))}
+          {/* S15a: Capture (Studio OS behaviour 8) — Home's verb row carried it beside Do Work; on the
+              Desk it is the last way to start something. What it files lands in the list above. */}
+          <CaptureDrop runs={runs} opens="up" />
         </div>
         <Composer
           composerKey="desk"

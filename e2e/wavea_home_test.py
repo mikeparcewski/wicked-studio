@@ -12,6 +12,11 @@ move, with the consequence shown before it runs.
   idea 14  broken-clock pill — a never-indexed repo whose registered_at reads 1970 shows an
            "impossible age" pill linking to the repo, never "20702d".
 
+Under STUDIO_SKIN=desk (S15a: the desk variant, in run_journeys.py DESK) the Desk has no tiles, so idea
+5's moves live where the Desk keeps them: "Replay" is the dead-letter chore "for whoever runs studio"
+(same dry run → confirm → result → re-read), and a failed run is retried from ITS row ("Retry ›" →
+the launch form prefilled → one POST /runs with retryOf). Ideas 3 and 14 are the same rows.
+
 Captures (e2e/shots/): wavea-<skin>-clones.png, wavea-<skin>-replay-preview.png,
 wavea-<skin>-replay-done.png, wavea-<skin>-pill.png.
 Env: FEEDBACK_PORT (default 4397), STUDIO_SKIN. JSON report; exit 0/1.
@@ -30,6 +35,7 @@ PORT = int(os.environ.get("FEEDBACK_PORT", "4397"))
 W, H = 1440, 700
 SHOTS = REPO / "e2e" / "shots"
 SKIN = STUDIO_SKIN
+DESK = SKIN == "desk"
 
 report: dict = {"ok": False, "skin": SKIN, "steps": {}}
 
@@ -104,6 +110,15 @@ with sync_playwright() as p:
     def section_replay() -> None:
         reset(origin, governance="deadletters")
         home()
+        if DESK:
+            # The Desk: the chore row carries the count and the move (no tile to overlap).
+            tile = page.locator('[data-testid="desk-chore"][data-chore="deadletters"]')
+            tile.wait_for(state="visible")
+            check("replay-count-shown", "128+ governance events dead-lettered" in tile.inner_text(), text=tile.inner_text())
+            repair = tile.locator('[data-testid="kpi-repair"][data-repair="replay"]')
+            check("replay-move-on-chore", repair.count() == 1)
+            replay_tail(repair, "desk-chore-line")
+            return
         tile = page.get_by_test_id("home-kpi-governed")
         tile.wait_for(state="visible")
         check("replay-count-shown", "128+ governance events dead-lettered" in tile.inner_text())
@@ -123,6 +138,10 @@ with sync_playwright() as p:
           return out;
         }""")
         check("repair-move-clear-of-tile-rows", overlaps == [], overlaps=overlaps)
+        replay_tail(repair, "home-kpi-governed")
+
+    def replay_tail(repair, where: str) -> None:
+        """Idea 5's replay, from its button on: dry run only, then the real one on confirm, then re-read."""
         repair.click()
         preview = page.get_by_test_id("kpi-repair-preview")
         preview.wait_for(state="visible")
@@ -143,8 +162,8 @@ with sync_playwright() as p:
               get_json(origin, "/__fixture/replay-posts")["posts"] == [{"dryRun": True}, {"dryRun": False}])
         # The page re-read diagnostics: the tile no longer reads dead-lettered.
         page.wait_for_function(
-            """() => !(document.querySelector('[data-testid="home-kpi-governed"]')?.textContent || '')
-                      .includes('dead-lettered')""")
+            """(id) => !(document.querySelector(`[data-testid="${id}"]`)?.textContent || '')
+                      .includes('dead-lettered')""", arg=where)
         page.screenshot(path=str(SHOTS / f"wavea-{SKIN}-replay-done.png"))
 
     def section_pill() -> None:
@@ -172,6 +191,9 @@ with sync_playwright() as p:
         page.on("request", lambda r: launches.append(json.loads(r.post_data or "{}"))
                 if r.method == "POST" and r.url.endswith("/api/v1/runs") else None)
         home()
+        if DESK:
+            desk_retry(launches)
+            return
         repair = page.locator('[data-testid="kpi-repair"][data-repair="retry"]')
         repair.wait_for(state="visible")
         repair.click()
@@ -195,6 +217,45 @@ with sync_playwright() as p:
         check("retried-failure-has-its-answer", echoed == ["f1"]
               and page.locator('[data-testid="kpi-repair"][data-repair="retry"]').count() == 0, echoed=echoed,
               retry_chips=page.locator('[data-testid="kpi-repair"][data-repair="retry"]').count())
+
+    def desk_retry(launches: list) -> None:
+        """The Desk: f1's own row offers Retry; it prefills the launch form and posts NOTHING until
+        the operator launches; the launch carries retryOf, and the retried failure leaves the list."""
+        for t in page.locator('[data-testid="need-group-toggle"][aria-expanded="false"]').all():
+            t.click()
+        row = page.locator('[data-testid="need-row"][data-key="fail:f1"], [data-testid="need-member"][data-key="fail:f1"]')
+        row.wait_for(state="visible")
+        act = row.locator('[data-testid="need-act"]')
+        check("retry-on-its-row", act.count() == 1 and act.inner_text().strip() == "Retry ›", label=act.inner_text() if act.count() else None)
+        act.click()
+        page.get_by_test_id("launch-problem").wait_for(state="visible")
+        page.wait_for_timeout(500)
+        check("retry-prefills-posts-nothing", page.evaluate("() => location.pathname") == "/runs/new" and launches == []
+              and (page.get_by_test_id("launch-problem").input_value() or "") != "",
+              path=page.evaluate("() => location.pathname"), launches=launches)
+        page.wait_for_function(
+            "() => { const b = document.querySelector('[data-testid=\"launch-submit\"]'); return b && !b.disabled; }",
+            timeout=20000)
+        page.get_by_test_id("launch-submit").click()
+        for _ in range(2):  # the launch's own preflight may ask first; the operator says go
+            for _ in range(50):
+                if launches:
+                    break
+                page.wait_for_timeout(200)
+            if launches or page.get_by_test_id("preflight-override").count() == 0:
+                break
+            page.get_by_test_id("preflight-override").click()
+        page.wait_for_timeout(600)
+        check("retry-relaunched", len(launches) == 1 and launches[0].get("retryOf") == "f1", launches=launches)
+        page.screenshot(path=str(SHOTS / f"wavea-{SKIN}-retry.png"))
+        runs = get_json(origin, "/api/v1/runs")
+        rows = runs if isinstance(runs, list) else runs.get("runs", [])
+        echoed = [r["session"].get("retry_of") for r in rows if r["session"]["id"].startswith("r-launched-")]
+        home()
+        for t in page.locator('[data-testid="need-group-toggle"][aria-expanded="false"]').all():
+            t.click()
+        page.wait_for_timeout(800)
+        check("retried-failure-has-its-answer", echoed == ["f1"] and row.count() == 0, echoed=echoed, rows=row.count())
 
     ok = True
     for section in (section_clones, section_replay, section_pill, section_retry):

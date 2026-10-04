@@ -22,7 +22,11 @@ Round 2 (review of #336): the queue beside other focus owners —
 Captures: e2e/shots/wave2b-queue-{grouped,expanded,resolved}.png.
 
 Prereqs: Python Playwright. Builds dist-sameorigin/ itself unless SKIP_STUDIO_BUILD=1.
-Env: FEEDBACK_PORT (default 4345). Prints a JSON report; exit 0/1.
+Under STUDIO_SKIN=desk (S15a: the desk variant, in run_journeys.py DESK) R2-2 has no card wall to
+select: the same safety reads "with the list focused on gate B, ⌥A decides nothing" (the Desk answers
+a gate only through its row's own choice). Every other step is the same.
+
+Env: FEEDBACK_PORT (default 4345), STUDIO_SKIN. Prints a JSON report; exit 0/1.
 """
 
 import json
@@ -30,7 +34,7 @@ import os
 import sys
 import time
 
-from uxfix_fixture import HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server
+from uxfix_fixture import HIDE_GATE_TOASTS, REPO, STUDIO_SKIN, ensure_build, set_fixture, start_server
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4345"))
 W, H = 1440, 700
@@ -187,12 +191,15 @@ with sync_playwright() as p:
     # R2-2. Wall selection on card A + queue focus on gate B: `a` must decide NOTHING.
     if "2" in only:
         fresh_home()
-        page.evaluate("() => document.activeElement && document.activeElement.blur()")
-        page.keyboard.press("Alt+j")
-        wall = page.evaluate("() => { const c = document.querySelector('[data-testid=\"band-needs-you\"] [data-kbd-selected]'); "
-                             "return c ? c.getAttribute('data-kbd-item') : null; }")
-        check("r2-wall-card-selected", wall in ("alpha", "beta"), wall=wall)
-        other_run = "g2" if wall == "alpha" else "g1"
+        if STUDIO_SKIN == "desk":
+            wall, other_run = None, "g2"  # no wall on the Desk: the list alone holds the cursor
+        else:
+            page.evaluate("() => document.activeElement && document.activeElement.blur()")
+            page.keyboard.press("Alt+j")
+            wall = page.evaluate("() => { const c = document.querySelector('[data-testid=\"band-needs-you\"] [data-kbd-selected]'); "
+                                 "return c ? c.getAttribute('data-kbd-item') : null; }")
+            check("r2-wall-card-selected", wall in ("alpha", "beta"), wall=wall)
+            other_run = "g2" if wall == "alpha" else "g1"
         page.get_by_test_id("needs-you-queue").focus()
         page.keyboard.press("Alt+j")
         page.keyboard.press("Enter")
@@ -205,7 +212,9 @@ with sync_playwright() as p:
         gate_posts.clear()
         page.keyboard.press("Alt+a")
         page.wait_for_timeout(1000)
-        check("r2-a-decides-nothing-while-queue-focused", gate_posts == [], posts=gate_posts, wall=wall)
+        toasts = page.get_by_test_id("undo-toast").count() if STUDIO_SKIN == "desk" else 0  # nothing queued either
+        check("r2-a-decides-nothing-while-queue-focused", gate_posts == [] and toasts == 0, posts=gate_posts, wall=wall,
+              toasts=toasts)
 
     # R2-3a. Enter on a focused control acts on THAT control, not the remembered row.
     if "3" in only:

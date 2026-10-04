@@ -332,6 +332,11 @@ export function needsYouRows(inputs: NeedsYouInputs): NeedRow[] {
   const escalations = inputs.stallEscalations ?? {};
   const rows: NeedRow[] = [];
   const live = runs.filter((v) => v.session.archived_at == null);
+  // A retried failure has its answer (repairMoves.retryableFailed's rule): a failed run that a later
+  // run names in `retry_of` no longer needs you — its row would only invite a second relaunch.
+  const retried = new Set(
+    runs.map((v) => v.session.retry_of).filter((id): id is string => typeof id === 'string' && id !== ''),
+  );
 
   // ── Repo graph rows FIRST: their onboard-run ids suppress failed-run twins ──
   const suppressed = new Set<string>();
@@ -417,7 +422,7 @@ export function needsYouRows(inputs: NeedsYouInputs): NeedRow[] {
           label: gateRowVerb(gate?.prompt, gate?.gateKind) ?? 'Open gate ›',
         },
       });
-    } else if (s.status === 'failed' && windowIds.has(s.id) && !suppressed.has(s.id)) {
+    } else if (s.status === 'failed' && windowIds.has(s.id) && !suppressed.has(s.id) && !retried.has(s.id)) {
       shownRunIds.add(s.id);
       rows.push({
         key: FAILED_KEY(s.id),

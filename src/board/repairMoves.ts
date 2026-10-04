@@ -1,4 +1,4 @@
-import type { LaunchBodyWithDeliver, RosterSeat, SessionView } from '../api/types.js';
+import type { DiagnosticsGovernance, LaunchBodyWithDeliver, RosterSeat, SessionView } from '../api/types.js';
 import type { GovernanceReplayOutcome } from '../api/governanceReplay.js';
 import { ONBOARDING_WORKFLOW_ID } from './repoStats.js';
 import { noCarryingSeatReason, seatCanCarry } from '../components/gateVerdictModel.js';
@@ -154,4 +154,20 @@ export function replayResultLine(o: GovernanceReplayOutcome): string {
   if (o.alreadyPresent !== null && o.alreadyPresent > 0) bits.push(`${o.alreadyPresent} already on the store`);
   bits.push(`${o.failed} still quarantined`);
   return `Replayed ${plural(o.read, 'event')}: ${bits.join(' · ')}`;
+}
+
+/**
+ * The Desk's dead-letter chore (S15a — the Command Deck's Governed tile carried this move; the
+ * Desk has no tiles, so it is a row "for whoever runs studio"). The SAME condition the tile reads:
+ * a resolved store, a `governance.deadletter` error finding and a non-zero outbox. `null` = no row.
+ */
+export function deadletterChore(g: DiagnosticsGovernance | null | undefined): { title: string; line: string } | null {
+  if (g == null || g.store === null) return null;
+  if (!g.findings.some((f) => f.kind === 'governance.deadletter' && f.severity === 'error')) return null;
+  if (g.deadletters.count <= 0) return null;
+  const n = `${g.deadletters.count}${g.deadletters.truncated ? '+' : ''}`;
+  return {
+    title: 'Governance evidence is not landing',
+    line: `${n} governance events dead-lettered — a dry run shows what a replay would move before anything does.`,
+  };
 }

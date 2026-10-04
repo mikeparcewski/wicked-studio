@@ -8,7 +8,9 @@ Some share default ports, so they run one at a time.
 
   python3 e2e/run_journeys.py              # the behaviour journeys (the CI set)
   python3 e2e/run_journeys.py --list desk  # the desk journeys (CI runs them under STUDIO_SKIN=desk)
-  python3 e2e/run_journeys.py --all        # every journey except the LIVE and DESK ones
+  python3 e2e/run_journeys.py --list desk --shard 1/2   # the first half of the desk list (CI shards it)
+  python3 e2e/run_journeys.py --check-desk # every behaviour journey has a desk counterpart (CI runs it)
+  python3 e2e/run_journeys.py --all        # every journey except the LIVE and desk-only ones
   python3 e2e/run_journeys.py wave1_dark   # just the named journeys
 
 The same-origin build is made once up front (unless SKIP_STUDIO_BUILD=1 and it already
@@ -48,10 +50,24 @@ BEHAVIOUR = [
     "type_to_composer",
 ]
 
-# The desk journeys (DES-STUDIO-REBUILD-001 §6.2): they assert the `desk` skin, so they run only
-# under STUDIO_SKIN=desk (CI's `journeys (desk)` leg, skipped while this list is empty). A desk
-# slice adds its journey here and never to BEHAVIOUR, which runs under [studio, compact-rail].
-DESK: list[str] = ["desk_home", "desk_session", "desk_answer", "desk_look", "desk_watch", "desk_proposal", "editor_conformance", "desk_reel_words", "desk_chat_launch", "desk_composer", "desk_watchtower", "desk_cmdk_routes", "desk_controls", "desk_sheets", "desk_home_paths", "desk_decisions", "desk_page_editor", "desk_doc_editors", "desk_walkthrough", "desk_rules", "desk_checks", "desk_plan_order", "desk_page_acts", "desk_run_state", "desk_gate_moves", "desk_repo_page", "desk_launch", "live_walkthrough_deliver_selftest"]
+# The desk journeys (DES-STUDIO-REBUILD-001 §6.2): they run only under STUDIO_SKIN=desk (CI's
+# `journeys (desk)` legs). A desk slice adds its journey here and never to BEHAVIOUR, which runs under
+# the other skins. S15a (§6.4): the behaviour journeys join this list too — each runs under desk as is,
+# or with its desk branch (the journey reads STUDIO_SKIN) — so the desk list is the full behaviour
+# proof under the skin that becomes the default. A behaviour journey whose surface the Desk replaced
+# names its desk counterpart in DESK_COUNTERPARTS instead; `--check-desk` holds every one to that.
+DESK_ONLY: list[str] = ["desk_home", "desk_session", "desk_answer", "desk_look", "desk_watch", "desk_proposal", "editor_conformance", "desk_reel_words", "desk_chat_launch", "desk_composer", "desk_watchtower", "desk_cmdk_routes", "desk_controls", "desk_sheets", "desk_home_paths", "desk_decisions", "desk_page_editor", "desk_doc_editors", "desk_walkthrough", "desk_rules", "desk_checks", "desk_plan_order", "desk_page_acts", "desk_run_state", "desk_gate_moves", "desk_repo_page", "desk_launch", "live_walkthrough_deliver_selftest", "desk_calm"]
+
+# Behaviour journeys that do NOT run under desk, each with the DESK journey that proves the same
+# behaviour on the Desk's surfaces (Home's bands and count tiles have no Desk form; the Desk says the
+# same through its one sentence, its list and its project sentences).
+DESK_COUNTERPARTS: dict[str, str] = {
+    "wave1_dark": "desk_calm",   # dark when healthy: bands collapsed → "Nothing needs you.", no row
+    "wave1_stall": "desk_calm",  # a stalled run is an exception: gamma's card → r1's row
+    "wave1_tone": "desk_calm",   # zero is quiet: count tiles' tones → the sentence's highlight + one row
+}
+
+DESK: list[str] = DESK_ONLY + [n for n in BEHAVIOUR if n not in DESK_COUNTERPARTS]
 
 LISTS = {"behaviour": BEHAVIOUR, "desk": DESK}
 
@@ -65,7 +81,34 @@ TIMEOUT_S = 240
 
 def all_journeys() -> list[str]:
     names = sorted(p.name[: -len("_test.py")] for p in E2E.glob("*_test.py"))
-    return [n for n in names if n not in LIVE and n not in DESK]
+    return [n for n in names if n not in LIVE and n not in DESK_ONLY]
+
+
+def check_desk() -> list[str]:
+    """Every behaviour journey runs under desk or names a desk counterpart that is in the desk list."""
+    problems = []
+    for n in BEHAVIOUR:
+        if n in DESK:
+            continue
+        twin = DESK_COUNTERPARTS.get(n)
+        if twin is None:
+            problems.append(f"{n}: not in DESK and no DESK_COUNTERPARTS entry")
+        elif twin not in DESK_ONLY or not (E2E / f"{twin}_test.py").is_file():
+            problems.append(f"{n}: its counterpart {twin} is not a desk journey")
+    for n in DESK:
+        if not (E2E / f"{n}_test.py").is_file():
+            problems.append(f"{n}: listed in DESK but {n}_test.py is missing")
+    if len(set(DESK)) != len(DESK):
+        problems.append("DESK lists a journey twice")
+    return problems
+
+
+def shard(names: list[str], spec: str) -> list[str]:
+    """`K/N`: the K-th of N interleaved slices (1-based), so long and short journeys spread evenly."""
+    k, n = (int(x) for x in spec.split("/"))
+    if not 1 <= k <= n:
+        raise SystemExit(f"--shard {spec}: K must be 1..N")
+    return names[k - 1::n]
 
 
 def build() -> None:
@@ -100,7 +143,18 @@ def main() -> int:
     ap.add_argument("--all", action="store_true", help="every journey except the LIVE and DESK ones")
     ap.add_argument("--list", choices=sorted(LISTS), default="behaviour",
                     help="which named list to run when no names are given (default: behaviour)")
+    ap.add_argument("--shard", metavar="K/N", help="run only the K-th of N interleaved slices of the list")
+    ap.add_argument("--check-desk", action="store_true",
+                    help="exit 1 unless every behaviour journey runs under desk or names a desk counterpart")
     args = ap.parse_args()
+
+    if args.check_desk:
+        problems = check_desk()
+        for line in problems:
+            print(line, file=sys.stderr)
+        print(f"desk list: {len(DESK)} journeys ({len(DESK_ONLY)} desk-only, {len(DESK) - len(DESK_ONLY)} behaviour); "
+              f"{len(DESK_COUNTERPARTS)} behaviour journeys proven by a desk counterpart")
+        return 1 if problems else 0
 
     if args.list == "desk" and not args.names and not args.all:
         # The desk list only means something under the desk skin.
@@ -108,6 +162,8 @@ def main() -> int:
             print(f"--list desk runs under STUDIO_SKIN=desk, not {os.environ['STUDIO_SKIN']}", file=sys.stderr)
             return 2
     names = args.names or (all_journeys() if args.all else LISTS[args.list])
+    if args.shard:
+        names = shard(names, args.shard)
     if not names:
         print(f"no journeys in the {args.list} list; nothing to run")
         return 0

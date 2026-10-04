@@ -276,12 +276,24 @@ with sync_playwright() as p:
     except Exception:
         page.screenshot(path=str(SHOTS / f"mcp-tools-missing-{STUDIO_SKIN}.png"))
         fail("page-shows", page.locator("body").inner_text()[:2000])
-    nav = page.evaluate("""() => {
-        const glyphs = [...document.querySelectorAll('[data-testid="rail-collapsed-glyph"]')].map(g => g.getAttribute('href'));
-        const heads = [...document.querySelectorAll('[data-testid^="rail-heading-"]')].map(h => h.dataset.testid.slice('rail-heading-'.length));
-        return { glyphs, heads }; }""")
-    order = nav["glyphs"] if STUDIO_SKIN == "compact-rail" else nav["heads"]
-    want = ["/skills", "/mcp", "/steering/dashboard"] if STUDIO_SKIN == "compact-rail" else ["skills", "mcp", "steering"]
+    if STUDIO_SKIN == "desk":
+        # The Desk's rail carries sessions, not sections: every section lives under
+        # "Everything else" — MCP tools sits between Skills and Rules (steering) there.
+        page.get_by_test_id("desk-rail-more").click()
+        page.get_by_test_id("desk-rail-everything").wait_for(state="visible", timeout=5000)
+        dests = page.evaluate("""() => [...document.querySelectorAll('[data-testid="desk-rail-everything"] [data-nav-dest]')]
+            .map(e => e.getAttribute('data-nav-dest'))""")
+        page.keyboard.press("Escape")
+        nav = {"dests": dests}
+        order = dests
+        want = ["section:skills", "section:mcp", "section:steering"]
+    else:
+        nav = page.evaluate("""() => {
+            const glyphs = [...document.querySelectorAll('[data-testid="rail-collapsed-glyph"]')].map(g => g.getAttribute('href'));
+            const heads = [...document.querySelectorAll('[data-testid^="rail-heading-"]')].map(h => h.dataset.testid.slice('rail-heading-'.length));
+            return { glyphs, heads }; }""")
+        order = nav["glyphs"] if STUDIO_SKIN == "compact-rail" else nav["heads"]
+        want = ["/skills", "/mcp", "/steering/dashboard"] if STUDIO_SKIN == "compact-rail" else ["skills", "mcp", "steering"]
     idx = [order.index(x) if x in order else -1 for x in want]
     check("nav-between-skills-and-steering", -1 not in idx and idx[1] == idx[0] + 1 and idx[2] == idx[1] + 1, nav=nav)
 

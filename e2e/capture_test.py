@@ -25,6 +25,10 @@ rule into the `proposals` queue):
   5 ask        the Ask dock carries the same drop, inline, with its consequence; opening it posts
                nothing.
 
+Under STUDIO_SKIN=desk (S15a: the desk variant, in run_journeys.py DESK) the drop point is the Desk's
+Start row (its last way to start something — the Desk has no verb row), the triage is the Desk's list,
+and the Ask dock opens with ⌘/Ctrl+Shift+A (the Desk's composer stands in for Home's Ask invite).
+
 Captures (e2e/shots/): capture-<skin>-drop.png, capture-<skin>-triage.png, capture-<skin>-ask.png.
 Env: FEEDBACK_PORT (default 4383), STUDIO_SKIN. JSON report; exit 0/1.
 """
@@ -108,12 +112,26 @@ with sync_playwright() as p:
     def section_verb() -> None:
         page.goto(f"{origin}/", wait_until="networkidle")
         check("skin-applied", page.evaluate("() => document.documentElement.getAttribute('data-skin')") == SKIN)
-        order = page.evaluate("""() => [...document.querySelector('[data-testid="home-verbs"]').children]
-            .map(e => e.dataset.testid)""")
-        check("capture-beside-do-work", order[:2] == ["home-verb-work", "capture"], order=order)
+        if SKIN == "desk":
+            # The Desk has no verb row: Capture is the Start row's last way to start something.
+            order = page.evaluate("""() => [...document.querySelector('[data-testid="desk-start-row"]').children]
+                .map(e => e.dataset.testid).filter(Boolean)""")
+            check("capture-on-the-start-row", order[-1:] == ["capture"] and "desk-start-chip" in order, order=order)
+        else:
+            order = page.evaluate("""() => [...document.querySelector('[data-testid="home-verbs"]').children]
+                .map(e => e.dataset.testid)""")
+            check("capture-beside-do-work", order[:2] == ["home-verb-work", "capture"], order=order)
         page.get_by_test_id("capture-open").click()
         drop = page.get_by_test_id("capture-drop")
         drop.wait_for(state="visible")
+        # The form opens where the operator can use it: its notes and its send button sit inside
+        # the viewport as it opens, before anything scrolls them (codex S15a r1 — on the Desk the
+        # Start row is the bottom band, so a popover opening downward fell off the screen).
+        in_view = page.evaluate("""() => ['capture-notes', 'capture-send'].map(id => {
+            const r = document.querySelector(`[data-testid="${id}"]`).getBoundingClientRect();
+            return { id, top: Math.round(r.top), bottom: Math.round(r.bottom),
+                     ok: r.top >= 0 && r.bottom <= window.innerHeight && r.left >= 0 && r.right <= window.innerWidth }; })""")
+        check("capture-form-in-view", all(x["ok"] for x in in_view), in_view=in_view, vh=H)
         page.get_by_test_id("capture-project").select_option(PROJECT)
         first = drop.evaluate("el => el.firstElementChild.dataset.testid")
         consequence = page.get_by_test_id("capture-consequence").inner_text()
@@ -167,8 +185,14 @@ with sync_playwright() as p:
               chip.inner_text() == "· 5 waiting"
               and status.startswith("5 proposals from your capture waiting in Needs You: 4 memory-only, 1 changes enforcement"),
               chip=chip.inner_text(), status=status)
-        header_rows = page.evaluate("""() => { const v = document.querySelector('[data-testid="home-verbs"]');
-            return new Set([...v.children].map(c => Math.round(c.getBoundingClientRect().top))).size; }""")
+        if SKIN == "desk":
+            # The Start row's label, chips and Capture differ in height: one row = one shared band.
+            header_rows = page.evaluate("""() => { const rs = [...document.querySelector('[data-testid="desk-start-row"]').children]
+                .map(c => c.getBoundingClientRect()).filter(r => r.height > 0);
+                return Math.max(...rs.map(r => r.top)) < Math.min(...rs.map(r => r.bottom)) ? 1 : 2; }""")
+        else:
+            header_rows = page.evaluate("""() => { const v = document.querySelector('[data-testid="home-verbs"]');
+                return new Set([...v.children].map(c => Math.round(c.getBoundingClientRect().top))).size; }""")
         check("verb-row-stays-one-row", header_rows == 1, rows=header_rows)
         row.get_by_test_id("need-group-toggle").click()
         members = page.locator(MEMBERS)
@@ -198,7 +222,10 @@ with sync_playwright() as p:
               status.startswith("1 proposal from your capture waiting in Needs You: 1 changes enforcement"), status=status)
 
     def section_ask() -> None:
-        page.get_by_test_id("home-ask").click()
+        if SKIN == "desk":
+            page.keyboard.press("Control+Shift+A")  # the Desk's composer stands in for Home's Ask invite
+        else:
+            page.get_by_test_id("home-ask").click()
         dock_capture = page.locator('[data-testid="assist-thread"] [data-testid="capture-open"]')
         dock_capture.wait_for(state="visible")
         dock_capture.click()

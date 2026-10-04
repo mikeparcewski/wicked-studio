@@ -11,6 +11,10 @@ main_scroll_test.py — the main pane scrolls; nothing on a top-level page sits 
            the viewport tall hides content behind `overflow: hidden` (the clipping class the Home bug
            was) — a pane taller than its box must be one the user can scroll.
 
+Under STUDIO_SKIN=desk (S15a: the desk variant, in run_journeys.py DESK) Home is the Desk: its own
+scroller must bring the last block of its list column fully into view above the Start row + composer
+band by the wheel alone, and the session rail and that band stay where they were. "pages" is the same.
+
 Captures (e2e/shots/): main-scroll-<skin>-home-top.png, main-scroll-<skin>-home-bottom.png.
 Env: FEEDBACK_PORT (default 4499), STUDIO_SKIN. JSON report; exit 0/1.
 """
@@ -88,6 +92,28 @@ LAST_SECTION = """() => {
            unobscured: !!hit && last.contains(hit) };
 }"""
 
+# The Desk (STUDIO_SKIN=desk, S15a's desk variant): its own scroller holds the list and the chores; the
+# floor is the Start row + composer band, which never scrolls.
+DESK_LAST_SECTION = """() => {
+  const main = document.querySelector('[data-place-scroll="desk"] .wk-desk-main');
+  if (!main) return null;
+  const last = main.lastElementChild || main;
+  const r = last.getBoundingClientRect();
+  const bar = document.querySelector('.wk-desk-bottom');
+  const floor = bar ? bar.getBoundingClientRect().top : innerHeight;
+  const cx = r.left + Math.min(r.width / 2, 120), cy = r.top + Math.min(r.height / 2, 12);
+  const hit = document.elementFromPoint(cx, cy);
+  return { testid: last.dataset.testid || null, top: Math.round(r.top), bottom: Math.round(r.bottom),
+           floor: Math.round(floor), inView: r.top >= 0 && r.bottom <= floor + 1,
+           unobscured: !!hit && last.contains(hit) };
+}"""
+
+DESK_CHROME = """() => {
+  const rect = (sel) => { const e = document.querySelector(sel); if (!e) return null;
+    const r = e.getBoundingClientRect(); return [Math.round(r.top), Math.round(r.bottom)]; };
+  return { sidebar: rect('[data-testid="session-rail"]'), main: rect('#main'), bar: rect('.wk-desk-bottom') };
+}"""
+
 CHROME = """() => {
   const rect = (sel) => { const e = document.querySelector(sel); if (!e) return null;
     const r = e.getBoundingClientRect(); return [Math.round(r.top), Math.round(r.bottom)]; };
@@ -109,30 +135,34 @@ with sync_playwright() as p:
         "document.addEventListener('DOMContentLoaded', () => { const s = document.createElement('style'); "
         f"s.textContent = {json.dumps(HIDE_GATE_TOASTS)}; document.head.appendChild(s); }});")
 
+    desk = SKIN == "desk"
+    last_section = DESK_LAST_SECTION if desk else LAST_SECTION
+    chrome = DESK_CHROME if desk else CHROME
+
     def section_home() -> None:
         set_fixture(origin, **CORPUS)
         page.goto(f"{origin}/", wait_until="networkidle")
         page.get_by_test_id("needs-you-queue").wait_for(state="visible", timeout=15000)
-        page.get_by_test_id("project-board").wait_for(state="attached")
+        page.get_by_test_id("desk" if desk else "project-board").wait_for(state="attached")
         page.wait_for_timeout(600)
-        start = page.evaluate(LAST_SECTION)
+        start = page.evaluate(last_section)
         check("home-last-section-starts-below-fold", start is not None and not start["inView"], start=start)
-        chrome_before = page.evaluate(CHROME)
+        chrome_before = page.evaluate(chrome)
         page.screenshot(path=str(SHOTS / f"main-scroll-{SKIN}-home-top.png"))
         # The wheel only — the user's move. Parked over the Home header's empty stretch, which is no
         # nested scroller, so a pane that cannot scroll simply does not move.
-        header = page.locator("#main header").first.bounding_box()
+        header = page.locator("#main header").first.bounding_box()  # the Desk's greeting under desk
         page.mouse.move(header["x"] + header["width"] * 0.6, header["y"] + header["height"] / 2)
         last = start
         for _ in range(30):
             page.mouse.wheel(0, 240)
             page.wait_for_timeout(90)
-            last = page.evaluate(LAST_SECTION)
+            last = page.evaluate(last_section)
             if last["inView"] and last["unobscured"]:
                 break
         page.screenshot(path=str(SHOTS / f"main-scroll-{SKIN}-home-bottom.png"))
         check("home-last-section-scrolls-into-view", last["inView"] and last["unobscured"], last=last)
-        chrome_after = page.evaluate(CHROME)
+        chrome_after = page.evaluate(chrome)
         check("home-sidebar-and-status-bar-stay-fixed", chrome_after == chrome_before,
               before=chrome_before, after=chrome_after)
         clipped = page.evaluate(CLIPPED_PANES)

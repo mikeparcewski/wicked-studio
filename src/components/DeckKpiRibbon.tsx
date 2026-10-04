@@ -350,7 +350,7 @@ function RepairButtons({ confirm, onConfirm, onCancel, disabled }: {
 }
 
 /** Governed tile: "Replay" — a dry run first; the real replay only on confirm. */
-function ReplayMove({ replay }: { replay: ReturnType<typeof useDeadletterReplay> }): React.ReactElement {
+export function ReplayMove({ replay }: { replay: ReturnType<typeof useDeadletterReplay> }): React.ReactElement {
   const s = replay.state;
   return (
     <RepairShell kind="replay" label="Replay ›" title="Replay the dead-lettered governance events (dry run first)" open={s.phase !== 'idle'} onOpen={() => void replay.preview()}>

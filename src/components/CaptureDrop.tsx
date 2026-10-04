@@ -47,12 +47,15 @@ const S = {
   },
 } as const satisfies Record<string, React.CSSProperties>;
 
-export function CaptureDrop({ runs, pathname = '/', inline = false, onReview }: {
+export function CaptureDrop({ runs, pathname = '/', inline = false, opens = 'down', onReview }: {
   runs: readonly SessionView[];
   /** The route the drop sits on: its project (if any) is the default target. */
   pathname?: string;
   /** Ask dock: the form renders in place, not as a popover. */
   inline?: boolean;
+  /** Which way the popover opens from its button: `down` (Home's verb row), or `up` where the
+   *  button sits in a bottom band (the Desk's Start row) and a downward form would leave the screen. */
+  opens?: 'down' | 'up';
   /** Where "Review" goes: Home's Needs You triage. Absent = already there (no link). */
   onReview?: (() => void) | undefined;
 }): React.ReactElement | null {
@@ -110,7 +113,10 @@ export function CaptureDrop({ runs, pathname = '/', inline = false, onReview }: 
       onDrop={(e) => { e.preventDefault(); e.stopPropagation(); addFiles(e.dataTransfer.files); }}
       style={{
         ...S.panel,
-        ...(inline ? {} : { position: 'absolute', top: 'calc(100% + 6px)', left: 0, width: 'min(440px, 90vw)', zIndex: 45 }),
+        ...(inline ? {} : {
+          position: 'absolute', ...(opens === 'up' ? { bottom: 'calc(100% + 6px)' } : { top: 'calc(100% + 6px)' }),
+          left: 0, width: 'min(440px, 90vw)', zIndex: 45,
+        }),
       }}
     >
       {/* The consequence first: where it goes, what happens, what is kept. */}

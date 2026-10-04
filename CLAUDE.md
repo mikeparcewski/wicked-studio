@@ -22,11 +22,13 @@ answer HITL gates, browse projects/evidence/coverage, watch live CoreEvents.
   mistake, and do not cite a `.product/…` path as something a reviewer can open.
 - `tests/` — vitest (jsdom): `npm test`; typecheck with `npm run typecheck`.
 - `e2e/` — Python Playwright journeys on the in-process fixture (`e2e/uxfix_fixture.py`);
-  `python3 e2e/run_journeys.py` runs the behaviour set CI runs (under both skins, via
-  `STUDIO_SKIN`); `--all` runs every journey except `DESK` and the few marked `LIVE` there (they need a
-  real daemon or bridge). `--list desk` runs the `DESK` list under `STUDIO_SKIN=desk` (CI's
-  `journeys (desk)` leg, skipped while the list is empty); a desk journey goes there, never in
-  `BEHAVIOUR`.
+  `python3 e2e/run_journeys.py` runs the behaviour set CI runs (under the studio and compact-rail
+  skins, via `STUDIO_SKIN`); `--all` runs every journey except the desk-only ones and the few marked
+  `LIVE` there (they need a real daemon or bridge). `--list desk` runs the `DESK` list under
+  `STUDIO_SKIN=desk` (CI's two `journeys (desk K/2)` shards, `--shard K/N`): the desk-only journeys plus
+  every behaviour journey (S15a). A desk journey goes in `DESK_ONLY`, never in `BEHAVIOUR`; a new
+  behaviour journey runs under desk too (branch on `STUDIO_SKIN` where the Desk differs), or names its
+  desk counterpart in `DESK_COUNTERPARTS` — `--check-desk` (run by CI) fails otherwise.
 - `testid-inventory.json` — regenerate with `npm run manifest:testids`, never hand-merge it.
   Removing a testid fails `tests/testidRemovals.test.ts` unless `e2e/testid-successors.json`
   names its successor.
