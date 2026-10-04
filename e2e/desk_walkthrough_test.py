@@ -336,11 +336,14 @@ with sync_playwright() as p:
         page.get_by_test_id("walkthrough-fix").click()
         page.wait_for_timeout(1500)
         early = gate_posts("r-walk-fail")
+        # The note is the UI's own word after the POST; the state line follows the walkthrough RE-READ. Judge
+        # `after` once both have landed — on a slow runner the note arrives a tick before the state flips.
         try:
-            page.wait_for_function("""() => { const n = document.querySelector('[data-testid="walkthrough-note"]'); return !!n && n.innerText.startsWith('Sent back'); }""", timeout=25000)
+            page.wait_for_function("""() => { const n = document.querySelector('[data-testid="walkthrough-note"]'); const w = document.querySelector('[data-testid="artifact"][data-kind="walkthrough"] [data-testid="walkthrough"]');
+              return !!n && n.innerText.startsWith('Sent back') && !!w && w.dataset.state === 'authoring'; }""", timeout=25000)
         except Exception:
             page.screenshot(path=str(SHOTS / "desk-walkthrough-fix-timeout.png"))
-            fail("ask-fix", {"why": "no 'Sent back to the helpers' note within 25 s", "found": page.evaluate(ART, "walkthrough"), "posts": gate_posts("r-walk-fail")})
+            fail("ask-fix", {"why": "no 'Sent back to the helpers' note with the walkthrough back in authoring within 25 s", "found": page.evaluate(ART, "walkthrough"), "posts": gate_posts("r-walk-fail")})
         after = page.evaluate(ART, "walkthrough")
         sent = gate_posts("r-walk-fail")
         page.screenshot(path=str(SHOTS / "desk-walkthrough-fix-sent.png"))

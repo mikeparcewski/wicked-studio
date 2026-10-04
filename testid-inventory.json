@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.5.19",
   "counts": {
-    "files": 213,
-    "occurrences": 2366,
-    "static": 2067,
+    "files": 214,
+    "occurrences": 2377,
+    "static": 2078,
     "dynamic": 80,
     "computed": 7
   },
@@ -7764,6 +7764,72 @@
       "testId": "rule-where-verdict",
       "files": [
         "src/components/decisions/RuleOrigin.tsx"
+      ]
+    },
+    {
+      "testId": "rules-all",
+      "files": [
+        "src/components/rules/RulesPage.tsx"
+      ]
+    },
+    {
+      "testId": "rules-error",
+      "files": [
+        "src/components/rules/RulesPage.tsx"
+      ]
+    },
+    {
+      "testId": "rules-group",
+      "files": [
+        "src/components/rules/RulesPage.tsx"
+      ]
+    },
+    {
+      "testId": "rules-loading",
+      "files": [
+        "src/components/rules/RulesPage.tsx"
+      ]
+    },
+    {
+      "testId": "rules-missing",
+      "files": [
+        "src/components/rules/RulesPage.tsx"
+      ]
+    },
+    {
+      "testId": "rules-page",
+      "files": [
+        "src/components/rules/RulesPage.tsx"
+      ]
+    },
+    {
+      "testId": "rules-retry",
+      "files": [
+        "src/components/rules/RulesPage.tsx"
+      ]
+    },
+    {
+      "testId": "rules-row",
+      "files": [
+        "src/components/rules/RulesPage.tsx"
+      ]
+    },
+    {
+      "testId": "rules-row-line",
+      "files": [
+        "src/components/rules/RulesPage.tsx"
+      ]
+    },
+    {
+      "testId": "rules-row-open",
+      "files": [
+        "src/components/rules/RulesPage.tsx"
+      ]
+    },
+    {
+      "testId": "rules-sentence",
+      "files": [
+        "src/components/rules/RulesPage.tsx"
       ]
     },
     {

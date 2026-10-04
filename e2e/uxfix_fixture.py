@@ -784,6 +784,10 @@ session_launched: list = []
 cancel_post_log: list = []
 # Wave 2a: every POST /runs/:id/gate the fixture received (read over GET /__fixture/gate-posts).
 gate_post_log: list = []
+# S13 (e2e/live_walkthrough_deliver_test.py): the `gateDecided` event a POST /runs/:id/gate on the walkthrough
+# corpus appends to that run's trail — crew writes one per decision; GET /runs/:id/events serves it after the
+# recorded events. Cleared with `reset_gate_posts`.
+walk_gate_decided: dict = {}
 # Every POST /runs/:id/inject (a message to the team on a live run; GET /__fixture/inject-posts).
 inject_post_log: list = []
 # S9: every `feedback.submitted` batch the bridge received — {pid, doc, version, items} — so a
@@ -5367,6 +5371,7 @@ class W2Handler(SimpleHTTPRequestHandler):
                 if state["home_paths"] and rid in HOME_EVENTS:
                     events = list(HOME_EVENTS[rid])
             with state_lock:
+                events = events + list(walk_gate_decided.get(rid, []))
                 if state["wave1"] and rid == "r1":
                     events = list(WAVE1_R1_STALL_EVENTS if state["wave1_stall"] else WAVE1_R1_EVENTS)
                     if state["wave2a_feed"]:
@@ -6475,6 +6480,14 @@ class W2Handler(SimpleHTTPRequestHandler):
                         walk_phase[rid] = "rerecording"   # the escalation's approve retries the recorder
                     elif body.get("action") == "request_changes":
                         walk_phase[rid] = "fixing"        # back to the creator, with the operator's note
+                # The decision lands in the run's trail as crew records it (S13's live journey reads it back).
+                with state_lock:
+                    trail = walk_gate_decided.setdefault(rid, [])
+                    decided = {"type": "gateDecided", "session": rid, "ord": gate["ord"], "seq": 9000 + len(trail) + 1,
+                               "ts": int(time.time() * 1000), "allow": body.get("approve") is True}
+                    if body.get("action") == "request_changes":
+                        decided["action"] = "request_changes"
+                    trail.append(decided)
                 self._json(200, {"status": "ok"})
                 return True
             return False
@@ -6573,8 +6586,22 @@ class W2Handler(SimpleHTTPRequestHandler):
             frame = {"type": "decisionChanged", "id": did, "state": d["state"], "project_id": d["project_id"]}
             if "rule_id" in d:
                 frame["rule_id"] = d["rule_id"]
+            # S12: what crew LANDS at remember() (DC §4.2.4 policyProposalToRule) — the rule the Rules page
+            # then serves under `steering_rules`: the statement (the operator's edit wins), the decision's
+            # project and steering type, provenance chat/decision.
+            landed = None
+            if verb == "remember":
+                derived = d.get("derived") or {}
+                landed = {"id": d["rule_id"], "rule_type": "policy",
+                          "statement": (d.get("edits") or {}).get("statement") or derived.get("statement") or "",
+                          "severity": "warn", "confidence": 0.9, "targets": {"project": d["project_id"]},
+                          "provenance": {"source": "chat", "source_kinds": ["decision"]},
+                          "steering_type": derived.get("steering_type") or "development", "applies_to": [], "excludes": [],
+                          "weight": 1.0, "created_at": int(time.time())}
         with state_lock:
             state["extra_frames"].append(frame)
+            if landed is not None and state["steering_rules"]:
+                steering_rule_overlay[landed["id"]] = landed
         self._json(200, answer)
         return True
 
@@ -6780,6 +6807,7 @@ class W2Handler(SimpleHTTPRequestHandler):
                 with state_lock:
                     cancel_post_log.clear()
                     gate_post_log.clear()
+                    walk_gate_decided.clear()
                     session_launch_log.clear()
                     session_launched.clear()
                     inject_post_log.clear()

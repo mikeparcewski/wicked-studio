@@ -14,13 +14,16 @@ serves the rule dec-auto landed), and proves:
   3. B10  a turn crew holds no record of (never mind, 404) has no line; the first turn reads
           "1 of your rules considered"; the word "Followed" is nowhere on the page.
   4. B10  the Build step's sheet carries the step's line: "Cited by the step — unchecked".
-  5. B11  a row opens the rule on the Rules page: the drawer, scope and effect as one sentence.
+  5. B11  a row opens the rule on the Rules page (`/rules/:ruleId`, S12): the drawer, scope and effect as
+          one sentence.
   6. B11  ORIGIN from the ledger: the verbatim words, the actor, how it was remembered, where (a link
           to the conversation); the history row.
   7. B11  "Where it was considered": the conversation as ONE row by its title ("· 6 turns", cited) and
           the Build step (cited — unchecked),
           and "look underneath" opens that step's sheet.
-  8. N7   no "Hold work to it" control on a decision rule.
+  7b. S12 the Rules page under it: the sentence, the rows grouped (from your words, testing, other) as
+          sentences; Esc returns to `/rules`; "All rules" reaches the steering grid.
+  8. N7   no "Hold work to it" control on a decision rule — judged while its drawer is open.
   9. 0 page errors, no horizontal scroll.
 
 Captures: e2e/shots/desk-rules*.png. Env: FEEDBACK_PORT (default 4357).
@@ -149,7 +152,7 @@ with sync_playwright() as p:
     if d2.get_attribute("data-open") != "true":
         d2.get_by_test_id("considered-toggle").click()
     d2.locator('[data-testid="considered-row"][data-verdict="cited"] [data-testid="considered-row-open"]').click()
-    page.wait_for_function("() => location.pathname === '/steering/policies' && location.search.includes('rule=proposal%3Apr-auto')", timeout=8000)
+    page.wait_for_function("() => decodeURIComponent(location.pathname) === '/rules/proposal:pr-auto'", timeout=8000)
     drawer = page.get_by_test_id("steering-rule-drawer")
     try:
         drawer.wait_for(state="visible", timeout=15000)
@@ -204,9 +207,35 @@ with sync_playwright() as p:
     check("rule-where-step", page.locator('[data-testid="considered-line"][data-subject="step"]').get_attribute("data-key") == "considered:r-pay-2:1:0")
     page.keyboard.press("Escape")
 
-    # ── 8. N7: no Hold control on a decision rule ───────────────────────────────────────
-    check("no-hold", page.get_by_text("Hold work to it").count() == 0
-          and "Followed" not in page.evaluate("() => document.body.innerText"))
+    # ── 7b. S12: the Rules page under the drawer — the frame, the sentence, the rows grouped ──────
+    sentence = page.get_by_test_id("rules-sentence").inner_text()
+    rows = page.get_by_test_id("rules-row").evaluate_all("els => els.map(e => [e.dataset.ruleId, e.dataset.group])")
+    check("rules-page", sentence == "3 rules in force · 1 from your words · 1 testing rule"
+          and rows == [["proposal:pr-auto", "words"], ["TST-1002", "testing"], ["PAT-100", "other"]]
+          and page.get_by_test_id("rules-row-aside").count() == 0,
+          sentence=sentence, rows=rows)
+    page.screenshot(path=str(SHOTS / "desk-rules-page.png"))
+    # ── 8. N7: no Hold control on a decision rule — judged while ITS drawer is open ─────────
+    drawers, holds = page.get_by_test_id("steering-rule-drawer").count(), page.get_by_text("Hold work to it").count()
+    check("no-hold", drawers == 1 and holds == 0, drawers=drawers, holds=holds, path=page.evaluate("() => location.pathname"))
+    # Esc closes the rule and the address returns to /rules.
+    page.keyboard.press("Escape")
+    page.wait_for_function("() => location.pathname === '/rules'", timeout=8000)
+    check("rules-close", page.get_by_test_id("steering-rule-drawer").count() == 0 and page.get_by_test_id("rules-row").count() == 3)
+    # "All rules" reaches the steering grid; Back returns to the Rules page.
+    page.get_by_test_id("rules-all").click()
+    page.wait_for_function("() => location.pathname === '/steering/policies'", timeout=8000)
+    try:
+        page.get_by_test_id("steering-page").wait_for(state="visible", timeout=15000)
+    except Exception as e:  # noqa: BLE001
+        page.screenshot(path=str(SHOTS / "desk-rules-all-missing.png"))
+        fail("rules-all", f"'All rules' did not reach the steering grid: {e}")
+    page.go_back()
+    # Back remounts the page in its loading state: wait for the rows the read restores, not just the address.
+    page.wait_for_function("() => location.pathname === '/rules' && document.querySelectorAll('[data-testid=\"rules-row\"]').length === 3", timeout=15000)
+    check("rules-all", page.get_by_test_id("rules-page").count() == 1 and page.get_by_test_id("rules-sentence").inner_text() == "3 rules in force · 1 from your words · 1 testing rule")
+
+    check("no-followed", "Followed" not in page.evaluate("() => document.body.innerText"))
 
     hs = page.evaluate("() => document.documentElement.scrollWidth > document.documentElement.clientWidth")
     check("no-errors-no-hscroll", not errors and not hs, errors=errors)

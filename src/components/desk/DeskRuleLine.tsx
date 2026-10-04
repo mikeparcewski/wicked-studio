@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { rulePath, type DecisionView } from '../../api/decisions.js';
+import { RULES_PATH, rulePath, type DecisionView } from '../../api/decisions.js';
 import { deskRuleSentence } from '../../board/decisionLine.js';
 import { useDecisionsStore } from '../../store/decisions.js';
 import { useProjectsStore } from '../../store/projects.js';
@@ -31,7 +31,7 @@ export function DeskRuleLine({ navigate }: { navigate: Navigate }): React.ReactE
   // Only under `on`: `ledger` records and labels but never offers or remembers, so there is nothing to say.
   const line = mode === 'on' ? deskRuleSentence(fresh, since, (id) => (id === null ? null : projects.find((p) => p.id === id)?.name ?? null)) : null;
   if (line === null) return null;
-  const href = line.ruleId !== null ? rulePath(line.ruleId) : '/steering/policies';
+  const href = line.ruleId !== null ? rulePath(line.ruleId) : RULES_PATH;
   return (
     <p data-testid="desk-rule-line" className="wk-desk-rule">
       {line.text}

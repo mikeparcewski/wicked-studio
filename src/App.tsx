@@ -82,6 +82,7 @@ import { useTeamPlanStore } from './store/teamPlan.js';
 import { useWatchStore } from './store/watch.js';
 import { useWatchHydrate } from './hooks/useWatchFeed.js';
 import { WatchtowerPage } from './components/watch/WatchtowerPage.js';
+import { RulesPage } from './components/rules/RulesPage.js';
 import { needCount } from './board/needsQueue.js';
 import type { CoreEvent, RepoEntry } from './api/types.js';
 import { readSteeringTypeFilter } from './api/steering.js';
@@ -118,7 +119,7 @@ const RIGHT_PANEL_PX = 288;
 const DESK_COMPOSER_PX = 96;
 
 export function App(): React.ReactElement {
-  const { panel, runId, repoId, projectId, mode, artifactId, showLaunch, showRegisterRepo, chatMode, chronicleView, campaignsView, campaignId, steeringSection, testingPage, navigate, search, pathname } = useRoute();
+  const { panel, runId, repoId, projectId, mode, artifactId, showLaunch, showRegisterRepo, chatMode, chronicleView, campaignsView, campaignId, steeringSection, testingPage, ruleId, navigate, search, pathname } = useRoute();
   const { runs, refresh, loaded: runsLoaded } = useRuns();
   const ingestGate = useGateStore((s) => s.ingest);
   const ingestCampaign = useCampaignsStore((s) => s.ingest);
@@ -678,6 +679,15 @@ export function App(): React.ReactElement {
       return (
         <div className="flex flex-1 overflow-hidden">
           <SkillsPage navigate={navigate} search={search} />
+        </div>
+      );
+    }
+    // `/rules` and `/rules/:ruleId` — the Rules page (S12): DC's rule components on one frame, for
+    // every skin; the steering grid stays reachable from it as "All rules".
+    if (panel === 'rules') {
+      return (
+        <div className="flex flex-1 overflow-hidden">
+          <RulesPage ruleId={ruleId} runs={runs} navigate={navigate} />
         </div>
       );
     }

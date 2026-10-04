@@ -110,7 +110,7 @@ export function useLegacyRedirect(route: LegacyRoute, navigate: Navigate): void 
  *   /steering                → /steering/dashboard            (the review-forward home)
  *   /steering/:type          → /steering/policies?type=:type  (the seven pages collapsed into a
  *                              filter — bookmarks keep their type)
- *   /wiki, /rules, /policies  → /steering/policies             (the retired governance panels — the
+ *   /wiki, /policies         → /steering/policies             (the retired governance panels — the
  *                              rule-management surface)
  *   /proposals               → /steering/dashboard            (the retired standalone review queue
  *                              → the dashboard's consolidated review inbox, its successor — for
@@ -142,8 +142,9 @@ export function useSteeringRedirect(
       navigate(policiesPath(second), { replace: true });
       return;
     }
-    // The retired `/wiki` `/rules` `/policies` panels are the rule-management surface → Policies.
-    if (first === 'wiki' || first === 'rules' || first === 'policies') {
+    // The retired `/wiki` `/policies` panels are the rule-management surface → Policies. (`/rules`
+    // is a real route again — the Rules page, S12 — and never reaches this hook.)
+    if (first === 'wiki' || first === 'policies') {
       navigate(policiesPath(), { replace: true });
       return;
     }

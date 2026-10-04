@@ -1,11 +1,14 @@
 import { useEffect, useId, useRef } from 'react';
 import type { SheetTab } from '../../board/objectActions.js';
+import { useModalEscape } from '../Modal.js';
 
 /**
  * THE SHEET (DES-STUDIO-REBUILD-001 §5.5, slice S11; DESIGN-interaction rule 9): an object's depth,
  * opened from the object itself — a title, its tabs, ONE primary action, and the line saying every
  * other action is ⌘K for this object. A drawer over the right edge, never a modal: the page stays
- * readable beside it. Esc and × close it (a sheet is not a decision, so Esc may close it).
+ * readable beside it. Esc and × close it (a sheet is not a decision, so Esc may close it). Esc is one
+ * step at a time: the sheet is a layer in the modal chain (`useModalEscape`), so a sheet opened over a
+ * drawer — "look underneath" from a rule's page (S12) — closes first and the drawer under it stays.
  */
 export function Sheet({ title, sub, objectAttr, tabs, tab, onTab, primary, onClose, children }: {
   title: string;
@@ -21,18 +24,12 @@ export function Sheet({ title, sub, objectAttr, tabs, tab, onTab, primary, onClo
 }): React.ReactElement {
   const ref = useRef<HTMLDivElement | null>(null);
   const uid = useId().replace(/:/g, '');
+  useModalEscape(onClose);
   useEffect(() => {
     const prev = document.activeElement as HTMLElement | null;
     ref.current?.focus();
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape' && !e.defaultPrevented) { e.preventDefault(); onClose(); }
-    };
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('keydown', onKey);
-      prev?.focus?.({ preventScroll: true });
-    };
-  }, [onClose]);
+    return () => { prev?.focus?.({ preventScroll: true }); };
+  }, []);
   return (
     <aside
       ref={ref}

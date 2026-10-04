@@ -170,7 +170,11 @@ export function isDecisionsUnsupported(e: unknown): boolean {
   return isRouteUnsupported(e);
 }
 
-/** The Rules page address of one landed rule (the policies grid opens it by `?rule=`). */
+/** The Rules page (`/rules`, DES-STUDIO-REBUILD-001 §5.4, slice S12) — the Desk face of the rules. */
+export const RULES_PATH = '/rules';
+
+/** The Rules page address of one landed rule — `/rules/:ruleId`, the rule open on the page (S12).
+ *  The steering grid still deep-links the same rule by `/steering/policies?rule=`. */
 export function rulePath(ruleId: string): string {
-  return `/steering/policies?rule=${encodeURIComponent(ruleId)}`;
+  return `${RULES_PATH}/${encodeURIComponent(ruleId)}`;
 }
