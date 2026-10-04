@@ -12,6 +12,15 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.6.0] — 2026-10-04
+
+The rebuild's minor (DES-STUDIO-REBUILD-001 §6.5): the Desk is the default skin. Everything since
+0.5.19 that was built for the desk now opens by default. That covers the session with its page,
+document, deck, walkthrough and video in place, the page editor plugin, the ordered plan, Rules on
+its own page, the placed walkthrough, and the rules a reply was given. An install that stored the
+old default skin opens on the Desk. The classic `studio` skin and `compact-rail` stay on the Theme
+page, so going back is one pick.
+
 ### Added
 - **The Desk is the default skin — the flip (DES-STUDIO-REBUILD-001 §6.5, §11 S15b; BUILD-PLAN W11).** `DEFAULT_SKIN_ID` is now `desk`, and an unknown skin resolves to it. The classic `studio` skin and `compact-rail` stay on the Theme page, so going back is one pick there, or a revert of this change. An install whose stored `studio.appearance` predates the flip carries the old default as its skin, so it opens on the Desk, with its theme and accent left as stored. Reading still never writes (§3.3): the record moves past the flip, `skin_migrated: true`, with the operator's next change, and from then on the stored skin is what they chose and stands across reloads. A new install, with nothing stored, opens on the Desk with the wicked-light theme and the harbor accent, and nothing is written for it. `index.html` pre-renders `data-skin="desk"`. Not in this change: the §5.4 redirects. `/everything` is not a route yet, and §5.4's redirects are not skin-scoped, so sending `/runs/:id` and `/p/:id/:mode` to `/s/:sessionId` would retire the run and project pages under the classic skins this change keeps selectable. Every old route still renders under every skin and stays reachable by its nav entry or ⌘K. The CI matrix keeps the `studio` and `compact-rail` behaviour legs next to the two desk shards until S16b removes compact-rail. Tests: `tests/skinFlip.s15b.test.ts` (the default, a pre-flip record, a post-flip choice that survives a reload, a new install), the registry and appearance tests moved to the new default, and the classic-shell rigs (`e2e/uxfix_fixture.py`'s stored record, `vision_slice7`, `studio_standalone`) pick `studio` the way the Theme page does.
 - **Every behaviour journey now runs under the desk skin, and the Desk carries what Home carried (DES-STUDIO-REBUILD-001 §6.4, §11 S15a).** Before the flip, the Desk lacked six things Home offered. Now: standing orders with "Mark me away", and "Just the top one", sit in the Desk's header. Capture is the Start row's last chip. Dead-lettered governance events are a chore "for whoever runs studio", with the same dry run, then confirm, then re-read as the Governed tile. Back to the Desk puts its scroll back (`data-place-scroll="desk"` plus the history scroll Home used). Behaviour change for every skin: a failed run that a later run retried (`retry_of` names it) no longer has a Needs You row, the rule the "Retry failed" move already used. CI's desk leg is now two shards. It runs the 29 desk-only journeys plus 33 behaviour journeys under `STUDIO_SKIN=desk`. Eleven of the 33 needed a desk branch, where the journey reads `STUDIO_SKIN`: `wave2a_safety`, `wave2a_undo`, `type_to_composer`, `wavea_home`, `wavec_home_runs`, `wave2b_handover`, `wave2b_queue`, `capture`, `main_scroll`, `wave1_raw` and `wicked_theme`. `standing_orders` passes as written now that the header carries the panel. The three journeys about Home's bands and count tiles (`wave1_dark`, `wave1_stall`, `wave1_tone`) name their Desk counterpart: the new `e2e/desk_calm_test.py` covers dark when healthy, a stall as an exception, and zero is quiet. `run_journeys.py --check-desk` fails CI if a behaviour journey neither runs under desk nor names a counterpart. `--shard K/N` splits a list. `BEHAVIOUR` and its `[studio, compact-rail]` legs are unchanged.
@@ -1735,7 +1744,8 @@ The merged interactive layer: wicked-interactive's UI moved into this skin (DES-
   `git subtree split` (92 commits).
 - The SPA as a pure HTTP/WS client of the wicked-crew daemon: runs, gates, live CoreEvents.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.5.19...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/mikeparcewski/wicked-studio/compare/v0.5.19...v0.6.0
 [0.5.19]: https://github.com/mikeparcewski/wicked-studio/compare/v0.5.14...v0.5.19
 [0.5.14]: https://github.com/mikeparcewski/wicked-studio/compare/v0.5.13...v0.5.14
 [0.5.13]: https://github.com/mikeparcewski/wicked-studio/compare/v0.5.12...v0.5.13
