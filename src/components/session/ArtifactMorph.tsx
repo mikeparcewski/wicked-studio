@@ -14,7 +14,7 @@ import { useEditorFor, useEditors } from '../../store/editors.js';
  *  behind the same chrome: its kind (the artifact's `data-kind`) and the body drawn at each size.
  *  `morph` lets a control inside it change the size (the walkthrough's Watch opens the pane). */
 export interface ArtifactSlot {
-  kind: 'walkthrough' | 'demo-video';
+  kind: 'walkthrough' | 'demo-video' | 'plan';
   body: (size: ArtifactSize, morph: (to: ArtifactSize) => void) => React.ReactNode;
 }
 

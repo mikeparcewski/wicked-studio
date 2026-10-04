@@ -12,8 +12,8 @@
   "studioVersion": "0.5.19",
   "counts": {
     "files": 211,
-    "occurrences": 2335,
-    "static": 2038,
+    "occurrences": 2331,
+    "static": 2035,
     "dynamic": 80,
     "computed": 7
   },
@@ -1054,12 +1054,6 @@
       ]
     },
     {
-      "testId": "chain-step-check",
-      "files": [
-        "src/components/session/ChainLine.tsx"
-      ]
-    },
-    {
       "testId": "chain-step-open",
       "files": [
         "src/components/session/ChainLine.tsx"
@@ -1687,24 +1681,6 @@
       "testId": "context-mode",
       "files": [
         "src/components/ProjectShell.tsx"
-      ]
-    },
-    {
-      "testId": "context-sent",
-      "files": [
-        "src/components/OperatorMessage.tsx"
-      ]
-    },
-    {
-      "testId": "context-sent-pack",
-      "files": [
-        "src/components/OperatorMessage.tsx"
-      ]
-    },
-    {
-      "testId": "context-sent-toggle",
-      "files": [
-        "src/components/OperatorMessage.tsx"
       ]
     },
     {
@@ -6259,6 +6235,18 @@
       ]
     },
     {
+      "testId": "plan-add",
+      "files": [
+        "src/components/session/PlanOrderEditor.tsx"
+      ]
+    },
+    {
+      "testId": "plan-add-item",
+      "files": [
+        "src/components/session/PlanOrderEditor.tsx"
+      ]
+    },
+    {
       "testId": "plan-edit",
       "files": [
         "src/components/PlanEditPanel.tsx"
@@ -6370,6 +6358,66 @@
       "testId": "plan-gate-why",
       "files": [
         "src/components/PlanGateSummary.tsx"
+      ]
+    },
+    {
+      "testId": "plan-order",
+      "files": [
+        "src/components/session/PlanOrderEditor.tsx"
+      ]
+    },
+    {
+      "testId": "plan-order-line",
+      "files": [
+        "src/components/session/PlanOrderEditor.tsx"
+      ]
+    },
+    {
+      "testId": "plan-order-none",
+      "files": [
+        "src/components/session/PlanOrderEditor.tsx"
+      ]
+    },
+    {
+      "testId": "plan-order-note",
+      "files": [
+        "src/components/session/PlanOrderEditor.tsx"
+      ]
+    },
+    {
+      "testId": "plan-order-steps",
+      "files": [
+        "src/components/session/PlanOrderEditor.tsx"
+      ]
+    },
+    {
+      "testId": "plan-step",
+      "files": [
+        "src/components/session/PlanOrderEditor.tsx"
+      ]
+    },
+    {
+      "testId": "plan-step-added",
+      "files": [
+        "src/components/session/PlanOrderEditor.tsx"
+      ]
+    },
+    {
+      "testId": "plan-step-down",
+      "files": [
+        "src/components/session/PlanOrderEditor.tsx"
+      ]
+    },
+    {
+      "testId": "plan-step-fixed",
+      "files": [
+        "src/components/session/PlanOrderEditor.tsx"
+      ]
+    },
+    {
+      "testId": "plan-step-up",
+      "files": [
+        "src/components/session/PlanOrderEditor.tsx"
       ]
     },
     {
@@ -8132,12 +8180,6 @@
       ]
     },
     {
-      "testId": "session-proposal-acceptance",
-      "files": [
-        "src/components/session/ProposalCard.tsx"
-      ]
-    },
-    {
       "testId": "session-proposal-bring-back",
       "files": [
         "src/components/session/ProposalCard.tsx"
@@ -8534,12 +8576,6 @@
       "files": [
         "src/board/objectActions.ts",
         "src/components/ShortcutOverlay.tsx"
-      ]
-    },
-    {
-      "testId": "signin-line",
-      "files": [
-        "src/components/HealthRailSection.tsx"
       ]
     },
     {
@@ -10423,54 +10459,6 @@
       ]
     },
     {
-      "testId": "steering-rule-hold",
-      "files": [
-        "src/components/SteeringRuleDrawer.tsx"
-      ]
-    },
-    {
-      "testId": "steering-rule-hold-cancel",
-      "files": [
-        "src/components/SteeringRuleDrawer.tsx"
-      ]
-    },
-    {
-      "testId": "steering-rule-hold-confirm",
-      "files": [
-        "src/components/SteeringRuleDrawer.tsx"
-      ]
-    },
-    {
-      "testId": "steering-rule-hold-error",
-      "files": [
-        "src/components/SteeringRuleDrawer.tsx"
-      ]
-    },
-    {
-      "testId": "steering-rule-hold-pick",
-      "files": [
-        "src/components/SteeringRuleDrawer.tsx"
-      ]
-    },
-    {
-      "testId": "steering-rule-hold-switch",
-      "files": [
-        "src/components/SteeringRuleDrawer.tsx"
-      ]
-    },
-    {
-      "testId": "steering-rule-hold-token",
-      "files": [
-        "src/components/SteeringRuleDrawer.tsx"
-      ]
-    },
-    {
-      "testId": "steering-rule-hold-words",
-      "files": [
-        "src/components/SteeringRuleDrawer.tsx"
-      ]
-    },
-    {
       "testId": "steering-rule-obligations",
       "files": [
         "src/components/SteeringRuleDrawer.tsx"
@@ -10854,12 +10842,6 @@
       "testId": "tech-rule-history-detail",
       "files": [
         "src/components/decisions/RuleOrigin.tsx"
-      ]
-    },
-    {
-      "testId": "tech-rule-hold-error",
-      "files": [
-        "src/components/SteeringRuleDrawer.tsx"
       ]
     },
     {

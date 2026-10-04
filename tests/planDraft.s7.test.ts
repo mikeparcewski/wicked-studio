@@ -52,10 +52,10 @@ describe('the / menu', () => {
 
 describe('the plans a draft sends', () => {
   it('a gate amend sends the held plan plus the added steps; mid-run sends the added step only', () => {
-    expect(gateDraftPlan({ seed: ['understand', 'build'], added: ['test'] })).toStrictEqual({ steps: [{ catalog: 'understand' }, { catalog: 'build' }, { catalog: 'test' }] });
-    expect(gateDraftPlan({ seed: ['test'], added: ['test'] }).steps[1]).toStrictEqual({ catalog: 'test', id: 'test-2' });
+    expect(gateDraftPlan({ seed: ['understand', 'build'], added: ['test'], order: null })).toStrictEqual({ steps: [{ catalog: 'understand' }, { catalog: 'build' }, { catalog: 'test' }] });
+    expect(gateDraftPlan({ seed: ['test'], added: ['test'], order: null }).steps[1]).toStrictEqual({ catalog: 'test', id: 'test-2' });
     expect(midRunPlan('test')).toStrictEqual({ steps: [{ catalog: 'test' }] });
-    expect(draftLine(['test', 'review'])).toBe('The steps change: + Test, + Review.');
+    expect(draftLine({ seed: ['build'], added: ['test', 'review'], order: null })).toBe('The steps change: + Test, + Review.');
   });
 });
 

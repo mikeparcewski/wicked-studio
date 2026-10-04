@@ -9,6 +9,7 @@ import { repoNameOf } from '../../board/deskWords.js';
 import { artifactKey } from '../../store/artifactSizes.js';
 import { useCapabilities } from '../../store/capabilities.js';
 import { ArtifactMorph } from './ArtifactMorph.js';
+import { hasPlanEditor, PlanOrderEditor } from './PlanOrderEditor.js';
 import { WalkthroughEditor } from './WalkthroughEditor.js';
 
 /**
@@ -62,10 +63,18 @@ export function RunArtifacts({ view, composerKey, chain }: { view: SessionView; 
     return () => { cancelled = true; clearInterval(timer); };
   }, [projectId, view.session.id, view.session.status]);
   const mine = projectId === null ? [] : docs.filter((d) => d.kind === 'doc' && isDocRun(view, d.name));
-  const count = mine.length + (walkStep !== null ? 1 : 0) + (demo ? 1 : 0);
+  // S10: a planned run's plan is its artifact too — the ordered editor, while the run is going.
+  const plan = hasPlanEditor(view, chain);
+  const count = mine.length + (walkStep !== null ? 1 : 0) + (demo ? 1 : 0) + (plan ? 1 : 0);
   if (count === 0) return null;
   return (
     <div data-testid="run-artifacts" data-run-id={runId} data-count={count}>
+      {plan && chain !== undefined && (
+        <ArtifactMorph
+          artifactKey={artifactKey('run', 'plan', runId)} title="Plan" projectId={projectId ?? ''} docId="" composerKey={composerKey}
+          slot={{ kind: 'plan', body: (size) => <PlanOrderEditor view={view} chain={chain} size={size} /> }}
+        />
+      )}
       {walkStep !== null && (
         <ArtifactMorph
           artifactKey={artifactKey('run', 'walkthrough', runId)} title="Walkthrough" projectId={projectId ?? ''} docId="" composerKey={composerKey}

@@ -1161,3 +1161,27 @@ button.wk-walk-chapter-btn:hover .wk-walk-chapter-title { text-decoration: under
 .wk-prop-accept--ok { color: var(--status-ok); }
 .wk-prop-accept--bad { color: var(--status-fail); }
 .wk-prop-accept--quiet { color: var(--ink-dim); }
+/* S10: the ordered plan editor in the run's artifact slot — a numbered list; fixed steps carry one
+   word and their reason in the title; a movable step has its two arrows; the line under it says what
+   the card will send (or that a running plan's order is set); "Add a step" offers the catalog. */
+.wk-plan { display: flex; flex-direction: column; gap: 8px; padding: 8px 10px; min-width: 0; }
+.wk-plan--inline { gap: 4px; padding: 6px 10px; }
+.wk-plan-pad { padding: 8px 10px; }
+.wk-plan-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.wk-plan-step { display: flex; align-items: center; gap: 8px; min-height: 26px; font-size: var(--text-sm); color: var(--ink-body); }
+.wk-plan-step--fixed .wk-plan-label { color: var(--ink-muted); }
+.wk-plan-n { flex: 0 0 18px; text-align: right; font-size: var(--text-xs); color: var(--ink-dim); font-variant-numeric: tabular-nums; }
+.wk-plan-label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wk-plan-tag, .wk-plan-fixed { flex: 0 0 auto; font-size: 10px; line-height: 16px; padding: 0 6px; border-radius: var(--radius-full); border: 1px solid var(--border); color: var(--ink-muted); }
+.wk-plan-tag { color: var(--status-run); border-color: var(--status-run); }
+.wk-plan-moves { flex: 0 0 auto; display: inline-flex; gap: 2px; }
+.wk-plan-btn { background: none; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0 6px; min-width: 24px; height: 22px; font: inherit; font-size: var(--text-xs); color: var(--ink-body); cursor: pointer; }
+.wk-plan-btn:hover { background: var(--surface-raised); }
+.wk-plan-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.wk-plan-btn--add { padding: 0 8px; }
+.wk-plan-btn--refused { color: var(--ink-dim); border-style: dashed; }
+.wk-plan-line { margin: 0; font-size: var(--text-xs); color: var(--ink-muted); }
+.wk-plan-note { margin: 0; font-size: var(--text-xs); color: var(--ink-high); }
+.wk-plan-add { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
+.wk-plan-add-word { font-size: var(--text-xs); color: var(--ink-muted); margin-right: 2px; }
+.wk-artifact--inline .wk-plan-add, .wk-artifact--inline .wk-plan-note { display: none; }

@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { gateDraftPlan, midRunPlan, wordOf, type GateDraft } from '../board/planDraft.js';
+import { draftChanges, gateDraftPlan, midRunPlan, wordOf, type DraftStep, type GateDraft } from '../board/planDraft.js';
 import { onDecisionTestReset, queueDecision, reportDecision } from '../board/undoQueue.js';
 import { proposePlanEdit, usePlanEdits } from './planEdits.js';
 
@@ -26,12 +26,25 @@ export const usePlanDrafts = create<PlanDraftsStore>(() => ({ gate: {}, added: {
 
 onDecisionTestReset(() => usePlanDrafts.setState({ gate: {}, added: {}, queued: {} }));
 
-/** Add a step to a plan gate's draft (a fresh draft when the gate is not the one it was made on). */
+function draftOn(cur: GateDraft | undefined, runId: string, gateKey: string, seed: readonly string[]): GateDraft {
+  return cur !== undefined && cur.gateKey === gateKey ? cur : { runId, gateKey, seed: [...seed], added: [], order: null };
+}
+
+/** Add a step to a plan gate's draft (a fresh draft when the gate is not the one it was made on). It
+ *  joins at the end of the order the operator has (S10). */
 export function addGateDraftStep(runId: string, gateKey: string, seed: readonly string[], catalog: string): void {
   usePlanDrafts.setState((s) => {
-    const cur = s.gate[runId];
-    const base = cur !== undefined && cur.gateKey === gateKey ? cur : { runId, gateKey, seed: [...seed], added: [] };
-    return { gate: { ...s.gate, [runId]: { ...base, added: [...base.added, catalog] } } };
+    const base = draftOn(s.gate[runId], runId, gateKey, seed);
+    const order = base.order === null ? null : [...base.order, { catalog, added: true }];
+    return { gate: { ...s.gate, [runId]: { ...base, added: [...base.added, catalog], order } } };
+  });
+}
+
+/** Put a plan gate's authored steps in another order (S10): the draft the card approves carries it. */
+export function reorderGateDraft(runId: string, gateKey: string, seed: readonly string[], order: readonly DraftStep[]): void {
+  usePlanDrafts.setState((s) => {
+    const base = draftOn(s.gate[runId], runId, gateKey, seed);
+    return { gate: { ...s.gate, [runId]: { ...base, order: order.map((st) => ({ ...st })) } } };
   });
 }
 
@@ -48,7 +61,7 @@ export function dropGateDraft(runId: string, gateKey?: string): void {
 /** The draft for this gate instance, or null (a draft made on an earlier gate is not this one's). */
 export function gateDraftFor(drafts: Record<string, GateDraft>, runId: string, gateKey: string | null): GateDraft | null {
   const d = drafts[runId];
-  return d !== undefined && gateKey !== null && d.gateKey === gateKey && d.added.length > 0 ? d : null;
+  return d !== undefined && gateKey !== null && d.gateKey === gateKey && draftChanges(d) ? d : null;
 }
 
 export { gateDraftPlan };
