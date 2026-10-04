@@ -356,17 +356,25 @@ with sync_playwright() as p:
               and sels == 0 and writes_after_bs == 0, typed=typed, composer=comp["text"], writes=writes, drafts=drafts,
               selections=sels, writes_after_backspace=writes_after_bs)
 
-        # 6. forwarding: Esc with nothing picked, ⌘K, a navigation chord, Tab out of the one control
+        # 6. forwarding: Esc with nothing picked, ⌘K, a navigation chord, and Tab at the plugin's edges —
+        # EP-P3 gave the page editor its own controls (the width header, the peek), so from the root
+        # Shift+Tab leaves backwards (forwarded) and Tab ENTERS the first control (§5.10 rule 5).
         page.keyboard.press("Escape")  # lets go of cta (the plugin's own)
         page.wait_for_timeout(100)
         root.focus()
         page.keyboard.press("Escape")
         page.keyboard.press("Control+k")
         page.keyboard.press("Alt+j")
-        page.keyboard.press("Tab")
+        page.keyboard.press("Shift+Tab")
         page.wait_for_timeout(200)
         keys = page.evaluate(COMPOSER)["keys"]
-        check("6-forwarding", keys == ["Escape", "Mod+K", "Alt+J", "Tab"], keys=keys)
+        root.focus()
+        page.keyboard.press("Tab")
+        page.wait_for_timeout(150)
+        entered = pf().evaluate("() => document.activeElement?.dataset?.testid ?? null")
+        keys_after = page.evaluate(COMPOSER)["keys"]
+        check("6-forwarding", keys == ["Escape", "Mod+K", "Alt+J", "Shift+Tab"] and entered == "page-width" and keys_after == keys,
+              keys=keys, tab_entered=entered, keys_after_tab=keys_after)
 
         # 7. edits: one write on Enter, the host's line; a stale base is shown, not retried
         edit("hero-title", "Book a room in a minute")
