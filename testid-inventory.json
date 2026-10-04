@@ -12,8 +12,8 @@
   "studioVersion": "0.5.19",
   "counts": {
     "files": 214,
-    "occurrences": 2381,
-    "static": 2082,
+    "occurrences": 2384,
+    "static": 2085,
     "dynamic": 80,
     "computed": 7
   },
@@ -7527,9 +7527,27 @@
       ]
     },
     {
+      "testId": "repo-graph-empty",
+      "files": [
+        "src/components/RepoDetailPage.tsx"
+      ]
+    },
+    {
+      "testId": "repo-graph-retry",
+      "files": [
+        "src/components/RepoDetailPage.tsx"
+      ]
+    },
+    {
       "testId": "repo-graph-state",
       "files": [
         "src/components/RepositoriesPanel.tsx"
+      ]
+    },
+    {
+      "testId": "repo-hotspots-empty",
+      "files": [
+        "src/components/RepoDetailPage.tsx"
       ]
     },
     {

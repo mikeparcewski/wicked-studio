@@ -265,6 +265,9 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          "home_paths": False, "runs_delay_ms": 0,
          # runs_fail — GET /runs answers 500 (studio#466: a failed read is not an empty list).
          "runs_fail": False,
+         # repo_graph — studio#461 (e2e/desk_repo_page_test.py): None serves REPO_GRAPH; "docs" a built
+         #   graph of a Markdown-only repo (totals 7 symbols / 2 files, no nodes shown); "fail" a 502.
+         "repo_graph": None,
          # reject_note — a run whose plan the operator rejected with a note: the daemon ended it
          #   cancelled and audited `gate.decided {approve:false, amend}` (studio#478).
          "reject_note": False,
@@ -5088,7 +5091,15 @@ class W2Handler(SimpleHTTPRequestHandler):
             if not repo_on or rid != REPO_ID:
                 self._json(404, {"error": f"Repo {rid} not found"})
                 return True
-            if leaf == "graph":
+            with state_lock:
+                graph_mode = state["repo_graph"]
+            if leaf == "graph" and graph_mode == "fail":
+                self._json(502, {"error": "code graph unavailable (fixture)"})
+            elif leaf == "graph" and graph_mode == "docs":
+                self._json(200, {"graph": {"nodes": [], "edges": [],
+                                           "stats": {"nodeCount": 0, "edgeCount": 0, "fileCount": 0},
+                                           "totals": {"nodes": 7, "edges": 5, "files": 2}}})
+            elif leaf == "graph":
                 self._json(200, {"graph": REPO_GRAPH})
             elif leaf == "git-history":
                 self._json(200, {"commits": [

@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { repoGraphState, repoGraphWords } from '../board/repoGraphState.js';
+import { useEffect, useState, useRef } from 'react';
 import { api } from '../api/client.js';
 import { RepoFindings } from './RepoFindings.js';
 import { CommitCadence } from './CommitCadence.js';
@@ -54,6 +55,11 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
   const [repo, setRepo] = useState<RepoEntry | null>(null);
   const [runs, setRuns] = useState<SessionView[]>([]);
   const [graph, setGraph] = useState<CodeGraphData | null>(null);
+  // studio#461: a failed graph read is its own state, never "not indexed".
+  const [graphFailed, setGraphFailed] = useState<string | null>(null);
+  // The repo a retry belongs to: a retry's answer for another repo is dropped (codex on #461).
+  const repoRef = useRef(repoId);
+  repoRef.current = repoId;
   const [commits, setCommits] = useState<GitCommit[] | null>(null);
   const [contributors, setContributors] = useState<GitContributor[] | null>(null);
   const [loading, setLoading] = useState(true);
@@ -75,12 +81,15 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
       api.listRuns().then(({ runs: rs }) =>
         rs.filter((v: SessionView) => v.session.repo_ref === repoId)
       ).catch(() => [] as SessionView[]),
-      api.getRepoGraph(repoId).then(({ graph: g }) => g).catch(() => null),
-    ]).then(([r, rs, g]) => {
+      api.getRepoGraph(repoId)
+        .then(({ graph: g }) => ({ g, failed: null as string | null }))
+        .catch((e: unknown) => ({ g: null, failed: e instanceof Error && e.message !== '' ? e.message : 'the daemon did not answer' })),
+    ]).then(([r, rs, gr]) => {
       if (cancelled) return;
       setRepo(r);
       setRuns(rs);
-      setGraph(g);
+      setGraph(gr.g);
+      setGraphFailed(gr.failed);
     }).catch((err: unknown) => {
       if (cancelled) return;
       setError(err instanceof Error ? err.message : 'Failed to load repo');
@@ -90,6 +99,16 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
     api.getRepoContributors(repoId).then(({ contributors: c }) => { if (!cancelled) setContributors(dedupeContributors(c)); }).catch(() => {});
     return () => { cancelled = true; };
   }, [repoId]);
+
+  /** "Try again" on a failed graph read: re-reads the graph alone, for the repo it was pressed on. */
+  function retryGraph(): void {
+    const forRepo = repoId;
+    api.getRepoGraph(forRepo)
+      .then(({ graph: g }) => { if (repoRef.current === forRepo) { setGraph(g); setGraphFailed(null); } })
+      .catch((e: unknown) => {
+        if (repoRef.current === forRepo) setGraphFailed(e instanceof Error && e.message !== '' ? e.message : 'the daemon did not answer');
+      });
+  }
 
   if (loading) {
     return (
@@ -143,6 +162,13 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
   })();
 
   const displayedRuns = expanded ? runs : runs.slice(0, 10);
+
+  // studio#461: never built, built with nothing to rank, or not read — each says its own sentence.
+  const graphState = repoGraphState(graphFailed !== null ? { kind: 'failed', message: graphFailed } : { kind: 'ok', graph }, hotspots.length);
+  const graphWords = repoGraphWords(graphState);
+  const graphRetry = graphState.kind === 'failed' ? (
+    <button type="button" data-testid="repo-graph-retry" onClick={retryGraph} className="ml-2 text-xs font-mono hover:underline" style={{ color: 'var(--accent)' }}>Try again</button>
+  ) : null;
 
   const graphStats = graph?.stats;
   // crew#505 / F-RC1-100 (api-types 0.38.0 `CodeGraphData.totals`): the whole graph, beside the
@@ -296,7 +322,7 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
 
       {/* Language composition (§3.3) — what this repo is actually built of. */}
       <Section title="Languages">
-        <LanguageBar breakdown={langBreakdown} />
+        <LanguageBar breakdown={langBreakdown} {...(graphState.kind !== 'ready' ? { emptyText: graphWords.languages } : {})} />
       </Section>
 
       {/* Active Now */}
@@ -340,8 +366,8 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
               view (and the CytoGraph) stay behind [Graph ›] / "View all →". */}
           <Section title="Code Hotspots">
             {hotspots.length === 0 ? (
-              <p className="text-sm font-mono italic" style={{ color: 'var(--ink-dim)' }}>
-                Graph not yet indexed — run onboarding to build it.
+              <p data-testid="repo-hotspots-empty" data-state={graphState.kind} className="text-sm font-mono italic" style={{ color: 'var(--ink-dim)' }}>
+                {graphWords.hotspots}{graphRetry}
               </p>
             ) : (
               <div data-testid="hotspots-excerpt" data-count={hotspots.length}>
@@ -372,7 +398,7 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
         <div className="flex flex-col gap-6">
           {/* Graph Stats / "Git History" */}
           <Section title="Code Graph">
-            {graphStats ? (
+            {graphStats && graphState.kind !== 'indexed-empty' && graphState.kind !== 'failed' ? (
               <div className="flex flex-col gap-3">
                 {[
                   { label: 'Symbols', value: graphStats.nodeCount, total: graphTotals?.nodes },
@@ -397,11 +423,11 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
                   Browse full graph →
                 </button>
               </div>
-            ) : (
-              <p className="text-sm font-mono italic" style={{ color: 'var(--ink-dim)' }}>
-                No graph yet — run onboarding to index this repo.
+            ) : graphWords.graph !== '' ? (
+              <p data-testid="repo-graph-empty" data-state={graphState.kind} className="text-sm font-mono italic" style={{ color: 'var(--ink-dim)' }}>
+                {graphWords.graph}
               </p>
-            )}
+            ) : null}
           </Section>
 
           {/* Commit cadence (§3.1) — active or stagnant, at the wire's honest
