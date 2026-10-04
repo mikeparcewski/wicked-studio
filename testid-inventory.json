@@ -12,8 +12,8 @@
   "studioVersion": "0.5.19",
   "counts": {
     "files": 212,
-    "occurrences": 2335,
-    "static": 2039,
+    "occurrences": 2347,
+    "static": 2050,
     "dynamic": 80,
     "computed": 7
   },
@@ -1049,6 +1049,12 @@
     },
     {
       "testId": "chain-step",
+      "files": [
+        "src/components/session/ChainLine.tsx"
+      ]
+    },
+    {
+      "testId": "chain-step-check",
       "files": [
         "src/components/session/ChainLine.tsx"
       ]
@@ -8198,6 +8204,12 @@
       ]
     },
     {
+      "testId": "session-proposal-acceptance",
+      "files": [
+        "src/components/session/ProposalCard.tsx"
+      ]
+    },
+    {
       "testId": "session-proposal-bring-back",
       "files": [
         "src/components/session/ProposalCard.tsx"
@@ -10483,6 +10495,54 @@
       ]
     },
     {
+      "testId": "steering-rule-hold",
+      "files": [
+        "src/components/SteeringRuleDrawer.tsx"
+      ]
+    },
+    {
+      "testId": "steering-rule-hold-cancel",
+      "files": [
+        "src/components/SteeringRuleDrawer.tsx"
+      ]
+    },
+    {
+      "testId": "steering-rule-hold-confirm",
+      "files": [
+        "src/components/SteeringRuleDrawer.tsx"
+      ]
+    },
+    {
+      "testId": "steering-rule-hold-error",
+      "files": [
+        "src/components/SteeringRuleDrawer.tsx"
+      ]
+    },
+    {
+      "testId": "steering-rule-hold-pick",
+      "files": [
+        "src/components/SteeringRuleDrawer.tsx"
+      ]
+    },
+    {
+      "testId": "steering-rule-hold-switch",
+      "files": [
+        "src/components/SteeringRuleDrawer.tsx"
+      ]
+    },
+    {
+      "testId": "steering-rule-hold-token",
+      "files": [
+        "src/components/SteeringRuleDrawer.tsx"
+      ]
+    },
+    {
+      "testId": "steering-rule-hold-words",
+      "files": [
+        "src/components/SteeringRuleDrawer.tsx"
+      ]
+    },
+    {
       "testId": "steering-rule-obligations",
       "files": [
         "src/components/SteeringRuleDrawer.tsx"
@@ -10866,6 +10926,12 @@
       "testId": "tech-rule-history-detail",
       "files": [
         "src/components/decisions/RuleOrigin.tsx"
+      ]
+    },
+    {
+      "testId": "tech-rule-hold-error",
+      "files": [
+        "src/components/SteeringRuleDrawer.tsx"
       ]
     },
     {
