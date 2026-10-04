@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { api } from '../api/client.js';
 import { getDiagnostics, isDiagnosticsUnsupported } from '../api/diagnostics.js';
 import type { SeatRecord } from '../api/seatRecord.js';
@@ -8,7 +7,6 @@ import { coachSeat, recordsByCli, seatWeekLine, type CoachMove } from '../board/
 import { useSeatWeek, type MoveState, type SeatWeekRead } from '../hooks/useSeatWeek.js';
 import { useConnectionStore } from '../store/connection.js';
 import { setCachedRoster } from '../store/rosterCache.js';
-import { Modal } from './Modal.js';
 import { SignInPanel } from './SignInPanel.js';
 import { useDisplayPath } from '../hooks/useHomePath.js';
 

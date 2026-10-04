@@ -97,7 +97,7 @@ export function EverythingPage({ runs, runsLoaded, runsError = null, onRetryRuns
             <SessionsTab runs={runs} runsLoaded={runsLoaded} runsError={runsError} onRetryRuns={onRetryRuns} needRows={needRows} q={{ ...q, project }} navigate={navigate} go={go} />
           )}
           {q.tab === 'made' && <MadeTab runs={runs} q={q} navigate={navigate} go={go} />}
-          {q.tab === 'helpers' && <HelpersTab go={go} />}
+          {q.tab === 'helpers' && <HelpersTab />}
           {q.tab === 'handed' && <HandedTab runs={runs} runsLoaded={runsLoaded} go={go} />}
         </section>
       </div>
@@ -299,7 +299,7 @@ function MadeTab({ runs, q, navigate, go }: { runs: SessionView[]; q: Everything
 
 // ── Helpers ──────────────────────────────────────────────────────────────────────────────────
 
-function HelpersTab({ go }: { go: Go }): React.ReactElement {
+function HelpersTab(): React.ReactElement {
   const roster = useRoster();
   // Amendment 5, decision 5: Sign in opens the one plain-words panel; the row clears when the
   // re-read finds the seat back (useRoster follows the deposit).
@@ -312,14 +312,14 @@ function HelpersTab({ go }: { go: Go }): React.ReactElement {
       {roster !== null && roster.length === 0 && <p data-testid="everything-empty" className="wk-session-grey">No helper is set up on this daemon yet.</p>}
       {roster !== null && roster.length > 0 && (
         <ul className="wk-everything-list">
-          {roster.map((seat) => <HelperRow key={seat.key} seat={seat} go={go} onSignIn={() => setSignIn(seat)} />)}
+          {roster.map((seat) => <HelperRow key={seat.key} seat={seat} onSignIn={() => setSignIn(seat)} />)}
         </ul>
       )}
     </div>
   );
 }
 
-function HelperRow({ seat, go, onSignIn }: { seat: RosterSeat; go: Go; onSignIn: () => void }): React.ReactElement {
+function HelperRow({ seat, onSignIn }: { seat: RosterSeat; onSignIn: () => void }): React.ReactElement {
   const standing = seatStandingWord(seat);
   const health = seat.health;
   const message = health?.status === 'inactive' && health.message !== undefined && health.message !== '' ? health.message : null;
