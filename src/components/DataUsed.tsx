@@ -1,4 +1,5 @@
 import type { RunModel } from '../hooks/useRunModel.js';
+import { useDisplayPath } from '../hooks/useHomePath.js';
 
 interface Props {
   model: RunModel;
@@ -6,6 +7,8 @@ interface Props {
 
 export function DataUsed({ model }: Props): React.ReactElement {
   const withFiles = model.units.filter((u) => u.filesRead.length > 0);
+  // studio#479 (codex on #484): a file under the home directory reads `~/…` in the default layer.
+  const showPath = useDisplayPath();
 
   return (
     <div data-testid="data-used" className="flex flex-col gap-2 text-[11px]">
@@ -24,8 +27,8 @@ export function DataUsed({ model }: Props): React.ReactElement {
               </p>
               <ul className="mt-0.5 flex flex-col gap-0.5">
                 {u.filesRead.map((f) => (
-                  <li key={f} className="truncate font-mono" style={{ color: 'var(--ink-muted)' }} title={f}>
-                    {f}
+                  <li key={f} className="truncate font-mono" style={{ color: 'var(--ink-muted)' }} title={showPath(f)}>
+                    {showPath(f)}
                   </li>
                 ))}
               </ul>

@@ -17,6 +17,7 @@ import {
   type DeliveryClaim,
 } from './delivery.js';
 import { compactPath } from './WhatWhere.js';
+import { useDisplayPath, useDisplayText } from '../hooks/useHomePath.js';
 
 const EMPTY_EVENTS: CoreEvent[] = [];
 
@@ -306,7 +307,12 @@ export function RunDelivery({ view, navigate }: Props): React.ReactElement {
     if (unitKey !== null) useDeliveryStore.getState().load(runId, unitKey);
   }, [runId, unitKey]);
 
-  const workdir = view.session.workdir;
+  // studio#479: the worktree and a local push target under the home directory read `~/…` in the
+  // default layer (hover included); "Show technical details" gives the full paths.
+  const showPath = useDisplayPath();
+  const showText = useDisplayText();
+  const workdir = typeof view.session.workdir === 'string' ? showPath(view.session.workdir) : view.session.workdir;
+  const pushedRemote = pushed !== undefined && pushed.remote !== null ? showPath(pushed.remote) : null;
 
   // The deliver lift (wicked-core#431 / F-3R2-013): the deliver unit's newest attempt, off the log.
   // Keyed on the deliver unit's ORD — `deliverLift` scopes to it, so a verify phase's floor is never
@@ -480,10 +486,10 @@ export function RunDelivery({ view, navigate }: Props): React.ReactElement {
               data-testid="run-delivery-pushed"
               className="font-mono break-all"
               style={{ color: 'var(--ink-muted)' }}
-              {...(pushed.remote !== null ? { title: pushed.remote } : {})}
+              {...(pushedRemote !== null ? { title: pushedRemote } : {})}
             >
-              {pushed.remote !== null
-                ? `${pushed.branch} is on ${remoteLabel(pushed.remote)}`
+              {pushedRemote !== null
+                ? `${pushed.branch} is on ${remoteLabel(pushedRemote)}`
                 : `${pushed.branch} is on the origin`}
             </p>
           )}
@@ -502,7 +508,7 @@ export function RunDelivery({ view, navigate }: Props): React.ReactElement {
           >
             {/* `reason` is already empty-normalized to `null` by the derivation,
                 so `??` cannot paint a blank paragraph here. */}
-            {reason ?? 'crew recorded no reason'}
+            {reason !== null ? showText(reason) : 'crew recorded no reason'}
           </p>
           {workdir !== undefined && workdir !== null && (
             <p className="font-mono" style={{ color: 'var(--ink-dim)' }} title={workdir}>

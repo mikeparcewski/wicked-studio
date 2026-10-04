@@ -8,6 +8,7 @@ import { useRunEventStore } from '../store/events.js';
 import { ApprovalDock } from './ApprovalDock.js';
 import { retainOnFinalize } from './ChatThread.js';
 import { readFileText } from './fileText.js';
+import { splitAskContext } from '../board/askPack.js';
 import { Markdown } from './Markdown.js';
 import { NarratorFeed, phaseName } from './NarratorFeed.js';
 import { NowBar } from './NowBar.js';
@@ -257,7 +258,7 @@ function replayDockTranscript(records: readonly unknown[]): DockChatMsg[] {
     const rec = r as { kind?: string; cliKey?: string; text?: string; ok?: boolean };
     if (typeof rec.text !== 'string') continue;
     if (rec.kind === 'user') {
-      out.push({ cliKey: 'you', text: rec.text.split('\n\n---\n', 1)[0] ?? rec.text, pending: false, ok: true });
+      out.push({ cliKey: 'you', text: splitAskContext(rec.text).typed, pending: false, ok: true });
     } else if (typeof rec.cliKey === 'string') {
       out.push({ cliKey: rec.cliKey, text: rec.text, pending: false, ok: rec.ok ?? true });
     }

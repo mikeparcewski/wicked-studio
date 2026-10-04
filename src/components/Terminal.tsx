@@ -3,6 +3,8 @@ import { Terminal as XTerm } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
 import { api, terminalWsUrl } from '../api/client.js';
+import { homeMasker } from '../board/homePath.js';
+import { splitUtf8 } from '../board/utf8Segments.js';
 import { resolveToken } from '../styles/resolveToken.js';
 
 interface Props {
@@ -23,6 +25,12 @@ interface Props {
    * echoing visibly so they can complete the CLI's URL/paste flow in this terminal.
    */
   initialInput?: string;
+  /**
+   * Home directories to draw as `~` in this terminal's output (studio#467): the sign-in line
+   * names the worker home under the operator's home directory, and the shell echoes it. Display
+   * only — what is typed and what runs is unchanged. Omit (or pass none) to draw the bytes as-is.
+   */
+  concealHome?: readonly string[];
 }
 
 /**
@@ -38,17 +46,18 @@ interface Props {
  * A terminal is a stateful session: it opens ONCE for the component's lifetime.
  * Remount with a React `key` to start a fresh terminal (e.g. a different cwd).
  */
-export function Terminal({ cwd, cmd, governed = true, initialInput }: Props): React.ReactElement {
+export function Terminal({ cwd, cmd, governed = true, initialInput, concealHome }: Props): React.ReactElement {
   const hostRef = useRef<HTMLDivElement>(null);
   // Snapshot the open-time props; the session opens once (see effect deps: []).
-  const propsRef = useRef({ cwd, cmd, governed, initialInput });
-  propsRef.current = { cwd, cmd, governed, initialInput };
+  const propsRef = useRef({ cwd, cmd, governed, initialInput, concealHome });
+  propsRef.current = { cwd, cmd, governed, initialInput, concealHome };
 
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
 
     let disposed = false;
+    let idle: ReturnType<typeof setTimeout> | undefined;
     let socket: WebSocket | undefined;
     let terminalId: string | undefined;
 
@@ -140,17 +149,62 @@ export function Terminal({ cwd, cmd, governed = true, initialInput }: Props): Re
           if (ws.readyState === WebSocket.OPEN) ws.send(line);
           else ws.onopen = () => ws.send(line);
         }
-        ws.onmessage = (ev: MessageEvent) => {
-          // Raw PTY output: binary frame → exact bytes; text frame → string.
-          if (typeof ev.data === 'string') term.write(ev.data);
-          else term.write(new Uint8Array(ev.data as ArrayBuffer));
-        };
+        const conceal = propsRef.current.concealHome ?? [];
+        if (conceal.length === 0) {
+          ws.onmessage = (ev: MessageEvent) => {
+            // Raw PTY output: binary frame → exact bytes; text frame → string.
+            if (typeof ev.data === 'string') term.write(ev.data);
+            else term.write(new Uint8Array(ev.data as ArrayBuffer));
+          };
+        } else {
+          // The same output, with the named home directories drawn as `~`. A chunk can end inside
+          // one, so the masker holds that tail; an idle moment draws whatever it still holds.
+          const masker = homeMasker(conceal);
+          // A binary frame is split into valid UTF-8 text (masked) and the bytes that are not (drawn as
+          // they came); a sequence cut by the frame's end waits for the next frame (codex r2 on #484).
+          let pending: Uint8Array = new Uint8Array(0);
+          const writeParts = (parts: readonly (string | Uint8Array)[]): void => {
+            for (const part of parts) {
+              if (typeof part === 'string') {
+                const out = masker.push(part);
+                if (out !== '') term.write(out);
+              } else {
+                const held = masker.flush(); // nothing that follows a raw byte can complete a held directory
+                if (held !== '') term.write(held);
+                term.write(part);
+              }
+            }
+          };
+          ws.onmessage = (ev: MessageEvent) => {
+            if (typeof ev.data === 'string') {
+              if (pending.length > 0) { writeParts([pending]); pending = new Uint8Array(0); }
+              writeParts([ev.data]);
+            } else {
+              const frame = new Uint8Array(ev.data as ArrayBuffer);
+              const buf = new Uint8Array(pending.length + frame.length);
+              buf.set(pending, 0);
+              buf.set(frame, pending.length);
+              const split = splitUtf8(buf);
+              pending = split.pending;
+              writeParts(split.parts);
+            }
+            if (idle !== undefined) clearTimeout(idle);
+            idle = setTimeout(() => {
+              idle = undefined;
+              if (disposed) return;
+              const rest = masker.flush();
+              if (rest !== '') term.write(rest);
+              if (pending.length > 0) { term.write(pending); pending = new Uint8Array(0); }
+            }, 40);
+          };
+        }
         socket = ws;
       })();
     });
 
     return () => {
       disposed = true;
+      if (idle !== undefined) clearTimeout(idle);
       cancelAnimationFrame(rafHandle);
       observe?.disconnect();
       dataSub.dispose();

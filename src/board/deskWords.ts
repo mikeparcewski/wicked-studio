@@ -21,8 +21,14 @@ const STEP_NOUN: Readonly<Record<string, string>> = {
   deliver: 'delivery', demo: 'demo', record: 'recording',
 };
 
-/** Engine text a default-layer line never carries. */
-const ENGINE_TEXT = /\b(?:unit|rev|band|ord)\s*\d|\b(?:manual|auto) mode\b|→|\bgate_?kind\b/i;
+/** Engine text a default-layer line never carries — the ` ||| PHASE SCOPE:` scaffold included (studio#464). */
+const ENGINE_TEXT = /\b(?:unit|rev|band|ord)\s*\d|\b(?:manual|auto) mode\b|→|\bgate_?kind\b|\|\|\|/i;
+
+/** The engine appends its unit prompt's scaffold after ` ||| ` (` ||| PHASE SCOPE: …`): never words. */
+function withoutScaffold(text: string): string {
+  const at = text.indexOf('|||');
+  return (at === -1 ? text : text.slice(0, at)).trim();
+}
 
 /** "Approve the plan (7 steps)", "Approve the review", or the author's own words — never the
  *  engine's prompt. `undefined` prompt (a late join before the prompt is read) → the plain wait. */
@@ -40,16 +46,20 @@ export function plainGateQuestion(prompt: string | undefined, gateKind: string |
     const noun = STEP_NOUN[phase.toLowerCase()];
     return noun !== undefined ? `Approve the ${noun}` : `Approve the ${phase.replace(/[_-]+/g, ' ')} step`;
   }
-  // The pre-execution form: "Approve unit 2 before it runs: review" (a phase id) or ": <its words>".
-  const before = /^Approve unit \d+ before it runs:\s*(.+)$/i.exec(p.split('\n')[0]!.trim())?.[1]?.trim();
+  // The pre-execution form: "Approve unit 2 before it runs: review" (a phase id), ": <its words>",
+  // or crew's "<phase> — <the run's goal> ||| PHASE SCOPE: …" (studio#464): the phase id before the
+  // ` — ` names the step (the goal is already the row's title) and the scaffold is never shown.
+  const raw = /^Approve unit \d+ before it runs:\s*(.+)$/i.exec(p.split('\n')[0]!.trim())?.[1];
+  const before = raw === undefined ? undefined : withoutScaffold(raw);
   if (before !== undefined && before !== '') {
-    if (/^[A-Za-z0-9_-]+$/.test(before)) {
-      const noun = STEP_NOUN[before.toLowerCase()];
-      return noun !== undefined ? `Approve the ${noun}` : `Approve the ${before.replace(/[_-]+/g, ' ')} step`;
+    const head = /^([A-Za-z0-9_-]+)\s+—\s/.exec(before)?.[1] ?? before;
+    if (/^[A-Za-z0-9_-]+$/.test(head)) {
+      const noun = STEP_NOUN[head.toLowerCase()];
+      return noun !== undefined ? `Approve the ${noun}` : `Approve the ${head.replace(/[_-]+/g, ' ')} step`;
     }
     if (!ENGINE_TEXT.test(before)) return `Approve the next step: ${before}`;
   }
-  const first = p.split('\n')[0]!.trim();
+  const first = withoutScaffold(p.split('\n')[0]!);
   if (first === '' || ENGINE_TEXT.test(first)) return 'Waiting on your answer';
   return first;
 }

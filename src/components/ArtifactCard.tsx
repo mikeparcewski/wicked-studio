@@ -1,4 +1,5 @@
 import type { RunArtifact } from './narrator.js';
+import { useDisplayPath } from '../hooks/useHomePath.js';
 
 /**
  * One artifact the run produced (DES-RUN-NARRATOR §6): a file the worker
@@ -17,7 +18,11 @@ export function ArtifactCard({
   /** Popover dress: tighter padding, no phase caption. */
   compact?: boolean;
 }): React.ReactElement {
-  const dir = artifact.kind === 'file' ? artifact.ref.slice(0, artifact.ref.length - artifact.name.length) : '';
+  // studio#479: a file's folder and its hover read `~/…` under the home directory in the default
+  // layer; `artifact.ref` (absolute) still opens the file.
+  const showPath = useDisplayPath();
+  const shownRef = artifact.kind === 'file' ? showPath(artifact.ref) : artifact.ref;
+  const dir = artifact.kind === 'file' ? shownRef.slice(0, shownRef.length - artifact.name.length) : '';
   return (
     <div
       data-testid="artifact-card"
@@ -29,7 +34,7 @@ export function ArtifactCard({
         {artifact.kind === 'pr' ? '⇡' : '▤'}
       </span>
       <span className="min-w-0 flex items-baseline gap-1.5">
-        <span className="truncate font-medium" style={{ color: 'var(--ink-body)' }} title={artifact.ref}>
+        <span className="truncate font-medium" style={{ color: 'var(--ink-body)' }} title={shownRef}>
           {artifact.name}
         </span>
         {!compact && dir !== '' && (

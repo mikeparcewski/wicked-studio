@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useDisplayText } from '../hooks/useHomePath.js';
 import { api } from '../api/client.js';
 import type { WorkUnit } from '../api/types.js';
 import { phaseLabel } from './gateVerdictModel.js';
@@ -19,6 +20,7 @@ export function GateUnderReview({ runId, units, reviewed, next }: {
   next: WorkUnit | null;
 }): React.ReactElement {
   const [open, setOpen] = useState(false);
+  const showText = useDisplayText();
   const key = unitKey(runId, reviewed.id, reviewed.ord);
   const [read, setRead] = useState<{ key: string; text: string | null; note: string | null } | null>(null);
   useEffect(() => {
@@ -57,7 +59,7 @@ export function GateUnderReview({ runId, units, reviewed, next }: {
             className="text-[11px] font-mono overflow-auto max-h-64 mt-1 p-2 rounded"
             style={{ background: 'var(--surface-base)', color: 'var(--ink-body)', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}
           >
-            {shown.text}
+            {showText(shown.text)}
           </pre>
         ) : (
           <p data-testid="gate-under-review-note" className="text-[11px] font-mono mt-1" style={{ color: 'var(--ink-dim)' }}>{shown.note}</p>

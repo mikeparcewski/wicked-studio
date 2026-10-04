@@ -36,6 +36,7 @@ import { UnitList } from './UnitList.js';
 import { VerdictDetail } from './VerdictDetail.js';
 import type { RunMode } from './runMode.js';
 import { MODE_LABELS } from './runMode.js';
+import { useDisplayText } from '../hooks/useHomePath.js';
 export type { RunMode } from './runMode.js';
 // Moved to its own module (DES-RUN-NARRATOR §9); re-exported so existing
 // importers (RightPanel's Term tab, tests) keep resolving.
@@ -687,6 +688,8 @@ function LegacyChatHistory({
   onNavigateBack: () => void;
 }): React.ReactElement {
   const { session, units } = view;
+  // studio#479: a unit's output (the deliver unit's push target above all) in the default layer.
+  const showText = useDisplayText();
   const [transcripts, setTranscripts] = useState<
     Record<number, { text: string | null; loading: boolean; visible: boolean }>
   >({});
@@ -793,7 +796,7 @@ function LegacyChatHistory({
                     </button>
                     {tc.visible && (
                       <div className="mt-2.5 max-h-96 overflow-auto rounded-xl p-4" style={{ background: 'var(--surface-base)' }}>
-                        <Markdown className="whitespace-pre-wrap">{tc.text}</Markdown>
+                        <Markdown className="whitespace-pre-wrap">{showText(tc.text)}</Markdown>
                       </div>
                     )}
                   </div>

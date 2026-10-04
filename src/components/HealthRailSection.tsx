@@ -10,7 +10,9 @@ import { useConnectionStore } from '../store/connection.js';
 import { setCachedRoster } from '../store/rosterCache.js';
 import { Modal } from './Modal.js';
 import { Terminal } from './Terminal.js';
-import { useDisplayPath } from '../hooks/useHomePath.js';
+import { useDisplayPath, useDisplayText } from '../hooks/useHomePath.js';
+import { homeDirsIn } from '../board/homePath.js';
+import { useViewPrefsStore } from '../store/viewPrefs.js';
 
 /**
  * The rail-foot health section (DES-FEEDBACK-003 §6.2, slice O): the operator —
@@ -370,6 +372,8 @@ export function HealthRailSection({ open, onToggle, compact = false }: Props): R
   // Wave B, idea 9: the seats' week, read on the same expand gesture.
   const { week, moves, apply, markOpened } = useSeatWeek(open);
   const [signIn, setSignIn] = useState<{ seat: RosterSeat; line: string } | null>(null);
+  const showText = useDisplayText();
+  const technical = useViewPrefsStore((st) => st.prefs.technical_details);
   const weekRecords = week.kind === 'ok' ? recordsByCli(week.record) : null;
   /** The expand generation a diagnostics read belongs to — a completion from an earlier
    *  expand must not overwrite a later one (the findings drive the heart and the dot). */
@@ -583,9 +587,11 @@ export function HealthRailSection({ open, onToggle, compact = false }: Props): R
         <Modal title={`Sign in — ${signIn.seat.display_name}`} onClose={() => setSignIn(null)}>
           <div className="flex flex-col gap-3">
             <p className="text-xs font-mono" style={{ color: 'var(--ink-muted)' }}>
-              Running <code className="rounded px-1 py-0.5" style={{ background: 'var(--surface-raised)', color: 'var(--ink-high)' }}>{signIn.line}</code> in your shell — complete the flow below, then close this panel.
+              Running <code data-testid="signin-line" className="rounded px-1 py-0.5" style={{ background: 'var(--surface-raised)', color: 'var(--ink-high)' }}>{showText(signIn.line)}</code> in your shell — complete the flow below, then close this panel.
             </p>
-            <Terminal key={signIn.seat.key} cwd="." initialInput={`${signIn.line}\n`} />
+            {/* studio#467: the shell echoes the line it is given; its home directory is drawn as `~`
+                unless technical details are on. What runs is the line as the daemon gave it. */}
+            <Terminal key={signIn.seat.key} cwd="." initialInput={`${signIn.line}\n`} concealHome={technical ? [] : homeDirsIn(signIn.line)} />
           </div>
         </Modal>,
         document.body,
