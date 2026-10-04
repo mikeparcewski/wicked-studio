@@ -82,7 +82,8 @@ with sync_playwright() as p:
         f"s.textContent = {json.dumps(HIDE_GATE_TOASTS)}; document.head.appendChild(s); }});"
         f"if (!localStorage.getItem('studio.visit')) localStorage.setItem('studio.visit', JSON.stringify({{lastSeenAt: {looked_at}, handover: null}}));")
 
-    set_fixture(origin, sessions=True, run_chat_id=True, decisions=True, decisions_mode="on", extra_frames=[], reset_decisions=True)
+    # `steering_rules`: GET /governance/rules serves the corpus plus what a Remember lands (S12: "see it" opens that rule).
+    set_fixture(origin, sessions=True, run_chat_id=True, decisions=True, decisions_mode="on", steering_rules=True, extra_frames=[], reset_decisions=True)
 
     # ── 1. B12: the review proposal is a Needs You row in the operator's words ─────────
     page.goto(f"{origin}/", wait_until="networkidle")
@@ -202,10 +203,18 @@ with sync_playwright() as p:
     page.screenshot(path=str(SHOTS / "desk-decisions-desk.png"))
     desk_line = page.get_by_test_id("desk-rule-line").inner_text()
     page.get_by_test_id("desk-rule-see").click()
-    # S12: "see it" lands on the Rules page, the rule open on its own address.
+    # S12: "see it" lands on the Rules page with THAT rule open — the drawer for the rule the Remember landed,
+    # its statement in the operator's words; the address alone (or a missing-rule page) is not enough.
     page.wait_for_function("() => decodeURIComponent(location.pathname) === '/rules/proposal:pr-offer'", timeout=8000)
+    try:
+        page.get_by_test_id("steering-rule-drawer").wait_for(state="visible", timeout=15000)
+    except Exception as e:  # noqa: BLE001
+        page.screenshot(path=str(SHOTS / "desk-decisions-rule-missing.png"))
+        fail("desk-rule", f"the remembered rule's drawer did not open from 'see it': {e}")
+    statement = page.get_by_test_id("steering-rule-drawer").get_by_test_id("steering-rule-statement").inner_text()
     check("desk-rule", desk_line == "One new rule for upload-endpoint, from your words — see it"
-          and page.get_by_test_id("rules-page").count() == 1, text=desk_line)
+          and statement == "Demos for the panel should feel calmer" and page.get_by_test_id("rules-missing").count() == 0,
+          text=desk_line, statement=statement)
 
     # ── 13. LEDGER: nothing drawn ───────────────────────────────────────────────────────
     set_fixture(origin, decisions_mode="ledger")

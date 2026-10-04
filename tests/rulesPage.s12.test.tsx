@@ -211,6 +211,39 @@ describe('the page', () => {
     expect(screen.queryByTestId('steering-rule-drawer')).toBeNull();
   });
 
+  it('a save that completes late closes only its own editor — never the one open for the rule you moved to (codex r2)', async () => {
+    listConformanceRules.mockResolvedValue({ rules: [PATTERN, TESTING, WORDS] });
+    let finishA: (v: unknown) => void = () => {};
+    upsertConformanceRule.mockImplementationOnce(() => new Promise((r) => { finishA = r; }));
+    const { rerender } = render(<RulesPage ruleId="proposal:pr-auto" runs={[]} navigate={vi.fn()} />);
+    const a = await screen.findByTestId('steering-rule-drawer');
+    fireEvent.click(a.querySelector('[data-testid="steering-edit-open"]') as HTMLElement);
+    fireEvent.click(screen.getByTestId('steering-form-save')); // A's save is in flight when the address moves on
+    rerender(<RulesPage ruleId="TST-1002" runs={[]} navigate={vi.fn()} />);
+    const b = await screen.findByTestId('steering-rule-drawer');
+    fireEvent.click(b.querySelector('[data-testid="steering-edit-open"]') as HTMLElement);
+    expect((screen.getByTestId('steering-form-statement') as HTMLTextAreaElement).value).toBe(TESTING.statement);
+    finishA({});
+    await new Promise((r) => setTimeout(r, 30));
+    expect(screen.queryByTestId('steering-rule-form')).not.toBeNull();
+    expect((screen.getByTestId('steering-form-statement') as HTMLTextAreaElement).value).toBe(TESTING.statement);
+  });
+
+  it('the drawer belongs to the addressed rule: A’s open Hold picker never carries over to B (codex r2)', async () => {
+    // A names no obligations, so its Hold switch opens the picker (TST-1002's two would write at once).
+    const BARE = rule({ ...TESTING, id: 'TST-2000', statement: 'A payments change gets a walkthrough.', obligations: [] });
+    const TESTING2 = rule({ ...TESTING, id: 'TST-2001', statement: 'A schema change gets a migration review.' });
+    listConformanceRules.mockResolvedValue({ rules: [BARE, TESTING2] });
+    const { rerender } = render(<RulesPage ruleId="TST-2000" runs={[]} navigate={vi.fn()} />);
+    const drawer = await screen.findByTestId('steering-rule-drawer');
+    fireEvent.click(drawer.querySelector('[data-testid="steering-rule-hold-switch"]') as HTMLElement);
+    expect(screen.getByTestId('steering-rule-hold-pick')).toBeTruthy();
+    rerender(<RulesPage ruleId="TST-2001" runs={[]} navigate={vi.fn()} />);
+    const next = await screen.findByTestId('steering-rule-drawer');
+    expect(next.querySelector('[data-testid="steering-rule-statement"]')?.textContent).toBe(TESTING2.statement);
+    expect(screen.queryByTestId('steering-rule-hold-pick')).toBeNull();
+  });
+
   it('a rule the daemon does not list is said to be missing, with the rest of the page still there', async () => {
     listConformanceRules.mockResolvedValue({ rules: [PATTERN] });
     render(<RulesPage ruleId="proposal:pr-gone" runs={[]} navigate={vi.fn()} />);

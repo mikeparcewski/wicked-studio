@@ -25,7 +25,8 @@ type Read = { kind: 'loading' } | { kind: 'ok'; rules: SteeringRule[] } | { kind
  * A failed read says so with Try again and is never shown as "no rules"; a rule the daemon does
  * not list is said to be missing while the rest of the page stands. Reads commit in order (a
  * reload after Hold or Retire is never overwritten by an older read; StrictMode replays the mount
- * read), and the editor closes when the address changes. DC §5.2's "landed without its project"
+ * read); the drawer is the addressed rule's (keyed by it) and the editor closes when the address
+ * changes — a save that completes late closes only its own editor. DC §5.2's "landed without its project"
  * is NOT said here: the rule alone cannot tell a legacy global landing from one the operator
  * scoped `everywhere` or widened — that needs a crew marker.
  */
@@ -105,6 +106,7 @@ export function RulesPage({ ruleId, runs, navigate }: {
 
       {open !== null && (
         <SteeringRuleDrawer
+          key={open.id}
           rule={open}
           evidence={null}
           onClose={() => navigate(RULES_PATH)}
@@ -120,7 +122,8 @@ export function RulesPage({ ruleId, runs, navigate }: {
           type={steeringTypeOf(editing)}
           initial={editing}
           onClose={() => setEditing(null)}
-          onSaved={() => { setEditing(null); void load(); }}
+          // A save that completes late (the address moved on, another editor is open) closes only ITS editor.
+          onSaved={(id) => { setEditing((cur) => (cur !== null && cur.id === id ? null : cur)); void load(); }}
         />
       )}
     </div>

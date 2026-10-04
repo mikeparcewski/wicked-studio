@@ -23,7 +23,7 @@ serves the rule dec-auto landed), and proves:
           and "look underneath" opens that step's sheet.
   7b. S12 the Rules page under it: the sentence, the rows grouped (from your words, testing, other) as
           sentences; Esc returns to `/rules`; "All rules" reaches the steering grid.
-  8. N7   no "Hold work to it" control on a decision rule.
+  8. N7   no "Hold work to it" control on a decision rule — judged while its drawer is open.
   9. 0 page errors, no horizontal scroll.
 
 Captures: e2e/shots/desk-rules*.png. Env: FEEDBACK_PORT (default 4357).
@@ -215,9 +215,10 @@ with sync_playwright() as p:
           and page.get_by_test_id("rules-row-aside").count() == 0,
           sentence=sentence, rows=rows)
     page.screenshot(path=str(SHOTS / "desk-rules-page.png"))
-    # Esc closes the rule and the address returns to /rules (the drawer may already have gone with the sheet's Esc).
-    if page.get_by_test_id("steering-rule-drawer").count() > 0:
-        page.keyboard.press("Escape")
+    # ── 8. N7: no Hold control on a decision rule — judged while ITS drawer is open ─────────
+    check("no-hold", page.get_by_test_id("steering-rule-drawer").count() == 1 and page.get_by_text("Hold work to it").count() == 0)
+    # Esc closes the rule and the address returns to /rules.
+    page.keyboard.press("Escape")
     page.wait_for_function("() => location.pathname === '/rules'", timeout=8000)
     check("rules-close", page.get_by_test_id("steering-rule-drawer").count() == 0 and page.get_by_test_id("rules-row").count() == 3)
     # "All rules" reaches the steering grid; Back returns to the Rules page.
@@ -229,12 +230,11 @@ with sync_playwright() as p:
         page.screenshot(path=str(SHOTS / "desk-rules-all-missing.png"))
         fail("rules-all", f"'All rules' did not reach the steering grid: {e}")
     page.go_back()
-    page.wait_for_function("() => location.pathname === '/rules'", timeout=8000)
-    check("rules-all", page.get_by_test_id("rules-page").count() == 1 and page.get_by_test_id("rules-row").count() == 3)
+    # Back remounts the page in its loading state: wait for the rows the read restores, not just the address.
+    page.wait_for_function("() => location.pathname === '/rules' && document.querySelectorAll('[data-testid=\"rules-row\"]').length === 3", timeout=15000)
+    check("rules-all", page.get_by_test_id("rules-page").count() == 1 and page.get_by_test_id("rules-sentence").inner_text() == "3 rules in force · 1 from your words · 1 testing rule")
 
-    # ── 8. N7: no Hold control on a decision rule ───────────────────────────────────────
-    check("no-hold", page.get_by_text("Hold work to it").count() == 0
-          and "Followed" not in page.evaluate("() => document.body.innerText"))
+    check("no-followed", "Followed" not in page.evaluate("() => document.body.innerText"))
 
     hs = page.evaluate("() => document.documentElement.scrollWidth > document.documentElement.clientWidth")
     check("no-errors-no-hscroll", not errors and not hs, errors=errors)
