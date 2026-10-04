@@ -458,7 +458,23 @@ describe('the host controller', () => {
         const { host, order, toPlugin } = await timedOut((_resolve, reject) => { fail = reject; });
         await vi.waitFor(() => expect(toPlugin.find((m) => m.re === 'w1')).toMatchObject({ ok: false, error: { code: 'timeout' } }));
         fail!(new Error('HTTP 503'));
-        await vi.waitFor(() => expect(order.at(-1)).toMatch(/^status:Not changed: HTTP 503/));
+        await vi.waitFor(() => expect(order.at(-1)).toMatch(/^status:Whether it changed is not known: HTTP 503/));
+        host.teardown('done');
+      } finally {
+        limits.replyMs = was;
+      }
+    });
+
+    it('codex r6: a late "unavailable" (the outcome is not known) is said as it is — never "Not changed"', async () => {
+      const limits = LIMITS as { replyMs: number };
+      const was = limits.replyMs;
+      limits.replyMs = 60;
+      try {
+        let settle: ((r: unknown) => void) | null = null;
+        const { host, order, toPlugin } = await timedOut((resolve) => { settle = resolve; });
+        await vi.waitFor(() => expect(toPlugin.find((m) => m.re === 'w1')).toMatchObject({ ok: false, error: { code: 'timeout' } }));
+        settle!({ error: 'unavailable', message: 'Two edits landed from version 1 at once (versions 2 and 3); which is yours cannot be told.' });
+        await vi.waitFor(() => expect(order.at(-1)).toBe('status:Two edits landed from version 1 at once (versions 2 and 3); which is yours cannot be told.'));
         host.teardown('done');
       } finally {
         limits.replyMs = was;

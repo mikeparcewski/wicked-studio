@@ -283,7 +283,7 @@ export class EditorHost {
           const made = (msg.type === 'version.write' || msg.type === 'version.fork') && !failed && typeof (r as { version?: unknown }).version === 'number';
           if (made) this.artifactChanged((r as { version: number }).version, msg.type === 'version.fork' ? 'fork' : 'deterministic');
           // A definite "no" after the timer replaces "it may still land" — while that line is still shown.
-          else if (failed) this.lateNo(id, (r as { message: string }).message);
+          else if (failed) this.lateEnd(id, (r as { error: ErrorCode }).error, (r as { message: string }).message);
         } else if (failed) {
           const e = r as { error: ErrorCode; message: string; head?: number };
           this.log({ kind: 'refused', type: msg.type, code: e.error, why: e.message });
@@ -294,18 +294,21 @@ export class EditorHost {
         if (moved !== undefined) this.artifactChanged(moved.head, moved.kind);
       })
       .catch((e: unknown) => {
-        if (settled) { this.lateNo(id, e instanceof Error ? e.message : String(e)); return; }
+        if (settled) { this.lateEnd(id, null, e instanceof Error ? e.message : String(e)); return; }
         settled = true;
         clearTimeout(timer);
         this.post(refuse(id, 'unavailable', e instanceof Error ? e.message : String(e)));
       });
   }
 
-  /** The timed-out write `id` ended without a version: say so, if its timeout line is still the one shown. */
-  private lateNo(id: string, why: string): void {
+  /** The timed-out write `id` ended without a version: say how, if its timeout line is still the one
+   *  shown. Only a code that means nothing was written says "Not changed"; `unavailable` (sent, but what
+   *  landed cannot be told) is said in its own words, and a throw says the outcome is not known (codex r6). */
+  private lateEnd(id: string, code: ErrorCode | null, why: string): void {
     if (this.torn || this.timeoutLine !== id) return;
     this.timeoutLine = null;
-    this.o.ui.status(`Not changed: ${why}`.slice(0, LIMITS.statusChars));
+    const line = code === null ? `Whether it changed is not known: ${why}` : code === 'unavailable' ? why : `Not changed: ${why}`;
+    this.o.ui.status(line.slice(0, LIMITS.statusChars));
   }
 
   private async currentInventory(): Promise<{ inv: Inventory; tokens: Set<string>; version: number } | { error: ErrorCode; message: string }> {
