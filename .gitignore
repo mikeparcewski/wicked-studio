@@ -38,3 +38,5 @@ docs/testing/
 # Playwright (root app e2e, studio#322) — playwright-report/ and test-results/ are ignored above
 /blob-report/
 /.playwright/
+# S13: every run of e2e/live_walkthrough_deliver_test.py writes its report here — evidence per run, not source.
+e2e/artifacts/live-walkthrough-deliver-*.json
