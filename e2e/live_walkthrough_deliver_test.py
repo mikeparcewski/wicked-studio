@@ -477,7 +477,7 @@ def main(p) -> None:  # noqa: ANN001, C901
             shot(page, "no-artifact")
             found = page.evaluate("""() => ({ runs: [...document.querySelectorAll('[data-testid="session-run"]')].map((b) => b.dataset.runId),
               artifacts: [...document.querySelectorAll('[data-testid="artifact"]')].map((a) => a.dataset.kind),
-              session: document.querySelector('[data-testid="session"]')?.innerText.replace(/\s+/g, ' ').slice(0, 400) ?? null })""")
+              session: document.querySelector('[data-testid="session"]')?.innerText.replace(/\\s+/g, ' ').slice(0, 400) ?? null })""")
             fail("inline", "no walkthrough artifact with a state line in the run's block", art=art, chain=chain, found=found,
                  blocked=blocked, redirects=redirects[:10], proxy_errors=proxy_errors[:10], console=console[:10], page_errors=errors[:5])
         shot(page, "inline")
