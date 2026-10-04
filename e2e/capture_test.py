@@ -124,6 +124,14 @@ with sync_playwright() as p:
         page.get_by_test_id("capture-open").click()
         drop = page.get_by_test_id("capture-drop")
         drop.wait_for(state="visible")
+        # The form opens where the operator can use it: its notes and its send button sit inside
+        # the viewport as it opens, before anything scrolls them (codex S15a r1 — on the Desk the
+        # Start row is the bottom band, so a popover opening downward fell off the screen).
+        in_view = page.evaluate("""() => ['capture-notes', 'capture-send'].map(id => {
+            const r = document.querySelector(`[data-testid="${id}"]`).getBoundingClientRect();
+            return { id, top: Math.round(r.top), bottom: Math.round(r.bottom),
+                     ok: r.top >= 0 && r.bottom <= window.innerHeight && r.left >= 0 && r.right <= window.innerWidth }; })""")
+        check("capture-form-in-view", all(x["ok"] for x in in_view), in_view=in_view, vh=H)
         page.get_by_test_id("capture-project").select_option(PROJECT)
         first = drop.evaluate("el => el.firstElementChild.dataset.testid")
         consequence = page.get_by_test_id("capture-consequence").inner_text()

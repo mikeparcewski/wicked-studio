@@ -231,7 +231,7 @@ export function Desk({ runs, runsLoaded, runsError = null, onRetryRuns, needRows
           ))}
           {/* S15a: Capture (Studio OS behaviour 8) — Home's verb row carried it beside Do Work; on the
               Desk it is the last way to start something. What it files lands in the list above. */}
-          <CaptureDrop runs={runs} />
+          <CaptureDrop runs={runs} opens="up" />
         </div>
         <Composer
           composerKey="desk"
