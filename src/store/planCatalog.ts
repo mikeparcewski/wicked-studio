@@ -23,7 +23,7 @@ export type PreviewState =
   | { status: 'loading' }
   | { status: 'ready'; preview: PlanPreviewResponse }
   | { status: 'unsupported' }
-  | { status: 'error'; error: string };
+  | { status: 'error'; error: string; timedOut?: true };
 
 interface PlanCatalogStore {
   catalog: LoadState;
@@ -47,6 +47,8 @@ export const usePlanCatalog = create<PlanCatalogStore>(() => ({
 export function resetPlanCatalog(): void {
   usePlanCatalog.setState({ catalog: 'idle', entries: [], catalogError: null, presets: {}, previews: {} });
   inflight.clear();
+  answers.clear();
+  generation.clear();
 }
 
 /** Load the catalog once (a failed load may be retried by calling again). */
@@ -112,6 +114,45 @@ export function previewKey(body: PlanPreviewBody): string {
 }
 
 const inflight = new Map<string, Promise<PreviewState>>();
+/** The engine's own answer per body, while it is still coming (studio#431: outlives the timeout). */
+const answers = new Map<string, Promise<PreviewState>>();
+/** Per body, the newest request's number: only its late answer may land (codex r2 on #431). */
+const generation = new Map<string, number>();
+
+/**
+ * The engine's ANSWER for `body`, however long it takes (codex on #431): what places a
+ * `before:N` gate must not be the timeout's "didn't answer" — a slow engine is not a failed preview,
+ * so the launch waits for the answer instead of refusing.
+ */
+export async function previewAnswer(body: PlanPreviewBody): Promise<PreviewState> {
+  const key = previewKey(body);
+  // An answer still coming (the preview timed out on screen) is joined, never asked for again.
+  let coming = answers.get(key);
+  if (coming === undefined) {
+    const st = await requestPreview(body);
+    if (!(st.status === 'error' && st.timedOut === true)) return st;
+    coming = answers.get(key);
+    if (coming === undefined) return st;
+  }
+  // Bounded (codex r2): an engine that never answers must not hang Send — past the wait, the
+  // launch says so, as a failed preview always has.
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const giveUp = new Promise<PreviewState>((resolve) => {
+    timer = setTimeout(() => resolve({ status: 'error', error: PREVIEW_ANSWER_WAIT_TEXT }), PREVIEW_ANSWER_WAIT_MS);
+  });
+  const st = await Promise.race([coming, giveUp]);
+  if (timer !== undefined) clearTimeout(timer);
+  return st;
+}
+
+/** How long Send waits on an engine that has not answered the preview yet, past the on-screen timeout. */
+export const PREVIEW_ANSWER_WAIT_MS = 60_000;
+const PREVIEW_ANSWER_WAIT_TEXT = 'the engine still hasn’t answered the preview — try again';
+
+/** How long a launch preview is waited on before it says the engine has not answered (studio#431). */
+export const PREVIEW_TIMEOUT_MS = 10_000;
+const PREVIEW_TIMEOUT_TEXT =
+  `The engine didn’t answer in ${PREVIEW_TIMEOUT_MS / 1000} s — the summary below is studio’s own reading of this launch.`;
 
 /**
  * Preview `body`, once per distinct body: a repeated call answers from the cache (or joins the
@@ -126,16 +167,34 @@ export function requestPreview(body: PlanPreviewBody): Promise<PreviewState> {
   const running = inflight.get(key);
   if (running !== undefined) return running;
   setPreview(key, { status: 'loading' });
-  const p = teamPlanApi.previewPlan(body).then(
+  const answer = teamPlanApi.previewPlan(body).then(
     (preview): PreviewState => ({ status: 'ready', preview }),
     (e: unknown): PreviewState =>
       isRouteUnsupported(e)
         ? { status: 'unsupported' }
         : { status: 'error', error: e instanceof ApiError ? e.message : String(e) },
-  ).then((st) => {
+  );
+  // studio#431: under host load the engine's preview can take far longer than a person waits. Past
+  // PREVIEW_TIMEOUT_MS the preview says so (an error — not cached, so asking again re-requests it),
+  // and an answer that comes later still lands.
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<PreviewState>((resolve) => {
+    timer = setTimeout(() => resolve({ status: 'error', error: PREVIEW_TIMEOUT_TEXT, timedOut: true }), PREVIEW_TIMEOUT_MS);
+  });
+  const p = Promise.race([answer, late]).then((st) => {
+    if (timer !== undefined) clearTimeout(timer);
     inflight.delete(key);
     setPreview(key, st);
     return st;
+  });
+  const gen = (generation.get(key) ?? 0) + 1;
+  generation.set(key, gen);
+  answers.set(key, answer);
+  void answer.then((st) => {
+    if (answers.get(key) === answer) answers.delete(key);
+    // The answer after the timeout: shown only if this is the newest request for the body (codex
+    // r2: an older late answer never lands over a newer one) and nothing newer is under way.
+    if (generation.get(key) === gen && !inflight.has(key) && usePlanCatalog.getState().previews[key]?.status === 'error') setPreview(key, st);
   });
   inflight.set(key, p);
   return p;

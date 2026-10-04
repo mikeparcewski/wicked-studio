@@ -98,3 +98,18 @@ describe('the launch rules, extracted (launchModel)', () => {
     expect(detectWorkflow('hello')).toBeNull();
   });
 });
+
+/** studio#429: a repo launch with no steps, preset or workflow becomes ONE neutral unit — no PA scope,
+ *  no evaluator, no deliver — while the page promised "the PA scores and plans it". It is a designed
+ *  launch (a repo as context, D2), so it still sends; the form says what it will be. */
+describe('a repo launch with no steps says what it runs as (studio#429)', () => {
+  const base = { problem: 'add SSO login', selectedClis: new Set(['claude']), submitting: false, targetRequired: false, roster: null };
+  it('with a repository and nothing that plans the work, the note says so and Send stays on', () => {
+    const r = launchSubmit({ ...base, planMissing: true });
+    expect(r.canSubmit).toBe(true);
+    expect(r.planNote).toBe('This runs as one step on the repository — no PA scope, no review, no delivery. Pick the steps (or a preset) to have it planned and reviewed.');
+  });
+  it('with steps, a preset or a workflow, there is no note', () => {
+    expect(launchSubmit({ ...base, planMissing: false })).toStrictEqual({ canSubmit: true, noSeatReason: null, planNote: null });
+  });
+});

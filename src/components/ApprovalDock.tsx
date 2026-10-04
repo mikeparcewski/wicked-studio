@@ -1,3 +1,4 @@
+import { runIdentityOf } from '../api/teamPlan.js';
 import { sessionGuidance } from '../api/guidance.js';
 import type { SessionView } from '../api/types.js';
 import { useElicitationStore } from '../store/elicitations.js';
@@ -97,6 +98,7 @@ export function ApprovalDock({
           {...(view !== undefined
             ? {
                 units: view.units, clis: view.session.clis, autoDeliver: autoDeliverOf(view.session),
+                identityKind: runIdentityOf(view.session)?.kind ?? null,
                 baseCommit: view.session.base_commit,
                 // studio#368: what a deliver approve pushes, named in its undo toast.
                 delivery: deliveryTargetOf(view.session),
