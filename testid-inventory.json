@@ -12,8 +12,8 @@
   "studioVersion": "0.6.0",
   "counts": {
     "files": 214,
-    "occurrences": 2389,
-    "static": 2089,
+    "occurrences": 2396,
+    "static": 2099,
     "dynamic": 80,
     "computed": 7
   },
@@ -2484,13 +2484,32 @@
     {
       "testId": "demo-script",
       "files": [
-        "src/components/DemoMode.tsx"
+        "src/components/DemoMode.tsx",
+        "src/components/session/WalkthroughEditor.tsx"
+      ]
+    },
+    {
+      "testId": "demo-script-box",
+      "files": [
+        "src/components/session/WalkthroughEditor.tsx"
       ]
     },
     {
       "testId": "demo-script-editor",
       "files": [
         "src/components/DemoMode.tsx"
+      ]
+    },
+    {
+      "testId": "demo-script-fixed",
+      "files": [
+        "src/components/session/WalkthroughEditor.tsx"
+      ]
+    },
+    {
+      "testId": "demo-script-save",
+      "files": [
+        "src/components/session/WalkthroughEditor.tsx"
       ]
     },
     {
@@ -8552,7 +8571,7 @@
       ]
     },
     {
-      "testId": "session-run-open",
+      "testId": "session-run-look",
       "files": [
         "src/components/session/SessionView.tsx"
       ]
@@ -8692,6 +8711,18 @@
       ]
     },
     {
+      "testId": "sheet-evidence",
+      "files": [
+        "src/components/sheets/ObjectSheet.tsx"
+      ]
+    },
+    {
+      "testId": "sheet-evidence-download",
+      "files": [
+        "src/components/sheets/ObjectSheet.tsx"
+      ]
+    },
+    {
       "testId": "sheet-goal",
       "files": [
         "src/components/sheets/ObjectSheet.tsx"
@@ -8788,6 +8819,12 @@
       ]
     },
     {
+      "testId": "sheet-session-changes",
+      "files": [
+        "src/components/sheets/ObjectSheet.tsx"
+      ]
+    },
+    {
       "testId": "sheet-signin-row",
       "files": [
         "src/components/sheets/ObjectSheet.tsx"
@@ -8795,6 +8832,30 @@
     },
     {
       "testId": "sheet-signins",
+      "files": [
+        "src/components/sheets/ObjectSheet.tsx"
+      ]
+    },
+    {
+      "testId": "sheet-step-open",
+      "files": [
+        "src/components/sheets/ObjectSheet.tsx"
+      ]
+    },
+    {
+      "testId": "sheet-step-row",
+      "files": [
+        "src/components/sheets/ObjectSheet.tsx"
+      ]
+    },
+    {
+      "testId": "sheet-step-why",
+      "files": [
+        "src/components/sheets/ObjectSheet.tsx"
+      ]
+    },
+    {
+      "testId": "sheet-steps",
       "files": [
         "src/components/sheets/ObjectSheet.tsx"
       ]

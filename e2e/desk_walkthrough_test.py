@@ -275,7 +275,8 @@ with sync_playwright() as p:
         poster = next((i for i in items if i["id"] == "walkthrough-export-poster-file"), None)
         take = fetch_of(mp4["href"]) if mp4 else (0, "", b"")
         still = fetch_of(poster["href"]) if poster else (0, "", b"")
-        check("walk-pass-export", p0["state"] == "✓ Passed · 6 chapters" and p0["verbs"] == [] and p1["size"] == "pane"
+        # S15d: the inline preview is the take itself, so the line gains its length once the metadata loads.
+        check("walk-pass-export", (p0["state"] or "").startswith("✓ Passed · 6 chapters") and p0["verbs"] == [] and p1["size"] == "pane"
               and (p1["sealed"] or "").startswith("Sealed") and p1["verbs"] == []
               and [i["id"] for i in items] == ["walkthrough-export-mp4", "walkthrough-export-poster-file"]
               and mp4 is not None and mp4["download"] and "path=demo-video%2Fdemo.mp4" in (mp4["href"] or "")
@@ -319,7 +320,7 @@ with sync_playwright() as p:
         page.screenshot(path=str(SHOTS / "desk-walkthrough-demo.png"))
         exports = [x["body"] for x in get_json(f"{origin}/__fixture/walkthrough-posts")["posts"] if x["route"] == "export"]
         gif = fetch_of(gif_href)
-        check("demo-video", d0["state"] == "✓ Ready to watch · 3 chapters" and d0["seats"] == "codex reviews, claude records"
+        check("demo-video", (d0["state"] or "").startswith("✓ Ready to watch · 3 chapters") and d0["seats"] == "codex reviews, claude records"
               and d1["size"] == "pane" and d1["checks"] == [] and d1["sealed"] is None and 35 <= d1["video"]["t"] < 41
               and "Run of show" in narration and "booking a room, start to finish" in narration
               and ids == ["walkthrough-export-mp4", "walkthrough-download-gif", "walkthrough-export-poster"]

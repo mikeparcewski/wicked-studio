@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { api } from '../../api/client.js';
+import { api, downloadRunEvidence } from '../../api/client.js';
 import { executingOrd } from '../../api/run-state.js';
 import type { RosterSeat, SessionView } from '../../api/types.js';
 import { getDiagnostics, type Diagnostics } from '../../api/diagnostics.js';
@@ -237,9 +237,10 @@ function SessionSheet({ r, tab: asked, runs, navigate }: { r: Extract<ObjectRef,
   const roster = useRoster();
   const isSystem = useIsSystemWorkflow();
   const sections = newest !== null ? runSections(newest, isSystem) : [];
-  // The run's sections only where the run has them (none when no run of it is on this daemon).
-  const runTab = new Set<string>(RUN_SECTION_TABS.map((t) => t.id));
-  const tabs = SHEET_TABS.session.filter((t) => !runTab.has(t.id) || sections.some((x) => x.id === t.id));
+  // The run's sections — and its steps, changes and evidence — only where the run has them (none
+  // when no run of it is on this daemon).
+  const runTab = new Set<string>(['steps', 'changes', 'evidence', ...RUN_SECTION_TABS.map((t) => t.id)]);
+  const tabs = SHEET_TABS.session.filter((t) => !runTab.has(t.id) || (newest !== null && (!RUN_SECTION_TABS.some((r) => r.id === t.id) || sections.some((x) => x.id === t.id))));
   // A tab that went away under the open sheet (the run finished, Plan left) falls back to the first.
   const tab = tabs.some((t) => t.id === asked) ? asked : tabs[0]!.id;
   const title = newest !== null ? humanTitle(mine[0]!.session.problem || mine[0]!.session.id) : 'This session';
@@ -261,7 +262,14 @@ function SessionSheet({ r, tab: asked, runs, navigate }: { r: Extract<ObjectRef,
           {mine.map((v) => <li key={v.session.id} className="wk-sheet-line">{v.session.problem || v.session.id}</li>)}
         </ul>
       )}
+      {tab === 'steps' && (newest !== null ? <StepsList view={newest} /> : <p className="wk-session-grey">Nothing in this session is on this daemon.</p>)}
       {tab === 'helpers' && <HelpersList runs={mine} />}
+      {tab === 'changes' && newest !== null && (
+        <div data-testid="sheet-session-changes" className="wk-sheet-section wk-sheet-fill">
+          <FileViewer runId={newest.session.id} defaultTab="diff" base="merge-base" onClose={() => setSheetTab('steps')} onUnsupported={() => setSheetTab('steps')} />
+        </div>
+      )}
+      {tab === 'evidence' && newest !== null && <EvidenceTab runId={newest.session.id} />}
       {tab === 'activity' && newest !== null && <ActivityTail runId={newest.session.id} />}
       {tab === 'signins' && <SignIns roster={roster} />}
       {newest !== null && sections.some((s) => s.id === tab) && <RunSection id={tab as AccordionId} view={newest} navigate={navigate} />}
@@ -276,6 +284,50 @@ function RunSection({ id, view, navigate }: { id: AccordionId; view: SessionView
   return (
     <div data-testid="sheet-section" data-section={id}>
       <RunSectionBody id={id} view={view} model={model} provenance={provenance} retriedAs={[]} navigate={navigate} />
+    </div>
+  );
+}
+
+/**
+ * S15d: the run's steps in order — the old run page's timeline in plain words. Each row names the
+ * step, what state it is in and who has it; the row opens the step's own sheet on "What it did"
+ * (its transcript; Changes and Live events are its other tabs). A stopped step says why.
+ */
+function StepsList({ view }: { view: SessionView }): React.ReactElement {
+  const live = executingOrd(view.session, view.units);
+  const units = [...view.units].sort((a, b) => a.ord - b.ord);
+  return (
+    <ul data-testid="sheet-steps" className="wk-sheet-list">
+      {units.length === 0 && <li className="wk-session-grey">No step has been planned yet.</li>}
+      {units.map((u) => {
+        const word = u.ord === live ? 'working' : UNIT_WORD[u.status] ?? u.status;
+        const ref: ObjectRef = { kind: 'step', runId: view.session.id, ord: u.ord };
+        return (
+          <li key={u.id} data-testid="sheet-step-row" data-ord={u.ord} data-status={u.status} className="wk-sheet-line" data-object={objectAttr(ref)}>
+            <button type="button" data-testid="sheet-step-open" aria-label={`What ${stepName(u)} did`} onClick={() => useSheets.setState({ open: { ref, tab: 'did' } })} className="wk-since-toggle">
+              {stepName(u)} — {word}{u.assigned_cli ? ` · ${u.assigned_cli}` : ''}
+            </button>
+            {u.denial_reason ? <span data-testid="sheet-step-why" className="wk-session-grey"> — {u.denial_reason}</span> : null}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+/** S15d: the run's evidence bundle (`GET /runs/:id/evidence`) — what the old run page offered as a download. */
+function EvidenceTab({ runId }: { runId: string }): React.ReactElement {
+  const [state, setState] = useState<'idle' | 'getting' | 'got' | 'failed'>('idle');
+  const get = (): void => {
+    setState('getting');
+    downloadRunEvidence(runId).then(() => setState('got')).catch(() => setState('failed'));
+  };
+  return (
+    <div data-testid="sheet-evidence" className="wk-sheet-section">
+      <p className="wk-sheet-line">Everything the run recorded — its events, verdicts and files — as one file you can keep or hand to a reviewer.</p>
+      <button type="button" data-testid="sheet-evidence-download" disabled={state === 'getting'} onClick={get} className="wk-prop-btn wk-prop-btn--ghost">{state === 'getting' ? 'Getting it…' : 'Download the evidence'}</button>
+      {state === 'got' && <p role="status" className="wk-sheet-hint">Downloaded.</p>}
+      {state === 'failed' && <p role="alert" className="wk-composer-note wk-composer-note--bad">Could not get the evidence from the daemon.</p>}
     </div>
   );
 }

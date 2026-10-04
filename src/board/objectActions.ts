@@ -60,7 +60,12 @@ export const SHEET_TABS: Readonly<Record<ObjectKind, readonly SheetTab[]>> = {
   ],
   session: [
     { id: 'goal', label: 'Goal' },
+    // S15d (Amendment 5 item 1): the old run page's depth, in plain words — every step and what it
+    // did, the changes, the evidence bundle — under the session, never on a page of its own.
+    { id: 'steps', label: 'Steps' },
     { id: 'helpers', label: 'Helpers' },
+    { id: 'changes', label: 'Changes' },
+    { id: 'evidence', label: 'Evidence' },
     { id: 'activity', label: 'Activity' },
     { id: 'signins', label: 'Sign-ins' },
     ...RUN_SECTION_TABS,
@@ -90,6 +95,9 @@ export const OBJECT_ACTIONS: Readonly<Record<ObjectKind, readonly ObjectAction[]
   ],
   session: [
     { id: 'record', label: 'Full record', primary: true },
+    { id: 'steps', label: 'Steps and what each did', tab: 'steps' },
+    { id: 'changes', label: 'Changes', tab: 'changes' },
+    { id: 'evidence', label: 'Evidence', tab: 'evidence' },
     { id: 'activity', label: 'Activity', tab: 'activity' },
     { id: 'helpers', label: 'Helpers', tab: 'helpers' },
     { id: 'stop', label: 'Stop this session', undoable: true },
@@ -152,7 +160,10 @@ export const RAW_CONTROLS: ReadonlyArray<{ control: string; homes: readonly RawH
   { control: 'Term (live PTY; take input)', homes: [{ on: 'helper', tab: 'terminal' }] },
   { control: 'Events (CoreEvent tail)', homes: [{ on: 'step', tab: 'events' }, { on: 'session', tab: 'activity' }, { surface: 'Watchtower', testid: 'watchtower' }] },
   { control: 'Transcript', homes: [{ on: 'step', tab: 'did' }, { on: 'helper', tab: 'did' }] },
-  { control: 'Diff', homes: [{ on: 'step', tab: 'changes' }, { surface: 'See everything', testid: 'desk-see-everything' }] },
+  { control: 'Diff', homes: [{ on: 'step', tab: 'changes' }, { on: 'session', tab: 'changes' }, { surface: 'See everything', testid: 'desk-see-everything' }] },
+  // S15d: what the retired run page carried (RunTimeline's rows and failure details, the evidence download).
+  { control: 'Timeline (steps in order, what each did, where it failed)', homes: [{ on: 'session', tab: 'steps' }, { on: 'step', tab: 'did' }] },
+  { control: 'Evidence bundle (download)', homes: [{ on: 'session', tab: 'evidence' }] },
   { control: 'Seats (auth, limit, reset, re-auth, route elsewhere)', homes: [{ on: 'helper', tab: 'signin' }, { on: 'session', tab: 'signins' }, { on: 'desk', tab: 'signins' }] },
   { control: 'Host (disk, stores)', homes: [{ on: 'desk', tab: 'computer' }] },
   { control: 'Policy ledger, detector, thresholds, conflicts', homes: [{ on: 'session', tab: 'governance' }, { on: 'session', tab: 'steering' }, { surface: 'Rules', testid: 'desk-rail-rules' }] },
