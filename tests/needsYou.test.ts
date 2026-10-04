@@ -303,3 +303,15 @@ describe('retryPrefillOf', () => {
     });
   });
 });
+
+describe('needsYouRows — a retried failure has its answer (S15a)', () => {
+  it('a failed run that a later run retried (retry_of names it) is not a row; an unretried one still is', () => {
+    const retry = makeView({ id: 'r-retry', status: 'executing' });
+    retry.session.retry_of = 'r-fail-a';
+    const rows = needsYouRows(inputs({
+      runs: [makeView({ id: 'r-fail-a', status: 'failed' }), makeView({ id: 'r-fail-b', status: 'failed' }), retry],
+      failedAt: { 'r-fail-a': NOW - HOUR, 'r-fail-b': NOW - HOUR },
+    }));
+    expect(rows.filter((r) => r.kind === 'failed-run').map((r) => r.key)).toStrictEqual(['fail:r-fail-b']);
+  });
+});

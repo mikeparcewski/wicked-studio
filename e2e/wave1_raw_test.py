@@ -23,7 +23,7 @@ import json
 import os
 import sys
 
-from uxfix_fixture import (HIDE_GATE_TOASTS, REPO, WAVE1_R1_EVENTS, ensure_build, set_fixture,
+from uxfix_fixture import (HIDE_GATE_TOASTS, REPO, STUDIO_SKIN, WAVE1_R1_EVENTS, ensure_build, set_fixture,
                            start_server)
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4342"))
@@ -31,7 +31,13 @@ W, H = 1440, 700
 SHOTS = REPO / "e2e" / "shots"
 SCROLL_TO = 240
 
-report: dict = {"ok": False, "steps": {}}
+report: dict = {"ok": False, "skin": STUDIO_SKIN, "steps": {}}
+# Under STUDIO_SKIN=desk (S15a: the desk variant, in run_journeys.py DESK) Home is the Desk: "where you
+# were" is the Desk's own scroller (data-place-scroll="desk") — the Desk has no Working band to expand —
+# and every palette, route and Back assertion is the same.
+DESK = STUDIO_SKIN == "desk"
+HOME = "desk" if DESK else "project-board"
+SCROLLER = '[data-place-scroll="desk"]' if DESK else '[data-place-scroll="home-board"]'
 
 
 def fail(step: str, why: str) -> None:
@@ -58,7 +64,7 @@ def palette_run(page, text: str) -> None:
 def back_home(page, step: str) -> None:
     page.go_back()
     page.wait_for_function("() => window.location.pathname === '/'", timeout=10000)
-    page.get_by_test_id("project-board").wait_for(state="visible", timeout=10000)
+    page.get_by_test_id(HOME).wait_for(state="visible", timeout=10000)
     check(f"{step}-back-palette-closed", page.get_by_test_id("command-palette").count() == 0)
 
 
@@ -77,18 +83,26 @@ with sync_playwright() as p:
 
     set_fixture(origin, wave1=True, gate_now=[])
     page.goto(f"{origin}/", wait_until="networkidle")
-    page.get_by_test_id("home-calm").wait_for(state="visible", timeout=15000)
+    if DESK:
+        page.wait_for_selector('[data-testid="desk-headline"][data-count="0"]', timeout=15000)
+        # The calm Desk is short at 1440x700: room below its content (a style in <head>, so it outlives the
+        # Desk's remount on Back) makes "where you were" a real scroll position.
+        page.evaluate("() => { const s = document.createElement('style');"
+                      " s.textContent = '[data-place-scroll=\"desk\"]::after { content: \"\"; display: block; height: 1200px; }';"
+                      " document.head.appendChild(s); }")
+    else:
+        page.get_by_test_id("home-calm").wait_for(state="visible", timeout=15000)
 
-    # ── where you were: the Working band expanded, the board scrolled ──────────
-    page.get_by_test_id("band-working").wait_for(state="visible", timeout=10000)
-    if page.get_by_test_id("band-working").get_attribute("data-expanded") == "false":
-        page.get_by_test_id("band-working-toggle").click()
-    page.wait_for_function(
-        "() => document.querySelectorAll('[data-testid=\"band-working\"] [data-testid=\"project-card\"]').length === 3",
-        timeout=10000)
-    page.evaluate(f"() => {{ document.querySelector('[data-place-scroll=\"home-board\"]').scrollTop = {SCROLL_TO}; }}")
+        # ── where you were: the Working band expanded, the board scrolled ──────────
+        page.get_by_test_id("band-working").wait_for(state="visible", timeout=10000)
+        if page.get_by_test_id("band-working").get_attribute("data-expanded") == "false":
+            page.get_by_test_id("band-working-toggle").click()
+        page.wait_for_function(
+            "() => document.querySelectorAll('[data-testid=\"band-working\"] [data-testid=\"project-card\"]').length === 3",
+            timeout=10000)
+    page.evaluate(f"(sel) => {{ document.querySelector(sel).scrollTop = {SCROLL_TO}; }}", SCROLLER)
     page.wait_for_timeout(300)
-    before = page.evaluate("() => document.querySelector('[data-place-scroll=\"home-board\"]').scrollTop")
+    before = page.evaluate("(sel) => document.querySelector(sel).scrollTop", SCROLLER)
     check("board-scrolled", before >= SCROLL_TO - 2, scroll_top=before)
 
     # ── >events r1 → the raw JSON event list ────────────────────────────────────
@@ -106,17 +120,18 @@ with sync_playwright() as p:
 
     # ── Back → `/`, palette closed, scroll restored ─────────────────────────────
     back_home(page, "events")
-    band = page.get_by_test_id("band-working")
-    check("back-band-still-expanded", band.get_attribute("data-expanded") == "true",
-          expanded=band.get_attribute("data-expanded"))
+    if not DESK:
+        band = page.get_by_test_id("band-working")
+        check("back-band-still-expanded", band.get_attribute("data-expanded") == "true",
+              expanded=band.get_attribute("data-expanded"))
     try:
         page.wait_for_function(
-            f"() => Math.abs(document.querySelector('[data-place-scroll=\"home-board\"]').scrollTop - {before}) <= 2",
+            f"(sel) => Math.abs(document.querySelector(sel).scrollTop - {before}) <= 2", arg=SCROLLER,
             timeout=5000)
         restored = True
     except Exception:  # noqa: BLE001 — reported below
         restored = False
-    after = page.evaluate("() => document.querySelector('[data-place-scroll=\"home-board\"]').scrollTop")
+    after = page.evaluate("(sel) => document.querySelector(sel).scrollTop", SCROLLER)
     page.screenshot(path=str(SHOTS / "wave1-raw-back.png"))
     check("back-scroll-restored", restored, before=before, after=after)
 

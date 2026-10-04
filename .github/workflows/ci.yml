@@ -115,13 +115,18 @@ jobs:
           path: e2e/shots/
           if-no-files-found: ignore
 
-  # The desk journeys (e2e/run_journeys.py DESK, DES-STUDIO-REBUILD-001 §6.2): journeys that assert
-  # the `desk` skin, run only under STUDIO_SKIN=desk. The leg skips its install, build and run while
-  # DESK is empty, so it costs one checkout until the first desk slice lands.
+  # The desk journeys (e2e/run_journeys.py DESK, DES-STUDIO-REBUILD-001 §6.2): the desk-only journeys
+  # plus every behaviour journey under STUDIO_SKIN=desk (S15a, §6.4), split into two interleaved shards
+  # so neither leg nears the timeout. `--check-desk` fails the leg if a behaviour journey neither runs
+  # under desk nor names its desk counterpart. The leg skips its install, build and run while DESK is empty.
   journeys-desk:
-    name: journeys (desk)
+    name: journeys (desk ${{ matrix.shard }})
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ['1/2', '2/2']
     env:
       STUDIO_SKIN: desk
       SKIP_STUDIO_BUILD: '1'
@@ -131,6 +136,7 @@ jobs:
       - name: Count the desk journeys
         id: desk
         run: |
+          python3 e2e/run_journeys.py --check-desk
           n=$(python3 -c "import sys; sys.path.insert(0, 'e2e'); import run_journeys; print(len(run_journeys.DESK))")
           echo "count=$n" >> "$GITHUB_OUTPUT"
           if [ "$n" = "0" ]; then echo "DESK is empty; skipping the desk leg"; fi
@@ -163,12 +169,12 @@ jobs:
 
       - name: Desk journeys
         if: steps.desk.outputs.count != '0'
-        run: python e2e/run_journeys.py --list desk
+        run: python e2e/run_journeys.py --list desk --shard ${{ matrix.shard }}
 
       - name: Upload screenshots
         if: failure() && steps.desk.outputs.count != '0'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: journey-shots-desk
+          name: journey-shots-desk-${{ strategy.job-index }}
           path: e2e/shots/
           if-no-files-found: ignore

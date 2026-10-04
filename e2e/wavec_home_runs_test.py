@@ -13,6 +13,11 @@ wavec_home_runs_test.py — Wave C, lane home-runs (brainstorm-actionable ideas 
           the bar carries the audited banner (who, why). While frozen, approving r-trust-deliver's
           deliver gate is refused with crew's message; after "Unfreeze" the same approve goes through.
 
+Under STUDIO_SKIN=desk (S15a: the desk variant, in run_journeys.py DESK) "Just the top one" sits in the
+Desk's header, and the freeze is switched where the Desk keeps it — "Look underneath" › Hold deliveries
+(the Desk has no status bar) — and said on the Desk as ONE row while on ("Deliveries frozen by …"),
+unfrozen from that row. The refusal, the audit and the approve-after-unfreeze are the same.
+
 Captures (e2e/shots/): wavec-<skin>-top.png, wavec-<skin>-reuse.png, wavec-<skin>-frozen.png.
 Env: FEEDBACK_PORT (default 4491), STUDIO_SKIN. JSON report; exit 0/1.
 """
@@ -160,9 +165,18 @@ with sync_playwright() as p:
         if not before.startswith("Deliver") and page.get_by_test_id("undo-toast").count() == 0:
             move.click()
 
+    def desk_freeze_open() -> None:
+        """The Desk keeps the switch under "Look underneath" › Hold deliveries."""
+        page.get_by_test_id("desk-sheet-open").click()
+        page.locator('[data-testid="sheet-tab"][data-tab="hold"]').click()
+        page.get_by_test_id("sheet-hold").wait_for(state="visible", timeout=8000)
+
     def section_freeze() -> None:
         reset(origin)
         page.goto(f"{origin}/", wait_until="networkidle")
+        if SKIN == "desk":
+            desk_freeze()
+            return
         open_btn = page.get_by_test_id("delivery-freeze-open")
         open_btn.wait_for(state="visible", timeout=15000)
         check("switch-in-status-bar", (open_btn.text_content() or "").strip() == "Freeze deliveries"
@@ -204,6 +218,58 @@ with sync_playwright() as p:
         page.get_by_test_id("delivery-freeze-confirm-btn").click()
         page.wait_for_function("""() => !document.querySelector('[data-testid="delivery-freeze-banner"]')""", timeout=8000)
         check("unfrozen", (page.get_by_test_id("delivery-freeze-open").text_content() or "").strip() == "Freeze deliveries")
+
+        approve_deliver()
+        deadline = time.monotonic() + 20
+        while len(gate_posts(origin, "r-trust-deliver")) < 2 and time.monotonic() < deadline:
+            page.wait_for_timeout(250)
+        posts = gate_posts(origin, "r-trust-deliver")
+        check("approve-goes-through-after-unfreeze", len(posts) == 2 and posts[1]["body"].get("approve") is True,
+              posts=len(posts))
+        page.wait_for_function("""() => [...document.querySelectorAll('[data-testid="undo-result"]')]
+            .some(e => e.getAttribute('data-kind') === 'sent')""", timeout=10000)
+
+    def desk_freeze() -> None:
+        page.get_by_test_id("desk").wait_for(state="visible", timeout=15000)
+        desk_freeze_open()
+        open_btn = page.get_by_test_id("sheet-hold").get_by_test_id("delivery-freeze-open")
+        check("switch-under-the-desk", (open_btn.text_content() or "").strip() == "Freeze deliveries")
+        open_btn.click()
+        consequence = text("delivery-freeze-consequence")
+        check("freeze-consequence-first", "no run pushes a branch or opens a PR until you unfreeze" in consequence,
+              consequence=consequence)
+        page.get_by_test_id("delivery-freeze-reason").fill("incident 42")
+        page.get_by_test_id("delivery-freeze-confirm-btn").click()
+        page.keyboard.press("Escape")  # close the sheet: the Desk says it
+        row = page.locator('[data-testid="desk-state"][data-state="frozen"]')
+        row.wait_for(state="visible", timeout=8000)
+        line = (row.get_by_test_id("desk-state-line").text_content() or "").strip()
+        check("banner-audited", line.startswith("Deliveries frozen by local") and "incident 42" in line, banner=line)
+        page.screenshot(path=str(SHOTS / f"wavec-{SKIN}-frozen.png"))
+
+        approve_deliver()
+        deadline = time.monotonic() + 20
+        while not gate_posts(origin, "r-trust-deliver") and time.monotonic() < deadline:
+            page.wait_for_timeout(250)
+        posts = gate_posts(origin, "r-trust-deliver")
+        check("approve-sent", len(posts) == 1 and posts[0]["body"].get("approve") is True, posts=posts)
+        page.wait_for_function("""() => [...document.querySelectorAll('[data-testid="undo-result"], [data-testid="steering-error"]')]
+            .some(e => e.textContent.includes('Deliveries are frozen'))""", timeout=10000)
+        msg = page.evaluate("""() => [...document.querySelectorAll('[data-testid="undo-result"], [data-testid="steering-error"]')]
+            .map(e => e.textContent).find(t => t.includes('Deliveries are frozen'))""")
+        check("frozen-refusal-is-clear", "unfreeze deliveries, then approve again" in msg
+              and "incident 42" in msg and page.get_by_test_id("gate-recommended").count() == 1, message=msg)
+        page.screenshot(path=str(SHOTS / f"wavec-{SKIN}-refused.png"))
+
+        # Unfreeze from the Desk's own row.
+        page.goto(f"{origin}/", wait_until="networkidle")
+        row = page.locator('[data-testid="desk-state"][data-state="frozen"]')
+        row.wait_for(state="visible", timeout=10000)
+        row.get_by_test_id("delivery-freeze-open").click()
+        check("unfreeze-consequence-first", "Deliver gates can be approved again" in text("delivery-freeze-consequence"))
+        page.get_by_test_id("delivery-freeze-confirm-btn").click()
+        page.wait_for_function("""() => !document.querySelector('[data-testid="desk-state"][data-state="frozen"]')""", timeout=8000)
+        check("unfrozen", True)
 
         approve_deliver()
         deadline = time.monotonic() + 20

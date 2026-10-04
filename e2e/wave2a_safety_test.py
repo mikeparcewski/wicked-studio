@@ -14,8 +14,12 @@ REAL 10 s window throughout. Against the `wave1` corpus with a SIMPLE gate waiti
   card      on /p/beta/build/b1, Approve on the gate card: the card reads "queued · undo in toast"
             with Approve disabled; its a key then says why it did nothing (a visible notice).
 
+Under STUDIO_SKIN=desk (S15a: the desk variant, in run_journeys.py DESK) the board is the Desk: the
+decision is queued from b1's Desk row (Answer, then 1 — the row's own pick, DES-STUDIO-REBUILD-001
+§5.6 rule 2) instead of the card wall's ⌥J ⌥A; every other step and assertion is the same.
+
 Capture: e2e/shots/wave2a-safety-elsewhere.png, wave2a-safety-newgate.png, wave2a-safety-card.png.
-Env: FEEDBACK_PORT (default 4354). Prints a JSON report; exit 0/1.
+Env: FEEDBACK_PORT (default 4354), STUDIO_SKIN. Prints a JSON report; exit 0/1.
 """
 
 import json
@@ -24,13 +28,16 @@ import sys
 import time
 import urllib.request
 
-from uxfix_fixture import HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server
+from uxfix_fixture import HIDE_GATE_TOASTS, REPO, STUDIO_SKIN, ensure_build, set_fixture, start_server
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4354"))
 W, H = 1440, 700
 SHOTS = REPO / "e2e" / "shots"
 
-report: dict = {"ok": False, "steps": {}}
+report: dict = {"ok": False, "skin": STUDIO_SKIN, "steps": {}}
+DESK = STUDIO_SKIN == "desk"
+# b1's row on the Desk (it may sit folded inside an approvals group).
+DESK_ROW = '[data-testid="need-row"][data-key="gate:b1"], [data-testid="need-member"][data-key="gate:b1"]'
 
 
 def fail(step: str, why: str) -> None:
@@ -73,11 +80,25 @@ def board(browser):
         "document.addEventListener('DOMContentLoaded', () => { const s = document.createElement('style'); "
         f"s.textContent = {json.dumps(HIDE_GATE_TOASTS)}; document.head.appendChild(s); }});")
     page.goto(f"{origin}/", wait_until="networkidle")
+    if DESK:
+        page.get_by_test_id("needs-you-queue").wait_for(state="visible", timeout=15000)
+        for t in page.locator('[data-testid="need-group-toggle"][aria-expanded="false"]').all():
+            t.click()
+        page.locator(DESK_ROW).wait_for(state="visible", timeout=10000)
+        return page
     page.get_by_test_id("gate-chip-b1").wait_for(state="visible", timeout=15000)
     return page
 
 
 def approve_on_board(page) -> float:
+    if DESK:
+        # The Desk answers a gate in its row: Answer opens the choices, 1 picks Approve (queued).
+        row = page.locator(DESK_ROW)
+        row.locator('[data-testid="need-answer"]').click()
+        row.locator('[data-testid="need-choices"]').wait_for(state="visible", timeout=10000)
+        page.keyboard.press("1")
+        page.get_by_test_id("undo-toast").wait_for(state="visible", timeout=3000)
+        return time.monotonic()
     page.evaluate("() => document.activeElement && document.activeElement.blur()")
     page.keyboard.press("Alt+j")
     page.wait_for_function(

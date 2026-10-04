@@ -205,7 +205,9 @@ with sync_playwright() as p:
     check("highlight-is-brief", True)
 
     # ── 4. finished → an overlay that shifts nothing ──────────────────────────
-    page.evaluate("() => document.querySelector('[data-place-scroll=\"home-board\"]')?.scrollTo(0, 0)")
+    # The page's own scroller (Home's board, or the Desk's under desk) back at the top.
+    page.evaluate("() => document.querySelectorAll('[data-place-scroll=\"home-board\"], [data-place-scroll=\"desk\"]')"
+                  ".forEach((el) => el.scrollTo(0, 0))")
     page.wait_for_timeout(300)
     before = page.evaluate(POSITIONS)
     page.locator('[data-testid="handover-chip"][data-section="finished"]').click()
@@ -297,7 +299,8 @@ with sync_playwright() as p:
     page.get_by_test_id("handover-panel").wait_for(state="visible", timeout=10000)
 
     # ── 6. Got it; reload: gone until the next absence ────────────────────────
-    page.evaluate("() => document.querySelector('[data-place-scroll=\"home-board\"]')?.scrollTo(0, 0)")
+    page.evaluate("() => document.querySelectorAll('[data-place-scroll=\"home-board\"], [data-place-scroll=\"desk\"]')"
+                  ".forEach((el) => el.scrollTo(0, 0))")
     with_top = page.get_by_test_id("needs-you-queue").bounding_box()["y"]
     page.get_by_test_id("handover-dismiss").click()
     page.wait_for_function("() => !document.querySelector('[data-testid=\"handover-panel\"]')", timeout=3000)

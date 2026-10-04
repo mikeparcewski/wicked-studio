@@ -1007,6 +1007,7 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
 .wk-sheet-open { border: 0; background: transparent; color: var(--ink-muted); font-size: var(--text-lg); cursor: pointer; padding: 0 6px; border-radius: var(--radius-sm); line-height: 1; }
 .wk-sheet-open:hover { color: var(--ink-high); background: var(--surface-raised); }
 .wk-desk-head-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.wk-desk-orders { margin-left: auto; min-width: 0; display: flex; align-items: baseline; gap: 8px; }
 .wk-chain-open { border: 0; background: transparent; padding: 0; color: inherit; font: inherit; cursor: pointer; }
 .wk-chain-open:hover { text-decoration: underline; }
 .wk-alt-peek {

@@ -12,8 +12,8 @@
   "studioVersion": "0.5.19",
   "counts": {
     "files": 214,
-    "occurrences": 2387,
-    "static": 2088,
+    "occurrences": 2389,
+    "static": 2089,
     "dynamic": 80,
     "computed": 7
   },
@@ -2579,6 +2579,12 @@
     },
     {
       "testId": "desk-chore",
+      "files": [
+        "src/components/desk/Desk.tsx"
+      ]
+    },
+    {
+      "testId": "desk-chore-line",
       "files": [
         "src/components/desk/Desk.tsx"
       ]
