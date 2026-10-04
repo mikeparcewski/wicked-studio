@@ -12,8 +12,8 @@
   "studioVersion": "0.5.19",
   "counts": {
     "files": 214,
-    "occurrences": 2377,
-    "static": 2078,
+    "occurrences": 2381,
+    "static": 2082,
     "dynamic": 80,
     "computed": 7
   },
@@ -2627,6 +2627,12 @@
       ]
     },
     {
+      "testId": "desk-projects-unread",
+      "files": [
+        "src/components/desk/Desk.tsx"
+      ]
+    },
+    {
       "testId": "desk-rail-badge",
       "files": [
         "src/board/objectActions.ts",
@@ -2680,6 +2686,18 @@
       "testId": "desk-rule-see",
       "files": [
         "src/components/desk/DeskRuleLine.tsx"
+      ]
+    },
+    {
+      "testId": "desk-runs-failed",
+      "files": [
+        "src/components/desk/Desk.tsx"
+      ]
+    },
+    {
+      "testId": "desk-runs-retry",
+      "files": [
+        "src/components/desk/Desk.tsx"
       ]
     },
     {
@@ -3412,6 +3430,12 @@
     },
     {
       "testId": "failure-plain",
+      "files": [
+        "src/components/FailureBanner.tsx"
+      ]
+    },
+    {
+      "testId": "failure-reject-note",
       "files": [
         "src/components/FailureBanner.tsx"
       ]

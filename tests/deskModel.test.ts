@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { RosterSeat, SessionView } from '../src/api/types.js';
 import type { NeedRow } from '../src/board/needsYou.js';
 import { groupAlike, needCount } from '../src/board/needsQueue.js';
+import { deskReadState } from '../src/board/deskModel.js';
 import {
   DESK_DESTINATIONS,
   START_CHIPS,
@@ -200,5 +201,19 @@ describe('the Start row and the rail destinations', () => {
       'settings:/system', 'settings:/theme', 'settings:/workflows',
     ]);
     for (const d of DESK_DESTINATIONS) expect(d.path.startsWith('/')).toBe(true);
+  });
+});
+
+/** studio#466 (codex on #486): what the Desk can say about its work, from the runs read alone. */
+describe('deskReadState', () => {
+  it('before the first answer: checking; a first read that failed: failed, nothing to show', () => {
+    expect(deskReadState(false, null)).toBe('checking');
+    expect(deskReadState(false, 'HTTP 500')).toBe('failed');
+  });
+  it('a refresh that failed after a good read: the failure is said, the last read is kept and named as such', () => {
+    expect(deskReadState(true, 'HTTP 500')).toBe('stale');
+  });
+  it('a good read: the verdict', () => {
+    expect(deskReadState(true, null)).toBe('known');
   });
 });

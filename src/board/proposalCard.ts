@@ -1,10 +1,11 @@
+import { plainGateQuestion } from './deskWords.js';
 import { executingOrd } from '../api/run-state.js';
 import type { SessionView, WorkUnit } from '../api/types.js';
 import { deliverUnit, deliveryOf } from '../components/delivery.js';
 import { deliverTargetOf, isDeliverGate } from '../components/gateMoveModel.js';
 import type { OpenGate } from '../store/gates.js';
 import type { GateActionState } from './gateActions.js';
-import { distinctLabels, stepLabelOf, type ChainModel } from './chainModel.js';
+import { gatePlanLabels, type ChainModel } from './chainModel.js';
 import { plainDeliverSentence, repoNameOf } from './deskWords.js';
 
 /**
@@ -24,7 +25,9 @@ import { plainDeliverSentence, repoNameOf } from './deskWords.js';
  *  - "Not now" sends nothing: the proposal is kept in the thread, with "Bring it back".
  */
 
-export type ProposalKind = 'plan' | 'deliver';
+/** `step` (studio#469): any other open gate — a step before it runs, a step's output, an author's
+ *  own question — so every gate the session says is "Waiting on you" can be answered there. */
+export type ProposalKind = 'plan' | 'deliver' | 'step';
 export type ProposalState = 'ask' | 'confirm' | 'run' | 'done' | 'cancelled' | 'fail' | 'no';
 
 /** A step's label in words: never the engine's instruction segment (` ||| …`, `INSTRUCTION_SEP`). */
@@ -68,7 +71,28 @@ export function proposalKindOf(runId: string, gate: OpenGate | undefined, units:
   if (gate.gateKind === 'plan_approval' || /^\s*Approve plan rev \d+/i.test(gate.prompt)) return 'plan';
   if (gate.gateKind === 'escalation' || FAILURE_PROMPT.test(gate.prompt)) return null;
   if (gate.gateKind === 'deliver' || isDeliverGate(runId, units, gate.ord)) return 'deliver';
-  return null;
+  // Gate kinds that are not a plain yes to the next step (a team dispute, the transport) stay with
+  // their own cards; every other gate is a step to approve (studio#469).
+  if (gate.gateKind !== undefined && !STEP_GATE_KINDS.has(gate.gateKind)) return null;
+  return 'step';
+}
+
+/** The gate kinds a step proposal answers: a workflow's declared gate, the launch's pre-execution
+ *  gate, and a gate whose daemon names no kind. */
+const STEP_GATE_KINDS: ReadonlySet<string> = new Set(['def', 'run_level', 'unit_review']);
+
+/** A step gate's question, in the Desk row's words (`plainGateQuestion`): "Start the triage step?",
+ *  "Accept the review?", or the author's own question. */
+export function stepQuestion(gate: OpenGate): { text: string; why: string } {
+  const q = plainGateQuestion(gate.prompt, gate.gateKind);
+  const what = /^Approve (.+)$/.exec(q)?.[1];
+  if (/^\s*Approve unit \d+ before it runs/i.test(gate.prompt) && what !== undefined) {
+    return { text: `Start ${what}?`, why: 'Go lets it start; nothing runs until you say so.' };
+  }
+  if (/^\s*Approve the output of unit \d+/i.test(gate.prompt) && what !== undefined) {
+    return { text: `Accept ${what}?`, why: 'Go accepts it and the run goes on.' };
+  }
+  return { text: q, why: 'Go approves it; Not now leaves it waiting.' };
 }
 
 /** One gate instance: a run can reopen a gate at the same ord, which asks afresh (Copilot). */
@@ -77,18 +101,25 @@ export function gateInstance(gate: OpenGate | undefined): string | null {
 }
 
 /** A plan's steps in words, in the chain's own labels (studio#442: one name per step, from one
- *  source): a proposal newer than the accepted plan (`chain.pending`, the plan gate's question),
- *  else the PROPOSED team chain when it has reached the bus (never the units, never an older
- *  accepted revision), else the gate prompt's own arrow list (`… : a → b → c`), each id named as
- *  the chain names it, with the gate's trailing instruction sentence dropped (Copilot). */
+ *  source). WHICH steps: the plan gate's own plan when its prompt lists one — what Go approves,
+ *  floor additions included (studio#470: the PA's proposal on the bus predates the floor fill) —
+ *  else a proposal newer than the accepted plan (`chain.pending`), else the PROPOSED team chain
+ *  (never the units, never an older accepted revision). Each id is named as the chain names it,
+ *  the gate's trailing sentences dropped (Copilot). */
 export function planSteps(chain: ChainModel, prompt: string | undefined): string[] {
+  const fromGate = gatePlanLabels(prompt, chain.source === 'team' ? chain.steps : []);
+  if (fromGate !== null) return fromGate.labels;
   if (chain.source === 'team' && chain.pending !== undefined && chain.pending.length > 0) return chain.pending.map((s) => s.label);
   if (chain.source === 'team' && chain.proposed && chain.steps.length > 0) return chain.steps.map((s) => s.label);
-  const list = /\):\s*(.+)$/s.exec(prompt ?? '')?.[1];
-  if (list === undefined) return [];
-  const steps = list.split('→').map((s) => s.trim()).filter((s) => s !== '');
-  if (steps.length > 0) steps[steps.length - 1] = steps[steps.length - 1]!.split(/[.;]\s/)[0]!.replace(/[.;]$/, '').trim();
-  return distinctLabels(steps.filter((s) => s !== '').map((id) => ({ id, label: stepLabelOf(id) }))).map((s) => s.label);
+  return [];
+}
+
+/** studio#470: the steps the floor added to the plan, said under the proposal ("+3 required by the
+ *  floor: Test plan, Architecture, Security check"), or null when it added none. */
+export function floorLine(prompt: string | undefined, chain?: ChainModel): string | null {
+  // The same known steps `planSteps` labels with, so the line names them as the sentence does.
+  const floor = gatePlanLabels(prompt, chain !== undefined && chain.source === 'team' ? chain.steps : [])?.floor ?? [];
+  return floor.length === 0 ? null : `${floor.length} required by the floor: ${floor.join(', ')}.`;
 }
 
 /** "Here's the plan: Research → Build → Test (3 steps)." */
@@ -176,7 +207,7 @@ function deliverEvidence(view: SessionView): ProposalKind | null {
 
 function base(kind: ProposalKind): ProposalCardModel {
   return {
-    kind, state: 'ask', text: '', why: null, act: kind === 'plan' ? 'Go' : 'Deliver', confirm: null,
+    kind, state: 'ask', text: '', why: null, act: kind === 'deliver' ? 'Deliver' : 'Go', confirm: null,
     runLabel: null, live: null, out: null, reason: null, canRetry: false,
   };
 }
@@ -190,13 +221,14 @@ export function proposalCard(input: ProposalInput): ProposalCardModel | null {
 
   if (kind !== null && gate !== undefined) {
     const card = base(kind);
-    card.text = kind === 'plan' ? planSentence(planSteps(chain, gate.prompt)) : 'Ready to hand it over.';
+    const step = kind === 'step' ? stepQuestion(gate) : null;
+    card.text = kind === 'plan' ? planSentence(planSteps(chain, gate.prompt)) : step !== null ? step.text : 'Ready to hand it over.';
     card.why = kind === 'plan'
-      ? 'Go starts the work; nothing is built until you say so.'
-      : deliverLine(view, gate, input.repoName ?? null);
+      ? ['Go starts the work; nothing is built until you say so.', floorLine(gate.prompt, chain)].filter((x) => x !== null).join(' ')
+      : step !== null ? step.why : deliverLine(view, gate, input.repoName ?? null);
     if (action.queued || action.busy || action.answered !== null) {
       return {
-        ...card, state: 'run', runLabel: kind === 'plan' ? 'Going' : 'Handing over',
+        ...card, state: 'run', runLabel: kind === 'deliver' ? 'Handing over' : 'Going',
         live: action.queued ? 'Sending in a moment — Undo is in the notice' : 'Sending your answer',
       };
     }

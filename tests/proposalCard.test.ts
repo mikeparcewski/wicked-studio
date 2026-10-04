@@ -1,4 +1,5 @@
 // @vitest-environment node
+import { gatePlanOf, stepLabelOf, withGatePlan } from '../src/board/chainModel.js';
 import { describe, expect, it } from 'vitest';
 import type { SessionView, SessionWithDelivery } from '../src/api/types.js';
 import type { ChainModel, ChainStep } from '../src/board/chainModel.js';
@@ -45,9 +46,10 @@ describe('the proposal: the plan, in one sentence, with Go / Not now', () => {
     expect(c.text).not.toMatch(/rev|unit|band|mode/);
   });
 
-  it('prefers the proposed chain’s own labels when the plan has reached the bus', () => {
+  it('the gate’s own plan decides which steps (studio#470); the proposed chain stands in only when the prompt lists none', () => {
     const proposed = chain([step('a', 'Research', 'todo'), step('b', 'Build', 'todo')], { proposed: true });
-    expect(planSteps(proposed, PLAN_PROMPT)).toStrictEqual(['Research', 'Build']);
+    expect(planSteps(proposed, PLAN_PROMPT)).toStrictEqual(['Research', 'Build', 'Test', 'Review', 'Deliver']);
+    expect(planSteps(proposed, 'Approve the plan?')).toStrictEqual(['Research', 'Build']);
     expect(planSentence(['Research'])).toBe('Here’s the plan: Research (1 step).');
   });
 
@@ -97,10 +99,10 @@ describe('the proposal: the plan, in one sentence, with Go / Not now', () => {
     expect(c.runLabel).toBe('Going');
   });
 
-  it('a run that never proposed has no card; other gates are not proposals', () => {
+  it('a run that never proposed has no card; any other open gate is a step proposal (studio#469)', () => {
     expect(proposalCard({ view: run('r1', 'executing'), gate: undefined, chain: EMPTY, action: IDLE_GATE_ACTION, ui: NO_UI })).toBeNull();
     const plain = openGate({ prompt: 'Approve the TTL bump?', ord: 1, gateKind: 'def' });
-    expect(proposalCard({ view: run('r1', 'awaiting_human'), gate: plain, chain: EMPTY, action: IDLE_GATE_ACTION, ui: NO_UI })).toBeNull();
+    expect(proposalCard({ view: run('r1', 'awaiting_human'), gate: plain, chain: EMPTY, action: IDLE_GATE_ACTION, ui: NO_UI })?.kind).toBe('step');
   });
 });
 
@@ -286,9 +288,118 @@ describe('studio#442: the proposal names the steps the chain names', () => {
   it('the prompt fallback says each step id in the chain’s words, never "Pa scope"', () => {
     expect(planSteps(EMPTY, REEL_PROMPT)).toStrictEqual(['Scope', 'Clarify', 'Plan', 'Build', 'Challenge', 'Test', 'Review']);
   });
-  it('a pending proposal on the team bus is the plan the card proposes, in the chain’s labels', () => {
+  it('a pending proposal on the team bus is the plan the card proposes when the gate lists no steps; the gate’s list wins (studio#470)', () => {
     const pending = [step('pa-scope', 'Scope', 'todo'), step('build', 'Build', 'todo')];
     const accepted = chain([step('pa-scope', 'Scope', 'done')], { pending });
-    expect(planSteps(accepted, REEL_PROMPT)).toStrictEqual(['Scope', 'Build']);
+    expect(planSteps(accepted, 'Approve the next plan?')).toStrictEqual(['Scope', 'Build']);
+    expect(planSteps(accepted, REEL_PROMPT)).toStrictEqual(['Scope', 'Clarify', 'Plan', 'Build', 'Challenge', 'Test', 'Review']);
+  });
+});
+
+/** studio#470: the proposal and the chain name the steps the run will run — the gate's own plan,
+ *  floor additions included — in the words the chain keeps after Go. */
+describe('the floor-filled plan (studio#470)', () => {
+  const FLOOR_PROMPT = 'Approve plan rev 2 before unit 1 runs (high risk: auto mode still requires approval; band 60-79, high risk; auto mode): '
+    + 'pa-scope → clarify → test_plan (floor) → design → architecture (floor) → build → adversarial-review → test → review → '
+    + 'security_review (floor) → deliver. Floor added: test_plan, architecture, security_review';
+  const AFTER_GO = ['Scope', 'Clarify', 'Test plan', 'Design', 'Architecture', 'Build', 'Challenge', 'Test', 'Review', 'Security check', 'Deliver'];
+  // The PA's proposal on the bus, before the floor filled it: 8 steps.
+  const PA = chain(['pa-scope', 'clarify', 'design', 'build', 'adversarial-review', 'test', 'review', 'deliver']
+    .map((id) => step(id, stepLabelOf(id), 'todo')), { proposed: true });
+
+  it('the gate\'s plan parsed: ids without the floor marker, and which ones the floor added', () => {
+    expect(gatePlanOf(FLOOR_PROMPT)).toStrictEqual({
+      ids: ['pa-scope', 'clarify', 'test_plan', 'design', 'architecture', 'build', 'adversarial-review', 'test', 'review', 'security_review', 'deliver'],
+      floor: ['test_plan', 'architecture', 'security_review'],
+    });
+    expect(gatePlanOf('Approve unit 1 before it runs: triage')).toBeNull();
+  });
+
+  it('the proposal counts and names the 11 steps the run will run, as the chain names them after Go', () => {
+    expect(planSteps(PA, FLOOR_PROMPT)).toStrictEqual(AFTER_GO);
+    const c = proposalCard({ view: run('r1', 'awaiting_human'), gate: openGate({ prompt: FLOOR_PROMPT, ord: 1, gateKind: 'plan_approval' }), chain: PA, action: IDLE_GATE_ACTION, ui: NO_UI })!;
+    expect(c.text).toBe(`Here’s the plan: ${AFTER_GO.join(' → ')} (11 steps).`);
+    expect(c.why ?? '').toContain('3 required by the floor: Test plan, Architecture, Security check');
+  });
+
+  it('the chain under it shows the same 11 while the gate waits — the floor steps marked as the floor\'s', () => {
+    const shown = withGatePlan(PA, FLOOR_PROMPT);
+    expect(shown.steps.map((s) => s.label)).toStrictEqual(AFTER_GO);
+    expect(shown.total).toBe(11);
+    expect(shown.steps.filter((s) => s.addedBy === 'floor').map((s) => s.id)).toStrictEqual(['test_plan', 'architecture', 'security_review']);
+    // An accepted plan is the run's own: the gate's plan never rewrites it.
+    const accepted = chain(PA.steps, { proposed: false });
+    expect(withGatePlan(accepted, FLOOR_PROMPT)).toBe(accepted);
+  });
+});
+
+/** studio#469: every gate that says "Waiting on you" on the session can be answered there. */
+describe('a step gate is a proposal too (studio#469)', () => {
+  const PRE = 'Approve unit 1 before it runs: triage — SAVE20 should give twenty percent off ||| PHASE SCOPE: read the code';
+  const OUT = 'Approve the output of unit 3 (review — Fix the importer)';
+  it('a pre-unit gate proposes its step, in the Desk row\'s words, with Go / Not now', () => {
+    const c = proposalCard({ view: run('r1', 'awaiting_human'), gate: openGate({ prompt: PRE, ord: 1, gateKind: 'run_level' }), chain: EMPTY, action: IDLE_GATE_ACTION, ui: NO_UI })!;
+    expect(c.kind).toBe('step');
+    expect(c.state).toBe('ask');
+    expect(c.text).toBe('Start the triage step?');
+    expect(c.act).toBe('Go');
+    expect(`${c.text} ${c.why ?? ''}`).not.toMatch(/\|\|\||PHASE SCOPE|unit \d/);
+  });
+  it('an output gate asks to accept the step', () => {
+    const c = proposalCard({ view: run('r1', 'awaiting_human'), gate: openGate({ prompt: OUT, ord: 4, gateKind: 'def' }), chain: EMPTY, action: IDLE_GATE_ACTION, ui: NO_UI })!;
+    expect(c.kind).toBe('step');
+    expect(c.text).toBe('Accept the review?');
+  });
+  it('an author\'s own question is kept; an escalation and a failure are still never proposals', () => {
+    expect(proposalCard({ view: run('r1', 'awaiting_human'), gate: openGate({ prompt: 'Approve the TTL bump?', gateKind: 'def' }), chain: EMPTY, action: IDLE_GATE_ACTION, ui: NO_UI })!.text).toBe('Approve the TTL bump?');
+    expect(proposalKindOf('r1', openGate({ prompt: 'Unit 1 failed and triage escalated', gateKind: 'escalation' }), [])).toBeNull();
+    expect(proposalKindOf('r1', openGate({ prompt: 'LIFT-CONFLICT on src/a.ts' }), [])).toBeNull();
+  });
+  it('answered, it is "Going" and then the run\'s progress', () => {
+    const c = proposalCard({ view: run('r1', 'awaiting_human'), gate: openGate({ prompt: PRE, ord: 1, gateKind: 'run_level' }), chain: EMPTY, action: { ...IDLE_GATE_ACTION, queued: true }, ui: NO_UI })!;
+    expect(c.state).toBe('run');
+    expect(c.runLabel).toBe('Going');
+  });
+});
+
+describe('codex on #486 (#470 delta)', () => {
+  it('a rev-2 plan gate over an accepted plan: the chain shows the gate\'s plan, the history kept, one count with the proposal', () => {
+    const prompt = 'Approve plan rev 2 before unit 2 runs (manual mode; band 20-39; manual mode): pa-scope → test_plan (floor) → build. Floor added: test_plan';
+    const accepted = chain([step('pa-scope', 'Scope', 'done'), step('build', 'Build', 'todo')], {
+      pending: [step('pa-scope', 'Scope', 'todo'), step('build', 'Build', 'todo')],
+    });
+    const shown = withGatePlan(accepted, prompt);
+    expect(shown.steps.map((s) => [s.id, s.state, s.addedBy])).toStrictEqual([['pa-scope', 'done', 'pa'], ['test_plan', 'todo', 'floor'], ['build', 'todo', 'pa']]);
+    expect([shown.done, shown.total]).toStrictEqual([1, 3]);
+    expect(shown.pending?.map((s) => s.label)).toStrictEqual(planSteps(accepted, prompt));
+    // The pending plan keeps each step's real state (codex r2).
+    expect(shown.pending?.map((s) => s.state)).toStrictEqual(['done', 'todo', 'todo']);
+  });
+
+  it('the accepted chain is never reordered; a step no longer planned stays where it ran (codex r2)', () => {
+    const prompt = 'Approve plan rev 2 before unit 3 runs (manual mode; band 20-39; manual mode): pa-scope → build';
+    const accepted = chain([step('pa-scope', 'Scope', 'done'), step('design', 'Plan', 'done'), step('build', 'Build', 'todo')], {
+      pending: [step('pa-scope', 'Scope', 'todo'), step('build', 'Build', 'todo')],
+    });
+    expect(withGatePlan(accepted, prompt).steps.map((s) => s.id)).toStrictEqual(['pa-scope', 'design', 'build']);
+  });
+
+  it('a prompt older than the bus\'s pending plan does not override it (codex r2)', () => {
+    const stale = 'Approve plan rev 1 before unit 1 runs (manual mode; band 20-39; manual mode): pa-scope → build';
+    const accepted = chain([step('pa-scope', 'Scope', 'done'), step('build', 'Build', 'todo')], {
+      pending: [step('pa-scope', 'Scope', 'todo'), step('test_plan', 'Test plan', 'todo'), step('build', 'Build', 'todo')],
+    });
+    expect(withGatePlan(accepted, stale)).toBe(accepted);
+    // Same ids, an older order: still not the bus's plan (codex r3).
+    const reordered = 'Approve plan rev 1 before unit 1 runs (manual mode; band 20-39; manual mode): pa-scope → build → test_plan';
+    expect(withGatePlan(accepted, reordered)).toBe(accepted);
+  });
+
+  it('the floor line names the floor\'s steps as the proposal sentence names them', () => {
+    const prompt = 'Approve plan rev 2 before unit 1 runs (manual mode; band 20-39; manual mode): ux-review (floor) → build. Floor added: ux-review';
+    const known = chain([{ id: 'ux-review', catalog: 'review', block: 'review', label: 'x', state: 'todo', addedBy: 'pa' }], { proposed: true });
+    const c = proposalCard({ view: run('r1', 'awaiting_human'), gate: openGate({ prompt, gateKind: 'plan_approval' }), chain: known, action: IDLE_GATE_ACTION, ui: NO_UI })!;
+    const first = planSteps(known, prompt)[0]!;
+    expect(c.why ?? '').toContain(`1 required by the floor: ${first}.`);
   });
 });

@@ -83,6 +83,23 @@ export function deriveProvenance(
   };
 }
 
+/**
+ * studio#478: the note the operator typed when they rejected a gate, off the same audit page —
+ * crew records every gate decision as `gate.decided` with `detail.approve` and `detail.amend`. The
+ * newest rejection for this run that carried words; `null` when none did. (The engine's own
+ * `gate.decided` team event has no note; the HTTP audit is where the words are kept.)
+ */
+export function rejectNoteOf(entries: readonly AuditEntry[], runId: string): string | null {
+  for (const e of entries) {
+    if (e.action !== 'gate.decided' || e.runId !== runId) continue;
+    const d = (e.detail ?? {}) as Record<string, unknown>;
+    if (d['approve'] !== false) continue;
+    const amend = typeof d['amend'] === 'string' ? d['amend'].trim() : '';
+    if (amend !== '') return amend;
+  }
+  return null;
+}
+
 /** SessionStorage key for runs this studio session launched (survives page reload). */
 const SESSION_KEY = 'wk-studio-launches';
 
@@ -107,6 +124,8 @@ function writeSessionLaunch(runId: string): void {
 interface ProvenanceStore {
   /** Derived provenance per run id — the cache list rows read (no fan-out). */
   byRun: Record<string, Provenance>;
+  /** studio#478: the newest reject note per run ({@link rejectNoteOf}), from the same one fetch. */
+  rejectNotes: Record<string, string | null>;
   /** Run ids THIS studio session launched (the `studio` channel witness). */
   launchedHere: Record<string, true>;
   markLaunchedHere: (runId: string) => void;
@@ -119,6 +138,7 @@ const inflight = new Set<string>();
 
 export const useProvenanceStore = create<ProvenanceStore>((set, get) => ({
   byRun: {},
+  rejectNotes: {},
   launchedHere: {},
 
   markLaunchedHere: (runId) => {
@@ -142,6 +162,7 @@ export const useProvenanceStore = create<ProvenanceStore>((set, get) => ({
             ...s.byRun,
             [runId]: deriveProvenance(entries, runId, launchedHere),
           },
+          rejectNotes: { ...s.rejectNotes, [runId]: rejectNoteOf(entries, runId) },
         }));
       })
       .catch(() => {

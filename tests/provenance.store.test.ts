@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { waitFor } from '@testing-library/react';
 import * as client from '../src/api/client.js';
 import type { AuditEntry } from '../src/api/types.js';
-import { deriveProvenance, useProvenanceStore } from '../src/store/provenance.js';
+import { deriveProvenance, rejectNoteOf, useProvenanceStore } from '../src/store/provenance.js';
 
 /**
  * DES-UX-001 §3 — provenance derivation over the REAL audit wire shape
@@ -155,5 +155,34 @@ describe('useProvenanceStore.load (§3.5: one fetch per run id, cached)', () => 
       const p = useProvenanceStore.getState().byRun['r-reload'];
       expect(p?.state === 'known' && p.channel).toBe('studio');
     });
+  });
+});
+
+/** studio#478: the reject note the operator typed, off crew's `gate.decided` audit (`detail.amend`). */
+describe('rejectNoteOf', () => {
+  const decided = (runId: string, detail: Record<string, unknown>, ts = 1_700_000_001_000): AuditEntry => ({
+    ts, action: 'gate.decided', actor: { id: 'mika', kind: 'human', trust: 'operator' }, runId, detail,
+  });
+  it('the newest rejection with a note for this run (the page is newest-first)', () => {
+    const entries = [
+      decided('r-1', { approve: false, amend: 'the venue is booked; plan around the hall' }, 3),
+      decided('r-1', { approve: false, amend: 'older note' }, 2),
+      launched('r-1'),
+    ];
+    expect(rejectNoteOf(entries, 'r-1')).toBe('the venue is booked; plan around the hall');
+  });
+  it('null for an approval, a rejection without a note, another run, or no decision', () => {
+    expect(rejectNoteOf([decided('r-1', { approve: true, amend: 'steer' })], 'r-1')).toBeNull();
+    expect(rejectNoteOf([decided('r-1', { approve: false })], 'r-1')).toBeNull();
+    expect(rejectNoteOf([decided('r-1', { approve: false, amend: '  ' })], 'r-1')).toBeNull();
+    expect(rejectNoteOf([decided('r-2', { approve: false, amend: 'x' })], 'r-1')).toBeNull();
+    expect(rejectNoteOf([launched('r-1')], 'r-1')).toBeNull();
+  });
+  it('the store keeps it beside the provenance, from the same one fetch', async () => {
+    const spy = vi.spyOn(client.api, 'getAudit').mockResolvedValue({ entries: [decided('r-478', { approve: false, amend: 'not this week' }), launched('r-478')] });
+    useProvenanceStore.getState().load('r-478');
+    await waitFor(() => expect(useProvenanceStore.getState().rejectNotes['r-478']).toBe('not this week'));
+    expect(spy).toHaveBeenCalledTimes(1);
+    spy.mockRestore();
   });
 });

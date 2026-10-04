@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { GroupChat } from '../src/components/GroupChat.js';
+import { clearRetryPrefill, peekRetryPrefill } from '../src/store/retryPrefill.js';
 
 /**
  * FINDING-027 — the per-mount chat leak.
@@ -501,3 +502,49 @@ describe('DES-L5 §5-i — a rejoin replays the persisted transcript (F-RC1-115 
     expect(screen.queryByTestId('user-bubble')).toBeNull();
   });
 });
+
+describe('studio#451 — Continue in Build on a rejoined chat carries its live seats', () => {
+  it('no seat has replied yet and nothing was picked this mount: the chat\'s own live seats ride into Build', async () => {
+    clearRetryPrefill();
+    sessionStorage.setItem('wicked.chat.r1', 'live-id');
+    getChat.mockResolvedValue({
+      chatId: 'live-id', seats: ['claude', 'codex'], scope: null, refused: [],
+      messages: [{ at: 1, turnId: 't1', kind: 'user', seats: ['claude', 'codex'], text: 'why is the importer slow?' }],
+    });
+    const navigate = vi.fn();
+    render(<GroupChat repoId="r1" onBack={() => undefined} navigate={navigate} />);
+    const promote = await screen.findByTestId('chat-promote');
+    fireEvent.click(promote);
+    expect(navigate).toHaveBeenCalled();
+    expect(peekRetryPrefill()?.clis).toEqual(['claude', 'codex']);
+  });
+
+  it('a seat the chat refused is not carried, even when the probe lists it (codex r3 on #486)', async () => {
+    clearRetryPrefill();
+    sessionStorage.setItem('wicked.chat.r1', 'live-id');
+    getChat.mockResolvedValue({
+      chatId: 'live-id', seats: ['claude', 'codex'], scope: null,
+      refused: [{ cliKey: 'codex', reason: 'not signed in' }],
+      messages: [{ at: 1, turnId: 't1', kind: 'user', seats: ['claude'], text: 'why is the importer slow?' }],
+    });
+    const navigate = vi.fn();
+    render(<GroupChat repoId="r1" onBack={() => undefined} navigate={navigate} />);
+    fireEvent.click(await screen.findByTestId('chat-promote'));
+    expect(peekRetryPrefill()?.clis).toEqual(['claude']);
+  });
+
+  it('with no warm seat left, the chip selection is carried minus any seat the chat refused', async () => {
+    clearRetryPrefill();
+    sessionStorage.setItem('wicked.chat.r1', 'live-id');
+    getChat.mockResolvedValue({
+      chatId: 'live-id', seats: ['claude'], scope: null,
+      refused: [{ cliKey: 'claude', reason: 'not signed in' }],
+      messages: [{ at: 1, turnId: 't1', kind: 'user', seats: ['claude'], text: 'why is the importer slow?' }],
+    });
+    const navigate = vi.fn();
+    render(<GroupChat repoId="r1" onBack={() => undefined} navigate={navigate} />);
+    fireEvent.click(await screen.findByTestId('chat-promote'));
+    expect(peekRetryPrefill()?.clis ?? []).not.toContain('claude');
+  });
+});
+

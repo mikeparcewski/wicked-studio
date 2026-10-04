@@ -120,7 +120,7 @@ const DESK_COMPOSER_PX = 96;
 
 export function App(): React.ReactElement {
   const { panel, runId, repoId, projectId, mode, artifactId, showLaunch, showRegisterRepo, chatMode, chronicleView, campaignsView, campaignId, steeringSection, testingPage, ruleId, navigate, search, pathname } = useRoute();
-  const { runs, refresh, loaded: runsLoaded } = useRuns();
+  const { runs, refresh, loaded: runsLoaded, error: runsError } = useRuns();
   const ingestGate = useGateStore((s) => s.ingest);
   const ingestCampaign = useCampaignsStore((s) => s.ingest);
   const ingestAnnotation = useAnnotationStore((s) => s.ingest);
@@ -409,7 +409,7 @@ export function App(): React.ReactElement {
   // ── THE needs-you queue, app-wide: one fold over the app-level sources (useNeedsRows) —
   // the right rail renders it on every route, peek shows its top item, Home reads the same.
   const needsNow = useNeedsClock();
-  const needRows = useNeedsRows(runs, needsNow);
+  const needRows = useNeedsRows(runs, needsNow, runsLoaded);
 
   // ── Studio wave 2a: peek (P), jump (G), back (B) — and the panels "back" reopens ──
   const peek = usePeekJump(runs, navigate, needRows);
@@ -623,10 +623,10 @@ export function App(): React.ReactElement {
     if (panel === 'home') {
       // The Desk (skin `desk`, S4) replaces the command center; same fold, same stores.
       if (desk) {
-        return <Desk runs={runs} runsLoaded={runsLoaded} needRows={needRows} now={needsNow} navigate={navigate} onAsk={handToAsk} />;
+        return <Desk runs={runs} runsLoaded={runsLoaded} runsError={runsError} onRetryRuns={refresh} needRows={needRows} now={needsNow} navigate={navigate} onAsk={handToAsk} />;
       }
       // The board-level Ask invite opens the SAME dock the rail button opens.
-      return <HomeBoard runs={runs} navigate={navigate} onOpenAsk={() => setAskOpen(true)} />;
+      return <HomeBoard runs={runs} runsLoaded={runsLoaded} navigate={navigate} onOpenAsk={() => setAskOpen(true)} />;
     }
     if (panel === 'workflows') {
       return (

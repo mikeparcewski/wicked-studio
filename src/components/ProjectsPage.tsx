@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { PROJECT_NAME_MAX, projectNameProblem } from '../board/projectName.js';
 import { api } from '../api/client.js';
 import type { Project, SessionView } from '../api/types.js';
 import { gateOpenPath } from '../board/gateActions.js';
@@ -81,7 +82,7 @@ function CreateProjectForm({ onCreated, onCancel }: { onCreated: (p: Project) =>
 
   async function submit(): Promise<void> {
     const trimmed = name.trim();
-    if (!trimmed) return;
+    if (projectNameProblem(trimmed) !== null) return;
     setBusy(true);
     setErr(null);
     try {
@@ -113,7 +114,7 @@ function CreateProjectForm({ onCreated, onCancel }: { onCreated: (p: Project) =>
         type="text"
         placeholder="Project name"
         value={name}
-        maxLength={120}
+        maxLength={PROJECT_NAME_MAX}
         onChange={(e) => setName(e.target.value)}
         onKeyDown={(e) => { if (e.key === 'Enter') void submit(); if (e.key === 'Escape') onCancel(); }}
         style={{
@@ -139,11 +140,11 @@ function CreateProjectForm({ onCreated, onCancel }: { onCreated: (p: Project) =>
         <button
           type="button"
           onClick={() => void submit()}
-          disabled={busy || !name.trim()}
+          disabled={busy || projectNameProblem(name) !== null}
           style={{
             background: S.accent, color: 'var(--accent-fg)', border: 'none', borderRadius: '6px',
             padding: '7px 16px', fontSize: '12px', fontWeight: 700, cursor: busy ? 'default' : 'pointer',
-            opacity: busy || !name.trim() ? 0.5 : 1,
+            opacity: busy || projectNameProblem(name) !== null ? 0.5 : 1,
           }}
         >
           {busy ? 'Creating…' : 'Create project'}

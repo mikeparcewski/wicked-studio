@@ -2,13 +2,15 @@ import { useMemo, useRef, useState } from 'react';
 import { useDeliveredNow } from '../../store/postHocDeliver.js';
 import type { SessionView } from '../../api/types.js';
 import {
-  deskGreeting, deskProjects, lapsedSeatChores, needsByRun, needsHeadline, needTextByRun, railGroups, START_CHIPS,
+  deskGreeting, deskProjects, deskReadState, lapsedSeatChores, needsByRun, needsHeadline, needTextByRun, railGroups,
+  START_CHIPS,
 } from '../../board/deskModel.js';
 import { needCount } from '../../board/needsQueue.js';
 import type { NeedRow } from '../../board/needsYou.js';
 import { useBoardModel } from '../../hooks/useBoardModel.js';
 import { useCapabilities } from '../../store/capabilities.js';
 import { useHandover } from '../../hooks/useHandover.js';
+import { useDisplayText } from '../../hooks/useHomePath.js';
 import type { Navigate } from '../../hooks/useRoute.js';
 import { useRoster } from '../../hooks/useRoster.js';
 import { HandoverPanel } from '../HandoverPanel.js';
@@ -32,11 +34,16 @@ const CARDS_MAX = 3;
  * Render only: counts and sentences are `board/deskModel.ts` over `useNeedsRows`, `useBoardModel`,
  * `useHandover` and the roster.
  */
-export function Desk({ runs, runsLoaded, needRows, now, navigate, onAsk }: {
+export function Desk({ runs, runsLoaded, runsError = null, onRetryRuns, needRows, now, navigate, onAsk }: {
   runs: SessionView[];
   /** Whether the first `GET /runs` has answered (studio#459): before it, the Desk says it is still
    *  looking — never "Nothing needs you" over a list that has not arrived. */
   runsLoaded: boolean;
+  /** The newest `GET /runs` failed, in the daemon's words (studio#466). With no list yet, the Desk
+   *  says the read failed and offers to try again — it does not keep "checking" forever, and it
+   *  says nothing about what needs you or what has been started. */
+  runsError?: string | null;
+  onRetryRuns?: () => void;
   needRows: NeedRow[];
   now: number;
   navigate: Navigate;
@@ -48,6 +55,8 @@ export function Desk({ runs, runsLoaded, needRows, now, navigate, onAsk }: {
   const handover = useHandover(runs, failedAt);
   const roster = useRoster();
   const count = needCount(needRows);
+  const readState = deskReadState(runsLoaded, runsError);
+  const displayText = useDisplayText();
   const { hello, date } = deskGreeting(now);
   const runChatId = useCapabilities((s) => s.runChatId);
   const deliveredNow = useDeliveredNow();
@@ -87,15 +96,25 @@ export function Desk({ runs, runsLoaded, needRows, now, navigate, onAsk }: {
           <span aria-hidden className="wk-desk-avatar"><span className="wk-desk-dot wk-desk-dot--waiting" /></span>
           <div>
             <p className="wk-desk-who">Studio</p>
-            {runsLoaded ? (
+            {(readState === 'failed' || readState === 'stale') && runsError !== null && (
+              // studio#466: the read failed — say so, with the way to try again. A first read that
+              // failed gives no verdict at all; a refresh that failed keeps the last list, said so.
+              <p data-testid="desk-runs-failed" data-state={readState} role="alert" className="wk-desk-sentence">
+                {readState === 'failed'
+                  ? <>I couldn’t read your work from the daemon, so I can’t say what needs you ({displayText(runsError)}).</>
+                  : <>I couldn’t refresh your work from the daemon ({displayText(runsError)}); what follows is from the last read.</>}{' '}
+                {onRetryRuns !== undefined && <button type="button" data-testid="desk-runs-retry" onClick={onRetryRuns} className="wk-since-toggle">Try again</button>}
+              </p>
+            )}
+            {readState === 'known' ? (
               <p data-testid="desk-headline" data-count={count} className="wk-desk-sentence">
                 {count > 0 ? <mark className="wk-desk-mark">{needsHeadline(count)}</mark> : needsHeadline(count)}
                 {count === 0 && ' We’ll tap you when something needs a decision.'}
               </p>
-            ) : (
+            ) : readState === 'checking' ? (
               // studio#459: an honest loading line while /runs is in flight — the all-clear waits.
               <p data-testid="desk-loading" aria-busy="true" className="wk-desk-sentence wk-desk-quiet">Checking what needs you…</p>
-            )}
+            ) : null}
             {/* DC-S6 (B9): a rule remembered from your words since you last looked, said once. */}
             <DeskRuleLine navigate={navigate} />
           </div>
@@ -129,9 +148,11 @@ export function Desk({ runs, runsLoaded, needRows, now, navigate, onAsk }: {
 
           <aside className="wk-desk-side" aria-label="Your projects">
             <p className="wk-desk-label">Your projects</p>
-            {cards.length === 0 && (runsLoaded
+            {cards.length === 0 && (readState === 'known'
               ? <p className="wk-desk-quiet">Nothing has been started yet.</p>
-              : <p data-testid="desk-projects-loading" aria-busy="true" className="wk-desk-quiet">Checking…</p>)}
+              : readState === 'checking'
+                ? <p data-testid="desk-projects-loading" aria-busy="true" className="wk-desk-quiet">Checking…</p>
+                : <p data-testid="desk-projects-unread" className="wk-desk-quiet">Not read{readState === 'stale' ? ' again' : ' yet'}.</p>)}
             {cards.slice(0, CARDS_MAX).map((card) => (
               <section key={card.projectId ?? 'unfiled'} data-testid="desk-project" data-project-id={card.projectId ?? ''} className="wk-desk-card">
                 <p className="wk-desk-card-title">

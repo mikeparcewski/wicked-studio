@@ -263,6 +263,14 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          # runs_delay_ms — GET /runs answers only after this delay (studio#459: the Desk's loading
          #   state is observable). Default 0.
          "home_paths": False, "runs_delay_ms": 0,
+         # runs_fail — GET /runs answers 500 (studio#466: a failed read is not an empty list).
+         "runs_fail": False,
+         # reject_note — a run whose plan the operator rejected with a note: the daemon ended it
+         #   cancelled and audited `gate.decided {approve:false, amend}` (studio#478).
+         "reject_note": False,
+         # floor_plan — a team run at its plan gate: the bus holds the PA's 8-step proposal, the gate
+         #   asks about the floor-filled 11 (studio#470).
+         "floor_plan": False,
          "no_runs": False, "usage_ws": False, "long_prompt": False,
          "extra_narration": [], "demo": False,
          "repo": False, "metrics_ws": False,
@@ -1956,6 +1964,25 @@ PLAN_GATE_TEAM = {
                 "high_risk": True, "mode": "manual", "reason": "manual_mode", "reviewing_ord": 1,
                 "diff": {"from_rev": 1, "added": ["test_plan", "architecture", "security_review"]}}}]},
     ],
+}
+
+
+# ── floor_plan (studio#470, e2e/desk_run_state_test.py) ──────────────────────
+FLOOR_RUN = _team_run("r-floor", "awaiting_human", "Add SSO login to the admin console",
+                      {"kind": "preset", "name": "feature", "user_plan": False, "system": False},
+                      workflow_id="feature", unit_ix=1, human_confirm="all")
+FLOOR_PROMPT = ("Approve plan rev 2 before unit 1 runs (high risk: auto mode still requires approval; band 60-79, "
+                "high risk; auto mode): pa-scope → clarify → test_plan (floor) → design → architecture (floor) → "
+                "build → adversarial-review → test → review → security_review (floor) → deliver. "
+                "Floor added: test_plan, architecture, security_review")
+_FLOOR_PA = ["pa-scope", "clarify", "design", "build", "adversarial-review", "test", "review", "deliver"]
+_FLOOR_CAT = {"pa-scope": "understand", "adversarial-review": "review"}
+FLOOR_TEAM = {
+    "runId": "r-floor", "transport": "bus", "reason": None, "planRev": 2, "pending": None, "ended": False,
+    "rows": [{"event_id": 701, "event_type": "wicked.team.plan.proposed", "payload": {
+        "kind": "initial", "by": "claude",
+        "steps": [{"catalog": _FLOOR_CAT.get(i, i), "id": i} for i in _FLOOR_PA]}}],
+    "units": [],
 }
 
 
@@ -3724,6 +3751,25 @@ HOME_EVENTS = {
 HOME_ASK_PACK = ("\n\n---\n[studio context pack — assembled 2026-10-03T14:00:00.000Z]\nwhere: Desk (/)\n"
                  "diagnostics (GET /api/v1/diagnostics):\n  stores: core.db 11.8 MB (/tmp/w2/state/core.db)")
 
+# ── reject_note (studio#478, e2e/desk_run_state_test.py) ─────────────────────
+REJECTED_RUN_ID = "r-rejected"
+REJECTED_NOTE = "the hall is booked that week; plan around the garden room"
+REJECTED_AUDIT = [
+    {"ts": NOW0 - 5 * 60_000, "action": "run.launched", "runId": REJECTED_RUN_ID,
+     "actor": {"id": "local", "kind": "human", "trust": "operator"}, "detail": {"workflow": "feature"}},
+    {"ts": NOW0 - 2 * 60_000, "action": "gate.decided", "runId": REJECTED_RUN_ID,
+     "actor": {"id": "local", "kind": "human", "trust": "operator"},
+     "detail": {"approve": False, "amend": REJECTED_NOTE, "ord": 0}},
+]
+
+
+def _rejected_run() -> dict:
+    r = session(REJECTED_RUN_ID, "cancelled", "Plan the team offsite", "plan the offsite")
+    r["session"]["created_at"] = (NOW0 - 5 * 60_000) // 1000
+    r["session"]["ended_at"] = (NOW0 - 2 * 60_000) // 1000
+    return r
+
+
 GOVERNANCE_BLOCKS = {
     "healthy": {
         "store": {"path": GOV_STORE, "source": "core-db-sidecar"},
@@ -4021,6 +4067,10 @@ def assemble_runs() -> list:
             runs = runs + json.loads(json.dumps(RUN_PAGE_RUNS))
         if state["home_runs"] and not state["no_runs"]:
             runs = runs + [json.loads(json.dumps(REUSE_RUN))]
+        if state["reject_note"] and not state["no_runs"]:
+            runs = runs + [_rejected_run()]
+        if state["floor_plan"] and not state["no_runs"]:
+            runs = runs + [json.loads(json.dumps(FLOOR_RUN))]
         if state["home_paths"] and not state["no_runs"]:
             runs = runs + _home_runs()
         if state["sessions"] and not state["no_runs"]:
@@ -4831,8 +4881,12 @@ class W2Handler(SimpleHTTPRequestHandler):
         if path == "/api/v1/runs":
             with state_lock:
                 runs_delay = state["runs_delay_ms"]
+                runs_fail = state["runs_fail"]
             if runs_delay:
                 time.sleep(runs_delay / 1000)
+            if runs_fail:
+                self._json(500, {"error": "w2 fixture: runs list unavailable"})
+                return True
             self._json(200, {"runs": assemble_runs()})
             return True
         # T9: the engine's phase catalog and the presets (crew 0.47.0), switch-gated.
@@ -4920,6 +4974,10 @@ class W2Handler(SimpleHTTPRequestHandler):
                 entries = [e for e in entries if e.get("ts", 0) >= int(since)]
             if action:
                 entries = [e for e in entries if e.get("action") == action]
+            with state_lock:
+                reject_on = state["reject_note"]
+            if reject_on and run_id in ("", REJECTED_RUN_ID):
+                entries = entries + REJECTED_AUDIT
             entries = sorted(entries, key=lambda e: -e.get("ts", 0))
             self._json(200, {"entries": entries})
             return True
@@ -5233,6 +5291,8 @@ class W2Handler(SimpleHTTPRequestHandler):
                 self._json(200, session_team(rid))
             elif on and rid == "r-plan-gate":
                 self._json(200, PLAN_GATE_TEAM)
+            elif state["floor_plan"] and rid == "r-floor":
+                self._json(200, FLOOR_TEAM)
             else:
                 self._json(404, {"error": f"w2 fixture: no team state for {rid}"})
             return True
@@ -5244,6 +5304,12 @@ class W2Handler(SimpleHTTPRequestHandler):
                 proposals_open = state["sessions"] and state["ship_proposals"]
             with state_lock:
                 reel_open = state["sessions"] and state["reel_runs"]
+            with state_lock:
+                floor_gate = state["floor_plan"] and rid == "r-floor"
+            if floor_gate:
+                self._json(200, {"runId": rid, "ord": 1, "lifecycle": "open", "prompt": FLOOR_PROMPT,
+                                 "receivedAt": iso(NOW0), "gateKind": "plan_approval"})
+                return True
             with state_lock:
                 home_gate = state["home_paths"] and rid == "r-home-gate"
             if home_gate:

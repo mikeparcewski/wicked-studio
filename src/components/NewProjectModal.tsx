@@ -1,4 +1,5 @@
 import { useId, useState } from 'react';
+import { PROJECT_NAME_MAX, projectNameProblem } from '../board/projectName.js';
 import { api } from '../api/client.js';
 import { modePath } from '../hooks/useRoute.js';
 import { useProjectsStore } from '../store/projects.js';
@@ -14,12 +15,10 @@ import { useModalEscape } from './Modal.js';
  * The wire contract (verified against wicked-crew `projects/routes.ts` +
  * `wicked-crew-api-types`): the body is `{ name, description? }` with
  * `name: z.string().min(1).max(120)` — the daemon accepts any 1–120-char
- * string and 409s on an active-name collision. The design's stricter slug
- * rule is therefore the CLIENT-side UX gate (§1.3: "no silent 400"): the
- * regex below blocks Create before the request ever fires.
+ * string and 409s on an active-name collision. That is the one rule every
+ * creation path checks (`board/projectName.ts`, studio#463): the modal used to
+ * refuse capitals and punctuation the Projects page and the daemon accept.
  */
-
-export const PROJECT_NAME_RE = /^[a-z0-9][a-z0-9 _-]{0,63}$/;
 
 export type StartWith = 'empty' | 'build' | 'chat' | 'document';
 
@@ -53,7 +52,8 @@ export function NewProjectModal({ navigate, onClose }: Props): React.ReactElemen
   // §7.7 (slice AC): the shared modal-family Escape — one press, one layer.
   useModalEscape(onClose);
 
-  const nameValid = PROJECT_NAME_RE.test(name);
+  const nameProblem = projectNameProblem(name);
+  const nameValid = nameProblem === null;
 
   async function create(): Promise<void> {
     if (!nameValid || busy) return;
@@ -61,7 +61,7 @@ export function NewProjectModal({ navigate, onClose }: Props): React.ReactElemen
     setError(null);
     try {
       const { project } = await api.createProject(
-        description.trim() === '' ? { name } : { name, description: description.trim() },
+        description.trim() === '' ? { name: name.trim() } : { name: name.trim(), description: description.trim() },
       );
       // Fresh-entity hydration (DES-UX-001 §7.10): the created project joins the
       // store BEFORE navigation, so the rail row and the shell breadcrumb render
@@ -134,7 +134,8 @@ export function NewProjectModal({ navigate, onClose }: Props): React.ReactElemen
             value={name}
             onChange={(e) => setName(e.target.value)}
             autoFocus
-            placeholder="lowercase, digits, space, - or _"
+            maxLength={PROJECT_NAME_MAX}
+            placeholder="Team offsite"
             className="w-full px-2 py-1.5 outline-none"
             style={fieldStyle}
           />
@@ -145,7 +146,7 @@ export function NewProjectModal({ navigate, onClose }: Props): React.ReactElemen
             className="text-[10px] font-mono"
             style={{ color: 'var(--status-fail)', margin: 0 }}
           >
-            1–64 chars: lowercase letters, digits, spaces, - or _, starting with a letter or digit.
+            {nameProblem}
           </p>
         )}
 

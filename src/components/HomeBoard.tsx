@@ -100,6 +100,9 @@ const CSS = {
 
 interface Props {
   runs: SessionView[];
+  /** Whether the first `GET /runs` has answered (studio#466): before it, no need is derived from
+   *  the (empty) list. Defaults to true for callers that only pass a read list. */
+  runsLoaded?: boolean;
   navigate: Navigate;
   /** Opens the app-wide AskDock (App's own state) — the board-level Ask invite
    *  is the SAME dock the rail button opens, never a fork. */
@@ -157,7 +160,7 @@ interface HomeWires {
 
 const NO_WIRES: HomeWires = { claims: null, rules: null, perRule: null, diag: null, evalCount: null };
 
-export function HomeBoard({ runs, navigate, onOpenAsk }: Props): React.ReactElement {
+export function HomeBoard({ runs, runsLoaded = true, navigate, onOpenAsk }: Props): React.ReactElement {
   const { items, unfiled, failedAt, repos, loading, error } = useBoardModel(runs);
   // The Home pane is the scroller; `wall` is the portfolio wall inside it. The wall's rows window
   // against the pane's scroll, offset by the wall's top within the pane (`wallTop`).
@@ -256,7 +259,8 @@ export function HomeBoard({ runs, navigate, onOpenAsk }: Props): React.ReactElem
   // ── THE needs-you fold (§3) — the queue, the KPI tile and the calm state all derive from
   // THIS one fold (`useNeedsRows`, app-level: the rail and peek read the same rows); no second
   // derivation exists to disagree with it.
-  const needRows = useNeedsRows(runs, now);
+  // studio#466: no row is derived from a runs list that has not been read (codex on #486).
+  const needRows = useNeedsRows(runs, now, runsLoaded);
   // The skin decides WHERE the queue renders, never what it is: `rail` docks it into the
   // shell's right rail (the shell mounts it there on every route), `inline` keeps it in the
   // command center. A rail variant with no rail mounted renders inline — never nowhere.

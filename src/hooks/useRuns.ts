@@ -21,7 +21,7 @@ import { rememberWorkTitles } from '../board/gateActions.js';
  * pool from being saturated by stacked actor-bound requests, which would starve
  * concurrent read-only operations (getCoverageReport, listConformanceRules, etc.).
  */
-export function useRuns(): { runs: SessionView[]; refresh: () => void; loaded: boolean } {
+export function useRuns(): { runs: SessionView[]; refresh: () => void; loaded: boolean; error: string | null } {
   const status = useConnectionStore((s) => s.status);
   const setGate = useGateStore((s) => s.setGate);
   const reconcileGates = useGateStore((s) => s.reconcile);
@@ -31,6 +31,10 @@ export function useRuns(): { runs: SessionView[]; refresh: () => void; loaded: b
   // lets a route naming an unlisted run distinguish "index still in flight"
   // from "the daemon does not serve this id" (the honest pending copy).
   const [loaded, setLoaded] = useState(false);
+  // studio#466: the newest `GET /runs` FAILED — said in the daemon's own words. A failed read is
+  // not an empty list: nothing may be derived from the runs it did not bring (above all no "N
+  // repos never indexed" with a batch launch). Cleared by the next read that answers.
+  const [error, setError] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -58,12 +62,16 @@ export function useRuns(): { runs: SessionView[]; refresh: () => void; loaded: b
       let fetched: SessionView[];
       try {
         ({ runs: fetched } = await api.listRuns());
-      } catch {
-        return; // keep the last list; ConnectionStatus reflects the disconnect
+      } catch (e: unknown) {
+        // Keep the last list; ConnectionStatus reflects a disconnect. The failure itself is kept
+        // too, so a surface that has no list yet can say the read failed instead of waiting forever.
+        if (!cancelled) setError(e instanceof Error && e.message !== '' ? e.message : 'the daemon did not answer');
+        return;
       }
       if (cancelled) return;
       setRuns(fetched);
       setLoaded(true);
+      setError(null);
       // studio#443: the decision notices name the work, not the run id.
       rememberWorkTitles(fetched);
 
@@ -105,5 +113,5 @@ export function useRuns(): { runs: SessionView[]; refresh: () => void; loaded: b
     };
   }, [status, tick, setGate, reconcileGates, reconcileElicitations]);
 
-  return { runs, refresh, loaded };
+  return { runs, refresh, loaded, error };
 }
