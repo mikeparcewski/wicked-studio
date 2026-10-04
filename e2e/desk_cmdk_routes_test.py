@@ -117,7 +117,7 @@ with sync_playwright() as p:
         return {"href": href, "label": label, "ok": not dead and went, "pushed": pushed[:3], "landed": path}
 
     # ── 2. every parameterless destination ──────────────────────────────────────────
-    FIXED = {"/", "/watch", "/work", "/chats", "/chat/new", "/projects", "/execute", "/vibe", "/demo", "/steering/dashboard",
+    FIXED = {"/", "/watch", "/rules", "/work", "/chats", "/chat/new", "/projects", "/execute", "/vibe", "/demo", "/steering/dashboard",
              "/steering/policies", "/steering/memories", "/testing/campaigns", "/testing/evals", "/repos", "/repos/new",
              "/runs/new", "/workflows", "/skills", "/mcp", "/system", "/theme", "/editors/dev", "/editors/conformance"}
     open_palette("go:")

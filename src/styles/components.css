@@ -955,6 +955,19 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
 .wk-watchtower-row { display: flex; align-items: flex-start; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--border-subtle); }
 .wk-watchtower-row .wk-desk-dot { margin-top: 6px; }
 .wk-watchtower-sentence { color: var(--ink-high); font-size: var(--text-sm); }
+
+/* The Rules page (`/rules`, S12): the Watchtower's frame, rows as sentences. */
+.wk-rules { display: flex; flex-direction: column; flex: 1; min-width: 0; overflow: hidden; }
+.wk-rules-head { padding: 20px 32px 12px 52px; border-bottom: 1px solid var(--border-subtle); }
+.wk-rules-body { flex: 1; overflow-y: auto; padding: 12px 32px 24px 52px; display: flex; flex-direction: column; gap: 14px; }
+.wk-rules-group { margin: 0; min-width: 0; }
+.wk-rules-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.wk-rules-row { display: flex; flex-direction: column; gap: 2px; padding: 10px 0; border-bottom: 1px solid var(--border-subtle); min-width: 0; }
+.wk-rules-row[data-retired="true"] { opacity: 0.6; }
+.wk-rules-statement { color: var(--ink-high); font-size: var(--text-sm); text-decoration: none; overflow-wrap: anywhere; }
+.wk-rules-statement:hover, .wk-rules-statement:focus-visible { text-decoration: underline; }
+.wk-rules-line { color: var(--ink-muted); font-size: var(--text-xs); }
+.wk-rules-aside { color: var(--ink-dim); font-size: var(--text-xs); }
 .wk-watch-pill-wrap { position: relative; }
 .wk-watch-card {
   display: none; position: absolute; left: calc(100% + 8px); bottom: 0; z-index: 40; width: 300px;

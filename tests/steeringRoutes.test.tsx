@@ -12,7 +12,7 @@ import { STEERING_TYPES } from '../src/api/steering.js';
  *  - bare `/steering` and a LEGACY `/steering/:type` (a valid type — the seven pages collapsed into
  *    a `?type=` filter on Policies) parse with `steeringSection: null`, then `useSteeringRedirect`
  *    REPLACES the address (bare → `/steering/policies`, legacy type → `/steering/policies?type=…`);
- *  - the RETIRED addresses `/wiki`, `/rules`, `/policies` (the old governance panels) and
+ *  - the RETIRED addresses `/wiki`, `/policies` (the old governance panels) and
  *    `/proposals` (the standalone review queue — proposals now live inside the sub-sections) parse
  *    to the steering panel with a null section and are REPLACED onto the right sub-section
  *    (`/proposals?type=memory` → Memories, everything else → Policies);
@@ -64,8 +64,13 @@ describe('useRoute — /steering/{dashboard,policies,memories}', () => {
     expect(routeAt('/steering/securty').current).toMatchObject({ panel: 'not-found' });
   });
 
-  it('the retired /wiki, /rules, /policies panels and the /proposals queue fold into the steering panel', () => {
-    for (const p of ['/wiki', '/rules', '/policies', '/proposals']) {
+  it('/rules is a REAL route again — the Rules page (S12), not a fold into steering', () => {
+    expect(routeAt('/rules').current).toMatchObject({ panel: 'rules', ruleId: null });
+    expect(routeAt('/rules/proposal%3Apr-1').current).toMatchObject({ panel: 'rules', ruleId: 'proposal:pr-1' });
+  });
+
+  it('the retired /wiki, /policies panels and the /proposals queue fold into the steering panel', () => {
+    for (const p of ['/wiki', '/policies', '/proposals']) {
       expect(routeAt(p).current).toMatchObject({ panel: 'steering', steeringSection: null });
     }
   });
@@ -97,8 +102,8 @@ describe('useSteeringRedirect', () => {
     expect(navigate).toHaveBeenCalledWith('/steering/dashboard', { replace: true });
   });
 
-  it('REPLACES the retired /wiki, /rules, /policies rule-management panels with the Policies home', () => {
-    for (const path of ['/wiki', '/rules', '/policies']) {
+  it('REPLACES the retired /wiki, /policies rule-management panels with the Policies home', () => {
+    for (const path of ['/wiki', '/policies']) {
       const navigate = vi.fn();
       renderHook(() => useSteeringRedirect('steering', null, path, '', navigate));
       expect(navigate).toHaveBeenCalledWith('/steering/policies', { replace: true });

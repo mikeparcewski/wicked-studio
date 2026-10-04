@@ -46,10 +46,10 @@ import { announceNavigateAway, inAppEntryState, isInAppEntry, replacedEntryState
 // worktree files/diff as REAL routes — `/runs/:id/events`, `/runs/:id/files` — so the palette
 // verb that opens them is one history entry and browser Back returns to where you were. The run
 // id rides in `artifactId` (NOT `runId`: no run-selected machinery, no legacy shell redirect).
-export type Panel = 'home' | 'runs' | 'run-events' | 'run-files' | 'workflows' | 'skills' | 'mcp' | 'steering' | 'testing' | 'repos' | 'system' | 'theme' | 'chats' | 'work' | 'repo-detail' | 'projects' | 'project-detail' | 'execute' | 'vibe' | 'demo' | 'session' | 'editors' | 'watch' | 'not-found';
+export type Panel = 'home' | 'runs' | 'run-events' | 'run-files' | 'workflows' | 'skills' | 'mcp' | 'steering' | 'testing' | 'repos' | 'system' | 'theme' | 'chats' | 'work' | 'repo-detail' | 'projects' | 'project-detail' | 'execute' | 'vibe' | 'demo' | 'session' | 'editors' | 'watch' | 'rules' | 'not-found';
 
 /** Every panel, exhaustively (the compile-time check below fails when the union grows without it). */
-export const ALL_PANELS = ['home', 'runs', 'run-events', 'run-files', 'workflows', 'skills', 'mcp', 'steering', 'testing', 'repos', 'system', 'theme', 'chats', 'work', 'repo-detail', 'projects', 'project-detail', 'execute', 'vibe', 'demo', 'session', 'editors', 'watch', 'not-found'] as const satisfies readonly Panel[];
+export const ALL_PANELS = ['home', 'runs', 'run-events', 'run-files', 'workflows', 'skills', 'mcp', 'steering', 'testing', 'repos', 'system', 'theme', 'chats', 'work', 'repo-detail', 'projects', 'project-detail', 'execute', 'vibe', 'demo', 'session', 'editors', 'watch', 'rules', 'not-found'] as const satisfies readonly Panel[];
 type MissingPanel = Exclude<Panel, (typeof ALL_PANELS)[number]>;
 export const PANELS_EXHAUSTIVE: MissingPanel extends never ? true : MissingPanel = true;
 
@@ -104,7 +104,7 @@ export interface Route {
   campaignId: string | null;
   /** The steering sub-section on `/steering/{policies,memories}`. `null` while panel === 'steering'
    *  means an address that names no valid sub-section (bare `/steering`, a legacy `/steering/:type`,
-   *  `/wiki`, `/rules`, `/policies`, the retired `/proposals`) — `useSteeringRedirect` replaces
+   *  `/wiki`, `/policies`, the retired `/proposals`) — `useSteeringRedirect` replaces
    *  those with the right sub-section's real URL. The Policies type filter is NOT a route field:
    *  it rides `?type=` in `search`, read via `readSteeringTypeFilter`. */
   steeringSection: SteeringSection | null;
@@ -112,6 +112,9 @@ export interface Route {
    *  panel === 'testing' means an address that names no page (bare `/testing`, the retired
    *  `/testing/harness`) — `useTestingRedirect` replaces those with the Campaigns landing. */
   testingPage: string | null;
+  /** Non-null only on `/rules/:ruleId` (DES-STUDIO-REBUILD-001 §5.4, slice S12): the rule the Rules
+   *  page opens. Bare `/rules` parses with `panel: 'rules'` and `ruleId: null`. */
+  ruleId: string | null;
 }
 
 /** Route options a caller can override; everything else takes its inert default. */
@@ -130,6 +133,7 @@ const INERT: Route = {
   campaignId: null,
   steeringSection: null,
   testingPage: null,
+  ruleId: null,
 };
 
 function route(over: Partial<Route>): Route {
@@ -284,13 +288,19 @@ function parse(pathname: string): Route {
       ? route({ panel: 'steering', steeringSection: null })
       : route({ panel: 'not-found' });
   }
-  // The RETIRED governance addresses: `/wiki` (the old Architecture Wiki page), `/rules` (the
-  // old RuleManager), `/policies` (the old policies settings panel — merged into steering rules)
+  // `/rules` and `/rules/:ruleId` — the Rules page (DES-STUDIO-REBUILD-001 §5.4, slice S12): the
+  // address the old RuleManager held is a REAL route again, for every skin — DC's rule components
+  // on one page frame; the steering grid stays reachable from it as "All rules".
+  if (first === 'rules') {
+    return route({ panel: 'rules', ruleId: second ? safeDecode(second) : null });
+  }
+  // The RETIRED governance addresses: `/wiki` (the old Architecture Wiki page), `/policies` (the
+  // old policies settings panel — merged into steering rules)
   // and `/proposals` (the standalone review queue — proposals now live inside the two
   // sub-sections) all fold into Steering — parsed here so a sub-section renders instantly,
   // redirected (replace) by `useSteeringRedirect` so bookmarks land on the surface's real URL
   // (`/proposals?type=memory` → Memories; everything else → Policies).
-  if (first === 'wiki' || first === 'rules' || first === 'policies' || first === 'proposals') {
+  if (first === 'wiki' || first === 'policies' || first === 'proposals') {
     return route({ panel: 'steering', steeringSection: null });
   }
   // The RETIRED `coverage`/`domain` settings panels (orphaned, context-free) fold into the

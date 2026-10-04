@@ -27,6 +27,7 @@ export const ROUTE_SHAPES: readonly RouteShape[] = [
   { id: 'home', example: '/', is: (r) => r.panel === 'home' },
   { id: 'session', example: '/s/run:r1', is: (r) => r.panel === 'session' && r.artifactId !== null },
   { id: 'watch', example: '/watch', is: (r) => r.panel === 'watch' },
+  { id: 'rules', example: '/rules', is: (r) => r.panel === 'rules' },
   { id: 'work', example: '/work', is: (r) => r.panel === 'work' },
   { id: 'chats', example: '/chats', is: (r) => r.panel === 'chats' },
   { id: 'chat-new', example: '/chat/new', is: (r) => r.panel === 'runs' && r.showLaunch && r.chatMode && r.projectId === null },
@@ -74,6 +75,7 @@ export const NOT_A_DESTINATION = 'not-found';
 const DESTINATIONS: ReadonlyArray<{ shape: string; label: string; href: string }> = [
   { shape: 'home', label: 'Desk — home', href: '/' },
   { shape: 'watch', label: 'Watchtower — the full feed', href: '/watch' },
+  { shape: 'rules', label: 'Rules — what helpers are told', href: '/rules' },
   { shape: 'work', label: 'Work — every run', href: '/work' },
   { shape: 'chats', label: 'Chats', href: '/chats' },
   { shape: 'chat-new', label: 'Start a chat', href: '/chat/new' },

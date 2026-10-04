@@ -7767,6 +7767,78 @@
       ]
     },
     {
+      "testId": "rules-all",
+      "files": [
+        "src/components/rules/RulesPage.tsx"
+      ]
+    },
+    {
+      "testId": "rules-error",
+      "files": [
+        "src/components/rules/RulesPage.tsx"
+      ]
+    },
+    {
+      "testId": "rules-group",
+      "files": [
+        "src/components/rules/RulesPage.tsx"
+      ]
+    },
+    {
+      "testId": "rules-loading",
+      "files": [
+        "src/components/rules/RulesPage.tsx"
+      ]
+    },
+    {
+      "testId": "rules-missing",
+      "files": [
+        "src/components/rules/RulesPage.tsx"
+      ]
+    },
+    {
+      "testId": "rules-page",
+      "files": [
+        "src/components/rules/RulesPage.tsx"
+      ]
+    },
+    {
+      "testId": "rules-retry",
+      "files": [
+        "src/components/rules/RulesPage.tsx"
+      ]
+    },
+    {
+      "testId": "rules-row",
+      "files": [
+        "src/components/rules/RulesPage.tsx"
+      ]
+    },
+    {
+      "testId": "rules-row-aside",
+      "files": [
+        "src/components/rules/RulesPage.tsx"
+      ]
+    },
+    {
+      "testId": "rules-row-line",
+      "files": [
+        "src/components/rules/RulesPage.tsx"
+      ]
+    },
+    {
+      "testId": "rules-row-open",
+      "files": [
+        "src/components/rules/RulesPage.tsx"
+      ]
+    },
+    {
+      "testId": "rules-sentence",
+      "files": [
+        "src/components/rules/RulesPage.tsx"
+      ]
+    },
+    {
       "testId": "run-archive",
       "files": [
         "src/components/ChatPanel.tsx"
