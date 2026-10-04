@@ -1,4 +1,5 @@
 import { judgeKey, judgeTyped } from './keys.js';
+import type { WriteVerb } from '../board/artifactMorph.js';
 import { changedBy, chipsFor, elementLabel, type Chip, type VersionKind } from './model.js';
 import { checkOps, inventoryOf, themeTokensOf, type Inventory, type WireItem } from './ops.js';
 import {
@@ -68,7 +69,7 @@ export interface HostUi {
   /** A write this editor made, structured, so a host can draw its own line and Undo (EP-P2). `anchors`
    *  are the HOST-checked ids the write touched — the words of the line come from them, never from
    *  the plugin's `summary` (codex r1). */
-  written?(w: { version: number; base: number; summary: string; anchors: string[] }): void;
+  written?(w: { version: number; base: number; summary: string; anchors: string[]; verb: WriteVerb }): void;
   fullscreen(): Promise<boolean>;
   torn(reason: string): void;
   log(entry: HostLogEntry): void;
@@ -109,6 +110,16 @@ export interface HostOptions {
 }
 
 const NO_ACTIVATION = (): boolean => (navigator as Navigator & { userActivation?: { isActive: boolean } }).userActivation?.isActive === true;
+
+/** The written line (EP-P3): what the write did, in one verb — every item a remove is "removed", every
+ *  item a colour "restyled", anything else (text, or a mix) "changed". */
+export function writeVerb(items: readonly WireItem[]): WriteVerb {
+  return items.every((it) => it.type === 'remove') ? 'removed' : items.every((it) => it.type === 'style-edit') ? 'restyled' : 'changed';
+}
+
+export function threadLine(firstParty: boolean, name: string, items: readonly WireItem[], summary: string, version: number): string {
+  return `${firstParty ? 'You' : name} ${writeVerb(items)} ${summary} · Version ${version}`;
+}
 
 /** Write refusals the host or adapter makes before anything is sent: nothing was written. */
 const UNSENT: ReadonlySet<ErrorCode> = new Set<ErrorCode>(['not_granted', 'bad_request', 'too_large', 'unsupported', 'rate_limited', 'refused', 'head_moved']);
@@ -348,8 +359,8 @@ export class EditorHost {
             this.log({ kind: 'written', version: r.version, items: checked.items });
             const summary = String(p['summary']).slice(0, LIMITS.summaryChars);
             this.timeoutLine = null;
-            this.o.ui.thread(`${this.o.firstParty ? 'You changed' : `${this.o.name} changed`} ${summary} · Version ${r.version}`);
-            this.o.ui.written?.({ version: r.version, base: p['base'] as number, summary, anchors: [...new Set(checked.items.map((it) => it.selector))] });
+            this.o.ui.thread(threadLine(this.o.firstParty, this.o.name, checked.items, summary, r.version));
+            this.o.ui.written?.({ version: r.version, base: p['base'] as number, summary, anchors: [...new Set(checked.items.map((it) => it.selector))], verb: writeVerb(checked.items) });
           }
           return r;
         } finally {
@@ -381,6 +392,16 @@ export class EditorHost {
       default:
         return { error: 'unsupported', message: `${type} is not available for this artifact` };
     }
+  }
+
+  /** EP-P3: the host's own "point at it" — a finding in the checks panel becomes a composer chip, in
+   *  the host's words, only when the element is in the version's inventory. False = not on this page. */
+  async pointAt(wid: string): Promise<boolean> {
+    if (this.torn) return false;
+    const chips = await this.chipsOf([{ kind: 'element', id: wid }]);
+    if (chips.length === 0) return false;
+    this.o.ui.chips(chips);
+    return true;
   }
 
   private async chipsOf(anchors: readonly AnchorRef[]): Promise<Chip[]> {

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { EditorHost, type HostLogEntry, type HostUi } from '../src/editors/host.js';
+import { EditorHost, threadLine, type HostLogEntry, type HostUi } from '../src/editors/host.js';
 import { FakeDocAdapter, SAMPLE_PAGE } from '../src/editors/fakeAdapter.js';
 import { CHORD_TABLE, isForwardable, isOneGrapheme, judgeKey, judgeTyped } from '../src/editors/keys.js';
 import { builtinDefaults, changedBy, chipsFor, elementLabel, resolveKind } from '../src/editors/model.js';
@@ -190,6 +190,34 @@ function makeHost(grants: PermissionId[] = ['artifact.read', 'selection.chip']) 
 
 afterEach(() => { document.body.innerHTML = ''; vi.useRealTimers(); });
 
+describe('EP-P3: the written line says what the write did', () => {
+  it('a text edit is "changed", a remove "removed", a colour "restyled"; a mix is "changed"', () => {
+    const t = { selector: 'h', type: 'content-edit' as const, value: 'x', before: 'y' };
+    const r = { selector: 'h', type: 'remove' as const };
+    const st = { selector: 'h', type: 'style-edit' as const, style: { background: '#fff' } };
+    expect(threadLine(true, 'Page', [t], 'the heading', 2)).toBe('You changed the heading · Version 2');
+    expect(threadLine(true, 'Page', [r], 'the heading', 3)).toBe('You removed the heading · Version 3');
+    expect(threadLine(true, 'Page', [st], 'the heading', 4)).toBe('You restyled the heading · Version 4');
+    expect(threadLine(false, 'Acme', [r, t], 'two parts', 5)).toBe('Acme changed two parts · Version 5');
+  });
+});
+
+describe('EP-P3: the host hands the written line its verb', () => {
+  it('a remove through the host is "removed" in `written`', async () => {
+    const { host, fromFrame, adapter, ui } = makeHost(['artifact.read', 'artifact.write']);
+    const written: { verb?: string; version: number }[] = [];
+    ui.written = vi.fn((w: { verb?: string; version: number }) => { written.push(w); });
+    let port: MessagePort | null = null;
+    vi.spyOn(host.frame.contentWindow!, 'postMessage').mockImplementation(((_m: unknown, _o: unknown, tr?: Transferable[]) => { port = (tr?.[0] as MessagePort) ?? null; }) as never);
+    fromFrame(env('plugin.ready', { editor: 'acme', version: '0.1.0', protocol: [1] }));
+    port!.onmessage = () => undefined;
+    port!.postMessage(env('version.write', { base: adapter.artifact().head, ops: [{ op: 'remove', anchor: 'cta' }], summary: 'the button' }, 'w1'));
+    await vi.waitFor(() => expect(written).toHaveLength(1));
+    expect(written[0]).toMatchObject({ verb: 'removed', version: 2 });
+    host.teardown('done');
+  });
+});
+
 describe('the host controller', () => {
   it('creates exactly a sandbox="allow-scripts" frame with no allow= features', () => {
     const { host } = makeHost();
@@ -309,7 +337,7 @@ describe('the host controller', () => {
     expect(toPlugin.find((m) => (m as { re?: string }).re === 'w1')).toMatchObject({ ok: true });
     expect(written).toHaveBeenCalledTimes(1);
     // The words come from the anchors the host checked, never the plugin's summary.
-    expect(written.mock.calls[0]![0]).toStrictEqual({ version: 2, base: 1, summary: 'the price title', anchors: ['cta'] });
+    expect(written.mock.calls[0]![0]).toStrictEqual({ version: 2, base: 1, summary: 'the price title', anchors: ['cta'], verb: 'changed' });
     // The inventory of version 2 is read once for a chip...
     port!.postMessage(env('selection.set', { anchors: [{ kind: 'element', id: 'cta' }] }));
     await vi.waitFor(() => expect(ui.chips).toHaveBeenCalledTimes(1));

@@ -37,7 +37,13 @@ export interface WidBlock {
   /** The bridge cut `text` short (a container's opening, or a very long block): it is not the
    *  element's whole text, so it must not be used as a `before` snapshot. Absent = whole. */
   cut?: boolean;
+  /** EP-P3 (R-c): the nearest enclosing section anchor (`section[data-wid]` or a `section-{i}` id, the
+   *  engine's own containers) — what "select the section" (⌥↑, a second click) moves to. Absent = none. */
+  section?: string;
 }
+
+/** An anchor id the bridge may name as a section: the engine's id shape, nothing a selector could escape. */
+const SECTION_WID = /^[A-Za-z0-9_.:-]{1,100}$/;
 
 /** Full inventory: all [data-wid] rects plus current frame scroll. Posted in
  *  response to `request-inventory` and whenever the inventory changes substantially.
@@ -99,6 +105,7 @@ function isFiniteNum(x: unknown): x is number {
 function isWidBlock(x: unknown): x is WidBlock {
   if (typeof x !== 'object' || x === null) return false;
   const b = x as Record<string, unknown>;
+  if (b['section'] !== undefined && (typeof b['section'] !== 'string' || !SECTION_WID.test(b['section']))) return false;
   return typeof b['text'] === 'string' && typeof b['composite'] === 'boolean';
 }
 
@@ -146,7 +153,11 @@ export function parseInbound(data: unknown): BridgeToOverlayMsg | null {
     const blocks: Record<string, WidBlock> = {};
     for (const [wid, block] of Object.entries(rawBlocks as Record<string, unknown>)) {
       if (!isWidBlock(block)) return null;
-      blocks[wid] = { text: block.text, composite: block.composite, ...(block.cut === true ? { cut: true } : {}) };
+      blocks[wid] = {
+        text: block.text, composite: block.composite,
+        ...(block.cut === true ? { cut: true } : {}),
+        ...(block.section !== undefined ? { section: block.section } : {}),
+      };
     }
     return { v: 1, type: 'wid-inventory', widMap, scrollX, scrollY, blocks };
   }

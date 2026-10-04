@@ -62,6 +62,18 @@ describe('parseInbound — well-formed v1 frames', () => {
     expect(blocks['c']).toStrictEqual({ text: 'x', composite: false });
   });
 
+  it('EP-P3 (R-c): a block may name its section ancestor; a malformed section invalidates the inventory', () => {
+    const ok = parseInbound({
+      v: 1, type: 'wid-inventory', widMap: { a: RECT, s: RECT }, scrollX: 0, scrollY: 0,
+      blocks: { a: { text: 'x', composite: false, section: 'section-0' }, s: { text: 'x', composite: true } },
+    });
+    expect((ok as { blocks: Record<string, unknown> }).blocks['a']).toStrictEqual({ text: 'x', composite: false, section: 'section-0' });
+    expect((ok as { blocks: Record<string, unknown> }).blocks['s']).toStrictEqual({ text: 'x', composite: true });
+    for (const section of ['', 7, null, 'x'.repeat(101), 'a"b']) {
+      expect(parseInbound({ v: 1, type: 'wid-inventory', widMap: { a: RECT }, scrollX: 0, scrollY: 0, blocks: { a: { text: 'x', composite: false, section } } })).toBeNull();
+    }
+  });
+
   it('accepts an inventory carrying `blocks` (the injected bridge) and one without (fixture bridges)', () => {
     const blocks = { h1: { text: 'Q3 review', composite: false } };
     expect(parseInbound({

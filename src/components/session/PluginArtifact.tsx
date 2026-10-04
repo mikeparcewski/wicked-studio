@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { apiBase } from '../../api/client.js';
 import type { EditorView } from '../../api/editors.js';
 import { getVersions, interactiveDocUrl } from '../../api/interactive.js';
-import { editedLine, notUndoneLine, shrink, undoneLine, writtenWords, type ArtifactSize } from '../../board/artifactMorph.js';
+import { editedLine, notUndoneLine, shrink, undoneLine, writtenWords, type ArtifactSize, type WriteVerb } from '../../board/artifactMorph.js';
 import { focusBeside } from '../../editors/focus.js';
 import { EditorHost, type HostLogEntry } from '../../editors/host.js';
 import { InteractiveDocAdapter } from '../../editors/interactiveDocAdapter.js';
@@ -10,6 +10,7 @@ import { bundleUrl, fetchGrants } from '../../editors/model.js';
 import { readThemeTokens } from '../../editors/theme.js';
 import { addAboutChip } from '../../store/composerChips.js';
 import { useSessionDrafts } from '../../store/sessionDrafts.js';
+import { ChecksPanel } from './ChecksPanel.js';
 
 /**
  * EP-P2 — the kind slot hosting an editor PLUGIN (DES-EDITOR-PLUGINS-001 §4, §5, §9.3): `wicked-page`
@@ -24,7 +25,7 @@ import { useSessionDrafts } from '../../store/sessionDrafts.js';
 const IDLE_MS = 5_000;
 
 type Line =
-  | { kind: 'edited'; version: number; base: number; what: string }
+  | { kind: 'edited'; version: number; base: number; what: string; verb: WriteVerb }
   | { kind: 'undone'; version: number }
   | { kind: 'not-undone'; head: number }
   | { kind: 'working' | 'failed' | 'status'; text: string }
@@ -62,6 +63,8 @@ export function PluginArtifact({ projectId, docId, title, composerKey, size, mor
   const [note, setNote] = useState<string | null>(null);
   const [mountKey, setMountKey] = useState(0);
   const [busy, setBusy] = useState(false);
+  // The version on screen, for the checks panel (EP-P3): the reviews read for this version.
+  const [head, setHead] = useState<number | null>(null);
   const sizeRef = useRef(size);
   sizeRef.current = size;
   const morphRef = useRef(morph);
@@ -72,7 +75,7 @@ export function PluginArtifact({ projectId, docId, title, composerKey, size, mor
   useEffect(() => { live.current = true; return () => { live.current = false; }; }, []);
 
   const adapter = useMemo(
-    () => new InteractiveDocAdapter(projectId, docId, title, 'page', (h) => { if (live.current) onHeadRef.current?.(h); }),
+    () => new InteractiveDocAdapter(projectId, docId, title, 'page', (h) => { if (live.current) { onHeadRef.current?.(h); setHead(h); } }),
     [projectId, docId, title],
   );
 
@@ -123,7 +126,7 @@ export function PluginArtifact({ projectId, docId, title, composerKey, size, mor
           thread: () => undefined,
           // The line's words are the host's: the anchors it checked, named by it — a third-party editor's
           // line also says who changed it. The plugin's summary never reaches the thread.
-          written: (w) => { if (live.current) setLine({ kind: 'edited', version: w.version, base: w.base, what: writtenWords(w.anchors) }); },
+          written: (w) => { if (live.current) setLine({ kind: 'edited', version: w.version, base: w.base, what: writtenWords(w.anchors), verb: w.verb }); },
           fullscreen: async () => { morphRef.current('full'); return true; },
           torn: (reason) => { if (live.current) setTorn(reason); },
           log: (e) => { logRef.current.push(e); if (logRef.current.length > 200) logRef.current.shift(); },
@@ -162,6 +165,8 @@ export function PluginArtifact({ projectId, docId, title, composerKey, size, mor
     return () => clearInterval(timer);
   }, [adapter]);
 
+  const pointAt = useCallback(async (wid: string): Promise<boolean> => (await hostRef.current?.pointAt(wid)) ?? false, []);
+
   const undo = async (): Promise<void> => {
     const host = hostRef.current;
     if (line === null || line.kind !== 'edited' || host === null || busy) return;
@@ -190,7 +195,7 @@ export function PluginArtifact({ projectId, docId, title, composerKey, size, mor
         <p data-testid="page-line" data-kind={line.kind} className={`wk-artifact-line${line.kind === 'not-undone' || line.kind === 'failed' ? ' wk-artifact-line--bad' : ''}`}>
           {line.kind === 'edited' && (
             <>
-              {editor.first_party ? editedLine(line.version, line.what) : `${editor.title} changed ${line.what} — version ${line.version}.`}{' '}
+              {editor.first_party ? editedLine(line.version, line.what, line.verb) : `${editor.title} ${line.verb} ${line.what} — version ${line.version}.`}{' '}
               <button type="button" data-testid="page-undo" disabled={busy} onClick={() => void undo()} className="wk-since-toggle">Undo</button>
             </>
           )}
@@ -199,6 +204,9 @@ export function PluginArtifact({ projectId, docId, title, composerKey, size, mor
           {(line.kind === 'working' || line.kind === 'failed' || line.kind === 'status') && line.text}
           {line.kind === 'drafted' && <>Suggested by {line.editor}: {line.text}</>}
         </p>
+      )}
+      {size !== 'inline' && head !== null && (
+        <ChecksPanel projectId={projectId} docId={docId} head={head} pointAt={pointAt} />
       )}
     </>
   );

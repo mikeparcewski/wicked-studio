@@ -301,7 +301,12 @@ with sync_playwright() as p:
         def pick(wid: str) -> None:
             # The click lands in the nested page frame; the plugin picks on the bridge's message and takes the
             # focus back onto its handle — a key pressed before that would stay in the page. Wait for both.
-            doc.locator(f'[data-wid="{wid}"]').click()
+            # EP-P3 (§7.1 R-c): a second click on the element already picked picks its SECTION, so an
+            # element that is already the subject is not clicked again — the focus goes back to it.
+            if plugin_state().get("selected") == wid:
+                pf().evaluate("() => document.getElementById('handle').focus()")
+            else:
+                doc.locator(f'[data-wid="{wid}"]').click()
             try:
                 plugin.locator(f'[data-testid="page-selected-box"][data-wid="{wid}"]').wait_for(state="visible", timeout=5000)
                 pf().wait_for_function("() => document.activeElement?.id === 'handle'", timeout=5000)
