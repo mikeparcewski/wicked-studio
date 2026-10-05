@@ -649,6 +649,8 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
   background: none; color: var(--ink-muted); cursor: pointer; font: inherit;
 }
 .wk-rail-watch { margin: 0 10px 4px; position: relative; z-index: 30; }
+/* At the top of the rail (Amendment 5) the card opens DOWN from the pill, never above the window. */
+.wk-rail-watch .wk-watch-card { top: 0; bottom: auto; }
 .wk-rail-foot { position: relative; border-top: 1px solid var(--border); padding: 8px 10px; display: flex; flex-direction: column; gap: 2px; }
 .wk-rail-link {
   display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 5px 10px;

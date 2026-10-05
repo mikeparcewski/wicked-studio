@@ -85,7 +85,7 @@ export function SessionRail({ runs, needRows, navigate, pathname }: {
       </a>
       {/* Watchtower, where the bell was — outside every scroller, so its card is never clipped. */}
       <div className="wk-rail-watch" data-testid="desk-rail-watch" data-nav-dest="watch">
-        <WatchPill needRows={needRows} runs={runs} navigate={navigate} />
+        <WatchPill needRows={needRows} runs={runs} navigate={navigate} onFeed={pathname === '/watch'} />
       </div>
 
       <div className="wk-rail-groups">

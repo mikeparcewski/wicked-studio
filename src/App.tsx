@@ -583,11 +583,8 @@ export function App(): React.ReactElement {
     // before `useMovedRoutes` replaces it. `/p/:id` renders the project's Sessions tab while the
     // newest session is found; with none, that tab is where it stays.
     if (panel === 'everything') {
-      return (
-        <div className="flex-1 overflow-hidden">
-          <EverythingPage runs={runs} runsLoaded={runsLoaded} runsError={runsError} onRetryRuns={refresh} needRows={needRows} navigate={navigate} search={search} routeProjectId={projectId} />
-        </div>
-      );
+      // Like the Desk: the page owns its scroller (`.wk-desk-scroll`) — no clipping wrapper (main_scroll).
+      return <EverythingPage runs={runs} runsLoaded={runsLoaded} runsError={runsError} onRetryRuns={refresh} needRows={needRows} navigate={navigate} search={search} routeProjectId={projectId} />;
     }
     // Wave 1 ("raw in one step"): a run's raw event JSON / worktree files as routes — the
     // palette's `>events <run>` / `>files <run>` verbs land here, and Back returns.
