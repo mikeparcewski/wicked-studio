@@ -106,7 +106,7 @@ export function SignInPanel({ seat, onClose, onChecked }: {
             <span data-testid="signin-result" data-state={check.kind} role="status" style={{ color: check.kind === 'signed-in' ? 'var(--status-run)' : 'var(--ink-body)' }}>
               {check.kind === 'signed-in' && `${cli} is signed in. You can close this.`}
               {check.kind === 'signed-out' && `${cli} is still signed out — finish the sign-in in the terminal, then check again.`}
-              {check.kind === 'failed' && `Couldn’t read the roster (${check.why}). The command above still stands.`}
+              {check.kind === 'failed' && `Couldn’t read the roster (${showText(check.why)}). The command above still stands.`}
             </span>
           )}
         </div>

@@ -196,11 +196,11 @@ function SessionsTab({ runs, runsLoaded, runsError, onRetryRuns, needRows, q, na
       {q.filter !== 'archived' && read === 'checking' && <p data-testid="everything-checking" className="wk-session-grey">Reading your work…</p>}
       {q.filter !== 'archived' && read === 'failed' && (
         <p data-testid="everything-failed" role="alert" className="wk-session-grey">
-          Couldn’t read your work ({runsError}).
+          Couldn’t read your work ({showText(runsError ?? '')}).
           {onRetryRuns !== undefined && <> <button type="button" data-testid="everything-retry" onClick={onRetryRuns} className="wk-since-toggle">Try again</button></>}
         </p>
       )}
-      {q.filter !== 'archived' && read === 'stale' && <p className="wk-session-grey">The last read failed ({runsError}); this is the list as last read.</p>}
+      {q.filter !== 'archived' && read === 'stale' && <p className="wk-session-grey">The last read failed ({showText(runsError ?? '')}); this is the list as last read.</p>}
       {q.filter !== 'archived' && (read === 'known' || read === 'stale') && total === 0 && (
         <p data-testid="everything-empty" className="wk-session-grey">
           {q.project !== null ? 'Nothing has been started in this project yet.' : 'Nothing has been started yet.'}
