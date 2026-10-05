@@ -131,7 +131,7 @@ with sync_playwright() as p:
         pi.scroll_into_view_if_needed()
         pi_consequence = (pi.get_by_test_id("rail-seat-move-consequence").text_content() or "").strip()
         check("signin-consequence", pi_consequence.startswith("benched from 2 runs this week: not signed in.")
-              and "Opens pi's own sign-in in a terminal" in pi_consequence, consequence=pi_consequence)
+              and "Shows the one command that signs pi in" in pi_consequence, consequence=pi_consequence)
         pi.get_by_test_id("rail-seat-move-button").click()
         dialog = page.get_by_role("dialog")
         dialog.wait_for(state="visible", timeout=8000)

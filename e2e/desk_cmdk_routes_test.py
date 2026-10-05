@@ -10,7 +10,7 @@ Against the in-process fixture (wave-1 corpus + the team corpus for a project wi
      (none renders the not-found page).
   2. Each parameterless destination is reached by opening the palette, typing its label and
      pressing Enter: the address is the row's, and the page is not the not-found page.
-  3. One row of each parametric shape the corpus holds (a project's chat/build/chronicle/
+  3. One row of each parametric shape the corpus holds (a project's chat/build/sessions/
      campaigns, a run's events/files, a session) is reached the same way.
   4. 0 page errors.
 
@@ -88,7 +88,7 @@ with sync_playwright() as p:
     page.screenshot(path=str(SHOTS / "desk-cmdk-go.png"))
     page.keyboard.press("Escape")
     groups = {r["group"] for r in rows}
-    check("go-group", groups == {"go"} and dest_rows == 25 and len(rows) > 25, groups=sorted(groups), destinations=dest_rows, rows=len(rows))
+    check("go-group", groups == {"go"} and dest_rows == 23 and len(rows) > 23, groups=sorted(groups), destinations=dest_rows, rows=len(rows))
 
     def reach(href: str, label: str) -> dict:
         open_palette(f"go: {label}")
@@ -117,7 +117,8 @@ with sync_playwright() as p:
         return {"href": href, "label": label, "ok": not dead and went, "pushed": pushed[:3], "landed": path}
 
     # ── 2. every parameterless destination ──────────────────────────────────────────
-    FIXED = {"/", "/watch", "/rules", "/work", "/chats", "/chat/new", "/projects", "/execute", "/vibe", "/demo", "/steering/dashboard",
+    FIXED = {"/", "/watch", "/rules", "/everything?tab=sessions", "/everything?tab=made", "/everything?tab=helpers",
+             "/everything?tab=handed", "/chat/new", "/steering/dashboard",
              "/steering/policies", "/steering/memories", "/testing/campaigns", "/testing/evals", "/repos", "/repos/new",
              "/runs/new", "/workflows", "/skills", "/mcp", "/system", "/theme", "/editors/dev", "/editors/conformance"}
     open_palette("go:")
@@ -132,7 +133,7 @@ with sync_playwright() as p:
     check("destinations", not bad and not missing_fixed, reached=len(results), bad=bad, missing=missing_fixed)
 
     # ── 3. one of each parametric shape the corpus holds ────────────────────────────
-    want = (" · chat", " · build", " · chronicle", " · campaigns", " · raw events", " · files and diff", " · session", " · details")
+    want = (" · chat", " · build", " · sessions", " · campaigns", " · raw events", " · files and diff", " · session", " · details")
     picked: dict = {}
     for r in rows:
         for w in want:

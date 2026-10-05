@@ -95,11 +95,14 @@ with sync_playwright() as p:
             timeout=timeout)
 
     def section_start() -> None:
+        # S15c: `/demo` moved onto "See everything › Everything made › Videos" (§5.4); the Start row's
+        # "Make a demo" chip is the way in, and a project's Video mode still holds the start form.
         page.goto(f"{origin}/demo", wait_until="networkidle")
+        page.wait_for_function("() => location.pathname === '/everything' && new URLSearchParams(location.search).get('kind') === 'videos'", timeout=10000)
         check("skin-applied", page.evaluate("() => document.documentElement.getAttribute('data-skin')") == SKIN)
-        check("demo-page-empty-says-how", page.get_by_test_id("demo-runs-empty").is_visible())
-        page.get_by_test_id("demo-new").click()
-        check("new-demo-picker-locked-to-demo", page.get_by_test_id("project-mode-picker").get_attribute("data-mode") == "video")
+        page.get_by_test_id("everything-made").wait_for(state="visible", timeout=10000)
+        page.wait_for_function("() => document.querySelector('[data-testid=\"everything-made\"]')?.dataset.index !== 'untried'", timeout=10000)
+        check("demo-page-empty-says-how", "No videos yet" in page.get_by_test_id("everything-empty").inner_text())
         page.goto(f"{origin}/p/{PROJECT}/video", wait_until="networkidle")
         page.get_by_test_id("demo-start").wait_for(state="visible")
         go = page.get_by_test_id("demo-launch")
@@ -196,7 +199,7 @@ with sync_playwright() as p:
         page.get_by_test_id("demo-watch").scroll_into_view_if_needed()
         page.screenshot(path=str(SHOTS / f"demo-{SKIN}-watch.png"))
         page.goto(f"{origin}/demo", wait_until="networkidle")
-        rows = page.locator('[data-testid="demo-run-row"]')
+        rows = page.locator('[data-testid="everything-made-row"][data-kind="videos"]')
         rows.first.wait_for(state="visible")
         check("demo-page-lists-the-run", rows.count() == 1 and rows.first.get_attribute("data-run-id") == state["rid"]
               and rows.first.get_attribute("data-status") == "completed")

@@ -91,32 +91,31 @@ describe('SystemSettings — CLI seats & sign-in', () => {
     expect(screen.queryByRole('button', { name: 'Sign in Cursor' })).toBeNull();
   });
 
-  it('Sign in opens a terminal modal with NO cmd and the login line + newline as initial stdin', async () => {
+  it('Sign in opens the plain-words panel with the login line, Copy and check-again — no terminal (Amendment 5)', async () => {
     const user = userEvent.setup();
     render(<SystemSettings />);
     await screen.findByText('Claude Code');
 
     await user.click(screen.getByRole('button', { name: 'Sign in Codex' }));
 
-    // Modal with the seat's name; terminal mounted inside it.
+    // Modal with the seat's name; the daemon's line shown as given, never run here.
     expect(screen.getByRole('dialog', { name: 'Sign in — Codex' })).toBeInTheDocument();
-    const term = screen.getByTestId('mock-terminal');
-    // CONTRACT: login_invocation is a SHELL LINE — interactive login shell (no cmd),
-    // the line + "\n" written into the PTY's stdin stream.
-    expect(term).toHaveAttribute('data-cmd', '');
-    expect(term).toHaveAttribute('data-initial-input', 'codex auth login\n');
+    expect(screen.getByTestId('signin-line')).toHaveTextContent('codex auth login');
+    expect(screen.getByTestId('copy-command')).toHaveAttribute('data-command', 'codex auth login');
+    expect(screen.getByTestId('signin-check')).toBeInTheDocument();
+    expect(screen.queryByTestId('mock-terminal')).toBeNull();
   });
 
-  it('the modal close button dismisses the sign-in terminal', async () => {
+  it('the modal close button dismisses the sign-in panel', async () => {
     const user = userEvent.setup();
     render(<SystemSettings />);
     await screen.findByText('Claude Code');
 
     await user.click(screen.getByRole('button', { name: 'Sign in Codex' }));
-    expect(screen.getByTestId('mock-terminal')).toBeInTheDocument();
+    expect(screen.getByTestId('signin-panel')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Close' }));
-    await waitFor(() => expect(screen.queryByTestId('mock-terminal')).toBeNull());
+    await waitFor(() => expect(screen.queryByTestId('signin-panel')).toBeNull());
   });
 
   it('clicking Sign in does not toggle the seat default-CLI checkbox', async () => {

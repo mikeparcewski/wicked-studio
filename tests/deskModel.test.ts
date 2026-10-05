@@ -5,7 +5,9 @@ import type { NeedRow } from '../src/board/needsYou.js';
 import { groupAlike, needCount } from '../src/board/needsQueue.js';
 import { deskReadState } from '../src/board/deskModel.js';
 import {
-  DESK_DESTINATIONS,
+  ADDITIONAL_SETTINGS,
+  DESK_RAIL_LINKS,
+  noSignedInHelper,
   START_CHIPS,
   deskGreeting,
   deskProjects,
@@ -183,6 +185,12 @@ describe('chores for whoever runs studio', () => {
     expect(chores.map((c) => c.seat)).toEqual(['pi', 'cx']);
     expect(chores[0]!.title).toBe('An AI helper (Pi) needs signing in again');
     expect(chores[0]!.action).toEqual({ label: 'Sign in', path: '/system' });
+    expect(chores[0]!.rosterSeat).toBe(roster[1]);
+    // A first-run Desk leads with the sign-in only when NO seat is usable; an unread roster never does.
+    expect(noSignedInHelper(roster)).toBe(false);
+    expect(noSignedInHelper(roster.filter((s) => s.key === 'pi' || s.key === 'cx'))).toBe(true);
+    expect(noSignedInHelper(null)).toBe(false);
+    expect(noSignedInHelper([])).toBe(true);
     expect(lapsedSeatChores(null)).toEqual([]);
     expect(chores.every((c) => !/disk|space/i.test(c.title))).toBe(true);
   });
@@ -194,13 +202,15 @@ describe('the Start row and the rail destinations', () => {
       ['Research', 'Brainstorm', 'Plan', 'Build', 'Write a proposal', 'Make a demo', 'Test', 'Just ask']);
   });
 
-  it('reaches every nav destination the other skins reach (the skin contract)', () => {
-    expect(DESK_DESTINATIONS.map((d) => d.dest).sort()).toEqual([
-      'section:chat', 'section:demo', 'section:execute', 'section:mcp', 'section:projects', 'section:repos',
-      'section:skills', 'section:steering', 'section:test', 'section:testing', 'section:vibe',
-      'settings:/system', 'settings:/theme', 'settings:/workflows',
+  it('the rail: Skills · MCP tools · Steering; Additional settings: Configuration, Repositories, Workflows, Evals, Theme (Amendment 5)', () => {
+    expect(DESK_RAIL_LINKS.map((l) => [l.label, l.path])).toEqual([['Skills', '/skills'], ['MCP tools', '/mcp'], ['Steering', '/rules']]);
+    expect(ADDITIONAL_SETTINGS.map((d) => [d.label, d.path])).toEqual([
+      ['Configuration', '/system'], ['Repositories', '/repos'], ['Workflows', '/workflows'], ['Evals', '/testing/evals'], ['Theme', '/theme'],
     ]);
-    for (const d of DESK_DESTINATIONS) expect(d.path.startsWith('/')).toBe(true);
+    // Nothing that redirects, and no Testing campaigns (⌘K and Configuration reach it).
+    for (const d of [...DESK_RAIL_LINKS, ...ADDITIONAL_SETTINGS]) {
+      expect(['/projects', '/chats', '/work', '/execute', '/vibe', '/demo', '/testing/campaigns']).not.toContain(d.path);
+    }
   });
 });
 

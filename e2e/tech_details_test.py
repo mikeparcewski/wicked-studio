@@ -84,8 +84,9 @@ with sync_playwright() as p:
         page.get_by_test_id("steering-gate").wait_for(state="visible", timeout=15000)
 
     def runs_list() -> None:
+        # S15c: /work moved onto "See everything › Sessions"; a live run is a session row there.
         page.goto(f"{origin}/work", wait_until="networkidle")
-        page.locator('[data-testid="run-link"][data-run-id="b1"]').first.wait_for(state="visible", timeout=15000)
+        page.locator('[data-testid="everything-session"][data-run-id="b1"]').first.wait_for(state="visible", timeout=15000)
 
     # ── 1. off by default ───────────────────────────────────────────────────────
     run_page()
@@ -94,7 +95,7 @@ with sync_playwright() as p:
     page.screenshot(path=str(SHOTS / "tech-details-off.png"))
     no_hscroll("off-run-page-no-hscroll")
     runs_list()
-    check("off-run-row", page.get_by_test_id("tech-run-row").count() == 0)
+    check("off-run-row", page.get_by_test_id("tech-run-row").count() == 0 and page.get_by_test_id("tech-session-row").count() == 0)
 
     # ── 2. Settings: the switch, off; turn it on → PUT studio.view ──────────────
     page.goto(f"{origin}/system", wait_until="networkidle")
@@ -131,7 +132,7 @@ with sync_playwright() as p:
     no_hscroll("on-run-page-no-hscroll")
 
     runs_list()
-    row = page.locator('[data-testid="run-link"][data-run-id="b1"] [data-testid="tech-run-row"]').first
+    row = page.locator('[data-testid="everything-session"][data-run-id="b1"] [data-testid="tech-session-row"]').first
     row.wait_for(state="visible", timeout=10000)
     t = row.text_content() or ""
     check("on-run-row", "run b1" in t and "base a41c9e2" in t and "seats claude, codex" in t, text=t)

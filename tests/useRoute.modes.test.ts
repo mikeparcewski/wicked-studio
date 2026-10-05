@@ -41,13 +41,14 @@ describe('useRoute — project + mode routes (DES-MERGE-001 §1.5)', () => {
     expect(routeAt('/p/proj-1/video/demo-3').current.runId).toBeNull();
   });
 
-  it('leaves mode null for /p/:projectId and for an unknown mode segment', () => {
-    expect(routeAt('/p/proj-1').current.mode).toBeNull();
+  it('leaves mode null for /p/:projectId; an unknown mode segment is a dead address (S15c, usability review #4)', () => {
+    expect(routeAt('/p/proj-1').current).toMatchObject({ mode: null, projectId: 'proj-1', panel: 'everything' });
 
     const bogus = routeAt('/p/proj-1/bogus/x').current;
+    expect(bogus.panel).toBe('not-found');
     expect(bogus.mode).toBeNull();
     expect(bogus.artifactId).toBeNull();
-    expect(bogus.projectId).toBe('proj-1');
+    expect(bogus.projectId).toBeNull();
   });
 
   it('decodes percent-encoded ids', () => {
@@ -57,25 +58,18 @@ describe('useRoute — project + mode routes (DES-MERGE-001 §1.5)', () => {
   });
 });
 
-describe('useRoute — slice BE routes (DES-UX-002 §5.2)', () => {
-  it('/p/:id/chronicle is the chronicle VIEW on the Build surface — a real route', () => {
+describe('useRoute — the chronicle moved onto "See everything" (S15c)', () => {
+  it('/p/:id/chronicle parses to everything, scoped to the project — no mode, no artifact', () => {
     const r = routeAt('/p/proj-1/chronicle').current;
+    expect(r.panel).toBe('everything');
     expect(r.projectId).toBe('proj-1');
-    expect(r.mode).toBe('build');
-    expect(r.chronicleView).toBe(true);
-    // Never an artifact named "chronicle": no run-selected machinery fires.
+    expect(r.mode).toBeNull();
     expect(r.artifactId).toBeNull();
     expect(r.runId).toBeNull();
   });
 
-  it('every other route spells chronicleView false', () => {
-    expect(routeAt('/p/proj-1/build').current.chronicleView).toBe(false);
-    expect(routeAt('/p/proj-1').current.chronicleView).toBe(false);
-    expect(routeAt('/').current.chronicleView).toBe(false);
-  });
-
-  it('chroniclePath/runTimelinePath spell the §5.2 addresses; the alias resolves', () => {
-    expect(chroniclePath('proj one')).toBe('/p/proj%20one/chronicle');
+  it('chroniclePath spells the live address; runTimelinePath is unchanged and the alias resolves', () => {
+    expect(chroniclePath('proj one')).toBe('/everything?tab=sessions&project=proj+one');
     expect(runTimelinePath('run/9')).toBe('/runs/run%2F9/timeline');
     // `/runs/:id/timeline` is the §5.2 alias of `/runs/:id` — same run detail,
     // whose default layout the timeline already is (slice BB, terminal runs).
@@ -87,7 +81,7 @@ describe('useRoute — the existing panel routes keep working', () => {
   it('still parses every legacy shape unchanged', () => {
     // `/` became the orchestrator board in slice 5; the run list moved to `/runs`.
     expect(routeAt('/').current).toMatchObject({ panel: 'home', runId: null, mode: null });
-    expect(routeAt('/runs').current).toMatchObject({ panel: 'runs', runId: null });
+    expect(routeAt('/runs').current).toMatchObject({ panel: 'everything', runId: null }); // moved (S15c)
     expect(routeAt('/runs/run-1').current).toMatchObject({ panel: 'runs', runId: 'run-1' });
     expect(routeAt('/runs/new').current).toMatchObject({ panel: 'runs', showLaunch: true });
     expect(routeAt('/chat/new').current).toMatchObject({ showLaunch: true, chatMode: true });
@@ -96,11 +90,11 @@ describe('useRoute — the existing panel routes keep working', () => {
     expect(routeAt('/chat/abc-123').current).toMatchObject({
       panel: 'runs', chatMode: true, artifactId: 'abc-123', runId: null, showLaunch: false,
     });
-    expect(routeAt('/work').current.panel).toBe('work');
+    expect(routeAt('/work').current.panel).toBe('everything'); // moved (S15c)
     expect(routeAt('/repos/new').current).toMatchObject({ panel: 'repos', showRegisterRepo: true });
     expect(routeAt('/repo-detail/repo-1').current).toMatchObject({ panel: 'repo-detail', repoId: 'repo-1' });
     expect(routeAt('/repo-detail').current.panel).toBe('repos');
-    expect(routeAt('/projects').current.panel).toBe('projects');
+    expect(routeAt('/projects').current.panel).toBe('everything'); // moved (S15c)
     expect(routeAt('/projects/proj-1').current).toMatchObject({ panel: 'project-detail', projectId: 'proj-1' });
     expect(routeAt('/system').current.panel).toBe('system');
   });
@@ -110,7 +104,7 @@ describe('useRoute — the existing panel routes keep working', () => {
     expect(r.current.mode).toBeNull();
     expect(r.current.panelPath('home')).toBe('/');
     expect(r.current.panelPath('runs')).toBe('/runs');
-    expect(r.current.panelPath('work')).toBe('/work');
+    expect(r.current.panelPath('watch')).toBe('/watch');
   });
 });
 

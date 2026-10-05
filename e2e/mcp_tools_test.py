@@ -277,13 +277,10 @@ with sync_playwright() as p:
         page.screenshot(path=str(SHOTS / f"mcp-tools-missing-{STUDIO_SKIN}.png"))
         fail("page-shows", page.locator("body").inner_text()[:2000])
     if STUDIO_SKIN == "desk":
-        # The Desk's rail carries sessions, not sections: every section lives under
-        # "Everything else" — MCP tools sits between Skills and Rules (steering) there.
-        page.get_by_test_id("desk-rail-more").click()
-        page.get_by_test_id("desk-rail-everything").wait_for(state="visible", timeout=5000)
-        dests = page.evaluate("""() => [...document.querySelectorAll('[data-testid="desk-rail-everything"] [data-nav-dest]')]
+        # Amendment 5: Skills · MCP tools · Steering sit in the Desk's rail itself (they change what
+        # in-flight work does) — MCP tools between Skills and Steering.
+        dests = page.evaluate("""() => [...document.querySelectorAll('[data-testid="session-rail"] [data-nav-dest]')]
             .map(e => e.getAttribute('data-nav-dest'))""")
-        page.keyboard.press("Escape")
         nav = {"dests": dests}
         order = dests
         want = ["section:skills", "section:mcp", "section:steering"]

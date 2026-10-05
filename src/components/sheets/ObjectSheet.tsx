@@ -18,6 +18,8 @@ import { useIsSystemWorkflow } from '../../store/workflowCache.js';
 import { DeliveryFreezeSwitch } from '../DeliveryFreezeSwitch.js';
 import { FileViewer } from '../FileViewer.js';
 import { seatStandingWord } from '../HealthRailSection.js';
+import { SignInPanel } from '../SignInPanel.js';
+import { signInLapsed } from '../../board/deskModel.js';
 import { LiveNarration } from '../LiveNarration.js';
 import { RunSectionBody, runSections, type AccordionId } from '../RightPanel.js';
 import { humanTitle } from '../runIdentity.js';
@@ -169,6 +171,8 @@ function StepSheet({ r, tab, runs, navigate }: { r: Extract<ObjectRef, { kind: '
 }
 
 function SeatFacts({ seat }: { seat: RosterSeat | undefined }): React.ReactElement {
+  // Amendment 5, decision 5: a signed-out helper's sheet offers the one plain-words sign-in panel.
+  const [signIn, setSignIn] = useState(false);
   if (seat === undefined) return <p className="wk-session-grey">This helper is not on the roster.</p>;
   const standing = seatStandingWord(seat);
   const health = (seat.health as { status?: string; message?: string } | undefined) ?? undefined;
@@ -177,6 +181,10 @@ function SeatFacts({ seat }: { seat: RosterSeat | undefined }): React.ReactEleme
       <p className="wk-sheet-line"><b>{seat.display_name || seat.key}</b> — {standing.detail}</p>
       {health?.message !== undefined && health.message !== '' && <p className="wk-session-grey">{health.message}</p>}
       <p className="wk-session-grey">{seat.enabled_for_council ? 'Takes part in councils.' : 'Not in councils.'}</p>
+      {signInLapsed(seat) && (
+        <button type="button" data-testid="sheet-seat-signin" onClick={() => setSignIn(true)} className="wk-prop-btn wk-prop-btn--ghost">Sign in</button>
+      )}
+      {signIn && <SignInPanel seat={seat} onClose={() => setSignIn(false)} />}
     </div>
   );
 }
@@ -366,11 +374,19 @@ function ActivityTail({ runId }: { runId: string }): React.ReactElement {
 }
 
 function SignIns({ roster }: { roster: RosterSeat[] | null }): React.ReactElement {
+  // Amendment 5, decision 5: a signed-out seat's row offers the one plain-words sign-in panel.
+  const [signIn, setSignIn] = useState<RosterSeat | null>(null);
   if (roster === null) return <p className="wk-session-grey">Reading the roster…</p>;
   return (
     <ul data-testid="sheet-signins" className="wk-sheet-list">
       {roster.length === 0 && <li className="wk-session-grey">No helper is set up on this daemon yet.</li>}
-      {roster.map((s) => <li key={s.key} data-testid="sheet-signin-row" data-seat={s.key} className="wk-sheet-line"><b>{s.display_name || s.key}</b> — {seatStandingWord(s).detail}</li>)}
+      {roster.map((s) => (
+        <li key={s.key} data-testid="sheet-signin-row" data-seat={s.key} className="wk-sheet-line">
+          <b>{s.display_name || s.key}</b> — {seatStandingWord(s).detail}
+          {signInLapsed(s) && <> <button type="button" data-testid="sheet-signin-action" data-seat={s.key} onClick={() => setSignIn(s)} className="wk-since-toggle">Sign in</button></>}
+        </li>
+      ))}
+      {signIn !== null && <SignInPanel seat={signIn} onClose={() => setSignIn(null)} />}
     </ul>
   );
 }

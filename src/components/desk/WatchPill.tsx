@@ -43,7 +43,15 @@ function flat(rows: readonly NeedRow[]): NeedRow[] {
  * focus expands a small card — the sentence and the newest two open rows of TR's feed; the card
  * opens itself only when something new needs you ({@link selfOpens}), for {@link SELF_OPEN_MS}.
  */
-export function WatchPill({ needRows, runs, navigate }: { needRows: NeedRow[]; runs: SessionView[]; navigate: Navigate }): React.ReactElement {
+export function WatchPill({ needRows, runs, navigate, onFeed = false }: {
+  needRows: NeedRow[];
+  runs: SessionView[];
+  navigate: Navigate;
+  /** True while the Watchtower page itself is open: the pill is the way back to it, and its card —
+   *  a preview of the feed — stays closed, so it never covers the feed's own controls (the pill sits
+   *  at the top of the rail since Amendment 5, where the card would open over the page's header). */
+  onFeed?: boolean;
+}): React.ReactElement {
   const count = needCount(needRows);
   const sentence = watchSentence(count, liveCount(runs));
   const recent = useWatchFeed({}).filter((r) => r.state === 'open').slice(0, 2);
@@ -63,25 +71,26 @@ export function WatchPill({ needRows, runs, navigate }: { needRows: NeedRow[]; r
   }, [needRows]);
   useEffect(() => () => { if (timer.current !== null) clearTimeout(timer.current); }, []);
   return (
-    <div className={`wk-watch-pill-wrap${self ? ' wk-watch-pill-wrap--open' : ''}`} data-testid="watch-pill-wrap" data-open={self ? 'true' : 'false'}>
+    <div className={`wk-watch-pill-wrap${self && !onFeed ? ' wk-watch-pill-wrap--open' : ''}${onFeed ? ' wk-watch-pill-wrap--on-feed' : ''}`} data-testid="watch-pill-wrap" data-open={self && !onFeed ? 'true' : 'false'}>
       <a
         href="/watch"
         onClick={(e) => { e.preventDefault(); setSelf(false); navigate('/watch'); }}
         data-testid="watch-pill"
         data-count={count}
         aria-label={`Watchtower: ${sentence}`}
+        aria-current={onFeed ? 'page' : undefined}
         className="wk-rail-link wk-watch-pill"
       >
         <span>Watchtower</span>
         <span aria-hidden className={`wk-desk-dot ${count > 0 ? 'wk-desk-dot--waiting' : 'wk-desk-dot--working'}`} />
       </a>
-      <div data-testid="watch-pill-card" role="status" className="wk-watch-card">
+      {!onFeed && <div data-testid="watch-pill-card" role="status" className="wk-watch-card">
         <p className="wk-watch-card-sentence">{sentence}</p>
         {recent.map((r) => (
           <p key={r.id} data-testid="watch-pill-row" className="wk-watch-card-row">{r.sentence}</p>
         ))}
         <p className="wk-watch-card-foot">It opens itself only for something that needs you. Click or ⌥W for the full feed.</p>
-      </div>
+      </div>}
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { UNFILED_MOUNT, type DocSummary } from '../api/interactive.js';
 import { ambientProjectId, launchPath, registerRepoPath } from '../hooks/ambientProject.js';
 import { useBoardModel, type BoardProject } from '../hooks/useBoardModel.js';
 import { modePath, projectPath, versionPath, type Mode } from '../hooks/useRoute.js';
+import { everythingPath } from '../board/everythingModel.js';
 import { fetchReposCached, getCachedRepos } from '../store/repoCache.js';
 import { useLiveChatsStore } from '../store/liveChats.js';
 import { useProjectsStore } from '../store/projects.js';
@@ -81,15 +82,20 @@ export type PathKey = 'projects' | 'execute' | 'test' | 'vibe' | 'demo' | 'chat'
  *  the SINGULAR the ＋ affordance creates (DES-UX-001 §7.10's grammar fix:
  *  "New Project", never "New Projects"). */
 interface PathSpec { key: PathKey; title: string; noun: string; glyph: string; dash: string | null; collapsedHref: string }
-const P_PROJECTS: PathSpec = { key: 'projects', title: 'Projects',     noun: 'Project',    glyph: '◇', dash: '/projects', collapsedHref: '/projects' };
+// S15c: the list and dashboard addresses moved onto "See everything" (§5.4); the classic rail's
+// ▦ dashboards and view-all rows point at the live addresses so nothing dead-ends.
+const EV_SESSIONS = everythingPath({ tab: 'sessions' });
+const EV_DOCS = everythingPath({ tab: 'made', kind: 'documents' });
+const EV_VIDEOS = everythingPath({ tab: 'made', kind: 'videos' });
+const P_PROJECTS: PathSpec = { key: 'projects', title: 'Projects',     noun: 'Project',    glyph: '◇', dash: everythingPath(), collapsedHref: everythingPath() };
 // The nav-reorg promoted each of Make's three forks (build|document|video) to a top-level path,
 // each reusing the Make/Chat rail grammar (▦ dashboard + ＋ create + accordion list + view-all):
 // Execute ← build, Vibe ← document, Demo ← video. Execute's ＋ launches a build run directly
 // (like Chat's ＋); Vibe/Demo's ＋ open a project-picker popover locked to their mode.
-const P_EXECUTE: PathSpec  = { key: 'execute',  title: 'Execute',      noun: 'Run',        glyph: '▸', dash: '/execute',  collapsedHref: '/execute' };
-const P_VIBE: PathSpec      = { key: 'vibe',     title: 'Vibe',         noun: 'Document',   glyph: '▤', dash: '/vibe',     collapsedHref: '/vibe' };
-const P_DEMO: PathSpec      = { key: 'demo',     title: 'Demo',         noun: 'Demo',       glyph: '▶', dash: '/demo',     collapsedHref: '/demo' };
-const P_CHAT: PathSpec     = { key: 'chat',     title: 'Chat',         noun: 'Chat',       glyph: '💬', dash: '/chats',    collapsedHref: '/chats' };
+const P_EXECUTE: PathSpec  = { key: 'execute',  title: 'Execute',      noun: 'Run',        glyph: '▸', dash: EV_SESSIONS, collapsedHref: EV_SESSIONS };
+const P_VIBE: PathSpec      = { key: 'vibe',     title: 'Vibe',         noun: 'Document',   glyph: '▤', dash: EV_DOCS,     collapsedHref: EV_DOCS };
+const P_DEMO: PathSpec      = { key: 'demo',     title: 'Demo',         noun: 'Demo',       glyph: '▶', dash: EV_VIDEOS,   collapsedHref: EV_VIDEOS };
+const P_CHAT: PathSpec     = { key: 'chat',     title: 'Chat',         noun: 'Chat',       glyph: '💬', dash: EV_SESSIONS, collapsedHref: EV_SESSIONS };
 const P_REPOS: PathSpec    = { key: 'repos',    title: 'Repositories', noun: 'Repository', glyph: '⬡', dash: '/repos',    collapsedHref: '/repos' };
 // Evals (the nav-reorg): the top-level Testing section became Evals — a NORMAL section (▦
 // dashboard + ＋ create-new + list) whose surface is the steering-rule eval runner (the one QE
@@ -784,12 +790,12 @@ export function LeftSidebar({ runs, navigate, pathname, runPath = flatRunPath, i
                 rail never narrates absence it cannot yet know. */}
             {!loading && error === null && (
               items.length === 0
-                ? <EmptyRow label="No projects yet" href="/projects" navigate={navigate} />
+                ? <EmptyRow label="No projects yet" href={everythingPath()} navigate={navigate} />
                 : items.slice(0, PROJECTS_MAX).map(item => (
                     <ProjectRow key={item.project.id} item={item} onOpen={() => openProject(item.project.id)} />
                   ))
             )}
-            <ViewAll href="/projects" navigate={navigate} />
+            <ViewAll href={everythingPath()} navigate={navigate} />
           </RailHeading>
 
           {/* ── Execute ← build runs (nav-reorg): ＋ launches a build run directly ── */}
@@ -801,11 +807,11 @@ export function LeftSidebar({ runs, navigate, pathname, runPath = flatRunPath, i
             navigate={navigate}
           >
             {executeRuns.length === 0
-              ? <EmptyRow label="Nothing run yet" href="/execute" navigate={navigate} />
+              ? <EmptyRow label="Nothing run yet" href={EV_SESSIONS} navigate={navigate} />
               : executeRuns.map((view) => (
                   <RunRow key={view.session.id} view={view} onOpen={() => navigate(runPath(view.session.id))} />
                 ))}
-            <ViewAll href="/execute" navigate={navigate} />
+            <ViewAll href={EV_SESSIONS} navigate={navigate} />
           </RailHeading>
 
           {/* ── Test — tests/recon as a standalone work section (usability wave): below Execute,
@@ -833,11 +839,11 @@ export function LeftSidebar({ runs, navigate, pathname, runPath = flatRunPath, i
               : undefined}
           >
             {vibeDocs.length === 0
-              ? <EmptyRow label="No documents yet" href="/vibe" navigate={navigate} />
+              ? <EmptyRow label="No documents yet" href={EV_DOCS} navigate={navigate} />
               : vibeDocs.map(({ doc, projectId, projectName }) => (
                   <DocRow key={`${projectId}:${doc.name}`} doc={doc} projectId={projectId} projectName={projectName} navigate={navigate} />
                 ))}
-            <ViewAll href="/vibe" navigate={navigate} />
+            <ViewAll href={EV_DOCS} navigate={navigate} />
           </RailHeading>
 
           {/* ── Demo ← demos (nav-reorg): ＋ opens a project-picker locked to Video ── */}
@@ -852,11 +858,11 @@ export function LeftSidebar({ runs, navigate, pathname, runPath = flatRunPath, i
               : undefined}
           >
             {demoDocs.length === 0
-              ? <EmptyRow label="No demos yet" href="/demo" navigate={navigate} />
+              ? <EmptyRow label="No demos yet" href={EV_VIDEOS} navigate={navigate} />
               : demoDocs.map(({ doc, projectId, projectName }) => (
                   <DocRow key={`${projectId}:${doc.name}`} doc={doc} projectId={projectId} projectName={projectName} navigate={navigate} />
                 ))}
-            <ViewAll href="/demo" navigate={navigate} />
+            <ViewAll href={EV_VIDEOS} navigate={navigate} />
           </RailHeading>
 
           {/* ── Chat ─────────────────────────────────────────────────────────── */}
@@ -900,11 +906,11 @@ export function LeftSidebar({ runs, navigate, pathname, runPath = flatRunPath, i
               // "Recorded" keeps this row's claim true beside a LIVE session
               // (J4/C6 one-truth) — and with live rows above, the label never
               // renders beside a live conversation at all (round 2, J4/3).
-              ? <EmptyRow label="No recorded chats yet" href="/chats" navigate={navigate} />
+              ? <EmptyRow label="No recorded chats yet" href={EV_SESSIONS} navigate={navigate} />
               : chatRuns.map((view) => (
                   <RunRow key={view.session.id} view={view} onOpen={() => navigate(runPath(view.session.id))} />
                 ))}
-            <ViewAll href="/chats" navigate={navigate} />
+            <ViewAll href={EV_SESSIONS} navigate={navigate} />
           </RailHeading>
 
           {/* ── Repositories — rows + search moved inside (§3.3) ─────────────── */}

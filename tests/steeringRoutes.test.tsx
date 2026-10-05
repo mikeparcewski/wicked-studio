@@ -81,8 +81,8 @@ describe('useRoute — /steering/{dashboard,policies,memories}', () => {
   });
 
   it('every other route spells steeringSection null without claiming the steering panel', () => {
-    const r = routeAt('/work').current;
-    expect(r.panel).toBe('work');
+    const r = routeAt('/skills').current;
+    expect(r.panel).toBe('skills');
     expect(r.steeringSection).toBeNull();
   });
 });

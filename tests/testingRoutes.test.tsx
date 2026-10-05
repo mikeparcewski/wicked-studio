@@ -73,8 +73,8 @@ describe('useRoute — /testing/:page', () => {
   });
 
   it('every other route spells testingPage null without claiming the testing panel', () => {
-    const r = routeAt('/work').current;
-    expect(r.panel).toBe('work');
+    const r = routeAt('/skills').current;
+    expect(r.panel).toBe('skills');
     expect(r.testingPage).toBeNull();
   });
 });

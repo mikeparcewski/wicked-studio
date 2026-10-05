@@ -9,7 +9,7 @@ import type { SteeringRule } from '../api/steering.js';
  * The move, first match wins:
  *
  * 1. **Sign in**: the seat was benched this week for an auth reason, and the roster gives its
- *    own sign-in line. The action opens that line in a terminal (`POST /terminals`), the same
+ *    own sign-in line. The action opens the sign-in panel with that line (Amendment 5), the same
  *    surface Settings uses.
  * 2. **Route a phase away**: 2+ stalls, or 2+ units sent back that are at least a third of its
  *    units, or under half its gated units passed first time (3+ gated). The phase is the one where
@@ -84,7 +84,7 @@ export function coachSeat(record: SeatRecord | undefined, seat: RosterSeat, wind
       kind: 'sign-in',
       label: `Sign in to ${name}`,
       why: `benched from ${plural(authBenches, 'run')} this week: not signed in`,
-      consequence: `Opens ${name}'s own sign-in in a terminal. Once it is signed in, the next run seats it again.`,
+      consequence: `Shows the one command that signs ${name} in. Once it is signed in, the next run seats it again.`,
       line,
     };
   }

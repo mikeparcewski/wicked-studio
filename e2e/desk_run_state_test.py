@@ -124,9 +124,10 @@ with sync_playwright() as p:
     href = link.get_attribute("href") if link.count() else None
     check("reject-note-on-the-banner", note is not None and "the hall is booked that week" in note, note=note,
           banner=banner.inner_text()[:300])
-    check("all-runs-link-follows-the-banner", href == "/work?filter=cancelled", href=href)
+    # S15c: the list is "See everything › Sessions" with the Stopped lens (`/work?filter=` moved).
+    check("all-runs-link-follows-the-banner", href == "/everything?tab=sessions&filter=cancelled", href=href)
     link.click()
-    page.wait_for_function("() => location.pathname === '/work'", timeout=8000)
+    page.wait_for_function("() => location.pathname === '/everything'", timeout=8000)
     page.wait_for_timeout(800)
     listed = page.locator('[data-testid="run-finished-row"][data-run-id="r-rejected"]').count()
     page.screenshot(path=str(SHOTS / "desk-run-state-work-cancelled.png"))

@@ -175,6 +175,14 @@ EXPECTED_DESTS = sorted([
     "section:chat", "section:repos", "section:skills", "section:mcp", "section:steering", "section:testing",
     "settings:/theme", "settings:/workflows", "settings:/system", "notifications", "health",
 ])
+# The Desk (Amendment 5, as revised): Watchtower, Skills, MCP tools, Steering, Health in the rail;
+# Configuration, Repositories, Workflows, Evals, Theme under "Additional settings"; no Notifications
+# entry (the Desk is the notification surface). The list pages moved onto /everything (S15c) and are
+# reached by ⌘K (desk_cmdk_routes proves every route), not by a nav entry.
+EXPECTED_DESK_DESTS = sorted([
+    "watch", "section:skills", "section:mcp", "section:steering", "health",
+    "settings:/system", "section:repos", "settings:/workflows", "section:testing", "settings:/theme",
+])
 
 
 def nav_reach(page, skin: str) -> dict:
@@ -184,7 +192,7 @@ def nav_reach(page, skin: str) -> dict:
         page.get_by_test_id("rail-settings-flyout").wait_for(state="visible", timeout=5000)
     elif skin == "desk":
         page.get_by_test_id("desk-rail-more").click()
-        page.get_by_test_id("desk-rail-everything").wait_for(state="visible", timeout=5000)
+        page.get_by_test_id("desk-rail-additional").wait_for(state="visible", timeout=5000)
     else:
         page.get_by_test_id("rail-title-settings").click()
     if skin != "desk":
@@ -204,8 +212,8 @@ def nav_reach(page, skin: str) -> dict:
     if skin == "compact-rail":
         page.get_by_test_id("rail-icon-settings").click()
     if skin == "desk":
-        # "Everything else" is a popover beside the rail (studio#421): the Health click closed it.
-        if not page.get_by_test_id("desk-rail-everything").is_visible():
+        # "Additional settings" is a popover beside the rail (studio#421): the Health click closed it.
+        if not page.get_by_test_id("desk-rail-additional").is_visible():
             page.get_by_test_id("desk-rail-more").click()
         page.locator('[data-testid="session-rail"] [data-nav-dest="settings:/theme"]').click()
     else:
@@ -308,7 +316,7 @@ with sync_playwright() as p:
     icons_without_aria = [d["dest"] for d in reach["compact-rail"]["dests"]
                           if d["dest"].startswith(("section:", "notifications", "health")) and not d["label"]]
     check("nav-destinations-same-under-every-skin",
-          rs == EXPECTED_DESTS and rc == EXPECTED_DESTS and rd == EXPECTED_DESTS and not unlabelled and not icons_without_aria
+          rs == EXPECTED_DESTS and rc == EXPECTED_DESTS and rd == EXPECTED_DESK_DESTS and not unlabelled and not icons_without_aria
           and all(r["health_opens"] and r["settings_navigates"] for r in reach.values()),
           studio=rs, compact_rail=rc, desk=rd, unlabelled=unlabelled, icons_without_aria=icons_without_aria)
 

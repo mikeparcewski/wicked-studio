@@ -36,7 +36,7 @@ describe('FailureBanner (§11.5 — run-halted explainer)', () => {
   });
 
   // Slice Y (DES-UX-001 §7.4): the banner's All-runs is a FAILURE-CONTEXT entry —
-  // it lands on /work with the Failed filter active, never on the retired /runs.
+  // it lands on "See everything › Sessions" with the Blocked lens (S15c; `/work?filter=` moved there).
 
   // Review Top-10 #1: the deny banner speaks plain language FIRST; the engine prose survives
   // as a dim detail line, and rule denials link into the Steering drawer.
@@ -73,9 +73,9 @@ describe('FailureBanner (§11.5 — run-halted explainer)', () => {
     const navigate = vi.fn();
     render(<FailureBanner view={makeView({ status: 'failed' })} log={errorLog} navigate={navigate} />);
     const link = screen.getByTestId('failure-all-runs');
-    expect(link).toHaveAttribute('href', '/work?filter=failed');
+    expect(link).toHaveAttribute('href', '/everything?tab=sessions&filter=failed');
     fireEvent.click(link);
-    expect(navigate).toHaveBeenCalledWith('/work?filter=failed');
+    expect(navigate).toHaveBeenCalledWith('/everything?tab=sessions&filter=failed');
   });
 
   it('omits the link when no navigate is wired (no dead affordance)', () => {
@@ -89,9 +89,9 @@ describe('a rejected plan ends cancelled (studio#478)', () => {
     const navigate = vi.fn();
     render(<FailureBanner view={makeView({ status: 'cancelled' })} log={[]} navigate={navigate} />);
     const link = screen.getByTestId('failure-all-runs');
-    expect(link).toHaveAttribute('href', '/work?filter=cancelled');
+    expect(link).toHaveAttribute('href', '/everything?tab=sessions&filter=cancelled');
     fireEvent.click(link);
-    expect(navigate).toHaveBeenCalledWith('/work?filter=cancelled');
+    expect(navigate).toHaveBeenCalledWith('/everything?tab=sessions&filter=cancelled');
   });
 
   it('the operator\'s reject note is on the cancelled banner, in their words', () => {
