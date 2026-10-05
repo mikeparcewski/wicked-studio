@@ -3,15 +3,10 @@
  * memories" review queue (`/proposals`): the surface where agent-proposed governed-knowledge
  * items wait, each `pending`, for a human to approve or reject.
  *
- * ── INTEGRATION POINT (faceted-memory build, paired estate/crew lane) ─────────────────────────
- * The `Proposal` shape is hand-mirrored from the engine that PRODUCES it — the estate proposal
- * store, surfaced through crew's `/api/v1/proposals*` slice (built in a parallel lane) — because
- * that crew slice is not yet in studio's installed `wicked-crew-api-types`. Like the wiki shapes
- * in `./wiki.ts` and the steering shapes in `./steering.ts`, every declaration here is
- * TEMPORARY: **delete this block and re-export from `wicked-crew-api-types`** the moment studio
- * bumps to the api-types version that carries the proposal contract. Field names are the
- * engine's serde output, verbatim — a served payload that disagrees is a contract bug, not an
- * adoption gap.
+ * ── CONTRACT (faceted-memory build) ───────────────────────────────────────────────────────────
+ * `Proposal`, `ProposalState` and `FileProposalBody` come from `wicked-crew-api-types` (pin 0.92.0,
+ * ASK-S1) — the engine's serde output, verbatim. `ProposalKind` / `ProposalApproveOutcome` below are
+ * studio's own readings.
  *
  * The support probe is the same two-layer adoption seam as the wiki/steering reads: a bare 404
  * (Fastify's unknown-route answer) means "this crew daemon predates the proposal routes"; a 501
@@ -26,34 +21,13 @@
 import { apiFetch } from './client.js';
 import { ApiError, isRouteAbsent } from './errors.js';
 
-// ── The proposal (mirrored from the estate proposal store; DELETE once api-types carries it) ──
-
-/** A proposal's lifecycle state. `pending` is the only one the queue lists by default. */
-export type ProposalState = 'pending' | 'approved' | 'rejected';
-
-/**
- * One agent-proposed governed-knowledge item awaiting human review. `kind_type` is the
- * discriminator — `"memory"` for a proposed memory, `"policy:<steering_type>"` for a proposed
- * steering policy (e.g. `"policy:security"`). `payload` is `unknown` because its shape depends
- * on the kind — read it through the narrowing helpers below, never by blind cast.
- */
-export interface Proposal {
-  id: string;
-  /** `"memory"` | `"policy:<steering_type>"` — the type dimension the queue filters on. */
-  kind_type: string;
-  /** Kind-dependent body — narrow with {@link memoryPayload} / {@link policyPayload}. */
-  payload: unknown;
-  /** Facet dimensions the proposal is tagged with (project, repo, domain, …). */
-  facets: Record<string, string>;
-  /** Which run/agent proposed it (run id, agent, source, …). */
-  provenance: Record<string, string>;
-  state: ProposalState;
-  /** Unix-epoch seconds the proposal was created. */
-  created_at: number;
-}
+// ── The proposal (from the contract package) ─────────────────────────────────────────────────
 
 /** Approve returns the engine's outcome — its exact shape is not in api-types yet, so it is
  *  read permissively (a stored item id, an ok flag). */
+import type { ProposalState, Proposal, FileProposalBody } from 'wicked-crew-api-types';
+export type { ProposalState, Proposal, FileProposalBody };
+
 export interface ProposalApproveOutcome {
   ok?: boolean;
   id?: string;
@@ -175,16 +149,6 @@ export function approveProposal(id: string, body?: { reach: 'project' }): Promis
     method: 'POST',
     ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
   });
-}
-
-/** `POST /proposals` body (crew api-types 0.54.0): ONE preference a person files — the daemon
- *  files it as a `memory` proposal with `payload.capture: "preference"`; the kind is never ours. */
-export interface FileProposalBody {
-  content: string;
-  /** Becomes the `project` facet — the preference is recalled on that project only. */
-  project?: string;
-  /** Where the pick was made (`doc:<docId>@v<N>`). */
-  source?: string;
 }
 
 /** `POST /proposals` — file one preference into the review queue; answers the pending id. */

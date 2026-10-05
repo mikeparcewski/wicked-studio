@@ -8,10 +8,8 @@
  * skill's content from the baseline. Nothing is live until PUBLISH validates the whole tree and
  * writes an immutable snapshot generation that every worker spawn then receives.
  *
- * THE TYPES ARE THE CONTRACT'S. Every wire shape here is imported from `./skills-wire.ts` — a
- * byte-for-byte mirror of the `wicked-crew-api-types@0.34.0` skills block (crew#480, crew#531), pinned by
- * `tests/skillsWire.test.ts` against a vendored fixture until the package publishes and the mirror
- * becomes a re-export. This module adds only what the UI folds from it (rows, counts, ownership,
+ * THE TYPES ARE THE CONTRACT'S. Every wire shape here is imported from `./skills-wire.ts`, which
+ * re-exports the `wicked-crew-api-types` skills block (pin 0.92.0). This module adds only what the UI folds from it (rows, counts, ownership,
  * route identity, the adoption / CAS seams) — never a shape of its own for something the wire spells.
  *
  * The three wire rules every caller leans on (api-types 0.27.0):

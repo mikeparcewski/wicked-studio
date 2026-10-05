@@ -12,79 +12,20 @@
  * note as `amend` — at the plan gate the planner runs again, at the review gate the recorder does
  * (one chapter).
  *
- * ── INTEGRATION POINT ──────────────────────────────────────────────────────────────────────────
- * Hand-mirrored from crew's `DemoLaunchBody` / `DemoView` because studio's installed
- * `wicked-crew-api-types` predates 0.61.0 — delete these declarations and re-export from the
- * contract package when studio bumps to it (the `./capture.ts` precedent).
+ * ── CONTRACT ───────────────────────────────────────────────────────────────────────────────────
+ * Types come from `wicked-crew-api-types` (pin 0.92.0, ASK-S1); the hand-mirrored copies that lived
+ * here while the pin lagged are gone.
+ * `DemoStep` below is studio's own reading.
  */
 
 import { apiBase, apiFetch } from './client.js';
 import { commitGateDecision, refreshGate, type DecisionOutcome } from '../board/gateActions.js';
 import type { SessionView } from './types.js';
 
-export interface DemoLaunchBody {
-  url: string;
-  audience: string;
-  show: string;
-  clisJson?: string;
-}
-
-export interface DemoLaunchResponse {
-  runId: string;
-}
-
-export type DemoStage =
-  | 'preparing'
-  | 'team_gate'
-  | 'planning'
-  | 'plan_gate'
-  | 'recording'
-  | 'reviewing'
-  | 'review_gate'
-  | 'done'
-  | 'failed';
-
-export interface DemoChapter {
-  key: string;
-  title: string;
-  blurb: string;
-  tags: string[];
-  resets: string[];
-  recorded: boolean;
-}
-
-export interface DemoMarker {
-  at: string;
-  sec: number;
-  title: string;
-}
-
-export interface DemoFinding {
-  at: string;
-  chapter: string;
-  issue: string;
-  verdict: 're-encode' | 're-record' | 'fix-app';
-}
-
-export interface DemoView {
-  runId: string;
-  url: string | null;
-  audience: string | null;
-  stage: DemoStage;
-  script: string | null;
-  chapters: DemoChapter[];
-  markers: DemoMarker[];
-  sheets: Array<{ name: 'chapters' | 'joins' | 'end'; path: string }>;
-  video: { path: string; bytes: number } | null;
-  recording: { readOnly: boolean | null };
-  /** `rejected`: the engine judged the review NOT PASS — the gate is its escalation gate, where approve
-   *  re-runs the reviewer and nothing accepts a failed review. */
-  review: { verdict: 'accept' | 'changes' | null; findings: DemoFinding[]; text: string | null; rejected: boolean };
-  seats: { recorder: string | null; reviewer: string | null };
-  syntheticLabelled: boolean;
-}
-
 /** The preset a demo run is launched from (`team_plan.preset`, api-types 0.46.0). */
+import type { DemoLaunchBody, DemoLaunchResponse, DemoStage, DemoChapter, DemoMarker, DemoFinding, DemoView } from 'wicked-crew-api-types';
+export type { DemoLaunchBody, DemoLaunchResponse, DemoStage, DemoChapter, DemoMarker, DemoFinding, DemoView };
+
 export const DEMO_PRESET = 'demo';
 
 /** A demo run: launched from the `demo` preset. Read structurally — studio's api-types predates `team_plan`. */

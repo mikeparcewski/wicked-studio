@@ -12,6 +12,7 @@ export const SEVERITY_COLOR: Record<string, string> = {
 
 export const EFFECT_COLOR: Record<SteeringEffect, string> = {
   deny: 'var(--status-fail)',
+  warn: 'var(--status-gate)',
   allow_with_conditions: 'var(--status-gate)',
   allow: 'var(--status-done)',
 };

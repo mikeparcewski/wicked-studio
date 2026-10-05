@@ -1,37 +1,9 @@
 import { apiFetch } from './client.js';
 import { isRouteUnsupported } from './errors.js';
-import { PROTOCOL_VERSION, type PermissionId } from '../editors/protocol.js';
+import { PROTOCOL_VERSION } from '../editors/protocol.js';
 
-/**
- * Crew's editor registry (EP-C1, `GET /api/v1/editors`; DES-EDITOR-PLUGINS-001 §9.1) — hand-mirrored
- * from `wicked-crew-api-types` until studio bumps its pin (the `./demo.ts` / `./walkthrough.ts`
- * precedent). The host asks it which editor claims an artifact kind (EP-P2): first-party editors ship
- * inside studio's own bundle, so what the daemon lists is what this build carries, hash-pinned.
- */
-export interface EditorView {
-  id: string;
-  title: string;
-  version: string;
-  /** wicked.editor protocol versions it speaks. */
-  protocol: number[];
-  /** Artifact kinds it can open. */
-  kinds: string[];
-  sizes: Array<'inline' | 'pane' | 'full'>;
-  panels?: Array<'checks'>;
-  permissions: Array<{ id: PermissionId; why: string }>;
-  /** The full sha256 of the entry file, pinned when the registry read it. */
-  sha256: string;
-  bytes: number;
-  first_party: boolean;
-  enabled: boolean;
-  source: 'studio-bundle';
-  entry_url: string;
-}
-
-export interface ListEditorsResponse {
-  editors: EditorView[];
-  installs: string;
-}
+import type { EditorView, ListEditorsResponse } from 'wicked-crew-api-types';
+export type { EditorView, ListEditorsResponse };
 
 const SHA = /^[0-9a-f]{64}$/;
 

@@ -19,111 +19,19 @@
  * ORIGIN (`origin.words`) comes ONLY from crew's ledger through these views: a proposal payload
  * carries just the decision id, so a forged payload has no words to show (§4.2.4).
  *
- * ── INTEGRATION POINT ─────────────────────────────────────────────────────────────────────────
- * Hand-mirrored from crew api-types 0.80.0 / 0.84.0 because studio's installed
- * `wicked-crew-api-types` predates them — delete these declarations and re-export from the
- * contract package when studio bumps to it (the `./demo.ts` precedent).
+ * ── CONTRACT ───────────────────────────────────────────────────────────────────────────────────
+ * Types come from `wicked-crew-api-types` (pin 0.92.0, ASK-S1); the hand-mirrored copies that lived
+ * here while the pin lagged are gone.
+ * `DecisionsMode`, `DecisionsFilter` and `ChatDecisionsRecord` below are studio's own readings.
  */
 
 import { apiFetch } from './client.js';
 import { isRouteUnsupported } from './errors.js';
-import type { SteeringType } from './steering.js';
-
-export type DecisionType = 'rule' | 'correction' | 'scope' | 'exception' | 'choice' | 'confirmation' | 'none';
-export type DecisionHost = 'studio-chat' | 'gate' | 'elicitation' | 'inject' | 'capture' | 'claude-code';
-/** The deterministic templates (`derive.ts`). Only `T1-always` and `T2-never` can auto-remember. */
-export type DecisionTemplateId = 'T1-always' | 'T2-never' | 'T3-before' | 'T4-prefer' | 'T5-must' | 'T6-only' | 'in-your-words';
-/** How the derivation routed a decision (§4.4): the first that applies wins. */
-export type DecisionRoute = 'ledger' | 'offer' | 'auto' | 'restated' | 'maybe-restated' | 'conflict';
-/** The latest outcome of a decision. `recorded` = no outcome yet (ledger-only, or still landing). */
-export type DecisionState = 'recorded' | 'offered' | 'remembered' | 'undone' | 'dismissed' | 'restated' | 'widened' | 'landing_failed';
-export type DecisionDismissReason = 'not-a-rule' | 'one-off' | 'wrong-type' | 'wrong-scope' | 'not-the-same' | 'undone';
 /** `WICKED_DECISIONS`: `off` records nothing; `ledger` records and labels (no chips, no auto); `on` offers and auto-remembers. */
+import type { DecisionType, DecisionHost, DecisionTemplateId, DecisionRoute, DecisionState, DecisionDismissReason, DecisionView, ListDecisionsResponse, RememberDecisionBody, RememberDecisionResponse, ChatDecisionsFrame, DecisionChangedFrame } from 'wicked-crew-api-types';
+export type { DecisionType, DecisionHost, DecisionTemplateId, DecisionRoute, DecisionState, DecisionDismissReason, DecisionView, ListDecisionsResponse, RememberDecisionBody, RememberDecisionResponse, ChatDecisionsFrame, DecisionChangedFrame };
+
 export type DecisionsMode = 'off' | 'ledger' | 'on';
-
-export interface DecisionView {
-  id: string;
-  /** Epoch ms the words were recorded. */
-  at: number;
-  project_id: string | null;
-  host: DecisionHost;
-  origin: {
-    actor: { id: string; kind: 'human'; trust: string };
-    auth_mode: 'off' | 'required';
-    run_id?: string;
-    ord?: number;
-    gate_id?: string;
-    elicitation_id?: string;
-    chat_id?: string;
-    turn_id?: string;
-    /** The verbatim words (masked where a secret was found; then `redacted: true`). */
-    words: string;
-    /** A bare gate approve/reject or a picked elicitation option, when there were no words. */
-    choice?: string;
-    words_source: 'typed' | 'operator-files' | 'cli-transcript';
-    redacted: boolean;
-  };
-  /** The derived rule: the statement crew would remember, never the model's paraphrase. */
-  derived: {
-    statement: string | null;
-    polarity: 'do' | 'dont' | null;
-    key: string | null;
-    scope: 'project' | 'everywhere';
-    steering_type: SteeringType;
-    template: DecisionTemplateId | null;
-    exclusions: string[];
-  };
-  route: DecisionRoute;
-  state: DecisionState;
-  /** How it was remembered (present once `remembered`). */
-  how?: 'auto' | 'chip' | 'needs-you';
-  proposal_id?: string;
-  rule_id?: string;
-  /** The in-force rule this restates (`restated`) or contradicts (`conflict`). */
-  restates_rule_id?: string;
-  conflicts_rule_id?: string;
-  /** Edits the operator made at Remember; ORIGIN keeps the original words. */
-  edits?: { statement?: string; scope?: 'project' | 'everywhere'; steering_type?: SteeringType };
-  /** The loud reason a landing failed (`landing_failed`). */
-  error?: string;
-  /** B8: the same rule decided in ≥ 2 projects — "Make it apply everywhere". */
-  widen?: { projects: string[] };
-}
-
-export interface ListDecisionsResponse {
-  decisions: DecisionView[];
-  mode: DecisionsMode;
-}
-
-export interface RememberDecisionBody {
-  scope?: 'project' | 'everywhere';
-  steering_type?: SteeringType;
-  statement?: string;
-}
-
-export interface RememberDecisionResponse {
-  rule_id: string;
-  proposal_id: string;
-  project?: string;
-}
-
-/** `/ws`: the decisions recorded from ONE chat turn's operator message (DC-S4b). */
-export interface ChatDecisionsFrame {
-  type: 'chatDecisions';
-  chat: string;
-  turn_id: string;
-  items: DecisionView[];
-  project_id?: string;
-}
-
-/** `/ws`: a decision's state changed (ids only, no words). */
-export interface DecisionChangedFrame {
-  type: 'decisionChanged';
-  id: string;
-  state: DecisionState;
-  rule_id?: string;
-  project_id: string | null;
-}
 
 /** The transcript record a reader folds onto the turn's `user` record (api-types 0.84.0). */
 export interface ChatDecisionsRecord {

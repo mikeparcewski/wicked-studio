@@ -15,6 +15,8 @@ import {
 const base = {
   deterministic: 0, destructive: false, floor_override: null, reasons: [], floor: [],
   high_risk: false, pauses: false, pause_reason: null,
+  // 0.92.0 types `def` as the composed WorkflowDef; the model never reads it.
+  def: {} as PlanPreviewResponse['def'],
 } satisfies Partial<PlanPreviewResponse>;
 
 const pending: PlanPreviewResponse = {

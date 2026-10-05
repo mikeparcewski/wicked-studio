@@ -11,95 +11,19 @@
  * The gate actions are the run's own gate (`POST /runs/:id/gate`): "Ask helpers to fix" is a
  * `request_changes`, "Edit the check" is the storyline PUT then an approve.
  *
- * ── INTEGRATION POINT ─────────────────────────────────────────────────────────────────────────
- * Hand-mirrored from crew api-types because studio's installed `wicked-crew-api-types` predates
- * them — delete these declarations and re-export from the contract package when studio bumps
- * (the `./demo.ts` precedent).
+ * ── CONTRACT ───────────────────────────────────────────────────────────────────────────────────
+ * Types come from `wicked-crew-api-types` (pin 0.92.0, ASK-S1); the hand-mirrored copies that lived
+ * here while the pin lagged are gone.
+ * `WalkthroughCheckKind` below is studio's own reading.
  */
 
 import { apiBase, apiFetch } from './client.js';
-import type { DemoChapter, DemoMarker } from './demo.js';
 import { isRouteUnsupported } from './errors.js';
-
-export type WalkthroughState = 'authoring' | 'linting' | 'starting_app' | 'recording' | 'judging' | 'passed' | 'failed' | 'inconclusive';
-export type WalkthroughVerdict = 'PASS' | 'FAIL' | 'INCONCLUSIVE';
 /** The seven check kinds (§4.5). */
+import type { WalkthroughState, WalkthroughVerdict, WalkthroughCheck, WalkthroughLeg, WalkthroughChapter, WalkthroughCheckState, WalkthroughStepState, WalkthroughView, PutStorylineResponse, DemoExportFormat, DemoExportResponse } from 'wicked-crew-api-types';
+export type { WalkthroughState, WalkthroughVerdict, WalkthroughCheck, WalkthroughLeg, WalkthroughChapter, WalkthroughCheckState, WalkthroughStepState, WalkthroughView, PutStorylineResponse, DemoExportFormat, DemoExportResponse };
+
 export type WalkthroughCheckKind = 'on_screen' | 'saved_state' | 'events' | 'side_effects' | 'output' | 'must_not_happen' | 'cross_check';
-
-export interface WalkthroughCheck {
-  id: string;
-  kind: WalkthroughCheckKind | string;
-  /** The plain sentence the check proves. */
-  sentence: string;
-  /** `null` when the check never ran. */
-  passed: boolean | null;
-  /** Seconds into the CHAPTER when it was captured; `null` when it never ran. */
-  atSec: number | null;
-  /** Proof-root-relative paths. */
-  evidence: string[];
-  vaultEntry: string | null;
-  detail: string | null;
-}
-
-export interface WalkthroughLeg {
-  leg: string;
-  claim_level: string;
-  reason: string;
-}
-
-export interface WalkthroughChapter extends DemoChapter {
-  index: number;
-  total: number;
-  verdict: WalkthroughVerdict | null;
-  takes: number;
-  failedAtSec: number | null;
-  failedFrame: string | null;
-  proves: string[];
-  legs: WalkthroughLeg[];
-  checks: WalkthroughCheck[];
-}
-
-export type WalkthroughCheckState = 'checked' | 'failed' | 'claimed' | 'owned_by_you';
-
-export interface WalkthroughStepState {
-  stepId: string;
-  checkState: WalkthroughCheckState;
-  provedBy: Array<{ chapter: string; atSec: number | null }>;
-}
-
-export interface WalkthroughView {
-  runId: string;
-  /** The `walkthrough_review` step id; `null` when the run has no walkthrough step. */
-  stepId: string | null;
-  planStepId: string | null;
-  state: WalkthroughState;
-  cause: string | null;
-  seat: { evaluator: string | null; builders: string[] };
-  tree: string | null;
-  stale: false;
-  sealed: boolean;
-  video: { mp4: string | null; poster: string | null; markers: DemoMarker[] };
-  chapters: WalkthroughChapter[];
-  steps: WalkthroughStepState[];
-}
-
-/** `PUT /runs/:id/walkthrough/storyline` → 200: crew wrote the author's `storyline.mjs`, marked `edited_by: human`. */
-export interface PutStorylineResponse {
-  runId: string;
-  planStepId: string;
-  sha256: string;
-  edited_by: 'human';
-  /** ISO-8601. */
-  at: string;
-}
-
-export type DemoExportFormat = 'gif' | 'poster';
-
-export interface DemoExportResponse {
-  format: DemoExportFormat;
-  path: string;
-  bytes: number;
-}
 
 const enc = encodeURIComponent;
 

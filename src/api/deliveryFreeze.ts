@@ -4,28 +4,16 @@
  * deliver unit with 409 `{code: "deliveries_frozen"}` (and the post-hoc deliver the same way); the
  * gate stays open, so unfreezing lets the same approve through. Audited by crew.
  *
- * ── INTEGRATION POINT ─────────────────────────────────────────────────────────────────────────
- * `DeliveryFreezeState` / `PutDeliveryFreezeBody` mirror `wicked-crew-api-types` 0.55.0, which
- * studio's installed contract predates. Delete this block and re-export from the contract package
- * the moment studio bumps to the api-types version that carries it.
+ * ── CONTRACT ───────────────────────────────────────────────────────────────────────────────────
+ * Types come from `wicked-crew-api-types` (pin 0.92.0, ASK-S1); the hand-mirrored copies that lived
+ * here while the pin lagged are gone.
  */
 
 import { ApiError } from './errors.js';
 import { apiFetch } from './client.js';
 
-export interface DeliveryFreezeState {
-  frozen: boolean;
-  /** ISO time it was turned on; `null` while thawed. */
-  since: string | null;
-  /** The actor id that turned it on; `null` while thawed. */
-  by: string | null;
-  reason: string | null;
-}
-
-export interface PutDeliveryFreezeBody {
-  frozen: boolean;
-  reason?: string;
-}
+import type { DeliveryFreezeState, PutDeliveryFreezeBody } from 'wicked-crew-api-types';
+export type { DeliveryFreezeState, PutDeliveryFreezeBody };
 
 export const deliveryFreezeApi = {
   get: () => apiFetch<DeliveryFreezeState>('/deliveries/freeze'),

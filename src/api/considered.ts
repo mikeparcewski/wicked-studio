@@ -15,60 +15,25 @@
  * `source` says how the in-force set was read: the engine's project-aware `considerRules`, the
  * global rules alone on an engine without it (`global-only`), or no read at all (`unavailable`).
  *
- * ── INTEGRATION POINT ─────────────────────────────────────────────────────────────────────────
- * Hand-mirrored from crew api-types 0.85.0 because studio's installed `wicked-crew-api-types`
- * predates it — delete these declarations and re-export from the contract package when studio
- * bumps to it (the `./decisions.ts` precedent).
+ * ── CONTRACT ───────────────────────────────────────────────────────────────────────────────────
+ * Types come from `wicked-crew-api-types` (pin 0.92.0, ASK-S1); the hand-mirrored copies that lived
+ * here while the pin lagged are gone.
+ * The severity / set-aside / subject readings below are studio's own.
  */
 
 import { apiFetch } from './client.js';
 import { isRouteUnsupported } from './errors.js';
-import type { SteeringType } from './steering.js';
+
+import type { ConsiderationRule, ConsiderationSetAside, ConsiderationCitation, Consideration } from 'wicked-crew-api-types';
+export type { ConsiderationRule, ConsiderationSetAside, ConsiderationCitation, Consideration };
 
 export type ConsiderationSeverity = 'info' | 'warn' | 'error' | 'critical';
 
-export interface ConsiderationRule {
-  id: string;
-  statement: string;
-  severity: ConsiderationSeverity;
-  steering_type?: SteeringType;
-  /** Present on a project-scoped rule. */
-  project?: string;
-}
-
 export type SetAsideReason = 'out_of_scope' | 'replaced' | 'retired' | 'not_confirmed';
-
-export interface ConsiderationSetAside {
-  id: string;
-  statement: string;
-  /** The engine's reasons, plus crew's `not_confirmed`: a decision offered for this project, not yet remembered. */
-  reason: SetAsideReason;
-}
-
-export interface ConsiderationCitation {
-  id: string;
-  /** The seat (`cliKey`) or the unit id that wrote it. */
-  by: string;
-  /** `unchecked` = in force and cited — not checked for compliance; `unverified` = not an in-force rule here. */
-  status: 'unchecked' | 'unverified';
-  label: string;
-}
 
 export type ConsiderationSubject =
   | { kind: 'chat'; chat_id: string; turn_id: string }
   | { kind: 'unit'; run_id: string; ord: number; attempt: number };
-
-export interface Consideration {
-  subject: ConsiderationSubject;
-  /** `considered:<chat>:<turn>` or `considered:<run>:<ord>:<attempt>` — the bus fact's idempotency key. */
-  key: string;
-  project_id: string | null;
-  /** Severity-ordered (critical → info). */
-  considered: ConsiderationRule[];
-  set_aside: ConsiderationSetAside[];
-  cited: ConsiderationCitation[];
-  source: 'considerRules' | 'global-only' | 'unavailable';
-}
 
 const enc = (s: string): string => encodeURIComponent(s);
 
