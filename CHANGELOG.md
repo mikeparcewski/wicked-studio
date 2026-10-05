@@ -12,6 +12,15 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.6.1] — 2026-10-05
+
+The released Desk, corrected by the operator's review of 0.6.0 (DES-STUDIO-REBUILD-001 Amendment 5,
+as revised): the session is the running chat and a finished demo's video plays in it; the rail is
+Desk · Watchtower · the sessions list · Skills · MCP tools · Steering · Health · "Additional
+settings" (Configuration, Repositories, Workflows, Evals, Theme); `/everything` carries what the
+retired list pages carried, the §5.4 moves redirect to it; and signing a CLI helper back in is one
+command shown in plain words with Copy and "check again".
+
 ### Fixed
 - **A finished demo's video plays in the session, and the run stays in the thread (DES-STUDIO-REBUILD-001 Amendment 5 items 1–2, slice S15d; studio#502).** The operator opened the released Desk on a finished `demo` run and found "no video or video editor anywhere": the "Demo video" artifact's inline preview was a text card (`✓ Ready to watch · 3 chapters`) and the player lived only behind the unlabelled ⤢. Now the preview IS the take (DESIGN-interaction rule 1): the inline artifact holds the `<video>` on `GET /runs/:id/demo/file`, playable in place beside the state line (which gains the length once known — `· 1:45`), the seats and the chapter marks; the same element grows into the editor, and `WalkthroughEditor` renders ONE tree at every size so the morph never remounts the player (a take playing inline keeps its place in the pane). Picking a chapter seeks and makes it the subject of the next message — an `about: chapter 2 · …` chip on the session composer (rule 2). The presenter's script is editable in the editor only while crew accepts the edit (the plan gate; `PUT /runs/:id/demo/script` answers 409 at any other stage), and a finished demo's narration reads as fixed and says where to ask. A failed walkthrough's preview stays its failing frame. The run's block in the thread no longer offers "Open the run page →"; its ⋯ opens the session sheet, which now carries what the old run page had, in plain words: **Steps** (every step in order, its state and helper, each a way into that step's own sheet on "What it did"), **Changes** (the worktree diff) and **Evidence** (the bundle download) — the §5 table names the homes (`RAW_CONTROLS`). Tests: `tests/demoVideo.s15d.test.tsx` against a real crew 0.8.0 `GET /demo` answer (`tests/fixtures/demo-crew-0.8.0-done.json`), `tests/sessionThread.s15d.test.tsx`; DESK journeys `desk_demo_video` and `desk_session_live`; `desk_walkthrough` reads the state line as a prefix. Removed testid `session-run-open` → `session-run-look`.
 ### Added
@@ -1754,7 +1763,8 @@ The merged interactive layer: wicked-interactive's UI moved into this skin (DES-
   `git subtree split` (92 commits).
 - The SPA as a pure HTTP/WS client of the wicked-crew daemon: runs, gates, live CoreEvents.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/mikeparcewski/wicked-studio/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/mikeparcewski/wicked-studio/compare/v0.5.19...v0.6.0
 [0.5.19]: https://github.com/mikeparcewski/wicked-studio/compare/v0.5.14...v0.5.19
 [0.5.14]: https://github.com/mikeparcewski/wicked-studio/compare/v0.5.13...v0.5.14
