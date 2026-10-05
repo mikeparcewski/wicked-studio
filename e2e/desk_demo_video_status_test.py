@@ -127,7 +127,8 @@ def morph_to(page, size: str) -> None:
                 page.keyboard.press("Tab")
                 page.wait_for_timeout(150)
                 landed = page.evaluate("() => document.activeElement ? (document.activeElement.dataset.testid || document.activeElement.tagName) : null")
-                check("tab-off-player", landed == "walkthrough-marker", landed=landed)
+                on_first = page.locator(f'{ART} [data-testid="walkthrough-marker"]').first.evaluate("(el) => document.activeElement === el")
+                check("tab-off-player", on_first, landed=landed, on_first_mark=on_first)
             page.keyboard.press("Escape")
         nxt = order[order.index(cur) + (1 if order.index(size) > order.index(cur) else -1)]
         page.wait_for_function(f"(s) => (document.querySelector('{ART}')||{{}}).dataset?.size === s", arg=nxt, timeout=5000)
