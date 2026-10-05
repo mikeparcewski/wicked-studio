@@ -82,6 +82,8 @@ export function useRuns(): { runs: SessionView[]; refresh: () => void; loaded: b
         .filter((v) => v.session.status === 'awaiting_human')
         .map((v) => v.session.id);
       reconcileGates(awaiting);
+      // A recorded turn gate on a run that no longer waits is stale (codex r2 #2).
+      useAskThreadStore.getState().reconcileTurnGates(awaiting);
       // Elicitations reconcile against ALL live runs, not just awaiting-human ones: a run can be
       // executing and still hold an open MCP question (DES-002 v0.25 — an absent run must bump so
       // an in-flight GET cannot resurrect a zombie prompt).

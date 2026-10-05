@@ -3,6 +3,7 @@ import type { CoreEvent } from '../api/types.js';
 import { isAwaitingPinned } from './awaitingPins.js';
 import { isAskTurnGate } from '../board/askThread.js';
 import { useAskThreadStore } from './askThread.js';
+import { useCapabilities } from './capabilities.js';
 
 /**
  * A browser-side open-gate record, keyed by run id. Mirrors the daemon's
@@ -132,10 +133,12 @@ export const useGateStore = create<GateStore>((set) => ({
   // A gate reconciled on a late join (`GET /runs/:id/gate`, no kind) is classified by the engine's
   // own words, so the turn gate stays undrawn there too (codex on ASK-S1 #3).
   setGate: (gate) => {
-    if (isAskTurnGate(useAskThreadStore.getState(), gate.runId, gate.gateKind, gate.prompt)) {
+    if (useCapabilities.getState().askPath && isAskTurnGate(useAskThreadStore.getState(), gate.runId, gate.gateKind, gate.prompt)) {
       useAskThreadStore.getState().recordTurnGate(gate.runId, gate.ord);
       return;
     }
+    // A real gate on the run supersedes any recorded turn gate (codex r2 #2).
+    useAskThreadStore.getState().clearTurnGate(gate.runId);
     set((s) => ({ gates: { ...s.gates, [gate.runId]: gate } }));
   },
 
@@ -176,10 +179,12 @@ export const useGateStore = create<GateStore>((set) => ({
           // next message, never drawn as a gate — recorded, so the Desk and the thread act on a
           // positive fact. A hand-over, an escalation, a plan approval, and every gate after a
           // creator step is accepted, are drawn (codex on ASK-S1 #1, #2).
-          if (isAskTurnGate(useAskThreadStore.getState(), session, gateKindOf(event).gateKind, typeof event.prompt === 'string' ? event.prompt : undefined)) {
+          if (useCapabilities.getState().askPath && isAskTurnGate(useAskThreadStore.getState(), session, gateKindOf(event).gateKind, typeof event.prompt === 'string' ? event.prompt : undefined)) {
             if (typeof event.ord === 'number') useAskThreadStore.getState().recordTurnGate(session, event.ord);
             return approaching === s.approaching ? s : { approaching };
           }
+          // A real gate on the run supersedes any recorded turn gate (codex r2 #2).
+          useAskThreadStore.getState().clearTurnGate(session);
           if (typeof event.ord === 'number' && typeof event.prompt === 'string') {
             const choices = choicesOf(event as unknown as Record<string, unknown>);
             return {

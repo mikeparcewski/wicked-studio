@@ -122,6 +122,9 @@ describe('askLines — the quiet lines, in row order, each expandable to its row
     ]);
     expect(lines[0]!.detail).toStrictEqual(['No caller passes padded names; trimming is safe.']);
     expect(lines[1]!.detail).toStrictEqual(['member turn exceeded 240 s']);
+    // Every quiet line expands to its row (rule 2; codex r2 #7): the no-member outcome says who asked and who was there.
+    expect(lines[2]!.detail).toHaveLength(1);
+    expect(lines[2]!.detail[0]).toMatch(/^claude asked for help and nobody else was signed in \(signed in: claude, codex\) · at /);
   });
 
   it('no reviewer on a one-seat roster — with the Sign in action; a seat that cannot join says why', () => {
@@ -130,9 +133,14 @@ describe('askLines — the quiet lines, in row order, each expandable to its row
     const [a] = askLines([started, none]).filter((l) => l.kind === 'reviewer');
     expect(a!.text).toBe('No reviewer — only claude is signed in.');
     expect(a!.action).toBe('signin');
+    // Expandable to its row (codex r2 #7): the engine's error, who is signed in, the rule.
+    expect(a!.detail).toContain('no seat distinct from the PA');
+    expect(a!.detail).toContain('Signed in: claude, codex.');
     const [b] = askLines([started, cannot]).filter((l) => l.kind === 'reviewer');
     expect(b!.text).toBe("No reviewer — codex can't join: seat 'codex' has no ACP adapter configured");
     expect(b!.action).toBeUndefined();
+    expect(b!.detail).toHaveLength(1);
+    expect(b!.detail[0]).toMatch(/^codex · seat 'codex' has no ACP adapter configured · at /);
   });
 
   it('a second attempt on the same reviewer is not a second line (first attempt only)', () => {

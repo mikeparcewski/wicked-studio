@@ -201,7 +201,7 @@ describe('rule 3 — the thread is the chain until a creator step is accepted', 
 
   it('after a creator step is accepted, a def gate on the ask run is REAL work’s and is drawn (codex #1)', () => {
     useAskThreadStore.getState().linkRun('chat-ask', RUN);
-    useAskThreadStore.getState().setCreatorAccepted(RUN, true);
+    useAskThreadStore.getState().markCreatorAccepted(RUN);
     act(() => useGateStore.getState().ingest({ type: 'awaitingHuman', session: RUN, ord: 3, prompt: 'Approve unit 3 before it runs. The work: migration — apply it', gateKind: 'def' } as never));
     expect(useGateStore.getState().gates[RUN]).toMatchObject({ ord: 3, gateKind: 'def' });
   });

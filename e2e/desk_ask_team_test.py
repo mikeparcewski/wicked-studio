@@ -107,6 +107,8 @@ with sync_playwright() as p:
     page = new_page(browser)
     page.goto(f"{origin}/", wait_until="networkidle")
     page.get_by_test_id("desk-composer-input").wait_for(state="visible", timeout=15000)
+    # The Desk's rows BEFORE the ask (by key): the ask's turn gate must add no row and remove none.
+    rows_before = page.evaluate("""() => [...document.querySelectorAll('[data-testid="need-row"]')].map((n) => n.dataset.key)""")
     page.get_by_test_id("desk-composer-input").fill("why does greet() not trim its input?")
     page.get_by_test_id("desk-composer-input").press("Enter")
     for _ in range(60):
@@ -193,12 +195,15 @@ with sync_playwright() as p:
     with urllib.request.urlopen(f"{origin}/api/v1/chats/{chat_id}", timeout=10) as res:
         ask_run = json.loads(res.read())["path"]["runId"]
     desk = page.evaluate("""(rid) => ({
-      needRows: [...document.querySelectorAll('[data-testid="need-row"]')].map((n) => n.innerText.replace(/\\s+/g, ' ').trim()),
-      gateRowsForAsk: [...document.querySelectorAll('[data-testid="need-row"]')].map((n) => n.innerText.replace(/\\s+/g, ' ').trim()).filter((t) => t.includes('greet()')),
+      keys: [...document.querySelectorAll('[data-testid="need-row"]')].map((n) => n.dataset.key),
       session: [...document.querySelectorAll('[data-testid="desk-session"]')].filter((s) => s.dataset.runId === rid).map((s) => s.dataset.state) })""", ask_run)
     page.screenshot(path=str(SHOTS / "desk-ask-team-desk.png"))
-    # The ask run waits at its turn gate: no gate ROW names it, yet its session is listed, waiting.
-    check("no-gate-row", desk["gateRowsForAsk"] == [] and desk["session"] == ["waiting"], desk=desk)
+    # The ask run waits at its turn gate: no row is keyed to it (`gate:<run>`, or any key naming the run),
+    # the rows that were there before the ask are all still there, and its session is listed, waiting.
+    check("no-gate-row",
+          not any(ask_run in (k or "") for k in desk["keys"])
+          and sorted(k for k in desk["keys"] if k) == sorted(k for k in rows_before if k)
+          and desk["session"] == ["waiting"], desk=desk, rows_before=rows_before)
     page.close()
 
     # ── 5. one seat: no reviewer, Sign in; the refusal line ───────────────────────

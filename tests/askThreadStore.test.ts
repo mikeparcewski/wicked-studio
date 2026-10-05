@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { CoreEvent } from '../src/api/types.js';
 import { useAskThreadStore } from '../src/store/askThread.js';
+import { useCapabilities } from '../src/store/capabilities.js';
+import { useGateStore } from '../src/store/gates.js';
 
 /**
  * ASK-S1 — the live side of an ask: the operator's turn deposited at the 202, the PA's reply as it
@@ -10,7 +12,93 @@ import { useAskThreadStore } from '../src/store/askThread.js';
  */
 const frame = (f: Record<string, unknown>): CoreEvent => f as unknown as CoreEvent;
 
-beforeEach(() => useAskThreadStore.setState({ turns: {}, runByChat: {}, runs: new Set(), creatorAccepted: {}, turnGates: {}, replySeq: {}, paByChat: {} }));
+beforeEach(() => {
+  useAskThreadStore.setState({ turns: {}, runByChat: {}, runs: new Set(), creatorAccepted: {}, turnGates: {}, replySeq: {}, paByChat: {}, retiredByChat: {} });
+  useCapabilities.setState({ loaded: true, askPath: true });
+  useGateStore.setState({ gates: {}, approaching: {} });
+});
+
+describe('under the capability only (codex r2 #3)', () => {
+  it('without askPath nothing is an ask path: learnRuns and a reply’s run_id teach no run, and the gate store draws every gate', () => {
+    useCapabilities.setState({ askPath: false });
+    const st = useAskThreadStore.getState();
+    st.learnRuns([{ session: { id: 'r1', chat_id: 'c1' }, units: [{ description: 'answer-1 — q' }] }]);
+    st.ingest(frame({ type: 'chatReply', chat: 'c1', cliKey: 'claude', text: 'x', ok: true, turn_id: 't1', run_id: 'r1', ord: 1 }));
+    expect(useAskThreadStore.getState().runs.size).toBe(0);
+    expect(useAskThreadStore.getState().runByChat['c1']).toBeUndefined();
+    expect(useAskThreadStore.getState().turns['c1']).toHaveLength(1); // the reply is still a turn
+    // Even a run this client once knew as a path: a def gate on an older daemon is drawn, not recorded.
+    useAskThreadStore.setState({ runs: new Set(['r9']) });
+    useGateStore.getState().ingest(frame({ type: 'awaitingHuman', session: 'r9', ord: 1, gateKind: 'def', prompt: 'Approve unit 1 before it runs' }));
+    expect(useGateStore.getState().gates['r9']).toMatchObject({ ord: 1 });
+    expect(useAskThreadStore.getState().turnGates['r9']).toBeUndefined();
+  });
+});
+
+describe('stale turn gates (codex r2 #2)', () => {
+  it('reconcileTurnGates drops the record of a run that no longer waits', () => {
+    const st = useAskThreadStore.getState();
+    st.linkRun('c1', 'r1'); st.linkRun('c2', 'r2');
+    st.recordTurnGate('r1', 1); st.recordTurnGate('r2', 1);
+    st.reconcileTurnGates(['r2']);
+    expect(useAskThreadStore.getState().turnGates['r1']).toBeUndefined();
+    expect(useAskThreadStore.getState().turnGates['r2']).toMatchObject({ ord: 1 });
+  });
+
+  it('a real gate landing on the run clears its recorded turn gate — the live frame and the late-join read alike', () => {
+    const st = useAskThreadStore.getState();
+    st.linkRun('c1', 'r1');
+    st.recordTurnGate('r1', 1);
+    useGateStore.getState().ingest(frame({ type: 'awaitingHuman', session: 'r1', ord: 2, gateKind: 'deliver', prompt: 'Deliver unit 2 as a PR?' }));
+    expect(useAskThreadStore.getState().turnGates['r1']).toBeUndefined();
+    expect(useGateStore.getState().gates['r1']).toMatchObject({ ord: 2 });
+    useGateStore.setState({ gates: {}, approaching: {} });
+    st.recordTurnGate('r1', 1);
+    useGateStore.getState().setGate({ runId: 'r1', ord: 3, prompt: 'Approve plan rev 2 before unit 3 runs: build-1 → review.', lifecycle: 'open', receivedAt: 1 });
+    expect(useAskThreadStore.getState().turnGates['r1']).toBeUndefined();
+    expect(useGateStore.getState().gates['r1']).toMatchObject({ ord: 3 });
+    // The turn gate itself, read late with no kind, is still recorded and not drawn.
+    useGateStore.setState({ gates: {}, approaching: {} });
+    useGateStore.getState().setGate({ runId: 'r1', ord: 1, prompt: 'Approve the output of unit 1 (answer-1) — the plan is complete.', lifecycle: 'open', receivedAt: 1 });
+    expect(useAskThreadStore.getState().turnGates['r1']).toMatchObject({ ord: 1 });
+    expect(useGateStore.getState().gates['r1']).toBeUndefined();
+  });
+
+  it('creator knowledge is positive only: marking twice is one fact, and nothing resets it (codex r2 #1)', () => {
+    const st = useAskThreadStore.getState();
+    st.linkRun('c1', 'r1'); st.recordTurnGate('r1', 1);
+    st.markCreatorAccepted('r1'); st.markCreatorAccepted('r1');
+    expect(useAskThreadStore.getState().creatorAccepted['r1']).toBe(true);
+    expect(useAskThreadStore.getState().turnGates['r1']).toBeUndefined();
+    expect('setCreatorAccepted' in useAskThreadStore.getState()).toBe(false);
+  });
+});
+
+describe('a re-pick (codex r2 #6)', () => {
+  it('retires the old PA’s half-typed bubble and its late frames; a failed attempt drops the pending bubble, the seat may try again', () => {
+    const st = useAskThreadStore.getState();
+    st.sent('c1', { turnId: 't1', text: 'q', runId: 'r1', stepId: 'answer-1' });
+    st.ingest(frame({ type: 'chatDelta', chat: 'c1', cliKey: 'claude', text: 'I thi', turn_id: 't1' }));
+    expect(useAskThreadStore.getState().turns['c1']!.filter((t) => t.who === 'claude')).toHaveLength(1);
+    st.ingest(frame({ type: 'teamEvent', event: { event_id: 20, event_type: 'wicked.team.path.repicked', payload: { run_id: 'r1', ord: 1, attempt: 0, from: 'claude', to: 'codex', reason: 'timed_out', pick_seq: 1 } } }));
+    expect(useAskThreadStore.getState().turns['c1']!.filter((t) => t.who === 'claude')).toHaveLength(0);
+    st.ingest(frame({ type: 'chatDelta', chat: 'c1', cliKey: 'claude', text: 'nk', turn_id: 't1' }));
+    st.ingest(frame({ type: 'chatReply', chat: 'c1', cliKey: 'claude', text: 'I think', ok: false, turn_id: 't1' }));
+    expect(useAskThreadStore.getState().turns['c1']!.filter((t) => t.who === 'claude')).toHaveLength(0);
+    st.ingest(frame({ type: 'chatDelta', chat: 'c1', cliKey: 'codex', text: 'The', turn_id: 't1' }));
+    st.ingest(frame({ type: 'chatReply', chat: 'c1', cliKey: 'codex', text: 'The answer.', ok: true, turn_id: 't1', run_id: 'r1', ord: 1 }));
+    const codex = useAskThreadStore.getState().turns['c1']!.filter((t) => t.who === 'codex');
+    expect(codex).toHaveLength(1);
+    expect(codex[0]).toMatchObject({ text: 'The answer.', pending: false });
+    // One seat, no re-pick: the attempt times out, the half-typed bubble goes, the same seat tries again.
+    st.sent('c1', { turnId: 't2', text: 'again', runId: 'r1', stepId: 'answer-2' });
+    st.ingest(frame({ type: 'chatDelta', chat: 'c1', cliKey: 'codex', text: 'Hm', turn_id: 't2' }));
+    st.ingest(frame({ type: 'teamEvent', event: { event_id: 21, event_type: 'wicked.team.step.completed', payload: { run_id: 'r1', ord: 2, attempt: 0, by: 'codex', step_id: 'answer-2', status: 'timed_out' } } }));
+    expect(useAskThreadStore.getState().turns['c1']!.filter((t) => t.who === 'codex' && t.pending)).toHaveLength(0);
+    st.ingest(frame({ type: 'chatDelta', chat: 'c1', cliKey: 'codex', text: 'Second try', turn_id: 't2' }));
+    expect(useAskThreadStore.getState().turns['c1']!.filter((t) => t.who === 'codex' && t.pending)).toHaveLength(1);
+  });
+});
 
 describe('the operator’s turn', () => {
   it('lands at once with its turn, run and step; the run is known as an ask path; a repeat is one turn', () => {

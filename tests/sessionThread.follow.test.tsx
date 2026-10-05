@@ -26,14 +26,15 @@ const QUESTION = { at: T0, turnId: 't1', kind: 'user', seats: ['claude'], text: 
 const REPLY = { at: T0 + 1000, turnId: 't1', kind: 'seat', cliKey: 'claude', ok: true, usage: null, text: 'The retry handler and the webhook both post the charge.' };
 let transcript: unknown[] = [QUESTION, REPLY];
 
-// jsdom lays nothing out: give every element a 500 px viewport and a scroll box that grows with the turns
-// it holds (an empty thread or one question fits; two turns do not), and a scrollTop that remembers what
-// was set (jsdom's own is inert).
+// jsdom lays nothing out: give every element a 500 px viewport, a scroll box that grows with the turns
+// it holds and the words in them (an empty thread or one question fits; two turns do not), and a
+// scrollTop that remembers what was set and clamps the way a browser does (jsdom's own is inert).
 const tops = new WeakMap<object, number>();
 const originals = ['scrollTop', 'scrollHeight', 'clientHeight'].map((k) => [k, Object.getOwnPropertyDescriptor(Element.prototype, k)] as const);
+const heightOf = (el: Element): number => [...el.querySelectorAll('[data-testid="session-turn"]')].reduce((n, t) => n + 200 + (t.textContent?.length ?? 0), 300);
 beforeEach(() => {
-  Object.defineProperty(Element.prototype, 'scrollTop', { configurable: true, get() { return tops.get(this) ?? 0; }, set(v: number) { tops.set(this, v); } });
-  Object.defineProperty(Element.prototype, 'scrollHeight', { configurable: true, get() { return 300 + 250 * (this as Element).querySelectorAll('[data-testid="session-turn"]').length; } });
+  Object.defineProperty(Element.prototype, 'scrollTop', { configurable: true, get() { return tops.get(this) ?? 0; }, set(v: number) { tops.set(this, Math.max(0, Math.min(v, heightOf(this as Element) - 500))); } });
+  Object.defineProperty(Element.prototype, 'scrollHeight', { configurable: true, get() { return heightOf(this as Element); } });
   Object.defineProperty(Element.prototype, 'clientHeight', { configurable: true, get() { return 500; } });
   useCapabilities.setState({ loaded: true, runChatId: true, walkthroughRoots: false, askPath: true });
   useAskThreadStore.setState({ turns: {}, runByChat: {}, runs: new Set(), creatorAccepted: {}, turnGates: {}, replySeq: {}, paByChat: {} });
@@ -73,14 +74,45 @@ describe('the thread follows its newest line only from the bottom', () => {
     expect(screen.getByTestId('session-thread').scrollTop).toBe(180);
   });
 
-  it('a fresh conversation (the question fits, the operator is at the bottom) follows the reply as it streams in', async () => {
+  it('a fresh conversation (the question fits, the operator is at the bottom) follows the reply as it lands', async () => {
     transcript = [QUESTION];
     render(<SessionPage sessionId="chat-pay" runs={[VIEW]} runsLoaded needRows={[]} navigate={() => {}} onAsk={() => {}} />);
     await waitFor(() => expect(screen.queryAllByTestId('session-turn').length).toBe(1));
-    expect(screen.getByTestId('session-thread').scrollTop).toBe(0);
+    const el = screen.getByTestId('session-thread');
+    expect(el.scrollTop).toBe(0);
     act(() => { useAskThreadStore.getState().ingest({ type: 'chatReply', chat: 'chat-pay', cliKey: 'claude', text: REPLY.text, ok: true, turn_id: 't1' } as never); });
     await screen.findByText(/both post the charge/);
-    // Two turns: the box is 800 tall; the thread moved to its newest line.
-    expect(screen.getByTestId('session-thread').scrollTop).toBe(800);
+    // Two turns: the thread moved to its newest line (the bottom, as far as the box scrolls).
+    expect(el.scrollHeight - 500).toBeGreaterThan(80);
+    expect(el.scrollTop).toBe(el.scrollHeight - 500);
+  });
+
+  it('a reply STREAMING in keeps the thread on its newest words — growth follows, not only a new entry (codex r2 #5)', async () => {
+    transcript = [QUESTION];
+    render(<SessionPage sessionId="chat-pay" runs={[VIEW]} runsLoaded needRows={[]} navigate={() => {}} onAsk={() => {}} />);
+    await waitFor(() => expect(screen.queryAllByTestId('session-turn').length).toBe(1));
+    const el = screen.getByTestId('session-thread');
+    act(() => { useAskThreadStore.getState().ingest({ type: 'chatDelta', chat: 'chat-pay', cliKey: 'claude', text: 'The retry handler', turn_id: 't1' } as never); });
+    await waitFor(() => expect(screen.queryAllByTestId('session-turn').length).toBe(2));
+    const afterFirst = el.scrollHeight - 500;
+    expect(el.scrollTop).toBe(afterFirst);
+    act(() => { useAskThreadStore.getState().ingest({ type: 'chatDelta', chat: 'chat-pay', cliKey: 'claude', text: ' and the webhook both post the charge, twice over, on every retry.', turn_id: 't1' } as never); });
+    await screen.findByText(/twice over/);
+    expect(el.scrollHeight - 500).toBeGreaterThan(afterFirst);
+    expect(el.scrollTop).toBe(el.scrollHeight - 500);
+  });
+
+  it('a returning visitor’s place is re-applied as the thread fills — a short thread clamps it, the rows that land later do not pull them down (codex r2 #4)', async () => {
+    useSessionDrafts.getState().setScroll('chat-pay', 180);
+    transcript = [QUESTION]; // the transcript at ready is short: 180 does not fit yet
+    render(<SessionPage sessionId="chat-pay" runs={[VIEW]} runsLoaded needRows={[]} navigate={() => {}} onAsk={() => {}} />);
+    await waitFor(() => expect(screen.queryAllByTestId('session-turn').length).toBe(1));
+    const el = screen.getByTestId('session-thread');
+    expect(el.scrollTop).toBe(el.scrollHeight - 500); // as far as it reaches so far
+    act(() => { useAskThreadStore.getState().ingest({ type: 'chatReply', chat: 'chat-pay', cliKey: 'claude', text: REPLY.text, ok: true, turn_id: 't1' } as never); });
+    await screen.findByText(/both post the charge/);
+    expect(el.scrollHeight - 500).toBeGreaterThanOrEqual(180);
+    expect(el.scrollTop).toBe(180);
+    expect(useSessionDrafts.getState().scroll['chat-pay']).toBe(180); // the thread's own scrolls never saved themselves as their place
   });
 });

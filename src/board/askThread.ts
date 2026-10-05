@@ -219,9 +219,10 @@ export function askLines(rows: readonly TeamRow[]): AskLine[] {
         if (b['status'] === 'attached' && seat !== null) {
           out.push({ key, at: t, kind: 'reviewer', text: `${seat} is reviewing`, detail: [str(b['reason']) ?? ''].filter(Boolean), tone: 'quiet', ord });
         } else if (seat === null) {
-          out.push({ key, at: t, kind: 'reviewer', text: `No reviewer — only ${paNow ?? path.pa ?? 'one helper'} is signed in.`, detail: [str(b['error']) ?? ''].filter(Boolean), tone: 'quiet', ord, action: 'signin' });
+          const signedIn = path.roster.length > 0 ? `Signed in: ${ROSTER_JOIN(path.roster)}.` : null;
+          out.push({ key, at: t, kind: 'reviewer', text: `No reviewer — only ${paNow ?? path.pa ?? 'one helper'} is signed in.`, detail: [str(b['error']), signedIn, `A reviewer must be a different helper from the one answering · at ${when(t)}`].filter((x): x is string => x !== null), tone: 'quiet', ord, action: 'signin' });
         } else {
-          out.push({ key, at: t, kind: 'reviewer', text: `No reviewer — ${seat} can't join: ${str(b['error']) ?? 'it could not attach'}`, detail: [], tone: 'quiet', ord });
+          out.push({ key, at: t, kind: 'reviewer', text: `No reviewer — ${seat} can't join: ${str(b['error']) ?? 'it could not attach'}`, detail: [`${seat} · ${str(b['error']) ?? 'could not attach'} · at ${when(t)}`], tone: 'quiet', ord });
         }
         break;
       }
@@ -270,6 +271,7 @@ export function askLines(rows: readonly TeamRow[]): AskLine[] {
           hit.line.detail = [str(b['answer']) ?? ''].filter(Boolean);
         } else if (outcome === 'no_member') {
           hit.line.text = `asked for help: ${q} · no other helper is signed in`;
+          hit.line.detail = [`${paNow ?? path.pa ?? 'The helper'} asked for help and nobody else was signed in${path.roster.length > 0 ? ` (signed in: ${ROSTER_JOIN(path.roster)})` : ''} · at ${when(t)}`];
         } else {
           hit.line.text = `asked ${seat ?? 'a helper'}: ${q} · ${seat ?? 'the helper'} did not answer (${outcome === 'timed_out' ? 'timed out' : outcome})`;
           hit.line.detail = [str(b['error']) ?? ''].filter(Boolean);

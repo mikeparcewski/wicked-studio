@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { CoreEvent } from '../api/types.js';
+import { useCapabilities } from './capabilities.js';
 
 /**
  * THE LIVE SIDE OF AN ASK (DES-ASK-TEAM-CHAT-001 §4.8, slice ASK-S1): what this client knows about
@@ -20,7 +21,13 @@ import type { CoreEvent } from '../api/types.js';
  * reply), so a reload or a late join renders each turn once; `replySeq` ticks per finished reply so
  * the session re-reads `GET /chats/:id` (the transcript's `seat`, `citations` and `decisions`
  * records, and the path's reviewer / helpers) exactly when something landed.
+ *
+ * Everything here that CLASSIFIES a run as an ask path (and so lets a gate go undrawn) is under
+ * `capabilities.askPath`: on an older daemon no run is an ask path, whatever its steps are called,
+ * and every gate is drawn (§8 F13; codex r2 #3).
  */
+const str = (v: unknown): string | null => (typeof v === 'string' && v !== '' ? v : null);
+const isAnswerStep = (id: unknown): boolean => typeof id === 'string' && /^answer-\d+$/.test(id);
 export interface AskTurn {
   turnId: string;
   /** `you`, or the seat that answered (the PA). */
@@ -59,14 +66,20 @@ interface AskThreadState {
   replySeq: Record<string, number>;
   /** Per chat: the seat whose frames answer — the PA (§8 F6's "claude is still answering"). */
   paByChat: Record<string, string>;
+  /** Per chat: seats a re-pick retired — their late frames are not bubbles (codex r2 #6). */
+  retiredByChat: Record<string, string[]>;
   sent: (chatId: string, turn: AskSent) => void;
   linkRun: (chatId: string, runId: string) => void;
   /** The runs list arrived: a run launched from a chat whose every unit is an answer step
    *  (`answer-N — …`, the engine's own step-id naming) is an ask path — so a fresh page (the Desk
    *  after a reload) classifies its turn gate before the gate reconcile runs. */
   learnRuns: (views: ReadonlyArray<{ session: { id: string; chat_id?: string | null }; units: ReadonlyArray<{ description?: string | null }> }>) => void;
-  /** The session's hydrate learnt whether the accepted plan has a creator step. */
-  setCreatorAccepted: (runId: string, accepted: boolean) => void;
+  /** The session's hydrate saw the accepted plan carry a creator step. POSITIVE knowledge only: an
+   *  empty fold (a remount before the rows arrive) never resets it (codex r2 #1). */
+  markCreatorAccepted: (runId: string) => void;
+  /** The runs list arrived: a recorded turn gate on a run that no longer waits is stale (a transition
+   *  missed across a reconnect) and goes, so an unknown gate that follows is drawn (codex r2 #2). */
+  reconcileTurnGates: (awaitingRunIds: readonly string[]) => void;
   /** The gate store left this run's turn gate undrawn. */
   recordTurnGate: (runId: string, ord: number) => void;
   /** A real gate opened or the run moved: the recorded turn gate is spent. */
@@ -88,8 +101,10 @@ export const useAskThreadStore = create<AskThreadState>((set) => ({
   turnGates: {},
   replySeq: {},
   paByChat: {},
+  retiredByChat: {},
   learnRuns: (views) =>
     set((s) => {
+      if (!useCapabilities.getState().askPath) return s;
       let runs: Set<string> | null = null;
       let runByChat: Record<string, string> | null = null;
       for (const v of views) {
@@ -102,8 +117,20 @@ export const useAskThreadStore = create<AskThreadState>((set) => ({
       if (runs === null && runByChat === null) return s;
       return { ...(runs !== null ? { runs } : {}), ...(runByChat !== null ? { runByChat } : {}) };
     }),
-  setCreatorAccepted: (runId, accepted) =>
-    set((s) => (s.creatorAccepted[runId] === accepted ? s : { creatorAccepted: { ...s.creatorAccepted, [runId]: accepted } })),
+  markCreatorAccepted: (runId) =>
+    set((s) => {
+      if (s.creatorAccepted[runId] === true) return s;
+      const turnGates = { ...s.turnGates }; delete turnGates[runId];
+      return { creatorAccepted: { ...s.creatorAccepted, [runId]: true }, turnGates };
+    }),
+  reconcileTurnGates: (awaiting) =>
+    set((s) => {
+      const keep = new Set(awaiting);
+      const stale = Object.keys(s.turnGates).filter((id) => !keep.has(id));
+      if (stale.length === 0) return s;
+      const turnGates = { ...s.turnGates }; for (const id of stale) delete turnGates[id];
+      return { turnGates };
+    }),
   recordTurnGate: (runId, ord) => set((s) => ({ turnGates: { ...s.turnGates, [runId]: { ord, at: Date.now() } } })),
   clearTurnGate: (runId) =>
     set((s) => {
@@ -132,14 +159,31 @@ export const useAskThreadStore = create<AskThreadState>((set) => ({
       const f = event as unknown as { type: string; chat?: unknown; cliKey?: unknown; text?: unknown; ok?: unknown; turn_id?: unknown; run_id?: unknown; ord?: unknown; session?: unknown; event?: unknown };
       // A team row of an ask run: `plan.accepted` with a creator step ends the turn-gate regime (#1).
       if (f.type === 'teamEvent') {
-        const ev = f.event as { event_type?: unknown; payload?: { run_id?: unknown; steps?: unknown } } | undefined;
-        const runId = ev?.payload?.run_id;
-        if (ev?.event_type !== 'wicked.team.plan.accepted' || typeof runId !== 'string' || !s.runs.has(runId)) return s;
-        const steps = Array.isArray(ev.payload?.steps) ? (ev.payload.steps as Array<{ catalog?: unknown }>) : [];
-        const creator = steps.some((st) => st.catalog === 'build' || st.catalog === 'produce');
-        if (!creator || s.creatorAccepted[runId] === true) return s;
-        const turnGates = { ...s.turnGates }; delete turnGates[runId];
-        return { creatorAccepted: { ...s.creatorAccepted, [runId]: true }, turnGates };
+        const ev = f.event as { event_type?: unknown; payload?: Record<string, unknown> } | undefined;
+        const p = ev?.payload ?? {};
+        const runId = p['run_id'];
+        if (typeof runId !== 'string' || !s.runs.has(runId)) return s;
+        if (ev?.event_type === 'wicked.team.plan.accepted') {
+          const steps = Array.isArray(p['steps']) ? (p['steps'] as Array<{ catalog?: unknown }>) : [];
+          const creator = steps.some((st) => st.catalog === 'build' || st.catalog === 'produce');
+          if (!creator || s.creatorAccepted[runId] === true) return s;
+          const turnGates = { ...s.turnGates }; delete turnGates[runId];
+          return { creatorAccepted: { ...s.creatorAccepted, [runId]: true }, turnGates };
+        }
+        // A re-pick, or an answer attempt that did not complete: the seat's half-typed bubble goes (the
+        // thread says what happened in a quiet line); a re-picked seat's late frames are not bubbles (#6).
+        const repicked = ev?.event_type === 'wicked.team.path.repicked';
+        const retired = repicked ? str(p['from'])
+          : ev?.event_type === 'wicked.team.step.completed' && p['status'] !== 'ok' && isAnswerStep(p['step_id']) ? str(p['by']) : null;
+        if (retired === null) return s;
+        const chats = Object.entries(s.runByChat).filter(([, r]) => r === runId).map(([c]) => c);
+        if (chats.length === 0) return s;
+        const turns = { ...s.turns }; const retiredByChat = { ...s.retiredByChat };
+        for (const c of chats) {
+          turns[c] = (turns[c] ?? []).filter((t) => !(t.who === retired && t.pending));
+          if (repicked && !(retiredByChat[c] ?? []).includes(retired)) retiredByChat[c] = [...(retiredByChat[c] ?? []), retired];
+        }
+        return { turns, retiredByChat };
       }
       // The run moved past its pause: a recorded turn gate is spent.
       if ((f.type === 'resumed' || f.type === 'sessionCompleted' || f.type === 'runCancelled' || f.type === 'sessionFailed') && typeof f.session === 'string' && f.session in s.turnGates) {
@@ -155,10 +199,12 @@ export const useAskThreadStore = create<AskThreadState>((set) => ({
         if (!(f.chat in s.turns) && !(f.chat in s.runByChat)) return s;
         const turns = { ...s.turns }; delete turns[f.chat];
         const runByChat = { ...s.runByChat }; delete runByChat[f.chat];
-        return { turns, runByChat };
+        const retiredByChat = { ...s.retiredByChat }; delete retiredByChat[f.chat];
+        return { turns, runByChat, retiredByChat };
       }
       if (f.type !== 'chatDelta' && f.type !== 'chatReply') return s;
       if (typeof f.cliKey !== 'string' || f.cliKey === '') return s;
+      if ((s.retiredByChat[f.chat] ?? []).includes(f.cliKey)) return s; // a re-picked seat's late frames (#6)
       const cur = s.turns[f.chat] ?? [];
       // The frame's turn; else (a daemon predating the turn index, #5) the seat's own PENDING turn,
       // else the newest operator turn, else a stable per-seat key — one bubble per reply, never one
@@ -188,7 +234,7 @@ export const useAskThreadStore = create<AskThreadState>((set) => ({
         ...pa,
         turns: { ...s.turns, [f.chat]: next },
         replySeq: { ...s.replySeq, [f.chat]: (s.replySeq[f.chat] ?? 0) + 1 },
-        ...(typeof f.run_id === 'string' && f.run_id !== '' ? { runByChat: { ...s.runByChat, [f.chat]: f.run_id }, runs: withRun(s.runs, f.run_id) } : {}),
+        ...(useCapabilities.getState().askPath && typeof f.run_id === 'string' && f.run_id !== '' ? { runByChat: { ...s.runByChat, [f.chat]: f.run_id }, runs: withRun(s.runs, f.run_id) } : {}),
       };
     }),
   drop: (chatId) =>
@@ -196,6 +242,7 @@ export const useAskThreadStore = create<AskThreadState>((set) => ({
       if (!(chatId in s.turns) && !(chatId in s.runByChat)) return s;
       const turns = { ...s.turns }; delete turns[chatId];
       const runByChat = { ...s.runByChat }; delete runByChat[chatId];
-      return { turns, runByChat };
+      const retiredByChat = { ...s.retiredByChat }; delete retiredByChat[chatId];
+      return { turns, runByChat, retiredByChat };
     }),
 }));

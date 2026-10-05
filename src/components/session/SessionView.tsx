@@ -173,10 +173,11 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
   const { fold: askFold, error: askTeamError, retry: askTeamRetry } = useTeamFold(askRunId, askView === null ? '' : `${askView.session.status}:${askView.session.unit_ix}`);
   const askRows = useMemo(() => askFold?.rows ?? [], [askFold]);
   const askPath = useMemo(() => askPathOf(askRows), [askRows]);
-  // The hydrate's knowledge reaches the gate filter too (a late join learns the creator step here).
+  // The hydrate's knowledge reaches the gate filter too (a late join learns the creator step here) —
+  // positive knowledge only: an empty fold on a remount never resets it (codex r2 #1).
   useEffect(() => {
-    if (askRunId !== null && askFold !== null) useAskThreadStore.getState().setCreatorAccepted(askRunId, askPath.creatorAccepted);
-  }, [askRunId, askFold, askPath.creatorAccepted]);
+    if (askRunId !== null && askPath.creatorAccepted) useAskThreadStore.getState().markCreatorAccepted(askRunId);
+  }, [askRunId, askPath.creatorAccepted]);
   const lines = useMemo(() => {
     const out = askLines(askRows);
     // §8 F7: the path ran un-teamed (no team transport) — said in the thread, since the chain line that
@@ -331,30 +332,50 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
   const capsLoaded = useCapabilities((s) => s.loaded);
   const ready = runsLoaded && chatLoaded && capsLoaded;
   // ASK-S1: a running conversation keeps its newest line in view. While the operator is at (or near)
-  // the bottom, a NEW entry — their own turn, the typing line, the reply, a quiet line — scrolls the
-  // thread to it; once they have scrolled up to read, nothing moves under them. "Near the bottom" is
-  // re-read from where the restore put them (R4: a returning visitor keeps their place even though
-  // the transcript and the team rows land after the thread is ready), and nothing follows before
-  // the restore has run — a follow before it would save the bottom as their place.
+  // the bottom, growth — their own turn, the typing line, a reply streaming in, a quiet line — scrolls
+  // the thread to it; once they have scrolled up to read, nothing moves under them. R4: a returning
+  // visitor's saved place is restored and RE-APPLIED while the thread is still filling (a thread
+  // shorter than the saved place clamps it; the transcript and the team rows land after it is ready),
+  // and a saved place means they were reading there — nothing follows until they scroll again. The
+  // thread's own scrolls are told apart from the operator's, so a restore or a follow never saves
+  // itself as their place or re-reads "near the bottom" off a half-filled thread (codex r2 #4, #5).
   const nearBottom = useRef(true);
   const newestKey = useRef<string | null>(null);
+  const lastHeight = useRef(0);
+  const programmatic = useRef(false);
+  const restore = useRef<{ top: number; pending: boolean }>({ top: 0, pending: false });
+  const scrollThread = (el: HTMLDivElement, top: number): void => {
+    const before = el.scrollTop;
+    el.scrollTop = top;
+    if (el.scrollTop !== before) programmatic.current = true;
+  };
   useLayoutEffect(() => {
     if (!ready) return;
     const el = scroller.current;
-    const top = useSessionDrafts.getState().scroll[sessionId];
+    const top = useSessionDrafts.getState().scroll[sessionId] ?? 0;
     // A first visit starts at the top: the scroller is reused across sessions (Copilot).
+    restore.current = { top, pending: top > 0 };
     if (el !== null) {
-      el.scrollTop = top ?? 0;
-      nearBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+      scrollThread(el, top);
+      nearBottom.current = top === 0 && el.scrollHeight - el.clientHeight < 80;
+      lastHeight.current = el.scrollHeight;
     }
   }, [sessionId, ready]);
   useLayoutEffect(() => {
     const el = scroller.current;
     const last = entries.length > 0 ? entries[entries.length - 1]!.key : null;
-    const grew = last !== newestKey.current;
+    const grew = last !== newestKey.current || (el !== null && el.scrollHeight !== lastHeight.current);
     newestKey.current = last;
-    if (!ready || !grew || el === null || !nearBottom.current) return;
-    el.scrollTop = el.scrollHeight;
+    if (el !== null) lastHeight.current = el.scrollHeight;
+    if (!ready || el === null) return;
+    if (restore.current.pending) {
+      // Their place, as far as the thread reaches so far; settled once the thread holds it.
+      const max = el.scrollHeight - el.clientHeight;
+      if (max >= restore.current.top) { scrollThread(el, restore.current.top); restore.current.pending = false; }
+      else scrollThread(el, max);
+      return;
+    }
+    if (grew && nearBottom.current) scrollThread(el, el.scrollHeight);
   }, [entries, ready]);
 
   // Where a source's passage can be read from: the session's runs with a worktree, newest first.
@@ -392,6 +413,9 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
           className="wk-session-thread"
           onScroll={(e) => {
             const el = e.currentTarget;
+            // The thread's own scroll (a restore, a follow) is not the operator's place.
+            if (programmatic.current) { programmatic.current = false; return; }
+            restore.current.pending = false;
             nearBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
             setScroll(sessionId, el.scrollTop);
           }}
