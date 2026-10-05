@@ -15,6 +15,8 @@ import { modePath, projectDetailPath, projectPath, type Navigate, versionPath } 
 import { useCapabilities } from '../../store/capabilities.js';
 import { useDocsCache } from '../../store/docsCache.js';
 import { useNeedsSources } from '../../store/needsSources.js';
+import { useLiveChatsStore } from '../../store/liveChats.js';
+import { displayText as showTextOf } from '../../board/homePath.js';
 import { useDisplayText } from '../../hooks/useHomePath.js';
 import { useMembershipStore } from '../../store/membership.js';
 import { useDeliveredNow } from '../../store/postHocDeliver.js';
@@ -189,7 +191,7 @@ function SessionsTab({ runs, runsLoaded, runsError, onRetryRuns, needRows, q, na
           </p>
         )}
       </div>
-      {q.filter === 'archived' && <ArchivedRuns navigate={navigate} runChatId={runChatId} project={q.project} />}
+      {q.filter === 'archived' && <ArchivedRuns key={q.project ?? ''} navigate={navigate} runChatId={runChatId} project={q.project} />}
       {q.filter !== 'archived' && read === 'checking' && <p data-testid="everything-checking" className="wk-session-grey">Reading your work…</p>}
       {q.filter !== 'archived' && read === 'failed' && (
         <p data-testid="everything-failed" role="alert" className="wk-session-grey">
@@ -286,6 +288,10 @@ function ArchivedRuns({ navigate, runChatId, project }: { navigate: Navigate; ru
   const showText = useDisplayText();
   useEffect(() => {
     let cancelled = false;
+    // A new scope starts from nothing: no row (and no Unarchive) of the previous project's survives
+    // the tick before this project's read lands.
+    setRows(null);
+    setFailed(false);
     api.listRuns(true)
       .then(({ runs: all }) => {
         if (cancelled) return;
@@ -333,30 +339,47 @@ function ArchivedRuns({ navigate, runChatId, project }: { navigate: Navigate; ru
  * `/chat/:id`; End closes it (the zombie-cleanup affordance) and drops it from the shared census.
  */
 function LiveChats({ known, go }: { known: ReadonlySet<string>; go: Go }): React.ReactElement | null {
-  const chats = useNeedsSources((s) => s.chats);
+  const census = useNeedsSources((s) => s.chats);
+  // What THIS client learned since boot (store/liveChats.ts): a chat opened after the census is
+  // listed too, and one the /ws fold retired (`chatClosed` → `remove`) leaves the list — the two
+  // sources reconciled, no read of their own (the Chats page did the same).
+  const live = useLiveChatsStore((s) => s.sessions);
+  const retired = useLiveChatsStore((s) => s.retired);
   const end = (id: string): void => {
     void api.closeChat(id)
       .then(() => {
         const cur = useNeedsSources.getState().chats;
         if (cur !== null) useNeedsSources.getState().depositChats(cur.filter((c) => c.chatId !== id));
+        useLiveChatsStore.getState().remove(id);
       })
       .catch(() => { /* best effort — the daemon's idle reaper collects either way */ });
   };
-  const rows = (chats ?? []).filter((c) => !known.has(c.chatId));
+  const rows = useMemo(() => {
+    const byId = new Map<string, { chatId: string; seats: readonly string[]; idleSecs: number | null; title?: string }>();
+    for (const c of census ?? []) {
+      byId.set(c.chatId, { chatId: c.chatId, seats: (c as { seats?: readonly string[] }).seats ?? [], idleSecs: (c as { idleSecs?: number | null }).idleSecs ?? null });
+    }
+    for (const sess of Object.values(live)) {
+      const prev = byId.get(sess.chatId);
+      byId.set(sess.chatId, { chatId: sess.chatId, seats: sess.seats.length > 0 ? sess.seats : prev?.seats ?? [], idleSecs: prev?.idleSecs ?? null, ...(sess.title !== undefined ? { title: sess.title } : {}) });
+    }
+    // A census chat this client has since seen end (`chatClosed` → the store's `remove`) is dropped
+    // too: the census row predates the frame.
+    return [...byId.values()].filter((c) => !known.has(c.chatId) && !retired.has(c.chatId));
+  }, [census, live, retired, known]);
   if (rows.length === 0) return null;
   return (
     <section data-testid="everything-live-chats" data-count={rows.length} className="wk-desk-card wk-everything-group">
       <p className="wk-desk-card-title"><span>Live chats</span></p>
       {rows.map((c) => {
         const path = `/chat/${encodeURIComponent(c.chatId)}`;
-        const idleSecs = (c as { idleSecs?: number | null }).idleSecs ?? null;
-        const idle = idleSecs === null ? null : idleSecs < 60 ? 'just now' : `${ageWord(idleSecs * 1000)} ago`;
-        const seats = (c as { seats?: readonly string[] }).seats ?? [];
+        const idle = c.idleSecs === null ? null : c.idleSecs < 60 ? 'just now' : `${ageWord(c.idleSecs * 1000)} ago`;
+        const seats = c.seats;
         return (
           <div key={c.chatId} data-testid="everything-live-chat" data-chat-id={c.chatId} className="wk-desk-session" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span aria-hidden className="wk-desk-dot wk-desk-dot--working" />
             <a href={path} onClick={go(path)} className="wk-desk-need-body" style={{ flex: '1 1 auto' }}>
-              <span className="wk-desk-session-title">Chat with {seats.length > 0 ? seats.join(', ') : 'no seat yet'}</span>
+              <span className="wk-desk-session-title">{c.title !== undefined ? showTextOf(c.title) : `Chat with ${seats.length > 0 ? seats.join(', ') : 'no seat yet'}`}</span>
               <span className="wk-desk-need-line">{idle !== null ? `last activity ${idle}` : 'open'}</span>
             </a>
             <button type="button" data-testid="everything-live-chat-end" onClick={() => end(c.chatId)} className="wk-since-toggle">End</button>
@@ -378,6 +401,7 @@ function MadeTab({ runs, q, navigate, go }: { runs: SessionView[]; q: Everything
   const projects = useProjectsStore((s) => s.projects);
   const projectIdByRun = useMembershipStore((s) => s.projectIdByRun);
   const nameOf = useProjectName();
+  const showText = useDisplayText();
   // The daemon-wide index: one cheap read, once per session (never a bridge spawn); absent on an
   // older daemon, in which case the list is what the projects opened this session listed.
   useEffect(() => { void useDocsCache.getState().loadIndex(); }, []);
@@ -428,7 +452,7 @@ function MadeTab({ runs, q, navigate, go }: { runs: SessionView[]; q: Everything
             <li key={r.key}>
               <a href={hrefOf(r)} onClick={go(hrefOf(r))} data-testid="everything-made-row" data-kind={r.kind} data-project-id={r.projectId ?? ''} {...(r.runId !== undefined ? { 'data-run-id': r.runId, 'data-status': r.runStatus ?? '' } : { 'data-name': r.doc!.name })} className="wk-desk-session wk-everything-row">
                 <span className="wk-desk-need-body">
-                  <span className="wk-desk-session-title">{r.title}</span>
+                  <span className="wk-desk-session-title">{showText(r.title)}</span>
                   <span className="wk-desk-need-line">
                     {MADE_WORD[r.kind]} · {nameOf(r.projectId)}{r.updatedAt !== null ? ` · ${ageWord(Math.max(0, now - r.updatedAt))} ago` : ''}
                   </span>
@@ -507,13 +531,14 @@ function HandedTab({ runs, runsLoaded, go }: { runs: SessionView[]; runsLoaded: 
 }
 
 function HandedRowView({ r, name, now, go }: { r: HandedRow; name: string; now: number; go: Go }): React.ReactElement {
+  const showText = useDisplayText();
   const when = r.when > 0 ? `${ageWord(Math.max(0, now - r.when))} ago` : null;
   const word = r.claim === 'pr-open' ? 'pull request open' : r.claim === 'pushed' ? `pushed${r.branch !== null ? ` to ${r.branch}` : ''}` : 'handed over';
   return (
     <li data-testid="everything-handed-row" data-run-id={r.runId} data-claim={r.claim} className="wk-desk-session wk-everything-row">
       <span aria-hidden className="wk-desk-dot wk-desk-dot--done" />
       <span className="wk-desk-need-body">
-        <span className="wk-desk-session-title">{r.title}</span>
+        <span className="wk-desk-session-title">{showText(r.title)}</span>
         <span className="wk-desk-need-line">
           {word} · {name}{when !== null ? ` · ${when}` : ''}
           {' · '}

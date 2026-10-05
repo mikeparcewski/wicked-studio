@@ -351,7 +351,7 @@ function parse(pathname: string): Route {
   // `/execute`, `/vibe`, `/demo`, the twice-retired `/make` and the bare `/runs` listing — all parse
   // to the page so it renders on the pre-redirect tick; `useMovedRoutes` replaces the address with
   // the real one (carrying `?filter=` and the tab). Deeper spellings are dead addresses.
-  if (first === 'everything') return second ? route({ panel: 'not-found' }) : route({ panel: 'everything' });
+  if (first === 'everything') return restEmpty(2) ? route({ panel: 'everything' }) : route({ panel: 'not-found' });
   if (MOVED_LISTS.has(first) && restEmpty(2)) return route({ panel: 'everything' });
   // `/s/:sessionId` (DES-STUDIO-REBUILD-001 §5.4, slice S6a): a session — a chat and the runs
   // launched from it, or one run (`run:<id>`). A real route under every skin (a route is not a skin

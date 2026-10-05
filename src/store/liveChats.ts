@@ -42,6 +42,9 @@ export interface LiveChatMeta {
 
 interface LiveChatsState {
   sessions: Record<string, LiveChatSession>;
+  /** Chats this client saw END (Close / End / the daemon's `chatClosed`) — kept so a list built on a
+   *  boot-time census (the Everything page's live chats, S15c) drops a row the census predates. */
+  retired: ReadonlySet<string>;
   /** Authoritative deposit — a session this client opened or rejoined. `meta`
    *  fills only what is not yet known (first write wins). */
   upsert: (chatId: string, seats: string[], meta?: LiveChatMeta) => void;
@@ -55,6 +58,7 @@ const CHAT_FRAME_TYPES = new Set(['chatSessionReady', 'chatDelta', 'chatReply'])
 
 export const useLiveChatsStore = create<LiveChatsState>((set) => ({
   sessions: {},
+  retired: new Set<string>(),
   upsert: (chatId, seats, meta) =>
     set((s) => {
       const prev = s.sessions[chatId];
@@ -65,7 +69,10 @@ export const useLiveChatsStore = create<LiveChatsState>((set) => ({
       // never relabels an Ask chat as a Chat chat or swaps its first question.
       const origin = prev?.origin ?? meta?.origin;
       const title = prev?.title ?? meta?.title;
+      // A chat that comes back (a rejoin, a new frame) is no longer retired.
+      const retired = s.retired.has(chatId) ? new Set([...s.retired].filter((id) => id !== chatId)) : s.retired;
       return {
+        retired,
         sessions: {
           ...s.sessions,
           [chatId]: {
@@ -79,10 +86,11 @@ export const useLiveChatsStore = create<LiveChatsState>((set) => ({
   remove: (chatId) =>
     set((s) => {
       forgetAskSession(chatId);
-      if (!(chatId in s.sessions)) return s;
+      const retired = s.retired.has(chatId) ? s.retired : new Set([...s.retired, chatId]);
+      if (!(chatId in s.sessions)) return retired === s.retired ? s : { retired };
       const next = { ...s.sessions };
       delete next[chatId];
-      return { sessions: next };
+      return { sessions: next, retired };
     }),
   ingest: (event) =>
     set((s) => {

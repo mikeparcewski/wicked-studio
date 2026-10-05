@@ -68,7 +68,7 @@ describe('the moved addresses parse to "See everything" (no headless tick)', () 
     expect(parseRoute('/p/kes/chronicle')).toMatchObject({ panel: 'everything', projectId: 'kes', mode: null });
   });
   it('typos stay dead addresses: a segment under /everything, a non-mode under /p/:id, garbage', () => {
-    for (const p of ['/everything/x', '/p/kes/bogus', '/nope', '/work//typo', '/work///typo', '/demo///typo', '/p/kes/chronicle/typo', '/p/kes/chronicle//typo', '/p/kes///typo', '/p/kes//x']) {
+    for (const p of ['/everything/x', '/everything//typo', '/everything///typo', '/p/kes/bogus', '/nope', '/work//typo', '/work///typo', '/demo///typo', '/p/kes/chronicle/typo', '/p/kes/chronicle//typo', '/p/kes///typo', '/p/kes//x']) {
       expect(parseRoute(p).panel, p).toBe('not-found');
     }
     // `/projects/:id` is the project management page, not a move.
