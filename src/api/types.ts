@@ -103,17 +103,17 @@ export type LaunchBodyWithDeliver = Omit<LaunchRunBody, 'deliver'> & {
   groupLabel?: string;
   /**
    * A user-composed plan (DES-TEAMING-002 T3; api-types 0.45.0+): ordered catalog steps and the
-   * predicted `touch` set. Mutually exclusive with `workflow`. Hand-declared (studio pins 0.39.0;
-   * see `./teamPlan.ts`) — delete on the bump that carries `LaunchRunBody.plan`.
+   * predicted `touch` set. Mutually exclusive with `workflow`. `LaunchPlan` is the contract's (re-exported
+   * by `./teamPlan.ts`); this widening stays because `LaunchBodyWithDeliver` is studio's tolerant launch
+   * body across the 0.11–0.18 `deliver` reshape.
    */
   plan?: import('./teamPlan.js').LaunchPlan;
 };
 
 // ── GET /repos/:id/deliver-target (R3, ship-prove-3) ──────────────────────────
 //
-// Hand-declared like the views above: `wicked-crew-api-types` 0.69.0 carries it
-// (`DeliverTargetResponse`), the version studio installs predates it. Where a
-// delivering launch on the repo would push, read by the SAME origin preflight
+// `DeliverTargetResponse` is the contract's (imported at the top of this file).
+// Where a delivering launch on the repo would push, read by the SAME origin preflight
 // the deliver gate card uses (crew#730); `sentence` is that card's own target
 // sentence for a run not yet started. A daemon without the route answers 404 —
 // the client reads that as `null` ("could not say"), never as an origin.
@@ -205,9 +205,6 @@ export interface RunAcceptanceView {
 
 // ── DELETE /projects/:id/interactive/docs/:doc (crew#338 / studio#119) ────────
 //
-// Hand-declared, same contract as SessionDelivery above: the installed
-// `wicked-crew-api-types` is STALE at 0.8.x and these ship in a later version
-// (the daemon's route layer compiles against the same names). **Delete both
-// declarations and re-export the package's** the moment studio bumps to the
-// api-types version that carries `InteractiveDocDeleteResponse`.
+// `InteractiveDocDeleteLedgerReport` / `InteractiveDocDeleteResponse` are the contract's (imported
+// at the top of this file); the notes below describe the wire they name.
 

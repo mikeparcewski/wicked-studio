@@ -4,7 +4,8 @@
  * steering-rule model (the STEERING program).
  *
  * ── CONTRACT (steering build) ─────────────────────────────────────────────────────────────────
- * `SteeringType` and the import/author bodies come from `wicked-crew-api-types` (pin 0.92.0, ASK-S1).
+ * `SteeringType`, `SteeringAuthorBody` and the rule's `effect` union come from `wicked-crew-api-types`
+ * (pin 0.92.0, ASK-S1).
  * The unified RULE shape below is still mirrored from the engine that PRODUCES it — wicked-core's
  * `crates/wicked-governance/src/conformance.rs` (`ConformanceRule`, grown by the steering-model
  * lane with `steering_type` / `applies_to` / `excludes` / `weight` and the policy-side
@@ -128,9 +129,10 @@ export function readSteeringTypeFilter(search: string): SteeringType | null {
 
 // ── The unified steering rule ─────────────────────────────────────────────────────────────────
 
-/** `Policy.effect`'s wire values (domain.rs `Effect`, serde snake_case) — optional on the
- *  unified rule: a rule WITHOUT an effect is recall-only, exactly as today. */
-export type SteeringEffect = 'deny' | 'allow_with_conditions' | 'allow';
+/** `Policy.effect`'s wire values (domain.rs `Effect`, serde snake_case) — the contract's own union
+ *  (`deny` | `warn` | `allow_with_conditions` | `allow`; codex on #519: the hand-written copy had
+ *  dropped `warn`). Optional on the unified rule: a rule WITHOUT an effect is recall-only. */
+export type SteeringEffect = NonNullable<ConformanceRule['effect']>;
 
 /**
  * The unified steering rule: `ConformanceRule` plus the fields the steering-model lane grows it

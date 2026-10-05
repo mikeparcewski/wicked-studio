@@ -309,6 +309,7 @@ export function SteeringRuleFormModal({ type, initial, onClose, onSaved, create 
             >
               <option value="">none (recall-only)</option>
               <option value="deny">deny</option>
+              <option value="warn">warn</option>
               <option value="allow_with_conditions">allow_with_conditions</option>
               <option value="allow">allow</option>
             </select>

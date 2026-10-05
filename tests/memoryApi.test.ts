@@ -49,10 +49,13 @@ describe('listMemories — the browse read', () => {
     expect(apiFetch).toHaveBeenCalledWith('/memory');
   });
 
-  it('serializes the query / scope_prefix / limit and facet.* params', async () => {
+  it('serializes the query / scope_prefix / limit and the ONE JSON-encoded facets object (the contract crew parses)', async () => {
     apiFetch.mockResolvedValue({ memories: [] });
     await listMemories({ query: 'gh flip', scope_prefix: 'brain:wicked', limit: 20, facets: { domain: 'ops' } });
-    expect(apiFetch).toHaveBeenCalledWith('/memory?query=gh+flip&scope_prefix=brain%3Awicked&limit=20&facet.domain=ops');
+    expect(apiFetch).toHaveBeenCalledWith(`/memory?query=gh+flip&scope_prefix=brain%3Awicked&limit=20&facets=${encodeURIComponent(JSON.stringify({ domain: 'ops' }))}`);
+    // Empty facets send no `facets` key at all: crew answers a present-but-blank value with a 400.
+    await listMemories({ facets: {} });
+    expect(apiFetch).toHaveBeenLastCalledWith('/memory');
   });
 
   it('tolerates a bare array payload (not wrapped)', async () => {
