@@ -440,7 +440,7 @@ function MadeTab({ runs, q, navigate, go }: { runs: SessionView[]; q: Everything
         {progress !== null && <> Asking {progress.current ?? '…'} ({progress.done} of {progress.total})…</>}
       </p>
       {Object.entries(unavailable).map(([pid, why]) => (
-        <p key={pid} data-testid="everything-made-unavailable" data-project-id={pid} className="wk-session-grey">Couldn’t list {nameOf(pid)}: {why}</p>
+        <p key={pid} data-testid="everything-made-unavailable" data-project-id={pid} className="wk-session-grey">Couldn’t list {nameOf(pid)}: {showText(why)}</p>
       ))}
       {rows.length === 0 && index !== 'untried' && (
         <p data-testid="everything-empty" className="wk-session-grey">
@@ -491,8 +491,10 @@ function HelpersTab(): React.ReactElement {
 
 function HelperRow({ seat, onSignIn }: { seat: RosterSeat; onSignIn: () => void }): React.ReactElement {
   const standing = seatStandingWord(seat);
+  const showText = useDisplayText();
   const health = seat.health;
-  const message = health?.status === 'inactive' && health.message !== undefined && health.message !== '' ? health.message : null;
+  // The daemon's own words for an inactive seat — through the home-path formatter, like every message.
+  const message = health?.status === 'inactive' && health.message !== undefined && health.message !== '' ? showText(health.message) : null;
   const state = health === undefined ? 'unknown' : health.status;
   return (
     <li data-testid="everything-helper" data-seat={seat.key} data-standing={standing.kind} data-health={state} className="wk-desk-session wk-everything-row">
