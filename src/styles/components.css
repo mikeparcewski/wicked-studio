@@ -1152,7 +1152,9 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
    19px): a 16:9 box as tall as the row, so the player, its controls and the line all fit between the
    header and the card's foot, at whatever width the line wraps to. */
 .wk-walk--preview .wk-walk-stage { flex: 0 0 auto; height: 100%; aspect-ratio: 16 / 9; width: auto; max-width: min(38%, 280px); min-height: 0; }
-.wk-walk--preview .wk-walk-side { flex: 1 1 auto; gap: 4px; min-height: 0; }
+/* The words keep to the row too, and scroll on their own when many chapters wrap at a narrow width
+   (a focus on a lower mark scrolls the side, never the body — the state line stays put). */
+.wk-walk--preview .wk-walk-side { flex: 1 1 auto; gap: 4px; min-height: 0; max-height: 100%; overflow-y: auto; }
 .wk-walk--preview .wk-walk-video { width: 100%; height: 100%; max-height: 100%; }
 .wk-walk--preview .wk-walk-frame { max-height: 100%; max-width: 100%; }
 .wk-walk--preview .wk-walk-video, .wk-walk--preview .wk-walk-chapter-btn, .wk-walk--preview .wk-walk-actions, .wk-walk--preview .wk-walk-time { position: relative; z-index: 1; }

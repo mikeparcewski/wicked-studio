@@ -18,9 +18,14 @@ stored appearance's `theme`: the default dark is the bare stylesheet, light stam
      focus on the `<video>` (so the browser scrolls it into view if anything can scroll) — the same
      boxes hold, and the preview has nothing to scroll (scrollHeight == clientHeight, scrollTop 0).
   3. #503 HOLDS: the `<video>` in the pane and at full screen is the SAME node that was inline (no
-     remount); Esc shrinks back; 0 page errors; no horizontal scroll.
+     remount); Tab off the player lands on the first chapter mark and Esc shrinks back from there (the
+     native controls take Esc while the player itself has the focus — a #503 limit, not changed here);
+     0 page errors; no horizontal scroll.
 
-Captures: e2e/shots/desk-demo-video-status-{dark,light}.png (inline, 1440x900). Env: FEEDBACK_PORT
+Then a narrow 960x700 card at inline: the same, and every chapter mark inside the card (the words
+keep to the row and scroll on their own, never the body).
+
+Captures: e2e/shots/desk-demo-video-status-{dark,light,dark-narrow}.png (inline). Env: FEEDBACK_PORT
 (default 4464).
 """
 
@@ -75,6 +80,7 @@ BOXES = """() => {
     card: r(a), head: r(q('artifact-head')), state: r(q('walkthrough-state')), seats: r(q('walkthrough-seats')), video: r(v),
     stateText: q('walkthrough-state') ? q('walkthrough-state').innerText.replace(/\\s+/g, ' ').trim() : null,
     scroll: walk ? { top: walk.scrollTop, height: walk.scrollHeight, client: walk.clientHeight } : null,
+    markers: [...a.querySelectorAll('[data-testid="walkthrough-marker"]')].map(r),
     marked: !!v && v.__s507 === 1,
     focusOnVideo: document.activeElement === v,
     hscroll: document.documentElement.scrollWidth > document.documentElement.clientWidth,
@@ -113,8 +119,15 @@ def morph_to(page, size: str) -> None:
         if order.index(size) > order.index(cur):
             page.locator(f'{ART} [data-testid="artifact-grow"]').click()
         else:
-            # Esc shrinks one step (rule 1) — once the focus is off the native player, whose controls take the key.
-            page.evaluate("() => { const a = document.activeElement; if (a && a !== document.body) a.blur(); }")
+            # Esc shrinks one step (rule 1). With the focus on the native player its controls take the key
+            # (it never reaches the document — a #503 limit, like the sandboxed frame's; the ⤡ / × buttons
+            # are the other way back), so a keyboard user Tabs off it first: one Tab lands on the first
+            # chapter mark. That real path is what runs here, and it must land there.
+            if page.evaluate("() => !!document.activeElement && document.activeElement.dataset.testid === 'walkthrough-video'"):
+                page.keyboard.press("Tab")
+                page.wait_for_timeout(150)
+                landed = page.evaluate("() => document.activeElement ? (document.activeElement.dataset.testid || document.activeElement.tagName) : null")
+                check("tab-off-player", landed == "walkthrough-marker", landed=landed)
             page.keyboard.press("Escape")
         nxt = order[order.index(cur) + (1 if order.index(size) > order.index(cur) else -1)]
         page.wait_for_function(f"(s) => (document.querySelector('{ART}')||{{}}).dataset?.size === s", arg=nxt, timeout=5000)
@@ -130,8 +143,11 @@ with sync_playwright() as p:
         "document.addEventListener('DOMContentLoaded', () => { const s = document.createElement('style'); "
         f"s.textContent = {json.dumps(HIDE_GATE_TOASTS)}; document.head.appendChild(s); }});")
 
-    for theme in ("dark", "light"):
+    # Both themes at 1440x900 over every size; then a narrow 960x700 card (the words wrap) at inline.
+    for theme, (vw, vh), sizes in (("dark", (W, H), ("inline", "pane", "full")), ("light", (W, H), ("inline", "pane", "full")), ("dark", (960, 700), ("inline",))):
         attr = None if theme == "dark" else theme  # the default (dark) theme is the bare stylesheet: no data-theme on <html>
+        tag = theme if vw == W else f"{theme}-narrow"
+        page.set_viewport_size({"width": vw, "height": vh})
         set_fixture(origin, sessions=True, run_chat_id=True, walkthrough=True, walk_recorded=3, extra_frames=[], reset_walkthrough=True,
                     appearance={**DEFAULT_APPEARANCE, "theme": theme})
         page.goto(f"{origin}/s/run%3Ar-walk-demo", wait_until="networkidle")
@@ -140,31 +156,32 @@ with sync_playwright() as p:
             page.wait_for_function(f"""() => {{ const v = document.querySelector('{ART} [data-testid="walkthrough-video"]'); return !!v && v.readyState >= 1; }}""", timeout=15000)
             page.wait_for_function("(t) => document.documentElement.getAttribute('data-theme') === t", arg=attr, timeout=5000)
         except Exception:
-            page.screenshot(path=str(SHOTS / f"desk-demo-video-status-{theme}-missing.png"))
-            fail(f"{theme}-inline-video", {"why": "the inline Demo video artifact holds no playable <video> under this theme", "found": page.evaluate(BOXES)})
+            page.screenshot(path=str(SHOTS / f"desk-demo-video-status-{tag}-missing.png"))
+            fail(f"{tag}-inline-video", {"why": "the inline Demo video artifact holds no playable <video> under this theme", "found": page.evaluate(BOXES)})
         page.evaluate(f"""() => {{ document.querySelector('{ART} [data-testid="walkthrough-video"]').__s507 = 1; }}""")
 
-        for size in ("inline", "pane", "full"):
+        for size in sizes:
             morph_to(page, size)
             # ── 1 + 2. at rest, then with the focus on the player: the line between the header and the
             # player, the player inside the card, nothing to scroll — both read before either is judged,
             # so a red report shows the slide itself (the state line's top above the header's bottom).
             d0 = page.evaluate(BOXES)
             if size == "inline":
-                page.screenshot(path=str(SHOTS / f"desk-demo-video-status-{theme}.png"))
+                page.screenshot(path=str(SHOTS / f"desk-demo-video-status-{tag}.png"))
             focus_player(page)
             d1 = page.evaluate(BOXES)
             if size == "inline" and not well_placed(d1):
-                page.screenshot(path=str(SHOTS / f"desk-demo-video-status-{theme}-focused.png"))
-            check(f"{theme}-{size}-state-line", d0 is not None and d0["size"] == size and d0["theme"] == attr
+                page.screenshot(path=str(SHOTS / f"desk-demo-video-status-{tag}-focused.png"))
+            check(f"{tag}-{size}-state-line", d0 is not None and d0["size"] == size and d0["theme"] == attr
                   and (d0["stateText"] or "").startswith("✓ Ready to watch · 3 chapters") and well_placed(d0)
-                  and d1 is not None and d1["focusOnVideo"] and d1["marked"] and well_placed(d1),
+                  and d1 is not None and d1["focusOnVideo"] and d1["marked"] and well_placed(d1)
+                  and all(inside(m, d1["card"]) for m in d1["markers"]) and len(d1["markers"]) == 3,
                   at_rest=d0, player_focused=d1)
 
         # ── 3. back to the thread: the same player, nothing broke ──────────────────
         morph_to(page, "inline")
         d2 = page.evaluate(BOXES)
-        check(f"{theme}-back-and-clean", d2["size"] == "inline" and d2["marked"] and not d2["hscroll"] and errors == [],
+        check(f"{tag}-back-and-clean", d2["size"] == "inline" and d2["marked"] and not d2["hscroll"] and errors == [],
               size=d2["size"], marked=d2["marked"], errors=errors[:3])
 
     browser.close()
