@@ -162,7 +162,7 @@ export function ArtifactMorph({ artifactKey, title, projectId, docId, composerKe
       className={`wk-artifact wk-artifact--${size}`}
       style={{ viewTransitionName: `artifact-${slug}` } as React.CSSProperties}
     >
-      <header className="wk-artifact-head">
+      <header data-testid="artifact-head" className="wk-artifact-head">
         <span className="wk-artifact-title">{title}</span>
         <span data-testid="artifact-version">{head === null ? '' : `version ${head}`}</span>
         {exportsHere.length > 0 && head !== null && (

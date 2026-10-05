@@ -12,8 +12,8 @@
   "studioVersion": "0.6.1",
   "counts": {
     "files": 216,
-    "occurrences": 2456,
-    "static": 2151,
+    "occurrences": 2457,
+    "static": 2152,
     "dynamic": 79,
     "computed": 8
   },
@@ -298,6 +298,12 @@
     },
     {
       "testId": "artifact-grow",
+      "files": [
+        "src/components/session/ArtifactMorph.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-head",
       "files": [
         "src/components/session/ArtifactMorph.tsx"
       ]
