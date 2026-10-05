@@ -12,6 +12,10 @@ interface CapabilitiesStore {
   /** `walkthroughRoots` (WT-W1, api-types 0.74.0) — repo-bound runs get an evidence root, so a
    *  walkthrough step can record; absent, the walkthrough artifact is not offered. */
   walkthroughRoots: boolean;
+  /** `askPath` (DES-ASK-TEAM-CHAT-001 §5.1, api-types 0.92.0) — an ask starts a team path: one primary
+   *  helper answers, a reviewer watches, help requests are rows on the bus. Absent or false (an older
+   *  daemon): every helper answers at once and the thread says so (§8 F13). */
+  askPath: boolean;
   load: () => Promise<void>;
 }
 
@@ -21,14 +25,15 @@ export const useCapabilities = create<CapabilitiesStore>((set, get) => ({
   loaded: false,
   runChatId: false,
   walkthroughRoots: false,
+  askPath: false,
   load: () => {
     if (get().loaded) return Promise.resolve();
     inflight ??= Promise.resolve().then(() => api.getHealth())
       .then((h) => {
         const caps = ((h as unknown as { capabilities?: Record<string, unknown> }).capabilities) ?? {};
-        set({ loaded: true, runChatId: caps['runChatId'] === true, walkthroughRoots: caps['walkthroughRoots'] === true });
+        set({ loaded: true, runChatId: caps['runChatId'] === true, walkthroughRoots: caps['walkthroughRoots'] === true, askPath: caps['askPath'] === true });
       })
-      .catch(() => { set({ loaded: true, runChatId: false, walkthroughRoots: false }); })
+      .catch(() => { set({ loaded: true, runChatId: false, walkthroughRoots: false, askPath: false }); })
       .finally(() => { inflight = null; });
     return inflight;
   },

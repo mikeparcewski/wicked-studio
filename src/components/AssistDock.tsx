@@ -9,6 +9,7 @@ import { ApprovalDock } from './ApprovalDock.js';
 import { retainOnFinalize } from './ChatThread.js';
 import { readFileText } from './fileText.js';
 import { splitAskContext } from '../board/askPack.js';
+import { useCapabilities } from '../store/capabilities.js';
 import { Markdown } from './Markdown.js';
 import { NarratorFeed, phaseName } from './NarratorFeed.js';
 import { NowBar } from './NowBar.js';
@@ -352,7 +353,10 @@ function DockChat({ chatId, resumed = false, onResumeProbe }: {
       for (let i = 0; i < next.length; i += 1) {
         const m = next[i];
         if (m !== undefined && m.cliKey === cliKey && m.pending) {
-          next[i] = { ...m, text: retainOnFinalize(m.text, text), pending: false, ok };
+          // ASK-S1 (codex #9): on a path the relay's `chatReply` IS the canonical answer — the stored
+          // output with the control lines stripped, so SHORTER than the deltas by design; it replaces
+          // them. The retain rule stays for the pool-era fan-out (no capability).
+          next[i] = { ...m, text: useCapabilities.getState().askPath ? text : retainOnFinalize(m.text, text), pending: false, ok };
           return next;
         }
       }

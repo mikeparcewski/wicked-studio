@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { EditorHostPage } from './components/editors/EditorHostPage.js';
 import { CenterDashboard } from './components/CenterDashboard.js';
 import { AskDock } from './components/AskDock.js';
+import { useAskThreadStore } from './store/askThread.js';
 import { AskLauncher } from './components/AskLauncher.js';
 import { CommandPalette, paletteShortcutEntries } from './components/CommandPalette.js';
 import { GateNotifications } from './components/GateNotifications.js';
@@ -161,6 +162,8 @@ export function App(): React.ReactElement {
       // J4 round 2: chat frames announce/retire live sessions for the rail's
       // Chat accordion — evidence this subscription already carries, no fetch.
       ingestLiveChat(event);
+      // ASK-S1: the PA's deltas and reply grow the session thread before the transcript has them.
+      useAskThreadStore.getState().ingest(event);
       // Wave 2b: the watchdog's needs-a-human escalations feed the needs-you queue.
       ingestStallEscalation(event);
       // DC-S6: `chatDecisions` (the line under the operator's message) and `decisionChanged` (ids only).
@@ -862,6 +865,7 @@ export function App(): React.ReactElement {
               onHandoffTaken: takeHandoff,
               ...(askHandoff.projectId !== undefined ? { sendProjectId: askHandoff.projectId } : {}),
               ...(askHandoff.fresh === true ? { sendFresh: true } : {}),
+              ...(askHandoff.primary !== undefined ? { sendPrimary: askHandoff.primary } : {}),
             } : {})}
           />
         )}

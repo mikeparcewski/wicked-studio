@@ -4,6 +4,7 @@ import type {
   AuditPage,
   ChatDetailResponse,
   ChatListResponse,
+  ChatMessageResponse,
   ChatOpenBody,
   ChatOpenResponse,
   ChatSeatOutcome,
@@ -263,7 +264,7 @@ export const api = {
   // verdict can be matched to the reply it belongs to rather than to the newest one. Absent on a
   // daemon predating the turn index.
   sendChatMessage: (chatId: string, text: string, targets?: string[]) =>
-    apiFetch<{ seats: string[]; turnId?: string }>(`/chats/${encodeURIComponent(chatId)}/messages`, {
+    apiFetch<ChatMessageResponse>(`/chats/${encodeURIComponent(chatId)}/messages`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(targets === undefined ? { text } : { text, targets }),

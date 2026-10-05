@@ -1,3 +1,4 @@
+import { useAskThreadStore } from '../store/askThread.js';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import type { SessionView } from '../api/types.js';
@@ -74,6 +75,8 @@ export function useRuns(): { runs: SessionView[]; refresh: () => void; loaded: b
       setError(null);
       // studio#443: the decision notices name the work, not the run id.
       rememberWorkTitles(fetched);
+      // ASK-S1: ask paths are known before their gates reconcile, so the turn gate stays undrawn here too.
+      useAskThreadStore.getState().learnRuns(fetched);
 
       const awaiting = fetched
         .filter((v) => v.session.status === 'awaiting_human')

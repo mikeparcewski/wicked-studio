@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.6.1",
   "counts": {
-    "files": 216,
-    "occurrences": 2457,
-    "static": 2152,
+    "files": 217,
+    "occurrences": 2465,
+    "static": 2160,
     "dynamic": 79,
     "computed": 8
   },
@@ -352,6 +352,36 @@
       ]
     },
     {
+      "testId": "ask-line",
+      "files": [
+        "src/components/session/AskThread.tsx"
+      ]
+    },
+    {
+      "testId": "ask-line-detail",
+      "files": [
+        "src/components/session/AskThread.tsx"
+      ]
+    },
+    {
+      "testId": "ask-line-retry",
+      "files": [
+        "src/components/session/AskThread.tsx"
+      ]
+    },
+    {
+      "testId": "ask-line-signin",
+      "files": [
+        "src/components/session/AskThread.tsx"
+      ]
+    },
+    {
+      "testId": "ask-line-toggle",
+      "files": [
+        "src/components/session/AskThread.tsx"
+      ]
+    },
+    {
       "testId": "ask-panel",
       "files": [
         "src/components/AskLauncher.tsx"
@@ -361,6 +391,12 @@
       "testId": "ask-scope",
       "files": [
         "src/components/ChatScopeSelect.tsx"
+      ]
+    },
+    {
+      "testId": "ask-typing",
+      "files": [
+        "src/components/session/AskThread.tsx"
       ]
     },
     {
@@ -8661,6 +8697,18 @@
     },
     {
       "testId": "session",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
+      "testId": "session-ask-older",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
+      "testId": "session-ask-shape",
       "files": [
         "src/components/session/SessionView.tsx"
       ]

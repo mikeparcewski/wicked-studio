@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../../api/client.js';
-import type { SessionView as RunView } from '../../api/types.js';
+import type { ChatPathView, SessionView as RunView } from '../../api/types.js';
 import { needsByRun } from '../../board/deskModel.js';
 import type { NeedRow } from '../../board/needsYou.js';
 import {
@@ -37,6 +37,10 @@ import { applyCheckState } from '../../board/checkState.js';
 import { useRunAcceptance } from '../../hooks/useRunAcceptance.js';
 import { momentOfRecording, useRecordingsStore } from '../../store/recordings.js';
 import { requestWalkthroughSeek } from '../../store/walkthroughSeek.js';
+import { askAnswerOrds, askLines, askPathOf, askThinking, isAskTurnGate, type AskLine } from '../../board/askThread.js';
+import { useAskThreadStore } from '../../store/askThread.js';
+import { useTeamFold } from '../../hooks/useTeamFold.js';
+import { AskLineView, AskTyping } from './AskThread.js';
 
 /**
  * A SESSION (`/s/:id`, DES-STUDIO-REBUILD-001 §5.4, slice S6a): the goal sentence, the thread (the
@@ -53,10 +57,21 @@ import { requestWalkthroughSeek } from '../../store/walkthroughSeek.js';
  *  - The composer (S7) hands the message to the Ask dock (as the Desk's does), led by its
  *    about-chips; its `/` adds a step to the newest live run as a plan draft, and a selection in
  *    the thread becomes an "about: “…”" chip.
+ *  - ASK-S1 (DES-ASK-TEAM-CHAT-001 §4.8): under `capabilities.askPath` an ask is a team PATH — the
+ *    chat's run. The thread folds THREE sources into one list in time order: the transcript (and the
+ *    live turns this client deposited or streamed before the transcript has them), the path's
+ *    `wicked.team.*` rows as quiet lines (who answers and why; the reviewer; a finding on the
+ *    answer; help asked and whether it came; a re-pick; a timeout; the end) and the other runs'
+ *    blocks. Only the PA's reply is a bubble; the ask run's own block (chain line, proposal card)
+ *    stays hidden while its plan has no creator step — the thread IS the chain — and appears once
+ *    one is accepted, or when the run opened a gate the composer cannot answer (a hand-over, an
+ *    escalation), or stopped. Without the capability the thread renders as before and says so.
  */
 
 interface ChatDetail {
   scope?: unknown;
+  /** (api-types 0.92.0) The chat's ask path once its first message launched it. */
+  path?: ChatPathView;
   messages?: Array<{
     at?: number; kind: string; text?: string; cliKey?: string; ok?: boolean; turnId?: string;
     /** A `citations` record (crew#561, api-types 0.68.0): the verdicts of the earlier reply with the same turn + seat;
@@ -66,8 +81,10 @@ interface ChatDetail {
 }
 
 type ThreadEntry =
-  | { kind: 'turn'; key: string; at: number; who: 'you' | string; text: string; ok: boolean; citations?: ChatCitations; turnId: string | null }
-  | { kind: 'run'; key: string; at: number; view: RunView };
+  | { kind: 'turn'; key: string; at: number; who: 'you' | string; text: string; ok: boolean; citations?: ChatCitations; turnId: string | null; pending?: boolean }
+  | { kind: 'run'; key: string; at: number; view: RunView }
+  | { kind: 'line'; key: string; at: number; line: AskLine }
+  | { kind: 'typing'; key: string; at: number; who: string };
 
 const STATE_WORD: Record<SessionState, string> = {
   waiting: 'Waiting on you', working: 'Being worked on', blocked: 'Stopped', done: 'Finished', quiet: 'Quiet',
@@ -130,6 +147,60 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
   const messages = useMemo(() => chatDetail?.messages ?? [], [chatDetail]);
   const title = sessionTitle(messages, mine);
 
+  // ── ASK-S1: the ask path behind this chat ──────────────────────────────────────────────────
+  const askPathOn = useCapabilities((s) => s.askPath);
+  const chatId = ref.kind === 'chat' ? ref.chatId : null;
+  const liveTurns = useAskThreadStore((s) => (chatId === null ? undefined : s.turns[chatId]));
+  const replySeq = useAskThreadStore((s) => (chatId === null ? 0 : s.replySeq[chatId] ?? 0));
+  const linkedRun = useAskThreadStore((s) => (chatId === null ? undefined : s.runByChat[chatId]));
+  const askRunsKnown = useAskThreadStore((s) => s.runs);
+  const creatorAcceptedKnown = useAskThreadStore((s) => s.creatorAccepted);
+  const askKnow = useMemo(() => ({ runs: askRunsKnown, creatorAccepted: creatorAcceptedKnown }), [askRunsKnown, creatorAcceptedKnown]);
+  const turnGates = useAskThreadStore((s) => s.turnGates);
+  // A finished reply re-reads the transcript: its `seat`, `citations` and `decisions` records and
+  // the path's reviewer / helpers land there; the live turn then yields to the record.
+  const seenReply = useRef(replySeq);
+  useEffect(() => {
+    if (replySeq === seenReply.current) return;
+    seenReply.current = replySeq;
+    setChatTry((n) => n + 1);
+  }, [replySeq]);
+  const askRunId = chatDetail?.path?.runId ?? linkedRun ?? null;
+  useEffect(() => {
+    if (chatId !== null && chatDetail?.path?.runId !== undefined) useAskThreadStore.getState().linkRun(chatId, chatDetail.path.runId);
+  }, [chatId, chatDetail?.path?.runId]);
+  const askView = askRunId === null ? null : mine.find((v) => v.session.id === askRunId) ?? null;
+  const { fold: askFold, error: askTeamError, retry: askTeamRetry } = useTeamFold(askRunId, askView === null ? '' : `${askView.session.status}:${askView.session.unit_ix}`);
+  const askRows = useMemo(() => askFold?.rows ?? [], [askFold]);
+  const askPath = useMemo(() => askPathOf(askRows), [askRows]);
+  // The hydrate's knowledge reaches the gate filter too (a late join learns the creator step here).
+  useEffect(() => {
+    if (askRunId !== null && askFold !== null) useAskThreadStore.getState().setCreatorAccepted(askRunId, askPath.creatorAccepted);
+  }, [askRunId, askFold, askPath.creatorAccepted]);
+  const lines = useMemo(() => {
+    const out = askLines(askRows);
+    // §8 F7: the path ran un-teamed (no team transport) — said in the thread, since the chain line that
+    // carries the banner is hidden here; a failed team read is said with a retry (codex on ASK-S1 #7).
+    const snap = askFold?.snapshot ?? null;
+    if (snap !== null && snap.teamed && snap.transport === 'none') {
+      out.unshift({ key: 'transport', at: 0, kind: 'transport', text: `Un-teamed: the team transport was unavailable${snap.reason !== null ? ` — ${snap.reason}` : ''}. The answer still comes; no reviewer or helpers this time.`, detail: [], tone: 'problem', ord: null });
+    }
+    if (askTeamError !== null) {
+      out.unshift({ key: 'team-error', at: 0, kind: 'transport', text: `Could not read the team's rows (${askTeamError}); showing the conversation without them.`, detail: [], tone: 'problem', ord: null, action: 'retry' });
+    }
+    return out;
+  }, [askRows, askFold, askTeamError]);
+  const thinking = useMemo(() => askThinking(askRows), [askRows]);
+  const askGate = useGateStore((s) => (askRunId === null ? undefined : s.gates[askRunId]));
+  // Rule 3: the ask run's block stays hidden while the thread is its chain. It comes back when a
+  // creator step is accepted, when the run stopped, or when a gate the composer cannot answer is open
+  // (a hand-over, an escalation, a plan approval). An UNKNOWN gate on a waiting run is shown, not
+  // hidden: only a turn gate the gate store positively recorded keeps the block away (codex #2).
+  const askBlockHidden = askRunId !== null && !askPath.creatorAccepted && askView?.session.status !== 'failed'
+    && (askGate !== undefined
+      ? isAskTurnGate(askKnow, askRunId, askGate.gateKind, askGate.prompt)
+      : askView?.session.status !== 'awaiting_human' || askRunId in turnGates);
+
   const badges = useMemo(() => needsByRun(needRows), [needRows]);
   const badge = mine.reduce((n, v) => n + (badges[v.session.id] ?? 0), 0);
   const state: SessionState = mine.some((v) => v.session.status === 'awaiting_human') ? 'waiting'
@@ -174,9 +245,53 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
         turnId: typeof m.turnId === 'string' ? m.turnId : null,
       });
     });
-    for (const v of mine) out.push({ kind: 'run', key: `r:${v.session.id}`, at: launchedMs(v), view: v });
+    // ASK-S1: the turns this client knows before the transcript does — the question just sent, the
+    // reply streaming in. A turn the transcript now carries is the record's, once. Without the
+    // capability the thread is the transcript alone (an older daemon's frames carry no turn ids to
+    // reconcile by — §8 F13; codex on ASK-S1 #5).
+    const have = new Set(out.filter((e): e is Extract<ThreadEntry, { kind: 'turn' }> => e.kind === 'turn' && e.turnId !== null).map((e) => `${e.turnId}:${e.who === 'you' ? 'you' : e.who}`));
+    const liveOrd = new Map<string, number>(); // a live reply's entry key → its unit ord (from the relay's frame)
+    for (const t of askPathOn ? liveTurns ?? [] : []) {
+      if (have.has(`${t.turnId}:${t.who}`)) continue;
+      const key = `live:${t.turnId}:${t.who}`;
+      if (t.ord !== undefined) liveOrd.set(key, t.ord);
+      out.push({ kind: 'turn', key, at: t.at, who: t.who, text: t.text, ok: t.ok, turnId: t.turnId, ...(t.pending ? { pending: true } : {}) });
+    }
+    // A line marked `under` (a finding on the answer, a help exchange) goes right after the reply bubble
+    // of ITS answer step — matched by unit, not by time (codex on ASK-S1 #4): a live reply carries the
+    // relay's `ord`; the transcript's k-th PA reply is the k-th answer step's (`step.claimed` order).
+    const answerOrds = askAnswerOrds(askRows);
+    const replyAtByOrd = new Map<number, number>();
+    const settled = out.filter((e): e is Extract<ThreadEntry, { kind: 'turn' }> => e.kind === 'turn' && e.who !== 'you' && e.pending !== true).sort((a, b) => a.at - b.at);
+    let k = 0;
+    for (const e of settled) {
+      const ord = liveOrd.get(e.key) ?? answerOrds[k];
+      k += 1;
+      if (ord !== undefined && !replyAtByOrd.has(ord)) replyAtByOrd.set(ord, e.at);
+    }
+    lines.forEach((line, i) => {
+      let at = line.at;
+      if (line.under === true && line.ord !== null) {
+        // Wherever the row landed in time (a slow final pass publishes a finding after later turns),
+        // the line sits under ITS reply.
+        const reply = replyAtByOrd.get(line.ord);
+        if (reply !== undefined) at = reply + 0.5 + i * 1e-4;
+      }
+      out.push({ kind: 'line', key: line.key, at, line });
+    });
+    const streaming = (liveTurns ?? []).some((t) => t.who !== 'you' && t.pending);
+    if (!streaming) {
+      for (const th of thinking) {
+        if ((liveTurns ?? []).some((t) => t.who !== 'you' && t.ord === th.ord)) continue;
+        out.push({ kind: 'typing', key: `typing:${th.ord}`, at: th.at, who: th.by });
+      }
+    }
+    for (const v of mine) {
+      if (askBlockHidden && v.session.id === askRunId) continue;
+      out.push({ kind: 'run', key: `r:${v.session.id}`, at: launchedMs(v), view: v });
+    }
     return out.map((e, i) => ({ e, i })).sort((a, b) => a.e.at - b.e.at || a.i - b.i).map((x) => x.e);
-  }, [messages, mine]);
+  }, [messages, mine, liveTurns, lines, thinking, askBlockHidden, askRunId, askRows, askPathOn]);
 
   // DC-S8: the considered line sits under the LAST reply of each turn (one Consideration per turn,
   // whatever the number of seats); it is re-read when the turn gains a reply.
@@ -215,13 +330,32 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
   // Not ready until `/health` answered too: before it, "no runs in this chat" could be false (Copilot).
   const capsLoaded = useCapabilities((s) => s.loaded);
   const ready = runsLoaded && chatLoaded && capsLoaded;
+  // ASK-S1: a running conversation keeps its newest line in view. While the operator is at (or near)
+  // the bottom, a NEW entry — their own turn, the typing line, the reply, a quiet line — scrolls the
+  // thread to it; once they have scrolled up to read, nothing moves under them. "Near the bottom" is
+  // re-read from where the restore put them (R4: a returning visitor keeps their place even though
+  // the transcript and the team rows land after the thread is ready), and nothing follows before
+  // the restore has run — a follow before it would save the bottom as their place.
+  const nearBottom = useRef(true);
+  const newestKey = useRef<string | null>(null);
   useLayoutEffect(() => {
     if (!ready) return;
     const el = scroller.current;
     const top = useSessionDrafts.getState().scroll[sessionId];
     // A first visit starts at the top: the scroller is reused across sessions (Copilot).
-    if (el !== null) el.scrollTop = top ?? 0;
+    if (el !== null) {
+      el.scrollTop = top ?? 0;
+      nearBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    }
   }, [sessionId, ready]);
+  useLayoutEffect(() => {
+    const el = scroller.current;
+    const last = entries.length > 0 ? entries[entries.length - 1]!.key : null;
+    const grew = last !== newestKey.current;
+    newestKey.current = last;
+    if (!ready || !grew || el === null || !nearBottom.current) return;
+    el.scrollTop = el.scrollHeight;
+  }, [entries, ready]);
 
   // Where a source's passage can be read from: the session's runs with a worktree, newest first.
   const readers = useMemo(() => [...mine].reverse().map((v) => ({
@@ -256,7 +390,11 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
           ref={scroller}
           data-testid="session-thread"
           className="wk-session-thread"
-          onScroll={(e) => setScroll(sessionId, e.currentTarget.scrollTop)}
+          onScroll={(e) => {
+            const el = e.currentTarget;
+            nearBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+            setScroll(sessionId, el.scrollTop);
+          }}
           // DESIGN-interaction rule 2: selecting a sentence in the work makes it the subject of the
           // next message — an "about: “…”" chip on the composer (never a button row).
           onMouseUp={(e) => {
@@ -284,10 +422,18 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
             </p>
           )}
           {!ready && <p className="wk-session-grey">Loading…</p>}
-          {entries.map((e) => (e.kind === 'turn'
+          {/* §8 F13: an older daemon has no team path — every helper answers at once; said once, in grey. */}
+          {ready && ref.kind === 'chat' && !askPathOn && conversation === 'live' && messages.length > 0 && (
+            <p data-testid="session-ask-older" className="wk-session-grey">Older daemon: every helper answers at once — no primary helper, reviewer or help requests in this conversation.</p>
+          )}
+          {entries.map((e) => (e.kind === 'line'
+            ? <AskLineView key={e.key} line={e.line} onSignIn={() => openSheet({ kind: 'session', sessionId }, 'signins')} onRetry={askTeamRetry} />
+            : e.kind === 'typing'
+              ? <AskTyping key={e.key} who={e.who} />
+              : e.kind === 'turn'
             ? (
-              <div key={e.key} data-testid="session-turn" data-who={e.who === 'you' ? 'you' : 'helper'} className={`wk-session-turn wk-session-turn--${e.who === 'you' ? 'you' : 'helper'}`}>
-                <p className="wk-session-who">{e.who === 'you' ? 'You' : e.who}</p>
+              <div key={e.key} data-testid="session-turn" data-who={e.who === 'you' ? 'you' : 'helper'} {...(e.pending ? { 'data-pending': 'true' } : {})} className={`wk-session-turn wk-session-turn--${e.who === 'you' ? 'you' : 'helper'}${e.pending ? ' wk-session-turn--pending' : ''}`}>
+                <p className="wk-session-who">{e.who === 'you' ? 'You' : e.pending ? `${e.who} · answering` : e.who}</p>
                 <p className={`wk-session-text${e.ok ? '' : ' wk-session-grey'}`}>{e.who === 'you' ? <OperatorMessage text={e.text} /> : e.text}</p>
                 {e.who !== 'you' && <SourceChips citations={e.citations} runs={readers} />}
                 {/* DC-S8: the rules the turn's seats were given — considered · set aside · cited (unchecked). */}
@@ -301,6 +447,10 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
             : <RunBlock key={e.key} view={e.view} badge={badges[e.view.session.id] ?? 0} sessionId={sessionId} />))}
         </div>
       </div>
+      {/* Rule 3: while the thread is the chain, the shape line names the path's steps for the operator. */}
+      {askBlockHidden && askPath.shape.length > 0 && (
+        <p data-testid="session-ask-shape" className="wk-session-grey wk-session-shape">Shape: {askPath.shape.map((s) => s.label).join(' → ')}{askPath.pa !== null ? ` · ${askPath.pa} answers` : ''}{askPath.reviewer?.seat ? ` · ${askPath.reviewer.seat} reviews` : ''}</p>
+      )}
 
       <Composer
         composerKey={sessionId}

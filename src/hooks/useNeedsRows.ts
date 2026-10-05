@@ -9,6 +9,7 @@ import { useDeliveredNow, usePostHocDeliverStore } from '../store/postHocDeliver
 import { useElicitationStore } from '../store/elicitations.js';
 import { useFailureClocks } from '../store/failureClocks.js';
 import { useGateStore } from '../store/gates.js';
+import { useAskThreadStore } from '../store/askThread.js';
 import { useMembershipStore } from '../store/membership.js';
 import { useDecisionsStore } from '../store/decisions.js';
 import { useNeedsSources } from '../store/needsSources.js';
@@ -35,6 +36,11 @@ const NO_DECISIONS: Readonly<Record<string, never>> = Object.freeze({});
 
 export function useNeedsRows(runs: SessionView[], now: number, runsKnown = true): NeedRow[] {
   const gates = useGateStore((s) => s.gates);
+  // ASK-S1 (DES-ASK-TEAM-CHAT-001 §4.8): an ask path waiting at its TURN gate is answered by the next
+  // message in its session, never a gate row on the Desk (the session itself reads "waiting", §8 F12).
+  // Only a turn gate the gate store positively recorded counts; an unknown gate stays a gate.
+  const turnGates = useAskThreadStore((s) => s.turnGates);
+  const askTurnRuns = useMemo(() => new Set(Object.keys(turnGates)), [turnGates]);
   const failedAt = useFailureClocks((s) => s.failedAtByRun);
   const lastEventAt = useActivityClocks((s) => s.lastEventAtByRun);
   const attachedAt = useMembershipStore((s) => s.attachedAtByRun);
@@ -88,6 +94,7 @@ export function useNeedsRows(runs: SessionView[], now: number, runsKnown = true)
   return useMemo(
     () =>
       needsYouRows({
+      askTurnRuns,
         runs,
         gates,
         failedAt,
@@ -106,7 +113,7 @@ export function useNeedsRows(runs: SessionView[], now: number, runsKnown = true)
         deliveredNow,
         now,
       }),
-    [runs, gates, failedAt, attachedAt, projectIds, chats, repos, campaigns, stalledAt, elicitations, steerRequests, stallEscalations, proposals, decisions, deliveryAttempted, deliveredNow, now],
+    [runs, gates, failedAt, attachedAt, projectIds, chats, repos, campaigns, stalledAt, elicitations, steerRequests, stallEscalations, proposals, decisions, deliveryAttempted, deliveredNow, now, askTurnRuns],
   );
 }
 

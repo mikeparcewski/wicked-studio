@@ -16,6 +16,7 @@ import {
   addAboutChip, backspaceAboutChip, chipsOf, clearAboutChips, removeAboutChip, useComposerChips,
 } from '../../store/composerChips.js';
 import { humanTitle } from '../runIdentity.js';
+import { useCapabilities } from '../../store/capabilities.js';
 
 /** Where a send goes besides the words: the project an `@project` chip named, and whether it opens a fresh session. */
 export interface ComposerSend {
@@ -23,6 +24,9 @@ export interface ComposerSend {
   projectId?: string;
   /** True when the message must open a NEW session (an `@project` after this session's first send). */
   fresh?: boolean;
+  /** ASK-S1: the helper an `@helper` chip named before the session's first send — under
+   *  `capabilities.askPath` it is the one who answers (the path's `primary`). */
+  primary?: string;
 }
 
 /** One `@` row: a project (a destination) or a helper (a subject). */
@@ -181,7 +185,7 @@ export function Composer({
     addAboutChip(composerKey, chip);
     setNote(item.kind === 'project'
       ? (started ? `Your next message starts a new session in ${item.label}.` : `This conversation will be in ${item.label}.`)
-      : null);
+      : (!started && useCapabilities.getState().askPath ? `${item.label} will answer this conversation.` : null));
   };
   const pick = (i: number): void => {
     if (token?.trigger === '/') { const it = slash[i]; if (it !== undefined) pickSlash(it); }
@@ -191,7 +195,13 @@ export function Composer({
   const send = (): void => {
     if (!canSend) return;
     const message = messageWithAbout(text, chips);
-    onSend(message, project === null ? {} : { projectId: project.projectId, fresh: started });
+    // ASK-S1: a helper named with `@` before the first send answers this conversation (its chip still
+    // leads the message as a subject, as before).
+    const helper = !started && useCapabilities.getState().askPath ? chips.find((c) => c.kind === 'about' && c.key.startsWith('h:')) : undefined;
+    onSend(message, {
+      ...(project === null ? {} : { projectId: project.projectId, fresh: started }),
+      ...(helper !== undefined ? { primary: helper.key.slice(2) } : {}),
+    });
     clearAboutChips(composerKey);
     setText('');
     setNote(null);

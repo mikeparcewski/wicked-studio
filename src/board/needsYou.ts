@@ -235,6 +235,10 @@ export interface StallEscalationLite {
 }
 
 export interface NeedsYouInputs {
+  /** ASK-S1 (DES-ASK-TEAM-CHAT-001 §4.8): ask runs whose TURN gate the gate store positively recorded
+   *  (`store/askThread.ts` `turnGates`) — the gate ROW is skipped for them (the next message in the
+   *  session is the answer); every other row of the run (an elicitation, a steer request) stays. */
+  askTurnRuns?: ReadonlySet<string>;
   /** The one salience-ordered run list (daemon order — newest/actionable first). */
   runs: SessionView[];
   gates: Record<string, GateLite>;
@@ -394,6 +398,7 @@ export function needsYouRows(inputs: NeedsYouInputs): NeedRow[] {
     const s = v.session;
     if (s.status === 'awaiting_human') {
       const gate = gates[s.id];
+      if (gate === undefined && inputs.askTurnRuns?.has(s.id) === true) continue; // the ask's turn: the composer is the answer
       // The gate's own one-liner IS the narrator's awaitingHuman template —
       // one template layer, zero forks (a synthesized frame of the wire shape).
       const line = narrate(
