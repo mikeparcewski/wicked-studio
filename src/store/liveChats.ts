@@ -97,17 +97,22 @@ export const useLiveChatsStore = create<LiveChatsState>((set) => ({
       const frame = event as { type: string; chat?: string; cliKey?: string };
       if (typeof frame.chat !== 'string' || frame.chat === '') return s;
       if (frame.type === 'chatClosed') {
+        // The same retirement `remove` records — a census row elsewhere drops on this frame too.
         forgetAskSession(frame.chat);
-        if (!(frame.chat in s.sessions)) return s;
+        const retired = s.retired.has(frame.chat) ? s.retired : new Set([...s.retired, frame.chat]);
+        if (!(frame.chat in s.sessions)) return retired === s.retired ? s : { retired };
         const next = { ...s.sessions };
         delete next[frame.chat];
-        return { sessions: next };
+        return { sessions: next, retired };
       }
       if (!CHAT_FRAME_TYPES.has(frame.type)) return s;
       const prev = s.sessions[frame.chat];
       const seats = prev ? [...prev.seats] : [];
       if (frame.cliKey && !seats.includes(frame.cliKey)) seats.push(frame.cliKey);
+      // A frame from a chat that had ended means it is back — no longer retired.
+      const retired = s.retired.has(frame.chat) ? new Set([...s.retired].filter((id) => id !== frame.chat)) : s.retired;
       return {
+        retired,
         sessions: {
           ...s.sessions,
           [frame.chat]: { ...prev, chatId: frame.chat, seats, lastSeenAt: Date.now() },

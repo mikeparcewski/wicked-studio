@@ -149,6 +149,7 @@ function SessionsTab({ runs, runsLoaded, runsError, onRetryRuns, needRows, q, na
   const lens = (over: Partial<EverythingQuery>): string => everythingPath({ tab: 'sessions', filter: q.filter, project: q.project, ...over });
   const scopeName = q.project !== null ? nameOf(q.project) : null;
   const viewOf = (runId: string): SessionView | undefined => runs.find((v) => v.session.id === runId);
+  const showText = useDisplayText();
   // The retired Work page's archive: a finished run can be put away from its row (FinishedRunRow),
   // and the Archived lens lists what was put away, with Unarchive — the same two calls it made.
   // After the write, the list is re-read (the Work page called onRefresh too) so the row leaves.
@@ -248,8 +249,8 @@ function SessionsTab({ runs, runsLoaded, runsError, onRetryRuns, needRows, q, na
               >
                 <span aria-hidden className={`wk-desk-dot wk-desk-dot--${s.state}`} />
                 <span className="wk-desk-need-body">
-                  <span className="wk-desk-session-title">{s.title}</span>
-                  <span className={`wk-desk-need-line${s.state === 'waiting' ? ' wk-desk-underline' : ''}`}>{s.line}</span>
+                  <span className="wk-desk-session-title">{showText(s.title)}</span>
+                  <span className={`wk-desk-need-line${s.state === 'waiting' ? ' wk-desk-underline' : ''}`}>{showText(s.line)}</span>
                   {/* The run's handles with "Show technical details" on — the same parts the run row showed. */}
                   <Tech data-testid="tech-session-row" parts={s.runIds.length === 1 && viewOf(s.runId) !== undefined ? runTechParts(viewOf(s.runId)!.session) : s.runIds} block />
                 </span>

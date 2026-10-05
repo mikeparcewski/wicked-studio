@@ -7,6 +7,7 @@ import { runTitle, runWhenWord, WHEN_TITLE } from './runIdentity.js';
 import { runRowKind } from './runMode.js';
 import { DeliveryChip } from './RunDelivery.js';
 import { Tech, runTechParts } from './Tech.js';
+import { useDisplayText } from '../hooks/useHomePath.js';
 
 interface Props {
   view: SessionView;
@@ -33,7 +34,10 @@ export function RunLink({ view, selectedRunId, onSelect }: Props): React.ReactEl
   // short-id + attempt ordinal — so identical prompts never render identical
   // rows. The short-id moves INTO the title; the meta line gains the attach
   // clock (the membership mirror — a store read, never a fetch).
-  const title = runTitle(session, TITLE_MAX);
+  // The default layer never prints a home directory (studio#458): the title and its tooltip read
+  // through the display formatter; "Show technical details" shows them as written.
+  const showText = useDisplayText();
+  const title = showText(runTitle(session, TITLE_MAX));
   const attachedAt = useMembershipStore((s) => s.attachedAtByRun[session.id]);
   // The clock `runWhenWord` reads: the run's own launch clock (unix seconds), else the attach clock.
   const now = Date.now();
@@ -79,7 +83,7 @@ export function RunLink({ view, selectedRunId, onSelect }: Props): React.ReactEl
           data-testid="run-title"
           className="flex-1 truncate text-[13px] leading-tight"
           style={{ color: isActive ? 'var(--ink-high)' : 'var(--ink-body)' }}
-          title={session.problem}
+          title={showText(session.problem)}
         >
           {title}
         </span>
