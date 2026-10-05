@@ -152,7 +152,7 @@ with sync_playwright() as p:
           selected=page.evaluate(SELECTED))
     page.evaluate("() => document.activeElement && document.activeElement.blur()")
 
-    for path, shot in (("/work", "needs-shell-work.png"), ("/theme", None)):
+    for path, shot in (("/everything", "needs-shell-everything.png"), ("/theme", None)):
         nav(page, path)
         rows = rail_rows_settled(page, home_rows)
         if shot:
@@ -237,7 +237,7 @@ with sync_playwright() as p:
     counts.clear()
     nav(page, RUN_PAGE)
     page.wait_for_timeout(1500)
-    nav(page, "/work")
+    nav(page, "/everything")
     page.wait_for_timeout(1000)
     nav(page, "/")
     page.get_by_test_id("needs-you-queue").wait_for(state="visible", timeout=15000)

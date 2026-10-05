@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../../api/client.js';
-import type { ChatSummary } from '../../api/types.js';
+import type { Project } from '../../api/types.js';
 import type { RosterSeat, SessionView } from '../../api/types.js';
 import { deskReadState, needsByRun, needTextByRun, railGroups, signInLapsed, type RailGroup } from '../../board/deskModel.js';
 import {
@@ -14,6 +14,8 @@ import { useRoster } from '../../hooks/useRoster.js';
 import { modePath, projectDetailPath, projectPath, type Navigate, versionPath } from '../../hooks/useRoute.js';
 import { useCapabilities } from '../../store/capabilities.js';
 import { useDocsCache } from '../../store/docsCache.js';
+import { useNeedsSources } from '../../store/needsSources.js';
+import { useDisplayText } from '../../hooks/useHomePath.js';
 import { useMembershipStore } from '../../store/membership.js';
 import { useDeliveredNow } from '../../store/postHocDeliver.js';
 import { useProjectsStore } from '../../store/projects.js';
@@ -132,7 +134,6 @@ function SessionsTab({ runs, runsLoaded, runsError, onRetryRuns, needRows, q, na
   const runChatId = useCapabilities((s) => s.runChatId);
   const deliveredNow = useDeliveredNow();
   const nameOf = useProjectName();
-  const projects = useProjectsStore((s) => s.projects);
   const groups = useMemo(
     () => railGroups(items, unfiled, needsByRun(needRows), Number.POSITIVE_INFINITY, needTextByRun(needRows), runChatId, deliveredNow),
     [items, unfiled, needRows, runChatId, deliveredNow],
@@ -148,8 +149,19 @@ function SessionsTab({ runs, runsLoaded, runsError, onRetryRuns, needRows, q, na
   const viewOf = (runId: string): SessionView | undefined => runs.find((v) => v.session.id === runId);
   // The retired Work page's archive: a finished run can be put away from its row (FinishedRunRow),
   // and the Archived lens lists what was put away, with Unarchive — the same two calls it made.
-  const archive = (id: string): void => { void api.archiveRun(id, true).catch(() => { /* the row stays; the next read says */ }); };
-  const archivedProjects = q.project === null ? projects.filter((p) => p.status === 'archived') : [];
+  // After the write, the list is re-read (the Work page called onRefresh too) so the row leaves.
+  const archive = (id: string): void => { void api.archiveRun(id, true).then(() => onRetryRuns?.()).catch(() => { /* the row stays; the next read says */ }); };
+  // Archived projects are their own read (`GET /projects?status=archived`): the board model keeps
+  // the shared store to the active register, so the store cannot name them.
+  const [archivedProjects, setArchivedProjects] = useState<Project[]>([]);
+  useEffect(() => {
+    if (q.project !== null) return;
+    let cancelled = false;
+    api.listProjects('archived')
+      .then(({ projects: ps }) => { if (!cancelled) setArchivedProjects(ps.filter((p) => p.status === 'archived')); })
+      .catch(() => { /* no register, no line — never a guessed one */ });
+    return () => { cancelled = true; };
+  }, [q.project]);
 
   return (
     <div data-testid="everything-sessions" data-count={total} data-filter={q.filter} data-project={q.project ?? ''}>
@@ -177,7 +189,7 @@ function SessionsTab({ runs, runsLoaded, runsError, onRetryRuns, needRows, q, na
           </p>
         )}
       </div>
-      {q.filter === 'archived' && <ArchivedRuns navigate={navigate} runChatId={runChatId} />}
+      {q.filter === 'archived' && <ArchivedRuns navigate={navigate} runChatId={runChatId} project={q.project} />}
       {q.filter !== 'archived' && read === 'checking' && <p data-testid="everything-checking" className="wk-session-grey">Reading your work…</p>}
       {q.filter !== 'archived' && read === 'failed' && (
         <p data-testid="everything-failed" role="alert" className="wk-session-grey">
@@ -258,20 +270,31 @@ function SessionsTab({ runs, runsLoaded, runsError, onRetryRuns, needRows, q, na
   );
 }
 
+/** The project the DTO files a run under, or null. */
+function dtoProjectOf(v: SessionView): string | null {
+  const p = (v.session as unknown as { project_id?: unknown }).project_id;
+  return typeof p === 'string' && p !== '' ? p : null;
+}
+
 /** The session states that are over — the row is the Work page's finished row with its moves. */
 const FINISHED: ReadonlySet<string> = new Set(['done', 'blocked', 'quiet']);
 
 /** The Archived lens: `GET /runs?archived` on pick, each run with Unarchive (the Work page's two calls). */
-function ArchivedRuns({ navigate, runChatId }: { navigate: Navigate; runChatId: boolean }): React.ReactElement {
+function ArchivedRuns({ navigate, runChatId, project }: { navigate: Navigate; runChatId: boolean; project: string | null }): React.ReactElement {
   const [rows, setRows] = useState<SessionView[] | null>(null);
   const [failed, setFailed] = useState(false);
+  const showText = useDisplayText();
   useEffect(() => {
     let cancelled = false;
     api.listRuns(true)
-      .then(({ runs: all }) => { if (!cancelled) setRows(all.filter((v) => v.session.archived_at != null)); })
+      .then(({ runs: all }) => {
+        if (cancelled) return;
+        // Scoped to one project: the runs the DTO files under it — never another project's.
+        setRows(all.filter((v) => v.session.archived_at != null && (project === null || dtoProjectOf(v) === project)));
+      })
       .catch(() => { if (!cancelled) { setRows([]); setFailed(true); } });
     return () => { cancelled = true; };
-  }, []);
+  }, [project]);
   const unarchive = (id: string): void => {
     void api.archiveRun(id, false)
       .then(() => setRows((prev) => (prev === null ? prev : prev.filter((v) => v.session.id !== id))))
@@ -289,8 +312,8 @@ function ArchivedRuns({ navigate, runChatId }: { navigate: Navigate; runChatId: 
             return (
               <li key={v.session.id} data-testid="everything-archived-run" data-run-id={v.session.id} className="wk-desk-session wk-everything-row" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <a href={path} onClick={(e) => { e.preventDefault(); navigate(path); }} className="wk-desk-need-body" style={{ flex: '1 1 auto', opacity: 0.7 }}>
-                  <span className="wk-desk-session-title">{humanTitle(v.session.problem || v.session.id)}</span>
-                  {v.session.archive_note ? <span className="wk-desk-need-line">{v.session.archive_note}</span> : null}
+                  <span className="wk-desk-session-title">{showText(humanTitle(v.session.problem || v.session.id))}</span>
+                  {v.session.archive_note ? <span className="wk-desk-need-line">{showText(v.session.archive_note)}</span> : null}
                 </a>
                 <button type="button" data-testid="everything-unarchive" onClick={() => unarchive(v.session.id)} className="wk-since-toggle">Unarchive</button>
               </li>
@@ -303,22 +326,20 @@ function ArchivedRuns({ navigate, runChatId }: { navigate: Navigate; runChatId: 
 }
 
 /**
- * The daemon's live-chat census (`GET /chats`, what the retired Chats page listed): the warm chats
- * that are not already a session here — a quiet chat with no run would otherwise be undiscoverable
- * after a reload. Each opens `/chat/:id`; End closes it (the zombie-cleanup affordance).
+ * The daemon's live-chat census (what the retired Chats page listed): the warm chats that are not
+ * already a session here — a quiet chat with no run would otherwise be undiscoverable after a
+ * reload. Read from the needs-you sources store, which holds the one `GET /chats` the app makes at
+ * boot (needs_shell: walking the routes re-reads nothing); never a fetch of its own. Each opens
+ * `/chat/:id`; End closes it (the zombie-cleanup affordance) and drops it from the shared census.
  */
 function LiveChats({ known, go }: { known: ReadonlySet<string>; go: Go }): React.ReactElement | null {
-  const [chats, setChats] = useState<ChatSummary[] | null>(null);
-  useEffect(() => {
-    let cancelled = false;
-    api.listChats()
-      .then(({ chats: c }) => { if (!cancelled) setChats(c); })
-      .catch(() => { if (!cancelled) setChats([]); });
-    return () => { cancelled = true; };
-  }, []);
+  const chats = useNeedsSources((s) => s.chats);
   const end = (id: string): void => {
     void api.closeChat(id)
-      .then(() => setChats((prev) => (prev === null ? prev : prev.filter((c) => c.chatId !== id))))
+      .then(() => {
+        const cur = useNeedsSources.getState().chats;
+        if (cur !== null) useNeedsSources.getState().depositChats(cur.filter((c) => c.chatId !== id));
+      })
       .catch(() => { /* best effort — the daemon's idle reaper collects either way */ });
   };
   const rows = (chats ?? []).filter((c) => !known.has(c.chatId));
@@ -328,12 +349,14 @@ function LiveChats({ known, go }: { known: ReadonlySet<string>; go: Go }): React
       <p className="wk-desk-card-title"><span>Live chats</span></p>
       {rows.map((c) => {
         const path = `/chat/${encodeURIComponent(c.chatId)}`;
-        const idle = c.idleSecs === null ? null : c.idleSecs < 60 ? 'just now' : `${ageWord(c.idleSecs * 1000)} ago`;
+        const idleSecs = (c as { idleSecs?: number | null }).idleSecs ?? null;
+        const idle = idleSecs === null ? null : idleSecs < 60 ? 'just now' : `${ageWord(idleSecs * 1000)} ago`;
+        const seats = (c as { seats?: readonly string[] }).seats ?? [];
         return (
           <div key={c.chatId} data-testid="everything-live-chat" data-chat-id={c.chatId} className="wk-desk-session" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span aria-hidden className="wk-desk-dot wk-desk-dot--working" />
             <a href={path} onClick={go(path)} className="wk-desk-need-body" style={{ flex: '1 1 auto' }}>
-              <span className="wk-desk-session-title">Chat with {c.seats.length > 0 ? c.seats.join(', ') : 'no seat yet'}</span>
+              <span className="wk-desk-session-title">Chat with {seats.length > 0 ? seats.join(', ') : 'no seat yet'}</span>
               <span className="wk-desk-need-line">{idle !== null ? `last activity ${idle}` : 'open'}</span>
             </a>
             <button type="button" data-testid="everything-live-chat-end" onClick={() => end(c.chatId)} className="wk-since-toggle">End</button>

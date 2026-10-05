@@ -234,7 +234,10 @@ export function routedVersion(search: string): number | null {
 function parse(pathname: string): Route {
   // A caller may hand a full address (`/everything?tab=made`, a palette row's href): the query is
   // not the route's business — `search` is read separately — so it is dropped before the split.
-  const [, first = '', second = '', third = '', fourth = ''] = pathname.split('?')[0]!.split('/');
+  const segs = pathname.split('?')[0]!.split('/');
+  const [, first = '', second = '', third = '', fourth = ''] = segs;
+  /** Nothing but empty segments from index `from` on — the whole address is the shape, not a prefix of it. */
+  const restEmpty = (from: number): boolean => segs.slice(from).every((x) => x === '');
   // `/` is the orchestrator board (DES-MERGE-001 §1.5, slice 5). The flat run list it
   // replaced keeps its own route, `/runs` — the power-user escape hatch, not a redirect.
   if (first === '') {
@@ -247,7 +250,7 @@ function parse(pathname: string): Route {
     // everything" — parsed to it so the tab renders on the pre-redirect tick; `useMovedRoutes`
     // replaces the address. A bare `/p/:projectId` (the project dashboard) parses the same way while
     // the hook finds the project's newest session; with none, the Sessions tab IS where it lands.
-    if ((third === 'chronicle' || third === '') && fourth === '') {
+    if ((third === 'chronicle' && restEmpty(4)) || (third === '' && restEmpty(3))) {
       return route({ panel: 'everything', projectId: safeDecode(second) });
     }
     // `/p/:projectId/campaigns` (nav-reorg): the project-scoped Campaigns surface. Rides no
@@ -349,7 +352,7 @@ function parse(pathname: string): Route {
   // to the page so it renders on the pre-redirect tick; `useMovedRoutes` replaces the address with
   // the real one (carrying `?filter=` and the tab). Deeper spellings are dead addresses.
   if (first === 'everything') return second ? route({ panel: 'not-found' }) : route({ panel: 'everything' });
-  if (MOVED_LISTS.has(first) && !second && !third) return route({ panel: 'everything' });
+  if (MOVED_LISTS.has(first) && restEmpty(2)) return route({ panel: 'everything' });
   // `/s/:sessionId` (DES-STUDIO-REBUILD-001 §5.4, slice S6a): a session — a chat and the runs
   // launched from it, or one run (`run:<id>`). A real route under every skin (a route is not a skin
   // concern). The id rides in `artifactId`, never `runId`: no run-selected machinery fires here.

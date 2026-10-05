@@ -50,12 +50,14 @@ export const MOVES: readonly { from: string; to: string }[] = [
 
 /** The static moves — the new address for an old one, or `null` when the address is not a move. */
 export function movedAddress(pathname: string, search: string): string | null {
-  const [, first = '', second = '', third = '', fourth = '', fifth = ''] = pathname.split('/');
+  const segs = pathname.split('/');
+  const [, first = '', second = '', third = ''] = segs;
+  const restEmpty = (from: number): boolean => segs.slice(from).every((x) => x === '');
   const raw = new URLSearchParams(search).get('filter');
   const filter = isSessionFilter(raw) ? raw : undefined;
   const sessions = (): string => everythingPath({ tab: 'sessions', ...(filter !== undefined ? { filter } : {}) });
-  // The whole address must be the old one: `/work//typo` is a typo, not a move (codex on S15c).
-  if (second === '' && third === '') {
+  // The WHOLE address must be the old one: `/work//typo` and `/work///typo` are typos, not moves.
+  if (restEmpty(2)) {
     switch (first) {
       case 'projects': return everythingPath();
       case 'chats':
@@ -68,7 +70,7 @@ export function movedAddress(pathname: string, search: string): string | null {
       default: return null;
     }
   }
-  if (first === 'p' && second !== '' && third === 'chronicle' && fourth === '' && fifth === '') {
+  if (first === 'p' && second !== '' && third === 'chronicle' && restEmpty(4)) {
     return everythingPath({ tab: 'sessions', project: decode(second) });
   }
   return null;

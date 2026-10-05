@@ -12,8 +12,8 @@
   "studioVersion": "0.6.0",
   "counts": {
     "files": 216,
-    "occurrences": 2442,
-    "static": 2140,
+    "occurrences": 2456,
+    "static": 2151,
     "dynamic": 79,
     "computed": 8
   },
@@ -3357,6 +3357,30 @@
       ]
     },
     {
+      "testId": "everything-archived",
+      "files": [
+        "src/components/everything/EverythingPage.tsx"
+      ]
+    },
+    {
+      "testId": "everything-archived-project",
+      "files": [
+        "src/components/everything/EverythingPage.tsx"
+      ]
+    },
+    {
+      "testId": "everything-archived-projects",
+      "files": [
+        "src/components/everything/EverythingPage.tsx"
+      ]
+    },
+    {
+      "testId": "everything-archived-run",
+      "files": [
+        "src/components/everything/EverythingPage.tsx"
+      ]
+    },
+    {
       "testId": "everything-checking",
       "files": [
         "src/components/everything/EverythingPage.tsx"
@@ -3447,6 +3471,24 @@
       ]
     },
     {
+      "testId": "everything-live-chat",
+      "files": [
+        "src/components/everything/EverythingPage.tsx"
+      ]
+    },
+    {
+      "testId": "everything-live-chat-end",
+      "files": [
+        "src/components/everything/EverythingPage.tsx"
+      ]
+    },
+    {
+      "testId": "everything-live-chats",
+      "files": [
+        "src/components/everything/EverythingPage.tsx"
+      ]
+    },
+    {
       "testId": "everything-made",
       "files": [
         "src/components/everything/EverythingPage.tsx"
@@ -3520,6 +3562,12 @@
     },
     {
       "testId": "everything-tab",
+      "files": [
+        "src/components/everything/EverythingPage.tsx"
+      ]
+    },
+    {
+      "testId": "everything-unarchive",
       "files": [
         "src/components/everything/EverythingPage.tsx"
       ]
@@ -7665,6 +7713,12 @@
       ]
     },
     {
+      "testId": "rail-seat-signin",
+      "files": [
+        "src/components/HealthRailSection.tsx"
+      ]
+    },
+    {
       "testId": "rail-seat-week",
       "files": [
         "src/components/HealthRailSection.tsx"
@@ -9028,6 +9082,12 @@
       ]
     },
     {
+      "testId": "sheet-seat-signin",
+      "files": [
+        "src/components/sheets/ObjectSheet.tsx"
+      ]
+    },
+    {
       "testId": "sheet-section",
       "files": [
         "src/components/sheets/ObjectSheet.tsx"
@@ -9035,6 +9095,12 @@
     },
     {
       "testId": "sheet-session-changes",
+      "files": [
+        "src/components/sheets/ObjectSheet.tsx"
+      ]
+    },
+    {
+      "testId": "sheet-signin-action",
       "files": [
         "src/components/sheets/ObjectSheet.tsx"
       ]

@@ -374,11 +374,19 @@ function ActivityTail({ runId }: { runId: string }): React.ReactElement {
 }
 
 function SignIns({ roster }: { roster: RosterSeat[] | null }): React.ReactElement {
+  // Amendment 5, decision 5: a signed-out seat's row offers the one plain-words sign-in panel.
+  const [signIn, setSignIn] = useState<RosterSeat | null>(null);
   if (roster === null) return <p className="wk-session-grey">Reading the roster…</p>;
   return (
     <ul data-testid="sheet-signins" className="wk-sheet-list">
       {roster.length === 0 && <li className="wk-session-grey">No helper is set up on this daemon yet.</li>}
-      {roster.map((s) => <li key={s.key} data-testid="sheet-signin-row" data-seat={s.key} className="wk-sheet-line"><b>{s.display_name || s.key}</b> — {seatStandingWord(s).detail}</li>)}
+      {roster.map((s) => (
+        <li key={s.key} data-testid="sheet-signin-row" data-seat={s.key} className="wk-sheet-line">
+          <b>{s.display_name || s.key}</b> — {seatStandingWord(s).detail}
+          {signInLapsed(s) && <> <button type="button" data-testid="sheet-signin-action" data-seat={s.key} onClick={() => setSignIn(s)} className="wk-since-toggle">Sign in</button></>}
+        </li>
+      ))}
+      {signIn !== null && <SignInPanel seat={signIn} onClose={() => setSignIn(null)} />}
     </ul>
   );
 }

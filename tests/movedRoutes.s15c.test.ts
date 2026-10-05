@@ -53,7 +53,7 @@ describe('the redirect table (static moves)', () => {
   });
 
   it('is not a move: the launch form, a run, the project shell, a real page, a typo', () => {
-    for (const p of ['/runs/new', '/runs/r1', '/p/kes/build', '/p/kes/build/r1', '/p/kes', '/everything', '/skills', '/nope', '/projects/kes', '/p/kes/campaigns', '/work//typo', '/p/kes/chronicle/typo']) {
+    for (const p of ['/runs/new', '/runs/r1', '/p/kes/build', '/p/kes/build/r1', '/p/kes', '/everything', '/skills', '/nope', '/projects/kes', '/p/kes/campaigns', '/work//typo', '/work///typo', '/demo///typo', '/p/kes/chronicle//typo']) {
       expect(movedAddress(p, ''), p).toBeNull();
     }
   });
@@ -68,7 +68,7 @@ describe('the moved addresses parse to "See everything" (no headless tick)', () 
     expect(parseRoute('/p/kes/chronicle')).toMatchObject({ panel: 'everything', projectId: 'kes', mode: null });
   });
   it('typos stay dead addresses: a segment under /everything, a non-mode under /p/:id, garbage', () => {
-    for (const p of ['/everything/x', '/p/kes/bogus', '/nope', '/work//typo', '/p/kes/chronicle/typo', '/p/kes//x']) {
+    for (const p of ['/everything/x', '/p/kes/bogus', '/nope', '/work//typo', '/work///typo', '/demo///typo', '/p/kes/chronicle/typo', '/p/kes/chronicle//typo', '/p/kes///typo', '/p/kes//x']) {
       expect(parseRoute(p).panel, p).toBe('not-found');
     }
     // `/projects/:id` is the project management page, not a move.
