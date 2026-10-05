@@ -2415,6 +2415,10 @@ WAVE1_RUNS[3]["units"][0]["status"] = "done"
 WAVE1_MEMBERS = {"alpha": ["a1"], "beta": ["b1"], "gamma": ["r1", "c1"]}
 WAVE1_ATTACHED_AT = {"a1": NOW0 - 2 * MIN, "b1": NOW0 - 3 * MIN,
                      "r1": NOW0 - 4 * MIN, "c1": NOW0 - 50 * MIN}
+# S15c (/p/:id → the project's NEWEST session): the DTO carries `created_at` (unix seconds), as the
+# daemon's does, so the newest is decided by its clock — a1 (2 min) over g1 (3 min) and d1 (5 h).
+for _r in WAVE1_RUNS:
+    _r["session"]["created_at"] = WAVE1_ATTACHED_AT[_r["session"]["id"]] // 1000
 # r1's durable tail — real event_to_json shapes with RecordedEvent's ts + seq.
 WAVE1_R1_EVENTS = [
     {"type": "sessionStarted", "sessionId": "r1", "ts": NOW0 - 4 * MIN, "seq": 1},
@@ -2438,6 +2442,8 @@ WAVE2B_RUNS[4]["units"][0]["status"] = "done"
 WAVE2B_MEMBERS = {"alpha": ["g1", "d1"], "beta": ["g2", "f1"], "gamma": ["e1"]}
 WAVE2B_ATTACHED_AT = {"g1": NOW0 - 3 * MIN, "g2": NOW0 - 3 * MIN, "e1": NOW0 - 5 * MIN,
                       "f1": NOW0 - 4 * HOUR, "d1": NOW0 - 5 * HOUR}
+for _r in WAVE2B_RUNS:
+    _r["session"]["created_at"] = WAVE2B_ATTACHED_AT[_r["session"]["id"]] // 1000
 # The simple gates' cached records: g1 has waited longer than g2.
 WAVE2B_GATES = {"g1": ("Approve the schema change?", 20 * MIN),
                 "g2": ("Approve the TTL bump?", 10 * MIN),

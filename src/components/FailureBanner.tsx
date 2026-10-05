@@ -2,6 +2,7 @@ import type { SessionView } from '../api/types.js';
 import type { LoggedEvent } from '../store/runtime.js';
 import { useProvenanceStore } from '../store/provenance.js';
 import { denialAdvice, denialHeadline, parseDenial, type StructuredDenial } from './denialCopy.js';
+import { everythingPath } from '../board/everythingModel.js';
 
 interface Props {
   view: SessionView;
@@ -16,7 +17,8 @@ interface Props {
  *  a halted run, Cancelled for a cancelled one (studio#478: a rejected plan ends cancelled, and the
  *  Failed list does not hold it). */
 function AllRunsLink({ navigate, filter }: { navigate: (path: string) => void; filter: 'failed' | 'cancelled' }): React.ReactElement {
-  const href = `/work?filter=${filter}`;
+  // S15c: the list lives on "See everything" (`/work?filter=` moved there).
+  const href = everythingPath({ tab: 'sessions', filter });
   return (
     <a
       href={href}

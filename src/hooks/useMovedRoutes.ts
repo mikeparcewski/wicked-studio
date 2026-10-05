@@ -50,11 +50,12 @@ export const MOVES: readonly { from: string; to: string }[] = [
 
 /** The static moves — the new address for an old one, or `null` when the address is not a move. */
 export function movedAddress(pathname: string, search: string): string | null {
-  const [, first = '', second = '', third = '', fourth = ''] = pathname.split('/');
+  const [, first = '', second = '', third = '', fourth = '', fifth = ''] = pathname.split('/');
   const raw = new URLSearchParams(search).get('filter');
   const filter = isSessionFilter(raw) ? raw : undefined;
   const sessions = (): string => everythingPath({ tab: 'sessions', ...(filter !== undefined ? { filter } : {}) });
-  if (second === '') {
+  // The whole address must be the old one: `/work//typo` is a typo, not a move (codex on S15c).
+  if (second === '' && third === '') {
     switch (first) {
       case 'projects': return everythingPath();
       case 'chats':
@@ -67,7 +68,7 @@ export function movedAddress(pathname: string, search: string): string | null {
       default: return null;
     }
   }
-  if (first === 'p' && second !== '' && third === 'chronicle' && fourth === '') {
+  if (first === 'p' && second !== '' && third === 'chronicle' && fourth === '' && fifth === '') {
     return everythingPath({ tab: 'sessions', project: decode(second) });
   }
   return null;
@@ -108,7 +109,13 @@ export async function resolveProjectNewestSession(
   } catch {
     /* the members read failed — the DTO's own project_id still files runs here */
   }
-  const mine = runs.filter((v) => projectOf(v) === projectId || members.has(v.session.id));
+  // The board's placement rule (useBoardModel): the DTO's own `project_id` wins; membership files a
+  // run only when the DTO names no project — so a stale membership row never claims another
+  // project's run (codex on S15c).
+  const mine = runs.filter((v) => {
+    const p = projectOf(v);
+    return p !== null ? p === projectId : members.has(v.session.id);
+  });
   if (mine.length === 0) return null;
   const newest = mine.reduce((a, b) => (launchedMs(b) >= launchedMs(a) ? b : a));
   return sessionIdOf(newest, runChatId);

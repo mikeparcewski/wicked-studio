@@ -101,7 +101,7 @@ describe('SystemSettings — CLI seats & sign-in', () => {
     // Modal with the seat's name; the daemon's line shown as given, never run here.
     expect(screen.getByRole('dialog', { name: 'Sign in — Codex' })).toBeInTheDocument();
     expect(screen.getByTestId('signin-line')).toHaveTextContent('codex auth login');
-    expect(screen.getByTestId('copy-command')).toHaveAttribute('aria-label', 'copy codex auth login');
+    expect(screen.getByTestId('copy-command')).toHaveAttribute('data-command', 'codex auth login');
     expect(screen.getByTestId('signin-check')).toBeInTheDocument();
     expect(screen.queryByTestId('mock-terminal')).toBeNull();
   });

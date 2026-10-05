@@ -41,7 +41,9 @@ describe('the sign-in panel never prints the home directory in the default layer
     await openSignIn();
     expect(screen.getByTestId('signin-line')).toHaveTextContent('PI_CONFIG_DIR="~/.wicked-worker/pi" pi login');
     expect(screen.getByRole('dialog').textContent).not.toContain('/Users/reel-operator');
-    expect(screen.getByTestId('copy-command')).toHaveAttribute('aria-label', `copy ${LINE}`);
+    expect(screen.getByTestId('copy-command')).toHaveAttribute('aria-label', 'copy the sign-in command for Pi');
+    expect(screen.getByTestId('copy-command').getAttribute('title') ?? '').not.toContain('/Users/reel-operator');
+    expect(screen.getByTestId('copy-command')).toHaveAttribute('data-command', LINE);
   });
 
   it('with technical details on, the full path shows', async () => {

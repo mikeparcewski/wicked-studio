@@ -155,10 +155,15 @@ with sync_playwright() as p:
         fail("project-to-session", {"landed": address(page)})
     landed = address(page)
     page.get_by_test_id("session").wait_for(state="visible", timeout=10000)
-    # alpha's newest: g1 (3 min ago) over a1 (2 min ago attached, but g1 launched later in wave2b) —
-    # either is alpha's; what matters is that it IS one of alpha's sessions.
+    # alpha's NEWEST by the DTO's created_at: a1 (2 min ago) over g1 (3 min) and d1 (5 h) — and never
+    # e1 (gamma, 5 min) or b1/g2 (beta, 3 min), which are newer than d1 but not alpha's.
     sid = urllib.parse.unquote(landed.split("/s/", 1)[1])
-    check("project-to-session", sid.replace("run:", "") in {"a1", "g1", "d1"}, landed=landed, session=sid)
+    check("project-to-session", sid == "run:a1", landed=landed, session=sid)
+    page.goto(f"{origin}/p/gamma", wait_until="networkidle")
+    page.wait_for_function("() => location.pathname.startsWith('/s/')", timeout=10000)
+    gamma = urllib.parse.unquote(address(page).split("/s/", 1)[1])
+    # gamma's: r1 (4 min) over e1 (5 min) and c1 (50 min).
+    check("project-to-session-other", gamma == "run:r1", session=gamma)
     page.goto(f"{origin}/p/nothing-here", wait_until="networkidle")
     page.get_by_test_id("everything").wait_for(state="visible", timeout=10000)
     page.wait_for_function("() => new URLSearchParams(location.search).get('project') === 'nothing-here'", timeout=10000)
@@ -172,8 +177,9 @@ with sync_playwright() as p:
         .map(h => ({seat: h.dataset.seat, standing: h.dataset.standing, signin: !!h.querySelector('[data-testid="everything-helper-signin"]')}))""")
     page.screenshot(path=str(SHOTS / "desk-everything-helpers.png"))
     codex = next((h for h in helpers if h["seat"] == "codex"), None)
+    # Sign in is offered to every seat whose sign-in lapsed (codex is signed out; claude and agy are in).
     check("helpers", codex is not None and codex["standing"] == "signed-out" and codex["signin"]
-          and all(not h["signin"] for h in helpers if h["standing"] != "signed-out"), helpers=helpers)
+          and all(not h["signin"] for h in helpers if h["seat"] in ("claude", "agy")), helpers=helpers)
     page.locator('[data-testid="everything-helper"][data-seat="codex"] [data-testid="everything-helper-signin"]').click()
     page.get_by_test_id("signin-panel").wait_for(state="visible", timeout=5000)
     check("helpers-signin-panel", page.get_by_test_id("signin-panel").get_attribute("data-seat") == "codex")

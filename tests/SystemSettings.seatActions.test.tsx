@@ -86,7 +86,7 @@ describe('System — seat cards: #1 opencode login + free-tier note', () => {
     await user.click(screen.getByRole('button', { name: 'Sign in OpenCode' }));
     expect(screen.getByRole('dialog', { name: 'Sign in — OpenCode' })).toBeInTheDocument();
     expect(screen.getByTestId('signin-line')).toHaveTextContent('XDG_CONFIG_HOME=/w/opencode opencode auth login');
-    expect(screen.getByTestId('copy-command')).toHaveAttribute('aria-label', 'copy XDG_CONFIG_HOME=/w/opencode opencode auth login');
+    expect(screen.getByTestId('copy-command')).toHaveAttribute('data-command', 'XDG_CONFIG_HOME=/w/opencode opencode auth login');
     expect(screen.getByTestId('signin-check')).toBeInTheDocument();
     expect(screen.queryByTestId('mock-terminal')).toBeNull();
   });

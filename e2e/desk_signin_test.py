@@ -9,8 +9,8 @@ Against the in-process fixture, whose roster has a seat whose sign-in lapsed (co
   1. THE DESK ROW: "An AI helper (codex) needs signing in again" with a Sign in action that opens the
      panel in place — no navigation.
   2. THE PANEL: names the CLI; says studio cannot sign in for it and to run ONE command in a terminal;
-     shows the daemon's line with the worker home as ~/… (no absolute home path in the words); a Copy
-     button whose accessible name carries the line as given; "I've signed in — check again".
+     shows the daemon's line with the worker home as ~/… (no absolute home path in the words, the Copy
+     button's name or its tooltip); a Copy button; "I've signed in — check again".
   3. CHECK AGAIN: with the seat still out, the panel says so (one GET /roster); after the fixture signs
      the seat in, check again says signed in, and the Desk row clears without a reload.
   4. HEALTH: the rail's Health registry offers the same panel for a benched signed-out seat (the
@@ -69,6 +69,8 @@ PANEL = """() => {
     seat: p.dataset.seat, title: dialog?.innerText.split('\\n')[0] ?? null, text: p.innerText,
     line: p.querySelector('[data-testid="signin-line"]')?.innerText ?? null,
     copy: p.querySelector('[data-testid="copy-command"]')?.getAttribute('aria-label') ?? null,
+    copyTitle: p.querySelector('[data-testid="copy-command"]')?.getAttribute('title') ?? null,
+    copyCommand: p.querySelector('[data-testid="copy-command"]')?.dataset.command ?? null,
     check: p.querySelector('[data-testid="signin-check"]')?.innerText ?? null,
     result: p.querySelector('[data-testid="signin-result"]')?.dataset.state ?? null,
     terminal: !!p.querySelector('[data-testid="agent-terminal"], .xterm'),
@@ -108,7 +110,8 @@ with sync_playwright() as p:
           and "terminal" in pn["text"].lower() and "can’t sign in for you" in pn["text"]
           and pn["line"] == 'CODEX_HOME="~/.wicked-worker/codex" codex login'
           and "/Users/reel-operator" not in pn["text"]
-          and pn["copy"] == f"copy {LINE}"
+          and pn["copy"] == "copy the sign-in command for codex" and "/Users/reel-operator" not in (pn["copyTitle"] or "")
+          and pn["copyCommand"] == LINE
           and (pn["check"] or "").startswith("I’ve signed in")
           and not pn["terminal"],
           **{k: v for k, v in (pn or {}).items() if k != "text"})

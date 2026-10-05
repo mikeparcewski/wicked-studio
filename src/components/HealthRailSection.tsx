@@ -6,8 +6,9 @@ import type { DiagnosticsGovernance, DiagnosticsGovernanceFinding, RosterSeat } 
 import { coachSeat, recordsByCli, seatWeekLine, type CoachMove } from '../board/seatCoaching.js';
 import { useSeatWeek, type MoveState, type SeatWeekRead } from '../hooks/useSeatWeek.js';
 import { useConnectionStore } from '../store/connection.js';
-import { setCachedRoster } from '../store/rosterCache.js';
+import { setCachedRoster, subscribeRoster } from '../store/rosterCache.js';
 import { SignInPanel } from './SignInPanel.js';
+import { signInLapsed } from '../board/deskModel.js';
 import { useDisplayPath } from '../hooks/useHomePath.js';
 
 /**
@@ -117,7 +118,7 @@ export function seatStandingWord(seat: RosterSeat): SeatStanding {
 }
 
 /** One registry row (§6.2's anatomy): glyph, name, the honest detail. */
-function SeatRow({ seat }: { seat: RosterSeat }): React.ReactElement {
+function SeatRow({ seat, onSignIn }: { seat: RosterSeat; onSignIn?: (seat: RosterSeat) => void }): React.ReactElement {
   const h = seat.health;
   const standing = seatStandingWord(seat);
   const hedged = standing.kind === 'signed-out' || standing.kind === 'ineligible';
@@ -155,6 +156,20 @@ function SeatRow({ seat }: { seat: RosterSeat }): React.ReactElement {
       >
         {detail}
       </span>
+      {/* Amendment 5, decision 5: wherever a seat is signed out, Sign in is one click away — not only
+          when the week's record happens to show an auth bench. */}
+      {onSignIn !== undefined && signInLapsed(seat) && (
+        <button
+          type="button"
+          data-testid="rail-seat-signin"
+          data-seat={seat.key}
+          onClick={() => onSignIn(seat)}
+          aria-label={`Sign in ${seat.display_name || seat.key}`}
+          style={{ ...MONO_2XS, flexShrink: 0, padding: '0 6px', borderRadius: 'var(--radius-md)', border: '1px solid var(--status-gate-dim)', background: 'var(--status-gate-dim)', color: 'var(--status-gate)', cursor: 'pointer' }}
+        >
+          Sign in
+        </button>
+      )}
     </div>
   );
 }
@@ -368,6 +383,9 @@ export function HealthRailSection({ open, onToggle, compact = false }: Props): R
   // Wave B, idea 9: the seats' week, read on the same expand gesture.
   const { week, moves, apply, markOpened } = useSeatWeek(open);
   const [signIn, setSignIn] = useState<RosterSeat | null>(null);
+  // Amendment 5: a roster re-read anywhere (the sign-in panel's "check again" on the Desk or in
+  // Helpers) refreshes this registry too — the rows clear without another expand.
+  useEffect(() => subscribeRoster((r) => { setRoster(r); setRosterError(false); }), []);
   const weekRecords = week.kind === 'ok' ? recordsByCli(week.record) : null;
   /** The expand generation a diagnostics read belongs to — a completion from an earlier
    *  expand must not overwrite a later one (the findings drive the heart and the dot). */
@@ -545,7 +563,7 @@ export function HealthRailSection({ open, onToggle, compact = false }: Props): R
                 const move = week.kind === 'ok' ? coachSeat(record, seat, week.record) : null;
                 return (
                   <div key={seat.key} data-testid="rail-seat" data-seat={seat.key}>
-                    <SeatRow seat={seat} />
+                    <SeatRow seat={seat} onSignIn={setSignIn} />
                     {move !== null && (
                       <SeatWeek
                         seat={seat}

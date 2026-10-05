@@ -47,7 +47,10 @@ describe('the panel', () => {
     expect(panel.textContent).toMatch(/terminal/i);
     expect(panel.textContent).toMatch(/Studio (can’t|can't|cannot|never) sign in for you/i);
     const copy = screen.getByTestId('copy-command');
-    expect(copy).toHaveAttribute('aria-label', `copy ${LINE}`);
+    // The clipboard gets the raw line; the button's name and tooltip never print the home directory.
+    expect(copy).toHaveAttribute('aria-label', 'copy the sign-in command for Codex');
+    expect(copy.getAttribute('title') ?? '').not.toContain('/Users/reel-operator');
+    expect(copy).toHaveAttribute('data-command', LINE);
     fireEvent.click(copy);
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith(LINE);
     // Never a terminal that runs it.

@@ -44,6 +44,9 @@ export const SESSION_FILTERS = [
   { id: 'completed', label: 'Done' },
   { id: 'failed', label: 'Blocked' },
   { id: 'cancelled', label: 'Stopped' },
+  // The old Work page's "show archived" toggle, as a lens: the archived runs (`GET /runs?archived`),
+  // each with Unarchive — read only when picked.
+  { id: 'archived', label: 'Archived' },
 ] as const;
 export type SessionFilter = (typeof SESSION_FILTERS)[number]['id'];
 
@@ -60,6 +63,7 @@ export function matchesSessionFilter(state: SessionState, filter: SessionFilter)
     case 'completed': return state === 'done';
     case 'failed': return state === 'blocked';
     case 'cancelled': return state === 'quiet';
+    case 'archived': return false; // archived runs are a separate read, never in the live groups
   }
 }
 
@@ -110,6 +114,8 @@ export interface MadeRow {
   doc?: { name: string; kind: DocSummary['kind'] };
   /** A demo run's video (opened on the run). */
   runId?: string;
+  /** The demo run's status, for a video row (`completed`, `executing`, …). */
+  runStatus?: string;
 }
 
 function isoMs(s: string | null): number | null {
@@ -155,6 +161,7 @@ export function madeRows(
       projectId: projectOf(v, projectIdByRun),
       updatedAt: ended ?? (launchedMs(v) || null),
       runId: v.session.id,
+      runStatus: v.session.status,
     });
   }
   return out

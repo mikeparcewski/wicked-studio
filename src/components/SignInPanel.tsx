@@ -78,7 +78,8 @@ export function SignInPanel({ seat, onClose, onChecked }: {
             <code data-testid="signin-line" className="rounded px-2 py-1" style={{ background: 'var(--surface-raised)', color: 'var(--ink-high)', overflowWrap: 'anywhere' }}>
               {showText(line)}
             </code>
-            <CopyButton command={line} />
+            {/* The clipboard gets the line as given; the button's name and tooltip never print the home path. */}
+            <CopyButton command={line} label={`copy the sign-in command for ${cli}`} />
           </div>
         ) : (
           <p data-testid="signin-no-line" style={{ color: 'var(--ink-muted)' }}>

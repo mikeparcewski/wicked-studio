@@ -5,7 +5,7 @@ wavec_home_runs_test.py — Wave C, lane home-runs (brainstorm-actionable ideas 
   top     Home: the header's "Just the top one" holds the highest-consequence Needs You item — the
           queue shows 1 item and says "N hidden, back when this clears"; turning it off restores
           every item (same count as before).
-  reuse   /work: the finished user-plan run r-reuse offers "Reuse as preset" and "Draft update" beside
+  reuse   /work (→ /everything, S15c): the finished user-plan run r-reuse offers "Reuse as preset" and "Draft update" beside
           Archive. Opening the save shows the consequence ABOVE the button, on screen, and writes
           nothing; saving PUTs /presets/tidy-upload with the run's 3 catalog steps (PA scope and
           deliver left out) and the row says it was saved. "Draft update" opens the outbound draft.
@@ -125,6 +125,10 @@ with sync_playwright() as p:
         row.get_by_test_id("run-reuse-preset").click()
         panel = row.get_by_test_id("run-reuse-panel")
         panel.wait_for(state="visible", timeout=8000)
+        # S15c: the row lives on "See everything › Sessions" under the page's header and lenses, so the
+        # panel is brought into view before its geometry (consequence above the button) is read.
+        panel.scroll_into_view_if_needed()
+        page.wait_for_timeout(150)
         consequence = (panel.get_by_test_id("run-reuse-consequence").text_content() or "").strip()
         check("consequence-first", consequence.startswith("Saves this run's 3 steps (understand → build → review) as the preset")
               and page.evaluate("""() => { const p = document.querySelector('[data-run-id="r-reuse"] [data-testid="run-reuse-panel"]');

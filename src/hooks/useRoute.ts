@@ -247,7 +247,7 @@ function parse(pathname: string): Route {
     // everything" — parsed to it so the tab renders on the pre-redirect tick; `useMovedRoutes`
     // replaces the address. A bare `/p/:projectId` (the project dashboard) parses the same way while
     // the hook finds the project's newest session; with none, the Sessions tab IS where it lands.
-    if (third === 'chronicle' || third === '') {
+    if ((third === 'chronicle' || third === '') && fourth === '') {
       return route({ panel: 'everything', projectId: safeDecode(second) });
     }
     // `/p/:projectId/campaigns` (nav-reorg): the project-scoped Campaigns surface. Rides no
@@ -349,7 +349,7 @@ function parse(pathname: string): Route {
   // to the page so it renders on the pre-redirect tick; `useMovedRoutes` replaces the address with
   // the real one (carrying `?filter=` and the tab). Deeper spellings are dead addresses.
   if (first === 'everything') return second ? route({ panel: 'not-found' }) : route({ panel: 'everything' });
-  if (MOVED_LISTS.has(first) && !second) return route({ panel: 'everything' });
+  if (MOVED_LISTS.has(first) && !second && !third) return route({ panel: 'everything' });
   // `/s/:sessionId` (DES-STUDIO-REBUILD-001 §5.4, slice S6a): a session — a chat and the runs
   // launched from it, or one run (`run:<id>`). A real route under every skin (a route is not a skin
   // concern). The id rides in `artifactId`, never `runId`: no run-selected machinery fires here.
