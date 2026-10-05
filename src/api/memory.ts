@@ -4,14 +4,10 @@
  * scope subtree. The read/decide twin (memory PROPOSALS) rides the shared proposal wire in
  * `./proposals.ts` — this module is only the "manage existing memories" half.
  *
- * ── INTEGRATION POINT (faceted-memory build, paired estate/crew lane) ─────────────────────────
- * The `MemoryItem` shape is hand-mirrored from the engine that PRODUCES it — the estate memory
- * store, surfaced through crew's `/api/v1/memory*` slice (built in a parallel lane) — because
- * that crew slice is not yet in studio's installed `wicked-crew-api-types`. Like the wiki shapes
- * in `./wiki.ts`, the steering shapes in `./steering.ts`, and the proposal shapes in
- * `./proposals.ts`, every declaration here is TEMPORARY: **delete this block and re-export from
- * `wicked-crew-api-types`** the moment studio bumps to the api-types version that carries the
- * memory contract. Field names are the engine's serde output, verbatim.
+ * ── CONTRACT (faceted-memory build) ───────────────────────────────────────────────────────────
+ * `MemoryItem` and `MemoryStats`-side rows come from `wicked-crew-api-types` (pin 0.92.0, ASK-S1) —
+ * the engine's serde output, verbatim. `ListMemoriesQuery` below keeps studio's exact-`scope`
+ * parameter (the contract's query has no such field) and `MemoryCoverage` is studio's own reading.
  *
  * The support probe is the same two-layer adoption seam as the wiki/steering/proposal reads: a
  * bare 404 (Fastify's unknown-route answer) means "this crew daemon predates the memory routes";
@@ -26,26 +22,13 @@
 import { apiFetch } from './client.js';
 import { ApiError, isRouteAbsent } from './errors.js';
 
-// ── The memory item (mirrored from the estate memory store; DELETE once api-types carries it) ──
-
-/**
- * One stored memory. `scope` is the store's addressing key (`brain:<project>/doc:<id>`,
- * `data/users/<id>/…`) — retire targets a scope PREFIX, so retiring by an item's own scope
- * erases that item and everything filed deeper under it (be honest about that granularity in the
- * UI). `facets` are the dimensions it is tagged with (project, repo, domain, …); `score` is the
- * recall relevance, present only on a queried read.
- */
-export interface MemoryItem {
-  id: string;
-  content: string;
-  tier: string;
-  scope: string;
-  facets: Record<string, string>;
-  score?: number;
-}
+// ── The memory item (from the contract package) ───────────────────────────────────────────────
 
 /** Coverage over a scope subtree — how much memory the store holds there. Read permissively: the
  *  exact shape is not in api-types yet, so extra fields are tolerated and absent ones degrade. */
+import type { MemoryItem } from 'wicked-crew-api-types';
+export type { MemoryItem };
+
 export interface MemoryCoverage {
   total?: number;
   /** Per-tier counts (`session | project | global | …`). */
@@ -53,6 +36,13 @@ export interface MemoryCoverage {
   [k: string]: unknown;
 }
 
+// ── Calls (the governed operator path — every write goes through crew's `/api/v1`) ────────────
+
+/**
+ * `GET /memory` — the memory store, optionally recall-queried / scope-scoped / facet-filtered.
+ * Unwraps `{ memories }`, but tolerates a bare array so a slightly different serialization still
+ * reads rather than throwing.
+ */
 export interface ListMemoriesQuery {
   /** A recall query — when present the read is a relevance search (scored), else a plain browse. */
   query?: string;
@@ -66,13 +56,6 @@ export interface ListMemoriesQuery {
   limit?: number;
 }
 
-// ── Calls (the governed operator path — every write goes through crew's `/api/v1`) ────────────
-
-/**
- * `GET /memory` — the memory store, optionally recall-queried / scope-scoped / facet-filtered.
- * Unwraps `{ memories }`, but tolerates a bare array so a slightly different serialization still
- * reads rather than throwing.
- */
 export function listMemories(query: ListMemoriesQuery = {}): Promise<MemoryItem[]> {
   const params = new URLSearchParams();
   if (query.query !== undefined && query.query !== '') params.set('query', query.query);

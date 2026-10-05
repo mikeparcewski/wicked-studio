@@ -3,12 +3,11 @@
  * `GET /campaigns/:id`, as the daemon ACTUALLY serves them (crew#342's shipped shape +
  * the api-types 0.19.0 additions built for wicked-studio#27).
  *
- * ── INTEGRATION POINT (api-types 0.19.0) ─────────────────────────────────────────────────────
- * These shapes are hand-mirrored VERBATIM from `wicked-crew-api-types` 0.19.0 (the engine's
- * persisted `Campaign` plus the daemon-joined rollup fields) because studio's installed
- * `wicked-crew-api-types` is stale at 0.8.x. Like `SessionDelivery` in `./types.ts`, every
- * declaration here is TEMPORARY: **delete this block and re-export from
- * `wicked-crew-api-types`** the moment studio bumps to ≥ 0.19.0.
+ * ── A READ-SIDE SUBSET, kept on purpose (api-types pin 0.92.0, ASK-S1) ──────────────────────
+ * `wicked-crew-api-types` carries `Campaign`, `CampaignDef`, `CampaignNode` and `CampaignRunSpec`
+ * too, but its `CampaignRunSpec` requires the engine's `clis` / `entity_mode`, which no studio
+ * surface reads and no studio fixture builds. The shapes below are the fields studio reads, each
+ * with an index signature for the rest — a subset of the contract, not a copy of it.
  *
  * ⚠ WIRE CORRECTION over the first cut of this file: crew#342 shipped the ENGINE campaign
  * shape (`id`/`def`/`node_status`/`node_run_id`…), NOT the DES-CAMPAIGN-001 §1.4 summary DTO

@@ -58,7 +58,7 @@ vi.mock('../src/api/client.js', () => ({ apiFetch: vi.fn() }));
 
 /**
  * The skills wire's pure folds (src/api/skills.ts) against responses shaped EXACTLY like crew#480's
- * (api-types 0.27.0 — the mirror in src/api/skills-wire.ts), pinned so they cannot drift:
+ * (api-types 0.27.0 — re-exported by src/api/skills-wire.ts), pinned so they cannot drift:
  *  - `readCatalogBody` accepts exactly `SkillsManifestResponse` — `{manifest: {skills: {…}, files: {…},
  *    …}, revision: number, root, current}` with PLAIN objects for the two maps and a non-negative
  *    INTEGER revision; anything else (an array, a missing `files` map, a string revision, the old

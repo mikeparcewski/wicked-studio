@@ -2,17 +2,14 @@
  * The architecture-wiki wire (AW-23 scoreboard + wiki meta + RuleSet grouping) — types and
  * calls for the read side of the Architecture Wiki surface (`/wiki`).
  *
- * ── INTEGRATION POINT (wiki-management build, paired crew lane) ──────────────────────────────
- * These shapes are hand-mirrored from the engine that PRODUCES them — wicked-core's
- * `crates/wicked-governance/src/scoreboard.rs` (`Scoreboard`, AW-23), `ruleset.rs`
- * (`RuleSetGrouping`, AW-13) and `provenance.rs` (the `<path>@<blob sha>#<RULE-ID>` ref
- * format, AW-10) — because the crew slice that serves them (`/governance/wiki/*`, built in a
- * parallel lane, presence-gated on core-ts methods like the campaigns routes) is not yet in
- * studio's installed `wicked-crew-api-types`. Like `Campaign` in `./campaigns.ts`, every
- * declaration here is TEMPORARY: **delete this block and re-export from
- * `wicked-crew-api-types`** the moment studio bumps to the api-types version that carries the
- * wiki contract. Field names and spellings are the engine's serde output, verbatim — a served
- * payload that disagrees is a contract bug, not an adoption gap.
+ * ── CONTRACT (wiki-management build) ──────────────────────────────────────────────────────────
+ * The coverage, evidence and recall-volume rows come from `wicked-crew-api-types` (pin 0.92.0,
+ * ASK-S1). The scoreboard, meta, rule-set, verdict and provenance-ref shapes below are mirrored from
+ * the engine that PRODUCES them — wicked-core's `crates/wicked-governance/src/scoreboard.rs`
+ * (`Scoreboard`, AW-23), `ruleset.rs` (`RuleSetGrouping`, AW-13) and `provenance.rs` (the
+ * `<path>@<blob sha>#<RULE-ID>` ref format, AW-10) — because the contract package does not carry
+ * them yet. Field names and spellings are the engine's serde output, verbatim — a served payload
+ * that disagrees is a contract bug, not an adoption gap.
  *
  * The support probe is the adoption seam, and it is TWO-LAYERED here:
  *  - a bare 404 (Fastify's unknown-route answer) means "this crew daemon predates the wiki
@@ -33,56 +30,11 @@ import { ApiError, isRouteAbsent } from './errors.js';
 
 // ── AW-23 scoreboard (scoreboard.rs `Scoreboard`, serde snake_case) ───────────────────────────
 
-/** Typing coverage — % of doctrine statements typed into enforcement classes (doc frontmatter). */
-export interface WikiTypingCoverage {
-  /** False when the daemon had no docs root to scan; `reason` says why, in-band. */
-  available: boolean;
-  reason?: string;
-  docs_scanned: number;
-  statements_total: number;
-  statements_typed: number;
-  /** Absent when there is nothing to divide by (serde skips `None`). */
-  percent?: number;
-  /** Statement count per enforcement class (`policy | validator | guidance`). */
-  by_class: Record<string, number>;
-  docs_untyped: string[];
-}
-
-/** Connection coverage — % of active rules whose `symbol_ref` resolves at the CURRENT epoch. */
-export interface WikiConnectionCoverage {
-  rules_with_ref: number;
-  refs_resolving: number;
-  refs_unresolvable: number;
-  percent?: number;
-  /** Rules carrying live `Governs` edges into code. */
-  rules_linked: number;
-}
-
-/** One rule's enforcement evidence — deny claims citing it + accumulated Governs evidence. */
-export interface WikiRuleEvidenceRow {
-  rule_id: string;
-  denial_claims: number;
-  governs_evidence: number;
-}
-
-/** Enforcement evidence — gate denials that CITE wiki rules (evidenced_by edges). */
-export interface WikiEnforcementEvidence {
-  denial_claims: number;
-  rules_evidenced: number;
-  evidenced_by_edges: number;
-  governs_evidence_total: number;
-  per_rule: WikiRuleEvidenceRow[];
-}
-
-/** Recall volume — documented UNAVAILABLE by the engine (nothing writes recall telemetry yet);
- *  the struct exists so the report says so in-band instead of silently omitting the metric. */
-export interface WikiRecallVolume {
-  available: boolean;
-  reason: string;
-}
-
 /** Per-steering-type rule counts — one row of the engine's `by_type` map
  *  (wicked-governance `SteeringTypeCount`, serde field spellings verbatim). */
+import type { WikiTypingCoverage, WikiConnectionCoverage, WikiRuleEvidenceRow, WikiEnforcementEvidence, WikiRecallVolume } from 'wicked-crew-api-types';
+export type { WikiTypingCoverage, WikiConnectionCoverage, WikiRuleEvidenceRow, WikiEnforcementEvidence, WikiRecallVolume };
+
 export interface SteeringTypeCounts {
   total: number;
   active: number;

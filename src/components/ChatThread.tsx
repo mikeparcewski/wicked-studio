@@ -182,9 +182,10 @@ export function replayTranscript(
         };
         break;
       }
-    } else {
+    } else if (r.kind === 'seat') {
       messages.push({ kind: 'seat', cliKey: r.cliKey, text: r.text, pending: false, ok: r.ok, turn, usage: r.usage });
     }
+    // `decisions` and `system` records (api-types 0.84.0 / 0.85.0) are folded by their own readers.
   }
   // The daemon's `turnId` → the local ordinal, so a frame stamped with a turn this surface only
   // ever saw in the transcript (a reload, a second tab) still finds its reply (crew#561).

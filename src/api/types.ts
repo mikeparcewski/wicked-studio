@@ -14,16 +14,17 @@
 
 import type { AgentSession, LaunchRunBody } from 'wicked-crew-api-types';
 
-export type * from 'wicked-crew-api-types';
+import type { DeliverRunResult, DeliverTargetResponse, RunAcceptanceWalkthrough, RunAcceptanceSummary, InteractiveDocDeleteLedgerReport, InteractiveDocDeleteResponse } from 'wicked-crew-api-types';
+export type { DeliverRunResult, DeliverTargetResponse, RunAcceptanceWalkthrough, RunAcceptanceSummary, InteractiveDocDeleteLedgerReport, InteractiveDocDeleteResponse };
 
+export type * from 'wicked-crew-api-types';
 
 // ── Delivery wire (crew#393 — api-types 0.18.0) ──────────────────────────────
 //
-// TODO(api-types 0.18.0): studio's installed `wicked-crew-api-types` is STALE at
-// 0.8.0 and every declaration in this section ships in 0.18.0. Delete this whole
-// section — `RunDeliveryState`, `SessionDelivery`, `SessionWithDelivery`,
-// `DeliverRunResult`, `LaunchBodyWithDeliver` — and read the fields straight off
-// `AgentSession` / `LaunchRunBody` the moment studio bumps to it.
+// `DeliverRunResult` and `DeliverTargetResponse` come from the contract package (pin 0.92.0,
+// ASK-S1). `RunDeliveryState`, `SessionDelivery`, `SessionWithDelivery` and `LaunchBodyWithDeliver`
+// stay: they are studio's tolerant readings of the delivery field across the 0.11–0.18 wire
+// reshape (`src/components/delivery.ts` still reads the legacy object off an older daemon).
 
 /**
  * `AgentSession.delivery` (crew#393; api-types 0.18.0) — the run's delivery
@@ -74,19 +75,6 @@ export type SessionWithDelivery = Omit<AgentSession, 'delivery' | 'deliverUrl'> 
 };
 
 /**
- * Response of `POST /runs/:id/deliver` (crew#393) — post-hoc delivery: lift a
- * COMPLETED repo-scoped run's stranded worktree into a PR with the SAME hardened
- * script the deliver phase runs. Idempotent — a delivered run answers 200 with
- * the same recorded `prUrl`. Failure is loud, never silent: 404 unknown run,
- * 409 not-completed / repo-less / worktree-gone / delivery-in-flight / the
- * script's own refusal (the error carries the script's own words), 500 when no
- * verifiable PR URL came back or the script could not be spawned.
- */
-export interface DeliverRunResult {
-  prUrl: string;
-}
-
-/**
  * `LaunchRunBody` with 0.18.0's widened `deliver`. `'pr'` appends the hardened
  * deliver phase; `'none'` explicitly declines (the completed run reads
  * `delivery: 'stranded'` on the wire, recoverable via `POST /runs/:id/deliver`);
@@ -129,12 +117,6 @@ export type LaunchBodyWithDeliver = Omit<LaunchRunBody, 'deliver'> & {
 // the deliver gate card uses (crew#730); `sentence` is that card's own target
 // sentence for a run not yet started. A daemon without the route answers 404 —
 // the client reads that as `null` ("could not say"), never as an origin.
-export interface DeliverTargetResponse {
-  repo: string;
-  origin: 'github' | 'local' | 'other' | 'none' | 'unknown';
-  githubRepo: string | null;
-  sentence: string;
-}
 
 // ── GET /runs/:id/acceptance (AW-14 / AW-18 — arch-R13a + R16) ────────────────
 //
@@ -207,33 +189,7 @@ export interface AcceptanceGate {
  * stored. The one declaration is `./walkthrough.ts` (WT-U1 mirrored it for the WalkthroughView's
  * `steps`); the acceptance read serves the same shape.
  */
-import type { WalkthroughStepState } from './walkthrough.js';
 export type { WalkthroughCheckState, WalkthroughStepState } from './walkthrough.js';
-
-/** `GET /runs/:id/acceptance` → `walkthrough` (api-types 0.75.0): the walkthrough half of the gate,
- *  ABSENT when the run's requirement names no walkthrough step. */
-export interface RunAcceptanceWalkthrough {
-  roots: Array<{ stepId: string; sealed: boolean; satisfied: boolean; reason: string }>;
-  sealed: boolean;
-  /** Per creator step, from the NEWEST walkthrough of the run. */
-  steps: WalkthroughStepState[];
-}
-
-/** `GET /runs/:id/acceptance` → `summary` (api-types 0.82.0, WT-W3): the deliver card's ONE
- *  acceptance line, in crew's words — counts and the tree, never a path. */
-export interface RunAcceptanceSummary {
-  required: boolean;
-  satisfied: boolean;
-  line: string;
-  walkthrough: {
-    checked: number;
-    failed: number;
-    ownedByYou: number;
-    steps: number;
-    sealed: boolean;
-    tree: string | null;
-  } | null;
-}
 
 /** The subset of `GET /runs/:id/acceptance` studio reads. */
 export interface RunAcceptanceView {
@@ -255,42 +211,3 @@ export interface RunAcceptanceView {
 // declarations and re-export the package's** the moment studio bumps to the
 // api-types version that carries `InteractiveDocDeleteResponse`.
 
-/** Crew's handoff-ledger half of a doc delete — what fell, or why nothing did. */
-export interface InteractiveDocDeleteLedgerReport {
-  /** True iff every ledger was swept without error. False with `skipped: true`
-   *  on the refusal paths — the sweep deliberately did not run. */
-  ok: boolean;
-  /** Every replay-dedup row key actually dropped (`<doc>`, `<doc>:v<n>`, …).
-   *  Empty ⇒ nothing was there — a never-drafted doc is a clean no-op here. */
-  removed_keys: string[];
-  /** The ledgers that could NOT be swept (`draft`|`edit`|`chat`|`demo`) and why.
-   *  Present only when `ok` is false and the sweep actually ran. */
-  errors?: { ledger: string; error: string }[];
-  /** True ⇒ deliberately skipped (interactive refused/failed the retire, so
-   *  crew's rows are still doing their job — nothing diverged). */
-  skipped?: boolean;
-}
-
-/**
- * The governed delete's 200: interactive's own retire answer (relayed verbatim)
- * plus crew's ledger report — BOTH halves named, per the route's loud-on-partial
- * contract (its non-200s carry `error` + the same `ledger` report).
- */
-export interface InteractiveDocDeleteResponse {
-  /** The doc name (slug). */
-  name: string;
-  kind: 'doc' | 'html' | 'source' | 'demo';
-  retired: true;
-  /** True on a repeat delete — idempotent, with the ORIGINAL `retired_at` and no `event_id`. */
-  already_retired: boolean;
-  /** ISO-8601 retirement timestamp. */
-  retired_at: string;
-  /** Head version at retirement. */
-  head: number;
-  /** Lineage size at retirement. */
-  versions: number;
-  /** The `wicked.interactive.doc.retired` bus event id — first retire only. */
-  event_id?: number;
-  /** What crew dropped from its handoff ledgers. */
-  ledger: InteractiveDocDeleteLedgerReport;
-}

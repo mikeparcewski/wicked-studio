@@ -3,17 +3,16 @@
  * governance surface that MERGED the wiki/rules model and the old policies model into one
  * steering-rule model (the STEERING program).
  *
- * ── INTEGRATION POINT (steering build, paired core/crew lanes) ────────────────────────────────
- * The unified rule shape is hand-mirrored from the engine that PRODUCES it — wicked-core's
+ * ── CONTRACT (steering build) ─────────────────────────────────────────────────────────────────
+ * `SteeringType` and the import/author bodies come from `wicked-crew-api-types` (pin 0.92.0, ASK-S1).
+ * The unified RULE shape below is still mirrored from the engine that PRODUCES it — wicked-core's
  * `crates/wicked-governance/src/conformance.rs` (`ConformanceRule`, grown by the steering-model
  * lane with `steering_type` / `applies_to` / `excludes` / `weight` and the policy-side
- * `effect` / `trigger` / `obligations` / `criteria`) — because the crew slice that serves the
- * management wire (`POST /governance/steering/*`, built in a parallel lane) is not yet in
- * studio's installed `wicked-crew-api-types`. Like the wiki shapes in `./wiki.ts`, every
- * declaration here is TEMPORARY: **delete this block and re-export from `wicked-crew-api-types`**
- * the moment studio bumps to the api-types version that carries the steering contract. Every
- * grown field is OPTIONAL: a pre-0.7.5 daemon serves plain conformance rules, and this surface
- * must read them as what they are — architecture-typed (the engine's serde default), weightless,
+ * `effect` / `trigger` / `obligations` / `criteria`) — and `SteeringImportBody` keeps studio's
+ * input/result split (the contract names the INPUT entry `SteeringImportEntry`; studio's
+ * `SteeringImportEntry` is the per-entry RESULT, folded over two vocabularies below). Every grown
+ * field is OPTIONAL: a pre-0.7.5 daemon serves plain conformance rules, and this surface must
+ * read them as what they are — architecture-typed (the engine's serde default), weightless,
  * recall-only.
  *
  * The support probe is the same two-layer adoption seam as the wiki reads: a bare 404 means
@@ -33,6 +32,9 @@ import type { ConformanceRule } from './types.js';
 
 // ── The seven steering types (enum-as-string, engine serde default "architecture") ───────────
 
+import type { SteeringType, SteeringAuthorBody } from 'wicked-crew-api-types';
+export type { SteeringType, SteeringAuthorBody };
+
 export const STEERING_TYPES = [
   'architecture',
   'development',
@@ -42,8 +44,6 @@ export const STEERING_TYPES = [
   'compliance',
   'design-ux',
 ] as const;
-
-export type SteeringType = (typeof STEERING_TYPES)[number];
 
 /** The engine's serde default: a rule written before `steering_type` existed IS architecture. */
 export const DEFAULT_STEERING_TYPE: SteeringType = 'architecture';
@@ -247,15 +247,15 @@ export function ruleTypeOfId(id: string): 'pattern' | 'policy' {
 
 // ── Import (`POST /governance/steering/import`) ───────────────────────────────────────────────
 
-export type SteeringImportEntryInput =
-  | { kind: 'doc'; name?: string; content: string }
-  | { kind: 'rule'; rule: Record<string, unknown> };
-
 export interface SteeringImportBody {
   /** Default steering_type for entries that omit it — the page's type. */
   type?: SteeringType;
   entries: SteeringImportEntryInput[];
 }
+
+export type SteeringImportEntryInput =
+  | { kind: 'doc'; name?: string; content: string }
+  | { kind: 'rule'; rule: Record<string, unknown> };
 
 /**
  * One entry's fate, reported per-entry so a half-good batch renders honestly. The ENGINE's row
@@ -303,16 +303,6 @@ export function importSteeringRules(body: SteeringImportBody): Promise<{ results
 }
 
 // ── Add with chat (`POST /governance/steering/author`) ────────────────────────────────────────
-
-export interface SteeringAuthorBody {
-  instructions: string;
-  /** The page's type — a default the authoring run applies to proposals. */
-  type?: SteeringType;
-  /** Daemon-visible paths the run may read (dirs allowed). */
-  paths?: string[];
-  /** File contents read client-side and carried inline — the authoring run's source material. */
-  documents?: { name: string; content: string }[];
-}
 
 /** Launches the authoring run; its PROPOSE gate arrives as a normal `awaitingHuman` frame on
  *  the returned run — the existing gate components render and answer it. */

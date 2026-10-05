@@ -3,36 +3,19 @@
  * Notes, text files and photos go to the daemon; it files a small run to the project whose output
  * is proposals in the ONE review queue (`./proposals.ts`).
  *
- * ── INTEGRATION POINT ──────────────────────────────────────────────────────────────────────────
- * Hand-mirrored from crew's `CaptureBody` / `CaptureResponse` because studio's installed
- * `wicked-crew-api-types` predates 0.48.0 — delete these declarations and re-export from the
- * contract package when studio bumps to it (the `./proposals.ts` precedent).
+ * ── CONTRACT ───────────────────────────────────────────────────────────────────────────────────
+ * Types come from `wicked-crew-api-types` (pin 0.92.0, ASK-S1); the hand-mirrored copies that lived
+ * here while the pin lagged are gone.
+ * `CaptureFile` below is studio's own union over the two file shapes.
  */
 
 import { apiFetch } from './client.js';
 import { readFileText } from '../components/fileText.js';
 
-export interface CaptureTextFile {
-  name: string;
-  text: string;
-}
-
-export interface CaptureImageFile {
-  name: string;
-  mediaType: string;
-  dataBase64: string;
-}
+import type { CaptureTextFile, CaptureImageFile, CaptureBody, CaptureResponse } from 'wicked-crew-api-types';
+export type { CaptureTextFile, CaptureImageFile, CaptureBody, CaptureResponse };
 
 export type CaptureFile = CaptureTextFile | CaptureImageFile;
-
-export interface CaptureBody {
-  notes?: string;
-  files?: CaptureFile[];
-}
-
-export interface CaptureResponse {
-  runId: string;
-}
 
 /** The image types a vision-capable seat reads, by extension (the daemon refuses any other). */
 export const CAPTURE_IMAGE_TYPES: Readonly<Record<string, string>> = {
