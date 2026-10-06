@@ -271,7 +271,7 @@ function SessionSheet({ r, tab: asked, runs, navigate }: { r: Extract<ObjectRef,
         </ul>
       )}
       {tab === 'steps' && (newest !== null ? <StepsList view={newest} /> : <p className="wk-session-grey">Nothing in this session is on this daemon.</p>)}
-      {tab === 'helpers' && <HelpersList runs={mine} sessionId={r.sessionId} onSignIn={() => setSheetTab('signins')} />}
+      {tab === 'helpers' && <HelpersList runs={mine} sessionId={r.sessionId} onSignIn={() => setSheetTab('signins')} roster={roster} />}
       {tab === 'changes' && newest !== null && (
         <div data-testid="sheet-session-changes" className="wk-sheet-section wk-sheet-fill">
           <FileViewer runId={newest.session.id} defaultTab="diff" base="merge-base" onClose={() => setSheetTab('steps')} onUnsupported={() => setSheetTab('steps')} />
@@ -357,27 +357,37 @@ function useAskPath(sessionId: string | null): ChatPathView | null {
   return askOn && path?.id === sessionId ? path.path : null;
 }
 
-function HelpersList({ runs, sessionId = null, onSignIn }: { runs: readonly SessionView[]; sessionId?: string | null; onSignIn?: () => void }): React.ReactElement {
+function HelpersList({ runs, sessionId = null, onSignIn, roster = null }: { runs: readonly SessionView[]; sessionId?: string | null; onSignIn?: () => void; roster?: RosterSeat[] | null }): React.ReactElement {
   const rows = runs.flatMap((v) => helpersOf(v).map((cli) => ({ v, cli })));
   const path = useAskPath(sessionId);
-  // The path's seats come first, by role — the PA (and how it was picked), the reviewer (or its
-  // absence, with the way to fix it), the helpers that answered a HELP: line.
-  const roles: Array<{ cli: string | null; role: string; key: string; action?: 'signin' }> = path === null ? [] : [
-    { key: 'pa', cli: path.pa, role: path.pa === null ? 'answers (not picked yet)' : `answers · ${path.selection === 'chosen' ? 'your pick' : 'picked at random'}` },
+  // The path's seats come first, by ROLE — what the wire records, nothing about what a seat is doing
+  // right now (the path view carries identities, not liveness): the primary helper and how it was
+  // picked, the reviewer, the helpers that answered a HELP: line (a seat that is also the reviewer
+  // keeps that fact on its row). "Only <pa> is signed in" is said only when the roster shows no other
+  // seat — otherwise the reviewer simply has not attached (codex on ASK-S3).
+  const helped = new Set(path?.helpers ?? []);
+  const othersSignedIn = roster === null ? null : roster.filter((s) => s.key !== path?.pa).length;
+  const roles: Array<{ cli: string | null; role: string; key: string; action?: 'signin'; runId?: string }> = path === null ? [] : [
+    { key: 'pa', cli: path.pa, runId: path.runId, role: path.pa === null ? 'primary helper (not picked yet)' : `primary helper · ${path.selection === 'chosen' ? 'your pick' : 'picked at random'}` },
     path.reviewer !== null
-      ? { key: 'reviewer', cli: path.reviewer, role: 'reviews — watches the answers, raises findings as quiet lines' }
-      : { key: 'reviewer', cli: null, role: `No reviewer — only ${path.pa ?? 'one helper'} is signed in.`, action: 'signin' },
-    ...path.helpers.filter((h) => h !== path.pa && h !== path.reviewer).map((h) => ({ key: `helper:${h}`, cli: h, role: 'helped — answered a question the primary helper asked' })),
+      ? { key: 'reviewer', cli: path.reviewer, runId: path.runId, role: `reviewer${helped.has(path.reviewer) ? ' · also answered a question the primary helper asked' : ''}` }
+      : othersSignedIn === 0
+        ? { key: 'reviewer', cli: null, role: `No reviewer — only ${path.pa ?? 'one helper'} is signed in.`, action: 'signin' }
+        : { key: 'reviewer', cli: null, role: 'No reviewer attached.' },
+    ...path.helpers.filter((h) => h !== path.pa && h !== path.reviewer).map((h) => ({ key: `helper:${h}`, cli: h, runId: path.runId, role: 'helped — answered a question the primary helper asked' })),
   ];
   return (
     <ul data-testid="sheet-helpers" className="wk-sheet-list">
-      {roles.map((x) => (
-        <li key={x.key} data-testid="sheet-helper-role" data-role={x.key.split(':')[0]} className="wk-sheet-line">
-          {x.cli !== null && <><b>{x.cli}</b>{' '}</>}
-          {x.role}
-          {x.action === 'signin' && onSignIn !== undefined && <>{' '}<button type="button" data-testid="sheet-helper-signin" onClick={onSignIn} className="wk-since-toggle">Sign in</button></>}
-        </li>
-      ))}
+      {roles.map((x) => {
+        const ref: ObjectRef | null = x.cli !== null && x.runId !== undefined ? { kind: 'helper', runId: x.runId, cli: x.cli } : null;
+        return (
+          <li key={x.key} data-testid="sheet-helper-role" data-role={x.key.split(':')[0]} className="wk-sheet-line" {...(ref !== null ? { 'data-object': objectAttr(ref) } : {})}>
+            {x.cli !== null && ref !== null && <><button type="button" data-testid="sheet-helper-open" data-cli={x.cli} onClick={() => useSheets.setState({ open: { ref, tab: SHEET_TABS.helper[0]!.id } })} className="wk-since-toggle">{x.cli}</button>{' '}</>}
+            {x.role}
+            {x.action === 'signin' && onSignIn !== undefined && <>{' '}<button type="button" data-testid="sheet-helper-signin" onClick={onSignIn} className="wk-since-toggle">Sign in</button></>}
+          </li>
+        );
+      })}
       {rows.length === 0 && roles.length === 0 && <li className="wk-session-grey">No helper has been given work here yet.</li>}
       {rows.map(({ v, cli }) => {
         const live = executingOrd(v.session, v.units);
