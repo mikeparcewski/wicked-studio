@@ -8,7 +8,6 @@ import { needsYouRows } from '../src/board/needsYou.js';
 import { runTargetHits } from '../src/palette/runTargets.js';
 import { draftOutbound, outboundKindFor, STATUS_HEAD } from '../src/api/outbound.js';
 import { OUTBOUND_ACTIONS } from '../src/hooks/useOutboundDraft.js';
-import { useModeMemory } from '../src/hooks/useModeMemory.js';
 import { announceNavigateAway, useHistoryScroll, useHistoryState } from '../src/hooks/useHistoryState.js';
 import { leaveRoute, runEventsPath, runFilesPath, useRoute } from '../src/hooks/useRoute.js';
 
@@ -145,20 +144,6 @@ describe('outbound harness — the draft', () => {
 
   it('offers exactly the actions that have a channel — Copy, today', () => {
     expect(OUTBOUND_ACTIONS).toEqual(['copy']);
-  });
-});
-
-describe('project-scoped mode memory', () => {
-  it('a mode never reopens the previous project artifact; each project keeps its own', () => {
-    const { result, rerender } = renderHook(
-      ({ pid, artifact }: { pid: string; artifact: string | null }) => useModeMemory(pid, 'build', artifact),
-      { initialProps: { pid: 'alpha', artifact: 'a1' as string | null } },
-    );
-    expect(result.current('build')).toBe('a1');
-    rerender({ pid: 'beta', artifact: null });
-    expect(result.current('build')).toBeNull();
-    rerender({ pid: 'alpha', artifact: null });
-    expect(result.current('build')).toBe('a1');
   });
 });
 

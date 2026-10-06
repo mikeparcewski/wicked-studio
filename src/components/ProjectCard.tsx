@@ -17,7 +17,7 @@ import { PhaseStrip, useCurrentUnit } from './PhaseStrip.js';
 import { PreGateAnnotate } from './PreGateAnnotate.js';
 import { ProjectSparkline } from './ProjectSparkline.js';
 import { edgeStateOf, LiveEdge } from './LiveEdge.js';
-import { MODE_SPECS } from './ModeSwitcher.js';
+import { MODE_SPECS } from './modeSpec.js';
 import { STATUS_STYLE } from './RunCard.js';
 
 /**

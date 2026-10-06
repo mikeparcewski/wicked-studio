@@ -36,7 +36,7 @@ from uxfix_fixture import (DEFAULT_APPEARANCE, HIDE_GATE_TOASTS, REPO, STUDIO_SK
 PORT = int(os.environ.get("FEEDBACK_PORT", "4352"))
 W, H = 1440, 700
 SHOTS = REPO / "e2e" / "shots"
-RUN_PAGE = "/p/gamma/build/r1"
+RUN_PAGE = "/s/run%3Ar1"  # S16a: /p/gamma/build/r1 → session URL
 
 report: dict = {"ok": False, "skin": STUDIO_SKIN, "steps": {}}
 
@@ -138,7 +138,7 @@ with sync_playwright() as p:
 
     # In-app: Home → the run page.
     nav(page, RUN_PAGE)
-    page.locator('[data-testid="thread"]').wait_for(state="visible", timeout=15000)
+    page.locator('[data-testid="session"]').wait_for(state="visible", timeout=15000)
     run_rows = rail_rows_settled(page, home_rows)
     page.screenshot(path=str(SHOTS / "needs-shell-run.png"))
     check("run-page-rail-same-ranked-rows", run_rows == home_rows
@@ -173,7 +173,7 @@ with sync_playwright() as p:
                 status_over={}, extra_frames=[], extra_gates=[], proposals=[PROPOSAL])
     page = new_page(browser)
     page.goto(f"{origin}{RUN_PAGE}", wait_until="networkidle")
-    page.locator('[data-testid="thread"]').wait_for(state="visible", timeout=15000)
+    page.locator('[data-testid="session"]').wait_for(state="visible", timeout=15000)
     booted = page.evaluate("() => document.documentElement.getAttribute('data-skin')")
     check("peek-boots-env-skin", booted == STUDIO_SKIN, booted=booted)
     href0 = page.evaluate("() => window.location.href")

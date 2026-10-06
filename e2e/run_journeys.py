@@ -32,22 +32,17 @@ REPO = E2E.parent
 
 # The behaviour journeys: no daemon, network or sibling checkout. CI runs these on every PR.
 BEHAVIOUR = [
-    "wave1_dark", "wave1_draft", "wave1_raw", "wave1_stall", "wave1_switch", "wave1_tone",
+    "wave1_dark", "wave1_raw", "wave1_stall", "wave1_tone",
     "wave2_consumers",
-    "wave2a_gatecard", "wave2a_peek", "wave2a_safety", "wave2a_undo",
-    "wave2b_handover", "wave2b_queue", "wave2b_switch",
-    "skin_contract", "needs_shell", "t9_plan_ui", "dogfood_fixes", "wavea_home", "gate_move",
-    "waveb_proposals", "agent_1on1", "gate_trust", "wavec_takes", "wavec_runpage", "wavec_home_runs",
+    "wave2a_undo",
+    "wave2b_handover", "wave2b_queue",
+    "skin_contract", "needs_shell", "wavea_home",
+    "waveb_proposals", "agent_1on1",
     "standing_orders",
     "capture",
     "main_scroll",
-    "escalation_arms",
     "chat_citations",
-    "demo_mode",
-    "mcp_tools",
     "wicked_theme",
-    "tech_details",
-    "type_to_composer",
 ]
 
 # The desk journeys (DES-STUDIO-REBUILD-001 §6.2): they run only under STUDIO_SKIN=desk (CI's

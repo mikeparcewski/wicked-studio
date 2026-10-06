@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { EditorHostPage } from './components/editors/EditorHostPage.js';
-import { CenterDashboard } from './components/CenterDashboard.js';
 import { AskDock } from './components/AskDock.js';
 import { useAskThreadStore } from './store/askThread.js';
 import { AskLauncher } from './components/AskLauncher.js';
@@ -9,12 +8,8 @@ import { GateNotifications } from './components/GateNotifications.js';
 import { HomeBoard } from './components/HomeBoard.js';
 import { ProjectCampaignsView } from './components/ProjectCampaignsView.js';
 import { LeftSidebar } from './components/LeftSidebar.js';
-import { DocumentCanvas } from './components/DocumentCanvas.js';
-import { DocumentThread } from './components/DocumentThread.js';
-import { DemoMode } from './components/DemoMode.js';
 import { NotFoundPage } from './components/NotFoundPage.js';
 import { SkipLink } from './components/SkipLink.js';
-import { ProjectShell } from './components/ProjectShell.js';
 import { ProjectDetailPage } from './components/ProjectDetailPage.js';
 import { RepositoriesPanel } from './components/RepositoriesPanel.js';
 import { RepoDetailPage } from './components/RepoDetailPage.js';
@@ -59,11 +54,12 @@ import { usePlacePanel } from './hooks/usePlacePanel.js';
 import { useRunsPanelStore } from './store/runsPanel.js';
 import { altChord, setShortcutsPaletteOpen, useGlobalShortcuts } from './hooks/useGlobalShortcuts.js';
 import { useTypeToComposer } from './hooks/useTypeToComposer.js';
-import { useLegacyRedirect, useRetiredSettingsRedirect, useSteeringRedirect, useTestingRedirect } from './hooks/useLegacyRedirect.js';
+import { useRetiredSettingsRedirect, useSteeringRedirect, useTestingRedirect } from './hooks/useLegacyRedirect.js';
 import { useMovedRoutes } from './hooks/useMovedRoutes.js';
 import { EverythingPage } from './components/everything/EverythingPage.js';
 import { everythingPath } from './board/everythingModel.js';
-import { modePath, routedVersion, useRoute, type Mode } from './hooks/useRoute.js';
+import { useRoute } from './hooks/useRoute.js';
+import { sessionPath } from './board/sessionModel.js';
 import { useRuns } from './hooks/useRuns.js';
 import { useAnnotationStore } from './store/annotations.js';
 import { useCampaignsStore } from './store/campaigns.js';
@@ -118,7 +114,7 @@ const RIGHT_PANEL_PX = 288;
 const DESK_COMPOSER_PX = 96;
 
 export function App(): React.ReactElement {
-  const { panel, runId, repoId, projectId, mode, artifactId, showLaunch, showRegisterRepo, chatMode, campaignsView, campaignId, steeringSection, testingPage, ruleId, navigate, search, pathname } = useRoute();
+  const { panel, runId, repoId, projectId, artifactId, showRegisterRepo, chatMode, campaignsView, campaignId, steeringSection, testingPage, ruleId, navigate, search, pathname } = useRoute();
   const { runs, refresh, loaded: runsLoaded, error: runsError } = useRuns();
   const movedRunChatId = useCapabilities((s) => s.runChatId);
   const ingestGate = useGateStore((s) => s.ingest);
@@ -131,17 +127,6 @@ export function App(): React.ReactElement {
   const ingestDocThread = useDocThreadStore((s) => s.ingest);
   const ingestLiveChat = useLiveChatsStore((s) => s.ingest);
   const ingestStallEscalation = useStallEscalationStore((s) => s.ingest);
-
-  // Dashboard gate callbacks — the CenterDashboard handles the API call + store
-  // clearing itself; these callbacks exist for any post-confirmation side-effects
-  // the parent needs (currently: refresh the run list to pick up status changes).
-  const onDashboardApproveGate = useCallback((): void => {
-    refresh();
-  }, [refresh]);
-
-  const onDashboardRejectGate = useCallback((): void => {
-    refresh();
-  }, [refresh]);
 
   const handleEvent = useCallback(
     (event: CoreEvent) => {
@@ -214,9 +199,6 @@ export function App(): React.ReactElement {
     void useDecisionsStore.getState().load();
   }, []);
 
-  // Pre-merge bookmarks (`/runs/:id`, `/projects/:id`) redirect into the shell (§1.5).
-  useLegacyRedirect({ panel, runId, projectId, mode, showLaunch, chatMode }, navigate);
-
   // Bare `/steering`, a legacy `/steering/:type`, the retired governance panels
   // (`/wiki`/`/rules`/`/policies`) and the retired standalone `/proposals` queue normalize onto
   // the unified surface's two sub-sections (`/steering/policies[?type=]` or `/steering/memories`).
@@ -270,14 +252,10 @@ export function App(): React.ReactElement {
     };
   }, [runId]);
 
-  // Inside the project shell, selecting a run stays in the shell (Chat keeps Chat, every
-  // other mode opens Build) instead of bouncing out to /runs/:id and redirecting back.
+  // S16a: all run navigation goes to the session page.
   const runPath = useCallback(
-    (id: string) =>
-      projectId && mode
-        ? modePath(projectId, mode === 'chat' ? 'chat' : 'build', id)
-        : `/runs/${encodeURIComponent(id)}`,
-    [projectId, mode],
+    (id: string) => sessionPath(`run:${id}`),
+    [],
   );
 
   const selectRun = useCallback((id: string) => navigate(runPath(id)), [navigate, runPath]);
@@ -290,13 +268,9 @@ export function App(): React.ReactElement {
     [navigate, refresh, runPath],
   );
 
-  // Outside the project shell, "back" belongs to the list the run was opened from —
-  // `/work`, the ONE canonical runs surface (DES-UX-001 §7.4, slice Y — the bare
-  // `/runs` listing retired into a redirect): `/` is a different surface, not this
-  // one's parent.
   const onNavigateBack = useCallback(
-    () => navigate(projectId && mode ? modePath(projectId, mode) : everythingPath({ tab: 'sessions' })),
-    [navigate, projectId, mode],
+    () => navigate(everythingPath({ tab: 'sessions' })),
+    [navigate],
   );
 
   const onKill = useCallback(
@@ -442,24 +416,6 @@ export function App(): React.ReactElement {
     [repoId],
   );
 
-  // The three center surfaces, rendered by the legacy routes AND by the project shell.
-  // Slice 4 WIRES them; sharing the expression is what keeps "the same surface" literal.
-  const dashboardSurface = (): React.ReactElement => (
-    <div className="flex-1 overflow-y-auto">
-      <CenterDashboard
-        runs={runs}
-        onSelectRun={selectRun}
-        onApproveGate={onDashboardApproveGate}
-        onRejectGate={onDashboardRejectGate}
-        navigate={navigate}
-        projectId={projectId}
-        // The chronicle moved onto "See everything" (S15c): `/p/:id/chronicle` is a redirect, so
-        // this dashboard never opens in its chronicle view any more.
-        chronicleView={false}
-      />
-    </div>
-  );
-
   // In the project shell the new chat is FILED into the project at open time
   // (DES-FEEDBACK-001 §5.1 — `projectId` on the POST body, never a silent unfiled
   // thread); outside it, GroupChat renders its own ProjectSwitcher (§5.2).
@@ -486,10 +442,6 @@ export function App(): React.ReactElement {
     </div>
   );
 
-  // §4.3 pre-bind: `/p/:projectId/build/new` is the launch form LOCKED to the
-  // project; the flat `/runs/new` stays unbound (Unfiled default, §5.1).
-  const launchProjectId = projectId !== null && mode === 'build' && showLaunch ? projectId : null;
-
   // overflow-y-auto, not hidden: at 1440x700 a tall gate card plus the composer outgrow the pane,
   // and a hidden overflow left the run header unreachable above the fold.
   const runSurface = (): React.ReactElement => (
@@ -501,7 +453,6 @@ export function App(): React.ReactElement {
         onNavigateBack={onNavigateBack}
         onRefresh={refresh}
         navigate={navigate}
-        launchProjectId={launchProjectId}
         // Slice Z (§7.6): the route names a run the index has not resolved —
         // a just-launched navigation or a mid-run reload racing GET /runs.
         // ChatPanel holds the honest pending state, never the composer.
@@ -510,50 +461,6 @@ export function App(): React.ReactElement {
       />
     </div>
   );
-
-  /**
-   * What a mode renders inside the shell (DES-MERGE-001 §6.2, slice 4). Document is the
-   * interactive canvas (§6.3, slice 8); Video still states what is coming and the action
-   * that enables it; Chat and Build reuse the existing surfaces above.
-   *
-   * Build with nothing open is the run home SCOPED to the project (DES-UX-001 §2.3
-   * rule 2, slice S — superseding the old "unscoped until launch files" caveat: launch
-   * DOES file the run now, and the DTO echoes `project_id` back, so a just-launched run
-   * appears in its project's list within one live-update cycle instead of vanishing).
-   */
-  function renderModeSurface(m: Mode, pid: string): React.ReactElement {
-    // The document's VERSION rides in the query (`?v=N`, slice 9) — the artifact is the
-    // doc, the version is a lens on it — so the strip's selection is a real navigation.
-    if (m === 'document') {
-      // Canvas and thread stay VISUAL siblings — the thread is fixed-width and never
-      // force-opened over the canvas (§1.2, §2.5) — but the thread passes through
-      // `DocumentCanvas` as its children so the version strip renders BELOW BOTH: the
-      // spine spanning canvas and thread, DES-UXFIX-001 §2.6 rule 2 (the F9 fix).
-      return (
-        <DocumentCanvas
-          projectId={pid}
-          docId={artifactId}
-          version={routedVersion(search)}
-          navigate={navigate}
-        >
-          <DocumentThread
-            projectId={pid}
-            docId={artifactId}
-            selectedVersion={routedVersion(search)}
-            navigate={navigate}
-          />
-        </DocumentCanvas>
-      );
-    }
-    // The Demo mode (wicked-studio#373): a demo of a real local app, made by a governed run of the
-    // `demo` preset (plan gate → record → review gate → watch). The artifact is the demo RUN.
-    if (m === 'video') {
-      return <DemoMode projectId={pid} runId={artifactId} runs={runs} navigate={navigate} />;
-    }
-    if (m === 'chat' && !artifactId) return groupChatSurface(null, pid);
-    // `showLaunch` here is `/p/:pid/build/new` — the §4.3 pre-bound launch form.
-    return artifactId || showLaunch ? runSurface() : dashboardSurface();
-  }
 
   // Center panel content based on route
   function renderCenter(): React.ReactElement {
@@ -564,15 +471,6 @@ export function App(): React.ReactElement {
         <div className="flex-1 overflow-y-auto">
           <NotFoundPage pathname={pathname} navigate={navigate} />
         </div>
-      );
-    }
-    // The project shell owns every `/p/*` route and is checked FIRST — the panel parse
-    // below is untouched and still owns the flat cross-project lists and side panels.
-    if (projectId !== null && mode !== null) {
-      return (
-        <ProjectShell projectId={projectId} mode={mode} artifactId={artifactId} navigate={navigate} runs={runs}>
-          {renderModeSurface(mode, projectId)}
-        </ProjectShell>
       );
     }
     // `/p/:projectId/campaigns` (nav-reorg): the project-scoped Test surface — the test landing
@@ -782,18 +680,9 @@ export function App(): React.ReactElement {
     if (chatMode && selected === null) {
       return groupChatSurface(repoId, null, artifactId, true);
     }
-    // Home dashboard: no run selected and not launching — three-panel home view + manager controls
-    if (panel === 'runs' && !runId && !selected && !showLaunch) {
-      return dashboardSurface();
-    }
     // Run selected or launch form
     return runSurface();
   }
-
-  // DES-FEEDBACK-001 §7.3 / DES-FEEDBACK-003 §5.5: Document and Video are
-  // canvas-first — the rail auto-collapses on entry, and the runs bottom
-  // sheet auto-collapses on the same transition (EC27).
-  const immersive = projectId !== null && (mode === 'document' || mode === 'video');
 
   // The skin's shell layout (theming/skins.ts): a right-rail skin reserves a full-height
   // column at the right edge on EVERY route, which the Needs-you queue docks into by variant.
@@ -820,7 +709,6 @@ export function App(): React.ReactElement {
           navigate={navigate}
           pathname={pathname}
           runPath={runPath}
-          immersive={immersive}
         />
       )}
 
@@ -900,7 +788,7 @@ export function App(): React.ReactElement {
           runs={runs}
           runPath={runPath}
           navigate={navigate}
-          immersive={immersive}
+          immersive={false}
           scopeProjectId={projectId}
         />
       )}

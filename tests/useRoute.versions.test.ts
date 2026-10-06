@@ -44,27 +44,29 @@ describe('routedVersion — what a URL resolves to', () => {
 });
 
 describe('useRoute — a version selection is a real navigation', () => {
+  // S16a: /s/:sessionId/a/:key is not a live route; the version lens sits on the session path.
+  // versionPath generates /p/:id/document/:key (a redirect address kept for back-compat) and
+  // the version query ?v= is read from `search` regardless of the path.
   it('exposes the query on mount and updates it on navigate', () => {
-    window.history.replaceState(null, '', '/p/proj-1/document/q3-report?v=2');
+    window.history.replaceState(null, '', '/s/sess-1?v=2');
     const { result } = renderHook(() => useRoute());
     expect(routedVersion(result.current.search)).toBe(2);
-    expect(result.current.artifactId).toBe('q3-report');
+    expect(result.current.artifactId).toBe('sess-1');
 
-    act(() => result.current.navigate(versionPath('proj-1', 'q3-report', 1)));
+    act(() => result.current.navigate('/s/sess-1?v=1'));
     expect(routedVersion(result.current.search)).toBe(1);
-    // The route itself is unchanged — the version is a lens on the same artifact.
-    expect(result.current.artifactId).toBe('q3-report');
-    expect(result.current.mode).toBe('document');
+    // The route itself is unchanged — the version is a lens on the same session.
+    expect(result.current.artifactId).toBe('sess-1');
   });
 
   it('back-button-correct: popstate re-reads the version from the URL', () => {
-    window.history.replaceState(null, '', '/p/proj-1/document/q3-report');
+    window.history.replaceState(null, '', '/s/sess-1');
     const { result } = renderHook(() => useRoute());
-    act(() => result.current.navigate(versionPath('proj-1', 'q3-report', 1)));
+    act(() => result.current.navigate('/s/sess-1?v=1'));
     expect(routedVersion(result.current.search)).toBe(1);
 
     act(() => {
-      window.history.replaceState(null, '', '/p/proj-1/document/q3-report');
+      window.history.replaceState(null, '', '/s/sess-1');
       window.dispatchEvent(new PopStateEvent('popstate'));
     });
     expect(routedVersion(result.current.search)).toBeNull();

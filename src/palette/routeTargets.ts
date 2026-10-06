@@ -2,7 +2,7 @@ import type { Project, SessionView } from '../api/types.js';
 import { sessionIdOf, sessionPath } from '../board/sessionModel.js';
 import { humanTitle } from '../components/runIdentity.js';
 import { everythingPath } from '../board/everythingModel.js';
-import { modePath, projectDetailPath, projectPath, runEventsPath, runFilesPath, type Route } from '../hooks/useRoute.js';
+import { projectDetailPath, projectPath, runEventsPath, runFilesPath, type Route } from '../hooks/useRoute.js';
 
 /**
  * EVERY ROUTE IN ⌘K (the skin contract, DES-STUDIO-REBUILD-001 §10 / §14 Q2: "every route is
@@ -39,12 +39,7 @@ export const ROUTE_SHAPES: readonly RouteShape[] = [
   // `/p/:id` lands on the project's newest session (S15c); until the runs are read it is the
   // project's Sessions tab, which is what this shape names.
   { id: 'project', example: '/p/p1', is: (r) => r.panel === 'everything' && r.projectId !== null },
-  { id: 'p-chat', example: '/p/p1/chat', is: (r) => r.projectId !== null && r.mode === 'chat' && !r.showLaunch },
-  { id: 'p-build', example: '/p/p1/build', is: (r) => r.mode === 'build' && r.artifactId === null && !r.showLaunch },
-  { id: 'p-build-new', example: '/p/p1/build/new', is: (r) => r.mode === 'build' && r.showLaunch },
-  { id: 'p-build-run', example: '/p/p1/build/r1', is: (r) => r.mode === 'build' && r.runId !== null },
-  { id: 'p-document', example: '/p/p1/document', is: (r) => r.mode === 'document' },
-  { id: 'p-video', example: '/p/p1/video', is: (r) => r.mode === 'video' },
+  // S16a: `/p/:id/:mode` addresses are MOVES onto `/s/:sessionId`; they are not destinations.
   { id: 'p-campaigns', example: '/p/p1/campaigns', is: (r) => r.campaignsView },
   { id: 'steering-dashboard', example: '/steering/dashboard', is: (r) => r.panel === 'steering' && r.steeringSection === 'dashboard' },
   { id: 'steering-policies', example: '/steering/policies', is: (r) => r.panel === 'steering' && r.steeringSection === 'policies' },
@@ -56,7 +51,7 @@ export const ROUTE_SHAPES: readonly RouteShape[] = [
   { id: 'repos-new', example: '/repos/new', is: (r) => r.panel === 'repos' && r.showRegisterRepo },
   { id: 'repo-detail', example: '/repo-detail/x1', is: (r) => r.panel === 'repo-detail' && r.repoId !== null },
   { id: 'runs-new', example: '/runs/new', is: (r) => r.panel === 'runs' && r.showLaunch && !r.chatMode && r.projectId === null },
-  { id: 'run', example: '/runs/r1', is: (r) => r.panel === 'runs' && r.runId !== null && r.projectId === null },
+  // S16a: `/runs/:id` redirects to `/s/run:<id>`; the canonical run address is the session shape.
   { id: 'run-events', example: '/runs/r1/events', is: (r) => r.panel === 'run-events' },
   { id: 'run-files', example: '/runs/r1/files', is: (r) => r.panel === 'run-files' },
   { id: 'workflows', example: '/workflows', is: (r) => r.panel === 'workflows' },
@@ -135,20 +130,11 @@ export function routeTargets(d: RouteTargetData): RouteTarget[] {
     }
     out.push({ shape: 'run-events', label: `${title} · raw events`, href: runEventsPath(id) });
     out.push({ shape: 'run-files', label: `${title} · files and diff`, href: runFilesPath(id) });
-    const pid = d.projectIdByRun[id];
-    if (pid !== undefined && pid !== 'default') {
-      out.push({ shape: 'p-build-run', label: `${title} · in its project`, href: modePath(pid, 'build', id) });
-    }
   }
   for (const p of d.projects) {
     if (p.id === 'default') continue;
     out.push(
       { shape: 'project-detail', label: `${p.name} · details`, href: projectDetailPath(p.id) },
-      { shape: 'p-chat', label: `${p.name} · chat`, href: modePath(p.id, 'chat') },
-      { shape: 'p-build', label: `${p.name} · build`, href: modePath(p.id, 'build') },
-      { shape: 'p-build-new', label: `${p.name} · start a build`, href: `${modePath(p.id, 'build')}/new` },
-      { shape: 'p-document', label: `${p.name} · documents`, href: modePath(p.id, 'document') },
-      { shape: 'p-video', label: `${p.name} · demos`, href: modePath(p.id, 'video') },
       { shape: 'project', label: `${p.name} · sessions`, href: everythingPath({ tab: 'sessions', project: p.id }) },
       { shape: 'p-campaigns', label: `${p.name} · campaigns`, href: `${projectPath(p.id)}/campaigns` },
     );
@@ -164,4 +150,5 @@ export function routeTargets(d: RouteTargetData): RouteTarget[] {
  * The shapes the palette reaches through its OTHER groups (a run row opens `/runs/:id`, a project
  * row `/p/:id`, a repo row `/repo-detail/:id`) — so "Go to" does not repeat them.
  */
-export const REACHED_BY_OTHER_GROUPS: readonly string[] = ['run', 'project', 'repo-detail'];
+// S16a: `run` shape retired — `/runs/:id` redirects; the `runs` group now links to session page.
+export const REACHED_BY_OTHER_GROUPS: readonly string[] = ['session', 'project', 'repo-detail'];

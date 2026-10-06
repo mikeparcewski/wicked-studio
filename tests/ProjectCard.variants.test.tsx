@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { cleanup, render, screen, within } from '@testing-library/react';
 import { ProjectCard, ACTIVE_CARD_H, QUIET_CARD_H } from '../src/components/ProjectCard.js';
-import { MODE_SPECS } from '../src/components/ModeSwitcher.js';
+import { MODE_SPECS } from '../src/components/modeSpec.js';
 import { MODES } from '../src/hooks/useRoute.js';
 import type { BoardProject } from '../src/hooks/useBoardModel.js';
 import type { DocSummary } from '../src/api/interactive.js';

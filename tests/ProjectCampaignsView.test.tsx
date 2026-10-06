@@ -64,7 +64,8 @@ describe('T13 — useRoute: /p/:projectId/campaigns', () => {
 
   it('T13 — decodes the project id; a mode route and the top-level landing never claim campaignsView', () => {
     expect(routeAt('/p/my%20proj/campaigns')).toMatchObject({ projectId: 'my proj', campaignsView: true });
-    expect(routeAt('/p/proj-1/build')).toMatchObject({ projectId: 'proj-1', campaignsView: false, mode: 'build' });
+    // S16a: /p/:id/:mode is a MOVE onto the project's newest session; mode is null in the parse.
+    expect(routeAt('/p/proj-1/build')).toMatchObject({ projectId: 'proj-1', campaignsView: false, mode: null });
     expect(routeAt('/testing/campaigns')).toMatchObject({ panel: 'testing', projectId: null, campaignsView: false });
   });
 });

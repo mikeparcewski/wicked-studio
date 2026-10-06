@@ -4,7 +4,7 @@ import { executingOrd } from '../../api/run-state.js';
 import type { ChatPathView, RosterSeat, SessionView } from '../../api/types.js';
 import { getDiagnostics, type Diagnostics } from '../../api/diagnostics.js';
 import { objectAttr, OBJECT_ACTIONS, primaryAction, RUN_SECTION_TABS, SHEET_TABS, type ObjectRef } from '../../board/objectActions.js';
-import { parseSessionId, runChatIdOf } from '../../board/sessionModel.js';
+import { parseSessionId, runChatIdOf, sessionPath } from '../../board/sessionModel.js';
 import { unitStepName } from '../../board/chainModel.js';
 import { UnitConsidered } from '../decisions/ConsideredLine.js';
 import { useRunModel } from '../../hooks/useRunModel.js';
@@ -164,7 +164,7 @@ function StepSheet({ r, tab, runs, navigate }: { r: Extract<ObjectRef, { kind: '
         </div>
       )}
       <p className="wk-sheet-hint">
-        <a href={`/runs/${encodeURIComponent(r.runId)}`} data-testid="sheet-record" onClick={(e) => { e.preventDefault(); closeSheet(); navigate(`/runs/${encodeURIComponent(r.runId)}`); }}>Full record →</a>
+        <a href={sessionPath(`run:${r.runId}`)} data-testid="sheet-record" onClick={(e) => { e.preventDefault(); closeSheet(); navigate(sessionPath(`run:${r.runId}`)); }}>Full record →</a>
       </p>
     </Sheet>
   );
@@ -252,7 +252,7 @@ function SessionSheet({ r, tab: asked, runs, navigate }: { r: Extract<ObjectRef,
   // A tab that went away under the open sheet (the run finished, Plan left) falls back to the first.
   const tab = tabs.some((t) => t.id === asked) ? asked : tabs[0]!.id;
   const title = newest !== null ? humanTitle(mine[0]!.session.problem || mine[0]!.session.id) : 'This session';
-  const record = newest !== null ? `/runs/${encodeURIComponent(newest.session.id)}` : null;
+  const record = newest !== null ? sessionPath(`run:${newest.session.id}`) : null;
   return (
     <Sheet
       title={title}

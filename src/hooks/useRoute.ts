@@ -235,7 +235,7 @@ function parse(pathname: string): Route {
   // A caller may hand a full address (`/everything?tab=made`, a palette row's href): the query is
   // not the route's business — `search` is read separately — so it is dropped before the split.
   const segs = pathname.split('?')[0]!.split('/');
-  const [, first = '', second = '', third = '', fourth = ''] = segs;
+  const [, first = '', second = '', third = ''] = segs;
   /** Nothing but empty segments from index `from` on — the whole address is the shape, not a prefix of it. */
   const restEmpty = (from: number): boolean => segs.slice(from).every((x) => x === '');
   // `/` is the orchestrator board (DES-MERGE-001 §1.5, slice 5). The flat run list it
@@ -264,24 +264,10 @@ function parse(pathname: string): Route {
     // A segment that names no mode (`/p/:id/bogus`) is a dead address — not-found, never a silent
     // swap onto the project (usability review #4).
     if (mode === null) return route({ panel: 'not-found' });
-    const raw = fourth ? safeDecode(fourth) : null;
-    // `/p/:projectId/:mode/new` is the project-scoped CREATE route (DES-FEEDBACK-001
-    // §4.3, slice B): the launch form pre-bound to the project — never an artifact
-    // named "new", so `artifactId` stays null and no run-selected machinery
-    // (event backfill, kill shortcut) fires against a non-id.
-    const isNew = raw === 'new';
-    const artifactId = isNew ? null : raw;
-    return route({
-      projectId: safeDecode(second),
-      mode,
-      artifactId,
-      showLaunch: isNew,
-      // Build and Chat wire straight into the existing run surfaces, so the artifact IS
-      // the run: every run-selected behaviour (event backfill, Ctrl+K kill, RightPanel,
-      // gate toasts) keeps working unchanged inside the shell.
-      runId: mode === 'build' || mode === 'chat' ? artifactId : null,
-      chatMode: mode === 'chat',
-    });
+    // S16a: valid modes are MOVES to the project's newest session — parse to `everything` so
+    // the project's Sessions tab renders on the pre-redirect tick; `useMovedRoutes` fires the
+    // async redirect. `mode` stays null in the route (the shell is gone; no mode needed here).
+    return route({ panel: 'everything', projectId: safeDecode(second) });
   }
   // `/steering/{policies,memories}` — the unified governed-knowledge surface: one page per
   // sub-section, each managing existing items AND reviewing proposals. Bare `/steering` and a
@@ -356,14 +342,15 @@ function parse(pathname: string): Route {
   // `/s/:sessionId` (DES-STUDIO-REBUILD-001 §5.4, slice S6a): a session — a chat and the runs
   // launched from it, or one run (`run:<id>`). A real route under every skin (a route is not a skin
   // concern). The id rides in `artifactId`, never `runId`: no run-selected machinery fires here.
-  // `/s/:id/a/:artifact` belongs to S8; until then any deeper address is a dead one.
+  // `/s/:id/a/:key` (S16a): an artifact within the session — the key rides in `sessionArtifactKey`.
   // EP-P1: the editor plugin host's dev route and its conformance host page (no nav entry: no user
   // surface until EP-P2 places the first plugin).
   if (first === 'editors' && (second === 'dev' || second === 'conformance') && !third) {
     return route({ panel: 'editors', artifactId: second });
   }
   if (first === 's' && second) {
-    return third ? route({ panel: 'not-found' }) : route({ panel: 'session', artifactId: safeDecode(second) });
+    if (!third) return route({ panel: 'session', artifactId: safeDecode(second) });
+    return route({ panel: 'not-found' });
   }
   if (first === 'repo-detail' && second) {
     return route({ panel: 'repo-detail', repoId: safeDecode(second) });
@@ -398,7 +385,11 @@ function parse(pathname: string): Route {
     if (second === 'new') return route({ panel: 'runs', showLaunch: true });
     if (second && third === 'events') return route({ panel: 'run-events', artifactId: safeDecode(second) });
     if (second && third === 'files') return route({ panel: 'run-files', artifactId: safeDecode(second) });
-    if (second) return route({ panel: 'runs', runId: safeDecode(second) });
+    // S16a: `/runs/:id` (and `/runs/:id/timeline`) redirect to `/s/run:<id>` via useMovedRoutes;
+    // parsing to 'session' lets the session page render on the pre-redirect tick.
+    // Operator (c): any extra segment beyond the id (e.g. `/runs/:id/bogus`) stays not-found.
+    if (second && (restEmpty(3) || (third === 'timeline' && restEmpty(4))))
+      return route({ panel: 'session', artifactId: `run:${safeDecode(second)}` });
     return route({ panel: 'not-found' });
   }
   return route({ panel: 'not-found' });

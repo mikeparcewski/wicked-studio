@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { parseRoute } from '../src/hooks/useRoute.js';
+import { sessionPath } from '../src/board/sessionModel.js';
 import { makeView } from './factories.js';
 
 /**
@@ -8,11 +9,12 @@ import { makeView } from './factories.js';
  * address lands on "See everything" with the right tab and filter; `/p/:id` lands on the project's
  * newest session; a typo stays a dead address.
  *
- * NOT moved here (deferred to S16a, with the reason pinned by the last `describe`): `/runs/:id` →
- * `/s/:id` and `/p/:id/:mode[/:artifact]` → `/s/:id[/a/:key]`. 23 of the 65 CI journeys drive those
- * addresses for behaviours the session page does not carry yet (the gate trust record, re-run from a
- * phase, the reject-note banner, seat reassignment, the demo start form), and `/s/:id/a/:key` is not
- * a route yet. When S16a moves them this last block goes red on purpose.
+ * S16a (DES-STUDIO-REBUILD-001 §5.4 slice): the deferred moves are now active. `/runs/:id` →
+ * `/s/run:<id>` (static), `/p/:id/build/:runId` → `sessionPath('run:<id>')` (static), `/p/:id/chat/:chatId` →
+ * `/chat/:chatId` (static), `/p/:id/build/new` → `/runs/new` (static). The dynamic arm still
+ * covers `/p/:id/:mode` → newest session and `/p/:id/document|video/:key` → newest session
+ * (artifact key discarded — `/s/:id/a/:key` is deferred to a later slice). 22 of the 65 CI
+ * journeys that drove those addresses have been moved or retired; see CHANGELOG.md.
  */
 
 const listProjectMembers = vi.fn();
@@ -49,11 +51,16 @@ describe('the redirect table (static moves)', () => {
   it('the table is published for the ⌘K / docs readers, one row per old address', () => {
     expect(MOVES.map((m) => m.from)).toEqual([
       '/projects', '/chats', '/work', '/execute', '/runs', '/make', '/vibe', '/demo', '/p/:id/chronicle', '/p/:id',
+      '/runs/:id', '/p/:id/build/new', '/p/:id/build/:runId', '/p/:id/chat/:chatId',
+      '/p/:id/:mode', '/p/:id/document/:doc', '/p/:id/video/:demo',
     ]);
   });
 
-  it('is not a move: the launch form, a run, the project shell, a real page, a typo', () => {
-    for (const p of ['/runs/new', '/runs/r1', '/p/kes/build', '/p/kes/build/r1', '/p/kes', '/everything', '/skills', '/nope', '/projects/kes', '/p/kes/campaigns', '/work//typo', '/work///typo', '/demo///typo', '/p/kes/chronicle//typo']) {
+  it('is not a move: the launch form, a real page, a typo', () => {
+    // movedAddress returns null for dynamic-move paths (/p/:id/:mode, /p/:id) because they require
+    // async resolution — the hook fires from useMovedRoutes, not movedAddress.
+    // /p/kes/build/r1 and /p/kes/chat/c1 are now STATIC moves handled by movedAddress.
+    for (const p of ['/runs/new', '/p/kes', '/p/kes/build', '/p/kes/document/d1', '/everything', '/skills', '/nope', '/projects/kes', '/p/kes/campaigns', '/work//typo', '/work///typo', '/demo///typo', '/p/kes/chronicle//typo']) {
       expect(movedAddress(p, ''), p).toBeNull();
     }
   });
@@ -106,12 +113,37 @@ describe('/p/:id → the project\'s newest session', () => {
   });
 });
 
-describe('deferred to S16a (goes red on purpose when those rows move)', () => {
-  it('/runs/:id is still the run page and /p/:id/:mode the project shell', () => {
-    expect(parseRoute('/runs/r1')).toMatchObject({ panel: 'runs', runId: 'r1' });
+describe('S16a moves (§5.4 deferred rows now active)', () => {
+  it('/runs/:id parses to the session panel and movedAddress redirects it', () => {
+    expect(parseRoute('/runs/r1')).toMatchObject({ panel: 'session', artifactId: 'run:r1' });
     expect(parseRoute('/runs/new')).toMatchObject({ panel: 'runs', showLaunch: true });
-    expect(parseRoute('/p/kes/build/r1')).toMatchObject({ projectId: 'kes', mode: 'build', runId: 'r1' });
-    expect(parseRoute('/p/kes/document/d1')).toMatchObject({ projectId: 'kes', mode: 'document', artifactId: 'd1' });
+    expect(parseRoute('/runs/r1')).not.toMatchObject({ panel: 'runs' });
+  });
+  it('movedAddress redirects /runs/:id (bare or /timeline) and rejects bogus extra segments', () => {
+    expect(movedAddress('/runs/r1', '')).toBe(sessionPath('run:r1'));
+    expect(movedAddress('/runs/r1/timeline', '')).toBe(sessionPath('run:r1')); // timeline allowed
+    expect(movedAddress('/runs/r1/bogus', '')).toBeNull();  // extra segment → not a move
+    expect(movedAddress('/runs/new', '')).toBeNull();        // launch form stays
+    expect(movedAddress('/runs/r1/events', '')).toBeNull(); // raw view stays
+    expect(movedAddress('/runs/r1/files', '')).toBeNull();  // raw view stays
+  });
+  it('movedAddress redirects /p/:id/build/:runId and /p/:id/chat/:chatId statically', () => {
+    expect(movedAddress('/p/kes/build/r1', '')).toBe(sessionPath('run:r1'));
+    expect(movedAddress('/p/kes/build/new', '')).toBe('/runs/new');
+    expect(movedAddress('/p/kes/chat/c1', '')).toBe('/chat/c1');
+    expect(movedAddress('/p/kes/build/r1/extra', '')).toBeNull(); // extra segment → not a move
+    expect(movedAddress('/p/kes/document/d1', '')).toBeNull();    // still dynamic (needs newest session)
+  });
+  it('/p/:id/:mode parses to everything (pre-redirect tick), mode is null', () => {
+    expect(parseRoute('/p/kes/build/r1')).toMatchObject({ panel: 'everything', projectId: 'kes', mode: null });
+    expect(parseRoute('/p/kes/document/d1')).toMatchObject({ panel: 'everything', projectId: 'kes', mode: null });
+  });
+  it('/p/kes/bogus stays not-found — redirect only for moves, never typos', () => {
+    expect(parseRoute('/p/kes/bogus').panel).toBe('not-found');
+  });
+  it('/s/:sessionId/a/:key is not a live route in S16a — artifact key deferred to a later slice', () => {
+    // The /s/:id/a/:key arm was removed: extra segments under /s/:id stay not-found.
     expect(parseRoute('/s/run:r1/a/k1').panel).toBe('not-found');
+    expect(parseRoute('/s/run:r1').panel).toBe('session');
   });
 });

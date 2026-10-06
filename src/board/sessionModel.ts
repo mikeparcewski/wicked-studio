@@ -50,6 +50,11 @@ export function sessionPath(id: string): string {
   return `/s/${encodeURIComponent(id)}`;
 }
 
+/** The Chat predicate (S16a: moved from ChatsPage to break its dependency on the deleted component).
+ *  Chat runs are 'chat'-stamped runs plus legacy runs with no workflow stamp. */
+export const isChatRun = (v: SessionView): boolean =>
+  !v.session.workflow_id || v.session.workflow_id === 'chat';
+
 /** A run's own clock: its end when the daemon recorded one, else its launch (both unix seconds). */
 function runClockMs(v: SessionView): number {
   const ended = endedAtMs(v);

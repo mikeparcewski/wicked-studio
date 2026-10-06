@@ -1,6 +1,6 @@
 import type { SessionStatus, SessionView } from '../api/types.js';
 import { useMembershipStore } from '../store/membership.js';
-import { MODE_SPECS } from './ModeSwitcher.js';
+import { MODE_SPECS } from './modeSpec.js';
 import { ageVerdict } from '../board/ageHonesty.js';
 import { AgeStamp } from './AgeStamp.js';
 import { runTitle, runWhenWord, WHEN_TITLE } from './runIdentity.js';
