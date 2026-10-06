@@ -116,7 +116,11 @@ with sync_playwright() as p:
     rail = page.get_by_test_id("desk-rail-controls")
     rail.wait_for(state="visible", timeout=5000)
     toggle = rail.get_by_test_id("standing-orders-toggle")
-    toggle_rect = page.evaluate(RECT, '[data-testid="desk-rail-controls"] [data-testid="standing-orders-toggle"]')
+    # The orders chip renders once `GET /standing-orders` answers (CI is slower than a laptop): wait
+    # for it, and measure the toggle through the locator that is about to be clicked.
+    toggle.wait_for(state="visible", timeout=10000)
+    tb = toggle.bounding_box()
+    toggle_rect = None if tb is None else {"top": tb["y"], "bottom": tb["y"] + tb["height"], "left": tb["x"], "right": tb["x"] + tb["width"], "width": tb["width"], "height": tb["height"]}
     toggle.click()
     overlay = page.get_by_test_id("standing-orders-manage")
     overlay.wait_for(state="visible", timeout=5000)
