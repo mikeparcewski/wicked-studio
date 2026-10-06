@@ -757,6 +757,17 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          # run_chat_id — GET /health.capabilities.runChatId (C1). Off: a daemon before C1 (and the
          #   runs then carry no chat_id either).
          "sessions": False, "run_chat_id": False,
+         # ask_path — DES-ASK-TEAM-CHAT-001 (ASK-S1, e2e/desk_ask_team_test.py): GET /health.capabilities.askPath
+         #   is true and an ask is a TEAM PATH. POST /chats records the eligible seats (nothing warms) and the
+         #   caller's `primary`; POST /chats/:id/messages answers crew's 202 {seats:[pa], turnId, runId, stepId}
+         #   and then replays, over /ws and on a timer, the frames the crew lane captured live (ws.jsonl
+         #   2026-10-05): the team rows (path.started random, plan.proposed/scored/accepted, step.claimed,
+         #   member.joined, step.completed, finding.raised target:output, ledger.folded) and the PA's chatDelta /
+         #   chatReply; GET /chats/:id carries the transcript + `path`; GET /runs lists the ask run (chat_id set,
+         #   awaiting_human at its turn gate after the reply); GET /runs/:id/team serves the rows so far.
+         #   ask_one_seat — the roster has no distinct seat: member.joined{seat:null,status:failed} and, after the
+         #   reply, plan.refused NoEligibleSeat (the §4.7 one-seat line).
+         "ask_path": False, "ask_one_seat": False,
          # sheets — S11 (e2e/desk_sheets_test.py): every run's units name a seat
          #   ("claude" where the corpus left none), so a session shows its helpers; POST
          #   /runs/:id/cancel answers crew's 200 and is recorded (GET /__fixture/cancel-posts).
@@ -4175,6 +4186,8 @@ def assemble_runs() -> list:
             if state["walkthrough"]:
                 extra = extra + json.loads(json.dumps(walk_runs()))
             runs = extra  # the sessions corpus stands alone: the rail shows exactly these
+        if state["ask_path"] and not state["no_runs"]:
+            runs = runs + ask_runs_list()  # the ask paths this fixture started (chat_id set), after any replacement
         if state["demo_runs"] and not state["no_runs"]:
             with demo_lock:
                 for d in demo_runs.values():
@@ -4344,6 +4357,219 @@ ws_gen = [0]
 # starve the surface that filters them by chat id. Each connection registers
 # its own queue on connect and removes it when its socket dies.
 ws_chat_queues: list = []
+
+
+# ── ASK-S1 (DES-ASK-TEAM-CHAT-001): an ask is a team path — the fixture's replay of the crew lane's frames ──
+#
+# Chat ids are the client's (AskDock mints one per session), so the corpus is DYNAMIC: `ask_open` records
+# each chat as POST /chats sees it; `ask_message` answers crew's 202 and starts a thread that replays, with
+# small delays, the rows and chat frames the proof daemon emitted on 2026-10-05 (lanes/a6-crew/proof/ws.jsonl)
+# for one answer step — field for field, ids and times minted here. The first turn of a chat also carries the
+# path's opening rows (path.started with `selection: random`, plan.proposed/scored/accepted). The second and
+# later turns add a HELP: exchange (help.requested → help.answered) so the thread's help line is exercised.
+ask_lock = threading.Lock()
+ask_chats: dict = {}       # chat_id -> {run_id, eligible, primary, pa, reviewer, turns, rows, messages, scope, status}
+ask_posts: list = []       # every POST /chats/:id/messages the ask path received (GET /__fixture/ask-posts)
+ask_seq = [0]
+ask_eid = [5000]
+
+ASK_REPLY_1 = ("`greet()` does not trim its input (`proof-scratch/src/greet.js:2`): it interpolates `name` verbatim, "
+               "so `greet(\"  Ada \")` returns `Hello,   Ada !`. Yes, it should trim — a greeting's only job is a "
+               "readable salutation, and no caller relies on the padding.")
+ASK_REPLY_2 = ("I asked the reviewer: no caller passes padded names, so trimming is safe. The one-line change is "
+               "`return `Hello, ${name.trim()}!`;` at `proof-scratch/src/greet.js:2`.")
+ASK_HELP_Q = "is trimming the name a behaviour change any caller relies on?"
+ASK_HELP_A = "No caller passes padded names; trimming is safe."
+
+
+def _ask_row(run_id: str, etype: str, at_ms: int, **payload) -> dict:
+    ask_eid[0] += 1
+    base = {"run_id": run_id, "ord": payload.pop("ord", None), "attempt": payload.pop("attempt", None),
+            "by": payload.pop("by", "engine"), "at": at_ms, "re": None}
+    return {"event_id": ask_eid[0], "event_type": f"wicked.team.{etype}", "emitted_at": at_ms,
+            "payload": dict(base, **payload)}
+
+
+def ask_open(chat_id: str, eligible: list, primary, scope) -> None:
+    """POST /chats under ask_path: record the eligible roster (nothing warms) and the caller's `primary`."""
+    with ask_lock:
+        if chat_id in ask_chats:
+            return
+        ask_seq[0] += 1
+        ask_chats[chat_id] = {"run_id": f"r-ask-{ask_seq[0]}", "eligible": list(eligible), "primary": primary,
+                              "pa": None, "reviewer": None, "turns": 0, "rows": [], "messages": [], "scope": scope,
+                              "status": None, "helpers": []}
+
+
+def ask_chat_detail(chat_id: str):
+    with ask_lock:
+        c = ask_chats.get(chat_id)
+        if c is None:
+            return None
+        detail = {"chatId": chat_id, "seats": list(c["eligible"]), "scope": c["scope"], "refused": [],
+                  "messages": json.loads(json.dumps(c["messages"]))}
+        if c["turns"] > 0:
+            detail["path"] = {"runId": c["run_id"], "pa": c["pa"], "selection": "chosen" if c["primary"] else "random",
+                              "reviewer": c["reviewer"], "helpers": list(c["helpers"]), "stepId": f"answer-{c['turns']}"}
+        return detail
+
+
+def ask_runs_list() -> list:
+    out = []
+    with ask_lock:
+        for cid, c in ask_chats.items():
+            if c["turns"] == 0:
+                continue
+            units = [(f"answer-{i} — ask", "understand", "done" if i < c["turns"] or c["status"] == "awaiting_human" else "distributed")
+                     for i in range(1, c["turns"] + 1)]
+            r = _session_run(c["run_id"], c["status"] or "executing", c["first_text"], cid, c["started_s"], None, units)
+            r["session"]["clis"] = list(c["eligible"])
+            for i, u in enumerate(r["units"], start=1):
+                u["assigned_cli"] = c["pa"]
+                # The engine's unit ords are 1-based (the proof frames: answer-1 is ord 1, the gate and the
+                # reply name it so); the ask run's units carry the ords its gates and replies use.
+                u["ord"] = i
+                u["id"] = f"{c['run_id']}:u{i}"
+            out.append(r)
+    return out
+
+
+def ask_team(rid: str):
+    with ask_lock:
+        for c in ask_chats.values():
+            if c["run_id"] != rid:
+                continue
+            rows = json.loads(json.dumps(c["rows"]))
+            run_rows = [r for r in rows if r["payload"].get("ord") is None]
+            by_ord: dict = {}
+            for r in rows:
+                o = r["payload"].get("ord")
+                if o is not None:
+                    by_ord.setdefault(o, []).append(r)
+            return {"runId": rid, "teamed": True, "transport": "bus", "reason": None, "streamFloor": None, "pending": None,
+                    "planRev": 1, "ended": False, "rows": run_rows,
+                    "units": [{"ord": o, "transport": "bus", "reason": None, "rows": rs} for o, rs in sorted(by_ord.items())]}
+    return None
+
+
+def _ask_emit(chat_id: str, row: dict) -> None:
+    """A team row: kept for GET /runs/:id/team AND relayed as crew's `teamEvent` frame."""
+    with ask_lock:
+        ask_chats[chat_id]["rows"].append(row)
+    broadcast_chat({"type": "teamEvent", "event": row})
+
+
+def ask_gate(rid: str):
+    """GET /runs/:id/gate for an ask run (the daemon's cached open gate, no kind): the turn gate while it
+    waits at the plan's end — the engine's own prompt — or the plan gate while a build proposal is open."""
+    with ask_lock:
+        for c in ask_chats.values():
+            if c["run_id"] != rid or c["status"] != "awaiting_human":
+                continue
+            n = c["turns"]
+            if c.get("proposal_open"):
+                return {"runId": rid, "ord": n + 1, "lifecycle": "open", "receivedAt": iso(int(time.time() * 1000)),
+                        "prompt": f"Approve plan rev 2 before unit {n + 1} runs: build-1 → review. The plan adds the first creator step."}
+            return {"runId": rid, "ord": n, "lifecycle": "open", "receivedAt": iso(int(time.time() * 1000)),
+                    "prompt": f"Approve the output of unit {n} (answer-{n}) — the plan is complete."}
+    return None
+
+
+def ask_message(chat_id: str, text: str):
+    """POST /chats/:id/messages under ask_path → crew's 202, then the turn's frames on a timer."""
+    with state_lock:
+        one_seat = state["ask_one_seat"]
+    with ask_lock:
+        c = ask_chats[chat_id]
+        if c["status"] == "executing":
+            return 409, {"error": "turn_in_flight: the previous turn has no reply yet", "code": "turn_in_flight"}
+        c["turns"] += 1
+        n = c["turns"]
+        if n == 1:
+            c["first_text"] = text.split("\n\n---\n")[0]
+            c["started_s"] = int(time.time())
+            c["pa"] = c["primary"] or c["eligible"][0]
+        c["status"] = "executing"
+        turn_id = f"t-ask-{n}"
+        now = int(time.time() * 1000)
+        c["messages"].append({"at": now, "turnId": turn_id, "kind": "user", "seats": [c["pa"]], "text": text})
+        run_id, pa, eligible = c["run_id"], c["pa"], list(c["eligible"])
+        ask_posts.append({"chatId": chat_id, "text": text, "turn": n})
+    reviewer = next((k for k in eligible if k != pa), None)
+    if one_seat:
+        reviewer = None
+    ord_ = n
+
+    def play() -> None:
+        t = int(time.time() * 1000)
+        time.sleep(0.3)
+        if n == 1:
+            step = {"catalog": "understand", "id": "answer-1", "gate": {"human_confirm": {"unconditional": True}},
+                    "budget_secs": 600, "instructions": text.split("\n\n---\n")[0]}
+            _ask_emit(chat_id, _ask_row(run_id, "path.started", t, cli=pa, selection="chosen" if ask_chats[chat_id]["primary"] else "random",
+                                        roster=eligible, request=text, workflow=None, plan=True))
+            _ask_emit(chat_id, _ask_row(run_id, "plan.proposed", t + 1, by="human", proposal_id="p-ask-1", base_rev=None, kind="initial",
+                                        preset=None, steps=[step], monitors={"asked": 1}, asks=[], touch=[], override=None, rationale=""))
+            _ask_emit(chat_id, _ask_row(run_id, "path.scored", t + 2, basis="intent", score=0, deterministic=0,
+                                        reasons=["no creator step and no declared scope"], model=None, score_source="intent:p-ask-1",
+                                        signals=None, plan={"depth": "none", "monitors": 0, "post_hoc_reviewer": False, "post_hoc_other_cli": False}, tree=None))
+            _ask_emit(chat_id, _ask_row(run_id, "plan.accepted", t + 3, plan_rev=1, workflow_id=f"{run_id}:plan-1", band="0-19", high_risk=False,
+                                        mode="auto", steps=[dict(step, added_by="plan")], override=None, proposal_id="p-ask-1", touch=[]))
+        _ask_emit(chat_id, _ask_row(run_id, "step.claimed", t + 10, ord=ord_, attempt=0, by=pa, step_id=f"answer-{n}", role="creator", kind="agent",
+                                    phase="understand", criterion="", baseline_tree=None, repo=None, code_graph_db=None))
+        if n == 1:
+            if reviewer is not None:
+                _ask_emit(chat_id, _ask_row(run_id, "member.joined", t + 20, ord=ord_, attempt=0, by=reviewer, member_id="m1", open_seq=1,
+                                            seat=reviewer, role="monitor", status="attached", reason="team plan monitors=1", error=None))
+                with ask_lock:
+                    ask_chats[chat_id]["reviewer"] = reviewer
+            else:
+                _ask_emit(chat_id, _ask_row(run_id, "member.joined", t + 20, ord=ord_, attempt=0, by="engine", member_id="m1", open_seq=1,
+                                            seat=None, role="monitor", status="failed", reason="team plan monitors=1",
+                                            error="no seat distinct from the PA"))
+        time.sleep(0.6)  # the thread shows "<pa> is thinking" here
+        if n >= 2 and reviewer is not None:
+            _ask_emit(chat_id, _ask_row(run_id, "help.requested", t + 600, ord=ord_, attempt=0, by=pa, help_id=f"h-{n}", help_seq=1,
+                                        question=ASK_HELP_Q, context=""))
+            time.sleep(0.3)
+            _ask_emit(chat_id, _ask_row(run_id, "help.answered", t + 900, ord=ord_, attempt=0, by=reviewer, help_id=f"h-{n}", answer_id=f"a-{n}",
+                                        answer=ASK_HELP_A, evidence=[], outcome="answered", error=None))
+            with ask_lock:
+                if reviewer not in ask_chats[chat_id]["helpers"]:
+                    ask_chats[chat_id]["helpers"].append(reviewer)
+        reply = ASK_REPLY_1 if n == 1 else ASK_REPLY_2
+        third = max(1, len(reply) // 3)
+        for chunk in (reply[:third], reply[third:2 * third]):
+            broadcast_chat({"type": "chatDelta", "chat": chat_id, "cliKey": pa, "text": chunk, "turn_id": turn_id})
+            time.sleep(0.25)
+        t2 = int(time.time() * 1000)
+        _ask_emit(chat_id, _ask_row(run_id, "step.completed", t2, ord=ord_, attempt=0, by=pa, step_id=f"answer-{n}", status="ok", tree=None,
+                                    output_bytes=len(reply), output_ref=f"unit:{run_id}:{ord_}:0", answers_presented=n >= 2))
+        if n == 1 and reviewer is not None:
+            _ask_emit(chat_id, _ask_row(run_id, "finding.raised", t2 + 5, ord=ord_, attempt=0, by=reviewer, raise_seq=1, finding_id="f-1",
+                                        member_id="m1", line_key=None, anchor=None, anchor_source="none", severity="medium", target="output",
+                                        path=f"answer-{n}", line=1, evidence="greet.js:2 is the template literal; the signature is line 1",
+                                        claim="the cited line is the signature, not the template", suggestion="cite greet.js:2 as the body",
+                                        tree="", in_diff=False, corroborated_by=[]))
+        _ask_emit(chat_id, _ask_row(run_id, "ledger.folded", t2 + 10, ord=ord_, attempt=0, final_pass="completed",
+                                    ledger={"finalPass": "completed", "findings": [], "monitors": ([{"monitorId": "m1", "seat": reviewer, "status": "completed", "batches": 1, "error": None}] if reviewer else []),
+                                            "rejected": {}, "renderedToJudge": False, "teamPause": False},
+                                    transport="bus", transcript={"from_event_id": 0, "to_event_id": 0, "count": 0, "truncated": False, "events": []}))
+        if one_seat and n == 1:
+            _ask_emit(chat_id, _ask_row(run_id, "plan.refused", t2 + 12, by="engine", proposal_id="p-ask-2", base_rev=1,
+                                        reason="NoEligibleSeat: no seat distinct from the creator seat"))
+        with ask_lock:
+            ask_chats[chat_id]["messages"].append({"at": t2 + 20, "turnId": turn_id, "kind": "seat", "cliKey": pa, "ok": True, "usage": None, "text": reply})
+            ask_chats[chat_id]["status"] = "awaiting_human"  # the turn gate: the next message is the answer
+        broadcast_chat({"type": "chatReply", "chat": chat_id, "cliKey": pa, "text": reply, "ok": True, "run_id": run_id, "ord": ord_, "turn_id": turn_id})
+        # The engine's TURN gate (the answer step's unconditional HumanConfirm at the plan's end): the real
+        # daemon's awaitingHuman frame — studio must draw no gate for it (§4.8), only the "waiting" session.
+        broadcast_chat({"type": "awaitingHuman", "session": run_id, "ord": ord_, "gateKind": "terminal",
+                        "prompt": f"Approve the output of unit {ord_} (answer-{n}) — the plan is complete."})
+
+    threading.Thread(target=play, daemon=True).start()
+    return 202, {"seats": [pa], "turnId": turn_id, "runId": run_id, "stepId": f"answer-{n}"}
+
 
 
 def broadcast_chat(frame: dict) -> None:
@@ -4901,6 +5127,8 @@ class W2Handler(SimpleHTTPRequestHandler):
             with state_lock:
                 if state["run_chat_id"]:
                     caps["runChatId"] = True
+                if state["ask_path"]:
+                    caps["askPath"] = True  # ASK-C1 (api-types 0.92.0)
                 if state["sessions"] and state["walkthrough"]:
                     caps["walkthroughRoots"] = True  # WT-W1 (api-types 0.74.0)
             self._json(200, {"status": "ok", "version": "w2-fixture", "ping": "pong", "capabilities": caps})
@@ -5249,6 +5477,12 @@ class W2Handler(SimpleHTTPRequestHandler):
             cid = urllib.parse.unquote(path.split("/")[4])
             with state_lock:
                 sessions_on = state["sessions"]
+                ask_on = state["ask_path"]
+            if ask_on:
+                detail = ask_chat_detail(cid)
+                if detail is not None:
+                    self._json(200, detail)
+                    return True
             if sessions_on and cid in SESSION_CHATS:
                 detail = SESSION_CHATS[cid]
                 with state_lock:
@@ -5385,7 +5619,10 @@ class W2Handler(SimpleHTTPRequestHandler):
                 proposals_on = state["ship_proposals"]
                 reel_on = state["reel_runs"]
                 walk_on = state["walkthrough"]
-            if sessions_on and walk_on and walk_team(rid) is not None:
+                ask_on = state["ask_path"]
+            if ask_on and ask_team(rid) is not None:
+                self._json(200, ask_team(rid))
+            elif sessions_on and walk_on and walk_team(rid) is not None:
                 self._json(200, walk_team(rid))
             elif sessions_on and reel_on and reel_team(rid) is not None:
                 time.sleep(REEL_TEAM_DELAY_S)  # the session paints from its units first (studio#440)
@@ -5404,6 +5641,11 @@ class W2Handler(SimpleHTTPRequestHandler):
         # /api/v1/runs/<id>/gate
         if len(parts) == 6 and parts[3] == "runs" and parts[5] == "gate":
             rid = urllib.parse.unquote(parts[4])
+            with state_lock:
+                ask_on = state["ask_path"]
+            if ask_on and ask_gate(rid) is not None:
+                self._json(200, ask_gate(rid))
+                return True
             with state_lock:
                 plan_gate_on = state["plan_gate"]
                 proposals_open = state["sessions"] and state["ship_proposals"]
@@ -6793,6 +7035,10 @@ class W2Handler(SimpleHTTPRequestHandler):
         path = urllib.parse.urlparse(self.path).path
         # Wave 2a: the SERVER-side record of every gate decision that arrived —
         # the only witness for "closing the tab during the undo window sends nothing".
+        if path == "/__fixture/ask-posts":
+            with ask_lock:
+                posts = list(ask_posts)
+            return self._json(200, {"posts": posts})
         if path == "/__fixture/launch-posts":
             with state_lock:
                 posts = list(session_launch_log)
@@ -7483,6 +7729,10 @@ class W2Handler(SimpleHTTPRequestHandler):
                     chat_send_count.setdefault(chat_id, 0)
                 if scope is not None:
                     chat_scopes[chat_id] = scope
+            with state_lock:
+                ask_on = state["ask_path"]
+            if ask_on:
+                ask_open(chat_id, [s["cliKey"] for s in seats if s["ok"]], body.get("primary"), scope)
             opened = {"chatId": chat_id, "seats": seats}
             if scope is not None:
                 opened["scope"] = scope
@@ -7612,6 +7862,11 @@ class W2Handler(SimpleHTTPRequestHandler):
             # draft must survive and the failure must render inline with retry.
             if send_fail:
                 return self._json(500, {"error": "chat send refused (fixture)"})
+            with state_lock:
+                ask_on = state["ask_path"]
+            if ask_on and urllib.parse.unquote(parts[4]) in ask_chats:
+                code, answer = ask_message(urllib.parse.unquote(parts[4]), body.get("text", ""))
+                return self._json(code, answer)
             # Slice AB (§7.9-3): buffer this round's interleaved chunk frames +
             # replies; nothing is broadcast until the rig flushes — so a second
             # send can open its turn BEFORE the first turn's chunks arrive.

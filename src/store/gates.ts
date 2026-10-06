@@ -1,6 +1,9 @@
 import { create } from 'zustand';
 import type { CoreEvent } from '../api/types.js';
 import { isAwaitingPinned } from './awaitingPins.js';
+import { isAskTurnGate } from '../board/askThread.js';
+import { useAskThreadStore } from './askThread.js';
+import { useCapabilities } from './capabilities.js';
 
 /**
  * A browser-side open-gate record, keyed by run id. Mirrors the daemon's
@@ -121,13 +124,27 @@ interface GateStore {
   ingest: (event: CoreEvent) => void;
   /** Self-healing prune: keep only gates whose run is still awaiting a human. */
   reconcile: (awaitingRunIds: string[]) => void;
+  /** The ask-path knowledge grew (the runs list classified a run, a reply named its ord): a gate cached
+   *  before that, which is now known to be an ask's turn gate, is recorded and no longer drawn (codex r3 #2). */
+  reclassifyAskGates: () => void;
 }
 
 export const useGateStore = create<GateStore>((set) => ({
   gates: {},
   approaching: {},
 
-  setGate: (gate) => set((s) => ({ gates: { ...s.gates, [gate.runId]: gate } })),
+  // A gate reconciled on a late join (`GET /runs/:id/gate`, no kind) is classified by the engine's
+  // own words, so the turn gate stays undrawn there too (codex on ASK-S1 #3).
+  setGate: (gate) => {
+    if (useCapabilities.getState().askPath && isAskTurnGate(useAskThreadStore.getState(), gate.runId, gate.gateKind, gate.prompt, gate.ord)) {
+      useAskThreadStore.getState().recordTurnGate(gate.runId, gate.ord);
+      set((s) => { if (!(gate.runId in s.gates)) return s; const next = { ...s.gates }; delete next[gate.runId]; return { gates: next }; });
+      return;
+    }
+    // A real gate on the run supersedes any recorded turn gate (codex r2 #2).
+    useAskThreadStore.getState().clearTurnGate(gate.runId);
+    set((s) => ({ gates: { ...s.gates, [gate.runId]: gate } }));
+  },
 
   clearGate: (runId) =>
     set((s) => {
@@ -161,6 +178,19 @@ export const useGateStore = create<GateStore>((set) => ({
       }
       switch (event.type) {
         case 'awaitingHuman': {
+          // DES-ASK-TEAM-CHAT-001 §4.8: an ask path's TURN gate (the engine's def / terminal
+          // HumanConfirm on an answer step, while the plan has no creator step) is answered by the
+          // next message, never drawn as a gate — recorded, so the Desk and the thread act on a
+          // positive fact. A hand-over, an escalation, a plan approval, and every gate after a
+          // creator step is accepted, are drawn (codex on ASK-S1 #1, #2).
+          if (useCapabilities.getState().askPath && isAskTurnGate(useAskThreadStore.getState(), session, gateKindOf(event).gateKind, typeof event.prompt === 'string' ? event.prompt : undefined, typeof event.ord === 'number' ? event.ord : undefined)) {
+            if (typeof event.ord === 'number') useAskThreadStore.getState().recordTurnGate(session, event.ord);
+            if (!(session in s.gates)) return approaching === s.approaching ? s : { approaching };
+            const next = { ...s.gates }; delete next[session];
+            return { approaching, gates: next };
+          }
+          // A real gate on the run supersedes any recorded turn gate (codex r2 #2).
+          useAskThreadStore.getState().clearTurnGate(session);
           if (typeof event.ord === 'number' && typeof event.prompt === 'string') {
             const choices = choicesOf(event as unknown as Record<string, unknown>);
             return {
@@ -196,6 +226,15 @@ export const useGateStore = create<GateStore>((set) => ({
           return approaching === s.approaching ? s : { approaching };
       }
     });
+  },
+
+  reclassifyAskGates: () => {
+    if (!useCapabilities.getState().askPath) return;
+    const know = useAskThreadStore.getState();
+    const turn = Object.values(useGateStore.getState().gates).filter((g) => isAskTurnGate(know, g.runId, g.gateKind, g.prompt, g.ord));
+    if (turn.length === 0) return;
+    for (const g of turn) know.recordTurnGate(g.runId, g.ord);
+    set((s) => { const next = { ...s.gates }; for (const g of turn) delete next[g.runId]; return { gates: next }; });
   },
 
   reconcile: (awaitingRunIds) =>

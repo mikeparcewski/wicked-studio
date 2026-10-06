@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import { getDiagnostics, isDiagnosticsUnsupported } from '../api/diagnostics.js';
 import type { ChatOpenBody, ChatScope, RepoEntry, SessionView } from '../api/types.js';
@@ -33,6 +33,8 @@ import { defaultSelection, describeChatOpenRefusal } from './GroupChat.js';
 import { apiStatus, apiWire } from '../api/errors.js';
 import { ambientProjectId } from '../hooks/ambientProject.js';
 import { peekTypedSeed, takeTypedSeed } from '../hooks/useTypeToComposer.js';
+import { useAskThreadStore } from '../store/askThread.js';
+import { useCapabilities } from '../store/capabilities.js';
 
 /**
  * ASK — the app-wide binding of the ASSIST DOCK (DES-ASSIST-DOCK §5: "the dock becomes
@@ -49,6 +51,13 @@ import { peekTypedSeed, takeTypedSeed } from '../hooks/useTypeToComposer.js';
  * Opening the dock fires READS only (diagnostics + the session repo/project caches, to
  * seed honest quick prompts). NOTHING launches until the user sends — the quick-prompt
  * chips prefill the composer, never submit it.
+ *
+ * ASK-S1 (DES-ASK-TEAM-CHAT-001 §5.1): under `capabilities.askPath` the same two calls start a
+ * TEAM PATH — `POST /chats` records the eligible seats (no seat is warmed), the first message
+ * launches the run and later ones continue it; the 202 names the turn and the run. The dock
+ * deposits each turn in the ask-thread store so the session thread shows the question at once,
+ * passes the one seat the operator named (`primary`) when they named one, and says in plain words
+ * when the PA is still answering (409 `turn_in_flight`) — the draft is kept.
  */
 
 /** The persisted scope rides only when the daemon stated one (a missing key reads as not stated). */
@@ -56,7 +65,29 @@ function scopeField(scope: ChatScope | null): { scope?: ChatScope } {
   return scope !== null ? { scope } : {};
 }
 
-export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoffTaken, sendProjectId, sendFresh = false }: {
+/** ASK-S1: the 202's turn (and, on a path, its run and answer step) lands in the ask-thread store, so
+ *  the session thread shows the operator's words at once — what they typed, never the context pack. */
+function deposit(chatId: string, typed: string, res: { turnId?: string; runId?: string; stepId?: string }): void {
+  useAskThreadStore.getState().sent(chatId, {
+    turnId: res.turnId ?? `local:${Date.now()}`, text: typed,
+    ...(res.runId !== undefined ? { runId: res.runId } : {}),
+    ...(res.stepId !== undefined ? { stepId: res.stepId } : {}),
+  });
+}
+
+/** §8 F6: a message while the PA is answering is refused 409 `turn_in_flight` — said in plain words;
+ *  the dock keeps the draft. Anything else is rethrown as it came. */
+function stillAnswering(chatId: string): (e: unknown) => never {
+  return (e: unknown) => {
+    if (apiStatus(e) === 409 && /turn_in_flight|in flight|still answering/i.test(apiWire(e) ?? '')) {
+      const pa = useAskThreadStore.getState().paByChat[chatId] ?? 'The helper';
+      throw new Error(`${pa} is still answering — wait for the reply; your message was not sent.`);
+    }
+    throw e;
+  };
+}
+
+export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoffTaken, sendProjectId, sendFresh = false, sendPrimary }: {
   runs: SessionView[];
   pathname: string;
   /** Collapsing the dock closes Ask entirely — the launcher bubble/shortcut reopen it. */
@@ -74,6 +105,9 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
   /** S7: the handed-over message starts a NEW session (an `@project` after the first send), never
    *  the one this dock would resume. */
   sendFresh?: boolean;
+  /** ASK-S1: the helper the operator named with `@` to answer — the path's `primary` (chosen) when
+   *  this send opens a new chat on a daemon with `capabilities.askPath`. */
+  sendPrimary?: string;
 }): React.ReactElement {
   // The letters that opened the dock (type-to-composer, §5.6 rule 4): read on mount, cleared
   // in an effect (a StrictMode double initializer must not read an already-emptied seed).
@@ -173,6 +207,20 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
     resumed === null ? undefined : (resumed.scope ?? null));
   const scopeRef = useRef<ChatScope | null>(resumed?.scope ?? null);
 
+  // ASK-S1 (Amendment 6 decision 5: studio renders ONE thread): on the chat's own session page the
+  // session thread shows every turn as it happens, so once a send is accepted the dock steps aside
+  // instead of showing the conversation a second time beside it. Anywhere else (the Desk, a page with
+  // no thread) the dock stays — it is where the reply shows.
+  const pathnameRef = useRef(pathname);
+  pathnameRef.current = pathname;
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  const stepAside = useCallback((chatId: string) => {
+    if (!useCapabilities.getState().askPath) return;
+    const m = /^\/s\/([^/]+)/.exec(pathnameRef.current);
+    if (m !== null && decodeURIComponent(m[1]!) === chatId) onCloseRef.current();
+  }, []);
+
   const verbs: AssistVerbs = useMemo(
     () => ({
       send: async (text) => {
@@ -180,11 +228,12 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
         if (id !== null && resumed !== null && id === resumed.chatId) {
           const message = seededRef.current ? text : `${text}${PACK_JOIN}${buildContextPack(packInputs.current)}`;
           try {
-            await api.sendChatMessage(id, message);
+            deposit(id, text, await api.sendChatMessage(id, message).catch(stillAnswering(id)));
             if (!seededRef.current) {
               seededRef.current = true;
               writeAskSession({ chatId: id, title: titleRef.current, seeded: true, ...scopeField(scopeRef.current) });
             }
+            stepAside(id);
             return { chatId: id };
           } catch (sendErr) {
             // A failed send is NOT proof the session is gone — a 5xx or a network blip
@@ -221,6 +270,8 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
           id = crypto.randomUUID();
           const body: ChatOpenBody = { chatId: id, ...askScopeOpenFields(choice, ambientProjectId(packInputs.current.pathname)) };
           if (clis.length > 0) body.clis = clis;
+          // ASK-S1: the helper named with `@` answers (`selection: chosen`); unnamed, the engine picks at random.
+          if (sendPrimary !== undefined && useCapabilities.getState().askPath && (clis.length === 0 || clis.includes(sendPrimary))) body.primary = sendPrimary;
           // A refused open reads as GroupChat's does (codex on #327): a pre-0.39.0 daemon's
           // "unknown field `scopeKind`" names the upgrade, never the raw wire.
           const { seats, scope } = await api.openChat(body).catch((e: unknown) => {
@@ -231,8 +282,8 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
             const detail =
               seats.length > 0
                 ? seats.map((s) => `${s.cliKey}: ${s.error ?? 'failed'}`).join('; ')
-                : 'the daemon warmed no seats';
-            throw new Error(`No agent seat came up — ${detail}`);
+                : useCapabilities.getState().askPath ? 'no signed-in helper is eligible to answer' : 'the daemon warmed no seats';
+            throw new Error(`${useCapabilities.getState().askPath ? 'No helper can answer' : 'No agent seat came up'} — ${detail}`);
           }
           chatIdRef.current = id;
           scopeRef.current = scope ?? null;
@@ -245,15 +296,16 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
           useLiveChatsStore.getState().upsert(id, ready, { origin: 'ask', title: text });
         }
         const message = seededRef.current ? text : `${text}${PACK_JOIN}${buildContextPack(packInputs.current)}`;
-        await api.sendChatMessage(id, message);
+        deposit(id, text, await api.sendChatMessage(id, message).catch(stillAnswering(id)));
         if (!seededRef.current) {
           seededRef.current = true;
           writeAskSession({ chatId: id, title: titleRef.current, seeded: true, ...scopeField(scopeRef.current) });
         }
+        stepAside(id);
         return { chatId: id };
       },
     }),
-    [resumed],
+    [resumed, sendPrimary, stepAside],
   );
 
   const prompts = useMemo(
@@ -336,7 +388,9 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
         navigate === undefined
           ? undefined
           : (chatId) => {
-              navigate(`/chat/${encodeURIComponent(chatId)}`);
+              // ASK-S1 (codex #8): under the capability the chat IS a path and its thread is the session;
+              // the legacy fan-out surface (`/chat/:id`) would draw a pending bubble per eligible seat.
+              navigate(useCapabilities.getState().askPath ? `/s/${encodeURIComponent(chatId)}` : `/chat/${encodeURIComponent(chatId)}`);
               onClose();
             }
       }
