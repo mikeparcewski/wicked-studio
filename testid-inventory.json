@@ -12,8 +12,8 @@
   "studioVersion": "0.6.1",
   "counts": {
     "files": 217,
-    "occurrences": 2470,
-    "static": 2164,
+    "occurrences": 2473,
+    "static": 2167,
     "dynamic": 79,
     "computed": 8
   },
@@ -2434,6 +2434,12 @@
       ]
     },
     {
+      "testId": "demo-open-run-gate",
+      "files": [
+        "src/components/DemoMode.tsx"
+      ]
+    },
+    {
       "testId": "demo-plan",
       "files": [
         "src/components/DemoMode.tsx"
@@ -2622,6 +2628,18 @@
     },
     {
       "testId": "demo-video",
+      "files": [
+        "src/components/DemoMode.tsx"
+      ]
+    },
+    {
+      "testId": "demo-waiting-gate",
+      "files": [
+        "src/components/DemoMode.tsx"
+      ]
+    },
+    {
+      "testId": "demo-waiting-gate-prompt",
       "files": [
         "src/components/DemoMode.tsx"
       ]
