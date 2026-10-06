@@ -87,8 +87,11 @@ function textOf(f: SkillReadResult): string {
   return f.content ?? '';
 }
 
-export function SkillDrawer({ skill, support, writer, catalogEpoch, busy, leaveTo, onClose, onLeave, onDirtyChange, onToggle, onChanged }: {
+export function SkillDrawer({ skill, support, writer, catalogEpoch, busy, leaveTo, top = 0, onClose, onLeave, onDirtyChange, onToggle, onChanged }: {
   skill: SkillRow;
+  /** studio#515: the viewport y where the page header ends — the drawer starts there, never over
+   *  the header's verbs. */
+  top?: number;
   /** The root support files (from the manifest's `files`, no owning skill), path-sorted. */
   support: readonly SkillTreeRow[];
   writer: SkillsWriter;
@@ -466,8 +469,10 @@ export function SkillDrawer({ skill, support, writer, catalogEpoch, busy, leaveT
       data-skill={skill.name}
       role="complementary"
       aria-label={`Skill ${skill.name}`}
-      className="fixed inset-y-0 right-0 z-40 flex w-[44rem] max-w-[95vw] flex-col gap-3 overflow-y-auto p-4 shadow-2xl"
-      style={{ background: 'var(--surface-card)', borderLeft: '1px solid var(--surface-raised)' }}
+      // studio#515: pinned below the page header (`top`, measured by the page) so the header's verbs
+      // stay reachable while a skill is open — never `inset-y-0` over them.
+      className="fixed bottom-0 right-0 z-40 flex w-[44rem] max-w-[95vw] flex-col gap-3 overflow-y-auto p-4 shadow-2xl"
+      style={{ top: `${top}px`, background: 'var(--surface-card)', borderLeft: '1px solid var(--surface-raised)' }}
     >
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-mono text-sm font-semibold" style={{ color: 'var(--ink-high)' }}>{skill.name}</span>

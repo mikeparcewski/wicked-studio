@@ -22,16 +22,11 @@ export function AnchoredOverlay({ anchor, onClose, label, testId, section, width
   children: ReactNode;
 }): React.ReactElement {
   const box = useRef<HTMLDivElement | null>(null);
-  const [pos, setPos] = useState<{ top: number; left: number; maxHeight: number } | null>(null);
+  const [pos, setPos] = useState<Placement | null>(null);
 
   const place = useCallback(() => {
     if (anchor === null) return;
-    const r = anchor.getBoundingClientRect();
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
-    const left = Math.max(8, Math.min(r.left, vw - width - 8));
-    const top = r.bottom + 6;
-    setPos({ top, left, maxHeight: Math.max(160, vh - top - 16) });
+    setPos(placeOverlay(anchor.getBoundingClientRect(), window.innerWidth, window.innerHeight, width));
   }, [anchor, width]);
 
   useLayoutEffect(() => {
@@ -85,14 +80,56 @@ export function AnchoredOverlay({ anchor, onClose, label, testId, section, width
       tabIndex={-1}
       data-testid={testId}
       data-section={section}
+      data-placement={pos?.placement}
       className="wk-overlay"
       style={{
         position: 'fixed', zIndex: 40, width, maxWidth: 'calc(100vw - 16px)',
-        top: pos?.top ?? -9999, left: pos?.left ?? -9999, maxHeight: pos?.maxHeight ?? 400,
+        // Pinned to ONE edge: below the anchor by `top`, above it by `bottom` — so a box that grows
+        // (the orders list, the read-back) grows away from the anchor and never over the fold.
+        top: pos === null ? -9999 : pos.placement === 'below' ? pos.top : 'auto',
+        bottom: pos !== null && pos.placement === 'above' ? pos.bottom : 'auto',
+        left: pos?.left ?? -9999, maxHeight: pos?.maxHeight ?? 400,
         visibility: pos === null ? 'hidden' : 'visible',
       }}
     >
       {children}
     </div>
   );
+}
+
+/** The overlay's place: `below` the anchor (`top` from the viewport's top) or `above` it (`bottom`
+ *  from the viewport's bottom), with `maxHeight` the room that side has. */
+export interface Placement {
+  placement: 'below' | 'above';
+  top: number;
+  bottom: number;
+  left: number;
+  maxHeight: number;
+}
+
+const GAP = 6;
+const MARGIN = 8;
+/** Below the anchor is the natural place; it is kept while it has at least this much room. */
+const WANT_BELOW = 320;
+
+/**
+ * studio#514: an overlay that does not fit below its anchor opens above it. A 700-px-tall window
+ * with the anchor near its foot (the rail's Additional settings, y ≈ 628) left ~30 px below — the
+ * old 160-px floor put the panel's input and buttons under the fold with nothing able to scroll
+ * them into view (`position: fixed`). Now: below when the room below is enough, otherwise whichever
+ * side has more room, and the height is capped to that room in either direction.
+ */
+export function placeOverlay(r: Pick<DOMRect, 'top' | 'bottom' | 'left'>, vw: number, vh: number, width: number): Placement {
+  const left = Math.max(MARGIN, Math.min(r.left, vw - width - MARGIN));
+  const roomBelow = vh - (r.bottom + GAP) - MARGIN;
+  const roomAbove = r.top - GAP - MARGIN;
+  const below = roomBelow >= WANT_BELOW || roomBelow >= roomAbove;
+  const maxHeight = Math.max(80, below ? roomBelow : roomAbove);
+  return {
+    placement: below ? 'below' : 'above',
+    top: r.bottom + GAP,
+    bottom: vh - r.top + GAP,
+    left,
+    maxHeight,
+  };
 }

@@ -18,9 +18,9 @@ stored appearance's `theme`: the default dark is the bare stylesheet, light stam
      focus on the `<video>` (so the browser scrolls it into view if anything can scroll) — the same
      boxes hold, and the preview has nothing to scroll (scrollHeight == clientHeight, scrollTop 0).
   3. #503 HOLDS: the `<video>` in the pane and at full screen is the SAME node that was inline (no
-     remount); Tab off the player lands on the first chapter mark and Esc shrinks back from there (the
-     native controls take Esc while the player itself has the focus — a #503 limit, not changed here);
-     0 page errors; no horizontal scroll.
+     remount); Esc shrinks back FROM THE FOCUSED PLAYER (studio#509: a keyboard entry is kept on the
+     player itself, where the artifact sees the key — inside the native controls' own buttons Chromium
+     delivers no key to the page); 0 page errors; no horizontal scroll.
 
 Then a narrow 960x700 card at inline: the same, and every chapter mark inside the card (the words
 keep to the row and scroll on their own, never the body).
@@ -119,17 +119,18 @@ def morph_to(page, size: str) -> None:
         if order.index(size) > order.index(cur):
             page.locator(f'{ART} [data-testid="artifact-grow"]').click()
         else:
-            # Esc shrinks one step (rule 1). With the focus on the native player its controls take the key
-            # (it never reaches the document — a #503 limit, like the sandboxed frame's; the ⤡ / × buttons
-            # are the other way back), so a keyboard user Tabs off it first: one Tab lands on the first
-            # chapter mark. That real path is what runs here, and it must land there.
-            if page.evaluate("() => !!document.activeElement && document.activeElement.dataset.testid === 'walkthrough-video'"):
-                page.keyboard.press("Tab")
-                page.wait_for_timeout(150)
-                landed = page.evaluate("() => document.activeElement ? (document.activeElement.dataset.testid || document.activeElement.tagName) : null")
-                on_first = page.locator(f'{ART} [data-testid="walkthrough-marker"]').first.evaluate("(el) => document.activeElement === el")
-                check("tab-off-player", on_first, landed=landed, on_first_mark=on_first)
+            # Esc shrinks one step (rule 1) — from the focused player too (studio#509): a keyboard entry
+            # onto the player is kept on the player itself, where the artifact sees the key. That real
+            # path is what runs here: the key is pressed with the player focused, and it must shrink.
+            on_player = page.evaluate("() => !!document.activeElement && document.activeElement.dataset.testid === 'walkthrough-video'")
             page.keyboard.press("Escape")
+            if on_player:
+                try:
+                    page.wait_for_function(f"(s) => (document.querySelector('{ART}')||{{}}).dataset?.size === s", arg=order[order.index(cur) - 1], timeout=3000)
+                    shrank = True
+                except Exception:  # noqa: BLE001
+                    shrank = False
+                check("esc-from-player", shrank, size_before=cur, shrank=shrank)
         nxt = order[order.index(cur) + (1 if order.index(size) > order.index(cur) else -1)]
         page.wait_for_function(f"(s) => (document.querySelector('{ART}')||{{}}).dataset?.size === s", arg=nxt, timeout=5000)
         page.wait_for_timeout(500)

@@ -12,8 +12,8 @@
   "studioVersion": "0.6.1",
   "counts": {
     "files": 217,
-    "occurrences": 2465,
-    "static": 2160,
+    "occurrences": 2466,
+    "static": 2161,
     "dynamic": 79,
     "computed": 8
   },
@@ -9759,6 +9759,12 @@
       "testId": "skills-grid-empty",
       "files": [
         "src/components/SkillsGrid.tsx"
+      ]
+    },
+    {
+      "testId": "skills-header",
+      "files": [
+        "src/components/SkillsPage.tsx"
       ]
     },
     {
