@@ -133,7 +133,7 @@ describe('the proposal card in the thread', () => {
 
   it('Continue in Build posts ONE approve with no plan', async () => {
     page();
-    const c = await card();
+    await card();
     fireEvent.click(screen.getByTestId('session-proposal-go'));
     const gate = await gatePosts(1);
     expect(gate[0]!.body).toMatchObject({ approve: true });
@@ -142,7 +142,7 @@ describe('the proposal card in the thread', () => {
 
   it('Not now posts the ACCEPTED rev’s steps (no build); the card keeps the proposal and Bring it back prefills the composer', async () => {
     page();
-    const c = await card();
+    await card();
     fireEvent.click(screen.getByTestId('session-proposal-not-now'));
     const gate = await gatePosts(1);
     expect(gate[0]!.body).toMatchObject({ approve: true, plan: { steps: [{ catalog: 'understand', id: 'answer-1' }] } });
@@ -153,7 +153,7 @@ describe('the proposal card in the thread', () => {
 
   it('End posts ONE reject', async () => {
     page();
-    const c = await card();
+    await card();
     fireEvent.click(screen.getByTestId('session-proposal-end'));
     const gate = await gatePosts(1);
     expect(gate[0]!.body).toMatchObject({ approve: false });
