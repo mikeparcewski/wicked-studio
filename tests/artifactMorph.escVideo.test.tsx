@@ -77,6 +77,24 @@ describe('Esc from the native player (studio#509)', () => {
     }
   });
 
+  it('a player in ANOTHER artifact is the document\'s key: Esc from it still shrinks the topmost open artifact (codex round 1)', () => {
+    render(
+      <>
+        <Player />
+        <ArtifactMorph
+          artifactKey="p1/run:r2/demo" title="Other video" projectId="p1" docId="run:r2" composerKey="s:run:r2"
+          slot={{ kind: 'demo-video', body: () => <video data-testid="other-player" controls tabIndex={0} /> }}
+        />
+      </>,
+    );
+    act(() => setArtifactSize(KEY, 'pane'));
+    const other = screen.getByTestId('other-player');
+    other.focus();
+    fireEvent.keyDown(other, { key: 'Escape' });
+    expect(artifactSizeOf(useArtifactSizes.getState(), KEY)).toBe('inline');
+    expect(artifactSizeOf(useArtifactSizes.getState(), 'p1/run:r2/demo')).toBe('inline');
+  });
+
   it('a field inside the artifact still owns its Esc (unchanged)', () => {
     render(
       <ArtifactMorph

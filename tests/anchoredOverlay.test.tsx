@@ -63,6 +63,15 @@ describe('AnchoredOverlay placement (studio#514)', () => {
     expect(el.dataset.placement).toBe('below');
   });
 
+  it('on a tiny window the height is never more than the room — no floor puts it back outside (codex round 1)', () => {
+    Object.defineProperty(window, 'innerHeight', { value: 150, configurable: true, writable: true });
+    const anchor = anchorAt(60, 84);
+    render(<AnchoredOverlay anchor={anchor} onClose={() => {}} label="x" testId="so"><p>x</p></AnchoredOverlay>);
+    const b = box(screen.getByTestId('so'), 150);
+    expect(b.top).toBeGreaterThanOrEqual(8);
+    expect(b.bottom).toBeLessThanOrEqual(150 - 8);
+  });
+
   it('with little room either way, the side with more room wins and the height is capped to it', () => {
     Object.defineProperty(window, 'innerHeight', { value: 300, configurable: true, writable: true });
     const anchor = anchorAt(180, 204);

@@ -124,7 +124,8 @@ export function placeOverlay(r: Pick<DOMRect, 'top' | 'bottom' | 'left'>, vw: nu
   const roomBelow = vh - (r.bottom + GAP) - MARGIN;
   const roomAbove = r.top - GAP - MARGIN;
   const below = roomBelow >= WANT_BELOW || roomBelow >= roomAbove;
-  const maxHeight = Math.max(80, below ? roomBelow : roomAbove);
+  // Never more than the room (a floor would put the box back outside the viewport on a tiny window).
+  const maxHeight = Math.max(0, below ? roomBelow : roomAbove);
   return {
     placement: below ? 'below' : 'above',
     top: r.bottom + GAP,

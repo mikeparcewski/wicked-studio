@@ -138,19 +138,21 @@ export function ArtifactMorph({ artifactKey, title, projectId, docId, composerKe
       if (t !== null && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return false;
       return true;
     };
-    const fromPlayer = (e: KeyboardEvent): boolean => {
+    // A key on THIS artifact's own player (another artifact's player is the document's to answer).
+    const fromMyPlayer = (e: KeyboardEvent): boolean => {
       const t = e.target as HTMLElement | null;
-      return t !== null && typeof t.closest === 'function' && t.closest('video, audio') !== null;
+      return t !== null && typeof t.closest === 'function' && t.closest('video, audio') !== null
+        && section.current !== null && section.current.contains(t);
     };
-    // The document (bubble): every key that gets there — except from a player, which the capture
-    // listener below already answered.
+    // The document (bubble): every key that gets there — except from this artifact's player, which
+    // the capture listener below already answered.
     const onKey = (e: KeyboardEvent): void => {
-      if (!wants(e) || fromPlayer(e)) return;
+      if (!wants(e) || fromMyPlayer(e)) return;
       morph(shrink(size));
     };
-    // The artifact (capture): a key on the player, before its controls take it.
+    // The artifact (capture): a key on its player, before the player's controls take it.
     const onPlayerKey = (e: KeyboardEvent): void => {
-      if (!wants(e) || !fromPlayer(e)) return;
+      if (!wants(e) || !fromMyPlayer(e)) return;
       if (document.fullscreenElement) return;
       e.preventDefault();
       morph(shrink(size));
