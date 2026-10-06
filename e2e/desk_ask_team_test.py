@@ -187,6 +187,22 @@ with sync_playwright() as p:
           and len(posts) == 2 and posts[1]["chatId"] == chat_id and posts[1]["turn"] == 2,
           thread=t2, posts=posts, help_detail=help_detail, thinking=thinking)
 
+    # ── 3b. the Helpers sheet names the path's seats by role (ASK-S3) ─────────────
+    page.get_by_test_id("session-sheet-open").click()
+    page.locator('[data-testid="sheet-tab"]', has_text="Helpers").click()
+    try:
+        page.wait_for_function("() => document.querySelectorAll('[data-testid=\"sheet-helper-role\"]').length >= 2", timeout=10000)
+    except Exception:
+        fail("helpers-sheet", page.evaluate("() => [...document.querySelectorAll('[data-testid=\"sheet-helper-role\"]')].map((n) => n.innerText)"))
+    roles = page.evaluate("() => [...document.querySelectorAll('[data-testid=\"sheet-helper-role\"]')].map((n) => [n.dataset.role, n.innerText.replace(/\\s+/g, ' ').trim()])")
+    page.screenshot(path=str(SHOTS / "desk-ask-team-helpers.png"))
+    check("helpers-sheet",
+          roles[0] == ["pa", f"{pa} answers · picked at random"]
+          and roles[1][0] == "reviewer" and roles[1][1].startswith(f"{reviewer} reviews"),
+          roles=roles)
+    page.keyboard.press("Escape")
+    page.wait_for_timeout(200)
+
     # ── 4. the turn gate draws nothing ────────────────────────────────────────────
     check("session-waiting", t2["state"] == "waiting", state=t2["state"])
     page.goto(f"{origin}/", wait_until="networkidle")

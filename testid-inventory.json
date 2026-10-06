@@ -12,8 +12,8 @@
   "studioVersion": "0.6.1",
   "counts": {
     "files": 217,
-    "occurrences": 2467,
-    "static": 2162,
+    "occurrences": 2469,
+    "static": 2164,
     "dynamic": 79,
     "computed": 8
   },
@@ -9065,6 +9065,18 @@
     },
     {
       "testId": "sheet-helper-open",
+      "files": [
+        "src/components/sheets/ObjectSheet.tsx"
+      ]
+    },
+    {
+      "testId": "sheet-helper-role",
+      "files": [
+        "src/components/sheets/ObjectSheet.tsx"
+      ]
+    },
+    {
+      "testId": "sheet-helper-signin",
       "files": [
         "src/components/sheets/ObjectSheet.tsx"
       ]

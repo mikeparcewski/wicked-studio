@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api, downloadRunEvidence } from '../../api/client.js';
 import { executingOrd } from '../../api/run-state.js';
-import type { RosterSeat, SessionView } from '../../api/types.js';
+import type { ChatPathView, RosterSeat, SessionView } from '../../api/types.js';
 import { getDiagnostics, type Diagnostics } from '../../api/diagnostics.js';
 import { objectAttr, OBJECT_ACTIONS, primaryAction, RUN_SECTION_TABS, SHEET_TABS, type ObjectRef } from '../../board/objectActions.js';
 import { parseSessionId, runChatIdOf } from '../../board/sessionModel.js';
@@ -271,7 +271,7 @@ function SessionSheet({ r, tab: asked, runs, navigate }: { r: Extract<ObjectRef,
         </ul>
       )}
       {tab === 'steps' && (newest !== null ? <StepsList view={newest} /> : <p className="wk-session-grey">Nothing in this session is on this daemon.</p>)}
-      {tab === 'helpers' && <HelpersList runs={mine} />}
+      {tab === 'helpers' && <HelpersList runs={mine} sessionId={r.sessionId} onSignIn={() => setSheetTab('signins')} />}
       {tab === 'changes' && newest !== null && (
         <div data-testid="sheet-session-changes" className="wk-sheet-section wk-sheet-fill">
           <FileViewer runId={newest.session.id} defaultTab="diff" base="merge-base" onClose={() => setSheetTab('steps')} onUnsupported={() => setSheetTab('steps')} />
@@ -340,11 +340,45 @@ function EvidenceTab({ runId }: { runId: string }): React.ReactElement {
   );
 }
 
-function HelpersList({ runs }: { runs: readonly SessionView[] }): React.ReactElement {
+/** ASK-S3 (DES-ASK-TEAM-CHAT-001 §10): the session's ask path — who answers, who reviews, who helped —
+ *  read from `GET /chats/:id.path` under the capability. `null` when the session is not a chat, the
+ *  daemon predates paths, or the read failed (the run rows below still say who was given work). */
+function useAskPath(sessionId: string | null): ChatPathView | null {
+  const askOn = useCapabilities((s) => s.askPath);
+  const [path, setPath] = useState<{ id: string; path: ChatPathView | null } | null>(null);
+  useEffect(() => {
+    if (!askOn || sessionId === null) return;
+    let cancelled = false;
+    api.getChat(sessionId)
+      .then((d) => { if (!cancelled) setPath({ id: sessionId, path: (d as { path?: ChatPathView | null }).path ?? null }); })
+      .catch(() => { if (!cancelled) setPath({ id: sessionId, path: null }); });
+    return () => { cancelled = true; };
+  }, [askOn, sessionId]);
+  return askOn && path?.id === sessionId ? path.path : null;
+}
+
+function HelpersList({ runs, sessionId = null, onSignIn }: { runs: readonly SessionView[]; sessionId?: string | null; onSignIn?: () => void }): React.ReactElement {
   const rows = runs.flatMap((v) => helpersOf(v).map((cli) => ({ v, cli })));
+  const path = useAskPath(sessionId);
+  // The path's seats come first, by role — the PA (and how it was picked), the reviewer (or its
+  // absence, with the way to fix it), the helpers that answered a HELP: line.
+  const roles: Array<{ cli: string | null; role: string; key: string; action?: 'signin' }> = path === null ? [] : [
+    { key: 'pa', cli: path.pa, role: path.pa === null ? 'answers (not picked yet)' : `answers · ${path.selection === 'chosen' ? 'your pick' : 'picked at random'}` },
+    path.reviewer !== null
+      ? { key: 'reviewer', cli: path.reviewer, role: 'reviews — watches the answers, raises findings as quiet lines' }
+      : { key: 'reviewer', cli: null, role: `No reviewer — only ${path.pa ?? 'one helper'} is signed in.`, action: 'signin' },
+    ...path.helpers.filter((h) => h !== path.pa && h !== path.reviewer).map((h) => ({ key: `helper:${h}`, cli: h, role: 'helped — answered a question the primary helper asked' })),
+  ];
   return (
     <ul data-testid="sheet-helpers" className="wk-sheet-list">
-      {rows.length === 0 && <li className="wk-session-grey">No helper has been given work here yet.</li>}
+      {roles.map((x) => (
+        <li key={x.key} data-testid="sheet-helper-role" data-role={x.key.split(':')[0]} className="wk-sheet-line">
+          {x.cli !== null && <><b>{x.cli}</b>{' '}</>}
+          {x.role}
+          {x.action === 'signin' && onSignIn !== undefined && <>{' '}<button type="button" data-testid="sheet-helper-signin" onClick={onSignIn} className="wk-since-toggle">Sign in</button></>}
+        </li>
+      ))}
+      {rows.length === 0 && roles.length === 0 && <li className="wk-session-grey">No helper has been given work here yet.</li>}
       {rows.map(({ v, cli }) => {
         const live = executingOrd(v.session, v.units);
         const working = v.units.some((u) => u.ord === live && u.assigned_cli === cli);
