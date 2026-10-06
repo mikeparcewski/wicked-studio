@@ -54,6 +54,7 @@ const posts: Array<{ path: string; body: unknown }> = [];
 
 beforeEach(() => {
   posts.length = 0;
+  lastCard = null;
   resetDecisionsForTest();
   useCapabilities.setState({ loaded: true, runChatId: true, walkthroughRoots: false, askPath: true });
   useAskThreadStore.setState({ turns: {}, runByChat: {}, runs: new Set([RUN]), replySeq: {}, paByChat: {} });
