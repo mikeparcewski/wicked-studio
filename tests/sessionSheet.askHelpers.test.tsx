@@ -22,16 +22,16 @@ const VIEW = makeView({ id: RUN, status: 'awaiting_human', problem: 'why no trim
 let path: Record<string, unknown> | null = { runId: RUN, pa: 'claude', selection: 'random', reviewer: 'pi', helpers: ['codex', 'pi'], stepId: 'answer-1' };
 let chatReads = 0;
 let rosterSeats: Array<Record<string, unknown>> = [
-  { key: 'claude', display_name: 'Claude', binary: 'claude', enabled_for_council: true },
-  { key: 'pi', display_name: 'Pi', binary: 'pi', enabled_for_council: true },
+  { key: 'claude', display_name: 'Claude', binary: 'claude', enabled_for_council: true, signed_in: true },
+  { key: 'pi', display_name: 'Pi', binary: 'pi', enabled_for_council: true, signed_in: true },
 ];
 
 beforeEach(() => {
   chatReads = 0;
   path = { runId: RUN, pa: 'claude', selection: 'random', reviewer: 'pi', helpers: ['codex', 'pi'], stepId: 'answer-1' };
   rosterSeats = [
-    { key: 'claude', display_name: 'Claude', binary: 'claude', enabled_for_council: true },
-    { key: 'pi', display_name: 'Pi', binary: 'pi', enabled_for_council: true },
+    { key: 'claude', display_name: 'Claude', binary: 'claude', enabled_for_council: true, signed_in: true },
+    { key: 'pi', display_name: 'Pi', binary: 'pi', enabled_for_council: true, signed_in: true },
   ];
   useCapabilities.setState({ loaded: true, runChatId: true, walkthroughRoots: false, askPath: true });
   setCachedRoster(rosterSeats as never);
@@ -63,15 +63,22 @@ describe('the Helpers tab of an ask session', () => {
     expect(chatReads).toBe(1);
   });
 
-  it('no reviewer: with another seat signed in it simply has not attached; alone, the F1 words and Sign in (opens the Sign-ins tab)', async () => {
-    path = { runId: RUN, pa: 'claude', selection: 'chosen', reviewer: null, helpers: [], stepId: 'answer-1' };
+  it('no reviewer: with another seat signed in (or unknown) it simply has not attached; with every other seat signed OUT, the F1 words and Sign in (opens the Sign-ins tab)', async () => {
+    path = { runId: RUN, pa: 'claude', selection: 'chosen', reviewer: null, helpers: ['claude'], stepId: 'answer-1' };
     render(<ObjectSheet runs={[VIEW]} navigate={() => {}} needCount={0} />);
     await waitFor(() => expect(screen.queryAllByTestId('sheet-helper-role').length).toBe(2));
-    expect(texts()[0]).toBe('claude primary helper · your pick');
+    expect(texts()[0]).toBe('claude primary helper · your pick · also answered a question the primary helper asked');
     expect(texts()[1]).toBe('No reviewer attached.');
     expect(screen.queryByTestId('sheet-helper-signin')).toBeNull();
     cleanup();
-    rosterSeats = [{ key: 'claude', display_name: 'Claude', binary: 'claude', enabled_for_council: true }];
+    // Unknown sign-in state on the other seat: still the neutral words (no evidence either way).
+    rosterSeats = [{ key: 'claude', display_name: 'Claude', binary: 'claude', enabled_for_council: true, signed_in: true }, { key: 'pi', display_name: 'Pi', binary: 'pi', enabled_for_council: true, signed_in: null }];
+    setCachedRoster(rosterSeats as never);
+    render(<ObjectSheet runs={[VIEW]} navigate={() => {}} needCount={0} />);
+    await waitFor(() => expect(screen.queryAllByTestId('sheet-helper-role').length).toBe(2));
+    expect(texts()[1]).toBe('No reviewer attached.');
+    cleanup();
+    rosterSeats = [{ key: 'claude', display_name: 'Claude', binary: 'claude', enabled_for_council: true, signed_in: true }, { key: 'pi', display_name: 'Pi', binary: 'pi', enabled_for_council: true, signed_in: false }];
     setCachedRoster(rosterSeats as never);
     render(<ObjectSheet runs={[VIEW]} navigate={() => {}} needCount={0} />);
     await waitFor(() => expect(screen.queryAllByTestId('sheet-helper-role').length).toBe(2));
@@ -90,12 +97,15 @@ describe('the Helpers tab of an ask session', () => {
     expect(chatReads).toBe(0);
   });
 
-  it('a run-only session (the chat read answers 404) is silent: run rows alone, no error', async () => {
+  it('a run-only session (the chat read answers 404) is silent: the run rows stay, no role rows, no error', async () => {
     path = null;
+    useSheets.setState({ open: { ref: { kind: 'session', sessionId: `run:${RUN}` }, tab: 'helpers' }, pointed: null, stopping: {} });
     render(<ObjectSheet runs={[VIEW]} navigate={() => {}} needCount={0} />);
     await screen.findByTestId('sheet-helpers');
     await waitFor(() => expect(chatReads).toBe(1));
+    await new Promise((r) => setTimeout(r, 30)); // the 404 settled
     expect(screen.queryAllByTestId('sheet-helper-role')).toHaveLength(0);
+    expect(screen.getAllByTestId('sheet-helper-open').map((b) => b.getAttribute('data-cli'))).toStrictEqual(['claude']);
     expect(screen.queryByRole('alert')).toBeNull();
   });
 });

@@ -366,13 +366,18 @@ function HelpersList({ runs, sessionId = null, onSignIn, roster = null }: { runs
   // keeps that fact on its row). "Only <pa> is signed in" is said only when the roster shows no other
   // seat — otherwise the reviewer simply has not attached (codex on ASK-S3).
   const helped = new Set(path?.helpers ?? []);
-  const othersSignedIn = roster === null ? null : roster.filter((s) => s.key !== path?.pa).length;
+  const alsoHelped = ' · also answered a question the primary helper asked';
+  // F1's "only <pa> is signed in" needs EVIDENCE: the roster says the PA looks signed in and every other
+  // seat looks signed out (`signed_in` is the daemon's heuristic; unknown → the neutral words).
+  const onlyPa = roster !== null && path?.pa !== null && path?.pa !== undefined
+    && roster.some((s) => s.key === path.pa && s.signed_in !== false)
+    && roster.filter((s) => s.key !== path.pa).every((s) => s.signed_in === false);
   const roles: Array<{ cli: string | null; role: string; key: string; action?: 'signin'; runId?: string }> = path === null ? [] : [
-    { key: 'pa', cli: path.pa, runId: path.runId, role: path.pa === null ? 'primary helper (not picked yet)' : `primary helper · ${path.selection === 'chosen' ? 'your pick' : 'picked at random'}` },
+    { key: 'pa', cli: path.pa, runId: path.runId, role: path.pa === null ? 'primary helper (not picked yet)' : `primary helper · ${path.selection === 'chosen' ? 'your pick' : 'picked at random'}${helped.has(path.pa) ? alsoHelped : ''}` },
     path.reviewer !== null
-      ? { key: 'reviewer', cli: path.reviewer, runId: path.runId, role: `reviewer${helped.has(path.reviewer) ? ' · also answered a question the primary helper asked' : ''}` }
-      : othersSignedIn === 0
-        ? { key: 'reviewer', cli: null, role: `No reviewer — only ${path.pa ?? 'one helper'} is signed in.`, action: 'signin' }
+      ? { key: 'reviewer', cli: path.reviewer, runId: path.runId, role: `reviewer${helped.has(path.reviewer) ? alsoHelped : ''}` }
+      : onlyPa
+        ? { key: 'reviewer', cli: null, role: `No reviewer — only ${path.pa} is signed in.`, action: 'signin' }
         : { key: 'reviewer', cli: null, role: 'No reviewer attached.' },
     ...path.helpers.filter((h) => h !== path.pa && h !== path.reviewer).map((h) => ({ key: `helper:${h}`, cli: h, runId: path.runId, role: 'helped — answered a question the primary helper asked' })),
   ];
