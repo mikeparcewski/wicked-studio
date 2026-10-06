@@ -265,6 +265,15 @@ describe('§8 F13 — an older daemon', () => {
   });
 });
 
+describe('what the fold teaches the gate filter (codex r4 #2)', () => {
+  it('the hydrated step.claimed{answer-N} rows name the answer units, so a late join’s turn gate is known at its ord', async () => {
+    useAskThreadStore.setState({ answerOrds: {} });
+    page();
+    await waitFor(() => expect(screen.queryAllByTestId('ask-line').length).toBeGreaterThan(0));
+    await waitFor(() => expect(useAskThreadStore.getState().answerOrds[RUN]).toStrictEqual([1]));
+  });
+});
+
 describe('the stored creator fact (codex r3 #3)', () => {
   it('a run known to have accepted a creator step keeps its block and chain even while the fold is empty', async () => {
     useAskThreadStore.getState().markCreatorAccepted(RUN);

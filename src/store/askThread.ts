@@ -73,10 +73,14 @@ interface AskThreadState {
   answerOrds: Record<string, number[]>;
   sent: (chatId: string, turn: AskSent) => void;
   linkRun: (chatId: string, runId: string) => void;
-  /** The runs list arrived: a run launched from a chat whose every unit is an answer step
-   *  (`answer-N — …`, the engine's own step-id naming) is an ask path — so a fresh page (the Desk
-   *  after a reload) classifies its turn gate before the gate reconcile runs. */
+  /** The runs list arrived: a run launched from a chat whose units include an answer step
+   *  (`answer-N — …`, the engine's own step-id naming; a research or build step may sit between
+   *  them — codex r4 #2) is an ask path, and the answer units' ords are its turn-gate ords — so a
+   *  fresh page (the Desk after a reload) classifies its turn gate before the gate reconcile runs. */
   learnRuns: (views: ReadonlyArray<{ session: { id: string; chat_id?: string | null }; units: ReadonlyArray<{ description?: string | null; ord?: number }> }>) => void;
+  /** The session's team fold hydrated: its `step.claimed{answer-N}` rows name the answer units of a run
+   *  the chat already linked (a late join with a mixed plan — codex r4 #2). */
+  learnAnswerOrds: (runId: string, ords: readonly number[]) => void;
   /** The session's hydrate saw the accepted plan carry a creator step. POSITIVE knowledge only: an
    *  empty fold (a remount before the rows arrive) never resets it (codex r2 #1). */
   markCreatorAccepted: (runId: string) => void;
@@ -120,13 +124,21 @@ export const useAskThreadStore = create<AskThreadState>((set) => ({
       for (const v of views) {
         const chat = v.session.chat_id;
         if (typeof chat !== 'string' || chat === '' || v.units.length === 0) continue;
-        if (!v.units.every((u) => typeof u.description === 'string' && /^answer-\d+ — /.test(u.description))) continue;
+        const answers = v.units.filter((u) => typeof u.description === 'string' && /^answer-\d+ — /.test(u.description));
+        if (answers.length === 0) continue;
         if (!s.runs.has(v.session.id)) { runs ??= new Set(s.runs); runs.add(v.session.id); }
         if (s.runByChat[chat] !== v.session.id) { runByChat ??= { ...s.runByChat }; runByChat[chat] = v.session.id; }
-        for (const u of v.units) if (typeof u.ord === 'number') answerOrds = withOrd(answerOrds, v.session.id, u.ord);
+        for (const u of answers) if (typeof u.ord === 'number') answerOrds = withOrd(answerOrds, v.session.id, u.ord);
       }
       if (runs === null && runByChat === null && answerOrds === s.answerOrds) return s;
       return { ...(runs !== null ? { runs } : {}), ...(runByChat !== null ? { runByChat } : {}), ...(answerOrds !== s.answerOrds ? { answerOrds } : {}) };
+    }),
+  learnAnswerOrds: (runId, ords) =>
+    set((s) => {
+      if (!s.runs.has(runId)) return s;
+      let answerOrds = s.answerOrds;
+      for (const o of ords) answerOrds = withOrd(answerOrds, runId, o);
+      return answerOrds === s.answerOrds ? s : { answerOrds };
     }),
   markCreatorAccepted: (runId) =>
     set((s) => {

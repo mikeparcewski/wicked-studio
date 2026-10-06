@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import type { SessionView } from '../api/types.js';
 import { useConnectionStore } from '../store/connection.js';
+import { useCapabilities } from '../store/capabilities.js';
 import { choicesOf, recommendedOf, useGateStore } from '../store/gates.js';
 import { useElicitationStore } from '../store/elicitations.js';
 import { rememberWorkTitles } from '../board/gateActions.js';
@@ -122,6 +123,15 @@ export function useRuns(): { runs: SessionView[]; refresh: () => void; loaded: b
       cancelled = true;
     };
   }, [status, tick, setGate, reconcileGates, reconcileElicitations]);
+
+  // ASK-S1: `/health` may answer AFTER the first runs list (codex r4 #1) — when the capability lands,
+  // the list already in hand is classified and any gate cached meanwhile is reclassified.
+  const askOn = useCapabilities((s) => s.askPath);
+  useEffect(() => {
+    if (!askOn || !loaded) return;
+    useAskThreadStore.getState().learnRuns(runs);
+    useGateStore.getState().reclassifyAskGates();
+  }, [askOn, loaded, runs]);
 
   return { runs, refresh, loaded, error };
 }

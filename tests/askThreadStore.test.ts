@@ -72,6 +72,22 @@ describe('stale turn gates (codex r2 #2)', () => {
     expect(useAskThreadStore.getState().turnGates['r1']).toMatchObject({ ord: 4 });
   });
 
+  it('a plan that mixes research or build steps between the answers is still an ask path; only the answer units are turn-gate ords (codex r4 #2)', () => {
+    const st = useAskThreadStore.getState();
+    st.learnRuns([{ session: { id: 'r1', chat_id: 'c1' }, units: [{ description: 'answer-1 — q', ord: 1 }, { description: 'research-1 — check the migration', ord: 2 }, { description: 'answer-2 — and?', ord: 3 }] }]);
+    expect(useAskThreadStore.getState().runs.has('r1')).toBe(true);
+    expect(useAskThreadStore.getState().answerOrds['r1']).toStrictEqual([1, 3]);
+    // A chat-launched run with no answer step at all (a build from a chat) is not a path.
+    st.learnRuns([{ session: { id: 'r2', chat_id: 'c2' }, units: [{ description: 'build — fix it', ord: 1 }] }]);
+    expect(useAskThreadStore.getState().runs.has('r2')).toBe(false);
+    // The fold's claimed answer steps teach a linked run its ords; an unknown run teaches nothing.
+    st.linkRun('c3', 'r3');
+    st.learnAnswerOrds('r3', [2, 4]);
+    st.learnAnswerOrds('r-unknown', [1]);
+    expect(useAskThreadStore.getState().answerOrds['r3']).toStrictEqual([2, 4]);
+    expect(useAskThreadStore.getState().answerOrds['r-unknown']).toBeUndefined();
+  });
+
   it('a gate cached before the run was known as an ask path is reclassified once the runs list says so (codex r3 #2)', () => {
     // The frame came first (no run knowledge yet): it is drawn.
     useGateStore.getState().ingest(frame({ type: 'awaitingHuman', session: 'r1', ord: 1, gateKind: 'terminal', prompt: 'Approve the output of unit 1 (answer-1) — the plan is complete.' }));
@@ -262,16 +278,19 @@ describe('what the gate filter knows', () => {
 });
 
 describe('learning ask runs from the run DTOs (a fresh page)', () => {
-  it('a chat-launched run whose every unit is an answer step is an ask path; a build run from a chat is not; a run with no chat is not', () => {
+  it('a chat-launched run with an answer step is an ask path (one that continued into build included); a build run from a chat with no answer step is not; a run with no chat is not', () => {
     useAskThreadStore.getState().learnRuns([
-      { session: { id: 'r-ask', chat_id: 'c1' }, units: [{ description: 'answer-1 — why?' }, { description: 'answer-2 — and?' }] },
-      { session: { id: 'r-build', chat_id: 'c2' }, units: [{ description: 'answer-1 — why?' }, { description: 'build-1 — trim' }] },
-      { session: { id: 'r-solo', chat_id: null }, units: [{ description: 'answer-1 — why?' }] },
+      { session: { id: 'r-ask', chat_id: 'c1' }, units: [{ description: 'answer-1 — why?', ord: 1 }, { description: 'answer-2 — and?', ord: 2 }] },
+      { session: { id: 'r-continued', chat_id: 'c2' }, units: [{ description: 'answer-1 — why?', ord: 1 }, { description: 'build-1 — trim', ord: 2 }] },
+      { session: { id: 'r-build', chat_id: 'c4' }, units: [{ description: 'understand — read the code', ord: 1 }, { description: 'build-1 — trim', ord: 2 }] },
+      { session: { id: 'r-solo', chat_id: null }, units: [{ description: 'answer-1 — why?', ord: 1 }] },
       { session: { id: 'r-empty', chat_id: 'c3' }, units: [] },
     ]);
     const s = useAskThreadStore.getState();
-    expect([...s.runs]).toStrictEqual(['r-ask']);
-    expect(s.runByChat).toStrictEqual({ c1: 'r-ask' });
+    expect([...s.runs]).toStrictEqual(['r-ask', 'r-continued']);
+    expect(s.runByChat).toStrictEqual({ c1: 'r-ask', c2: 'r-continued' });
+    // The continued run's build unit is never a turn-gate ord: a gate there is drawn.
+    expect(s.answerOrds['r-continued']).toStrictEqual([1]);
   });
 });
 

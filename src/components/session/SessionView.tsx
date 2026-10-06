@@ -180,6 +180,15 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
   useEffect(() => {
     if (askRunId !== null && askPath.creatorAccepted) useAskThreadStore.getState().markCreatorAccepted(askRunId);
   }, [askRunId, askPath.creatorAccepted]);
+  // The fold's `step.claimed{answer-N}` rows name the answer units — the ords a turn gate may sit at —
+  // for a late join whose plan mixes research or build steps between the answers (codex r4 #2).
+  useEffect(() => {
+    if (askRunId === null) return;
+    const ords = askAnswerOrds(askRows);
+    if (ords.length === 0) return;
+    useAskThreadStore.getState().learnAnswerOrds(askRunId, ords);
+    useGateStore.getState().reclassifyAskGates();
+  }, [askRunId, askRows]);
   // What the thread and the fold know between them: the stored fact survives an empty fold (r3 #3).
   const creatorAccepted = askPath.creatorAccepted || (askRunId !== null && creatorAcceptedKnown[askRunId] === true);
   const lines = useMemo(() => {
