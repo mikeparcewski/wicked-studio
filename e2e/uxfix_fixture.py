@@ -4424,8 +4424,12 @@ def ask_runs_list() -> list:
                      for i in range(1, c["turns"] + 1)]
             r = _session_run(c["run_id"], c["status"] or "executing", c["first_text"], cid, c["started_s"], None, units)
             r["session"]["clis"] = list(c["eligible"])
-            for u in r["units"]:
+            for i, u in enumerate(r["units"], start=1):
                 u["assigned_cli"] = c["pa"]
+                # The engine's unit ords are 1-based (the proof frames: answer-1 is ord 1, the gate and the
+                # reply name it so); the ask run's units carry the ords its gates and replies use.
+                u["ord"] = i
+                u["id"] = f"{c['run_id']}:u{i}"
             out.append(r)
     return out
 

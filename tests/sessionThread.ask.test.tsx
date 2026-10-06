@@ -56,7 +56,7 @@ beforeEach(() => {
   chatBody = { chatId: 'chat-ask', seats: ['claude', 'codex'], scope: { kind: 'none' }, messages: TRANSCRIPT, path: { runId: RUN, pa: 'claude', selection: 'random', reviewer: 'codex', helpers: [], stepId: 'answer-1' } };
   teamBody = { runId: RUN, teamed: true, transport: 'bus', reason: null, planRev: 1, ended: false, units: [], rows: [ROWS.started, ROWS.scored, ROWS.accepted, ROWS.claimed, ROWS.reviewing, ROWS.completed, ROWS.finding] };
   useCapabilities.setState({ loaded: true, runChatId: true, walkthroughRoots: false, askPath: true });
-  useAskThreadStore.setState({ turns: {}, runByChat: {}, runs: new Set(), creatorAccepted: {}, turnGates: {}, replySeq: {}, paByChat: {} });
+  useAskThreadStore.setState({ turns: {}, runByChat: {}, runs: new Set(), creatorAccepted: {}, turnGates: {}, replySeq: {}, paByChat: {}, retiredByChat: {}, answerOrds: { [RUN]: [1] } });
   // The corpus is "the reply landed, the run waits at its turn gate": the gate store recorded that
   // turn gate when its frame arrived (the positive fact the thread acts on — codex #2).
   useAskThreadStore.getState().recordTurnGate(RUN, 1);
@@ -182,6 +182,8 @@ describe('rule 3 — the thread is the chain until a creator step is accepted', 
 
   it('the turn gate (def / terminal) draws nothing: no block, no gate — and it is RECORDED as the one positive fact', async () => {
     useAskThreadStore.getState().linkRun('chat-ask', RUN);
+    // The runs list named the plan's units (answer-1, answer-2): the gate at unit 2 is at an answer step.
+    useAskThreadStore.getState().learnRuns([{ session: { id: RUN, chat_id: 'chat-ask' }, units: [{ description: 'answer-1 — why no trim?', ord: 1 }, { description: 'answer-2 — and the test?', ord: 2 }] }]);
     act(() => useGateStore.getState().ingest({ type: 'awaitingHuman', session: RUN, ord: 2, prompt: 'Approve unit 2 before it runs.', gateKind: 'def' } as never));
     expect(useGateStore.getState().gates[RUN]).toBeUndefined();
     expect(useAskThreadStore.getState().turnGates[RUN]).toMatchObject({ ord: 2 });
@@ -249,5 +251,27 @@ describe('§8 F13 — an older daemon', () => {
     await screen.findByText(/greet\(\) does not trim its input/);
     expect(screen.getByTestId('session-ask-older').textContent).toContain('Older daemon: every helper answers at once');
     expect(screen.queryAllByTestId('ask-line')).toHaveLength(0);
+  });
+
+  it('without the capability nothing is a path, whatever the daemon’s chat carries: no fold, no quiet lines, the run’s block drawn (codex r3)', async () => {
+    useCapabilities.setState({ askPath: false });
+    // The chat detail still names a path (a capability read that failed open); the team rows exist.
+    page();
+    await screen.findByText(/greet\(\) does not trim its input/);
+    await screen.findByTestId('session-run');
+    expect(screen.queryAllByTestId('ask-line')).toHaveLength(0);
+    expect(screen.queryByTestId('session-ask-shape')).toBeNull();
+    expect(useAskThreadStore.getState().runByChat['chat-ask']).toBeUndefined();
+  });
+});
+
+describe('the stored creator fact (codex r3 #3)', () => {
+  it('a run known to have accepted a creator step keeps its block and chain even while the fold is empty', async () => {
+    useAskThreadStore.getState().markCreatorAccepted(RUN);
+    teamBody = { ...(teamBody as Record<string, unknown>), rows: [] };
+    page([{ ...ASK_RUN, session: { ...ASK_RUN.session, status: 'executing' } } as never]);
+    await screen.findByText(/greet\(\) does not trim its input/);
+    await screen.findByTestId('session-run');
+    expect(screen.queryAllByTestId('session-run')).toHaveLength(1);
   });
 });

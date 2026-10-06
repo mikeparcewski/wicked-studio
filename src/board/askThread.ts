@@ -406,10 +406,16 @@ const TURN_GATE_PROMPT = /^\s*Approve (?:unit \d+ before it runs|the output of u
 export interface AskGateKnowledge {
   runs: ReadonlySet<string>;
   creatorAccepted: Readonly<Record<string, boolean>>;
+  /** Per run: the unit ords of its ANSWER steps (learnt from the reply's `ord`, the runs list's
+   *  `answer-N` units and `step.claimed`). A gate is the turn gate only AT one of them — a gated
+   *  research step before any creator work is drawn, and so is a gate at an ord nobody has placed
+   *  (codex r3 #1: fail closed). */
+  answerOrds: Readonly<Record<string, readonly number[]>>;
 }
 
-export function isAskTurnGate(know: AskGateKnowledge, runId: string, gateKind: string | undefined, prompt?: string): boolean {
+export function isAskTurnGate(know: AskGateKnowledge, runId: string, gateKind: string | undefined, prompt?: string, ord?: number): boolean {
   if (!know.runs.has(runId) || know.creatorAccepted[runId] === true) return false;
+  if (ord === undefined || !(know.answerOrds[runId] ?? []).includes(ord)) return false;
   if (gateKind !== undefined) return TURN_GATE_KINDS.has(gateKind);
   return prompt !== undefined && TURN_GATE_PROMPT.test(prompt);
 }

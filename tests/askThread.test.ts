@@ -186,26 +186,32 @@ describe('askLines — the quiet lines, in row order, each expandable to its row
 });
 
 describe('isAskTurnGate — the turn gate draws nothing, and only the turn gate', () => {
-  const know = (creator = false) => ({ runs: new Set(['r-ask']), creatorAccepted: creator ? { 'r-ask': true } : {} });
-  it('a def/terminal gate on a creator-less ask run is the turn gate; a deliver, escalation or plan_approval gate is not; another run never is', () => {
-    expect(isAskTurnGate(know(), 'r-ask', 'def')).toBe(true);
-    expect(isAskTurnGate(know(), 'r-ask', 'terminal')).toBe(true);
-    expect(isAskTurnGate(know(), 'r-ask', 'deliver')).toBe(false);
-    expect(isAskTurnGate(know(), 'r-ask', 'escalation')).toBe(false);
-    expect(isAskTurnGate(know(), 'r-ask', 'plan_approval')).toBe(false);
-    expect(isAskTurnGate(know(), 'r-other', 'def')).toBe(false);
+  const know = (creator = false) => ({ runs: new Set(['r-ask']), creatorAccepted: creator ? { 'r-ask': true } : {}, answerOrds: { 'r-ask': [1, 2] } });
+  it('a def/terminal gate AT an answer step of a creator-less ask run is the turn gate; a deliver, escalation or plan_approval gate is not; another run never is', () => {
+    expect(isAskTurnGate(know(), 'r-ask', 'def', undefined, 2)).toBe(true);
+    expect(isAskTurnGate(know(), 'r-ask', 'terminal', undefined, 1)).toBe(true);
+    expect(isAskTurnGate(know(), 'r-ask', 'deliver', undefined, 1)).toBe(false);
+    expect(isAskTurnGate(know(), 'r-ask', 'escalation', undefined, 1)).toBe(false);
+    expect(isAskTurnGate(know(), 'r-ask', 'plan_approval', undefined, 2)).toBe(false);
+    expect(isAskTurnGate(know(), 'r-other', 'def', undefined, 1)).toBe(false);
+  });
+  it('a gate at a unit that is not an answer step (a gated research step), or at an ord nobody placed, is drawn (codex r3 #1)', () => {
+    expect(isAskTurnGate(know(), 'r-ask', 'def', undefined, 3)).toBe(false);
+    expect(isAskTurnGate(know(), 'r-ask', 'terminal', 'Approve the output of unit 3', 3)).toBe(false);
+    expect(isAskTurnGate(know(), 'r-ask', 'def')).toBe(false);
+    expect(isAskTurnGate({ ...know(), answerOrds: {} }, 'r-ask', 'terminal', undefined, 1)).toBe(false);
   });
   it('once a creator step is accepted every gate is real work’s and is drawn (codex #1)', () => {
-    expect(isAskTurnGate(know(true), 'r-ask', 'def')).toBe(false);
-    expect(isAskTurnGate(know(true), 'r-ask', 'terminal')).toBe(false);
+    expect(isAskTurnGate(know(true), 'r-ask', 'def', undefined, 1)).toBe(false);
+    expect(isAskTurnGate(know(true), 'r-ask', 'terminal', undefined, 1)).toBe(false);
   });
   it('a gate with no kind (a late join’s GET /runs/:id/gate) is classified by the engine’s own words (codex #3)', () => {
-    expect(isAskTurnGate(know(), 'r-ask', undefined, 'Approve unit 2 before it runs. The work: answer-2 — why?')).toBe(true);
-    expect(isAskTurnGate(know(), 'r-ask', undefined, 'Approve the output of unit 1 (answer-1) — the plan is complete.')).toBe(true);
-    expect(isAskTurnGate(know(), 'r-ask', undefined, 'Approve delivery before unit 2 runs. Pushes branch wicked/x to origin.')).toBe(false);
-    expect(isAskTurnGate(know(), 'r-ask', undefined, 'Approve plan rev 2 before unit 2 runs: build-1 → review.')).toBe(false);
-    expect(isAskTurnGate(know(), 'r-ask', undefined, 'The deliver phase refused: fatal: origin does not exist')).toBe(false);
-    expect(isAskTurnGate(know(), 'r-ask', undefined)).toBe(false);
+    expect(isAskTurnGate(know(), 'r-ask', undefined, 'Approve unit 2 before it runs. The work: answer-2 — why?', 2)).toBe(true);
+    expect(isAskTurnGate(know(), 'r-ask', undefined, 'Approve the output of unit 1 (answer-1) — the plan is complete.', 1)).toBe(true);
+    expect(isAskTurnGate(know(), 'r-ask', undefined, 'Approve delivery before unit 2 runs. Pushes branch wicked/x to origin.', 2)).toBe(false);
+    expect(isAskTurnGate(know(), 'r-ask', undefined, 'Approve plan rev 2 before unit 2 runs: build-1 → review.', 2)).toBe(false);
+    expect(isAskTurnGate(know(), 'r-ask', undefined, 'The deliver phase refused: fatal: origin does not exist', 2)).toBe(false);
+    expect(isAskTurnGate(know(), 'r-ask', undefined, undefined, 1)).toBe(false);
   });
 });
 

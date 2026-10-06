@@ -66,20 +66,24 @@ interface AskThreadState {
   replySeq: Record<string, number>;
   /** Per chat: the seat whose frames answer — the PA (§8 F6's "claude is still answering"). */
   paByChat: Record<string, string>;
-  /** Per chat: seats a re-pick retired — their late frames are not bubbles (codex r2 #6). */
+  /** Per chat: seats a re-pick retired — their late frames are not bubbles (codex r2 #6); a seat
+   *  picked again is un-retired (codex r3 #4). */
   retiredByChat: Record<string, string[]>;
+  /** Per run: the unit ords of its answer steps — the only ords a turn gate can sit at (codex r3 #1). */
+  answerOrds: Record<string, number[]>;
   sent: (chatId: string, turn: AskSent) => void;
   linkRun: (chatId: string, runId: string) => void;
   /** The runs list arrived: a run launched from a chat whose every unit is an answer step
    *  (`answer-N — …`, the engine's own step-id naming) is an ask path — so a fresh page (the Desk
    *  after a reload) classifies its turn gate before the gate reconcile runs. */
-  learnRuns: (views: ReadonlyArray<{ session: { id: string; chat_id?: string | null }; units: ReadonlyArray<{ description?: string | null }> }>) => void;
+  learnRuns: (views: ReadonlyArray<{ session: { id: string; chat_id?: string | null }; units: ReadonlyArray<{ description?: string | null; ord?: number }> }>) => void;
   /** The session's hydrate saw the accepted plan carry a creator step. POSITIVE knowledge only: an
    *  empty fold (a remount before the rows arrive) never resets it (codex r2 #1). */
   markCreatorAccepted: (runId: string) => void;
-  /** The runs list arrived: a recorded turn gate on a run that no longer waits is stale (a transition
-   *  missed across a reconnect) and goes, so an unknown gate that follows is drawn (codex r2 #2). */
-  reconcileTurnGates: (awaitingRunIds: readonly string[]) => void;
+  /** The runs list arrived: a recorded turn gate on a run that no longer waits, or that waits at a
+   *  different unit than the record's, is stale (a transition missed across a reconnect) and goes, so
+   *  the gate that follows is read back and drawn (codex r2 #2, r3). */
+  reconcileTurnGates: (views: ReadonlyArray<{ id: string; status: string; cursorOrd: number | null }>) => void;
   /** The gate store left this run's turn gate undrawn. */
   recordTurnGate: (runId: string, ord: number) => void;
   /** A real gate opened or the run moved: the recorded turn gate is spent. */
@@ -92,6 +96,10 @@ interface AskThreadState {
 function withRun(runs: ReadonlySet<string>, runId: string): ReadonlySet<string> {
   return runs.has(runId) ? runs : new Set([...runs, runId]);
 }
+function withOrd(map: Record<string, number[]>, runId: string, ord: number): Record<string, number[]> {
+  const cur = map[runId] ?? [];
+  return cur.includes(ord) ? map : { ...map, [runId]: [...cur, ord] };
+}
 
 export const useAskThreadStore = create<AskThreadState>((set) => ({
   turns: {},
@@ -102,20 +110,23 @@ export const useAskThreadStore = create<AskThreadState>((set) => ({
   replySeq: {},
   paByChat: {},
   retiredByChat: {},
+  answerOrds: {},
   learnRuns: (views) =>
     set((s) => {
       if (!useCapabilities.getState().askPath) return s;
       let runs: Set<string> | null = null;
       let runByChat: Record<string, string> | null = null;
+      let answerOrds = s.answerOrds;
       for (const v of views) {
         const chat = v.session.chat_id;
         if (typeof chat !== 'string' || chat === '' || v.units.length === 0) continue;
         if (!v.units.every((u) => typeof u.description === 'string' && /^answer-\d+ — /.test(u.description))) continue;
         if (!s.runs.has(v.session.id)) { runs ??= new Set(s.runs); runs.add(v.session.id); }
         if (s.runByChat[chat] !== v.session.id) { runByChat ??= { ...s.runByChat }; runByChat[chat] = v.session.id; }
+        for (const u of v.units) if (typeof u.ord === 'number') answerOrds = withOrd(answerOrds, v.session.id, u.ord);
       }
-      if (runs === null && runByChat === null) return s;
-      return { ...(runs !== null ? { runs } : {}), ...(runByChat !== null ? { runByChat } : {}) };
+      if (runs === null && runByChat === null && answerOrds === s.answerOrds) return s;
+      return { ...(runs !== null ? { runs } : {}), ...(runByChat !== null ? { runByChat } : {}), ...(answerOrds !== s.answerOrds ? { answerOrds } : {}) };
     }),
   markCreatorAccepted: (runId) =>
     set((s) => {
@@ -123,10 +134,12 @@ export const useAskThreadStore = create<AskThreadState>((set) => ({
       const turnGates = { ...s.turnGates }; delete turnGates[runId];
       return { creatorAccepted: { ...s.creatorAccepted, [runId]: true }, turnGates };
     }),
-  reconcileTurnGates: (awaiting) =>
+  reconcileTurnGates: (views) =>
     set((s) => {
-      const keep = new Set(awaiting);
-      const stale = Object.keys(s.turnGates).filter((id) => !keep.has(id));
+      const waiting = new Map(views.filter((v) => v.status === 'awaiting_human').map((v) => [v.id, v.cursorOrd]));
+      const stale = Object.entries(s.turnGates)
+        .filter(([id, rec]) => !waiting.has(id) || (typeof waiting.get(id) === 'number' && waiting.get(id) !== rec.ord))
+        .map(([id]) => id);
       if (stale.length === 0) return s;
       const turnGates = { ...s.turnGates }; for (const id of stale) delete turnGates[id];
       return { turnGates };
@@ -163,6 +176,12 @@ export const useAskThreadStore = create<AskThreadState>((set) => ({
         const p = ev?.payload ?? {};
         const runId = p['run_id'];
         if (typeof runId !== 'string' || !s.runs.has(runId)) return s;
+        if (ev?.event_type === 'wicked.team.step.claimed') {
+          const ord = p['ord'];
+          if (!isAnswerStep(p['step_id']) || typeof ord !== 'number') return s;
+          const answerOrds = withOrd(s.answerOrds, runId, ord);
+          return answerOrds === s.answerOrds ? s : { answerOrds };
+        }
         if (ev?.event_type === 'wicked.team.plan.accepted') {
           const steps = Array.isArray(p['steps']) ? (p['steps'] as Array<{ catalog?: unknown }>) : [];
           const creator = steps.some((st) => st.catalog === 'build' || st.catalog === 'produce');
@@ -178,10 +197,12 @@ export const useAskThreadStore = create<AskThreadState>((set) => ({
         if (retired === null) return s;
         const chats = Object.entries(s.runByChat).filter(([, r]) => r === runId).map(([c]) => c);
         if (chats.length === 0) return s;
+        const to = repicked ? str(p['to']) : null;
         const turns = { ...s.turns }; const retiredByChat = { ...s.retiredByChat };
         for (const c of chats) {
           turns[c] = (turns[c] ?? []).filter((t) => !(t.who === retired && t.pending));
-          if (repicked && !(retiredByChat[c] ?? []).includes(retired)) retiredByChat[c] = [...(retiredByChat[c] ?? []), retired];
+          // The seat picked now answers again, whatever an earlier re-pick retired (r3 #4).
+          if (repicked) retiredByChat[c] = [...(retiredByChat[c] ?? []).filter((x) => x !== retired && x !== to), retired];
         }
         return { turns, retiredByChat };
       }
@@ -234,7 +255,9 @@ export const useAskThreadStore = create<AskThreadState>((set) => ({
         ...pa,
         turns: { ...s.turns, [f.chat]: next },
         replySeq: { ...s.replySeq, [f.chat]: (s.replySeq[f.chat] ?? 0) + 1 },
-        ...(useCapabilities.getState().askPath && typeof f.run_id === 'string' && f.run_id !== '' ? { runByChat: { ...s.runByChat, [f.chat]: f.run_id }, runs: withRun(s.runs, f.run_id) } : {}),
+        ...(useCapabilities.getState().askPath && typeof f.run_id === 'string' && f.run_id !== ''
+          ? { runByChat: { ...s.runByChat, [f.chat]: f.run_id }, runs: withRun(s.runs, f.run_id), ...(typeof f.ord === 'number' ? { answerOrds: withOrd(s.answerOrds, f.run_id, f.ord) } : {}) }
+          : {}),
       };
     }),
   drop: (chatId) =>

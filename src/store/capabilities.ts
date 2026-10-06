@@ -1,5 +1,4 @@
 import { create } from 'zustand';
-import { api } from '../api/client.js';
 
 /**
  * The daemon's `GET /health.capabilities` the session surfaces read (S6a): read once at startup.
@@ -28,7 +27,9 @@ export const useCapabilities = create<CapabilitiesStore>((set, get) => ({
   askPath: false,
   load: () => {
     if (get().loaded) return Promise.resolve();
-    inflight ??= Promise.resolve().then(() => api.getHealth())
+    // The HTTP client is reached lazily: the stores that read a capability (gates, the ask thread)
+    // import this module, and a store must not pull the client into every importer's module graph.
+    inflight ??= import('../api/client.js').then(({ api }) => api.getHealth())
       .then((h) => {
         const caps = ((h as unknown as { capabilities?: Record<string, unknown> }).capabilities) ?? {};
         set({ loaded: true, runChatId: caps['runChatId'] === true, walkthroughRoots: caps['walkthroughRoots'] === true, askPath: caps['askPath'] === true });

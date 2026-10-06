@@ -155,7 +155,8 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
   const linkedRun = useAskThreadStore((s) => (chatId === null ? undefined : s.runByChat[chatId]));
   const askRunsKnown = useAskThreadStore((s) => s.runs);
   const creatorAcceptedKnown = useAskThreadStore((s) => s.creatorAccepted);
-  const askKnow = useMemo(() => ({ runs: askRunsKnown, creatorAccepted: creatorAcceptedKnown }), [askRunsKnown, creatorAcceptedKnown]);
+  const answerOrdsKnown = useAskThreadStore((s) => s.answerOrds);
+  const askKnow = useMemo(() => ({ runs: askRunsKnown, creatorAccepted: creatorAcceptedKnown, answerOrds: answerOrdsKnown }), [askRunsKnown, creatorAcceptedKnown, answerOrdsKnown]);
   const turnGates = useAskThreadStore((s) => s.turnGates);
   // A finished reply re-reads the transcript: its `seat`, `citations` and `decisions` records and
   // the path's reviewer / helpers land there; the live turn then yields to the record.
@@ -165,10 +166,11 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
     seenReply.current = replySeq;
     setChatTry((n) => n + 1);
   }, [replySeq]);
-  const askRunId = chatDetail?.path?.runId ?? linkedRun ?? null;
+  // Under the capability only: an older daemon's chat is a plain transcript, whatever it carries (F13; r3).
+  const askRunId = askPathOn ? chatDetail?.path?.runId ?? linkedRun ?? null : null;
   useEffect(() => {
-    if (chatId !== null && chatDetail?.path?.runId !== undefined) useAskThreadStore.getState().linkRun(chatId, chatDetail.path.runId);
-  }, [chatId, chatDetail?.path?.runId]);
+    if (askPathOn && chatId !== null && chatDetail?.path?.runId !== undefined) useAskThreadStore.getState().linkRun(chatId, chatDetail.path.runId);
+  }, [askPathOn, chatId, chatDetail?.path?.runId]);
   const askView = askRunId === null ? null : mine.find((v) => v.session.id === askRunId) ?? null;
   const { fold: askFold, error: askTeamError, retry: askTeamRetry } = useTeamFold(askRunId, askView === null ? '' : `${askView.session.status}:${askView.session.unit_ix}`);
   const askRows = useMemo(() => askFold?.rows ?? [], [askFold]);
@@ -178,6 +180,8 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
   useEffect(() => {
     if (askRunId !== null && askPath.creatorAccepted) useAskThreadStore.getState().markCreatorAccepted(askRunId);
   }, [askRunId, askPath.creatorAccepted]);
+  // What the thread and the fold know between them: the stored fact survives an empty fold (r3 #3).
+  const creatorAccepted = askPath.creatorAccepted || (askRunId !== null && creatorAcceptedKnown[askRunId] === true);
   const lines = useMemo(() => {
     const out = askLines(askRows);
     // §8 F7: the path ran un-teamed (no team transport) — said in the thread, since the chain line that
@@ -197,9 +201,9 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
   // creator step is accepted, when the run stopped, or when a gate the composer cannot answer is open
   // (a hand-over, an escalation, a plan approval). An UNKNOWN gate on a waiting run is shown, not
   // hidden: only a turn gate the gate store positively recorded keeps the block away (codex #2).
-  const askBlockHidden = askRunId !== null && !askPath.creatorAccepted && askView?.session.status !== 'failed'
+  const askBlockHidden = askRunId !== null && !creatorAccepted && askView?.session.status !== 'failed'
     && (askGate !== undefined
-      ? isAskTurnGate(askKnow, askRunId, askGate.gateKind, askGate.prompt)
+      ? isAskTurnGate(askKnow, askRunId, askGate.gateKind, askGate.prompt, askGate.ord)
       : askView?.session.status !== 'awaiting_human' || askRunId in turnGates);
 
   const badges = useMemo(() => needsByRun(needRows), [needRows]);
@@ -352,12 +356,14 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
   useLayoutEffect(() => {
     if (!ready) return;
     const el = scroller.current;
-    const top = useSessionDrafts.getState().scroll[sessionId] ?? 0;
-    // A first visit starts at the top: the scroller is reused across sessions (Copilot).
+    const saved = useSessionDrafts.getState().scroll[sessionId];
+    // A first visit starts at the top: the scroller is reused across sessions (Copilot). A SAVED place —
+    // the top included — means they were reading there: nothing follows until they scroll again (r3 #5).
+    const top = saved ?? 0;
     restore.current = { top, pending: top > 0 };
     if (el !== null) {
       scrollThread(el, top);
-      nearBottom.current = top === 0 && el.scrollHeight - el.clientHeight < 80;
+      nearBottom.current = saved === undefined && el.scrollHeight - el.clientHeight < 80;
       lastHeight.current = el.scrollHeight;
     }
   }, [sessionId, ready]);

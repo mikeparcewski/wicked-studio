@@ -13,7 +13,7 @@ import { useGateStore } from '../src/store/gates.js';
 const frame = (f: Record<string, unknown>): CoreEvent => f as unknown as CoreEvent;
 
 beforeEach(() => {
-  useAskThreadStore.setState({ turns: {}, runByChat: {}, runs: new Set(), creatorAccepted: {}, turnGates: {}, replySeq: {}, paByChat: {}, retiredByChat: {} });
+  useAskThreadStore.setState({ turns: {}, runByChat: {}, runs: new Set(), creatorAccepted: {}, turnGates: {}, replySeq: {}, paByChat: {}, retiredByChat: {}, answerOrds: {} });
   useCapabilities.setState({ loaded: true, askPath: true });
   useGateStore.setState({ gates: {}, approaching: {} });
 });
@@ -36,18 +36,62 @@ describe('under the capability only (codex r2 #3)', () => {
 });
 
 describe('stale turn gates (codex r2 #2)', () => {
-  it('reconcileTurnGates drops the record of a run that no longer waits', () => {
+  it('reconcileTurnGates drops the record of a run that no longer waits, or that waits at another unit than the record’s', () => {
     const st = useAskThreadStore.getState();
-    st.linkRun('c1', 'r1'); st.linkRun('c2', 'r2');
-    st.recordTurnGate('r1', 1); st.recordTurnGate('r2', 1);
-    st.reconcileTurnGates(['r2']);
+    st.linkRun('c1', 'r1'); st.linkRun('c2', 'r2'); st.linkRun('c3', 'r3'); st.linkRun('c4', 'r4');
+    st.recordTurnGate('r1', 1); st.recordTurnGate('r2', 1); st.recordTurnGate('r3', 1); st.recordTurnGate('r4', 1);
+    st.reconcileTurnGates([
+      { id: 'r2', status: 'awaiting_human', cursorOrd: 1 },   // still there: kept
+      { id: 'r3', status: 'awaiting_human', cursorOrd: 3 },   // waits at a LATER unit (a transition missed): stale
+      { id: 'r4', status: 'awaiting_human', cursorOrd: null }, // the cursor is unknown: kept (the gate read re-classifies it)
+      { id: 'r1', status: 'executing', cursorOrd: 2 },        // moved on: stale
+    ]);
+    const g = useAskThreadStore.getState().turnGates;
+    expect(g['r1']).toBeUndefined();
+    expect(g['r2']).toMatchObject({ ord: 1 });
+    expect(g['r3']).toBeUndefined();
+    expect(g['r4']).toMatchObject({ ord: 1 });
+  });
+
+  it('answer ords are learnt from the runs list, the reply’s ord and step.claimed — and a gate is the turn gate only at one of them (codex r3 #1)', () => {
+    const st = useAskThreadStore.getState();
+    st.learnRuns([{ session: { id: 'r1', chat_id: 'c1' }, units: [{ description: 'answer-1 — q', ord: 1 }, { description: 'answer-2 — more', ord: 2 }] }]);
+    expect(useAskThreadStore.getState().answerOrds['r1']).toStrictEqual([1, 2]);
+    st.ingest(frame({ type: 'chatReply', chat: 'c1', cliKey: 'claude', text: 'x', ok: true, turn_id: 't3', run_id: 'r1', ord: 3 }));
+    expect(useAskThreadStore.getState().answerOrds['r1']).toStrictEqual([1, 2, 3]);
+    st.ingest(frame({ type: 'teamEvent', event: { event_id: 30, event_type: 'wicked.team.step.claimed', payload: { run_id: 'r1', ord: 4, attempt: 0, by: 'claude', step_id: 'answer-4' } } }));
+    st.ingest(frame({ type: 'teamEvent', event: { event_id: 31, event_type: 'wicked.team.step.claimed', payload: { run_id: 'r1', ord: 5, attempt: 0, by: 'codex', step_id: 'research-1' } } }));
+    expect(useAskThreadStore.getState().answerOrds['r1']).toStrictEqual([1, 2, 3, 4]);
+    // The gate store: a def gate at unit 5 (the research step) is drawn; the terminal gate at unit 4 is the turn.
+    useGateStore.getState().ingest(frame({ type: 'awaitingHuman', session: 'r1', ord: 5, gateKind: 'def', prompt: 'Approve unit 5 before it runs' }));
+    expect(useGateStore.getState().gates['r1']).toMatchObject({ ord: 5 });
     expect(useAskThreadStore.getState().turnGates['r1']).toBeUndefined();
-    expect(useAskThreadStore.getState().turnGates['r2']).toMatchObject({ ord: 1 });
+    useGateStore.setState({ gates: {}, approaching: {} });
+    useGateStore.getState().ingest(frame({ type: 'awaitingHuman', session: 'r1', ord: 4, gateKind: 'terminal', prompt: 'Approve the output of unit 4' }));
+    expect(useGateStore.getState().gates['r1']).toBeUndefined();
+    expect(useAskThreadStore.getState().turnGates['r1']).toMatchObject({ ord: 4 });
+  });
+
+  it('a gate cached before the run was known as an ask path is reclassified once the runs list says so (codex r3 #2)', () => {
+    // The frame came first (no run knowledge yet): it is drawn.
+    useGateStore.getState().ingest(frame({ type: 'awaitingHuman', session: 'r1', ord: 1, gateKind: 'terminal', prompt: 'Approve the output of unit 1 (answer-1) — the plan is complete.' }));
+    expect(useGateStore.getState().gates['r1']).toMatchObject({ ord: 1 });
+    // The runs list arrives and classifies the run; the cached gate becomes the recorded turn gate.
+    useAskThreadStore.getState().learnRuns([{ session: { id: 'r1', chat_id: 'c1' }, units: [{ description: 'answer-1 — q', ord: 1 }] }]);
+    useGateStore.getState().reclassifyAskGates();
+    expect(useGateStore.getState().gates['r1']).toBeUndefined();
+    expect(useAskThreadStore.getState().turnGates['r1']).toMatchObject({ ord: 1 });
+    // Without the capability nothing is reclassified.
+    useCapabilities.setState({ askPath: false });
+    useGateStore.getState().ingest(frame({ type: 'awaitingHuman', session: 'r1', ord: 1, gateKind: 'terminal', prompt: 'Approve the output of unit 1' }));
+    useGateStore.getState().reclassifyAskGates();
+    expect(useGateStore.getState().gates['r1']).toMatchObject({ ord: 1 });
   });
 
   it('a real gate landing on the run clears its recorded turn gate — the live frame and the late-join read alike', () => {
     const st = useAskThreadStore.getState();
     st.linkRun('c1', 'r1');
+    useAskThreadStore.setState({ answerOrds: { r1: [1] } });
     st.recordTurnGate('r1', 1);
     useGateStore.getState().ingest(frame({ type: 'awaitingHuman', session: 'r1', ord: 2, gateKind: 'deliver', prompt: 'Deliver unit 2 as a PR?' }));
     expect(useAskThreadStore.getState().turnGates['r1']).toBeUndefined();
@@ -90,13 +134,19 @@ describe('a re-pick (codex r2 #6)', () => {
     const codex = useAskThreadStore.getState().turns['c1']!.filter((t) => t.who === 'codex');
     expect(codex).toHaveLength(1);
     expect(codex[0]).toMatchObject({ text: 'The answer.', pending: false });
-    // One seat, no re-pick: the attempt times out, the half-typed bubble goes, the same seat tries again.
+    // Picked again (codex → claude): claude answers again — a re-pick retires the seat it leaves, not forever (r3 #4).
+    st.sent('c1', { turnId: 't1b', text: 'and?', runId: 'r1', stepId: 'answer-1' });
+    st.ingest(frame({ type: 'teamEvent', event: { event_id: 22, event_type: 'wicked.team.path.repicked', payload: { run_id: 'r1', ord: 1, attempt: 1, from: 'codex', to: 'claude', reason: 'timed_out', pick_seq: 2 } } }));
+    expect(useAskThreadStore.getState().retiredByChat['c1']).toStrictEqual(['codex']);
+    st.ingest(frame({ type: 'chatReply', chat: 'c1', cliKey: 'claude', text: 'Back again.', ok: true, turn_id: 't1b', run_id: 'r1', ord: 1 }));
+    expect(useAskThreadStore.getState().turns['c1']!.filter((t) => t.who === 'claude')).toHaveLength(1);
+    // No re-pick (nobody else to pick): the attempt times out, the half-typed bubble goes, the same seat tries again.
     st.sent('c1', { turnId: 't2', text: 'again', runId: 'r1', stepId: 'answer-2' });
-    st.ingest(frame({ type: 'chatDelta', chat: 'c1', cliKey: 'codex', text: 'Hm', turn_id: 't2' }));
-    st.ingest(frame({ type: 'teamEvent', event: { event_id: 21, event_type: 'wicked.team.step.completed', payload: { run_id: 'r1', ord: 2, attempt: 0, by: 'codex', step_id: 'answer-2', status: 'timed_out' } } }));
-    expect(useAskThreadStore.getState().turns['c1']!.filter((t) => t.who === 'codex' && t.pending)).toHaveLength(0);
-    st.ingest(frame({ type: 'chatDelta', chat: 'c1', cliKey: 'codex', text: 'Second try', turn_id: 't2' }));
-    expect(useAskThreadStore.getState().turns['c1']!.filter((t) => t.who === 'codex' && t.pending)).toHaveLength(1);
+    st.ingest(frame({ type: 'chatDelta', chat: 'c1', cliKey: 'claude', text: 'Hm', turn_id: 't2' }));
+    st.ingest(frame({ type: 'teamEvent', event: { event_id: 21, event_type: 'wicked.team.step.completed', payload: { run_id: 'r1', ord: 2, attempt: 0, by: 'claude', step_id: 'answer-2', status: 'timed_out' } } }));
+    expect(useAskThreadStore.getState().turns['c1']!.filter((t) => t.who === 'claude' && t.pending)).toHaveLength(0);
+    st.ingest(frame({ type: 'chatDelta', chat: 'c1', cliKey: 'claude', text: 'Second try', turn_id: 't2' }));
+    expect(useAskThreadStore.getState().turns['c1']!.filter((t) => t.who === 'claude' && t.pending)).toHaveLength(1);
   });
 });
 

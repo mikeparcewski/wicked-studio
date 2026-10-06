@@ -77,13 +77,18 @@ export function useRuns(): { runs: SessionView[]; refresh: () => void; loaded: b
       rememberWorkTitles(fetched);
       // ASK-S1: ask paths are known before their gates reconcile, so the turn gate stays undrawn here too.
       useAskThreadStore.getState().learnRuns(fetched);
+      useGateStore.getState().reclassifyAskGates();
 
       const awaiting = fetched
         .filter((v) => v.session.status === 'awaiting_human')
         .map((v) => v.session.id);
       reconcileGates(awaiting);
-      // A recorded turn gate on a run that no longer waits is stale (codex r2 #2).
-      useAskThreadStore.getState().reconcileTurnGates(awaiting);
+      // A recorded turn gate on a run that no longer waits there is stale (codex r2 #2).
+      // (`unit_ix` is a 0-based index into the ord-ordered units — the cursor unit's ORD is what a gate names.)
+      useAskThreadStore.getState().reconcileTurnGates(fetched.map((v) => ({
+        id: v.session.id, status: v.session.status,
+        cursorOrd: [...v.units].sort((a, b) => a.ord - b.ord)[v.session.unit_ix]?.ord ?? null,
+      })));
       // Elicitations reconcile against ALL live runs, not just awaiting-human ones: a run can be
       // executing and still hold an open MCP question (DES-002 v0.25 — an absent run must bump so
       // an in-flight GET cannot resurrect a zombie prompt).

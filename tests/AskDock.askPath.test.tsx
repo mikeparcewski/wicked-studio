@@ -55,7 +55,7 @@ beforeEach(() => {
   clearCachedRoster();
   clearRepoCache();
   useProjectsStore.setState({ projects: [], loading: false, error: null } as never);
-  useAskThreadStore.setState({ turns: {}, runByChat: {}, runs: new Set(), replySeq: {}, paByChat: {} });
+  useAskThreadStore.setState({ turns: {}, runByChat: {}, runs: new Set(), retiredByChat: {}, answerOrds: {}, replySeq: {}, paByChat: {} });
   useCapabilities.setState({ loaded: true, runChatId: true, walkthroughRoots: false, askPath: true });
   setCachedRoster(ROSTER);
   listRepos.mockResolvedValue({ repos: [] });

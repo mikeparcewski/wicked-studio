@@ -1,4 +1,4 @@
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
@@ -33,11 +33,17 @@ const tops = new WeakMap<object, number>();
 const originals = ['scrollTop', 'scrollHeight', 'clientHeight'].map((k) => [k, Object.getOwnPropertyDescriptor(Element.prototype, k)] as const);
 const heightOf = (el: Element): number => [...el.querySelectorAll('[data-testid="session-turn"]')].reduce((n, t) => n + 200 + (t.textContent?.length ?? 0), 300);
 beforeEach(() => {
-  Object.defineProperty(Element.prototype, 'scrollTop', { configurable: true, get() { return tops.get(this) ?? 0; }, set(v: number) { tops.set(this, Math.max(0, Math.min(v, heightOf(this as Element) - 500))); } });
+  // Like a browser, a change of position fires `scroll` — asynchronously, after the assignment returns.
+  Object.defineProperty(Element.prototype, 'scrollTop', { configurable: true, get() { return tops.get(this) ?? 0; }, set(v: number) {
+    const next = Math.max(0, Math.min(v, heightOf(this as Element) - 500));
+    if (next === (tops.get(this) ?? 0)) return;
+    tops.set(this, next);
+    setTimeout(() => (this as Element).dispatchEvent(new Event('scroll')), 0);
+  } });
   Object.defineProperty(Element.prototype, 'scrollHeight', { configurable: true, get() { return heightOf(this as Element); } });
   Object.defineProperty(Element.prototype, 'clientHeight', { configurable: true, get() { return 500; } });
   useCapabilities.setState({ loaded: true, runChatId: true, walkthroughRoots: false, askPath: true });
-  useAskThreadStore.setState({ turns: {}, runByChat: {}, runs: new Set(), creatorAccepted: {}, turnGates: {}, replySeq: {}, paByChat: {} });
+  useAskThreadStore.setState({ turns: {}, runByChat: {}, runs: new Set(), creatorAccepted: {}, turnGates: {}, replySeq: {}, paByChat: {}, retiredByChat: {}, answerOrds: {} });
   useSessionDrafts.setState({ drafts: {}, scroll: {} });
   transcript = [QUESTION, REPLY];
   setCachedRoster([{ key: 'claude', display_name: 'Claude', binary: 'claude', enabled_for_council: true } as never]);
@@ -113,6 +119,39 @@ describe('the thread follows its newest line only from the bottom', () => {
     await screen.findByText(/both post the charge/);
     expect(el.scrollHeight - 500).toBeGreaterThanOrEqual(180);
     expect(el.scrollTop).toBe(180);
+    await new Promise((r) => setTimeout(r, 5)); // the thread's own scroll events have fired
     expect(useSessionDrafts.getState().scroll['chat-pay']).toBe(180); // the thread's own scrolls never saved themselves as their place
+  });
+
+  it('a saved place at the TOP is a place too: a returning visitor saved at 0 is not followed down (codex r3 #5)', async () => {
+    useSessionDrafts.getState().setScroll('chat-pay', 0);
+    transcript = [QUESTION];
+    render(<SessionPage sessionId="chat-pay" runs={[VIEW]} runsLoaded needRows={[]} navigate={() => {}} onAsk={() => {}} />);
+    await waitFor(() => expect(screen.queryAllByTestId('session-turn').length).toBe(1));
+    const el = screen.getByTestId('session-thread');
+    act(() => { useAskThreadStore.getState().ingest({ type: 'chatReply', chat: 'chat-pay', cliKey: 'claude', text: REPLY.text, ok: true, turn_id: 't1' } as never); });
+    await screen.findByText(/both post the charge/);
+    expect(el.scrollTop).toBe(0);
+  });
+
+  it('once the operator scrolls up, growth no longer follows, and their place is the one saved (codex r3 #6)', async () => {
+    transcript = [QUESTION];
+    render(<SessionPage sessionId="chat-pay" runs={[VIEW]} runsLoaded needRows={[]} navigate={() => {}} onAsk={() => {}} />);
+    await waitFor(() => expect(screen.queryAllByTestId('session-turn').length).toBe(1));
+    const el = screen.getByTestId('session-thread');
+    act(() => { useAskThreadStore.getState().ingest({ type: 'chatDelta', chat: 'chat-pay', cliKey: 'claude', text: 'The retry handler and the webhook both post the charge; the ledger shows two rows per order.', turn_id: 't1' } as never); });
+    await waitFor(() => expect(screen.queryAllByTestId('session-turn').length).toBe(2));
+    await new Promise((r) => setTimeout(r, 5));
+    expect(el.scrollTop).toBe(el.scrollHeight - 500); // following
+    // The operator scrolls up to read.
+    el.scrollTop = 20;
+    fireEvent.scroll(el);
+    await new Promise((r) => setTimeout(r, 5));
+    expect(useSessionDrafts.getState().scroll['chat-pay']).toBe(20);
+    act(() => { useAskThreadStore.getState().ingest({ type: 'chatDelta', chat: 'chat-pay', cliKey: 'claude', text: ' Each retry re-posts the same intent id, and the webhook posts it once more on confirmation.', turn_id: 't1' } as never); });
+    await screen.findByText(/once more on confirmation/);
+    await new Promise((r) => setTimeout(r, 5));
+    expect(el.scrollTop).toBe(20);
+    expect(useSessionDrafts.getState().scroll['chat-pay']).toBe(20);
   });
 });
