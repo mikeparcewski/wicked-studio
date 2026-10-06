@@ -12,12 +12,16 @@ import {
   stepOf,
   type DemoChapter,
   type DemoFinding,
+  type DemoStage,
   type DemoStep,
   type DemoView,
 } from '../api/demo.js';
-import type { SessionView } from '../api/types.js';
+import type { GateInfo, SessionView } from '../api/types.js';
+import { api } from '../api/client.js';
 import { modePath } from '../hooks/useRoute.js';
+import { useDisplayText } from '../hooks/useHomePath.js';
 import { gateOpenPath } from '../board/gateActions.js';
+import { plainRunTitle } from '../board/deskWords.js';
 import { Markdown } from './Markdown.js';
 import { Modal } from './Modal.js';
 import { OutboundDraft } from './OutboundDraft.js';
@@ -43,6 +47,41 @@ const POLL_MS = 2500;
 
 /** The review gate's line when the engine failed the review: there is nothing to accept. */
 const REVIEW_FAILED_LINE = 'The review failed the recording. Re-record what it found, or have it reviewed again.';
+/** studio#521: a gate that is not one of the demo's own three is open — the stage line says so. */
+const WAITING_LINE = 'The run is waiting on a decision before it goes on — the gate is below, with the way to the run.';
+/** The demo's own gates, each with its card below; any OTHER open gate gets the waiting card. */
+const OWN_GATE_STAGES = new Set<string>(['team_gate', 'plan_gate', 'review_gate']);
+/** A governance denial's prompt (crew: "Unit N was DENIED by input governance — a tool call was
+ *  refused…"): never one of the demo's own gates, whatever the stage reads. */
+const DENIAL_PROMPT = /\b(DENIED|denied|refused)\b/;
+/** A floor failure's prompt (crew: "Unit N failed its deterministic floor (…)"): an escalation too —
+ *  and, at a rejected review, the failed review's OWN gate (the engine's NOT PASS), which the review
+ *  card below answers. */
+const FLOOR_PROMPT = /\bfailed its\b|\bescalat/;
+
+/** The floor a failure names, from the engine's prompt: "Unit N failed its deterministic floor
+ *  (<floor>): …" → `<floor>` (`demo_review`, `demo_record`, `walkthrough_failed`); '' when the
+ *  prompt is not of that shape. The id is the only part read — the explanation after the colon may
+ *  mention a review (or anything) without being the review's gate. */
+function floorIdOf(prompt: string): string {
+  return /failed its deterministic floor \(([^)]+)\)/.exec(prompt)?.[1] ?? '';
+}
+
+/** studio#521 (codex): which open gate gets the waiting card — one the stage does not account for,
+ *  or an escalation that opened while the stage still reads as one of the demo's own gates (the
+ *  stage is derived from the run's files and can lag the gate). The one gate left to its own card is
+ *  the failed review's: at `review_gate` with the review rejected, a floor failure WHOSE FLOOR ID names
+ *  the review is that verdict gate; a governance denial or another unit's floor failure there is
+ *  still shown — neither is the review's own. */
+export function waitingGateOf(gate: GateInfo | null, stage: string, reviewRejected: boolean): GateInfo | null {
+  if (gate === null) return null;
+  if (!OWN_GATE_STAGES.has(stage)) return gate;
+  if (DENIAL_PROMPT.test(gate.prompt)) return gate;
+  if (!FLOOR_PROMPT.test(gate.prompt)) return null;
+  // The failed review's own verdict gate: the floor id names the review ("demo_review").
+  const reviewsOwn = stage === 'review_gate' && reviewRejected && /review/i.test(floorIdOf(gate.prompt));
+  return reviewsOwn ? null : gate;
+}
 
 const BTN =
   'rounded-md px-3 py-1.5 text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed';
@@ -81,7 +120,22 @@ export function DemoMode({ projectId, runId, runs, navigate }: DemoModeProps): R
 
 // ── Start ──────────────────────────────────────────────────────────────────────────────────────
 
+/**
+ * studio#520: a demo run's row in plain words. The daemon composes the run's `problem` from the brief
+ * — on crew 0.8.1 with the brief's absolute home path in it ("…follow the demo brief at
+ * <home>/.wicked/demos/<id>/BRIEF.md. Demo root: …") — so the row reads by what the demo is of (the
+ * first URL in the text) and falls back to the one title fold; the caller passes it through the
+ * home-path formatter either way.
+ */
+export function demoListTitle(problem: string): string {
+  const url = /https?:\/\/[^\s"'`<>)\]]+/.exec(problem);
+  // A URL at the end of a sentence carries the sentence's punctuation; the demo is not of that.
+  if (url !== null) return `Demo of ${url[0].replace(/[.,;:!?]+$/, '')}`;
+  return plainRunTitle(problem);
+}
+
 function DemoStart({ projectId, runs, navigate }: Omit<DemoModeProps, 'runId'>): React.ReactElement {
+  const showText = useDisplayText();
   const [url, setUrl] = useState('');
   const [audience, setAudience] = useState('');
   const [show, setShow] = useState('');
@@ -177,7 +231,8 @@ function DemoStart({ projectId, runs, navigate }: Omit<DemoModeProps, 'runId'>):
             className="flex items-center justify-between gap-3 px-4 py-3 text-left"
             style={CARD}
           >
-            <span className="truncate text-sm" style={{ color: 'var(--ink-high)' }}>{r.session.problem}</span>
+            {/* studio#520: by what the demo is of — never the composed problem (it carries the brief's home path). */}
+            <span className="truncate text-sm" style={{ color: 'var(--ink-high)' }} title={showText(demoListTitle(r.session.problem))}>{showText(demoListTitle(r.session.problem))}</span>
             <span className="shrink-0 text-xs font-mono" style={{ color: 'var(--ink-muted)' }}>{r.session.status.replace('_', ' ')}</span>
           </button>
         ))}
@@ -194,13 +249,53 @@ function DemoRun({ runId, projectId, navigate }: { runId: string; projectId: str
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [answered, setAnswered] = useState<string | null>(null);
+  // studio#521: the run's open gate, read beside the demo view — `GET /runs/:id/gate` is 404 when
+  // none is open. A gate the demo's stage does not account for (an escalation on a denied tool call,
+  // a deliver gate) is shown, not hidden behind "the team is scoping".
+  // The gate and the view are read by the same refresh (codex rounds 1–8): each carries the
+  // refresh's sequence, and each lands only in order — an answer older than the one already on screen
+  // is dropped (a slow earlier gate read must not resurrect a gate a later read saw answered; an older
+  // demo read must not step the view back), while an answer that is merely slow still lands (a daemon
+  // slower than the poll interval must still load the page, and a gate endpoint consistently slower
+  // than the demo one must still show its gate). What invalidates a gate on screen is the run MOVING
+  // ON: a view whose stage changed drops the gate until a gate read at least that fresh lands, so an
+  // answered gate never shows as pending beside a view that already moved past it; with the stage
+  // unchanged, the gate read on screen is still consistent with the view and stays.
+  const [gateRead, setGateRead] = useState<{ seq: number; gate: GateInfo | null }>({ seq: 0, gate: null });
+  const refreshSeq = useRef(0);
+  const landedGateSeq = useRef(0);
+  const landedViewSeq = useRef(0);
+  const lastStage = useRef<DemoStage | null>(null);
+  // Gate reads started at or before this sequence were started before the run was seen to move on:
+  // barred from landing (the first read started afterwards answers).
+  const gateBarSeq = useRef(0);
 
   const refresh = useCallback(async (): Promise<void> => {
+    const seq = ++refreshSeq.current;
+    const landGate = (gate: GateInfo | null): void => {
+      if (seq < landedGateSeq.current || seq <= gateBarSeq.current) return;
+      landedGateSeq.current = seq;
+      setGateRead({ seq, gate });
+    };
+    // Beside the demo read, never awaited by it: a gate answer must not hold the page's `busy`.
+    void api.getGate(runId).then((g) => landGate(g), () => landGate(null));
     try {
       const v = await getDemo(runId);
+      if (seq < landedViewSeq.current) return; // an older read landing after a newer one: nothing to say
+      landedViewSeq.current = seq;
+      if (lastStage.current !== null && v.stage !== lastStage.current) {
+        // The run moved on: every gate read started so far — later refreshes' reads still in flight
+        // included — was started before this was known and may name an answered gate. Drop what is
+        // shown and bar all of them from landing; the first read started after this answers.
+        gateBarSeq.current = refreshSeq.current;
+        landedGateSeq.current = Math.max(landedGateSeq.current, refreshSeq.current);
+        setGateRead({ seq: refreshSeq.current, gate: null });
+      }
+      lastStage.current = v.stage;
       setView(v);
       setLoadError(null);
     } catch (e) {
+      if (seq < landedViewSeq.current) return;
       setLoadError(e instanceof Error ? e.message : String(e));
     }
   }, [runId]);
@@ -247,8 +342,9 @@ function DemoRun({ runId, projectId, navigate }: { runId: string; projectId: str
   }
 
   const step = stepOf(view.stage);
+  const waitingGate = waitingGateOf(gateRead.gate, view.stage, view.review.rejected);
   return (
-    <div data-testid="demo-run" data-stage={view.stage} className="mx-auto flex w-full flex-col gap-4 px-6 py-5" style={{ maxWidth: '1180px' }}>
+    <div data-testid="demo-run" data-stage={view.stage} data-waiting={waitingGate !== null ? 'gate' : undefined} className="mx-auto flex w-full flex-col gap-4 px-6 py-5" style={{ maxWidth: '1180px' }}>
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex min-w-0 flex-col gap-1">
           <button type="button" className="self-start text-xs" style={{ color: 'var(--ink-muted)' }} onClick={() => navigate(modePath(projectId, 'video'))}>
@@ -264,7 +360,7 @@ function DemoRun({ runId, projectId, navigate }: { runId: string; projectId: str
         <Stepper step={step} failed={view.stage === 'failed'} />
       </header>
       <p data-testid="demo-stage-line" className="text-sm" style={{ color: 'var(--ink-body)', margin: 0 }}>
-        {view.stage === 'review_gate' && view.review.rejected ? REVIEW_FAILED_LINE : STAGE_LINE[view.stage]}
+        {waitingGate !== null ? WAITING_LINE : view.stage === 'review_gate' && view.review.rejected ? REVIEW_FAILED_LINE : STAGE_LINE[view.stage]}
       </p>
       {answered !== null && (
         <p data-testid="demo-answered" className="text-xs font-mono" style={{ color: 'var(--status-done)', margin: 0 }}>
@@ -278,6 +374,9 @@ function DemoRun({ runId, projectId, navigate }: { runId: string; projectId: str
       )}
       <div className="grid gap-4" style={{ gridTemplateColumns: 'minmax(0,1fr) 300px', alignItems: 'start' }}>
         <main className="flex min-w-0 flex-col gap-4">
+          {waitingGate !== null && (
+            <WaitingGate gate={waitingGate} projectId={projectId} runId={view.runId} navigate={navigate} />
+          )}
           {view.stage === 'team_gate' && (
             <TeamGate view={view} busy={busy} act={act} projectId={projectId} navigate={navigate} />
           )}
@@ -376,6 +475,26 @@ function SendBack({ busy, act, runId, placeholder }: { busy: boolean; act: Act; 
         <button type="button" className={BTN} style={QUIET} onClick={() => setOpen(false)}>Cancel</button>
       </div>
     </div>
+  );
+}
+
+/** studio#521: a gate the demo's stage does not account for — the run is `awaiting_human` on it. The
+ *  prompt's head says what; the run's page (the gate in view) is where it is answered. */
+function WaitingGate({ gate, projectId, runId, navigate }: { gate: GateInfo; projectId: string; runId: string; navigate: (to: string) => void }): React.ReactElement {
+  const showText = useDisplayText();
+  const head = gate.prompt.trim().split(/\n/)[0] ?? '';
+  return (
+    <GateCard testId="demo-waiting-gate" title={`Waiting on you: step ${gate.ord} needs a decision before the demo goes on`}>
+      <p data-testid="demo-waiting-gate-prompt" className="text-sm" style={{ color: 'var(--ink-body)', margin: 0, overflowWrap: 'anywhere' }}>
+        {showText(head.length > 280 ? `${head.slice(0, 280).trimEnd()}…` : head)}
+      </p>
+      <div className="flex flex-wrap items-center gap-2">
+        <button type="button" data-testid="demo-open-run-gate" className={BTN} style={PRIMARY} onClick={() => navigate(gateOpenPath(projectId, runId))}>
+          Open the run →
+        </button>
+        <span className="text-xs" style={{ color: 'var(--ink-muted)' }}>Approve, send back or stop it there; the demo picks up from the answer.</span>
+      </div>
+    </GateCard>
   );
 }
 
