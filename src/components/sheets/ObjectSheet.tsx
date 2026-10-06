@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api, downloadRunEvidence } from '../../api/client.js';
 import { executingOrd } from '../../api/run-state.js';
-import type { RosterSeat, SessionView } from '../../api/types.js';
+import type { ChatPathView, RosterSeat, SessionView } from '../../api/types.js';
 import { getDiagnostics, type Diagnostics } from '../../api/diagnostics.js';
 import { objectAttr, OBJECT_ACTIONS, primaryAction, RUN_SECTION_TABS, SHEET_TABS, type ObjectRef } from '../../board/objectActions.js';
 import { parseSessionId, runChatIdOf } from '../../board/sessionModel.js';
@@ -271,7 +271,7 @@ function SessionSheet({ r, tab: asked, runs, navigate }: { r: Extract<ObjectRef,
         </ul>
       )}
       {tab === 'steps' && (newest !== null ? <StepsList view={newest} /> : <p className="wk-session-grey">Nothing in this session is on this daemon.</p>)}
-      {tab === 'helpers' && <HelpersList runs={mine} />}
+      {tab === 'helpers' && <HelpersList runs={mine} sessionId={r.sessionId} onSignIn={() => setSheetTab('signins')} roster={roster} />}
       {tab === 'changes' && newest !== null && (
         <div data-testid="sheet-session-changes" className="wk-sheet-section wk-sheet-fill">
           <FileViewer runId={newest.session.id} defaultTab="diff" base="merge-base" onClose={() => setSheetTab('steps')} onUnsupported={() => setSheetTab('steps')} />
@@ -340,11 +340,60 @@ function EvidenceTab({ runId }: { runId: string }): React.ReactElement {
   );
 }
 
-function HelpersList({ runs }: { runs: readonly SessionView[] }): React.ReactElement {
+/** ASK-S3 (DES-ASK-TEAM-CHAT-001 §10): the session's ask path — who answers, who reviews, who helped —
+ *  read from `GET /chats/:id.path` under the capability. `null` when the session is not a chat, the
+ *  daemon predates paths, or the read failed (the run rows below still say who was given work). */
+function useAskPath(sessionId: string | null): ChatPathView | null {
+  const askOn = useCapabilities((s) => s.askPath);
+  const [path, setPath] = useState<{ id: string; path: ChatPathView | null } | null>(null);
+  useEffect(() => {
+    if (!askOn || sessionId === null) return;
+    let cancelled = false;
+    api.getChat(sessionId)
+      .then((d) => { if (!cancelled) setPath({ id: sessionId, path: (d as { path?: ChatPathView | null }).path ?? null }); })
+      .catch(() => { if (!cancelled) setPath({ id: sessionId, path: null }); });
+    return () => { cancelled = true; };
+  }, [askOn, sessionId]);
+  return askOn && path?.id === sessionId ? path.path : null;
+}
+
+function HelpersList({ runs, sessionId = null, onSignIn, roster = null }: { runs: readonly SessionView[]; sessionId?: string | null; onSignIn?: () => void; roster?: RosterSeat[] | null }): React.ReactElement {
   const rows = runs.flatMap((v) => helpersOf(v).map((cli) => ({ v, cli })));
+  const path = useAskPath(sessionId);
+  // The path's seats come first, by ROLE — what the wire records, nothing about what a seat is doing
+  // right now (the path view carries identities, not liveness): the primary helper and how it was
+  // picked, the reviewer, the helpers that answered a HELP: line (a seat that is also the reviewer
+  // keeps that fact on its row). "Only <pa> is signed in" is said only when the roster shows no other
+  // seat — otherwise the reviewer simply has not attached (codex on ASK-S3).
+  const helped = new Set(path?.helpers ?? []);
+  const alsoHelped = ' · also answered a question the primary helper asked';
+  // F1's "only <pa> is signed in" needs EVIDENCE: the roster says the PA looks signed in and every other
+  // seat looks signed out (`signed_in` is the daemon's heuristic; unknown → the neutral words).
+  const onlyPa = roster !== null && path?.pa !== null && path?.pa !== undefined
+    && roster.some((s) => s.key === path.pa && s.signed_in !== false)
+    && roster.filter((s) => s.key !== path.pa).every((s) => s.signed_in === false);
+  const roles: Array<{ cli: string | null; role: string; key: string; action?: 'signin'; runId?: string }> = path === null ? [] : [
+    { key: 'pa', cli: path.pa, runId: path.runId, role: path.pa === null ? 'primary helper (not picked yet)' : `primary helper · ${path.selection === 'chosen' ? 'your pick' : 'picked at random'}${helped.has(path.pa) ? alsoHelped : ''}` },
+    path.reviewer !== null
+      ? { key: 'reviewer', cli: path.reviewer, runId: path.runId, role: `reviewer${helped.has(path.reviewer) ? alsoHelped : ''}` }
+      : onlyPa
+        ? { key: 'reviewer', cli: null, role: `No reviewer — only ${path.pa} is signed in.`, action: 'signin' }
+        : { key: 'reviewer', cli: null, role: 'No reviewer attached.' },
+    ...path.helpers.filter((h) => h !== path.pa && h !== path.reviewer).map((h) => ({ key: `helper:${h}`, cli: h, runId: path.runId, role: 'helped — answered a question the primary helper asked' })),
+  ];
   return (
     <ul data-testid="sheet-helpers" className="wk-sheet-list">
-      {rows.length === 0 && <li className="wk-session-grey">No helper has been given work here yet.</li>}
+      {roles.map((x) => {
+        const ref: ObjectRef | null = x.cli !== null && x.runId !== undefined ? { kind: 'helper', runId: x.runId, cli: x.cli } : null;
+        return (
+          <li key={x.key} data-testid="sheet-helper-role" data-role={x.key.split(':')[0]} className="wk-sheet-line" {...(ref !== null ? { 'data-object': objectAttr(ref) } : {})}>
+            {x.cli !== null && ref !== null && <><button type="button" data-testid="sheet-helper-open" data-cli={x.cli} onClick={() => useSheets.setState({ open: { ref, tab: SHEET_TABS.helper[0]!.id } })} className="wk-since-toggle">{x.cli}</button>{' '}</>}
+            {x.role}
+            {x.action === 'signin' && onSignIn !== undefined && <>{' '}<button type="button" data-testid="sheet-helper-signin" onClick={onSignIn} className="wk-since-toggle">Sign in</button></>}
+          </li>
+        );
+      })}
+      {rows.length === 0 && roles.length === 0 && <li className="wk-session-grey">No helper has been given work here yet.</li>}
       {rows.map(({ v, cli }) => {
         const live = executingOrd(v.session, v.units);
         const working = v.units.some((u) => u.ord === live && u.assigned_cli === cli);
