@@ -208,6 +208,9 @@ describe('isAskTurnGate — the turn gate draws nothing, and only the turn gate'
   it('a gate with no kind (a late join’s GET /runs/:id/gate) is classified by the engine’s own words (codex #3)', () => {
     expect(isAskTurnGate(know(), 'r-ask', undefined, 'Approve unit 2 before it runs. The work: answer-2 — why?', 2)).toBe(true);
     expect(isAskTurnGate(know(), 'r-ask', undefined, 'Approve the output of unit 1 (answer-1) — the plan is complete.', 1)).toBe(true);
+    // The engine's terminal gate, as the LIVE proof read it back from GET /runs/:id/gate.
+    expect(isAskTurnGate(know(), 'r-ask', undefined, 'Approve completion after the final phase (unit 1): answer-1 — # Chat scope\n\nThis directory is the scratch root…', 1)).toBe(true);
+    expect(isAskTurnGate(know(), 'r-ask', undefined, 'Approve completion after the final phase (unit 3): research-1 — …', 3)).toBe(false); // not an answer unit
     expect(isAskTurnGate(know(), 'r-ask', undefined, 'Approve delivery before unit 2 runs. Pushes branch wicked/x to origin.', 2)).toBe(false);
     expect(isAskTurnGate(know(), 'r-ask', undefined, 'Approve plan rev 2 before unit 2 runs: build-1 → review.', 2)).toBe(false);
     expect(isAskTurnGate(know(), 'r-ask', undefined, 'The deliver phase refused: fatal: origin does not exist', 2)).toBe(false);

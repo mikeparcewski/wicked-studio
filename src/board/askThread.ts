@@ -396,10 +396,13 @@ export function askAnswerOrds(rows: readonly TeamRow[]): number[] {
 /** Gate kinds that are the ask's TURN gate (the engine's def / terminal HumanConfirm on an answer
  *  step): the composer is the answer, nothing is drawn as a gate (§4.8; codex #3). */
 const TURN_GATE_KINDS: ReadonlySet<string> = new Set(['def', 'terminal']);
-/** The engine's own words for a def / terminal gate (the ones `stepQuestion` reads too) — how a gate
- *  reconciled on a late join (`GET /runs/:id/gate` carries no kind) is told apart from a hand-over,
- *  an escalation or a plan approval (codex on ASK-S1 #3). */
-const TURN_GATE_PROMPT = /^\s*Approve (?:unit \d+ before it runs|the output of unit \d+)\b/i;
+/** The engine's own words for a def / terminal gate (`actor.rs`: "Approve unit N before it runs: …",
+ *  "Approve the output of unit N (<step>) before unit M runs: …", and the terminal "Approve completion
+ *  after the final phase (unit N): <step> — …") — how a gate reconciled on a late join
+ *  (`GET /runs/:id/gate` carries no kind) is told apart from a hand-over, an escalation or a plan
+ *  approval (codex on ASK-S1 #3). The terminal wording was learnt from the LIVE proof: a reload of a
+ *  real ask drew its turn gate until it was added. */
+const TURN_GATE_PROMPT = /^\s*Approve (?:unit \d+ before it runs|the output of unit \d+(?!\d)|completion after the final phase \(unit \d+\))/i;
 
 /** What the gate filter knows about ask runs: which runs are paths, and which have accepted a creator
  *  step — after that every gate is real work's and is drawn (codex on ASK-S1 #1). */

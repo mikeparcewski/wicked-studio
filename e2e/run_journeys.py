@@ -74,9 +74,11 @@ LISTS = {"behaviour": BEHAVIOUR, "desk": DESK}
 # Journeys that need a live daemon or bridge: a real wicked-crew daemon (seed_surfaces,
 # studio_standalone, test_feature_live) or a sibling wicked-interactive checkout
 # (interactive_wire_contract). Operator-run only; never part of --all or CI.
-LIVE = ["seed_surfaces", "studio_standalone", "test_feature_live", "interactive_wire_contract", "live_walkthrough_deliver"]
+LIVE = ["seed_surfaces", "studio_standalone", "test_feature_live", "interactive_wire_contract", "live_walkthrough_deliver", "live_ask_path"]
 
 TIMEOUT_S = 240
+# LIVE journeys wait for real model turns: their own budget (seconds) when run through this runner.
+TIMEOUTS: dict[str, int] = {"live_ask_path": 900}
 
 
 def all_journeys() -> list[str]:
@@ -129,11 +131,11 @@ def run(name: str) -> tuple[bool, float, str]:
     start = time.monotonic()
     try:
         r = subprocess.run([sys.executable, script.name], cwd=E2E, env=env,
-                           capture_output=True, text=True, timeout=TIMEOUT_S)
+                           capture_output=True, text=True, timeout=TIMEOUTS.get(name, TIMEOUT_S))
         ok, out = r.returncode == 0, r.stdout + r.stderr
     except subprocess.TimeoutExpired as e:
         text = lambda b: b.decode(errors="replace") if isinstance(b, bytes) else (b or "")
-        ok, out = False, text(e.stdout) + text(e.stderr) + f"\n[timed out after {TIMEOUT_S}s]"
+        ok, out = False, text(e.stdout) + text(e.stderr) + f"\n[timed out after {TIMEOUTS.get(name, TIMEOUT_S)}s]"
     return ok, time.monotonic() - start, out
 
 
