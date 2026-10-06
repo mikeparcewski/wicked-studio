@@ -12,8 +12,8 @@
   "studioVersion": "0.6.1",
   "counts": {
     "files": 217,
-    "occurrences": 2466,
-    "static": 2161,
+    "occurrences": 2467,
+    "static": 2162,
     "dynamic": 79,
     "computed": 8
   },
@@ -2715,6 +2715,12 @@
       "testId": "desk-rail-badge",
       "files": [
         "src/board/objectActions.ts",
+        "src/components/desk/SessionRail.tsx"
+      ]
+    },
+    {
+      "testId": "desk-rail-brand",
+      "files": [
         "src/components/desk/SessionRail.tsx"
       ]
     },
