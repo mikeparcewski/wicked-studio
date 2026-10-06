@@ -3,6 +3,7 @@ import type { SessionView } from '../../api/types.js';
 import type { ChainModel } from '../../board/chainModel.js';
 import { commitGateDecision, IDLE_GATE_ACTION, useGateActionStore, type GateAnswer } from '../../board/gateActions.js';
 import { deliverCardOf, deliverLine, gateInstance, proposalCard, type ProposalKind } from '../../board/proposalCard.js';
+import type { AskProposal } from '../../board/askThread.js';
 import { deliverAcceptance } from '../../board/checkState.js';
 import type { RunAcceptanceSummary } from '../../api/types.js';
 import { useGateStore } from '../../store/gates.js';
@@ -24,11 +25,15 @@ import { dropGateDraft, gateDraftFor, gateDraftPlan, usePlanDrafts } from '../..
  *  deliver unit then says so (`proposalCard`'s late-join evidence). */
 const lastKinds = new Map<string, ProposalKind>();
 
-export function ProposalCard({ view, chain, acceptance = null }: {
+export function ProposalCard({ view, chain, acceptance = null, ask = null, onBringBack }: {
   view: SessionView;
   chain: ChainModel;
   /** WT-U2 / WT-W3: crew's acceptance summary for the run — the deliver card's one line, verbatim. */
   acceptance?: RunAcceptanceSummary | null;
+  /** ASK-S2 (§4.7): the ask path's pending proposal to build — Continue in Build / Not now / End. */
+  ask?: AskProposal | null;
+  /** ASK-S2: "Bring it back" prefills the composer with the operator's own words, so the PA re-proposes. */
+  onBringBack?: (() => void) | undefined;
 }): React.ReactElement | null {
   const runId = view.session.id;
   const accept = deliverAcceptance(acceptance);
@@ -36,7 +41,7 @@ export function ProposalCard({ view, chain, acceptance = null }: {
   const action = useGateActionStore((s) => s.byGate[runId] ?? IDLE_GATE_ACTION);
   const [ui, setUi] = useState<{ dismissed: string | null; confirming: string | null }>({ dismissed: null, confirming: null });
   const sending = useRef(false);
-  const card = proposalCard({ view, gate, chain, action, ui, lastKind: lastKinds.get(runId) ?? null });
+  const card = proposalCard({ view, gate, chain, action, ui, lastKind: lastKinds.get(runId) ?? null, ask });
   const asked = card !== null && gate !== undefined ? card.kind : null;
   useEffect(() => { if (asked !== null) lastKinds.set(runId, asked); }, [runId, asked]);
   // The one "Are you sure?" takes focus when it opens; Cancel gives it back to Deliver (Copilot).
@@ -82,7 +87,27 @@ export function ProposalCard({ view, chain, acceptance = null }: {
     if (card.kind === 'deliver' && card.state !== 'confirm') { setUi((u) => ({ ...u, confirming: instance })); return; }
     answer();
   };
-  const notNow = (): void => setUi({ dismissed: instance, confirming: null });
+  const notNow = (): void => {
+    if (ask === null) { setUi({ dismissed: instance, confirming: null }); return; }
+    // §4.7 Not now = approve-with-amend whose steps are the ACCEPTED rev's: the proposal was never
+    // accepted, so nothing accepted is removed; the floor stays the accepted rev's (empty). Posted
+    // through the one decision path; the card then keeps the proposal with "Bring it back".
+    if (sending.current || gate === undefined) return;
+    sending.current = true;
+    commitGateDecision(runId, { approve: true, plan: { steps: ask.acceptedSteps.map((s) => ({ catalog: s.catalog, id: s.id })) } },
+      { notice: { preview: 'The conversation goes on; nothing is built. The proposal stays in the thread.', sent: 'Not now — the conversation goes on; nothing was built.' } })
+      .then((outcome) => { if (outcome === 'sent') setUi({ dismissed: instance, confirming: null }); })
+      .catch(() => { /* the refusal is in the shared action state, which the card renders */ })
+      .finally(() => { sending.current = false; });
+  };
+  // §4.7 End = reject: the path is cancelled, the conversation is over.
+  const end = (): void => {
+    if (sending.current || gate === undefined) return;
+    sending.current = true;
+    commitGateDecision(runId, { approve: false }, { notice: { preview: 'The conversation ends; the helpers stand down.', sent: 'Ended the conversation.' } })
+      .catch(() => { /* said in the shared action state */ })
+      .finally(() => { sending.current = false; });
+  };
 
   return (
     <div ref={cardRef} tabIndex={-1} data-testid="session-proposal" data-run-id={runId} data-kind={card.kind} data-state={card.state} className={`wk-prop wk-prop--${card.state}`}>
@@ -111,6 +136,7 @@ export function ProposalCard({ view, chain, acceptance = null }: {
                 <button ref={goRef} type="button" data-testid="session-proposal-go" data-draft={draft !== null ? 'true' : 'false'} onClick={go} className="wk-prop-btn wk-prop-btn--primary">{draft !== null ? 'Approve with these changes' : card.act}</button>
                 {draft !== null && <button type="button" data-testid="session-proposal-drop-draft" onClick={() => dropGateDraft(runId, draft.gateKey)} className="wk-prop-btn wk-prop-btn--ghost">Drop the changes</button>}
                 <button type="button" data-testid="session-proposal-not-now" onClick={notNow} className="wk-prop-btn wk-prop-btn--ghost">Not now</button>
+                {card.end !== undefined && <button type="button" data-testid="session-proposal-end" onClick={end} className="wk-prop-btn wk-prop-btn--ghost">{card.end}</button>}
               </div>
             </>
           )}
@@ -149,6 +175,7 @@ export function ProposalCard({ view, chain, acceptance = null }: {
                 <button ref={goRef} type="button" data-testid="session-proposal-go" data-draft={draft !== null ? 'true' : 'false'} onClick={go} className="wk-prop-btn wk-prop-btn--primary">{draft !== null ? 'Approve with these changes' : card.act}</button>
                 {draft !== null && <button type="button" data-testid="session-proposal-drop-draft" onClick={() => dropGateDraft(runId, draft.gateKey)} className="wk-prop-btn wk-prop-btn--ghost">Drop the changes</button>}
                 <button type="button" data-testid="session-proposal-not-now" onClick={notNow} className="wk-prop-btn wk-prop-btn--ghost">Not now</button>
+                {card.end !== undefined && <button type="button" data-testid="session-proposal-end" onClick={end} className="wk-prop-btn wk-prop-btn--ghost">{card.end}</button>}
               </div>
             </>
           )}
@@ -157,7 +184,7 @@ export function ProposalCard({ view, chain, acceptance = null }: {
       {card.state === 'no' && (
         <p className="wk-prop-status">
           <span data-testid="session-proposal-no" className="wk-prop-live">{card.text}</span>
-          <button type="button" data-testid="session-proposal-bring-back" onClick={() => setUi({ dismissed: null, confirming: null })} className="wk-since-toggle">Bring it back</button>
+          <button type="button" data-testid="session-proposal-bring-back" onClick={() => { if (ask !== null) onBringBack?.(); else setUi({ dismissed: null, confirming: null }); }} className="wk-since-toggle">Bring it back</button>
         </p>
       )}
     </div>

@@ -12,8 +12,8 @@
   "studioVersion": "0.6.1",
   "counts": {
     "files": 217,
-    "occurrences": 2473,
-    "static": 2167,
+    "occurrences": 2476,
+    "static": 2169,
     "dynamic": 79,
     "computed": 8
   },
@@ -8732,6 +8732,12 @@
       ]
     },
     {
+      "testId": "session-ask-proposal",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
       "testId": "session-ask-shape",
       "files": [
         "src/components/session/SessionView.tsx"
@@ -8835,6 +8841,12 @@
     },
     {
       "testId": "session-proposal-drop-draft",
+      "files": [
+        "src/components/session/ProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "session-proposal-end",
       "files": [
         "src/components/session/ProposalCard.tsx"
       ]

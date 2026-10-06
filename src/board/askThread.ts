@@ -19,7 +19,7 @@ import { blockOf } from './chainModel.js';
  */
 
 export type AskLineKind =
-  | 'who' | 'reviewer' | 'finding' | 'help' | 'timeout' | 'repick' | 'restart' | 'refused' | 'proposal' | 'ended' | 'transport';
+  | 'who' | 'reviewer' | 'finding' | 'help' | 'timeout' | 'repick' | 'restart' | 'refused' | 'ended' | 'transport';
 
 export interface AskLine {
   /** Stable per row (`a:<event_id>`); a finding or help line keeps the id of the row that opened it. */
@@ -49,6 +49,8 @@ export interface AskShapeStep {
   /** answer · research · check · build · deliver · … — the operator's word for the step. */
   label: string;
   addedBy: string | null;
+  /** `owner` as the plan names it (`pa` by default; `team` = a member seat does the step). */
+  owner: string | null;
 }
 
 export interface AskPath {
@@ -110,7 +112,7 @@ function shapeOf(steps: unknown): AskShapeStep[] {
     const catalog = str(b['catalog']);
     const id = str(b['id']) ?? catalog;
     if (catalog === null || id === null) continue;
-    out.push({ id, catalog, label: askShapeLabel({ catalog, id, gate: b['gate'], owner: b['owner'] }), addedBy: str(b['added_by']) });
+    out.push({ id, catalog, label: askShapeLabel({ catalog, id, gate: b['gate'], owner: b['owner'] }), addedBy: str(b['added_by']), owner: str(b['owner']) });
   }
   return out;
 }
@@ -316,14 +318,7 @@ export function askLines(rows: readonly TeamRow[]): AskLine[] {
         }
         break;
       }
-      case 'plan.proposed': {
-        // A PA change that adds creator work: S2 draws the proposal card; the line names it.
-        if (b['kind'] !== 'change') break;
-        const steps = shapeOf(b['steps']);
-        if (!steps.some((s) => s.label === 'build')) break;
-        out.push({ key, at: t, kind: 'proposal', text: `${by ?? path.pa ?? 'the helper'} proposes to build: ${steps.map((s) => s.label).join(' → ')}`, detail: list(b['touch']).map((x) => `touches ${x}`), tone: 'quiet', ord });
-        break;
-      }
+      // `plan.proposed{kind:change}` with creator steps is the PROPOSAL CARD (S2, `askProposal`), not a line.
       case 'plan.refused': {
         const words = refusedWords(str(b['reason']) ?? 'refused', paNow ?? path.pa);
         out.push({ key, at: t, kind: 'refused', text: words.text, detail: [str(b['reason']) ?? ''].filter(Boolean), tone: 'problem', ord, ...(words.action !== undefined ? { action: words.action } : {}) });
@@ -365,6 +360,129 @@ export function askThinking(rows: readonly TeamRow[]): Array<{ ord: number; by: 
     else if (type(r) === 'step.completed') open.delete(ord);
   }
   return [...open.values()];
+}
+
+/** The PA's pending proposal to BUILD (§4.7 Continue in Build): the latest `plan.proposed{kind:change}`
+ *  that adds a creator step and has been neither accepted nor refused — with the band and the blast
+ *  radius its `path.scored{basis:intent}` gave it, the floor's additions off `gate.opened{plan_approval}`,
+ *  and the ACCEPTED rev's steps (what "Not now" re-approves, so nothing accepted is removed). */
+export interface AskProposal {
+  proposalId: string;
+  by: string | null;
+  at: number;
+  /** The proposed steps, labelled; `floor: true` on a step the floor added; `owner` as proposed
+   *  (`team` = a member seat does it, T2 §8.8 Work). */
+  steps: Array<{ id: string; label: string; floor: boolean; owner: string | null }>;
+  touch: string[];
+  band: string | null;
+  score: number | null;
+  dependents: number | null;
+  /** `gate.opened{plan_approval}.reason === 'first_creator'`: the crossing-into-work row (K2b). */
+  firstCreator: boolean;
+  /** The gate is open (the operator's answer is awaited). */
+  gateOpen: boolean;
+  /** The plan gate's answer (`gate.decided.decision`): `allow` = Continue, `human_amended` = Not now,
+   *  `reject` = End; `null` while open. */
+  decision: 'allow' | 'human_amended' | 'reject' | null;
+  /** The `gate.decided` row's time (Unix millis); `null` while open. */
+  decidedAt: number | null;
+  /** The plan gate bound to this proposal (`gate.opened.gate_id`): a later gate on the run is another
+   *  question and never reopens this card (codex on ASK-S2 #1) — unless it asks about the SAME plan
+   *  rev after an answer the engine refused (an edit it could not take): that reopen rebinds. */
+  gateId: string | null;
+  /** The plan rev the bound gate asked about (`gate.opened.plan_rev`). */
+  planRev: number | null;
+  /** The ACCEPTED rev's steps as of the newest `plan.accepted` — what Not now re-approves (#5). */
+  acceptedSteps: Array<{ catalog: string; id: string }>;
+}
+
+export function askProposal(rows: readonly TeamRow[]): AskProposal | null {
+  let accepted: Array<{ catalog: string; id: string }> = [];
+  let pending: AskProposal | null = null;
+  for (const r of rows) {
+    const b = r.payload;
+    switch (type(r)) {
+      case 'plan.accepted': {
+        const steps = Array.isArray(b['steps']) ? (b['steps'] as unknown[]) : [];
+        accepted = steps.flatMap((s) => {
+          if (typeof s !== 'object' || s === null) return [];
+          const x = s as Bag;
+          const catalog = str(x['catalog']); const id = str(x['id']) ?? catalog;
+          return catalog === null || id === null ? [] : [{ catalog, id }];
+        });
+        if (pending !== null && str(b['proposal_id']) === pending.proposalId) pending = null;
+        else if (pending !== null) pending.acceptedSteps = accepted; // the accepted rev advanced under the card (#5)
+        break;
+      }
+      case 'plan.refused':
+        if (pending !== null && str(b['proposal_id']) === pending.proposalId) pending = null;
+        break;
+      case 'plan.proposed': {
+        if (b['kind'] !== 'change') break;
+        const shape = shapeOf(b['steps']);
+        if (!shape.some((s) => s.label === 'build')) break; // a change without creator work is not this card's
+        pending = {
+          proposalId: str(b['proposal_id']) ?? `a:${r.event_id}`, by: str(b['by']), at: at(r),
+          steps: shape.map((s) => ({ id: s.id, label: s.label, floor: s.addedBy === 'floor', owner: s.owner })),
+          touch: list(b['touch']), band: null, score: null, dependents: null, firstCreator: false, gateOpen: false, decision: null, decidedAt: null, gateId: null, planRev: null,
+          acceptedSteps: accepted,
+        };
+        break;
+      }
+      case 'path.scored': {
+        if (pending === null || str(b['score_source']) !== `intent:${pending.proposalId}`) break;
+        pending.score = num(b['score']);
+        const signals = b['signals'];
+        pending.dependents = typeof signals === 'object' && signals !== null ? num((signals as Bag)['dependents']) : null;
+        break;
+      }
+      case 'plan.revised': {
+        // The floor's fill of THIS proposal (`proposal_id` names it); a step is "required" only when the
+        // row says the floor added it — unknown provenance is left unmarked (#6).
+        if (pending === null || str(b['proposal_id']) !== pending.proposalId) break;
+        const added = shapeOf(b['added']);
+        for (const s of added) if (!pending.steps.some((x) => x.id === s.id)) pending.steps.push({ id: s.id, label: s.label, floor: s.addedBy === 'floor', owner: s.owner });
+        pending.band = str(b['to_band']) ?? pending.band;
+        break;
+      }
+      case 'gate.opened': {
+        // The plan gate binds to the proposal awaiting one. A bound or decided proposal takes a later
+        // gate only when it asks about the same plan rev again — the engine reopened after refusing the
+        // answer (an edit it could not take); any other gate is another question (#1, r2).
+        if (pending === null || b['kind'] !== 'plan_approval') break;
+        const planRev = num(b['plan_rev']);
+        const reopen = pending.gateId !== null && planRev !== null && planRev === pending.planRev && !pending.gateOpen;
+        if (pending.gateId !== null && !reopen) break;
+        pending.gateId = str(b['gate_id']) ?? `a:${r.event_id}`;
+        pending.planRev = planRev;
+        pending.decision = null;
+        pending.decidedAt = null;
+        pending.band = str(b['band']) ?? pending.band;
+        pending.firstCreator = b['reason'] === 'first_creator';
+        pending.gateOpen = true;
+        const diff = b['diff'];
+        for (const id of typeof diff === 'object' && diff !== null ? list((diff as Bag)['added']) : []) {
+          if (!pending.steps.some((x) => x.id === id)) pending.steps.push({ id, label: askShapeLabel({ catalog: id, id }), floor: false, owner: null });
+        }
+        break;
+      }
+      case 'gate.decided': {
+        if (pending === null || b['kind'] !== 'plan_approval' || pending.gateId === null || str(b['gate_id']) !== pending.gateId) break;
+        pending.gateOpen = false;
+        pending.decidedAt = at(r);
+        // The wire's human decisions are `human_approved` / `human_amended` / `human_rejected`
+        // (api-types TeamGateDecidedPayload); the engine's own `allow` / `deny` are read the same way.
+        const d = b['decision'];
+        pending.decision = d === 'human_approved' || d === 'allow' ? 'allow'
+          : d === 'human_amended' ? 'human_amended'
+            : d === 'human_rejected' || d === 'reject' || d === 'deny' ? 'reject' : pending.decision;
+        break;
+      }
+      default:
+        break;
+    }
+  }
+  return pending;
 }
 
 /** When each answer step completed (`step.completed.at` per ord): the thread places a line marked

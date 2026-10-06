@@ -808,6 +808,8 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
 .wk-ask-line-detail { margin: 4px 0 0 18px; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 2px; color: var(--ink-body); white-space: pre-wrap; overflow-wrap: anywhere; }
 .wk-ask-typing { display: flex; align-items: center; gap: 6px; }
 .wk-session-shape { padding: 4px 52px 0; font-size: var(--text-xs); }
+.wk-session-ask-proposal { max-width: 720px; }
+.wk-session-ask-proposal .wk-prop { margin: 0; }
 .wk-session-run { background: var(--surface-card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 8px 14px; min-width: 0; }
 .wk-session-run-head { margin: 0 0 6px; display: flex; align-items: center; gap: 8px; min-width: 0; }
 .wk-session-run-title { flex: 1 1 auto; min-width: 0; font-weight: var(--weight-semi); color: var(--ink-high); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
