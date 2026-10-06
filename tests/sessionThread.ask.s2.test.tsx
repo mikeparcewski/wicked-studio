@@ -18,7 +18,7 @@ const { useAskThreadStore } = await import('../src/store/askThread.js');
 const { useTeamPlanStore } = await import('../src/store/teamPlan.js');
 const { useGateStore } = await import('../src/store/gates.js');
 const { useGateActionStore } = await import('../src/board/gateActions.js');
-const { flushDecisionsForTest, resetDecisionsForTest } = await import('../src/board/undoQueue.js');
+const { flushDecisionsForTest, resetDecisionsForTest, useUndoQueue } = await import('../src/board/undoQueue.js');
 const { useSessionDrafts } = await import('../src/store/sessionDrafts.js');
 const { setCachedRoster } = await import('../src/store/rosterCache.js');
 const { makeUnit, makeView } = await import('./factories.js');
@@ -96,7 +96,18 @@ async function card(): Promise<HTMLElement> {
 async function gatePosts(n: number): Promise<Array<{ path: string; body: unknown }>> {
   await waitFor(async () => {
     await flushDecisionsForTest();
-    expect(posts.filter((p) => p.path === `/runs/${RUN}/gate`)).toHaveLength(n);
+    const got = posts.filter((p) => p.path === `/runs/${RUN}/gate`);
+    if (got.length !== n) {
+      // studio#532 diagnostics: what the one decision path saw when nothing was posted.
+      const diag = {
+        results: useUndoQueue.getState().results.map((r) => `${r.kind}: ${r.text}`),
+        pending: useUndoQueue.getState().pending.map((p) => `${p.verb} ${p.runIds.join(',')}`),
+        byGate: useGateActionStore.getState().byGate[RUN] ?? null,
+        gate: useGateStore.getState().gates[RUN] ?? null,
+        allPosts: posts.map((p) => p.path),
+      };
+      expect(got, JSON.stringify(diag)).toHaveLength(n);
+    }
   }, { timeout: 4000 });
   return posts.filter((p) => p.path === `/runs/${RUN}/gate`);
 }
