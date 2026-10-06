@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client.js';
+import { useCapabilities } from '../store/capabilities.js';
 import { getDiagnostics } from '../api/diagnostics.js';
 import { apiStatus, apiWire } from '../api/errors.js';
 import type {
@@ -408,6 +409,7 @@ export function GroupChat({
   const [seatErrors, setSeatErrors] = useState<Record<string, string>>({});
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState('');
+  const askPathOn = useCapabilities((s) => s.askPath);
   const [openError, setOpenError] = useState<string | null>(null);
   /** The refused open's HTTP status (crew#502 refusals render by code); null when none / not a wire refusal. */
   const [openErrorStatus, setOpenErrorStatus] = useState<number | null>(null);
@@ -1910,17 +1912,20 @@ export function GroupChat({
             {chatCostLabel(cost)}
           </span>
         )}
-        {/* §7.9 conversation→action: visible once there is a transcript to carry. */}
+        {/* §7.9 conversation→action: visible once there is a transcript to carry. ASK-S2 (DES-ASK-TEAM-CHAT-001
+            §4.7, E9): under `capabilities.askPath` the prefill-promote is gone — the chat IS a path, so
+            "Build this" puts the operator's own words in the composer and the PA proposes the work; the
+            operator still presses Send, and the proposal card asks before anything is built. */}
         {messages.length > 0 && navigate !== undefined && !ended && (
           <button
             type="button"
             data-testid="chat-promote"
-            title="Open the Build composer prefilled with this conversation as context — editable before launch"
-            onClick={promoteToBuild}
+            title={askPathOn ? 'Ask the helper to propose the work — it answers with a plan you approve first' : 'Open the Build composer prefilled with this conversation as context — editable before launch'}
+            onClick={askPathOn ? () => setInput('Build this.') : promoteToBuild}
             className="text-[11px] px-2.5 py-1 rounded-lg"
             style={{ background: 'var(--surface-raised)', color: 'var(--ink-body)', border: '1px solid var(--surface-overlay)' }}
           >
-            Continue in Build →
+            {askPathOn ? 'Build this' : 'Continue in Build →'}
           </button>
         )}
         {closable && (

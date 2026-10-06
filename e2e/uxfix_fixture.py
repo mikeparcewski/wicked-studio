@@ -4420,8 +4420,11 @@ def ask_runs_list() -> list:
         for cid, c in ask_chats.items():
             if c["turns"] == 0:
                 continue
-            units = [(f"answer-{i} — ask", "understand", "done" if i < c["turns"] or c["status"] == "awaiting_human" else "distributed")
+            units = [(f"answer-{i} — ask", "understand", "done" if i < c["turns"] or c["status"] in ("awaiting_human", "executing", "cancelled") and c.get("building", False) or c["status"] == "awaiting_human" else "distributed")
                      for i in range(1, c["turns"] + 1)]
+            if c.get("building"):
+                units += [("build-1 — trim the name in greet()", "build", "distributed" if c["status"] == "executing" else "pending"),
+                          ("review — review", "review", "pending")]
             r = _session_run(c["run_id"], c["status"] or "executing", c["first_text"], cid, c["started_s"], None, units)
             r["session"]["clis"] = list(c["eligible"])
             for i, u in enumerate(r["units"], start=1):
@@ -4469,10 +4472,61 @@ def ask_gate(rid: str):
             n = c["turns"]
             if c.get("proposal_open"):
                 return {"runId": rid, "ord": n + 1, "lifecycle": "open", "receivedAt": iso(int(time.time() * 1000)),
-                        "prompt": f"Approve plan rev 2 before unit {n + 1} runs: build-1 → review. The plan adds the first creator step."}
+                        "prompt": f"Approve plan rev {c.get('plan_rev', 1) + 1} before unit {n + 1} runs: build-1 → review. The plan adds the first creator step."}
             return {"runId": rid, "ord": n, "lifecycle": "open", "receivedAt": iso(int(time.time() * 1000)),
-                    "prompt": f"Approve the output of unit {n} (answer-{n}) — the plan is complete."}
+                    "prompt": f"Approve completion after the final phase (unit {n}): answer-{n} — {c['first_text']}"}
     return None
+def ask_gate_answer(rid: str, body: dict):
+    """POST /runs/:id/gate on an ask path's open plan gate (§4.7): Continue (approve) accepts rev 2 and the
+    build step claims; Not now (approve with the accepted rev's steps) accepts a rev identical to rev 1 and the
+    turn gate reopens; End (reject) cancels the path. `None` when the run is not an ask path with its
+    proposal open."""
+    with ask_lock:
+        hit = next(((cid, c) for cid, c in ask_chats.items() if c["run_id"] == rid and c.get("proposal_open")), None)
+        if hit is None:
+            return None
+        chat_id, c = hit
+        c["proposal_open"] = False
+        pa, n = c["pa"], c["turns"]
+        pid, gid, rev = c.get("proposal_id", "p-ask-build-1"), c.get("gate_id", f"g-{rid}-plan-2"), c.get("plan_rev", 1)
+        c["plan_rev"] = rev + 1
+    t = int(time.time() * 1000)
+    approve = body.get("approve") is True
+    plan = body.get("plan") if isinstance(body.get("plan"), dict) else None
+    broadcast_chat({"type": "gateDecided", "session": rid, "ord": n + 1, "allow": approve})
+    if not approve:
+        _ask_emit(chat_id, _ask_row(rid, "gate.decided", t, gate_id=gid, kind="plan_approval", decision="human_rejected", combined=False, team_pause=False, unresolved=[]))
+        _ask_emit(chat_id, _ask_row(rid, "path.ended", t + 1, status="cancelled"))
+        with ask_lock:
+            c["status"] = "cancelled"
+        broadcast_chat({"type": "runCancelled", "session": rid})
+        return "cancelled"
+    if plan is not None and not any(s.get("catalog") == "build" for s in plan.get("steps", [])):
+        # Not now: the accepted rev re-approved — identical steps, the creator proposal dropped.
+        # Not now: the SUBMITTED steps (the accepted rev's) are accepted as rev n+1 — identical steps, the
+        # creator proposal dropped, the floor the accepted rev's (empty, band 0-19).
+        _ask_emit(chat_id, _ask_row(rid, "gate.decided", t, gate_id=gid, kind="plan_approval", decision="human_amended", combined=False, team_pause=False, unresolved=[]))
+        _ask_emit(chat_id, _ask_row(rid, "plan.accepted", t + 1, plan_rev=rev + 1, workflow_id=f"{rid}:plan-{rev + 1}", band="0-19", high_risk=False, mode="auto",
+                                    steps=[{"added_by": "plan", "catalog": s.get("catalog"), "id": s.get("id")} for s in plan.get("steps", [])], override=None, proposal_id=None, touch=[]))
+        with ask_lock:
+            c["status"] = "awaiting_human"
+        broadcast_chat({"type": "awaitingHuman", "session": rid, "ord": n, "gateKind": "terminal", "prompt": f"Approve completion after the final phase (unit {n}): answer-{n} — ask"})
+        return "not_now"
+    # Continue in Build: rev 2 accepted with the creator step and the floor's review; build claims on the PA's seat.
+    _ask_emit(chat_id, _ask_row(rid, "gate.decided", t, gate_id=gid, kind="plan_approval", decision="human_approved", combined=False, team_pause=False, unresolved=[]))
+    _ask_emit(chat_id, _ask_row(rid, "plan.accepted", t + 1, plan_rev=rev + 1, workflow_id=f"{rid}:plan-{rev + 1}", band="20-39", high_risk=False, mode="auto",
+                                steps=[{"added_by": "plan", "catalog": "understand", "id": f"answer-{i}"} for i in range(1, n + 1)]
+                                + [{"added_by": "plan", "catalog": "build", "id": "build-1"},
+                                   {"added_by": "floor", "catalog": "review", "id": "review", "floor_reason": "band 20+ always reviews"}],
+                                override=None, proposal_id=pid, touch=["src/greet.js", "test/greet.test.js"], touch_source="pa_scope"))
+    _ask_emit(chat_id, _ask_row(rid, "step.claimed", t + 2, ord=n + 1, attempt=0, by=pa, step_id="build-1", role="creator", kind="agent", phase="build",
+                                criterion="the tree changed", baseline_tree="70c9a656", repo=None, code_graph_db=None))
+    with ask_lock:
+        c["status"] = "executing"
+        c["building"] = True
+    broadcast_chat({"type": "resumed", "session": rid, "ord": n + 1})
+    broadcast_chat({"type": "unitExecuting", "session": rid, "ord": n + 1})
+    return "continue"
 
 
 def ask_message(chat_id: str, text: str):
@@ -4499,6 +4553,9 @@ def ask_message(chat_id: str, text: str):
     if one_seat:
         reviewer = None
     ord_ = n
+    # "Build this…" and Bring it back's own words ("Go ahead with the plan you proposed.") make the PA propose.
+    lowered = text.strip().lower()
+    build_this = lowered.startswith("build this") or lowered.startswith("go ahead with the plan")
 
     def play() -> None:
         t = int(time.time() * 1000)
@@ -4515,6 +4572,19 @@ def ask_message(chat_id: str, text: str):
                                         signals=None, plan={"depth": "none", "monitors": 0, "post_hoc_reviewer": False, "post_hoc_other_cli": False}, tree=None))
             _ask_emit(chat_id, _ask_row(run_id, "plan.accepted", t + 3, plan_rev=1, workflow_id=f"{run_id}:plan-1", band="0-19", high_risk=False,
                                         mode="auto", steps=[dict(step, added_by="plan")], override=None, proposal_id="p-ask-1", touch=[]))
+        if n >= 2:
+            # The next message is a new answer step: crew's propose_plan(answer-N) + the turn gate's Approve →
+            # the accepted rev grows by that step (T2 §8.6; ASK-K2a) — what Not now re-approves later.
+            with ask_lock:
+                rev_n = ask_chats[chat_id].get("plan_rev", 1) + 1
+                ask_chats[chat_id]["plan_rev"] = rev_n
+            step_n = {"catalog": "understand", "id": f"answer-{n}", "gate": {"human_confirm": {"unconditional": True}}, "budget_secs": 600,
+                      "instructions": text.split("\n\n---\n")[0]}
+            _ask_emit(chat_id, _ask_row(run_id, "plan.proposed", t + 4, by="human", proposal_id=f"p-ask-{n}", base_rev=rev_n - 1, kind="change",
+                                        preset=None, steps=[step_n], monitors={"asked": 1}, asks=[], touch=[], override=None, rationale=""))
+            _ask_emit(chat_id, _ask_row(run_id, "plan.accepted", t + 5, plan_rev=rev_n, workflow_id=f"{run_id}:plan-{rev_n}", band="0-19", high_risk=False,
+                                        mode="auto", steps=[{"added_by": "plan", "catalog": "understand", "id": f"answer-{i}"} for i in range(1, n + 1)],
+                                        override=None, proposal_id=f"p-ask-{n}", touch=[]))
         _ask_emit(chat_id, _ask_row(run_id, "step.claimed", t + 10, ord=ord_, attempt=0, by=pa, step_id=f"answer-{n}", role="creator", kind="agent",
                                     phase="understand", criterion="", baseline_tree=None, repo=None, code_graph_db=None))
         if n == 1:
@@ -4562,10 +4632,60 @@ def ask_message(chat_id: str, text: str):
             ask_chats[chat_id]["messages"].append({"at": t2 + 20, "turnId": turn_id, "kind": "seat", "cliKey": pa, "ok": True, "usage": None, "text": reply})
             ask_chats[chat_id]["status"] = "awaiting_human"  # the turn gate: the next message is the answer
         broadcast_chat({"type": "chatReply", "chat": chat_id, "cliKey": pa, "text": reply, "ok": True, "run_id": run_id, "ord": ord_, "turn_id": turn_id})
+        if build_this:
+            # ASK-S2 (§4.7): the PA proposes the work — a `change` adding the first creator step. The engine
+            # refuses it on a roster with no distinct seat (`NoEligibleSeat`, D1) and on a path with no repo
+            # bound (`no repo bound`, F11) — `plan.refused`, the run keeps its accepted rev, the turn gate
+            # reopens. Otherwise: scored on its declared touch, the floor's review added, the crossing-into-work
+            # approval row (K2b); the operator answers the plan gate in the thread (Continue / Not now / End).
+            # Every proposal is its own row set: fresh proposal_id / gate_id / plan_rev.
+            time.sleep(0.3)
+            t3 = int(time.time() * 1000)
+            with ask_lock:
+                scope_now = ask_chats[chat_id].get("scope") or {}
+                repo_bound = bool(scope_now.get("repos")) and scope_now.get("kind") in ("repos", "project", "repo")
+                refused = ("NoEligibleSeat: no seat distinct from the creator seat " + pa) if reviewer is None \
+                    else (None if repo_bound else "no repo bound: this path has no repository to build in")
+            if refused is not None:
+                # On a one-seat roster the first turn already said it (the PA's own proposal was refused above);
+                # a later turn, or a repo-less path, says it here — once.
+                if not (reviewer is None and n == 1):
+                    _ask_emit(chat_id, _ask_row(run_id, "plan.proposed", t3, by=pa, proposal_id=f"p-ask-build-refused-{n}", base_rev=ask_chats[chat_id].get("plan_rev", 1), kind="change", preset=None,
+                                                steps=[{"catalog": "build", "id": "build-1", "instructions": "trim the name in greet()"}], monitors={"asked": 1},
+                                                asks=[], touch=["src/greet.js"], override=None, rationale="one-line fix"))
+                    _ask_emit(chat_id, _ask_row(run_id, "plan.refused", t3 + 1, by="engine", proposal_id=f"p-ask-build-refused-{n}", base_rev=ask_chats[chat_id].get("plan_rev", 1), reason=refused))
+                with ask_lock:
+                    ask_chats[chat_id]["status"] = "awaiting_human"
+                broadcast_chat({"type": "awaitingHuman", "session": run_id, "ord": ord_, "gateKind": "terminal",
+                                "prompt": f"Approve completion after the final phase (unit {ord_}): answer-{n} — ask"})
+                return
+            with ask_lock:
+                ask_chats[chat_id]["proposals"] = ask_chats[chat_id].get("proposals", 0) + 1
+                k = ask_chats[chat_id]["proposals"]
+                rev = ask_chats[chat_id].get("plan_rev", 1)
+                ask_chats[chat_id]["proposal_id"] = f"p-ask-build-{k}"
+                ask_chats[chat_id]["gate_id"] = f"g-{run_id}-plan-{rev + 1}"
+            pid, gid = f"p-ask-build-{k}", f"g-{run_id}-plan-{rev + 1}"
+            _ask_emit(chat_id, _ask_row(run_id, "plan.proposed", t3, by=pa, proposal_id=pid, base_rev=rev, kind="change", preset=None,
+                                        steps=[{"catalog": "build", "id": "build-1", "instructions": "trim the name in greet()"}], monitors={"asked": 1},
+                                        asks=[], touch=["src/greet.js", "test/greet.test.js"], override=None, rationale="one-line fix, one test"))
+            _ask_emit(chat_id, _ask_row(run_id, "path.scored", t3 + 1, basis="intent", score=25, deterministic=25, reasons=["2 files, 12 dependents"],
+                                        model=None, score_source=f"intent:{pid}",
+                                        signals={"changed_symbols": 1, "dependents": 12, "products": 1, "contract_change": False, "test_gap": 0, "critical": False, "destructive": False, "truncated": False},
+                                        plan={"depth": "build", "monitors": 1, "post_hoc_reviewer": True, "post_hoc_other_cli": False}, tree=None))
+            _ask_emit(chat_id, _ask_row(run_id, "plan.revised", t3 + 2, plan_rev=rev + 1, proposal_id=pid, reason="floor_raised", from_band="0-19", to_band="20-39",
+                                        high_risk=False, added=[{"catalog": "review", "id": "review", "added_by": "floor", "floor_reason": "band 20+ always reviews"}]))
+            _ask_emit(chat_id, _ask_row(run_id, "gate.opened", t3 + 3, gate_id=gid, kind="plan_approval", reviewing_ord=ord_, plan_rev=rev + 1,
+                                        band="20-39", high_risk=False, mode="auto", reason="first_creator", diff={"from_rev": rev, "added": ["build-1", "review"]}))
+            with ask_lock:
+                ask_chats[chat_id]["proposal_open"] = True
+            broadcast_chat({"type": "awaitingHuman", "session": run_id, "ord": ord_ + 1, "gateKind": "plan_approval",
+                            "prompt": f"Approve plan rev {rev + 1} before unit {ord_ + 1} runs: build-1 → review. The plan adds the first creator step."})
+            return
         # The engine's TURN gate (the answer step's unconditional HumanConfirm at the plan's end): the real
         # daemon's awaitingHuman frame — studio must draw no gate for it (§4.8), only the "waiting" session.
         broadcast_chat({"type": "awaitingHuman", "session": run_id, "ord": ord_, "gateKind": "terminal",
-                        "prompt": f"Approve the output of unit {ord_} (answer-{n}) — the plan is complete."})
+                        "prompt": f"Approve completion after the final phase (unit {ord_}): answer-{n} — ask"})
 
     threading.Thread(target=play, daemon=True).start()
     return 202, {"seats": [pa], "turnId": turn_id, "runId": run_id, "stepId": f"answer-{n}"}
@@ -7574,6 +7694,12 @@ class W2Handler(SimpleHTTPRequestHandler):
             return self._json(200, {"status": "ok", "ord": 1, "cli": body.get("cli"), "approved": True})
         if len(parts) == 6 and parts[3] == "runs" and parts[5] == "gate":
             rid = urllib.parse.unquote(parts[4])
+            with state_lock:
+                ask_on = state["ask_path"]
+            if ask_on and ask_gate_answer(rid, body) is not None:
+                with state_lock:
+                    gate_post_log.append({"runId": rid, "body": body, "at": time.time()})
+                return self._json(200, {"status": "resumed"})
             with state_lock:
                 conflict = rid in state["gate_409"]
                 moved = rid in state["gate_moved"] and rid not in gate_moved_done

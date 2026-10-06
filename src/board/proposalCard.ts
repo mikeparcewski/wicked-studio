@@ -7,6 +7,7 @@ import type { OpenGate } from '../store/gates.js';
 import type { GateActionState } from './gateActions.js';
 import { gatePlanLabels, type ChainModel } from './chainModel.js';
 import { plainDeliverSentence, repoNameOf } from './deskWords.js';
+import type { AskProposal } from './askThread.js';
 
 /**
  * THE PROPOSAL CARD (DES-STUDIO-REBUILD-001 §3 scenes 07/08/24/42, slice S6b). Pure.
@@ -56,6 +57,8 @@ export interface ProposalCardModel {
   reason: string | null;
   /** fail with an open gate keeps its buttons (Try again / Not now). */
   canRetry: boolean;
+  /** ASK-S2: the third answer (End) — only on the ask's Continue in Build card. */
+  end?: string;
 }
 
 const TERMINAL: ReadonlySet<string> = new Set(['completed', 'failed', 'cancelled']);
@@ -183,6 +186,32 @@ export interface ProposalInput {
   /** The proposal this card last asked (the host remembers it): after its gate is pruned, an
    *  accepted hand-over still reads as one (codex). */
   lastKind?: ProposalKind | null;
+  /** ASK-S2 (DES-ASK-TEAM-CHAT-001 §4.7): the PA's pending proposal to build on an ask path — the
+   *  plan gate is "Continue in Build?", with the band and the blast radius, and three answers. */
+  ask?: AskProposal | null;
+}
+
+/** The ask's plan card words: the steps (floor additions marked), then the band and blast radius. */
+export function askProposalWords(ask: AskProposal, pa: string | null): { text: string; why: string } {
+  const steps = ask.steps.map((s) => `${s.label[0]!.toUpperCase()}${s.label.slice(1)}${s.floor ? ' (required)' : ''}`).join(' → ');
+  // The touch set is declared PATHS (a directory counts as one), never a file count the card did not take.
+  const files = ask.touch.length === 0 ? null : `touches ${ask.touch.length} declared path${ask.touch.length === 1 ? '' : 's'}`;
+  const deps = ask.dependents === null ? null : `${ask.dependents} dependent${ask.dependents === 1 ? '' : 's'}`;
+  // §8 F10: a proposal that declared no scope says so whatever band the engine gave it (X1 fail-closed).
+  const band = ask.band === null ? null : `band ${ask.band.replace('-', '–')}`;
+  const noScope = ask.touch.length === 0 ? 'high risk — the helper declared no scope' : null;
+  const radius = [band, noScope, files, deps].filter((x): x is string => x !== null).join(' · ');
+  const who = ask.by ?? pa ?? 'the helper';
+  // Who does the building: the PA's seat when every build step is the PA's (the default owner); a
+  // step the plan gives the team runs on a member seat — the card never claims a seat the plan did
+  // not name (codex on ASK-S2 r5).
+  const builds = ask.steps.filter((s) => s.label === 'build');
+  const teamOwned = builds.some((s) => s.owner === 'team');
+  const seat = teamOwned ? 'Continue starts the work — a helper takes the team\u2019s build step' : `Continue starts the work on ${who}'s seat`;
+  return {
+    text: `Continue in Build? ${who} proposes: ${steps}.`,
+    why: `${radius !== '' ? `${radius} · ` : ''}${seat}; review runs on a different helper, and the reviewer carries over. Not now keeps the conversation going; End closes it.`,
+  };
 }
 
 /** What the deliver approve sends off the machine, in one plain sentence (studio#444): the target
@@ -219,13 +248,52 @@ export function proposalCard(input: ProposalInput): ProposalCardModel | null {
   const kind = proposalKindOf(view.session.id, gate, view.units);
   const instance = gateInstance(gate);
 
+  // ASK-S2 (§4.7): the ask's proposal card reads its OUTCOME off the proposal's own rows once the plan
+  // gate is answered — Not now keeps the proposal here with "Bring it back"; End is the end; Continue
+  // is progress until the engine accepts the rev (the card then yields to the run's block).
+  if (input.ask && !input.ask.gateOpen && input.ask.decision !== null) {
+    const card = base('plan');
+    const words = askProposalWords(input.ask, null);
+    card.text = words.text; card.why = words.why; card.act = 'Continue in Build'; card.end = 'End';
+    if (input.ask.decision === 'human_amended') return { ...card, state: 'no', text: 'Not now — the conversation goes on; the proposal stays here.' };
+    if (input.ask.decision === 'reject') return { ...card, state: 'cancelled', out: 'Ended — the conversation is over.' };
+    return { ...card, state: 'run', runLabel: 'Going', live: 'Starting the work' };
+  }
+  // The answer was sent and the local gate pruned (`sendGateDecision` clears it at once), but the
+  // engine's `gate.decided` row has not landed yet: the card says what was answered from the host's
+  // own state — never "Starting the work" for a Not now — until the rows take over.
+  if (input.ask && gate === undefined && input.ask.gateOpen && (ui.dismissed !== null || action.answered !== null || action.busy || action.queued || action.error !== null)) {
+    const card = base('plan');
+    const words = askProposalWords(input.ask, null);
+    card.text = words.text; card.why = words.why; card.act = 'Continue in Build'; card.end = 'End';
+    if (ui.dismissed !== null) return { ...card, state: 'no', text: 'Not now — the conversation goes on; the proposal stays here.' };
+    if (action.answered === 'rejected') return { ...card, state: 'cancelled', out: 'Ended — the conversation is over.' };
+    // The answer was refused and the gate it was made on is gone (409 gate_changed, then no cached
+    // gate): the refusal is said, with the three choices kept (r2 #9).
+    if (action.error !== null && !action.busy && !action.queued && action.answered === null) {
+      return { ...card, state: 'fail', reason: `${action.error} The question is being read again; the answers come back with it.`, canRetry: false };
+    }
+    return { ...card, state: 'run', runLabel: 'Going', live: action.queued ? 'Sending in a moment — Undo is in the notice' : 'Starting the work' };
+  }
+
   if (kind !== null && gate !== undefined) {
     const card = base(kind);
     const step = kind === 'step' ? stepQuestion(gate) : null;
-    card.text = kind === 'plan' ? planSentence(planSteps(chain, gate.prompt)) : step !== null ? step.text : 'Ready to hand it over.';
-    card.why = kind === 'plan'
-      ? ['Go starts the work; nothing is built until you say so.', floorLine(gate.prompt, chain)].filter((x) => x !== null).join(' ')
-      : step !== null ? step.why : deliverLine(view, gate, input.repoName ?? null);
+    const ask = kind === 'plan' ? input.ask ?? null : null;
+    if (ask !== null) {
+      const words = askProposalWords(ask, null);
+      card.text = words.text;
+      card.why = words.why;
+      card.act = 'Continue in Build';
+      card.end = 'End';
+      // Not now was SENT (the accepted rev re-approved): the card is the proposal kept, not progress.
+      if (ui.dismissed === instance) return { ...card, state: 'no', text: 'Not now — the conversation goes on; the proposal stays here.' };
+    } else {
+      card.text = kind === 'plan' ? planSentence(planSteps(chain, gate.prompt)) : step !== null ? step.text : 'Ready to hand it over.';
+      card.why = kind === 'plan'
+        ? ['Go starts the work; nothing is built until you say so.', floorLine(gate.prompt, chain)].filter((x) => x !== null).join(' ')
+        : step !== null ? step.why : deliverLine(view, gate, input.repoName ?? null);
+    }
     if (action.queued || action.busy || action.answered !== null) {
       return {
         ...card, state: 'run', runLabel: kind === 'deliver' ? 'Handing over' : 'Going',
@@ -239,7 +307,9 @@ export function proposalCard(input: ProposalInput): ProposalCardModel | null {
       };
     }
     if (ui.dismissed === instance) return { ...card, state: 'no', text: 'Not now — nothing started.' };
-    if (action.error !== null) return { ...card, state: 'fail', reason: action.error, canRetry: true, act: 'Try again' };
+    // A refused answer on the ask's card keeps its THREE explicit choices — Try again would re-send an
+    // approve for a Not now or an End (codex on ASK-S2 #3).
+    if (action.error !== null) return { ...card, state: 'fail', reason: action.error, canRetry: true, ...(ask !== null ? {} : { act: 'Try again' }) };
     return card;
   }
 

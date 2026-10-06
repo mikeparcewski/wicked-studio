@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { api } from '../../api/client.js';
 import type { ChatPathView, SessionView as RunView } from '../../api/types.js';
 import { needsByRun } from '../../board/deskModel.js';
@@ -37,7 +37,7 @@ import { applyCheckState } from '../../board/checkState.js';
 import { useRunAcceptance } from '../../hooks/useRunAcceptance.js';
 import { momentOfRecording, useRecordingsStore } from '../../store/recordings.js';
 import { requestWalkthroughSeek } from '../../store/walkthroughSeek.js';
-import { askAnswerOrds, askLines, askPathOf, askThinking, isAskTurnGate, type AskLine } from '../../board/askThread.js';
+import { askAnswerOrds, askLines, askPathOf, askProposal, askThinking, isAskTurnGate, type AskLine, type AskProposal } from '../../board/askThread.js';
 import { useAskThreadStore } from '../../store/askThread.js';
 import { useTeamFold } from '../../hooks/useTeamFold.js';
 import { AskLineView, AskTyping } from './AskThread.js';
@@ -84,7 +84,13 @@ type ThreadEntry =
   | { kind: 'turn'; key: string; at: number; who: 'you' | string; text: string; ok: boolean; citations?: ChatCitations; turnId: string | null; pending?: boolean }
   | { kind: 'run'; key: string; at: number; view: RunView }
   | { kind: 'line'; key: string; at: number; line: AskLine }
-  | { kind: 'typing'; key: string; at: number; who: string };
+  | { kind: 'typing'; key: string; at: number; who: string }
+  | { kind: 'proposal'; key: string; at: number; view: RunView; ask: AskProposal };
+
+/** How long a just-decided proposal keeps the run's block away while the daemon's status catches up. */
+const JUST_DECIDED_MS = 15_000;
+/** How long an open proposal with NO cached gate keeps the block away (the reconcile reads the gate back). */
+const OPEN_GRACE_MS = 60_000;
 
 const STATE_WORD: Record<SessionState, string> = {
   waiting: 'Waiting on you', working: 'Being worked on', blocked: 'Stopped', done: 'Finished', quiet: 'Quiet',
@@ -205,15 +211,45 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
     return out;
   }, [askRows, askFold, askTeamError]);
   const thinking = useMemo(() => askThinking(askRows), [askRows]);
+  // S2 (§4.7): the PA's pending proposal to build — its card sits in the thread, not in a run block.
+  const proposal = useMemo(() => askProposal(askRows), [askRows]);
   const askGate = useGateStore((s) => (askRunId === null ? undefined : s.gates[askRunId]));
   // Rule 3: the ask run's block stays hidden while the thread is its chain. It comes back when a
   // creator step is accepted, when the run stopped, or when a gate the composer cannot answer is open
-  // (a hand-over, an escalation, a plan approval). An UNKNOWN gate on a waiting run is shown, not
-  // hidden: only a turn gate the gate store positively recorded keeps the block away (codex #2).
+  // (a hand-over, an escalation). An UNKNOWN gate on a waiting run is shown, not hidden: only a turn
+  // gate the gate store positively recorded keeps the block away (codex #2). The plan approval of a
+  // pending BUILD proposal is the proposal card's (S2, §4.7) — drawn in the thread, so the block stays
+  // hidden while that gate is open.
+  // The cached gate, when it is THIS card's plan gate: a deliver, escalation or any other gate on the
+  // run takes precedence — the block (and its controls) shows (codex on ASK-S2 #2).
+  // …and THIS proposal's plan gate, not another revision's: when the prompt names a rev it must be the
+  // proposal's (a stale card never answers a newer question with its own words — codex on ASK-S2 r3 #1).
+  const promptRev = askGate === undefined ? null : (/^\s*Approve plan rev (\d+)\b/i.exec(askGate.prompt)?.[1] ?? null);
+  const askGateIsPlan = askGate !== undefined && (askGate.gateKind === 'plan_approval' || promptRev !== null)
+    && (promptRev === null || proposal === null || proposal.planRev === null || Number(promptRev) === proposal.planRev);
+  // With no cached gate at all, the rows' open proposal keeps the block away only for a while: a gate
+  // the daemon still holds is read back by the runs reconcile; past the grace the run's own block shows.
+  const openAgo = proposal === null ? null : Date.now() - proposal.at;
+  const proposalOpen = proposal !== null && proposal.gateOpen && (askGate !== undefined ? askGateIsPlan : openAgo !== null && openAgo < OPEN_GRACE_MS);
+  // The proposal's gate was just answered (its `gate.decided` row is in) and the daemon's run status has
+  // not caught up: for a few seconds the card says what was answered and the block waits for the run to
+  // move. Bounded: past that an unknown waiting gate is shown, not hidden (the runs reconcile reads it).
+  const [, tickDecided] = useReducer((n: number) => n + 1, 0);
+  const decidedAgo = proposal?.decidedAt === null || proposal?.decidedAt === undefined ? null : Date.now() - proposal.decidedAt;
+  const proposalJustDecided = proposal !== null && !proposal.gateOpen && proposal.decision !== null && askGate === undefined
+    && askView?.session.status === 'awaiting_human' && decidedAgo !== null && decidedAgo < JUST_DECIDED_MS;
+  useEffect(() => {
+    const waits: number[] = [];
+    if (proposalJustDecided && decidedAgo !== null) waits.push(JUST_DECIDED_MS - decidedAgo + 20);
+    if (proposalOpen && askGate === undefined && openAgo !== null) waits.push(OPEN_GRACE_MS - openAgo + 20);
+    if (waits.length === 0) return;
+    const id = setTimeout(tickDecided, Math.max(0, Math.min(...waits)));
+    return () => clearTimeout(id);
+  }, [proposalJustDecided, decidedAgo, proposalOpen, askGate, openAgo]);
   const askBlockHidden = askRunId !== null && !creatorAccepted && askView?.session.status !== 'failed'
-    && (askGate !== undefined
+    && (proposalOpen || proposalJustDecided || (askGate !== undefined
       ? isAskTurnGate(askKnow, askRunId, askGate.gateKind, askGate.prompt, askGate.ord)
-      : askView?.session.status !== 'awaiting_human' || askRunId in turnGates);
+      : askView?.session.status !== 'awaiting_human' || askRunId in turnGates));
 
   const badges = useMemo(() => needsByRun(needRows), [needRows]);
   const badge = mine.reduce((n, v) => n + (badges[v.session.id] ?? 0), 0);
@@ -301,11 +337,14 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
       }
     }
     for (const v of mine) {
-      if (askBlockHidden && v.session.id === askRunId) continue;
+      if (askBlockHidden && v.session.id === askRunId) {
+        if (proposal !== null) out.push({ kind: 'proposal', key: `p:${proposal.proposalId}`, at: proposal.at, view: v, ask: proposal });
+        continue;
+      }
       out.push({ kind: 'run', key: `r:${v.session.id}`, at: launchedMs(v), view: v });
     }
     return out.map((e, i) => ({ e, i })).sort((a, b) => a.e.at - b.e.at || a.i - b.i).map((x) => x.e);
-  }, [messages, mine, liveTurns, lines, thinking, askBlockHidden, askRunId, askRows, askPathOn]);
+  }, [messages, mine, liveTurns, lines, thinking, askBlockHidden, askRunId, askRows, askPathOn, proposal]);
 
   // DC-S8: the considered line sits under the LAST reply of each turn (one Consideration per turn,
   // whatever the number of seats); it is re-read when the turn gains a reply.
@@ -469,7 +508,9 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
             ? <AskLineView key={e.key} line={e.line} onSignIn={() => openSheet({ kind: 'session', sessionId }, 'signins')} onRetry={askTeamRetry} />
             : e.kind === 'typing'
               ? <AskTyping key={e.key} who={e.who} />
-              : e.kind === 'turn'
+              : e.kind === 'proposal'
+                ? <AskProposalBlock key={e.key} view={e.view} ask={e.ask} onBringBack={() => setDraft(sessionId, 'Go ahead with the plan you proposed.')} />
+                : e.kind === 'turn'
             ? (
               <div key={e.key} data-testid="session-turn" data-who={e.who === 'you' ? 'you' : 'helper'} {...(e.pending ? { 'data-pending': 'true' } : {})} className={`wk-session-turn wk-session-turn--${e.who === 'you' ? 'you' : 'helper'}${e.pending ? ' wk-session-turn--pending' : ''}`}>
                 <p className="wk-session-who">{e.who === 'you' ? 'You' : e.pending ? `${e.who} · answering` : e.who}</p>
@@ -503,6 +544,18 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
         placeholder="Ask about this, or tell studio what to do next — / adds a step, @ names a project or a helper"
         variant="session"
       />
+    </div>
+  );
+}
+
+/** ASK-S2 (§4.7): the ask path's Continue in Build card, in the thread where the proposal landed —
+ *  the run's own block stays hidden until the work is accepted (rule 3). */
+function AskProposalBlock({ view, ask, onBringBack }: { view: RunView; ask: AskProposal; onBringBack: () => void }): React.ReactElement {
+  const { chain } = useRunChain(view);
+  return (
+    <div data-testid="session-ask-proposal" data-run-id={view.session.id} data-proposal-id={ask.proposalId} data-first-creator={ask.firstCreator ? 'true' : 'false'} className="wk-session-ask-proposal">
+      {/* A re-proposal is a new row: the card's own state (Not now, the confirm) starts over with it. */}
+      <ProposalCard key={`${ask.proposalId}:${ask.at}`} view={view} chain={chain} ask={ask} onBringBack={onBringBack} />
     </div>
   );
 }

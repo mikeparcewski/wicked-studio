@@ -223,7 +223,7 @@ const PAST: Record<string, string> = { approve: 'Approved', reject: 'Rejected', 
  * `outcome === 'sent'`.
  */
 export function commitGateDecision(
-  runId: string, decision: GateAnswer, opts: { deliver?: DeliverTarget | null } = {},
+  runId: string, decision: GateAnswer, opts: { deliver?: DeliverTarget | null; notice?: { preview: string; sent: string } } = {},
 ): Promise<DecisionOutcome> {
   const cur = useGateActionStore.getState().byGate[runId] ?? IDLE_GATE_ACTION;
   if (cur.queued || cur.busy || cur.answered !== null) {
@@ -234,7 +234,11 @@ export function commitGateDecision(
   // studio#368: a deliver gate's approve pushes — the host names the branch and repo when it knows
   // them; any other caller (palette, triage keys) still gets the push line off the gate's kind.
   const deliver = opts.deliver ?? (useGateStore.getState().gates[runId]?.gateKind === 'deliver' ? { branch: null, repo: null } : null);
-  const { verb, preview } = describeDecision(decision, 1, deliver);
+  // ASK-S2: a card whose answers are not the wire's verbs (Not now = approve-with-amend, End = reject)
+  // names the notice in its own words.
+  const described = describeDecision(decision, 1, deliver);
+  const verb = described.verb;
+  const preview = opts.notice?.preview ?? described.preview;
   const label = gateLabel(runId);
   const amend = decision.amend ?? null;
   // The gate this decision was made on — watched while queued, and sent so the daemon can refuse
@@ -254,7 +258,7 @@ export function commitGateDecision(
         patch(runId, { queued: false });
         const error = await sendGateDecision(runId, ord === undefined ? decision : { ...decision, ord });
         if (error === null) {
-          reportDecision('sent', `${PAST[verb] ?? 'Answered'} ${label}.`);
+          reportDecision('sent', opts.notice?.sent ?? `${PAST[verb] ?? 'Answered'} ${label}.`);
           resolve('sent');
         } else {
           reportDecision('failed', `Not sent: ${label} — ${error}`);

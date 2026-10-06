@@ -171,7 +171,9 @@ describe('rule 3 — the thread is the chain until a creator step is accepted', 
     await screen.findByTestId('session-run');
     expect(screen.getByTestId('session-run').getAttribute('data-run-id')).toBe(RUN);
     expect(screen.queryByTestId('session-ask-shape')).toBeNull();
-    expect(texts('ask-line')).toContain('claude proposes to build: build');
+    // The accepted proposal is no longer a card (S2) and never was a quiet line.
+    expect(screen.queryByTestId('session-ask-proposal')).toBeNull();
+    expect(texts('ask-line').some((x) => x.includes('proposes to build'))).toBe(false);
   });
 
   it('a gate the composer cannot answer (a hand-over) brings the block back even without a creator step', async () => {
