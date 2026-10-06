@@ -12,6 +12,19 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.6.2] — 2026-10-06
+
+The ask is one thread (DES-STUDIO-REBUILD-001 Amendment 6; DES-ASK-TEAM-CHAT-001). On a daemon
+whose `capabilities.askPath` is true — the ask path landed in wicked-crew after the 0.8.1 publish
+and ships in 0.8.2, on wicked-core-ts ≥ 0.7.38; the bullets' live proofs ran against that main
+build, which still named itself 0.8.1 — one primary
+helper answers — chosen, or picked at random among the signed-in seats — a reviewer watches and
+its findings are quiet lines under the reply, Continue in Build is a card in the thread, and the
+session's Helpers sheet names the path's seats by role. On an older daemon the thread says so and
+keeps the released behaviour. Also the W12 reel's corrections to the released 0.6.1 Desk: the
+chrome fits a 700-px window, Settings and Theme say what is true, demos and onboarding sessions
+read in plain words.
+
 ### Added
 - **The session's Helpers sheet names the ask path's seats by role (DES-ASK-TEAM-CHAT-001 §10, slice ASK-S3, first half).** Under `capabilities.askPath` the look-underneath's Helpers tab reads `GET /chats/:id.path` and leads with the path, by ROLE (what the wire records — identities, not what a seat is doing right now): **"claude primary helper · picked at random"** (or "· your pick"), **"pi reviewer"** (**"· also answered a question the primary helper asked"** when the reviewer answered a HELP: line too), **"codex helped — answered a question the primary helper asked"**; no reviewer reads **"No reviewer attached."**, or — only when the roster shows no other seat — "No reviewer — only claude is signed in." with **Sign in**, which opens the Sign-ins tab. Every named seat opens its helper sheet, like the run rows, which follow as before. Without the capability the tab is the run rows alone. The Watchtower half of ASK-S3 waits on crew's ASK-C3 (the `path.repicked` / absent-reviewer / non-answered-help entries are not shipped yet). New: `useAskPath` in `src/components/sheets/ObjectSheet.tsx`; testids `sheet-helper-role`, `sheet-helper-signin`. Tests: `tests/sessionSheet.askHelpers.test.tsx`; the DESK journey `e2e/desk_ask_team_test.py` opens the sheet and reads the roles.
 - **The ask's turn gate stays undrawn after a reload on a real daemon; the LIVE ask-path journey (DES-ASK-TEAM-CHAT-001 §9 E2E).** The LIVE proof against a real wicked-crew 0.8.1 daemon (core-ts 0.7.38, seats claude + opencode) found the one wording the fixture had invented: the engine's terminal gate reads "Approve completion after the final phase (unit N): <step> — …" (`actor.rs`), so a reload read the real ask's turn gate back without a kind, classified it as a real gate and drew the run's block and a Desk row. The late-join words now carry the engine's three prompts (`src/board/askThread.ts`). `e2e/live_ask_path_test.py` (LIVE list, operator-run against `CREW_ORIGIN`): builds the studio with `VITE_API_HOST` baked, asks from the Desk, waits for the real reply and proves one voice, the who-line against `path.started`, the reviewer line against `member.joined` and `GET /chats/:id.path`, the undrawn turn gate (run `awaiting_human`, session "waiting", no Desk row) and 0 page errors. Run 5 on 2026-10-06 passed 7/7 (PA opencode picked at random, claude reviewing).
@@ -1779,7 +1792,8 @@ The merged interactive layer: wicked-interactive's UI moved into this skin (DES-
   `git subtree split` (92 commits).
 - The SPA as a pure HTTP/WS client of the wicked-crew daemon: runs, gates, live CoreEvents.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.6.1...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.6.2...HEAD
+[0.6.2]: https://github.com/mikeparcewski/wicked-studio/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/mikeparcewski/wicked-studio/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/mikeparcewski/wicked-studio/compare/v0.5.19...v0.6.0
 [0.5.19]: https://github.com/mikeparcewski/wicked-studio/compare/v0.5.14...v0.5.19
