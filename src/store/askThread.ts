@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { CoreEvent } from '../api/types.js';
 import { useCapabilities } from './capabilities.js';
+import { blockOf } from '../board/chainModel.js';
 
 /**
  * THE LIVE SIDE OF AN ASK (DES-ASK-TEAM-CHAT-001 §4.8, slice ASK-S1): what this client knows about
@@ -76,8 +77,10 @@ interface AskThreadState {
   /** The runs list arrived: a run launched from a chat whose units include an answer step
    *  (`answer-N — …`, the engine's own step-id naming; a research or build step may sit between
    *  them — codex r4 #2) is an ask path, and the answer units' ords are its turn-gate ords — so a
-   *  fresh page (the Desk after a reload) classifies its turn gate before the gate reconcile runs. */
-  learnRuns: (views: ReadonlyArray<{ session: { id: string; chat_id?: string | null }; units: ReadonlyArray<{ description?: string | null; ord?: number }> }>) => void;
+   *  fresh page (the Desk after a reload) classifies its turn gate before the gate reconcile runs. A
+   *  creator unit in the list (`executes_code`, or a build / write phase) IS the accepted creator
+   *  step: from then on every gate of the run is drawn (codex r5 #1 — a fresh Desk knows it too). */
+  learnRuns: (views: ReadonlyArray<{ session: { id: string; chat_id?: string | null }; units: ReadonlyArray<{ description?: string | null; ord?: number; phase_ref?: string | null; executes_code?: boolean }> }>) => void;
   /** The session's team fold hydrated: its `step.claimed{answer-N}` rows name the answer units of a run
    *  the chat already linked (a late join with a mixed plan — codex r4 #2). */
   learnAnswerOrds: (runId: string, ords: readonly number[]) => void;
@@ -121,6 +124,8 @@ export const useAskThreadStore = create<AskThreadState>((set) => ({
       let runs: Set<string> | null = null;
       let runByChat: Record<string, string> | null = null;
       let answerOrds = s.answerOrds;
+      let creatorAccepted: Record<string, boolean> | null = null;
+      let turnGates: Record<string, { ord: number; at: number }> | null = null;
       for (const v of views) {
         const chat = v.session.chat_id;
         if (typeof chat !== 'string' || chat === '' || v.units.length === 0) continue;
@@ -129,9 +134,17 @@ export const useAskThreadStore = create<AskThreadState>((set) => ({
         if (!s.runs.has(v.session.id)) { runs ??= new Set(s.runs); runs.add(v.session.id); }
         if (s.runByChat[chat] !== v.session.id) { runByChat ??= { ...s.runByChat }; runByChat[chat] = v.session.id; }
         for (const u of answers) if (typeof u.ord === 'number') answerOrds = withOrd(answerOrds, v.session.id, u.ord);
+        const creator = v.units.some((u) => u.executes_code === true || (typeof u.phase_ref === 'string' && ['build', 'write'].includes(blockOf(u.phase_ref))));
+        if (creator && s.creatorAccepted[v.session.id] !== true) {
+          creatorAccepted ??= { ...s.creatorAccepted }; creatorAccepted[v.session.id] = true;
+          if (v.session.id in s.turnGates) { turnGates ??= { ...s.turnGates }; delete turnGates[v.session.id]; }
+        }
       }
-      if (runs === null && runByChat === null && answerOrds === s.answerOrds) return s;
-      return { ...(runs !== null ? { runs } : {}), ...(runByChat !== null ? { runByChat } : {}), ...(answerOrds !== s.answerOrds ? { answerOrds } : {}) };
+      if (runs === null && runByChat === null && answerOrds === s.answerOrds && creatorAccepted === null) return s;
+      return {
+        ...(runs !== null ? { runs } : {}), ...(runByChat !== null ? { runByChat } : {}), ...(answerOrds !== s.answerOrds ? { answerOrds } : {}),
+        ...(creatorAccepted !== null ? { creatorAccepted } : {}), ...(turnGates !== null ? { turnGates } : {}),
+      };
     }),
   learnAnswerOrds: (runId, ords) =>
     set((s) => {

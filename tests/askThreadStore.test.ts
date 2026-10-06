@@ -292,6 +292,32 @@ describe('learning ask runs from the run DTOs (a fresh page)', () => {
     // The continued run's build unit is never a turn-gate ord: a gate there is drawn.
     expect(s.answerOrds['r-continued']).toStrictEqual([1]);
   });
+
+  it('a fresh Desk over a plan that already carries a creator step knows the creator was accepted: every gate of that run is drawn, an answer step’s included (codex r5 #1)', () => {
+    useAskThreadStore.getState().recordTurnGate('r-mixed', 3); // a record left over from before the reload
+    useAskThreadStore.getState().learnRuns([
+      { session: { id: 'r-mixed', chat_id: 'c1' }, units: [
+        { description: 'answer-1 — why?', ord: 1, phase_ref: 'understand' },
+        { description: 'build-1 — trim', ord: 2, phase_ref: 'build', executes_code: true },
+        { description: 'answer-2 — and now?', ord: 3, phase_ref: 'understand' },
+      ] },
+    ]);
+    const s = useAskThreadStore.getState();
+    expect(s.runs.has('r-mixed')).toBe(true);
+    expect(s.answerOrds['r-mixed']).toStrictEqual([1, 3]);
+    expect(s.creatorAccepted['r-mixed']).toBe(true);
+    expect(s.turnGates['r-mixed']).toBeUndefined();
+    useGateStore.getState().ingest(frame({ type: 'awaitingHuman', session: 'r-mixed', ord: 3, gateKind: 'terminal', prompt: 'Approve the output of unit 3 (answer-2)' }));
+    expect(useGateStore.getState().gates['r-mixed']).toMatchObject({ ord: 3 });
+    expect(useAskThreadStore.getState().turnGates['r-mixed']).toBeUndefined();
+    // A write phase without the flag counts too; a research phase does not.
+    useAskThreadStore.getState().learnRuns([
+      { session: { id: 'r-doc', chat_id: 'c2' }, units: [{ description: 'answer-1 — q', ord: 1, phase_ref: 'understand' }, { description: 'produce — write it up', ord: 2, phase_ref: 'produce' }] },
+      { session: { id: 'r-research', chat_id: 'c3' }, units: [{ description: 'answer-1 — q', ord: 1, phase_ref: 'understand' }, { description: 'research-1 — look', ord: 2, phase_ref: 'understand' }] },
+    ]);
+    expect(useAskThreadStore.getState().creatorAccepted['r-doc']).toBe(true);
+    expect(useAskThreadStore.getState().creatorAccepted['r-research']).toBeUndefined();
+  });
 });
 
 describe('the end', () => {
