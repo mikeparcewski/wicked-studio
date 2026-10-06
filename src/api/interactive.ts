@@ -274,8 +274,8 @@ const jsonPost = (body: unknown): RequestInit => ({ method: 'POST', body: JSON.s
 // ── Wrappers ────────────────────────────────────────────────────────────────
 
 /** `GET /api/docs` — the doc registry, most-recently-updated first. */
-export function listDocs(projectId: string): Promise<DocSummary[]> {
-  return iFetch<DocSummary[]>(`${interactiveBase(projectId)}/api/docs`);
+export function listDocs(projectId: string, init?: { signal?: AbortSignal }): Promise<DocSummary[]> {
+  return iFetch<DocSummary[]>(`${interactiveBase(projectId)}/api/docs`, init?.signal === undefined ? undefined : { signal: init.signal });
 }
 
 /**
@@ -301,8 +301,8 @@ export function getVersions(projectId: string, docId: string): Promise<VersionMa
 }
 
 /** `POST /api/docs`. The bridge slugifies `name`; 409 if the doc already exists. */
-export function createDoc(projectId: string, body: CreateDocBody): Promise<CreateDocResult> {
-  return iFetch<CreateDocResult>(`${interactiveBase(projectId)}/api/docs`, jsonPost(body));
+export function createDoc(projectId: string, body: CreateDocBody, init?: { signal?: AbortSignal }): Promise<CreateDocResult> {
+  return iFetch<CreateDocResult>(`${interactiveBase(projectId)}/api/docs`, { ...jsonPost(body), ...(init?.signal === undefined ? {} : { signal: init.signal }) });
 }
 
 // ── Doc delete — the GOVERNED route, adopted (studio#119) ─────────────────────

@@ -99,6 +99,32 @@ export const NEW_INSTALL_APPEARANCE: StudioAppearance = {
 const PERSIST_DEBOUNCE_MS = 400;
 const RETRY_MS = 2000;
 
+/**
+ * studio#517: the last APPLIED appearance, remembered on this client. The store started from
+ * `DEFAULT_APPEARANCE` (dark) and only `GET /settings` ever changed it, so every cold load flashed
+ * dark until the stored theme arrived, and an unreachable daemon left it dark for as long as it was
+ * away. The cache is the starting state and the fallback; the stored settings stay the source of
+ * truth once they answer (and refresh it). Never trusted raw: it goes through `sanitizeAppearance`.
+ */
+export const APPEARANCE_CACHE_KEY = 'studio.appearance.cache';
+
+export function readCachedAppearance(): StudioAppearance | null {
+  try {
+    const raw = typeof localStorage === 'undefined' ? null : localStorage.getItem(APPEARANCE_CACHE_KEY);
+    if (raw === null) return null;
+    const parsed: unknown = JSON.parse(raw);
+    return parsed !== null && typeof parsed === 'object' ? sanitizeAppearance(parsed) : null;
+  } catch {
+    return null; // a corrupt or unavailable cache is no cache
+  }
+}
+
+function writeCachedAppearance(a: StudioAppearance): void {
+  try {
+    if (typeof localStorage !== 'undefined') localStorage.setItem(APPEARANCE_CACHE_KEY, JSON.stringify(a));
+  } catch { /* storage full or denied: the daemon's record still stands */ }
+}
+
 function clamp(raw: unknown, lo: number, hi: number, fallback: number): number {
   const n = typeof raw === 'number' && Number.isFinite(raw) ? Math.round(raw) : fallback;
   return Math.min(hi, Math.max(lo, n));
@@ -131,6 +157,7 @@ export function sanitizeAppearance(raw: unknown): StudioAppearance {
  * skin as `data-skin` plus its token overrides (theming/skins.ts).
  */
 export function applyAppearance(a: StudioAppearance): void {
+  writeCachedAppearance(a);
   const root = document.documentElement;
   root.style.setProperty('--_accent-h', String(a.accent_h));
   root.style.setProperty('--_accent-s', `${a.accent_s}%`);
@@ -197,8 +224,14 @@ function persistSoon(read: () => StudioAppearance): void {
   }, PERSIST_DEBOUNCE_MS);
 }
 
+/** The starting state: the cached appearance when this client has one, applied before the first
+ *  render (so a cold load paints the operator's theme, not the dark default); otherwise the
+ *  stylesheet defaults. */
+const cached = typeof document === 'undefined' ? null : readCachedAppearance();
+if (cached !== null) applyAppearance(cached);
+
 export const useAppearanceStore = create<AppearanceStore>((set, get) => ({
-  appearance: DEFAULT_APPEARANCE,
+  appearance: cached ?? DEFAULT_APPEARANCE,
   loaded: false,
 
   load: async () => {
@@ -209,7 +242,8 @@ export const useAppearanceStore = create<AppearanceStore>((set, get) => ({
       applyAppearance(appearance);
       set({ appearance, loaded: true });
     } catch {
-      // No settings surface (or it errored): the tokens.css defaults stand.
+      // No settings surface, or the daemon is unreachable: what this client last applied stands
+      // (the cache, already applied at start) — else the tokens.css defaults.
       set({ loaded: true });
     }
   },

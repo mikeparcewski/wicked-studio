@@ -38,7 +38,9 @@ export function NotificationSettings(): React.ReactElement {
   const prefs = useNotifPrefsStore((s) => s.prefs);
   const update = useNotifPrefsStore((s) => s.update);
   const [permission, setPermission] = useState<PermState>(permissionNow);
-  const [denied, setDenied] = useState(false);
+  // studio#513: the operator asked, and the browser did not grant — a dismissed prompt (the
+  // permission stays `default`). Said until the operator picks Off or asks again.
+  const [dismissed, setDismissed] = useState(false);
 
   /** EC25: THE one requestPermission call site in the app — this click. */
   async function chooseDesktop(): Promise<void> {
@@ -51,28 +53,41 @@ export function NotificationSettings(): React.ReactElement {
         result = Notification.permission;
       }
     }
-    setPermission(result);
-    if (result === 'granted') {
-      setDenied(false);
+    // studio#513: a decisive answer (granted / denied) is the state. An answer of "default" is not
+    // one — with the permission already DENIED, `requestPermission()` resolves "default" (no prompt
+    // is shown) while `Notification.permission` stays "denied" — so the browser's state is read
+    // then: still denied = blocked (the reason stays on screen); default = a dismissed prompt.
+    const now: NotificationPermission = result === 'default' ? Notification.permission : result;
+    setPermission(now);
+    if (now === 'granted') {
+      setDismissed(false);
       update({ desktop: true });
     } else {
-      // The radio reverts to Off; a `denied` is named honestly below.
-      setDenied(result === 'denied');
+      // The radio reverts to Off; the reason is named below — blocked, or not granted this time.
+      setDismissed(now === 'default');
       update({ desktop: false });
     }
   }
 
-  const statusLine = ((): { text: string; color: string } | null => {
+  const statusLine = ((): { text: string; color: string; state: string } | null => {
     if (permission === 'unsupported') {
-      return { text: 'this browser does not support desktop notifications', color: 'var(--ink-dim)' };
+      return { text: 'this browser does not support desktop notifications', color: 'var(--ink-dim)', state: 'unsupported' };
     }
-    if (permission === 'denied' || denied) {
+    if (permission === 'denied') {
       return {
         text: 'permission blocked in browser settings — the studio cannot re-ask',
         color: 'var(--status-fail)',
+        state: 'denied',
       };
     }
-    if (permission === 'granted') return { text: 'permission granted ✓', color: 'var(--status-run)' };
+    if (permission === 'granted') return { text: 'permission granted ✓', color: 'var(--status-run)', state: 'granted' };
+    if (dismissed) {
+      return {
+        text: 'the browser did not grant it — pick Desktop again to be asked',
+        color: 'var(--status-gate)',
+        state: 'dismissed',
+      };
+    }
     if (prefs.desktop) {
       // §7.10 (slice X2): the on-load truth. The crew-persisted pref says
       // desktop-on, but THIS browser has never granted (state 'default') —
@@ -81,6 +96,7 @@ export function NotificationSettings(): React.ReactElement {
       return {
         text: 'permission not granted in this browser — click the desktop option to grant it',
         color: 'var(--status-gate)',
+        state: 'ungranted',
       };
     }
     return null; // 'default' + off: nothing to report until the operator opts in
@@ -106,7 +122,10 @@ export function NotificationSettings(): React.ReactElement {
           name="notif-mode"
           data-testid="notif-off"
           checked={!prefs.desktop}
-          onChange={() => { setDenied(false); update({ desktop: false }); }}
+          onChange={() => { setDismissed(false); update({ desktop: false }); }}
+          // A failed Desktop request leaves Off already checked, so a click on it fires no change
+          // event — the click itself is the operator stepping back, and clears the dismissed line.
+          onClick={() => setDismissed(false)}
           style={{ accentColor: 'var(--accent)', marginTop: '2px' }}
         />
         <label htmlFor="notif-off" style={CSS.label}>Off — in-app toasts only</label>
@@ -147,7 +166,7 @@ export function NotificationSettings(): React.ReactElement {
       </div>
 
       {statusLine !== null && (
-        <p data-testid="notif-permission" style={{ ...CSS.status, color: statusLine.color }}>
+        <p data-testid="notif-permission" data-state={statusLine.state} style={{ ...CSS.status, color: statusLine.color }}>
           {statusLine.text}
         </p>
       )}

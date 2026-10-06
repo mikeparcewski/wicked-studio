@@ -136,7 +136,8 @@ describe('BrandLearn — the restored /theme extraction flow', () => {
     render(<BrandLearn />);
     await learnFrom();
     // The default project is the one already bound to an interactive root.
-    expect(listDocs).toHaveBeenCalledExactlyOnceWith('notes');
+    expect(listDocs).toHaveBeenCalledTimes(1);
+    expect(listDocs.mock.calls[0]?.[0]).toBe('notes'); // studio#518: the abort signal rides the call too
     expect(createDoc).not.toHaveBeenCalled(); // idempotent: listed → reused
     expect(requestThemeLearn).toHaveBeenCalledExactlyOnceWith(
       'notes', SCRATCH_DOC_NAME, { kind: 'url', url: 'https://acme.example' });
@@ -232,6 +233,24 @@ describe('BrandLearn — the restored /theme extraction flow', () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
     expect(getLearnedTheme).toHaveBeenCalledTimes(1); // the abort ended the loop
     expect(screen.queryByTestId('learn-status')).toBeNull(); // back to idle
+  });
+
+  it('Cancel while "Preparing the scratch document…" creates nothing (studio#518)', async () => {
+    // The project's document list is slow (the bridge is coming up): it answers AFTER the cancel.
+    let answerList!: (docs: unknown[]) => void;
+    listDocs.mockReturnValue(new Promise((r) => { answerList = r; }));
+    render(<BrandLearn />);
+    fireEvent.change(screen.getByTestId('learn-input'), { target: { value: 'https://example.org/' } });
+    await act(async () => { fireEvent.click(screen.getByTestId('learn-submit')); await vi.advanceTimersByTimeAsync(0); });
+    expect(screen.getByTestId('learn-status').textContent).toMatch(/Preparing the scratch document/);
+    const signal = listDocs.mock.calls[0]?.[1] as { signal?: AbortSignal } | undefined;
+    expect(signal?.signal).toBeInstanceOf(AbortSignal);
+    await act(async () => { fireEvent.click(screen.getByTestId('learn-cancel')); });
+    expect(signal?.signal?.aborted).toBe(true);
+    await act(async () => { answerList([]); await vi.advanceTimersByTimeAsync(10_000); });
+    expect(createDoc).not.toHaveBeenCalled();
+    expect(requestThemeLearn).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('learn-status')).toBeNull(); // back to idle, no error
   });
 
   it('unmount aborts the poll', async () => {

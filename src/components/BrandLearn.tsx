@@ -77,7 +77,15 @@ export function BrandLearn(): React.ReactElement {
     setPhase('preparing');
     setStatus(`Preparing the scratch document in “${effectiveProject}”…`);
     try {
-      const docId = await ensureScratchDoc(effectiveProject);
+      // studio#518: the signal rides the preparation too — a Cancel while the project's document
+      // list is in flight stops the create that would follow (and the drafting run it launches).
+      let docId: string;
+      try {
+        docId = await ensureScratchDoc(effectiveProject, undefined, ctl.signal);
+      } catch (e: unknown) {
+        if (ctl.signal.aborted) return; // cancel already reset the surface
+        throw e;
+      }
       if (ctl.signal.aborted) return;
       // The bridge reports refusals ASYNC as status.posted errors on the
       // scratch doc's thread; snapshot the newest one so only a NEW arrival

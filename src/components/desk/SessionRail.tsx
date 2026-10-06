@@ -8,6 +8,7 @@ import { useBoardModel } from '../../hooks/useBoardModel.js';
 import { useCapabilities } from '../../store/capabilities.js';
 import type { Navigate } from '../../hooks/useRoute.js';
 import { SESSION_RAIL_PX } from '../../theming/skins.js';
+import { useAppearanceStore } from '../../theming/appearance.js';
 import { anyModalOpen, useLayerStore } from '../../store/layers.js';
 import { HealthRailSection } from '../HealthRailSection.js';
 import { WatchPill } from './WatchPill.js';
@@ -75,10 +76,15 @@ export function SessionRail({ runs, needRows, navigate, pathname }: {
     requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>('[data-testid="desk-composer-input"]')?.focus());
   };
   const current = (path: string): 'page' | undefined => (pathname === path || pathname.startsWith(`${path}/`) ? 'page' : undefined);
+  const siteName = useAppearanceStore((s) => s.appearance.site_name?.trim() || null);
 
   return (
     <nav data-testid="session-rail" aria-label="Sessions" className="wk-rail" style={{ width: SESSION_RAIL_PX }}>
-      <div className="wk-rail-brand"><span aria-hidden className="wk-desk-dot wk-desk-dot--waiting" /> wicked <b>studio</b></div>
+      {/* studio#512: Theme › Site name is shown here under the Desk skin (the classic chrome is the other home). */}
+      <div className="wk-rail-brand" data-testid="desk-rail-brand">
+        <span aria-hidden className="wk-desk-dot wk-desk-dot--waiting" />
+        {siteName !== null ? <b>{siteName}</b> : <>wicked <b>studio</b></>}
+      </div>
       <a href="/" onClick={go('/')} data-testid="desk-rail-home" aria-current={pathname === '/' ? 'page' : undefined} className="wk-rail-desk">
         <span>Desk</span>
         {count > 0 && <span data-testid="desk-rail-badge" className="wk-rail-badge" aria-label={`${count} need you`}>{count}</span>}
