@@ -39,6 +39,20 @@ import { addAboutChip } from '../../store/composerChips.js';
  * the contained file routes. Nothing here says "checked" — that word is the acceptance read's (WT-U2).
  */
 
+/**
+ * studio#509: a keyboard entry into the player (Tab / Shift+Tab from outside it) lands the focus on
+ * one of the native controls' own buttons, inside Chromium's user-agent shadow tree — and from there
+ * Chromium delivers NO key event to the page (measured: not keydown, not keyup, not even at a
+ * window-level capture listener), so Esc could not shrink the artifact. The focus event is still
+ * retargeted to the `<video>`, so on an entry from OUTSIDE (`relatedTarget` is not the player) the
+ * focus is re-pointed at the player itself: Space / arrows still drive it there, Esc reaches the
+ * artifact, and Tab from it walks the native buttons as before (moves between them fire no focus
+ * event at the host, so this never pulls the focus back out of them).
+ */
+export function focusPlayerOnEntry(e: React.FocusEvent<HTMLMediaElement>): void {
+  if (e.relatedTarget !== e.currentTarget) e.currentTarget.focus({ preventScroll: true });
+}
+
 const POLL_MS = 2500;
 /** A read that keeps failing is retried this many times (5 s apart), then left: the line says it failed. */
 const MAX_FAILED_READS = 5;
@@ -433,6 +447,7 @@ function Body({ rec, size, morph, units, reload, composerKey }: {
               playsInline
               className="wk-walk-video"
               onLoadedMetadata={(e) => setDuration(Number.isFinite(e.currentTarget.duration) ? e.currentTarget.duration : null)}
+              onFocus={focusPlayerOnEntry}
             />
           ) : failed?.failedFrame != null ? (
             <img data-testid="walkthrough-failed-frame" src={fileUrl(rec, failed.failedFrame)} alt={`The failing frame of chapter ${failed.index}`} className={open ? 'wk-walk-video' : 'wk-walk-frame'} />

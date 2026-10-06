@@ -124,16 +124,46 @@ export function ArtifactMorph({ artifactKey, title, projectId, docId, composerKe
   // it is consuming it (a pick, an edit field), which stops the event before it reaches the document.
   // Known limit: a key pressed with focus INSIDE the sandboxed frame stays there; the ⤡ / × buttons
   // and a pick (which moves focus out) are the way back.
+  // studio#509: the native `<video controls>` with the PLAYER focused is not such a limit — the
+  // artifact also listens in the capture phase on its own element and shrinks on Esc from it; the
+  // browser's own fullscreen is left alone (Esc leaves it first). With the focus on one of the
+  // controls' own buttons (Tab into them) Chromium delivers no key to the page at all — the player's
+  // `focusPlayerOnEntry` keeps a keyboard entry on the player itself for that reason.
+  const section = useRef<HTMLElement | null>(null);
   useEffect(() => {
     if (size === 'inline' || !topmost) return undefined;
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.key !== 'Escape' || e.defaultPrevented) return;
+    const wants = (e: KeyboardEvent): boolean => {
+      if (e.key !== 'Escape' || e.defaultPrevented) return false;
       const t = e.target as HTMLElement | null;
-      if (t !== null && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      if (t !== null && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return false;
+      return true;
+    };
+    // A key on THIS artifact's own player (another artifact's player is the document's to answer).
+    const fromMyPlayer = (e: KeyboardEvent): boolean => {
+      const t = e.target as HTMLElement | null;
+      return t !== null && typeof t.closest === 'function' && t.closest('video, audio') !== null
+        && section.current !== null && section.current.contains(t);
+    };
+    // The document (bubble): every key that gets there — except from this artifact's player, which
+    // the capture listener below already answered.
+    const onKey = (e: KeyboardEvent): void => {
+      if (!wants(e) || fromMyPlayer(e)) return;
       morph(shrink(size));
     };
+    // The artifact (capture): a key on its player, before the player's controls take it.
+    const onPlayerKey = (e: KeyboardEvent): void => {
+      if (!wants(e) || !fromMyPlayer(e)) return;
+      if (document.fullscreenElement) return;
+      e.preventDefault();
+      morph(shrink(size));
+    };
+    const el = section.current;
     document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
+    el?.addEventListener('keydown', onPlayerKey, true);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      el?.removeEventListener('keydown', onPlayerKey, true);
+    };
   }, [size, topmost, morph]);
 
   // Focus follows the morph: the control that was pressed may be gone at the new size.
@@ -153,6 +183,7 @@ export function ArtifactMorph({ artifactKey, title, projectId, docId, composerKe
   const slug = artifactKey.replace(/[^a-z0-9]/gi, '-');
   return (
     <section
+      ref={section}
       data-testid="artifact"
       data-object={`artifact:${artifactKey}`}
       data-size={size}

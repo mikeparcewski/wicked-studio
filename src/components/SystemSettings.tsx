@@ -366,7 +366,7 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
           label="Deliver identity (GitHub login)"
           description="The account the deliver phase must push as. Before anything is staged, the phase checks gh's active login AND the credential git would use for the remote's host, and refuses — naming both — if either disagrees. Empty = the daemon's GH_ACCOUNT environment variable, and if that is unset too it pushes as whatever login gh holds. A login, never a token: the credential stays in gh's keyring or GH_TOKEN."
         >
-          <div className="flex flex-col items-end gap-1">
+          <div className="flex w-56 flex-col items-end gap-1">
             <input
               type="text"
               aria-label="Deliver identity (GitHub login)"
@@ -385,12 +385,12 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
               }}
             />
             {deliverIdentityInvalid && (
-              <p className="text-xs" style={{ color: 'var(--status-fail)' }} data-testid="deliver-identity-invalid">
+              <p className="w-56 text-xs break-words" style={{ color: 'var(--status-fail)', overflowWrap: 'anywhere' }} data-testid="deliver-identity-invalid">
                 Must be empty or a GitHub login (letters, digits and single hyphens).
               </p>
             )}
             {deliverIdentityError !== null && (
-              <p className="text-xs" style={{ color: 'var(--status-fail)' }} data-testid="deliver-identity-error">
+              <p className="w-56 text-xs break-words" style={{ color: 'var(--status-fail)', overflowWrap: 'anywhere' }} data-testid="deliver-identity-error">
                 {deliverIdentityError}
               </p>
             )}
@@ -444,7 +444,7 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
           label="Worker config root"
           description="Base directory for the engine-owned worker CLI config homes (e.g. the claude worker home is <root>/claude). Empty = the engine default ~/.wicked-worker. Must be an absolute path; takes effect on the next worker spawn."
         >
-          <div className="flex flex-col items-end gap-1">
+          <div className="flex w-56 flex-col items-end gap-1">
             <input
               type="text"
               aria-label="Worker config root"
@@ -462,12 +462,12 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
               }}
             />
             {workerRootInvalid && (
-              <p className="text-xs" style={{ color: 'var(--status-fail)' }} data-testid="worker-root-invalid">
+              <p className="w-56 text-xs break-words" style={{ color: 'var(--status-fail)', overflowWrap: 'anywhere' }} data-testid="worker-root-invalid">
                 Must be empty or an absolute path.
               </p>
             )}
             {workerRootError && (
-              <p className="text-xs" style={{ color: 'var(--status-fail)' }} data-testid="worker-root-error">
+              <p className="w-56 text-xs break-words" style={{ color: 'var(--status-fail)', overflowWrap: 'anywhere' }} data-testid="worker-root-error">
                 {workerRootError}
               </p>
             )}

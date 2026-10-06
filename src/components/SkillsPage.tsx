@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { getDiagnostics } from '../api/diagnostics.js';
 import { apiRevision, apiWire } from '../api/errors.js';
 import {
@@ -138,6 +138,30 @@ export function SkillsPage({ navigate, search = '' }: {
    *  parks its name in `pendingSelect` and the drawer asks first — its `key` swaps only after the
    *  operator discards, never under a draft (review round 2). */
   const [drawerDirty, setDrawerDirty] = useState(false);
+  // studio#515: where the page header ends — the drawer is pinned below it (a fixed aside over the
+  // header hid Refresh baseline / Analyze / Publish and the catalog re-read while a skill was open).
+  // Re-measured on resize, on any scroll (the header lives in the page's scroller) and when the
+  // header itself changes height (the snapshot / engine lines come and go).
+  const headerRef = useRef<HTMLDivElement | null>(null);
+  const [drawerTop, setDrawerTop] = useState(0);
+  useLayoutEffect(() => {
+    const measure = (): void => {
+      const el = headerRef.current;
+      if (el === null) return;
+      const next = Math.max(0, Math.round(el.getBoundingClientRect().bottom));
+      setDrawerTop((cur) => (cur === next ? cur : next));
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    window.addEventListener('scroll', measure, true);
+    const ro = typeof ResizeObserver === 'undefined' || headerRef.current === null ? null : new ResizeObserver(measure);
+    if (ro !== null && headerRef.current !== null) ro.observe(headerRef.current);
+    return () => {
+      window.removeEventListener('resize', measure);
+      window.removeEventListener('scroll', measure, true);
+      ro?.disconnect();
+    };
+  }, []);
   const [pendingSelect, setPendingSelect] = useState<string | null>(null);
 
   /** The engine line is read-only telemetry beside the catalog: a failure (an older daemon, a
@@ -459,8 +483,10 @@ export function SkillsPage({ navigate, search = '' }: {
   return (
     <div data-testid="skills-page" className="flex h-full min-h-0 min-w-0 flex-1 overflow-hidden">
       <div className="flex min-w-0 flex-1 flex-col gap-4 overflow-y-auto p-6">
-        {/* The verbs wrap under the intro at phone width instead of squeezing it to a word per line. */}
-        <div className="flex flex-wrap items-start gap-2">
+        {/* The verbs wrap under the intro at phone width instead of squeezing it to a word per line.
+            studio#515: the drawer is pinned BELOW this header (measured), so the verbs — the catalog
+            re-read above all, meant for the moment a skill is open — stay reachable with the drawer up. */}
+        <div ref={headerRef} data-testid="skills-header" className="flex flex-wrap items-start gap-2">
           <div className="min-w-0 flex-1 basis-[16rem]">
             <h2 className="text-sm font-semibold" style={{ color: 'var(--ink-high)' }}>Skills</h2>
             <p className="mt-1 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
@@ -830,6 +856,7 @@ export function SkillsPage({ navigate, search = '' }: {
       {selected !== null && (
         <SkillDrawer
           key={selected.name}
+          top={drawerTop}
           skill={selected}
           support={support}
           writer={writer}
