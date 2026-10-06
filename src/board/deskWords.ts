@@ -1,6 +1,6 @@
 import type { SessionView } from '../api/types.js';
 import { deliverUnit, deliveryOf } from '../components/delivery.js';
-import { humanTitle } from '../components/runIdentity.js';
+import { humanTitle, onboardTitle } from '../components/runIdentity.js';
 
 /**
  * THE DESK'S WORDS (DES-STUDIO-REBUILD-001 §3; DESIGN-simple §3), from the live reel take of
@@ -69,9 +69,7 @@ export function plainGateQuestion(prompt: string | undefined, gateKind: string |
 /** A run's title in the default layer. Onboarding runs say which repo ("Set up checkout-demo"):
  *  the title fold cut "Onboard repository: <name>" at its colon, so every one read the same. */
 export function plainRunTitle(problem: string): string {
-  const onboard = /^Onboard repository:\s+(\S+)/.exec(problem.trim());
-  if (onboard !== null) return `Set up ${onboard[1]}`;
-  return humanTitle(problem);
+  return onboardTitle(problem) ?? humanTitle(problem);
 }
 
 // ── studio#424: finished work kept on this machine ──────────────────────────────────────────

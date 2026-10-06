@@ -25,7 +25,7 @@ import { ageWord } from '../DashboardTiles.js';
 import { seatStandingWord } from '../HealthRailSection.js';
 import { SignInPanel } from '../SignInPanel.js';
 import { FinishedRunRow } from '../FinishedRunRow.js';
-import { humanTitle } from '../runIdentity.js';
+import { plainRunTitle } from '../../board/deskWords.js';
 import { runTechParts, Tech } from '../Tech.js';
 
 /**
@@ -192,7 +192,7 @@ function SessionsTab({ runs, runsLoaded, runsError, onRetryRuns, needRows, q, na
           </p>
         )}
       </div>
-      {q.filter === 'archived' && <ArchivedRuns key={q.project ?? ''} navigate={navigate} runChatId={runChatId} project={q.project} />}
+      {q.filter === 'archived' && <ArchivedRuns key={q.project ?? ''} navigate={navigate} runChatId={runChatId} project={q.project} onChanged={onRetryRuns} />}
       {q.filter !== 'archived' && read === 'checking' && <p data-testid="everything-checking" className="wk-session-grey">Reading your work…</p>}
       {q.filter !== 'archived' && read === 'failed' && (
         <p data-testid="everything-failed" role="alert" className="wk-session-grey">
@@ -282,8 +282,10 @@ function dtoProjectOf(v: SessionView): string | null {
 /** The session states that are over — the row is the Work page's finished row with its moves. */
 const FINISHED: ReadonlySet<string> = new Set(['done', 'blocked', 'quiet']);
 
-/** The Archived lens: `GET /runs?archived` on pick, each run with Unarchive (the Work page's two calls). */
-function ArchivedRuns({ navigate, runChatId, project }: { navigate: Navigate; runChatId: boolean; project: string | null }): React.ReactElement {
+/** The Archived lens: `GET /runs?archived` on pick, each run with Unarchive (the Work page's two calls).
+ *  studio#511: Unarchive re-reads the runs list through `onChanged` (the same re-read Archive on a finished
+ *  row triggers), so the run shows under its state filter without leaving the page. */
+function ArchivedRuns({ navigate, runChatId, project, onChanged }: { navigate: Navigate; runChatId: boolean; project: string | null; onChanged: (() => void) | undefined }): React.ReactElement {
   const [rows, setRows] = useState<SessionView[] | null>(null);
   const [failed, setFailed] = useState(false);
   const showText = useDisplayText();
@@ -304,7 +306,10 @@ function ArchivedRuns({ navigate, runChatId, project }: { navigate: Navigate; ru
   }, [project]);
   const unarchive = (id: string): void => {
     void api.archiveRun(id, false)
-      .then(() => setRows((prev) => (prev === null ? prev : prev.filter((v) => v.session.id !== id))))
+      .then(() => {
+        setRows((prev) => (prev === null ? prev : prev.filter((v) => v.session.id !== id)));
+        onChanged?.();
+      })
       .catch(() => { /* the row stays; the next read says */ });
   };
   return (
@@ -319,7 +324,8 @@ function ArchivedRuns({ navigate, runChatId, project }: { navigate: Navigate; ru
             return (
               <li key={v.session.id} data-testid="everything-archived-run" data-run-id={v.session.id} className="wk-desk-session wk-everything-row" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <a href={path} onClick={(e) => { e.preventDefault(); navigate(path); }} className="wk-desk-need-body" style={{ flex: '1 1 auto', opacity: 0.7 }}>
-                  <span className="wk-desk-session-title">{showText(humanTitle(v.session.problem || v.session.id))}</span>
+                  {/* studio#510: the same word the rail uses — an onboarding run names its repository. */}
+                  <span className="wk-desk-session-title">{showText(plainRunTitle(v.session.problem || v.session.id))}</span>
                   {v.session.archive_note ? <span className="wk-desk-need-line">{showText(v.session.archive_note)}</span> : null}
                 </a>
                 <button type="button" data-testid="everything-unarchive" onClick={() => unarchive(v.session.id)} className="wk-since-toggle">Unarchive</button>

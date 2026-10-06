@@ -82,14 +82,27 @@ function clauseEnd(intent: string): number {
 }
 
 /**
+ * studio#423 / #510: an onboarding run's title names its repository — "Set up notes-b". The daemon
+ * words these runs "Onboard repository: <name>", and {@link humanTitle}'s clause cut keeps exactly
+ * the part every onboarding shares, so five of them read the same. `null` for any other run. The
+ * ONE fold: the Desk rail (`plainRunTitle`) and {@link runTitle} both go through it.
+ */
+export function onboardTitle(problem: string): string | null {
+  const m = /^Onboard repository:\s+(\S+)/.exec(problem.trim());
+  return m === null ? null : `Set up ${m[1]}`;
+}
+
+/**
  * §7.5's synthesized display title: `intent clause · short-id · #ordinal`.
  * The attempt ordinal is 1-based off the DTO's 0-based `attempt`, so five
  * identical prompts stop being quintuplets — the short-id alone already
  * distinguishes them; the ordinal names reworks. The intent half goes through
- * {@link humanTitle} — one derivation, not four copies.
+ * {@link humanTitle} — one derivation, not four copies — after the onboarding
+ * fold ({@link onboardTitle}), which names the repository instead of the clause
+ * (and keeps to the same length budget: a long repository name is trimmed too).
  */
 export function runTitle(session: AgentSession, intentMax: number = INTENT_MAX): string {
-  return `${humanTitle(session.problem, intentMax)} · ${runShortId(session.id)} · #${session.attempt + 1}`;
+  return `${humanTitle(onboardTitle(session.problem) ?? session.problem, intentMax)} · ${runShortId(session.id)} · #${session.attempt + 1}`;
 }
 
 /**
