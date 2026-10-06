@@ -18,7 +18,7 @@ const { useAskThreadStore } = await import('../src/store/askThread.js');
 const { useTeamPlanStore } = await import('../src/store/teamPlan.js');
 const { useGateStore } = await import('../src/store/gates.js');
 const { useGateActionStore } = await import('../src/board/gateActions.js');
-const { flushDecisionsForTest, resetDecisionsForTest } = await import('../src/board/undoQueue.js');
+const { flushDecisionsForTest, resetDecisionsForTest, useUndoQueue } = await import('../src/board/undoQueue.js');
 const { useSessionDrafts } = await import('../src/store/sessionDrafts.js');
 const { setCachedRoster } = await import('../src/store/rosterCache.js');
 const { makeUnit, makeView } = await import('./factories.js');
@@ -54,6 +54,7 @@ const posts: Array<{ path: string; body: unknown }> = [];
 
 beforeEach(() => {
   posts.length = 0;
+  lastCard = null;
   resetDecisionsForTest();
   useCapabilities.setState({ loaded: true, runChatId: true, walkthroughRoots: false, askPath: true });
   useAskThreadStore.setState({ turns: {}, runByChat: {}, runs: new Set([RUN]), replySeq: {}, paByChat: {} });
@@ -83,8 +84,10 @@ function page() {
   return render(<SessionPage sessionId="chat-ask" runs={[ASK_RUN]} runsLoaded needRows={[]} navigate={() => {}} onAsk={() => {}} />);
 }
 
+let lastCard: HTMLElement | null = null;
 async function card(): Promise<HTMLElement> {
   const c = await screen.findByTestId('session-ask-proposal');
+  lastCard = c;
   await waitFor(() => expect(c.querySelector('[data-testid="session-proposal-go"]')).not.toBeNull());
   // The card answers only a gate the store holds (the handlers bail without one): wait for it.
   await waitFor(() => expect(useGateStore.getState().gates[RUN]).toBeDefined());
@@ -96,7 +99,20 @@ async function card(): Promise<HTMLElement> {
 async function gatePosts(n: number): Promise<Array<{ path: string; body: unknown }>> {
   await waitFor(async () => {
     await flushDecisionsForTest();
-    expect(posts.filter((p) => p.path === `/runs/${RUN}/gate`)).toHaveLength(n);
+    const got = posts.filter((p) => p.path === `/runs/${RUN}/gate`);
+    if (got.length !== n) {
+      // studio#532 diagnostics: what the one decision path saw when nothing was posted.
+      const diag = {
+        results: useUndoQueue.getState().results.map((r) => `${r.kind}: ${r.text}`),
+        pending: useUndoQueue.getState().pending.map((p) => `${p.verb} ${p.runIds.join(',')}`),
+        byGate: useGateActionStore.getState().byGate[RUN] ?? null,
+        gate: useGateStore.getState().gates[RUN] ?? null,
+        allPosts: posts.map((p) => p.path),
+        cardsInDocument: document.querySelectorAll('[data-testid="session-ask-proposal"]').length,
+        capturedCardAttached: lastCard !== null && document.contains(lastCard),
+      };
+      expect(got, JSON.stringify(diag)).toHaveLength(n);
+    }
   }, { timeout: 4000 });
   return posts.filter((p) => p.path === `/runs/${RUN}/gate`);
 }
@@ -118,8 +134,8 @@ describe('the proposal card in the thread', () => {
 
   it('Continue in Build posts ONE approve with no plan', async () => {
     page();
-    const c = await card();
-    fireEvent.click(c.querySelector('[data-testid="session-proposal-go"]') as HTMLElement);
+    await card();
+    fireEvent.click(screen.getByTestId('session-proposal-go'));
     const gate = await gatePosts(1);
     expect(gate[0]!.body).toMatchObject({ approve: true });
     expect('plan' in (gate[0]!.body as object)).toBe(false);
@@ -127,8 +143,8 @@ describe('the proposal card in the thread', () => {
 
   it('Not now posts the ACCEPTED rev’s steps (no build); the card keeps the proposal and Bring it back prefills the composer', async () => {
     page();
-    const c = await card();
-    fireEvent.click(c.querySelector('[data-testid="session-proposal-not-now"]') as HTMLElement);
+    await card();
+    fireEvent.click(screen.getByTestId('session-proposal-not-now'));
     const gate = await gatePosts(1);
     expect(gate[0]!.body).toMatchObject({ approve: true, plan: { steps: [{ catalog: 'understand', id: 'answer-1' }] } });
     await waitFor(() => expect(screen.getByTestId('session-proposal-no').textContent).toContain('Not now — the conversation goes on'));
@@ -138,8 +154,8 @@ describe('the proposal card in the thread', () => {
 
   it('End posts ONE reject', async () => {
     page();
-    const c = await card();
-    fireEvent.click(c.querySelector('[data-testid="session-proposal-end"]') as HTMLElement);
+    await card();
+    fireEvent.click(screen.getByTestId('session-proposal-end'));
     const gate = await gatePosts(1);
     expect(gate[0]!.body).toMatchObject({ approve: false });
   });
@@ -157,7 +173,7 @@ describe('the proposal card in the thread', () => {
     }));
     page();
     const c = await card();
-    fireEvent.click(c.querySelector('[data-testid="session-proposal-not-now"]') as HTMLElement);
+    fireEvent.click(screen.getByTestId('session-proposal-not-now'));
     await act(async () => { await flushDecisionsForTest(); });
     await waitFor(() => expect(c.querySelector('[data-testid="session-proposal"]')!.getAttribute('data-state')).toBe('fail'));
     expect([...c.querySelectorAll('.wk-prop-btns button')].map((b) => b.textContent)).toStrictEqual(['Continue in Build', 'Not now', 'End']);
