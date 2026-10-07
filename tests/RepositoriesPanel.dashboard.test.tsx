@@ -227,3 +227,52 @@ describe('the FilterStrip drives the fleet; the register flow is untouched', () 
     expect(rerunOnboarding).not.toHaveBeenCalled();
   });
 });
+
+describe('the captured-learnings state (studio#294 b) — a captured repo reads differently from one never captured', () => {
+  const CAPTURE = makeView({
+    id: 'c-api', repo_ref: 'studio-api', workflow_id: 'capture-learnings', status: 'completed',
+    problem: 'Capture learnings from studio-api',
+  });
+
+  it('a repo whose newest capture-learnings run completed reads "learnings captured · <ago> ago"; one with none is prompted', async () => {
+    listRuns.mockImplementationOnce(() => Promise.resolve({ runs: [...RUNS, CAPTURE] }));
+    useMembershipStore.setState({ attachedAtByRun: { ...useMembershipStore.getState().attachedAtByRun, 'c-api': NOW - 2 * 3_600_000 } });
+    await panel();
+    const card = (id: string) => screen.getAllByTestId('repo-card').find((c) => c.getAttribute('data-repo-id') === id)!;
+    const api = card('studio-api');
+    expect(api).toHaveAttribute('data-captured', 'captured');
+    expect(within(api).getByTestId('repo-capture-state')).toHaveAttribute('data-state', 'captured');
+    expect(within(api).getByTestId('repo-capture-state').textContent).toContain('learnings captured · 2h ago');
+    expect(within(api).getByTestId('repo-capture-learnings').textContent).toBe('Capture learnings again');
+    // The graph line is untouched: a capture is not an onboard.
+    expect(within(api).getByTestId('repo-graph-state')).toHaveAttribute('data-state', 'ready');
+    // A never-captured repo is told the verb exists.
+    const fresh = card('fresh');
+    expect(fresh).toHaveAttribute('data-captured', 'never');
+    expect(within(fresh).getByTestId('repo-capture-state').textContent).toContain('no learnings captured yet — Capture learnings');
+    expect(within(fresh).getByTestId('repo-capture-learnings').textContent).toBe('Capture learnings');
+    // The added reading changes NOTHING the existing folds say — the ordering and the KPI tiles hold
+    // (the capture run is one more windowed run, nothing else).
+    expect(screen.getAllByTestId('repo-card').map((c) => c.getAttribute('data-repo-id'))).toEqual(['billing', 'studio-api', 'fresh']);
+    expect(screen.getByTestId('stat-ready').getAttribute('data-value')).toBe('1');
+    expect(screen.getByTestId('stat-gaps').getAttribute('data-value')).toBe('2');
+  });
+
+  it('an in-flight capture reads "capturing learnings now"; a failed one says FAILED — never "captured"', async () => {
+    listRuns.mockImplementationOnce(() => Promise.resolve({
+      runs: [
+        ...RUNS,
+        makeView({ id: 'c-run', repo_ref: 'fresh', workflow_id: 'capture-learnings', status: 'executing' }),
+        makeView({ id: 'c-bad', repo_ref: 'billing', workflow_id: 'capture-learnings', status: 'failed' }),
+        makeView({ id: 'c-old', repo_ref: 'billing', workflow_id: 'capture-learnings', status: 'completed' }),
+      ],
+    }));
+    await panel();
+    const card = (id: string) => screen.getAllByTestId('repo-card').find((c) => c.getAttribute('data-repo-id') === id)!;
+    expect(within(card('fresh')).getByTestId('repo-capture-state')).toHaveAttribute('data-state', 'capturing');
+    expect(within(card('fresh')).getByTestId('repo-capture-state').textContent).toContain('capturing learnings now');
+    expect(within(card('billing')).getByTestId('repo-capture-state')).toHaveAttribute('data-state', 'failed');
+    expect(within(card('billing')).getByTestId('repo-capture-state').textContent).toContain('learnings capture FAILED');
+    expect(within(card('billing')).getByTestId('repo-capture-state').textContent).not.toContain('learnings captured');
+  });
+});

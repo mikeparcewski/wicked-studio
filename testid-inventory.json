@@ -12,8 +12,8 @@
   "studioVersion": "0.6.2",
   "counts": {
     "files": 217,
-    "occurrences": 2476,
-    "static": 2169,
+    "occurrences": 2477,
+    "static": 2170,
     "dynamic": 79,
     "computed": 8
   },
@@ -7858,6 +7858,12 @@
     },
     {
       "testId": "repo-capture-learnings",
+      "files": [
+        "src/components/RepositoriesPanel.tsx"
+      ]
+    },
+    {
+      "testId": "repo-capture-state",
       "files": [
         "src/components/RepositoriesPanel.tsx"
       ]
