@@ -17,7 +17,9 @@ import { IDLE_GATE_ACTION, useGateActionStore } from '../src/board/gateActions.j
 import { setUndoWindowForTest, undoDecision, useUndoQueue } from '../src/board/undoQueue.js';
 import { GateRow } from '../src/components/session/GateRow.js';
 import { ProposalCard } from '../src/components/session/ProposalCard.js';
+import { RunBlock } from '../src/components/session/SessionView.js';
 import { proposalKindOf } from '../src/board/proposalCard.js';
+import { teamPlanApi } from '../src/api/teamPlan.js';
 import { useRunEventStore } from '../src/store/events.js';
 import { useGateStore } from '../src/store/gates.js';
 import type { OpenGate } from '../src/store/gates.js';
@@ -364,34 +366,67 @@ describe('GateRow — empty note cannot be sent', () => {
   });
 });
 
-describe('ProposalCard — receipt survives unmount+remount after plan gate answer (Rule 5)', () => {
-  it('remount: session-proposal still renders from store receipt (plan gate)', async () => {
-    const RUN_REM = 'r-remount-plan';
+describe('RunBlock — receipt survives unmount+remount through RunBlock routing (Rule 5)', () => {
+  const RUN_REM = 'r-remount-block';
+
+  function remountView(): SessionView {
+    return makeView({ id: RUN_REM, status: 'awaiting_human' });
+  }
+
+  beforeEach(() => {
+    vi.spyOn(teamPlanApi, 'team').mockResolvedValue({ rows: [], units: [] } as never);
     vi.spyOn(client.api, 'getRunEvents').mockResolvedValue({ events: [] });
     vi.spyOn(client.api, 'getRunDiff').mockResolvedValue({ diff: '', truncated: false });
-    useRunEventStore.setState({ byRun: { [RUN_REM]: [] } });
-    const gate: OpenGate = { runId: RUN_REM, ord: 1, prompt: 'Approve plan rev 1.', lifecycle: 'open', receivedAt: NOW, gateKind: 'plan_approval' };
-    useGateStore.setState({ gates: { [RUN_REM]: gate }, approaching: {} });
+    useRunEventStore.setState((s) => ({ byRun: { ...s.byRun, [RUN_REM]: [] } }));
+    useGateStore.setState({ gates: {}, approaching: {} });
     useGateActionStore.setState({ byGate: { [RUN_REM]: IDLE_GATE_ACTION } });
-    const v = makeView({ id: RUN_REM, status: 'awaiting_human' });
+  });
 
-    // Initial render: gate open → ProposalCard renders and records lastKind.
-    const { unmount } = render(<ProposalCard view={v} chain={EMPTY_CHAIN} />);
+  it('plan gate: RunBlock routes to session-proposal after unmount+remount (receipt kind: plan)', async () => {
+    const gate: OpenGate = {
+      runId: RUN_REM, ord: 1, prompt: 'Approve plan rev 1.', lifecycle: 'open', receivedAt: NOW, gateKind: 'plan_approval',
+    };
+    useGateStore.setState({ gates: { [RUN_REM]: gate }, approaching: {} });
+
+    const { unmount } = render(<RunBlock view={remountView()} badge={0} sessionId={`run:${RUN_REM}`} />);
     await waitFor(() => expect(screen.queryByTestId('session-proposal')).not.toBeNull());
 
-    // Click Go → commitGateDecision → sets answered + receipt in store, clears gate.
     fireEvent.click(screen.getByTestId('session-proposal-go'));
     await waitFor(() => {
       const st = useGateActionStore.getState().byGate[RUN_REM];
-      return st?.answered === 'approved' && st?.receipt !== null;
+      return st?.answered === 'approved' && st?.receipt?.kind === 'plan';
     });
 
-    // Unmount: component instance gone; lastKinds (module-level) and store receipt survive.
     unmount();
 
-    // Remount fresh — store receipt (kind:'plan') keeps session-proposal visible.
-    render(<ProposalCard view={v} chain={EMPTY_CHAIN} />);
+    // Remount: store receipt (kind:'plan') causes RunBlock to render ProposalCard, not GateRow.
+    render(<RunBlock view={remountView()} badge={0} sessionId={`run:${RUN_REM}`} />);
     await waitFor(() => expect(screen.queryByTestId('session-proposal')).not.toBeNull());
+    expect(screen.queryByTestId('session-gate-row')).toBeNull();
+  });
+
+  it('GateRow gate: RunBlock routes to session-gate-chosen after unmount+remount (receipt kind: row)', async () => {
+    const gate: OpenGate = {
+      runId: RUN_REM, ord: 1, prompt: 'Approve the plan?', lifecycle: 'open', receivedAt: NOW,
+    };
+    useGateStore.setState({ gates: { [RUN_REM]: gate }, approaching: {} });
+
+    const { unmount } = render(<RunBlock view={remountView()} badge={0} sessionId={`run:${RUN_REM}`} />);
+    await waitFor(() => expect(screen.queryByTestId('session-gate-row')).not.toBeNull());
+
+    fireEvent.click(screen.getAllByTestId('session-gate-choice')[0]!); // Approve — no note needed
+    await waitFor(() => {
+      const st = useGateActionStore.getState().byGate[RUN_REM];
+      return st?.receipt?.kind === 'row';
+    });
+
+    unmount();
+
+    // Remount: store receipt (kind:'row') causes RunBlock to render GateRow showing the fold.
+    render(<RunBlock view={remountView()} badge={0} sessionId={`run:${RUN_REM}`} />);
+    const chosen = await screen.findByTestId('session-gate-chosen');
+    expect(chosen.textContent).toMatch(/You chose: Approve/);
+    expect(screen.queryByTestId('session-proposal')).toBeNull();
   });
 });
 

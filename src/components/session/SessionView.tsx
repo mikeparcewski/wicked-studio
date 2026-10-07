@@ -570,7 +570,7 @@ function TurnDecisions({ chatId, turnId, navigate }: { chatId: string; turnId: s
   return <DecisionLine decisions={decisions} navigate={navigate} />;
 }
 
-function RunBlock({ view, badge, sessionId }: {
+export function RunBlock({ view, badge, sessionId }: {
   view: RunView;
   badge: number;
   sessionId: string;
