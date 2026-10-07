@@ -1,6 +1,6 @@
 import {
   liftContradictsItself,
-  liftIsFailure,
+  liftItselfFailed,
   liftOutcomeLabel,
   reverifyChangedTree,
   splitElided,
@@ -32,7 +32,11 @@ import { checkOutcome, checkTails, formatDuration, shortId, splitBackticks } fro
  * the PR claim stay with the Delivery card's own url-gated arms.
  */
 export function DeliverLift({ view, omitFailure = false }: { view: DeliverLiftView; omitFailure?: boolean }): React.ReactElement {
-  const failing = liftIsFailure(view);
+  // #408: the card wears the LIFT's tone, not the attempt's. An `unchanged` / `lifted` lift whose
+  // attempt failed later (push refused, gh error) stays in the success tone — the refusal below is
+  // its own red line, not a recolouring of good news.
+  const failing = liftItselfFailed(view);
+  const liftTone = failing ? 'fail' : view.outcome === 'skipped' ? 'muted' : 'pass';
   const tone = failing ? 'var(--status-fail)' : view.outcome === 'skipped' ? 'var(--ink-muted)' : 'var(--status-done)';
   const toneDim = failing ? 'var(--status-fail-dim)' : view.outcome === 'skipped' ? 'var(--surface-raised)' : 'var(--status-done-dim)';
   const short7 = (id: string | null): string => (id === null ? '?' : shortId(id, 7));
@@ -46,6 +50,7 @@ export function DeliverLift({ view, omitFailure = false }: { view: DeliverLiftVi
     <div
       data-testid="deliver-lift"
       data-outcome={view.outcome ?? 'refused'}
+      data-lift-tone={liftTone}
       {...(view.attempt !== null ? { 'data-attempt': view.attempt } : {})}
       className="rounded-lg p-2.5 flex flex-col gap-1 font-mono text-[11px]"
       style={{ background: toneDim, border: `1px solid ${toneDim}`, color: 'var(--ink-body)', overflowWrap: 'anywhere' }}

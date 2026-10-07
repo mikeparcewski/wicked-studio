@@ -216,6 +216,27 @@ export function liftIsFailure(view: DeliverLiftView): boolean {
 }
 
 /**
+ * Whether the LIFT ITSELF failed — as opposed to the deliver attempt failing at a later step
+ * (the push refused, a `gh` error) after a lift that was good news (#408). True for a `conflict`
+ * or `failed` outcome and a failed re-verify on the lifted tree, with or without a failure. Once
+ * the attempt HAS failed, only a lift PROVEN good keeps the success tone: `unchanged`, or `lifted`
+ * whose re-verify passed. A refusal before the lift (no outcome), a `skipped` lift, a `lifted` lift
+ * with no re-verify frame (the tree that would ship was never proven) and an outcome token this
+ * studio does not know all stay in the failure tone — the card never overstates what it cannot
+ * stand behind (codex review of this PR, HIGH).
+ *
+ * {@link liftIsFailure} is the ATTEMPT predicate — "nothing was pushed" — and keeps that meaning
+ * for the Delivery card, the deliver gate and the timeline; this one only tones the lift card.
+ */
+export function liftItselfFailed(view: DeliverLiftView): boolean {
+  if (view.outcome === 'conflict' || view.outcome === 'failed' || view.reverify?.passed === false) return true;
+  if (view.failure === null) return false;
+  if (view.outcome === 'unchanged') return false;
+  if (view.outcome === 'lifted') return view.reverify === null;
+  return true;
+}
+
+/**
  * A `passed: false` re-verify whose every check exited 0 is the post-check PROOF failing, not a
  * red suite: the repository's checks passed but CHANGED the worktree while running (wicked-core
  * F-433-002) — the refusal text names the tree/HEAD that moved. Said out loud so "repository
