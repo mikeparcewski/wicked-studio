@@ -27,10 +27,12 @@ import { SignInPanel } from '../SignInPanel.js';
 import { FinishedRunRow } from '../FinishedRunRow.js';
 import { plainRunTitle } from '../../board/deskWords.js';
 import { runTechParts, Tech } from '../Tech.js';
+import { ProjectEntry, ProjectsTab } from './ProjectsTab.js';
+import { projectRows } from '../../board/projectsModel.js';
 
 /**
- * "SEE EVERYTHING" (`/everything`, DES-STUDIO-REBUILD-001 §5.4, slice S15c) — one page, four tabs,
- * under the shell of every skin: Sessions, Everything made, Helpers, Handed over. Render only: the
+ * "SEE EVERYTHING" (`/everything`, DES-STUDIO-REBUILD-001 §5.4, slice S15c/S17a) — one page, five tabs,
+ * under the shell of every skin: Sessions, Everything made, Helpers, Handed over, Projects. Render only: the
  * folds are `board/everythingModel.ts` over `useBoardModel`, the docs cache, the roster and the
  * delivery facts studio already reads.
  *
@@ -57,7 +59,7 @@ export function EverythingPage({ runs, runsLoaded, runsError = null, onRetryRuns
   const project = q.project ?? routeProjectId;
   const go = (path: string) => (e: React.MouseEvent): void => { e.preventDefault(); navigate(path); };
   const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
-  const pick = (tab: EverythingTab): void => { navigate(everythingPath({ ...q, tab, project })); };
+  const pick = (tab: EverythingTab): void => { navigate(everythingPath({ ...q, tab, project: tab === 'projects' ? null : project, filter: tab === 'projects' || q.tab === 'projects' ? 'all' : q.filter })); };
   const onTabKey = (e: React.KeyboardEvent, i: number): void => {
     const n = EVERYTHING_TABS.length;
     let to: number | null = null;
@@ -107,6 +109,7 @@ export function EverythingPage({ runs, runsLoaded, runsError = null, onRetryRuns
           {q.tab === 'made' && <MadeTab runs={runs} q={q} navigate={navigate} go={go} />}
           {q.tab === 'helpers' && <HelpersTab />}
           {q.tab === 'handed' && <HandedTab runs={runs} runsLoaded={runsLoaded} go={go} />}
+          {q.tab === 'projects' && <ProjectsTab q={q} runs={runs} needRows={needRows} navigate={navigate} />}
         </section>
       </div>
     </div>
@@ -133,6 +136,7 @@ function SessionsTab({ runs, runsLoaded, runsError, onRetryRuns, needRows, q, na
   go: Go;
 }): React.ReactElement {
   const { items, unfiled } = useBoardModel(runs);
+  const projects = useProjectsStore((s) => s.projects);
   const runChatId = useCapabilities((s) => s.runChatId);
   const deliveredNow = useDeliveredNow();
   const nameOf = useProjectName();
@@ -157,17 +161,29 @@ function SessionsTab({ runs, runsLoaded, runsError, onRetryRuns, needRows, q, na
   // Archived projects are their own read (`GET /projects?status=archived`): the board model keeps
   // the shared store to the active register, so the store cannot name them.
   const [archivedProjects, setArchivedProjects] = useState<Project[]>([]);
+  const [scopedRepos, setScopedRepos] = useState<string[]>([]);
+  const repoList = useNeedsSources((s) => s.repos);
   useEffect(() => {
-    if (q.project !== null) return;
     let cancelled = false;
     api.listProjects('archived')
       .then(({ projects: ps }) => { if (!cancelled) setArchivedProjects(ps.filter((p) => p.status === 'archived')); })
       .catch(() => { /* no register, no line — never a guessed one */ });
     return () => { cancelled = true; };
   }, [q.project]);
+  useEffect(() => {
+    if (q.project === null) return;
+    let live = true;
+    void api.listProjectMembers(q.project).then(({ members }) => {
+      if (live) setScopedRepos(members.filter((m) => m.member_kind === 'crew.repo').map((m) => repoList?.find((r) => r.id === m.member_ref)?.name ?? m.member_ref));
+    }).catch(() => undefined);
+    return () => { live = false; setScopedRepos([]); };
+  }, [q.project, repoList]);
+  const scopedProject = q.project === null ? null : projects.find((p) => p.id === q.project) ?? archivedProjects.find((p) => p.id === q.project) ?? null;
+  const projectHeader = scopedProject === null ? null : projectRows([scopedProject], items, groups, runs).map((row) => ({ ...row, repos: scopedRepos.length > 0 ? scopedRepos : row.repos }))[0] ?? null;
 
   return (
     <div data-testid="everything-sessions" data-count={total} data-filter={q.filter} data-project={q.project ?? ''}>
+      {projectHeader !== null && <ProjectEntry row={projectHeader} navigate={navigate} header onStatusChanged={(changed) => setArchivedProjects((old) => changed.status === 'archived' ? [changed, ...old.filter((p) => p.id !== changed.id)] : old.filter((p) => p.id !== changed.id))} />}
       <div className="wk-everything-bar">
         <div role="group" aria-label="Show" className="wk-everything-chips">
           {SESSION_FILTERS.map((f) => (

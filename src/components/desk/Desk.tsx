@@ -28,6 +28,7 @@ import { Composer, type ComposerSend } from '../session/Composer.js';
 import { DeskStateRows, useDeskStates } from './DeskStateRows.js';
 import { DeskRuleLine } from './DeskRuleLine.js';
 import { openSheet } from '../../store/sheets.js';
+import { NewProjectModal } from '../NewProjectModal.js';
 
 /** The daemon's governance self-report, read once per mount (and again after a replay changed it).
  *  A daemon without `/diagnostics` (or predating `governance`) yields null: no chore, never a guess. */
@@ -90,6 +91,7 @@ export function Desk({ runs, runsLoaded, runsError = null, onRetryRuns, needRows
   // every "needs signing in again" row opens the one plain-words panel in place.
   const leadWithSignIn = noSignedInHelper(roster) && chores.length > 0;
   const [signIn, setSignIn] = useState<RosterSeat | null>(null);
+  const [newProjectOpen, setNewProjectOpen] = useState(false);
   // S15a: the Command Deck's repair move for dead-lettered governance events, as a chore.
   const { governance, reread } = useGovernance();
   const dead = deadletterChore(governance);
@@ -209,7 +211,8 @@ export function Desk({ runs, runsLoaded, runsError = null, onRetryRuns, needRows
           </div>
 
           <aside className="wk-desk-side" aria-label="Your projects">
-            <p className="wk-desk-label">Your projects</p>
+            <p className="wk-desk-label">Your projects <button type="button" data-testid="desk-new-project" onClick={() => setNewProjectOpen(true)}>New project</button></p>
+            {newProjectOpen && <NewProjectModal deskMode navigate={navigate} onClose={() => setNewProjectOpen(false)} />}
             {cards.length === 0 && (readState === 'known'
               ? <p className="wk-desk-quiet">Nothing has been started yet.</p>
               : readState === 'checking'

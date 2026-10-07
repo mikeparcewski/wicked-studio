@@ -29,15 +29,14 @@ export const ROUTE_SHAPES: readonly RouteShape[] = [
   { id: 'session', example: '/s/run:r1', is: (r) => r.panel === 'session' && r.artifactId !== null },
   { id: 'watch', example: '/watch', is: (r) => r.panel === 'watch' },
   { id: 'rules', example: '/rules', is: (r) => r.panel === 'rules' },
-  // "See everything" (S15c): one page, four tabs in `?tab=`; the list pages that moved onto it
+  // "See everything" (S15c/S17a): one page, five tabs in `?tab=`; the list pages that moved onto it
   // (`/work`, `/chats`, `/projects`, `/execute`, `/vibe`, `/demo`, `/p/:id/chronicle`) are redirects
   // (hooks/useMovedRoutes.ts), not shapes — a redirect is not a destination.
   { id: 'everything', example: '/everything', is: (r) => r.panel === 'everything' && r.projectId === null },
   { id: 'chat-new', example: '/chat/new', is: (r) => r.panel === 'runs' && r.showLaunch && r.chatMode && r.projectId === null },
   { id: 'chat', example: '/chat/c1', is: (r) => r.panel === 'runs' && r.chatMode && r.artifactId !== null && r.projectId === null },
   { id: 'project-detail', example: '/projects/p1', is: (r) => r.panel === 'project-detail' && r.projectId !== null },
-  // `/p/:id` lands on the project's newest session (S15c); until the runs are read it is the
-  // project's Sessions tab, which is what this shape names.
+  // `/p/:id` moves directly to the project's scoped Sessions tab (S17a).
   { id: 'project', example: '/p/p1', is: (r) => r.panel === 'everything' && r.projectId !== null },
   { id: 'p-chat', example: '/p/p1/chat', is: (r) => r.projectId !== null && r.mode === 'chat' && !r.showLaunch },
   { id: 'p-build', example: '/p/p1/build', is: (r) => r.mode === 'build' && r.artifactId === null && !r.showLaunch },
@@ -80,6 +79,7 @@ const DESTINATIONS: ReadonlyArray<{ shape: string; label: string; href: string }
   { shape: 'everything', label: 'Everything made — documents, pages, decks, videos', href: everythingPath({ tab: 'made' }) },
   { shape: 'everything', label: 'Helpers — the CLIs and their sign-in', href: everythingPath({ tab: 'helpers' }) },
   { shape: 'everything', label: 'Handed over — pull requests and pushes', href: everythingPath({ tab: 'handed' }) },
+  { shape: 'everything', label: 'Projects — all your projects', href: everythingPath({ tab: 'projects' }) },
   { shape: 'chat-new', label: 'Start a chat', href: '/chat/new' },
   { shape: 'steering-dashboard', label: 'Steering dashboard — proposals to review', href: '/steering/dashboard' },
   { shape: 'steering-policies', label: 'Steering — all rules and policies', href: '/steering/policies' },

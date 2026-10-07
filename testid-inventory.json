@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.6.3",
   "counts": {
-    "files": 218,
-    "occurrences": 2518,
-    "static": 2196,
+    "files": 219,
+    "occurrences": 2529,
+    "static": 2210,
     "dynamic": 79,
     "computed": 9
   },
@@ -2706,6 +2706,12 @@
       ]
     },
     {
+      "testId": "desk-new-project",
+      "files": [
+        "src/components/desk/Desk.tsx"
+      ]
+    },
+    {
       "testId": "desk-project",
       "files": [
         "src/components/desk/Desk.tsx"
@@ -3588,6 +3594,24 @@
       "testId": "everything-panel",
       "files": [
         "src/components/everything/EverythingPage.tsx"
+      ]
+    },
+    {
+      "testId": "everything-project-archive",
+      "files": [
+        "src/components/everything/ProjectsTab.tsx"
+      ]
+    },
+    {
+      "testId": "everything-project-header",
+      "files": [
+        "src/components/everything/ProjectsTab.tsx"
+      ]
+    },
+    {
+      "testId": "everything-project-rename",
+      "files": [
+        "src/components/everything/ProjectsTab.tsx"
       ]
     },
     {
@@ -6285,6 +6309,12 @@
       ]
     },
     {
+      "testId": "new-project-attach-retry",
+      "files": [
+        "src/components/NewProjectModal.tsx"
+      ]
+    },
+    {
       "testId": "new-project-cancel",
       "files": [
         "src/components/NewProjectModal.tsx"
@@ -6328,6 +6358,12 @@
     },
     {
       "testId": "new-project-name-invalid",
+      "files": [
+        "src/components/NewProjectModal.tsx"
+      ]
+    },
+    {
+      "testId": "new-project-repo",
       "files": [
         "src/components/NewProjectModal.tsx"
       ]
@@ -7366,7 +7402,8 @@
     {
       "testId": "projects-filter",
       "files": [
-        "src/components/ProjectsPage.tsx"
+        "src/components/ProjectsPage.tsx",
+        "src/components/everything/ProjectsTab.tsx"
       ]
     },
     {
@@ -7382,9 +7419,57 @@
       ]
     },
     {
+      "testId": "projects-new",
+      "files": [
+        "src/components/everything/ProjectsTab.tsx"
+      ]
+    },
+    {
       "testId": "projects-page",
       "files": [
         "src/components/ProjectsPage.tsx"
+      ]
+    },
+    {
+      "testId": "projects-row",
+      "files": [
+        "src/components/everything/ProjectsTab.tsx"
+      ]
+    },
+    {
+      "testId": "projects-row-archive",
+      "files": [
+        "src/components/everything/ProjectsTab.tsx"
+      ]
+    },
+    {
+      "testId": "projects-row-error",
+      "files": [
+        "src/components/everything/ProjectsTab.tsx"
+      ]
+    },
+    {
+      "testId": "projects-row-open",
+      "files": [
+        "src/components/everything/ProjectsTab.tsx"
+      ]
+    },
+    {
+      "testId": "projects-row-rename",
+      "files": [
+        "src/components/everything/ProjectsTab.tsx"
+      ]
+    },
+    {
+      "testId": "projects-row-unarchive",
+      "files": [
+        "src/components/everything/ProjectsTab.tsx"
+      ]
+    },
+    {
+      "testId": "projects-tab",
+      "files": [
+        "src/components/everything/ProjectsTab.tsx"
       ]
     },
     {

@@ -5,15 +5,14 @@ S15c) at 1440x700 under STUDIO_SKIN=desk.
 
 Against the in-process fixture (wave-1 + wave-2b corpus: alpha/beta/gamma with runs, one failed):
 
-  1. THE PAGE: /everything renders four tabs — Sessions, Everything made, Helpers, Handed over — the
+  1. THE PAGE: /everything renders five tabs — Sessions, Everything made, Helpers, Handed over, Projects — the
      tab is the address (?tab=), and the Sessions tab lists every session grouped by project.
   2. THE MOVES (replace, never push): /projects → /everything; /work?filter=failed →
      /everything?tab=sessions&filter=failed with the Blocked filter pressed and only blocked sessions
      shown; /chats and /execute → the Sessions tab; /vibe → made, documents; /demo → made, videos;
      /p/beta/chronicle → the Sessions tab scoped to beta; /runs (bare) → the Sessions tab.
      None leaves a history entry: Back from the landing returns to where the operator came from.
-  3. /p/:id → the project's newest session (/s/…); a project with nothing started stays on its
-     (empty) Sessions tab.
+  3. /p/:id → the project's scoped Sessions tab, including a project with nothing started.
   4. HELPERS: the roster, one row per seat; the signed-out seat offers "Sign in →" which opens the
      sign-in panel (desk_signin proves the panel).
   5. The Desk's "See everything →" opens /everything. 0 page errors.
@@ -97,7 +96,7 @@ with sync_playwright() as p:
     page.wait_for_timeout(200)
     page.screenshot(path=str(SHOTS / "desk-everything-sessions.png"))
     s1 = page.evaluate(PAGE)
-    check("page", s1["present"] and s1["tabs"] == ["Sessions", "Everything made", "Helpers", "Handed over"]
+    check("page", s1["present"] and s1["tabs"] == ["Sessions", "Everything made", "Helpers", "Handed over", "Projects"]
           and s1["selected"] == "sessions" and s1["count"] >= 5 and set(s1["groups"]) >= {"alpha", "beta", "gamma"},
           **s1)
     # A tab is a page (pushed): the address carries it.
@@ -147,23 +146,14 @@ with sync_playwright() as p:
     page.screenshot(path=str(SHOTS / "desk-everything-moved.png"))
     check("moves", all(r["ok"] for r in results), results=results)
 
-    # ── 3. /p/:id → the newest session ────────────────────────────────────────────
+    # ── 3. /p/:id → the project's scoped Sessions tab ────────────────────────────
     page.goto(f"{origin}/p/alpha", wait_until="networkidle")
-    try:
-        page.wait_for_function("() => location.pathname.startsWith('/s/')", timeout=10000)
-    except Exception:
-        fail("project-to-session", {"landed": address(page)})
-    landed = address(page)
-    page.get_by_test_id("session").wait_for(state="visible", timeout=10000)
-    # alpha's NEWEST by the DTO's created_at: a1 (2 min ago) over g1 (3 min) and d1 (5 h) — and never
-    # e1 (gamma, 5 min) or b1/g2 (beta, 3 min), which are newer than d1 but not alpha's.
-    sid = urllib.parse.unquote(landed.split("/s/", 1)[1])
-    check("project-to-session", sid == "run:a1", landed=landed, session=sid)
+    page.wait_for_function("() => new URLSearchParams(location.search).get('project') === 'alpha'", timeout=10000)
+    page.get_by_test_id("everything-project-header").wait_for(state="visible", timeout=10000)
+    check("project-to-sessions-tab", address(page) == "/everything?tab=sessions&project=alpha", landed=address(page))
     page.goto(f"{origin}/p/gamma", wait_until="networkidle")
-    page.wait_for_function("() => location.pathname.startsWith('/s/')", timeout=10000)
-    gamma = urllib.parse.unquote(address(page).split("/s/", 1)[1])
-    # gamma's: r1 (4 min) over e1 (5 min) and c1 (50 min).
-    check("project-to-session-other", gamma == "run:r1", session=gamma)
+    page.wait_for_function("() => new URLSearchParams(location.search).get('project') === 'gamma'", timeout=10000)
+    check("project-to-sessions-tab-other", address(page) == "/everything?tab=sessions&project=gamma", landed=address(page))
     page.goto(f"{origin}/p/nothing-here", wait_until="networkidle")
     page.get_by_test_id("everything").wait_for(state="visible", timeout=10000)
     page.wait_for_function("() => new URLSearchParams(location.search).get('project') === 'nothing-here'", timeout=10000)

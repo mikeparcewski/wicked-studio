@@ -12,6 +12,9 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+### Added
+- S17a: Projects tab on Everything with active and archived registers, project actions, and a New project door on the tab and Desk. `/p/:id` now opens the project's scoped Sessions view with a project header.
+
 ## [0.6.3] — 2026-10-07
 
 Every gate kind is answerable in the session thread (DES-STUDIO-REBUILD-001 Amendment 5 §1;

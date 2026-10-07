@@ -1,12 +1,11 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { parseRoute } from '../src/hooks/useRoute.js';
-import { makeView } from './factories.js';
 
 /**
  * THE §5.4 MOVES (DES-STUDIO-REBUILD-001 §5.4, slice S15c; Amendment 5): the redirect table, as
  * data and as parses. "Redirects only for moves, never for typos" — every old list and dashboard
  * address lands on "See everything" with the right tab and filter; `/p/:id` lands on the project's
- * newest session; a typo stays a dead address.
+ * scoped Sessions tab; a typo stays a dead address.
  *
  * NOT moved here (deferred to S16a, with the reason pinned by the last `describe`): `/runs/:id` →
  * `/s/:id` and `/p/:id/:mode[/:artifact]` → `/s/:id[/a/:key]`. 23 of the 65 CI journeys drive those
@@ -15,15 +14,7 @@ import { makeView } from './factories.js';
  * a route yet. When S16a moves them this last block goes red on purpose.
  */
 
-const listProjectMembers = vi.fn();
-vi.mock('../src/api/client.js', () => ({
-  api: { listProjectMembers: (...a: unknown[]) => listProjectMembers(...a) },
-  apiFetch: () => Promise.resolve({}),
-}));
-
-const { movedAddress, resolveProjectNewestSession, MOVES } = await import('../src/hooks/useMovedRoutes.js');
-
-afterEach(() => vi.clearAllMocks());
+const { movedAddress, MOVES } = await import('../src/hooks/useMovedRoutes.js');
 
 describe('the redirect table (static moves)', () => {
   const TABLE: ReadonlyArray<[string, string, string]> = [
@@ -41,6 +32,8 @@ describe('the redirect table (static moves)', () => {
     ['/demo', '', '/everything?tab=made&kind=videos'],
     ['/p/kes/chronicle', '', '/everything?tab=sessions&project=kes'],
     ['/p/a%20b/chronicle', '', '/everything?tab=sessions&project=a+b'],
+    ['/p/kes', '', '/everything?tab=sessions&project=kes'],
+    ['/p/a%20b', '', '/everything?tab=sessions&project=a+b'],
   ];
   it.each(TABLE)('%s%s → %s', (path, search, to) => {
     expect(movedAddress(path, search)).toBe(to);
@@ -53,7 +46,7 @@ describe('the redirect table (static moves)', () => {
   });
 
   it('is not a move: the launch form, a run, the project shell, a real page, a typo', () => {
-    for (const p of ['/runs/new', '/runs/r1', '/p/kes/build', '/p/kes/build/r1', '/p/kes', '/everything', '/skills', '/nope', '/projects/kes', '/p/kes/campaigns', '/work//typo', '/work///typo', '/demo///typo', '/p/kes/chronicle//typo']) {
+    for (const p of ['/runs/new', '/runs/r1', '/p/kes/build', '/p/kes/build/r1', '/everything', '/skills', '/nope', '/projects/kes', '/p/kes/campaigns', '/work//typo', '/work///typo', '/demo///typo', '/p/kes/chronicle//typo']) {
       expect(movedAddress(p, ''), p).toBeNull();
     }
   });
@@ -73,36 +66,6 @@ describe('the moved addresses parse to "See everything" (no headless tick)', () 
     }
     // `/projects/:id` is the project management page, not a move.
     expect(parseRoute('/projects/kes')).toMatchObject({ panel: 'project-detail', projectId: 'kes' });
-  });
-});
-
-describe('/p/:id → the project\'s newest session', () => {
-  const runs = [
-    makeView({ id: 'old', problem: 'first', status: 'completed', created_at: 100 } as never),
-    makeView({ id: 'new', problem: 'second', status: 'executing', created_at: 200 } as never),
-    makeView({ id: 'other', problem: 'elsewhere', status: 'executing', created_at: 300 } as never),
-  ];
-  it('picks the last launched of the project\'s runs (DTO project_id or membership), as its session', async () => {
-    listProjectMembers.mockResolvedValue({ members: [{ member_kind: 'crew.run', member_ref: 'old' }, { member_kind: 'crew.run', member_ref: 'new' }] });
-    expect(await resolveProjectNewestSession('kes', runs, false)).toBe('run:new');
-    expect(listProjectMembers).toHaveBeenCalledWith('kes');
-  });
-  it('the DTO\'s project_id wins over membership: a stale membership row never claims another project\'s run', async () => {
-    listProjectMembers.mockResolvedValue({ members: [{ member_kind: 'crew.run', member_ref: 'other' }, { member_kind: 'crew.run', member_ref: 'mine' }] });
-    const mixed = [
-      makeView({ id: 'mine', problem: 'x', status: 'completed', created_at: 10, project_id: 'kes' } as never),
-      makeView({ id: 'other', problem: 'y', status: 'executing', created_at: 999, project_id: 'another' } as never),
-      makeView({ id: 'unfiled', problem: 'z', status: 'executing', created_at: 500 } as never),
-    ];
-    // `other` is newer but the DTO files it elsewhere; `unfiled` names no project and is not a member.
-    expect(await resolveProjectNewestSession('kes', mixed, false)).toBe('run:mine');
-  });
-
-  it('a failed members read still files runs by the DTO\'s project_id; nothing started → null', async () => {
-    listProjectMembers.mockRejectedValue(new Error('down'));
-    const filed = [makeView({ id: 'mine', problem: 'x', status: 'executing', created_at: 5, project_id: 'kes' } as never)];
-    expect(await resolveProjectNewestSession('kes', filed, false)).toBe('run:mine');
-    expect(await resolveProjectNewestSession('kes', [], false)).toBeNull();
   });
 });
 
