@@ -10,9 +10,11 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
  */
 
 const createProject = vi.fn();
+const attachProjectMember = vi.fn();
+const listRepos = vi.fn();
 
 vi.mock('../src/api/client.js', () => ({
-  api: { createProject: (body: unknown) => createProject(body) },
+  api: { createProject: (body: unknown) => createProject(body), attachProjectMember: (...args: unknown[]) => attachProjectMember(...args), listRepos: () => listRepos() },
 }));
 
 const { NewProjectModal, startPath } = await import('../src/components/NewProjectModal.js');
@@ -21,6 +23,8 @@ const { projectNameProblem } = await import('../src/board/projectName.js');
 beforeEach(() => {
   createProject.mockReset();
   createProject.mockResolvedValue({ project: { id: 'proj_1', name: 'api migration' } });
+  attachProjectMember.mockReset().mockResolvedValue({ member: { id: 'm1' } });
+  listRepos.mockReset().mockResolvedValue({ repos: [{ id: 'repo-1', name: 'Studio API' }] });
 });
 afterEach(cleanup);
 
@@ -52,6 +56,32 @@ describe('startPath', () => {
     expect(startPath('p1', 'chat')).toBe('/p/p1/chat');
     expect(startPath('p1', 'document')).toBe('/p/p1/document');
     expect(startPath('p1', 'empty')).toBe('/projects/p1');
+  });
+});
+
+describe('Desk project door', () => {
+  it('hides Start with and lands on scoped Sessions after creation and repository attachment', async () => {
+    const navigate = vi.fn();
+    render(<NewProjectModal deskMode navigate={navigate} onClose={() => undefined} />);
+    expect(screen.queryByTestId('new-project-start')).toBeNull();
+    fireEvent.change(screen.getByTestId('new-project-name'), { target: { value: 'api migration' } });
+    const repo = await screen.findByTestId('new-project-repo');
+    fireEvent.change(repo, { target: { value: 'repo-1' } });
+    fireEvent.click(screen.getByTestId('new-project-create'));
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/everything?tab=sessions&project=proj_1'));
+    expect(createProject).toHaveBeenCalledWith({ name: 'api migration' });
+    expect(attachProjectMember).toHaveBeenCalledWith('proj_1', { kind: 'crew.repo', ref: 'repo-1', attachedBy: 'studio' });
+  });
+
+  it('retries attachment without creating a duplicate project', async () => {
+    attachProjectMember.mockRejectedValueOnce(new Error('attach refused'));
+    render(<NewProjectModal deskMode navigate={() => undefined} onClose={() => undefined} />);
+    fireEvent.change(screen.getByTestId('new-project-name'), { target: { value: 'api migration' } });
+    fireEvent.change(await screen.findByTestId('new-project-repo'), { target: { value: 'repo-1' } });
+    fireEvent.click(screen.getByTestId('new-project-create'));
+    fireEvent.click(await screen.findByTestId('new-project-attach-retry'));
+    await waitFor(() => expect(attachProjectMember).toHaveBeenCalledTimes(2));
+    expect(createProject).toHaveBeenCalledTimes(1);
   });
 });
 

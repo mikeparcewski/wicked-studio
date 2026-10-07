@@ -739,7 +739,7 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
 .wk-desk-underline { text-decoration: underline; text-decoration-color: var(--accent); text-decoration-thickness: 2px; }
 .wk-desk-more, .wk-desk-quiet { font-size: var(--text-sm); color: var(--ink-muted); }
 
-/* ── "See everything" (/everything, S15c): the Desk's palette, four tabs, plain rows. ── */
+/* ── "See everything" (/everything, S15c/S17a): the Desk's palette, five tabs, plain rows. ── */
 .wk-everything-head { margin-bottom: 8px; }
 .wk-everything-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0 0; border-bottom: 1px solid var(--border-subtle); }
 .wk-everything-tab {

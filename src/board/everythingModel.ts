@@ -11,16 +11,16 @@ import { sessionIdOf, type SessionState } from './sessionModel.js';
  * "SEE EVERYTHING" (`/everything`, DES-STUDIO-REBUILD-001 §5.4, slice S15c) — the model. Pure folds
  * over what studio already reads; `components/everything/EverythingPage.tsx` renders them.
  *
- * Four tabs, one page: Sessions (what `/work`, `/chats`, `/execute`, `/projects` and the project
+ * Five tabs, one page: Sessions (what `/work`, `/chats`, `/execute` and the project
  * chronicle listed, as sessions — a chat and the runs launched from it), Everything made (the
  * documents, pages, decks and videos across every project — what `/vibe` and `/demo` showed),
  * Helpers (the roster and each seat's sign-in), Handed over (the runs whose work left this machine
- * as a pull request or a pushed branch). The tab, the Sessions filter, the project scope and the
+ * as a pull request or a pushed branch), and Projects (the project register). The tab, the Sessions filter, the project scope and the
  * Made kind all ride the query string, so every view is an address: deep-linkable, Back-correct, and
  * the target of the §5.4 moves (`hooks/useMovedRoutes.ts`).
  */
 
-export const EVERYTHING_TABS = ['sessions', 'made', 'helpers', 'handed'] as const;
+export const EVERYTHING_TABS = ['sessions', 'made', 'helpers', 'handed', 'projects'] as const;
 export type EverythingTab = (typeof EVERYTHING_TABS)[number];
 
 export const TAB_LABEL: Readonly<Record<EverythingTab, string>> = {
@@ -28,6 +28,7 @@ export const TAB_LABEL: Readonly<Record<EverythingTab, string>> = {
   made: 'Everything made',
   helpers: 'Helpers',
   handed: 'Handed over',
+  projects: 'Projects',
 };
 
 export function isEverythingTab(v: unknown): v is EverythingTab {

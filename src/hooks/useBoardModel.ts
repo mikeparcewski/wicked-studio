@@ -73,6 +73,8 @@ export interface BoardProject {
    *  card's repo count) — off the SAME members read, zero new requests.
    *  Optional so hand-built fixtures predating it stay valid; absent = 0. */
   repoCount?: number;
+  /** Every attached repository's display name. */
+  repoNames?: string[];
   runs: SessionView[];
   docs: DocSummary[];
   /**
@@ -183,12 +185,13 @@ interface Bindings {
   repo: string | null;
   /** Count of `crew.repo` members — the /projects card's repo count. */
   repoCount: number;
+  repoNames: string[];
   docs: DocSummary[];
   /** Run id → `attached_at` (epoch ms) off the same members read. */
   attachedAt: Record<string, number>;
 }
 
-const EMPTY: Bindings = { runIds: new Set(), repo: null, repoCount: 0, docs: [], attachedAt: {} };
+const EMPTY: Bindings = { runIds: new Set(), repo: null, repoCount: 0, repoNames: [], docs: [], attachedAt: {} };
 
 /**
  * DTO-truth placement (DES-UX-001 §2.3 rule 3): the run's own `project_id`
@@ -249,6 +252,7 @@ async function loadBindings(p: Project, repoNames: Map<string, string>): Promise
     runIds: new Set(runMembers.map((m) => m.member_ref)),
     repo: repoRef === null ? null : repoNames.get(repoRef) ?? repoRef,
     repoCount: repoMembers.length,
+    repoNames: repoMembers.map((m) => repoNames.get(m.member_ref) ?? m.member_ref),
     docs,
     attachedAt,
   };
@@ -464,7 +468,7 @@ export function useBoardModel(runs: SessionView[]): BoardModel {
           // matter how stale the clocks are. Decay orders; status bands.
           const hasActiveRun = mine.some((v) => ACTIVE.has(v.session.status));
           return {
-            project, repo: b.repo, repoCount: b.repoCount, runs: mine, docs: b.docs, attachedAt: b.attachedAt,
+            project, repo: b.repo, repoCount: b.repoCount, repoNames: b.repoNames, runs: mine, docs: b.docs, attachedAt: b.attachedAt,
             attention: deriveAttention(mine, b.docs),
             score, band: bandFor(signals, hasActiveRun, now), signal,
           };

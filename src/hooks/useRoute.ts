@@ -4,15 +4,15 @@ import { isTestingSubPage } from '../api/testing.js';
 import { everythingPath } from '../board/everythingModel.js';
 import { announceNavigateAway, inAppEntryState, isInAppEntry, replacedEntryState } from './useHistoryState.js';
 
-// `everything` is "See everything" (`/everything`, DES-STUDIO-REBUILD-001 §5.4, slice S15c): four
-// tabs — Sessions, Everything made, Helpers, Handed over — selected by `?tab=`; the Sessions tab keeps
+// `everything` is "See everything" (`/everything`, DES-STUDIO-REBUILD-001 §5.4, slices S15c/S17a): five
+// tabs — Sessions, Everything made, Helpers, Handed over, Projects — selected by `?tab=`; the Sessions tab keeps
 // `?filter=` (the old `/work` words) and takes `?project=` for one project's sessions. The list and
 // dashboard addresses it replaced are MOVES onto it (`hooks/useMovedRoutes.ts`): `/projects`,
 // `/chats`, `/work`, `/execute`, `/vibe`, `/demo`, the retired `/make`, the bare `/runs` listing and
 // `/p/:id/chronicle` all parse to `everything` (so the page renders on the pre-redirect tick) and are
 // replaced with the real address. `/p/:id` (the project dashboard) parses to `everything` scoped to
-// the project while `useMovedRoutes` finds the project's newest session and replaces the address with
-// it; a project with no session stays on its (empty) Sessions tab. The run page (`/runs/:id`) and the
+// the project while `useMovedRoutes` replaces the address with the scoped Sessions tab.
+// A project with no session stays on its (empty) Sessions tab. The run page (`/runs/:id`) and the
 // project shell (`/p/:id/:mode`) are NOT moved yet — see useMovedRoutes.ts for why and when.
 // `steering` is the unified governed-knowledge surface (`/steering/{policies,memories}`) — one
 // home with two sub-sections, each carrying BOTH "manage existing" and "proposals (review)":
@@ -146,9 +146,8 @@ function safeDecode(s: string): string {
 }
 
 /**
- * `/p/:projectId` — since S15c (DES-STUDIO-REBUILD-001 §4.1) a MOVE: `useMovedRoutes` replaces it
- * with the project's newest session (`/s/:id`), or with its Sessions tab on "See everything" when
- * nothing has been started in it. The project dashboard it addressed no longer renders.
+ * `/p/:projectId` — since S17a a MOVE: `useMovedRoutes` replaces it with the project's scoped
+ * Sessions tab on "See everything". The project dashboard it addressed no longer renders.
  */
 export function projectPath(projectId: string): string {
   return `/p/${encodeURIComponent(projectId)}`;
@@ -248,8 +247,8 @@ function parse(pathname: string): Route {
   if (first === 'p' && second) {
     // `/p/:projectId/chronicle` MOVED (S15c): the chronicle is the project's Sessions tab on "See
     // everything" — parsed to it so the tab renders on the pre-redirect tick; `useMovedRoutes`
-    // replaces the address. A bare `/p/:projectId` (the project dashboard) parses the same way while
-    // the hook finds the project's newest session; with none, the Sessions tab IS where it lands.
+    // replaces the address. A bare `/p/:projectId` (the project dashboard) parses the same way;
+    // its new address is the scoped Sessions tab.
     if ((third === 'chronicle' && restEmpty(4)) || (third === '' && restEmpty(3))) {
       return route({ panel: 'everything', projectId: safeDecode(second) });
     }

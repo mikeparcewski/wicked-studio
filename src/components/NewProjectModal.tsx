@@ -1,7 +1,9 @@
-import { useId, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { PROJECT_NAME_MAX, projectNameProblem } from '../board/projectName.js';
 import { api } from '../api/client.js';
 import { modePath } from '../hooks/useRoute.js';
+import { everythingPath } from '../board/everythingModel.js';
+import { useNeedsSources } from '../store/needsSources.js';
 import { useProjectsStore } from '../store/projects.js';
 import { useModalEscape } from './Modal.js';
 
@@ -39,15 +41,22 @@ export function startPath(projectId: string, start: StartWith): string {
 interface Props {
   navigate: (path: string) => void;
   onClose: () => void;
+  deskMode?: boolean;
 }
 
-export function NewProjectModal({ navigate, onClose }: Props): React.ReactElement {
+export function NewProjectModal({ navigate, onClose, deskMode = false }: Props): React.ReactElement {
   const titleId = useId();
   const [name, setName] = useState('');
   const [start, setStart] = useState<StartWith>('build');
   const [description, setDescription] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const repos = useNeedsSources((s) => s.repos);
+  const [repoId, setRepoId] = useState('');
+  const [createdId, setCreatedId] = useState<string | null>(null);
+  useEffect(() => {
+    if (deskMode) void useNeedsSources.getState().loadRepos();
+  }, [deskMode]);
 
   // §7.7 (slice AC): the shared modal-family Escape — one press, one layer.
   useModalEscape(onClose);
@@ -56,7 +65,7 @@ export function NewProjectModal({ navigate, onClose }: Props): React.ReactElemen
   const nameValid = nameProblem === null;
 
   async function create(): Promise<void> {
-    if (!nameValid || busy) return;
+    if (!nameValid || busy || createdId !== null) return;
     setBusy(true);
     setError(null);
     try {
@@ -67,8 +76,32 @@ export function NewProjectModal({ navigate, onClose }: Props): React.ReactElemen
       // store BEFORE navigation, so the rail row and the shell breadcrumb render
       // its display name immediately — never the raw `proj_…` id until a reload.
       useProjectsStore.getState().addProject(project);
+      if (deskMode && repoId !== '') {
+        setCreatedId(project.id);
+        try {
+          await api.attachProjectMember(project.id, { kind: 'crew.repo', ref: repoId, attachedBy: 'studio' });
+        } catch (e) {
+          setError(e instanceof Error ? e.message : String(e));
+          setBusy(false);
+          return;
+        }
+      }
       onClose();
-      navigate(startPath(project.id, start));
+      navigate(deskMode ? everythingPath({ tab: 'sessions', project: project.id }) : startPath(project.id, start));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      setBusy(false);
+    }
+  }
+
+  async function retryAttach(): Promise<void> {
+    if (createdId === null || busy || repoId === '') return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api.attachProjectMember(createdId, { kind: 'crew.repo', ref: repoId, attachedBy: 'studio' });
+      onClose();
+      navigate(everythingPath({ tab: 'sessions', project: createdId }));
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
       setBusy(false);
@@ -150,7 +183,7 @@ export function NewProjectModal({ navigate, onClose }: Props): React.ReactElemen
           </p>
         )}
 
-        <fieldset className="flex flex-col gap-1" style={{ border: 'none', margin: 0, padding: 0 }}>
+        {!deskMode && <fieldset className="flex flex-col gap-1" style={{ border: 'none', margin: 0, padding: 0 }}>
           <legend style={{ ...labelStyle, padding: 0 }}>Start with (optional)</legend>
           <div className="flex items-center gap-3" data-testid="new-project-start">
             {START_OPTIONS.map((opt) => (
@@ -171,7 +204,15 @@ export function NewProjectModal({ navigate, onClose }: Props): React.ReactElemen
               </label>
             ))}
           </div>
-        </fieldset>
+        </fieldset>}
+
+        {deskMode && (repos?.length ?? 0) > 0 && <label className="flex flex-col gap-1">
+          <span style={labelStyle}>Repository (optional)</span>
+          <select data-testid="new-project-repo" value={repoId} onChange={(e) => setRepoId(e.target.value)} style={fieldStyle}>
+            <option value="">No repository</option>
+            {repos?.map((repo) => <option key={repo.id} value={repo.id}>{repo.name}</option>)}
+          </select>
+        </label>}
 
         <label className="flex flex-col gap-1">
           <span style={labelStyle}>Description (optional)</span>
@@ -208,7 +249,7 @@ export function NewProjectModal({ navigate, onClose }: Props): React.ReactElemen
           >
             Cancel
           </button>
-          <button
+          {createdId !== null ? <button type="button" data-testid="new-project-attach-retry" disabled={busy} onClick={() => { void retryAttach(); }}>Retry attaching repository</button> : <button
             type="button"
             data-testid="new-project-create"
             onClick={() => { void create(); }}
@@ -220,7 +261,7 @@ export function NewProjectModal({ navigate, onClose }: Props): React.ReactElemen
             }}
           >
             {busy ? 'Creating…' : 'Create project →'}
-          </button>
+          </button>}
         </div>
       </div>
     </div>
