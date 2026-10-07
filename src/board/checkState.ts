@@ -136,9 +136,15 @@ export function ownEvidenceOf(events: readonly CoreEvent[]): OwnEvidence | null 
   }
   if (floors.size === 0 && ords.size === 0) return null;
   let gatesPassed = 0;
+  let gatesTotal = 0;
   for (const ord of ords) {
     const v = gateVerdict(events, ord);
-    if (v === null || v.ord !== ord || v.outcome !== 'pass') continue;
+    if (v === null || v.ord !== ord) continue;
+    // A pre-run approval emits an UNGATED frame (no floor, no judge, no policy — nothing was judged):
+    // not a reviewer gate, so not in the count either way (codex r2).
+    if (v.outcome === 'ungated') continue;
+    gatesTotal++;
+    if (v.outcome !== 'pass') continue;
     // A verdict on an EARLIER attempt is not the unit's: once a retry was dispatched and has no
     // verdict yet, that unit has not passed (the rule `gateVerdictFor` holds for a gate card; codex r1).
     const latest = attemptBefore(events, ord);
@@ -146,7 +152,8 @@ export function ownEvidenceOf(events: readonly CoreEvent[]): OwnEvidence | null 
     gatesPassed++;
   }
   const floor = floors.size === 0 ? null : [...floors.values()].every(Boolean) ? 'passed' : 'failed';
-  return { floor, gatesPassed, gatesTotal: ords.size };
+  if (floor === null && gatesTotal === 0) return null;
+  return { floor, gatesPassed, gatesTotal };
 }
 
 /** "floor passed · 4 of 4 reviewer gates passed" — or null with nothing to say. */

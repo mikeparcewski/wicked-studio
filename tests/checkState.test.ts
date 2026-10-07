@@ -195,6 +195,13 @@ describe('studio#577: ownEvidenceOf — the run’s floor and reviewer gates, of
     const retrying = [...OWN_EVENTS, { type: 'unitDispatched', session: 'r1', ord: 2, attempt: 1 }] as unknown as CoreEvent[];
     expect(ownEvidenceOf(retrying)).toStrictEqual({ floor: 'passed', gatesPassed: 1, gatesTotal: 3 });
   });
+  it('a pre-run approval’s UNGATED frame (no floor, no judge, no policy) is not a reviewer gate — not counted either way (codex r2)', () => {
+    const ungated = passFrame(4, { hasDeterministicFloor: false, deterministicPass: true, agentVerdict: null, evaluatorPass: null, evaluatorPolicies: [], judgeCli: null, judgeDistinct: null });
+    expect(ownEvidenceOf([...OWN_EVENTS, { type: 'unitDispatched', session: 'r1', ord: 4, attempt: 0 }, ungated] as unknown as CoreEvent[]))
+      .toStrictEqual({ floor: 'passed', gatesPassed: 2, gatesTotal: 3 });
+    // Only ungated frames and no floor: nothing to say.
+    expect(ownEvidenceOf([{ type: 'unitDispatched', session: 'r1', ord: 4, attempt: 0 }, ungated] as unknown as CoreEvent[])).toBeNull();
+  });
   it('no floor and no gate in the log → nothing to say', () => {
     expect(ownEvidenceOf([])).toBeNull();
     expect(ownEvidenceOf([{ type: 'unitDispatched', session: 'r1', ord: 1, attempt: 0 }] as unknown as CoreEvent[])).toBeNull();
