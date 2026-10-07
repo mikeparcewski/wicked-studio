@@ -248,6 +248,46 @@ describe('MemoriesPanel — retire is a SUBTREE erase (honest granularity)', () 
     expect(calls.filter((c) => c === '/memory/coverage').length).toBeGreaterThanOrEqual(2);
   });
 
+  it('a slow pre-retire coverage read that lands AFTER the post-retire one cannot put the stale count back', async () => {
+    let rows: MemoryItem[] = [M1];
+    const calls: string[] = [];
+    let coverageReads = 0;
+    let releaseFirst: (() => void) | null = null;
+    apiFetch.mockImplementation((path: unknown, init?: { body?: string }) => {
+      const s = String(path);
+      calls.push(s);
+      if (s === '/memory/coverage') {
+        coverageReads += 1;
+        if (coverageReads === 1) {
+          // The mount read stalls until released — and answers the PRE-retire total.
+          return new Promise((resolve) => { releaseFirst = () => resolve({ total: 1 }); });
+        }
+        return Promise.resolve({ total: rows.length });
+      }
+      if (s === '/memory/retire') {
+        const body = JSON.parse(init?.body ?? '{}') as { scope_prefix: string };
+        const before = rows.length;
+        rows = rows.filter((m) => !m.scope.startsWith(body.scope_prefix));
+        return Promise.resolve({ erased: before - rows.length });
+      }
+      if (s.startsWith('/memory')) return Promise.resolve({ memories: rows });
+      return Promise.reject(new ApiError(404, 'Not Found'));
+    });
+    render(<MemoriesPanel />);
+    const user = userEvent.setup();
+    const rowEls = await screen.findAllByTestId('memory-row');
+    await user.click(within(rowEls[0]!).getByTestId('memory-retire'));
+    await user.click(await screen.findByTestId('memory-retire-confirm'));
+    await waitFor(() => expect(calls.filter((c) => c === '/memory/coverage').length).toBe(2));
+    const empty = await screen.findByTestId('memories-empty');
+    await waitFor(() => expect(empty).toHaveTextContent('No memories in the store.'));
+
+    // Now the stale mount read resolves — it must be ignored.
+    await act(async () => { releaseFirst!(); await Promise.resolve(); });
+    expect(screen.getByTestId('memories-empty')).toHaveTextContent('No memories in the store.');
+    expect(screen.queryByText(/1 in store/)).toBeNull();
+  });
+
   it('Cancel closes the confirm without touching the wire', async () => {
     wire([M1]);
     render(<MemoriesPanel />);

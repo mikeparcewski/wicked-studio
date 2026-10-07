@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   isMemoryUnsupported,
   listMemories,
@@ -95,10 +95,14 @@ export function MemoriesPanel(): React.ReactElement {
   // The coverage summary is a bonus header line — a daemon that cannot answer just omits it. Re-read
   // after every retire: the empty state reads the total to tell "no hits" from "empty store" (#406),
   // so a stale count after erasing the last row would call an empty store non-empty (codex, MEDIUM).
+  // Generation-guarded: only the NEWEST read may land (a pre-retire read resolving after the
+  // post-retire one would otherwise put the stale count back — codex round 2 on this PR).
+  const coverageGen = useRef(0);
   const loadCoverage = useCallback((): void => {
+    const gen = ++coverageGen.current;
     void memoryCoverage()
-      .then((c) => setCoverage(c))
-      .catch(() => setCoverage(null));
+      .then((c) => { if (gen === coverageGen.current) setCoverage(c); })
+      .catch(() => { if (gen === coverageGen.current) setCoverage(null); });
   }, []);
 
   useEffect(() => {
