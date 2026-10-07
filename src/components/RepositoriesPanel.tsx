@@ -116,6 +116,33 @@ const GRAPH_STATE_COLOR: Record<string, string> = {
   missing: 'var(--status-fail)',
 };
 
+/**
+ * The card's captured-learnings line (studio#294 b) — one honest sentence per state, derived
+ * from the repo's newest capture-learnings run exactly as the graph line is from its newest
+ * onboard. Before this a captured repo was indistinguishable from a never-captured one (the
+ * capture only bumped the run count), and nothing told a fresh operator the verb exists.
+ */
+function captureStateWord(m: RepoFleetModel, attachedAt: Record<string, number>, now: number): string {
+  const { state, run } = m.capture;
+  const clock = run === null ? undefined : attachedAt[run.session.id];
+  const when = clock === undefined ? '' : ` · ${ago(clock, now)} ago`;
+  if (state === 'captured') return `learnings captured${when} — durable memory holds this repo's history`;
+  if (state === 'capturing') return 'capturing learnings now — a governed run is mining this repo';
+  if (state === 'failed') return `learnings capture FAILED${when} — memory may hold nothing from this repo`;
+  return 'no learnings captured yet — Capture learnings mines this repo\'s history into memory';
+}
+
+const CAPTURE_STATE_COLOR: Record<string, string> = {
+  captured: 'var(--ink-dim)',
+  capturing: 'var(--status-run)',
+  failed: 'var(--status-fail)',
+  never: 'var(--ink-muted)',
+};
+
+/** The hover text the captured-learnings reading shares: what the story is derived from. */
+const CAPTURE_STATE_TITLE =
+  'Derived from the repo\'s newest capture-learnings run (the repos wire carries no "learnings captured" field): completed = captured, in flight = capturing, failed = the capture failed, none on record = never captured';
+
 /** The hover text every graph-state reading shares: what the story is derived from. */
 const GRAPH_STATE_TITLE =
   'Derived from the repo\'s newest onboarding run AND the engine\'s checkout findings (RepoEntry.findings): a finding that says no live graph has been indexed outranks a completed onboard — the repos wire carries no index-freshness field';
@@ -728,6 +755,7 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
                   data-testid="repo-card"
                   data-repo-id={repo.id}
                   data-state={m.onboard.state}
+                  data-captured={m.capture.state}
                   data-gates={waiting.length}
                   data-runs={counts.total}
                   role="link"
@@ -809,6 +837,18 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
                     {graphStateWord(m, attachedAt, now)}
                   </p>
 
+                  {/* The captured-learnings state (studio#294 b) — the newest capture-learnings run's
+                      verdict, so a captured repo reads differently from one never captured. */}
+                  <p
+                    data-testid="repo-capture-state"
+                    data-state={m.capture.state}
+                    className="text-[11px] font-mono truncate"
+                    style={{ color: CAPTURE_STATE_COLOR[m.capture.state] ?? 'var(--ink-dim)', margin: 0 }}
+                    title={CAPTURE_STATE_TITLE}
+                  >
+                    {captureStateWord(m, attachedAt, now)}
+                  </p>
+
                   {/* studio#251: the engine's checkout findings (wicked-core#406), compact —
                       "Re-run onboarding" rides the card's EXISTING onboard wire. Silent when none. */}
                   <RepoFindings
@@ -882,7 +922,7 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
                         cursor: 'pointer',
                       }}
                     >
-                      {(capturing[repo.id] ?? false) ? 'Starting…' : 'Capture learnings'}
+                      {(capturing[repo.id] ?? false) ? 'Starting…' : m.capture.state === 'captured' ? 'Capture learnings again' : 'Capture learnings'}
                     </button>
                     {m.onboard.run !== null ? (
                       <button

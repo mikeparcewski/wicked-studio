@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { RepoEntry } from '../src/api/types.js';
 import {
-  matchesRepoChip, ONBOARDING_WORKFLOW_ID, repoFleetModels, repoOnboard,
+  CAPTURE_LEARNINGS_WORKFLOW_ID, matchesRepoChip, ONBOARDING_WORKFLOW_ID, repoCapture, repoFleetModels, repoOnboard,
 } from '../src/board/repoStats.js';
 import { makeView } from './factories.js';
 
@@ -17,6 +17,9 @@ const repo = (id: string): RepoEntry =>
 
 const onboard = (id: string, repoRef: string, status: string) =>
   makeView({ id, repo_ref: repoRef, workflow_id: ONBOARDING_WORKFLOW_ID, status: status as never });
+
+const capture = (id: string, repoRef: string, status: string) =>
+  makeView({ id, repo_ref: repoRef, workflow_id: CAPTURE_LEARNINGS_WORKFLOW_ID, status: status as never });
 
 describe('repoOnboard — the honest graph state off the run history', () => {
   it('newest decisive onboard completed ⇒ ready', () => {
@@ -57,6 +60,40 @@ describe('repoOnboard — the honest graph state off the run history', () => {
   });
 });
 
+describe('repoCapture — the captured-learnings state off the run history (studio#294 b)', () => {
+  it('newest decisive capture completed ⇒ captured, carrying the run the clock reads from', () => {
+    const runs = [capture('c-new', 'a', 'completed'), capture('c-old', 'a', 'failed')];
+    expect(repoCapture(runs, 'a')).toEqual({ state: 'captured', run: runs[0] });
+  });
+
+  it('newest decisive capture failed ⇒ failed — even with an older success behind it', () => {
+    const runs = [capture('c-new', 'a', 'failed'), capture('c-old', 'a', 'completed')];
+    expect(repoCapture(runs, 'a')).toEqual({ state: 'failed', run: runs[0] });
+  });
+
+  it('an in-flight capture wins ⇒ capturing (gated captures count as in flight)', () => {
+    expect(repoCapture([capture('c-run', 'a', 'executing')], 'a').state).toBe('capturing');
+    expect(repoCapture([capture('c-gate', 'a', 'awaiting_human')], 'a').state).toBe('capturing');
+  });
+
+  it('a cancelled capture is withdrawn, not a verdict — the fold looks further back', () => {
+    const runs = [capture('c-cancelled', 'a', 'cancelled'), capture('c-done', 'a', 'completed')];
+    expect(repoCapture(runs, 'a')).toEqual({ state: 'captured', run: runs[1] });
+  });
+
+  it('no capture run on record ⇒ never — an onboard, a feature run, another repo\'s capture and an archived capture never count', () => {
+    const runs = [
+      onboard('o-a', 'a', 'completed'),
+      makeView({ id: 'r-build', repo_ref: 'a', workflow_id: 'feature', status: 'completed' }),
+      capture('c-other', 'b', 'completed'),
+      makeView({ id: 'c-archived', repo_ref: 'a', workflow_id: CAPTURE_LEARNINGS_WORKFLOW_ID, status: 'completed', archived_at: 123 }),
+    ];
+    expect(repoCapture(runs, 'a')).toEqual({ state: 'never', run: null });
+    // and a capture is NOT an onboard: the graph story stays what the onboard says
+    expect(repoOnboard([capture('c-a', 'a', 'completed')], 'a').state).toBe('never');
+  });
+});
+
 describe('repoFleetModels — one fold per card, attention-ordered', () => {
   const NOW = 1_756_000_000_000;
   const REPOS = [repo('quiet'), repo('gated'), repo('broken'), repo('busy')];
@@ -68,6 +105,7 @@ describe('repoFleetModels — one fold per card, attention-ordered', () => {
     makeView({ id: 'r-out', repo_ref: 'busy', workflow_id: 'feature', status: 'failed' }), // outside window
     onboard('o-busy', 'busy', 'completed'),
     onboard('o-broken', 'broken', 'failed'),
+    capture('c-quiet', 'quiet', 'completed'),
   ];
   const ATTACHED = { 'r-run': NOW - 3_600_000, 'r-done': NOW - 2 * 3_600_000 };
   // The recency window holds everything but r-out (the positional idiom —
@@ -94,6 +132,13 @@ describe('repoFleetModels — one fold per card, attention-ordered', () => {
     expect(byId['broken']!.failing).toBe(true);
     expect(byId['quiet']!.onboard.state).toBe('never');
     expect(byId['quiet']!.failing).toBe(false);
+  });
+
+  it('carries the captured-learnings state per repo WITHOUT touching failing, ordering or the chips', () => {
+    expect(byId['quiet']!.capture).toEqual({ state: 'captured', run: RUNS[7] });
+    expect(byId['busy']!.capture).toEqual({ state: 'never', run: null });
+    expect(byId['quiet']!.failing).toBe(false);
+    expect(byId['quiet']!.onboard.state).toBe('never'); // a capture is not an onboard
   });
 
   it('lastAt is the newest attach clock — null when no clock is known, never invented', () => {

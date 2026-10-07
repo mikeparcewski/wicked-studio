@@ -24,6 +24,10 @@ import { statusCounts, type StatusCounts } from './windowStats.js';
 /** The graph-building workflow's id (crew's BUILTIN_WORKFLOWS). */
 export const ONBOARDING_WORKFLOW_ID = 'onboarding';
 
+/** The learnings-mining workflow's id (crew's BUILTIN_WORKFLOWS) — what the card's
+ *  "Capture learnings" verb launches (`POST /runs {workflow: 'capture-learnings'}`). */
+export const CAPTURE_LEARNINGS_WORKFLOW_ID = 'capture-learnings';
+
 /**
  * A repo's graph state, derived from its newest onboarding run:
  *  - `ready`      — newest decisive onboard completed;
@@ -37,6 +41,24 @@ export type OnboardState = 'ready' | 'onboarding' | 'failed' | 'never';
 
 export interface RepoOnboard {
   state: OnboardState;
+  /** The run the state derives from (`null` only for `never`). */
+  run: SessionView | null;
+}
+
+/**
+ * A repo's captured-learnings state (studio#294 b), derived from its newest capture-learnings
+ * run the same way the graph story is derived from the newest onboard — the repos wire carries
+ * no "learnings captured" field, so the run history is the only witness:
+ *  - `captured`  — newest decisive capture completed: durable memory holds this repo's learnings;
+ *  - `capturing` — a capture run is in flight right now;
+ *  - `failed`    — newest decisive capture failed;
+ *  - `never`     — no capture run on record (the card prompts the verb).
+ * Cancelled captures are skipped, not verdicts — an operator withdrew them.
+ */
+export type CaptureState = 'captured' | 'capturing' | 'failed' | 'never';
+
+export interface RepoCapture {
+  state: CaptureState;
   /** The run the state derives from (`null` only for `never`). */
   run: SessionView | null;
 }
@@ -82,6 +104,9 @@ export interface RepoFleetModel {
   onboard: RepoOnboard;
   /** The engine's checkout findings say no live graph exists (F-2R2-003) — outranks `onboard`. */
   graphGap: RepoGraphGap | null;
+  /** The repo's captured-learnings story off its newest capture-learnings run (studio#294 b);
+   *  an ADDED reading — it never feeds `failing`, the ordering or the chips. */
+  capture: RepoCapture;
   /** Newest attach clock among the repo's runs; `null` = no clock known. */
   lastAt: number | null;
 }
@@ -106,6 +131,24 @@ export function repoOnboard(runs: readonly SessionView[], repoId: string): RepoO
     if (o === 'run' || o === 'gate') return { state: 'onboarding', run: v };
     if (o === 'cancelled') continue; // withdrawn, not a verdict — look further back
     if (verdict === null) verdict = { state: o === 'done' ? 'ready' : 'failed', run: v };
+  }
+  return verdict ?? { state: 'never', run: null };
+}
+
+/**
+ * A repo's captured-learnings state off the salience-ordered run list — the same walk as
+ * `repoOnboard` over the capture-learnings workflow: first in-flight capture wins
+ * (`capturing`); otherwise the first terminal, non-cancelled capture is the verdict.
+ */
+export function repoCapture(runs: readonly SessionView[], repoId: string): RepoCapture {
+  let verdict: RepoCapture | null = null;
+  for (const v of runs) {
+    const s = v.session;
+    if (s.archived_at != null || s.repo_ref !== repoId || s.workflow_id !== CAPTURE_LEARNINGS_WORKFLOW_ID) continue;
+    const o = outcomeOf(s.status);
+    if (o === 'run' || o === 'gate') return { state: 'capturing', run: v };
+    if (o === 'cancelled') continue; // withdrawn, not a verdict — look further back
+    if (verdict === null) verdict = { state: o === 'done' ? 'captured' : 'failed', run: v };
   }
   return verdict ?? { state: 'never', run: null };
 }
@@ -139,6 +182,7 @@ export function repoFleetModels(
       failing: counts.failed > 0 || onboard.state === 'failed',
       onboard,
       graphGap: repoGraphGap(repo),
+      capture: repoCapture(mine, repo.id),
       lastAt: clocks.length > 0 ? Math.max(...clocks) : null,
     };
   }).sort((a, b) =>
