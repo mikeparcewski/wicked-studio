@@ -119,6 +119,13 @@ export function MemoriesPanel(): React.ReactElement {
     setQuery(queryInput.trim());
   };
 
+  /** The zero-hit search's Clear: back to the unfiltered listing (the `query` effect re-reads). */
+  const clearQuery = (): void => {
+    setQueryInput('');
+    setFacet(null);
+    setQuery('');
+  };
+
   const confirmRetire = (): void => {
     if (retiring === null) return;
     const target = retiring;
@@ -327,7 +334,28 @@ export function MemoriesPanel(): React.ReactElement {
         </p>
       ) : visible.length === 0 ? (
         <p data-testid="memories-empty" className="rounded px-3 py-2 text-xs" style={{ background: 'var(--surface-rail)', border: '1px solid var(--surface-raised)', color: 'var(--ink-muted)' }}>
-          {memories.length === 0 ? 'No memories in the store.' : 'No memories match this facet.'}
+          {/* #406: `memories` is the SEARCH result, not the store — a zero-hit query must not say the
+              store is empty while the header says "N in store". "No memories in the store." is only
+              for a store whose coverage total is 0 (or unknown with nothing to narrow by). */}
+          {memories.length > 0 ? (
+            'No memories match this facet.'
+          ) : query !== '' && coverageTotal !== 0 ? (
+            <>
+              No memories match &ldquo;{query}&rdquo;.{' '}
+              <button
+                type="button"
+                onClick={clearQuery}
+                className="font-semibold underline focus:outline-none focus-visible:ring-1"
+                style={{ color: 'var(--accent)' }}
+              >
+                Clear search
+              </button>
+            </>
+          ) : coverageTotal !== null && coverageTotal > 0 ? (
+            `The store holds ${coverageTotal} memor${coverageTotal === 1 ? 'y' : 'ies'} but the listing returned none — try a search.`
+          ) : (
+            'No memories in the store.'
+          )}
         </p>
       ) : (
         <ul data-testid="memories-list" className="flex flex-col gap-2">

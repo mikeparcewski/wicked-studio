@@ -129,6 +129,21 @@ describe('GovernanceDashboard — browse (part 3)', () => {
     expect(screen.getByTestId('gk-rules-facet-input')).toBeInTheDocument();
   });
 
+  it('an empty memory preview over a NON-empty store (tile says 42) does not say "No memories in the store." (#406)', async () => {
+    wire({ memories: [], coverage: { total: 42 } });
+    render(<GovernanceDashboard navigate={vi.fn()} />);
+    const empty = await screen.findByTestId('gk-memories-empty');
+    expect(empty).toHaveTextContent('The store holds 42 memories but the preview listed none');
+    expect(empty).not.toHaveTextContent('No memories in the store.');
+    expect(within(empty).getByRole('link', { name: /search from Manage memories/ })).toBeInTheDocument();
+  });
+
+  it('an empty memory preview over an EMPTY store (coverage 0) says the store is empty', async () => {
+    wire({ memories: [], coverage: { total: 0 } });
+    render(<GovernanceDashboard navigate={vi.fn()} />);
+    expect(await screen.findByTestId('gk-memories-empty')).toHaveTextContent('No memories in the store.');
+  });
+
   it('the rules facet typeahead narrows the corpus (severity=warn → the one warn rule)', async () => {
     wire();
     render(<GovernanceDashboard navigate={vi.fn()} />);

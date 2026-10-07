@@ -127,6 +127,64 @@ describe('MemoriesPanel — the store browser', () => {
     expect(await screen.findByTestId('memories-empty')).toHaveTextContent('No memories in the store.');
   });
 
+  it('a zero-hit search says so — never "No memories in the store." under a "2 in store" header — and Clear restores the listing (#406)', async () => {
+    const calls: string[] = [];
+    apiFetch.mockImplementation((path: unknown) => {
+      const s = String(path);
+      calls.push(s);
+      if (s === '/memory/coverage') return Promise.resolve({ total: 2 });
+      if (s.startsWith('/memory?query=')) return Promise.resolve({ memories: [] });
+      if (s.startsWith('/memory')) return Promise.resolve({ memories: [M1, M2] });
+      return Promise.reject(new ApiError(404, 'Not Found'));
+    });
+    render(<MemoriesPanel />);
+    const user = userEvent.setup();
+    await screen.findAllByTestId('memory-row');
+
+    await user.type(screen.getByTestId('memories-search'), 'quantum sigils');
+    await user.click(screen.getByTestId('memories-search-go'));
+    await waitFor(() => expect(calls).toContain('/memory?query=quantum+sigils'));
+
+    const empty = await screen.findByTestId('memories-empty');
+    expect(empty).toHaveTextContent('No memories match “quantum sigils”.');
+    expect(empty).not.toHaveTextContent('No memories in the store.');
+    // The header still says what the store holds.
+    expect(screen.getByText(/2 in store/)).toBeInTheDocument();
+
+    await user.click(within(empty).getByRole('button', { name: 'Clear search' }));
+    expect(await screen.findAllByTestId('memory-row')).toHaveLength(2);
+    expect(screen.getByTestId('memories-search')).toHaveValue('');
+  });
+
+  it('a zero-hit search on an EMPTY store (coverage 0) still says the store is empty', async () => {
+    apiFetch.mockImplementation((path: unknown) => {
+      const s = String(path);
+      if (s === '/memory/coverage') return Promise.resolve({ total: 0 });
+      if (s.startsWith('/memory')) return Promise.resolve({ memories: [] });
+      return Promise.reject(new ApiError(404, 'Not Found'));
+    });
+    render(<MemoriesPanel />);
+    const user = userEvent.setup();
+    expect(await screen.findByTestId('memories-empty')).toHaveTextContent('No memories in the store.');
+    await user.type(screen.getByTestId('memories-search'), 'anything');
+    await user.click(screen.getByTestId('memories-search-go'));
+    await waitFor(() => expect(screen.getByTestId('memories-empty')).toHaveTextContent('No memories in the store.'));
+    expect(screen.queryByRole('button', { name: 'Clear search' })).toBeNull();
+  });
+
+  it('an empty unfiltered listing over a NON-empty store says the store holds N, not that it is empty', async () => {
+    apiFetch.mockImplementation((path: unknown) => {
+      const s = String(path);
+      if (s === '/memory/coverage') return Promise.resolve({ total: 3 });
+      if (s.startsWith('/memory')) return Promise.resolve({ memories: [] });
+      return Promise.reject(new ApiError(404, 'Not Found'));
+    });
+    render(<MemoriesPanel />);
+    const empty = await screen.findByTestId('memories-empty');
+    expect(empty).toHaveTextContent('The store holds 3 memories but the listing returned none');
+    expect(empty).not.toHaveTextContent('No memories in the store.');
+  });
+
   it('renders the honest unsupported state on a daemon that predates the memory routes', async () => {
     apiFetch.mockImplementation((path: unknown) => {
       const s = String(path);

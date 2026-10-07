@@ -225,7 +225,7 @@ export function GovernanceDashboard({ navigate }: { navigate: Navigate }): React
       {/* ── 3. Browse — memory store + rule corpus, each with the facet typeahead ── */}
       <section data-testid="governance-browse" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
         <p style={CSS.sectionHead}>Browse</p>
-        <MemoriesBrowse link={link} />
+        <MemoriesBrowse link={link} coverageTotal={coverageTotal} />
         <RulesBrowse rules={activeRules} link={link} />
       </section>
     </div>
@@ -234,8 +234,10 @@ export function GovernanceDashboard({ navigate }: { navigate: Navigate }): React
 
 // ── The memory-store browse (read-only preview; retire lives in the Memories deep-dive) ──────────
 
-function MemoriesBrowse({ link }: {
+function MemoriesBrowse({ link, coverageTotal }: {
   link: (path: string) => { href: string; onClick: (e: React.MouseEvent) => void };
+  /** The store-wide count from `/memory/coverage` (the KPI tile's number); `null` = unavailable. */
+  coverageTotal: number | null;
 }): React.ReactElement {
   const [memories, setMemories] = useState<MemoryItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -290,7 +292,19 @@ function MemoriesBrowse({ link }: {
         </p>
       ) : visible.length === 0 ? (
         <p data-testid="gk-memories-empty" className="rounded px-3 py-2 text-[11px]" style={{ background: 'var(--surface-rail)', border: '1px solid var(--surface-raised)', color: 'var(--ink-muted)' }}>
-          {memories.length === 0 ? 'No memories in the store.' : 'No memories match this facet.'}
+          {/* #406: `memories` is the preview's listing, not the store — "No memories in the store." only
+              when the coverage total (the tile above) is 0 or unknown; a non-empty store that listed
+              nothing says so and points at the search on the Memories page. */}
+          {memories.length > 0 ? (
+            'No memories match this facet.'
+          ) : coverageTotal !== null && coverageTotal > 0 ? (
+            <>
+              The store holds {coverageTotal} memor{coverageTotal === 1 ? 'y' : 'ies'} but the preview listed none —{' '}
+              <a {...link(memoriesPath())} style={CSS.deepLink}>search from Manage memories →</a>
+            </>
+          ) : (
+            'No memories in the store.'
+          )}
         </p>
       ) : (
         <ul data-testid="gk-memories-list" className="flex flex-col gap-2">
