@@ -1,6 +1,6 @@
 import { executingOrd } from '../api/run-state.js';
 import type { SessionView, WorkUnit } from '../api/types.js';
-import { deliverUnit, deliveryOf } from '../components/delivery.js';
+import { deliverUnit, deliveryOf, resolveDelivery } from '../components/delivery.js';
 import { deliverTargetOf, isDeliverGate } from '../components/gateMoveModel.js';
 import type { OpenGate } from '../store/gates.js';
 import type { GateActionState } from './gateActions.js';
@@ -50,6 +50,9 @@ export interface ProposalCardModel {
   live: string | null;
   /** done: the one outcome line. */
   out: string | null;
+  /** done: where the work went (studio#575) — the pull request when one is in hand (the same `href`
+   *  the Handed-over row links), else the branch a push-only hand-over landed on; null when neither. */
+  handed: { href: string | null; branch: string | null } | null;
   /** fail: why, in the daemon's words. */
   reason: string | null;
   /** fail with an open gate keeps its buttons (Try again / Not now). */
@@ -214,8 +217,17 @@ function deliverEvidence(view: SessionView): ProposalKind | null {
 function base(kind: ProposalKind): ProposalCardModel {
   return {
     kind, state: 'ask', text: '', why: null, act: kind === 'deliver' ? 'Deliver' : 'Go', confirm: null,
-    runLabel: null, live: null, out: null, reason: null, canRetry: false,
+    runLabel: null, live: null, out: null, reason: null, canRetry: false, handed: null,
   };
+}
+
+/** studio#575: what the finished run handed over, through the one derivation every PR claim uses
+ *  (`resolveDelivery`): the PR's `href` when the wire has one, else the pushed branch, else null. */
+export function handedOf(view: SessionView): { href: string | null; branch: string | null } | null {
+  const d = resolveDelivery(deliveryOf(view));
+  const href = d.href;
+  const branch = href === null ? (d.pushed?.branch ?? null) : null;
+  return href === null && branch === null ? null : { href, branch };
 }
 
 /** The card for one run, or null when the run has nothing to propose and never had. */
@@ -304,7 +316,7 @@ export function proposalCard(input: ProposalInput): ProposalCardModel | null {
     const live = starting ? (card.kind === 'deliver' ? 'Pushing the work' : 'Starting the work') : statusSentence(view, chain, gate);
     return { ...card, state: 'run', runLabel: card.kind === 'deliver' ? 'Handing over' : 'Going', live };
   }
-  if (status === 'completed') return { ...card, state: 'done', out: outcomeLine(view) };
+  if (status === 'completed') return { ...card, state: 'done', out: outcomeLine(view), handed: handedOf(view) };
   // Cancelled is its own outcome, never a failure (board/metrics.ts).
   if (status === 'cancelled') return { ...card, state: 'cancelled', out: statusSentence(view, chain, gate) };
   return { ...card, state: 'fail', reason: statusSentence(view, chain, gate), canRetry: false };

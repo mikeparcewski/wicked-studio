@@ -12,8 +12,8 @@
   "studioVersion": "0.6.4",
   "counts": {
     "files": 219,
-    "occurrences": 2534,
-    "static": 2215,
+    "occurrences": 2536,
+    "static": 2217,
     "dynamic": 79,
     "computed": 9
   },
@@ -9045,6 +9045,12 @@
       ]
     },
     {
+      "testId": "session-proposal-branch",
+      "files": [
+        "src/components/session/ProposalCard.tsx"
+      ]
+    },
+    {
       "testId": "session-proposal-bring-back",
       "files": [
         "src/components/session/ProposalCard.tsx"
@@ -9148,6 +9154,12 @@
     },
     {
       "testId": "session-proposal-outcome",
+      "files": [
+        "src/components/session/ProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "session-proposal-pr",
       "files": [
         "src/components/session/ProposalCard.tsx"
       ]

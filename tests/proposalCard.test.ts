@@ -5,7 +5,7 @@ import type { SessionView, SessionWithDelivery } from '../src/api/types.js';
 import type { ChainModel, ChainStep } from '../src/board/chainModel.js';
 import { IDLE_GATE_ACTION } from '../src/board/gateActions.js';
 import {
-  gateInstance, outcomeLine, planSentence, planSteps, proposalCard, proposalKindOf, statusSentence,
+  gateInstance, handedOf, outcomeLine, planSentence, planSteps, proposalCard, proposalKindOf, statusSentence,
 } from '../src/board/proposalCard.js';
 import { basedOnLine, parsePlace, passageCandidates, passageHasLine, passageWindow, sourcesOf } from '../src/board/sources.js';
 import type { OpenGate } from '../src/store/gates.js';
@@ -390,5 +390,38 @@ describe('codex on #486 (#470 delta)', () => {
     const c = proposalCard({ view: run('r1', 'awaiting_human'), gate: openGate({ prompt, gateKind: 'plan_approval' }), chain: known, action: IDLE_GATE_ACTION, ui: NO_UI })!;
     const first = planSteps(known, prompt)[0]!;
     expect(c.why ?? '').toContain(`1 required by the floor: ${first}.`);
+  });
+});
+
+// ── studio#575: the receipt says where the work went ─────────────────────────────────────────
+
+describe('studio#575: the done receipt carries the pull request, else the branch', () => {
+  const doneChain = chain([step('a', 'Build', 'done'), step('b', 'Deliver', 'done')]);
+  const PR = 'https://github.com/example/studio-api/pull/999';
+  it('a delivered run with a PR url in hand links it — the same href the Handed-over row carries', () => {
+    const v = run('r1', 'completed');
+    (v.session as SessionWithDelivery).delivery = 'delivered';
+    (v.session as SessionWithDelivery).deliverUrl = PR;
+    expect(handedOf(v)).toStrictEqual({ href: PR, branch: null });
+    const done = proposalCard({ view: v, gate: undefined, chain: doneChain, action: IDLE_GATE_ACTION, ui: NO_UI, lastKind: 'deliver' })!;
+    expect(done.state).toBe('done');
+    expect(done.out).toBe('Finished · delivered');
+    expect(done.handed).toStrictEqual({ href: PR, branch: null });
+  });
+  it('a push-only hand-over names the branch and links nothing', () => {
+    const v = run('r1', 'completed');
+    Object.assign(v.session as object, { delivery: 'pushed', deliverBranch: 'wicked/r1', deliverRemote: 'origin' });
+    expect(handedOf(v)).toStrictEqual({ href: null, branch: 'wicked/r1' });
+    const done = proposalCard({ view: v, gate: undefined, chain: doneChain, action: IDLE_GATE_ACTION, ui: NO_UI, lastKind: 'deliver' })!;
+    expect(done.out).toBe('Finished · branch pushed');
+    expect(done.handed).toStrictEqual({ href: null, branch: 'wicked/r1' });
+  });
+  it('"delivered" with no url, or a run that never delivered, hands nothing to link — and a non-https url is never a link', () => {
+    const v = run('r1', 'completed');
+    (v.session as SessionWithDelivery).delivery = 'delivered';
+    expect(handedOf(v)).toBeNull();
+    expect(handedOf(run('r2', 'completed'))).toBeNull();
+    (v.session as SessionWithDelivery).deliverUrl = 'javascript:alert(1)';
+    expect(handedOf(v)).toBeNull();
   });
 });

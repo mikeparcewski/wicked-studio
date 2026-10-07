@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import type { RunAcceptanceSummary, WalkthroughStepState } from '../src/api/types.js';
+import type { CoreEvent, RunAcceptanceSummary, WalkthroughStepState } from '../src/api/types.js';
 import type { ChainModel, ChainStep } from '../src/board/chainModel.js';
 import { chainSentence } from '../src/board/chainModel.js';
-import { applyCheckState, checkChip, checkedSentence, deliverAcceptance, provedAt, type MomentOf } from '../src/board/checkState.js';
+import { applyCheckState, checkChip, checkedSentence, deliverAcceptance, ownEvidenceOf, ownEvidenceWords, provedAt, type MomentOf } from '../src/board/checkState.js';
 import { momentOfRecording } from '../src/store/recordings.js';
 import type { Recording } from '../src/board/walkthroughModel.js';
 
@@ -152,5 +152,84 @@ describe('deliverAcceptance — crew’s line, with a tone', () => {
     expect(deliverAcceptance(undefined)).toBeNull();
     expect(deliverAcceptance(null)).toBeNull();
     expect(deliverAcceptance(s({ line: '' }))).toBeNull();
+  });
+});
+
+// ── studio#577: the deliver card reads its evidence truthfully ───────────────────────────────
+
+const NO_LEDGER_LINE =
+  'Not accepted yet: no QE ledger at .wicked-qe — no QE run has recorded a verdict for this repository; this gate reads the QE ledger only ' +
+  "(the run's own repo-check and evaluator evidence is on GET /runs/:id/evidence) (missing ⇒ deny)";
+
+/** The engine's frames for a run whose floor passed and whose two evaluated units passed their gates. */
+function passFrame(ord: number, over: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    type: 'gateEvaluated', session: 'r1', ord, criterion: null, hasDeterministicFloor: true, deterministicPass: true,
+    agentVerdict: 'PASS', agentReasoning: null, evaluatorPass: true, evaluatorPolicies: [], denialReason: null, denial: null,
+    combined: true, judgeCli: 'pi', judgeDistinct: true, ...over,
+  };
+}
+const OWN_EVENTS = [
+  { type: 'unitDispatched', session: 'r1', ord: 1, attempt: 0 },
+  { type: 'repoChecksEvaluated', session: 'r1', ord: 1, attempt: 0, passed: true, criterion: 'checks pass', skipped: [], checks: [] },
+  passFrame(1),
+  { type: 'unitDispatched', session: 'r1', ord: 2, attempt: 0 },
+  passFrame(2),
+  { type: 'unitDispatched', session: 'r1', ord: 3, attempt: 0 },
+  passFrame(3, { combined: false, denialReason: 'VERDICT: FAIL', denial: { source: 'evaluator_verdict', reason: 'VERDICT: FAIL', claimId: null, ruleIds: [], deniedTool: null, phase: null } }),
+] as unknown as CoreEvent[];
+
+describe('studio#577: ownEvidenceOf — the run’s floor and reviewer gates, off its events', () => {
+  it('counts the latest gate per unit and the floor per unit', () => {
+    expect(ownEvidenceOf(OWN_EVENTS)).toStrictEqual({ floor: 'passed', gatesPassed: 2, gatesTotal: 3 });
+    expect(ownEvidenceWords(ownEvidenceOf(OWN_EVENTS))).toBe('floor passed · 2 of 3 reviewer gates passed');
+  });
+  it('a later evaluation of the same unit supersedes the earlier one; a failed floor says so', () => {
+    const retried = [...OWN_EVENTS, { type: 'unitDispatched', session: 'r1', ord: 3, attempt: 1 }, passFrame(3)] as unknown as CoreEvent[];
+    expect(ownEvidenceOf(retried)).toStrictEqual({ floor: 'passed', gatesPassed: 3, gatesTotal: 3 });
+    const floorFail = [{ type: 'repoChecksEvaluated', session: 'r1', ord: 1, passed: false, skipped: [], checks: [] }] as unknown as CoreEvent[];
+    expect(ownEvidenceOf(floorFail)).toStrictEqual({ floor: 'failed', gatesPassed: 0, gatesTotal: 0 });
+    expect(ownEvidenceWords(ownEvidenceOf(floorFail))).toBe('floor failed');
+  });
+  it('a retry dispatched after a pass, with no verdict yet, is not a passed gate (the earlier attempt’s verdict is not this unit’s)', () => {
+    const retrying = [...OWN_EVENTS, { type: 'unitDispatched', session: 'r1', ord: 2, attempt: 1 }] as unknown as CoreEvent[];
+    expect(ownEvidenceOf(retrying)).toStrictEqual({ floor: 'passed', gatesPassed: 1, gatesTotal: 3 });
+  });
+  it('no floor and no gate in the log → nothing to say', () => {
+    expect(ownEvidenceOf([])).toBeNull();
+    expect(ownEvidenceOf([{ type: 'unitDispatched', session: 'r1', ord: 1, attempt: 0 }] as unknown as CoreEvent[])).toBeNull();
+    expect(ownEvidenceWords(null)).toBeNull();
+  });
+});
+
+describe('studio#577: deliverAcceptance — "no verdict recorded" is not "deny"', () => {
+  const s = (over: Partial<RunAcceptanceSummary>): RunAcceptanceSummary => ({ required: true, satisfied: false, line: NO_LEDGER_LINE, walkthrough: null, ...over });
+  it('a missing QE verdict reads quiet and says what this Deliver rests on — the run’s own evidence', () => {
+    expect(deliverAcceptance(s({}), ownEvidenceOf(OWN_EVENTS))).toStrictEqual({
+      text: 'No QE verdict is recorded for this run, and Deliver doesn’t consult the QE gate — this hand-over rests on the run’s own evidence: floor passed · 2 of 3 reviewer gates passed.',
+      tone: 'quiet',
+    });
+    expect(deliverAcceptance(s({}))).toStrictEqual({
+      text: 'No QE verdict is recorded for this run, and Deliver doesn’t consult the QE gate — this hand-over rests on the run’s own evidence.',
+      tone: 'quiet',
+    });
+  });
+  it('every "nothing recorded" spelling crew has: no repo context, no verdict in the ledger, none attributed', () => {
+    for (const line of [
+      'Not accepted yet: run has no repo context — acceptance evidence cannot be located (missing ⇒ deny)',
+      'Not accepted yet: QE ledger at .wicked-qe records no verdict (missing ⇒ deny)',
+      'Not accepted yet: QE ledger at .wicked-qe holds no verdict attributed to this run — not attributed (unattributed ⇒ deny)',
+    ]) expect(deliverAcceptance(s({ line }))?.tone).toBe('quiet');
+  });
+  it('a FAILED verdict, an unreadable ledger, or a walkthrough not yet sealed keep crew’s words and the bad tone — that is evidence', () => {
+    for (const line of [
+      'Not accepted yet: the walkthrough failed in chapter 4.',
+      'Not accepted yet: QE ledger at .wicked-qe could not be read: EACCES (unreadable ⇒ deny)',
+      'Not accepted yet: walkthrough_review has not sealed a take.',
+    ]) expect(deliverAcceptance(s({ line }), ownEvidenceOf(OWN_EVENTS))).toStrictEqual({ text: line, tone: 'bad' });
+  });
+  it('a satisfied gate, or nothing required, is unchanged by the evidence', () => {
+    expect(deliverAcceptance(s({ satisfied: true, line: 'Checked by a walkthrough: 3 of 3 steps at a1b2c3d.' }), ownEvidenceOf(OWN_EVENTS))?.tone).toBe('ok');
+    expect(deliverAcceptance(s({ required: false, satisfied: true, line: 'Nothing had to be proved before delivery (missing ⇒ deny)' }))?.tone).toBe('quiet');
   });
 });
