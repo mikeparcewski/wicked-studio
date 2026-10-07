@@ -55,16 +55,58 @@ interface HealthInfo {
 }
 
 /** Moved verbatim from the retired AppChrome popover (§6.2/§8.2). */
-function CheckRow({ label, ok, detail }: { label: string; ok: boolean | null; detail: string }): React.ReactElement {
+function CheckRow({ label, ok, detail, since, testId, state, action }: {
+  label: string; ok: boolean | null; detail: string;
+  /** studio#280 item 2: the clock the probe SETTLED at — a timestamped "checked HH:MM:SS" so an
+   *  answer is never mistaken for a probe still running (its own span: the detail stays verbatim). */
+  since?: number | undefined;
+  testId?: string;
+  state?: string;
+  /** An inline move for a row that cannot settle on its own (the re-probe). */
+  action?: { label: string; testId: string; onClick: () => void };
+}): React.ReactElement {
   const icon = ok === null ? '·' : ok ? '✓' : '✗';
   const color = ok === null ? 'var(--ink-dim)' : ok ? 'var(--status-run)' : 'var(--status-fail)';
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: '5px' }}>
+    <div data-testid={testId} data-state={state} style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: '5px' }}>
       <span style={{ width: '12px', fontSize: 'var(--text-xs)', color, fontFamily: 'var(--font-mono)', flexShrink: 0 }}>{icon}</span>
       <span style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-body)', fontFamily: 'var(--font-mono)', flex: 1 }}>{label}</span>
       <span style={{ fontSize: 'var(--text-2xs)', color: 'var(--ink-dim)', fontFamily: 'var(--font-mono)' }}>{detail}</span>
+      {since !== undefined && (
+        <span data-testid="rail-probe-checked" data-at={since} title="when this probe last answered" style={{ fontSize: 'var(--text-2xs)', color: 'var(--ink-dim)', fontFamily: 'var(--font-mono)', opacity: 0.8 }}>
+          checked {clockWord(since)}
+        </span>
+      )}
+      {action !== undefined && (
+        <button
+          type="button"
+          data-testid={action.testId}
+          onClick={action.onClick}
+          style={{ background: 'none', border: 'none', padding: 0, font: 'inherit', fontSize: 'var(--text-2xs)', fontFamily: 'var(--font-mono)', color: 'var(--ink-muted)', textDecoration: 'underline', cursor: 'pointer' }}
+        >
+          {action.label}
+        </button>
+      )}
     </div>
   );
+}
+
+/** HH:MM:SS of a settled probe — locale-free so the row reads the same everywhere. */
+function clockWord(at: number): string {
+  return new Date(at).toTimeString().slice(0, 8);
+}
+
+/**
+ * studio#280 item 2: how long a probe may read "checking…" before the row says it has NOT
+ * answered. RC1 saw all three rows stuck on "checking…" 2.5 s after the expand while the daemon's
+ * /health answered in < 50 ms — a request that never settles must not look like one in flight.
+ */
+export const PROBE_DEADLINE_MS = 4000;
+
+/** The words a probe past its deadline wears — not an error (nothing answered), not "checking…". */
+export function probeOverdueWord(deadlineMs: number): string {
+  const span = deadlineMs < 1000 ? `${deadlineMs} ms` : `${Math.round(deadlineMs / 1000)} s`;
+  return `no answer after ${span} — still waiting`;
 }
 
 const EXCERPT_CH = 40;
@@ -277,9 +319,22 @@ function stamp(ms: number): string {
 }
 
 /** The governance registry group — one CheckRow per question, the findings as banners. */
-function GovernanceRows({ read }: { read: GovernanceRead }): React.ReactElement {
+function GovernanceRows({ read, overdue = 0, onReprobe }: {
+  read: GovernanceRead;
+  /** the probe deadline (ms) once passed, 0 while inside it */
+  overdue?: number;
+  /** the expand's re-probe, offered on an overdue row */
+  onReprobe?: () => void;
+}): React.ReactElement {
   const showPath = useDisplayPath();
-  if (read.kind === 'loading') return <CheckRow label="governance" ok={null} detail="checking…" />;
+  if (read.kind === 'loading') {
+    return (
+      <CheckRow
+        label="governance" ok={null} detail={overdue ? probeOverdueWord(overdue) : 'checking…'} testId="rail-governance-probe" state={overdue ? 'overdue' : 'checking'}
+        {...(overdue && onReprobe !== undefined ? { action: { label: 'check again', testId: 'rail-governance-recheck', onClick: onReprobe } } : {})}
+      />
+    );
+  }
   if (read.kind === 'error') {
     return (
       <div data-testid="rail-governance" data-state="error">
@@ -371,12 +426,25 @@ interface Props {
   /** The collapsed / icon nav: the header is the heart icon alone (aria-label "Health") and
    *  the registry opens as a flyout beside the rail. Same state, same fetches, same rows. */
   compact?: boolean;
+  /** studio#280 item 2: how long a probe may read "checking…" (tests shorten it). */
+  probeDeadlineMs?: number;
 }
 
-export function HealthRailSection({ open, onToggle, compact = false }: Props): React.ReactElement {
+export function HealthRailSection({ open, onToggle, compact = false, probeDeadlineMs = PROBE_DEADLINE_MS }: Props): React.ReactElement {
   const wsStatus = useConnectionStore((s) => s.status);
   const [health, setHealth] = useState<HealthInfo | null>(null);
-  const [healthError, setHealthError] = useState(false);
+  /** The rejected probe's own sentence (`null` = not rejected) — the row shows WHY, never a bare "unreachable". */
+  const [healthError, setHealthError] = useState<string | null>(null);
+  /** When the /health probe last SETTLED (answer or rejection); `null` until it has. */
+  const [healthCheckedAt, setHealthCheckedAt] = useState<number | null>(null);
+  /** studio#280 item 2: the current expand's probes have outlived the deadline without settling. */
+  const [overdue, setOverdue] = useState(false);
+  /** Whether the shown /health and /roster answers belong to THIS expand (false = kept from an
+   *  earlier one): a kept answer past the deadline is said to be stale, never passed off as fresh. */
+  const [healthFresh, setHealthFresh] = useState(false);
+  const [rosterFresh, setRosterFresh] = useState(false);
+  /** Bumped by "check again" — re-runs the expand's probes without a collapse. */
+  const [reprobe, setReprobe] = useState(0);
   const [roster, setRoster] = useState<RosterSeat[] | null>(null);
   const [rosterError, setRosterError] = useState(false);
   const [governance, setGovernance] = useState<GovernanceRead>({ kind: 'loading' });
@@ -387,45 +455,69 @@ export function HealthRailSection({ open, onToggle, compact = false }: Props): R
   // Helpers) refreshes this registry too — the rows clear without another expand.
   useEffect(() => subscribeRoster((r) => { setRoster(r); setRosterError(false); }), []);
   const weekRecords = week.kind === 'ok' ? recordsByCli(week.record) : null;
-  /** The expand generation a diagnostics read belongs to — a completion from an earlier
-   *  expand must not overwrite a later one (the findings drive the heart and the dot). */
-  const governanceGen = useRef(0);
+  /** The expand generation a probe belongs to — a completion from an earlier expand (or an
+   *  earlier "check again") must not overwrite a later one: the findings drive the heart and the
+   *  dot, and a slow /health answer landing over a fresh one would read as settled when it is not. */
+  const probeGen = useRef(0);
   const ref = useRef<HTMLDivElement>(null);
+  // Unmount retires every in-flight probe: its completion must not reach a setter (codex on the
+  // #280 PR). Unmount only — a collapse keeps the generation so an answer still landing can feed
+  // the summary dot, exactly as before.
+  useEffect(() => () => { probeGen.current++; }, []);
 
   // EC30: the expand IS the fetch gesture — one GET /health + one GET /roster
   // per expansion (the retired popover's exact `[open]` effect, moved); the
   // answers survive a collapse so the summary dot can keep reading them.
+  // studio#280 item 2: every probe SETTLES visibly — an answer stamps its clock, a rejection
+  // shows its sentence, and a probe past `probeDeadlineMs` says it has not answered (with a
+  // re-probe) instead of reading "checking…" forever.
   useEffect(() => {
     if (!open) return;
-    setHealthError(false);
+    const gen = ++probeGen.current;
+    const live = (): boolean => probeGen.current === gen;
+    setHealthError(null);
     setRosterError(false);
-    api.getHealth()
-      .then((h) => setHealth(h))
-      .catch(() => setHealthError(true));
-    api.getRoster()
-      .then(({ roster: seats }) => { setRoster(seats); setCachedRoster(seats); })
-      .catch(() => setRosterError(true));
+    setOverdue(false);
+    setHealthFresh(false);
+    setRosterFresh(false);
+    let pending = 3;
+    const settled = (): void => { if (live() && --pending === 0) setOverdue(false); };
+    const deadline = setTimeout(() => { if (live() && pending > 0) setOverdue(true); }, probeDeadlineMs);
+    // Through resolved promises so a client that cannot serve a read at all (a partial mock, a
+    // missing export) becomes the honest error row, not a throw out of the effect.
+    Promise.resolve()
+      .then(() => api.getHealth())
+      .then((h) => { if (!live()) return; setHealth(h); setHealthCheckedAt(Date.now()); setHealthFresh(true); })
+      .catch((e: unknown) => { if (!live()) return; setHealthError(e instanceof Error && e.message !== '' ? e.message : String(e)); setHealthCheckedAt(Date.now()); setHealthFresh(true); })
+      .finally(settled);
+    Promise.resolve()
+      .then(() => api.getRoster())
+      .then(({ roster: seats }) => { if (!live()) return; setRoster(seats); setCachedRoster(seats); setRosterFresh(true); })
+      .catch(() => { if (live()) { setRosterError(true); setRosterFresh(true); } })
+      .finally(settled);
     // studio#246: the same gesture reads the governance block. Absence is a
     // named state (older daemon), never an invented healthy store.
     setGovernance({ kind: 'loading' });
-    const gen = ++governanceGen.current;
-    // Through a resolved promise so a client that cannot serve the read at all
-    // (a partial mock, a missing export) becomes the honest error row, not a throw.
     // Only the CURRENT expand's answer lands (Copilot on #253): a slow earlier read
     // resolving after a re-expand would otherwise paint stale governance health.
     Promise.resolve()
       .then(() => getDiagnostics())
       .then((d) => {
-        if (governanceGen.current !== gen) return;
+        if (!live()) return;
         setGovernance(d.governance === undefined ? { kind: 'absent', why: 'no-block' } : { kind: 'ok', governance: d.governance });
       })
       .catch((e: unknown) => {
-        if (governanceGen.current !== gen) return;
+        if (!live()) return;
         setGovernance(isDiagnosticsUnsupported(e) ? { kind: 'absent', why: 'no-route' } : { kind: 'error', message: e instanceof Error ? e.message : String(e) });
-      });
+      })
+      .finally(settled);
     // Opened from the chrome dot: bring the foot into view (§6.2).
     ref.current?.scrollIntoView({ block: 'nearest' });
-  }, [open]);
+    return () => clearTimeout(deadline);
+  }, [open, reprobe, probeDeadlineMs]);
+
+  /** "check again": re-runs this expand's probes without a collapse — offered on every overdue row. */
+  const reprobeNow = (): void => setReprobe((n) => n + 1);
 
   const wsDown = wsStatus === 'disconnected';
   const pillLabel = wsStatus === 'connected' ? 'Connected' : wsStatus === 'connecting' ? 'Connecting' : 'Disconnected';
@@ -450,7 +542,7 @@ export function HealthRailSection({ open, onToggle, compact = false }: Props): R
   // (crew#533, api-types 0.35.0) degrades it, because that IS the daemon's own word.
   const ineligible = (roster ?? []).some((s) => (s as Record<string, unknown>)['council_eligible'] === false && s.health?.status !== 'inactive');
   const degraded =
-    wsStatus === 'connecting' || healthError || rosterError || govWarnings || ineligible || (health !== null && health.status !== 'ok');
+    wsStatus === 'connecting' || healthError !== null || rosterError || govWarnings || ineligible || (health !== null && health.status !== 'ok');
   const heartState = sick ? 'unhealthy' : degraded ? 'degraded' : 'healthy';
   const heartColor = sick
     ? 'var(--status-fail)'
@@ -530,12 +622,23 @@ export function HealthRailSection({ open, onToggle, compact = false }: Props): R
             : undefined}
         >
           <CheckRow label="WebSocket" ok={wsStatus === 'connected'} detail={pillLabel} />
-          {healthError ? (
-            <CheckRow label="API server" ok={false} detail="unreachable" />
+          {healthError !== null ? (
+            <CheckRow label="API server" ok={false} detail={`unreachable — ${healthError}`} since={healthCheckedAt ?? undefined} testId="rail-api-server" state="error" />
           ) : health ? (
-            <CheckRow label="API server" ok={health.status === 'ok'} detail={`${health.status} · ${health.version}`} />
+            // A kept answer past this expand's deadline is STALE: its clock says when, the state says so,
+            // and the re-probe rides the row — never the old answer passed off as this expand's.
+            <CheckRow
+              label="API server" ok={health.status === 'ok'} detail={`${health.status} · ${health.version}`} since={healthCheckedAt ?? undefined}
+              testId="rail-api-server" state={overdue && !healthFresh ? 'stale' : 'answered'}
+              {...(overdue && !healthFresh ? { action: { label: 'check again', testId: 'rail-health-recheck', onClick: reprobeNow } } : {})}
+            />
+          ) : overdue ? (
+            <CheckRow
+              label="API server" ok={null} detail={probeOverdueWord(probeDeadlineMs)} testId="rail-api-server" state="overdue"
+              action={{ label: 'check again', testId: 'rail-health-recheck', onClick: reprobeNow }}
+            />
           ) : (
-            <CheckRow label="API server" ok={null} detail="checking…" />
+            <CheckRow label="API server" ok={null} detail="checking…" testId="rail-api-server" state="checking" />
           )}
           <p
             aria-hidden
@@ -547,9 +650,18 @@ export function HealthRailSection({ open, onToggle, compact = false }: Props): R
           {rosterError ? (
             <CheckRow label="seats" ok={false} detail="unreachable" />
           ) : roster === null ? (
-            <CheckRow label="seats" ok={null} detail="checking…" />
+            <CheckRow
+              label="seats" ok={null} detail={overdue ? probeOverdueWord(probeDeadlineMs) : 'checking…'} testId="rail-seats-probe" state={overdue ? 'overdue' : 'checking'}
+              {...(overdue ? { action: { label: 'check again', testId: 'rail-seats-recheck', onClick: reprobeNow } } : {})}
+            />
           ) : (
             <>
+              {overdue && !rosterFresh && (
+                <CheckRow
+                  label="seats" ok={null} detail={`${probeOverdueWord(probeDeadlineMs)} · showing the last answer`} testId="rail-seats-probe" state="stale"
+                  action={{ label: 'check again', testId: 'rail-seats-recheck', onClick: reprobeNow }}
+                />
+              )}
               {(() => {
                 const cap = weekCaption(week);
                 return cap === null ? null : (
@@ -592,7 +704,7 @@ export function HealthRailSection({ open, onToggle, compact = false }: Props): R
           >
             ── governance ────────
           </p>
-          <GovernanceRows read={governance} />
+          <GovernanceRows read={governance} overdue={overdue ? probeDeadlineMs : 0} onReprobe={reprobeNow} />
         </div>
       )}
       {/* Amendment 5, decision 5: the one plain-words sign-in panel — the command, Copy, check again.

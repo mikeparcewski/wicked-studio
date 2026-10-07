@@ -12,10 +12,10 @@
   "studioVersion": "0.6.2",
   "counts": {
     "files": 218,
-    "occurrences": 2502,
-    "static": 2188,
+    "occurrences": 2517,
+    "static": 2195,
     "dynamic": 79,
-    "computed": 8
+    "computed": 9
   },
   "static": [
     {
@@ -7556,6 +7556,12 @@
       ]
     },
     {
+      "testId": "rail-api-server",
+      "files": [
+        "src/components/HealthRailSection.tsx"
+      ]
+    },
+    {
       "testId": "rail-chevron",
       "files": [
         "src/components/LeftSidebar.tsx"
@@ -7628,7 +7634,19 @@
       ]
     },
     {
+      "testId": "rail-governance-probe",
+      "files": [
+        "src/components/HealthRailSection.tsx"
+      ]
+    },
+    {
       "testId": "rail-governance-range",
+      "files": [
+        "src/components/HealthRailSection.tsx"
+      ]
+    },
+    {
+      "testId": "rail-governance-recheck",
       "files": [
         "src/components/HealthRailSection.tsx"
       ]
@@ -7659,6 +7677,12 @@
     },
     {
       "testId": "rail-health-heart",
+      "files": [
+        "src/components/HealthRailSection.tsx"
+      ]
+    },
+    {
+      "testId": "rail-health-recheck",
       "files": [
         "src/components/HealthRailSection.tsx"
       ]
@@ -7703,6 +7727,12 @@
       "testId": "rail-mcp-usage",
       "files": [
         "src/components/LeftSidebar.tsx"
+      ]
+    },
+    {
+      "testId": "rail-probe-checked",
+      "files": [
+        "src/components/HealthRailSection.tsx"
       ]
     },
     {
@@ -7798,6 +7828,18 @@
     },
     {
       "testId": "rail-seat-week-window",
+      "files": [
+        "src/components/HealthRailSection.tsx"
+      ]
+    },
+    {
+      "testId": "rail-seats-probe",
+      "files": [
+        "src/components/HealthRailSection.tsx"
+      ]
+    },
+    {
+      "testId": "rail-seats-recheck",
       "files": [
         "src/components/HealthRailSection.tsx"
       ]
@@ -13700,6 +13742,12 @@
       "expression": "a.testId",
       "files": [
         "src/components/ComposerContext.tsx"
+      ]
+    },
+    {
+      "expression": "action.testId",
+      "files": [
+        "src/components/HealthRailSection.tsx"
       ]
     },
     {
