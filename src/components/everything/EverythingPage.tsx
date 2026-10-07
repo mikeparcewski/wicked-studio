@@ -4,11 +4,13 @@ import type { Project } from '../../api/types.js';
 import type { RosterSeat, SessionView } from '../../api/types.js';
 import { deskReadState, needsByRun, needTextByRun, railGroups, signInLapsed, type RailGroup } from '../../board/deskModel.js';
 import {
-  EVERYTHING_TABS, everythingPath, filterGroups, handedRows, MADE_KINDS, MADE_WORD, madeRows, readEverythingQuery,
+  EVERYTHING_TABS, EVERYTHING_VIEWS, everythingPath, filterGroups, handedRows, MADE_KINDS, MADE_WORD, madeRows, readEverythingQuery,
   SESSION_FILTERS, TAB_LABEL, type EverythingQuery, type EverythingTab, type HandedRow, type MadeRow,
 } from '../../board/everythingModel.js';
 import type { NeedRow } from '../../board/needsYou.js';
-import { sessionIdOf, sessionPath } from '../../board/sessionModel.js';
+import { sessionIdOf, sessionPath, type SessionState } from '../../board/sessionModel.js';
+import { filterRunRows, pageRunRows, runRows, sortRunRows, type RunSortKey, type SortDir } from '../../board/runsTableModel.js';
+import { openSheet } from '../../store/sheets.js';
 import { useBoardModel } from '../../hooks/useBoardModel.js';
 import { useRoster } from '../../hooks/useRoster.js';
 import { modePath, projectDetailPath, projectPath, type Navigate, versionPath } from '../../hooks/useRoute.js';
@@ -150,7 +152,11 @@ function SessionsTab({ runs, runsLoaded, runsError, onRetryRuns, needRows, q, na
   const inScope = q.project === null ? groups : groups.filter((g) => g.projectId === q.project);
   const total = inScope.reduce((n, g) => n + g.sessions.length, 0);
   const read = deskReadState(runsLoaded, runsError);
-  const lens = (over: Partial<EverythingQuery>): string => everythingPath({ tab: 'sessions', filter: q.filter, project: q.project, ...over });
+  // The view (`?view=`) rides every Sessions lens so a chip click inside "Every run" stays there.
+  const lens = (over: Partial<EverythingQuery>): string => everythingPath({ tab: 'sessions', filter: q.filter, project: q.project, view: q.view, ...over });
+  // The full count in the tab header ("124 runs · 97 sessions") — runs scoped the same way as the
+  // session total, archived excluded. A cheap reduce, never the row fold.
+  const runCount = runs.reduce((n, v) => (v.session.archived_at == null && (q.project === null || dtoProjectOf(v) === q.project) ? n + 1 : n), 0);
   const scopeName = q.project !== null ? nameOf(q.project) : null;
   const viewOf = (runId: string): SessionView | undefined => runs.find((v) => v.session.id === runId);
   const showText = useDisplayText();
@@ -207,7 +213,35 @@ function SessionsTab({ runs, runsLoaded, runsError, onRetryRuns, needRows, q, na
             <a href={lens({ project: null })} onClick={(e) => { e.preventDefault(); navigate(lens({ project: null }), { replace: true }); }} data-testid="everything-scope-clear">Every project</a>
           </p>
         )}
+        <div className="wk-everything-views">
+          <div role="group" aria-label="View" className="wk-everything-viewswitch">
+            {EVERYTHING_VIEWS.map((v) => (
+              <button
+                key={v}
+                type="button"
+                aria-pressed={q.view === v}
+                data-testid="everything-view"
+                data-view={v}
+                onClick={() => navigate(lens({ view: v }), { replace: true })}
+                className="wk-chip"
+              >
+                {v === 'grouped' ? 'Grouped' : 'Every run'}
+              </button>
+            ))}
+          </div>
+          <p data-testid="everything-count" data-runs={runCount} data-sessions={total} className="wk-everything-count wk-session-grey">
+            {countWord(runCount, 'run')} · {countWord(total, 'session')}
+          </p>
+        </div>
       </div>
+      {q.view === 'runs' && (
+        <RunsTable
+          runs={runs} runChatId={runChatId} projects={projects} q={q}
+          runsLoaded={runsLoaded} runsError={runsError} onRetryRuns={onRetryRuns}
+          navigate={navigate} go={go} archive={archive} viewOf={viewOf} showText={showText}
+        />
+      )}
+      {q.view === 'grouped' && (<>
       {q.filter === 'archived' && <ArchivedRuns key={q.project ?? ''} navigate={navigate} runChatId={runChatId} project={q.project} onChanged={onRetryRuns} />}
       {q.filter !== 'archived' && read === 'checking' && <p data-testid="everything-checking" className="wk-session-grey">Reading your work…</p>}
       {q.filter !== 'archived' && read === 'failed' && (
@@ -284,6 +318,200 @@ function SessionsTab({ runs, runsLoaded, runsError, onRetryRuns, needRows, q, na
           ))}
           {' '}— open one to restore it.
         </p>
+      )}
+      </>)}
+    </div>
+  );
+}
+
+/** "N runs" / "1 run" — the count sentence's plural. */
+function countWord(n: number, word: string): string {
+  return `${n} ${word}${n === 1 ? '' : 's'}`;
+}
+
+// ── Every run (S17b): one row per RUN, sortable / filterable / paged ────────────────────────
+
+/** The plain state word a run row shows — the chip labels, per state. */
+const STATE_WORD: Readonly<Record<SessionState, string>> = {
+  working: 'Working', waiting: 'Waiting on you', blocked: 'Blocked', done: 'Done', quiet: 'Stopped',
+};
+
+const RUN_COLS: readonly { key: RunSortKey; label: string }[] = [
+  { key: 'status', label: 'State' },
+  { key: 'title', label: 'What' },
+  { key: 'project', label: 'Project' },
+  { key: 'repo', label: 'Repo' },
+  { key: 'workflow', label: 'Workflow' },
+  { key: 'created', label: 'Started' },
+  { key: 'updated', label: 'Updated' },
+];
+
+/**
+ * The "Every run" table (S17b): paints the moment `GET /runs` answers — it reads only `runs`, the
+ * projects store (a name fills in when known) and the `runsLoaded`/`runsError` gate, never the board
+ * model's members fan-out. The Archived lens (`?filter=archived`) reads `GET /runs?include=archived`
+ * and renders the same table with an inline Unarchive. Sort, text filter and paging are the pure
+ * folds in `board/runsTableModel.ts`; only the 100-row page slice is painted.
+ */
+function RunsTable({ runs, runChatId, projects, q, runsLoaded, runsError, onRetryRuns, navigate, go, archive, viewOf, showText }: {
+  runs: SessionView[];
+  runChatId: boolean;
+  projects: Project[];
+  q: EverythingQuery;
+  runsLoaded: boolean;
+  runsError: string | null;
+  onRetryRuns: (() => void) | undefined;
+  navigate: Navigate;
+  go: Go;
+  archive: (id: string) => void;
+  viewOf: (runId: string) => SessionView | undefined;
+  showText: (t: string) => string;
+}): React.ReactElement {
+  const archivedMode = q.filter === 'archived';
+  const nameOf = (id: string | null): string => (id === null ? 'Not in a project' : projects.find((p) => p.id === id)?.name ?? id);
+  const [sortKey, setSortKey] = useState<RunSortKey>('updated');
+  const [sortDir, setSortDir] = useState<SortDir>('desc');
+  const [text, setText] = useState('');
+  const [page, setPage] = useState(1);
+  const [menuFor, setMenuFor] = useState<string | null>(null);
+  // The Archived lens is its own read (`GET /runs?include=archived`), scoped to the project when one is set.
+  const [archivedViews, setArchivedViews] = useState<SessionView[] | null>(null);
+  const [archivedFailed, setArchivedFailed] = useState(false);
+  useEffect(() => {
+    if (!archivedMode) return undefined;
+    let cancelled = false;
+    setArchivedViews(null);
+    setArchivedFailed(false);
+    api.listRuns(true)
+      .then(({ runs: all }) => { if (!cancelled) setArchivedViews(all.filter((v) => v.session.archived_at != null && (q.project === null || dtoProjectOf(v) === q.project))); })
+      .catch(() => { if (!cancelled) { setArchivedViews([]); setArchivedFailed(true); } });
+    return () => { cancelled = true; };
+  }, [archivedMode, q.project]);
+  // Reset to the first page whenever the shape of the list changes under the operator.
+  useEffect(() => { setPage(1); }, [text, q.filter, q.project]);
+
+  const read = deskReadState(runsLoaded, runsError);
+  const sourceViews = archivedMode ? (archivedViews ?? []) : runs;
+  const allRows = useMemo(
+    () => runRows(sourceViews, { runChatId, nameOf, includeArchived: archivedMode }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [sourceViews, runChatId, projects, archivedMode],
+  );
+  const effFilter = archivedMode ? 'all' : q.filter;
+  const filtered = useMemo(() => filterRunRows(allRows, { filter: effFilter, text }), [allRows, effFilter, text]);
+  const sorted = useMemo(() => sortRunRows(filtered, sortKey, sortDir), [filtered, sortKey, sortDir]);
+  const pageData = pageRunRows(sorted, page);
+  const now = Date.now();
+
+  const ready = archivedMode ? (archivedViews !== null && !archivedFailed) : (read === 'known' || read === 'stale');
+  const onCol = (key: RunSortKey): void => {
+    if (sortKey === key) { setSortDir((d) => (d === 'asc' ? 'desc' : 'asc')); return; }
+    setSortKey(key);
+    setSortDir(key === 'updated' || key === 'created' ? 'desc' : 'asc');
+  };
+  const ariaSort = (key: RunSortKey): 'ascending' | 'descending' | 'none' => (sortKey === key ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none');
+  const unarchive = (id: string): void => {
+    void api.archiveRun(id, false)
+      .then(() => { setArchivedViews((prev) => (prev === null ? prev : prev.filter((v) => v.session.id !== id))); onRetryRuns?.(); })
+      .catch(() => { /* the row stays; the next read says */ });
+  };
+
+  return (
+    <div data-testid="everything-runs" data-count={pageData.total} data-filter={q.filter}>
+      {!archivedMode && read === 'checking' && <p data-testid="everything-checking" className="wk-session-grey">Reading your work…</p>}
+      {!archivedMode && read === 'failed' && (
+        <p data-testid="everything-failed" role="alert" className="wk-session-grey">
+          Couldn’t read your work ({showText(runsError ?? '')}).
+          {onRetryRuns !== undefined && <> <button type="button" data-testid="everything-retry" onClick={onRetryRuns} className="wk-since-toggle">Try again</button></>}
+        </p>
+      )}
+      {!archivedMode && read === 'stale' && <p className="wk-session-grey">The last read failed ({showText(runsError ?? '')}); this is the list as last read.</p>}
+      {archivedMode && archivedViews === null && <p data-testid="everything-checking" className="wk-session-grey">Reading what was archived…</p>}
+      {archivedMode && archivedFailed && <p role="alert" className="wk-session-grey">Couldn’t read the archived runs.</p>}
+      {ready && (
+        <div className="wk-runs-controls">
+          <input
+            data-testid="runs-filter"
+            type="search"
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder="Filter runs…"
+            aria-label="Filter runs"
+            className="wk-runs-filter"
+          />
+        </div>
+      )}
+      {ready && pageData.total === 0 && (
+        <p data-testid="everything-empty" className="wk-session-grey">
+          {archivedMode ? 'Nothing is archived.' : text.trim() !== '' ? 'No runs match this filter.' : q.project !== null ? 'Nothing has been started in this project yet.' : 'Nothing has been started yet.'}
+        </p>
+      )}
+      {ready && pageData.total > 0 && (
+        <div role="table" aria-label="Every run" data-testid="everything-runs-table" className="wk-runs-table">
+          <div role="row" className="wk-runs-head">
+            {RUN_COLS.map((c) => (
+              <button
+                key={c.key}
+                type="button"
+                role="columnheader"
+                data-testid="runs-col"
+                data-key={c.key}
+                aria-sort={ariaSort(c.key)}
+                onClick={() => onCol(c.key)}
+                className="wk-runs-col"
+              >
+                {c.label}{sortKey === c.key ? (sortDir === 'asc' ? ' ↑' : ' ↓') : ''}
+              </button>
+            ))}
+            <span aria-hidden className="wk-runs-col wk-runs-col--menu" />
+          </div>
+          {pageData.slice.map((r) => {
+            const path = sessionPath(r.sessionId);
+            const finished = !archivedMode && FINISHED.has(r.status) ? viewOf(r.runId) : undefined;
+            const open = menuFor === r.runId;
+            return (
+              <div key={r.runId} data-testid="runs-row" data-run-id={r.runId} data-session-id={r.sessionId} data-state={r.status} className="wk-runs-row">
+                <div className="wk-runs-line">
+                  <a href={path} onClick={go(path)} className="wk-runs-cells">
+                    <span className="wk-runs-cell wk-runs-cell--state"><span aria-hidden className={`wk-desk-dot wk-desk-dot--${r.status}`} />{STATE_WORD[r.status]}</span>
+                    <span className="wk-runs-cell wk-runs-cell--title">{showText(r.title)}</span>
+                    <span className="wk-runs-cell">{r.project}</span>
+                    <span className="wk-runs-cell">{r.repo ?? '—'}</span>
+                    <span className="wk-runs-cell">{r.workflow}</span>
+                    <span className="wk-runs-cell">{r.created > 0 ? `${ageWord(Math.max(0, now - r.created))} ago` : '—'}</span>
+                    <span className="wk-runs-cell">{r.updated > 0 ? `${ageWord(Math.max(0, now - r.updated))} ago` : '—'}</span>
+                  </a>
+                  {archivedMode && (
+                    <button type="button" data-testid="everything-unarchive" data-run-id={r.runId} onClick={() => unarchive(r.runId)} className="wk-since-toggle">Unarchive</button>
+                  )}
+                  <button
+                    type="button"
+                    data-testid="runs-row-menu"
+                    data-run-id={r.runId}
+                    aria-expanded={open}
+                    aria-label="Row actions"
+                    onClick={() => setMenuFor(open ? null : r.runId)}
+                    className="wk-sheet-open"
+                  >⋯</button>
+                </div>
+                {open && (
+                  <div className="wk-runs-menu">
+                    <button type="button" data-testid="runs-row-open" onClick={() => navigate(path)} className="wk-since-toggle">Open</button>
+                    <button type="button" data-testid="runs-row-look" onClick={() => openSheet({ kind: 'session', sessionId: `run:${r.runId}` }, 'steps')} className="wk-since-toggle">Look underneath</button>
+                    {finished !== undefined && <FinishedRunRow view={finished} selectedRunId={null} onSelect={() => navigate(path)} onArchive={archive} />}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {ready && pageData.total > 0 && pageData.pages > 1 && (
+        <div data-testid="runs-pager" className="wk-runs-pager">
+          <button type="button" data-testid="runs-pager-prev" disabled={pageData.page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))} className="wk-since-toggle">Previous</button>
+          <span data-testid="runs-pager-at">page {pageData.page} of {pageData.pages}</span>
+          <button type="button" data-testid="runs-pager-next" disabled={pageData.page >= pageData.pages} onClick={() => setPage((p) => p + 1)} className="wk-since-toggle">Next</button>
+        </div>
       )}
     </div>
   );
