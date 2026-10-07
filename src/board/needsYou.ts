@@ -10,7 +10,7 @@ import type { RetryPrefill } from '../store/retryPrefill.js';
 import { campaignCounts, campaignMemberRunIds } from './campaignStats.js';
 import { STALLED_IDLE_SECS, stalledLiveChats, type LiveChatSnapshot } from './chatStats.js';
 import { gateOpenPath } from './gateActions.js';
-import { sessionPath } from './sessionModel.js';
+import { ORPHANED_LINE, sessionPath } from './sessionModel.js';
 import { gateRowVerb } from '../components/gateMoveModel.js';
 import { outcomeOf, runStats } from './metrics.js';
 import { repoOnboard } from './repoStats.js';
@@ -64,7 +64,7 @@ import { captureClass, decisionIdOf, proposalConsequence, proposalConsequenceLin
  */
 
 export type NeedKind =
-  | 'gate' | 'elicitation' | 'stall-escalated' | 'steer-request' | 'failed-run' | 'stalled-run'
+  | 'gate' | 'elicitation' | 'orphaned-run' | 'stall-escalated' | 'steer-request' | 'failed-run' | 'stalled-run'
   | 'stranded-run' | 'campaign' | 'repo-graph' | 'proposal' | 'stalled-chat';
 
 /** Alike SIMPLE items the queue folds into one expandable row ("2 approvals"); `reindex` folds
@@ -132,6 +132,9 @@ export const SEVERITY: Record<NeedKind, number> = {
   gate: 100,
   // An MCP server mid-run asked a question: the run is blocked on the answer.
   elicitation: 96,
+  // The daemon restarted under the step and restored no worker (studio#545): nothing is working on
+  // the run at all, and only a Resume moves it — above every recovery the watchdog could still try.
+  'orphaned-run': 95,
   // The watchdog spent (or refused) its automatic recoveries: only a human can move it.
   'stall-escalated': 94,
   // The agent asked for direction; it may keep going without it, so below a hard block.
@@ -257,6 +260,9 @@ export interface NeedsYouInputs {
   /** Live runs gone silent past the stall threshold (run id → last evidence) — the
    *  board model's `stalledAt`; absent = no stall evidence held. */
   stalledAt?: Record<string, number>;
+  /** studio#545: runs the daemon restart orphaned (run id → the engine's `runOrphaned` report clock) —
+   *  `store/watch`'s `orphanedRuns`; absent = no trail evidence held. */
+  orphanedAt?: Record<string, number>;
   /** Open MCP elicitations keyed by run id (absent = none held). */
   elicitations?: Record<string, ElicitationLite>;
   /** Unread steer requests (absent = none). */
@@ -334,6 +340,7 @@ const clipLine = (t: string, n = 120): string => {
 export function needsYouRows(inputs: NeedsYouInputs): NeedRow[] {
   const { runs, gates, failedAt, attachedAt, projectIds, chats, repos, campaigns, now, deliveryAttempted, deliveredNow } = inputs;
   const stalledAt = inputs.stalledAt ?? {};
+  const orphanedAt = inputs.orphanedAt ?? {};
   const escalations = inputs.stallEscalations ?? {};
   const rows: NeedRow[] = [];
   const live = runs.filter((v) => v.session.archived_at == null);
@@ -443,6 +450,23 @@ export function needsYouRows(inputs: NeedsYouInputs): NeedRow[] {
         at: endedAtMs(v) ?? finishedAtMs(v) ?? failedAt[s.id] ?? attachedAt[s.id] ?? null,
         subjectPath: `/runs/${encodeURIComponent(s.id)}`,
         action: { kind: 'retry-prefill', prefill: retryPrefillOf(v), label: 'Retry ›' },
+      });
+    } else if (s.status === 'executing' && orphanedAt[s.id] !== undefined) {
+      // studio#545: the daemon restarted under this step and restored no worker (the engine's
+      // `runOrphaned` report, read off the trail by store/watch): nothing is working on it, and only
+      // a Resume moves it — said before any stall verdict (a run with no worker is not "wedged").
+      shownRunIds.add(s.id);
+      rows.push({
+        key: `orphaned:${s.id}`,
+        kind: 'orphaned-run',
+        severity: SEVERITY['orphaned-run'],
+        stakes: 1 + repoStake(v),
+        subject: s.problem,
+        text: ORPHANED_LINE,
+        tone: 'gate',
+        at: orphanedAt[s.id]!,
+        subjectPath: sessionPath('run:' + s.id),
+        action: { kind: 'open', path: sessionPath('run:' + s.id), label: 'Resume ›' },
       });
     } else if (escalations[s.id] !== undefined && !TERMINAL_STATUSES.has(s.status)) {
       // The watchdog's escalation supersedes the board's own stall verdict for the

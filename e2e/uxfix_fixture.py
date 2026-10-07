@@ -829,6 +829,10 @@ cancel_post_log: list = []
 gate_post_log: list = []
 # studio#480: every POST /runs/:id/reassign (GET /__fixture/reassign-posts); reset with reset_gate_posts.
 reassign_post_log: list = []
+# studio#545: every POST /runs/:id/resume (GET /__fixture/resume-posts); a resumed run's trail gains the
+# dispatch that follows the orphan report. Reset with `reset_gate_posts`.
+resume_post_log: list = []
+resumed_runs: set = set()
 # S13 (e2e/live_walkthrough_deliver_test.py): the `gateDecided` event a POST /runs/:id/gate on the walkthrough
 # corpus appends to that run's trail — crew writes one per decision; GET /runs/:id/events serves it after the
 # recorded events. Cleared with `reset_gate_posts`.
@@ -2978,6 +2982,15 @@ RUN_EVENTS = {
                  {"type": "sessionFailed", "session": "r-legacy", "ts": NOW0 - 8 * DAY}],
     "r-auth": [{"type": "sessionStarted", "session": "r-auth", "ts": NOW0 - 13 * MIN},
                {"type": "sessionFailed", "session": "r-auth", "ts": NOW0 - 12 * MIN}],
+    # studio#545: the daemon restarted under r-orphan's step — the engine's `runOrphaned` REPORT (crew#830,
+    # api-types RunOrphanedFrame) ends the trail; the run stays `executing` with no worker until a resume
+    # dispatches the unit again (POST /runs/:id/resume below appends that dispatch).
+    "r-orphan": [{"type": "sessionStarted", "session": "r-orphan", "problem": "stranded work from another client",
+                  "ts": NOW0 - 40 * MIN, "seq": 1},
+                 {"type": "unitDispatched", "session": "r-orphan", "ord": 1, "attempt": 0, "cli": "claude",
+                  "ts": NOW0 - 39 * MIN, "seq": 2},
+                 {"type": "runOrphaned", "session": "r-orphan", "ord": 1, "detail": "POST /api/v1/runs/r-orphan/resume",
+                  "ts": NOW0 - 10 * MIN, "seq": 3}],
 }
 
 NOTES_DOCS = [
@@ -5955,6 +5968,10 @@ class W2Handler(SimpleHTTPRequestHandler):
             rid = urllib.parse.unquote(parts[4])
             events = list(RUN_EVENTS.get(rid, []))
             with state_lock:
+                if rid in resumed_runs:
+                    events = events + [{"type": "unitDispatched", "session": rid, "ord": 1, "attempt": 1, "cli": "claude",
+                                        "ts": NOW0, "seq": 4}]
+            with state_lock:
                 if state["seat_escalation"] and rid == "r-seat":
                     events = list(SEAT_EVENTS)
             with state_lock:
@@ -7223,6 +7240,10 @@ class W2Handler(SimpleHTTPRequestHandler):
             with state_lock:
                 posts = list(gate_post_log)
             return self._json(200, {"posts": posts})
+        if path == "/__fixture/resume-posts":
+            with state_lock:
+                posts = list(resume_post_log)
+            return self._json(200, {"posts": posts})
         if path == "/__fixture/inject-posts":
             with state_lock:
                 posts = list(inject_post_log)
@@ -7408,6 +7429,8 @@ class W2Handler(SimpleHTTPRequestHandler):
                     cancel_post_log.clear()
                     gate_post_log.clear()
                     reassign_post_log.clear()
+                    resume_post_log.clear()
+                    resumed_runs.clear()
                     walk_gate_decided.clear()
                     session_launch_log.clear()
                     session_launched.clear()
@@ -7730,6 +7753,14 @@ class W2Handler(SimpleHTTPRequestHandler):
         # ("approved · advancing…") renders truthfully after a triage key or a
         # chip click; the rigs assert the request BODY off the browser tap.
         parts = path.split("/")
+        if len(parts) == 6 and parts[3] == "runs" and parts[5] == "resume":
+            # studio#545: crew's POST /runs/:id/resume — the orphaned run's unit is dispatched again, and
+            # GET /runs/:id/events then carries that dispatch after the orphan report.
+            rid = urllib.parse.unquote(parts[4])
+            with state_lock:
+                resume_post_log.append({"runId": rid, "at": time.time()})
+                resumed_runs.add(rid)
+            return self._json(200, {"status": "resumed"})
         if len(parts) == 6 and parts[3] == "runs" and parts[5] == "reassign":
             rid = urllib.parse.unquote(parts[4])
             with state_lock:

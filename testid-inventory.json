@@ -12,8 +12,8 @@
   "studioVersion": "0.6.4",
   "counts": {
     "files": 219,
-    "occurrences": 2529,
-    "static": 2210,
+    "occurrences": 2534,
+    "static": 2215,
     "dynamic": 79,
     "computed": 9
   },
@@ -8991,6 +8991,30 @@
       ]
     },
     {
+      "testId": "session-orphaned",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
+      "testId": "session-orphaned-asked",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
+      "testId": "session-orphaned-error",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
+      "testId": "session-orphaned-resume",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
       "testId": "session-passage",
       "files": [
         "src/components/session/SourceChips.tsx"
@@ -13230,6 +13254,12 @@
     },
     {
       "testId": "watchtower-open",
+      "files": [
+        "src/components/watch/WatchtowerPage.tsx"
+      ]
+    },
+    {
+      "testId": "watchtower-orphaned",
       "files": [
         "src/components/watch/WatchtowerPage.tsx"
       ]

@@ -4,6 +4,8 @@ import type { SessionView } from '../src/api/types.js';
 import {
   conversationOf,
   groupSessions,
+  ORPHANED_LINE,
+  orphanedOf,
   parseSessionId,
   SINCE_IDLE_MS,
   sessionIdOf,
@@ -120,5 +122,29 @@ describe('since you left (R2: a session idle ≥ 4 h)', () => {
   it('nothing happened: still a card, saying so', () => {
     const card = sinceYouLeft(now - 2 * SINCE_IDLE_MS, now, [runs[3]!], {})!;
     expect(card.summary).toBe('Nothing changed');
+  });
+});
+
+describe('orphanedOf — a run the daemon restart orphaned (studio#545 / crew#830)', () => {
+  const started = { type: 'sessionStarted', ts: 1_000 };
+  const dispatched = { type: 'unitDispatched', ord: 1, ts: 2_000 };
+  const orphaned = { type: 'runOrphaned', ord: 1, ts: 9_000 };
+  it('a trail whose newest dispatch-or-orphan frame is the report: orphaned, at the report\'s own clock', () => {
+    expect(orphanedOf('executing', [started, dispatched, orphaned])).toEqual({ ord: 1, at: 9_000 });
+    // Frames after the report that are not a dispatch (an audit line, a chat frame) change nothing.
+    expect(orphanedOf('executing', [started, dispatched, orphaned, { type: 'gateDecided', ts: 9_500 }])).toEqual({ ord: 1, at: 9_000 });
+    expect(ORPHANED_LINE).toBe('The daemon restarted while this step was running; nothing is working on it.');
+  });
+  it('a dispatch after the report (the daemon\'s boot resume, an operator\'s Resume) is a live run again', () => {
+    expect(orphanedOf('executing', [started, dispatched, orphaned, { type: 'unitDispatched', ord: 1, ts: 10_000 }])).toBeNull();
+  });
+  it('no verdict without the evidence: a trail not read, a run that is not executing, a trail without the report', () => {
+    expect(orphanedOf('executing', undefined)).toBeNull();
+    expect(orphanedOf('awaiting_human', [started, dispatched, orphaned])).toBeNull();
+    expect(orphanedOf('completed', [started, dispatched, orphaned])).toBeNull();
+    expect(orphanedOf('executing', [started, dispatched])).toBeNull();
+    expect(orphanedOf('executing', [])).toBeNull();
+    // A report without a clock or ord is still a report.
+    expect(orphanedOf('executing', [{ type: 'runOrphaned' }])).toEqual({ ord: null, at: null });
   });
 });

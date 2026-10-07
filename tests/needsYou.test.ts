@@ -11,6 +11,7 @@ import {
   retryPrefillOf,
   type NeedsYouInputs,
 } from '../src/board/needsYou.js';
+import { ORPHANED_LINE } from '../src/board/sessionModel.js';
 import { makeView } from './factories.js';
 
 /**
@@ -313,5 +314,31 @@ describe('needsYouRows — a retried failure has its answer (S15a)', () => {
       failedAt: { 'r-fail-a': NOW - HOUR, 'r-fail-b': NOW - HOUR },
     }));
     expect(rows.filter((r) => r.kind === 'failed-run').map((r) => r.key)).toStrictEqual(['fail:r-fail-b']);
+  });
+});
+
+describe('an orphaned run needs you (studio#545)', () => {
+  it('an executing run the daemon restart orphaned is one row, with the orphan line and Resume ›, above a stalled run', () => {
+    const rows = needsYouRows(inputs({
+      runs: [
+        makeView({ id: 'r-stalled', status: 'executing', problem: 'tidy the importer' }),
+        makeView({ id: 'r-orphan', status: 'executing', problem: 'stranded work from another client' }),
+      ],
+      stalledAt: { 'r-stalled': NOW - 20 * MIN, 'r-orphan': NOW - 20 * MIN },
+      orphanedAt: { 'r-orphan': NOW - 10 * MIN },
+    }));
+    expect(rows.map((r) => [r.kind, r.key])).toEqual([['orphaned-run', 'orphaned:r-orphan'], ['stalled-run', 'stalled:r-stalled']]);
+    const row = rows[0]!;
+    expect(row.text).toBe(ORPHANED_LINE);
+    expect(row.at).toBe(NOW - 10 * MIN);
+    expect(row.subjectPath).toBe('/s/run%3Ar-orphan');
+    expect(row.action).toEqual({ kind: 'open', path: '/s/run%3Ar-orphan', label: 'Resume ›' });
+    // The orphan verdict supersedes the stall verdict for the run: one row, never two.
+    expect(rows.filter((r) => r.key.endsWith('r-orphan'))).toHaveLength(1);
+  });
+  it('no evidence, no row: the input absent, or the run no longer executing', () => {
+    const run = makeView({ id: 'r-orphan', status: 'executing' });
+    expect(needsYouRows(inputs({ runs: [run] }))).toEqual([]);
+    expect(needsYouRows(inputs({ runs: [makeView({ id: 'r-orphan', status: 'completed' })], orphanedAt: { 'r-orphan': NOW } }))).toEqual([]);
   });
 });
