@@ -12,8 +12,8 @@
   "studioVersion": "0.6.4",
   "counts": {
     "files": 219,
-    "occurrences": 2536,
-    "static": 2217,
+    "occurrences": 2556,
+    "static": 2231,
     "dynamic": 79,
     "computed": 9
   },
@@ -3459,6 +3459,12 @@
       ]
     },
     {
+      "testId": "everything-count",
+      "files": [
+        "src/components/everything/EverythingPage.tsx"
+      ]
+    },
+    {
       "testId": "everything-empty",
       "files": [
         "src/components/everything/EverythingPage.tsx"
@@ -3621,6 +3627,18 @@
       ]
     },
     {
+      "testId": "everything-runs",
+      "files": [
+        "src/components/everything/EverythingPage.tsx"
+      ]
+    },
+    {
+      "testId": "everything-runs-table",
+      "files": [
+        "src/components/everything/EverythingPage.tsx"
+      ]
+    },
+    {
       "testId": "everything-scope",
       "files": [
         "src/components/everything/EverythingPage.tsx"
@@ -3658,6 +3676,12 @@
     },
     {
       "testId": "everything-unarchive",
+      "files": [
+        "src/components/everything/EverythingPage.tsx"
+      ]
+    },
+    {
+      "testId": "everything-view",
       "files": [
         "src/components/everything/EverythingPage.tsx"
       ]
@@ -8748,6 +8772,66 @@
       "testId": "runs-bottom-sheet",
       "files": [
         "src/components/RunsBottomPanel.tsx"
+      ]
+    },
+    {
+      "testId": "runs-col",
+      "files": [
+        "src/components/everything/EverythingPage.tsx"
+      ]
+    },
+    {
+      "testId": "runs-filter",
+      "files": [
+        "src/components/everything/EverythingPage.tsx"
+      ]
+    },
+    {
+      "testId": "runs-pager",
+      "files": [
+        "src/components/everything/EverythingPage.tsx"
+      ]
+    },
+    {
+      "testId": "runs-pager-at",
+      "files": [
+        "src/components/everything/EverythingPage.tsx"
+      ]
+    },
+    {
+      "testId": "runs-pager-next",
+      "files": [
+        "src/components/everything/EverythingPage.tsx"
+      ]
+    },
+    {
+      "testId": "runs-pager-prev",
+      "files": [
+        "src/components/everything/EverythingPage.tsx"
+      ]
+    },
+    {
+      "testId": "runs-row",
+      "files": [
+        "src/components/everything/EverythingPage.tsx"
+      ]
+    },
+    {
+      "testId": "runs-row-look",
+      "files": [
+        "src/components/everything/EverythingPage.tsx"
+      ]
+    },
+    {
+      "testId": "runs-row-menu",
+      "files": [
+        "src/components/everything/EverythingPage.tsx"
+      ]
+    },
+    {
+      "testId": "runs-row-open",
+      "files": [
+        "src/components/everything/EverythingPage.tsx"
       ]
     },
     {

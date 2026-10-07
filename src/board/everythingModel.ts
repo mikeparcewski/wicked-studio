@@ -55,6 +55,17 @@ export function isSessionFilter(v: unknown): v is SessionFilter {
   return typeof v === 'string' && SESSION_FILTERS.some((f) => f.id === v);
 }
 
+// ── The Sessions view: grouped (sessions) or every run (S17b) ─────────────────────────────────
+
+/** `grouped` — one row per session (the default, what §5.3 lists); `runs` — one row per RUN, the
+ *  sortable/filterable/paged "Every run" table (`?view=runs`). Carried like a filter: a lens, not a page. */
+export const EVERYTHING_VIEWS = ['grouped', 'runs'] as const;
+export type EverythingView = (typeof EVERYTHING_VIEWS)[number];
+
+export function isEverythingView(v: unknown): v is EverythingView {
+  return typeof v === 'string' && (EVERYTHING_VIEWS as readonly string[]).includes(v);
+}
+
 /** Whether a session in `state` shows under `filter` — `active` is live work, waiting on you included. */
 export function matchesSessionFilter(state: SessionState, filter: SessionFilter): boolean {
   switch (filter) {
@@ -230,6 +241,8 @@ export interface EverythingQuery {
   /** One project's sessions (`?project=`), else every project's. */
   project: string | null;
   kind: MadeKind;
+  /** The Sessions view (`?view=`): grouped by session (default) or every run as a table. */
+  view: EverythingView;
 }
 
 /** `?tab=` · `?filter=` · `?project=` · `?kind=` off a `location.search`; anything unknown takes the default. */
@@ -239,11 +252,13 @@ export function readEverythingQuery(search: string): EverythingQuery {
   const filter = q.get('filter');
   const project = q.get('project');
   const kind = q.get('kind');
+  const view = q.get('view');
   return {
     tab: isEverythingTab(tab) ? tab : 'sessions',
     filter: isSessionFilter(filter) ? filter : 'all',
     project: project !== null && project !== '' ? project : null,
     kind: isMadeKind(kind) ? kind : 'all',
+    view: isEverythingView(view) ? view : 'grouped',
   };
 }
 
@@ -258,6 +273,7 @@ export function everythingPath(q: Partial<EverythingQuery> = {}): string {
   if (q.filter !== undefined && q.filter !== 'all') p.set('filter', q.filter);
   if (q.project !== undefined && q.project !== null && q.project !== '') p.set('project', q.project);
   if (q.kind !== undefined && q.kind !== 'all') p.set('kind', q.kind);
+  if (q.view !== undefined && q.view !== 'grouped') p.set('view', q.view);
   const s = p.toString();
   return s === '' ? '/everything' : `/everything?${s}`;
 }
