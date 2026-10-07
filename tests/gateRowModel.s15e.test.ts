@@ -502,6 +502,28 @@ describe('sessionGateChoices — a denied unit re-runs: Approve (suggested) · s
     expect(model.choices[model.recommended!]!.key).toBe('approve');
   });
 
+  it('nothing is suggested when no judge verdict is recorded (none ran, or the frame carries none)', () => {
+    const noJudge = sessionGateChoices({ runId: DENIED_RUN, gate: deniedGate(), units: DENIED_UNITS, events: deniedEvents({ agentVerdict: null, judgeCli: null, judgeDistinct: null }), pool: [], roster: null })!;
+    expect(noJudge.choices.map((c) => c.key)).toEqual(['approve', 'steer', 'stop']);
+    expect(noJudge.recommended).toBeNull();
+  });
+
+  it('a gate about a LATER unit does not inherit an earlier unit\'s input-governance denial (last-at-or-below lookup)', () => {
+    // Unit 2 was denied by input governance and re-ran; the open gate is unit 3's generic retry prompt
+    // with no evaluation of its own. The lookup falls to unit 2's frame — which is not this gate's.
+    const gate = deniedGateNoKind('confirm to retry the phase, or reject to cancel the run');
+    const later: OpenGate = { ...gate, ord: 3, gateKind: 'escalation' };
+    // Unit 3 is a reviewer here (not the hand-over, which the deliver card takes).
+    const units = [
+      ...DENIED_UNITS.slice(0, 2),
+      makeUnit({ id: `${DENIED_RUN}:review`, session_id: DENIED_RUN, ord: 3, stage: 'review', role: 'evaluator', status: 'rejected', assigned_cli: 'pi' }),
+    ];
+    const model = sessionGateChoices({ runId: DENIED_RUN, gate: later, units, events: deniedEvents(), pool: [], roster: null })!;
+    expect(model.reason).toBe('escalation');
+    expect(model.choices.map((c) => c.key)).toContain('send-back');
+    expect(model.choices.map((c) => c.key)).not.toContain('approve');
+  });
+
   it('nothing is suggested when the judge said FAIL, or the floor failed', () => {
     const judgeFail = sessionGateChoices({ runId: DENIED_RUN, gate: deniedGate(), units: DENIED_UNITS, events: deniedEvents({ agentVerdict: 'FAIL' }), pool: [], roster: null })!;
     expect(judgeFail.choices.map((c) => c.key)).toEqual(['approve', 'steer', 'stop']);
@@ -549,5 +571,9 @@ describe('sessionGateChoices — a denied unit re-runs: Approve (suggested) · s
     expect(isDeniedUnitEscalation('Unit 2 verdict is NOT PASS — …', null)).toBe(false);
     expect(isDeniedUnitEscalation(undefined, null)).toBe(false);
     expect(deniedUnitJudgedOk(null)).toBe(false);
+    // The source rule is bound to the gate's own unit.
+    const view = { ord: 2, denial: { source: 'input_governance' } } as unknown as Parameters<typeof isDeniedUnitEscalation>[1];
+    expect(isDeniedUnitEscalation(undefined, view, 2)).toBe(true);
+    expect(isDeniedUnitEscalation(undefined, view, 3)).toBe(false);
   });
 });
