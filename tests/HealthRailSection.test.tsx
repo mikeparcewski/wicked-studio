@@ -298,11 +298,25 @@ describe('the probes settle (studio#280 item 2)', () => {
     expect(within(api).getByTestId('rail-health-recheck')).toBeInTheDocument();
     expect(screen.getByTestId('rail-seats-probe')).toHaveAttribute('data-state', 'stale');
     expect(screen.getByTestId('rail-seats-probe').textContent).toContain('showing the last answer');
+    expect(screen.getByTestId('rail-seats-recheck')).toBeInTheDocument(); // every overdue row offers the re-probe
     expect(screen.getAllByTestId('rail-seat-row')).toHaveLength(3);
     // The re-probe answers: fresh again, nothing stale left.
     fireEvent.click(within(api).getByTestId('rail-health-recheck'));
     await waitFor(() => expect(screen.getByTestId('rail-api-server')).toHaveAttribute('data-state', 'answered'));
     await waitFor(() => expect(screen.queryByTestId('rail-seats-probe')).toBeNull());
+  });
+
+  it('an overdue SEATS or GOVERNANCE row offers the re-probe even when /health answered (codex round 2)', async () => {
+    getRoster.mockImplementationOnce(() => new Promise(() => undefined));
+    render(<Deadline ms={30} />);
+    await screen.findByText('ok · 0.6.0');
+    const seats = await screen.findByTestId('rail-seats-probe');
+    await waitFor(() => expect(seats).toHaveAttribute('data-state', 'overdue'));
+    expect(screen.queryByTestId('rail-health-recheck')).toBeNull(); // the API row answered fresh — nothing to re-probe there
+    fireEvent.click(screen.getByTestId('rail-seats-recheck'));
+    await waitFor(() => expect(getRoster).toHaveBeenCalledTimes(2));
+    await screen.findAllByTestId('rail-seat-row');
+    expect(screen.queryByTestId('rail-seats-probe')).toBeNull();
   });
 
   it('a slow EARLIER answer never lands over a later expand (the generation guard covers /health too)', async () => {

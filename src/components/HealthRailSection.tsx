@@ -319,10 +319,21 @@ function stamp(ms: number): string {
 }
 
 /** The governance registry group — one CheckRow per question, the findings as banners. */
-function GovernanceRows({ read, overdue = 0 }: { read: GovernanceRead; /** the probe deadline (ms) once passed, 0 while inside it */ overdue?: number }): React.ReactElement {
+function GovernanceRows({ read, overdue = 0, onReprobe }: {
+  read: GovernanceRead;
+  /** the probe deadline (ms) once passed, 0 while inside it */
+  overdue?: number;
+  /** the expand's re-probe, offered on an overdue row */
+  onReprobe?: () => void;
+}): React.ReactElement {
   const showPath = useDisplayPath();
   if (read.kind === 'loading') {
-    return <CheckRow label="governance" ok={null} detail={overdue ? probeOverdueWord(overdue) : 'checking…'} testId="rail-governance-probe" state={overdue ? 'overdue' : 'checking'} />;
+    return (
+      <CheckRow
+        label="governance" ok={null} detail={overdue ? probeOverdueWord(overdue) : 'checking…'} testId="rail-governance-probe" state={overdue ? 'overdue' : 'checking'}
+        {...(overdue && onReprobe !== undefined ? { action: { label: 'check again', testId: 'rail-governance-recheck', onClick: onReprobe } } : {})}
+      />
+    );
   }
   if (read.kind === 'error') {
     return (
@@ -505,6 +516,9 @@ export function HealthRailSection({ open, onToggle, compact = false, probeDeadli
     return () => clearTimeout(deadline);
   }, [open, reprobe, probeDeadlineMs]);
 
+  /** "check again": re-runs this expand's probes without a collapse — offered on every overdue row. */
+  const reprobeNow = (): void => setReprobe((n) => n + 1);
+
   const wsDown = wsStatus === 'disconnected';
   const pillLabel = wsStatus === 'connected' ? 'Connected' : wsStatus === 'connecting' ? 'Connecting' : 'Disconnected';
   // The passive header summary (§6.2): fail-red if any seat is inactive or the
@@ -616,12 +630,12 @@ export function HealthRailSection({ open, onToggle, compact = false, probeDeadli
             <CheckRow
               label="API server" ok={health.status === 'ok'} detail={`${health.status} · ${health.version}`} since={healthCheckedAt ?? undefined}
               testId="rail-api-server" state={overdue && !healthFresh ? 'stale' : 'answered'}
-              {...(overdue && !healthFresh ? { action: { label: 'check again', testId: 'rail-health-recheck', onClick: () => setReprobe((n) => n + 1) } } : {})}
+              {...(overdue && !healthFresh ? { action: { label: 'check again', testId: 'rail-health-recheck', onClick: reprobeNow } } : {})}
             />
           ) : overdue ? (
             <CheckRow
               label="API server" ok={null} detail={probeOverdueWord(probeDeadlineMs)} testId="rail-api-server" state="overdue"
-              action={{ label: 'check again', testId: 'rail-health-recheck', onClick: () => setReprobe((n) => n + 1) }}
+              action={{ label: 'check again', testId: 'rail-health-recheck', onClick: reprobeNow }}
             />
           ) : (
             <CheckRow label="API server" ok={null} detail="checking…" testId="rail-api-server" state="checking" />
@@ -636,11 +650,17 @@ export function HealthRailSection({ open, onToggle, compact = false, probeDeadli
           {rosterError ? (
             <CheckRow label="seats" ok={false} detail="unreachable" />
           ) : roster === null ? (
-            <CheckRow label="seats" ok={null} detail={overdue ? probeOverdueWord(probeDeadlineMs) : 'checking…'} testId="rail-seats-probe" state={overdue ? 'overdue' : 'checking'} />
+            <CheckRow
+              label="seats" ok={null} detail={overdue ? probeOverdueWord(probeDeadlineMs) : 'checking…'} testId="rail-seats-probe" state={overdue ? 'overdue' : 'checking'}
+              {...(overdue ? { action: { label: 'check again', testId: 'rail-seats-recheck', onClick: reprobeNow } } : {})}
+            />
           ) : (
             <>
               {overdue && !rosterFresh && (
-                <CheckRow label="seats" ok={null} detail={`${probeOverdueWord(probeDeadlineMs)} · showing the last answer`} testId="rail-seats-probe" state="stale" />
+                <CheckRow
+                  label="seats" ok={null} detail={`${probeOverdueWord(probeDeadlineMs)} · showing the last answer`} testId="rail-seats-probe" state="stale"
+                  action={{ label: 'check again', testId: 'rail-seats-recheck', onClick: reprobeNow }}
+                />
               )}
               {(() => {
                 const cap = weekCaption(week);
@@ -684,7 +704,7 @@ export function HealthRailSection({ open, onToggle, compact = false, probeDeadli
           >
             ── governance ────────
           </p>
-          <GovernanceRows read={governance} overdue={overdue ? probeDeadlineMs : 0} />
+          <GovernanceRows read={governance} overdue={overdue ? probeDeadlineMs : 0} onReprobe={reprobeNow} />
         </div>
       )}
       {/* Amendment 5, decision 5: the one plain-words sign-in panel — the command, Copy, check again.

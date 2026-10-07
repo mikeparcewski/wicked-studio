@@ -12,8 +12,8 @@
   "studioVersion": "0.6.2",
   "counts": {
     "files": 218,
-    "occurrences": 2514,
-    "static": 2193,
+    "occurrences": 2517,
+    "static": 2195,
     "dynamic": 79,
     "computed": 9
   },
@@ -7646,6 +7646,12 @@
       ]
     },
     {
+      "testId": "rail-governance-recheck",
+      "files": [
+        "src/components/HealthRailSection.tsx"
+      ]
+    },
+    {
       "testId": "rail-governance-store-path",
       "files": [
         "src/components/HealthRailSection.tsx"
@@ -7828,6 +7834,12 @@
     },
     {
       "testId": "rail-seats-probe",
+      "files": [
+        "src/components/HealthRailSection.tsx"
+      ]
+    },
+    {
+      "testId": "rail-seats-recheck",
       "files": [
         "src/components/HealthRailSection.tsx"
       ]
