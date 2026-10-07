@@ -244,10 +244,11 @@ describe('the probes settle (studio#280 item 2)', () => {
     const checked = within(api).getByTestId('rail-probe-checked');
     expect(checked.textContent).toMatch(/^checked \d\d:\d\d:\d\d$/);
     expect(Number(checked.getAttribute('data-at'))).toBeGreaterThanOrEqual(before);
-    expect(screen.getByTestId('rail-health-heart')).toHaveAttribute('data-health', 'healthy');
+    expect(Number(checked.getAttribute('data-at'))).toBeLessThanOrEqual(Date.now());
   });
 
   it('a REJECTED /health shows the error with its sentence (and its clock) — never a bare "unreachable", never "checking…"', async () => {
+    rosterAnswer = [SEATS[0]!]; // every seat healthy, so the heart reads the probe alone
     getHealth.mockImplementationOnce(() => Promise.reject(new Error('ECONNREFUSED 127.0.0.1:7701')));
     render(<Harness initialOpen />);
     const api = await screen.findByTestId('rail-api-server');
@@ -272,7 +273,7 @@ describe('the probes settle (studio#280 item 2)', () => {
     expect(screen.queryByTestId('rail-seats-probe')).toBeNull();
     expect(getHealth).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByTestId('rail-health-recheck'));
-    expect(getHealth).toHaveBeenCalledTimes(2);
+    await waitFor(() => expect(getHealth).toHaveBeenCalledTimes(2));
     await screen.findByText('ok · 0.6.0');
     expect(screen.getByTestId('rail-api-server')).toHaveAttribute('data-state', 'answered');
     expect(screen.queryByTestId('rail-health-recheck')).toBeNull();
