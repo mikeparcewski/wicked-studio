@@ -231,6 +231,23 @@ describe('MemoriesPanel — retire is a SUBTREE erase (honest granularity)', () 
     });
   });
 
+  it('retiring the LAST memory re-reads the coverage total, so the empty state says the store is empty — not "holds 1" (#406, codex MEDIUM)', async () => {
+    const { calls } = wire([M1]);
+    render(<MemoriesPanel />);
+    const user = userEvent.setup();
+
+    const rows = await screen.findAllByTestId('memory-row');
+    expect(await screen.findByText(/1 in store/)).toBeInTheDocument();
+    await user.click(within(rows[0]!).getByTestId('memory-retire'));
+    await user.click(await screen.findByTestId('memory-retire-confirm'));
+    await waitFor(() => expect(calls).toContain('/memory/retire'));
+
+    const empty = await screen.findByTestId('memories-empty');
+    await waitFor(() => expect(empty).toHaveTextContent('No memories in the store.'));
+    expect(empty).not.toHaveTextContent(/holds 1 memory/);
+    expect(calls.filter((c) => c === '/memory/coverage').length).toBeGreaterThanOrEqual(2);
+  });
+
   it('Cancel closes the confirm without touching the wire', async () => {
     wire([M1]);
     render(<MemoriesPanel />);
