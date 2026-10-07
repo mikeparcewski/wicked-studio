@@ -201,6 +201,31 @@ with sync_playwright() as p:
           and unreadable.startswith("Studio can’t open this here"),
           line=line, chips=chips, hit=hit, closed=closed, focus_back=focus_back, unreadable=unreadable)
 
+    # ── 6. studio#575: the hand-over's receipt links the pull request it opened ─────
+    # Step 4 approved r-ship-deliver's hand-over here (the POST landed). The daemon now finishes the
+    # run and reports the PR: the fixture flips the run to completed + delivered and pushes a
+    # lifecycle frame so the app re-reads the list. The receipt — "Finished · delivered" — then
+    # carries `Pull request ↗` (the Handed-over row's link) where the operator approved it.
+    SHIP_PR = "https://github.com/acme/shop/pull/42"
+    set_fixture(origin, status_over={"r-ship-deliver": "completed"},
+                session_over={"r-ship-deliver": {"delivery": "delivered", "deliverUrl": SHIP_PR}},
+                extra_frames=[{"type": "unitDone", "session": "r-ship-deliver", "ord": 4,
+                               "ts": int(time.time() * 1000), "seq": 9001}])
+    try:
+        page.wait_for_function(
+            f"() => document.querySelector('{CARD.format('r-ship-deliver')}')?.dataset.state === 'done'", timeout=25000)
+    except Exception as e:  # noqa: BLE001
+        page.screenshot(path=str(SHOTS / "desk-proposal-delivered-missing.png"))
+        fail("delivered-receipt", {"why": f"the hand-over card never reached its receipt: {e}",
+                                   "state": page.evaluate(f"() => document.querySelector('{CARD.format('r-ship-deliver')}')?.dataset.state ?? null")})
+    pr_link = deliver.get_by_test_id("session-proposal-pr")
+    outcome = deliver.get_by_test_id("session-proposal-outcome").inner_text()
+    check("delivered-receipt", outcome == "Finished · delivered" and pr_link.count() == 1
+          and pr_link.get_attribute("href") == SHIP_PR and pr_link.get_attribute("target") == "_blank"
+          and pr_link.inner_text() == "Pull request ↗" and deliver.get_by_test_id("session-proposal-branch").count() == 0,
+          outcome=outcome, href=pr_link.get_attribute("href") if pr_link.count() else None)
+    page.screenshot(path=str(SHOTS / "desk-proposal-delivered.png"))
+
     hs = page.evaluate("() => document.documentElement.scrollWidth > document.documentElement.clientWidth")
     check("no-errors-no-hscroll", not errors and not hs, errors=errors)
     browser.close()

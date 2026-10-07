@@ -7,7 +7,7 @@ import { commitGateDecision, GATE_HASH, IDLE_GATE_ACTION, useGateActionStore, ty
 import { deliverCardOf, deliverLine, gateInstance, proposalCard, proposalKindOf, type ProposalKind } from '../../board/proposalCard.js';
 import { repoNameOf } from '../../board/deskWords.js';
 import type { AskProposal } from '../../board/askThread.js';
-import { deliverAcceptance } from '../../board/checkState.js';
+import { deliverAcceptance, ownEvidenceOf } from '../../board/checkState.js';
 import type { RunAcceptanceSummary } from '../../api/types.js';
 import { useGateStore } from '../../store/gates.js';
 import { useRunEventStore } from '../../store/events.js';
@@ -53,7 +53,6 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
   onBringBack?: (() => void) | undefined;
 }): React.ReactElement | null {
   const runId = view.session.id;
-  const accept = deliverAcceptance(acceptance);
   const gate = useGateStore((s) => s.gates[runId]);
   const action = useGateActionStore((s) => s.byGate[runId] ?? IDLE_GATE_ACTION);
   // studio#574: the plan gate's view (the editor's seed) — read only while a plan proposal is open,
@@ -63,6 +62,8 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
   const sending = useRef(false);
   // Fetch events for deliver cards — fallback file count from repoChecksEvaluated.changed.
   const eventsRaw = useRunEventStore((s) => s.byRun[runId]);
+  // studio#577: the acceptance line, with the run's own evidence when crew's gate has no verdict.
+  const accept = deliverAcceptance(acceptance, ownEvidenceOf(eventsRaw ?? []));
   const fetchedEventsRef = useRef<string | null>(null);
   useEffect(() => {
     if (eventsRaw !== undefined || fetchedEventsRef.current === runId) return;
@@ -288,6 +289,14 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
           <span aria-hidden className="wk-prop-tick">✓</span>
           <b>Done</b>
           <span data-testid="session-proposal-outcome" className="wk-prop-live">{card.out}</span>
+          {/* studio#575: where the work went, on the card the operator approved it from — the same
+              `Pull request ↗` the Handed-over row carries; the branch when no PR was opened. */}
+          {card.handed !== null && card.handed.href !== null && (
+            <span className="wk-prop-live"> · <a href={card.handed.href} target="_blank" rel="noreferrer" data-testid="session-proposal-pr">Pull request ↗</a></span>
+          )}
+          {card.handed !== null && card.handed.href === null && card.handed.branch !== null && (
+            <span data-testid="session-proposal-branch" className="wk-prop-live"> · branch <code>{card.handed.branch}</code></span>
+          )}
         </p>
       )}
       {card.state === 'fail' && (

@@ -1,4 +1,5 @@
-import type { RunAcceptanceSummary, WalkthroughStepState } from '../api/types.js';
+import type { CoreEvent, RunAcceptanceSummary, WalkthroughStepState } from '../api/types.js';
+import { attemptBefore, gateVerdict } from '../components/gateVerdictModel.js';
 import { fmtTime } from './walkthroughModel.js';
 import type { ChainModel, ChainStep } from './chainModel.js';
 
@@ -115,10 +116,79 @@ export function checkedSentence(c: ChainModel): string | null {
 
 export type AcceptanceTone = 'ok' | 'bad' | 'quiet';
 
-/** The deliver card's acceptance line: crew's words, with a tone — nothing required reads quiet, a
- *  satisfied gate ok, an unsatisfied one bad. `null` = this daemon has no summary (before WT-W3). */
-export function deliverAcceptance(summary: RunAcceptanceSummary | null | undefined): { text: string; tone: AcceptanceTone } | null {
+/** The run's OWN evidence for a hand-over (studio#577), read off its event log: the latest floor
+ *  result per unit, and how many of the units the engine evaluated passed their gate. */
+export interface OwnEvidence {
+  floor: 'passed' | 'failed' | null;
+  gatesPassed: number;
+  gatesTotal: number;
+}
+
+/** {@link OwnEvidence} from the run's events; `null` when the log carries neither a floor nor a gate. */
+export function ownEvidenceOf(events: readonly CoreEvent[]): OwnEvidence | null {
+  const floors = new Map<number, boolean>();
+  const ords = new Set<number>();
+  for (const e of events) {
+    const r = e as unknown as { type?: unknown; ord?: unknown; passed?: unknown };
+    if (typeof r.ord !== 'number') continue;
+    if (r.type === 'repoChecksEvaluated' && typeof r.passed === 'boolean') floors.set(r.ord, r.passed);
+    if (r.type === 'gateEvaluated') ords.add(r.ord);
+  }
+  if (floors.size === 0 && ords.size === 0) return null;
+  let gatesPassed = 0;
+  let gatesTotal = 0;
+  for (const ord of ords) {
+    const v = gateVerdict(events, ord);
+    if (v === null || v.ord !== ord) continue;
+    // A pre-run approval emits an UNGATED frame (no floor, no judge, no policy — nothing was judged):
+    // not a reviewer gate, so not in the count either way (codex r2).
+    if (v.outcome === 'ungated') continue;
+    gatesTotal++;
+    if (v.outcome !== 'pass') continue;
+    // A verdict on an EARLIER attempt is not the unit's: once a retry was dispatched and has no
+    // verdict yet, that unit has not passed (the rule `gateVerdictFor` holds for a gate card; codex r1).
+    const latest = attemptBefore(events, ord);
+    if (latest !== null && v.attempt !== null && v.attempt !== latest) continue;
+    gatesPassed++;
+  }
+  const floor = floors.size === 0 ? null : [...floors.values()].every(Boolean) ? 'passed' : 'failed';
+  if (floor === null && gatesTotal === 0) return null;
+  return { floor, gatesPassed, gatesTotal };
+}
+
+/** "floor passed · 4 of 4 reviewer gates passed" — or null with nothing to say. */
+export function ownEvidenceWords(own: OwnEvidence | null | undefined): string | null {
+  if (own === null || own === undefined) return null;
+  const parts: string[] = [];
+  if (own.floor !== null) parts.push(`floor ${own.floor}`);
+  if (own.gatesTotal > 0) parts.push(`${own.gatesPassed} of ${own.gatesTotal} reviewer gate${own.gatesTotal === 1 ? '' : 's'} passed`);
+  return parts.length === 0 ? null : parts.join(' · ');
+}
+
+/** crew's QE acceptance gate found NO verdict to judge (qe/acceptance.ts: no ledger, no verdict
+ *  recorded, none attributed to this run, no repo context) — as opposed to a verdict that FAILED or a
+ *  ledger that could not be read. */
+const NO_VERDICT_RECORDED = /\((?:missing|unattributed) ⇒ deny\)\s*$/;
+
+/**
+ * The deliver card's acceptance line: crew's words, with a tone — nothing required reads quiet, a
+ * satisfied gate ok, an unsatisfied one bad. `null` = this daemon has no summary (before WT-W3).
+ *
+ * studio#577: when the gate's answer is only that NO QE verdict exists ("… (missing ⇒ deny)"), the
+ * line is not what the press below it does — crew's deliver does not consult the QE acceptance gate
+ * (the push went through under that very line on the rig). The card then says what this hand-over
+ * rests on: the run's own evidence (`own`, off its events), quietly. A FAILED verdict, or a ledger
+ * that could not be read, keeps crew's words and the bad tone: that is evidence.
+ */
+export function deliverAcceptance(summary: RunAcceptanceSummary | null | undefined, own: OwnEvidence | null = null): { text: string; tone: AcceptanceTone } | null {
   if (summary === null || summary === undefined || typeof summary.line !== 'string' || summary.line === '') return null;
+  if (summary.required && !summary.satisfied && NO_VERDICT_RECORDED.test(summary.line)) {
+    const words = ownEvidenceWords(own);
+    return {
+      text: `No QE verdict is recorded for this run, and Deliver doesn’t consult the QE gate — this hand-over rests on the run’s own evidence${words === null ? '' : `: ${words}`}.`,
+      tone: 'quiet',
+    };
+  }
   const tone: AcceptanceTone = !summary.required ? 'quiet' : summary.satisfied ? 'ok' : 'bad';
   return { text: summary.line, tone };
 }
