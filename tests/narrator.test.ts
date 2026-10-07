@@ -103,6 +103,37 @@ describe('narrate — the event → status-line templates (§4)', () => {
     expect(real!.text).toBe('Planned phase-3 — write the acceptance test plan for the picker');
   });
 
+  it("unitPlanned never prints the engine's ' ||| ' instruction separator — segment 0 only (#405)", () => {
+    const intent = 'Implement GitHub issue #405: the narration prints the raw segment marker in Planned lines';
+    const withIntent: NarratorContext = { ...ctx, intent };
+    const instructions = 'Survey the repo and list the touched files. Push identity: the run branch.';
+    const amendment = 'APPROVED INTENT AMENDMENT — also cover the Desk sheet tail.';
+    // A real description: the marker and both trailing segments go, the description stays.
+    const real = narrate(
+      ev({
+        type: 'unitPlanned', session: 'r', ord: 1,
+        description: `phase-1 — survey the repo ||| ${instructions} ||| ${amendment}`,
+      }),
+      withIntent,
+    );
+    expect(real!.text).toBe('Planned phase-1 — survey the repo');
+    expect(real!.text).not.toContain('|||');
+    // The daemon's restated intent followed by instructions: the restatement still collapses
+    // to "Planned <phase>" — the split happens BEFORE the restates() check, so the trailing
+    // instructions do not defeat it.
+    const restated = narrate(
+      ev({ type: 'unitPlanned', session: 'r', ord: 2, description: `phase-2 — ${intent} ||| ${instructions}` }),
+      withIntent,
+    );
+    expect(restated!.text).toBe('Planned phase-2');
+    // A description that is ONLY the marker + instructions (empty segment 0) says just the phase.
+    const bare = narrate(
+      ev({ type: 'unitPlanned', session: 'r', ord: 3, description: ` ||| ${instructions}` }),
+      ctx,
+    );
+    expect(bare!.text).toBe('Planned phase-3');
+  });
+
   it('stays silent on noise frames (deltas, heartbeat, terminal bytes, burn, allow-hooks, unknown)', () => {
     for (const bag of [
       { type: 'unitOutputDelta', session: 'r', ord: 0, text: 'x' },

@@ -5,6 +5,7 @@ import {
 } from '../api/wave6-wire.js';
 import { escalationCopy } from './denialCopy.js';
 import { isPrUrl } from './delivery.js';
+import { INSTRUCTION_SEP } from './gateMoveModel.js';
 import { shortId } from './gateVerdictModel.js';
 import { runBaseLine, runBaseOf } from './runBaseModel.js';
 
@@ -188,7 +189,10 @@ export function narrate(event: CoreEvent, ctx: NarratorContext): NarrationLine |
     case 'unitPlanned': {
       // The daemon writes description as "<phase> — <intent…>"; the narrator
       // already speaks the phase, so the duplicated prefix goes.
-      let raw = str(event.description);
+      // The engine joins the description to the phase's instructions (and any approved intent
+      // amendment) with ` ||| ` (`INSTRUCTION_SEP`, "never rendered") — only segment 0 is the
+      // description; the marker and the instruction segments never reach a narrated line (#405).
+      let raw = str(event.description).split(INSTRUCTION_SEP)[0] ?? '';
       const dash = raw.indexOf('—');
       if (dash > 0 && raw.slice(0, dash).trim().toLowerCase() === phase.toLowerCase()) {
         raw = raw.slice(dash + 1).trim();
