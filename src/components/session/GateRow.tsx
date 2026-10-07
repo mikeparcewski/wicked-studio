@@ -34,6 +34,11 @@ function useTicker(on: boolean): number {
   return now;
 }
 
+/** A text field anywhere on the page (the composer, a sheet's input): a gate's arrival never yanks its caret. */
+function isEditable(el: Element | null): boolean {
+  return el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || (el instanceof HTMLElement && el.isContentEditable);
+}
+
 function formatSentTime(ts: number): string {
   return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
@@ -124,10 +129,16 @@ export function GateRow({ view, gate }: {
   // letter to the session composer. Never while the note is open or focus is already in the row.
   const focusedForRef = useRef<string | null>(null);
   useLayoutEffect(() => {
-    if (model === null || window.location.hash !== GATE_HASH || focusedForRef.current === gateKey) return;
+    // The gate cleared (or its evidence is still loading): the next arrival — even the same gate
+    // restored with the same key — focuses again.
+    if (model === null) { focusedForRef.current = null; return; }
+    if (window.location.hash !== GATE_HASH || focusedForRef.current === gateKey) return;
+    // An open note keeps the caret. The key is NOT recorded here, so a replacement gate (which
+    // closes the note in the reset effect) still gets its one focus once the note is gone.
+    if (noteOpen !== null) return;
     focusedForRef.current = gateKey;
     const row = rowRef.current;
-    if (row === null || noteOpen !== null || row.contains(document.activeElement)) return;
+    if (row === null || row.contains(document.activeElement) || isEditable(document.activeElement)) return;
     row.focus();
   }, [model, gateKey, noteOpen]);
 

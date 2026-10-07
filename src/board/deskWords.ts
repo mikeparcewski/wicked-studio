@@ -72,12 +72,22 @@ export function plainGateQuestion(prompt: string | undefined, gateKind: string |
 /** The engine's pause prompts in one line each: what happened, and what the row's choices do
  *  (studio#570). `null` for every other prompt — the caller keeps its own fallbacks. */
 function pausedStepQuestion(p: string, gateKind: string | undefined): string | null {
-  if (/^\s*Unit\s+\d+\s+verdict is NOT PASS\b/i.test(p)) return 'The reviewer said FAIL — send it back?';
-  if (/^\s*Unit\s+\d+\s+failed its deterministic floor\b/i.test(p)) return 'The floor failed — retry, send back or stop?';
-  if (/^\s*Unit\s+\d+\s+was DENIED by input governance\b/i.test(p) || /^\s*Governance DENIED unit\s+\d+/i.test(p)) {
+  if (/^\s*Unit\s+\d+\s+verdict is NOT PASS\b/i.test(p)) {
+    // The reviewer edited the tree instead of judging it (wicked-core#431 / the read-only guard):
+    // the edit was discarded and Approve retries on the restored tree — not a FAIL verdict.
+    if (/changed the tree under review/i.test(p)) return 'The reviewer changed the work instead of judging it — retry on the restored tree?';
+    // The evaluator's verdict names the request-changes arm (gateVerdictModel's own rule); the
+    // legacy worktree-guard prompt ("confirm to retry the phase, or reject") never does.
+    if (/\brequest\s+changes\b|verdict is FAIL|evaluator denied/i.test(p)) return 'The reviewer said FAIL — send it back?';
+    return 'The step did not pass review — how should it go on?';
+  }
+  if (/^\s*Unit\s+\d+\s+failed its deterministic floor\b/i.test(p)) return 'The floor failed — how should the step go on?';
+  if (/^\s*Unit\s+\d+\s+was DENIED by input governance\b/i.test(p)) {
     const tool = /tool call was refused\s*\(\s*`?([A-Za-z0-9_.:-]+)`?\s*\)/i.exec(p)?.[1];
     return tool !== undefined ? `A ${tool} call was denied — how should the step go on?` : 'A tool call was denied — how should the step go on?';
   }
+  // Core's output-governance denial ("Governance DENIED unit N (key): …") judges the WORK, not a tool call.
+  if (/^\s*Governance DENIED unit\s+\d+/i.test(p)) return 'Governance denied this step — how should it go on?';
   if (/^\s*Team dispute on unit\s+\d+/i.test(p) || gateKind === 'team_dispute') return 'The team disagreed — approve or reject the work?';
   if (gateKind === 'team_transport') return 'The team lost a seat — approve or reject the work?';
   if (/^\s*Unit\s+\d+\s+failed and triage escalated\b/i.test(p)) return 'The step failed — send it back, reassign or stop?';

@@ -82,7 +82,7 @@ describe('studio#570: session-gate-question reads each gate kind in the row\'s w
       prompt: 'Unit 4 failed its deterministic floor (pinned_validator): the pinned validator exited 1 — confirm to retry the phase, request changes to send it back, or reject to cancel the run',
     };
     render(<GateRow view={makeView({ id: MOVE_RUN, status: 'awaiting_human' }, MOVE_UNITS)} gate={gate} />);
-    expect(screen.getByTestId('session-gate-question').textContent).toBe('The floor failed — retry, send back or stop?');
+    expect(screen.getByTestId('session-gate-question').textContent).toBe('The floor failed — how should the step go on?');
   });
 
   it('an input-governance denial names the refused tool', () => {
@@ -104,6 +104,28 @@ describe('studio#570: session-gate-question reads each gate kind in the row\'s w
     expect(screen.getByTestId('session-gate-question').textContent).toBe('The team disagreed — approve or reject the work?');
   });
 
+  it('a NOT PASS whose reviewer edited the tree (restored retry) is not called a FAIL; the legacy guard prompt stays neutral', () => {
+    const restored: OpenGate = {
+      runId: MOVE_RUN, ord: 2, lifecycle: 'open', receivedAt: NOW, gateKind: 'escalation',
+      prompt: "Unit 4 verdict is NOT PASS — the evaluator changed the tree under review; its edit was discarded and the creator's verified tree restored. Approve to retry the phase against the restored tree, or reject to cancel the run",
+    };
+    const { unmount } = render(<GateRow view={makeView({ id: MOVE_RUN, status: 'awaiting_human' }, MOVE_UNITS)} gate={restored} />);
+    expect(screen.getByTestId('session-gate-question').textContent).toBe('The reviewer changed the work instead of judging it — retry on the restored tree?');
+    unmount();
+    const legacy: OpenGate = { ...restored, prompt: 'Unit 4 verdict is NOT PASS — confirm to retry the phase, or reject to cancel the run' };
+    render(<GateRow view={makeView({ id: MOVE_RUN, status: 'awaiting_human' }, MOVE_UNITS)} gate={legacy} />);
+    expect(screen.getByTestId('session-gate-question').textContent).toBe('The step did not pass review — how should it go on?');
+  });
+
+  it("core's output-governance denial judges the work, not a tool call", () => {
+    const gate: OpenGate = {
+      runId: MOVE_RUN, ord: 2, lifecycle: 'open', receivedAt: NOW, gateKind: 'escalation',
+      prompt: 'Governance DENIED unit 1 (review): the refactored middleware drops the token-refresh path — auth.refresh.spec fails on the expired-token branch',
+    };
+    render(<GateRow view={makeView({ id: MOVE_RUN, status: 'awaiting_human' }, MOVE_UNITS)} gate={gate} />);
+    expect(screen.getByTestId('session-gate-question').textContent).toBe('Governance denied this step — how should it go on?');
+  });
+
   it('a def gate keeps its "Approve the <step>" question', () => {
     const gate: OpenGate = { runId: MOVE_RUN, ord: 1, lifecycle: 'open', receivedAt: NOW, gateKind: 'def', prompt: 'Approve the output of unit 1 (clarify — Rules for booking ||| PHASE SCOPE: …) before unit 2 runs' };
     render(<GateRow view={makeView({ id: MOVE_RUN, status: 'awaiting_human' }, MOVE_UNITS)} gate={gate} />);
@@ -114,7 +136,7 @@ describe('studio#570: session-gate-question reads each gate kind in the row\'s w
 // ── #569: the note keeps the caret ──────────────────────────────────────────────────────────
 
 /** App's type-to-composer hook plus a page composer, as the session page has (`session-composer-input`). */
-function Harness({ view, gate }: { view: ReturnType<typeof makeView>; gate: OpenGate }): React.ReactElement {
+function Harness({ view, gate }: { view: ReturnType<typeof makeView>; gate: OpenGate | undefined }): React.ReactElement {
   useTypeToComposer(() => {});
   return (
     <div>
@@ -172,6 +194,45 @@ describe('studio#569: typing into the gate note never moves the caret to the com
     act(() => { note.focus(); });
     rerender(<Harness view={makeView({ id: MOVE_RUN, status: 'awaiting_human' }, [...MOVE_UNITS])} gate={gate} />);
     expect(document.activeElement).toBe(note);
+  });
+
+  it('a replacement gate arriving while the note is open closes the note and the ROW takes focus (never body)', async () => {
+    window.location.hash = '#gate';
+    const gate = escalationGate();
+    const { rerender } = render(<Harness view={makeView({ id: MOVE_RUN, status: 'awaiting_human' }, MOVE_UNITS)} gate={gate} />);
+    fireEvent.click(screen.getByTestId('session-gate-choices').querySelector('[data-choice-key="send-back"]')!);
+    const note = screen.getByTestId('session-gate-note');
+    await waitFor(() => expect(document.activeElement).toBe(note));
+    // The same ord re-opens as a new instance (a new receivedAt): a fresh question.
+    const replacement: OpenGate = { ...gate, receivedAt: NOW + 60_000 };
+    await act(async () => { rerender(<Harness view={makeView({ id: MOVE_RUN, status: 'awaiting_human' }, MOVE_UNITS)} gate={replacement} />); });
+    await waitFor(() => expect(screen.queryByTestId('session-gate-note')).toBeNull());
+    expect(document.activeElement).toBe(screen.getByTestId('session-gate-row'));
+  });
+
+  it('a gate that clears and comes back with the same identity focuses the row again', async () => {
+    window.location.hash = '#gate';
+    const gate = escalationGate();
+    const view = makeView({ id: MOVE_RUN, status: 'awaiting_human' }, MOVE_UNITS);
+    const { rerender } = render(<Harness view={view} gate={gate} />);
+    expect(document.activeElement).toBe(screen.getByTestId('session-gate-row'));
+    act(() => { (document.activeElement as HTMLElement).blur(); });
+    await act(async () => { rerender(<Harness view={view} gate={undefined} />); });
+    expect(screen.queryByTestId('session-gate-choices')).toBeNull();
+    await act(async () => { rerender(<Harness view={view} gate={gate} />); });
+    expect(document.activeElement).toBe(screen.getByTestId('session-gate-row'));
+  });
+
+  it("a gate's arrival never yanks the caret out of the composer", () => {
+    window.location.hash = '#gate';
+    const gate = escalationGate();
+    const view = makeView({ id: MOVE_RUN, status: 'awaiting_human' }, MOVE_UNITS);
+    const { rerender } = render(<Harness view={view} gate={undefined} />);
+    const composer = screen.getByTestId('session-composer-input');
+    act(() => { composer.focus(); });
+    rerender(<Harness view={view} gate={gate} />);
+    expect(screen.getByTestId('session-gate-row')).toBeDefined();
+    expect(document.activeElement).toBe(composer);
   });
 
   it('Escape leaves the note (cancels it) and the row takes focus back', () => {
