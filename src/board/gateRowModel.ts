@@ -20,6 +20,7 @@ import {
   reassignCandidates,
   isRestoredRetry,
   steerScopeTarget,
+  type GateVerdictView,
 } from '../components/gateVerdictModel.js';
 import type { GateAnswer } from './gateActions.js';
 
@@ -109,6 +110,34 @@ function mapChoiceTitle(value: string): string {
     case 'accept_suggestion': return 'Apply the restored edit and rewind to the creator.';
     default: return '';
   }
+}
+
+/**
+ * studio#573: a DENIED-unit escalation — input governance refused one of the unit's tool calls (the
+ * engine's `boundary_deny` pause: "Unit N was DENIED by input governance …"), or the fold's denial
+ * names that layer. The engine offers two arms there: approve RE-RUNS the phase from the start under
+ * the same policies (the captured output is not accepted), reject cancels the run. Nothing was
+ * judged wrong with the work, so there is no reviewer finding for a creator to fix: "Send back"
+ * (request_changes) is not one of this gate's arms.
+ */
+export function isDeniedUnitEscalation(prompt: string | undefined, verdict: GateVerdictView | null): boolean {
+  if (prompt !== undefined && /^\s*Unit\s+\d+\s+was DENIED by input governance\b/i.test(prompt)) return true;
+  return verdict?.denial?.source === 'input_governance';
+}
+
+/**
+ * Whether the denied unit's OTHER layers passed — the floor (when one ran) and the judge (when one
+ * ran) — so the re-run is the suggested arm (studio#573: "floor PASS, judge PASS, denial = the
+ * write-root catch"). A failed floor or a judge FAIL means the re-run is not the obvious move, and
+ * nothing is preselected. No verdict in the log claims nothing either way: the engine's own prompt
+ * says approve re-runs, so the re-run stays suggested.
+ */
+export function deniedUnitJudgedOk(verdict: GateVerdictView | null): boolean {
+  if (verdict === null) return true;
+  if (verdict.hasDeterministicFloor && !verdict.deterministicPass) return false;
+  const judge = (verdict.agentVerdict ?? '').trim().toLowerCase();
+  if (judge !== '' && judge !== 'pass') return false;
+  return verdict.evaluatorPass !== false;
 }
 
 export interface SessionGateInput {
@@ -263,10 +292,20 @@ export function sessionGateChoices(input: SessionGateInput): GateRowModel | null
     // returns null because no creator sits at or after gate.ord — matching SteeringGate.tsx:377.
     const escalationScopeTarget = steerScopeTarget(units, gate.ord);
 
-    // Build core choices WITHOUT stop: send-back, escalation arms, steer.
+    // studio#573: a denied unit's row carries the engine's arms as its prompt states them — Approve
+    // RE-RUNS the phase (suggested when the floor and the judge passed), steer, Stop. No Send back:
+    // there is no reviewer finding to return, and no reviewer note to pre-fill.
+    const deniedUnit = isDeniedUnitEscalation(gate.prompt, verdict);
+    if (deniedUnit) noteDefault = '';
+
+    // Build core choices WITHOUT stop: send-back (or the denied unit's re-run), escalation arms, steer.
     // Stop is always the last inline choice, appended after the reassign slot.
     const coreWithoutStop: GateRowChoice[] = [];
-    coreWithoutStop.push({ key: 'send-back', label: 'Send back', decision: { approve: false, action: 'request_changes' }, needsNote: true, title: 'Return to the creator with the reviewer\'s failing items.' });
+    if (deniedUnit) {
+      coreWithoutStop.push({ key: 'approve', label: 'Approve', decision: { approve: true }, needsNote: false, title: 'Re-run the step from the start under the same policies; the captured output is not accepted.' });
+    } else {
+      coreWithoutStop.push({ key: 'send-back', label: 'Send back', decision: { approve: false, action: 'request_changes' }, needsNote: true, title: 'Return to the creator with the reviewer\'s failing items.' });
+    }
 
     // Escalation arms: timeout (extend / targeted / accept_partial) or adopted suggestion.
     // Decision wire: {approve:true, action} as EscalationDecision — cast since api-types is pinned.
@@ -322,7 +361,8 @@ export function sessionGateChoices(input: SessionGateInput): GateRowModel | null
       planView: null,
       diffstat: null,
     });
-    const recommended = rec?.kind === 'send-back' ? 0 : null;
+    // The denied unit's suggested arm is the re-run (index 0) when its other layers passed.
+    const recommended = deniedUnit ? (deniedUnitJudgedOk(verdict) ? 0 : null) : rec?.kind === 'send-back' ? 0 : null;
     return { reason, question, choices: escInline, overflow, noteDefault, recommended, detailItems };
   }
 

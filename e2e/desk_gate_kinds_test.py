@@ -28,6 +28,9 @@ under STUDIO_SKIN=desk at 1440x700 against the in-process fixture:
      Approve and steer → {approve:true, amend, amendScope}.
  11. 409 GATE CHANGED (gate_moved fixture): the row shows the moved-gate error words;
      no second gate POST is sent.
+ 14. DENIED UNIT (r-denied, escalation_arms=True; studio#573): input governance refused the
+     unit's tool call — the row offers Approve (the re-run, suggested) · Approve and steer ·
+     Stop and no Send back; Approve → {approve:true} with no action.
 
 Captures: e2e/shots/desk-gate-kinds-*.png. Env: FEEDBACK_PORT (default 4358).
 """
@@ -594,6 +597,41 @@ with sync_playwright() as p:
               posts=suggest_posts)
 
     page.screenshot(path=str(SHOTS / "desk-gate-kinds-suggest-done.png"))
+
+    # ── 14. DENIED UNIT (r-denied, studio#573): Approve (re-run) is on the row and suggested; no Send back ──
+    set_fixture(origin, escalation_arms=True, reset_gate_posts=True)
+    page.goto(f"{origin}/s/run%3Ar-denied#gate", wait_until="networkidle")
+    try:
+        page.wait_for_selector('[data-testid="session-gate-row"][data-reason="escalation"]', timeout=15_000)
+    except Exception:
+        page.screenshot(path=str(SHOTS / "desk-gate-kinds-denied-no-row.png"))
+        fail("denied-gate-row", {
+            "why": "session-gate-row[data-reason=escalation] did not appear for r-denied",
+            "text": page.evaluate("() => document.body.innerText.slice(0, 600)"),
+        })
+    denied_keys = [el.get_attribute("data-choice-key") for el in page.query_selector_all("[data-testid='session-gate-choice']")]
+    check("denied-choices", denied_keys == ["approve", "steer", "stop"], got=denied_keys,
+          why="a denied unit's row carries the engine's arms: Approve (re-run) · Approve and steer · Stop — no Send back")
+    denied_approve = page.locator('[data-testid="session-gate-choice"][data-choice-key="approve"]').first
+    check("denied-approve-suggested", denied_approve.get_attribute("data-recommended") == "true",
+          got=denied_approve.get_attribute("data-recommended"), why="floor PASS + judge PASS ⇒ the re-run is the suggested arm")
+    denied_q = page.get_by_test_id("session-gate-question").inner_text()
+    check("denied-question", denied_q == "A Bash call was denied — how should the step go on?", got=denied_q)
+    page.screenshot(path=str(SHOTS / "desk-gate-kinds-denied.png"))
+
+    denied_approve.click()
+    try:
+        page.get_by_test_id("session-gate-chosen").wait_for(state="visible", timeout=10_000)
+    except Exception:
+        page.screenshot(path=str(SHOTS / "desk-gate-kinds-denied-click.png"))
+        fail("denied-chosen", {"why": "chosen line did not appear after clicking Approve on the denied unit"})
+    page.wait_for_timeout(11_500)
+    denied_posts = gate_posts("r-denied")
+    denied_body = denied_posts[-1].get("body", {}) if denied_posts else {}
+    check("denied-approve-post",
+          len(denied_posts) > 0 and denied_body.get("approve") is True and "action" not in denied_body and "ord" in denied_body,
+          posts=denied_posts, why="Approve on a denied unit is the plain re-run: {approve:true, ord}, no action")
+    page.screenshot(path=str(SHOTS / "desk-gate-kinds-denied-sent.png"))
 
     browser.close()
 

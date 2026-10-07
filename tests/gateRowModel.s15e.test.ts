@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { CoreEvent, WorkUnit } from '../src/api/types.js';
 import type { OpenGate } from '../src/store/gates.js';
-import { sessionGateChoices } from '../src/board/gateRowModel.js';
+import { deniedUnitJudgedOk, isDeniedUnitEscalation, sessionGateChoices } from '../src/board/gateRowModel.js';
 import { NOT_PASS_PROMPT, NOT_PASS_EVENTS, MOVE_RUN, MOVE_UNITS } from './fixtures/gateMove.js';
 import { makeUnit } from './factories.js';
 
@@ -442,5 +442,94 @@ describe('sessionGateChoices — floor check lines in detailItems (gate 15 Item 
     const gate = plainGate();
     const model = sessionGateChoices(input(gate))!;
     expect(model.detailItems).toEqual(['Approve the plan?']);
+  });
+});
+
+// ── studio#573: a denied unit's row carries the engine's arms — Approve RE-RUNS, or Stop ──────────
+
+const DENIED_RUN = 'r-denied';
+const DENIED_PROMPT =
+  'Unit 2 was DENIED by input governance — a tool call was refused (`Bash`): the `test` phase wrote outside its ' +
+  'write roots (claim witness-deny:unit-2). The phase\'s output was captured. Approve RE-RUNS the `test` phase ' +
+  'from the start under the same policies (a retry; the captured output is not accepted), or reject to cancel the run';
+const DENIED_UNITS: WorkUnit[] = [
+  makeUnit({ id: `${DENIED_RUN}:fix`, session_id: DENIED_RUN, ord: 1, stage: 'build', role: 'creator', status: 'done', assigned_cli: 'claude' }),
+  makeUnit({ id: `${DENIED_RUN}:test`, session_id: DENIED_RUN, ord: 2, stage: 'review', role: 'evaluator', status: 'rejected', assigned_cli: 'codex' }),
+  makeUnit({ id: `${DENIED_RUN}:deliver`, session_id: DENIED_RUN, ord: 3, stage: 'build', role: 'neutral', status: 'pending' }),
+];
+/** The engine's frames for a `boundary_deny` pause: floor PASS, judge PASS, the denial is input governance's. */
+function deniedEvents(over: Record<string, unknown> = {}): CoreEvent[] {
+  return [
+    { type: 'unitDispatched', session: DENIED_RUN, ord: 2, attempt: 0 },
+    {
+      type: 'gateEvaluated', session: DENIED_RUN, ord: 2,
+      criterion: 'tests pass on the head', hasDeterministicFloor: true, deterministicPass: true,
+      agentVerdict: 'PASS', agentReasoning: 'The tests cover the fix.', evaluatorPass: true, evaluatorPolicies: [],
+      denialReason: 'input governance denied a tool-call in unit-2 (claim witness-deny:unit-2)',
+      denial: { source: 'input_governance', reason: 'input governance denied a tool-call in unit-2 (claim witness-deny:unit-2)', claimId: 'witness-deny:unit-2', ruleIds: [], deniedTool: 'Bash', phase: 'test' },
+      combined: false, judgeCli: 'pi', judgeDistinct: true,
+      ...over,
+    },
+    { type: 'gateEscalated', session: DENIED_RUN, ord: 2, attempt: 0, condition: 'boundary_deny', denialSource: 'input_governance', outputCaptured: true, defGate: false, restored: false, discarded: [], suggestionRef: null, verdictSummary: null },
+    { type: 'awaitingHuman', session: DENIED_RUN, ord: 2, prompt: DENIED_PROMPT, reviewingOrd: 2, gateKind: 'escalation' },
+  ] as unknown as CoreEvent[];
+}
+function deniedGate(over: Partial<OpenGate> = {}): OpenGate {
+  return { runId: DENIED_RUN, ord: 2, prompt: DENIED_PROMPT, gateKind: 'escalation', lifecycle: 'open', receivedAt: NOW, ...over };
+}
+
+describe('sessionGateChoices — a denied unit re-runs: Approve (suggested) · steer · Stop, no Send back (studio#573)', () => {
+  it('offers Approve (the re-run), Approve and steer and Stop — and no Send back', () => {
+    const model = sessionGateChoices({ runId: DENIED_RUN, gate: deniedGate(), units: DENIED_UNITS, events: deniedEvents(), pool: ['claude', 'codex'], roster: null })!;
+    expect(model.reason).toBe('escalation');
+    expect(model.choices.map((c) => c.key)).toEqual(['approve', 'steer', 'stop']);
+    expect(model.overflow).toEqual([]);
+    const approve = model.choices[0]!;
+    expect(approve.decision).toEqual({ approve: true });
+    expect(approve.needsNote).toBe(false);
+    expect(approve.title).toMatch(/re-run/i);
+    // No reviewer finding to return: the steer note starts empty, not with "Fix the reviewer's failing items".
+    expect(model.noteDefault).toBe('');
+  });
+
+  it('Approve is the suggested arm when the floor and the judge passed (the denial was the write-root catch)', () => {
+    const model = sessionGateChoices({ runId: DENIED_RUN, gate: deniedGate(), units: DENIED_UNITS, events: deniedEvents(), pool: [], roster: null })!;
+    expect(model.recommended).toBe(0);
+    expect(model.choices[model.recommended!]!.key).toBe('approve');
+  });
+
+  it('nothing is suggested when the judge said FAIL, or the floor failed', () => {
+    const judgeFail = sessionGateChoices({ runId: DENIED_RUN, gate: deniedGate(), units: DENIED_UNITS, events: deniedEvents({ agentVerdict: 'FAIL' }), pool: [], roster: null })!;
+    expect(judgeFail.choices.map((c) => c.key)).toEqual(['approve', 'steer', 'stop']);
+    expect(judgeFail.recommended).toBeNull();
+    const floorFail = sessionGateChoices({ runId: DENIED_RUN, gate: deniedGate(), units: DENIED_UNITS, events: deniedEvents({ deterministicPass: false }), pool: [], roster: null })!;
+    expect(floorFail.recommended).toBeNull();
+  });
+
+  it('the fold\'s denial source is enough on its own (a late join whose prompt is the generic retry line)', () => {
+    const gate = deniedGate({ prompt: 'Unit 2 was denied — confirm to retry the phase, or reject to cancel the run' });
+    const model = sessionGateChoices({ runId: DENIED_RUN, gate, units: DENIED_UNITS, events: deniedEvents(), pool: [], roster: null })!;
+    expect(model.reason).toBe('escalation');
+    expect(model.choices.map((c) => c.key)).toEqual(['approve', 'steer', 'stop']);
+  });
+
+  it('the prompt is enough on its own (no event log yet — recommended stays on the re-run the prompt names)', () => {
+    const model = sessionGateChoices({ runId: DENIED_RUN, gate: deniedGate(), units: DENIED_UNITS, events: [], pool: [], roster: null })!;
+    expect(model.choices.map((c) => c.key)).toEqual(['approve', 'steer', 'stop']);
+    expect(model.recommended).toBe(0);
+  });
+
+  it('a reviewer FAIL escalation is unchanged: Send back first and suggested, no Approve', () => {
+    const gate: OpenGate = { runId: MOVE_RUN, ord: 2, prompt: NOT_PASS_PROMPT, lifecycle: 'open', receivedAt: NOW };
+    const model = sessionGateChoices({ runId: MOVE_RUN, gate, units: MOVE_UNITS, events: NOT_PASS_EVENTS, pool: [], roster: null })!;
+    expect(model.choices.map((c) => c.key)).toEqual(['send-back', 'steer', 'stop']);
+    expect(model.recommended).toBe(0);
+  });
+
+  it('isDeniedUnitEscalation / deniedUnitJudgedOk: the two rules, directly', () => {
+    expect(isDeniedUnitEscalation(DENIED_PROMPT, null)).toBe(true);
+    expect(isDeniedUnitEscalation('Unit 2 verdict is NOT PASS — …', null)).toBe(false);
+    expect(isDeniedUnitEscalation(undefined, null)).toBe(false);
+    expect(deniedUnitJudgedOk(null)).toBe(true);
   });
 });
