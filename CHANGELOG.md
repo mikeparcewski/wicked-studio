@@ -15,6 +15,7 @@ npm publish dates. Every version listed here exists on
 ### Fixed
 - #540: the ask thread's shape line names a reviewer only when its join attached — a member whose join failed ("No reviewer — <seat> can't join") is no longer listed as "<seat> reviews"; an ask run whose `problem` is crew's chat-scope statement is titled by what the conversation is about ("A conversation about <repo>"), never "# Chat scope" — the chat's own question still wins when the transcript is at hand.
 - Session gate row: a unit DENIED by input governance (the engine's `boundary_deny` pause) now carries the engine's own arms — **Approve** re-runs the phase (suggested when the floor and the judge passed), Approve and steer, Stop — instead of Send back / steer / Stop with nothing suggested; there is no reviewer finding to send back on a denied unit (#573).
+- Plan editor: the reorderable list, its move refusals, its order line and the card's "The order changes" line now name each step as the proposal sentence and the chain line do — from the plan's step ids (Scope · Clarify · Plan · Build · Challenge · Test · Review · Deliver), distinct across the plan — instead of by catalog alone (Research, Review, Review) (#574).
 
 ## [0.6.4] — 2026-10-07
 

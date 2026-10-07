@@ -4,7 +4,7 @@ import type { RunDiff } from '../../api/wave6-wire.js';
 import type { ChainModel } from '../../board/chainModel.js';
 import { api } from '../../api/client.js';
 import { commitGateDecision, GATE_HASH, IDLE_GATE_ACTION, useGateActionStore, type GateAnswer } from '../../board/gateActions.js';
-import { deliverCardOf, deliverLine, gateInstance, proposalCard, type ProposalKind } from '../../board/proposalCard.js';
+import { deliverCardOf, deliverLine, gateInstance, proposalCard, proposalKindOf, type ProposalKind } from '../../board/proposalCard.js';
 import { repoNameOf } from '../../board/deskWords.js';
 import type { AskProposal } from '../../board/askThread.js';
 import { deliverAcceptance } from '../../board/checkState.js';
@@ -13,6 +13,8 @@ import { useGateStore } from '../../store/gates.js';
 import { useRunEventStore } from '../../store/events.js';
 import { Tech } from '../Tech.js';
 import { draftLine } from '../../board/planDraft.js';
+import { planStepWords } from '../../board/planOrder.js';
+import { usePlanGate } from '../../store/planGates.js';
 import { dropGateDraft, gateDraftFor, gateDraftPlan, usePlanDrafts } from '../../store/planDrafts.js';
 import { gateVerdictFor, checkOutcome } from '../gateVerdictModel.js';
 
@@ -54,6 +56,9 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
   const accept = deliverAcceptance(acceptance);
   const gate = useGateStore((s) => s.gates[runId]);
   const action = useGateActionStore((s) => s.byGate[runId] ?? IDLE_GATE_ACTION);
+  // studio#574: the plan gate's view (the editor's seed) — read only while a plan proposal is open,
+  // through the same store `PlanOrderEditor` reads (one read per gate instance).
+  const planGate = usePlanGate(runId, view.session.status === 'awaiting_human' && gate !== undefined && proposalKindOf(runId, gate, view.units) === 'plan');
   const [ui, setUi] = useState<{ dismissed: string | null; confirming: string | null }>({ dismissed: null, confirming: null });
   const sending = useRef(false);
   // Fetch events for deliver cards — fallback file count from repoChecksEvaluated.changed.
@@ -116,6 +121,11 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
   if (card === null) return null;
   const instance = gateInstance(gate);
   const draft = card.kind === 'plan' && card.state === 'ask' ? gateDraftFor(drafts, runId, instance) : null;
+  // studio#574: the draft's order line names each step as the editor's rows do — from the SAME
+  // plan-gate view the draft was seeded from (`planGate.view.planSteps`), never the chain's steps,
+  // whose floor insertions can shift the `<catalog>#<n>` keys (codex r1) — so the card and the
+  // editor list read one vocabulary.
+  const planWords = draft !== null && planGate.view !== null ? planStepWords(planGate.view.planSteps) : undefined;
 
   const answer = (): void => {
     if (sending.current || gate === undefined) return; // double clicks are ignored
@@ -249,7 +259,7 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
             </div>
           ) : (
             <>
-              {draft !== null && <p data-testid="session-proposal-draft" className="wk-prop-why"><b>{draftLine(draft)}</b> Approving sends your changes with it; nothing has been sent yet.</p>}
+              {draft !== null && <p data-testid="session-proposal-draft" className="wk-prop-why"><b>{draftLine(draft, planWords)}</b> Approving sends your changes with it; nothing has been sent yet.</p>}
               <div className="wk-prop-btns">
                 <button ref={goRef} type="button" data-testid="session-proposal-go" data-draft={draft !== null ? 'true' : 'false'} onClick={go} className="wk-prop-btn wk-prop-btn--primary">{draft !== null ? 'Approve with these changes' : card.act}</button>
                 {draft !== null && <button type="button" data-testid="session-proposal-drop-draft" onClick={() => dropGateDraft(runId, draft.gateKey)} className="wk-prop-btn wk-prop-btn--ghost">Drop the changes</button>}
@@ -288,7 +298,7 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
           </p>
           {card.canRetry && (
             <>
-              {draft !== null && <p data-testid="session-proposal-draft" className="wk-prop-why"><b>{draftLine(draft)}</b> Approving sends your changes with it; nothing has been sent yet.</p>}
+              {draft !== null && <p data-testid="session-proposal-draft" className="wk-prop-why"><b>{draftLine(draft, planWords)}</b> Approving sends your changes with it; nothing has been sent yet.</p>}
               <div className="wk-prop-btns">
                 <button ref={goRef} type="button" data-testid="session-proposal-go" data-draft={draft !== null ? 'true' : 'false'} onClick={go} className="wk-prop-btn wk-prop-btn--primary">{draft !== null ? 'Approve with these changes' : card.act}</button>
                 {draft !== null && <button type="button" data-testid="session-proposal-drop-draft" onClick={() => dropGateDraft(runId, draft.gateKey)} className="wk-prop-btn wk-prop-btn--ghost">Drop the changes</button>}

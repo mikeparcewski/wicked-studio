@@ -1,5 +1,5 @@
 import type { SessionView } from '../api/types.js';
-import { stepLabelOf, type ChainModel } from './chainModel.js';
+import { distinctLabels, planStepLabel, stepLabelOf, type ChainModel } from './chainModel.js';
 import { draftSteps, type DraftStep, type GateDraft } from './planDraft.js';
 import { DELIVER_STEP, PA_SCOPE_STEP, type PlanGateView } from './planModel.js';
 
@@ -43,7 +43,7 @@ export interface OrderRow {
   index: number | null;
 }
 
-/** What the engine's ratchet and floor fix at this gate. */
+/** What the engine's ratchet and floor fix at this gate — and the words its steps go by. */
 export interface OrderContext {
   /** The authored steps (no scope, no deliver) that have run already: the first `progressed`. */
   progressed: number;
@@ -52,6 +52,41 @@ export interface OrderContext {
   /** The held plan opens with the lead helper's scope step / closes with hand-over. */
   scope: boolean;
   deliver: boolean;
+  /** Each seed step's word, by its draft key (studio#574: {@link planStepWords}). */
+  words: ReadonlyMap<string, string>;
+}
+
+/**
+ * studio#574: the editor's words for a plan's authored steps, keyed as the draft keys them
+ * (`<catalog>#<n>` — the n-th seed step of that catalog, `planDraft.ts`'s rule), each step named as
+ * the chain names it: its ID's word (Clarify, Challenge), else its catalog's block word, distinct
+ * across the plan ("Critique" / "Review", never "Review" twice). The editor list was naming steps by
+ * catalog alone — "Research" for `clarify`, "Review" for `adversarial-review` — so one plan read in
+ * two vocabularies on one card. From the gate's `planSteps` (`{id, catalog}`) or from chain steps
+ * (which bring their label). The scope step and the hand-over are not seed steps, so they take no
+ * key; a step with no catalog cannot be keyed and is skipped.
+ */
+export function planStepWords(steps: readonly { id: string | null; catalog: string | null; label?: string }[]): ReadonlyMap<string, string> {
+  // A step with no catalog cannot be keyed, so it is out before the distinct pass as well: it must
+  // not turn the keyed `review#1` into "Review 2" (codex r1).
+  const named = distinctLabels(steps
+    .filter((s): s is { id: string | null; catalog: string; label?: string } => s.catalog !== null)
+    .map((s) => ({ id: s.id ?? s.catalog, catalog: s.catalog, label: s.label ?? planStepLabel(s.id, s.catalog) })));
+  const seen = new Map<string, number>();
+  const out = new Map<string, string>();
+  for (const s of named) {
+    if (s.id === PA_SCOPE_STEP || s.catalog === DELIVER_STEP) continue;
+    const n = (seen.get(s.catalog) ?? 0) + 1;
+    seen.set(s.catalog, n);
+    out.set(`${s.catalog}#${n}`, s.label);
+  }
+  return out;
+}
+
+/** A draft step's word: the plan's word for that seed step, else (an added step, or no plan) its
+ *  catalog's word. */
+export function stepWord(s: Pick<DraftStep, 'id' | 'catalog'>, words: ReadonlyMap<string, string> | undefined): string {
+  return words?.get(s.id) ?? stepLabelOf(s.catalog);
 }
 
 /**
@@ -63,7 +98,7 @@ export function orderContext(gate: Pick<PlanGateView, 'ord' | 'floorAdded' | 'pl
   const scope = gate.planSteps[0]?.id === PA_SCOPE_STEP;
   const deliver = gate.planSteps.some((s) => s.catalog === DELIVER_STEP);
   const ran = Math.max(0, gate.ord - 1);
-  return { progressed: Math.max(0, ran - (scope ? 1 : 0)), floor: new Set(gate.floorAdded), scope, deliver };
+  return { progressed: Math.max(0, ran - (scope ? 1 : 0)), floor: new Set(gate.floorAdded), scope, deliver, words: planStepWords(gate.planSteps) };
 }
 
 /** Why the i-th editable step cannot move (`null` = it can). An added step is never fixed. */
@@ -89,7 +124,7 @@ function keyed(steps: readonly { catalog: string }[]): string[] {
 export function gateRows(gate: Pick<PlanGateView, 'ord' | 'floorAdded' | 'planSteps' | 'editSeed'>, draft: GateDraft | null): OrderRow[] {
   const ctx = orderContext(gate);
   const steps = draftSteps(draft ?? { seed: gate.editSeed, added: [], order: null });
-  const rows: OrderRow[] = steps.map((s, i) => ({ key: s.id, catalog: s.catalog, label: stepLabelOf(s.catalog), fixed: fixedAt(steps, i, ctx), added: s.added, index: i }));
+  const rows: OrderRow[] = steps.map((s, i) => ({ key: s.id, catalog: s.catalog, label: stepWord(s, ctx.words), fixed: fixedAt(steps, i, ctx), added: s.added, index: i }));
   if (ctx.scope) rows.unshift({ key: 'scope', catalog: PA_SCOPE_STEP, label: stepLabelOf(PA_SCOPE_STEP), fixed: 'scope', added: false, index: null });
   if (ctx.deliver) rows.push({ key: 'deliver', catalog: DELIVER_STEP, label: stepLabelOf(DELIVER_STEP), fixed: 'deliver', added: false, index: null });
   return rows;
@@ -120,7 +155,7 @@ export function moveStep(steps: readonly DraftStep[], i: number, dir: -1 | 1, ct
   const s = steps[i];
   if (s === undefined) return { refused: 'That step is no longer on the plan.' };
   const j = i + dir;
-  const label = stepLabelOf(s.catalog);
+  const label = stepWord(s, ctx.words);
   if (j < 0 || j >= steps.length) {
     return { refused: `${label} is already ${dir < 0 ? 'first' : 'last'} among the steps you can order.` };
   }
@@ -128,16 +163,17 @@ export function moveStep(steps: readonly DraftStep[], i: number, dir: -1 | 1, ct
   if (mine !== null) return { refused: `${label} stays where it is: it ${FIXED_WORD[mine]}.` };
   const other = steps[j]!;
   const theirs = fixedAt(steps, j, ctx);
-  if (theirs !== null) return { refused: `${label} cannot pass ${stepLabelOf(other.catalog)}: it ${FIXED_WORD[theirs]}.` };
+  if (theirs !== null) return { refused: `${label} cannot pass ${stepWord(other, ctx.words)}: it ${FIXED_WORD[theirs]}.` };
   const next = [...steps];
   next[i] = other;
   next[j] = s;
   return { steps: next };
 }
 
-/** "Research → Plan → Review → Build": the authored order in the chain's own words. */
-export function orderWords(steps: readonly { catalog: string }[]): string {
-  return steps.map((s) => stepLabelOf(s.catalog)).join(' → ');
+/** "Clarify → Plan → Challenge → Build": the authored order in the chain's own words (the plan's
+ *  words when given, else the catalogs'). */
+export function orderWords(steps: readonly { catalog: string; id?: string }[], words?: ReadonlyMap<string, string>): string {
+  return steps.map((s) => (s.id !== undefined ? stepWord({ id: s.id, catalog: s.catalog }, words) : stepLabelOf(s.catalog))).join(' → ');
 }
 
 const TERMINAL = new Set(['completed', 'failed', 'cancelled']);

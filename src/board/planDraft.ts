@@ -175,10 +175,12 @@ export function midRunPlan(catalog: string): LaunchPlan {
 /** "The steps change: + Test, + Review." — the gate card's line for a draft; with a new order (S10),
  *  "The order changes: Research → Review → Build." — the whole authored order, in the chain's words,
  *  so nothing about what is sent is left to guess. */
-export function draftLine(d: Pick<GateDraft, 'seed' | 'added' | 'order'>): string {
+export function draftLine(d: Pick<GateDraft, 'seed' | 'added' | 'order'>, words?: ReadonlyMap<string, string>): string {
   const parts: string[] = [];
   if (d.added.length > 0) parts.push(`The steps change: ${d.added.map((c) => `+ ${wordOf(c)}`).join(', ')}.`);
-  if (orderChanged(d)) parts.push(`The order changes: ${draftSteps(d).map((s) => stepLabelOf(s.catalog)).join(' → ')}.`);
+  // studio#574: a seed step goes by the plan's word for it (`planOrder.ts` planStepWords) when the
+  // caller has the plan — the same word the editor's row and the chain use; else its catalog's.
+  if (orderChanged(d)) parts.push(`The order changes: ${draftSteps(d).map((s) => words?.get(s.id) ?? stepLabelOf(s.catalog)).join(' → ')}.`);
   return parts.join(' ');
 }
 
