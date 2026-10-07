@@ -63,6 +63,10 @@ describe('DeliverLift — tone (#408)', () => {
       { outcome: 'failed', note: 'apply failed part-way', failure: 'deliver: apply failed' },
       { outcome: 'lifted', reverify: rcFail, failure: 'deliver: the tree that would ship failed its checks' },
       { outcome: null, failure: 'deliver: BASE MOVED since verification' },
+      // Not PROVEN good, and the attempt failed: never green (codex HIGH on this PR).
+      { outcome: 'lifted', reverify: null, failure: PUSH_REFUSED },
+      { outcome: 'skipped', note: 'the lift could not be decided', failure: PUSH_REFUSED },
+      { outcome: 'lift_refused_after_fetch', failure: PUSH_REFUSED },
     ];
     for (const over of cases) {
       cleanup();

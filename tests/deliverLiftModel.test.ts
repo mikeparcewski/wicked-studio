@@ -284,6 +284,18 @@ describe('liftItselfFailed — the lift vs the attempt', () => {
     expect(liftItselfFailed(view({ outcome: null, failure: 'deliver: BASE MOVED' }))).toBe(true);
   });
 
+  it('a failed attempt keeps the failure tone unless the lift is PROVEN good (codex HIGH on this PR)', () => {
+    // lifted with NO re-verify frame: the tree that would ship was never proven.
+    expect(liftItselfFailed(view({ outcome: 'lifted', reverify: null, failure: 'deliver: push refused' }))).toBe(true);
+    // skipped + a failure: the lift could not be decided, and the attempt failed.
+    expect(liftItselfFailed(view({ outcome: 'skipped', note: 'undecidable', failure: 'deliver: push refused' }))).toBe(true);
+    // a newer engine's token this studio does not know is never read as good news.
+    expect(liftItselfFailed(view({ outcome: 'lift_refused_after_fetch', failure: 'deliver: …' }))).toBe(true);
+    // …and without a failure an unknown token is not a lift failure either (as before: liftIsFailure false).
+    expect(liftItselfFailed(view({ outcome: 'lift_refused_after_fetch' }))).toBe(false);
+    expect(liftIsFailure(view({ outcome: 'lift_refused_after_fetch' }))).toBe(false);
+  });
+
   it('unchanged / lifted / skipped with no failure → false', () => {
     expect(liftItselfFailed(view({ outcome: 'unchanged' }))).toBe(false);
     expect(liftItselfFailed(view({ outcome: 'lifted', reverify: rcPass }))).toBe(false);

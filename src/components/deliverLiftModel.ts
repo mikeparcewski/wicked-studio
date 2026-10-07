@@ -217,22 +217,23 @@ export function liftIsFailure(view: DeliverLiftView): boolean {
 
 /**
  * Whether the LIFT ITSELF failed — as opposed to the deliver attempt failing at a later step
- * (the push refused, a `gh` error) after an `unchanged` / `lifted` lift that was good news (#408).
- * True for a `conflict` or `failed` outcome, a failed re-verify on the lifted tree, and a refusal
- * that preceded the lift (no outcome at all — only the engine's `deliver:` text exists). An
- * `unchanged` / `lifted` outcome whose attempt then failed is NOT a lift failure: the card keeps
- * the success tone and the failure renders as its own red line.
+ * (the push refused, a `gh` error) after a lift that was good news (#408). True for a `conflict`
+ * or `failed` outcome and a failed re-verify on the lifted tree, with or without a failure. Once
+ * the attempt HAS failed, only a lift PROVEN good keeps the success tone: `unchanged`, or `lifted`
+ * whose re-verify passed. A refusal before the lift (no outcome), a `skipped` lift, a `lifted` lift
+ * with no re-verify frame (the tree that would ship was never proven) and an outcome token this
+ * studio does not know all stay in the failure tone — the card never overstates what it cannot
+ * stand behind (codex review of this PR, HIGH).
  *
  * {@link liftIsFailure} is the ATTEMPT predicate — "nothing was pushed" — and keeps that meaning
  * for the Delivery card, the deliver gate and the timeline; this one only tones the lift card.
  */
 export function liftItselfFailed(view: DeliverLiftView): boolean {
-  return (
-    view.outcome === 'conflict' ||
-    view.outcome === 'failed' ||
-    view.reverify?.passed === false ||
-    (view.outcome === null && view.failure !== null)
-  );
+  if (view.outcome === 'conflict' || view.outcome === 'failed' || view.reverify?.passed === false) return true;
+  if (view.failure === null) return false;
+  if (view.outcome === 'unchanged') return false;
+  if (view.outcome === 'lifted') return view.reverify === null;
+  return true;
 }
 
 /**
