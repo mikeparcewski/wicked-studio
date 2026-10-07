@@ -142,19 +142,20 @@ with sync_playwright() as p:
     check("gate-named-on-demo-page", "Unit 3 was DENIED by input governance" in card_text and waiting == "gate"
           and "scoping" not in stage_line and "waiting" in stage_line.lower(),
           card=card_text[:200], stage_line=stage_line, waiting=waiting, stage=run.get_attribute("data-stage"))
-    # The way to the run: the card's link opens the run's page WITH the gate in view (gateOpenPath =
-    # the build mode + "#gate"; the page consumes the hash on arrival), not just the page.
+    # The way to the run: the card's link opens the run's session thread WITH the gate in view
+    # (S15e: gateOpenPath = /s/run%3A<id> + "#gate"; the thread consumes the hash on arrival by
+    # focusing the answerable row), not just the page.
     try:
         page.get_by_test_id("demo-open-run-gate").click(timeout=3000)
-        page.wait_for_url(f"**/p/{PROJECT}/build/{RID}*", timeout=8000)
+        page.wait_for_url(f"**/s/run%3A{RID}*", timeout=8000)
     except Exception:  # noqa: BLE001
         pass
     page.wait_for_timeout(500)
     opened = page.url.replace(origin, "")
     pushed = page.evaluate("() => window.__pushed.slice(-3)")
-    focused_gate = page.evaluate("() => !!document.activeElement?.closest?.('[data-testid=\"steering-gate\"]')")
+    focused_gate = page.evaluate("() => !!document.activeElement?.closest?.('[data-testid=\"steering-gate\"], [data-testid=\"session-gate-row\"]')")
     page.screenshot(path=str(SHOTS / "desk-demo-plain-run.png"))
-    check("open-the-run", opened.startswith(f"/p/{PROJECT}/build/{RID}") and any(u.endswith(f"/p/{PROJECT}/build/{RID}#gate") for u in pushed),
+    check("open-the-run", opened.startswith(f"/s/run%3A{RID}") and any(u.endswith(f"/s/run%3A{RID}#gate") for u in pushed),
           url=opened, pushed=pushed, gate_focused_on_arrival=focused_gate)
 
     check("no-errors", not errors, errors=errors[:5])

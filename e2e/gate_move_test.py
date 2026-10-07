@@ -11,7 +11,8 @@ at 1440x700.
   diff    the "Why it failed" toggle lists the reviewer's failing criteria beside what the creator
           (produce) claimed, read from the creator's transcript.
   send    taking the move POSTs {approve: false, action: "request_changes", amend: <the items>}.
-  home    the Home "Needs you" row for r-review names the move ("Send back… ›") and still opens the gate.
+  home    the Home "Needs you" row for r-review names the move ("Send back… ›") and opens the gate in the
+          session thread (S15e: /s/run%3Ar-review#gate, the move preselected in the gate row).
 
 Captures (e2e/shots/): gate-move-<skin>-card.png, gate-move-<skin>-diff.png, gate-move-<skin>-home.png.
 Env: FEEDBACK_PORT (default 4471), STUDIO_SKIN. JSON report; exit 0/1.
@@ -142,8 +143,11 @@ with sync_playwright() as p:
         check("home-row-names-the-move", verb == "Send back… ›" and act.get_attribute("data-act") == "open", verb=verb)
         page.screenshot(path=str(SHOTS / f"gate-move-{SKIN}-home.png"))
         act.click()
-        page.get_by_test_id("gate-recommended").wait_for(state="visible", timeout=15000)
-        check("home-row-opens-the-gate", "/runs/r-review" in page.url or "r-review" in page.url, url=page.url)
+        # S15e: the row opens the session thread at the gate (`/s/run%3Ar-review#gate`), where the
+        # move is the preselected choice of `session-gate-row`; the run page's `gate-recommended`
+        # stays accepted for a skin that still routes there.
+        page.locator('[data-testid="session-gate-row"], [data-testid="gate-recommended"]').first.wait_for(state="visible", timeout=15000)
+        check("home-row-opens-the-gate", "r-review" in page.url, url=page.url)
 
     for section in (section_card, section_home):
         try:

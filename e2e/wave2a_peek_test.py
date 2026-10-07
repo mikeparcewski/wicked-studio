@@ -122,13 +122,14 @@ with sync_playwright() as p:
 
     # ── jump ────────────────────────────────────────────────────────────────────
     page.keyboard.press("Alt+g")
-    # The gate's address is /p/beta/build/b1#gate; the thread consumes the one-shot `#gate` on
-    # arrival (SteeringGate) by scrolling the gate card in and focusing its prompt — so "at the
-    # gate" is: the b1 thread, with the gate prompt holding focus.
+    # The gate's address is the session thread at the gate anchor, /s/run%3Ab1#gate (S15e:
+    # `gateOpenPath` lands every gate deep link in the thread); the thread consumes the one-shot
+    # `#gate` on arrival by focusing the answerable row — so "at the gate" is: the b1 session,
+    # with the gate row (or the proposal card's primary button) holding focus.
     check("jump-to-b1-gate", wait_ok(
-        page, "() => window.location.pathname === '/p/beta/build/b1'"
+        page, "() => (window.location.pathname === '/s/run%3Ab1' || window.location.pathname === '/s/run:b1')"
               " && (window.location.hash === '#gate'"
-              "     || document.activeElement?.getAttribute('data-testid') === 'steering-prompt')"),
+              "     || ['session-gate-row', 'session-proposal-go'].includes(document.activeElement?.getAttribute('data-testid')))"),
         url=page.evaluate("() => window.location.href"),
         focused=page.evaluate("() => document.activeElement?.getAttribute('data-testid')"))
     check("peek-closed-on-jump", page.get_by_test_id("peek-card").count() == 0)
@@ -203,7 +204,8 @@ with sync_playwright() as p:
           and q.evaluate("() => !!document.activeElement?.closest('[data-testid=\"needs-you-queue\"]')"),
           focused=q.evaluate("() => document.activeElement?.getAttribute('data-testid')"))
     q.keyboard.press("Alt+g")
-    check("queue-jump-to-g1", wait_ok(q, "() => window.location.pathname === '/p/alpha/build/g1'"),
+    # S15e: the queue's jump lands in g1's session thread at the gate (/s/run%3Ag1#gate).
+    check("queue-jump-to-g1", wait_ok(q, "() => window.location.pathname === '/s/run%3Ag1' || window.location.pathname === '/s/run:g1'"),
           url=q.evaluate("() => window.location.href"))
     q.keyboard.press("Alt+b")
     check("queue-back-home-focus-on-queue", wait_ok(
