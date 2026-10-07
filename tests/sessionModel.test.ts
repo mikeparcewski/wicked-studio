@@ -83,6 +83,18 @@ describe('the goal sentence and the conversation', () => {
     expect(conversationOf({ kind: 'chat', chatId: 'c' }, null)).toBe('closed');
     expect(conversationOf({ kind: 'run', runId: 'r' }, null)).toBe('none');
   });
+
+  it('an ask run (its problem is crew\'s chat-scope statement) is titled by the chat\'s question, never "# Chat scope" (studio#540)', () => {
+    const statement = '# Chat scope\n\nThis directory is the scratch root of wicked-crew chat `c-1`. It is the ONLY place you may write.\n\n## Repositories in scope (READ-ONLY)\n\n- **wicked-platform** (`r-9`): `/srv/repos/wicked-platform`\n\nExplore and answer questions.\n';
+    const ask = run('r-ask', 'executing', { problem: statement, chat_id: 'c-1' });
+    const msgs = [{ kind: 'user', text: 'why does greet() not trim?', at: 1 }];
+    expect(sessionTitle(msgs as never, [ask])).toBe('why does greet() not trim?');
+    // A question that merely opens with the heading is the operator's words, kept (codex r1 #1).
+    expect(sessionTitle([{ kind: 'user', text: '# Chat scope\nwhich repos can this chat see?', at: 1 }] as never, [ask])).toBe('# Chat scope');
+    // No transcript at hand (the rail, a late join): the statement says what the chat is about.
+    expect(sessionTitle([], [ask])).toBe('A conversation about wicked-platform');
+    expect(sessionTitle([], [ask])).not.toMatch(/Chat scope/);
+  });
 });
 
 describe('since you left (R2: a session idle ≥ 4 h)', () => {

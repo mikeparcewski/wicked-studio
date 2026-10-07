@@ -38,7 +38,7 @@ import { applyCheckState } from '../../board/checkState.js';
 import { useRunAcceptance } from '../../hooks/useRunAcceptance.js';
 import { momentOfRecording, useRecordingsStore } from '../../store/recordings.js';
 import { requestWalkthroughSeek } from '../../store/walkthroughSeek.js';
-import { askAnswerOrds, askLines, askPathOf, askProposal, askThinking, isAskTurnGate, type AskLine, type AskProposal } from '../../board/askThread.js';
+import { askAnswerOrds, askLines, askPathOf, askProposal, askShapeFooter, askThinking, isAskTurnGate, type AskLine, type AskProposal } from '../../board/askThread.js';
 import { useAskThreadStore } from '../../store/askThread.js';
 import { useTeamFold } from '../../hooks/useTeamFold.js';
 import { AskLineView, AskTyping } from './AskThread.js';
@@ -530,7 +530,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
       </div>
       {/* Rule 3: while the thread is the chain, the shape line names the path's steps for the operator. */}
       {askBlockHidden && askPath.shape.length > 0 && (
-        <p data-testid="session-ask-shape" className="wk-session-grey wk-session-shape">Shape: {askPath.shape.map((s) => s.label).join(' → ')}{askPath.pa !== null ? ` · ${askPath.pa} answers` : ''}{askPath.reviewer?.seat ? ` · ${askPath.reviewer.seat} reviews` : ''}</p>
+        <p data-testid="session-ask-shape" className="wk-session-grey wk-session-shape">{askShapeFooter(askPath)}</p>
       )}
 
       <Composer

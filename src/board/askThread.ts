@@ -171,6 +171,16 @@ export function askPathOf(rows: readonly TeamRow[]): AskPath {
   return p;
 }
 
+/** Rule 3's shape line under the chain (studio#540): the steps, who answers, and who REVIEWS — by
+ *  the wire's own rule (`GET /chats/:id` → `path.reviewer` is `null` for a failed join): a member
+ *  whose join failed is on record above ("No reviewer — <seat> can't join") and is NOT a reviewer
+ *  here. `null` while the path has no shape. */
+export function askShapeFooter(path: AskPath): string | null {
+  if (path.shape.length === 0) return null;
+  const reviewer = path.reviewer !== null && path.reviewer.status === 'attached' ? path.reviewer.seat : null;
+  return `Shape: ${path.shape.map((s) => s.label).join(' → ')}${path.pa !== null ? ` · ${path.pa} answers` : ''}${reviewer !== null ? ` · ${reviewer} reviews` : ''}`;
+}
+
 const ROSTER_JOIN = (xs: readonly string[]): string => xs.join(', ');
 const bandWords = (band: string | null): string | null => (band === null ? null : `band ${band.replace('-', '–')}`);
 
