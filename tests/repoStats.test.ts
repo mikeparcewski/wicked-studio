@@ -106,11 +106,12 @@ describe('repoFleetModels — one fold per card, attention-ordered', () => {
     onboard('o-busy', 'busy', 'completed'),
     onboard('o-broken', 'broken', 'failed'),
     capture('c-quiet', 'quiet', 'completed'),
+    capture('c-gated-fail', 'gated', 'failed'), // outside window: only the capture STATE could couple
   ];
   const ATTACHED = { 'r-run': NOW - 3_600_000, 'r-done': NOW - 2 * 3_600_000 };
   // The recency window holds everything but r-out (the positional idiom —
   // membership is the caller's windowBuckets output).
-  const WINDOW = new Set(RUNS.map((v) => v.session.id).filter((id) => id !== 'r-out'));
+  const WINDOW = new Set(RUNS.map((v) => v.session.id).filter((id) => id !== 'r-out' && id !== 'c-gated-fail'));
 
   const fleet = repoFleetModels(REPOS, RUNS, ATTACHED, WINDOW);
   const byId = Object.fromEntries(fleet.map((m) => [m.repo.id, m]));
@@ -137,8 +138,17 @@ describe('repoFleetModels — one fold per card, attention-ordered', () => {
   it('carries the captured-learnings state per repo WITHOUT touching failing, ordering or the chips', () => {
     expect(byId['quiet']!.capture).toEqual({ state: 'captured', run: RUNS[7] });
     expect(byId['busy']!.capture).toEqual({ state: 'never', run: null });
-    expect(byId['quiet']!.failing).toBe(false);
     expect(byId['quiet']!.onboard.state).toBe('never'); // a capture is not an onboard
+    // gated's newest capture FAILED (outside the window, so no windowed failed count can mask the
+    // coupling): the capture state alone never makes a repo failing, never moves it, never lands
+    // it on the failing chip — the ordering and the partitions below are the pre-capture ones.
+    expect(byId['gated']!.capture.state).toBe('failed');
+    expect(byId['gated']!.counts.failed).toBe(0);
+    expect(byId['gated']!.failing).toBe(false);
+    expect(byId['quiet']!.failing).toBe(false);
+    expect(fleet.map((m) => m.repo.id)).toEqual(['gated', 'broken', 'busy', 'quiet']);
+    expect(fleet.filter((m) => matchesRepoChip(m, 'failing')).map((m) => m.repo.id)).toEqual(['broken']);
+    expect(fleet.filter((m) => matchesRepoChip(m, 'never')).map((m) => m.repo.id)).toEqual(['gated', 'quiet']);
   });
 
   it('lastAt is the newest attach clock — null when no clock is known, never invented', () => {
