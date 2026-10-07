@@ -279,6 +279,32 @@ describe('the probes settle (studio#280 item 2)', () => {
     expect(screen.queryByTestId('rail-health-recheck')).toBeNull();
   });
 
+  it('a KEPT answer past a re-expand\'s deadline is said to be stale — its clock, "stale", the re-probe — never passed off as fresh', async () => {
+    render(<Deadline ms={30} />);
+    await screen.findByText('ok · 0.6.0');
+    await screen.findAllByTestId('rail-seat-row');
+    // The re-expand's probes never answer (what RC1 saw) …
+    getHealth.mockImplementationOnce(() => new Promise(() => undefined));
+    getRoster.mockImplementationOnce(() => new Promise(() => undefined));
+    const toggle = screen.getByTestId('rail-health-toggle');
+    fireEvent.click(toggle);
+    fireEvent.click(toggle);
+    const api = await screen.findByTestId('rail-api-server');
+    await waitFor(() => expect(api).toHaveAttribute('data-state', 'stale'));
+    // … so the kept answer stays readable WITH its clock, but is marked stale and carries the re-probe;
+    // the seats list is kept too, under a row that says the probe has not answered.
+    expect(api.textContent).toContain('ok · 0.6.0');
+    expect(within(api).getByTestId('rail-probe-checked')).toBeInTheDocument();
+    expect(within(api).getByTestId('rail-health-recheck')).toBeInTheDocument();
+    expect(screen.getByTestId('rail-seats-probe')).toHaveAttribute('data-state', 'stale');
+    expect(screen.getByTestId('rail-seats-probe').textContent).toContain('showing the last answer');
+    expect(screen.getAllByTestId('rail-seat-row')).toHaveLength(3);
+    // The re-probe answers: fresh again, nothing stale left.
+    fireEvent.click(within(api).getByTestId('rail-health-recheck'));
+    await waitFor(() => expect(screen.getByTestId('rail-api-server')).toHaveAttribute('data-state', 'answered'));
+    await waitFor(() => expect(screen.queryByTestId('rail-seats-probe')).toBeNull());
+  });
+
   it('a slow EARLIER answer never lands over a later expand (the generation guard covers /health too)', async () => {
     let resolveFirst: (h: { status: string; version: string; ping: string }) => void = () => undefined;
     getHealth.mockImplementationOnce(() => new Promise((r) => { resolveFirst = r; }));

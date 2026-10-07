@@ -428,6 +428,10 @@ export function HealthRailSection({ open, onToggle, compact = false, probeDeadli
   const [healthCheckedAt, setHealthCheckedAt] = useState<number | null>(null);
   /** studio#280 item 2: the current expand's probes have outlived the deadline without settling. */
   const [overdue, setOverdue] = useState(false);
+  /** Whether the shown /health and /roster answers belong to THIS expand (false = kept from an
+   *  earlier one): a kept answer past the deadline is said to be stale, never passed off as fresh. */
+  const [healthFresh, setHealthFresh] = useState(false);
+  const [rosterFresh, setRosterFresh] = useState(false);
   /** Bumped by "check again" — re-runs the expand's probes without a collapse. */
   const [reprobe, setReprobe] = useState(0);
   const [roster, setRoster] = useState<RosterSeat[] | null>(null);
@@ -445,6 +449,10 @@ export function HealthRailSection({ open, onToggle, compact = false, probeDeadli
    *  dot, and a slow /health answer landing over a fresh one would read as settled when it is not. */
   const probeGen = useRef(0);
   const ref = useRef<HTMLDivElement>(null);
+  // Unmount retires every in-flight probe: its completion must not reach a setter (codex on the
+  // #280 PR). Unmount only — a collapse keeps the generation so an answer still landing can feed
+  // the summary dot, exactly as before.
+  useEffect(() => () => { probeGen.current++; }, []);
 
   // EC30: the expand IS the fetch gesture — one GET /health + one GET /roster
   // per expansion (the retired popover's exact `[open]` effect, moved); the
@@ -459,6 +467,8 @@ export function HealthRailSection({ open, onToggle, compact = false, probeDeadli
     setHealthError(null);
     setRosterError(false);
     setOverdue(false);
+    setHealthFresh(false);
+    setRosterFresh(false);
     let pending = 3;
     const settled = (): void => { if (live() && --pending === 0) setOverdue(false); };
     const deadline = setTimeout(() => { if (live() && pending > 0) setOverdue(true); }, probeDeadlineMs);
@@ -466,13 +476,13 @@ export function HealthRailSection({ open, onToggle, compact = false, probeDeadli
     // missing export) becomes the honest error row, not a throw out of the effect.
     Promise.resolve()
       .then(() => api.getHealth())
-      .then((h) => { if (!live()) return; setHealth(h); setHealthCheckedAt(Date.now()); })
-      .catch((e: unknown) => { if (!live()) return; setHealthError(e instanceof Error && e.message !== '' ? e.message : String(e)); setHealthCheckedAt(Date.now()); })
+      .then((h) => { if (!live()) return; setHealth(h); setHealthCheckedAt(Date.now()); setHealthFresh(true); })
+      .catch((e: unknown) => { if (!live()) return; setHealthError(e instanceof Error && e.message !== '' ? e.message : String(e)); setHealthCheckedAt(Date.now()); setHealthFresh(true); })
       .finally(settled);
     Promise.resolve()
       .then(() => api.getRoster())
-      .then(({ roster: seats }) => { if (!live()) return; setRoster(seats); setCachedRoster(seats); })
-      .catch(() => { if (live()) setRosterError(true); })
+      .then(({ roster: seats }) => { if (!live()) return; setRoster(seats); setCachedRoster(seats); setRosterFresh(true); })
+      .catch(() => { if (live()) { setRosterError(true); setRosterFresh(true); } })
       .finally(settled);
     // studio#246: the same gesture reads the governance block. Absence is a
     // named state (older daemon), never an invented healthy store.
@@ -601,7 +611,13 @@ export function HealthRailSection({ open, onToggle, compact = false, probeDeadli
           {healthError !== null ? (
             <CheckRow label="API server" ok={false} detail={`unreachable — ${healthError}`} since={healthCheckedAt ?? undefined} testId="rail-api-server" state="error" />
           ) : health ? (
-            <CheckRow label="API server" ok={health.status === 'ok'} detail={`${health.status} · ${health.version}`} since={healthCheckedAt ?? undefined} testId="rail-api-server" state="answered" />
+            // A kept answer past this expand's deadline is STALE: its clock says when, the state says so,
+            // and the re-probe rides the row — never the old answer passed off as this expand's.
+            <CheckRow
+              label="API server" ok={health.status === 'ok'} detail={`${health.status} · ${health.version}`} since={healthCheckedAt ?? undefined}
+              testId="rail-api-server" state={overdue && !healthFresh ? 'stale' : 'answered'}
+              {...(overdue && !healthFresh ? { action: { label: 'check again', testId: 'rail-health-recheck', onClick: () => setReprobe((n) => n + 1) } } : {})}
+            />
           ) : overdue ? (
             <CheckRow
               label="API server" ok={null} detail={probeOverdueWord(probeDeadlineMs)} testId="rail-api-server" state="overdue"
@@ -623,6 +639,9 @@ export function HealthRailSection({ open, onToggle, compact = false, probeDeadli
             <CheckRow label="seats" ok={null} detail={overdue ? probeOverdueWord(probeDeadlineMs) : 'checking…'} testId="rail-seats-probe" state={overdue ? 'overdue' : 'checking'} />
           ) : (
             <>
+              {overdue && !rosterFresh && (
+                <CheckRow label="seats" ok={null} detail={`${probeOverdueWord(probeDeadlineMs)} · showing the last answer`} testId="rail-seats-probe" state="stale" />
+              )}
               {(() => {
                 const cap = weekCaption(week);
                 return cap === null ? null : (
