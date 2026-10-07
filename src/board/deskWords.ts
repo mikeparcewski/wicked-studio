@@ -59,9 +59,33 @@ export function plainGateQuestion(prompt: string | undefined, gateKind: string |
     }
     if (!ENGINE_TEXT.test(before)) return `Approve the next step: ${before}`;
   }
+  // studio#570: the engine's pause prompts (a reviewer's FAIL, a failed floor, a denied tool call,
+  // a team dispute, a seat that failed) each read as one line of the Desk's words; the engine's own
+  // sentence stays underneath, in the row's Details.
+  const paused = pausedStepQuestion(p, gateKind);
+  if (paused !== null) return paused;
   const first = withoutScaffold(p.split('\n')[0]!);
   if (first === '' || ENGINE_TEXT.test(first)) return 'Waiting on your answer';
   return first;
+}
+
+/** The engine's pause prompts in one line each: what happened, and what the row's choices do
+ *  (studio#570). `null` for every other prompt — the caller keeps its own fallbacks. */
+function pausedStepQuestion(p: string, gateKind: string | undefined): string | null {
+  if (/^\s*Unit\s+\d+\s+verdict is NOT PASS\b/i.test(p)) return 'The reviewer said FAIL — send it back?';
+  if (/^\s*Unit\s+\d+\s+failed its deterministic floor\b/i.test(p)) return 'The floor failed — retry, send back or stop?';
+  if (/^\s*Unit\s+\d+\s+was DENIED by input governance\b/i.test(p) || /^\s*Governance DENIED unit\s+\d+/i.test(p)) {
+    const tool = /tool call was refused\s*\(\s*`?([A-Za-z0-9_.:-]+)`?\s*\)/i.exec(p)?.[1];
+    return tool !== undefined ? `A ${tool} call was denied — how should the step go on?` : 'A tool call was denied — how should the step go on?';
+  }
+  if (/^\s*Team dispute on unit\s+\d+/i.test(p) || gateKind === 'team_dispute') return 'The team disagreed — approve or reject the work?';
+  if (gateKind === 'team_transport') return 'The team lost a seat — approve or reject the work?';
+  if (/^\s*Unit\s+\d+\s+failed and triage escalated\b/i.test(p)) return 'The step failed — send it back, reassign or stop?';
+  if (/^\s*Unit\s+\d+\s+\([^)]*\)\s+refused its environment\b/i.test(p) || /^\s*Unit\s+\d+\s+failed again on attempt\s+\d+/i.test(p)) {
+    return 'The step could not start — retry or stop?';
+  }
+  if (gateKind === 'escalation') return 'The step was escalated — how should it go on?';
+  return null;
 }
 
 // ── studio#423: a run's title ───────────────────────────────────────────────────────────────
