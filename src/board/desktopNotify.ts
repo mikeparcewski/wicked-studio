@@ -104,7 +104,7 @@ export function notifyGateIfUnfocused(event: CoreEvent): void {
   if (!tabUnfocused()) return;
   if (fired.get(runId) === ord) return; // a replayed frame, not a new gate
 
-  const { projectNameByRun, projectIdByRun } = useMembershipStore.getState();
+  const { projectNameByRun } = useMembershipStore.getState();
   const prompt = typeof event.prompt === 'string' && event.prompt !== ''
     ? event.prompt
     : 'A run is awaiting your review';
@@ -117,8 +117,7 @@ export function notifyGateIfUnfocused(event: CoreEvent): void {
     fired.set(runId, ord);
     n.onclick = () => {
       window.focus();
-      const pid = useMembershipStore.getState().projectIdByRun[runId] ?? projectIdByRun[runId];
-      goTo(pid !== undefined ? gateOpenPath(pid, runId) : `/runs/${runId}`);
+      goTo(gateOpenPath('', runId));
       n.close();
     };
   } catch {

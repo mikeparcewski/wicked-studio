@@ -167,16 +167,16 @@ describe('the click (§8.2: focus + land on the gate)', () => {
     notifyGateIfUnfocused(gateEvent('r-q3'));
     FakeNotification.instances[0]?.onclick?.();
     expect(focus).toHaveBeenCalled();
-    expect(window.location.pathname + window.location.hash).toBe('/p/q3-review-deck/build/r-q3#gate');
+    expect(window.location.pathname + window.location.hash).toBe('/s/run%3Ar-q3#gate');
     expect(FakeNotification.instances[0]?.closed).toBe(true);
     focus.mockRestore();
   });
 
-  it('falls back to the legacy /runs/:id route when the project is unknown', () => {
+  it('navigates to the session thread even when the project is unknown', () => {
     const focus = vi.spyOn(window, 'focus').mockImplementation(() => undefined);
     notifyGateIfUnfocused(gateEvent('r-orphan'));
     FakeNotification.instances[0]?.onclick?.();
-    expect(window.location.pathname).toBe('/runs/r-orphan');
+    expect(window.location.pathname + window.location.hash).toBe('/s/run%3Ar-orphan#gate');
     focus.mockRestore();
   });
 });

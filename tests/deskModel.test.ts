@@ -91,8 +91,8 @@ describe('sessions in the rail and on the project cards', () => {
     expect(groups[0]!.sessions.map((s) => s.id)).toEqual(['run:r1', 'run:r2', 'run:r3']);
     expect(groups[0]!.sessions[0]!.badge).toBe(1);
     expect(groups[0]!.sessions[1]!.badge).toBe(0);
-    // S6a: a session opens its own route.
-    expect(groups[0]!.sessions[0]!.path).toBe('/s/run%3Ar1');
+    // S6a+S15e: a gated waiting session goes to the thread AT the gate.
+    expect(groups[0]!.sessions[0]!.path).toBe('/s/run%3Ar1#gate');
   });
 
   it('with runChatId, runs launched from one chat are one session; its badge sums its runs (S6a)', () => {
@@ -108,7 +108,7 @@ describe('sessions in the rail and on the project cards', () => {
     expect(g[0]!.sessions.map((s) => [s.id, s.runIds, s.badge, s.runId])).toEqual([
       ['chat-a', ['c1', 'c2'], 1, 'c2'], ['run:c3', ['c3'], 0, 'c3'],
     ]);
-    expect(g[0]!.sessions[0]!.path).toBe('/s/chat-a');
+    expect(g[0]!.sessions[0]!.path).toBe('/s/chat-a#gate');
     // Without the capability the same runs stay apart, chat_id or not.
     expect(railGroups(chatRuns as never, [], {}, undefined, {}, false)[0]!.sessions).toHaveLength(3);
   });

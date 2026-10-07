@@ -35,7 +35,7 @@ describe('peekTarget reads the ranked queue', () => {
     const ranked = rows({ runs, gates, projectIds: { young: 'p1', old: 'p2' } });
     const t = peekTarget({ rows: ranked, gates, runs, projectIdByRun: { young: 'p1', old: 'p2' } });
     expect(t).toMatchObject({ key: ranked[0]!.key, kind: 'gate', runId: 'old', projectId: 'p2', prompt: 'gate old', ord: 2 });
-    expect(t?.path).toBe('/p/p2/build/old#gate');
+    expect(t?.path).toBe('/s/run%3Aold#gate');
   });
 
   it('a folded group ("2 approvals") stands for its top-ranked member', () => {
@@ -74,7 +74,7 @@ describe('peekTarget reads the ranked queue', () => {
     expect(ranked.some((r) => r.kind === 'gate')).toBe(false);
     const t = peekTarget({ rows: ranked, gates, runs, projectIdByRun: {} });
     expect(t).toMatchObject({ kind: 'gate', runId: 'g', prompt: 'gate g', ord: 2, projectId: 'p' });
-    expect(t?.path).toBe('/p/p/build/g#gate');
+    expect(t?.path).toBe('/s/run%3Ag#gate');
   });
 
   it('a live not-yet-folded gate outranks a non-gate top item, but not a decided one', () => {

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { SteeringGate } from '../src/components/SteeringGate.js';
 import * as client from '../src/api/client.js';
@@ -39,6 +39,7 @@ describe('SteeringGate (§11.1 — the three/four distinct actions)', () => {
     // The steer button is disabled until amend text is present.
     expect(screen.getByTestId('steering-approve-steer')).toBeDisabled();
     await user.type(screen.getByTestId('steering-amend'), 'prefer the smaller diff');
+    await waitFor(() => expect(screen.getByTestId('steering-approve-steer')).toBeEnabled());
     await user.click(screen.getByTestId('steering-approve-steer'));
     expect(client.api.confirmGate).toHaveBeenCalledWith('run-42', {
       approve: true,

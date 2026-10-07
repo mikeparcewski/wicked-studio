@@ -145,7 +145,7 @@ describe('the fleet grid — graph honesty, needs-you first, cards are doors', (
     const jump = screen.getByTestId('repo-needs-you');
     expect(jump.getAttribute('data-run-id')).toBe('r-gate');
     fireEvent.click(jump);
-    expect(navigate).toHaveBeenCalledWith('/p/p-billing/build/r-gate#gate');
+    expect(navigate).toHaveBeenCalledWith('/s/run%3Ar-gate#gate');
     expect(navigate).not.toHaveBeenCalledWith('/repo-detail/billing'); // no card navigation leaked
   });
 

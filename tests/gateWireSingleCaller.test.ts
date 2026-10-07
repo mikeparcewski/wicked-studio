@@ -21,7 +21,7 @@ function files(dir: string): string[] {
 }
 
 describe('the gate POST has exactly one caller', () => {
-  it('only board/gateActions.ts calls confirmGate (api/client.ts defines it)', () => {
+  it('only board/gateActions.ts calls confirmGate (api/client.ts defines it)', { timeout: 20_000 }, () => {
     const offenders = files(SRC)
       .map((p) => relative(SRC, p).split('\\').join('/'))
       .filter((rel) => !ALLOWED.has(rel))

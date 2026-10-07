@@ -2277,14 +2277,33 @@ new file mode 100644
 
 def _trust_events(rid: str) -> list:
     ord_, kind, prompt = TRUST_GATES[rid]
-    return [
+    evs = [
         {"type": "sessionStarted", "session": rid, "problem": "tidy the importer", "workflowId": "wf-w2",
          "cliCount": 2, "governed": True, "entityMode": "shared", "ts": TRUST_T0, "seq": 1},
         {"type": "unitDispatched", "session": rid, "ord": 1, "attempt": 0, "ts": TRUST_T0 + SEC, "seq": 2},
         {"type": "unitDone", "session": rid, "ord": 1, "ts": TRUST_T0 + 5 * MIN, "seq": 3},
-        {"type": "awaitingHuman", "session": rid, "ord": ord_, "ts": TRUST_T0 + 5 * MIN + SEC, "seq": 4,
-         "prompt": prompt, "reviewingOrd": ord_ - 1, "gateKind": kind},
     ]
+    if kind == "deliver":
+        evs.append({"type": "repoChecksEvaluated", "session": rid, "ord": ord_, "attempt": 0,
+                    "ts": TRUST_T0 + 5 * MIN, "seq": 4, "passed": True,
+                    "criterion": "repository checks pass on the head", "skipped": [],
+                    "checks": [
+                        {"name": "typecheck", "argv": ["npm", "run", "typecheck"], "source": "declared",
+                         "exitCode": 0, "timedOut": False, "spawnError": None, "durationMs": 8200},
+                        {"name": "lint", "argv": ["npm", "run", "lint"], "source": "declared",
+                         "exitCode": 0, "timedOut": False, "spawnError": None, "durationMs": 4100},
+                    ]})
+        evs.append({"type": "gateEvaluated", "session": rid, "ord": ord_, "ts": TRUST_T0 + 5 * MIN, "seq": 5,
+                    "criterion": "repository checks pass on the head", "hasDeterministicFloor": True,
+                    "deterministicPass": True, "agentVerdict": None, "agentReasoning": None,
+                    "evaluatorPass": None, "evaluatorPolicies": [], "denialReason": None, "denial": None,
+                    "combined": True, "judgeCli": None, "judgeDistinct": None})
+        evs.append({"type": "awaitingHuman", "session": rid, "ord": ord_, "ts": TRUST_T0 + 5 * MIN + SEC,
+                    "seq": 6, "prompt": prompt, "reviewingOrd": ord_ - 1, "gateKind": kind})
+    else:
+        evs.append({"type": "awaitingHuman", "session": rid, "ord": ord_, "ts": TRUST_T0 + 5 * MIN + SEC,
+                    "seq": 4, "prompt": prompt, "reviewingOrd": ord_ - 1, "gateKind": kind})
+    return evs
 
 
 def _decided(i: int, days: float, seat: str = "claude", decision: str = "approve", **over) -> dict:
