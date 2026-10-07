@@ -34,6 +34,11 @@ function useTicker(on: boolean): number {
   return now;
 }
 
+/** A text field anywhere on the page (the composer, a sheet's input): a gate's arrival never yanks its caret. */
+function isEditable(el: Element | null): boolean {
+  return el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || (el instanceof HTMLElement && el.isContentEditable);
+}
+
 function formatSentTime(ts: number): string {
   return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
@@ -118,16 +123,38 @@ export function GateRow({ view, gate }: {
     setPick(INITIAL_PICK(model?.recommended ?? null));
   }, [model?.recommended]);
 
-  // Focus the row when navigating to #gate
+  // Focus the row when navigating to #gate — ONCE per gate (studio#569). `model` is recomputed on
+  // every thread update (units re-polled, an event appended, the roster read), and re-focusing the
+  // row on each pulled the caret out of an open note, after which type-to-composer sent the next
+  // letter to the session composer. Never while the note is open or focus is already in the row.
+  const focusedForRef = useRef<string | null>(null);
   useLayoutEffect(() => {
-    if (model !== null && window.location.hash === GATE_HASH) {
-      rowRef.current?.focus();
-    }
-  }, [model]);
+    // The gate cleared (or its evidence is still loading): the next arrival — even the same gate
+    // restored with the same key — focuses again.
+    if (model === null) { focusedForRef.current = null; return; }
+    if (window.location.hash !== GATE_HASH || focusedForRef.current === gateKey) return;
+    // An open note keeps the caret. The key is NOT recorded here, so a replacement gate (which
+    // closes the note in the reset effect) still gets its one focus once the note is gone.
+    if (noteOpen !== null) return;
+    focusedForRef.current = gateKey;
+    const row = rowRef.current;
+    if (row === null || row.contains(document.activeElement) || isEditable(document.activeElement)) return;
+    row.focus();
+  }, [model, gateKey, noteOpen]);
 
-  // Focus the note textarea when it opens
+  // Focus the note textarea when it opens, caret at the END of the pre-filled text (studio#569: a
+  // programmatic focus lands the caret at 0 in Chrome, so End / Enter / typing landed in front).
   useEffect(() => {
-    if (noteOpen !== null) noteRef.current?.focus();
+    if (noteOpen === null) return;
+    const el = noteRef.current;
+    if (el === null) return;
+    el.focus();
+    const end = el.value.length;
+    try {
+      el.setSelectionRange(end, end);
+    } catch {
+      /* a field that refuses a selection still has focus */
+    }
   }, [noteOpen]);
 
   const question = plainGateQuestion(gate?.prompt, gate?.gateKind);
@@ -137,7 +164,7 @@ export function GateRow({ view, gate }: {
     const left = pending === null ? 0 : secondsLeft(pending, now);
     return (
       <div data-testid="session-gate-row" ref={rowRef} tabIndex={-1} className="wk-session-gate-row" role="status">
-        <span data-testid="session-gate-chosen">
+        <span data-testid="session-gate-chosen" className="wk-session-gate-chosen">
           {chosen.sentAt !== null
             ? `You chose: ${chosen.label}, ${formatSentTime(chosen.sentAt)}`
             : left > 0 ? `You chose: ${chosen.label} · Undo ${left} s` : `You chose: ${chosen.label} · sending`}
@@ -159,7 +186,7 @@ export function GateRow({ view, gate }: {
   if (chosen === null && gate === undefined && action.receipt?.kind === 'row') {
     return (
       <div data-testid="session-gate-row" ref={rowRef} tabIndex={-1} className="wk-session-gate-row" role="status">
-        <span data-testid="session-gate-chosen">
+        <span data-testid="session-gate-chosen" className="wk-session-gate-chosen">
           {`You chose: ${action.receipt.chosenLabel}, ${formatSentTime(action.receipt.sentAt)}`}
         </span>
       </div>
@@ -247,6 +274,13 @@ export function GateRow({ view, gate }: {
   };
 
   const noteChoice = noteOpen !== null ? (allChoices.find((c) => c.key === noteOpen) ?? null) : null;
+
+  // Leaving the note (Cancel / Escape) hands focus back to the row, so the keyboard stays on the gate.
+  const cancelNote = (): void => {
+    setNoteOpen(null);
+    setNoteText('');
+    rowRef.current?.focus();
+  };
 
   const notePlaceholder = noteChoice?.key === 'steer'
     ? 'Steer the next creator phase…'
@@ -354,12 +388,18 @@ export function GateRow({ view, gate }: {
             placeholder={notePlaceholder}
             rows={4}
             onChange={(e) => setNoteText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key !== 'Escape') return;
+              e.preventDefault();
+              e.stopPropagation();
+              cancelNote();
+            }}
           />
           <div className="wk-session-gate-note-actions">
             <button type="button" data-testid="session-gate-send" onClick={sendNote} disabled={action.busy || !noteText.trim()} className="wk-session-gate-send">
               Send
             </button>
-            <button type="button" onClick={() => { setNoteOpen(null); setNoteText(''); }} className="wk-session-gate-cancel">
+            <button type="button" onClick={cancelNote} className="wk-session-gate-cancel">
               Cancel
             </button>
           </div>

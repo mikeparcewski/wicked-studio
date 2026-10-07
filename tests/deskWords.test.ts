@@ -75,6 +75,16 @@ describe('#422 a gate says its question in plain words', () => {
     const long = 'Should the nightly export keep the 90-day window for the finance team, or move to 30 days now that the archive covers everything older than a month?';
     expect(plainGateQuestion(long, undefined)).toBe(long);
     expect(plainGateQuestion('Unit 4 rev 3 band 20-39: proceed?', undefined)).toBe('Waiting on your answer');
+    // studio#570: the engine's pause prompts read as one line each; the legacy guard prompt stays neutral.
+    expect(plainGateQuestion("Unit 4 verdict is NOT PASS (the evaluator's verdict is FAIL) — confirm to retry the phase, request changes to send the review back to the creator phase, or reject to cancel the run", undefined)).toBe('The reviewer said FAIL — send it back?');
+    expect(plainGateQuestion('Unit 4 verdict is NOT PASS — confirm to retry the phase, or reject to cancel the run', undefined)).toBe('The step did not pass review — how should it go on?');
+    expect(plainGateQuestion("Unit 2 verdict is NOT PASS — the read-only `verify` phase changed the tree under review (M src/importer.ts); its edit was discarded and the creator's verified tree restored. Approve to retry the phase against the restored tree, or reject to cancel the run", undefined)).toBe('The reviewer changed the work instead of judging it — retry on the restored tree?');
+    expect(plainGateQuestion('Unit 4 failed its deterministic floor (pinned_validator): exit 1', 'escalation')).toBe('The floor failed — how should the step go on?');
+    expect(plainGateQuestion('Unit 2 was DENIED by input governance — a tool call was refused (`Bash`): never', undefined)).toBe('A Bash call was denied — how should the step go on?');
+    expect(plainGateQuestion('Governance DENIED unit 1 (review): the middleware drops the refresh path', undefined)).toBe('Governance denied this step — how should it go on?');
+    expect(plainGateQuestion('Team dispute on unit 4 (build — x): unresolved HIGH finding(s)', 'team_dispute')).toBe('The team disagreed — approve or reject the work?');
+    expect(plainGateQuestion('Unit 3 failed and triage escalated: codex exited 1', undefined)).toBe('The step failed — send it back, reassign or stop?');
+    expect(plainGateQuestion('Unit 2 (build) refused its environment: no network', undefined)).toBe('The step could not start — retry or stop?');
     expect(plainGateQuestion(undefined, undefined)).toBe('Waiting on your answer');
   });
 
