@@ -129,11 +129,11 @@ export function isDeniedUnitEscalation(prompt: string | undefined, verdict: Gate
  * Whether the denied unit's OTHER layers passed — the floor (when one ran) and the judge (when one
  * ran) — so the re-run is the suggested arm (studio#573: "floor PASS, judge PASS, denial = the
  * write-root catch"). A failed floor or a judge FAIL means the re-run is not the obvious move, and
- * nothing is preselected. No verdict in the log claims nothing either way: the engine's own prompt
- * says approve re-runs, so the re-run stays suggested.
+ * nothing is preselected. No verdict in the log is no evidence of a pass either: nothing is
+ * preselected then (the row never suggests Approve on missing evidence — codex r1).
  */
 export function deniedUnitJudgedOk(verdict: GateVerdictView | null): boolean {
-  if (verdict === null) return true;
+  if (verdict === null) return false;
   if (verdict.hasDeterministicFloor && !verdict.deterministicPass) return false;
   const judge = (verdict.agentVerdict ?? '').trim().toLowerCase();
   if (judge !== '' && judge !== 'pass') return false;
@@ -164,8 +164,17 @@ export function sessionGateChoices(input: SessionGateInput): GateRowModel | null
 
   const question = gate.prompt;
 
+  // studio#573 (codex r1): the engine says `gateKind: 'escalation'` on every denied-unit pause
+  // (wicked-core#464), which is what classifies it above. A gate from a daemon that predates the
+  // kind, read before its log, would fall to the four-verb def row — with Send back on a unit
+  // nothing was found wrong with. The denied-unit prompt / denial source is read here as well.
+  const deniedAsAnswer = rowClass.kind === 'answer'
+    && isDeniedUnitEscalation(gate.prompt, gateVerdictFor(events, gate.ord, gate.prompt));
+
   let reason: SessionGateReason;
-  if (rowClass.kind === 'card') {
+  if (deniedAsAnswer) {
+    reason = 'escalation';
+  } else if (rowClass.kind === 'card') {
     if (rowClass.reason === 'escalation') reason = 'escalation';
     else if (rowClass.reason === 'retry') reason = 'retry';
     else if (rowClass.reason === 'team') reason = 'team';

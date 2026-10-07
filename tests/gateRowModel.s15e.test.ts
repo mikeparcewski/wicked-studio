@@ -477,6 +477,10 @@ function deniedEvents(over: Record<string, unknown> = {}): CoreEvent[] {
 function deniedGate(over: Partial<OpenGate> = {}): OpenGate {
   return { runId: DENIED_RUN, ord: 2, prompt: DENIED_PROMPT, gateKind: 'escalation', lifecycle: 'open', receivedAt: NOW, ...over };
 }
+/** The same gate from a daemon that sends no `gateKind` (the key absent, not undefined). */
+function deniedGateNoKind(prompt: string = DENIED_PROMPT): OpenGate {
+  return { runId: DENIED_RUN, ord: 2, prompt, lifecycle: 'open', receivedAt: NOW };
+}
 
 describe('sessionGateChoices — a denied unit re-runs: Approve (suggested) · steer · Stop, no Send back (studio#573)', () => {
   it('offers Approve (the re-run), Approve and steer and Stop — and no Send back', () => {
@@ -513,10 +517,24 @@ describe('sessionGateChoices — a denied unit re-runs: Approve (suggested) · s
     expect(model.choices.map((c) => c.key)).toEqual(['approve', 'steer', 'stop']);
   });
 
-  it('the prompt is enough on its own (no event log yet — recommended stays on the re-run the prompt names)', () => {
+  it('the prompt is enough on its own for the arms — but with no verdict in the log nothing is suggested', () => {
     const model = sessionGateChoices({ runId: DENIED_RUN, gate: deniedGate(), units: DENIED_UNITS, events: [], pool: [], roster: null })!;
     expect(model.choices.map((c) => c.key)).toEqual(['approve', 'steer', 'stop']);
-    expect(model.recommended).toBe(0);
+    expect(model.recommended).toBeNull();
+  });
+
+  it('a denied gate with no gateKind (a daemon before wicked-core#464, read before its log) is still this escalation, never the def row', () => {
+    // Without the kind and with no escalation spelling the Desk classifier knows, classifyRowGate reads
+    // the prompt as a plain approve/reject row; the session row still recognizes the denied unit.
+    const noKind = deniedGateNoKind();
+    const fromPrompt = sessionGateChoices({ runId: DENIED_RUN, gate: noKind, units: DENIED_UNITS, events: [], pool: [], roster: null })!;
+    expect(fromPrompt.reason).toBe('escalation');
+    expect(fromPrompt.choices.map((c) => c.key)).toEqual(['approve', 'steer', 'stop']);
+    const generic = deniedGateNoKind('confirm to retry the phase, or reject to cancel the run');
+    const fromDenial = sessionGateChoices({ runId: DENIED_RUN, gate: generic, units: DENIED_UNITS, events: deniedEvents(), pool: [], roster: null })!;
+    expect(fromDenial.reason).toBe('escalation');
+    expect(fromDenial.choices.map((c) => c.key)).toEqual(['approve', 'steer', 'stop']);
+    expect(fromDenial.recommended).toBe(0);
   });
 
   it('a reviewer FAIL escalation is unchanged: Send back first and suggested, no Approve', () => {
@@ -530,6 +548,6 @@ describe('sessionGateChoices — a denied unit re-runs: Approve (suggested) · s
     expect(isDeniedUnitEscalation(DENIED_PROMPT, null)).toBe(true);
     expect(isDeniedUnitEscalation('Unit 2 verdict is NOT PASS — …', null)).toBe(false);
     expect(isDeniedUnitEscalation(undefined, null)).toBe(false);
-    expect(deniedUnitJudgedOk(null)).toBe(true);
+    expect(deniedUnitJudgedOk(null)).toBe(false);
   });
 });
