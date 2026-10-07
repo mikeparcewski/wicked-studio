@@ -100,6 +100,18 @@ describe('the 503 card — the engine\'s finding and the remedy controls (F-A45-
     expect(screen.queryByTestId('skills-recovery-no-diagnostics')).toBeNull();
   });
 
+  it("the engine's input path under the home directory reads as ~/… — never the account's home (#546)", async () => {
+    const HOME_INPUT = '/Users/reel-operator/.wicked-crew/skills/snapshots/000003';
+    const diag = { skills: { ...DIAG_CONFIG_ERROR.skills, state: 'published', engineInput: HOME_INPUT } };
+    const card = await renderUnavailable({ 'GET /diagnostics': () => Promise.resolve(diag) });
+    const state = await within(card).findByTestId('skills-recovery-state');
+    expect(state).toHaveTextContent('input ~/.wicked-crew/skills/snapshots/000003');
+    expect(state.textContent).not.toContain('/Users/');
+    expect(state.textContent).not.toContain('reel-operator');
+    // The rest of the 503 card carries no home path either.
+    expect(card.textContent).not.toContain('/Users/');
+  });
+
   it('a daemon without diagnostics: the controls still stand, with the honest "no engine word" line', async () => {
     wire({ 'GET /skills': unavailable503 });
     render(<SkillsPage navigate={() => {}} />);

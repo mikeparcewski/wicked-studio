@@ -616,8 +616,10 @@ export function SkillsPage({ navigate, search = '' }: {
                 <>
                   <p className="text-[11px]" data-testid="skills-recovery-state" data-state={engine.state} style={{ color: ENGINE_STATE_COLOR[engine.state] }}>
                     engine: <span className="font-semibold">{engine.state}</span> — {SKILLS_ENGINE_STATE_COPY[engine.state]}
+                    {/* #546: the same home-path rule as the header's root line (#460) — `~/…` here, the
+                        full path under "Show technical details" (useDisplayPath). */}
                     {engine.engineInput !== null && engine.engineInput !== '' && (
-                      <span className="font-mono" style={{ color: 'var(--ink-dim)' }}> · input {engine.engineInput}</span>
+                      <span className="font-mono" style={{ color: 'var(--ink-dim)' }}> · input {showPath(engine.engineInput)}</span>
                     )}
                   </p>
                   {engine.findings.length === 0 ? (
