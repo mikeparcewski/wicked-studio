@@ -46,6 +46,8 @@ export function GateRow({ view, gate }: {
   const eventsRaw = useRunEventStore((s) => s.byRun[runId]);
   // Hydrate the run event store on mount — the session page has no board-level hydration
   const fetchedForRef = useRef<string | null>(null);
+  const [eventsFetchFailed, setEventsFetchFailed] = useState(false);
+  const [eventsFetchAttempt, setEventsFetchAttempt] = useState(0);
   useEffect(() => {
     if (eventsRaw !== undefined || fetchedForRef.current === runId) return;
     fetchedForRef.current = runId;
@@ -57,9 +59,11 @@ export function GateRow({ view, gate }: {
         }
       })
       .catch(() => {
-        useRunEventStore.setState((s) => ({ byRun: { ...s.byRun, [runId]: s.byRun[runId] ?? ([] as CoreEvent[]) } }));
+        // A failed read is NOT an empty log: leave the store untouched so the row cannot classify
+        // a late-joined gate without its verdict evidence (fail closed); offer a Retry instead.
+        if (fetchedForRef.current === runId) setEventsFetchFailed(true);
       });
-  }, [runId, eventsRaw]);
+  }, [runId, eventsRaw, eventsFetchAttempt]);
   // null = loading; [] = loaded but empty; [...] = loaded with events
   const events: CoreEvent[] | null = eventsRaw !== undefined ? eventsRaw : null;
 
@@ -158,6 +162,27 @@ export function GateRow({ view, gate }: {
         <span data-testid="session-gate-chosen">
           {`You chose: ${action.receipt.chosenLabel}, ${formatSentTime(action.receipt.sentAt)}`}
         </span>
+      </div>
+    );
+  }
+
+  // Fail closed (security review, unit 10): the events read failed and nothing else hydrated the
+  // log, so no choice is offered on missing evidence; the operator retries the read from the row.
+  if (gate !== undefined && eventsRaw === undefined && eventsFetchFailed) {
+    return (
+      <div data-testid="session-gate-row" data-reason="events-unavailable" ref={rowRef} tabIndex={-1} className="wk-session-gate-row" role="alert">
+        <p data-testid="session-gate-question" className="wk-session-gate-question">{question}</p>
+        <p data-testid="session-gate-events-error" className="wk-session-gate-error">
+          The run's events could not be read, so this gate's choices are held back — nothing is offered on missing evidence.
+        </p>
+        <button
+          type="button"
+          data-testid="session-gate-events-retry"
+          className="wk-session-gate-send"
+          onClick={() => { fetchedForRef.current = null; setEventsFetchFailed(false); setEventsFetchAttempt((n) => n + 1); }}
+        >
+          Retry
+        </button>
       </div>
     );
   }

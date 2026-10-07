@@ -12,8 +12,8 @@
   "studioVersion": "0.6.2",
   "counts": {
     "files": 218,
-    "occurrences": 2498,
-    "static": 2186,
+    "occurrences": 2502,
+    "static": 2188,
     "dynamic": 79,
     "computed": 8
   },
@@ -8805,6 +8805,18 @@
     },
     {
       "testId": "session-gate-error",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-events-error",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-events-retry",
       "files": [
         "src/components/session/GateRow.tsx"
       ]

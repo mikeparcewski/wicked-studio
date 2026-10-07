@@ -485,3 +485,23 @@ describe('GateRow — overflow disabled choice cannot be sent', () => {
     expect(confirm).not.toHaveBeenCalled();
   });
 });
+
+describe('GateRow — the events read fails (security review: fail closed, never Approve on missing evidence)', () => {
+  it('offers no choice while GET /runs/:id/events is failed; Retry re-reads and the row then classifies', async () => {
+    useRunEventStore.setState({ byRun: {} });
+    const getRunEvents = vi.spyOn(client.api, 'getRunEvents')
+      .mockRejectedValueOnce(new Error('503'))
+      .mockResolvedValueOnce({ events: [] });
+    // A late join carries no gateKind: the classification depends on the event log.
+    render(<GateRow view={view()} gate={plainGate()} />);
+    await waitFor(() => expect(screen.getByTestId('session-gate-events-error')).toBeDefined());
+    expect(screen.getByTestId('session-gate-row').dataset['reason']).toBe('events-unavailable');
+    expect(screen.queryAllByTestId('session-gate-choice')).toHaveLength(0);
+    expect(useRunEventStore.getState().byRun[RUN]).toBeUndefined();
+    expect(getRunEvents).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByTestId('session-gate-events-retry'));
+    await waitFor(() => expect(screen.getAllByTestId('session-gate-choice')).toHaveLength(4));
+    expect(screen.queryByTestId('session-gate-events-error')).toBeNull();
+    expect(getRunEvents).toHaveBeenCalledTimes(2);
+  });
+});
