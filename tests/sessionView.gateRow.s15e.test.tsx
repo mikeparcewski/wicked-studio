@@ -394,8 +394,11 @@ describe('RunBlock — receipt survives unmount+remount through RunBlock routing
     fireEvent.click(screen.getByTestId('session-proposal-go'));
     await waitFor(() => {
       const st = useGateActionStore.getState().byGate[RUN_REM];
-      return st?.answered === 'approved' && st?.receipt?.kind === 'plan';
+      expect(st?.answered).toBe('approved');
+      expect(st?.receipt?.kind).toBe('plan');
     });
+    // The decision path cleared the open gate: what the remount shows comes from the receipt alone.
+    expect(useGateStore.getState().gates[RUN_REM]).toBeUndefined();
 
     unmount();
 
@@ -417,8 +420,10 @@ describe('RunBlock — receipt survives unmount+remount through RunBlock routing
     fireEvent.click(screen.getAllByTestId('session-gate-choice')[0]!); // Approve — no note needed
     await waitFor(() => {
       const st = useGateActionStore.getState().byGate[RUN_REM];
-      return st?.receipt?.kind === 'row';
+      expect(st?.answered).toBe('approved');
+      expect(st?.receipt?.kind).toBe('row');
     });
+    expect(useGateStore.getState().gates[RUN_REM]).toBeUndefined();
 
     unmount();
 
@@ -453,7 +458,8 @@ describe('GateRow — fold stays visible after gate clears', () => {
     // Wait for commitGateDecision to complete and store receipt to be written.
     await waitFor(() => {
       const st = useGateActionStore.getState().byGate[RUN];
-      return st?.answered === 'approved' && st?.receipt !== null;
+      expect(st?.answered).toBe('approved');
+      expect(st?.receipt?.kind).toBe('row');
     });
 
     // Unmount: chosen state lost; store receipt survives.
