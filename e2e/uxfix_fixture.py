@@ -2203,6 +2203,35 @@ ESC_EVENTS = {
          "prompt": ESC_PRERUN_PROMPT, "reviewingOrd": 1, "gateKind": "run_level"},
     ],
 }
+# studio#573: a DENIED unit — input governance refused the `test` phase's tool call (wicked-core's
+# `boundary_deny` pause). Floor PASS, judge PASS; the engine's arms are approve (RE-RUNS the phase) or
+# reject. Served under the same `escalation_arms` switch (e2e/desk_gate_kinds_test.py step 14).
+ESC_DENIED_PROMPT = ("Unit 2 was DENIED by input governance — a tool call was refused (`Bash`): the `test` phase wrote "
+                     "outside its write roots (claim witness-deny:unit-2). The phase's output was captured. Approve "
+                     "RE-RUNS the `test` phase from the start under the same policies (a retry; the captured output is "
+                     "not accepted), or reject to cancel the run")
+ESC_RUNS.append(_esc_run("r-denied", 1, [_esc_unit("r-denied", "fix", 1, "build", "creator", "done", "claude"),
+                                         _esc_unit("r-denied", "test", 2, "review", "evaluator", "rejected", "codex"),
+                                         _esc_unit("r-denied", "deliver", 3, "build", "neutral", "pending", None)]))
+ESC_GATES["r-denied"] = (2, ESC_DENIED_PROMPT)
+ESC_EVENTS["r-denied"] = [
+    {"type": "unitDispatched", "session": "r-denied", "ord": 1, "attempt": 0, "ts": ESC_T0, "seq": 1},
+    {"type": "unitDone", "session": "r-denied", "ord": 1, "ts": ESC_T0 + 6 * MIN, "seq": 2},
+    {"type": "unitDispatched", "session": "r-denied", "ord": 2, "attempt": 0, "ts": ESC_T0 + 7 * MIN, "seq": 3},
+    {"type": "gateEvaluated", "session": "r-denied", "ord": 2, "ts": ESC_T0 + 11 * MIN, "seq": 4,
+     "criterion": "tests pass on the head", "hasDeterministicFloor": True, "deterministicPass": True,
+     "agentVerdict": "PASS", "agentReasoning": "The tests cover the fix.", "evaluatorPass": True, "evaluatorPolicies": [],
+     "denialReason": "input governance denied a tool-call in unit-2 (claim witness-deny:unit-2)",
+     "denial": {"source": "input_governance", "reason": "input governance denied a tool-call in unit-2 (claim witness-deny:unit-2)",
+                "claimId": "witness-deny:unit-2", "ruleIds": [], "deniedTool": "Bash", "phase": "test"},
+     "combined": False, "judgeCli": "pi", "judgeDistinct": True},
+    {"type": "gateEscalated", "session": "r-denied", "ord": 2, "ts": ESC_T0 + 11 * MIN, "seq": 5, "attempt": 0,
+     "condition": "boundary_deny", "defGate": False, "denialSource": "input_governance", "discarded": [],
+     "outputCaptured": True, "restored": False, "suggestionRef": None, "verdictSummary": None},
+    {"type": "awaitingHuman", "session": "r-denied", "ord": 2, "ts": ESC_T0 + 11 * MIN + SEC, "seq": 6,
+     "prompt": ESC_DENIED_PROMPT, "reviewingOrd": 2, "gateKind": "escalation"},
+]
+
 ESC_OUTPUTS = {("r-prerun", "recon"): {"output": "Recon: the importer reads with split('\\n') and drops a trailing "
                                                  "row with no newline (src/importer.ts:41). Two call sites."}}
 

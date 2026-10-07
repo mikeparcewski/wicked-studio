@@ -511,3 +511,51 @@ describe('GateRow — the events read fails (security review: fail closed, never
     expect(getRunEvents).toHaveBeenCalledTimes(2);
   });
 });
+
+// ── studio#573: the denied unit's row, rendered ──────────────────────────────────────────────
+
+const DENIED_PROMPT_573 =
+  'Unit 2 was DENIED by input governance — a tool call was refused (`Bash`): the `test` phase wrote outside its ' +
+  'write roots. The phase\'s output was captured. Approve RE-RUNS the `test` phase from the start under the same ' +
+  'policies (a retry; the captured output is not accepted), or reject to cancel the run';
+const DENIED_EVENTS_573 = [
+  { type: 'unitDispatched', session: RUN, ord: 2, attempt: 0 },
+  {
+    type: 'gateEvaluated', session: RUN, ord: 2, criterion: null, hasDeterministicFloor: true, deterministicPass: true,
+    agentVerdict: 'PASS', agentReasoning: null, evaluatorPass: true, evaluatorPolicies: [],
+    denialReason: 'input governance denied a tool-call in unit-2',
+    denial: { source: 'input_governance', reason: 'input governance denied a tool-call in unit-2', claimId: null, ruleIds: [], deniedTool: 'Bash', phase: 'test' },
+    combined: false, judgeCli: 'pi', judgeDistinct: true,
+  },
+  { type: 'gateEscalated', session: RUN, ord: 2, attempt: 0, condition: 'boundary_deny', denialSource: 'input_governance', outputCaptured: true },
+  { type: 'awaitingHuman', session: RUN, ord: 2, prompt: DENIED_PROMPT_573, reviewingOrd: 2, gateKind: 'escalation' },
+] as unknown as import('../src/api/types.js').CoreEvent[];
+
+describe('GateRow — a denied unit (studio#573): Approve is on the row and suggested; Send back is not', () => {
+  it('renders approve · steer · stop, Approve preselected, under the denied-call question', () => {
+    useRunEventStore.setState({ byRun: { [RUN]: DENIED_EVENTS_573 } });
+    const units = [
+      makeUnit({ id: `${RUN}:fix`, session_id: RUN, ord: 1, stage: 'build', role: 'creator', status: 'done', assigned_cli: 'claude' }),
+      makeUnit({ id: `${RUN}:test`, session_id: RUN, ord: 2, stage: 'review', role: 'evaluator', status: 'rejected', assigned_cli: 'codex' }),
+    ];
+    const gate = plainGate({ ord: 2, gateKind: 'escalation', prompt: DENIED_PROMPT_573 });
+    render(<GateRow view={makeView({ id: RUN, status: 'awaiting_human' }, units)} gate={gate} />);
+    expect(screen.getByTestId('session-gate-row').dataset['reason']).toBe('escalation');
+    const choices = screen.getAllByTestId('session-gate-choice');
+    expect(choices.map((c) => c.getAttribute('data-choice-key'))).toEqual(['approve', 'steer', 'stop']);
+    expect(choices.map((c) => c.getAttribute('data-recommended'))).toEqual(['true', 'false', 'false']);
+    expect(screen.getByTestId('session-gate-question').textContent).toBe('A Bash call was denied — how should the step go on?');
+  });
+
+  it('clicking Approve sends {approve:true} with no action — the engine re-runs the phase', async () => {
+    useRunEventStore.setState({ byRun: { [RUN]: DENIED_EVENTS_573 } });
+    const gate = plainGate({ ord: 2, gateKind: 'escalation', prompt: DENIED_PROMPT_573 });
+    useGateStore.setState({ gates: { [RUN]: gate } });
+    render(<GateRow view={view()} gate={gate} />);
+    fireEvent.click(screen.getAllByTestId('session-gate-choice')[0]!);
+    await waitFor(() => expect(client.api.confirmGate).toHaveBeenCalled());
+    const body = (client.api.confirmGate as unknown as { mock: { calls: unknown[][] } }).mock.calls[0]![1] as Record<string, unknown>;
+    expect(body['approve']).toBe(true);
+    expect(body['action']).toBeUndefined();
+  });
+});
