@@ -13,6 +13,7 @@ import { useGateStore } from '../../store/gates.js';
 import { useRunEventStore } from '../../store/events.js';
 import { Tech } from '../Tech.js';
 import { draftLine } from '../../board/planDraft.js';
+import { planStepWords } from '../../board/planOrder.js';
 import { dropGateDraft, gateDraftFor, gateDraftPlan, usePlanDrafts } from '../../store/planDrafts.js';
 import { gateVerdictFor, checkOutcome } from '../gateVerdictModel.js';
 
@@ -116,6 +117,11 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
   if (card === null) return null;
   const instance = gateInstance(gate);
   const draft = card.kind === 'plan' && card.state === 'ask' ? gateDraftFor(drafts, runId, instance) : null;
+  // studio#574: the draft's order line names each step as the chain does (the proposal's steps,
+  // else the chain's live steps), so the card and the editor list read one vocabulary.
+  const planWords = draft !== null
+    ? planStepWords(chain.pending ?? chain.steps.filter((s) => s.state !== 'struck' && s.state !== 'replaced'))
+    : undefined;
 
   const answer = (): void => {
     if (sending.current || gate === undefined) return; // double clicks are ignored
@@ -249,7 +255,7 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
             </div>
           ) : (
             <>
-              {draft !== null && <p data-testid="session-proposal-draft" className="wk-prop-why"><b>{draftLine(draft)}</b> Approving sends your changes with it; nothing has been sent yet.</p>}
+              {draft !== null && <p data-testid="session-proposal-draft" className="wk-prop-why"><b>{draftLine(draft, planWords)}</b> Approving sends your changes with it; nothing has been sent yet.</p>}
               <div className="wk-prop-btns">
                 <button ref={goRef} type="button" data-testid="session-proposal-go" data-draft={draft !== null ? 'true' : 'false'} onClick={go} className="wk-prop-btn wk-prop-btn--primary">{draft !== null ? 'Approve with these changes' : card.act}</button>
                 {draft !== null && <button type="button" data-testid="session-proposal-drop-draft" onClick={() => dropGateDraft(runId, draft.gateKey)} className="wk-prop-btn wk-prop-btn--ghost">Drop the changes</button>}
@@ -288,7 +294,7 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
           </p>
           {card.canRetry && (
             <>
-              {draft !== null && <p data-testid="session-proposal-draft" className="wk-prop-why"><b>{draftLine(draft)}</b> Approving sends your changes with it; nothing has been sent yet.</p>}
+              {draft !== null && <p data-testid="session-proposal-draft" className="wk-prop-why"><b>{draftLine(draft, planWords)}</b> Approving sends your changes with it; nothing has been sent yet.</p>}
               <div className="wk-prop-btns">
                 <button ref={goRef} type="button" data-testid="session-proposal-go" data-draft={draft !== null ? 'true' : 'false'} onClick={go} className="wk-prop-btn wk-prop-btn--primary">{draft !== null ? 'Approve with these changes' : card.act}</button>
                 {draft !== null && <button type="button" data-testid="session-proposal-drop-draft" onClick={() => dropGateDraft(runId, draft.gateKey)} className="wk-prop-btn wk-prop-btn--ghost">Drop the changes</button>}

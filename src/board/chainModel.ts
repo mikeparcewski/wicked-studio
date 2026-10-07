@@ -113,6 +113,15 @@ export function stepLabelOf(id: string, catalogLabels: Record<string, string> = 
   return labelOf(blockOf(id), id, id, catalogLabels);
 }
 
+/** A plan step named from the engine's `{id, catalog}` pair by the chain's own rule — the id's word,
+ *  else the CATALOG's block word, else the id in words — for a caller that holds plan steps rather
+ *  than chain steps (studio#574: the plan editor's rows). The same step then reads the same in the
+ *  proposal sentence, the chain line and the editor list. */
+export function planStepLabel(id: string | null, catalog: string | null, catalogLabels: Record<string, string> = {}): string {
+  const cat = catalog ?? id ?? '';
+  return labelOf(blockOf(cat), id ?? cat, cat, catalogLabels);
+}
+
 /** Two steps of one run never share a label (studio#442: "Research, Research", "Review, Review").
  *  A repeated label falls back to each step's own id in words; if that still repeats, it is
  *  numbered in plan order ("Review 2"). Mutates and returns `steps`. */

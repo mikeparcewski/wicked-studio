@@ -80,7 +80,7 @@ export function PlanOrderEditor({ view, chain, size }: { view: SessionView; chai
 
   const line = mode === 'gate'
     ? (draft !== null
-      ? `${draftLine(draft)} Approve on the card to send it; nothing has been sent.`
+      ? `${draftLine(draft, g !== null ? orderContext(g).words : undefined)} Approve on the card to send it; nothing has been sent.`
       : 'Move a step up or down, or add one. The card sends your order when you approve.')
     : 'A running plan only grows: its order is set. A step you add joins at the run’s next step.';
   const addable = slashItems('', target, catalog);

@@ -1,7 +1,8 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
 import { draftChanges, draftLine, draftSteps, gateDraftPlan, orderChanged, type GateDraft } from '../src/board/planDraft.js';
-import { fixedAt, gateRows, hasPlanEditor, midRunRows, moveStep, orderContext, orderWords } from '../src/board/planOrder.js';
+import { fixedAt, gateRows, hasPlanEditor, midRunRows, moveStep, orderContext, orderWords, planStepWords, stepWord } from '../src/board/planOrder.js';
+import { stepLabelOf } from '../src/board/chainModel.js';
 import type { SessionView } from '../src/api/types.js';
 import type { ChainModel } from '../src/board/chainModel.js';
 import type { PlanGateView } from '../src/board/planModel.js';
@@ -139,5 +140,64 @@ describe('which runs get the plan artifact', () => {
     expect(hasPlanEditor(view('executing', null), units)).toBe(false);
     expect(hasPlanEditor(view('completed', 'preset'), units)).toBe(false);
     expect(hasPlanEditor(view('executing', 'preset'), undefined)).toBe(false);
+  });
+});
+
+// ── studio#574: one vocabulary — the editor names a step as the chain and the proposal do ────────
+
+describe('studio#574: the editor list, the chain line and the proposal sentence read one name per step', () => {
+  /** The engine's `feature` plan as the gate carries it: ids the chain names Clarify / Challenge, catalogs
+   *  the editor used to name Research / Review — "Review" twice once the real review scrolled in. */
+  const PLAN = [
+    { id: 'pa-scope', catalog: 'understand' }, { id: 'clarify', catalog: 'understand' }, { id: 'design', catalog: 'design' },
+    { id: 'build', catalog: 'build' }, { id: 'adversarial-review', catalog: 'review' }, { id: 'test', catalog: 'test' },
+    { id: 'review', catalog: 'review' }, { id: 'deliver', catalog: 'deliver' },
+  ];
+  const SEED = ['understand', 'design', 'build', 'review', 'test', 'review'];
+  const g = gate({ ord: 2, floorAdded: [], editSeed: SEED, planSteps: PLAN });
+
+  it('the rows read Scope · Clarify · Plan · Build · Challenge · Test · Review · Deliver — the ids’ words, as the chain names them', () => {
+    const labels = gateRows(g, null).map((r) => r.label);
+    expect(labels).toStrictEqual(['Scope', 'Clarify', 'Plan', 'Build', 'Challenge', 'Test', 'Review', 'Deliver']);
+    expect(labels).toStrictEqual(PLAN.map((s) => stepLabelOf(s.id)));
+    expect(labels.filter((l) => l === 'Review')).toHaveLength(1);
+  });
+
+  it('a refusal names the step the same way', () => {
+    const steps = draftSteps(draft({ seed: SEED }));
+    expect(moveStep(steps, 0, -1, orderContext(g))).toStrictEqual({ refused: 'Clarify is already first among the steps you can order.' });
+    const floored = gate({ ord: 2, floorAdded: ['test'], editSeed: SEED, planSteps: PLAN });
+    expect(moveStep(steps, 3, 1, orderContext(floored))).toStrictEqual({ refused: 'Challenge cannot pass Test: it is required for this risk — the floor put it here.' });
+  });
+
+  it('the draft line after a move reads the same words; without the plan’s words (an older caller) the catalogs’ stand', () => {
+    const steps = draftSteps(draft({ seed: SEED }));
+    const moved = moveStep(steps, 3, 1, orderContext(g));
+    const d = draft({ seed: SEED, order: 'steps' in moved ? moved.steps : null });
+    expect(draftLine(d, orderContext(g).words)).toBe('The order changes: Clarify → Plan → Build → Test → Challenge → Review.');
+    expect(draftLine(d)).toBe('The order changes: Research → Plan → Build → Test → Review → Review.');
+    expect(orderWords(draftSteps(d), orderContext(g).words)).toBe('Clarify → Plan → Build → Test → Challenge → Review');
+  });
+
+  it('a repeated word reads distinct — Critique / Review — as the chain reads it; an added step takes its catalog’s word', () => {
+    const plan = [{ id: 'critique', catalog: 'review' }, { id: 'review', catalog: 'review' }];
+    expect([...planStepWords(plan).entries()]).toStrictEqual([['review#1', 'Critique'], ['review#2', 'Review']]);
+    const rows = gateRows(gate({ ord: 1, floorAdded: [], editSeed: ['review', 'review'], planSteps: plan }), draft({ seed: ['review', 'review'], added: ['test'] }));
+    expect(rows.map((r) => [r.key, r.label])).toStrictEqual([['review#1', 'Critique'], ['review#2', 'Review'], ['+test#1', 'Test']]);
+  });
+
+  it('the scope step and the hand-over take no key; chain steps bring their own label; a nameless step is skipped', () => {
+    const w = planStepWords([
+      { id: 'pa-scope', catalog: 'understand', label: 'Scope' }, { id: 'clarify', catalog: 'understand', label: 'Clarify' },
+      { id: null, catalog: null }, { id: 'odd', catalog: null }, { id: 'deliver', catalog: 'deliver', label: 'Deliver' },
+    ]);
+    expect([...w.entries()]).toStrictEqual([['understand#1', 'Clarify']]);
+    expect(stepWord({ id: 'understand#1', catalog: 'understand' }, w)).toBe('Clarify');
+    expect(stepWord({ id: 'understand#2', catalog: 'understand' }, w)).toBe('Research');
+    expect(stepWord({ id: '+test#1', catalog: 'test' }, undefined)).toBe('Test');
+  });
+
+  it('a plan whose ids are its catalogs reads as before (the fixture corpus: Research · Plan · Build · Security check · Review)', () => {
+    expect(gateRows(gate(), null).map((r) => r.label)).toStrictEqual(['Scope', 'Research', 'Plan', 'Build', 'Security check', 'Review', 'Deliver']);
   });
 });

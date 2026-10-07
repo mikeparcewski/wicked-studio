@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import type { SessionView } from '../src/api/types.js';
 import type { RunTeamResponse, TeamRow } from '../src/api/teamPlan.js';
-import { blockOf, chainFromTeam, chainFromUnits, chainOf, chainSentence } from '../src/board/chainModel.js';
+import { blockOf, chainFromTeam, chainFromUnits, chainOf, chainSentence, planStepLabel, stepLabelOf } from '../src/board/chainModel.js';
 import { EMPTY_FOLD, foldFrame, foldRows, hydrateFold, teamFrameOf } from '../src/store/teamPlan.js';
 
 /**
@@ -319,5 +319,24 @@ describe('studio#442: the line lists what the plan gate asks about', () => {
     expect(c.steps.map((s) => [s.label, s.state])).toEqual([['Scope', 'done'], ['Clarify', 'todo'], ['Challenge', 'todo'], ['Review', 'todo']]);
     expect(c.pending?.map((s) => s.label)).toEqual(c.steps.map((s) => s.label));
     expect(chainSentence(c)).toBe('1 of 4 done');
+  });
+});
+
+// ── studio#574: the chain's naming rule, for a caller holding the engine's {id, catalog} pairs ────
+
+describe('studio#574: planStepLabel — the chain’s rule for an {id, catalog} pair', () => {
+  it('a known id takes its word whatever its catalog; an unknown id its catalog’s block word; no catalog → the id in words', () => {
+    expect(planStepLabel('clarify', 'understand')).toBe('Clarify');
+    expect(planStepLabel('adversarial-review', 'review')).toBe('Challenge');
+    expect(planStepLabel('understand', 'understand')).toBe(stepLabelOf('understand'));
+    expect(planStepLabel('fix-the-importer', 'build')).toBe('Build');
+    expect(planStepLabel('fix-the-importer', null)).toBe('Fix the importer');
+    expect(planStepLabel(null, 'test')).toBe('Test');
+    expect(planStepLabel(null, null)).toBe('Step');
+  });
+  it('agrees with the chain’s own labels for every step of a team plan', () => {
+    const ids = ['pa-scope', 'clarify', 'design', 'build', 'adversarial-review', 'test', 'review', 'deliver'];
+    const catalogs = ['understand', 'understand', 'design', 'build', 'review', 'test', 'review', 'deliver'];
+    expect(ids.map((id, i) => planStepLabel(id, catalogs[i]!))).toStrictEqual(ids.map((id) => stepLabelOf(id)));
   });
 });
