@@ -15,6 +15,7 @@ import { useDecisionsStore } from '../store/decisions.js';
 import { useNeedsSources } from '../store/needsSources.js';
 import { useNotificationStore } from '../store/notifications.js';
 import { useStallEscalationStore } from '../store/stallEscalations.js';
+import { orphanedRuns, useWatchStore } from '../store/watch.js';
 
 /**
  * THE needs-you fold (`needsYouRows` → `compareNeeds`), app-wide (DES-HOME-COMMAND-CENTER §3,
@@ -91,6 +92,10 @@ export function useNeedsRows(runs: SessionView[], now: number, runsKnown = true)
     [runs, lastEventAt, now],
   );
 
+  // studio#545: runs the daemon restart orphaned — the engine's report in the trail, folded by store/watch.
+  const watchFold = useWatchStore((s) => s.fold);
+  const orphanedAt = useMemo(() => orphanedRuns(watchFold), [watchFold]);
+
   return useMemo(
     () =>
       needsYouRows({
@@ -104,6 +109,7 @@ export function useNeedsRows(runs: SessionView[], now: number, runsKnown = true)
         repos: repos ?? [],
         campaigns,
         stalledAt,
+        orphanedAt,
         elicitations,
         steerRequests,
         stallEscalations,
@@ -113,7 +119,7 @@ export function useNeedsRows(runs: SessionView[], now: number, runsKnown = true)
         deliveredNow,
         now,
       }),
-    [runs, gates, failedAt, attachedAt, projectIds, chats, repos, campaigns, stalledAt, elicitations, steerRequests, stallEscalations, proposals, decisions, deliveryAttempted, deliveredNow, now, askTurnRuns],
+    [runs, gates, failedAt, attachedAt, projectIds, chats, repos, campaigns, stalledAt, orphanedAt, elicitations, steerRequests, stallEscalations, proposals, decisions, deliveryAttempted, deliveredNow, now, askTurnRuns],
   );
 }
 

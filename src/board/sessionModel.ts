@@ -210,3 +210,30 @@ export function sinceYouLeft(
     summary: parts.length === 0 ? 'Nothing changed' : parts.join(' · '),
   };
 }
+
+// ── studio#545: a run the daemon restart orphaned ───────────────────────────────────────────
+
+/** The row's one line: the engine's `runOrphaned` report — the daemon died mid-step and restored no
+ *  worker for the run, which stays `executing` (crew#830). */
+export const ORPHANED_LINE = 'The daemon restarted while this step was running; nothing is working on it.';
+
+/** The frame fields the orphan verdict reads (a `CoreEvent`, live or from the durable trail). */
+export interface OrphanFrame { type: string; ord?: number; ts?: number }
+
+/**
+ * studio#545 / crew#830: at boot the engine writes `runOrphaned{session, ord}` to the trail of every
+ * `executing` run it restored no worker for — a REPORT, not a terminal: the run stays `executing` and
+ * resumable. A resume (the daemon's own at boot, or `POST /runs/:id/resume`) dispatches the unit
+ * again, so a trail whose newest orphan-or-dispatch frame is the orphan is a run nobody is running.
+ * `null` for a run not `executing`, a trail not yet read (`undefined` — no verdict without the
+ * evidence), or one that moved on.
+ */
+export function orphanedOf(status: string, frames: readonly OrphanFrame[] | undefined): { ord: number | null; at: number | null } | null {
+  if (status !== 'executing' || frames === undefined) return null;
+  for (let i = frames.length - 1; i >= 0; i--) {
+    const f = frames[i]!;
+    if (f.type === 'unitDispatched') return null;
+    if (f.type === 'runOrphaned') return { ord: typeof f.ord === 'number' ? f.ord : null, at: typeof f.ts === 'number' ? f.ts : null };
+  }
+  return null;
+}

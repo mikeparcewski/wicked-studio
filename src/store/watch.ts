@@ -1,5 +1,7 @@
 import { create } from 'zustand';
-import type { SessionView } from '../api/types.js';
+import { api } from '../api/client.js';
+import type { CoreEvent, SessionView } from '../api/types.js';
+import { ORPHANED_LINE, orphanedOf } from '../board/sessionModel.js';
 import { wireDelivery } from '../board/windowStats.js';
 import {
   WATCH_CLEARED, WATCH_RAISED, type WatchAnchor, type WatchFeedResponse, type WatchFinding, type WatchFindingCleared,
@@ -156,10 +158,14 @@ function minutes(ms: number): string {
 }
 
 /** Watchdog frames and the run's next word. `at` is when the frame was seen (frames carry no clock). */
-export function foldWatchdog(fold: WatchFold, event: Record<string, unknown>, at: number): WatchFold {
+export function foldWatchdog(start: WatchFold, event: Record<string, unknown>, at: number): WatchFold {
   const runId = str(event['session']);
-  if (runId === null) return fold;
+  if (runId === null) return start;
   const type = event['type'];
+  // studio#545: the engine's orphan report (crew#830) is its own row — the run has no worker — and
+  // the run's next dispatch (the daemon's boot resume, or an operator's Resume) closes it.
+  const fold = foldOrphanFrame(start, runId, type, num(event['ord']), at);
+  if (type === 'runOrphaned') return fold;
   const open = fold.quietOpen[runId];
   if (type === 'workerStalled') {
     if (open !== undefined) return fold; // one row per quiet period
@@ -198,6 +204,48 @@ export function foldWatchdog(fold: WatchFold, event: Record<string, unknown>, at
   }
   // Any other word from the run re-arms the watchdog: the quiet period is over.
   return close({ state: 'fixed', stateLine: 'Moving again' });
+}
+
+/** The orphan row (`orphan:<run>`, one per run): `runOrphaned` opens it at the frame's clock (a second
+ *  report while it is open changes nothing); `unitDispatched` for the run turns it Resumed. */
+function foldOrphanFrame(fold: WatchFold, runId: string, type: unknown, ord: number | null, at: number): WatchFold {
+  const id = `orphan:${runId}`;
+  const prior = fold.rows[id];
+  if (type === 'runOrphaned') {
+    if (prior?.state === 'open') return fold;
+    const row: WatchRow = {
+      id, source: 'watchdog', kind: 'quiet', runId, projectId: prior?.projectId ?? null,
+      sentence: ORPHANED_LINE, at, state: 'open', stateLine: null,
+      severity: null, attach: null, anchor: { run_id: runId, ord, attempt: null, at }, rolledUp: 0,
+      corroboratedBy: [], foldedInto: null, place: null, ord, emit: null,
+    };
+    return { ...fold, rows: { ...fold.rows, [id]: row } };
+  }
+  if (type === 'unitDispatched' && prior?.state === 'open') {
+    return { ...fold, rows: { ...fold.rows, [id]: { ...prior, state: 'fixed', stateLine: 'Resumed' } } };
+  }
+  return fold;
+}
+
+/** studio#545: a run's durable trail (`GET /runs/:id/events`), read for the orphan verdict a late join
+ *  never saw live: a trail ending on the report opens the row at the report's own clock; one that
+ *  carries the report AND a dispatch after it closes an open row. A trail with no report says nothing
+ *  about a row a live frame opened (codex r1 #2). Nothing else in the trail is folded here. */
+export function foldTrail(fold: WatchFold, runId: string, frames: readonly CoreEvent[], now: number): WatchFold {
+  const verdict = orphanedOf('executing', frames);
+  if (verdict !== null) return foldOrphanFrame(fold, runId, 'runOrphaned', verdict.ord, verdict.at ?? now);
+  const reported = frames.some((f) => f.type === 'runOrphaned');
+  return reported && fold.rows[`orphan:${runId}`]?.state === 'open' ? foldOrphanFrame(fold, runId, 'unitDispatched', null, now) : fold;
+}
+
+/** The runs with an open orphan row: run id → the report's clock — the needs-you fold's `orphanedAt`
+ *  and the Watchtower's count (studio#545). */
+export function orphanedRuns(fold: WatchFold): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const r of Object.values(fold.rows)) {
+    if (r.id.startsWith('orphan:') && r.state === 'open' && r.runId !== null) out[r.runId] = r.at;
+  }
+  return out;
 }
 
 // ── 3. team findings ──────────────────────────────────────────────────────────────────────
@@ -270,6 +318,12 @@ export function foldRuns(fold: WatchFold, runs: readonly SessionView[], projectO
     // `{kind:'pull_request', url}` object (board/windowStats `wireDelivery`, Copilot).
     const delivery = wireDelivery(v);
     const at = typeof s.ended_at === 'number' ? s.ended_at * 1000 : null;
+    // studio#545: an orphan row stays open only while its run is still `executing`.
+    const orphan = rows[`orphan:${s.id}`];
+    if (orphan !== undefined && orphan.state === 'open' && s.status !== 'executing') {
+      rows[orphan.id] = { ...orphan, state: 'fixed', stateLine: s.status === 'completed' ? 'Finished' : `Ended (${s.status})` };
+      changed = true;
+    }
     if (s.status !== 'completed' || at === null) continue;
     const base = {
       source: 'run' as const, runId: s.id, projectId: projectOf?.(s.id) ?? sessionProject(v), at, state: 'done' as const, stateLine: null,
@@ -355,8 +409,14 @@ interface WatchStore {
   hydrate: (resp: WatchFeedResponse) => void;
   failFeed: (error: string | null) => void;
   runs: (runs: readonly SessionView[], projectOf?: (runId: string) => string | null) => void;
+  /** A run's durable trail, folded for the orphan verdict (studio#545; `foldTrail`). */
+  trail: (runId: string, frames: readonly CoreEvent[]) => void;
   reset: () => void;
 }
+
+/** studio#545: the executing runs whose trail this client has asked for (once each — the live `/ws`
+ *  frames keep the fold current from there on; a failed read stays asked: no verdict, no storm). */
+const probed = new Set<string>();
 
 export const useWatchStore = create<WatchStore>((set, get) => ({
   fold: EMPTY_WATCH,
@@ -375,6 +435,19 @@ export const useWatchStore = create<WatchStore>((set, get) => ({
   runs: (runs, projectOf) => {
     const next = foldRuns(get().fold, runs, projectOf);
     if (next !== get().fold) set({ fold: next });
+    // studio#545: a late join never saw the engine's orphan report live — it is in the durable trail.
+    for (const v of runs) {
+      const id = v.session.id;
+      if (v.session.status !== 'executing' || probed.has(id)) continue;
+      probed.add(id);
+      api.getRunEvents(id)
+        .then(({ events }) => { get().trail(id, events); })
+        .catch(() => { /* no trail read, no verdict */ });
+    }
   },
-  reset: () => set({ fold: EMPTY_WATCH, feedError: null, registry: 'unknown' }),
+  trail: (runId, frames) => {
+    const next = foldTrail(get().fold, runId, frames, Date.now());
+    if (next !== get().fold) set({ fold: next });
+  },
+  reset: () => { probed.clear(); set({ fold: EMPTY_WATCH, feedError: null, registry: 'unknown' }); },
 }));

@@ -1,10 +1,11 @@
 // @vitest-environment node
-import { describe, expect, it } from 'vitest';
-import type { SessionView } from '../src/api/types.js';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { api } from '../src/api/client.js';
+import type { CoreEvent, SessionView } from '../src/api/types.js';
 import type { WatchFinding, WatchFindingCleared } from '../src/api/watch-wire.js';
 import {
-  EMPTY_WATCH, coverageLine, foldCleared, foldFeed, foldFinding, foldRuns, foldTeamFrame, foldWatchFrame, foldWatchdog,
-  gateLine, jumpPath, parseJump, runPath, useWatchStore, watchFeed,
+  EMPTY_WATCH, coverageLine, foldCleared, foldFeed, foldFinding, foldRuns, foldTeamFrame, foldTrail, foldWatchFrame, foldWatchdog,
+  gateLine, jumpPath, orphanedRuns, parseJump, runPath, useWatchStore, watchFeed,
 } from '../src/store/watch.js';
 
 /**
@@ -198,5 +199,71 @@ describe('jump in, coverage, the store', () => {
     useWatchStore.getState().ingest(frame('wicked.crew.watch_finding.raised', finding()) as never);
     useWatchStore.getState().ingest({ type: 'workerStalled', session: 'r-2', quietForMs: 60_000 });
     expect(watchFeed(useWatchStore.getState().fold).map((r) => r.kind).sort()).toStrictEqual(['problem', 'quiet']);
+  });
+});
+
+describe('a run the daemon restart orphaned (studio#545 / crew#830)', () => {
+  const LINE = 'The daemon restarted while this step was running; nothing is working on it.';
+  const trail: CoreEvent[] = [
+    { type: 'sessionStarted', session: 'r-o', ts: 1_000, seq: 1 },
+    { type: 'unitDispatched', session: 'r-o', ord: 1, ts: 2_000, seq: 2 },
+    { type: 'runOrphaned', session: 'r-o', ord: 1, ts: 9_000, seq: 3 },
+  ];
+  afterEach(() => { vi.restoreAllMocks(); useWatchStore.getState().reset(); });
+
+  it('the live report opens one row at its clock; a second report changes nothing; the next dispatch turns it Resumed', () => {
+    let f = foldWatchdog(EMPTY_WATCH, { type: 'runOrphaned', session: 'r-o', ord: 1 }, 100);
+    expect(watchFeed(f).map((r) => [r.id, r.kind, r.sentence, r.state, r.at, r.ord])).toStrictEqual([['orphan:r-o', 'quiet', LINE, 'open', 100, 1]]);
+    expect(foldWatchdog(f, { type: 'runOrphaned', session: 'r-o', ord: 1 }, 200)).toBe(f);
+    expect(orphanedRuns(f)).toStrictEqual({ 'r-o': 100 });
+    f = foldWatchdog(f, { type: 'unitDispatched', session: 'r-o', ord: 1, cli: 'claude' }, 300);
+    expect(f.rows['orphan:r-o']!.state).toBe('fixed');
+    expect(f.rows['orphan:r-o']!.stateLine).toBe('Resumed');
+    expect(orphanedRuns(f)).toStrictEqual({});
+  });
+
+  it('the report does not touch an open Gone quiet row; a dispatch closes both', () => {
+    let f = foldWatchdog(EMPTY_WATCH, { type: 'workerStalled', session: 'r-o', ord: 1, quietForMs: 60_000 }, 1);
+    f = foldWatchdog(f, { type: 'runOrphaned', session: 'r-o', ord: 1 }, 2);
+    expect(f.rows['quiet:r-o:1']!.state).toBe('open');
+    expect(f.rows['orphan:r-o']!.state).toBe('open');
+    f = foldWatchdog(f, { type: 'unitDispatched', session: 'r-o', ord: 1 }, 3);
+    expect([f.rows['quiet:r-o:1']!.state, f.rows['orphan:r-o']!.state]).toStrictEqual(['fixed', 'fixed']);
+  });
+
+  it('the durable trail (a late join): ending on the report opens the row at the report\'s clock; a dispatch after it closes an open row', () => {
+    let f = foldTrail(EMPTY_WATCH, 'r-o', trail, 50_000);
+    expect(orphanedRuns(f)).toStrictEqual({ 'r-o': 9_000 });
+    expect(foldTrail(f, 'r-o', trail, 60_000)).toBe(f);
+    f = foldTrail(f, 'r-o', [...trail, { type: 'unitDispatched', session: 'r-o', ord: 1, ts: 10_000, seq: 4 }], 60_000);
+    expect(f.rows['orphan:r-o']!.state).toBe('fixed');
+    // A trail without the report says nothing: no row opens, and a row a LIVE frame opened stays (codex r1 #2).
+    expect(foldTrail(EMPTY_WATCH, 'r-x', trail.slice(0, 2), 1)).toBe(EMPTY_WATCH);
+    const live = foldWatchdog(EMPTY_WATCH, { type: 'runOrphaned', session: 'r-o', ord: 1 }, 100);
+    expect(foldTrail(live, 'r-o', trail.slice(0, 2), 200)).toBe(live);
+    expect(foldTrail(live, 'r-o', [], 200)).toBe(live);
+  });
+
+  it('the run list closes the row when the run is no longer executing', () => {
+    const f = foldWatchdog(EMPTY_WATCH, { type: 'runOrphaned', session: 'r-o', ord: 1 }, 100);
+    const cancelled = { session: { id: 'r-o', status: 'cancelled' }, units: [] } as unknown as SessionView;
+    const g = foldRuns(f, [cancelled]);
+    expect(g.rows['orphan:r-o']!.state).toBe('fixed');
+    expect(g.rows['orphan:r-o']!.stateLine).toBe('Ended (cancelled)');
+    const executing = { session: { id: 'r-o', status: 'executing' }, units: [] } as unknown as SessionView;
+    expect(foldRuns(f, [executing])).toBe(f);
+  });
+
+  it('the store reads each executing run\'s trail once and folds the verdict; a terminal run is never asked', async () => {
+    const read = vi.spyOn(api, 'getRunEvents').mockImplementation((id) => Promise.resolve({ events: id === 'r-o' ? trail : [] }));
+    const runs = [
+      { session: { id: 'r-o', status: 'executing' }, units: [] },
+      { session: { id: 'r-live', status: 'executing' }, units: [] },
+      { session: { id: 'r-done', status: 'completed' }, units: [] },
+    ] as unknown as SessionView[];
+    useWatchStore.getState().runs(runs);
+    useWatchStore.getState().runs(runs);
+    await vi.waitFor(() => expect(orphanedRuns(useWatchStore.getState().fold)).toStrictEqual({ 'r-o': 9_000 }));
+    expect(read.mock.calls.map((c) => c[0]).sort()).toStrictEqual(['r-live', 'r-o']);
   });
 });

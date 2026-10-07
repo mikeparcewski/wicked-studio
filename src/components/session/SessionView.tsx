@@ -4,7 +4,7 @@ import type { ChatPathView, SessionView as RunView } from '../../api/types.js';
 import { needsByRun } from '../../board/deskModel.js';
 import type { NeedRow } from '../../board/needsYou.js';
 import {
-  CLOSED_LINE, conversationOf, parseSessionId, runChatIdOf, sessionPath, sessionState, sessionTitle, sinceYouLeft,
+  CLOSED_LINE, conversationOf, ORPHANED_LINE, orphanedOf, parseSessionId, runChatIdOf, sessionPath, sessionState, sessionTitle, sinceYouLeft,
   type Conversation, type SessionState,
 } from '../../board/sessionModel.js';
 import type { Navigate } from '../../hooks/useRoute.js';
@@ -15,6 +15,7 @@ import type { ChatCitations } from '../../api/chat-wire.js';
 import { IDLE_GATE_ACTION, useGateActionStore } from '../../board/gateActions.js';
 import { proposalKindOf, statusSentence } from '../../board/proposalCard.js';
 import { useGateStore } from '../../store/gates.js';
+import { useRunEventStore } from '../../store/events.js';
 import { ChainLine, useRunChain } from './ChainLine.js';
 import { ProposalCard } from './ProposalCard.js';
 import { GateRow } from './GateRow.js';
@@ -604,6 +605,7 @@ export function RunBlock({ view, badge, sessionId }: {
       </p>
       {/* S6b: the run's ONE status sentence, then its proposal (the plan, the hand-over). */}
       <p data-testid="session-status-sentence" role="status" className="wk-session-status-sentence">{statusSentence(view, chain, gate, action)}</p>
+      <OrphanedRow view={view} />
       {/* S15e: plan and deliver go through ProposalCard; every other gate kind is answered in the thread. */}
       {effectiveKind === 'plan' || effectiveKind === 'deliver'
         ? <ProposalCard view={view} chain={chain} acceptance={acceptance?.summary ?? null} />
@@ -614,6 +616,47 @@ export function RunBlock({ view, badge, sessionId }: {
       <RunArtifacts view={view} composerKey={sessionId} chain={chain} />
       <RunHelpers view={view} />
     </section>
+  );
+}
+
+/**
+ * studio#545: a run the daemon restart orphaned says so — the engine's `runOrphaned` report is the
+ * newest dispatch-or-orphan frame of its trail (`board/sessionModel.orphanedOf`) — and offers the one
+ * move that fixes it: Resume (`POST /runs/:id/resume`). The trail is read once here when nothing else
+ * on the page has (a late join); a failed read is no verdict, so a bare run never claims an orphan.
+ */
+function OrphanedRow({ view }: { view: RunView }): React.ReactElement | null {
+  const id = view.session.id;
+  const status = view.session.status;
+  const frames = useRunEventStore((s) => s.byRun[id]);
+  const fetchedFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (frames !== undefined || status !== 'executing' || fetchedFor.current === id) return;
+    fetchedFor.current = id;
+    api.getRunEvents(id)
+      .then(({ events }) => { useRunEventStore.getState().hydrate(id, events); })
+      .catch(() => { /* no trail read, no verdict */ });
+  }, [id, status, frames]);
+  const [sent, setSent] = useState<'idle' | 'sending' | 'asked' | 'failed'>('idle');
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => { setSent('idle'); setError(null); }, [id]);
+  const orphan = orphanedOf(status, frames);
+  if (orphan === null) return null;
+  const resume = (): void => {
+    setSent('sending');
+    api.resumeRun(id)
+      .then(() => api.getRunEvents(id))
+      .then(({ events }) => { useRunEventStore.getState().hydrate(id, events); setSent('asked'); })
+      .catch((e: unknown) => { setSent('failed'); setError(e instanceof Error ? e.message : String(e)); });
+  };
+  return (
+    <p data-testid="session-orphaned" role="status" {...(orphan.ord !== null ? { 'data-ord': String(orphan.ord) } : {})} className="wk-session-grey wk-session-orphaned">
+      {ORPHANED_LINE}{' '}
+      {sent === 'asked'
+        ? <span data-testid="session-orphaned-asked">Resume asked — waiting for the step to start again.</span>
+        : <button type="button" data-testid="session-orphaned-resume" disabled={sent === 'sending'} onClick={resume} className="wk-since-toggle">{sent === 'sending' ? 'Resuming…' : 'Resume'}</button>}
+      {sent === 'failed' && <span data-testid="session-orphaned-error"> Resume failed: {error}</span>}
+    </p>
   );
 }
 

@@ -3,7 +3,7 @@ import type { SessionView } from '../../api/types.js';
 import type { WatchKind } from '../../api/watch-wire.js';
 import { readWatch, useWatchFeed } from '../../hooks/useWatchFeed.js';
 import type { Navigate } from '../../hooks/useRoute.js';
-import { jumpPath, runPath, useWatchStore, type WatchRow } from '../../store/watch.js';
+import { jumpPath, orphanedRuns, runPath, useWatchStore, type WatchRow } from '../../store/watch.js';
 import { liveCount, watchSentence } from '../desk/WatchPill.js';
 
 /** The feed's kinds, in the words the page uses (TR §4.10's five). */
@@ -49,6 +49,8 @@ export function WatchtowerPage({ count, runs, navigate, now }: {
   const rows = useMemo(() => (kind === null ? all : all.filter((r) => r.kind === kind)), [all, kind]);
   const feedError = useWatchStore((s) => s.feedError);
   const registry = useWatchStore((s) => s.registry);
+  // studio#545: runs a daemon restart orphaned — nobody is working on them until a Resume.
+  const orphaned = useWatchStore((s) => Object.keys(orphanedRuns(s.fold)).length);
   const [retrying, setRetrying] = useState(false);
   const go = (path: string) => (e: React.MouseEvent): void => { e.preventDefault(); navigate(path); };
 
@@ -57,6 +59,11 @@ export function WatchtowerPage({ count, runs, navigate, now }: {
       <header className="wk-watchtower-head">
         <h1 className="wk-session-title">Watchtower</h1>
         <p data-testid="watchtower-sentence" data-count={count} className="wk-session-status">{watchSentence(count, liveCount(runs))}</p>
+        {orphaned > 0 && (
+          <p data-testid="watchtower-orphaned" data-count={orphaned} className="wk-session-grey">
+            {orphaned === 1 ? '1 run was orphaned by a restart — nothing is working on it.' : `${orphaned} runs were orphaned by a restart — nothing is working on them.`}
+          </p>
+        )}
       </header>
       <div className="wk-watchtower-body">
         <div role="group" aria-label="Show" className="wk-watchtower-kinds">
