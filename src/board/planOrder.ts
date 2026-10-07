@@ -67,13 +67,15 @@ export interface OrderContext {
  * key; a step with no catalog cannot be keyed and is skipped.
  */
 export function planStepWords(steps: readonly { id: string | null; catalog: string | null; label?: string }[]): ReadonlyMap<string, string> {
+  // A step with no catalog cannot be keyed, so it is out before the distinct pass as well: it must
+  // not turn the keyed `review#1` into "Review 2" (codex r1).
   const named = distinctLabels(steps
-    .filter((s) => s.id !== null || s.catalog !== null)
-    .map((s) => ({ id: s.id ?? s.catalog ?? '', catalog: s.catalog, label: s.label ?? planStepLabel(s.id, s.catalog) })));
+    .filter((s): s is { id: string | null; catalog: string; label?: string } => s.catalog !== null)
+    .map((s) => ({ id: s.id ?? s.catalog, catalog: s.catalog, label: s.label ?? planStepLabel(s.id, s.catalog) })));
   const seen = new Map<string, number>();
   const out = new Map<string, string>();
   for (const s of named) {
-    if (s.catalog === null || s.id === PA_SCOPE_STEP || s.catalog === DELIVER_STEP) continue;
+    if (s.id === PA_SCOPE_STEP || s.catalog === DELIVER_STEP) continue;
     const n = (seen.get(s.catalog) ?? 0) + 1;
     seen.set(s.catalog, n);
     out.set(`${s.catalog}#${n}`, s.label);

@@ -186,6 +186,11 @@ describe('studio#574: the editor list, the chain line and the proposal sentence 
     expect(rows.map((r) => [r.key, r.label])).toStrictEqual([['review#1', 'Critique'], ['review#2', 'Review'], ['+test#1', 'Test']]);
   });
 
+  it('a step with no catalog is out before the distinct pass: it never turns the keyed review into "Review 2" (codex r1)', () => {
+    const w = planStepWords([{ id: 'review', catalog: null }, { id: 'review', catalog: 'review' }, { id: 'build', catalog: 'build' }]);
+    expect([...w.entries()]).toStrictEqual([['review#1', 'Review'], ['build#1', 'Build']]);
+  });
+
   it('the scope step and the hand-over take no key; chain steps bring their own label; a nameless step is skipped', () => {
     const w = planStepWords([
       { id: 'pa-scope', catalog: 'understand', label: 'Scope' }, { id: 'clarify', catalog: 'understand', label: 'Clarify' },
