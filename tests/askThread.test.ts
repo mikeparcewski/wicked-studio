@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { TeamRow } from '../src/api/teamPlan.js';
-import { askLines, askPathOf, askShapeLabel, isAskTurnGate } from '../src/board/askThread.js';
+import { askLines, askPathOf, askShapeFooter, askShapeLabel, isAskTurnGate } from '../src/board/askThread.js';
 
 /**
  * DES-ASK-TEAM-CHAT-001 §4.8 (slice ASK-S1): the ask thread's quiet lines, folded from the run's
@@ -243,5 +243,22 @@ describe('every quiet line expands to its row (codex #12)', () => {
     expect(lines.find((l) => l.kind === 'repick')!.detail[0]).toMatch(/^timed_out · re-pick 1 · at /);
     expect(lines.find((l) => l.kind === 'restart')!.detail[0]).toMatch(/^answer-1 · attempt 2 · at /);
     expect(lines.find((l) => l.kind === 'ended')!.detail[0]).toMatch(/^cancelled · at /);
+  });
+});
+
+describe('askShapeFooter — the shape line names a reviewer only when one attached (studio#540)', () => {
+  it('an attached reviewer reviews; a member whose join FAILED stays on record in the path but is not a reviewer (as GET /chats/:id says: its path.reviewer is null)', () => {
+    expect(askShapeFooter(askPathOf([started, proposed, accepted, claimed, reviewing]))).toBe('Shape: answer · claude answers · codex reviews');
+    const refused = row('member.joined', { by: 'opencode', ord: 1, attempt: 0, member_id: 'm1', open_seq: 1, seat: 'opencode', role: 'monitor', status: 'failed', reason: 'team plan monitors=1', error: "'opencode' is the creator's own seat instance — a member must be distinct" });
+    const path = askPathOf([started, proposed, accepted, claimed, refused]);
+    expect(path.reviewer).toEqual({ seat: 'opencode', status: 'failed', error: "'opencode' is the creator's own seat instance — a member must be distinct" });
+    expect(askShapeFooter(path)).toBe('Shape: answer · claude answers');
+    expect(askShapeFooter(path)).not.toMatch(/reviews/);
+    // The refusal is still on record as its own line.
+    expect(askLines([started, proposed, accepted, claimed, refused]).find((l) => l.kind === 'reviewer')!.text).toBe("No reviewer — opencode can't join: 'opencode' is the creator's own seat instance — a member must be distinct");
+  });
+  it('no shape yet → no line; a PA not yet picked → the steps alone', () => {
+    expect(askShapeFooter(askPathOf([started]))).toBeNull();
+    expect(askShapeFooter({ ...askPathOf([started, proposed, accepted, claimed, reviewing]), pa: null })).toBe('Shape: answer · codex reviews');
   });
 });

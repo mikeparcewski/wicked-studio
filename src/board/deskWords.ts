@@ -103,7 +103,35 @@ function pausedStepQuestion(p: string, gateKind: string | undefined): string | n
 /** A run's title in the default layer. Onboarding runs say which repo ("Set up checkout-demo"):
  *  the title fold cut "Onboard repository: <name>" at its colon, so every one read the same. */
 export function plainRunTitle(problem: string): string {
-  return onboardTitle(problem) ?? humanTitle(problem);
+  return onboardTitle(problem) ?? askTitle(problem) ?? humanTitle(problem);
+}
+
+// ── studio#540: an ask run's title ──────────────────────────────────────────────────────────
+
+/** Is this run's `problem` crew's chat-scope statement — the run is a chat's ask path? Crew sets an
+ *  ask run's `problem` to the statement its seats read (`routes.ts`: `chatScopeStatement(...)`):
+ *  the `# Chat scope` heading AND its scratch-root sentence — the heading alone is not it, so an
+ *  operator's own question that happens to open with that heading keeps its words (codex r1 #1). */
+export function isChatScopeProblem(problem: string): boolean {
+  return /^#\s*Chat scope\s*\n\s*This directory is the scratch root of wicked-crew chat\b/i.test(problem.trimStart());
+}
+
+/**
+ * An ask run's title (studio#540): its `problem` is a seat briefing ("# Chat scope · This directory
+ * is the scratch root …"), so the clause cut titled every ask "# Chat scope". The statement never
+ * carries the question — that is the chat's first turn, which {@link sessionTitle} takes whenever
+ * the transcript is at hand (crew#823 tracks putting the question on the run itself) — so this
+ * says what the statement DOES say: what the conversation is about. `null` for any other run.
+ */
+export function askTitle(problem: string): string | null {
+  if (!isChatScopeProblem(problem)) return null;
+  const repos = [...problem.matchAll(/^- \*\*([^*\n]+)\*\*/gm)].map((m) => m[1]!.trim()).filter((r) => r !== '');
+  if (repos.length > 0) {
+    const about = repos.length <= 2 ? repos.join(' and ') : `${repos.slice(0, 2).join(', ')} and ${repos.length - 2} more`;
+    return `A conversation about ${about}`;
+  }
+  if (/^## Scope: system\b/m.test(problem)) return 'A conversation about the wicked platform';
+  return 'A conversation';
 }
 
 // ── studio#424: finished work kept on this machine ──────────────────────────────────────────

@@ -4,7 +4,7 @@ import type { SessionView, SessionWithDelivery } from '../src/api/types.js';
 import { needsYouRows, type NeedsYouInputs } from '../src/board/needsYou.js';
 import { needTextByRun, railGroups } from '../src/board/deskModel.js';
 import { sessionTitle } from '../src/board/sessionModel.js';
-import { KEPT_LINE, keptLocally, plainGateQuestion, plainRunTitle } from '../src/board/deskWords.js';
+import { askTitle, isChatScopeProblem, KEPT_LINE, keptLocally, plainGateQuestion, plainRunTitle } from '../src/board/deskWords.js';
 import { makeUnit, makeView } from './factories.js';
 
 /**
@@ -173,5 +173,26 @@ describe('#424 a run launched without delivery is kept, not stranded', () => {
     expect(rows.map((r) => r.key)).toStrictEqual(['stranded:r-stuck']);
     expect(rows[0]!.text).not.toMatch(/no PR/);
     expect(rows[0]!.text).not.toMatch(/stranded/i);
+  });
+});
+
+describe('#540 an ask run is never titled "# Chat scope"', () => {
+  const head = '# Chat scope\n\nThis directory is the scratch root of wicked-crew chat `c-1`. It is the ONLY place you may write.\n\n';
+  it('names what the statement says the conversation is about', () => {
+    expect(plainRunTitle(`${head}## Repositories in scope (READ-ONLY)\n\n- **alpha** (\`r-1\`): \`/srv/repos/alpha\`\n`)).toBe('A conversation about alpha');
+    expect(plainRunTitle(`${head}## Scope: everything\n\n## Repositories in scope (READ-ONLY)\n\n- **alpha** (\`r-1\`): \`/a\`\n- **beta** (\`r-2\`): \`/b\`\n`)).toBe('A conversation about alpha and beta');
+    expect(plainRunTitle(`${head}- **a** (\`1\`): \`/a\`\n- **b** (\`2\`): \`/b\`\n- **c** (\`3\`): \`/c\`\n- **d** (\`4\`): \`/d\`\n`)).toBe('A conversation about a, b and 2 more');
+    expect(plainRunTitle(`${head}## Scope: system\n\nThis chat is about the wicked platform itself.\n`)).toBe('A conversation about the wicked platform');
+    expect(plainRunTitle(`${head}## Repositories in scope\n\nNone. This chat was opened without a project or repo scope.\n`)).toBe('A conversation');
+  });
+  it('only a chat-scope statement is folded; every other problem keeps its clause', () => {
+    expect(isChatScopeProblem(head)).toBe(true);
+    expect(isChatScopeProblem('Chat scope: fix the double charge')).toBe(false);
+    // The heading alone is an operator's words, not crew's statement (codex r1 #1).
+    expect(isChatScopeProblem('# Chat scope\n\nwhich repos can this chat see?')).toBe(false);
+    expect(plainRunTitle('# Chat scope\nwhich repos can this chat see?')).toBe('# Chat scope');
+    expect(askTitle('fix the double charge on checkout. Then show me')).toBeNull();
+    expect(plainRunTitle('fix the double charge on checkout. Then show me')).toBe('fix the double charge on checkout');
+    expect(plainRunTitle('Onboard repository: alpha')).toBe('Set up alpha');
   });
 });
