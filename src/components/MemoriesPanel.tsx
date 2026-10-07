@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   isMemoryUnsupported,
   listMemories,
@@ -92,12 +92,22 @@ export function MemoriesPanel(): React.ReactElement {
     void load(query);
   }, [load, query]);
 
-  useEffect(() => {
-    // The coverage summary is a bonus header line — a daemon that cannot answer just omits it.
+  // The coverage summary is a bonus header line — a daemon that cannot answer just omits it. Re-read
+  // after every retire: the empty state reads the total to tell "no hits" from "empty store" (#406),
+  // so a stale count after erasing the last row would call an empty store non-empty (codex, MEDIUM).
+  // Generation-guarded: only the NEWEST read may land (a pre-retire read resolving after the
+  // post-retire one would otherwise put the stale count back — codex round 2 on this PR).
+  const coverageGen = useRef(0);
+  const loadCoverage = useCallback((): void => {
+    const gen = ++coverageGen.current;
     void memoryCoverage()
-      .then((c) => setCoverage(c))
-      .catch(() => setCoverage(null));
+      .then((c) => { if (gen === coverageGen.current) setCoverage(c); })
+      .catch(() => { if (gen === coverageGen.current) setCoverage(null); });
   }, []);
+
+  useEffect(() => {
+    loadCoverage();
+  }, [loadCoverage]);
 
   /** Every `key=value` facet pair the loaded set carries — the filter's chips. */
   const facetPairs = useMemo(() => {
@@ -119,6 +129,13 @@ export function MemoriesPanel(): React.ReactElement {
     setQuery(queryInput.trim());
   };
 
+  /** The zero-hit search's Clear: back to the unfiltered listing (the `query` effect re-reads). */
+  const clearQuery = (): void => {
+    setQueryInput('');
+    setFacet(null);
+    setQuery('');
+  };
+
   const confirmRetire = (): void => {
     if (retiring === null) return;
     const target = retiring;
@@ -130,6 +147,7 @@ export function MemoriesPanel(): React.ReactElement {
           setRetiring(null);
           setNote(`Retired 1 memory from ${target.scope === '' ? 'the root scope' : target.scope}. Nothing else in the scope was touched.`);
           void load(query);
+          loadCoverage();
         })
         .catch((e: unknown) => {
           setNote(
@@ -147,6 +165,7 @@ export function MemoriesPanel(): React.ReactElement {
         setRetireCount(null);
         setNote(`Retired scope ${target.scope} — erased ${erased} memor${erased === 1 ? 'y' : 'ies'}.`);
         void load(query);
+        loadCoverage();
       })
       .catch((e: unknown) => {
         setNote(`Could not retire ${target.scope}: ${e instanceof Error ? e.message : String(e)}`);
@@ -327,7 +346,28 @@ export function MemoriesPanel(): React.ReactElement {
         </p>
       ) : visible.length === 0 ? (
         <p data-testid="memories-empty" className="rounded px-3 py-2 text-xs" style={{ background: 'var(--surface-rail)', border: '1px solid var(--surface-raised)', color: 'var(--ink-muted)' }}>
-          {memories.length === 0 ? 'No memories in the store.' : 'No memories match this facet.'}
+          {/* #406: `memories` is the SEARCH result, not the store — a zero-hit query must not say the
+              store is empty while the header says "N in store". "No memories in the store." is only
+              for a store whose coverage total is 0 (or unknown with nothing to narrow by). */}
+          {memories.length > 0 ? (
+            'No memories match this facet.'
+          ) : query !== '' && coverageTotal !== 0 ? (
+            <>
+              No memories match &ldquo;{query}&rdquo;.{' '}
+              <button
+                type="button"
+                onClick={clearQuery}
+                className="font-semibold underline focus:outline-none focus-visible:ring-1"
+                style={{ color: 'var(--accent)' }}
+              >
+                Clear search
+              </button>
+            </>
+          ) : coverageTotal !== null && coverageTotal > 0 ? (
+            `The store holds ${coverageTotal} memor${coverageTotal === 1 ? 'y' : 'ies'} but the listing returned none — try a search.`
+          ) : (
+            'No memories in the store.'
+          )}
         </p>
       ) : (
         <ul data-testid="memories-list" className="flex flex-col gap-2">
