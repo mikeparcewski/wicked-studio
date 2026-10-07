@@ -152,6 +152,17 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
   const isPlanGate = planGate.isPlanGate;
   const [editingPlan, setEditingPlan] = useState(false);
   const planEdit = usePhaseSelection(editingPlan);
+  // #485: the gate instance open now (`ord:receivedAt`, as the plan-gate store keys its reads). A
+  // picker opened on one instance never survives into the next — a successor gate opening while
+  // the predecessor's plan is being edited closes the editor, so "Approve the edited plan" can never
+  // post the predecessor's steps under the successor's fresh read.
+  const gateInstance = useGateStore((s) => {
+    const g = s.gates[runId];
+    return g === undefined ? null : `${g.ord}:${g.receivedAt}`;
+  });
+  useEffect(() => {
+    setEditingPlan(false);
+  }, [gateInstance]);
   // F-7R2-008: the intake gate — the engine's pre-run gate on the run's FIRST unit — renders the
   // planned phases + seats above the prompt, so "approve" is an informed act over the plan.
   const intake = !isPlanGate && isIntakeGate(prompt, ord, units ?? EMPTY_UNITS);
@@ -497,13 +508,20 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
   // D11: approve the plan gate WITH the edited plan (T9's picker, seeded from the held plan).
   const approveEditedPlan = (): Promise<void> => {
     const plan = planEdit.plan;
-    if (plan === null) return Promise.resolve();
+    // #485: only a plan seeded from a read for THIS gate instance may be posted.
+    if (plan === null || !planGate.fresh) return Promise.resolve();
     return run(() => commitGateDecision(runId, { approve: true, plan: { steps: plan.steps } }), { kind: 'approve' });
   };
+  // #485: seed the picker only from a view read for the gate instance open now (`fresh`, as the
+  // composer and the plan editor already do) — the cached view may be the PREDECESSOR gate's plan
+  // while the successor's team read is still on its way, and approving that would drop every step
+  // the successor added. While `reading`, the card says the plan is being read.
   const openPlanEdit = (): void => {
-    planEdit.replace(planGate.view?.editSeed ?? []);
+    if (!planGate.fresh || planGate.view === null) return;
+    planEdit.replace(planGate.view.editSeed);
     setEditingPlan(true);
   };
+  const planEditReady = planGate.fresh && planGate.view !== null;
 
   // Escalation Retry: re-dispatches the failed unit. Optionally carries the amend note — the
   // deliver-unit prompt says "Approve to retry (optionally amend)" and other escalation shapes
@@ -726,6 +744,13 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
 
       {/* D10: why the plan scored as it did — score, band, reasons, the floor's additions. */}
       {isPlanGate && <PlanGateSummary view={planGate.view} />}
+
+      {/* #485: a read for THIS gate instance is still on its way — the picker waits for it. */}
+      {isPlanGate && planGate.reading && (
+        <p className="mb-2 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
+          Reading the plan for this gate… the plan editor opens once it lands.
+        </p>
+      )}
 
       {/* D11: the edited plan — T9's picker, seeded with the held plan's authored phases. The
           launch's deliver step is the engine's to place; it is never authored in an edit. */}
@@ -963,7 +988,7 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
               <button
                 data-testid="plan-gate-approve-edited"
                 onClick={() => void approveEditedPlan()}
-                disabled={locked || planEdit.plan === null}
+                disabled={locked || planEdit.plan === null || !planEditReady}
                 className={lead(true)}
               >
                 Approve the edited plan
@@ -972,7 +997,8 @@ export function SteeringGate({ runId, ord, prompt, guidance, repoRef, units, cli
               <button
                 data-testid="plan-gate-edit-open"
                 onClick={openPlanEdit}
-                disabled={locked}
+                disabled={locked || !planEditReady}
+                {...(planGate.reading ? { title: 'Reading the plan for this gate…' } : {})}
                 className={BTN.secondary}
               >
                 Edit the plan…

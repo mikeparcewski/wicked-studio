@@ -4,7 +4,7 @@
 // "Approve + steer", which the daemon refuses there ("takes an edited plan, not amend text").
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { SteeringGate } from '../src/components/SteeringGate.js';
 import { ChatInput } from '../src/components/ChatInput.js';
@@ -117,8 +117,11 @@ describe('SteeringGate on a plan_approval gate', () => {
       skill_ref: null, description: null })) as never });
     const confirm = vi.spyOn(client.api, 'confirmGate').mockResolvedValue({ ok: true } as never);
     const user = userEvent.setup();
+    // The live gate frame: the picker seeds only from a read made for THIS instance (#485).
+    useGateStore.setState({ gates: { 'run-plan-edit': { runId: 'run-plan-edit', ord: 2, prompt: PROMPT, lifecycle: 'open', receivedAt: 1, gateKind: 'plan_approval' } } });
     render(<SteeringGate runId="run-plan-edit" ord={2} prompt={PROMPT} />);
     await waitFor(() => expect(screen.getByTestId('plan-gate-summary').dataset.state).toBe('ready'));
+    await waitFor(() => expect(screen.getByTestId('plan-gate-edit-open')).toBeEnabled());
 
     await user.click(screen.getByTestId('plan-gate-edit-open'));
     await waitFor(() => expect(screen.getByTestId('phase-picker').dataset.catalogState).toBe('ready'));
@@ -137,6 +140,83 @@ describe('SteeringGate on a plan_approval gate', () => {
       ] },
     });
     expect('amend' in (decision as object)).toBe(false);
+  });
+
+  // #485 — the picker can only open on a read for the gate instance open NOW.
+  const CATALOG = ['understand', 'design', 'produce', 'critique', 'review', 'test', 'deliver'];
+  function teamWith(steps: string[]): RunTeamResponse {
+    const base = highRiskTeam();
+    return {
+      ...base,
+      rows: [
+        { event_id: 617, event_type: 'wicked.team.plan.proposed', payload: { kind: 'initial', steps: [...steps, 'deliver'].map((id) => ({ catalog: id, id })) } },
+        base.rows[1]!,
+      ],
+    };
+  }
+  function mockCatalog(): void {
+    vi.spyOn(teamPlanApi, 'catalog').mockResolvedValue({ entries: CATALOG.map((id) => ({ id, kind: 'build', role: 'neutral', gate: 'auto', gate_type: null, executes_code: false,
+      executor: id === 'deliver' ? 'tool' : 'agent', validator_pin: null, pinned: false, evidence_floor: false, skill_ref: null, description: null })) as never });
+  }
+  const gateAt = (runId: string, receivedAt: number) => ({ runId, ord: 2, prompt: PROMPT, lifecycle: 'open', receivedAt, gateKind: 'plan_approval' });
+
+  it("a successor gate never opens the picker on its predecessor's plan: while its read is held the card says so, once fresh the POST carries the successor's steps (#485)", async () => {
+    const RUN = 'run-485-fresh';
+    const team = vi.spyOn(teamPlanApi, 'team').mockResolvedValue(teamWith(['understand', 'produce']));
+    mockCatalog();
+    const confirm = vi.spyOn(client.api, 'confirmGate').mockResolvedValue({ ok: true } as never);
+    const user = userEvent.setup();
+
+    // G1: its read lands.
+    useGateStore.setState({ gates: { [RUN]: gateAt(RUN, 1) } });
+    render(<SteeringGate runId={RUN} ord={2} prompt={PROMPT} />);
+    await waitFor(() => expect(screen.getByTestId('plan-gate-summary').dataset.state).toBe('ready'));
+    await waitFor(() => expect(screen.getByTestId('plan-gate-edit-open')).toBeEnabled());
+
+    // G2 opens (a new gate instance) with its team read HELD.
+    let release: (() => void) | null = null;
+    team.mockImplementation(() => new Promise<RunTeamResponse>((resolve) => { release = () => resolve(teamWith(['understand', 'design', 'produce'])); }));
+    act(() => { useGateStore.setState({ gates: { [RUN]: gateAt(RUN, 2) } }); });
+    await waitFor(() => expect(team).toHaveBeenCalledTimes(2));
+
+    // The picker does not open on the cached (G1) plan; the card says the plan is being read.
+    const open = screen.getByTestId('plan-gate-edit-open');
+    expect(open).toBeDisabled();
+    expect(open).toHaveAttribute('title', 'Reading the plan for this gate…');
+    expect(screen.getByText(/Reading the plan for this gate/)).toBeInTheDocument();
+    await user.click(open);
+    expect(screen.queryByTestId('plan-gate-edit')).toBeNull();
+
+    // G2's read lands → fresh: the picker opens on G2's plan and the POST carries design.
+    act(() => { release!(); });
+    await waitFor(() => expect(screen.getByTestId('plan-gate-edit-open')).toBeEnabled());
+    expect(screen.queryByText(/Reading the plan for this gate/)).toBeNull();
+    await user.click(screen.getByTestId('plan-gate-edit-open'));
+    await waitFor(() => expect(screen.getByTestId('phase-picker').dataset.catalogState).toBe('ready'));
+    await user.click(screen.getByTestId('plan-gate-approve-edited'));
+    await waitFor(() => expect(confirm).toHaveBeenCalledTimes(1));
+    const [, decision] = confirm.mock.calls[0]!;
+    expect(decision).toMatchObject({ approve: true, plan: { steps: [{ catalog: 'understand' }, { catalog: 'design' }, { catalog: 'produce' }] } });
+  });
+
+  it("a picker already open on G1's plan closes when G2 opens — the predecessor's steps are never posted under the successor's read (#485)", async () => {
+    const RUN = 'run-485-close';
+    const team = vi.spyOn(teamPlanApi, 'team').mockResolvedValue(teamWith(['understand', 'produce']));
+    mockCatalog();
+    const confirm = vi.spyOn(client.api, 'confirmGate').mockResolvedValue({ ok: true } as never);
+    const user = userEvent.setup();
+    useGateStore.setState({ gates: { [RUN]: gateAt(RUN, 1) } });
+    render(<SteeringGate runId={RUN} ord={2} prompt={PROMPT} />);
+    await waitFor(() => expect(screen.getByTestId('plan-gate-edit-open')).toBeEnabled());
+    await user.click(screen.getByTestId('plan-gate-edit-open'));
+    await waitFor(() => expect(screen.getByTestId('phase-picker').dataset.catalogState).toBe('ready'));
+
+    team.mockImplementation(() => new Promise<RunTeamResponse>(() => { /* held */ }));
+    act(() => { useGateStore.setState({ gates: { [RUN]: gateAt(RUN, 2) } }); });
+    await waitFor(() => expect(screen.queryByTestId('plan-gate-edit')).toBeNull());
+    expect(screen.queryByTestId('plan-gate-approve-edited')).toBeNull();
+    expect(screen.getByTestId('plan-gate-edit-open')).toBeDisabled();
+    expect(confirm).not.toHaveBeenCalled();
   });
 
   it('reject is the bare reject, whatever a draft note holds', async () => {
