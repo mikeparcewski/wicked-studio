@@ -101,3 +101,46 @@ describe('a rejected plan ends cancelled (studio#478)', () => {
     expect(screen.getByTestId('failure-reject-note')).toHaveTextContent('You rejected it: “not this week”');
   });
 });
+
+describe('an engine cancel is never attributed to the operator (studio#537)', () => {
+  it('send-back then runCancelled with no reject ⇒ "Run cancelled — the engine stopped it", the send-back shown as a send-back', () => {
+    const view = makeView({ status: 'cancelled' });
+    useProvenanceStore.setState((s) => ({
+      rejectNotes: { ...s.rejectNotes, [view.session.id]: null },
+      cancelStories: { ...s.cancelStories, [view.session.id]: { rejectNote: null, sendBackNote: 'Fix the reviewer\'s failing items', engineTimedOut: true } },
+    }));
+    render(<FailureBanner view={view} log={[]} />);
+    const banner = screen.getByTestId('failure-banner');
+    expect(banner).toHaveAttribute('data-cause', 'engine-timeout');
+    expect(banner).toHaveTextContent('Run cancelled — the engine stopped it');
+    expect(banner).not.toHaveTextContent('You rejected it');
+    expect(screen.queryByTestId('failure-reject-note')).toBeNull();
+    expect(screen.getByTestId('failure-send-back-note')).toHaveTextContent('Your last send-back to the creator (acted on — not a rejection): “Fix the reviewer\'s failing items”');
+  });
+
+  it('a cancel with no story on record stays the plain "Run cancelled." — nothing is invented', () => {
+    const view = makeView({ status: 'cancelled' });
+    useProvenanceStore.setState((s) => ({
+      rejectNotes: { ...s.rejectNotes, [view.session.id]: null },
+      cancelStories: { ...s.cancelStories, [view.session.id]: { rejectNote: null, sendBackNote: null, engineTimedOut: false } },
+    }));
+    render(<FailureBanner view={view} log={[]} />);
+    const banner = screen.getByTestId('failure-banner');
+    expect(banner).toHaveAttribute('data-cause', 'unattributed');
+    expect(banner.textContent).toContain('Run cancelled.');
+    expect(banner).not.toHaveTextContent('the engine stopped it');
+    expect(screen.queryByTestId('failure-send-back-note')).toBeNull();
+  });
+
+  it('a real rejection still reads "You rejected it" even when a turn also timed out', () => {
+    const view = makeView({ status: 'cancelled' });
+    useProvenanceStore.setState((s) => ({
+      rejectNotes: { ...s.rejectNotes, [view.session.id]: 'not this week' },
+      cancelStories: { ...s.cancelStories, [view.session.id]: { rejectNote: 'not this week', sendBackNote: 'earlier send-back', engineTimedOut: true } },
+    }));
+    render(<FailureBanner view={view} log={[]} />);
+    expect(screen.getByTestId('failure-banner')).toHaveAttribute('data-cause', 'rejected');
+    expect(screen.getByTestId('failure-reject-note')).toHaveTextContent('You rejected it: “not this week”');
+    expect(screen.queryByTestId('failure-send-back-note')).toBeNull();
+  });
+});

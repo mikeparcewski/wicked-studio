@@ -36,16 +36,22 @@ export function FailureBanner({ view, log, navigate }: Props): React.ReactElemen
   const { status } = view.session;
   // studio#478: the note the operator rejected with (crew's gate audit; the run page loads it once).
   const rejectNote = useProvenanceStore((s) => s.rejectNotes[view.session.id] ?? null);
+  // studio#537: the rest of the cancel story off the same fetch — a send-back is not a rejection, and
+  // the daemon's turn-ceiling mark says the ENGINE stopped the run.
+  const story = useProvenanceStore((s) => s.cancelStories[view.session.id] ?? null);
   if (status !== 'failed' && status !== 'cancelled') return null;
 
   const lastError = [...log].reverse().find((e) => e.type === 'error');
   const denied = view.units.filter((u) => u.denial_reason || u.status === 'rejected');
 
   if (status === 'cancelled') {
+    const engineStopped = rejectNote === null && story?.engineTimedOut === true;
+    const sendBack = rejectNote === null ? story?.sendBackNote ?? null : null;
     return (
       <div
         data-testid="failure-banner"
         data-kind="cancelled"
+        data-cause={rejectNote !== null ? 'rejected' : engineStopped ? 'engine-timeout' : 'unattributed'}
         className="rounded-lg p-3 text-xs font-mono"
         style={{
           background: 'var(--surface-raised)',
@@ -53,10 +59,15 @@ export function FailureBanner({ view, log, navigate }: Props): React.ReactElemen
           color: 'var(--ink-muted)',
         }}
       >
-        Run cancelled.
+        {engineStopped ? 'Run cancelled — the engine stopped it: a worker turn hit its time ceiling.' : 'Run cancelled.'}
         {rejectNote !== null && (
           <p data-testid="failure-reject-note" className="mt-1" style={{ color: 'var(--ink-body)', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
             You rejected it: “{rejectNote}”
+          </p>
+        )}
+        {sendBack !== null && (
+          <p data-testid="failure-send-back-note" className="mt-1" style={{ color: 'var(--ink-body)', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
+            Your last send-back to the creator (acted on — not a rejection): “{sendBack}”
           </p>
         )}
         {navigate !== undefined && <div><AllRunsLink navigate={navigate} filter="cancelled" /></div>}

@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { waitFor } from '@testing-library/react';
 import * as client from '../src/api/client.js';
 import type { AuditEntry } from '../src/api/types.js';
-import { deriveProvenance, rejectNoteOf, useProvenanceStore } from '../src/store/provenance.js';
+import { cancelStoryOf, deriveProvenance, ENGINE_TIMEOUT_AUDIT, rejectNoteOf, sendBackNoteOf, useProvenanceStore } from '../src/store/provenance.js';
 
 /**
  * DES-UX-001 §3 — provenance derivation over the REAL audit wire shape
@@ -178,6 +178,45 @@ describe('rejectNoteOf', () => {
     expect(rejectNoteOf([decided('r-2', { approve: false, amend: 'x' })], 'r-1')).toBeNull();
     expect(rejectNoteOf([launched('r-1')], 'r-1')).toBeNull();
   });
+  // studio#537: the operator's last gate answer was "Send back to the creator" (`approve:false,
+  // action:'request_changes', amend`); 2 h 45 m later the engine timed the creator out and cancelled.
+  // That send-back is NOT a rejection — the run page must never caption the cancel "You rejected it".
+  it('a send-back (approve:false + action:request_changes) is NOT a rejection; the reject arm is', () => {
+    const sendBack = decided('r-1', { approve: false, action: 'request_changes', amend: 'Fix the reviewer\'s failing items' }, 3);
+    expect(rejectNoteOf([sendBack, launched('r-1')], 'r-1')).toBeNull();
+    expect(sendBackNoteOf([sendBack, launched('r-1')], 'r-1')).toBe('Fix the reviewer\'s failing items');
+    // The explicit reject arm and the legacy two-arm wire both ARE rejections.
+    expect(rejectNoteOf([decided('r-1', { approve: false, action: 'reject', amend: 'no' })], 'r-1')).toBe('no');
+    expect(rejectNoteOf([decided('r-1', { approve: false, amend: 'no' })], 'r-1')).toBe('no');
+    // A send-back newer than a real rejection does not shadow it, and an approve never reads as a send-back.
+    expect(rejectNoteOf([sendBack, decided('r-1', { approve: false, amend: 'older real reject' }, 2)], 'r-1')).toBe('older real reject');
+    expect(sendBackNoteOf([decided('r-1', { approve: true, action: 'approve', amend: 'steer' })], 'r-1')).toBeNull();
+  });
+
+  it('cancelStoryOf: send-back then an engine timeout ⇒ no reject note, the send-back kept as such, engineTimedOut', () => {
+    const timedOut: AuditEntry = {
+      ts: 4, action: ENGINE_TIMEOUT_AUDIT, actor: { id: 'crew.daemon', kind: 'system', trust: 'admin' }, runId: 'r-1', detail: { ord: 6 },
+    };
+    const entries = [timedOut, decided('r-1', { approve: false, action: 'request_changes', amend: 'Fix the reviewer\'s failing items' }, 3), launched('r-1')];
+    expect(cancelStoryOf(entries, 'r-1')).toEqual({ rejectNote: null, sendBackNote: 'Fix the reviewer\'s failing items', engineTimedOut: true });
+    // Another run's timeout is not this run's; a plain rejection reads as one.
+    expect(cancelStoryOf([{ ...timedOut, runId: 'r-2' }], 'r-1')).toEqual({ rejectNote: null, sendBackNote: null, engineTimedOut: false });
+    expect(cancelStoryOf([decided('r-1', { approve: false, amend: 'not this week' })], 'r-1')).toEqual({ rejectNote: 'not this week', sendBackNote: null, engineTimedOut: false });
+  });
+
+  it('the store keeps the cancel story beside the reject note, from the same one fetch', async () => {
+    const spy = vi.spyOn(client.api, 'getAudit').mockResolvedValue({ entries: [
+      { ts: 5, action: ENGINE_TIMEOUT_AUDIT, actor: { id: 'crew.daemon', kind: 'system', trust: 'admin' }, runId: 'r-537', detail: { ord: 6 } },
+      decided('r-537', { approve: false, action: 'request_changes', amend: 'step 4 is the whole of e2e/' }),
+      launched('r-537'),
+    ] });
+    useProvenanceStore.getState().load('r-537');
+    await waitFor(() => expect(useProvenanceStore.getState().cancelStories['r-537']).toEqual({ rejectNote: null, sendBackNote: 'step 4 is the whole of e2e/', engineTimedOut: true }));
+    expect(useProvenanceStore.getState().rejectNotes['r-537']).toBeNull();
+    expect(spy).toHaveBeenCalledTimes(1);
+    spy.mockRestore();
+  });
+
   it('the store keeps it beside the provenance, from the same one fetch', async () => {
     const spy = vi.spyOn(client.api, 'getAudit').mockResolvedValue({ entries: [decided('r-478', { approve: false, amend: 'not this week' }), launched('r-478')] });
     useProvenanceStore.getState().load('r-478');

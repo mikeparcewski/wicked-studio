@@ -12,8 +12,8 @@
   "studioVersion": "0.6.3",
   "counts": {
     "files": 218,
-    "occurrences": 2517,
-    "static": 2195,
+    "occurrences": 2518,
+    "static": 2196,
     "dynamic": 79,
     "computed": 9
   },
@@ -3790,6 +3790,12 @@
     },
     {
       "testId": "failure-rule-link",
+      "files": [
+        "src/components/FailureBanner.tsx"
+      ]
+    },
+    {
+      "testId": "failure-send-back-note",
       "files": [
         "src/components/FailureBanner.tsx"
       ]

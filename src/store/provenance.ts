@@ -84,20 +84,72 @@ export function deriveProvenance(
 }
 
 /**
- * studio#478: the note the operator typed when they rejected a gate, off the same audit page —
- * crew records every gate decision as `gate.decided` with `detail.approve` and `detail.amend`. The
- * newest rejection for this run that carried words; `null` when none did. (The engine's own
- * `gate.decided` team event has no note; the HTTP audit is where the words are kept.)
+ * studio#537: a `gate.decided` is a REJECTION only on the reject arm — `approve: false` with no
+ * `action` (the legacy two-arm wire) or `action: 'reject'`. `approve: false` + `action:
+ * 'request_changes'` is a SEND-BACK: the creator was rewound and handed the note, the run went
+ * on. Before this every `approve: false` read as a rejection, so an engine cancel hours after a
+ * send-back was captioned "You rejected it" with the send-back note as the reason.
  */
-export function rejectNoteOf(entries: readonly AuditEntry[], runId: string): string | null {
+function isRejection(d: Record<string, unknown>): boolean {
+  return d['approve'] === false && (d['action'] === undefined || d['action'] === 'reject');
+}
+
+function isSendBack(d: Record<string, unknown>): boolean {
+  return d['approve'] === false && d['action'] === 'request_changes';
+}
+
+/** The newest `gate.decided` for this run that `pick` accepts AND carried words; `null` when none did. */
+function gateNoteOf(entries: readonly AuditEntry[], runId: string, pick: (d: Record<string, unknown>) => boolean): string | null {
   for (const e of entries) {
     if (e.action !== 'gate.decided' || e.runId !== runId) continue;
     const d = (e.detail ?? {}) as Record<string, unknown>;
-    if (d['approve'] !== false) continue;
+    if (!pick(d)) continue;
     const amend = typeof d['amend'] === 'string' ? d['amend'].trim() : '';
     if (amend !== '') return amend;
   }
   return null;
+}
+
+/**
+ * studio#478: the note the operator typed when they rejected a gate, off the same audit page —
+ * crew records every gate decision as `gate.decided` with `detail.approve` and `detail.amend`. The
+ * newest rejection for this run that carried words; `null` when none did. (The engine's own
+ * `gate.decided` team event has no note; the HTTP audit is where the words are kept.) A send-back
+ * (`action: 'request_changes'`) is NOT a rejection (studio#537) — see {@link sendBackNoteOf}.
+ */
+export function rejectNoteOf(entries: readonly AuditEntry[], runId: string): string | null {
+  return gateNoteOf(entries, runId, isRejection);
+}
+
+/** studio#537: the newest send-back note (`approve: false, action: 'request_changes', amend`) — what the
+ *  creator received and acted on; shown as a send-back, never as a rejection. */
+export function sendBackNoteOf(entries: readonly AuditEntry[], runId: string): string | null {
+  return gateNoteOf(entries, runId, isSendBack);
+}
+
+/** The daemon's own audit mark for the engine's turn ceiling (`WICKED_UNIT_TIMEOUT_SECS`) —
+ *  "A worker turn hit its time ceiling and was stopped" (handover's SYSTEM_ACTION_TEXT). */
+export const ENGINE_TIMEOUT_AUDIT = 'run.turn.timedout';
+
+/**
+ * studio#537: why a cancelled run ended, off the one audit fetch — the banner says exactly what the
+ * record holds and puts no words in the operator's mouth:
+ *  - `rejectNote`      — the operator REJECTED a gate with these words (the run was cancelled by that);
+ *  - `sendBackNote`    — the operator's last send-back to the creator (acted on; not a rejection);
+ *  - `engineTimedOut`  — the daemon recorded a worker turn hitting the engine's time ceiling.
+ */
+export interface CancelStory {
+  rejectNote: string | null;
+  sendBackNote: string | null;
+  engineTimedOut: boolean;
+}
+
+export function cancelStoryOf(entries: readonly AuditEntry[], runId: string): CancelStory {
+  return {
+    rejectNote: rejectNoteOf(entries, runId),
+    sendBackNote: sendBackNoteOf(entries, runId),
+    engineTimedOut: entries.some((e) => e.action === ENGINE_TIMEOUT_AUDIT && e.runId === runId),
+  };
 }
 
 /** SessionStorage key for runs this studio session launched (survives page reload). */
@@ -126,6 +178,8 @@ interface ProvenanceStore {
   byRun: Record<string, Provenance>;
   /** studio#478: the newest reject note per run ({@link rejectNoteOf}), from the same one fetch. */
   rejectNotes: Record<string, string | null>;
+  /** studio#537: why a cancelled run ended ({@link cancelStoryOf}), from the same one fetch. */
+  cancelStories: Record<string, CancelStory>;
   /** Run ids THIS studio session launched (the `studio` channel witness). */
   launchedHere: Record<string, true>;
   markLaunchedHere: (runId: string) => void;
@@ -139,6 +193,7 @@ const inflight = new Set<string>();
 export const useProvenanceStore = create<ProvenanceStore>((set, get) => ({
   byRun: {},
   rejectNotes: {},
+  cancelStories: {},
   launchedHere: {},
 
   markLaunchedHere: (runId) => {
@@ -163,6 +218,7 @@ export const useProvenanceStore = create<ProvenanceStore>((set, get) => ({
             [runId]: deriveProvenance(entries, runId, launchedHere),
           },
           rejectNotes: { ...s.rejectNotes, [runId]: rejectNoteOf(entries, runId) },
+          cancelStories: { ...s.cancelStories, [runId]: cancelStoryOf(entries, runId) },
         }));
       })
       .catch(() => {
