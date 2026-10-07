@@ -163,7 +163,7 @@ describe('the triage cursor (slice H, §2.2)', () => {
     render(<Harness items={items} navigate={navigate} />);
     press('j');
     press('a');
-    expect(navigate).toHaveBeenCalledWith('/p/p1/build/r1#gate');
+    expect(navigate).toHaveBeenCalledWith('/s/run%3Ar1#gate');
     expect(client.api.confirmGate).not.toHaveBeenCalled();
   });
 

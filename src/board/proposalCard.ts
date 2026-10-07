@@ -1,4 +1,3 @@
-import { plainGateQuestion } from './deskWords.js';
 import { executingOrd } from '../api/run-state.js';
 import type { SessionView, WorkUnit } from '../api/types.js';
 import { deliverUnit, deliveryOf } from '../components/delivery.js';
@@ -26,9 +25,7 @@ import type { AskProposal } from './askThread.js';
  *  - "Not now" sends nothing: the proposal is kept in the thread, with "Bring it back".
  */
 
-/** `step` (studio#469): any other open gate — a step before it runs, a step's output, an author's
- *  own question — so every gate the session says is "Waiting on you" can be answered there. */
-export type ProposalKind = 'plan' | 'deliver' | 'step';
+export type ProposalKind = 'plan' | 'deliver';
 export type ProposalState = 'ask' | 'confirm' | 'run' | 'done' | 'cancelled' | 'fail' | 'no';
 
 /** A step's label in words: never the engine's instruction segment (` ||| …`, `INSTRUCTION_SEP`). */
@@ -67,35 +64,15 @@ const TERMINAL: ReadonlySet<string> = new Set(['completed', 'failed', 'cancelled
  *  proposal — its card carries the failure, the evidence and the retry (Copilot). */
 const FAILURE_PROMPT = /LIFT-CONFLICT|BASE MOVED|failed and triage escalated|verdict is NOT PASS|deliver: .*refused/i;
 
-/** The proposal a gate makes, or null (every other gate is the row's or its card's). A plan
- *  approval is classified first; an escalation is never a hand-over. */
+/** The proposal a gate makes, or null (every other gate is the session thread's GateRow). A plan
+ *  approval is classified first; an escalation is never a hand-over. def / run_level / unit_review
+ *  gates belong to GateRow (Approve / Approve and steer / Send back / Stop). */
 export function proposalKindOf(runId: string, gate: OpenGate | undefined, units: readonly WorkUnit[]): ProposalKind | null {
   if (gate === undefined) return null;
   if (gate.gateKind === 'plan_approval' || /^\s*Approve plan rev \d+/i.test(gate.prompt)) return 'plan';
   if (gate.gateKind === 'escalation' || FAILURE_PROMPT.test(gate.prompt)) return null;
   if (gate.gateKind === 'deliver' || isDeliverGate(runId, units, gate.ord)) return 'deliver';
-  // Gate kinds that are not a plain yes to the next step (a team dispute, the transport) stay with
-  // their own cards; every other gate is a step to approve (studio#469).
-  if (gate.gateKind !== undefined && !STEP_GATE_KINDS.has(gate.gateKind)) return null;
-  return 'step';
-}
-
-/** The gate kinds a step proposal answers: a workflow's declared gate, the launch's pre-execution
- *  gate, and a gate whose daemon names no kind. */
-const STEP_GATE_KINDS: ReadonlySet<string> = new Set(['def', 'run_level', 'unit_review']);
-
-/** A step gate's question, in the Desk row's words (`plainGateQuestion`): "Start the triage step?",
- *  "Accept the review?", or the author's own question. */
-export function stepQuestion(gate: OpenGate): { text: string; why: string } {
-  const q = plainGateQuestion(gate.prompt, gate.gateKind);
-  const what = /^Approve (.+)$/.exec(q)?.[1];
-  if (/^\s*Approve unit \d+ before it runs/i.test(gate.prompt) && what !== undefined) {
-    return { text: `Start ${what}?`, why: 'Go lets it start; nothing runs until you say so.' };
-  }
-  if (/^\s*Approve the output of unit \d+/i.test(gate.prompt) && what !== undefined) {
-    return { text: `Accept ${what}?`, why: 'Go accepts it and the run goes on.' };
-  }
-  return { text: q, why: 'Go approves it; Not now leaves it waiting.' };
+  return null;
 }
 
 /** One gate instance: a run can reopen a gate at the same ord, which asks afresh (Copilot). */
@@ -278,7 +255,6 @@ export function proposalCard(input: ProposalInput): ProposalCardModel | null {
 
   if (kind !== null && gate !== undefined) {
     const card = base(kind);
-    const step = kind === 'step' ? stepQuestion(gate) : null;
     const ask = kind === 'plan' ? input.ask ?? null : null;
     if (ask !== null) {
       const words = askProposalWords(ask, null);
@@ -289,10 +265,10 @@ export function proposalCard(input: ProposalInput): ProposalCardModel | null {
       // Not now was SENT (the accepted rev re-approved): the card is the proposal kept, not progress.
       if (ui.dismissed === instance) return { ...card, state: 'no', text: 'Not now — the conversation goes on; the proposal stays here.' };
     } else {
-      card.text = kind === 'plan' ? planSentence(planSteps(chain, gate.prompt)) : step !== null ? step.text : 'Ready to hand it over.';
+      card.text = kind === 'plan' ? planSentence(planSteps(chain, gate.prompt)) : 'Ready to hand it over.';
       card.why = kind === 'plan'
         ? ['Go starts the work; nothing is built until you say so.', floorLine(gate.prompt, chain)].filter((x) => x !== null).join(' ')
-        : step !== null ? step.why : deliverLine(view, gate, input.repoName ?? null);
+        : deliverLine(view, gate, input.repoName ?? null);
     }
     if (action.queued || action.busy || action.answered !== null) {
       return {

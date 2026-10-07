@@ -176,9 +176,9 @@ describe('ProjectDashboard — the full-width project command surface', () => {
 
     await waitFor(() => expect(screen.getByTestId('dashboard-run-needs-you')).toBeInTheDocument());
     fireEvent.click(screen.getByTestId('dashboard-run-needs-you'));
-    expect(navigate).toHaveBeenCalledWith('/p/proj-1/build/r-gate#gate');
+    expect(navigate).toHaveBeenCalledWith('/s/run%3Ar-gate#gate');
     // The KPI gate tile is the same door.
-    expect(screen.getByTestId('stat-gates')).toHaveAttribute('href', '/p/proj-1/build/r-gate#gate');
+    expect(screen.getByTestId('stat-gates')).toHaveAttribute('href', '/s/run%3Ar-gate#gate');
   });
 
   it('a FAILED run’s card offers inline Retry — a prefill deposit + composer, never a relaunch', async () => {

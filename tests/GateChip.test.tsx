@@ -148,9 +148,9 @@ describe('board gate chips (§1.4 — answerable, not a badge)', () => {
     const navigate = card();
     expect(screen.queryByTestId(`gate-approve-${RUN}`)).toBeNull();
     const open = screen.getByTestId(`gate-open-${RUN}`);
-    expect(open).toHaveAttribute('href', `/p/${PROJECT}/build/${RUN}#gate`);
+    expect(open).toHaveAttribute('href', `/s/run%3A${RUN}#gate`);
     await user.click(open);
-    expect(navigate).toHaveBeenCalledWith(`/p/${PROJECT}/build/${RUN}#gate`);
+    expect(navigate).toHaveBeenCalledWith(`/s/run%3A${RUN}#gate`);
     expect(client.api.confirmGate).not.toHaveBeenCalled();
   });
 

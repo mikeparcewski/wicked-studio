@@ -101,7 +101,7 @@ describe('HomeBoard — the needs-you queue', () => {
     expect(within(row).getByTestId('need-line').textContent).toContain('Gate: waiting on you — ship to prod?');
     const door = within(row).getByTestId('need-act');
     expect(door).toHaveAttribute('data-act', 'open');
-    expect(door).toHaveAttribute('href', '/p/proj-1/build/r-gate#gate');
+    expect(door).toHaveAttribute('href', '/s/run%3Ar-gate#gate');
     expect(launchSpy).not.toHaveBeenCalled();
     expect(confirmSpy).not.toHaveBeenCalled();
   });

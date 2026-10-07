@@ -241,7 +241,7 @@ describe('newestFailedRun — the Ask quick-prompt seed (E1)', () => {
 });
 
 describe('needsYouRows — gate act-in-place', () => {
-  it('deep-links to the run approval dock when the project is known, /runs/:id otherwise', () => {
+  it('deep-links to the session thread gate anchor for every gate row', () => {
     const rows = needsYouRows(inputs({
       runs: [
         makeView({ id: 'r-filed', status: 'awaiting_human' }),
@@ -250,8 +250,8 @@ describe('needsYouRows — gate act-in-place', () => {
       projectIds: { 'r-filed': 'proj-1' },
     }));
     const paths = new Map(rows.map((r) => [r.key, r.action.kind === 'open' ? r.action.path : '']));
-    expect(paths.get('gate:r-filed')).toBe('/p/proj-1/build/r-filed#gate');
-    expect(paths.get('gate:r-unfiled')).toBe('/runs/r-unfiled');
+    expect(paths.get('gate:r-filed')).toBe('/s/run%3Ar-filed#gate');
+    expect(paths.get('gate:r-unfiled')).toBe('/s/run%3Ar-unfiled#gate');
   });
 });
 

@@ -85,7 +85,6 @@ function liveGateNotQueued(
   const run = runs.find((v) => v.session.id === g.runId);
   const dto = run?.session.project_id;
   const projectId = typeof dto === 'string' ? dto : projectIdByRun[g.runId] ?? null;
-  const runPath = `/runs/${encodeURIComponent(g.runId)}`;
   return {
     key: `gate:${g.runId}`,
     kind: 'gate',
@@ -96,7 +95,7 @@ function liveGateNotQueued(
     prompt: g.prompt,
     ord: g.ord,
     at: g.receivedAt,
-    path: projectId !== null ? gateOpenPath(projectId, g.runId) : runPath,
+    path: gateOpenPath('', g.runId),
   };
 }
 

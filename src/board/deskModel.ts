@@ -166,7 +166,9 @@ function toSessions(
       state: sum.state,
       badge: sum.badge,
       line: deliveredJustNow && sum.badge === 0 && sum.state === 'done' ? DELIVERED_LINE : kept ? KEPT_LINE : sessionLine(sum.state, sum.badge, texts[runId] ?? null),
-      path: sessionPath(id),
+      // S15e: a gated waiting session links directly to the gate so a click from the Desk lands
+      // inside the thread at the answerable row (operator amendment 1 / needsYou.ts pattern).
+      path: needy !== undefined && sum.state === 'waiting' ? sessionPath(id) + '#gate' : sessionPath(id),
     };
   });
 }

@@ -10,6 +10,7 @@ import type { RetryPrefill } from '../store/retryPrefill.js';
 import { campaignCounts, campaignMemberRunIds } from './campaignStats.js';
 import { STALLED_IDLE_SECS, stalledLiveChats, type LiveChatSnapshot } from './chatStats.js';
 import { gateOpenPath } from './gateActions.js';
+import { sessionPath } from './sessionModel.js';
 import { gateRowVerb } from '../components/gateMoveModel.js';
 import { outcomeOf, runStats } from './metrics.js';
 import { repoOnboard } from './repoStats.js';
@@ -405,7 +406,6 @@ export function needsYouRows(inputs: NeedsYouInputs): NeedRow[] {
         { type: 'awaitingHuman', session: s.id, ...(gate !== undefined ? { prompt: gate.prompt } : {}) },
         QUEUE_CTX,
       );
-      const projectId = typeof s.project_id === 'string' ? s.project_id : projectIds[s.id];
       shownRunIds.add(s.id);
       rows.push({
         key: `gate:${s.id}`,
@@ -418,10 +418,10 @@ export function needsYouRows(inputs: NeedsYouInputs): NeedRow[] {
         question: plainGateQuestion(gate?.prompt, gate?.gateKind),
         tone: 'gate',
         at: gate?.receivedAt ?? attachedAt[s.id] ?? null,
-        subjectPath: `/runs/${encodeURIComponent(s.id)}`,
+        subjectPath: sessionPath('run:' + s.id),
         action: {
           kind: 'open',
-          path: projectId !== undefined ? gateOpenPath(projectId, s.id) : `/runs/${encodeURIComponent(s.id)}`,
+          path: gateOpenPath('', s.id),
           // The gate card's recommended move, named on the row (brainstorm idea 1): the row still
           // OPENS the gate — the ellipsis says the answer is given there.
           label: gateRowVerb(gate?.prompt, gate?.gateKind) ?? 'Open gate ›',

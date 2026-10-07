@@ -16,7 +16,7 @@ describe('needsYouRows — the gate row names its move', () => {
       runs: [makeView({ id: 'r-np', status: 'awaiting_human', problem: 'fix the bug' })],
       gates: { 'r-np': { prompt: NOT_PASS_PROMPT, receivedAt: NOW - 60_000, ord: 2 } },
     }));
-    expect(rows[0]!.action).toMatchObject({ kind: 'open', label: 'Send back… ›', path: '/runs/r-np' });
+    expect(rows[0]!.action).toMatchObject({ kind: 'open', label: 'Send back… ›', path: '/s/run%3Ar-np#gate' });
   });
 
   it('a gate whose prompt names no move keeps "Open gate ›"', () => {

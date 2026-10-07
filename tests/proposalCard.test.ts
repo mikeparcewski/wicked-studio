@@ -99,10 +99,10 @@ describe('the proposal: the plan, in one sentence, with Go / Not now', () => {
     expect(c.runLabel).toBe('Going');
   });
 
-  it('a run that never proposed has no card; any other open gate is a step proposal (studio#469)', () => {
+  it('a run that never proposed has no card; def/run_level/unit_review gates go to GateRow (null from ProposalCard)', () => {
     expect(proposalCard({ view: run('r1', 'executing'), gate: undefined, chain: EMPTY, action: IDLE_GATE_ACTION, ui: NO_UI })).toBeNull();
     const plain = openGate({ prompt: 'Approve the TTL bump?', ord: 1, gateKind: 'def' });
-    expect(proposalCard({ view: run('r1', 'awaiting_human'), gate: plain, chain: EMPTY, action: IDLE_GATE_ACTION, ui: NO_UI })?.kind).toBe('step');
+    expect(proposalCard({ view: run('r1', 'awaiting_human'), gate: plain, chain: EMPTY, action: IDLE_GATE_ACTION, ui: NO_UI })).toBeNull();
   });
 });
 
@@ -333,32 +333,21 @@ describe('the floor-filled plan (studio#470)', () => {
   });
 });
 
-/** studio#469: every gate that says "Waiting on you" on the session can be answered there. */
-describe('a step gate is a proposal too (studio#469)', () => {
+/** S15e boundary: def / run_level / unit_review gates belong to GateRow, not ProposalCard. */
+describe('def / run_level / unit_review gates: ProposalCard returns null (GateRow handles them)', () => {
   const PRE = 'Approve unit 1 before it runs: triage — SAVE20 should give twenty percent off ||| PHASE SCOPE: read the code';
   const OUT = 'Approve the output of unit 3 (review — Fix the importer)';
-  it('a pre-unit gate proposes its step, in the Desk row\'s words, with Go / Not now', () => {
-    const c = proposalCard({ view: run('r1', 'awaiting_human'), gate: openGate({ prompt: PRE, ord: 1, gateKind: 'run_level' }), chain: EMPTY, action: IDLE_GATE_ACTION, ui: NO_UI })!;
-    expect(c.kind).toBe('step');
-    expect(c.state).toBe('ask');
-    expect(c.text).toBe('Start the triage step?');
-    expect(c.act).toBe('Go');
-    expect(`${c.text} ${c.why ?? ''}`).not.toMatch(/\|\|\||PHASE SCOPE|unit \d/);
+  it('a pre-unit gate (run_level) returns null from ProposalCard', () => {
+    expect(proposalCard({ view: run('r1', 'awaiting_human'), gate: openGate({ prompt: PRE, ord: 1, gateKind: 'run_level' }), chain: EMPTY, action: IDLE_GATE_ACTION, ui: NO_UI })).toBeNull();
   });
-  it('an output gate asks to accept the step', () => {
-    const c = proposalCard({ view: run('r1', 'awaiting_human'), gate: openGate({ prompt: OUT, ord: 4, gateKind: 'def' }), chain: EMPTY, action: IDLE_GATE_ACTION, ui: NO_UI })!;
-    expect(c.kind).toBe('step');
-    expect(c.text).toBe('Accept the review?');
+  it('an output gate (def) returns null from ProposalCard', () => {
+    expect(proposalCard({ view: run('r1', 'awaiting_human'), gate: openGate({ prompt: OUT, ord: 4, gateKind: 'def' }), chain: EMPTY, action: IDLE_GATE_ACTION, ui: NO_UI })).toBeNull();
   });
-  it('an author\'s own question is kept; an escalation and a failure are still never proposals', () => {
-    expect(proposalCard({ view: run('r1', 'awaiting_human'), gate: openGate({ prompt: 'Approve the TTL bump?', gateKind: 'def' }), chain: EMPTY, action: IDLE_GATE_ACTION, ui: NO_UI })!.text).toBe('Approve the TTL bump?');
+  it('proposalKindOf returns null for def, run_level, and still null for escalation/failures', () => {
+    expect(proposalKindOf('r1', openGate({ prompt: 'Approve the TTL bump?', gateKind: 'def' }), [])).toBeNull();
+    expect(proposalKindOf('r1', openGate({ prompt: PRE, gateKind: 'run_level' }), [])).toBeNull();
     expect(proposalKindOf('r1', openGate({ prompt: 'Unit 1 failed and triage escalated', gateKind: 'escalation' }), [])).toBeNull();
     expect(proposalKindOf('r1', openGate({ prompt: 'LIFT-CONFLICT on src/a.ts' }), [])).toBeNull();
-  });
-  it('answered, it is "Going" and then the run\'s progress', () => {
-    const c = proposalCard({ view: run('r1', 'awaiting_human'), gate: openGate({ prompt: PRE, ord: 1, gateKind: 'run_level' }), chain: EMPTY, action: { ...IDLE_GATE_ACTION, queued: true }, ui: NO_UI })!;
-    expect(c.state).toBe('run');
-    expect(c.runLabel).toBe('Going');
   });
 });
 

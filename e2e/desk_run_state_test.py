@@ -134,17 +134,18 @@ with sync_playwright() as p:
     check("the-run-is-in-the-list", listed == 1, url=page.url, listed=listed)
     set_fixture(origin, reject_note=False)
 
-    # ── 4. #469: the pre-unit gate's session card ───────────────────────────────
+    # ── 4. #469: the pre-unit def gate in the session thread (S15e) ─────────────
     set_fixture(origin, home_paths=True, reset_gate_posts=True)
     page.goto(f"{origin}/s/run%3Ar-home-gate", wait_until="networkidle")
     try:
-        page.locator('[data-testid="session-proposal"][data-kind="step"]').wait_for(state="visible", timeout=10000)
-        step_text = page.get_by_test_id("session-proposal-text").inner_text()
+        page.get_by_test_id("session-gate-row").wait_for(state="visible", timeout=10000)
     except Exception:
-        step_text = None
         page.screenshot(path=str(SHOTS / "desk-run-state-step-card-missing.png"))
-    check("step-gate-has-its-card", step_text == "Start the triage step?", text=step_text)
-    page.get_by_test_id("session-proposal-go").click()
+    gate_row = page.get_by_test_id("session-gate-row")
+    check("step-gate-in-thread", gate_row.is_visible() and gate_row.get_attribute("data-reason") == "def",
+          got=gate_row.get_attribute("data-reason") if gate_row.is_visible() else "missing")
+    # Approve: first choice for a def gate
+    page.get_by_test_id("session-gate-choice").first.click()
     page.wait_for_timeout(11500)  # the 10 s undo window, then the one post
     posts = json.loads(urllib.request.urlopen(f"{origin}/__fixture/gate-posts", timeout=10).read())["posts"]
     mine = [p_ for p_ in posts if p_["runId"] == "r-home-gate"]

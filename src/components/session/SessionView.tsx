@@ -13,10 +13,11 @@ import { readSessionVisit, useSessionDrafts, writeSessionVisit } from '../../sto
 import { humanTitle } from '../runIdentity.js';
 import type { ChatCitations } from '../../api/chat-wire.js';
 import { IDLE_GATE_ACTION, useGateActionStore } from '../../board/gateActions.js';
-import { statusSentence } from '../../board/proposalCard.js';
+import { proposalKindOf, statusSentence } from '../../board/proposalCard.js';
 import { useGateStore } from '../../store/gates.js';
 import { ChainLine, useRunChain } from './ChainLine.js';
 import { ProposalCard } from './ProposalCard.js';
+import { GateRow } from './GateRow.js';
 import { SourceChips } from './SourceChips.js';
 import { SinceYouLeft } from './SinceYouLeft.js';
 import { Composer, type ComposerSend } from './Composer.js';
@@ -569,7 +570,7 @@ function TurnDecisions({ chatId, turnId, navigate }: { chatId: string; turnId: s
   return <DecisionLine decisions={decisions} navigate={navigate} />;
 }
 
-function RunBlock({ view, badge, sessionId }: {
+export function RunBlock({ view, badge, sessionId }: {
   view: RunView;
   badge: number;
   sessionId: string;
@@ -586,6 +587,10 @@ function RunBlock({ view, badge, sessionId }: {
   const chain = useMemo(() => applyCheckState(planChain, checks), [planChain, checks]);
   const recording = useRecordingsStore((s) => s.byRun[id]);
   const momentOf = useMemo(() => momentOfRecording(recording), [recording]);
+  const proposalKind = proposalKindOf(id, gate, view.units);
+  // Rule 5: store-based receipt survives remount; no useRef.
+  const effectiveKind = gate !== undefined ? proposalKind
+    : action.receipt?.kind === 'plan' || action.receipt?.kind === 'deliver' ? action.receipt.kind : null;
   return (
     <section data-testid="session-run" data-run-id={id} data-state={state} {...(acceptance !== null ? { 'data-acceptance': 'read' } : {})} className="wk-session-run">
       <p className="wk-session-run-head">
@@ -599,7 +604,10 @@ function RunBlock({ view, badge, sessionId }: {
       </p>
       {/* S6b: the run's ONE status sentence, then its proposal (the plan, the hand-over). */}
       <p data-testid="session-status-sentence" role="status" className="wk-session-status-sentence">{statusSentence(view, chain, gate, action)}</p>
-      <ProposalCard view={view} chain={chain} acceptance={acceptance?.summary ?? null} />
+      {/* S15e: plan and deliver go through ProposalCard; every other gate kind is answered in the thread. */}
+      {effectiveKind === 'plan' || effectiveKind === 'deliver'
+        ? <ProposalCard view={view} chain={chain} acceptance={acceptance?.summary ?? null} />
+        : <GateRow view={view} gate={gate} />}
       <PlanStepLines runId={id} />
       <ChainLine chain={chain} runId={id} units={view.units} teamError={teamError} onRetry={retry} checks={checks} momentOf={momentOf} onOpenAt={(sec) => requestWalkthroughSeek(id, sec)} />
       {/* S8: the page the run is producing — a live preview that morphs inline → pane → full. */}

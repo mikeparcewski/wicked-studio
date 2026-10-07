@@ -136,7 +136,7 @@ describe('the grid — the partition invariant, needs-you first, cards are doors
     const jump = screen.getByTestId('chat-needs-you');
     expect(jump.getAttribute('data-run-id')).toBe('c-gated');
     fireEvent.click(jump);
-    expect(navigate).toHaveBeenCalledWith('/p/p-auth/build/c-gated#gate');
+    expect(navigate).toHaveBeenCalledWith('/s/run%3Ac-gated#gate');
     expect(onSelect).not.toHaveBeenCalled(); // no card navigation leaked
   });
 });

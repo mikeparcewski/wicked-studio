@@ -6,7 +6,7 @@ import { useDeliveryFreezeStore } from '../store/deliveryFreeze.js';
 import type { GateDecision, SessionView } from '../api/types.js';
 import { plainGateQuestion, plainRunTitle } from './deskWords.js';
 import type { LaunchPlan } from '../api/teamPlan.js';
-import { modePath } from '../hooks/useRoute.js';
+import { sessionPath } from './sessionModel.js';
 import { choicesOf, recommendedOf, useGateStore } from '../store/gates.js';
 import { useMembershipStore } from '../store/membership.js';
 import {
@@ -58,9 +58,12 @@ export interface GateActionState {
   answered: 'approved' | 'rejected' | null;
   /** The named failure, adjacent to the still-enabled controls (§3.3). */
   error: string | null;
+  /** The sent answer's receipt: kind tells RunBlock which component to keep mounted; chosenLabel
+   *  and sentAt give GateRow its fold line on remount. Cleared when a new gate arrives. */
+  receipt: { kind: 'plan' | 'deliver' | 'row'; chosenLabel: string; sentAt: number } | null;
 }
 
-export const IDLE_GATE_ACTION: GateActionState = { queued: false, busy: false, answered: null, error: null };
+export const IDLE_GATE_ACTION: GateActionState = { queued: false, busy: false, answered: null, error: null, receipt: null };
 
 interface GateActionsStore {
   byGate: Record<string, GateActionState>;
@@ -223,7 +226,12 @@ const PAST: Record<string, string> = { approve: 'Approved', reject: 'Rejected', 
  * `outcome === 'sent'`.
  */
 export function commitGateDecision(
-  runId: string, decision: GateAnswer, opts: { deliver?: DeliverTarget | null; notice?: { preview: string; sent: string } } = {},
+  runId: string, decision: GateAnswer, opts: {
+    deliver?: DeliverTarget | null;
+    notice?: { preview: string; sent: string };
+    /** Gate kind and chosen label for the receipt stored in GateActionState (Rule 5: remount). */
+    receipt?: { kind: 'plan' | 'deliver' | 'row'; chosenLabel: string };
+  } = {},
 ): Promise<DecisionOutcome> {
   const cur = useGateActionStore.getState().byGate[runId] ?? IDLE_GATE_ACTION;
   if (cur.queued || cur.busy || cur.answered !== null) {
@@ -258,6 +266,9 @@ export function commitGateDecision(
         patch(runId, { queued: false });
         const error = await sendGateDecision(runId, ord === undefined ? decision : { ...decision, ord });
         if (error === null) {
+          if (opts.receipt !== undefined) {
+            patch(runId, { receipt: { ...opts.receipt, sentAt: Date.now() } });
+          }
           reportDecision('sent', opts.notice?.sent ?? `${PAST[verb] ?? 'Answered'} ${label}.`);
           resolve('sent');
         } else {
@@ -309,7 +320,7 @@ export function commitGateReassign(runId: string, cli: string, seatLabel: string
         patch(runId, { queued: false, busy: true });
         try {
           await api.reassignRun(runId, cli);
-          patch(runId, { busy: false, answered: 'approved' });
+          patch(runId, { busy: false, answered: 'approved', receipt: { kind: 'row', chosenLabel: seatLabel, sentAt: Date.now() } });
           useGateStore.getState().clearGate(runId);
           reportDecision('sent', `Moved ${label} to ${seatLabel}; the retry runs there.`);
           resolve('sent');
@@ -403,7 +414,7 @@ export async function refreshGate(runId: string): Promise<void> {
   }
 }
 
-/** A COMPLEX gate's one honest affordance (§2.3): the thread, at the gate. */
-export function gateOpenPath(projectId: string, runId: string): string {
-  return `${modePath(projectId, 'build', runId)}${GATE_HASH}`;
+/** A gate's one honest affordance: the session thread at the gate anchor. */
+export function gateOpenPath(_projectId: string, runId: string): string {
+  return sessionPath('run:' + runId) + GATE_HASH;
 }

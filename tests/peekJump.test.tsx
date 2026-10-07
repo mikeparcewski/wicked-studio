@@ -120,7 +120,7 @@ describe('jump and back', () => {
     screen.getByTestId('focus-me').focus();
 
     press('g');
-    expect(navigate).toHaveBeenLastCalledWith('/p/beta/build/b1#gate');
+    expect(navigate).toHaveBeenLastCalledWith('/s/run%3Ab1#gate');
     expect(useReturnPlace.getState().place).toMatchObject({
       href: '/p/gamma/build/r1', scroll: { feed: 420 }, focus: '[data-testid="focus-me"]',
       panels: { 'test.panel': true },
@@ -190,11 +190,11 @@ describe('round 3', () => {
     const navigate = vi.fn((path: string) => window.history.pushState(null, '', path));
     render(<Harness navigate={navigate} />);
     press('g'); // r1 → b1's gate
-    expect(window.location.pathname).toBe('/p/beta/build/b1');
+    expect(window.location.pathname).toBe('/s/run%3Ab1');
     // the thread consumes #gate; the operator wanders, then jumps again
     window.history.pushState(null, '', '/p/alpha/chat');
     press('g');
-    expect(window.location.pathname).toBe('/p/beta/build/b1');
+    expect(window.location.pathname).toBe('/s/run%3Ab1');
     press('b');
     expect(navigate).toHaveBeenLastCalledWith('/p/gamma/build/r1');
   });

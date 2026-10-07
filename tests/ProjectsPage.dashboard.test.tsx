@@ -157,7 +157,7 @@ describe('the project cards — mini-dashboard rows, needs-you first', () => {
     const badge = screen.getByTestId('project-needs-you');
     expect(badge).toHaveTextContent('needs you · 1');
     fireEvent.click(badge);
-    expect(navigate).toHaveBeenCalledWith('/p/p-hot/build/r-gated#gate');
+    expect(navigate).toHaveBeenCalledWith('/s/run%3Ar-gated#gate');
     // The badge click never triggered the card's own navigation.
     expect(navigate).not.toHaveBeenCalledWith('/p/p-hot');
   });
