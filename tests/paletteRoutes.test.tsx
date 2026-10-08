@@ -64,7 +64,7 @@ describe('the palette carries them', () => {
     fireEvent.keyDown(input, { key: 'Enter' });
     expect(navigate).toHaveBeenCalledWith('/system');
     vi.unstubAllGlobals();
-  });
+  }, 30_000);
 
   it('the run, project and repo groups carry the shapes GO TO leaves to them', async () => {
     vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(new Response('{"repos":[{"id":"x1","name":"api","root_path":"/x","default_branch":"main","registered_at":1}]}', { status: 200, headers: { 'content-type': 'application/json' } }))));

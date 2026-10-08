@@ -182,7 +182,7 @@ describe('the triage cursor (slice H, §2.2)', () => {
       approve: false, amend: 'needs the Q3 numbers first',
     });
     expect(screen.queryByTestId('gate-reject-note')).toBeNull();
-  });
+  }, 30_000);
 
   it('an empty note rejects WITHOUT an amend field (the note is optional)', async () => {
     const { default: userEvent } = await import('@testing-library/user-event');

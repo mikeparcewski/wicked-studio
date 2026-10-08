@@ -11,6 +11,7 @@ import type { SkinVariants } from '../theming/skins.js';
 import { TONE_COLOR, TONE_GLYPH } from './narrator.js';
 import { AgeStamp } from './AgeStamp.js';
 import { QuestionRow } from './desk/QuestionRow.js';
+import { ApprovalGroupActions } from './desk/ApprovalGroupActions.js';
 import { needRunId } from '../board/deskModel.js';
 import { plainRunTitle } from '../board/deskWords.js';
 import { Tech } from './Tech.js';
@@ -248,6 +249,7 @@ export function NeedsYouQueue({ queue, runs, navigate, now, variant = 'inline' }
         </span>
         {isGroup && row.action.kind === 'batch-onboard' && batchAct(row.action, row.text)}
         {isGroup && row.action.kind === 'accept-memory' && acceptAct(row.action)}
+        {isGroup && row.action.kind === 'batch-approve' && <ApprovalGroupActions runIds={row.action.runIds} label={row.action.label} />}
         {isGroup ? (
           <button type="button" data-testid="need-group-toggle" aria-expanded={open} onClick={() => queue.toggle(row.key)} className="wk-need-act">
             {open ? 'Fold' : 'Show each'}

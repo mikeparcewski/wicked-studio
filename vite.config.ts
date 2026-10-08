@@ -89,6 +89,7 @@ export default defineConfig(({ mode }) => ({
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./tests/setup.ts'],
+    maxWorkers: process.env.CI ? undefined : '50%',
     // site/ is the marketing site — its own app with its own deps and a
     // Playwright suite (site/tests/e2e, run by the Site E2E workflow).
     // Without this, vitest's default include sweeps those *.spec.ts files

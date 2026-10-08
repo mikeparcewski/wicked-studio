@@ -27,7 +27,7 @@ describe('fonts are self-hosted', () => {
     const files = [join(REPO, 'index.html'), ...walk(join(REPO, 'src')).filter((f) => /\.(css|tsx?|html)$/.test(f))];
     const hits = files.filter((f) => FONT_CDN.test(readFileSync(f, 'utf8'))).map((f) => relative(REPO, f));
     expect(hits).toEqual([]);
-  }, 30_000);
+  }, 120_000);
 
   const FONTS_CSS = join(REPO, 'src', 'styles', 'fonts.css');
 

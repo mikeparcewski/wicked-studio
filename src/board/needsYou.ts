@@ -82,7 +82,12 @@ export type NeedAction =
   | { kind: 'batch-onboard'; repoIds: string[]; label: string }
   /** A proposal group's batch move (Wave B, idea 4): accept exactly the memory-only proposals
    *  named here, after a preview and an undo window, through `POST /proposals/:id/approve`. */
-  | { kind: 'accept-memory'; ids: string[]; label: string };
+  | { kind: 'accept-memory'; ids: string[]; label: string }
+  /** A folded approval group's batch move (S18a): seed the batch selection with `runIds` and fan
+   *  out one `POST /runs/:id/gate` each, through the shared `runBatchDecision` (the 10 s undo,
+   *  per-id failures, retry-one). Reject-all and reject-with-reason are the same group row's own
+   *  controls, reading these `runIds` — the group still expands to open each member too. */
+  | { kind: 'batch-approve'; runIds: string[]; label: string };
 
 export interface NeedRow {
   /** Dedupe identity — one row per subject, ever. */

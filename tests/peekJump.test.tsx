@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, render, screen } from '@testing-library/react';
 import { useState } from 'react';
 import type { SessionView } from '../src/api/types.js';
@@ -64,6 +64,7 @@ beforeEach(() => {
   useMembershipStore.setState({ projectIdByRun: { r1: 'gamma', b1: 'beta' }, attachedAtByRun: {} });
   useElicitationStore.setState({ elicitations: {} });
 });
+afterAll(() => new Promise<void>((r) => { setTimeout(r, 20); })); // let place.ts:129's 0 ms listener timer fire before jsdom teardown
 
 describe('peek', () => {
   it('off Home, peek sees the app-level queue — a pending proposal, then an elicitation above it', () => {

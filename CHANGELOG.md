@@ -12,6 +12,9 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+### Added
+- S18a: two gate-answering ports from the classic skin land on the Desk (DES-STUDIO-REBUILD-001 Amendment 5). (1) The approvals group row ("2 approvals") answers in place — **Approve all** / **Reject all**, plus an optional **Reject with reason…**, fanning out one `POST /runs/:id/gate` per member through the shared batch path (the one 10 s undo window, per-id failure rows with retry-just-this-one — never an optimistic "approved all"); the group still expands to open each member. (2) The Desk question row's **Reject** choice opens an optional one-line reason that upgrades the decision to `{approve:false, amend}` — while the keyboard fast path (a digit, or Enter on a moved-to choice) still commits the bare reject at once.
+
 ## [0.6.5] — 2026-10-08
 
 Everything › Sessions gains an "Every run" table beside the grouped view (S17b, studio#586), and a

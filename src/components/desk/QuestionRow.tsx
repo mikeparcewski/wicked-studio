@@ -1,11 +1,11 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { api } from '../../api/client.js';
-import type { CoreEvent, WorkUnit } from '../../api/types.js';
+import type { CoreEvent, GateDecision, WorkUnit } from '../../api/types.js';
 import { commitGateDecision } from '../../board/gateActions.js';
 import {
   CARD_REASON, INITIAL_PICK, chosenLine, classifyRowGate, pickKey, type RowChoice, type RowPick,
 } from '../../board/questionRow.js';
-import { secondsLeft, undoDecision, useUndoQueue } from '../../board/undoQueue.js';
+import { secondsLeft, takeRestoredNote, undoDecision, useUndoQueue } from '../../board/undoQueue.js';
 import { useGateStore } from '../../store/gates.js';
 
 /**
@@ -63,6 +63,13 @@ export function QuestionRow({ runId, units, openPath, openLabel, onOpen }: {
     : classifyRowGate({ runId, gate, units, events: open ? events : [] });
   const preCard = cls.kind === 'card' && !open;
   const [pick, setPick] = useState<RowPick>(() => INITIAL_PICK(null));
+  // S18a: a mouse click on Reject opens an OPTIONAL one-line reason that upgrades the decision to
+  // {approve:false, amend}. The keyboard fast path (a digit, or Enter on a moved-to choice) still
+  // commits the bare reject at once (questionRow.ts stays the default) — the reason is mouse-only.
+  const [reason, setReason] = useState<{ choice: RowChoice } | null>(null);
+  const [reasonText, setReasonText] = useState('');
+  const reasonRef = useRef<HTMLInputElement>(null);
+  useEffect(() => { if (reason !== null) reasonRef.current?.focus(); }, [reason]);
   const recommended = cls.kind === 'answer' ? cls.recommended : null;
   useEffect(() => {
     if (open) setPick(INITIAL_PICK(recommended));
@@ -88,6 +95,28 @@ export function QuestionRow({ runId, units, openPath, openLabel, onOpen }: {
       // A failed send is reported (the toast names it); the row comes back, answerable again.
       () => { settle(null); },
     );
+  };
+
+  // A mouse click on Reject reveals the reason input (seeded from any note an Undo handed back for
+  // this run); every other choice commits at once.
+  const onChoiceClick = (c: RowChoice): void => {
+    if (c.key === 'reject') {
+      setReasonText(takeRestoredNote(runId) || '');
+      setReason({ choice: c });
+      return;
+    }
+    commit(c);
+  };
+
+  // Commit the reject the reason belongs to: a non-empty reason upgrades it to {approve:false,
+  // amend}; an empty one commits the bare reject — never pauses for text that was not typed.
+  const commitReason = (): void => {
+    if (reason === null) return;
+    const text = reasonText.trim();
+    const decision: GateDecision = text === '' ? { approve: false } : { approve: false, amend: text };
+    setReason(null);
+    setReasonText('');
+    commit({ ...reason.choice, decision });
   };
 
   // Folded: the decision is in its window, on its way, or sent — for THIS gate only.
@@ -172,7 +201,7 @@ export function QuestionRow({ runId, units, openPath, openLabel, onOpen }: {
               data-choice={c.key}
               data-focus={pick.focus === i ? 'true' : 'false'}
               data-recommended={cls.recommended === i ? 'true' : undefined}
-              onClick={() => commit(c)}
+              onClick={() => onChoiceClick(c)}
               className={`wk-need-choice${pick.focus === i ? ' wk-need-choice--focus' : ''}`}
             >
               <span aria-hidden className="wk-need-choice-n">{i + 1}</span>
@@ -181,6 +210,38 @@ export function QuestionRow({ runId, units, openPath, openLabel, onOpen }: {
             </span>
           ))}
         </div>
+      )}
+      {reason !== null && (
+        <span className="wk-need-reason" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+          <input
+            ref={reasonRef}
+            type="text"
+            data-testid="need-choice-reason"
+            placeholder="reason (optional)"
+            value={reasonText}
+            onChange={(e) => setReasonText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                e.stopPropagation();
+                commitReason();
+              } else if (e.key === 'Escape') {
+                e.preventDefault();
+                e.stopPropagation();
+                setReason(null);
+                setReasonText('');
+              }
+            }}
+            style={{
+              minWidth: '12em', background: 'var(--surface-card)', border: '1px solid var(--surface-raised)',
+              borderRadius: 'var(--radius-md)', outline: 'none', fontSize: 'var(--text-xs)',
+              fontFamily: 'var(--font-sans)', color: 'var(--ink-high)', padding: '3px 8px',
+            }}
+          />
+          <span aria-hidden style={{ fontSize: 'var(--text-2xs)', color: 'var(--ink-dim)', fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap' }}>
+            ↵ reject · esc cancel
+          </span>
+        </span>
       )}
       <button type="button" data-testid="need-answer-close" onClick={() => setOpen(false)} className="wk-need-act wk-need-act--quiet">
         Not now
