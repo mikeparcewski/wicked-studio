@@ -24,6 +24,8 @@ import { ProposalCard } from './ProposalCard.js';
 import { useRunEvents } from '../../hooks/useRunEvents.js';
 import { StrandedCard } from './StrandedCard.js';
 import { RunRecordLines } from './RunRecord.js';
+import { startRetry } from './RunActions.js';
+import { Tech, runTechParts } from '../Tech.js';
 import { parseJump } from '../../store/watch.js';
 import { GateRow } from './GateRow.js';
 import { SourceChips } from './SourceChips.js';
@@ -639,7 +641,16 @@ export function RunBlock({ view, badge, sessionId, navigate }: {
         <button type="button" data-testid="session-run-look" aria-label="Look underneath this run: its steps, changes and evidence" title="Steps, changes, evidence" onClick={() => openSheet({ kind: 'session', sessionId: `run:${id}` }, 'steps')} className="wk-sheet-open wk-sheet-open--run">⋯</button>
       </p>
       {/* S6b: the run's ONE status sentence, then its proposal (the plan, the hand-over). */}
-      <p data-testid="session-status-sentence" role="status" className="wk-session-status-sentence">{statusSentence(view, chain, gate, action)}</p>
+      <p data-testid="session-status-sentence" role="status" className="wk-session-status-sentence">
+        {statusSentence(view, chain, gate, action)}
+        {view.session.archived_at != null && <span data-testid="session-run-archived" className="wk-session-grey"> · Archived</span>}
+        {/* S16a-1d: Retry a failed or cancelled run — the Desk row's prefill, the launch form; no POST. */}
+        {navigate !== undefined && (view.session.status === 'failed' || view.session.status === 'cancelled') && (
+          <button type="button" data-testid="session-run-retry" onClick={() => startRetry(view, navigate)} className="wk-since-toggle" title="Open the launch form prefilled with this run's intent and settings — nothing starts until you send">Retry ›</button>
+        )}
+      </p>
+      {/* S16a-1d: the run's technical handles, when Settings › Show technical details is on. */}
+      <Tech data-testid="tech-session-run" parts={runTechParts({ id, base_commit: view.session.base_commit, clis: view.session.clis })} block />
       <OrphanedRow view={view} />
       {/* S16a-1c: the run's record lines — why it stopped, the amended acceptance list, a short
           council, the Watchtower's lines (and "You jumped in" when the address carries ?jump=). */}

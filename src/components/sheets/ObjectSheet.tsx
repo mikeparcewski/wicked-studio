@@ -33,6 +33,7 @@ import { Sheet } from './Sheet.js';
 import { useDisplayText } from '../../hooks/useHomePath.js';
 import { useRunEventStore } from '../../store/events.js';
 import { VerdictDetail } from '../VerdictDetail.js';
+import { SheetRunActions } from '../session/RunActions.js';
 
 /** A run can take a message only while a helper is working in it (crew's inject surface). */
 const MESSAGEABLE = new Set(['executing', 'distributing', 'planning']);
@@ -271,6 +272,7 @@ function SessionSheet({ r, tab: asked, runs, navigate }: { r: Extract<ObjectRef,
       onTab={setSheetTab}
       primary={{ label: primaryAction('session').label, onClick: () => { if (record !== null) { closeSheet(); navigate(record); } }, disabled: record === null ? 'Nothing in this session is on this daemon.' : null }}
       onClose={closeSheet}
+      {...(newest !== null ? { actions: <SheetRunActions key={newest.session.id} view={newest} /> } : {})}
     >
       {tab === 'goal' && (
         <ul data-testid="sheet-goal" className="wk-sheet-list">

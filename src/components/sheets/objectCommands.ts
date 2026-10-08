@@ -7,6 +7,7 @@ import { STEP_WORD, unitPhaseId } from '../../board/chainModel.js';
 import type { Navigate } from '../../hooks/useRoute.js';
 import { openSheet, stopRun } from '../../store/sheets.js';
 import { humanTitle } from '../runIdentity.js';
+import { archiveBlocked, askRunAction, retryBlocked, startRetry } from '../session/RunActions.js';
 
 const TERMINAL = new Set(['completed', 'failed', 'cancelled']);
 
@@ -73,6 +74,11 @@ export function objectCommands(ref: ObjectRef, ctx: { runs: readonly SessionView
       if (a.tab !== undefined) return tabRow(a.id, a.label, a.tab);
       if (a.id === 'record') return { id: a.id, label: a.label, run: newest !== undefined ? go(`/runs/${encodeURIComponent(newest.session.id)}`) : () => {}, disabled: newest === undefined ? 'Nothing in it is on this daemon.' : null };
       if (a.id === 'stop') return { id: a.id, label: `${a.label} — 10 s to undo`, run: () => { stopRun(live, `“${title}”`); }, disabled: live.length === 0 ? 'Nothing in it is running.' : null };
+      // S16a-1d: Retry deposits the prefill and opens the launch form (no POST); Archive and Draft
+      // open the session sheet at their confirm / the draft (the sheet owns both; no POST here).
+      if (a.id === 'retry') return { id: a.id, label: a.label, run: () => { if (newest !== undefined) startRetry(newest, ctx.navigate); }, disabled: retryBlocked(newest) };
+      if (a.id === 'archive') return { id: a.id, label: `${a.label} — asks first`, run: () => { if (newest !== undefined) { askRunAction(newest.session.id, 'archive'); openSheet(ref); } }, disabled: archiveBlocked(newest) };
+      if (a.id === 'draft') return { id: a.id, label: a.label, run: () => { if (newest !== undefined) { askRunAction(newest.session.id, 'draft'); openSheet(ref); } }, disabled: newest === undefined ? 'Nothing in it is on this daemon.' : null };
       return { id: a.id, label: a.label, run: () => openSheet(ref), disabled: null };
     });
     return { title, rows: [look, ...rows] };

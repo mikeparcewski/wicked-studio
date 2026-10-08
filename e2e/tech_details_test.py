@@ -6,7 +6,8 @@ Runs against the shared fixture (uxfix_fixture.py) with the `wave1` corpus, b1 a
 `base_commit` on b1 (`session_over`). The preference is one switch in Settings, off by default,
 saved as `studio.view` = {technical_details: bool} through PUT /api/v1/settings (DESIGN-simple §4).
 
-  1. Off by default: the run header, the gate card and the Runs list row show no handles.
+  1. Off by default: the run's head in its session thread (S16a-1d), the gate card and the Runs list
+     row show no handles.
   2. Settings › "Show technical details" is unchecked; turning it on PUTs `studio.view` and the
      fixture's settings store holds {technical_details: true}.
   3. After a full reload the switch is still on, and all three surfaces show the run id, the
@@ -79,9 +80,15 @@ with sync_playwright() as p:
         check(step, sw <= W, scroll_width=sw)
 
     def run_page() -> None:
+        # The gate card's handle (`tech-gate`) is still read on the run page's gate card.
         page.goto(f"{origin}/p/beta/build/b1", wait_until="networkidle")
         page.get_by_test_id("run-header").wait_for(state="visible", timeout=15000)
         page.get_by_test_id("steering-gate").wait_for(state="visible", timeout=15000)
+
+    def session_page() -> None:
+        # S16a-1d: the run's handles ride its run block's head in the session thread.
+        page.goto(f"{origin}/s/run%3Ab1", wait_until="networkidle")
+        page.locator('[data-testid="session-run"][data-run-id="b1"]').wait_for(state="visible", timeout=15000)
 
     def runs_list() -> None:
         # S15c: /work moved onto "See everything › Sessions"; a live run is a session row there.
@@ -89,8 +96,10 @@ with sync_playwright() as p:
         page.locator('[data-testid="everything-session"][data-run-id="b1"]').first.wait_for(state="visible", timeout=15000)
 
     # ── 1. off by default ───────────────────────────────────────────────────────
+    session_page()
+    check("off-run-header", page.get_by_test_id("tech-session-run").count() == 0)
+    no_hscroll("off-session-no-hscroll")
     run_page()
-    check("off-run-header", page.get_by_test_id("tech-run-header").count() == 0)
     check("off-gate", page.get_by_test_id("tech-gate").count() == 0)
     page.screenshot(path=str(SHOTS / "tech-details-off.png"))
     no_hscroll("off-run-page-no-hscroll")
@@ -116,18 +125,21 @@ with sync_playwright() as p:
     page.get_by_test_id("tech-details-toggle").wait_for(state="visible", timeout=15000)
     check("reload-switch-on", page.get_by_test_id("tech-details-toggle").is_checked())
 
-    run_page()
-    hdr = page.get_by_test_id("tech-run-header")
+    session_page()
+    hdr = page.get_by_test_id("tech-session-run")
     hdr.wait_for(state="visible", timeout=10000)
     t = hdr.text_content() or ""
     check("on-run-header", "run b1" in t and "base a41c9e2" in t and "seats claude, codex" in t, text=t)
+    color = hdr.evaluate("(el) => getComputedStyle(el).color")
+    size = hdr.evaluate("(el) => parseFloat(getComputedStyle(el).fontSize)")
+    check("on-small-grey-type", size <= 12.5, color=color, font_size=size)
+    no_hscroll("on-session-no-hscroll")
+    run_page()
+    hdr = page.get_by_test_id("tech-run-header")
     gate = page.get_by_test_id("tech-gate")
     gate.wait_for(state="visible", timeout=10000)
     t = gate.text_content() or ""
     check("on-gate", "run b1" in t and "base a41c9e2" in t and "seats claude, codex" in t, text=t)
-    color = hdr.evaluate("(el) => getComputedStyle(el).color")
-    size = hdr.evaluate("(el) => parseFloat(getComputedStyle(el).fontSize)")
-    check("on-small-grey-type", size <= 12.5, color=color, font_size=size)
     page.screenshot(path=str(SHOTS / "tech-details-on.png"))
     no_hscroll("on-run-page-no-hscroll")
 
@@ -146,8 +158,9 @@ with sync_playwright() as p:
     stored = stored_view(origin)
     check("put-studio-view-off", stored == {"technical_details": False}, stored=stored)
     page.reload(wait_until="networkidle")
+    session_page()
+    check("off-again-run-header", page.get_by_test_id("tech-session-run").count() == 0)
     run_page()
-    check("off-again-run-header", page.get_by_test_id("tech-run-header").count() == 0)
     check("off-again-gate", page.get_by_test_id("tech-gate").count() == 0)
 
     check("zero-page-errors", len(errors) == 0, errors=errors)

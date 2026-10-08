@@ -4,7 +4,8 @@ wave1_draft_test.py — studio wave 1, behaviour 3: OUTBOUND HARNESS WITH COPY (
 
 Runs against the shared W2 fixture (uxfix_fixture.py) with the `wave1` corpus.
 
-  draft  open the COMPLETED run c1 and click "Draft update": an editable text
+  S16a-1d: Draft update lives in the run's session sheet (/s/run%3A<id> › ⋯), not the run page.
+  draft  open the COMPLETED run c1's sheet and click "Draft update": an editable text
          area shows crew's drafted text (GET /runs/c1/deliver-text) — its first
          line equals line 1 of the fixture's deliver-text.
   copy   edit the text, click Copy: the clipboard equals the text area.
@@ -63,11 +64,13 @@ with sync_playwright() as p:
         f"s.textContent = {json.dumps(HIDE_GATE_TOASTS)}; document.head.appendChild(s); }});")
 
     set_fixture(origin, wave1=True, gate_now=[], status_over={})
-    page.goto(f"{origin}/runs/c1", wait_until="networkidle")
-    page.get_by_test_id("run-header").wait_for(state="visible", timeout=15000)
+    # S16a-1d: Draft update is a secondary action of the run's session sheet (⋯ on its run block).
+    page.goto(f"{origin}/s/run%3Ac1", wait_until="networkidle")
+    page.get_by_test_id("session-run-look").first.wait_for(state="visible", timeout=15000)
+    page.get_by_test_id("session-run-look").first.click()
 
     # ── Draft update on a finished run ──────────────────────────────────────────
-    page.get_by_test_id("run-draft-update").click()
+    page.get_by_test_id("sheet-draft-update").click()
     text = page.get_by_test_id("outbound-text")
     text.wait_for(state="visible", timeout=10000)
     page.wait_for_function(
@@ -98,9 +101,11 @@ with sync_playwright() as p:
 
     # ── a live run offers the same action (a status draft) ──────────────────────
     page.keyboard.press("Escape")
-    page.goto(f"{origin}/runs/r1", wait_until="networkidle")
-    page.get_by_test_id("run-header").wait_for(state="visible", timeout=15000)
-    page.get_by_test_id("run-draft-update").click()
+    page.goto(f"{origin}/s/run%3Ar1", wait_until="networkidle")
+    page.get_by_test_id("session-run-look").first.wait_for(state="visible", timeout=15000)
+    run_state = page.locator('[data-testid="session-run"][data-run-id="r1"]').get_attribute("data-state")
+    page.get_by_test_id("session-run-look").first.click()
+    page.get_by_test_id("sheet-draft-update").click()
     page.get_by_test_id("outbound-text").wait_for(state="visible", timeout=10000)
     check("live-run-kind-is-status",
           page.get_by_test_id("outbound-draft").get_attribute("data-kind") == "status")
@@ -113,11 +118,12 @@ with sync_playwright() as p:
     live.evaluate("el => { el.focus(); el.setSelectionRange(el.value.length, el.value.length); }")
     page.keyboard.type("\nEdited while it ran.")
     typed = live.input_value()
-    page.get_by_test_id("run-cancel").wait_for(state="attached", timeout=10000)
     set_fixture(origin, status_over={"r1": "completed"},
                 extra_frames=[{"type": "sessionCompleted", "session": "r1"}])
-    # The app has seen the flip once the run offers no Cancel (terminal runs cannot be cancelled).
-    page.get_by_test_id("run-cancel").wait_for(state="detached", timeout=15000)
+    # The app has seen the flip once the run block's state word moves off the live one.
+    page.wait_for_function(
+        "(was) => { const b = document.querySelector('[data-testid=\"session-run\"][data-run-id=\"r1\"]'); return !!b && b.dataset.state !== was; }",
+        arg=run_state, timeout=15000)
     page.wait_for_timeout(1500)
     page.screenshot(path=str(SHOTS / "wave1-draft-survives.png"))
     check("edit-survives-run-finishing", live.input_value() == typed,

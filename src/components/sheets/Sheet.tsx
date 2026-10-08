@@ -10,7 +10,7 @@ import { useModalEscape } from '../Modal.js';
  * step at a time: the sheet is a layer in the modal chain (`useModalEscape`), so a sheet opened over a
  * drawer — "look underneath" from a rule's page (S12) — closes first and the drawer under it stays.
  */
-export function Sheet({ title, sub, objectAttr, tabs, tab, onTab, primary, onClose, children }: {
+export function Sheet({ title, sub, objectAttr, tabs, tab, onTab, primary, onClose, actions, children }: {
   title: string;
   sub?: string | null;
   /** The object's `data-object` spelling: ⌘K inside the sheet acts on it. */
@@ -20,6 +20,8 @@ export function Sheet({ title, sub, objectAttr, tabs, tab, onTab, primary, onClo
   onTab: (id: string) => void;
   primary: { label: string; onClick: () => void; disabled?: string | null } | null;
   onClose: () => void;
+  /** S16a-1d: the object's secondary actions under its title (a session's Archive / Draft update). */
+  actions?: React.ReactNode;
   children: React.ReactNode;
 }): React.ReactElement {
   const ref = useRef<HTMLDivElement | null>(null);
@@ -44,6 +46,7 @@ export function Sheet({ title, sub, objectAttr, tabs, tab, onTab, primary, onClo
         <div className="wk-sheet-head-body">
           <h2 data-testid="sheet-title" className="wk-sheet-title">{title}</h2>
           {sub !== undefined && sub !== null && <p data-testid="sheet-sub" className="wk-sheet-sub">{sub}</p>}
+          {actions}
         </div>
         <button type="button" data-testid="sheet-close" aria-label="Close" onClick={onClose} className="wk-sheet-x">×</button>
       </header>

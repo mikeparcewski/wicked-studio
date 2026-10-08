@@ -101,6 +101,10 @@ export const OBJECT_ACTIONS: Readonly<Record<ObjectKind, readonly ObjectAction[]
     { id: 'activity', label: 'Activity', tab: 'activity' },
     { id: 'helpers', label: 'Helpers', tab: 'helpers' },
     { id: 'stop', label: 'Stop this session', undoable: true },
+    // S16a-1d: the run page header's actions, homed on the session.
+    { id: 'retry', label: 'Retry it' },
+    { id: 'archive', label: 'Archive it' },
+    { id: 'draft', label: 'Draft an update' },
   ],
   desk: [
     { id: 'everything', label: 'See everything', primary: true },
@@ -176,6 +180,12 @@ export const RAW_CONTROLS: ReadonlyArray<{ control: string; homes: readonly RawH
   { control: 'Run sections (What/Where … Delivery)', homes: RUN_SECTION_TABS.map((t) => ({ on: 'session' as const, tab: t.id })) },
   { control: 'Mode tags', homes: [{ surface: 'Start something', testid: 'desk-start-row' }] },
   { control: 'Keycaps and chord hints', homes: [{ surface: 'Shortcuts sheet', testid: 'shortcut-overlay' }] },
+  // S16a-1d: the retired run page header's actions (the mid-run mode pill is not carried: a change of
+  // pace is a message in the session composer).
+  { control: 'Retry', homes: [{ on: 'session', action: 'retry' }, { surface: 'Session run retry', testid: 'session-run-retry' }] },
+  { control: 'Archive', homes: [{ on: 'session', action: 'archive' }, { surface: 'Session sheet Archive', testid: 'sheet-archive' }] },
+  { control: 'Draft update', homes: [{ on: 'session', action: 'draft' }, { surface: 'Session sheet Draft update', testid: 'sheet-draft-update' }] },
+  { control: 'Technical handles', homes: [{ surface: 'Session run head', testid: 'tech-session-run' }] },
 ];
 
 /** How many clicks a sheet home is from its object: 1 to open the sheet (an action is in it or in

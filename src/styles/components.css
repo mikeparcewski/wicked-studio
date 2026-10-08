@@ -1111,6 +1111,8 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
 .wk-sheet-head-body { flex: 1; min-width: 0; }
 .wk-sheet-title { margin: 0; font-size: var(--text-lg); font-weight: var(--weight-semi); color: var(--ink-high); }
 .wk-sheet-sub { margin: 2px 0 0; font-size: var(--text-xs); color: var(--ink-muted); }
+/* S16a-1d: a session sheet's secondary actions (Draft update, Archive with its confirm). */
+.wk-sheet-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; }
 .wk-sheet-x { border: 0; background: transparent; color: var(--ink-muted); font-size: var(--text-lg); cursor: pointer; line-height: 1; }
 .wk-sheet-tabs { display: flex; flex-wrap: wrap; gap: 4px; padding: 0 16px 8px; border-bottom: 1px solid var(--border-subtle); }
 .wk-sheet-tab { border: 0; background: transparent; padding: 4px 10px; border-radius: 999px; font-size: var(--text-xs); color: var(--ink-muted); cursor: pointer; }
