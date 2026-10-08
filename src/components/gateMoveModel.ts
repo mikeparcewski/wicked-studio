@@ -426,11 +426,75 @@ function findingsItems(text: string | null | undefined): string[] | null {
       if (group !== 'passing' && !FRAME.test(l)) push(prose, l);
     }
   }
-  // The must-fix tier is why the review failed; Concerns ride only when it names none (Copilot).
-  if (mustFix.length > 0) return mustFix;
-  if (severe.length > 0) return severe;
+  // The must-fix tier is why the review failed; its Concerns ride beside it, labelled, so nothing
+  // the reviewer raised is silently out of scope (studio#559 F24).
+  if (severe.length > 0) return tiered(mustFix, severe);
   if (allBullets.length > 0) return allBullets;
   return prose;
+}
+
+/** studio#559 (F28): one bold lead of a paragraph-form verdict — `**Critical — X.**`, `**Concern:**`,
+ *  `**Condition to pass:**` — at a paragraph's start (a line's start, or glued straight after a
+ *  sentence's end when the capture lost its newlines). A bullet's bold lead is not one. */
+const BOLD_LEAD = /\*\*([^*\n]{1,240}?)\*\*/g;
+const BOLD_SEVERITY = /^(critical(?:\s+findings?)?|blockers?|blocking|must[- ]fix|high|major|concerns?)\b\s*(?:[—–:-]\s*(.*?))?\s*$/i;
+const BOLD_CONDITION = /^conditions?\b[^:]*:?\s*$/i;
+/** The tier word for a labelled item (`Critical: …` / `Concern: …`). */
+const TIER_LEAD = /^(Critical|Concern): /;
+
+function atParagraphStart(text: string, at: number): boolean {
+  const before = text.slice(0, at).replace(/[ \t]+$/, '');
+  return before === '' || before.endsWith('\n') || /[.!?)`]$/.test(before);
+}
+
+/**
+ * studio#559 (F28): the findings of a verdict written as bold-led PARAGRAPHS — one per finding,
+ * `**Critical — wrong run's diff can appear.** body` / `**Concern — …** body` — so the count is the
+ * finding count, not one item per paragraph (what-I-did, commands, conditions, counts). A
+ * "Condition(s) to pass" paragraph is the finding only when the verdict names no severity
+ * paragraph (it restates them otherwise). `null` when the text is not in this form, or when a bold
+ * severity lead is a HEADING over a list (`**Critical findings**` then bullets) — the list readers
+ * own that shape.
+ */
+function boldParagraphFindings(text: string | null | undefined): string[] | null {
+  const t = (text ?? '').replace(/\r/g, '');
+  if (t.trim() === '') return null;
+  const leads = [...t.matchAll(BOLD_LEAD)].filter((m) => atParagraphStart(t, m.index));
+  if (leads.length === 0) return null;
+  const must: string[] = [];
+  const concerns: string[] = [];
+  const conditions: string[] = [];
+  for (let i = 0; i < leads.length; i++) {
+    const m = leads[i]!;
+    const inner = m[1]!.trim();
+    const end = m.index + m[0].length;
+    const next = i + 1 < leads.length ? leads[i + 1]!.index : t.length;
+    // The paragraph's body: up to the next bold lead, a blank line, or the verdict/advice trailer.
+    const body = unlink(t.slice(end, next).split(/\n\s*\n|\n(?=VERDICT\b|ADVICE\b)|(?=VERDICT:)/)[0]!.replace(/\s+/g, ' ').trim());
+    const sev = BOLD_SEVERITY.exec(inner);
+    if (sev !== null) {
+      const title = (sev[2] ?? '').replace(/[.:]\s*$/, '').trim();
+      // `**Critical findings**` with nothing after it on its line heads a list: not this form.
+      if (title === '' && body === '') return null;
+      if (title === '' && /^\s*\n\s*(?:[-*•]|\d+[.)])\s/.test(t.slice(end, next))) return null;
+      const item = title !== '' ? (body !== '' ? `${title} — ${body}` : title) : body;
+      (MUST_FIX.test(sev[1]!) ? must : concerns).push(item);
+      continue;
+    }
+    if (BOLD_CONDITION.test(inner) && body !== '') conditions.push(body);
+  }
+  if (must.length > 0 || concerns.length > 0) return tiered(must, concerns);
+  return conditions.length > 0 ? conditions : null;
+}
+
+/** studio#559 (F24): both tiers ride, LABELLED, when a verdict names Criticals AND Concerns — the
+ *  creator fixes the enumerated list, so a dropped tier cost a full round. One tier rides bare. */
+function tiered(must: readonly string[], concerns: readonly string[]): string[] {
+  const rest = concerns.filter((c) => !must.includes(c));
+  if (must.length > 0 && rest.length > 0) {
+    return [...must.map((i) => `Critical: ${i}`), ...rest.map((i) => `Concern: ${i}`)];
+  }
+  return must.length > 0 ? [...must] : [...rest];
 }
 
 /**
@@ -470,6 +534,8 @@ export function failingItems(verdict: GateVerdictView | null, verdictSummary?: s
   if (fromSummaryFindings !== null && fromSummaryFindings.length > 0) return fromSummaryFindings;
   const sectioned = fromFindings !== null || fromSummaryFindings !== null;
   if (!sectioned) {
+    const fromBold = boldParagraphFindings(reason) ?? boldParagraphFindings(verdictSummary);
+    if (fromBold !== null && fromBold.length > 0) return fromBold;
     const fromBullets = bullets(reason);
     if (fromBullets.length > 0) return fromBullets;
     const fromSummary = bullets(verdictSummary);
@@ -494,7 +560,11 @@ export function failingItems(verdict: GateVerdictView | null, verdictSummary?: s
 
 /** The note a send-back / retry carries: the failing items, one per line, under one plain ask. */
 export function findingsNote(items: readonly string[], who: 'reviewer' | 'validator'): string {
-  return [`Fix the ${who}'s failing items:`, ...items.map((i) => `- ${i}`)].join('\n');
+  // studio#559: a two-tier list says its tiers in the ask ("Critical (3) · Concerns (3)").
+  const crit = items.filter((i) => TIER_LEAD.exec(i)?.[1] === 'Critical').length;
+  const conc = items.filter((i) => TIER_LEAD.exec(i)?.[1] === 'Concern').length;
+  const tiers = crit > 0 && conc > 0 ? ` (Critical (${crit}) · Concerns (${conc}))` : '';
+  return [`Fix the ${who}'s failing items${tiers}:`, ...items.map((i) => `- ${i}`)].join('\n');
 }
 
 /**

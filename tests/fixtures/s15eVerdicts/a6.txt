@@ -1,0 +1,27 @@
+## What I did
+
+**Evaluator, read only.** I reviewed the S15e model, session components, gate paths, tests, and DESK journey. I made no changes.
+
+## Commands run
+
+`cat` and `rg`/`sed`/`nl` source reads completed with exit 0, except one search for a nonexistent path (exit 2) and a CSS search with no matches (exit 1). The sandbox rejected the Git status/diff command. This phase forbids running the repository checks; their exit codes were not included in the supplied run record, so I cannot verify them.
+
+**Counts:** derived 5 findings / submitted 0 / failed 0.
+
+## Findings
+
+- **Critical — ProposalCard’s step behavior was removed.** The request explicitly keeps plan, deliver, **and step** proposals as they are. [proposalCard.ts](/w/src/board/proposalCard.ts:28) drops `step`, and [SessionView.tsx](/w/src/components/session/SessionView.tsx:604) sends every def/run-level gate to GateRow. The existing step-card contract was changed to make the new tests pass.
+
+- **Critical — reassign is offered for gates where it is not a seat remedy.** [gateRowModel.ts](/w/src/board/gateRowModel.ts:241) uses broad `isEscalationGate` for reassign eligibility, and its retry branch offers reassign for a launch refusal. The existing [SteeringGate.tsx](/w/src/components/SteeringGate.tsx:881) explicitly withholds that action for launch refusals. Use the narrower failure-escalation rule and exclude launch refusals.
+
+- **Critical — engine choices can be displayed without an answering control.** Unknown choice values become disabled in [gateRowModel.ts](/w/src/board/gateRowModel.ts:148); [GateRow.tsx](/w/src/components/session/GateRow.tsx:266) disables those buttons. A gate containing only such choices cannot be answered in the session, contrary to the acceptance criterion.
+
+- **Concern — deliver deep links lack a focus target.** `gateOpenPath` now appends `#gate` for every kind, but [SessionView.tsx](/w/src/components/session/SessionView.tsx:604) renders ProposalCard for deliver, while the hash-focus effect exists only in [GateRow.tsx](/w/src/components/session/GateRow.tsx:117). A deliver link therefore does not focus its answering card.
+
+- **Concern — the DESK journey does not prove several required claims.** [desk_gate_kinds_test.py](/w/e2e/desk_gate_kinds_test.py:375) skips reassign when absent; its steer assertion checks `approve` but not `amendScope` or `ord` ([line 432](/w/e2e/desk_gate_kinds_test.py:432)); its deep-link check verifies the hash but not focus ([line 345](/w/e2e/desk_gate_kinds_test.py:345)). It also does not exercise team, free-text, or custom-choice gates end to end.
+
+## Open questions
+
+The typecheck, lint, Vitest counts, DESK journey exit code, and `--check-desk` exit code are unknown in the evidence available to this read-only phase. The deterministic floor’s run record is needed to establish those results.
+
+VERDICT: FAIL

@@ -1,0 +1,15 @@
+**Evaluator review — S15e.** I read the gate model, session components, decision path, fixture, and tests. I made no edits. Read-only `sed` and `rg` commands exited 0; one `git status`/diff command was denied. I did not run tests because this phase prohibits commands that write files. The prior build phase reported 476 Vitest files and 5,313 tests passing, plus a green DESK journey; I could not independently verify those results here.
+
+**Critical findings**
+
+1. [gateRowModel.ts](/w/src/board/gateRowModel.ts:269) puts *every* eligible reassign seat inline for a retry gate. A pool with three eligible alternatives produces five inline choices, breaking the required 2–4 choice row. Cap retry choices at four and put additional seats under ⋯, as the escalation branch does.
+
+2. [ProposalCard.tsx](/w/src/components/session/ProposalCard.tsx:146) looks for `repoChecksEvaluated.changed` at the **deliver gate’s ord**. The supplied `r-trust-deliver` fixture exposes its deliver diff through `/runs/:id/diff`, and the journey only checks that ProposalCard appears ([desk_gate_kinds_test.py](/w/e2e/desk_gate_kinds_test.py:272)). The requested diffstat is therefore absent on that covered deliver case. Read the deliver diff and assert its contents in the journey.
+
+3. [gateRowModel.ts](/w/src/board/gateRowModel.ts:58) maps any unrecognized engine choice to `{approve:false}`. A displayed custom choice can consequently send a plain rejection instead of the choice the operator selected. Map only choices with a verified wire meaning; provide an honest answering control for the others.
+
+**Concern:** The queued fold uses `chosenLine`, which renders “You chose X” without the requested colon ([GateRow.tsx](/w/src/components/session/GateRow.tsx:139)).
+
+Counts: derived 4 findings / submitted 0 / failed 0. The exact wire representation for arbitrary engine choices remains unverified; the current default rejection should not stand as an assumption.
+
+VERDICT: FAIL

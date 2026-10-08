@@ -1,0 +1,18 @@
+**What I did:** Read-only evaluator review of the S15e session gate model, row, proposal card, tests, and journey. I made no changes.
+
+**Commands run:** `cat CLAUDE.md` and the governed-worker skill (exit 0); source reads and `rg` searches (exit 0). The `git status`/diff command was denied. I did not run tests or builds: this phase forbids their filesystem writes. The prior phase reports a green DESK journey and targeted tests, but does not provide a green full Vitest run.
+
+**Counts:** derived 6 findings / submitted 0 / failed 0.
+
+**Critical findings**
+
+- [GateRow.tsx:90](/w/src/components/session/GateRow.tsx:90): clearing a successfully answered gate changes `gateKey`, and the reset effect clears `chosen`. The required “You chose: …, HH:MM” receipt therefore disappears after the POST.
+- [GateRow.tsx:233](/w/src/components/session/GateRow.tsx:233): the choices have no `title`, visible “suggested” marker, or radio semantics. The required recommendation and hover explanations are absent.
+- [GateRow.tsx:272](/w/src/components/session/GateRow.tsx:272): the closed disclosure contains only the raw prompt. It omits verdict layers, failing items, floor checks, and the reviewer’s note.
+- [gateRowModel.ts:167](/w/src/board/gateRowModel.ts:167): escalation recommendations are inferred from a nonempty note instead of `recommendGateMove`. Reassignment also uses previously assigned unit seats rather than the run’s `session.clis` pool, with no roster eligibility check; valid helpers can be missing and ineligible ones can be offered.
+- [gateRowModel.ts:63](/w/src/board/gateRowModel.ts:63): every engine choice other than `approve` and `request_changes` maps to the same rejection. Distinct team or custom choices consequently send indistinguishable answers.
+- [ProposalCard.tsx:123](/w/src/components/session/ProposalCard.tsx:123): delivery details contain no diffstat or repository name, so they do not identify the requested push target and changes.
+
+**Open questions:** The run record’s deterministic floor exit codes were not provided here. The in-process journey also does not exercise reassign, stop, 409 recovery, or delivery details; those checks remain unverified by the evidence available in this phase.
+
+VERDICT: FAIL

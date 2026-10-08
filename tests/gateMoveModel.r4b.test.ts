@@ -265,10 +265,10 @@ describe('failingItems — Copilot review, round 3', () => {
 });
 
 describe('failingItems — Copilot review, round 4', () => {
-  it('a trailing severity opens the must-fix tier: "Findings (critical)" outranks a Concerns subgroup', () => {
+  it('a trailing severity opens the must-fix tier: "Findings (critical)" leads a labelled Concerns subgroup (studio#559)', () => {
     for (const head of ['Findings (critical)', 'Findings — blocking']) {
       const text = ["the evaluator's verdict is FAIL", head, `- ${FINDING}`, 'Concerns:', '- the README wording is loose.', 'VERDICT: FAIL'].join('\n');
-      expect(read(text)).toEqual([FINDING]);
+      expect(read(text)).toEqual([`Critical: ${FINDING}`, 'Concern: the README wording is loose.']);
     }
   });
 

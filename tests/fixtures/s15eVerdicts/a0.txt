@@ -1,0 +1,21 @@
+**Role: Evaluator.** I reviewed the S15e model, session components, routing, event hydration, and new journey. I made no changes.
+
+**Commands run:** Read-only `cat`, `nl`, and `rg` commands exited 0, except one `rg` with no matches (exit 1). The `git status`/diff command was denied. I did not run builds or tests in this read-only phase; no deterministic floor results were available to cite.
+
+**Counts:** derived 6 findings / submitted 0 / failed 0.
+
+### Critical findings
+
+- **A fresh session can have no gate row.** [GateRow.tsx](/w/src/components/session/GateRow.tsx:66) returns nothing until run events are in the store. The durable-event fetch in [App.tsx](/w/src/App.tsx:250) depends on `runId`, while [useRoute.ts](/w/src/hooks/useRoute.ts:358) explicitly leaves `runId` null for `/s/:id`. The session needs its own event hydration path.
+- **The new journey cannot prove a sent decision as written.** [desk_gate_kinds_test.py](/w/e2e/desk_gate_kinds_test.py:123) checks POSTs immediately after the row folds, before the required 10-second undo window expires. The same mistake affects its escalation assertion at line 237. The requested journey was not reported as run.
+- **Reassignment uses the wrong pool and no roster.** [GateRow.tsx](/w/src/components/session/GateRow.tsx:59) builds a pool from seats previously assigned to units; [gateRowModel.ts](/w/src/board/gateRowModel.ts:173) passes no roster. A run-pool helper that has not worked a unit is omitted, and an unavailable seat can be offered.
+
+### Concerns
+
+- [GateRow.tsx](/w/src/components/session/GateRow.tsx:214) has no suggested marker, choice `title`, or closed verdict/failing-items/floor-check disclosure. The raw prompt disclosure appears only when it differs from the plain question. This misses the specified decision context.
+- [gateRowModel.ts](/w/src/board/gateRowModel.ts:182) recommends escalation send-back whenever its note is nonempty, without calling `recommendGateMove`. It also places every reassignment candidate inline, so the row can exceed four choices.
+- [ProposalCard.tsx](/w/src/components/session/ProposalCard.tsx:123) adds delivery details, but does not show the requested diffstat or an explicit repository name.
+
+**Open question:** The run record’s deterministic floor results were not available in this phase. They do not resolve the code and journey findings above.
+
+VERDICT: FAIL
