@@ -12,6 +12,15 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.6.5] — 2026-10-08
+
+Everything › Sessions gains an "Every run" table beside the grouped view (S17b, studio#586), and a
+finished run with no governance evidence says so once (S17c, studio#589, delivered by governed run
+`dee87f48` on the rig). Also: an orphaned run says so and offers Resume (#545), a denied-unit gate
+row offers Approve with the suggested arm (#573), one vocabulary for plan step names (#574), the
+delivered card links its PR and the deliver card reads its evidence truthfully (#575, #577), and a
+refused ask member is no longer listed as a reviewer (#540).
+
 ### Added
 - S17c: a finished run with no governance evidence says so once ("No governance evidence was recorded for this run — it ended <ago>"), with the individual reasons collapsed under ⋯; the run's chain sentence says "· nothing checked".
 - #545: a run the daemon restart orphaned says so — the session thread shows "The daemon restarted while this step was running; nothing is working on it." with one action, Resume (`POST /runs/:id/resume`); the Desk's needs-you queue counts it (above any stall verdict, with `Resume ›`); the Watchtower says "N runs were orphaned by a restart". The verdict is the engine's `runOrphaned` report as the newest dispatch-or-orphan frame of the run's trail (crew#830) — read once per executing run for a late join, kept current by the live frames.
@@ -1846,7 +1855,8 @@ The merged interactive layer: wicked-interactive's UI moved into this skin (DES-
   `git subtree split` (92 commits).
 - The SPA as a pure HTTP/WS client of the wicked-crew daemon: runs, gates, live CoreEvents.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.6.4...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.6.5...HEAD
+[0.6.5]: https://github.com/mikeparcewski/wicked-studio/compare/v0.6.4...v0.6.5
 [0.6.4]: https://github.com/mikeparcewski/wicked-studio/compare/v0.6.3...v0.6.4
 [0.6.3]: https://github.com/mikeparcewski/wicked-studio/compare/v0.6.2...v0.6.3
 [0.6.2]: https://github.com/mikeparcewski/wicked-studio/compare/v0.6.1...v0.6.2
