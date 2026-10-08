@@ -42,7 +42,7 @@ function parseDiffstat(diff: string): { files: number; additions: number; deleti
  *  deliver unit then says so (`proposalCard`'s late-join evidence). */
 const lastKinds = new Map<string, ProposalKind>();
 
-export function ProposalCard({ view, chain, acceptance = null, ask = null, onBringBack }: {
+export function ProposalCard({ view, chain, acceptance = null, ask = null, onBringBack, handedOver = false }: {
   view: SessionView;
   chain: ChainModel;
   /** WT-U2 / WT-W3: crew's acceptance summary for the run — the deliver card's one line, verbatim. */
@@ -51,6 +51,9 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
   ask?: AskProposal | null;
   /** ASK-S2: "Bring it back" prefills the composer with the operator's own words, so the PA re-proposes. */
   onBringBack?: (() => void) | undefined;
+  /** S16a-1a: the run finished with a hand-over on record (delivered / pushed) and this browser holds
+   *  no receipt — the card is that hand-over's receipt, read off the run's delivery verdict. */
+  handedOver?: boolean;
 }): React.ReactElement | null {
   const runId = view.session.id;
   const gate = useGateStore((s) => s.gates[runId]);
@@ -81,7 +84,7 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
   }, [runId]);
   // Diff for the current run only; null while loading or when the fetch failed.
   const runDiff = runDiffState?.runId === runId ? runDiffState.data : null;
-  const card = proposalCard({ view, gate, chain, action, ui, lastKind: lastKinds.get(runId) ?? null, ask });
+  const card = proposalCard({ view, gate, chain, action, ui, lastKind: lastKinds.get(runId) ?? (handedOver ? 'deliver' : null), ask });
   const asked = card !== null && gate !== undefined ? card.kind : null;
   useEffect(() => { if (asked !== null) lastKinds.set(runId, asked); }, [runId, asked]);
   // The one "Are you sure?" takes focus when it opens; Cancel gives it back to Deliver (Copilot).

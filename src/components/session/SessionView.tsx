@@ -16,12 +16,13 @@ import { readSessionVisit, useSessionDrafts, writeSessionVisit } from '../../sto
 import { humanTitle } from '../runIdentity.js';
 import type { ChatCitations } from '../../api/chat-wire.js';
 import { IDLE_GATE_ACTION, useGateActionStore } from '../../board/gateActions.js';
-import { proposalKindOf, statusSentence } from '../../board/proposalCard.js';
+import { finishedDeliveryArm, proposalKindOf, statusSentence } from '../../board/proposalCard.js';
 import { useGateStore } from '../../store/gates.js';
 import { useRunEventStore } from '../../store/events.js';
 import { ChainLine, useRunChain } from './ChainLine.js';
 import { ProposalCard } from './ProposalCard.js';
 import { useRunEvents } from '../../hooks/useRunEvents.js';
+import { StrandedCard } from './StrandedCard.js';
 import { GateRow } from './GateRow.js';
 import { SourceChips } from './SourceChips.js';
 import { SinceYouLeft } from './SinceYouLeft.js';
@@ -616,6 +617,10 @@ export function RunBlock({ view, badge, sessionId }: {
   // Rule 5: store-based receipt survives remount; no useRef.
   const effectiveKind = gate !== undefined ? proposalKind
     : action.receipt?.kind === 'plan' || action.receipt?.kind === 'deliver' ? action.receipt.kind : null;
+  // S16a-1a (studio#583 / #587): a finished run opened fresh — no gate, no receipt here — still
+  // answers its hand-over in the thread, off the daemon's delivery verdict: the receipt (PR link or
+  // branch) for a hand-over, the "Deliver — open a PR" door for a stranded run.
+  const finished = effectiveKind === null ? finishedDeliveryArm(view, gate) : null;
   return (
     <section data-testid="session-run" data-run-id={id} data-state={state} {...(acceptance !== null ? { 'data-acceptance': 'read' } : {})} className="wk-session-run">
       <p className="wk-session-run-head">
@@ -633,7 +638,11 @@ export function RunBlock({ view, badge, sessionId }: {
       {/* S15e: plan and deliver go through ProposalCard; every other gate kind is answered in the thread. */}
       {effectiveKind === 'plan' || effectiveKind === 'deliver'
         ? <ProposalCard view={view} chain={chain} acceptance={acceptance?.summary ?? null} />
-        : <GateRow view={view} gate={gate} />}
+        : finished === 'handed'
+          ? <ProposalCard view={view} chain={chain} acceptance={acceptance?.summary ?? null} handedOver />
+          : finished === 'stranded'
+            ? <StrandedCard view={view} />
+            : <GateRow view={view} gate={gate} />}
       <PlanStepLines runId={id} />
       <ChainLine chain={chain} runId={id} units={view.units} teamError={teamError} onRetry={retry} checks={checks} momentOf={momentOf} onOpenAt={(sec) => requestWalkthroughSeek(id, sec)} nothingChecked={noEvidenceSummary !== null} />
       {/* S8: the page the run is producing — a live preview that morphs inline → pane → full. */}

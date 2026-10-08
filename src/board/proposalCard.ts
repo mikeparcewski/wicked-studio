@@ -321,3 +321,45 @@ export function proposalCard(input: ProposalInput): ProposalCardModel | null {
   if (status === 'cancelled') return { ...card, state: 'cancelled', out: statusSentence(view, chain, gate) };
   return { ...card, state: 'fail', reason: statusSentence(view, chain, gate), canRetry: false };
 }
+
+/** S16a-1a (studio#583 / #587): which card a FINISHED run opened fresh shows — no gate open, no
+ *  receipt in this browser — read off the daemon's delivery verdict alone. `handed` = the receipt
+ *  (delivered: the pull request; pushed: the branch); `stranded` = the "Deliver — open a PR" door;
+ *  null = the status sentence's outcome line only (nothing to deliver, failed, none). */
+export type FinishedDeliveryArm = 'handed' | 'stranded' | null;
+
+export function finishedDeliveryArm(view: SessionView, gate: OpenGate | undefined): FinishedDeliveryArm {
+  if (gate !== undefined || view.session.status !== 'completed') return null;
+  const s = deliveryOf(view).state;
+  if (s === 'delivered' || s === 'pushed') return 'handed';
+  if (s === 'stranded') return 'stranded';
+  return null;
+}
+
+/** The post-hoc deliver's state as the stranded card reads it (`store/postHocDeliver.ts`). */
+export type StrandedPress =
+  | { phase: 'delivering' }
+  | { phase: 'delivered'; prUrl: string }
+  | { phase: 'error'; error: string }
+  | undefined;
+
+export interface StrandedCardModel {
+  state: 'ask' | 'delivering' | 'delivered' | 'error';
+  /** The outcome sentence (`outcomeLine`'s stranded words; "Finished · delivered" once it lands). */
+  out: string;
+  /** The primary button's words. */
+  act: string;
+  /** delivered: the pull request the POST answered. */
+  prUrl: string | null;
+  /** error: studio's headline, then the daemon's words verbatim. */
+  error: { headline: string; detail: string } | null;
+}
+
+/** The stranded card (S16a-1a): pure over the run and the post-hoc deliver's answer. */
+export function strandedCard(view: SessionView, press: StrandedPress): StrandedCardModel {
+  const base: StrandedCardModel = { state: 'ask', out: outcomeLine(view), act: 'Deliver — open a PR', prUrl: null, error: null };
+  if (press === undefined) return base;
+  if (press.phase === 'delivering') return { ...base, state: 'delivering', act: 'Delivering…' };
+  if (press.phase === 'delivered') return { ...base, state: 'delivered', out: 'Finished · delivered', prUrl: press.prUrl };
+  return { ...base, state: 'error', error: { headline: 'Delivery failed — the run is still stranded.', detail: press.error } };
+}
