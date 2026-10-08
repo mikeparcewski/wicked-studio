@@ -188,6 +188,21 @@ describe('the §7.2 lifecycle (B5, EC37): the popover answers where the click wa
     expect(screen.queryByTestId('learn-timeout')).toBeNull(); // a REPORTED failure is not a timeout
   });
 
+  it('studio#592: a reason naming a home path reads ~/… in the default layer', async () => {
+    const { useViewPrefsStore } = await import('../src/store/viewPrefs.js');
+    useViewPrefsStore.setState((s) => ({ prefs: { ...s.prefs, technical_details: false } }));
+    pollLearnedTheme.mockResolvedValue({
+      kind: 'bridge-error',
+      reason: "Couldn't grab that URL: Executable doesn't exist at /Users/reel-operator/rig/home/state/interactive/recorder-browsers/chromium/x",
+    });
+    const user = userEvent.setup();
+    mount();
+    await submitUrl(user);
+    const error = await screen.findByTestId('learn-error');
+    expect(error).toHaveTextContent('~/rig/home/state/interactive/recorder-browsers');
+    expect(error.textContent).not.toContain('/Users/reel-operator');
+  });
+
   it('AC: fixture-simulated silence resolves to learn-timeout with the honest retry copy', async () => {
     pollLearnedTheme.mockResolvedValue({ kind: 'timeout', attempts: 16, lastFetchError: null });
     const user = userEvent.setup();

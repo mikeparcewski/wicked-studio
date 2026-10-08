@@ -7,6 +7,7 @@ import { createDoc, docBinding, getVersions, injectDocMessage, interactiveUrl, p
 import { parseCreateAsk } from '../interactive/createAsk.js';
 import { docSlug } from '../interactive/docSlug.js';
 import { useRunEventStore } from '../store/events.js';
+import { useDisplayText } from '../hooks/useHomePath.js';
 import { ComposerContext } from './ComposerContext.js';
 import { DocSubjectPicker, NO_GROUNDING_NARRATION, type DocFormat, type SubjectStatus } from './DocSubjectPicker.js';
 import { defaultDocSeats, docClisJson, type DocSeatDefault } from './docSeats.js';
@@ -133,6 +134,9 @@ function NarrationRow({ msg, live }: { msg: Extract<DocMsg, { kind: 'narration' 
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => { clearInterval(timer); };
   }, [live, repeats, msg.firstAt]);
+  // studio#592: a bridge line ("Couldn't grab that URL: …") may name a home path — `~/…` here,
+  // the full path only under "Show technical details".
+  const showText = useDisplayText();
   const span = msg.firstAt === undefined
     ? null
     : live ? now - msg.firstAt : (msg.lastAt ?? msg.firstAt) - msg.firstAt;
@@ -141,7 +145,7 @@ function NarrationRow({ msg, live }: { msg: Extract<DocMsg, { kind: 'narration' 
     <div className="flex items-start gap-2 text-xs font-mono" data-testid="doc-narration" data-repeats={repeats} style={{ color: S.body }}>
       <span className="mt-1.5 w-1.5 h-1.5 rounded-full shrink-0" style={{ background: S.live }} />
       <span>
-        {msg.text}
+        {showText(msg.text)}
         {repeats > 0 && span !== null && (
           <span
             data-testid="doc-narration-elapsed"

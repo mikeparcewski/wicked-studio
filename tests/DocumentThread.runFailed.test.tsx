@@ -217,6 +217,23 @@ describe('the folded narration row (F-4R2-005)', () => {
     expect(within(rows[0]!).getByTestId('doc-narration-elapsed').textContent).not.toBe(before);
   });
 
+  it('studio#592: a bridge error line naming a home path reads ~/… (full path only under technical details)', async () => {
+    const { useViewPrefsStore } = await import('../src/store/viewPrefs.js');
+    useViewPrefsStore.setState((s) => ({ prefs: { ...s.prefs, technical_details: false } }));
+    const store = useDocThreadStore.getState();
+    store.addUserMsg(KEY, 'm-1', 'learn https://acme.example');
+    store.ingest(status("Couldn't grab that URL: Executable doesn't exist at /Users/reel-operator/rig/home/state/interactive/recorder-browsers/chromium/x", 'error'));
+    mount();
+    const row = screen.getByTestId('doc-narration');
+    expect(row.textContent).toContain('~/rig/home/state/interactive/recorder-browsers');
+    expect(row.textContent).not.toContain('/Users/reel-operator');
+    cleanup();
+    useViewPrefsStore.setState((s) => ({ prefs: { ...s.prefs, technical_details: true } }));
+    mount();
+    expect(screen.getByTestId('doc-narration').textContent).toContain('/Users/reel-operator/rig/home');
+    useViewPrefsStore.setState((s) => ({ prefs: { ...s.prefs, technical_details: false } }));
+  });
+
   it('fmtSpan reads in words', () => {
     expect(fmtSpan(48_000)).toBe('48s');
     expect(fmtSpan(135_000)).toBe('2m 15s');
