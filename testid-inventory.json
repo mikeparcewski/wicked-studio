@@ -12,8 +12,8 @@
   "studioVersion": "0.6.4",
   "counts": {
     "files": 219,
-    "occurrences": 2556,
-    "static": 2231,
+    "occurrences": 2559,
+    "static": 2233,
     "dynamic": 79,
     "computed": 9
   },
@@ -13259,6 +13259,18 @@
     },
     {
       "testId": "watch-coverage",
+      "files": [
+        "src/components/WatchLines.tsx"
+      ]
+    },
+    {
+      "testId": "watch-coverage-reasons",
+      "files": [
+        "src/components/WatchLines.tsx"
+      ]
+    },
+    {
+      "testId": "watch-coverage-toggle",
       "files": [
         "src/components/WatchLines.tsx"
       ]

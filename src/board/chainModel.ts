@@ -451,9 +451,11 @@ export function gatePlanLabels(prompt: string | undefined, known: readonly Chain
   return { labels: steps.map((s) => s.label), floor: steps.filter((s) => plan.floor.includes(s.id)).map((s) => s.label) };
 }
 
-/** "2 of 5 done" — and "· 1 checked" only once a step carries `check_state`. */
-export function chainSentence(c: ChainModel): string {
+/** "2 of 5 done" — and "· 1 checked" only once a step carries `check_state`; "· nothing checked" when nothingChecked. */
+export function chainSentence(c: ChainModel, nothingChecked = false): string {
   if (c.total === 0) return c.transportLine ?? 'No steps yet';
   const base = c.proposed ? `${c.total} steps proposed` : `${c.done} of ${c.total} done`;
-  return c.checked === null ? base : `${base} · ${c.checked} checked`;
+  if (c.checked !== null) return `${base} · ${c.checked} checked`;
+  if (nothingChecked) return `${base} · nothing checked`;
+  return base;
 }

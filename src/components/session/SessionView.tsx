@@ -3,6 +3,9 @@ import { api } from '../../api/client.js';
 import type { ChatPathView, SessionView as RunView } from '../../api/types.js';
 import { needsByRun } from '../../board/deskModel.js';
 import type { NeedRow } from '../../board/needsYou.js';
+import { endedAtMs, finishedAtMs } from '../../board/needsYou.js';
+import type { WatchCoverage } from '../../api/watch-wire.js';
+import { coverageSummary } from '../../store/watch.js';
 import {
   CLOSED_LINE, conversationOf, ORPHANED_LINE, orphanedOf, parseSessionId, runChatIdOf, sessionPath, sessionState, sessionTitle, sinceYouLeft,
   type Conversation, type SessionState,
@@ -579,6 +582,26 @@ export function RunBlock({ view, badge, sessionId }: {
   const { chain: planChain, teamError, retry } = useRunChain(view);
   const id = view.session.id;
   const state = sessionState(view.session.status);
+  const isTerminal = ['completed', 'cancelled', 'failed'].includes(view.session.status);
+  const endedMs = isTerminal ? (endedAtMs(view) ?? finishedAtMs(view)) : null;
+  const [watchCoverage, setWatchCoverage] = useState<WatchCoverage[] | undefined>(undefined);
+  const watchFetchedFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (!isTerminal || watchFetchedFor.current === id) return;
+    watchFetchedFor.current = id;
+    api.getWatch({ run: id, limit: 1 })
+      .then((r) => { setWatchCoverage(r.coverage ?? []); })
+      .catch(() => {
+        // Any failure (404/501 absent registry, or other error) → leave watchCoverage undefined.
+        // Only a successful read with no checked entry adds "· nothing checked".
+      });
+  }, [id, isTerminal]);
+  const noEvidenceSummary = coverageSummary(
+    watchCoverage,
+    isTerminal,
+    endedMs,
+    (e) => e.replace(/[-_]+/g, ' '),
+  );
   const gate = useGateStore((s) => s.gates[id]);
   const action = useGateActionStore((s) => s.byGate[id] ?? IDLE_GATE_ACTION);
   // WT-U2: "checked" comes only from the acceptance read (crew's per-step check state); the chips'
@@ -611,7 +634,7 @@ export function RunBlock({ view, badge, sessionId }: {
         ? <ProposalCard view={view} chain={chain} acceptance={acceptance?.summary ?? null} />
         : <GateRow view={view} gate={gate} />}
       <PlanStepLines runId={id} />
-      <ChainLine chain={chain} runId={id} units={view.units} teamError={teamError} onRetry={retry} checks={checks} momentOf={momentOf} onOpenAt={(sec) => requestWalkthroughSeek(id, sec)} />
+      <ChainLine chain={chain} runId={id} units={view.units} teamError={teamError} onRetry={retry} checks={checks} momentOf={momentOf} onOpenAt={(sec) => requestWalkthroughSeek(id, sec)} nothingChecked={noEvidenceSummary !== null} />
       {/* S8: the page the run is producing — a live preview that morphs inline → pane → full. */}
       <RunArtifacts view={view} composerKey={sessionId} chain={chain} />
       <RunHelpers view={view} />

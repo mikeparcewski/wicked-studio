@@ -100,7 +100,7 @@ function whyOf(s: ChainStep): string {
   return [ADDED_WORD[s.addedBy], s.reason].filter(Boolean).join(' — ');
 }
 
-export function ChainLine({ chain, runId, units = [], teamError = null, onRetry, checks = null, momentOf, onOpenAt }: {
+export function ChainLine({ chain, runId, units = [], teamError = null, onRetry, checks = null, momentOf, onOpenAt, nothingChecked = false }: {
   chain: ChainModel;
   runId: string;
   /** The run's units: a step that has one opens its sheet (S11). */
@@ -113,6 +113,8 @@ export function ChainLine({ chain, runId, units = [], teamError = null, onRetry,
   momentOf?: MomentOf;
   /** WT-U2: a chip with a moment asks the run's walkthrough to open there. */
   onOpenAt?: (sec: number) => void;
+  /** S17c: true when the run is terminal with no checked governance entries → "· nothing checked". */
+  nothingChecked?: boolean;
 }): React.ReactElement {
   return (
     <div data-testid="chain" data-run-id={runId} data-source={chain.source} data-proposed={chain.proposed ? 'true' : 'false'} className="wk-chain">
@@ -154,7 +156,7 @@ export function ChainLine({ chain, runId, units = [], teamError = null, onRetry,
         </ol>
       )}
       {(chain.total > 0 || chain.transportLine === null) && (
-        <p data-testid="chain-sentence" className="wk-chain-sentence">{checkedSentence(chain) ?? chainSentence(chain)}</p>
+        <p data-testid="chain-sentence" className="wk-chain-sentence">{checkedSentence(chain) ?? chainSentence(chain, nothingChecked)}</p>
       )}
       {teamError !== null && (
         <p data-testid="chain-team-error" className="wk-chain-transport">

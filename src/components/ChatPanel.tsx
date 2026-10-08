@@ -1,5 +1,6 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { parseJump } from '../store/watch.js';
+import { endedAtMs, finishedAtMs } from '../board/needsYou.js';
 import { WatchRunLines } from './WatchLines.js';
 import { Tech, runTechParts } from './Tech.js';
 import { lostQuorum, quorumLabel } from './councilQuorum.js';
@@ -1075,7 +1076,7 @@ function RunChat({
       )}
 
       {/* TR-W8: "You jumped in from the Watchtower" and the run's watch coverage line. */}
-      <WatchRunLines runId={session.id} jumped={jump !== null} onBack={() => window.history.back()} />
+      <WatchRunLines runId={session.id} jumped={jump !== null} onBack={() => window.history.back()} isTerminal={isTerminal} endedMs={isTerminal ? (endedAtMs(view) ?? finishedAtMs(view)) : null} />
 
       {/* The Units lens: the slice-R post-mortem spine for failed/cancelled runs
           (unchanged), the crew#272 output blocks for completed ones. */}

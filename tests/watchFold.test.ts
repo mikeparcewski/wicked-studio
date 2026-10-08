@@ -4,7 +4,7 @@ import { api } from '../src/api/client.js';
 import type { CoreEvent, SessionView } from '../src/api/types.js';
 import type { WatchFinding, WatchFindingCleared } from '../src/api/watch-wire.js';
 import {
-  EMPTY_WATCH, coverageLine, foldCleared, foldFeed, foldFinding, foldRuns, foldTeamFrame, foldTrail, foldWatchFrame, foldWatchdog,
+  EMPTY_WATCH, coverageLine, coverageSummary, foldCleared, foldFeed, foldFinding, foldRuns, foldTeamFrame, foldTrail, foldWatchFrame, foldWatchdog,
   gateLine, jumpPath, orphanedRuns, parseJump, runPath, useWatchStore, watchFeed,
 } from '../src/store/watch.js';
 
@@ -199,6 +199,48 @@ describe('jump in, coverage, the store', () => {
     useWatchStore.getState().ingest(frame('wicked.crew.watch_finding.raised', finding()) as never);
     useWatchStore.getState().ingest({ type: 'workerStalled', session: 'r-2', quietForMs: 60_000 });
     expect(watchFeed(useWatchStore.getState().fold).map((r) => r.kind).sort()).toStrictEqual(['problem', 'quiet']);
+  });
+});
+
+describe('coverageSummary (S17c)', () => {
+  const NOW = 1_700_000_000_000;
+  const NOT_CHECKED = (id: string, reason: string) => ({ entry_id: id, state: 'not_checked' as const, reason });
+  const CHECKED = (id: string) => ({ entry_id: id, state: 'checked' as const });
+
+  it('A1: terminal + all not_checked → one no-evidence line with reasons', () => {
+    const result = coverageSummary(
+      [NOT_CHECKED('scope-drift', 'no declared scope'), NOT_CHECKED('claim-vs-evidence', 'no evidence file')],
+      true, NOW - 120_000, undefined, NOW,
+    );
+    expect(result?.line).toBe('No governance evidence was recorded for this run — it ended 2 min ago');
+    expect(result?.reasons).toStrictEqual(['scope-drift (no declared scope)', 'claim-vs-evidence (no evidence file)']);
+  });
+
+  it('A2: terminal + empty list → no-evidence line, empty reasons', () => {
+    const result = coverageSummary([], true, NOW - 120_000, undefined, NOW);
+    expect(result?.line).toMatch(/^No governance evidence was recorded for this run/);
+    expect(result?.reasons).toStrictEqual([]);
+  });
+
+  it('A3: live run → delegates to coverageLine', () => {
+    const result = coverageSummary(
+      [NOT_CHECKED('scope-drift', 'no declared scope')],
+      false, null, undefined, NOW,
+    );
+    expect(result?.line).toMatch(/^Not checked on this run:/);
+    expect(result?.reasons).toStrictEqual([]);
+  });
+
+  it('A4: undefined (absent registry) → null', () => {
+    expect(coverageSummary(undefined, true, NOW - 120_000, undefined, NOW)).toBeNull();
+  });
+
+  it('terminal + has a checked entry → null (evidence exists)', () => {
+    const result = coverageSummary(
+      [NOT_CHECKED('scope-drift', 'no declared scope'), CHECKED('claim-vs-evidence')],
+      true, NOW - 120_000, undefined, NOW,
+    );
+    expect(result).toBeNull();
   });
 });
 
