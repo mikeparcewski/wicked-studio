@@ -5,6 +5,7 @@ import {
 } from '../interactive/themeWire.js';
 import { pollLearnedTheme } from '../theming/learnPoll.js';
 import { threadKey, useDocThreadStore } from '../store/docThread.js';
+import { useDisplayText } from '../hooks/useHomePath.js';
 
 // The Themes control (DES-UXFIX-001 §2.6 rule 4, V19), CORRECTED by issue #65,
 // grown an honest lifecycle by DES-UX-001 §7.2 (B5, EC37).
@@ -115,6 +116,9 @@ export function ThemesMenu({ projectId, docId, inline = false }: ThemesMenuProps
     .filter((m) => m.kind === 'narration')
     .at(-1)?.text ?? null;
 
+  // studio#592: the bridge's reason may name a path under the home directory — `~/…` in the
+  // default layer, the full path only under "Show technical details" (#460/#546).
+  const showText = useDisplayText();
   const busy = phase.kind === 'inflight';
 
   async function submit(): Promise<void> {
@@ -257,7 +261,7 @@ export function ThemesMenu({ projectId, docId, inline = false }: ThemesMenuProps
               {stage !== null && (
                 <span data-testid="learn-stage" className="text-[10px] font-mono"
                       style={{ color: S.muted }}>
-                  {stage}
+                  {showText(stage)}
                 </span>
               )}
             </div>
@@ -277,7 +281,7 @@ export function ThemesMenu({ projectId, docId, inline = false }: ThemesMenuProps
             <div data-testid={phase.timeout ? 'learn-timeout' : 'learn-error'}
                  className="flex flex-col gap-1">
               <p className="text-[10px] font-mono" style={{ color: S.fail, margin: 0 }}>
-                {phase.reason}
+                {showText(phase.reason)}
               </p>
               <button
                 type="button"

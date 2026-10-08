@@ -7,6 +7,9 @@ import { createDoc, docBinding, getVersions, injectDocMessage, interactiveUrl, p
 import { parseCreateAsk } from '../interactive/createAsk.js';
 import { docSlug } from '../interactive/docSlug.js';
 import { useRunEventStore } from '../store/events.js';
+import { useDisplayText } from '../hooks/useHomePath.js';
+import { useDocsCache } from '../store/docsCache.js';
+import { GroundingChip } from './GroundingChip.js';
 import { ComposerContext } from './ComposerContext.js';
 import { DocSubjectPicker, NO_GROUNDING_NARRATION, type DocFormat, type SubjectStatus } from './DocSubjectPicker.js';
 import { defaultDocSeats, docClisJson, type DocSeatDefault } from './docSeats.js';
@@ -133,6 +136,9 @@ function NarrationRow({ msg, live }: { msg: Extract<DocMsg, { kind: 'narration' 
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => { clearInterval(timer); };
   }, [live, repeats, msg.firstAt]);
+  // studio#592: a bridge line ("Couldn't grab that URL: …") may name a home path — `~/…` here,
+  // the full path only under "Show technical details".
+  const showText = useDisplayText();
   const span = msg.firstAt === undefined
     ? null
     : live ? now - msg.firstAt : (msg.lastAt ?? msg.firstAt) - msg.firstAt;
@@ -141,7 +147,7 @@ function NarrationRow({ msg, live }: { msg: Extract<DocMsg, { kind: 'narration' 
     <div className="flex items-start gap-2 text-xs font-mono" data-testid="doc-narration" data-repeats={repeats} style={{ color: S.body }}>
       <span className="mt-1.5 w-1.5 h-1.5 rounded-full shrink-0" style={{ background: S.live }} />
       <span>
-        {msg.text}
+        {showText(msg.text)}
         {repeats > 0 && span !== null && (
           <span
             data-testid="doc-narration-elapsed"
@@ -653,6 +659,11 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate }: 
   const pendingIds = useDocThreadStore((s) => (key === null ? EMPTY_IDS : s.pending[key] ?? EMPTY_IDS));
   // §6.3: whether this thread's text was rehydrated from the conversation read.
   const hydratedFromWire = useDocThreadStore((s) => (key === null ? false : s.hydrated[key] === true));
+  // studio#567: the grounding chip — the live status frame's record, else the docs row's copy
+  // (a reopened document shows its chip without replaying the thread). Absent → no chip.
+  const liveGrounding = useDocThreadStore((s) => (key === null ? undefined : s.grounding[key]));
+  const rowGrounding = useDocsCache((s) => (docId === null ? undefined : s.byProject[projectId]?.find((d) => d.name === docId)?.grounding));
+  const grounding = liveGrounding ?? rowGrounding;
   // A document that exists with nothing in flight IS case 4: complete, and editable (§7.10).
   const state: GenState = docId === null ? 'idle' : streamed ?? 'terminal';
   // §6.1 honesty budget (J3): the moment the thread last heard ANY interactive
@@ -1114,6 +1125,9 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate }: 
                borderLeft: `1px solid ${S.border}`, fontFamily: 'var(--font-sans)' }}
     >
       <div className="flex-1 overflow-y-auto px-3.5 py-4 flex flex-col gap-3">
+        {grounding !== undefined && (
+          <div data-testid="doc-grounding-line" className="flex"><GroundingChip grounding={grounding} /></div>
+        )}
         {/* §6.3's stopgap note, scoped to the ONE gap the wire still has: the thread's
             TEXT is back from `GET /d/:doc/api/conversation` (BRIDGE-UX-1 probe 2 — a
             real read), but the transcript carries no version anchors, so markers are

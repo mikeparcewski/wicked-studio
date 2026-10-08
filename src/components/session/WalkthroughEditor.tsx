@@ -8,6 +8,7 @@ import {
 } from '../../board/walkthroughModel.js';
 import { commitGateDecision, refreshGate } from '../../board/gateActions.js';
 import { useGateStore } from '../../store/gates.js';
+import { useDisplayText } from '../../hooks/useHomePath.js';
 import { publishRecording, withdrawRecording } from '../../store/recordings.js';
 import { consumeWalkthroughSeek, useWalkthroughSeek } from '../../store/walkthroughSeek.js';
 import { addAboutChip } from '../../store/composerChips.js';
@@ -171,6 +172,7 @@ function Body({ rec, size, morph, units, reload, composerKey }: {
   const seekReq = useWalkthroughSeek((s) => s.byRun[rec.runId]);
   const seenSeek = useRef(0);
   const pendingSeek = useRef<number | null>(null);
+  const showText = useDisplayText();
   const line = stateLine(rec, { authorWaiting: authorWaiting(rec, units) });
   const seats = seatLine(rec);
   const failed = failedChapter(rec);
@@ -407,7 +409,7 @@ function Body({ rec, size, morph, units, reload, composerKey }: {
   return (
     <div data-testid="walkthrough" data-kind={rec.kind} data-state={rec.state} data-run-id={rec.runId} data-size={size} className={`wk-walk wk-walk--${size}${open ? '' : ' wk-walk--preview'}`}>
       <div className="wk-walk-head">
-        <p data-testid="walkthrough-state" data-tone={line.tone} className={`wk-walk-state wk-walk-state--${line.tone}`}><span aria-hidden className="wk-walk-mark">{line.mark}</span> {lineText}</p>
+        <p data-testid="walkthrough-state" data-tone={line.tone} className={`wk-walk-state wk-walk-state--${line.tone}`}><span aria-hidden className="wk-walk-mark">{line.mark}</span> {showText(lineText)}</p>
         {seats !== null && <p data-testid="walkthrough-seats" className="wk-walk-quiet">{seats}</p>}
         {open && rec.kind === 'walkthrough' && rec.video !== null && <p data-testid="walkthrough-sealed" data-sealed={rec.sealed ? 'true' : 'false'} className="wk-walk-quiet">{rec.sealed ? 'Sealed: the take matches the files on disk.' : 'Not sealed.'}</p>}
         {open && options.length > 0 && (

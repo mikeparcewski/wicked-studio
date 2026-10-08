@@ -17,7 +17,7 @@ import {
   type StoredAnchor, type StoredExport, type StoredSendState,
 } from '../interactive/threadStopgap.js';
 import { UNFILED_MOUNT } from '../api/interactive.js';
-import type { ConversationEntry, ExportFormat } from '../api/interactive.js';
+import type { ConversationEntry, DocGrounding, ExportFormat } from '../api/interactive.js';
 import { describeExportReport, exportReportOf } from '../interactive/exportReport.js';
 import { parseRunFailure, type RunFailureSeam } from '../interactive/runFailure.js';
 import type { CoreEvent, SessionStatus, SessionView } from '../api/types.js';
@@ -300,6 +300,10 @@ interface DocThreadStore {
    *  readback route. The transcript keeps carrying the same line as a
    *  narration message; this is an index into it, not a second author. */
   lastError: Record<string, ThreadError>;
+  /** studio#567: the document's repository grounding, per thread — the structured record crew#512
+   *  puts on the ONE status frame that carries the "Grounded on …" narration. The thread header's
+   *  chip reads this (or the docs row's copy); nothing parses the sentence. */
+  grounding: Record<string, DocGrounding>;
   /**
    * The FIFO of user-message ids awaiting a landed version, per thread
    * (DES-UX-001 §6.1 + §8.4.1 probe 1). The bridge QUEUES sends — every
@@ -489,6 +493,7 @@ export const useDocThreadStore = create<DocThreadStore>((set, get) => {
   landed: {},
   landings: [],
   lastError: {},
+  grounding: {},
   lastSignalAt: {},
   bindings: {},
   held: {},
@@ -615,6 +620,10 @@ export const useDocThreadStore = create<DocThreadStore>((set, get) => {
         const failed = state === 'error' && text !== null
           ? { lastError: { ...s.lastError, [key]: { text } } }
           : {};
+        const g = (payload as Record<string, unknown>).grounding;
+        const grounded = g !== null && typeof g === 'object' && Array.isArray((g as DocGrounding).repo_refs)
+          ? { grounding: { ...s.grounding, [key]: g as DocGrounding } }
+          : {};
         // §6.1 (EC36): a run that DIES takes its backlog with it — every send still
         // pending resolves to the VISIBLE failed state (with its retry) rather than
         // a chip that generates forever. Probe 4 (§8.4.1): the death is one
@@ -653,7 +662,7 @@ export const useDocThreadStore = create<DocThreadStore>((set, get) => {
         // still speaks either cannot put it on screen. A filtered frame still carries the
         // state transition it rode in on: dropping the LINE is not dropping the fact.
         if (text === null || isFiller(text)) {
-          return { messages: base, genState: { ...s.genState, [key]: next }, ...failed, ...pending };
+          return { messages: base, genState: { ...s.genState, [key]: next }, ...failed, ...grounded, ...pending };
         }
         // F-4R2-005: a heartbeat re-emitting the newest narration folds into it (one row, a
         // repeat count and a span) — never a second identical row. A run that ended takes the
@@ -669,6 +678,7 @@ export const useDocThreadStore = create<DocThreadStore>((set, get) => {
             : append(base, key, statusMessage(text, at)),
           genState: { ...s.genState, [key]: next },
           ...failed,
+          ...grounded,
           ...pending,
           ...bound,
         };
@@ -1014,11 +1024,12 @@ export const useDocThreadStore = create<DocThreadStore>((set, get) => {
       const hydrated = { ...s.hydrated }; delete hydrated[key];
       const landed = { ...s.landed }; delete landed[key];
       const lastError = { ...s.lastError }; delete lastError[key];
+      const grounding = { ...s.grounding }; delete grounding[key];
       const lastSignalAt = { ...s.lastSignalAt }; delete lastSignalAt[key];
       const expectedDividers = { ...s.expectedDividers }; delete expectedDividers[key];
       const held = { ...s.held }; delete held[docId];
       const boundRun = { ...s.boundRun }; delete boundRun[key];
-      return { messages, genState, pending, hydrated, landed, lastError, lastSignalAt, expectedDividers, held, boundRun };
+      return { messages, genState, pending, hydrated, landed, lastError, grounding, lastSignalAt, expectedDividers, held, boundRun };
     });
   },
   };

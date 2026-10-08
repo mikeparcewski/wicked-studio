@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.6.5",
   "counts": {
-    "files": 221,
-    "occurrences": 2576,
-    "static": 2247,
+    "files": 222,
+    "occurrences": 2581,
+    "static": 2252,
     "dynamic": 79,
     "computed": 9
   },
@@ -3108,6 +3108,36 @@
       "testId": "doc-gate-option",
       "files": [
         "src/components/DocumentThread.tsx"
+      ]
+    },
+    {
+      "testId": "doc-grounding-chip",
+      "files": [
+        "src/components/GroundingChip.tsx"
+      ]
+    },
+    {
+      "testId": "doc-grounding-line",
+      "files": [
+        "src/components/DocumentThread.tsx"
+      ]
+    },
+    {
+      "testId": "doc-grounding-repos",
+      "files": [
+        "src/components/GroundingChip.tsx"
+      ]
+    },
+    {
+      "testId": "doc-grounding-skipped",
+      "files": [
+        "src/components/GroundingChip.tsx"
+      ]
+    },
+    {
+      "testId": "doc-grounding-source",
+      "files": [
+        "src/components/GroundingChip.tsx"
       ]
     },
     {

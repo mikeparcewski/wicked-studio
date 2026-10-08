@@ -31,6 +31,7 @@ import { plainRunTitle } from '../../board/deskWords.js';
 import { runTechParts, Tech } from '../Tech.js';
 import { ProjectEntry, ProjectsTab } from './ProjectsTab.js';
 import { projectRows } from '../../board/projectsModel.js';
+import { GroundingChip } from '../GroundingChip.js';
 
 /**
  * "SEE EVERYTHING" (`/everything`, DES-STUDIO-REBUILD-001 §5.4, slice S15c/S17a) — one page, five tabs,
@@ -740,6 +741,7 @@ function MadeTab({ runs, q, navigate, go }: { runs: SessionView[]; q: Everything
                   <span className="wk-desk-need-line">
                     {MADE_WORD[r.kind]} · {nameOf(r.projectId)}{r.updatedAt !== null ? ` · ${ageWord(Math.max(0, now - r.updatedAt))} ago` : ''}
                   </span>
+                  {r.doc?.grounding !== undefined && <span className="wk-desk-need-line"><GroundingChip grounding={r.doc.grounding} /></span>}
                 </span>
               </a>
             </li>

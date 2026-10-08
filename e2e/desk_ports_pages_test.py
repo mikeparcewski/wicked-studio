@@ -8,7 +8,8 @@ under STUDIO_SKIN=desk, against the in-process fixture (project_create, wave2b, 
      brings the filter back.
   2. MADE (port 1d): "Ask every project" starts the fan-out; everything-made-cancel sits beside the
      progress sentence and stops it after the project being asked answers (no further project is
-     asked); ?project= narrows the rows to that project and the scope line names it.
+     asked); ?project= narrows the rows to that project and the scope line names it; a grounded
+     document row carries the grounding chip from crew#512's record (studio#567).
   3. /projects/:id (port 1e): the Documents root row shows beside Repositories; Set… saves a root
      (PATCH {interactiveRoot}) and the row reads it back; Clear sends null.
   4. SHEETS (port 1f): a session sheet's Activity tab speaks sentences (sheet-activity-line with a
@@ -135,6 +136,20 @@ with sync_playwright() as p:
           and len(set(all_rows)) > 1 and len(scoped) >= 1 and len(scoped) < len(all_rows)
           and all(x == target for x in scoped) and target in scope_text,
           census=census, asked=asked_n, stopped=stopped, all_rows=sorted(set(all_rows)), target=target, scoped=scoped)
+
+    # studio#567: the grounded fixture document's row carries the chip from the structured record;
+    # the row without the record carries none.
+    chip = page.evaluate("""() => {
+      const row = n => document.querySelector(`[data-testid="everything-made-row"][data-name="${n}"]`);
+      const g = row('ideas'), t = row('todo');
+      const q = (el, id) => el ? el.querySelector(`[data-testid="${id}"]`) : null;
+      return { repos: q(g, 'doc-grounding-repos')?.innerText ?? null, reposTitle: q(g, 'doc-grounding-repos')?.title ?? null,
+               source: q(g, 'doc-grounding-source')?.innerText ?? null, skipped: q(g, 'doc-grounding-skipped')?.innerText ?? null,
+               skippedTitle: q(g, 'doc-grounding-skipped')?.title ?? null, plain: t !== null && q(t, 'doc-grounding-chip') === null };
+    }""")
+    check("made_grounding_chip", chip["repos"] == "Grounded on 1 repo" and chip["reposTitle"] == "notes-app"
+          and chip["source"] == "the project's only repo" and chip["skipped"] == "skipped 1"
+          and "old-notes" in (chip["skippedTitle"] or "") and chip["plain"], **chip)
 
     # ── 3. /projects/:id — the Documents root ─────────────────────────────────────
     patches = []

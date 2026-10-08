@@ -178,7 +178,13 @@ export function stateLine(r: Recording, opts: { authorWaiting?: boolean } = {}):
     // `authoring` is also the state of a walkthrough whose author has not been reached yet (the work
     // before it is still going, or went back to the helpers): nobody is writing checks then.
     case 'authoring': return { mark: '○', text: r.kind === 'demo-video' ? 'Planning the story' : opts.authorWaiting === true ? 'Not started yet' : 'Writing the checks', tone: 'quiet' };
-    case 'linting': return { mark: '○', text: 'Checking the storyline', tone: 'quiet' };
+    // studio#593: crew reports a REFUSED storyline as `linting` plus a `cause` (the lint's denial,
+    // wicked-crew api/recording.js — `plan.status === 'rejected'` → `cause = denial_reason`). A
+    // finished refusal is not a check still running: with a cause, the row says it was refused.
+    case 'linting':
+      return r.cause !== null && r.cause.trim() !== ''
+        ? { mark: '✗', text: `The storyline was refused — ${r.cause}`, tone: 'bad' }
+        : { mark: '○', text: 'Checking the storyline', tone: 'quiet' };
     case 'starting_app': return { mark: '○', text: 'Starting the app', tone: 'quiet' };
     case 'judging': return { mark: '○', text: r.kind === 'demo-video' ? 'Being reviewed' : 'Judging the take', tone: 'quiet' };
     default: return { mark: '○', text: r.state, tone: 'quiet' };
