@@ -394,6 +394,51 @@ export function coverageLine(coverage: WatchFeedResponse['coverage'], label: (en
   return `Not checked on this run: ${not.map((c) => `${label(c.entry_id)} (${c.reason})`).join(', ')}`;
 }
 
+export interface CoverageSummary {
+  line: string;
+  /** Non-empty → ⋯ disclosure; empty → no toggle. */
+  reasons: string[];
+}
+
+// Inlined from WatchtowerPage.ago — a store cannot import a component.
+function _ago(at: number, now: number): string {
+  const s = Math.max(0, Math.round((now - at) / 1000));
+  if (s < 60) return 'just now';
+  if (s < 3600) return `${Math.round(s / 60)} min ago`;
+  if (s < 86_400) return `${Math.round(s / 3600)} h ago`;
+  return new Date(at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+/** S17c: for a terminal run with no checked coverage entry → one no-evidence line + reasons for ⋯.
+ *  For a live run, or a terminal run with at least one checked entry → today's coverageLine result.
+ *  For absent registry (undefined) → null. */
+export function coverageSummary(
+  coverage: WatchFeedResponse['coverage'] | undefined,
+  isTerminal: boolean,
+  endedMs: number | null,
+  label: (entryId: string) => string = (e) => e,
+  now = Date.now(),
+): CoverageSummary | null {
+  if (coverage === undefined) return null;
+  if (!isTerminal) {
+    const line = coverageLine(coverage, label);
+    return line === null ? null : { line, reasons: [] };
+  }
+  // A finished run that DID record evidence keeps today's per-entry line (nothing to summarise).
+  if ((coverage ?? []).some((c) => c.state === 'checked')) {
+    const line = coverageLine(coverage, label);
+    return line === null ? null : { line, reasons: [] };
+  }
+  const notChecked = (coverage ?? []).filter(
+    (c): c is { entry_id: string; state: 'not_checked'; reason: string } => c.state === 'not_checked',
+  );
+  const ended = endedMs !== null ? `it ended ${_ago(endedMs, now)}` : 'it has ended';
+  return {
+    line: `No governance evidence was recorded for this run — ${ended}`,
+    reasons: notChecked.map((c) => `${label(c.entry_id)} (${c.reason})`),
+  };
+}
+
 // ── The store ─────────────────────────────────────────────────────────────────────────────
 
 interface WatchStore {

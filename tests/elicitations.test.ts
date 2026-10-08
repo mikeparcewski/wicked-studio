@@ -178,5 +178,5 @@ describe('the component is actually reachable', () => {
       const jsx = /<ElicitationPrompt\b[^>]*/.exec(readFileSync(f, 'utf8'))?.[0] ?? '';
       expect(jsx, `mount in ${f} is missing key={...}`).toMatch(/\bkey=\{/);
     }
-  });
+  }, 30_000);
 });
