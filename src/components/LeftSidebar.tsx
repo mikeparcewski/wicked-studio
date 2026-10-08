@@ -26,6 +26,7 @@ import { ProjectSwitcher } from './ProjectSwitcher.js';
 import { phaseWord, RUN_DOT } from './RunsSection.js';
 import { SettingsShortcutRows } from './SettingsRailSection.js';
 import { useDisplayPath } from '../hooks/useHomePath.js';
+import { headingForPath, type PathKey } from './askContext.js';
 
 /**
  * The rail, re-architected around FIVE PRIMARY PATHS (DES-FEEDBACK-003 §2/§3,
@@ -75,7 +76,7 @@ const S = {
 
 // ── The five paths (§2.1) ─────────────────────────────────────────────────────
 
-export type PathKey = 'projects' | 'execute' | 'test' | 'vibe' | 'demo' | 'chat' | 'repos' | 'testing' | 'skills' | 'mcp' | 'steering' | 'settings';
+// `PathKey` and `headingForPath` live in askContext.ts (S18c); imported back for the classic rail.
 
 /** Heading word, collapsed-rail glyph (§3.2), ▦ target (§2.1; Settings' glyph
  *  links `/system` in the collapsed column — it has no dashboard). `noun` is
@@ -128,47 +129,7 @@ const P_SETTINGS: PathSpec = { key: 'settings', title: 'Settings',     noun: 'Se
 // Skills / Steering / Settings tail.
 const PATHS: PathSpec[] = [P_PROJECTS, P_EXECUTE, P_TEST, P_VIBE, P_DEMO, P_CHAT, P_REPOS, P_SKILLS, P_MCP, P_STEERING, P_TESTING, P_SETTINGS];
 
-// `wiki`, `rules` and `policies` retired into Steering (they redirect to /steering); the
-// retired `coverage` and `domain` panels redirect to /system — kept mapped here so the rail
-// never flashes headless on the pre-redirect tick.
-const SETTINGS_ROUTES = new Set(['system', 'theme', 'coverage', 'domain', 'workflows']);
-
-/**
- * The route→heading map (§3.2): which primary path owns a pathname. `/` and
- * `/runs*` map to NONE — five closed headings, the rail's calmest reading.
- * Exported pure so the default-expansion contract is unit-pinned.
- */
-export function headingForPath(pathname: string): PathKey | null {
-  const [, first = '', second = ''] = pathname.split('/');
-  if (first === 'projects' || first === 'p') return 'projects';
-  // Execute / Vibe / Demo (nav-reorg). The retired `/make` maps to Execute so the rail never
-  // flashes headless on the pre-redirect tick (useMakeRedirect replaces it with /execute).
-  if (first === 'execute' || first === 'make') return 'execute';
-  if (first === 'vibe') return 'vibe';
-  if (first === 'demo') return 'demo';
-  // `/chat/new` AND `/chat/:id` (J4/C6: a live session's real URL) are Chat's.
-  if (first === 'chats' || (first === 'chat' && second !== '')) return 'chat';
-  if (first === 'repos' || first === 'repo-detail') return 'repos';
-  // The `/testing/*` surface splits into TWO rail sections (usability wave): Test (campaigns/recon,
-  // a work section that needs no project) and Evals (steering-rule evals, a system section beside
-  // Steering). Both are still panel `testing`; the rail heading is chosen by the sub-page. The
-  // retired flat `/campaigns` addresses (which redirect onto `/testing/campaigns`) map to Test.
-  if (first === 'campaigns') return 'test';
-  // Bare `/testing` and the retired `/testing/harness` are page-less addresses `useTestingRedirect`
-  // lands on the TEST landing (F-075 / F-7R2-009) — so the rail heading follows: only `/testing/evals`
-  // is Evals.
-  if (first === 'testing') return second === 'evals' ? 'testing' : 'test';
-  // `/skills` (+ any sub-address) is the skills file manager — a system section beside Steering.
-  if (first === 'skills') return 'skills';
-  // `/mcp` is MCP tools — a system section between Skills and Steering.
-  if (first === 'mcp') return 'mcp';
-  // The retired `/wiki` + `/rules` + `/policies` panels AND the retired standalone `/proposals`
-  // queue redirect into Steering (proposals now live inside its two sub-sections) — map them
-  // there too, so the rail never flashes Settings open on the pre-redirect tick.
-  if (first === 'steering' || first === 'wiki' || first === 'rules' || first === 'policies' || first === 'proposals') return 'steering';
-  if (SETTINGS_ROUTES.has(first)) return 'settings';
-  return null;
-}
+export { headingForPath, type PathKey };
 
 // The Chat predicate — ChatsPage's filter VERBATIM (§3.3: runs with no
 // workflow stamp are chats there and must not double-list under Make);

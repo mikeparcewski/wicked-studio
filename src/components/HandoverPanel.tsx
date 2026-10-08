@@ -23,7 +23,7 @@ import { AnchoredOverlay } from './AnchoredOverlay.js';
 import { ReusePresetPanel } from './FinishedRunRow.js';
 import { Modal } from './Modal.js';
 import { OutboundDraft } from './OutboundDraft.js';
-import { ago } from './ProjectCard.js';
+import { ago } from './AgeStamp.js';
 import { humanTitle } from './runIdentity.js';
 
 /**

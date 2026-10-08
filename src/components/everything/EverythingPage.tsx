@@ -4,7 +4,7 @@ import type { Project } from '../../api/types.js';
 import type { RosterSeat, SessionView } from '../../api/types.js';
 import { deskReadState, needsByRun, needTextByRun, railGroups, signInLapsed, type RailGroup } from '../../board/deskModel.js';
 import {
-  EVERYTHING_TABS, EVERYTHING_VIEWS, everythingPath, filterGroups, handedRows, MADE_KINDS, MADE_WORD, madeRows, readEverythingQuery,
+  EVERYTHING_TABS, EVERYTHING_VIEWS, everythingPath, filterGroups, handedRows, MADE_KINDS, MADE_WORD, madeRows, readEverythingQuery, searchGroups,
   SESSION_FILTERS, TAB_LABEL, type EverythingQuery, type EverythingTab, type HandedRow, type MadeRow,
 } from '../../board/everythingModel.js';
 import type { NeedRow } from '../../board/needsYou.js';
@@ -146,7 +146,11 @@ function SessionsTab({ runs, runsLoaded, runsError, onRetryRuns, needRows, q, na
     () => railGroups(items, unfiled, needsByRun(needRows), Number.POSITIVE_INFINITY, needTextByRun(needRows), runChatId, deliveredNow),
     [items, unfiled, needRows, runChatId, deliveredNow],
   );
-  const shown: RailGroup[] = filterGroups(groups, q.filter, q.project);
+  // The search (S18b): a non-empty query lifts the state filter — it finds a session the chips hid.
+  const [query, setQuery] = useState('');
+  const searching = query.trim() !== '';
+  const problemOf = (runId: string): string | undefined => runs.find((v) => v.session.id === runId)?.session.problem;
+  const shown: RailGroup[] = searching ? searchGroups(filterGroups(groups, 'all', q.project), query, problemOf) : filterGroups(groups, q.filter, q.project);
   // What the scope holds before the state filter: one project's sessions, or every project's — so
   // an empty project says "nothing started here", not "nothing matches this filter".
   const inScope = q.project === null ? groups : groups.filter((g) => g.projectId === q.project);
@@ -213,6 +217,17 @@ function SessionsTab({ runs, runsLoaded, runsError, onRetryRuns, needRows, q, na
             <a href={lens({ project: null })} onClick={(e) => { e.preventDefault(); navigate(lens({ project: null }), { replace: true }); }} data-testid="everything-scope-clear">Every project</a>
           </p>
         )}
+        {q.view === 'grouped' && q.filter !== 'archived' && (
+          <input
+            data-testid="everything-search"
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search sessions…"
+            aria-label="Search sessions"
+            className="wk-runs-filter"
+          />
+        )}
         <div className="wk-everything-views">
           <div role="group" aria-label="View" className="wk-everything-viewswitch">
             {EVERYTHING_VIEWS.map((v) => (
@@ -256,7 +271,13 @@ function SessionsTab({ runs, runsLoaded, runsError, onRetryRuns, needRows, q, na
           {q.project !== null ? 'Nothing has been started in this project yet.' : 'Nothing has been started yet.'}
         </p>
       )}
-      {q.filter !== 'archived' && (read === 'known' || read === 'stale') && total > 0 && shown.length === 0 && (
+      {q.filter !== 'archived' && (read === 'known' || read === 'stale') && total > 0 && shown.length === 0 && searching && (
+        <p data-testid="everything-empty" className="wk-session-grey">
+          No sessions match “{query.trim()}”{scopeName !== null ? ` in ${scopeName}` : ''}.{' '}
+          <button type="button" data-testid="everything-search-clear" onClick={() => setQuery('')} className="wk-since-toggle">Clear the search</button>
+        </p>
+      )}
+      {q.filter !== 'archived' && (read === 'known' || read === 'stale') && total > 0 && shown.length === 0 && !searching && (
         <p data-testid="everything-empty" className="wk-session-grey">
           No sessions match this filter{scopeName !== null ? ` in ${scopeName}` : ''}.{' '}
           <button type="button" data-testid="everything-show-all" onClick={() => navigate(lens({ filter: 'all' }), { replace: true })} className="wk-since-toggle">Show all</button>
@@ -656,9 +677,11 @@ function MadeTab({ runs, q, navigate, go }: { runs: SessionView[]; q: Everything
   // The daemon-wide index: one cheap read, once per session (never a bridge spawn); absent on an
   // older daemon, in which case the list is what the projects opened this session listed.
   useEffect(() => { void useDocsCache.getState().loadIndex(); }, []);
-  const rows = useMemo(() => madeRows(byProject, runs, projectIdByRun, q.kind), [byProject, runs, projectIdByRun, q.kind]);
+  const rows = useMemo(() => madeRows(byProject, runs, projectIdByRun, q.kind, q.project), [byProject, runs, projectIdByRun, q.kind, q.project]);
   const now = Date.now();
-  const lens = (kind: EverythingQuery['kind']): string => everythingPath({ tab: 'made', kind });
+  // The kind is a lens on the scope: a chip click keeps `?project=` (S18b).
+  const lens = (kind: EverythingQuery['kind'], project: string | null = q.project): string => everythingPath({ tab: 'made', kind, project });
+  const scopeName = q.project !== null ? nameOf(q.project) : null;
   const hrefOf = (r: MadeRow): string => {
     if (r.runId !== undefined) return r.projectId !== null ? modePath(r.projectId, 'video', r.runId) : `/runs/${encodeURIComponent(r.runId)}`;
     // A registry document — a demo's script included — opens as a document: the video surface takes
@@ -683,18 +706,28 @@ function MadeTab({ runs, q, navigate, go }: { runs: SessionView[]; q: Everything
             <button key={k.id} type="button" aria-pressed={q.kind === k.id} data-testid="everything-kind" data-kind={k.id} onClick={() => navigate(lens(k.id), { replace: true })} className="wk-chip">{k.label}</button>
           ))}
         </div>
+        {scopeName !== null && (
+          <p data-testid="everything-scope" data-project-id={q.project ?? ''} className="wk-everything-scope">
+            In <b>{scopeName}</b>
+            {' · '}
+            <a href={lens(q.kind, null)} onClick={(e) => { e.preventDefault(); navigate(lens(q.kind, null), { replace: true }); }} data-testid="everything-scope-clear">Every project</a>
+          </p>
+        )}
       </div>
       <p data-testid="everything-made-census" className="wk-session-grey">
         {censusLine}
         {offerLoad && <> <button type="button" data-testid="everything-made-load" onClick={loadAll} className="wk-since-toggle" title="One list per project, in turn — a project's bridge may take a minute to start">Ask every project</button></>}
-        {progress !== null && <> Asking {progress.current ?? '…'} ({progress.done} of {progress.total})…</>}
+        {progress !== null && <>
+          {' '}Asking {progress.current ?? '…'} ({progress.done} of {progress.total})…{' '}
+          <button type="button" data-testid="everything-made-cancel" onClick={() => useDocsCache.getState().cancelFanout()} title="Stop after the project being asked answers — what landed stays listed" className="wk-since-toggle">Cancel</button>
+        </>}
       </p>
       {Object.entries(unavailable).map(([pid, why]) => (
         <p key={pid} data-testid="everything-made-unavailable" data-project-id={pid} className="wk-session-grey">Couldn’t list {nameOf(pid)}: {showText(why)}</p>
       ))}
       {rows.length === 0 && index !== 'untried' && (
         <p data-testid="everything-empty" className="wk-session-grey">
-          {q.kind === 'all' ? 'Nothing made yet.' : `No ${q.kind} yet.`}
+          {q.kind === 'all' ? 'Nothing made yet' : `No ${q.kind} yet`}{scopeName !== null ? ` in ${scopeName}` : ''}.
         </p>
       )}
       {rows.length > 0 && (

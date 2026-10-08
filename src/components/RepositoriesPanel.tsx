@@ -16,7 +16,7 @@ import {
   DashboardGrid, FilterStrip, KpiBand, KpiGroup, Sparkline, StatTile, type FilterChip,
 } from './dashboardKit.js';
 import { NewProjectModal } from './NewProjectModal.js';
-import { ago } from './ProjectCard.js';
+import { ago } from './AgeStamp.js';
 import { ProjectSwitcher } from './ProjectSwitcher.js';
 import { RepoFindings } from './RepoFindings.js';
 import { useNeedsSources } from '../store/needsSources.js';

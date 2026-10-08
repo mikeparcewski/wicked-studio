@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../api/client.js';
 import { apiStatus, isRouteAbsent } from '../api/errors.js';
 import type { ProjectGraphRefreshResult, ProjectGraphStatus } from '../api/types.js';
-import { ago } from './ProjectCard.js';
+import { ago } from './AgeStamp.js';
 
 /**
  * "Build project graph" — the ONE UI control that calls crew's existing

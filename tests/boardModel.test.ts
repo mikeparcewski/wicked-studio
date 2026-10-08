@@ -6,7 +6,7 @@ import {
   interactiveRootOf,
   type Attention,
 } from '../src/hooks/useBoardModel.js';
-import { ago } from '../src/components/ProjectCard.js';
+import { ago } from '../src/components/AgeStamp.js';
 import { makeView } from './factories.js';
 
 const doc: DocSummary = { name: 'deck', kind: 'doc', head: 1, versions: 1, updated_at: null };

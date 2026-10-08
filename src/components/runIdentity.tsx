@@ -1,7 +1,18 @@
-import type { AgentSession, CoreEvent } from '../api/types.js';
+import type { AgentSession, CoreEvent, SessionStatus } from '../api/types.js';
 import { useRunEventStore } from '../store/events.js';
 import { useRuntimeStore, type LoggedEvent } from '../store/runtime.js';
 import { ageWord } from './DashboardTiles.js';
+
+// Status metadata — colors speak the §2.6 status layer (moved from the classic RunCard, S18c)
+export const STATUS_STYLE: Record<SessionStatus, { label: string; color: string }> = {
+  planning:       { label: 'Planning',        color: 'var(--ink-muted)' },
+  distributing:   { label: 'Distributing',    color: 'var(--status-run)' },
+  executing:      { label: 'Executing',        color: 'var(--status-run)' },
+  awaiting_human: { label: 'Awaiting human',  color: 'var(--status-gate)' },
+  completed:      { label: 'Completed',        color: 'var(--status-done)' },
+  cancelled:      { label: 'Cancelled',        color: 'var(--ink-dim)' },
+  failed:         { label: 'Failed',           color: 'var(--status-fail)' },
+};
 
 /**
  * Run identity (DES-UX-001 §7.5, slice Y2 — EC40): "five visually identical

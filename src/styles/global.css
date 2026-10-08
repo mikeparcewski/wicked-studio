@@ -25,7 +25,7 @@ html, body, #root {
   background: var(--surface-base);
   color: var(--ink-body);
   height: 100%;
-  /* §2.8's one sans, resolved from the token: Inter by default, Archivo under the
+  /* §2.8's one sans, resolved from the token: Archivo (S18c), Archivo too under the
      wicked themes — both self-hosted by fonts.css (no font CDN). */
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;

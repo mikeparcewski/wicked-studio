@@ -7,7 +7,6 @@ import { useMembershipStore } from '../store/membership.js';
 import { plainGateQuestion, plainRunTitle } from '../board/deskWords.js';
 import { useSkin } from '../hooks/useSkin.js';
 import { deskShell } from '../theming/skins.js';
-import { RUNS_BAR_PX } from './RunsBottomPanel.js';
 
 /**
  * §7.1 (DES-UX-001, slice AA): how long an announcement dwells before it
@@ -122,9 +121,9 @@ export function GateNotifications({ onSelect, runId, projectId = null, runs = []
       className="fixed right-4 flex flex-col items-end gap-2 z-50"
       data-testid="gate-notification-layer"
       // EC38 layout safety: the LAYER reserves no pointer surface — only the
-      // visible cards (pointerEvents: auto below) accept clicks — and it sits
-      // above the runs bar, never over its toggle or "All runs ›".
-      style={{ bottom: RUNS_BAR_PX + 12, pointerEvents: 'none' }}
+      // visible cards (pointerEvents: auto below) accept clicks. 12 px off the bottom edge:
+      // the classic runs bar it once sat above is retired (S18c).
+      style={{ bottom: 12, pointerEvents: 'none' }}
     >
       {cards.map((gate) => desk ? (
         <div

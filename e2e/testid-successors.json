@@ -7,6 +7,14 @@
     "session-run-open": "session-run-look",
     "desk-rail-rules": "desk-rail-steering",
     "desk-rail-everything": "desk-rail-additional",
-    "*-dashboard": "everything"
+    "*-dashboard": "everything",
+    "dashboard-docs-root": "project-docs-root",
+    "dashboard-docs-root-value": "project-docs-root-value",
+    "dashboard-docs-root-edit": "project-docs-root-edit",
+    "dashboard-docs-root-clear": "project-docs-root-clear",
+    "dashboard-docs-root-input": "project-docs-root-input",
+    "dashboard-docs-root-save": "project-docs-root-save",
+    "dashboard-docs-root-cancel": "project-docs-root-cancel",
+    "dashboard-docs-root-error": "project-docs-root-error"
   }
 }

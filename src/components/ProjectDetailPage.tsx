@@ -3,6 +3,8 @@ import { api } from '../api/client.js';
 import type { ActivityEntry, ProjectDetail, ProjectMember } from '../api/types.js';
 import { useProjectsStore } from '../store/projects.js';
 import { ProjectRepositories } from './ProjectRepositories.js';
+import { ProjectDocumentsRoot } from './ProjectDocumentsRoot.js';
+import { everythingPath } from '../board/everythingModel.js';
 
 /** The Repositories section owns these rows; the generic Members list shows the rest. */
 const REPO_KIND = 'crew.repo';
@@ -235,7 +237,7 @@ export function ProjectDetailPage({ projectId, navigate }: Props): React.ReactEl
       <div style={{ padding: '28px 32px' }}>
         <button
           type="button"
-          onClick={() => navigate('/projects')}
+          onClick={() => navigate(everythingPath({ tab: 'projects' }))}
           style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'transparent', border: 'none', cursor: 'pointer', color: S.muted, fontSize: '13px', marginBottom: '16px', padding: 0 }}
         >
           <IconBack /> Projects
@@ -250,7 +252,7 @@ export function ProjectDetailPage({ projectId, navigate }: Props): React.ReactEl
       {/* Back */}
       <button
         type="button"
-        onClick={() => navigate('/projects')}
+        onClick={() => navigate(everythingPath({ tab: 'projects' }))}
         style={{
           display: 'flex', alignItems: 'center', gap: '6px', background: 'transparent',
           border: 'none', cursor: 'pointer', color: S.muted, fontSize: '12px',
@@ -364,8 +366,14 @@ export function ProjectDetailPage({ projectId, navigate }: Props): React.ReactEl
         </div>
       )}
 
-      {/* Repositories — attach/detach `crew.repo` members (studio#207); omitted for `default`. */}
+      {/* Repositories — attach/detach `crew.repo` members (studio#207); omitted for `default`.
+          The Documents root (studio#279, S18b) sits beside it; also omitted for `default`. */}
       <div style={{ marginBottom: '28px' }}>
+        <ProjectDocumentsRoot
+          projectId={projectId}
+          project={project}
+          onChanged={(updated) => setDetail((d) => (d !== null && d.project.id === updated.id ? { ...d, project: updated } : d))}
+        />
         <ProjectRepositories
           projectId={projectId}
           members={members}

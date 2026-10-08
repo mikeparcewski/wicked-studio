@@ -10,8 +10,7 @@ import {
 import { useAcceptanceStore } from '../store/acceptance.js';
 import { useCampaignsStore } from '../store/campaigns.js';
 import { deliveryOf, isPrUrl, resolveDelivery, DELIVERY_LABEL } from './delivery.js';
-import { STATUS_STYLE } from './RunCard.js';
-import { runShortId } from './runIdentity.js';
+import { runShortId, STATUS_STYLE } from './runIdentity.js';
 
 /**
  * The campaign scoreboard (TH-14, extends wicked-studio#27) — READ-ONLY: one surface that

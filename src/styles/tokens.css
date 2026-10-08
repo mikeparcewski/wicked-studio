@@ -121,7 +121,7 @@
 
   /* ── Type scale (§2.8) — two faces, one rule: prose/labels in sans,
      data/narration in mono. The face contrast is the product's visual rhythm. */
-  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-sans: 'Archivo', system-ui, -apple-system, sans-serif; /* the Desk's face (S18c — was set by the desk skin) */
   --font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
 
   --text-2xs: 11px;   /* the floor: nothing on a decision surface is smaller (was 10px) */

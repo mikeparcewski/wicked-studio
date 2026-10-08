@@ -19,6 +19,7 @@ import { ProjectSparkline } from './ProjectSparkline.js';
 import { edgeStateOf, LiveEdge } from './LiveEdge.js';
 import { MODE_SPECS } from './ModeSwitcher.js';
 import { STATUS_STYLE } from './RunCard.js';
+import { ago } from './AgeStamp.js';
 
 /**
  * One orchestrator-board card, in TWO variants chosen by the decayed attention
@@ -164,14 +165,8 @@ const CSS = {
   },
 } as const satisfies Record<string, React.CSSProperties>;
 
-/** Coarse, honest relative time — the board never needs second precision. */
-export function ago(from: number, now: number = Date.now()): string {
-  const secs = Math.max(0, Math.round((now - from) / 1000));
-  if (secs < 60) return `${secs}s`;
-  if (secs < 3600) return `${Math.floor(secs / 60)}m`;
-  if (secs < 86400) return `${Math.floor(secs / 3600)}h`;
-  return `${Math.floor(secs / 86400)}d`;
-}
+// `ago` lives in AgeStamp.tsx (S18c); re-exported for the classic files S18d deletes.
+export { ago };
 
 type Link = (path: string) => { href: string; onClick: (e: React.MouseEvent) => void };
 
