@@ -2,8 +2,9 @@
 """
 gate_trust_test.py — trust at the gate (brainstorm-actionable ideas 7 + 8), at 1440x700.
 
-  record   /runs/r-trust (a review gate on claude's build) and /runs/r-trust-codex (the same gate on
-           codex's build): the Approve button carries the creator seat's record on this kind of step,
+  S16a-1b: every section reads the session thread (/s/run%3A<id>), not the run page.
+  record   r-trust (a review gate on claude's build) and r-trust-codex (the same gate on
+           codex's build): the Approve choice carries the creator seat's record on this kind of step,
            different for the two seats ("claude: 8/10 approvals held · 2 sent back" vs
            "codex: 1/5 approvals held · 3 sent back · 1 rejected"), as neutral text.
   offer    on r-trust, after the last 3 alike approvals (northwind, band 0-19): "Always approve band
@@ -11,7 +12,8 @@ gate_trust_test.py — trust at the gate (brainstorm-actionable ideas 7 + 8), at
            1 by an order) shown above "Make it a rule"; clicking it POSTs /standing-orders with the
            band-scoped project rule, and the card says the order was made. No gate decision is sent.
   covered  r-trust-codex (same project and band) then offers nothing: the order covers it.
-  deliver  /runs/r-trust-deliver: the deliver gate carries the record but NEVER the offer.
+  deliver  r-trust-deliver: the deliver card carries the record but NEVER the offer; its diffstat is
+           read before the push and the first press asks "Are you sure?" (nothing posted).
 
 Captures (e2e/shots/): gate-trust-desk-offer.png, gate-trust-desk-codex.png, gate-trust-desk-deliver.png.
 Env: FEEDBACK_PORT (default 4473). JSON report; exit 0/1.
@@ -83,67 +85,59 @@ with sync_playwright() as p:
         f"s.textContent = {json.dumps(HIDE_GATE_TOASTS)}; document.head.appendChild(s); }});")
 
     def section_offer() -> None:
-        page.goto(f"{origin}/runs/r-trust", wait_until="networkidle")
-        page.get_by_test_id("gate-track-record").wait_for(state="visible", timeout=15000)
-        record = text(page, "gate-track-record")
-        inside = page.evaluate("""() => !!document.querySelector('[data-testid="steering-approve"] [data-testid="gate-track-record"]')""")
+        page.goto(f"{origin}/s/run%3Ar-trust", wait_until="networkidle")
+        page.get_by_test_id("session-gate-track-record").wait_for(state="visible", timeout=15000)
+        record = text(page, "session-gate-track-record")
+        inside = page.evaluate("""() => !!document.querySelector('[data-testid="session-gate-choice"]:is([data-choice-key="approve"], [data-choice-key="free-text-send"]) [data-testid="session-gate-track-record"]')""")
         check("claude-record-on-approve", record == "claude: 8/10 approvals held · 2 sent back" and inside, record=record)
-        page.get_by_test_id("gate-rule-offer").wait_for(state="visible", timeout=10000)
-        question = text(page, "gate-rule-question")
-        preview = page.get_by_test_id("gate-rule-preview")
+        page.get_by_test_id("session-gate-rule-offer").wait_for(state="visible", timeout=10000)
+        question = text(page, "session-gate-rule-question")
+        preview = page.get_by_test_id("session-gate-rule-preview")
         counts = {k: preview.get_attribute(f"data-{k}") for k in ("would-approve", "you-approved", "you-sent-back")}
         check("offer-after-three-alike-approvals", question == "Always approve band 0-19 unit reviews on Northwind?",
               question=question)
         check("preview-counts", counts == {"would-approve": "8", "you-approved": "5", "you-sent-back": "2"}
               and "It also approves this gate now." in (preview.text_content() or ""), counts=counts)
-        page.get_by_test_id("gate-rule-make").scroll_into_view_if_needed()
-        check("offer-on-screen", on_screen(page, "gate-rule-make") and on_screen(page, "gate-rule-preview"))
+        page.get_by_test_id("session-gate-rule-make").scroll_into_view_if_needed()
+        check("offer-on-screen", on_screen(page, "session-gate-rule-make") and on_screen(page, "session-gate-rule-preview"))
         page.screenshot(path=str(SHOTS / f"gate-trust-desk-offer.png"))
-        page.get_by_test_id("gate-rule-make").click()
-        page.get_by_test_id("gate-rule-made").wait_for(state="visible", timeout=10000)
+        page.get_by_test_id("session-gate-rule-make").click()
+        page.get_by_test_id("session-gate-rule-made").wait_for(state="visible", timeout=10000)
         posts = fixture_posts(origin, "standing-order-posts")
         check("confirm-creates-the-order", len(posts) == 1 and posts[0].get("rule") == RULE
               and posts[0].get("text") == "Always approve band 0-19 unit reviews on Northwind"
-              and page.get_by_test_id("gate-rule-offer").count() == 0, posts=posts)
+              and page.get_by_test_id("session-gate-rule-offer").count() == 0, posts=posts)
         check("no-gate-decision-sent", fixture_posts(origin, "gate-posts") == [])
 
     def section_codex() -> None:
-        page.goto(f"{origin}/runs/r-trust-codex", wait_until="networkidle")
-        page.get_by_test_id("gate-track-record").wait_for(state="visible", timeout=15000)
-        record = text(page, "gate-track-record")
+        page.goto(f"{origin}/s/run%3Ar-trust-codex", wait_until="networkidle")
+        page.get_by_test_id("session-gate-track-record").wait_for(state="visible", timeout=15000)
+        record = text(page, "session-gate-track-record")
         check("codex-record-differs", record == "codex: 1/5 approvals held · 3 sent back · 1 rejected", record=record)
         page.wait_for_timeout(500)
-        check("covered-by-the-order-no-offer", page.get_by_test_id("gate-rule-offer").count() == 0)
+        check("covered-by-the-order-no-offer", page.get_by_test_id("session-gate-rule-offer").count() == 0)
         page.screenshot(path=str(SHOTS / f"gate-trust-desk-codex.png"))
 
     def section_deliver() -> None:
         # A fresh fixture with no orders: the deliver gate is refused on its own, not because an order covers it.
         set_fixture(origin, **{"reset_orders": True})
-        page.goto(f"{origin}/runs/r-trust-deliver", wait_until="networkidle")
-        page.get_by_test_id("gate-recommended").wait_for(state="visible", timeout=15000)
-        page.get_by_test_id("gate-track-record").wait_for(state="visible", timeout=10000)
-        inside = page.evaluate("""() => !!document.querySelector('[data-testid="gate-recommended"] [data-testid="gate-track-record"]')""")
-        move = page.get_by_test_id("gate-move").get_attribute("data-move")
-        check("deliver-record-on-the-recommended-move", inside and move == "deliver", move=move)
+        page.goto(f"{origin}/s/run%3Ar-trust-deliver", wait_until="networkidle")
+        page.locator('[data-testid="session-proposal"][data-kind="deliver"]').wait_for(state="visible", timeout=15000)
+        page.get_by_test_id("session-proposal-track-record").wait_for(state="visible", timeout=10000)
+        inside = page.evaluate("""() => !!document.querySelector('[data-testid="session-proposal-go"] [data-testid="session-proposal-track-record"]')""")
+        check("deliver-record-on-the-recommended-move", inside)
         page.wait_for_timeout(800)
-        check("no-offer-for-deliver", page.get_by_test_id("gate-rule-offer").count() == 0)
-        # The deliver gate reads the run branch's diff before anything is pushed (#300): the diffstat
-        # names what the approve pushes, the move says to review it, and the first press only opens it.
-        page.get_by_test_id("deliver-gate-diffstat").wait_for(state="visible", timeout=10000)
-        stat = text(page, "deliver-gate-diffstat")
-        consequence = text(page, "gate-move-consequence")
-        label = text(page, "gate-recommended")
-        check("deliver-diffstat", stat == "2 files changed, +14, −2"
-              and consequence == "Deliver pushes the run branch: 2 files changed, +14, −2"
-              and label.startswith("Review the diff, then deliver"),
-              stat=stat, consequence=consequence, label=label)
-        page.get_by_test_id("gate-recommended").click()
-        page.get_by_test_id("deliver-gate-full-diff").wait_for(state="visible", timeout=5000)
+        check("no-offer-for-deliver", page.get_by_test_id("session-gate-rule-offer").count() == 0)
+        # The deliver card reads the run branch's diff before anything is pushed (#300): the diffstat
+        # names what the approve pushes, and the first press only asks "Are you sure?".
+        page.get_by_test_id("session-proposal-deliver-detail").locator("summary").click()
+        page.get_by_test_id("session-proposal-deliver-diffstat").wait_for(state="visible", timeout=10000)
+        stat = text(page, "session-proposal-deliver-diffstat")
+        check("deliver-diffstat", stat == "2 files changed, +14, −2", stat=stat)
+        page.get_by_test_id("session-proposal-go").click()
+        page.get_by_test_id("session-proposal-confirm").wait_for(state="visible", timeout=5000)
         page.wait_for_timeout(600)
-        full = page.get_by_test_id("deliver-gate-full-diff").text_content() or ""
-        check("first-press-opens-the-diff", "src/importer/dates.ts" in full
-              and text(page, "gate-recommended").startswith("Deliver")
-              and fixture_posts(origin, "gate-posts") == [], label=text(page, "gate-recommended"))
+        check("first-press-asks-before-it-pushes", fixture_posts(origin, "gate-posts") == [])
         page.screenshot(path=str(SHOTS / f"gate-trust-desk-deliver.png"))
 
     for section in (section_offer, section_codex, section_deliver):

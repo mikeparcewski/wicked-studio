@@ -1,7 +1,8 @@
 import { executingOrd } from '../../api/run-state.js';
 import type { SessionView } from '../../api/types.js';
 import { OBJECT_ACTIONS, type ObjectRef } from '../../board/objectActions.js';
-import { parseSessionId, runChatIdOf } from '../../board/sessionModel.js';
+import { parseSessionId, runChatIdOf, sessionPath } from '../../board/sessionModel.js';
+import { GATE_HASH } from '../../board/gateActions.js';
 import { STEP_WORD, unitPhaseId } from '../../board/chainModel.js';
 import type { Navigate } from '../../hooks/useRoute.js';
 import { openSheet, stopRun } from '../../store/sheets.js';
@@ -49,7 +50,8 @@ export function objectCommands(ref: ObjectRef, ctx: { runs: readonly SessionView
         case 'message':
           return { id: a.id, label: a.label, run: () => openSheet(ref, ref.kind === 'helper' ? 'terminal' : 'happening'), disabled: working ? null : 'It is not working right now.' };
         case 'rerun':
-          return { id: a.id, label: `${a.label} (on its run page)`, run: go(`/runs/${encodeURIComponent(ref.runId)}`), disabled: null };
+          // S16a-1b: the rewind is a ⋯ choice on the session thread's gate row ("Rerun from <step>").
+          return { id: a.id, label: `${a.label} (at its gate in the thread)`, run: go(`${sessionPath(`run:${ref.runId}`)}${GATE_HASH}`), disabled: null };
         case 'record':
           return { id: a.id, label: a.label, run: go(`/runs/${encodeURIComponent(ref.runId)}`), disabled: null };
         case 'stop':

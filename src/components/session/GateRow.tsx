@@ -8,6 +8,8 @@ import { secondsLeft, undoDecision, useUndoQueue } from '../../board/undoQueue.j
 import { useRunEvents } from '../../hooks/useRunEvents.js';
 import { getCachedRoster, subscribeRoster } from '../../store/rosterCache.js';
 import type { OpenGate } from '../../store/gates.js';
+import { useRerunFromHere } from '../../hooks/useRerunFromHere.js';
+import { GateDepthDetails, RuleOfferBlock, useSeatTrust } from './GateDepth.js';
 
 /**
  * EVERY GATE KIND ANSWERABLE IN THE SESSION THREAD (S15e): an answerable row rendered inside
@@ -76,10 +78,18 @@ export function GateRow({ view, gate }: {
       .filter((c): c is string => typeof c === 'string' && c !== '');
   }, [view.session, view.units]);
 
+  // S16a-1b: "Rerun from <step>" — the run page breadcrumb's offer, one more ⋯ choice here.
+  const { offer: rerunOffer } = useRerunFromHere(view);
   const model = useMemo<GateRowModel | null>(() => {
     if (gate === undefined || events === null) return null;
-    return sessionGateChoices({ runId, gate, units: view.units, events, pool, roster });
-  }, [runId, gate, view.units, events, pool, roster]);
+    return sessionGateChoices({ runId, gate, units: view.units, events, pool, roster, rerun: rerunOffer });
+  }, [runId, gate, view.units, events, pool, roster, rerunOffer]);
+  // S16a-1b: the creator seat's record on Approve and the standing-order offer (review gates).
+  const seat = useSeatTrust(view, gate, {
+    isPlanGate: false, isDeliverGate: gate?.gateKind === 'deliver',
+    isEscalation: model !== null && (model.reason === 'escalation' || model.reason === 'retry'),
+  });
+  const [confirmRerun, setConfirmRerun] = useState(false);
 
   // A new gate instance is a fresh question — reset all state.
   // When gate clears (becomes undefined) after a successful send, do NOT clear `chosen`:
@@ -91,6 +101,7 @@ export function GateRow({ view, gate }: {
     prevKeyRef.current = gateKey;
     setNoteOpen(null);
     setNoteText('');
+    setConfirmRerun(false);
     // Only clear chosen when a NEW gate arrives (gate is defined).
     // When gate cleared (undefined), the receipt must stay until unmount.
     if (gate !== undefined) setChosen(null);
@@ -196,6 +207,9 @@ export function GateRow({ view, gate }: {
   if (model === null) return null;
 
   const allChoices = [...model.choices, ...model.overflow];
+  // S16a-1b: the record rides the approve-shaped choice the row leads with — Approve, else the
+  // free-text gate's Send, else Retry (the run page's rule: the move, else Approve, else Retry).
+  const recordOn = (['approve', 'free-text-send', 'retry'] as const).find((k) => model.choices.some((c) => c.key === k)) ?? null;
 
   const sendDirect = (choice: GateRowChoice): void => {
     if (choice.reassignCli !== undefined) {
@@ -210,6 +224,7 @@ export function GateRow({ view, gate }: {
       );
       return;
     }
+    if (choice.key === 'rerun' && !confirmRerun) { setConfirmRerun(true); return; }
     if (choice.needsNote) {
       setNoteOpen(choice.key);
       setNoteText((prev) => prev || model.noteDefault);
@@ -284,6 +299,10 @@ export function GateRow({ view, gate }: {
       }}
     >
       <p data-testid="session-gate-question" className="wk-session-gate-question">{question}</p>
+      {/* S16a-1b: the recommended move's consequence, above the choice that takes it. */}
+      {model.consequence !== null && (
+        <p data-testid="session-gate-consequence" className="wk-gate-consequence">{model.consequence}</p>
+      )}
       <div
         data-testid="session-gate-choices"
         role="radiogroup"
@@ -317,6 +336,10 @@ export function GateRow({ view, gate }: {
             {i === model.recommended && (
               <span className="wk-session-gate-suggested" aria-hidden="true">suggested</span>
             )}
+            {/* S16a-1b: the creator seat's record rides Approve as neutral text — never a tone. */}
+            {choice.key === recordOn && seat.record !== null && (
+              <span data-testid="session-gate-track-record" className="wk-session-gate-record">{seat.record}</span>
+            )}
           </button>
         ))}
       </div>
@@ -347,13 +370,36 @@ export function GateRow({ view, gate }: {
           </div>
         </details>
       )}
-      {/* ⋯ details: raw prompt, verdict layers, failing items, reviewer's note */}
+      {/* S16a-1b: Rerun from <step> — its consequence first, then the one confirm. */}
+      {confirmRerun && rerunOffer !== null && (
+        <div data-testid="session-gate-rerun" data-ord={rerunOffer.ord} className="wk-session-gate-detail">
+          <p data-testid="session-gate-rerun-consequence" className="wk-session-gate-detail-item">{rerunOffer.consequence}</p>
+          <div className="wk-session-gate-note-actions">
+            <button
+              type="button"
+              data-testid="session-gate-rerun-confirm"
+              disabled={action.busy}
+              onClick={() => { const c = allChoices.find((x) => x.key === 'rerun'); setConfirmRerun(false); if (c !== undefined) sendDirect({ ...c, key: 'rerun-confirmed' }); }}
+              className="wk-session-gate-send"
+            >
+              Rerun from {rerunOffer.phase}
+            </button>
+            <button type="button" onClick={() => setConfirmRerun(false)} className="wk-session-gate-cancel">Cancel</button>
+          </div>
+        </div>
+      )}
+      <RuleOfferBlock seat={seat} locked={action.busy} />
+      {/* ⋯ details: raw prompt, verdict layers, failing items, reviewer's note; S16a-1b: the work under
+          review, "Why it failed" (the failing criteria beside the creator's claims), the source line. */}
       {model.detailItems.length > 0 && (
         <details className="wk-session-gate-prompt-detail">
           <summary className="wk-session-gate-prompt-summary">Details</summary>
           {model.detailItems.map((item, idx) => (
             <p key={idx} data-testid={idx === 0 ? 'session-gate-raw-prompt' : undefined} className="wk-session-gate-detail-item">{item}</p>
           ))}
+          {gate !== undefined && (
+            <GateDepthDetails view={view} gate={gate} failing={model.failing} reviewedOrd={model.reviewedOrd} source={model.source} underReview={model.reason === 'def'} />
+          )}
         </details>
       )}
       {noteChoice !== null && (

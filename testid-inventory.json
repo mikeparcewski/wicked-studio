@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.6.5",
   "counts": {
-    "files": 193,
-    "occurrences": 2280,
-    "static": 2022,
+    "files": 194,
+    "occurrences": 2295,
+    "static": 2037,
     "dynamic": 49,
     "computed": 8
   },
@@ -7838,6 +7838,12 @@
       ]
     },
     {
+      "testId": "session-gate-consequence",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
       "testId": "session-gate-detail",
       "files": [
         "src/components/session/GateRow.tsx"
@@ -7880,15 +7886,87 @@
       ]
     },
     {
+      "testId": "session-gate-rerun",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-rerun-confirm",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-rerun-consequence",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
       "testId": "session-gate-row",
       "files": [
         "src/components/session/GateRow.tsx"
       ]
     },
     {
+      "testId": "session-gate-rule-error",
+      "files": [
+        "src/components/session/GateDepth.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-rule-made",
+      "files": [
+        "src/components/session/GateDepth.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-rule-make",
+      "files": [
+        "src/components/session/GateDepth.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-rule-offer",
+      "files": [
+        "src/components/session/GateDepth.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-rule-preview",
+      "files": [
+        "src/components/session/GateDepth.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-rule-question",
+      "files": [
+        "src/components/session/GateDepth.tsx"
+      ]
+    },
+    {
       "testId": "session-gate-send",
       "files": [
         "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-source",
+      "files": [
+        "src/components/session/GateDepth.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-track-record",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-under-review",
+      "files": [
+        "src/components/session/GateDepth.tsx"
       ]
     },
     {
@@ -8067,6 +8145,12 @@
       ]
     },
     {
+      "testId": "session-proposal-plan-why",
+      "files": [
+        "src/components/session/ProposalCard.tsx"
+      ]
+    },
+    {
       "testId": "session-proposal-pr",
       "files": [
         "src/components/session/ProposalCard.tsx",
@@ -8081,6 +8165,12 @@
     },
     {
       "testId": "session-proposal-text",
+      "files": [
+        "src/components/session/ProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "session-proposal-track-record",
       "files": [
         "src/components/session/ProposalCard.tsx"
       ]

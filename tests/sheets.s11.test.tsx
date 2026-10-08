@@ -92,6 +92,15 @@ describe('Stop waits 10 s with Undo', () => {
     const ended = objectCommands({ kind: 'step', runId: 'r1', ord: 1 }, { runs: [makeView({ id: 'r1', status: 'completed' })], navigate: () => {}, runChatId: false });
     expect(ended.rows.find((r) => r.id === 'stop')!.disabled).toBe('It has already ended.');
   });
+
+  it('S16a-1b: a step’s "Re-run from here" opens the session thread at its gate, never the run page', () => {
+    const navigate = vi.fn();
+    const cmds = objectCommands({ kind: 'step', runId: 'r1', ord: 1 }, { runs: [RUN], navigate, runChatId: false });
+    const rerun = cmds.rows.find((r) => r.id === 'rerun')!;
+    rerun.run();
+    expect(navigate).toHaveBeenCalledExactlyOnceWith('/s/run%3Ar1#gate');
+    expect(rerun.label).not.toContain('run page');
+  });
 });
 
 describe('the sheets', () => {

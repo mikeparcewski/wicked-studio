@@ -891,6 +891,9 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
 .wk-session-gate-choice:disabled, .wk-session-gate-choice--disabled { opacity: 0.5; cursor: default; }
 .wk-session-gate-choice:disabled:hover { border-color: var(--border); }
 .wk-session-gate-suggested { padding: 0 6px; border: 1px solid var(--border); border-radius: var(--radius-full); background: var(--accent-wash); font-size: var(--text-2xs); color: var(--ink-muted); }
+/* S16a-1b: the creator seat's record on Approve (neutral, never a tone) and the rule offer. */
+.wk-session-gate-record { display: block; font-size: var(--text-2xs); font-weight: 400; color: inherit; opacity: 0.85; }
+.wk-session-gate-rule { margin-top: 8px; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius-md, 8px); display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
 /* The three disclosures: ⋯ (the rest of the choices), Details (the engine's words), the note. */
 .wk-session-gate-overflow, .wk-session-gate-prompt-detail, .wk-session-gate-detail { margin: 0; }
 .wk-session-gate-overflow-summary, .wk-session-gate-prompt-summary, .wk-session-gate-detail-summary { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; list-style: none; font-size: var(--text-xs); color: var(--ink-muted); }
