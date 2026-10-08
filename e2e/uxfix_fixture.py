@@ -2994,7 +2994,10 @@ RUN_EVENTS = {
 }
 
 NOTES_DOCS = [
-    {"name": "ideas", "kind": "doc", "head": 1, "versions": 1, "updated_at": iso(NOW0 - 2 * DAY)},
+    # studio#567: crew#512's grounding record on the docs row (api-types 0.93.0 InteractiveDocGrounding).
+    {"name": "ideas", "kind": "doc", "head": 1, "versions": 1, "updated_at": iso(NOW0 - 2 * DAY),
+     "grounding": {"repo_refs": ["notes-app"], "source": "sole-member",
+                   "skipped": [{"ref": "old-notes", "reason": "not-a-member"}], "member_count": 1}},
     {"name": "todo", "kind": "doc", "head": 1, "versions": 1, "updated_at": iso(NOW0 - 3 * DAY)},
 ]
 

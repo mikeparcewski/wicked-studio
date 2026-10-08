@@ -46,6 +46,26 @@ export interface DocSummary {
   head: number;
   versions: number;
   updated_at: string | null;
+  /** studio#567 / crew#512 (api-types 0.93.0 `InteractiveDocSummary.grounding`): the repository
+   *  grounding the draft seam resolved, from the `crew-grounding.json` sidecar. Absent on an older
+   *  daemon and on a document grounded before the sidecar existed. */
+  grounding?: DocGrounding;
+}
+
+/** api-types 0.93.0 `InteractiveDocGroundingSkip` — a requested repository that grounded nothing. */
+export interface DocGroundingSkip {
+  ref: string;
+  /** `not-a-member` | `ambiguous` | `unsnapshotable` — typed open: a newer daemon may name another. */
+  reason: string;
+}
+
+/** api-types 0.93.0 `InteractiveDocGrounding` — the structured twin of the "Grounded on …" line. */
+export interface DocGrounding {
+  repo_refs: string[];
+  /** `named` | `brief` | `sole-member` | `none` — typed open. */
+  source: string;
+  skipped: DocGroundingSkip[];
+  member_count: number;
 }
 
 export interface VersionEntry {

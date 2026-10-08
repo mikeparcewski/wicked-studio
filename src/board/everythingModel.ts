@@ -145,7 +145,7 @@ export interface MadeRow {
   /** Unix ms, or null when the wire carries no clock. */
   updatedAt: number | null;
   /** A registry document (opened on its document route). */
-  doc?: { name: string; kind: DocSummary['kind'] };
+  doc?: { name: string; kind: DocSummary['kind']; grounding?: DocSummary['grounding'] };
   /** A demo run's video (opened on the run). */
   runId?: string;
   /** The demo run's status, for a video row (`completed`, `executing`, …). */
@@ -185,7 +185,7 @@ export function madeRows(
   const out: MadeRow[] = [];
   for (const [pid, docs] of Object.entries(byProject)) {
     for (const d of docs) {
-      out.push({ key: `doc:${pid}:${d.name}`, kind: madeKindOf(d), title: d.name, projectId: pid, updatedAt: isoMs(d.updated_at), doc: { name: d.name, kind: d.kind } });
+      out.push({ key: `doc:${pid}:${d.name}`, kind: madeKindOf(d), title: d.name, projectId: pid, updatedAt: isoMs(d.updated_at), doc: { name: d.name, kind: d.kind, ...(d.grounding !== undefined ? { grounding: d.grounding } : {}) } });
     }
   }
   for (const v of runs) {

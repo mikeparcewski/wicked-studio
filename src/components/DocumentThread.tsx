@@ -8,6 +8,8 @@ import { parseCreateAsk } from '../interactive/createAsk.js';
 import { docSlug } from '../interactive/docSlug.js';
 import { useRunEventStore } from '../store/events.js';
 import { useDisplayText } from '../hooks/useHomePath.js';
+import { useDocsCache } from '../store/docsCache.js';
+import { GroundingChip } from './GroundingChip.js';
 import { ComposerContext } from './ComposerContext.js';
 import { DocSubjectPicker, NO_GROUNDING_NARRATION, type DocFormat, type SubjectStatus } from './DocSubjectPicker.js';
 import { defaultDocSeats, docClisJson, type DocSeatDefault } from './docSeats.js';
@@ -657,6 +659,11 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate }: 
   const pendingIds = useDocThreadStore((s) => (key === null ? EMPTY_IDS : s.pending[key] ?? EMPTY_IDS));
   // §6.3: whether this thread's text was rehydrated from the conversation read.
   const hydratedFromWire = useDocThreadStore((s) => (key === null ? false : s.hydrated[key] === true));
+  // studio#567: the grounding chip — the live status frame's record, else the docs row's copy
+  // (a reopened document shows its chip without replaying the thread). Absent → no chip.
+  const liveGrounding = useDocThreadStore((s) => (key === null ? undefined : s.grounding[key]));
+  const rowGrounding = useDocsCache((s) => (docId === null ? undefined : s.byProject[projectId]?.find((d) => d.name === docId)?.grounding));
+  const grounding = liveGrounding ?? rowGrounding;
   // A document that exists with nothing in flight IS case 4: complete, and editable (§7.10).
   const state: GenState = docId === null ? 'idle' : streamed ?? 'terminal';
   // §6.1 honesty budget (J3): the moment the thread last heard ANY interactive
@@ -1118,6 +1125,9 @@ export function DocumentThread({ projectId, docId, selectedVersion, navigate }: 
                borderLeft: `1px solid ${S.border}`, fontFamily: 'var(--font-sans)' }}
     >
       <div className="flex-1 overflow-y-auto px-3.5 py-4 flex flex-col gap-3">
+        {grounding !== undefined && (
+          <div data-testid="doc-grounding-line" className="flex"><GroundingChip grounding={grounding} /></div>
+        )}
         {/* §6.3's stopgap note, scoped to the ONE gap the wire still has: the thread's
             TEXT is back from `GET /d/:doc/api/conversation` (BRIDGE-UX-1 probe 2 — a
             real read), but the transcript carries no version anchors, so markers are

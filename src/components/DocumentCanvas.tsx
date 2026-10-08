@@ -13,6 +13,7 @@ import { hasInstrumentBridge, instrumentDocHtml } from '../interactive/instrumen
 import { DeleteDocButton } from './DocDelete.js';
 import { RecordingFailedBadge } from './demoRecordingState.js';
 import { DocPanel, type DocPanelTab } from './DocPanel.js';
+import { GroundingChip } from './GroundingChip.js';
 import { FeedbackOverlay } from './FeedbackOverlay.js';
 import { StripSensor, useStripAutoHide } from './ThreadDrawer.js';
 import { Failed, Loading, PANEL, S, useLoad } from './SurfaceState.js';
@@ -109,6 +110,7 @@ function DocPicker({ projectId, navigate }: { projectId: string; navigate: Navig
               }}
             >
               <span style={{ flex: 1, fontWeight: 500 }}>{doc.name}</span>
+              <GroundingChip grounding={doc.grounding} />
               <span style={{ color: S.muted, flexShrink: 0, fontSize: 'var(--text-xs)', fontFamily: 'var(--font-mono)' }}>
                 {doc.kind} · v{doc.head}
               </span>

@@ -63,7 +63,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   postEvent.mockResolvedValue({ ok: true, event_id: 'e1', correlation_id: 'c1' });
   getVersions.mockResolvedValue({ head: 3, versions: [] });
-  useDocThreadStore.setState({ messages: {}, genState: {}, pending: {}, hydrated: {}, landed: {}, lastSignalAt: {}, boundRun: {} });
+  useDocThreadStore.setState({ messages: {}, genState: {}, pending: {}, hydrated: {}, landed: {}, lastSignalAt: {}, boundRun: {}, grounding: {} });
   useRunEventStore.setState({ byRun: {} });
 });
 afterEach(() => { cleanup(); vi.useRealTimers(); });
@@ -232,6 +232,27 @@ describe('the folded narration row (F-4R2-005)', () => {
     mount();
     expect(screen.getByTestId('doc-narration').textContent).toContain('/Users/reel-operator/rig/home');
     useViewPrefsStore.setState((s) => ({ prefs: { ...s.prefs, technical_details: false } }));
+  });
+
+  it('studio#567: the status frame\'s grounding record renders the thread\'s chip (no sentence parsing)', () => {
+    const store = useDocThreadStore.getState();
+    store.ingest({
+      type: 'interactiveEvent',
+      event: { event_type: 'wicked.interactive.status.posted', payload: {
+        project_id: PROJECT, document_id: DOC, state: 'working', message: 'Grounded on repo-a.',
+        grounding: { repo_refs: ['repo-a'], source: 'brief', skipped: [{ ref: 'old', reason: 'not-a-member' }], member_count: 2 },
+      } },
+    } as unknown as CoreEvent);
+    mount();
+    expect(screen.getByTestId('doc-grounding-repos')).toHaveTextContent('Grounded on 1 of 2 repos');
+    expect(screen.getByTestId('doc-grounding-source')).toHaveTextContent('named in the brief');
+    expect(screen.getByTestId('doc-grounding-skipped')).toHaveTextContent('skipped 1');
+  });
+
+  it('studio#567: no grounding record → no chip', () => {
+    useDocThreadStore.getState().ingest(status('Grounded on repo-a.'));
+    mount();
+    expect(screen.queryByTestId('doc-grounding-line')).toBeNull();
   });
 
   it('fmtSpan reads in words', () => {
