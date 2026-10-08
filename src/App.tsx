@@ -27,7 +27,7 @@ import { SteeringPage } from './components/SteeringPage.js';
 import { MemoriesPanel } from './components/MemoriesPanel.js';
 import { GovernanceDashboard } from './components/GovernanceDashboard.js';
 import { TestingPage } from './components/TestingPage.js';
-import { RunsBottomPanel } from './components/RunsBottomPanel.js';
+import { RunsBottomPanel, RUNS_BAR_PX } from './components/RunsBottomPanel.js';
 import { ChatPanel } from './components/ChatPanel.js';
 import { GroupChat } from './components/GroupChat.js';
 import { WorkflowViewer } from './components/WorkflowViewer.js';
@@ -808,7 +808,7 @@ export function App(): React.ReactElement {
     // a ROW, not an overlay, so every surface (board, dashboards, canvas — and
     // with it the version strip's proximity-sensor band, which ends at the
     // canvas edge) ends ABOVE the bar. Nothing is ever covered while collapsed.
-    <div className="flex h-screen overflow-hidden bg-surface-base" data-shell={skin.shell} style={{ paddingBottom: 0 }}>
+    <div className="flex h-screen overflow-hidden bg-surface-base" data-shell={skin.shell} style={{ paddingBottom: desk ? 0 : RUNS_BAR_PX }}>
       {/* The FIRST tabbable element (usability review #10): one Tab reaches a
           jump to the main content instead of a page's top-right Refresh. */}
       <SkipLink />
