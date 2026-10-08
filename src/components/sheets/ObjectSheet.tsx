@@ -31,6 +31,8 @@ import { RunSectionBody, runSections, type AccordionId } from '../RightPanel.js'
 import { humanTitle } from '../runIdentity.js';
 import { Sheet } from './Sheet.js';
 import { useDisplayText } from '../../hooks/useHomePath.js';
+import { useRunEventStore } from '../../store/events.js';
+import { VerdictDetail } from '../VerdictDetail.js';
 
 /** A run can take a message only while a helper is working in it (crew's inject surface). */
 const MESSAGEABLE = new Set(['executing', 'distributing', 'planning']);
@@ -312,10 +314,30 @@ function RunSection({ id, view, runs, navigate }: { id: AccordionId; view: Sessi
  * step, what state it is in and who has it; the row opens the step's own sheet on "What it did"
  * (its transcript; Changes and Live events are its other tabs). A stopped step says why.
  */
+/** S16a-1c: a finished run's deciding verdict (the run page's VerdictDetail) above its steps — the
+ *  deciding evaluation, its criteria, a skipped judge, an ungated run. The log is read once when no
+ *  surface on the page has hydrated it. */
+function FinishedVerdict({ view }: { view: SessionView }): React.ReactElement | null {
+  const runId = view.session.id;
+  const terminal = ['completed', 'failed', 'cancelled'].includes(view.session.status);
+  const events = useRunEventStore((s) => s.byRun[runId]);
+  useEffect(() => {
+    if (!terminal || events !== undefined) return;
+    api.getRunEvents(runId)
+      .then(({ events: fetched }) => { useRunEventStore.getState().hydrate(runId, fetched); })
+      .catch(() => { /* no log: VerdictDetail says no evaluator record survives */ });
+  }, [runId, terminal, events]);
+  if (!terminal || events === undefined) return null;
+  const units = [...view.units].sort((a, b) => a.ord - b.ord);
+  return <div data-testid="sheet-verdict" className="wk-sheet-section"><VerdictDetail runId={runId} units={units} /></div>;
+}
+
 function StepsList({ view }: { view: SessionView }): React.ReactElement {
   const live = executingOrd(view.session, view.units);
   const units = [...view.units].sort((a, b) => a.ord - b.ord);
   return (
+    <>
+    <FinishedVerdict view={view} />
     <ul data-testid="sheet-steps" className="wk-sheet-list">
       {units.length === 0 && <li className="wk-session-grey">No step has been planned yet.</li>}
       {units.map((u) => {
@@ -331,6 +353,7 @@ function StepsList({ view }: { view: SessionView }): React.ReactElement {
         );
       })}
     </ul>
+    </>
   );
 }
 

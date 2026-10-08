@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.6.5",
   "counts": {
-    "files": 194,
-    "occurrences": 2295,
-    "static": 2037,
+    "files": 195,
+    "occurrences": 2304,
+    "static": 2038,
     "dynamic": 49,
     "computed": 8
   },
@@ -3233,43 +3233,50 @@
     {
       "testId": "failure-all-runs",
       "files": [
-        "src/components/FailureBanner.tsx"
+        "src/components/FailureBanner.tsx",
+        "src/components/session/RunRecord.tsx"
       ]
     },
     {
       "testId": "failure-banner",
       "files": [
-        "src/components/FailureBanner.tsx"
+        "src/components/FailureBanner.tsx",
+        "src/components/session/RunRecord.tsx"
       ]
     },
     {
       "testId": "failure-engine-detail",
       "files": [
-        "src/components/FailureBanner.tsx"
+        "src/components/FailureBanner.tsx",
+        "src/components/session/RunRecord.tsx"
       ]
     },
     {
       "testId": "failure-plain",
       "files": [
-        "src/components/FailureBanner.tsx"
+        "src/components/FailureBanner.tsx",
+        "src/components/session/RunRecord.tsx"
       ]
     },
     {
       "testId": "failure-reject-note",
       "files": [
-        "src/components/FailureBanner.tsx"
+        "src/components/FailureBanner.tsx",
+        "src/components/session/RunRecord.tsx"
       ]
     },
     {
       "testId": "failure-rule-link",
       "files": [
-        "src/components/FailureBanner.tsx"
+        "src/components/FailureBanner.tsx",
+        "src/components/session/RunRecord.tsx"
       ]
     },
     {
       "testId": "failure-send-back-note",
       "files": [
-        "src/components/FailureBanner.tsx"
+        "src/components/FailureBanner.tsx",
+        "src/components/session/RunRecord.tsx"
       ]
     },
     {
@@ -8607,6 +8614,12 @@
       "testId": "sheet-title",
       "files": [
         "src/components/sheets/Sheet.tsx"
+      ]
+    },
+    {
+      "testId": "sheet-verdict",
+      "files": [
+        "src/components/sheets/ObjectSheet.tsx"
       ]
     },
     {

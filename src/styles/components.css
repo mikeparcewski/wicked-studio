@@ -849,6 +849,11 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
 /* S6b: the run's one status sentence, the proposal card (ask → progress → receipt), the sources
    under a helper's reply and a source's passage. Tokens only. */
 .wk-session-status-sentence { margin: 0 0 6px; font-size: var(--text-sm); color: var(--ink-body); }
+/* S16a-1c: why the run stopped — one quiet line under the status sentence, the note quoted. */
+.wk-session-run-story { margin: 0 0 6px; font-size: var(--text-xs); color: var(--ink-muted); }
+.wk-session-run-story-line { margin: 0; }
+.wk-session-run-story-note { margin: 2px 0 0; color: var(--ink-body); white-space: pre-wrap; overflow-wrap: anywhere; }
+.wk-session-run-story--failed .wk-session-run-story-line { color: var(--status-fail); }
 .wk-prop { margin: 0 0 8px; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-base); }
 .wk-prop--fail { border-color: color-mix(in oklab, var(--status-fail) 45%, var(--border)); }
 .wk-prop-text { margin: 0; color: var(--ink-high); font-weight: var(--weight-semi); }

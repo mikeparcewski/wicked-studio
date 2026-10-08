@@ -23,6 +23,8 @@ import { ChainLine, useRunChain } from './ChainLine.js';
 import { ProposalCard } from './ProposalCard.js';
 import { useRunEvents } from '../../hooks/useRunEvents.js';
 import { StrandedCard } from './StrandedCard.js';
+import { RunRecordLines } from './RunRecord.js';
+import { parseJump } from '../../store/watch.js';
 import { GateRow } from './GateRow.js';
 import { SourceChips } from './SourceChips.js';
 import { SinceYouLeft } from './SinceYouLeft.js';
@@ -531,7 +533,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
                 {e.who === 'you' && ref.kind === 'chat' && e.turnId !== null && <TurnDecisions chatId={ref.chatId} turnId={e.turnId} navigate={navigate} />}
               </div>
             )
-            : <RunBlock key={e.key} view={e.view} badge={badges[e.view.session.id] ?? 0} sessionId={sessionId} />))}
+            : <RunBlock key={e.key} view={e.view} badge={badges[e.view.session.id] ?? 0} sessionId={sessionId} navigate={navigate} />))}
         </div>
       </div>
       {/* Rule 3: while the thread is the chain, the shape line names the path's steps for the operator. */}
@@ -576,10 +578,12 @@ function TurnDecisions({ chatId, turnId, navigate }: { chatId: string; turnId: s
   return <DecisionLine decisions={decisions} navigate={navigate} />;
 }
 
-export function RunBlock({ view, badge, sessionId }: {
+export function RunBlock({ view, badge, sessionId, navigate }: {
   view: RunView;
   badge: number;
   sessionId: string;
+  /** S16a-1c: the record lines' links (the stop story's "All runs ›", rule links). */
+  navigate?: Navigate;
 }): React.ReactElement {
   const { chain: planChain, teamError, retry } = useRunChain(view);
   const id = view.session.id;
@@ -621,6 +625,8 @@ export function RunBlock({ view, badge, sessionId }: {
   // answers its hand-over in the thread, off the daemon's delivery verdict: the receipt (PR link or
   // branch) for a hand-over, the "Deliver — open a PR" door for a stranded run.
   const finished = effectiveKind === null ? finishedDeliveryArm(view, gate) : null;
+  // S16a-1c: the Watchtower's "Jump in" lands here with `?jump=ord:attempt:at` — read on arrival.
+  const [jump] = useState(() => (typeof window === 'undefined' ? null : parseJump(window.location.search)));
   return (
     <section data-testid="session-run" data-run-id={id} data-state={state} {...(acceptance !== null ? { 'data-acceptance': 'read' } : {})} className="wk-session-run">
       <p className="wk-session-run-head">
@@ -635,6 +641,9 @@ export function RunBlock({ view, badge, sessionId }: {
       {/* S6b: the run's ONE status sentence, then its proposal (the plan, the hand-over). */}
       <p data-testid="session-status-sentence" role="status" className="wk-session-status-sentence">{statusSentence(view, chain, gate, action)}</p>
       <OrphanedRow view={view} />
+      {/* S16a-1c: the run's record lines — why it stopped, the amended acceptance list, a short
+          council, the Watchtower's lines (and "You jumped in" when the address carries ?jump=). */}
+      <RunRecordLines view={view} jumped={jump !== null} {...(navigate === undefined ? {} : { navigate })} />
       {/* S15e: plan and deliver go through ProposalCard; every other gate kind is answered in the thread. */}
       {effectiveKind === 'plan' || effectiveKind === 'deliver'
         ? <ProposalCard view={view} chain={chain} acceptance={acceptance?.summary ?? null} />
@@ -644,7 +653,7 @@ export function RunBlock({ view, badge, sessionId }: {
             ? <StrandedCard view={view} />
             : <GateRow view={view} gate={gate} />}
       <PlanStepLines runId={id} />
-      <ChainLine chain={chain} runId={id} units={view.units} teamError={teamError} onRetry={retry} checks={checks} momentOf={momentOf} onOpenAt={(sec) => requestWalkthroughSeek(id, sec)} nothingChecked={noEvidenceSummary !== null} />
+      <ChainLine chain={chain} runId={id} units={view.units} teamError={teamError} onRetry={retry} checks={checks} momentOf={momentOf} onOpenAt={(sec) => requestWalkthroughSeek(id, sec)} nothingChecked={noEvidenceSummary !== null} jumpOrd={jump?.ord ?? null} />
       {/* S8: the page the run is producing — a live preview that morphs inline → pane → full. */}
       <RunArtifacts view={view} composerKey={sessionId} chain={chain} />
       <RunHelpers view={view} />

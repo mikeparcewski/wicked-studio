@@ -10,6 +10,7 @@ import { getCachedRoster, subscribeRoster } from '../../store/rosterCache.js';
 import type { OpenGate } from '../../store/gates.js';
 import { useRerunFromHere } from '../../hooks/useRerunFromHere.js';
 import { GateDepthDetails, RuleOfferBlock, useSeatTrust } from './GateDepth.js';
+import { WatchGateLine } from '../WatchLines.js';
 
 /**
  * EVERY GATE KIND ANSWERABLE IN THE SESSION THREAD (S15e): an answerable row rendered inside
@@ -299,6 +300,8 @@ export function GateRow({ view, gate }: {
       }}
     >
       <p data-testid="session-gate-question" className="wk-session-gate-question">{question}</p>
+      {/* S16a-1c (TR-W8): a watch finding attached to this gate, as one quiet line (nothing when absent). */}
+      {gate !== undefined && <WatchGateLine runId={runId} ord={typeof gate.ord === 'number' ? gate.ord : null} />}
       {/* S16a-1b: the recommended move's consequence, above the choice that takes it. */}
       {model.consequence !== null && (
         <p data-testid="session-gate-consequence" className="wk-gate-consequence">{model.consequence}</p>
