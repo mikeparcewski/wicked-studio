@@ -235,12 +235,13 @@ describe('coverageSummary (S17c)', () => {
     expect(coverageSummary(undefined, true, NOW - 120_000, undefined, NOW)).toBeNull();
   });
 
-  it('terminal + has a checked entry → null (evidence exists)', () => {
+  it('terminal + has a checked entry → today\'s per-entry line (evidence exists, nothing summarised)', () => {
     const result = coverageSummary(
       [NOT_CHECKED('scope-drift', 'no declared scope'), CHECKED('claim-vs-evidence')],
       true, NOW - 120_000, undefined, NOW,
     );
-    expect(result).toBeNull();
+    expect(result).toStrictEqual({ line: 'Not checked on this run: scope-drift (no declared scope)', reasons: [] });
+    expect(coverageSummary([CHECKED('claim-vs-evidence')], true, NOW - 120_000, undefined, NOW)).toBeNull();
   });
 });
 

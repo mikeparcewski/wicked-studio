@@ -410,7 +410,8 @@ function _ago(at: number, now: number): string {
 }
 
 /** S17c: for a terminal run with no checked coverage entry → one no-evidence line + reasons for ⋯.
- *  For a live run → today's coverageLine result. For absent registry (undefined) → null. */
+ *  For a live run, or a terminal run with at least one checked entry → today's coverageLine result.
+ *  For absent registry (undefined) → null. */
 export function coverageSummary(
   coverage: WatchFeedResponse['coverage'] | undefined,
   isTerminal: boolean,
@@ -423,8 +424,11 @@ export function coverageSummary(
     const line = coverageLine(coverage, label);
     return line === null ? null : { line, reasons: [] };
   }
-  const hasChecked = (coverage ?? []).some((c) => c.state === 'checked');
-  if (hasChecked) return null;
+  // A finished run that DID record evidence keeps today's per-entry line (nothing to summarise).
+  if ((coverage ?? []).some((c) => c.state === 'checked')) {
+    const line = coverageLine(coverage, label);
+    return line === null ? null : { line, reasons: [] };
+  }
   const notChecked = (coverage ?? []).filter(
     (c): c is { entry_id: string; state: 'not_checked'; reason: string } => c.state === 'not_checked',
   );

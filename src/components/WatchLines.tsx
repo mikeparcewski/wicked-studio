@@ -69,6 +69,8 @@ export function WatchRunLines({ runId, jumped, onBack, isTerminal, endedMs }: {
               <button
                 type="button"
                 data-testid="watch-coverage-toggle"
+                aria-expanded={open}
+                aria-label="Why nothing was checked"
                 onClick={() => setOpen((o) => !o)}
                 className="wk-since-toggle"
               >⋯</button>
