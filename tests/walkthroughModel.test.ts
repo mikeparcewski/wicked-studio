@@ -64,6 +64,18 @@ describe('before the recording', () => {
   });
 });
 
+describe('studio#593 — a refused storyline', () => {
+  const empty = { chapters: [], sealed: false, video: { mp4: null, poster: null, markers: [] } };
+  it('says the lint refused it, with crew’s cause, instead of an in-progress word', () => {
+    const r = recordingOf(view({ state: 'linting', cause: 'pinned validator failed: no coverage report', ...empty }));
+    expect(stateLine(r)).toEqual({ mark: '✗', text: 'The storyline was refused — pinned validator failed: no coverage report', tone: 'bad' });
+  });
+  it('still says "Checking the storyline" while the lint runs (no cause)', () => {
+    expect(stateLine(recordingOf(view({ state: 'linting', cause: null, ...empty })))).toEqual({ mark: '○', text: 'Checking the storyline', tone: 'quiet' });
+    expect(stateLine(recordingOf(view({ state: 'linting', cause: '  ', ...empty }))).tone).toBe('quiet');
+  });
+});
+
 describe('scene 19 — a failing chapter at its frame', () => {
   const failed = chapter(4, {
     verdict: 'FAIL', failedAtSec: 11, failedFrame: 'ch4/fail.png', takes: 2,
