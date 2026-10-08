@@ -175,8 +175,6 @@ export function rightRailOpen(skin: SkinManifest): boolean {
   return skin.shell === 'right-rail';
 }
 
-/** Width of the desk shell's session rail (px) — fixed, so nothing moves when a pane opens. */
-export const SESSION_RAIL_PX = 236;
 
 /** Whether the shell is the Desk's (the session rail on every route, the Desk on `/`). */
 export function deskShell(skin: SkinManifest): boolean {

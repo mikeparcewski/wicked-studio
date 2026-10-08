@@ -7,13 +7,15 @@ import type { NeedRow } from '../../board/needsYou.js';
 import { useBoardModel } from '../../hooks/useBoardModel.js';
 import { useCapabilities } from '../../store/capabilities.js';
 import type { Navigate } from '../../hooks/useRoute.js';
-import { SESSION_RAIL_PX } from '../../theming/skins.js';
 import { useAppearanceStore } from '../../theming/appearance.js';
 import { anyModalOpen, useLayerStore } from '../../store/layers.js';
 import { HealthRailSection } from '../HealthRailSection.js';
 import { WatchPill } from './WatchPill.js';
 import { StandingOrdersPanel } from '../StandingOrdersPanel.js';
 import { DeliveryFreezeSwitch } from '../DeliveryFreezeSwitch.js';
+
+/** Width of the desk shell's session rail (px) — fixed, so nothing moves when a pane opens. */
+export const SESSION_RAIL_PX = 236;
 
 /**
  * THE SESSION RAIL (skin `desk`, DES-STUDIO-REBUILD-001 §4.2, slice S4; Amendment 5 as revised,
@@ -77,12 +79,24 @@ export function SessionRail({ runs, needRows, navigate, pathname }: {
   };
   const current = (path: string): 'page' | undefined => (pathname === path || pathname.startsWith(`${path}/`) ? 'page' : undefined);
   const siteName = useAppearanceStore((s) => s.appearance.site_name?.trim() || null);
+  // studio#512 (S18b): Theme › Logo takes the dot's place — the classic chrome's §3.1 slot, 32 px, contain-fit.
+  const logoUrl = useAppearanceStore((s) => s.appearance.logo_url);
 
   return (
     <nav data-testid="session-rail" aria-label="Sessions" className="wk-rail" style={{ width: SESSION_RAIL_PX }}>
       {/* studio#512: Theme › Site name is shown here under the Desk skin (the classic chrome is the other home). */}
       <div className="wk-rail-brand" data-testid="desk-rail-brand">
-        <span aria-hidden className="wk-desk-dot wk-desk-dot--waiting" />
+        {logoUrl !== null
+          ? <span
+              aria-hidden
+              data-testid="desk-rail-logo"
+              style={{
+                width: 32, height: 32, flexShrink: 0,
+                backgroundImage: `url(${JSON.stringify(logoUrl)})`,
+                backgroundSize: 'contain', backgroundPosition: 'center', backgroundRepeat: 'no-repeat',
+              }}
+            />
+          : <span aria-hidden className="wk-desk-dot wk-desk-dot--waiting" />}
         {siteName !== null ? <b>{siteName}</b> : <>wicked <b>studio</b></>}
       </div>
       <a href="/" onClick={go('/')} data-testid="desk-rail-home" aria-current={pathname === '/' ? 'page' : undefined} className="wk-rail-desk">

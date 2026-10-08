@@ -1,7 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api, downloadRunEvidence } from '../../api/client.js';
 import { executingOrd } from '../../api/run-state.js';
-import type { ChatPathView, RosterSeat, SessionView } from '../../api/types.js';
+import type { ChatPathView, CoreEvent, RosterSeat, SessionView } from '../../api/types.js';
+import { everythingPath } from '../../board/everythingModel.js';
+import { narratorCtxOf } from '../../board/homeActivity.js';
+import { observedSpend } from '../../board/metrics.js';
+import { narrate, TONE_GLYPH, type NarrationLine } from '../narrator.js';
+import { useRuntimeStore } from '../../store/runtime.js';
+import { AgeStamp } from '../AgeStamp.js';
 import { getDiagnostics, type Diagnostics } from '../../api/diagnostics.js';
 import { objectAttr, OBJECT_ACTIONS, primaryAction, RUN_SECTION_TABS, SHEET_TABS, type ObjectRef } from '../../board/objectActions.js';
 import { parseSessionId, runChatIdOf } from '../../board/sessionModel.js';
@@ -278,20 +284,25 @@ function SessionSheet({ r, tab: asked, runs, navigate }: { r: Extract<ObjectRef,
         </div>
       )}
       {tab === 'evidence' && newest !== null && <EvidenceTab runId={newest.session.id} />}
-      {tab === 'activity' && newest !== null && <ActivityTail runId={newest.session.id} />}
+      {tab === 'activity' && newest !== null && <ActivityTail view={newest} />}
       {tab === 'signins' && <SignIns roster={roster} />}
-      {newest !== null && sections.some((s) => s.id === tab) && <RunSection id={tab as AccordionId} view={newest} navigate={navigate} />}
+      {newest !== null && sections.some((s) => s.id === tab) && <RunSection id={tab as AccordionId} view={newest} runs={runs} navigate={navigate} />}
     </Sheet>
   );
 }
 
-function RunSection({ id, view, navigate }: { id: AccordionId; view: SessionView; navigate: Navigate }): React.ReactElement {
+function RunSection({ id, view, runs, navigate }: { id: AccordionId; view: SessionView; runs: readonly SessionView[]; navigate: Navigate }): React.ReactElement {
   const model = useRunModel(view.session.id, view);
   const provenance = useProvenanceStore((s) => s.byRun[view.session.id] ?? null);
   useEffect(() => { useProvenanceStore.getState().load(view.session.id); }, [view.session.id]);
+  // Forward lineage (§4.3): the retries of THIS run, from the already-loaded index — as the run page's panel derives it.
+  const retriedAs = useMemo(
+    () => runs.filter((r) => r.session.retry_of === view.session.id).map((r) => r.session.id),
+    [runs, view.session.id],
+  );
   return (
     <div data-testid="sheet-section" data-section={id}>
-      <RunSectionBody id={id} view={view} model={model} provenance={provenance} retriedAs={[]} navigate={navigate} />
+      <RunSectionBody id={id} view={view} model={model} provenance={provenance} retriedAs={retriedAs} navigate={navigate} />
     </div>
   );
 }
@@ -409,15 +420,38 @@ function HelpersList({ runs, sessionId = null, onSignIn, roster = null }: { runs
   );
 }
 
-function ActivityTail({ runId }: { runId: string }): React.ReactElement {
-  const ev = useRunRawEvents(runId);
+/** A frame's own clock, when the trail carries one (`ts` / `at`, ms or s epoch, or an ISO string). */
+function eventAtMs(e: CoreEvent): number | null {
+  const raw = (e as { ts?: unknown; at?: unknown }).ts ?? (e as { at?: unknown }).at;
+  if (typeof raw === 'number' && Number.isFinite(raw) && raw > 0) return raw < 1e12 ? raw * 1000 : raw;
+  if (typeof raw === 'string') { const t = Date.parse(raw); return Number.isFinite(t) ? t : null; }
+  return null;
+}
+
+/**
+ * S18b: the run's activity in the narrator's words — one sentence per frame with its tone glyph and
+ * its age (the retired home page's Recent activity, per run). A frame the narrator does not speak is
+ * left out, never printed as its raw type; a frame with no clock gets the age pill that says so.
+ */
+function ActivityTail({ view }: { view: SessionView }): React.ReactElement {
+  const ev = useRunRawEvents(view.session.id);
+  const ctx = useMemo(() => narratorCtxOf(view), [view]);
   if (ev.state === 'loading') return <p className="wk-session-grey">Reading the activity…</p>;
   if (ev.state === 'error') return <p role="alert" className="wk-composer-note wk-composer-note--bad">Could not read the activity: {ev.message}</p>;
-  const tail = ev.events.slice(-30).reverse();
+  const lines = ev.events
+    .map((e) => ({ line: narrate(e, ctx), at: eventAtMs(e) }))
+    .filter((x): x is { line: NarrationLine; at: number | null } => x.line !== null)
+    .slice(-30)
+    .reverse();
+  const now = Date.now();
   return (
     <ul data-testid="sheet-activity" className="wk-sheet-list">
-      {tail.length === 0 && <li className="wk-session-grey">Nothing has happened yet.</li>}
-      {tail.map((e, i) => <li key={i} className="wk-sheet-line">{String((e as { type?: unknown }).type ?? 'event')}</li>)}
+      {lines.length === 0 && <li className="wk-session-grey">Nothing has happened yet.</li>}
+      {lines.map((x, i) => (
+        <li key={i} data-testid="sheet-activity-line" data-tone={x.line.tone} className="wk-sheet-line">
+          <span aria-hidden>{TONE_GLYPH[x.line.tone]}</span> {x.line.text} · <AgeStamp at={x.at} now={now} />
+        </li>
+      ))}
     </ul>
   );
 }
@@ -457,6 +491,9 @@ function DeskSheet({ tab, runs, navigate, needCount }: { tab: string; runs: Sess
     return () => { cancelled = true; };
   }, []);
   const live = runs.filter((v) => !TERMINAL.has(v.session.status));
+  // S18b: what this session observed in reported `cliUsage` dollars — said only once a frame reported one.
+  const logs = useRuntimeStore((s) => s.logs);
+  const spend = useMemo(() => observedSpend(logs), [logs]);
   return (
     <Sheet
       title="The Desk"
@@ -465,7 +502,7 @@ function DeskSheet({ tab, runs, navigate, needCount }: { tab: string; runs: Sess
       tabs={SHEET_TABS.desk}
       tab={tab}
       onTab={setSheetTab}
-      primary={{ label: primaryAction('desk').label, onClick: () => { closeSheet(); navigate('/projects'); } }}
+      primary={{ label: primaryAction('desk').label, onClick: () => { closeSheet(); navigate(everythingPath()); } }}
       onClose={closeSheet}
     >
       {tab === 'studio' && (
@@ -478,6 +515,7 @@ function DeskSheet({ tab, runs, navigate, needCount }: { tab: string; runs: Sess
               <p className="wk-session-grey">Up {Math.round(diag.d.daemon.uptimeMs / 60_000)} min · {diag.d.recentErrors.length === 0 ? 'no recent errors' : `${diag.d.recentErrors.length} recent errors`}</p>
             </>
           )}
+          {spend.frames > 0 && <p data-testid="sheet-studio-spend" data-frames={spend.frames} className="wk-sheet-line">${spend.total.toFixed(2)} observed this session</p>}
         </div>
       )}
       {tab === 'computer' && (

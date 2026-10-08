@@ -4,7 +4,7 @@ import type { DiagnosticsGovernance, SessionView } from '../../api/types.js';
 import { getDiagnostics } from '../../api/diagnostics.js';
 import { deadletterChore } from '../../board/repairMoves.js';
 import { useDeadletterReplay } from '../../hooks/useRepairMoves.js';
-import { ReplayMove } from '../DeckKpiRibbon.js';
+import { ReplayMove } from '../ReplayMove.js';
 import { StandingOrdersPanel } from '../StandingOrdersPanel.js';
 import {
   deskGreeting, deskProjects, deskReadState, lapsedSeatChores, needsByRun, needsHeadline, needTextByRun, noSignedInHelper, railGroups,

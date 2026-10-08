@@ -4,8 +4,8 @@ wicked_theme_test.py — DES-STUDIO-REBUILD-001 S1: the wicked themes and self-h
 in a real browser at 1440x700.
 
   1. DEFAULT UNCHANGED: with the fixture's default appearance, <html> carries no data-theme,
-     the body's computed font is Inter (Archivo under STUDIO_SKIN=desk — the desk skin's face, the
-     desk variant in run_journeys.py DESK), that face is actually loaded (document.fonts), and the
+     the body's computed font is Archivo (the base --font-sans in styles/tokens.css since S18c,
+     under every skin), that face is actually loaded (document.fonts), and the
      computed --accent is the default accent (230/74/68).
   2. WICKED-LIGHT: on /theme, choosing "Wicked light" stamps data-theme="wicked-light",
      writes the harbor preset inline (200 / 47% / 25%), the computed --accent is #224A5E
@@ -95,9 +95,9 @@ with sync_playwright() as p:
     page.add_style_tag(content=HIDE_GATE_TOASTS)
     page.wait_for_function("() => document.documentElement.style.getPropertyValue('--_accent-h') !== ''", timeout=15000)
     s0 = page.evaluate(STATE)
-    # The desk skin's one token that is not colour is its face (skins.ts DESK: --font-sans Archivo), so
-    # under desk the default body font is Archivo; the theme and the accent are the defaults either way.
-    face, face_loaded = ("Archivo", s0["archivoLoaded"]) if STUDIO_SKIN == "desk" else ("Inter", s0["interLoaded"])
+    # S18c moved the Desk's face into styles/tokens.css (--font-sans Archivo), so the default body font
+    # is Archivo under every skin; the theme and the accent are the defaults either way.
+    face, face_loaded = "Archivo", s0["archivoLoaded"]
     check("default_unchanged", s0["theme"] is None and s0["bodyFont"] == face and face_loaded
           and s0["accent"] == s0["defaultAccent"] and s0["skin"] == STUDIO_SKIN, state=s0)
 

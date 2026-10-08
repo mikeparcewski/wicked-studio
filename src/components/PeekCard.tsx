@@ -1,6 +1,6 @@
 import type { PeekView } from '../hooks/usePeekJump.js';
 import { GateVerdict } from './GateVerdict.js';
-import { ago } from './ProjectCard.js';
+import { ago } from './AgeStamp.js';
 
 /**
  * The peek card (studio wave 2a, behaviour 3) — a skin over `usePeekJump`: the top item that

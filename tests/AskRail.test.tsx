@@ -46,12 +46,12 @@ describe('the Ask entry — out of the rail chrome (studio#323 R1)', () => {
 });
 
 describe('the Ask launcher — a floating chat bubble bottom-right (studio#323 R1)', () => {
-  it('is fixed to the bottom-right corner, above the 28px runs bar', () => {
+  it('is fixed to the bottom-right corner, a gutter above the bottom edge', () => {
     render(<AskLauncher open={false} onToggle={() => undefined} />);
     const bubble = screen.getByTestId('ask-launcher');
     expect(bubble.style.position).toBe('fixed');
     expect(bubble.style.right).toBe('16px');
-    expect(bubble.style.bottom).toBe('44px'); // 28px runs bar + 16px gutter
+    expect(bubble.style.bottom).toBe('16px'); // the 16px gutter (the runs bar is retired, S18c)
     expect(bubble.style.left).toBe('');
     expect(bubble.style.top).toBe('');
     expect(bubble.style.borderRadius).toBe('var(--radius-full)');
@@ -75,10 +75,10 @@ describe('the Ask launcher — a floating chat bubble bottom-right (studio#323 R
 
   it('stays clear of a bottom composer (studio#333): bubble AND panel lift by the offset App passes', () => {
     render(<AskLauncher open onToggle={() => undefined} bottomOffsetPx={184}><div /></AskLauncher>);
-    expect(screen.getByTestId('ask-launcher').style.bottom).toBe('228px'); // 28 bar + 184 band + 16 gutter
-    expect(screen.getByTestId('ask-panel').style.bottom).toBe('288px'); // bubble bottom 228 + 48 bubble + 12 gap
-    // jsdom's innerHeight is 768: the budget above the bubble is 768 - 288 - 16.
-    expect(screen.getByTestId('ask-panel').style.height).toBe('464px');
+    expect(screen.getByTestId('ask-launcher').style.bottom).toBe('200px'); // 184 band + 16 gutter
+    expect(screen.getByTestId('ask-panel').style.bottom).toBe('260px'); // bubble bottom 200 + 48 bubble + 12 gap
+    // jsdom's innerHeight is 768: the budget above the bubble is 768 - 260 - 16.
+    expect(screen.getByTestId('ask-panel').style.height).toBe('492px');
     expect(screen.getByTestId('ask-launcher').style.right).toBe('16px'); // the other axis is untouched
   });
 
@@ -136,7 +136,7 @@ describe('the Ask launcher — a floating chat bubble bottom-right (studio#323 R
     const panel = screen.getByTestId('ask-panel');
     expect(panel.style.position).toBe('fixed');
     expect(panel.style.right).toBe('16px');
-    expect(panel.style.bottom).toBe('104px'); // bubble bottom 44 + 48 bubble + 12 gap
+    expect(panel.style.bottom).toBe('76px'); // bubble bottom 16 + 48 bubble + 12 gap
     expect(panel).toContainElement(screen.getByTestId('dock-child'));
     expect(screen.getByTestId('ask-launcher')).toHaveAttribute('aria-expanded', 'true');
   });

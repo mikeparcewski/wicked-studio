@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { RUNS_BAR_PX } from './RunsBottomPanel.js';
 
 /**
  * The ASK launcher (studio#323 R1) — a floating chat bubble fixed bottom-right, in the
@@ -9,8 +8,8 @@ import { RUNS_BAR_PX } from './RunsBottomPanel.js';
  * so opening Ask pushes nothing.
  *
  * Placement contract:
- *   - it clears the runs bottom bar: `bottom` starts above `RUNS_BAR_PX` (the root's
- *     reserved padding — App.tsx), so the collapsed bar never covers it;
+ *   - it sits a gutter above the viewport's bottom edge (the classic runs bar it once
+ *     cleared is retired, S18c);
  *   - it clears the right panel: when a run is selected App passes that panel's width
  *     as `rightOffsetPx`, and both bubble and panel shift left by it — unless the
  *     viewport is too narrow for the panel to fit beside it, when both overlay the
@@ -90,7 +89,7 @@ export function AskLauncher({ open, onToggle, rightOffsetPx = 0, bottomOffsetPx 
   // (the width axis's rule, on this axis) — never a bubble above the top edge.
   const bubbleBottom = Math.max(
     0,
-    Math.min(RUNS_BAR_PX + bottomOffsetPx + ASK_GUTTER_PX, vh - ASK_GUTTER_PX - ASK_BUBBLE_PX),
+    Math.min(bottomOffsetPx + ASK_GUTTER_PX, vh - ASK_GUTTER_PX - ASK_BUBBLE_PX),
   );
   const panelBottom = bubbleBottom + ASK_BUBBLE_PX + 12;
   // The panel's height budget is what is left above the bubble — never negative.

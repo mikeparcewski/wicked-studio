@@ -13,7 +13,6 @@ import { useRunEventStore } from '../store/events.js';
 import { useRuntimeStore, type CouncilStatus } from '../store/runtime.js';
 import { setRetryPrefill } from '../store/retryPrefill.js';
 import { LiveEdge } from './LiveEdge.js';
-import { STATUS_STYLE } from './RunCard.js';
 import { ApprovalDock } from './ApprovalDock.js';
 import { ChatInput } from './ChatInput.js';
 import { AgentTerminal } from './AgentTerminal.js';
@@ -28,7 +27,7 @@ import { useRerunFromHere, type RerunFromHere } from '../hooks/useRerunFromHere.
 import { RunDegradedNote } from './RunDegradedNote.js';
 import { RunIntentAmendments } from './RunIntentAmendments.js';
 import { deriveArtifacts, lastNarration, type NarratorContext } from './narrator.js';
-import { runTitle } from './runIdentity.js';
+import { runTitle, STATUS_STYLE } from './runIdentity.js';
 import { RunTimeline } from './RunTimeline.js';
 import { OutboundDraft } from './OutboundDraft.js';
 import { Modal } from './Modal.js';

@@ -1,17 +1,9 @@
-import type { SessionStatus, SessionView } from '../api/types.js';
+import type { SessionView } from '../api/types.js';
 import { edgeStateOf, LiveEdge } from './LiveEdge.js';
-import { humanTitle } from './runIdentity.js';
+import { humanTitle, STATUS_STYLE } from './runIdentity.js';
 
-// Status metadata — colors speak the §2.6 status layer
-export const STATUS_STYLE: Record<SessionStatus, { label: string; color: string }> = {
-  planning:       { label: 'Planning',        color: 'var(--ink-muted)' },
-  distributing:   { label: 'Distributing',    color: 'var(--status-run)' },
-  executing:      { label: 'Executing',        color: 'var(--status-run)' },
-  awaiting_human: { label: 'Awaiting human',  color: 'var(--status-gate)' },
-  completed:      { label: 'Completed',        color: 'var(--status-done)' },
-  cancelled:      { label: 'Cancelled',        color: 'var(--ink-dim)' },
-  failed:         { label: 'Failed',           color: 'var(--status-fail)' },
-};
+// `STATUS_STYLE` lives in runIdentity.tsx (S18c); re-exported for the classic files S18d deletes.
+export { STATUS_STYLE };
 
 interface Props {
   view: SessionView;

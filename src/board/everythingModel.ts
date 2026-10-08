@@ -87,6 +87,28 @@ export function filterGroups(groups: readonly RailGroup[], filter: SessionFilter
     .filter((g) => g.sessions.length > 0);
 }
 
+/**
+ * The Sessions search (S18b, the retired Work page's search box): the sessions whose title — or, when
+ * the caller passes it, the problem of any of their runs — holds every word of `query`, across every
+ * group. Case-insensitive; a blank query returns the groups as they are; empty groups go. The page
+ * hands it the project-scoped groups BEFORE the state filter: a non-empty search lifts the filter.
+ */
+export function searchGroups(
+  groups: readonly RailGroup[],
+  query: string,
+  problemOf: (runId: string) => string | undefined = () => undefined,
+): RailGroup[] {
+  const words = query.toLowerCase().split(/\s+/).filter((w) => w !== '');
+  if (words.length === 0) return groups.map((g) => ({ ...g }));
+  const hit = (s: RailGroup['sessions'][number]): boolean => {
+    const hay = [s.title, ...s.runIds.map((r) => problemOf(r) ?? '')].join('\n').toLowerCase();
+    return words.every((w) => hay.includes(w));
+  };
+  return groups
+    .map((g) => ({ ...g, sessions: g.sessions.filter(hit) }))
+    .filter((g) => g.sessions.length > 0);
+}
+
 // ── Everything made: documents · pages · decks · videos ──────────────────────────────────────
 
 export const MADE_KINDS = [
@@ -149,13 +171,16 @@ function projectOf(v: SessionView, projectIdByRun: Readonly<Record<string, strin
 
 /**
  * Everything made, newest first: every document in the docs cache (what the daemon's index listed,
- * or what the projects opened this session listed) plus every demo run's video. Filtered by `kind`.
+ * or what the projects opened this session listed) plus every demo run's video. Filtered by `kind`
+ * and, when one is named, by `project`.
  */
 export function madeRows(
   byProject: Readonly<Record<string, readonly DocSummary[]>>,
   runs: readonly SessionView[],
   projectIdByRun: Readonly<Record<string, string | undefined>>,
   kind: MadeKind = 'all',
+  /** One project's rows (`?project=`), else every project's. */
+  project: string | null = null,
 ): MadeRow[] {
   const out: MadeRow[] = [];
   for (const [pid, docs] of Object.entries(byProject)) {
@@ -177,7 +202,7 @@ export function madeRows(
     });
   }
   return out
-    .filter((r) => kind === 'all' || r.kind === kind)
+    .filter((r) => (kind === 'all' || r.kind === kind) && (project === null || r.projectId === project))
     .sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0) || a.title.localeCompare(b.title));
 }
 

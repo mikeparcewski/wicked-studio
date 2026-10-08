@@ -15,7 +15,7 @@ import { useGateStore } from '../store/gates.js';
 import { useSteeringStore, type SteeringAction } from '../store/steering.js';
 import { DeliverLift } from './DeliverLift.js';
 import { deliverLift, textCarriesFailure } from './deliverLiftModel.js';
-import { GATE_HASH } from './GateChip.js';
+import { GATE_HASH } from '../board/gateActions.js';
 import { GateVerdict } from './GateVerdict.js';
 import { escalationOffers, failedSeatOf, gateFrameFor, gateSourceLine, gateVerdictFor, isEscalationGate, isFailureEscalation, isLaunchRefusal, isSeatFailure, isRestoredRetry, phaseLabel, reviewedUnitFor, steerScopeTarget, type EscalationOffer } from './gateVerdictModel.js';
 import { GateUnderReview } from './GateUnderReview.js';

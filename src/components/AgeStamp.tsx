@@ -1,5 +1,13 @@
 import { ageVerdict, brokenClockLabel, brokenClockTitle } from '../board/ageHonesty.js';
-import { ago } from './ProjectCard.js';
+
+/** Coarse, honest relative time — the board never needs second precision. */
+export function ago(from: number, now: number = Date.now()): string {
+  const secs = Math.max(0, Math.round((now - from) / 1000));
+  if (secs < 60) return `${secs}s`;
+  if (secs < 3600) return `${Math.floor(secs / 60)}m`;
+  if (secs < 86400) return `${Math.floor(secs / 3600)}h`;
+  return `${Math.floor(secs / 86400)}d`;
+}
 
 /**
  * One rendered age (studio Wave A, idea 14). A plausible clock renders as the plain age word

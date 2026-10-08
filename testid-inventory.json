@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.6.5",
   "counts": {
-    "files": 219,
-    "occurrences": 2559,
-    "static": 2233,
+    "files": 221,
+    "occurrences": 2576,
+    "static": 2247,
     "dynamic": 79,
     "computed": 9
   },
@@ -2761,6 +2761,12 @@
       ]
     },
     {
+      "testId": "desk-rail-logo",
+      "files": [
+        "src/components/desk/SessionRail.tsx"
+      ]
+    },
+    {
       "testId": "desk-rail-mcp",
       "files": [
         "src/board/deskModel.ts"
@@ -3573,6 +3579,12 @@
       ]
     },
     {
+      "testId": "everything-made-cancel",
+      "files": [
+        "src/components/everything/EverythingPage.tsx"
+      ]
+    },
+    {
       "testId": "everything-made-census",
       "files": [
         "src/components/everything/EverythingPage.tsx"
@@ -3646,6 +3658,18 @@
     },
     {
       "testId": "everything-scope-clear",
+      "files": [
+        "src/components/everything/EverythingPage.tsx"
+      ]
+    },
+    {
+      "testId": "everything-search",
+      "files": [
+        "src/components/everything/EverythingPage.tsx"
+      ]
+    },
+    {
+      "testId": "everything-search-clear",
       "files": [
         "src/components/everything/EverythingPage.tsx"
       ]
@@ -4890,31 +4914,32 @@
     {
       "testId": "kpi-repair",
       "files": [
-        "src/components/DeckKpiRibbon.tsx"
+        "src/components/ReplayMove.tsx"
       ]
     },
     {
       "testId": "kpi-repair-cancel",
       "files": [
-        "src/components/DeckKpiRibbon.tsx"
+        "src/components/ReplayMove.tsx"
       ]
     },
     {
       "testId": "kpi-repair-confirm",
       "files": [
-        "src/components/DeckKpiRibbon.tsx"
+        "src/components/ReplayMove.tsx"
       ]
     },
     {
       "testId": "kpi-repair-preview",
       "files": [
-        "src/components/DeckKpiRibbon.tsx"
+        "src/components/ReplayMove.tsx"
       ]
     },
     {
       "testId": "kpi-repair-result",
       "files": [
-        "src/components/DeckKpiRibbon.tsx"
+        "src/components/DeckKpiRibbon.tsx",
+        "src/components/ReplayMove.tsx"
       ]
     },
     {
@@ -7190,6 +7215,54 @@
       ]
     },
     {
+      "testId": "project-docs-root",
+      "files": [
+        "src/components/ProjectDocumentsRoot.tsx"
+      ]
+    },
+    {
+      "testId": "project-docs-root-cancel",
+      "files": [
+        "src/components/ProjectDocumentsRoot.tsx"
+      ]
+    },
+    {
+      "testId": "project-docs-root-clear",
+      "files": [
+        "src/components/ProjectDocumentsRoot.tsx"
+      ]
+    },
+    {
+      "testId": "project-docs-root-edit",
+      "files": [
+        "src/components/ProjectDocumentsRoot.tsx"
+      ]
+    },
+    {
+      "testId": "project-docs-root-error",
+      "files": [
+        "src/components/ProjectDocumentsRoot.tsx"
+      ]
+    },
+    {
+      "testId": "project-docs-root-input",
+      "files": [
+        "src/components/ProjectDocumentsRoot.tsx"
+      ]
+    },
+    {
+      "testId": "project-docs-root-save",
+      "files": [
+        "src/components/ProjectDocumentsRoot.tsx"
+      ]
+    },
+    {
+      "testId": "project-docs-root-value",
+      "files": [
+        "src/components/ProjectDocumentsRoot.tsx"
+      ]
+    },
+    {
       "testId": "project-field",
       "files": [
         "src/components/ProjectSwitcher.tsx"
@@ -9389,6 +9462,12 @@
       ]
     },
     {
+      "testId": "sheet-activity-line",
+      "files": [
+        "src/components/sheets/ObjectSheet.tsx"
+      ]
+    },
+    {
       "testId": "sheet-body",
       "files": [
         "src/components/sheets/Sheet.tsx"
@@ -9612,6 +9691,12 @@
     },
     {
       "testId": "sheet-studio",
+      "files": [
+        "src/components/sheets/ObjectSheet.tsx"
+      ]
+    },
+    {
+      "testId": "sheet-studio-spend",
       "files": [
         "src/components/sheets/ObjectSheet.tsx"
       ]
