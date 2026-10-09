@@ -347,7 +347,7 @@ describe('the presence-gate — an older crew (no POST /testing/recon) keeps tod
       repoRef: 'r-1',
     });
 
-    // The intake gate arrives as a normal awaitingHuman frame — the EXISTING gate card renders.
+    // The intake gate arrives as a normal awaitingHuman frame — S16a-4g: answered in its thread.
     act(() => {
       useGateStore.getState().ingest({
         type: 'awaitingHuman',
@@ -356,10 +356,8 @@ describe('the presence-gate — an older crew (no POST /testing/recon) keeps tod
         prompt: 'Proposed campaign: 4 scenarios — approve to launch',
       } as never);
     });
-    const gate = await screen.findByTestId('steering-gate');
-    expect(gate).toHaveAttribute('data-run-id', 'run-old-1');
-    await user.click(within(gate).getByTestId('steering-approve'));
-    await waitFor(() => expect(confirmGate).toHaveBeenCalledWith('run-old-1', expect.objectContaining({ approve: true })));
+    expect(await screen.findByTestId('answer-in-thread')).toHaveAttribute('data-subject', 'run-old-1');
+    act(() => { useGateStore.getState().clearGate('run-old-1'); });
     expect(await screen.findByTestId('testing-launch-resolved')).toHaveTextContent(/Tests/);
   });
 
@@ -948,8 +946,8 @@ describe('T14–T16 — fan-out and response honesty (the answer decides, never 
   });
 });
 
-describe('T17–T19 — the single-run intake gate: the EXISTING SteeringGate card, reused', () => {
-  it('T18 — before the gate arrives: the waiting line names the run; no gate card yet', async () => {
+describe('T17–T19 → S16a-4g — the single-run intake gate is answered in its thread; the panel points there', () => {
+  it('T18 — before the gate arrives: the waiting line names the run; no gate card, no line yet', async () => {
     const user = userEvent.setup();
     wireUp({ runId: 'run-1234567890' });
     panelOnly();
@@ -959,29 +957,38 @@ describe('T17–T19 — the single-run intake gate: the EXISTING SteeringGate ca
     expect(waiting).toHaveTextContent('run-1234');
     expect(waiting).toHaveTextContent('intake gate will appear here');
     expect(within(panel).queryByTestId('steering-gate')).toBeNull();
+    expect(within(panel).queryByTestId('answer-in-thread')).toBeNull();
   });
 
-  it('T17 — the awaitingHuman frame for THIS run swaps the waiting line for the ONE SteeringGate (prompt in-band); a frame for another run changes nothing', async () => {
+  it('T17 — the awaitingHuman frame for THIS run swaps the waiting line for ONE "Answer in its thread ›" line (no card); a frame for another run changes nothing', async () => {
     const user = userEvent.setup();
     wireUp({ runId: 'run-1' });
-    panelOnly();
+    const navigate = vi.fn();
+    panelOnly({ navigate });
     const panel = screen.getByTestId('testing-launch-panel');
     await brief(user, panel, 'Gate me', { unscoped: true });
     await screen.findByTestId('testing-launch-waiting');
 
     gateArrives('run-other');
-    expect(within(panel).queryByTestId('steering-gate')).toBeNull();
+    expect(within(panel).queryByTestId('answer-in-thread')).toBeNull();
     expect(within(panel).getByTestId('testing-launch-waiting')).toBeInTheDocument();
 
     gateArrives('run-1', 'Proposed plan: 3 scenarios — approve to launch');
-    const gates = await within(panel).findAllByTestId('steering-gate');
-    expect(gates).toHaveLength(1);
-    expect(gates[0]).toHaveAttribute('data-run-id', 'run-1');
-    expect(within(gates[0]!).getByTestId('steering-prompt')).toHaveTextContent('Proposed plan: 3 scenarios');
+    const lines = await within(panel).findAllByTestId('answer-in-thread');
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toHaveAttribute('data-subject', 'run-1');
+    expect(within(panel).queryByTestId('steering-gate')).toBeNull();
     expect(within(panel).queryByTestId('testing-launch-waiting')).toBeNull();
+    const open = within(lines[0]!).getByTestId('answer-in-thread-open');
+    expect(open).toHaveAttribute('href', '/s/run%3Arun-1#gate');
+    await user.click(open);
+    expect(navigate).toHaveBeenCalledWith('/s/run%3Arun-1#gate');
+    // The line opens the thread; it sends nothing.
+    expect(confirmGate).not.toHaveBeenCalled();
+    expect(cancelRun).not.toHaveBeenCalled();
   });
 
-  it('T17 — a gate that lands BEFORE the launch response resolves renders the moment the run id is known', async () => {
+  it('T17 — a gate that lands BEFORE the launch response resolves shows the line the moment the run id is known', async () => {
     const user = userEvent.setup();
     const d = wireUpDeferred();
     panelOnly();
@@ -992,76 +999,31 @@ describe('T17–T19 — the single-run intake gate: the EXISTING SteeringGate ca
       d.resolve({ runId: 'run-early' });
       await d.promise;
     });
-    expect(await within(panel).findByTestId('steering-gate')).toHaveAttribute('data-run-id', 'run-early');
+    expect(await within(panel).findByTestId('answer-in-thread')).toHaveAttribute('data-subject', 'run-early');
     expect(within(panel).queryByTestId('testing-launch-waiting')).toBeNull();
   });
 
-  const DECISIONS: Array<[label: string, button: string, amend: string | undefined, decision: Record<string, unknown>]> = [
-    ['approve', 'steering-approve', undefined, { approve: true }],
-    ['approve + steer', 'steering-approve-steer', 'focus on the checkout flow', { approve: true, amend: 'focus on the checkout flow' }],
-    ['reject', 'steering-reject', undefined, { approve: false }],
-    ['reject + note', 'steering-reject', 'the proposed plan is too broad', { approve: false, amend: 'the proposed plan is too broad' }],
-  ];
-
-  it.each(DECISIONS)('T19 — %s → confirmGate(runId, %j) exactly once, then the resolved copy with working doors to the Tests landing and the run', async (_label, button, amend, decision) => {
+  it('T19 — the resolved state follows the gate store: open, then cleared → the resolved copy with working doors to the Tests landing and the run\'s thread', async () => {
     const user = userEvent.setup();
     wireUp({ runId: 'run-1' });
-    confirmGate.mockResolvedValue({ status: 'ok' });
     const navigate = vi.fn();
     panelOnly({ navigate });
     const panel = screen.getByTestId('testing-launch-panel');
     await brief(user, panel, 'Decide', { unscoped: true });
     await screen.findByTestId('testing-launch-waiting');
     gateArrives('run-1');
-    const gate = await within(panel).findByTestId('steering-gate');
-    if (amend !== undefined) await user.type(within(gate).getByTestId('steering-amend'), amend);
-    await user.click(within(gate).getByTestId(button));
+    await within(panel).findByTestId('answer-in-thread');
+    act(() => { useGateStore.getState().clearGate('run-1'); });
 
-    await waitFor(() => expect(confirmGate).toHaveBeenCalledWith('run-1', expect.objectContaining(decision)));
-    expect(confirmGate).toHaveBeenCalledTimes(1);
-    expect(cancelRun).not.toHaveBeenCalled();
     const resolved = await within(panel).findByTestId('testing-launch-resolved');
-    expect(within(panel).queryByTestId('steering-gate')).toBeNull();
+    expect(within(panel).queryByTestId('answer-in-thread')).toBeNull();
     const [toTests, toRun] = within(resolved).getAllByRole('button');
     expect(toTests).toHaveTextContent('Tests');
     await user.click(toTests!);
     expect(navigate).toHaveBeenCalledWith('/testing/campaigns');
     await user.click(toRun!);
-    expect(navigate).toHaveBeenCalledWith('/runs/run-1');
-  });
-
-  it('T19 — Cancel run is the BODYLESS POST /runs/:id/cancel (no gate decision), and resolves the panel too', async () => {
-    const user = userEvent.setup();
-    wireUp({ runId: 'run-1' });
-    cancelRun.mockResolvedValue({ status: 'cancelled' });
-    panelOnly();
-    const panel = screen.getByTestId('testing-launch-panel');
-    await brief(user, panel, 'Cancel', { unscoped: true });
-    await screen.findByTestId('testing-launch-waiting');
-    gateArrives('run-1');
-    await user.click(within(await within(panel).findByTestId('steering-gate')).getByTestId('steering-cancel'));
-
-    await waitFor(() => expect(cancelRun).toHaveBeenCalledWith('run-1'));
-    expect(cancelRun.mock.calls[0]).toHaveLength(1);
+    expect(navigate).toHaveBeenCalledWith('/s/run%3Arun-1');
     expect(confirmGate).not.toHaveBeenCalled();
-    await within(panel).findByTestId('testing-launch-resolved');
-  });
-
-  it('T19 — a refused decision keeps the gate up with the daemon\'s sentence — nothing resolves', async () => {
-    const user = userEvent.setup();
-    wireUp({ runId: 'run-1' });
-    confirmGate.mockRejectedValue(new ApiError(409, 'gate already decided'));
-    panelOnly();
-    const panel = screen.getByTestId('testing-launch-panel');
-    await brief(user, panel, 'Refused', { unscoped: true });
-    await screen.findByTestId('testing-launch-waiting');
-    gateArrives('run-1');
-    const gate = await within(panel).findByTestId('steering-gate');
-    await user.click(within(gate).getByTestId('steering-approve'));
-
-    expect(await within(gate).findByTestId('steering-error')).toHaveTextContent('gate already decided');
-    expect(within(panel).getByTestId('steering-gate')).toBeInTheDocument();
-    expect(within(panel).queryByTestId('testing-launch-resolved')).toBeNull();
   });
 });
 

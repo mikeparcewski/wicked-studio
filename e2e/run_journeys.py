@@ -38,7 +38,7 @@ BEHAVIOUR = [
     "wave2a_gatecard", "wave2a_peek", "wave2a_safety", "wave2a_undo",
     "wave2b_handover", "wave2b_queue",
     "needs_shell", "t9_plan_ui", "dogfood_fixes", "wavea_home", "gate_move",
-    "waveb_proposals", "agent_1on1", "gate_trust", "wavec_takes", "wavec_runpage", "wavec_home_runs",
+    "waveb_proposals", "agent_1on1", "gate_trust", "wavec_runpage", "wavec_home_runs",
     "standing_orders",
     "capture",
     "main_scroll",
@@ -52,7 +52,7 @@ BEHAVIOUR = [
 ]
 
 # The journeys the Desk slices added (DES-STUDIO-REBUILD-001 §6.2).
-DESK_ONLY: list[str] = ["desk_home", "desk_session", "desk_answer", "desk_look", "desk_watch", "desk_proposal", "editor_conformance", "desk_reel_words", "desk_chat_launch", "desk_composer", "desk_watchtower", "desk_cmdk_routes", "desk_controls", "desk_sheets", "desk_home_paths", "desk_decisions", "desk_page_editor", "desk_doc_editors", "desk_walkthrough", "desk_rules", "desk_checks", "desk_plan_order", "desk_page_acts", "desk_run_state", "desk_gate_moves", "desk_repo_page", "desk_launch", "live_walkthrough_deliver_selftest", "desk_calm", "desk_demo_video", "desk_demo_video_status", "desk_session_live", "desk_everything", "desk_projects", "desk_rail", "desk_signin", "desk_ask_team", "desk_everything_archive", "desk_fit", "desk_settings_honest", "desk_demo_plain", "desk_ask_path", "desk_gate_kinds", "desk_orphaned", "desk_every_run", "desk_no_evidence", "desk_ports_pages", "desk_ports_gates", "desk_stranded_deliver"]
+DESK_ONLY: list[str] = ["desk_home", "desk_session", "desk_answer", "desk_look", "desk_watch", "desk_proposal", "editor_conformance", "desk_reel_words", "desk_chat_launch", "desk_composer", "desk_watchtower", "desk_cmdk_routes", "desk_controls", "desk_sheets", "desk_home_paths", "desk_decisions", "desk_page_editor", "desk_doc_editors", "desk_walkthrough", "desk_rules", "desk_checks", "desk_plan_order", "desk_page_acts", "desk_run_state", "desk_gate_moves", "desk_repo_page", "desk_launch", "live_walkthrough_deliver_selftest", "desk_calm", "desk_demo_video", "desk_demo_video_status", "desk_session_live", "desk_everything", "desk_projects", "desk_rail", "desk_signin", "desk_ask_team", "desk_everything_archive", "desk_fit", "desk_settings_honest", "desk_demo_plain", "desk_ask_path", "desk_gate_kinds", "desk_orphaned", "desk_every_run", "desk_no_evidence", "desk_ports_pages", "desk_ports_gates", "desk_stranded_deliver", "desk_artifact_address", "desk_artifact_versions", "desk_made_opens", "desk_made_doors", "desk_chat_moves", "desk_project_moves", "desk_questions_in_thread"]
 
 # One list (S18d): the Desk is the only shell. `DESK` keeps its name for CI's count step.
 JOURNEYS: list[str] = DESK_ONLY + BEHAVIOUR

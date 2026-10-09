@@ -43,6 +43,8 @@ const { CommandPalette, clearPaletteRepoCache } = await import('../src/component
 const { useProjectsStore } = await import('../src/store/projects.js');
 const { useGateStore } = await import('../src/store/gates.js');
 const { useAppearanceStore } = await import('../src/theming/appearance.js');
+const { chipsOf, useComposerChips } = await import('../src/store/composerChips.js');
+const { useSessionDrafts } = await import('../src/store/sessionDrafts.js');
 
 function proj(id: string, name: string, updated_at: number): Project {
   return { id, name, description: null, status: 'active', scope: `project:${id}`, created_at: 1, updated_at };
@@ -241,16 +243,21 @@ describe('the verb table (§1.3)', () => {
     expect(useAppearanceStore.getState().appearance.theme).not.toBe(before);
   });
 
-  it('New Build navigates to the flat launch route when unscoped, the pre-bound one inside a project', () => {
+  it('S16a-4f: New Build starts in the Desk composer (the project\'s @ chip inside a project) and sends nothing', () => {
+    useComposerChips.setState({ byComposer: {} });
     const { navigate } = renderPalette();
     fireEvent.change(screen.getByTestId('palette-input'), { target: { value: '> new build' } });
     fireEvent.click(rows().find((r) => r.textContent?.includes('New Build'))!);
-    expect(navigate).toHaveBeenCalledWith('/runs/new');
+    expect(navigate).toHaveBeenCalledWith('/');
+    expect(chipsOf(useComposerChips.getState(), 'desk')).toEqual([]);
 
     cleanup();
     const scoped = renderPalette({ projectId: 'q3-review-deck' });
     fireEvent.change(screen.getByTestId('palette-input'), { target: { value: '> new build' } });
     fireEvent.click(rows().find((r) => r.textContent?.includes('New Build'))!);
-    expect(scoped.navigate).toHaveBeenCalledWith('/p/q3-review-deck/build/new');
+    expect(scoped.navigate).toHaveBeenCalledWith('/');
+    expect(scoped.navigate.mock.calls.flat().some((p) => String(p).startsWith('/p/'))).toBe(false);
+    expect(chipsOf(useComposerChips.getState(), 'desk').map((c) => c.key)).toEqual(['project:q3-review-deck']);
+    expect(useSessionDrafts.getState().drafts['desk'] ?? '').toBe('');
   });
 });

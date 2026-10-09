@@ -604,8 +604,9 @@ export function needsYouRows(inputs: NeedsYouInputs): NeedRow[] {
       text: `Idle ${Math.round(idle / 60)}m — ${plural(chat.seats.length, 'warm seat')} waiting on a message`,
       tone: 'gate',
       at: now - idle * 1000,
-      subjectPath: `/chat/${encodeURIComponent(chat.chatId)}`,
-      action: { kind: 'open', path: `/chat/${encodeURIComponent(chat.chatId)}`, label: 'Open chat ›' },
+      // S16a-4e: a chat is its session.
+      subjectPath: sessionPath(chat.chatId),
+      action: { kind: 'open', path: sessionPath(chat.chatId), label: 'Open chat ›' },
     });
   }
 
@@ -626,8 +627,9 @@ export function needsYouRows(inputs: NeedsYouInputs): NeedRow[] {
       text: `Question: ${clipLine(e.message)}`,
       tone: 'gate',
       at: Number.isFinite(at) ? at : null,
-      subjectPath: runOpenPath(runId),
-      action: { kind: 'open', path: runOpenPath(runId), label: 'Answer ›' },
+      // S16a-4g: the question is answered in the run's thread; `#gate` focuses it on arrival.
+      subjectPath: `${runOpenPath(runId)}#gate`,
+      action: { kind: 'open', path: `${runOpenPath(runId)}#gate`, label: 'Answer ›' },
     });
   }
   // One row per run: the newest unread ask carries the line; opening acks them all.

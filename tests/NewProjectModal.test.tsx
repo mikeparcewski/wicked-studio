@@ -17,7 +17,7 @@ vi.mock('../src/api/client.js', () => ({
   api: { createProject: (body: unknown) => createProject(body), attachProjectMember: (...args: unknown[]) => attachProjectMember(...args), listRepos: () => listRepos() },
 }));
 
-const { NewProjectModal, startPath } = await import('../src/components/NewProjectModal.js');
+const { NewProjectModal } = await import('../src/components/NewProjectModal.js');
 const { projectNameProblem } = await import('../src/board/projectName.js');
 
 beforeEach(() => {
@@ -50,15 +50,6 @@ describe('one project-name rule, the daemon\'s (studio#463)', () => {
   });
 });
 
-describe('startPath', () => {
-  it('maps the start modes onto their shells; Empty lands on the project page', () => {
-    expect(startPath('p1', 'build')).toBe('/p/p1/build');
-    expect(startPath('p1', 'chat')).toBe('/p/p1/chat');
-    expect(startPath('p1', 'document')).toBe('/p/p1/document');
-    expect(startPath('p1', 'empty')).toBe('/projects/p1');
-  });
-});
-
 describe('Desk project door', () => {
   it('hides Start with and lands on scoped Sessions after creation and repository attachment', async () => {
     const navigate = vi.fn();
@@ -86,17 +77,15 @@ describe('Desk project door', () => {
 });
 
 describe('NewProjectModal', () => {
-  it('renders the §1.3 anatomy: name, start radio (Build default), description, actions', () => {
+  it('renders the §1.3 anatomy: name, description, actions — no Start with (S16a-4f)', () => {
     render(<NewProjectModal navigate={() => {}} onClose={() => {}} />);
     const modal = screen.getByTestId('new-project-modal');
     expect(modal.style.width).toBe('360px');
     expect(modal.style.borderRadius).toBe('var(--radius-xl)');
     expect(modal.style.boxShadow).toBe('var(--shadow-overlay)');
     expect(screen.getByTestId('new-project-name')).toBeInTheDocument();
-    expect(screen.getByRole('radio', { name: 'Build' })).toBeChecked();
-    for (const label of ['Empty', 'Chat', 'Document']) {
-      expect(screen.getByRole('radio', { name: label })).not.toBeChecked();
-    }
+    expect(screen.queryByTestId('new-project-start')).toBeNull();
+    expect(screen.queryAllByRole('radio')).toHaveLength(0);
     expect(screen.getByTestId('new-project-description')).toBeInTheDocument();
     expect(screen.getByTestId('new-project-create')).toBeDisabled();
   });
@@ -114,15 +103,14 @@ describe('NewProjectModal', () => {
     expect(screen.getByTestId('new-project-create')).toBeEnabled();
   });
 
-  it('Create POSTs {name, description?} and navigates into the chosen mode', async () => {
+  it('Create POSTs {name, description?} and lands on the project\'s Sessions (S16a-4f)', async () => {
     const navigate = vi.fn();
     const onClose = vi.fn();
     render(<NewProjectModal navigate={navigate} onClose={onClose} />);
     fireEvent.change(screen.getByTestId('new-project-name'), { target: { value: 'api migration' } });
-    fireEvent.click(screen.getByRole('radio', { name: 'Chat' }));
     fireEvent.click(screen.getByTestId('new-project-create'));
 
-    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/p/proj_1/chat'));
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/everything?tab=sessions&project=proj_1'));
     // The wire shape is crew's CreateProjectBody: description omitted when blank.
     expect(createProject).toHaveBeenCalledWith({ name: 'api migration' });
     expect(onClose).toHaveBeenCalled();

@@ -167,7 +167,9 @@ describe('T30 — every rendered word on the Test surfaces says Test (#203)', ()
         type: 'awaitingHuman', session: 'r1', ord: 1, prompt: 'Proposed plan: 3 scenarios — approve to launch',
       } as never);
     });
-    await user.click(within(await screen.findByTestId('steering-gate')).getByTestId('steering-approve'));
+    // S16a-4g: answered in the run's thread — the panel shows one line, and resolves when the store clears it.
+    expectTestVocabulary(await screen.findByTestId('answer-in-thread'));
+    act(() => { useGateStore.getState().clearGate('r1'); });
     const resolved = await screen.findByTestId('testing-launch-resolved');
     expect(within(resolved).getByTestId('testing-launch-to-campaigns')).toHaveTextContent('Tests');
     expectTestVocabulary(screen.getByTestId('testing-launch-panel'));

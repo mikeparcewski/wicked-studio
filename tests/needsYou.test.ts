@@ -203,7 +203,8 @@ describe('needsYouRows — dedupe', () => {
     expect(rows.map((r) => r.key)).toEqual(['chat:stalled']);
     expect(rows[0]!.text).toContain('Idle 12m');
     expect(rows[0]!.text).toContain('2 warm seats');
-    expect(rows[0]!.action).toEqual({ kind: 'open', path: '/chat/stalled', label: 'Open chat ›' });
+    // S16a-4e: a chat is its session.
+    expect(rows[0]!.action).toEqual({ kind: 'open', path: '/s/stalled', label: 'Open chat ›' });
   });
 });
 

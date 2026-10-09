@@ -53,7 +53,7 @@ export function isDocRun(view: SessionView, docId: string): boolean {
 
 /** Whether a run's filing agrees with the thread's project — an unjoined DTO (no `project_id`)
  *  cannot disagree; the Unfiled mount matches unfiled runs (`null` / `'default'`). */
-function inProject(view: SessionView, projectId: string): boolean {
+export function inProject(view: SessionView, projectId: string): boolean {
   const pid = view.session.project_id;
   if (pid === undefined) return true;
   if (pid === null || pid === 'default') return projectId === 'default';

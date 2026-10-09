@@ -1,5 +1,4 @@
 import type { AgentSession } from '../api/types.js';
-import { modePath } from './useRoute.js';
 
 /**
  * The ONE ambient-project derivation (DES-UX-001 §2.3 rule 1, slice S): every
@@ -28,16 +27,6 @@ export function ambientProjectId(pathname: string, search = ''): string | null {
 
 function safeDecode(s: string): string {
   try { return decodeURIComponent(s); } catch { return s; }
-}
-
-/**
- * Where a "new run" / "new chat" gesture lands (§2.3 rule 1): inside a project
- * context, the shell's pre-bound create route (`/p/:id/build/new`, `/p/:id/
- * chat/new` — the slice-B lock); outside one, the flat Unfiled-default forms.
- */
-export function launchPath(ambient: string | null, verb: 'build' | 'chat'): string {
-  if (ambient !== null) return `${modePath(ambient, verb)}/new`;
-  return verb === 'chat' ? '/chat/new' : '/runs/new';
 }
 
 /**

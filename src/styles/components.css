@@ -751,6 +751,12 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
 .wk-everything-tab:focus-visible { outline: 2px solid transparent; box-shadow: var(--focus-ring); border-radius: var(--radius-md); }
 .wk-everything-panel { display: flex; flex-direction: column; gap: 10px; padding-top: 10px; max-width: 920px; }
 .wk-everything-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+/* S16a-4d: the Made list's doors — New document's form, a Delete on each document row. */
+.wk-made-new { display: flex; flex-direction: column; gap: 8px; margin: 8px 0; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-card); }
+.wk-made-new-field { display: flex; flex-direction: column; gap: 4px; font-size: var(--text-xs); color: var(--ink-muted); }
+.wk-made-li { display: flex; align-items: center; gap: 8px; }
+.wk-made-li > a { flex: 1 1 auto; min-width: 0; }
+.wk-made-delete { flex: 0 0 auto; }
 .wk-everything-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .wk-everything-scope { margin: 0; font-size: var(--text-sm); color: var(--ink-muted); }
 .wk-everything-scope a, .wk-everything-aside a, .wk-everything-row a { color: var(--ink-muted); }
@@ -1187,6 +1193,13 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
 /* S9: what stands beside the frame — a deck's slide strip, a document's requirements. */
 .wk-artifact-side { flex: 0 0 auto; width: 232px; overflow: auto; padding: 10px; border-right: 1px solid var(--border); background: var(--surface-card); font-size: var(--text-xs); color: var(--ink-muted); }
 .wk-artifact--pane .wk-artifact-side { width: 148px; padding: 8px; }
+/* S16a-4b: a full-size artifact's version list, a column at the right edge (the frame makes room). */
+.wk-artifact--versions > .wk-artifact-body, .wk-artifact--versions > .wk-artifact-row { margin-right: 248px; }
+.wk-artifact-versions { position: absolute; top: 36px; right: 0; bottom: 0; width: 248px; overflow: auto; padding: 10px; border-left: 1px solid var(--border); background: var(--surface-card); font-size: var(--text-xs); color: var(--ink-muted); z-index: 2; }
+.wk-artifact-versions-title { margin: 0 0 6px; color: var(--ink-high); font-weight: var(--weight-semi); }
+.wk-artifact-versions-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.wk-artifact-version { padding: 4px 6px; border-radius: var(--radius-sm); }
+.wk-artifact-version--on { background: var(--accent-wash); color: var(--ink-high); }
 .wk-slide-thumb { display: flex; gap: 8px; align-items: baseline; width: 100%; margin: 0 0 6px; padding: 8px; text-align: left; font: inherit; color: var(--ink-muted); background: var(--surface-base); border: 1px solid var(--border); border-radius: var(--radius-sm); cursor: pointer; }
 .wk-slide-thumb:hover { border-color: var(--ink-dim); }
 .wk-slide-thumb--on { border-color: var(--accent); color: var(--ink-high); }
@@ -1351,3 +1364,5 @@ button.wk-walk-chapter-btn:hover .wk-walk-chapter-title { text-decoration: under
 .wk-plan-add { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
 .wk-plan-add-word { font-size: var(--text-xs); color: var(--ink-muted); margin-right: 2px; }
 .wk-artifact--inline .wk-plan-add { display: none; }
+/* S16a-4g: the questions a run or a chat asks, answered in its thread. */
+.wk-session-questions { display: flex; flex-direction: column; gap: 8px; margin: 0 0 8px; }

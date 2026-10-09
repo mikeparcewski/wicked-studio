@@ -29,7 +29,7 @@ import { GateVerdict } from './GateVerdict.js';
 import { failedSeatOf, gateVerdictFor, isFailureEscalation, isSeatFailure, isRestoredRetry, phaseLabel } from './gateVerdictModel.js';
 import { ReassignControl } from './ReassignControl.js';
 import { useSteeringStore } from '../store/steering.js';
-import { launchPath, sessionProjectId } from '../hooks/ambientProject.js';
+import { sessionProjectId } from '../hooks/ambientProject.js';
 import { chroniclePath, modePath } from '../hooks/useRoute.js';
 import { useTimeRange } from '../hooks/useTimeRange.js';
 import { DeliveryChip } from './RunDelivery.js';
@@ -1370,8 +1370,8 @@ export function CenterDashboard({
             type="button"
             data-testid="build-something"
             // §4.3: from project context the launch form opens pre-bound and
-            // locked — the shared `launchPath` spelling (slice S, §2.3 rule 1).
-            onClick={() => navigate(launchPath(projectId, 'build'))}
+            // locked (S16a-4f: the flat launch form; CenterDashboard is unreachable, deleted by S16a-4h).
+            onClick={() => navigate('/runs/new')}
             style={{
               background: 'var(--accent)',
               color: 'var(--accent-fg)',

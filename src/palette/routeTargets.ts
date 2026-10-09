@@ -2,7 +2,8 @@ import type { Project, SessionView } from '../api/types.js';
 import { sessionIdOf, sessionPath } from '../board/sessionModel.js';
 import { humanTitle } from '../components/runIdentity.js';
 import { everythingPath } from '../board/everythingModel.js';
-import { modePath, projectDetailPath, projectPath, runEventsPath, runFilesPath, type Route } from '../hooks/useRoute.js';
+import { projectDetailPath, runEventsPath, runFilesPath, type Route } from '../hooks/useRoute.js';
+import { projectTestsPath } from '../api/testing.js';
 
 /**
  * EVERY ROUTE IN ⌘K (the skin contract, DES-STUDIO-REBUILD-001 §10 / §14 Q2: "every route is
@@ -26,26 +27,26 @@ export interface RouteShape {
 
 export const ROUTE_SHAPES: readonly RouteShape[] = [
   { id: 'home', example: '/', is: (r) => r.panel === 'home' },
-  { id: 'session', example: '/s/run:r1', is: (r) => r.panel === 'session' && r.artifactId !== null },
+  { id: 'session', example: '/s/run:r1', is: (r) => r.panel === 'session' && r.artifactId !== null && r.artifactKey === null },
+  // S16a-4a: a session with one artifact grown — reached from the artifact itself, never GO TO.
+  { id: 'session-artifact', example: '/s/run:r1/a/r1%3Ap1%2Fd1', is: (r) => r.panel === 'session' && r.artifactKey !== null },
   { id: 'watch', example: '/watch', is: (r) => r.panel === 'watch' },
   { id: 'rules', example: '/rules', is: (r) => r.panel === 'rules' },
   // "See everything" (S15c/S17a): one page, five tabs in `?tab=`; the list pages that moved onto it
   // (`/work`, `/chats`, `/projects`, `/execute`, `/vibe`, `/demo`, `/p/:id/chronicle`) are redirects
   // (hooks/useMovedRoutes.ts), not shapes — a redirect is not a destination.
   { id: 'everything', example: '/everything', is: (r) => r.panel === 'everything' && r.projectId === null },
-  { id: 'chat-new', example: '/chat/new', is: (r) => r.panel === 'runs' && r.showLaunch && r.chatMode && r.projectId === null },
-  { id: 'chat', example: '/chat/c1', is: (r) => r.panel === 'runs' && r.chatMode && r.artifactId !== null && r.projectId === null },
+  // S16a-4e: `/chat/:id`, `/chat/new` and the shell's `/p/:pid/chat[/…]` MOVED (a chat is its session; a
+  // new one starts in the Desk composer) — redirects, not shapes.
   { id: 'project-detail', example: '/projects/p1', is: (r) => r.panel === 'project-detail' && r.projectId !== null },
   // `/p/:id` moves directly to the project's scoped Sessions tab (S17a).
   { id: 'project', example: '/p/p1', is: (r) => r.panel === 'everything' && r.projectId !== null },
-  { id: 'p-chat', example: '/p/p1/chat', is: (r) => r.projectId !== null && r.mode === 'chat' && !r.showLaunch },
-  { id: 'p-build', example: '/p/p1/build', is: (r) => r.mode === 'build' && r.artifactId === null && !r.showLaunch },
-  { id: 'p-build-new', example: '/p/p1/build/new', is: (r) => r.mode === 'build' && r.showLaunch },
   // S16a-2d: `/p/:pid/build/:run`, `/runs/:id` and `/runs/:id/timeline` are MOVES to the run's
   // session (hooks/useMovedRoutes.ts) — redirects, not shapes; they parse as `session`.
-  { id: 'p-document', example: '/p/p1/document', is: (r) => r.mode === 'document' },
-  { id: 'p-video', example: '/p/p1/video', is: (r) => r.mode === 'video' },
-  { id: 'p-campaigns', example: '/p/p1/campaigns', is: (r) => r.campaignsView },
+  // S16a-4c: `/p/:pid/document[/:doc]` and `/p/:pid/video[/:run]` MOVED (a made thing opens in its
+  // session, or on the project's Made list) — redirects, not shapes.
+  // S16a-4f: `/p/:pid/build[/new]` and `/p/:pid/campaigns` MOVED (the project's Sessions, the Desk
+  // composer, Testing with `?project=`) — redirects, not shapes.
   { id: 'steering-dashboard', example: '/steering/dashboard', is: (r) => r.panel === 'steering' && r.steeringSection === 'dashboard' },
   { id: 'steering-policies', example: '/steering/policies', is: (r) => r.panel === 'steering' && r.steeringSection === 'policies' },
   { id: 'steering-memories', example: '/steering/memories', is: (r) => r.panel === 'steering' && r.steeringSection === 'memories' },
@@ -80,7 +81,7 @@ const DESTINATIONS: ReadonlyArray<{ shape: string; label: string; href: string }
   { shape: 'everything', label: 'Helpers — the CLIs and their sign-in', href: everythingPath({ tab: 'helpers' }) },
   { shape: 'everything', label: 'Handed over — pull requests and pushes', href: everythingPath({ tab: 'handed' }) },
   { shape: 'everything', label: 'Projects — all your projects', href: everythingPath({ tab: 'projects' }) },
-  { shape: 'chat-new', label: 'Start a chat', href: '/chat/new' },
+  { shape: 'home', label: 'Start a chat', href: '/chat/new' },
   { shape: 'steering-dashboard', label: 'Steering dashboard — proposals to review', href: '/steering/dashboard' },
   { shape: 'steering-policies', label: 'Steering — all rules and policies', href: '/steering/policies' },
   { shape: 'steering-memories', label: 'Steering — memories', href: '/steering/memories' },
@@ -141,16 +142,13 @@ export function routeTargets(d: RouteTargetData): RouteTarget[] {
     if (p.id === 'default') continue;
     out.push(
       { shape: 'project-detail', label: `${p.name} · details`, href: projectDetailPath(p.id) },
-      { shape: 'p-chat', label: `${p.name} · chat`, href: modePath(p.id, 'chat') },
-      { shape: 'p-build', label: `${p.name} · build`, href: modePath(p.id, 'build') },
-      { shape: 'p-build-new', label: `${p.name} · start a build`, href: `${modePath(p.id, 'build')}/new` },
-      { shape: 'p-document', label: `${p.name} · documents`, href: modePath(p.id, 'document') },
-      { shape: 'p-video', label: `${p.name} · demos`, href: modePath(p.id, 'video') },
+      { shape: 'everything', label: `${p.name} · documents`, href: everythingPath({ tab: 'made', kind: 'documents', project: p.id }) },
+      { shape: 'everything', label: `${p.name} · demos`, href: everythingPath({ tab: 'made', kind: 'videos', project: p.id }) },
       { shape: 'project', label: `${p.name} · sessions`, href: everythingPath({ tab: 'sessions', project: p.id }) },
-      { shape: 'p-campaigns', label: `${p.name} · campaigns`, href: `${projectPath(p.id)}/campaigns` },
+      { shape: 'testing-campaigns', label: `${p.name} · campaigns`, href: projectTestsPath(p.id) },
     );
   }
-  for (const c of d.chats) out.push({ shape: 'chat', label: `${c.title} · chat`, href: `/chat/${encodeURIComponent(c.id)}` });
+  for (const c of d.chats) out.push({ shape: 'session', label: `${c.title} · chat`, href: sessionPath(c.id) });
   for (const c of d.campaigns) {
     out.push({ shape: 'testing-campaign', label: `${c.label} · campaign`, href: `/testing/campaigns/${encodeURIComponent(c.id)}` });
   }

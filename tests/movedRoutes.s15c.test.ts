@@ -44,12 +44,36 @@ describe('the redirect table (static moves)', () => {
       '/projects', '/chats', '/work', '/execute', '/runs', '/make', '/vibe', '/demo', '/p/:id/chronicle', '/p/:id',
       // S16a-2d: the run page's addresses.
       '/runs/:id', '/runs/:id/timeline', '/p/:pid/build/:run',
+      // S16a-4c: where a made thing opens.
+      '/p/:pid/document', '/p/:pid/document/:doc', '/p/:pid/video', '/p/:pid/video/:run',
+      // S16a-4e: a chat is its session.
+      '/chat/:id', '/chat/new', '/p/:pid/chat', '/p/:pid/chat/:run',
+      // S16a-4f: the shell's Build view and its project Tests view.
+      '/p/:pid/build', '/p/:pid/build/new', '/p/:pid/campaigns',
     ]);
   });
 
+  it('S16a-4f: the project Build view → its Sessions; its Tests view → Testing, scoped by ?project=', () => {
+    expect(movedAddress('/p/kes/build', '')).toBe('/everything?tab=sessions&project=kes');
+    expect(movedAddress('/p/kes/build/', '')).toBe('/everything?tab=sessions&project=kes');
+    expect(movedAddress('/p/k%20s/build', '')).toBe('/everything?tab=sessions&project=k+s');
+    expect(movedAddress('/p/kes/campaigns', '')).toBe('/testing/campaigns?project=kes');
+    expect(movedAddress('/p/k%20s/campaigns', '?x=1')).toBe('/testing/campaigns?project=k+s');
+    // typos stay dead, never a silent swap
+    for (const p of ['/p/kes/build//x', '/p/kes/campaigns/x', '/p/kes/campaigns//x']) {
+      expect(movedAddress(p, ''), p).toBeNull();
+      expect(parseRoute(p).panel, p).toBe('not-found');
+    }
+    // each parses to where it lands (no headless tick)
+    expect(parseRoute('/p/kes/build')).toMatchObject({ panel: 'everything', projectId: 'kes', mode: null });
+    expect(parseRoute('/p/kes/build/new')).toMatchObject({ panel: 'home', mode: null, showLaunch: false });
+    expect(parseRoute('/p/kes/campaigns')).toMatchObject({ panel: 'testing', testingPage: 'campaigns', campaignsView: false, mode: null });
+  });
+
   it('is not a move: the launch form, a run, the project shell, a real page, a typo', () => {
-    // S16a-2d: /runs/r1 and /p/kes/build/r1 are moves now (below); /runs/new and /p/kes/build stay.
-    for (const p of ['/runs/new', '/p/kes/build', '/p/kes/build/new', '/runs/r1/events', '/runs/r1/files', '/runs/r1/zzz', '/p/kes/document/d1', '/p/kes/chat/r1', '/everything', '/skills', '/nope', '/projects/kes', '/p/kes/campaigns', '/work//typo', '/work///typo', '/demo///typo', '/p/kes/chronicle//typo']) {
+    // S16a-2d: /runs/r1 and /p/kes/build/r1 are moves now (below); /runs/new stays. S16a-4f:
+    // /p/kes/build and /p/kes/campaigns moved (above); /p/kes/build/new is the Desk's new-chat form.
+    for (const p of ['/runs/new', '/p/kes/build/new', '/runs/r1/events', '/runs/r1/files', '/runs/r1/zzz', '/p/kes/document/d1', '/p/kes/chat/r1', '/everything', '/skills', '/nope', '/projects/kes', '/work//typo', '/work///typo', '/demo///typo', '/p/kes/chronicle//typo']) {
       expect(movedAddress(p, ''), p).toBeNull();
     }
   });
@@ -95,15 +119,14 @@ describe('S16a-2d: the run page moved to the run\'s session thread', () => {
     expect(parseRoute('/p/kes/build/r1')).toMatchObject({ panel: 'session', artifactId: 'run:r1' });
   });
 
-  it('not moves: the launch forms, the Build view, the raw views, the shell\'s other modes, typos', () => {
+  it('not moves: the launch form, the raw views, typos (S16a-4f moved the Build view)', () => {
     expect(parseRoute('/runs/new')).toMatchObject({ panel: 'runs', showLaunch: true });
-    expect(parseRoute('/p/kes/build/new')).toMatchObject({ projectId: 'kes', mode: 'build', showLaunch: true });
-    expect(parseRoute('/p/kes/build')).toMatchObject({ projectId: 'kes', mode: 'build', runId: null });
     expect(parseRoute('/runs/r1/events')).toMatchObject({ panel: 'run-events', artifactId: 'r1' });
     expect(parseRoute('/runs/r1/files')).toMatchObject({ panel: 'run-files', artifactId: 'r1' });
-    expect(parseRoute('/p/kes/document/d1')).toMatchObject({ projectId: 'kes', mode: 'document', artifactId: 'd1' });
+    expect(parseRoute('/p/kes/document/d1')).toMatchObject({ panel: 'everything', projectId: 'kes' }); // S16a-4c: moved
     expect(parseRoute('/runs/r1/zzz').panel).toBe('not-found');
     expect(parseRoute('/runs//x').panel).toBe('not-found');
-    expect(parseRoute('/s/run:r1/a/k1').panel).toBe('not-found');
+    // S16a-4a: /s/:id/a/:key is the artifact's address; a deeper path is still a dead one.
+    expect(parseRoute('/s/run:r1/a/k1/x').panel).toBe('not-found');
   });
 });

@@ -434,7 +434,7 @@ describe('SteeringPage — edit (the drawer’s modal, unchanged wires)', () => 
 });
 
 describe('SteeringPage — add with chat (the dock message → the authoring run + its propose gate)', () => {
-  it('POSTs instructions + analysis documents with THIS page type, then pins the EXISTING gate card in the dock', async () => {
+  it('POSTs instructions + analysis documents with THIS page type, then points at the run\'s thread for its propose gate (S16a-4g)', async () => {
     const user = userEvent.setup();
     listConformanceRules.mockResolvedValue({ rules: [] });
     confirmGate.mockResolvedValue({ status: 'ok' });
@@ -467,8 +467,7 @@ describe('SteeringPage — add with chat (the dock message → the authoring run
     });
 
     // The propose gate arrives as a normal awaitingHuman frame on the run — the app's one /ws
-    // fold puts it in the gate store, and the dock's PINNED ApprovalDock renders the EXISTING
-    // SteeringGate card (never a second gate UI).
+    // fold puts it in the gate store; S16a-4g: the dock points at the thread that answers it.
     act(() => {
       useGateStore.getState().ingest({
         type: 'awaitingHuman',
@@ -477,16 +476,17 @@ describe('SteeringPage — add with chat (the dock message → the authoring run
         prompt: 'Propose 3 compliance rules — approve to write them',
       } as never);
     });
-    const gate = await within(dock).findByTestId('steering-gate');
-    expect(gate).toHaveAttribute('data-run-id', 'run-author-1');
-    expect(within(gate).getByTestId('steering-prompt')).toHaveTextContent(/Propose 3 compliance rules/);
-    // Structural: the gate is OUTSIDE the thread scroll region — pinned, it can never scroll away.
-    expect(screen.getByTestId('assist-thread').contains(gate)).toBe(false);
+    // S16a-4g: the gate is answered in the run's thread — the dock shows one line, no card.
+    const line = await within(dock).findByTestId('answer-in-thread');
+    expect(line).toHaveAttribute('data-subject', 'run-author-1');
+    expect(within(line).getByTestId('answer-in-thread-open')).toHaveAttribute('href', '/s/run%3Arun-author-1#gate');
+    expect(within(dock).queryByTestId('steering-gate')).toBeNull();
+    expect(screen.getByTestId('assist-thread').contains(line)).toBe(false);
 
-    // Approving rides the same POST /runs/:id/gate as every gate, then the page reloads rules.
-    await user.click(within(gate).getByTestId('steering-approve'));
-    await waitFor(() => expect(confirmGate).toHaveBeenCalledWith('run-author-1', expect.objectContaining({ approve: true })));
+    // Answered in the thread (the gate store clears it): the page reloads rules; nothing sent here.
+    act(() => { useGateStore.getState().clearGate('run-author-1'); });
     await waitFor(() => expect(listConformanceRules).toHaveBeenCalledTimes(2));
+    expect(confirmGate).not.toHaveBeenCalled();
   });
 
   it('a daemon without the author route gets the honest unsupported copy in-thread', async () => {

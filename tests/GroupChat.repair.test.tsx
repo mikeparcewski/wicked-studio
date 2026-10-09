@@ -219,7 +219,6 @@ describe('the conversation→action bridge (§7.9)', () => {
     });
 
     await user.click(screen.getByTestId('chat-promote'));
-    // unscoped: launchPath(null, 'build') === '/runs/new'
     expect(navigate).toHaveBeenCalledWith('/runs/new');
     const prefill = peekRetryPrefill();
     expect(prefill).not.toBeNull();
@@ -240,7 +239,7 @@ describe('the conversation→action bridge (§7.9)', () => {
     expect(sendChatMessage).toHaveBeenCalledTimes(1);
   });
 
-  it('Continue in Build: scoped chat navigates into the project build route', async () => {
+  it('Continue in Build: scoped chat opens the launch form, pre-bound by the prefill (S16a-4f)', async () => {
     const user = userEvent.setup();
     const navigate = vi.fn();
     render(<GroupChat repoId={null} projectId="proj-42" onBack={() => undefined} navigate={navigate} />);
@@ -251,9 +250,7 @@ describe('the conversation→action bridge (§7.9)', () => {
     });
 
     await user.click(screen.getByTestId('chat-promote'));
-    // launchPath('proj-42', 'build') === '/p/proj-42/build/new'
-    expect(navigate).toHaveBeenCalledWith(expect.stringContaining('proj-42'));
-    expect(navigate).toHaveBeenCalledWith(expect.stringContaining('build'));
+    expect(navigate).toHaveBeenCalledWith('/runs/new');
     const prefill = peekRetryPrefill();
     expect(prefill).not.toBeNull();
     expect(prefill!.projectId).toBe('proj-42');

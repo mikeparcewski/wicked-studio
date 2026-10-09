@@ -3,14 +3,13 @@
 desk_demo_plain_test.py — DEMO MODE IN PLAIN WORDS at 1440x700 on the Desk (studio#520,
 #521 — two defects the W12 reel found on the released 0.6.1 Desk; the frames had to be blurred).
 
-  1. #520 — Project › Demo mode › "This project's demos": a row read the run's raw `problem`, which on
-     crew 0.8.1 carries the brief's absolute home path ("…follow the demo brief at
-     /Users/<user>/.wicked/demos/<id>/BRIEF.md. Demo root: …") with "Show technical details" off. Now
-     a row reads by what the demo is of ("Demo of <url>") and its state; no home path on screen.
-  2. #521 — the demo's page said "The team is scoping the demo before planning starts." while the run
-     was `awaiting_human` on an ESCALATION gate (a denied tool call) — only the team plan gate had a
-     card. Now any gate that is not one of the demo's own three gets a card naming the gate's prompt
-     head with a way to the run, and the stage line says the run is waiting on a decision.
+  S16a-4c: the project's Video mode moved — its demos list is "See everything › Made › Videos" for the
+  project, and a demo opens in its session (the demo video at full size).
+  1. #520 — the videos list row never shows the brief's home path ("…/BRIEF.md", "/Users/…") with
+     "Show technical details" off.
+  2. #521 — while the run waits on an ESCALATION gate (a denied tool call), the row opens the session
+     with the demo video at full size; in the thread the gate row names the gate's prompt and the
+     status says the run is waiting, never "scoping".
 
 Against the in-process fixture (its demo runs), plus Playwright routes: `GET /runs` gains one demo run
 whose problem carries a home path; `GET /runs/:id/demo` answers stage `preparing` and
@@ -112,49 +111,36 @@ with sync_playwright() as p:
     page.route(f"**/api/v1/runs/{RID}/gate", lambda r: r.fulfill(status=200, content_type="application/json", body=json.dumps(
         {"runId": RID, "ord": 3, "prompt": GATE_PROMPT, "lifecycle": "pending", "receivedAt": "2026-10-05T12:00:00.000Z"})))
 
-    # ── 1. the demos list, in plain words (#520) ─────────────────────────────────────────────
+    # ── 1. the videos list, in plain words (#520) — S16a-4c: the project's Video mode moved onto
+    #       "See everything › Made › Videos" for the project ─────────────────────────────────────
     page.goto(f"{origin}/p/{PROJECT}/video", wait_until="networkidle")
-    page.get_by_test_id("demo-start").wait_for(state="visible", timeout=15000)
-    row = page.locator(f'[data-testid="demo-list-row"][data-run="{RID}"]')
+    page.wait_for_function("() => location.pathname === '/everything' && new URLSearchParams(location.search).get('kind') === 'videos'", timeout=15000)
+    row = page.locator(f'[data-testid="everything-made-row"][data-run-id="{RID}"]')
     row.wait_for(state="visible", timeout=10000)
     text = row.inner_text().replace("\n", " ")
     page_text = page.locator("body").inner_text()
     page.screenshot(path=str(SHOTS / "desk-demo-plain-list.png"))
-    check("list-row-plain", f"Demo of {URL}" in text and "/Users/" not in text and "BRIEF.md" not in text
-          and "/Users/" not in page_text, row=text[:200], home_path_on_page="/Users/" in page_text)
+    check("list-row-plain", "/Users/" not in text and "BRIEF.md" not in text and "/Users/" not in page_text,
+          row=text[:200], home_path_on_page="/Users/" in page_text)
 
-    # ── 2. the demo page while an escalation gate is open (#521) ────────────────────────────
+    # ── 2. the demo's session while an escalation gate is open (#521) — the demo video at full size,
+    #       and the gate answered in the thread, said by name, never "scoping" ────────────────────
     row.click()
-    page.wait_for_url(f"**/p/{PROJECT}/video/{RID}", timeout=10000)
-    run = page.get_by_test_id("demo-run")
-    run.wait_for(state="visible", timeout=10000)
-    card = page.get_by_test_id("demo-waiting-gate")
-    try:
-        card.wait_for(state="visible", timeout=6000)
-        card_text = card.inner_text().replace("\n", " ")
-    except Exception:  # noqa: BLE001
-        card_text = ""
-    stage_line = page.get_by_test_id("demo-stage-line").inner_text()
-    waiting = run.get_attribute("data-waiting")
+    page.wait_for_function(f"() => location.pathname.startsWith('/s/run%3A{RID}/a/')", timeout=10000)
+    art = page.locator('[data-testid="artifact"][data-kind="demo-video"]')
+    art.wait_for(state="visible", timeout=10000)
+    check("row-opens-the-session-artifact", art.get_attribute("data-size") == "full" and "size=full" in page.url, url=page.url)
+    # Back to the thread (Esc twice: full → pane → thread) where the gate row stands.
+    page.keyboard.press("Escape")
+    page.keyboard.press("Escape")
+    gate = page.get_by_test_id("session-gate-row")
+    gate.wait_for(state="visible", timeout=10000)
+    status = page.get_by_test_id("session-status-sentence").first.inner_text()
+    raw = page.evaluate("() => document.querySelector('[data-testid=\"session-gate-raw-prompt\"]')?.textContent || ''")
     page.screenshot(path=str(SHOTS / "desk-demo-plain-gate.png"))
-    check("gate-named-on-demo-page", "Unit 3 was DENIED by input governance" in card_text and waiting == "gate"
-          and "scoping" not in stage_line and "waiting" in stage_line.lower(),
-          card=card_text[:200], stage_line=stage_line, waiting=waiting, stage=run.get_attribute("data-stage"))
-    # The way to the run: the card's link opens the run's session thread WITH the gate in view
-    # (S15e: gateOpenPath = /s/run%3A<id> + "#gate"; the thread consumes the hash on arrival by
-    # focusing the answerable row), not just the page.
-    try:
-        page.get_by_test_id("demo-open-run-gate").click(timeout=3000)
-        page.wait_for_url(f"**/s/run%3A{RID}*", timeout=8000)
-    except Exception:  # noqa: BLE001
-        pass
-    page.wait_for_timeout(500)
-    opened = page.url.replace(origin, "")
-    pushed = page.evaluate("() => window.__pushed.slice(-3)")
-    focused_gate = page.evaluate("() => !!document.activeElement?.closest?.('[data-testid=\"steering-gate\"], [data-testid=\"session-gate-row\"]')")
-    page.screenshot(path=str(SHOTS / "desk-demo-plain-run.png"))
-    check("open-the-run", opened.startswith(f"/s/run%3A{RID}") and any(u.endswith(f"/s/run%3A{RID}#gate") for u in pushed),
-          url=opened, pushed=pushed, gate_focused_on_arrival=focused_gate)
+    check("gate-named-in-the-thread", "Unit 3 was DENIED by input governance" in raw and "scoping" not in status.lower()
+          and "waiting" in status.lower(), status=status, raw=raw[:160])
+    check("open-the-run", page.url.replace(origin, "").startswith(f"/s/run%3A{RID}"), url=page.url)
 
     check("no-errors", not errors, errors=errors[:5])
     browser.close()

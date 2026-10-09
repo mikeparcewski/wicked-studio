@@ -24,10 +24,14 @@ import { ProposalCard } from './ProposalCard.js';
 import { useRunEvents } from '../../hooks/useRunEvents.js';
 import { StrandedCard } from './StrandedCard.js';
 import { RunRecordLines } from './RunRecord.js';
+import { ArtifactAddressProvider, useArtifactMissing } from './ArtifactAddress.js';
+import { chatPromotePrefill } from '../../board/chatPromote.js';
+import { setRetryPrefill } from '../../store/retryPrefill.js';
 import { startRetry } from './RunActions.js';
 import { Tech, runTechParts } from '../Tech.js';
 import { parseJump } from '../../store/watch.js';
 import { GateRow } from './GateRow.js';
+import { ChatQuestions, RunQuestions } from './ThreadQuestions.js';
 import { SourceChips } from './SourceChips.js';
 import { SinceYouLeft } from './SinceYouLeft.js';
 import { Composer, type ComposerSend } from './Composer.js';
@@ -44,6 +48,8 @@ import { TurnConsidered } from '../decisions/ConsideredLine.js';
 import { collapseArtifacts, paneOpen, useArtifactSizes } from '../../store/artifactSizes.js';
 import { RunArtifacts } from './RunArtifacts.js';
 import { OperatorMessage } from '../OperatorMessage.js';
+import { Markdown } from '../Markdown.js';
+import { CitationStrip, citationMarks } from '../citations.js';
 import { applyCheckState } from '../../board/checkState.js';
 import { useRunAcceptance } from '../../hooks/useRunAcceptance.js';
 import { momentOfRecording, useRecordingsStore } from '../../store/recordings.js';
@@ -115,8 +121,13 @@ function launchedMs(v: RunView): number {
   return typeof c === 'number' && Number.isFinite(c) ? c * 1000 : 0;
 }
 
-export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, onAsk }: {
+export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, onAsk, artifactKey = null, artifactSize = 'pane', artifactVersion = null }: {
   sessionId: string;
+  /** S16a-4a: the artifact the address grows (`/s/:id/a/:key`) and its size (`?size=`). */
+  artifactKey?: string | null;
+  artifactSize?: 'pane' | 'full';
+  /** S16a-4b: `?v=N` — the version picked to look at. */
+  artifactVersion?: number | null;
   runs: RunView[];
   runsLoaded: boolean;
   needRows: NeedRow[];
@@ -144,8 +155,10 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
     const q = new URLSearchParams(window.location.search);
     if (q.has('jump')) q.set('jumpRun', ref.runId);
     const search = q.toString();
-    navigate(`${sessionPath(chat)}${search !== '' ? `?${search}` : ''}${window.location.hash}`, { replace: true });
-  }, [ref, runChatId, runs, navigate]);
+    // S16a-4a: a grown artifact's segment rides along too (`/a/<key>`).
+    const grownAt = artifactKey !== null ? `/a/${encodeURIComponent(artifactKey)}` : '';
+    navigate(`${sessionPath(chat)}${grownAt}${search !== '' ? `?${search}` : ''}${window.location.hash}`, { replace: true });
+  }, [ref, runChatId, runs, navigate, artifactKey]);
   const mine = useMemo(() => {
     const list = ref.kind === 'run'
       ? runs.filter((v) => v.session.id === ref.runId)
@@ -468,9 +481,11 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
   // Leaving the session (or switching to another) folds them back: a remembered pane from
   // another session must not narrow this one.
   const pane = useArtifactSizes(paneOpen);
+  const artifactMissing = useArtifactMissing(artifactKey, ready && mine.length > 0);
   useEffect(() => () => collapseArtifacts(), [sessionId]);
 
   return (
+    <ArtifactAddressProvider sessionId={sessionId} routeKey={artifactKey} routeSize={artifactSize} routeVersion={artifactVersion} navigate={navigate}>
     <div data-testid="session" data-object={`session:${sessionId}`} data-session-id={sessionId} data-conversation={conversation} data-state={state} data-pane={pane} className={`wk-session${pane ? ' wk-session--pane' : ''}`}>
       <header className="wk-session-head">
         <span aria-hidden className={`wk-desk-dot wk-desk-dot--${state}`} />
@@ -483,11 +498,17 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
           </p>
         </div>
         {/* S11: look underneath the session — goal, helpers, activity, sign-ins and the run's sections. */}
+        {/* S16a-4e: a chat off the ask path promotes into Build from its own session (GroupChat's door). */}
+        {ref.kind === 'chat' && !askPathOn && conversation === 'live' && messages.some((m) => m.kind === 'user') && (
+          <button type="button" data-testid="session-chat-promote" title="Open the Build composer prefilled with this conversation as context — editable before launch" onClick={() => { setRetryPrefill(chatPromotePrefill(ref.chatId, messages, mine[0] !== undefined && typeof mine[0].session.project_id === 'string' ? mine[0].session.project_id : null)); navigate('/runs/new'); }} className="wk-prop-btn wk-prop-btn--ghost">Continue in Build</button>
+        )}
         <button type="button" data-testid="session-sheet-open" aria-label="Look underneath this session" title="Look underneath (⌘K for everything else)" onClick={() => openSheet({ kind: 'session', sessionId })} className="wk-sheet-open">⋯</button>
       </header>
 
       <div className="wk-session-body">
         {since !== null && ready && <SinceYouLeft key={sessionId} card={since} runs={mine} />}
+        {/* S16a-4a: an address naming an artifact this session does not hold grows nothing and says so. */}
+        {artifactMissing && <p data-testid="session-artifact-missing" className="wk-session-grey">That artifact is not in this session any more.</p>}
         <div
           ref={scroller}
           data-testid="session-thread"
@@ -548,7 +569,17 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
             ? (
               <div key={e.key} data-testid="session-turn" data-who={e.who === 'you' ? 'you' : 'helper'} {...(e.pending ? { 'data-pending': 'true' } : {})} className={`wk-session-turn wk-session-turn--${e.who === 'you' ? 'you' : 'helper'}${e.pending ? ' wk-session-turn--pending' : ''}`}>
                 <p className="wk-session-who">{e.who === 'you' ? 'You' : e.pending ? `${e.who} · answering` : e.who}</p>
-                <p className={`wk-session-text${e.ok ? '' : ' wk-session-grey'}`}>{e.who === 'you' ? <OperatorMessage text={e.text} /> : e.text}</p>
+                {e.who === 'you'
+                  ? <p className={`wk-session-text${e.ok ? '' : ' wk-session-grey'}`}><OperatorMessage text={e.text} /></p>
+                  : (
+                    // S16a-4e (crew#561): a helper's reply on the session wears the daemon's verdicts where
+                    // it cited — the marks and the strip GroupChat's thread had — so a fabricated SHA is
+                    // never read as a confirmed one here either. Mark, never edit.
+                    <div className={`wk-session-text${e.ok ? '' : ' wk-session-grey'}`}>
+                      <Markdown marks={citationMarks(e.citations)}>{e.text}</Markdown>
+                      {e.citations !== undefined && <CitationStrip citations={e.citations} />}
+                    </div>
+                  )}
                 {e.who !== 'you' && <SourceChips citations={e.citations} runs={readers} />}
                 {/* DC-S8: the rules the turn's seats were given — considered · set aside · cited (unchecked). */}
                 {e.who !== 'you' && ref.kind === 'chat' && e.turnId !== null && replies.last.get(e.turnId) === e.key && (
@@ -559,6 +590,8 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
               </div>
             )
             : <RunBlock key={e.key} view={e.view} badge={badges[e.view.session.id] ?? 0} sessionId={sessionId} navigate={navigate} />))}
+          {/* S16a-4g: the chat's own question and gate (keyed by the chat id) at the thread's foot. */}
+          {ref.kind === 'chat' && <ChatQuestions chatId={ref.chatId} />}
         </div>
       </div>
       {/* Rule 3: while the thread is the chain, the shape line names the path's steps for the operator. */}
@@ -570,7 +603,8 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
         composerKey={sessionId}
         text={draft}
         setText={(t) => setDraft(sessionId, t)}
-        onSend={onAsk}
+        // S16a-4e: on a live chat's own session the composer replies into THAT chat.
+        onSend={(text, opts) => onAsk(text, ref.kind === 'chat' && conversation === 'live' && opts.fresh !== true && opts.projectId === undefined ? { ...opts, chatId: ref.chatId } : opts)}
         runs={mine}
         started={entries.length > 0}
         className="wk-session-composer"
@@ -579,6 +613,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
         variant="session"
       />
     </div>
+    </ArtifactAddressProvider>
   );
 }
 
@@ -695,6 +730,8 @@ export function RunBlock({ view, badge, sessionId, navigate }: {
           : finished === 'stranded'
             ? <StrandedCard view={view} />
             : <GateRow view={view} gate={gate} />}
+      {/* S16a-4g: an MCP server's question and the stall watchdog's hand-off, under the run's card. */}
+      <RunQuestions view={view} />
       <PlanStepLines runId={id} />
       <ChainLine chain={chain} runId={id} units={view.units} teamError={teamError} onRetry={retry} checks={checks} momentOf={momentOf} onOpenAt={(sec) => requestWalkthroughSeek(id, sec)} nothingChecked={noEvidenceSummary !== null} jumpOrd={jump?.ord ?? null} />
       {/* S8: the page the run is producing — a live preview that morphs inline → pane → full. */}

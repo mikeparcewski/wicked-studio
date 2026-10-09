@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   ambientProjectId,
-  launchPath,
   registerRepoPath,
   sessionProjectId,
 } from '../src/hooks/ambientProject.js';
@@ -47,17 +46,7 @@ describe('ambientProjectId — the shared route derivation', () => {
   });
 });
 
-describe('launchPath / registerRepoPath — the shared entry-point spellings', () => {
-  it('inside a project: the pre-bound create routes (the slice-B lock)', () => {
-    expect(launchPath('upload-endpoint', 'build')).toBe('/p/upload-endpoint/build/new');
-    expect(launchPath('upload-endpoint', 'chat')).toBe('/p/upload-endpoint/chat/new');
-  });
-
-  it('outside a project: the flat Unfiled-default forms', () => {
-    expect(launchPath(null, 'build')).toBe('/runs/new');
-    expect(launchPath(null, 'chat')).toBe('/chat/new');
-  });
-
+describe('registerRepoPath — the shared entry-point spelling (S16a-4f: launchPath retired)', () => {
   it('register-repo carries the ambient project as ?project=', () => {
     expect(registerRepoPath('upload-endpoint')).toBe('/repos/new?project=upload-endpoint');
     expect(registerRepoPath('a b')).toBe('/repos/new?project=a%20b');

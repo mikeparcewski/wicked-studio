@@ -6,7 +6,7 @@ desk_chat_launch_test.py — studio#446: a run launched from a chat lands in tha
 Drives the built UI against the fixture's sessions corpus (`sessions` + `run_chat_id`; crew's
 `capabilities.chatIdOnLaunch` is on) and proves:
 
-  1. PROMOTE: /chat/chat-pay rejoins the chat with its transcript; "Continue in Build" opens the
+  1. PROMOTE: /chat/chat-pay lands on the chat's session (S16a-4e); "Continue in Build" opens the
      composer prefilled, and nothing is launched until Send.
   2. LAUNCH: Send posts ONE `POST /runs` whose body carries `chatId: "chat-pay"`.
   3. SESSION: /s/chat-pay now lists the new run beside the chat's other runs, and the rail's
@@ -70,21 +70,15 @@ with sync_playwright() as p:
                 extra_frames=[], reset_gate_posts=True)
 
     # ── 1. promote from the chat ──────────────────────────────────────────────────
+    # S16a-4e: /chat/chat-pay is the chat's session (/s/chat-pay); "Continue in Build" is its door.
     page.goto(f"{origin}/chat/chat-pay", wait_until="domcontentloaded")
     try:
-        page.get_by_test_id("chat-promote").wait_for(state="visible", timeout=15000)
+        page.wait_for_function("() => location.pathname === '/s/chat-pay'", timeout=10000)
+        page.get_by_test_id("session-chat-promote").wait_for(state="visible", timeout=15000)
     except Exception as e:  # noqa: BLE001
         page.screenshot(path=str(SHOTS / "desk-chat-launch-no-promote.png"))
         fail("promote-visible", str(e))
-    # The promote carries the seats that replied; a click before the transcript marked claude as
-    # replied carries none and Send stays off (main CI 1cf9702). Wait for the replied seat first.
-    try:
-        page.locator('[data-testid="seat-chip"][data-agent="claude"][data-state="replied"]').wait_for(
-            state="visible", timeout=15000)
-    except Exception as e:  # noqa: BLE001
-        page.screenshot(path=str(SHOTS / "desk-chat-launch-no-seat.png"))
-        fail("chat-seat-selected", str(e))
-    page.get_by_test_id("chat-promote").click()
+    page.get_by_test_id("session-chat-promote").click()
     page.get_by_test_id("launch-problem").wait_for(state="visible", timeout=10000)
     problem = page.get_by_test_id("launch-problem").input_value()
     page.wait_for_timeout(800)

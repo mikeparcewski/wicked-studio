@@ -9,7 +9,8 @@ import { useRunEvents } from '../../hooks/useRunEvents.js';
 import { getCachedRoster, subscribeRoster } from '../../store/rosterCache.js';
 import type { OpenGate } from '../../store/gates.js';
 import { useRerunFromHere } from '../../hooks/useRerunFromHere.js';
-import { GateDepthDetails, RuleOfferBlock, useFullVerdict, useSeatTrust } from './GateDepth.js';
+import type { RerunOffer } from '../rerunModel.js';
+import { GateDepthDetails, RuleOfferBlock, useFullVerdict, useSeatTrust, type SeatTrust } from './GateDepth.js';
 import { WatchGateLine } from '../WatchLines.js';
 
 /**
@@ -45,10 +46,34 @@ function formatSentTime(ts: number): string {
   return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-export function GateRow({ view, gate }: {
-  view: RunView;
+/**
+ * S16a-4g: `view: null` is a chat's own gate (keyed by the chat id, answered at the chat's thread
+ * foot): the gate's own choices plus approve / send back / steer — no reassign (no seat pool), no
+ * event hydration (a chat has no run log), no depth; every answer still goes through
+ * `commitGateDecision` with its undo window.
+ */
+export function GateRow({ view, gate, chatId }: {
+  view: RunView | null;
   gate: OpenGate | undefined;
+  /** The chat id the gate is keyed by — required when `view` is null. */
+  chatId?: string;
 }): React.ReactElement | null {
+  if (view === null) return chatId === undefined ? null : <ChatGateRow chatId={chatId} gate={gate} />;
+  return <RunGateRow view={view} gate={gate} />;
+}
+
+const NO_UNITS: readonly never[] = [];
+const NO_EVENTS: readonly never[] = [];
+
+function ChatGateRow({ chatId, gate }: { chatId: string; gate: OpenGate | undefined }): React.ReactElement | null {
+  const model = useMemo<GateRowModel | null>(() => {
+    if (gate === undefined) return null;
+    return sessionGateChoices({ runId: chatId, gate, units: NO_UNITS, events: NO_EVENTS, pool: [], roster: null, rerun: null, fullVerdict: null });
+  }, [chatId, gate]);
+  return <GateRowBody runId={chatId} gate={gate} model={model} seat={null} rerunOffer={null} eventsUnavailable={false} retryEvents={() => undefined} depth={null} />;
+}
+
+function RunGateRow({ view, gate }: { view: RunView; gate: OpenGate | undefined }): React.ReactElement | null {
   const runId = view.session.id;
   // studio#558: the session page's one run-event read (shared with ProposalCard / OrphanedRow).
   const { events, failed: eventsFetchFailed, retry: retryEvents } = useRunEvents(runId);
@@ -57,18 +82,6 @@ export function GateRow({ view, gate }: {
   // Roster subscription for reassign eligibility checks
   const [roster, setRoster] = useState<readonly RosterSeat[] | null>(() => getCachedRoster());
   useEffect(() => subscribeRoster((r) => setRoster(r)), []);
-
-  const action = useGateActionStore((s) => s.byGate[runId] ?? IDLE_GATE_ACTION);
-  const pending = useUndoQueue((s) => s.pending.find((p) => p.runIds.length === 1 && p.runIds[0] === runId) ?? null);
-  const now = useTicker(pending !== null);
-
-  const [noteOpen, setNoteOpen] = useState<string | null>(null);
-  const [noteText, setNoteText] = useState('');
-  const [pick, setPick] = useState<RowPick>(() => INITIAL_PICK(null));
-  const [chosen, setChosen] = useState<{ key: string; label: string; sentAt: number | null } | null>(null);
-
-  const rowRef = useRef<HTMLDivElement>(null);
-  const noteRef = useRef<HTMLTextAreaElement>(null);
 
   // Pool: prefer session.clis (the run's full seat list), fall back to units' assigned CLIs
   const pool = useMemo(() => {
@@ -93,6 +106,43 @@ export function GateRow({ view, gate }: {
     isPlanGate: false, isDeliverGate: gate?.gateKind === 'deliver',
     isEscalation: model !== null && (model.reason === 'escalation' || model.reason === 'retry'),
   });
+  const depth = gate !== undefined && model !== null
+    ? <GateDepthDetails view={view} gate={gate} failing={model.failing} reviewedOrd={model.reviewedOrd} source={model.source} underReview={model.reason === 'def'} />
+    : null;
+  return (
+    <GateRowBody
+      runId={runId} gate={gate} model={model} seat={seat} rerunOffer={rerunOffer}
+      eventsUnavailable={gate !== undefined && events === null && eventsFetchFailed}
+      retryEvents={retryEvents} depth={depth}
+    />
+  );
+}
+
+function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, retryEvents, depth }: {
+  runId: string;
+  gate: OpenGate | undefined;
+  model: GateRowModel | null;
+  /** The creator seat's record and the standing-order offer; null on a chat's gate. */
+  seat: SeatTrust | null;
+  rerunOffer: RerunOffer | null;
+  /** The events read failed and nothing hydrated the log (fail closed). */
+  eventsUnavailable: boolean;
+  retryEvents: () => void;
+  /** ⋯ Details' depth block (the run's); null on a chat's gate. */
+  depth: React.ReactNode;
+}): React.ReactElement | null {
+  const action = useGateActionStore((s) => s.byGate[runId] ?? IDLE_GATE_ACTION);
+  const pending = useUndoQueue((s) => s.pending.find((p) => p.runIds.length === 1 && p.runIds[0] === runId) ?? null);
+  const now = useTicker(pending !== null);
+
+  const [noteOpen, setNoteOpen] = useState<string | null>(null);
+  const [noteText, setNoteText] = useState('');
+  const [pick, setPick] = useState<RowPick>(() => INITIAL_PICK(null));
+  const [chosen, setChosen] = useState<{ key: string; label: string; sentAt: number | null } | null>(null);
+
+  const rowRef = useRef<HTMLDivElement>(null);
+  const noteRef = useRef<HTMLTextAreaElement>(null);
+
   const [confirmRerun, setConfirmRerun] = useState(false);
   // S16a-2a: the choice under the pointer or the keyboard says what it does BEFORE it is taken —
   // the run page's per-arm consequence lines (escalation arms, reassign), one line above the row.
@@ -192,7 +242,7 @@ export function GateRow({ view, gate }: {
 
   // Fail closed (security review, unit 10): the events read failed and nothing else hydrated the
   // log, so no choice is offered on missing evidence; the operator retries the read from the row.
-  if (gate !== undefined && events === null && eventsFetchFailed) {
+  if (eventsUnavailable) {
     return (
       <div data-testid="session-gate-row" data-reason="events-unavailable" ref={rowRef} tabIndex={-1} className="wk-session-gate-row" role="alert">
         <p data-testid="session-gate-question" className="wk-session-gate-question">{question}</p>
@@ -353,7 +403,7 @@ export function GateRow({ view, gate }: {
               <span className="wk-session-gate-suggested" aria-hidden="true">suggested</span>
             )}
             {/* S16a-1b: the creator seat's record rides Approve as neutral text — never a tone. */}
-            {choice.key === recordOn && seat.record !== null && (
+            {choice.key === recordOn && seat !== null && seat.record !== null && (
               <span data-testid="session-gate-track-record" className="wk-session-gate-record">{seat.record}</span>
             )}
           </button>
@@ -416,7 +466,7 @@ export function GateRow({ view, gate }: {
           </div>
         </div>
       )}
-      <RuleOfferBlock seat={seat} locked={action.busy} />
+      {seat !== null && <RuleOfferBlock seat={seat} locked={action.busy} />}
       {/* ⋯ details: raw prompt, verdict layers, failing items, reviewer's note; S16a-1b: the work under
           review, "Why it failed" (the failing criteria beside the creator's claims), the source line. */}
       {model.detailItems.length > 0 && (
@@ -425,9 +475,7 @@ export function GateRow({ view, gate }: {
           {model.detailItems.map((item, idx) => (
             <p key={idx} data-testid={idx === 0 ? 'session-gate-raw-prompt' : undefined} className="wk-session-gate-detail-item">{item}</p>
           ))}
-          {gate !== undefined && (
-            <GateDepthDetails view={view} gate={gate} failing={model.failing} reviewedOrd={model.reviewedOrd} source={model.source} underReview={model.reason === 'def'} />
-          )}
+          {depth}
         </details>
       )}
       {noteChoice !== null && (

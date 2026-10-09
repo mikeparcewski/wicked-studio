@@ -156,3 +156,14 @@ describe('the PA is still answering (§8 F6)', () => {
     expect(sendChatMessage).not.toHaveBeenCalled();
   });
 });
+
+describe('S16a-4e — a reply on a chat\'s own session goes into THAT chat', () => {
+  it('handed a chatId, the dock sends to it once and never opens or resumes its own stored chat', async () => {
+    sessionStorage.setItem('wicked.ask.session', JSON.stringify({ chatId: 'c-dock', title: 'older', seeded: true }));
+    render(<AskDock runs={[]} pathname="/s/chat-a" onClose={() => undefined} sendText="and the retry path?" sendChatId="chat-a" />);
+    await waitFor(() => expect(sendChatMessage).toHaveBeenCalledTimes(1));
+    expect(sendChatMessage.mock.calls[0]![0]).toBe('chat-a');
+    expect(openChat).not.toHaveBeenCalled();
+    expect(JSON.parse(sessionStorage.getItem('wicked.ask.session') ?? '{}').chatId).toBe('chat-a');
+  });
+});

@@ -40,6 +40,8 @@ describe('the router, enumerated', () => {
     const targets = routeTargets(DATA);
     for (const s of ROUTE_SHAPES) {
       if (REACHED_BY_OTHER_GROUPS.includes(s.id)) continue;
+      // S16a-4a: a grown artifact's address is reached from the artifact itself (its ⤢), not GO TO.
+      if (s.id === 'session-artifact') continue;
       const mine = targets.filter((t) => t.shape === s.id);
       expect(mine.length, `no ⌘K entry for ${s.id}`).toBeGreaterThan(0);
       for (const t of mine) expect(s.is(parseRoute(t.href)), `${t.label} → ${t.href}`).toBe(true);

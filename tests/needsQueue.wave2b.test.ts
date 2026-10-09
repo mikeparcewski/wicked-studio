@@ -77,7 +77,8 @@ describe('needsYouRows — the kinds wave 2b adds', () => {
     expect(e.text).toBe('Question: Which region?');
     expect(e.at).toBe(NOW - 2 * MIN);
     // S16a-2c: the run's session thread, never its project's Build view.
-    expect(e.action).toEqual({ kind: 'open', path: '/s/run%3Ae', label: 'Answer ›' });
+    expect(e.action).toEqual({ kind: 'open', path: '/s/run%3Ae#gate', label: 'Answer ›' }); // S16a-4g: focused on arrival
+    expect(e.subjectPath).toBe('/s/run%3Ae#gate');
   });
 
   it('an elicitation on a finished or unknown run adds no row', () => {

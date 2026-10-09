@@ -93,8 +93,18 @@ def wait_attr(page, testid: str, name: str, value: str, timeout: int = 8000) -> 
 
 
 def open_composer(page, origin: str) -> None:
-    page.goto(f"{origin}/p/{PROJECT}/build/new", wait_until="networkidle")
+    # S16a-4f: `/p/<pid>/build/new` moved to the Desk composer; the launch form is `/runs/new`,
+    # bound to the project through its own Project field (what the pre-bound route did).
+    page.goto(f"{origin}/runs/new", wait_until="networkidle")
     page.get_by_test_id("launch-problem").wait_for(state="visible", timeout=15000)
+    bind_project(page)
+
+
+def bind_project(page) -> None:
+    row = page.get_by_test_id("launch-project-row")
+    row.get_by_test_id("project-switcher").locator("button").first.click()
+    page.locator(f'[data-testid="project-switcher-option"][data-project-id="{PROJECT}"]').click()
+    page.wait_for_timeout(300)
 
 
 def open_picker(page) -> None:
@@ -328,7 +338,7 @@ with sync_playwright() as p:
         # build routes on main either: the desktop shell renders squeezed; collapse the nav) ──
         reset(origin)
         page.set_viewport_size({"width": 390, "height": 844})
-        page.goto(f"{origin}/p/{PROJECT}/build/new", wait_until="networkidle")
+        page.goto(f"{origin}/runs/new", wait_until="networkidle")
         if page.get_by_role("button", name="Collapse sidebar").count() > 0:
             page.get_by_role("button", name="Collapse sidebar").first.click()
         page.get_by_test_id("phase-picker-toggle").scroll_into_view_if_needed()

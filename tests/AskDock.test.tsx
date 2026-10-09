@@ -441,7 +441,7 @@ describe('the Ask session survives close/reopen, and promotes into the full chat
     expect(JSON.parse(sessionStorage.getItem('wicked.ask.session') ?? 'null')).toEqual({ chatId: FIXED_ID, title: 'first', seeded: true });
   });
 
-  it('"Open in full chat" navigates to /chat/:id for the dock session and closes the dock', async () => {
+  it('"Open in full chat" navigates to the dock session\'s own thread (/s/:id, S16a-4e) and closes the dock', async () => {
     vi.spyOn(crypto, 'randomUUID').mockReturnValue(FIXED_ID);
     sessionStorage.clear();
     const user = userEvent.setup();
@@ -456,7 +456,7 @@ describe('the Ask session survives close/reopen, and promotes into the full chat
 
     await user.click(screen.getByTestId('assist-dock-expand'));
 
-    expect(navigate).toHaveBeenCalledWith(`/chat/${FIXED_ID}`);
+    expect(navigate).toHaveBeenCalledWith(`/s/${FIXED_ID}`);
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 });

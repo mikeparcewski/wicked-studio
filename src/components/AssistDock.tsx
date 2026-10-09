@@ -5,7 +5,7 @@ import type { CoreEvent, SessionView } from '../api/types.js';
 import { useEventStream } from '../hooks/useEventStream.js';
 import { pinAwaiting } from '../store/awaitingPins.js';
 import { useRunEventStore } from '../store/events.js';
-import { ApprovalDock } from './ApprovalDock.js';
+import { AnswerInThread, useGateCleared } from './AnswerInThread.js';
 import { retainOnFinalize } from './ChatThread.js';
 import { readFileText } from './fileText.js';
 import { splitAskContext } from '../board/askPack.js';
@@ -30,9 +30,9 @@ import {
  *  - a typed message fires `verbs.send` (on Steering: the governed steering-author run) and
  *    the returned run NARRATES INLINE through the SHIPPED narrator modules (NowBar +
  *    NarratorFeed — DES-RUN-NARRATOR §9, reused verbatim, never forked);
- *  - anything awaiting the human renders in the pinned {@link ApprovalDock} between the
- *    thread and the composer (`chatId` entry point, §11.5) — the propose gate is answered
- *    here, without leaving the page;
+ *  - anything awaiting the human is answered in its session thread (S16a-4g): the dock shows
+ *    one {@link AnswerInThread} line — the question and "Answer in its thread ›" — and, when
+ *    the gate clears, notes it and fires `verbs.onRunResolved`;
  *  - attachments (drag/drop or pick): files `importable(name)` calls rule-shaped offer the
  *    fork — "Import directly" (fires `verbs.importDirect` now, results echoed into the thread
  *    as narration notes) vs "Analyze with chat" (rides the next send as `documents[]`); plain
@@ -83,7 +83,7 @@ export interface AssistVerbs {
   send: (text: string, documents: AssistDocument[]) => Promise<AssistLaunch>;
   /** The direct-import fork for rule-shaped attachments; returns notes to echo. Absent ⇒ no fork. */
   importDirect?: (doc: AssistDocument) => Promise<AssistNote[]>;
-  /** Fired when a pinned gate/elicitation resolves — the surface reloads its data. */
+  /** Fired when the active run's gate clears from the gate store — the surface reloads its data. */
   onRunResolved?: () => void;
 }
 
@@ -520,14 +520,20 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
 
   // The ACTIVE launch: the newest run/chat item — its gates/elicitations pin below the
   // thread (the daemon keys chat-session gates by the chat id, §11.5).
-  const activeId = useMemo(() => {
+  const active = useMemo<{ kind: 'run'; runId: string } | { kind: 'chat'; chatId: string } | null>(() => {
     for (let i = items.length - 1; i >= 0; i -= 1) {
       const item = items[i];
-      if (item !== undefined && item.kind === 'run') return item.runId;
-      if (item !== undefined && item.kind === 'chat') return item.chatId;
+      if (item !== undefined && item.kind === 'run') return { kind: 'run', runId: item.runId };
+      if (item !== undefined && item.kind === 'chat') return { kind: 'chat', chatId: item.chatId };
     }
     return null;
   }, [items]);
+  // S16a-4g: the active gate is answered in its thread; when the gate store clears it (open, then
+  // gone) the dock notes it and the surface reloads its data — the card's onResolved, from the store.
+  useGateCleared(active === null ? null : active.kind === 'run' ? active.runId : active.chatId, () => {
+    note('human', 'Answered — the run continues; this page reloads when its work lands.');
+    verbs.onRunResolved?.();
+  });
 
   /** The newest CHAT session in the thread — what the promote door opens. */
   const latestChatId = useMemo(() => {
@@ -646,10 +652,6 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
     }
   };
 
-  const onGateResolved = (): void => {
-    note('human', 'Answered — the run continues; this page reloads when its work lands.');
-    verbs.onRunResolved?.();
-  };
 
   // ── Collapsed: a slim re-open rail ──────────────────────────────────────────────────────────
   if (!open) {
@@ -798,13 +800,11 @@ export function AssistDock({ context, verbs, importable, open, onOpenChange, onE
         })}
       </div>
 
-      {/* The pinned approval dock — anything the ACTIVE run asks of the human answers HERE,
-          a structural sibling of the thread scroll (it can never scroll away). Capped at 60%
-          of the panel with its OWN scroll: a long propose prompt must never push the composer
-          below the fold (caught on the gated evidence pass). */}
-      {activeId !== null && (
-        <div className="max-h-[60%] shrink-0 overflow-y-auto" style={{ borderTop: '1px solid var(--surface-raised)' }}>
-          <ApprovalDock chatId={activeId} onResolved={onGateResolved} />
+      {/* S16a-4g: what the ACTIVE run or chat asks of the human is answered in its session thread;
+          the dock says so in one line (the question and "Answer in its thread ›") — never a card. */}
+      {active !== null && (
+        <div className="shrink-0 px-3 pt-2" style={{ borderTop: '1px solid var(--surface-raised)' }}>
+          <AnswerInThread subject={active} />
         </div>
       )}
 

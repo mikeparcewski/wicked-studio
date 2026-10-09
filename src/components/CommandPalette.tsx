@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Search } from 'lucide-react';
 import type { GovernanceClaim, InteractionRequest, RepoEntry, SessionView } from '../api/types.js';
 import { api } from '../api/client.js';
@@ -6,8 +6,7 @@ import { UNFILED_MOUNT } from '../api/interactive.js';
 import { fetchReposCached, getCachedRepos } from '../store/repoCache.js';
 import { fuzzyMatch, type FuzzyResult } from '../palette/fuzzy.js';
 import { runTargetHits } from '../palette/runTargets.js';
-import { launchPath } from '../hooks/ambientProject.js';
-import { modePath, projectPath, type Navigate } from '../hooks/useRoute.js';
+import { projectPath, type Navigate } from '../hooks/useRoute.js';
 import type { ShortcutEntry } from '../hooks/useGlobalShortcuts.js';
 import { useMembershipStore } from '../store/membership.js';
 import { useLiveChatsStore } from '../store/liveChats.js';
@@ -23,6 +22,10 @@ import { Modal } from './Modal.js';
 import { ProjectSwitcher } from './ProjectSwitcher.js';
 import { humanTitle, INTENT_MAX, runTitle, runWhenWord, WHEN_TITLE } from './runIdentity.js';
 import { Terminal } from './Terminal.js';
+import { useSessionDrafts } from '../store/sessionDrafts.js';
+import { addAboutChip } from '../store/composerChips.js';
+import { everythingPath } from '../board/everythingModel.js';
+import { seedNewChat } from '../board/chatMoves.js';
 
 /**
  * The universal command palette (DES-FEEDBACK-002 §1, slice G): Cmd+K / Ctrl+K /
@@ -241,6 +244,14 @@ export function CommandPalette({
   const restoreRef = useRef<HTMLElement | null>(null);
 
   const projects = useProjectsStore((s) => s.projects);
+  // S16a-4c: "New Demo" seeds the Desk composer (and the project's @ chip); nothing is sent.
+  const seedDemo = useCallback((pid: string | null): void => {
+    useSessionDrafts.getState().setDraft('desk', 'Make a demo of ');
+    const p = pid !== null && pid !== 'default' && pid !== UNFILED_MOUNT ? projects.find((x) => x.id === pid) ?? null : null;
+    if (p !== null) addAboutChip('desk', { kind: 'project', key: `project:${p.id}`, label: p.name, projectId: p.id });
+    onClose();
+    navigate('/');
+  }, [projects, onClose, navigate]);
   const gates = useGateStore((s) => s.gates);
 
   // Open: remember focus and focus the input; fetch the repo list only when the
@@ -524,34 +535,44 @@ export function CommandPalette({
 
     // Verbs (§1.3's table — each names its existing mechanism, none invents one).
     const verbs: Array<{ name: string; action: () => void; when?: boolean }> = [
-      // Slice S: the pre-bound-vs-flat fork is the shared `launchPath` spelling
-      // (DES-UX-001 §2.3 rule 1) — the palette may not hand-roll it.
       {
+        // S16a-4f: a build starts in the Desk composer too (the project's @ chip when one is
+        // ambient); nothing is sent until the user sends.
         name: 'New Build',
-        action: () => navigate(launchPath(projectId, 'build')),
+        action: () => {
+          onClose();
+          navigate('/');
+          seedNewChat(projectId, projectId === null ? null : projects.find((p) => p.id === projectId)?.name ?? null);
+        },
       },
       {
+        // S16a-4e: a new chat starts in the Desk composer (the project's @ chip when one is ambient).
         name: 'New Chat',
-        action: () => navigate(launchPath(projectId, 'chat')),
+        action: () => {
+          onClose();
+          navigate('/');
+          seedNewChat(projectId, projectId === null ? null : projects.find((p) => p.id === projectId)?.name ?? null);
+        },
       },
       // The §3.4 fork's other two tines (DES-FEEDBACK-003 §8.4, slice N): the
       // palette and Make's ＋ agree on what can be made. Inside a project shell
       // the verb lands directly in the mode; outside, a doc cannot be Unfiled,
       // so the same project-picker mechanism as the Make ＋ runs first.
       {
+        // S16a-4d: the Made list with its "New document" door open, the ambient project preselected
+        // (the door picks the project itself — no picker modal first).
         name: 'New Document',
         action: () => {
-          if (projectId !== null) navigate(modePath(projectId, 'document'));
-          else {
-            if (projects.length === 0) void useProjectsStore.getState().load();
-            setPickProjectFor('document');
-          }
+          onClose();
+          navigate(everythingPath({ tab: 'made', kind: 'documents', ...(projectId !== null && projectId !== 'default' ? { project: projectId } : {}), new: 'document' }));
         },
       },
       {
+        // S16a-4c: a demo is made by a run — the Desk composer, seeded "Make a demo of " with the
+        // project's @ chip when one is ambient (nothing is sent).
         name: 'New Demo',
         action: () => {
-          if (projectId !== null) navigate(modePath(projectId, 'video'));
+          if (projectId !== null) seedDemo(projectId);
           else {
             if (projects.length === 0) void useProjectsStore.getState().load();
             setPickProjectFor('video');
@@ -637,7 +658,7 @@ export function CommandPalette({
       return [...targeted, ...matched];
     }
     return matched;
-  }, [runs, projects, repos, gates, claims, prompts, projectNameByRun, attachedAtByRun, goTargets, object, scope, needle, runPath, navigate, projectId, selectedRun, onKill]);
+  }, [runs, projects, repos, gates, claims, prompts, projectNameByRun, attachedAtByRun, goTargets, object, scope, needle, runPath, navigate, projectId, selectedRun, onKill, seedDemo, onClose]);
 
   // Clamp the selection whenever the row set changes.
   const selIx = Math.min(sel, Math.max(0, rows.length - 1));
@@ -948,7 +969,8 @@ export function CommandPalette({
                 // close (the same repair as the Make ＋ picker's stage).
                 const m = pickProjectFor;
                 setPickProjectFor(null);
-                navigate(modePath(pid ?? UNFILED_MOUNT, m));
+                if (m === 'video') seedDemo(pid);
+                else navigate(everythingPath({ tab: 'made', kind: 'documents', project: pid ?? UNFILED_MOUNT, new: 'document' }));
               }}
             />
           </div>

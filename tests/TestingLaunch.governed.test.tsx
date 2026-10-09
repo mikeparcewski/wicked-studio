@@ -361,8 +361,8 @@ describe('project chips are DROPPABLE (F-076 / F-7R2-010)', () => {
   });
 });
 
-describe('the intake gate carries the PLAN (F-7R2-008)', () => {
-  it('the awaitingHuman frame swaps the waiting line for the gate card WITH every planned phase, executor, skill and seat — read once off GET /runs/:id', async () => {
+describe('F-7R2-008 → S16a-4g — the intake gate (and its plan) is answered in the run\'s thread', () => {
+  it('the awaitingHuman frame swaps the waiting line for ONE "Answer in its thread ›" line — no card, no plan block, no run read here', async () => {
     wire({ '/testing/author': { runId: 'r-gt-1', runIds: ['r-gt-1'], campaign: 'a', campaignRegistered: false } });
     const user = userEvent.setup();
     const p = panel();
@@ -370,60 +370,16 @@ describe('the intake gate carries the PLAN (F-7R2-008)', () => {
     await attach(user, p, 'wicked-studio');
     await brief(user, p, 'Plan');
     await screen.findByTestId('testing-launch-waiting');
-    expect(getRun).not.toHaveBeenCalled(); // nothing read before the gate exists
 
     gateArrives('r-gt-1');
-    const plan = await screen.findByTestId('intake-plan');
-    expect(getRun).toHaveBeenCalledExactlyOnceWith('r-gt-1');
-    expect(plan).toHaveAttribute('data-units', '5');
-    expect(plan).toHaveAttribute('data-workflow', 'qe-author-tests');
-    expect(plan).toHaveTextContent('The plan you are approving — 5 phases · workflow qe-author-tests');
-    const rows = within(plan).getAllByTestId('intake-plan-unit');
-    expect(rows.map((r) => [r.dataset.ord, r.dataset.phase, r.dataset.executor, r.dataset.seat ?? null])).toEqual([
-      ['1', 'recon', 'agent', 'claude'],
-      ['2', 'author', 'agent', null],
-      ['3', 'verify', 'tool', null],
-      ['4', 'review', 'agent', null],
-      ['5', 'deliver', 'tool', null],
-    ]);
-    expect(rows[0]).toHaveTextContent('seat: claude');
-    expect(rows[1]).toHaveTextContent('wicked-garden-qe');
-    expect(rows[1]).toHaveTextContent('writes code');
-    expect(rows[1]).toHaveTextContent('council picks from claude, codex, pi');
-    expect(rows[2]).toHaveTextContent('no seat — a direct command');
-    expect(rows[3]).toHaveTextContent('evaluator ≠ creator');
-    expect(within(p).getByTestId('steering-prompt')).toHaveTextContent('Approve unit 1 before it runs: recon — read the repo and its tests');
+    const line = await within(p).findByTestId('answer-in-thread');
+    expect(line).toHaveAttribute('data-subject', 'r-gt-1');
+    expect(within(line).getByTestId('answer-in-thread-open')).toHaveAttribute('href', '/s/run%3Ar-gt-1#gate');
+    expect(within(p).queryByTestId('steering-gate')).toBeNull();
+    expect(within(p).queryByTestId('intake-plan')).toBeNull();
+    expect(getRun).not.toHaveBeenCalled();
     expect(within(p).queryByTestId('testing-launch-waiting')).toBeNull();
-    // The run link stays above the card.
+    // The run link stays above the line.
     expect(within(p).getByTestId('testing-launch-fanout-run')).toHaveAttribute('data-run-id', 'r-gt-1');
-  });
-
-  it('a GET /runs/:id that fails shows the card without a plan — never a plan made up from the prompt', async () => {
-    getRun.mockRejectedValue(new ApiError(500, 'boom'));
-    wire({ '/testing/author': { runId: 'r-gt-1', runIds: ['r-gt-1'], campaign: 'a', campaignRegistered: false } });
-    const user = userEvent.setup();
-    const p = panel();
-    await within(p).findByTestId('testing-launch-workflow');
-    await attach(user, p, 'wicked-studio');
-    await brief(user, p, 'Plan');
-    await screen.findByTestId('testing-launch-waiting');
-    gateArrives('r-gt-1');
-    await screen.findByTestId('steering-gate');
-    await waitFor(() => expect(getRun).toHaveBeenCalled());
-    expect(screen.queryByTestId('intake-plan')).toBeNull();
-  });
-
-  it('a NON-intake gate (an escalation on unit 3) renders no plan block even with the units known', async () => {
-    wire({ '/testing/author': { runId: 'r-gt-1', runIds: ['r-gt-1'], campaign: 'a', campaignRegistered: false } });
-    const user = userEvent.setup();
-    const p = panel();
-    await within(p).findByTestId('testing-launch-workflow');
-    await attach(user, p, 'wicked-studio');
-    await brief(user, p, 'Plan');
-    await screen.findByTestId('testing-launch-waiting');
-    gateArrives('r-gt-1', 3, 'Unit 3 failed and triage escalated: the verify command exited 1');
-    await screen.findByTestId('steering-gate');
-    await waitFor(() => expect(getRun).toHaveBeenCalled());
-    expect(screen.queryByTestId('intake-plan')).toBeNull();
   });
 });

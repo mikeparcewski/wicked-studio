@@ -3,7 +3,9 @@ import { flushSync } from 'react-dom';
 import { interactiveUrl, type ExportFormat } from '../../api/interactive.js';
 import { grow, shrink, type ArtifactSize, type EditorKind } from '../../board/artifactMorph.js';
 import { exportReadyText, runExport } from '../../interactive/exportWire.js';
-import { artifactSizeOf, setArtifactSize, topmostArtifact, useArtifactSizes } from '../../store/artifactSizes.js';
+import { artifactSizeOf, artifactSizeWrites, registerArtifact, setArtifactSize, topmostArtifact, useArtifactSizes } from '../../store/artifactSizes.js';
+import { useArtifactAddress } from './ArtifactAddress.js';
+import { ArtifactVersions, lensVersion, useVersionList, VersionLens } from './ArtifactVersions.js';
 import { DocCoverage } from './DocCoverage.js';
 import { PageEditor, type FrameParts } from './PageEditor.js';
 import { NoEditorPage, PluginArtifact } from './PluginArtifact.js';
@@ -112,13 +114,41 @@ export function ArtifactMorph({ artifactKey, title, projectId, docId, composerKe
   // Folded back to the preview, the menu is gone — it must not be open when the artifact grows again.
   useEffect(() => { if (size === 'inline') setExportOpen(false); }, [size]);
 
+  // S16a-4a: the morph writes the address too (grow pushes, shrink goes Back or replaces) — Esc and
+  // the buttons share this one path.
+  const address = useArtifactAddress();
+  const writeAddress = address?.write ?? null;
+  useEffect(() => registerArtifact(artifactKey), [artifactKey]);
   const morph = useCallback((to: ArtifactSize): void => {
-    const apply = (): void => flushSync(() => setArtifactSize(artifactKey, to));
+    const from = artifactSizeOf(useArtifactSizes.getState(), artifactKey);
+    if (from === to) return;
+    // A view transition runs its callback on a later frame: if any size write lands first (the
+    // address writing this same step, or a Back already shrinking it), this apply is stale.
+    const writes = artifactSizeWrites();
+    const apply = (): void => {
+      if (artifactSizeWrites() !== writes) return;
+      flushSync(() => setArtifactSize(artifactKey, to));
+    };
     const reduced = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const vt = (document as Document & { startViewTransition?: (cb: () => void) => unknown }).startViewTransition;
-    if (!reduced && typeof vt === 'function') vt.call(document, apply);
-    else apply();
-  }, [artifactKey]);
+    type Transition = { ready?: Promise<unknown>; finished?: Promise<unknown>; updateCallbackDone?: Promise<unknown> };
+    const vt = (document as Document & { startViewTransition?: (cb: () => void) => Transition | undefined }).startViewTransition;
+    if (!reduced && typeof vt === 'function') {
+      // A step that lands while the previous morph is still animating SKIPS that transition (the
+      // browser rejects its promises with "Transition was skipped"): expected, never a page error.
+      const t = vt.call(document, apply);
+      for (const p of [t?.ready, t?.finished, t?.updateCallbackDone]) p?.catch(() => undefined);
+    } else apply();
+    writeAddress?.(artifactKey, from, to);
+  }, [artifactKey, writeAddress]);
+
+  // S16a-4b: at full size a page / document / deck lists its versions; `?v=N` on the address is a
+  // read-only lens on one (touch-editing is off while it is shown).
+  const editorKind = slot === undefined;
+  const versionsOn = editorKind && size === 'full';
+  const versions = useVersionList(projectId, docId, head, versionsOn);
+  const pinned = address !== null && address.routeKey === artifactKey ? address.routeVersion : null;
+  const lens = versionsOn ? lensVersion(pinned, head, versions) : null;
+  const look = (v: number | null): void => { address?.pickVersion(artifactKey, v, 'push'); };
 
   // Esc shrinks one step (rule 1) — the topmost open artifact only, and not while something inside
   // it is consuming it (a pick, an edit field), which stops the event before it reaches the document.
@@ -190,12 +220,12 @@ export function ArtifactMorph({ artifactKey, title, projectId, docId, composerKe
       data-doc={docId}
       data-kind={slot?.kind ?? kind}
       aria-label={`${title} — ${size === 'inline' ? 'preview' : size === 'pane' ? 'open beside the thread' : 'full screen'}`}
-      className={`wk-artifact wk-artifact--${size}`}
+      className={`wk-artifact wk-artifact--${size}${versionsOn ? ' wk-artifact--versions' : ''}`}
       style={{ viewTransitionName: `artifact-${slug}` } as React.CSSProperties}
     >
       <header data-testid="artifact-head" className="wk-artifact-head">
         <span className="wk-artifact-title">{title}</span>
-        <span data-testid="artifact-version">{head === null ? '' : `version ${head}`}</span>
+        <span data-testid="artifact-version">{lens !== null ? `looking at version ${lens}` : head === null ? '' : versionsOn ? `version ${head} (working)` : `version ${head}`}</span>
         {exportsHere.length > 0 && head !== null && (
           <span className="wk-artifact-export" onKeyDown={onExportKey}>
             <button ref={exportBtn} type="button" data-testid="artifact-export" aria-haspopup="menu" aria-expanded={exportOpen} onClick={() => setExportOpen((o) => !o)} className="wk-artifact-btn">Export ▾</button>
@@ -215,7 +245,9 @@ export function ArtifactMorph({ artifactKey, title, projectId, docId, composerKe
           <button ref={shrinkBtn} type="button" data-testid="artifact-shrink" aria-label={size === 'full' ? 'Back to the pane' : 'Back to the thread'} title="Esc" onClick={() => morph(shrink(size))} className="wk-artifact-btn">{size === 'full' ? '⤡' : '×'}</button>
         )}
       </header>
-      {slot !== undefined
+      {lens !== null
+        ? <VersionLens projectId={projectId} docId={docId} version={lens} onBack={() => look(null)} />
+        : slot !== undefined
         ? slot.body(size, morph)
         : kind === 'page'
           ? (pageEditor === undefined
@@ -224,6 +256,17 @@ export function ArtifactMorph({ artifactKey, title, projectId, docId, composerKe
               ? <NoEditorPage projectId={projectId} docId={docId} size={size} reason={noEditorReason} onHead={setHead} />
               : <PluginArtifact projectId={projectId} docId={docId} title={title} composerKey={composerKey} size={size} morph={morph} editor={pageEditor} onHead={setHead} />)
           : <PageEditor projectId={projectId} docId={docId} composerKey={composerKey} size={size} kind={kind} side={side} onHead={setHead} />}
+      {versionsOn && (
+        <ArtifactVersions
+          projectId={projectId}
+          docId={docId}
+          head={head}
+          list={versions}
+          lens={lens}
+          onLook={look}
+          onRestored={(newHead) => { setHead(newHead); if (address !== null && address.routeKey === artifactKey) address.pickVersion(artifactKey, null, 'replace'); }}
+        />
+      )}
       {exported !== null && size !== 'inline' && (
         <p data-testid="artifact-export-line" data-state={exported.state} className={`wk-artifact-line${exported.state === 'failed' ? ' wk-artifact-line--bad' : ''}`}>
           {exported.text}

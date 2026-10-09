@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.6.6",
   "counts": {
-    "files": 191,
-    "occurrences": 2271,
-    "static": 2013,
+    "files": 196,
+    "occurrences": 2296,
+    "static": 2038,
     "dynamic": 48,
     "computed": 8
   },
@@ -120,6 +120,18 @@
       "testId": "amend-prepopulated",
       "files": [
         "src/components/SteeringGate.tsx"
+      ]
+    },
+    {
+      "testId": "answer-in-thread",
+      "files": [
+        "src/components/AnswerInThread.tsx"
+      ]
+    },
+    {
+      "testId": "answer-in-thread-open",
+      "files": [
+        "src/components/AnswerInThread.tsx"
       ]
     },
     {
@@ -255,6 +267,18 @@
       ]
     },
     {
+      "testId": "artifact-lens-back",
+      "files": [
+        "src/components/session/ArtifactVersions.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-lens-line",
+      "files": [
+        "src/components/session/ArtifactVersions.tsx"
+      ]
+    },
+    {
       "testId": "artifact-no-editor",
       "files": [
         "src/components/session/PluginArtifact.tsx"
@@ -289,6 +313,48 @@
       "testId": "artifact-version",
       "files": [
         "src/components/session/ArtifactMorph.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-version-age",
+      "files": [
+        "src/components/session/ArtifactVersions.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-version-frame",
+      "files": [
+        "src/components/session/ArtifactVersions.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-version-lens",
+      "files": [
+        "src/components/session/ArtifactVersions.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-version-line",
+      "files": [
+        "src/components/session/ArtifactVersions.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-version-restore",
+      "files": [
+        "src/components/session/ArtifactVersions.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-version-row",
+      "files": [
+        "src/components/session/ArtifactVersions.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-versions",
+      "files": [
+        "src/components/session/ArtifactVersions.tsx"
       ]
     },
     {
@@ -3075,6 +3141,12 @@
       ]
     },
     {
+      "testId": "everything-made-open",
+      "files": [
+        "src/components/everything/MadeOpen.tsx"
+      ]
+    },
+    {
       "testId": "everything-made-row",
       "files": [
         "src/components/everything/EverythingPage.tsx"
@@ -4523,6 +4595,66 @@
       ]
     },
     {
+      "testId": "made-new-document",
+      "files": [
+        "src/components/everything/EverythingPage.tsx"
+      ]
+    },
+    {
+      "testId": "made-new-document-brief",
+      "files": [
+        "src/components/everything/NewDocument.tsx"
+      ]
+    },
+    {
+      "testId": "made-new-document-collision",
+      "files": [
+        "src/components/everything/NewDocument.tsx"
+      ]
+    },
+    {
+      "testId": "made-new-document-create",
+      "files": [
+        "src/components/everything/NewDocument.tsx"
+      ]
+    },
+    {
+      "testId": "made-new-document-error",
+      "files": [
+        "src/components/everything/NewDocument.tsx"
+      ]
+    },
+    {
+      "testId": "made-new-document-form",
+      "files": [
+        "src/components/everything/NewDocument.tsx"
+      ]
+    },
+    {
+      "testId": "made-new-document-name",
+      "files": [
+        "src/components/everything/NewDocument.tsx"
+      ]
+    },
+    {
+      "testId": "made-new-document-open",
+      "files": [
+        "src/components/everything/NewDocument.tsx"
+      ]
+    },
+    {
+      "testId": "made-new-document-project",
+      "files": [
+        "src/components/everything/NewDocument.tsx"
+      ]
+    },
+    {
+      "testId": "made-row-delete",
+      "files": [
+        "src/components/everything/EverythingPage.tsx"
+      ]
+    },
+    {
       "testId": "mapper-adjustments",
       "files": [
         "src/components/BrandLearn.tsx"
@@ -5588,12 +5720,6 @@
     },
     {
       "testId": "new-project-repo",
-      "files": [
-        "src/components/NewProjectModal.tsx"
-      ]
-    },
-    {
-      "testId": "new-project-start",
       "files": [
         "src/components/NewProjectModal.tsx"
       ]
@@ -7640,6 +7766,12 @@
       ]
     },
     {
+      "testId": "session-artifact-missing",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
       "testId": "session-ask-older",
       "files": [
         "src/components/session/SessionView.tsx"
@@ -7661,6 +7793,18 @@
       "testId": "session-chat-error",
       "files": [
         "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
+      "testId": "session-chat-promote",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
+      "testId": "session-chat-questions",
+      "files": [
+        "src/components/session/ThreadQuestions.tsx"
       ]
     },
     {
@@ -8095,6 +8239,12 @@
       "testId": "session-run-pending",
       "files": [
         "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
+      "testId": "session-run-questions",
+      "files": [
+        "src/components/session/ThreadQuestions.tsx"
       ]
     },
     {

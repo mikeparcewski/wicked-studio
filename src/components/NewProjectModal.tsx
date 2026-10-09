@@ -1,7 +1,6 @@
 import { useEffect, useId, useState } from 'react';
 import { PROJECT_NAME_MAX, projectNameProblem } from '../board/projectName.js';
 import { api } from '../api/client.js';
-import { modePath } from '../hooks/useRoute.js';
 import { everythingPath } from '../board/everythingModel.js';
 import { useNeedsSources } from '../store/needsSources.js';
 import { useProjectsStore } from '../store/projects.js';
@@ -10,9 +9,9 @@ import { useModalEscape } from './Modal.js';
 /**
  * The new-project flow (DES-FEEDBACK-001 §1.3, slice A): a minimal inline
  * modal — not a new route, not a full page — opened from the QUICK section's
- * `Project` action. Name (required), a "Start with" radio (default Build),
- * an optional description; Create → `POST /api/v1/projects`, then navigate
- * into the chosen mode's shell. Escape / ✕ / Cancel close it.
+ * `Project` action. Name (required) and an optional description; Create →
+ * `POST /api/v1/projects`, then the project's Sessions (S16a-4f: the "Start with" radio went with
+ * the shell's modes). Escape / ✕ / Cancel close it.
  *
  * The wire contract (verified against wicked-crew `projects/routes.ts` +
  * `wicked-crew-api-types`): the body is `{ name, description? }` with
@@ -21,22 +20,6 @@ import { useModalEscape } from './Modal.js';
  * creation path checks (`board/projectName.ts`, studio#463): the modal used to
  * refuse capitals and punctuation the Projects page and the daemon accept.
  */
-
-export type StartWith = 'empty' | 'build' | 'chat' | 'document';
-
-const START_OPTIONS: { value: StartWith; label: string }[] = [
-  { value: 'empty', label: 'Empty' },
-  { value: 'build', label: 'Build' },
-  { value: 'chat', label: 'Chat' },
-  { value: 'document', label: 'Document' },
-];
-
-/** Where a just-created project lands, per start mode. Empty = its detail page. */
-export function startPath(projectId: string, start: StartWith): string {
-  return start === 'empty'
-    ? `/projects/${encodeURIComponent(projectId)}`
-    : modePath(projectId, start);
-}
 
 interface Props {
   navigate: (path: string) => void;
@@ -47,7 +30,6 @@ interface Props {
 export function NewProjectModal({ navigate, onClose, deskMode = false }: Props): React.ReactElement {
   const titleId = useId();
   const [name, setName] = useState('');
-  const [start, setStart] = useState<StartWith>('build');
   const [description, setDescription] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -87,7 +69,8 @@ export function NewProjectModal({ navigate, onClose, deskMode = false }: Props):
         }
       }
       onClose();
-      navigate(deskMode ? everythingPath({ tab: 'sessions', project: project.id }) : startPath(project.id, start));
+      // S16a-4f: a new project lands on its Sessions (the shell's modes moved onto the Desk).
+      navigate(everythingPath({ tab: 'sessions', project: project.id }));
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
       setBusy(false);
@@ -182,29 +165,6 @@ export function NewProjectModal({ navigate, onClose, deskMode = false }: Props):
             {nameProblem}
           </p>
         )}
-
-        {!deskMode && <fieldset className="flex flex-col gap-1" style={{ border: 'none', margin: 0, padding: 0 }}>
-          <legend style={{ ...labelStyle, padding: 0 }}>Start with (optional)</legend>
-          <div className="flex items-center gap-3" data-testid="new-project-start">
-            {START_OPTIONS.map((opt) => (
-              <label
-                key={opt.value}
-                className="flex items-center gap-1 cursor-pointer"
-                style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-body)', fontFamily: 'var(--font-sans)' }}
-              >
-                <input
-                  type="radio"
-                  name="new-project-start"
-                  value={opt.value}
-                  checked={start === opt.value}
-                  onChange={() => setStart(opt.value)}
-                  style={{ accentColor: 'var(--accent)' }}
-                />
-                {opt.label}
-              </label>
-            ))}
-          </div>
-        </fieldset>}
 
         {deskMode && (repos?.length ?? 0) > 0 && <label className="flex flex-col gap-1">
           <span style={labelStyle}>Repository (optional)</span>
