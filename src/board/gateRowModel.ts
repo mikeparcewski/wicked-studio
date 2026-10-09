@@ -5,6 +5,7 @@ import {
   escalationSummaryFor,
   failingItems,
   findingsNote,
+  INSTRUCTION_SEP,
   recommendGateMove,
   type GateMove,
 } from '../components/gateMoveModel.js';
@@ -23,6 +24,7 @@ import {
   reassignCandidates,
   isRestoredRetry,
   isFloorFixGate,
+  sendBackAccepted,
   steerScopeTarget,
   type GateVerdictView,
 } from '../components/gateVerdictModel.js';
@@ -127,6 +129,41 @@ function mapChoiceTitle(value: string): string {
     case 'accept_suggestion': return 'Apply the restored edit and rewind to the creator.';
     default: return '';
   }
+}
+
+/**
+ * studio#571 (N3): the engine's prompt as the row's Details show it — its ` ||| ` segment marker
+ * (`INSTRUCTION_SEP`, "never rendered") joined on ` — `, as every other gate surface does.
+ */
+export function shownPrompt(prompt: string): string {
+  return prompt.split(INSTRUCTION_SEP).join(' — ');
+}
+
+/**
+ * studio#547: the unresolved HIGH findings a `team_dispute` pause is about — the `awaitingHuman`
+ * frame's `findingIds` (core#759 follow-up), else the ids the engine's prompt names ("unresolved
+ * HIGH finding(s) without a council YES: f-…, f-…"). Empty when neither names any.
+ */
+export function disputeFindingIds(events: readonly CoreEvent[] | null, ord: number, prompt: string): string[] {
+  for (let i = (events ?? []).length - 1; i >= 0; i--) {
+    const e = events![i] as unknown as Record<string, unknown>;
+    if (e['type'] !== 'awaitingHuman' || e['ord'] !== ord) continue;
+    const ids = e['findingIds'];
+    if (Array.isArray(ids)) {
+      const out = ids.filter((x): x is string => typeof x === 'string' && x !== '');
+      if (out.length > 0) return out;
+    }
+    break;
+  }
+  const m = /without a council YES:\s*([^.]+)/i.exec(prompt);
+  return m === null ? [] : m[1]!.split(',').map((x) => x.trim()).filter((x) => x !== '');
+}
+
+/** studio#547: the note a dispute's Send back opens on — the findings the creator must address. */
+export function disputeNote(ids: readonly string[]): string {
+  return ids.length === 0
+    ? 'Rework this step: the team recorded an unresolved HIGH finding without a council YES.'
+    : `Rework this step: address the unresolved HIGH finding${ids.length === 1 ? '' : 's'} ${ids.join(', ')} (no council YES).`;
 }
 
 /**
@@ -304,7 +341,7 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
       overflow: [],
       noteDefault: '',
       recommended: null,
-      detailItems: [gate.prompt],
+      detailItems: [shownPrompt(gate.prompt)],
     };
   }
 
@@ -338,7 +375,13 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
 
   // team / choices: map the engine's choices (first 4 inline, rest in overflow)
   if (reason === 'team' || reason === 'choices') {
-    const raw = gate.choices ?? ['approve', 'reject'];
+    const offered = gate.choices ?? ['approve', 'reject'];
+    // studio#627: a Send back the engine would refuse (no creator at or before the cursor) is not
+    // offered; `recommended` indexes the producer's list, so it is re-pointed past the drop.
+    const keep = offered.map((v) => v !== 'request_changes' || sendBackAccepted(units, gate.ord));
+    const raw = offered.filter((_, i) => keep[i]);
+    const dispute = kind === 'team_dispute';
+    const findingIds = dispute ? disputeFindingIds(events, gate.ord, gate.prompt) : [];
     const all: GateRowChoice[] = raw.map((v, i) => {
       const decision = mapChoiceDecision(v);
       if (decision === null) {
@@ -350,6 +393,14 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
           title: 'No wire for this choice yet — send a note instead',
           disabled: true,
         };
+      }
+      // studio#547: on a team dispute Send back reworks the unit WITH the finding — the note opens
+      // pre-filled from it; Approve counts the work past the finding (the engine's own arms).
+      if (dispute && v === 'request_changes') {
+        return { key: `choice-${i}`, label: 'Send back', decision, needsNote: true, title: 'Rework the step: its creator runs again with your note and the finding.' };
+      }
+      if (dispute && v === 'approve') {
+        return { key: `choice-${i}`, label: 'Approve', decision, needsNote: false, title: 'The work counts as it is; the run continues past the finding.' };
       }
       return {
         key: `choice-${i}`,
@@ -366,9 +417,19 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
       all.push({ key: 'stop', label: 'Stop', decision: { approve: false }, needsNote: false, title: 'Cancel the run; the work stops here.' });
       all.push({ key: 'send-note-instead', label: 'Send a note instead', decision: { approve: false, action: 'request_changes' }, needsNote: true, title: 'Send a note and cancel the run.' });
     }
-    const recommended = typeof gate.recommended === 'number' && gate.recommended >= 0 && gate.recommended < all.length
-      ? gate.recommended : null;
-    return { reason, question, choices: all.slice(0, 4), overflow: all.slice(4), noteDefault: '', recommended, detailItems: [gate.prompt] };
+    const r = gate.recommended;
+    const recommended = typeof r === 'number' && r >= 0 && r < offered.length && keep[r] === true
+      ? keep.slice(0, r).filter(Boolean).length : null;
+    const detailItems = [shownPrompt(gate.prompt)];
+    if (findingIds.length > 0) {
+      detailItems.push(`Unresolved HIGH finding${findingIds.length === 1 ? '' : 's'} without a council YES: ${findingIds.join(', ')}`);
+    }
+    return {
+      reason, question, choices: all.slice(0, 4), overflow: all.slice(4),
+      noteDefault: dispute && raw.includes('request_changes') ? disputeNote(findingIds) : '',
+      recommended: recommended !== null && recommended < all.length ? recommended : null,
+      detailItems,
+    };
   }
 
   // free-text (choices === null): one Send choice that opens the note field
@@ -379,7 +440,7 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
       overflow: [],
       noteDefault: '',
       recommended: null,
-      detailItems: [gate.prompt],
+      detailItems: [shownPrompt(gate.prompt)],
     };
   }
 
@@ -394,7 +455,7 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
       overflow: [],
       noteDefault: '',
       recommended: null,
-      detailItems: [gate.prompt],
+      detailItems: [shownPrompt(gate.prompt)],
     };
   }
 
@@ -426,14 +487,14 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
     if (items.length > 0) noteDefault = findingsNote(items, 'reviewer');
 
     // ⋯ detail: raw prompt, verdict layer line, failing items, reviewer note, floor checks
-    detailItems.push(gate.prompt);
+    detailItems.push(shownPrompt(gate.prompt));
     const layer = verdict !== null ? layerLine(verdict) : null;
     if (layer !== null) detailItems.push(layer);
     detailItems.push(...items);
     if (summary !== null) detailItems.push(`Reviewer note: ${summary}`);
     detailItems.push(...floorDetailLines);
   } else {
-    detailItems.push(gate.prompt);
+    detailItems.push(shownPrompt(gate.prompt));
     detailItems.push(...floorDetailLines);
   }
 
@@ -445,7 +506,10 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
     const scopeTarget = steerScopeTarget(units, gate.ord);
     choices.push({ key: 'approve', label: 'Approve', decision: { approve: true }, needsNote: false, title: 'Continue the run.' });
     choices.push({ key: 'steer', label: 'Approve and steer', decision: scopeTarget !== null ? { approve: true, amendScope: 'creator' } : { approve: true }, needsNote: true, title: 'Approve and add a note to steer the next phase.' });
-    choices.push({ key: 'send-back', label: 'Send back', decision: { approve: false, action: 'request_changes' }, needsNote: true, title: 'Return to the creator with your note.' });
+    // studio#627: Send back only where the engine accepts it — a creator at or before this unit.
+    if (sendBackAccepted(units, gate.ord)) {
+      choices.push({ key: 'send-back', label: 'Send back', decision: { approve: false, action: 'request_changes' }, needsNote: true, title: 'Return to the creator with your note.' });
+    }
     choices.push({ key: 'stop', label: 'Stop', decision: { approve: false }, needsNote: false, title: 'Cancel the run; the work stops here.' });
     return { reason, question, choices, overflow: [], noteDefault, recommended: 0, detailItems };
   }
@@ -467,7 +531,7 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
     const coreWithoutStop: GateRowChoice[] = [];
     if (deniedUnit) {
       coreWithoutStop.push({ key: 'approve', label: 'Approve', decision: { approve: true }, needsNote: false, title: 'Re-run the step from the start under the same policies; the captured output is not accepted.' });
-    } else {
+    } else if (sendBackAccepted(units, gate.ord)) {
       coreWithoutStop.push({ key: 'send-back', label: 'Send back', decision: { approve: false, action: 'request_changes' }, needsNote: true, title: 'Return to the creator with the reviewer\'s failing items.' });
     }
 

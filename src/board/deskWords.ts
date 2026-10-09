@@ -97,7 +97,7 @@ function pausedStepQuestion(p: string, gateKind: string | undefined): string | n
   }
   // Core's output-governance denial ("Governance DENIED unit N (key): …") judges the WORK, not a tool call.
   if (/^\s*Governance DENIED unit\s+\d+/i.test(p)) return 'Governance denied this step — how should it go on?';
-  if (/^\s*Team dispute on unit\s+\d+/i.test(p) || gateKind === 'team_dispute') return 'The team disagreed — approve or reject the work?';
+  if (/^\s*Team dispute on unit\s+\d+/i.test(p) || gateKind === 'team_dispute') return 'The team disagreed — send it back, approve or reject?';
   if (gateKind === 'team_transport') return 'The team lost a seat — approve or reject the work?';
   if (/^\s*Unit\s+\d+\s+failed and triage escalated\b/i.test(p)) return 'The step failed — send it back, reassign or stop?';
   if (/^\s*Unit\s+\d+\s+\([^)]*\)\s+refused its environment\b/i.test(p) || /^\s*Unit\s+\d+\s+failed again on attempt\s+\d+/i.test(p)) {

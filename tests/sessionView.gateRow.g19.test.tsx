@@ -101,7 +101,7 @@ describe('studio#570: session-gate-question reads each gate kind in the row\'s w
     };
     render(<GateRow view={makeView({ id: MOVE_RUN, status: 'awaiting_human' }, MOVE_UNITS)} gate={gate} />);
     expect(screen.getByTestId('session-gate-row').dataset['reason']).toBe('team');
-    expect(screen.getByTestId('session-gate-question').textContent).toBe('The team disagreed — approve or reject the work?');
+    expect(screen.getByTestId('session-gate-question').textContent).toBe('The team disagreed — send it back, approve or reject?');
   });
 
   it('a NOT PASS whose reviewer edited the tree (restored retry) is not called a FAIL; the legacy guard prompt stays neutral', () => {
