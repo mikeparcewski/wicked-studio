@@ -15,6 +15,9 @@ describe('promoteHeadline (R1: every absolute-path shape is redacted)', () => {
     ['quoted', 'open "/srv/data/file"', 'open "<path>"'],
     ['windows backslash', 'see C:\\Users\\alex\\repo now', 'see <path> now'],
     ['windows forward slash', 'see D:/work/repo now', 'see <path> now'],
+    ['bracketed', 'open [/srv/data/file]', 'open [<path>]'],
+    ['after a comma', 'path,/srv/data/file', 'path,<path>'],
+    ['sentence punctuation stays', 'read /var/log/app.log. then /a/b: and C:\\Users\\a\\repo, done', 'read <path>. then <path>: and <path>, done'],
   ])('%s', (_name, input, want) => {
     expect(promoteHeadline(input)).toBe(want);
   });

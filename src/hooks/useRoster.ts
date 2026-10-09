@@ -21,7 +21,9 @@ export function useRoster(): RosterSeat[] | null {
     // the same silent miss as a rejected read — never a thrown effect.
     Promise.resolve()
       .then(() => api.getRoster())
-      .then(({ roster: r }) => { setCachedRoster(r); if (!cancelled) setRoster(r); })
+      // A read that lost the race (unmounted, or a fresher deposit already landed) deposits nothing:
+      // it would overwrite the newer roster for every subscriber.
+      .then(({ roster: r }) => { if (cancelled) return; setCachedRoster(r); setRoster(r); })
       .catch(() => { /* no roster, no chore and no refusal — never a guessed one */ });
     return () => { cancelled = true; };
   }, [roster]);

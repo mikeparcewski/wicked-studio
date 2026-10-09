@@ -1,15 +1,24 @@
 import type { RetryPrefill } from '../store/retryPrefill.js';
 
 /** Any POSIX absolute path of two or more segments (`/var/folders/x`, `/opt/app/bin`), or a Windows
- *  drive path (`C:\\Users\\x`, `D:/repo`) — the shapes a PR title must never carry (studio#311 R1). */
-const ABS_PATH = /(?:^|(?<=[\s'"`(=:]))(?:\/[^\s/'"`)]+){2,}\/?|\b[A-Za-z]:[\\/][^\s'"`)]*/g;
+ *  drive path (`C:\\Users\\x`, `D:/repo`) — the shapes a PR title must never carry (studio#311 R1).
+ *  A path starts after anything but a word/path character (so `[/srv/x]` and `a,/srv/x` match, while
+ *  `src/a/b` and a URL's `//host/x` do not) and stops at whitespace, quotes and brackets. */
+const ABS_PATH = /(?<![\w.~/\\-])(?:\/[^\s/'"`()[\]{}<>,;]+){2,}\/?|(?<!\w)[A-Za-z]:[\\/][^\s'"`()[\]{}<>,;]*/g;
+/** Sentence punctuation a path match swallowed — it belongs to the sentence, not the path. */
+const TRAILING_PUNCT = /[.:?!]+$/;
 
 /**
  * The PR-safe headline: the first question with whitespace collapsed (a multi-line ask reads as one
  * line, studio#311 R2), absolute paths redacted to `<path>` (R1), at most 72 chars.
  */
 export function promoteHeadline(firstAsk: string): string {
-  return firstAsk.replace(/\s+/g, ' ').trim().replace(ABS_PATH, '<path>').slice(0, 72).trimEnd();
+  return firstAsk
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(ABS_PATH, (m) => `<path>${TRAILING_PUNCT.exec(m)?.[0] ?? ''}`)
+    .slice(0, 72)
+    .trimEnd();
 }
 
 /**
