@@ -142,6 +142,7 @@ export function Composer({
   const wfChip = (chips.find((c) => c.kind === 'workflow') as Extract<AboutChip, { kind: 'workflow' }> | undefined) ?? null;
   const chatIdOnLaunch = useCapabilities((s) => s.chatIdOnLaunch);
   const deliverGate = useCapabilities((s) => s.deliverGate);
+  const askPathOn = useCapabilities((s) => s.askPath);
   const own = useRef<HTMLTextAreaElement | null>(null);
   const box = inputRef ?? own;
   const [caret, setCaret] = useState(0);
@@ -210,11 +211,23 @@ export function Composer({
   const toggleSeat = useComposerSeats((s) => s.toggle);
   const eligibleSeats = useMemo(() => {
     if (roster === null) return [];
-    return wfChip !== null ? roster.filter((s) => s.enabled_for_council).map((s) => s.key) : defaultSelection(roster, project !== null);
-  }, [roster, wfChip, project]);
+    // A handed-over Ask always opens SCOPED (the dock remounts per handoff, and its default scope is
+    // the route's project or everything — only a manual `system` pick is unscoped), so the row reads
+    // the scoped admission AskDock sends with (codex r1 on #631).
+    return wfChip !== null ? roster.filter((s) => s.enabled_for_council).map((s) => s.key) : defaultSelection(roster, true);
+  }, [roster, wfChip]);
   const showSeats = eligibleSeats.length > 0 && (wfChip !== null || !started);
   const sendSeats = chosenSeats(eligibleSeats, dropped);
-  const seatRefusal = showSeats && sendSeats.length === 0 ? NO_SEAT_PICKED : null;
+  // An `@helper` named to answer (ASK-S1) but turned off in the row would be silently dropped as the
+  // chat's primary — refused instead, by name (codex r1 on #631).
+  const namedHelper = wfChip === null && !started && askPathOn
+    ? chips.find((c) => c.kind === 'about' && c.key.startsWith('h:'))
+    : undefined;
+  const namedDropped = namedHelper !== undefined && dropped.includes(namedHelper.key.slice(2));
+  const seatRefusal = !showSeats ? null
+    : sendSeats.length === 0 ? NO_SEAT_PICKED
+      : namedDropped ? `${namedHelper?.label ?? 'The helper you named'} is named to answer but is left out of the helpers row — turn it on, or remove the chip.`
+        : null;
   const launchState = wfChip !== null ? workflowLaunchState(repoRef, roster) : null;
   const wfDef = wfChip !== null ? (defs ?? []).find((d) => d.id === wfChip.workflowId) ?? null : null;
   // A named def that runs no code is not a delivering launch; an unknown name (a preset) may deliver.

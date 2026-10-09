@@ -7,7 +7,8 @@ import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { RepoEntry, RosterSeat, WorkflowDef } from '../src/api/types.js';
 import { Composer, type ComposerSend } from '../src/components/session/Composer.js';
-import { useComposerChips } from '../src/store/composerChips.js';
+import { addAboutChip, useComposerChips } from '../src/store/composerChips.js';
+import { useCapabilities } from '../src/store/capabilities.js';
 import { chosenSeats, resetComposerSeats, useComposerSeats } from '../src/store/composerSeats.js';
 import { resetPlanCatalog } from '../src/store/planCatalog.js';
 import { clearRepoCache } from '../src/store/repoCache.js';
@@ -100,6 +101,22 @@ describe('studio#631: the composer helpers row', () => {
     fireEvent.click(seatButton('copilot'));
     expect(JSON.parse(localStorage.getItem('wicked_composer_dropped_seats') ?? '[]')).toEqual(['copilot']);
     expect(chosenSeats(['claude', 'codex', 'copilot'], useComposerSeats.getState().dropped)).toEqual(['claude', 'codex']);
+  });
+
+  it('a helper named to answer but turned off is refused by name, not silently dropped as primary', () => {
+    useCapabilities.setState({ askPath: true });
+    try {
+      const onSend = vi.fn();
+      addAboutChip('desk', { kind: 'about', key: 'h:codex', label: 'Codex' });
+      render(<Harness onSend={onSend} />);
+      fireEvent.click(seatButton('codex'));
+      expect(screen.getByTestId('composer-seats-refused').textContent).toMatch(/Codex is named to answer but is left out/);
+      type('what changed?');
+      key('Enter');
+      expect(onSend).not.toHaveBeenCalled();
+    } finally {
+      useCapabilities.setState({ askPath: false });
+    }
   });
 
   it('a reply into a started chat keeps that chat\'s seats — no row', () => {
