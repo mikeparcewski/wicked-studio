@@ -61,6 +61,14 @@ export function classifyRowGate(input: {
   const kind = gate.gateKind ?? (events === null ? undefined : gateFrameFor(events, gate.ord)?.gateKind ?? undefined);
   if (kind === 'deliver' || isDeliverGate(runId, units, gate.ord)) return { kind: 'card', reason: 'deliver' };
   if (kind !== undefined && TEAM_PAUSES.has(kind)) return { kind: 'card', reason: 'team' };
+  // studio#600: the engine's restored-tree gate (the evaluator edited the tree under review; its
+  // edit was discarded and the creator's tree restored) leads with the NOT PASS spelling and may
+  // carry `gateKind: 'escalation'`, but its arms are a RETRY ("Approve to retry the phase against
+  // the restored tree, or reject"): nothing for a creator to fix, so it is read first, off the
+  // evidence frames (`isRestoredRetry`), whenever the log is read.
+  if (events !== null && isRestoredRetry(gateVerdictFor(events, gate.ord, gate.prompt), gate.ord)) {
+    return { kind: 'card', reason: 'retry' };
+  }
   // The engine's own word (`awaitingHuman.gateKind: 'escalation'`, wicked-core#464), or the
   // escalation spellings, are enough on their own; the rest needs the event log.
   if (kind === 'escalation' || /^\s*Unit\s+\d+\s+(?:failed and triage escalated|verdict is NOT PASS)/i.test(gate.prompt)) {
@@ -76,7 +84,6 @@ export function classifyRowGate(input: {
   if (kind !== undefined && !ROW_KINDS.has(kind)) return { kind: 'card', reason: 'unknown' };
   if (events === null) return { kind: 'checking' };
   const verdict = gateVerdictFor(events, gate.ord, gate.prompt);
-  if (isRestoredRetry(verdict, gate.ord)) return { kind: 'card', reason: 'retry' };
   if (isEscalationGate(gate.prompt, verdict)) return { kind: 'card', reason: 'escalation' };
 
   const plan = kind === 'plan_approval';

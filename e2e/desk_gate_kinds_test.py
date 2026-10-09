@@ -33,6 +33,9 @@ on the Desk at 1440x700 against the in-process fixture:
      Stop and no Send back; Approve → {approve:true} with no action.
  15. RETRY KIND (r-retry, retry_gate=True; studio#557): the engine restored the creator's tree —
      the row is Retry · Reassign to Claude · Stop, each driven to its POST.
+ 16. RESTORED-TREE GATE ON THE ENGINE'S OWN WIRE (r-api, wire433=True; studio#600): the gate's prompt
+     leads "Unit 4 verdict is NOT PASS — the evaluator changed the tree under review …" — the row is
+     still the RETRY kind (Retry first, no Send back), and Retry → {approve:true, ord}, no action.
 
 Captures: e2e/shots/desk-gate-kinds-*.png. Env: FEEDBACK_PORT (default 4358).
 """
@@ -555,11 +558,13 @@ with sync_playwright() as p:
     page.screenshot(path=str(SHOTS / "desk-gate-kinds-timeout-done.png"))
 
     # ── 13. ESCALATION ARMS — r-suggest (accept_suggestion: adopt evaluator's edit) ──────────────
+    # studio#600: the restored-tree gate is the RETRY kind (Retry first, no Send back); the pinned
+    # edit's adopt arm rides it.
     set_fixture(origin, escalation_arms=True, reset_gate_posts=True)
     page.goto(f"{origin}/s/run%3Ar-suggest#gate", wait_until="networkidle")
     try:
         page.wait_for_selector(
-            '[data-testid="session-gate-row"][data-reason="escalation"]',
+            '[data-testid="session-gate-row"][data-reason="retry"]',
             timeout=15_000,
         )
     except Exception:
@@ -568,7 +573,7 @@ with sync_playwright() as p:
             "() => document.querySelector('[data-testid=\"session-gate-row\"]')?.getAttribute('data-reason') ?? 'not-found'"
         )
         fail("suggest-gate-row", {
-            "why": "session-gate-row[data-reason=escalation] did not appear for r-suggest",
+            "why": "session-gate-row[data-reason=retry] did not appear for r-suggest",
             "found_reason": found_reason,
         })
 
@@ -581,7 +586,10 @@ with sync_playwright() as p:
         suggest_btn = page.locator('[data-choice-key="offer:accept_suggestion"]').first
     all_suggest_keys = [el.get_attribute("data-choice-key") for el in page.query_selector_all("[data-testid='session-gate-choice']")]
     check("suggest-has-accept-offer", suggest_btn.count() > 0,
-          why="r-suggest escalation must show accept_suggestion offer (evaluator's edit pinned)",
+          why="r-suggest restored-tree gate must show accept_suggestion offer (evaluator's edit pinned)",
+          found_keys=all_suggest_keys)
+    check("suggest-retry-first-no-send-back",
+          len(all_suggest_keys) > 0 and all_suggest_keys[0] == "retry" and "send-back" not in all_suggest_keys,
           found_keys=all_suggest_keys)
 
     if suggest_btn.count() > 0:
@@ -700,6 +708,36 @@ with sync_playwright() as p:
           len(stop_posts) == 1 and stop_body.get("approve") is False and "ord" in stop_body,
           posts=stop_posts)
     page.screenshot(path=str(SHOTS / "desk-gate-kinds-retry-done.png"))
+
+    # ── 16. RESTORED-TREE GATE ON THE ENGINE'S WIRE (r-api, wire433=True; studio#600) ──
+    # The engine's own restored-tree prompt starts with the NOT PASS spelling; the row must still
+    # be the retry kind — not an escalation with Send back first.
+    set_fixture(origin, retry_gate=False, wire433=True, reset_gate_posts=True)
+    page.goto(f"{origin}/s/run%3Ar-api#gate", wait_until="networkidle")
+    page.reload(wait_until="networkidle")
+    try:
+        page.get_by_test_id("session-gate-row").wait_for(state="visible", timeout=15_000)
+    except Exception:
+        page.screenshot(path=str(SHOTS / "desk-gate-kinds-no-wire433.png"))
+        fail("wire433-gate-row", {
+            "why": "session-gate-row did not appear for r-api (wire433)",
+            "text": page.evaluate("() => document.body.innerText.slice(0, 600)"),
+        })
+    w433_row = page.get_by_test_id("session-gate-row")
+    check("wire433-reason", w433_row.get_attribute("data-reason") == "retry",
+          got=w433_row.get_attribute("data-reason"))
+    w433_keys = [el.get_attribute("data-choice-key") for el in page.query_selector_all("[data-testid='session-gate-choice']")]
+    check("wire433-choices", len(w433_keys) > 0 and w433_keys[0] == "retry" and w433_keys[-1] == "stop"
+          and "send-back" not in w433_keys, got=w433_keys)
+    page.screenshot(path=str(SHOTS / "desk-gate-kinds-wire433.png"))
+    page.locator("[data-testid='session-gate-choice'][data-choice-key='retry']").click()
+    chosen_then_wait("wire433-retry-chosen")
+    w433_posts = gate_posts("r-api")
+    w433_body = w433_posts[-1].get("body", {}) if w433_posts else {}
+    check("wire433-retry-post",
+          len(w433_posts) == 1 and w433_body.get("approve") is True and "action" not in w433_body and w433_body.get("ord") == 4,
+          posts=w433_posts)
+    set_fixture(origin, wire433=False, reset_gate_posts=True)
 
     browser.close()
 

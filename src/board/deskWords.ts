@@ -55,7 +55,9 @@ export function plainGateQuestion(prompt: string | undefined, gateKind: string |
     const head = /^([A-Za-z0-9_-]+)\s+—\s/.exec(before)?.[1] ?? before;
     if (/^[A-Za-z0-9_-]+$/.test(head)) {
       const noun = STEP_NOUN[head.toLowerCase()];
-      return noun !== undefined ? `Approve the ${noun}` : `Approve the ${head.replace(/[_-]+/g, ' ')} step`;
+      // studio#606 (6): a gate BEFORE a step runs asks to start it — "Approve the scope" is the
+      // question about the step's OUTPUT, and the two gates of one step must not read the same.
+      return noun !== undefined ? `Start the ${noun}?` : `Start the ${head.replace(/[_-]+/g, ' ')} step?`;
     }
     if (!ENGINE_TEXT.test(before)) return `Approve the next step: ${before}`;
   }

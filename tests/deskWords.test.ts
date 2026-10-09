@@ -53,16 +53,16 @@ describe('#422 a gate says its question in plain words', () => {
     expect(plainGateQuestion('Approve the output of unit 3 (build — Add a code)', 'def')).toBe('Approve the build');
     expect(plainGateQuestion('Approve the output of unit 3 (design)', 'def')).toBe('Approve the design');
     // The pre-execution form names the phase after the colon (Copilot r3).
-    expect(plainGateQuestion('Approve unit 2 before it runs: review', 'def')).toBe('Approve the review');
-    expect(plainGateQuestion('Approve unit 4 before it runs: deliver', undefined)).toBe('Approve the delivery');
+    expect(plainGateQuestion('Approve unit 2 before it runs: review', 'def')).toBe('Start the review?');
+    expect(plainGateQuestion('Approve unit 4 before it runs: deliver', undefined)).toBe('Start the delivery?');
     expect(plainGateQuestion('Approve unit 3 before it runs: apply the review fixes to the middleware chain', 'def')).toBe('Approve the next step: apply the review fixes to the middleware chain');
     expect(plainGateQuestion('Approve the output of unit 3 (some_new-phase — x)', 'def')).toBe('Approve the some new phase step');
   });
 
   it('studio#464: the pre-execution form with the goal and the engine\'s phase scope reads as the step', () => {
     const prompt = 'Approve unit 1 before it runs: triage — SAVE20 should give twenty percent off, not twenty pounds off ||| PHASE SCOPE: this is the triage phase; read the code';
-    expect(plainGateQuestion(prompt, 'def')).toBe('Approve the triage step');
-    expect(plainGateQuestion('Approve unit 2 before it runs: fix — Fix issue #12 ||| PHASE SCOPE: fix only', undefined)).toBe('Approve the fix');
+    expect(plainGateQuestion(prompt, 'def')).toBe('Start the triage step?');
+    expect(plainGateQuestion('Approve unit 2 before it runs: fix — Fix issue #12 ||| PHASE SCOPE: fix only', undefined)).toBe('Start the fix?');
     // Words with no phase id: the engine's scaffold is cut, the words are kept.
     expect(plainGateQuestion('Approve unit 3 before it runs: apply the review fixes ||| PHASE SCOPE: x', 'def')).toBe('Approve the next step: apply the review fixes');
     // Never the scaffold, whatever the form.

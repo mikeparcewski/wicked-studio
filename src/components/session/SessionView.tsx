@@ -720,6 +720,7 @@ export function RunBlock({ view, badge, sessionId, navigate }: {
       {/* S16a-1d: the run's technical handles, when Settings › Show technical details is on. */}
       <Tech data-testid="tech-session-run" parts={runTechParts({ id, base_commit: view.session.base_commit, clis: view.session.clis })} block />
       <OrphanedRow view={view} />
+      <FailedResumeRow view={view} />
       {/* S16a-1c: the run's record lines — why it stopped, the amended acceptance list, a short
           council, the Watchtower's lines (and "You jumped in" when the address carries ?jump=). */}
       <RunRecordLines view={view} jumped={jump !== null} {...(navigate === undefined ? {} : { navigate })} />
@@ -772,6 +773,46 @@ function OrphanedRow({ view }: { view: RunView }): React.ReactElement | null {
         ? <span data-testid="session-orphaned-asked">Resume asked — waiting for the step to start again.</span>
         : <button type="button" data-testid="session-orphaned-resume" disabled={sent === 'sending'} onClick={resume} className="wk-since-toggle">{sent === 'sending' ? 'Resuming…' : 'Resume'}</button>}
       {sent === 'failed' && <span data-testid="session-orphaned-error"> Resume failed: {error}</span>}
+    </p>
+  );
+}
+
+/**
+ * studio#615: a FAILED run counts as needing you (the Desk's failed-run row), so its block says what
+ * to do — "It stopped: Resume or start over" — and offers the in-place recovery the engine has:
+ * Resume (`POST /runs/:id/resume`) continues THIS run from its cursor (the same worktree, the same
+ * finished steps; a re-opened gate comes back to the thread). Retry stays the separate start-over
+ * (a new launch). A refusal (crew's 409) is said in its own words, beside the arm.
+ */
+function FailedResumeRow({ view }: { view: RunView }): React.ReactElement | null {
+  const id = view.session.id;
+  const status = view.session.status;
+  const [sent, setSent] = useState<'idle' | 'sending' | 'asked' | 'failed'>('idle');
+  const [error, setError] = useState<string | null>(null);
+  // A receipt is for ONE failure: leaving the failed state (the resume took) clears it, so the same
+  // run failing again offers Resume again (codex r1).
+  useEffect(() => { setSent('idle'); setError(null); }, [id, status]);
+  if (status !== 'failed' || view.session.archived_at != null) return null;
+  const resume = (): void => {
+    setSent('sending');
+    setError(null);
+    api.resumeRun(id).then(
+      () => {
+        // The POST took: say so whatever the refresh does — a failed event read never re-offers a
+        // second state-changing POST (codex r1). The run list's poll brings the new state anyway.
+        setSent('asked');
+        api.getRunEvents(id).then(({ events }) => useRunEventStore.getState().hydrate(id, events)).catch(() => {});
+      },
+      (e: unknown) => { setSent('failed'); setError(e instanceof Error ? e.message : String(e)); },
+    );
+  };
+  return (
+    <p data-testid="session-failed-resume" role="status" className="wk-session-grey">
+      It stopped: Resume or start over.{' '}
+      {sent === 'asked'
+        ? <span data-testid="session-failed-resume-asked">Resume asked — the run picks up where it stopped.</span>
+        : <button type="button" data-testid="session-failed-resume-button" disabled={sent === 'sending'} onClick={resume} className="wk-since-toggle" title="Continue this run where it stopped — the same worktree and finished steps; nothing new is launched">{sent === 'sending' ? 'Resuming…' : 'Resume'}</button>}
+      {sent === 'failed' && <span data-testid="session-failed-resume-error"> Resume refused: {error}</span>}
     </p>
   );
 }
