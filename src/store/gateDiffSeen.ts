@@ -39,14 +39,20 @@ function fnv(text: string): string {
   return (h >>> 0).toString(16).padStart(8, '0');
 }
 
-/** A unified diff split per file (`diff --git a/<p> b/<p>`), each file's patch hashed. */
+/** The path a `diff --git` header names, for display — spaces and git's quoting included (codex
+ *  r1); the whole header when it does not parse, so no patch is ever dropped from the comparison. */
+function headerPath(header: string): string {
+  const m = /^diff --git (?:"a\/(.+)"|a\/(.+)) (?:"b\/(.+)"|b\/(.+))$/.exec(header);
+  return m === null ? header.replace(/^diff --git /, '') : (m[3] ?? m[4] ?? m[1] ?? m[2])!;
+}
+
+/** A unified diff split per file (each `diff --git` header starts one), each file's patch hashed. */
 export function diffFiles(diff: string): Record<string, string> {
   const out: Record<string, string> = {};
-  const parts = diff.split(/^(?=diff --git )/m);
-  for (const part of parts) {
-    const head = /^diff --git a\/(\S+) b\/(\S+)/.exec(part);
-    if (head === null) continue;
-    out[head[2]!] = fnv(part);
+  for (const part of diff.split(/^(?=diff --git )/m)) {
+    if (!part.startsWith('diff --git ')) continue;
+    const header = part.slice(0, part.indexOf('\n') === -1 ? part.length : part.indexOf('\n'));
+    out[headerPath(header)] = fnv(part);
   }
   return out;
 }
@@ -103,11 +109,16 @@ export function recordSeen(runId: string, seen: DiffSeen): void {
 /** Read the diff the operator is deciding on — issued BEFORE the decision is posted, so it is the
  *  tree the gate showed, not one the resumed run went on to change. Best-effort: a failed read is
  *  `null`, and nothing is recorded (the next gate then says nothing rather than something wrong). */
-export function readDecisionDiff(runId: string): Promise<Record<string, string> | null> {
-  return api.getRunDiff(runId, undefined, 'merge-base')
+export function readDecisionDiff(runId: string, capMs = DECISION_DIFF_CAP_MS): Promise<Record<string, string> | null> {
+  const read = api.getRunDiff(runId, undefined, 'merge-base')
     .then((d) => (typeof d.diff === 'string' ? diffFiles(d.diff) : null))
     .catch(() => null);
+  // The decision waits on this read (codex r1: a read racing the resumed run could record changes the
+  // operator never saw), but never long: past the cap nothing is recorded and the decision goes.
+  return Promise.race([read, new Promise<null>((r) => { setTimeout(() => r(null), capMs); })]);
 }
+/** How long a decision waits for its diff read. */
+export const DECISION_DIFF_CAP_MS = 3000;
 
 /**
  * The drift line for an open gate, or null: the record the operator's LAST decision on this run left

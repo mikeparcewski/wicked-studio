@@ -94,3 +94,13 @@ describe('studio#244 — recorded on the one decision path, shown on the next ga
     expect(screen.queryByTestId('gate-diff-drift')).toBeNull();
   });
 });
+
+describe('studio#244 (codex r1) — paths with spaces and git quoting are compared too', () => {
+  it('a quoted header and a spaced path each count as a file', () => {
+    const spaced = 'diff --git a/docs/User Guide.md b/docs/User Guide.md\n+x\n';
+    const quoted = 'diff --git "a/caf\\303\\251.md" "b/caf\\303\\251.md"\n+y\n';
+    expect(Object.keys(diffFiles(spaced + quoted)).sort()).toEqual(['caf\\303\\251.md', 'docs/User Guide.md']);
+    const seen = { ord: 1, at: 1, files: diffFiles(spaced) };
+    expect(diffDrift(seen, spaced.replace('+x', '+z'))).toMatchObject({ kind: 'changed', paths: ['docs/User Guide.md'] });
+  });
+});
