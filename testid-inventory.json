@@ -12,8 +12,8 @@
   "studioVersion": "0.6.8",
   "counts": {
     "files": 173,
-    "occurrences": 1935,
-    "static": 1721,
+    "occurrences": 1937,
+    "static": 1723,
     "dynamic": 37,
     "computed": 6
   },
@@ -165,6 +165,12 @@
       ]
     },
     {
+      "testId": "artifact-export-file",
+      "files": [
+        "src/components/session/ArtifactMorph.tsx"
+      ]
+    },
+    {
       "testId": "artifact-export-format",
       "files": [
         "src/components/session/ArtifactMorph.tsx"
@@ -178,6 +184,12 @@
     },
     {
       "testId": "artifact-export-menu",
+      "files": [
+        "src/components/session/ArtifactMorph.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-exports",
       "files": [
         "src/components/session/ArtifactMorph.tsx"
       ]
