@@ -21,5 +21,10 @@ export default defineConfig({
     url: `http://127.0.0.1:${PORT}`,
     reuseExistingServer: !process.env.CI,
     timeout: 60_000,
+    // Astro 7 daemonizes `astro preview` when it detects an agentic environment, so the parent
+    // exits and Playwright reports "Process from config.webServer exited early".
+    // ASTRO_PREVIEW_BACKGROUND (the marker its own daemon child uses) keeps it in the foreground.
+    // No-op in normal CI.
+    env: { ASTRO_PREVIEW_BACKGROUND: '1' },
   },
 });

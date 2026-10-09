@@ -55,6 +55,13 @@ html { scroll-snap-type: y proximity; scroll-padding-top: var(--topbar-h); }
 /* Alternating section bands — translucent darkening so the background art
    shows THROUGH instead of being painted over. */
 .board, .steer, .pair { background: color-mix(in oklab, #000 7%, transparent); }
+/* Reduced motion: snapping moves the viewport for you — the motion the preference asks us to
+   suppress. The chrome (wicked-web tokens.css) carries the same rule, but this file re-declares
+   `scroll-snap-type` on html at equal specificity later in the cascade, so the guard must live
+   here too, beside the phone off-switch (wicked-web#31). */
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-snap-type: none; }
+}
 @media (max-width: 768px) {
   html { scroll-snap-type: none; }
   .hero, .board, .steer, .proj, .work, .ctx, .reqs, .pair, .get { min-height: 0; }
