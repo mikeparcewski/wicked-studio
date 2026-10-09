@@ -12,8 +12,8 @@
   "studioVersion": "0.6.8",
   "counts": {
     "files": 173,
-    "occurrences": 1930,
-    "static": 1717,
+    "occurrences": 1931,
+    "static": 1718,
     "dynamic": 37,
     "computed": 6
   },
@@ -6636,6 +6636,12 @@
     },
     {
       "testId": "session-proposal-confirm-yes",
+      "files": [
+        "src/components/session/ProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "session-proposal-deliver-amendment",
       "files": [
         "src/components/session/ProposalCard.tsx"
       ]

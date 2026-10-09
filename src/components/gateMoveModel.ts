@@ -661,18 +661,38 @@ const INTENT_AMENDMENT_HEAD = 'APPROVED INTENT AMENDMENT';
  */
 export function deliverTargetOf(units: readonly WorkUnit[], ord: number | null | undefined): string | null {
   if (typeof ord !== 'number') return null;
-  const desc = units.find((u) => u.ord === ord)?.description ?? '';
-  // Segment 0 is `deliver — <intent>`; an approved intent amendment adds its own
-  // `APPROVED INTENT AMENDMENT …` segment, which is never the card (Copilot on core#684).
-  const card = desc
-    .split(INSTRUCTION_SEP)
-    .slice(1)
-    .map((s) => s.trim())
-    .find((s) => s !== '' && !s.startsWith(INTENT_AMENDMENT_HEAD));
+  const unit = units.find((u) => u.ord === ord);
+  // core#686: a unit planned with its fields carries the card as `instructions` — read there, never
+  // split out of the description (an intent quoting ` ||| ` or the amendment sentence mis-parsed).
+  const card = unit?.structured_description === true
+    ? (unit.instructions?.trim() || undefined)
+    : legacyDeliverCard(unit?.description ?? '');
   if (card === undefined) return null;
   const identity = card.indexOf(' Push identity:');
   const target = (identity === -1 ? card : card.slice(0, identity)).trim();
   return target === '' ? null : target;
+}
+
+/**
+ * LEGACY (core#686): a record that predates `WorkUnit.instructions` — the card re-found in the flat
+ * description. Segment 0 is `deliver — <intent>`; an approved intent amendment adds its own
+ * `APPROVED INTENT AMENDMENT …` segment, which is never the card (Copilot on core#684).
+ */
+function legacyDeliverCard(desc: string): string | undefined {
+  return desc
+    .split(INSTRUCTION_SEP)
+    .slice(1)
+    .map((s) => s.trim())
+    .find((s) => s !== '' && !s.startsWith(INTENT_AMENDMENT_HEAD));
+}
+
+/** core#686: the approved intent amendments folded onto the unit at `ord`, oldest first — read off
+ *  `WorkUnit.amendments` (a legacy record names none here; its card line already excludes them). */
+export function unitAmendmentsOf(units: readonly WorkUnit[], ord: number | null | undefined): string[] {
+  if (typeof ord !== 'number') return [];
+  const unit = units.find((u) => u.ord === ord);
+  if (unit?.structured_description !== true) return [];
+  return (unit.amendments ?? []).map((a) => a.trim()).filter((a) => a !== '');
 }
 
 /** A note's longest verdict body. The engine keeps only the TAIL of a long note (~4 KB), so a

@@ -18,7 +18,7 @@ import { planStepWords } from '../../board/planOrder.js';
 import { usePlanGate } from '../../store/planGates.js';
 import { dropGateDraft, gateDraftFor, gateDraftPlan, usePlanDrafts } from '../../store/planDrafts.js';
 import { gateVerdictFor, checkOutcome } from '../gateVerdictModel.js';
-import { diffstatOf } from '../gateMoveModel.js';
+import { diffstatOf, unitAmendmentsOf } from '../gateMoveModel.js';
 import { PlanGateSummary } from '../PlanGateSummary.js';
 import { useSeatTrust } from './GateDepth.js';
 
@@ -241,6 +241,10 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
                     ))}
                   </div>
                 )}
+                {/* core#686: the approved intent amendments the hand-over carries, off the unit's own field. */}
+                {unitAmendmentsOf(view.units, gate?.ord).map((a, i) => (
+                  <p key={`amend-${i}`} data-testid="session-proposal-deliver-amendment">Approved amendment: {showText(a)}</p>
+                ))}
                 <Tech data-testid="tech-proposal-deliver-card" parts={[deliverCardOf(view, gate)]} block />
               </details>
             );
