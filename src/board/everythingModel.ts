@@ -270,6 +270,8 @@ export interface EverythingQuery {
   view: EverythingView;
   /** S16a-4c: on the Made tab, a document no run is bound to, opened at full size (`?open=<doc>`). */
   open?: string | null;
+  /** S16a-4d: on the Made tab, the "New document" door open (`?new=document`); other values drop. */
+  new?: 'document' | null;
 }
 
 /** `?tab=` · `?filter=` · `?project=` · `?kind=` off a `location.search`; anything unknown takes the default. */
@@ -287,6 +289,7 @@ export function readEverythingQuery(search: string): EverythingQuery {
     kind: isMadeKind(kind) ? kind : 'all',
     view: isEverythingView(view) ? view : 'grouped',
     open: q.get('open') !== null && q.get('open') !== '' ? q.get('open') : null,
+    new: q.get('new') === 'document' ? 'document' : null,
   };
 }
 
@@ -303,6 +306,7 @@ export function everythingPath(q: Partial<EverythingQuery> = {}): string {
   if (q.kind !== undefined && q.kind !== 'all') p.set('kind', q.kind);
   if (q.view !== undefined && q.view !== 'grouped') p.set('view', q.view);
   if (q.open !== undefined && q.open !== null && q.open !== '') p.set('open', q.open);
+  if (q.new === 'document') p.set('new', 'document');
   const s = p.toString();
   return s === '' ? '/everything' : `/everything?${s}`;
 }

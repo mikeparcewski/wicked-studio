@@ -34,6 +34,8 @@ import { projectRows } from '../../board/projectsModel.js';
 import { GroundingChip } from '../GroundingChip.js';
 import { madeOpenAddress } from '../../board/madeMoves.js';
 import { MadeOpen } from './MadeOpen.js';
+import { NewDocument } from './NewDocument.js';
+import { DocDeleteConfirm } from '../DocDelete.js';
 
 /**
  * "SEE EVERYTHING" (`/everything`, DES-STUDIO-REBUILD-001 §5.4, slice S15c/S17a) — one page, five tabs,
@@ -693,6 +695,11 @@ function MadeTab({ runs, q, navigate, go }: { runs: SessionView[]; q: Everything
     if (r.runId !== undefined) return madeOpenAddress('video', r.projectId ?? 'default', r.runId, runs, runChatId);
     return madeOpenAddress('document', r.projectId ?? 'default', r.doc!.name, runs, runChatId);
   };
+  // S16a-4d: the Made list's two doors — "New document" (the bar; `?new=document` opens it) and a
+  // "Delete…" on each document row (DocDeleteConfirm, its one "Are you sure?").
+  const [deleting, setDeleting] = useState<{ projectId: string; name: string } | null>(null);
+  const doorOpen = q.new === 'document';
+  const withDoor = (open: boolean): string => everythingPath({ tab: 'made', kind: q.kind, project: q.project, ...(open ? { new: 'document' as const } : {}) });
   const opened = q.open !== null && q.open !== undefined ? rows.find((r) => r.doc !== undefined && r.doc.name === q.open && (q.project === null || r.projectId === q.project)) ?? null : null;
   const askable = projects.filter((p) => p.id !== 'default').map((p) => p.id);
   const loadAll = (): void => { void useDocsCache.getState().loadAll(askable); };
@@ -715,6 +722,9 @@ function MadeTab({ runs, q, navigate, go }: { runs: SessionView[]; q: Everything
             <button key={k.id} type="button" aria-pressed={q.kind === k.id} data-testid="everything-kind" data-kind={k.id} onClick={() => navigate(lens(k.id), { replace: true })} className="wk-chip">{k.label}</button>
           ))}
         </div>
+        {!doorOpen && (
+          <button type="button" data-testid="made-new-document" onClick={() => navigate(withDoor(true), { replace: true })} className="wk-prop-btn wk-prop-btn--ghost">New document</button>
+        )}
         {scopeName !== null && (
           <p data-testid="everything-scope" data-project-id={q.project ?? ''} className="wk-everything-scope">
             In <b>{scopeName}</b>
@@ -723,6 +733,18 @@ function MadeTab({ runs, q, navigate, go }: { runs: SessionView[]; q: Everything
           </p>
         )}
       </div>
+      {doorOpen && (
+        <NewDocument
+          projects={projects}
+          initialProject={q.project}
+          onClose={() => navigate(withDoor(false), { replace: true })}
+          onCreated={(pid, name) => navigate(everythingPath({ tab: 'made', kind: 'documents', project: pid, open: name }), { replace: true })}
+          onOpen={(pid, name) => navigate(everythingPath({ tab: 'made', kind: 'documents', project: pid, open: name }))}
+        />
+      )}
+      {deleting !== null && (
+        <DocDeleteConfirm projectId={deleting.projectId} docId={deleting.name} subject="document" onClose={() => setDeleting(null)} onDeleted={() => setDeleting(null)} />
+      )}
       <p data-testid="everything-made-census" className="wk-session-grey">
         {censusLine}
         {offerLoad && <> <button type="button" data-testid="everything-made-load" onClick={loadAll} className="wk-since-toggle" title="One list per project, in turn — a project's bridge may take a minute to start">Ask every project</button></>}
@@ -742,7 +764,7 @@ function MadeTab({ runs, q, navigate, go }: { runs: SessionView[]; q: Everything
       {rows.length > 0 && (
         <ul className="wk-everything-list">
           {rows.map((r) => (
-            <li key={r.key}>
+            <li key={r.key} className="wk-made-li">
               <a href={hrefOf(r)} onClick={go(hrefOf(r))} data-testid="everything-made-row" data-kind={r.kind} data-project-id={r.projectId ?? ''} {...(r.runId !== undefined ? { 'data-run-id': r.runId, 'data-status': r.runStatus ?? '' } : { 'data-name': r.doc!.name })} className="wk-desk-session wk-everything-row">
                 <span className="wk-desk-need-body">
                   <span className="wk-desk-session-title">{showText(r.title)}</span>
@@ -752,6 +774,9 @@ function MadeTab({ runs, q, navigate, go }: { runs: SessionView[]; q: Everything
                   {r.doc?.grounding !== undefined && <span className="wk-desk-need-line"><GroundingChip grounding={r.doc.grounding} /></span>}
                 </span>
               </a>
+              {r.doc !== undefined && (
+                <button type="button" data-testid="made-row-delete" data-name={r.doc.name} aria-label={`Delete ${r.title}`} onClick={() => setDeleting({ projectId: r.projectId ?? 'default', name: r.doc!.name })} className="wk-since-toggle wk-made-delete">Delete…</button>
+              )}
             </li>
           ))}
         </ul>

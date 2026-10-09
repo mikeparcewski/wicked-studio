@@ -5,6 +5,7 @@ import { api } from '../api/client.js';
 import { getCachedRoster, setCachedRoster, subscribeRoster } from '../store/rosterCache.js';
 import { createDoc, docBinding, getVersions, injectDocMessage, interactiveUrl, postEvent, postFork } from '../api/interactive.js';
 import { parseCreateAsk } from '../interactive/createAsk.js';
+import { docNameFromBrief } from '../board/newDocument.js';
 import { docSlug } from '../interactive/docSlug.js';
 import { useRunEventStore } from '../store/events.js';
 import { useDisplayText } from '../hooks/useHomePath.js';
@@ -1435,8 +1436,8 @@ const EMPTY: DocMsg[] = [];
 /** Stable identity for "nothing pending" — same rule as EMPTY. */
 const EMPTY_IDS: string[] = [];
 
-/** The doc's name is DERIVED from the ask (§4.1) — the bridge slugifies what it gets. */
+/** The doc's name is DERIVED from the ask (§4.1) — one spelling with the Made list's door (S16a-4d). */
 function docName(brief: string): string {
-  return brief.split(/\s+/).slice(0, 6).join(' ').slice(0, 60);
+  return docNameFromBrief(brief);
 }
 

@@ -25,6 +25,7 @@ import { humanTitle, INTENT_MAX, runTitle, runWhenWord, WHEN_TITLE } from './run
 import { Terminal } from './Terminal.js';
 import { useSessionDrafts } from '../store/sessionDrafts.js';
 import { addAboutChip } from '../store/composerChips.js';
+import { everythingPath } from '../board/everythingModel.js';
 
 /**
  * The universal command palette (DES-FEEDBACK-002 §1, slice G): Cmd+K / Ctrl+K /
@@ -549,13 +550,12 @@ export function CommandPalette({
       // the verb lands directly in the mode; outside, a doc cannot be Unfiled,
       // so the same project-picker mechanism as the Make ＋ runs first.
       {
+        // S16a-4d: the Made list with its "New document" door open, the ambient project preselected
+        // (the door picks the project itself — no picker modal first).
         name: 'New Document',
         action: () => {
-          if (projectId !== null) navigate(modePath(projectId, 'document'));
-          else {
-            if (projects.length === 0) void useProjectsStore.getState().load();
-            setPickProjectFor('document');
-          }
+          onClose();
+          navigate(everythingPath({ tab: 'made', kind: 'documents', ...(projectId !== null && projectId !== 'default' ? { project: projectId } : {}), new: 'document' }));
         },
       },
       {
@@ -649,7 +649,7 @@ export function CommandPalette({
       return [...targeted, ...matched];
     }
     return matched;
-  }, [runs, projects, repos, gates, claims, prompts, projectNameByRun, attachedAtByRun, goTargets, object, scope, needle, runPath, navigate, projectId, selectedRun, onKill, seedDemo]);
+  }, [runs, projects, repos, gates, claims, prompts, projectNameByRun, attachedAtByRun, goTargets, object, scope, needle, runPath, navigate, projectId, selectedRun, onKill, seedDemo, onClose]);
 
   // Clamp the selection whenever the row set changes.
   const selIx = Math.min(sel, Math.max(0, rows.length - 1));

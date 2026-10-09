@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.6.6",
   "counts": {
-    "files": 193,
-    "occurrences": 2282,
-    "static": 2024,
+    "files": 194,
+    "occurrences": 2292,
+    "static": 2034,
     "dynamic": 48,
     "computed": 8
   },
@@ -4580,6 +4580,66 @@
       "testId": "logo-wicked-mark",
       "files": [
         "src/components/WickedLogo.tsx"
+      ]
+    },
+    {
+      "testId": "made-new-document",
+      "files": [
+        "src/components/everything/EverythingPage.tsx"
+      ]
+    },
+    {
+      "testId": "made-new-document-brief",
+      "files": [
+        "src/components/everything/NewDocument.tsx"
+      ]
+    },
+    {
+      "testId": "made-new-document-collision",
+      "files": [
+        "src/components/everything/NewDocument.tsx"
+      ]
+    },
+    {
+      "testId": "made-new-document-create",
+      "files": [
+        "src/components/everything/NewDocument.tsx"
+      ]
+    },
+    {
+      "testId": "made-new-document-error",
+      "files": [
+        "src/components/everything/NewDocument.tsx"
+      ]
+    },
+    {
+      "testId": "made-new-document-form",
+      "files": [
+        "src/components/everything/NewDocument.tsx"
+      ]
+    },
+    {
+      "testId": "made-new-document-name",
+      "files": [
+        "src/components/everything/NewDocument.tsx"
+      ]
+    },
+    {
+      "testId": "made-new-document-open",
+      "files": [
+        "src/components/everything/NewDocument.tsx"
+      ]
+    },
+    {
+      "testId": "made-new-document-project",
+      "files": [
+        "src/components/everything/NewDocument.tsx"
+      ]
+    },
+    {
+      "testId": "made-row-delete",
+      "files": [
+        "src/components/everything/EverythingPage.tsx"
       ]
     },
     {
