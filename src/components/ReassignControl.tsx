@@ -1,9 +1,8 @@
 import { commitGateDecision, commitGateReassign } from '../board/gateActions.js';
 import { reportDecision } from '../board/undoQueue.js';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { api } from '../api/client.js';
-import type { RosterSeat } from '../api/types.js';
-import { getCachedRoster, setCachedRoster, subscribeRoster } from '../store/rosterCache.js';
+import { useRoster } from '../hooks/useRoster.js';
 import { useSteeringStore } from '../store/steering.js';
 import { isOfferable, reassignCandidates } from './gateVerdictModel.js';
 
@@ -69,19 +68,10 @@ export function ReassignControl({
   runId, ord, pool, failedCli, amend, onDone, compact = false,
 }: ReassignControlProps): React.ReactElement | null {
   const recordSteering = useSteeringStore((s) => s.record);
-  const [roster, setRoster] = useState<RosterSeat[] | null>(getCachedRoster);
   // The roster's word on each seat: the shared cache when warm (the rail / the composer read it),
-  // one read here when cold — the labels are what make the pick honest, so they are worth it.
-  useEffect(() => {
-    const unsubscribe = subscribeRoster(setRoster);
-    if (getCachedRoster() !== null) return unsubscribe;
-    let cancelled = false;
-    Promise.resolve()
-      .then(() => api.getRoster())
-      .then(({ roster: seats }) => { if (!cancelled) { setCachedRoster(seats); setRoster(seats); } })
-      .catch(() => { /* cold roster: the seats are offered by key, unlabelled — never invented */ });
-    return () => { cancelled = true; unsubscribe(); };
-  }, []);
+  // one read here when cold — the labels are what make the pick honest, so they are worth it. A cold
+  // roster offers the seats by key, unlabelled — never invented.
+  const roster = useRoster();
 
   // studio#315: only seats that can take the retry are offered; the others are NAMED with the
   // roster's reason, so a seat never vanishes from the choice without a word.

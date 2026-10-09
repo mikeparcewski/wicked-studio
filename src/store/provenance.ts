@@ -43,9 +43,9 @@ export type Provenance =
  * a well-formed actor is the degraded answer — never a fabricated name.
  *
  * Channel resolution order (survives page reload):
- *  1. `detail.channel` on the audit entry — forward-compat field the daemon may
- *     write in a future version; type-safe today (AuditEntry.detail is
- *     `Record<string, unknown>`; no schema change needed to read it).
+ *  1. `detail.channel` on the audit entry — the launch channel crew persists on
+ *     `run.launched` since crew#632 (a launch body's `channel`); older daemons
+ *     omit it. Read off `AuditEntry.detail` (`Record<string, unknown>`).
  *  2. `launchedHere` — set by the caller from the sessionStorage witness so the
  *     'studio' answer survives a same-session page reload even before the daemon
  *     writes the channel field.

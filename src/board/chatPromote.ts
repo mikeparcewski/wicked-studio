@@ -1,5 +1,17 @@
 import type { RetryPrefill } from '../store/retryPrefill.js';
 
+/** Any POSIX absolute path of two or more segments (`/var/folders/x`, `/opt/app/bin`), or a Windows
+ *  drive path (`C:\\Users\\x`, `D:/repo`) — the shapes a PR title must never carry (studio#311 R1). */
+const ABS_PATH = /(?:^|(?<=[\s'"`(=:]))(?:\/[^\s/'"`)]+){2,}\/?|\b[A-Za-z]:[\\/][^\s'"`)]*/g;
+
+/**
+ * The PR-safe headline: the first question with whitespace collapsed (a multi-line ask reads as one
+ * line, studio#311 R2), absolute paths redacted to `<path>` (R1), at most 72 chars.
+ */
+export function promoteHeadline(firstAsk: string): string {
+  return firstAsk.replace(/\s+/g, ' ').trim().replace(ABS_PATH, '<path>').slice(0, 72).trimEnd();
+}
+
 /**
  * S16a-4e: "Continue in Build" on a chat's own session (a chat off the ask path) — the retired chat page's
  * promote, said on the session: the WHOLE conversation rides into the Build composer as context
@@ -12,12 +24,14 @@ export function chatPromotePrefill(
   projectId: string | null,
 ): RetryPrefill {
   const firstAsk = messages.find((m) => m.kind === 'user')?.text ?? '';
-  // PR-safe headline: the first question, ≤72 chars, absolute paths redacted.
-  const headline = firstAsk.replace(/\/(?:Users|home|root|tmp)\S*/g, '<path>').slice(0, 72).trimEnd();
+  const headline = promoteHeadline(firstAsk);
   const transcript = messages
     .filter((m) => (m.kind === 'user' || m.kind === 'seat') && typeof m.text === 'string')
     .map((m) => (m.kind === 'user' ? `operator: ${m.text}` : `${m.cliKey ?? 'helper'}: ${m.text}`))
     .join('\n');
+  // "The seats that replied" = every seat that answered ANY turn of this chat (studio#311 R3): the
+  // transcript is the whole conversation, so a seat that answered an earlier question but is still
+  // working on the latest one rides along — it is part of the context being carried into Build.
   const answered = [...new Set(messages.filter((m) => m.kind === 'seat' && m.ok !== false && typeof m.cliKey === 'string').map((m) => m.cliKey as string))];
   return {
     retryOf: null,
