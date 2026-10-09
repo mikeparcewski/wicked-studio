@@ -88,7 +88,7 @@ describe('#422 a gate says its question in plain words', () => {
     expect(plainGateQuestion('Unit 4 failed its deterministic floor (pinned_validator): exit 1', 'escalation')).toBe('The floor failed — how should the step go on?');
     expect(plainGateQuestion('Unit 2 was DENIED by input governance — a tool call was refused (`Bash`): never', undefined)).toBe('A Bash call was denied — how should the step go on?');
     expect(plainGateQuestion('Governance DENIED unit 1 (review): the middleware drops the refresh path', undefined)).toBe('Governance denied this step — how should it go on?');
-    expect(plainGateQuestion('Team dispute on unit 4 (build — x): unresolved HIGH finding(s)', 'team_dispute')).toBe('The team disagreed — approve or reject the work?');
+    expect(plainGateQuestion('Team dispute on unit 4 (build — x): unresolved HIGH finding(s)', 'team_dispute')).toBe('The team disagreed — send it back, approve or reject?');
     expect(plainGateQuestion('Unit 3 failed and triage escalated: codex exited 1', undefined)).toBe('The step failed — send it back, reassign or stop?');
     expect(plainGateQuestion('Unit 2 (build) refused its environment: no network', undefined)).toBe('The step could not start — retry or stop?');
     expect(plainGateQuestion(undefined, undefined)).toBe('Waiting on your answer');

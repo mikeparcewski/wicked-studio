@@ -608,6 +608,20 @@ export function steerScopeTarget(units: readonly WorkUnit[] | undefined, ord: nu
 }
 
 /**
+ * studio#627: whether the engine accepts a Send back (`request_changes`) at the gate on `ord`. The
+ * engine refuses it, before the gate resolves, unless the unit at its cursor is itself a creator or
+ * a creator phase precedes it (wicked-core `actor.rs` "no creator phase precedes unit N — approve
+ * (retry) or reject"; `pipeline::most_recent_prior_creator`). The same rule refuses a team
+ * dispute's rework. A host that holds no units, or not the gate's unit, cannot tell: the arm stays.
+ */
+export function sendBackAccepted(units: readonly WorkUnit[] | undefined, ord: number | undefined): boolean {
+  if (units === undefined || typeof ord !== 'number') return true;
+  const cursor = units.find((u) => u.ord === ord);
+  if (cursor === undefined) return true;
+  return cursor.role === 'creator' || units.some((u) => u.ord < ord && u.role === 'creator');
+}
+
+/**
  * Whether this gate's failure is one NO seat can fix (studio#315, F-RC2-003): the unit's LAUNCH was
  * refused before any work ran — the engine's environment-refusal arm (`stepFailed.failureKind:
  * environmentRefused` on the gate's unit, or its prompt "Unit N (cli) refused its environment…"),
