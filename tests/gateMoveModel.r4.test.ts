@@ -215,7 +215,7 @@ describe('failingItems — a sectioned review (R4)', () => {
     expect(failingItems(v, text)).toEqual(['src/text.ts:26 slices UTF-16 code units.']);
   });
 
-  it('Critical outranks Concern, and markers inside a finding are kept: src/__tests__/ is a path (Copilot)', () => {
+  it('Critical leads, its Concerns ride LABELLED (studio#559 F24), and markers inside a finding are kept: src/__tests__/ is a path (Copilot)', () => {
     const text = [
       "the evaluator's verdict is FAIL",
       'Findings',
@@ -224,7 +224,7 @@ describe('failingItems — a sectioned review (R4)', () => {
       'VERDICT: FAIL',
     ].join('\n');
     const v = gateVerdictFor(events(text), 2, NOT_PASS_PROMPT);
-    expect(failingItems(v, text)).toEqual(['src/__tests__/math.test.ts never asserts `min === max`.']);
+    expect(failingItems(v, text)).toEqual(['Critical: src/__tests__/math.test.ts never asserts `min === max`.', 'Concern: the README wording is loose.']);
     // With no must-fix item, the Concerns are what there is.
     const onlyConcern = ["the evaluator's verdict is FAIL", 'Findings', 'Concern: the README wording is loose.', 'VERDICT: FAIL'].join('\n');
     expect(failingItems(gateVerdictFor(events(onlyConcern), 2, NOT_PASS_PROMPT), onlyConcern)).toEqual(['the README wording is loose.']);
@@ -269,7 +269,7 @@ describe('failingItems — a sectioned review (R4)', () => {
     expect(failingItems(v, text)).toEqual(['src/auth.ts:12 logs the password in clear text.']);
   });
 
-  it('heading edge cases: "Confirmed security issues:" fails, inline "- **Verified:** …" passes, colonless "### Critical" outranks a Concern (Copilot)', () => {
+  it('heading edge cases: "Confirmed security issues:" fails, inline "- **Verified:** …" passes, colonless "### Critical" leads a labelled Concern (Copilot; studio#559)', () => {
     const read = (body: string[]): string[] => {
       const text = ["the evaluator's verdict is FAIL", 'Findings', ...body, 'VERDICT: FAIL'].join('\n');
       return failingItems(gateVerdictFor(events(text), 2, NOT_PASS_PROMPT), text);
@@ -279,7 +279,7 @@ describe('failingItems — a sectioned review (R4)', () => {
       'test/math.test.ts lacks the equal-bounds case.',
     ]);
     expect(read(['### Concern:', '- the README wording is loose.', '### Critical', '- the min === max case is untested.'])).toEqual([
-      'the min === max case is untested.',
+      'Critical: the min === max case is untested.', 'Concern: the README wording is loose.',
     ]);
     // Top-level prose after a bulleted Verified group is outside it.
     expect(read(['- **Verified:**', '  - src/math.ts:24 validates all arguments.', 'test/math.test.ts lacks the equal-bounds case.'])).toEqual([

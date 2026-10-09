@@ -1,0 +1,14 @@
+**Evaluator review: the S15e worktree does not yet meet the deliver-detail requirement.** I read the gate row, proposal card, models, and relevant tests. I made no edits.
+
+**Critical — wrong run’s diff can appear in a deliver card.** [ProposalCard.tsx](/w/src/components/session/ProposalCard.tsx:76) stores one diff without its run ID. The guard at line 79 skips fetching after that value is set, even if `runId` changes; the response callback at line 82 can also apply after a run change. Key the diff by run ID and discard stale responses.
+
+**Concern — the diffstat fallback is skipped for an incomplete diff response.** At [ProposalCard.tsx:171](/w/src/components/session/ProposalCard.tsx:171), a response without a usable `diff` produces no stat, but the event fallback at line 179 runs only when `runDiff` is `null`. Run that fallback whenever parsing produces no stat.
+
+**Conditions for a passing review:** fix both paths and cover a run change and a missing or empty diff payload in tests.
+
+Commands: source reads exited 0; `git status --short` was denied by the sandbox. This read-only phase could not run repository checks. The prior creator reported `npx vitest run` green at **476 files, 5,316 tests**; I did not independently verify it. Counts: derived 2 findings / submitted 0 / failed 0.
+
+ADVICE f-1e1c3742736723d1: ACCEPT — the diff state is unkeyed and stale responses are not rejected.
+ADVICE f-68d944806c194749: ACCEPT — the event fallback misses unusable non-null diff responses.
+
+VERDICT: FAIL

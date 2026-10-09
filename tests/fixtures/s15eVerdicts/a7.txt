@@ -1,0 +1,19 @@
+**Evaluator review — FAIL.** I read the S15e model, session components, paths, tests, and DESK journey. I made no edits. The current tree contains an implementation, so I decline the earlier advice that the quota failure left this worktree unchanged.
+
+**Critical findings**
+
+- [gateRowModel.ts](/w/src/board/gateRowModel.ts:147) disables engine choices it does not recognize, while [GateRow.tsx](/w/src/components/session/GateRow.tsx:284) renders overflow choices without honoring that disabled state. Some advertised choices therefore cannot be answered in the thread, and overflow choices can appear clickable but do nothing. This conflicts with the requirement that every open gate have an answering control.
+- [GateRow.tsx](/w/src/components/session/GateRow.tsx:188) sends steer and send-back decisions with an empty note. The existing run-page controls require text for those actions at [SteeringGate.tsx](/w/src/components/SteeringGate.tsx:589).
+
+**Concerns**
+
+- The deliver disclosure reports walkthrough pass/fail counts at [ProposalCard.tsx](/w/src/components/session/ProposalCard.tsx:218), rather than the floor’s individual check outcomes requested for S15e.
+- The [DESK journey](/w/e2e/desk_gate_kinds_test.py:378) allows reassign to be skipped and checks only part of the required steer and stop POST bodies. It does not establish the requested coverage for every gate kind.
+
+**Commands and evidence:** `cat`, `rg`, and `sed` source reads exited 0. Git inspection was denied before execution and was not retried; a broad read-only search was stopped with exit 130. I did not run repository checks because this phase forbids them. No deterministic floor result was supplied here, so typecheck, lint, Vitest counts, journey status, and PR status remain unverified.
+
+**Counts:** derived 1 review / submitted 0 changes / failed 0 submissions.
+
+ADVICE f-7c7f4f75ba6b884c: DECLINE — the current tree contains `GateRow.tsx`, `gateRowModel.ts`, the DESK journey, and S15e wiring; the earlier quota finding describes a prior state.
+
+VERDICT: FAIL

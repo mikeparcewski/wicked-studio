@@ -1,0 +1,10 @@
+**Evaluator review, read-only.** I reviewed the S15e gate row, delivery diff handling, journey, and regression tests. I changed no files.
+
+**Condition to pass:** The run-switch test at [sessionView.gateRow.s15e.test.tsx:251](/w/tests/sessionView.gateRow.s15e.test.tsx:251) succeeds when run B’s diffstat is absent. It therefore does not prove the new fetch renders run B’s result. Require B’s expected text, such as `1 file changed, +1`, and assert that `getRunDiff` was called for B. The keyed fetch and fallback code at [ProposalCard.tsx:75](/w/src/components/session/ProposalCard.tsx:75) appears consistent with the intended fix; this finding is about its regression guard.
+
+**Commands:** Source reads exited 0. One read used an incorrect planned filename and exited 1. Git inspection was denied by the read-only sandbox. I did not run tests or builds; current-tree check results were unavailable in this phase.
+
+**Counts:** derived 1 finding / submitted 1 / failed 0. No further open question changes the finding.
+
+ADVICE f-9c75ba39d1d449fd: ACCEPT — the test needs a positive run B assertion; evaluator read-only rules prohibit me from editing it.
+VERDICT: FAIL

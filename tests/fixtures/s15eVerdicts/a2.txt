@@ -1,0 +1,16 @@
+**Role: Evaluator.** I reviewed the S15e implementation and tests without editing files. No external payload transformation was identified.
+
+**Commands:** Repository guidance, skill, source, and test reads exited 0. The read-only environment rejected `git status` and `git diff`; I did not retry them. I did not run tests because this phase prohibits writes. The prior creator reported a passing typecheck, 80 targeted tests, and 17 journey steps; I could not verify the full required checks from this seat.
+
+**Counts:** derived 4 findings / submitted 0 / failed 0.
+
+**Critical findings**
+
+1. [SessionView.tsx:604](/w/src/components/session/SessionView.tsx:604) sends `step` proposals to `GateRow`, although the intent says `ProposalCard` keeps step proposals. [proposalCard.ts:72](/w/src/board/proposalCard.ts:72) classifies `def`, `run_level`, and `unit_review` as steps. Resolve that ownership boundary and test it through `RunBlock`.
+2. [gateRowModel.ts:224](/w/src/board/gateRowModel.ts:224) adds every eligible reassign seat inline. With multiple seats, the row exceeds four choices and pushes **Stop** beyond the `1–4` keyboard range. Keep the inline set to four and put additional seats in the disclosure.
+3. [ProposalCard.tsx:123](/w/src/components/session/ProposalCard.tsx:123) shows branch, repository, and check counts, but no diffstat. `deliverCardOf` supplies a delivery target, not a diffstat. The required deliver detail remains incomplete.
+4. [desk_gate_kinds_test.py:207](/w/e2e/desk_gate_kinds_test.py:207) covers an escalation send-back, but the requested journey does not prove retry, reassign, stop, or 409 recovery POST behavior. Add those fixture scenarios and body assertions before treating “every gate kind” as verified.
+
+**Open question:** The run’s deterministic floor results were not available in this phase; check status beyond the creator’s reported results is unknown.
+
+VERDICT: FAIL

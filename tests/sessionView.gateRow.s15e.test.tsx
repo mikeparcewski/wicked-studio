@@ -559,3 +559,40 @@ describe('GateRow — a denied unit (studio#573): Approve is on the row and sugg
     expect(body['action']).toBeUndefined();
   });
 });
+
+// ── studio#558: one session-level run-event read ─────────────────────────────────────────────
+
+describe('the session page reads a run\'s events once (#558)', () => {
+  it('a gate row and a proposal card over one run share ONE GET /runs/:id/events', async () => {
+    useRunEventStore.setState({ byRun: {} });
+    vi.spyOn(client.api, 'getRunDiff').mockResolvedValue({ diff: '', truncated: false });
+    let resolve!: (v: { events: [] }) => void;
+    const getRunEvents = vi.spyOn(client.api, 'getRunEvents')
+      .mockImplementation(() => new Promise((r) => { resolve = r as typeof resolve; }));
+    render(
+      <>
+        <GateRow view={view()} gate={plainGate()} />
+        <ProposalCard view={view()} chain={EMPTY_CHAIN} />
+      </>,
+    );
+    await waitFor(() => expect(getRunEvents).toHaveBeenCalledTimes(1));
+    await act(async () => { resolve({ events: [] }); });
+    await waitFor(() => expect(screen.getAllByTestId('session-gate-choice')).toHaveLength(4));
+    expect(getRunEvents).toHaveBeenCalledTimes(1);
+  });
+
+  it('a failed read leaves the log unread for every reader — the proposal card no longer writes [] over it', async () => {
+    useRunEventStore.setState({ byRun: {} });
+    vi.spyOn(client.api, 'getRunDiff').mockResolvedValue({ diff: '', truncated: false });
+    const getRunEvents = vi.spyOn(client.api, 'getRunEvents').mockRejectedValue(new Error('503'));
+    render(
+      <>
+        <GateRow view={view()} gate={plainGate()} />
+        <ProposalCard view={view()} chain={EMPTY_CHAIN} />
+      </>,
+    );
+    await waitFor(() => expect(screen.getByTestId('session-gate-events-error')).toBeDefined());
+    expect(useRunEventStore.getState().byRun[RUN]).toBeUndefined();
+    expect(getRunEvents).toHaveBeenCalledTimes(1);
+  });
+});

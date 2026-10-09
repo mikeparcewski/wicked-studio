@@ -31,6 +31,8 @@ under STUDIO_SKIN=desk at 1440x700 against the in-process fixture:
  14. DENIED UNIT (r-denied, escalation_arms=True; studio#573): input governance refused the
      unit's tool call — the row offers Approve (the re-run, suggested) · Approve and steer ·
      Stop and no Send back; Approve → {approve:true} with no action.
+ 15. RETRY KIND (r-retry, retry_gate=True; studio#557): the engine restored the creator's tree —
+     the row is Retry · Reassign to Claude · Stop, each driven to its POST.
 
 Captures: e2e/shots/desk-gate-kinds-*.png. Env: FEEDBACK_PORT (default 4358).
 """
@@ -308,12 +310,16 @@ with sync_playwright() as p:
         except Exception:
             page.screenshot(path=str(SHOTS / "desk-gate-kinds-deliver-diffstat.png"))
             fail("deliver-diffstat", {"why": "session-proposal-deliver-diffstat did not appear"})
+        # studio#557: the fixture's diff names the run branch, so the card must render it — an
+        # absent branch line is a failure, never a skip.
         branch_el = page.get_by_test_id("session-proposal-deliver-branch")
-        if branch_el.count() > 0:
+        try:
+            branch_el.wait_for(state="visible", timeout=8_000)
             branch_text = branch_el.inner_text()
-            check("deliver-branch", "wicked/r-trust-deliver" in branch_text, got=branch_text)
-        else:
-            check("deliver-branch", True, note="run_branch/diff.branch not in session — skipped")
+        except Exception:
+            branch_text = None
+        check("deliver-branch", branch_text is not None and "wicked/r-trust-deliver" in branch_text,
+              got=branch_text, why="the deliver card must show the branch the fixture's diff names")
         # Assert per-check floor lines from repoChecksEvaluated
         check_els = page.get_by_test_id("session-proposal-deliver-check").all()
         check("deliver-floor-checks", len(check_els) > 0,
@@ -363,10 +369,11 @@ with sync_playwright() as p:
     url_has_hash = "#gate" in page.url
     check("needs-you-url", url_has_hash, got=page.url, want=f"...#gate")
 
-    # Assert that the gate row (or deliver card's Go button) is focused on #gate arrival.
+    # studio#557: r-home-gate's open gate is a def gate, answered by the gate row — #gate arrival
+    # focuses THAT row (one target; the deliver card's Go belongs to a different gate kind).
     focused_testid = page.evaluate("() => document.activeElement?.getAttribute('data-testid') ?? ''")
-    check("needs-you-focus", focused_testid == "session-gate-row" or focused_testid == "session-proposal-go",
-          got=focused_testid, want="session-gate-row or session-proposal-go")
+    check("needs-you-focus", focused_testid == "session-gate-row",
+          got=focused_testid, want="session-gate-row")
 
     page.screenshot(path=str(SHOTS / "desk-gate-kinds-needs-you.png"))
 
@@ -632,6 +639,69 @@ with sync_playwright() as p:
           len(denied_posts) > 0 and denied_body.get("approve") is True and "action" not in denied_body and "ord" in denied_body,
           posts=denied_posts, why="Approve on a denied unit is the plain re-run: {approve:true, ord}, no action")
     page.screenshot(path=str(SHOTS / "desk-gate-kinds-denied-sent.png"))
+
+    # ── 15. RETRY KIND (r-retry, retry_gate=True; studio#557) ────────────────
+    # The engine restored the creator's tree after the review seat (codex) changed it: the row is
+    # the RETRY kind — Retry / Reassign / Stop — rendered and driven, not proven in vitest only.
+    def open_retry() -> None:
+        set_fixture(origin, retry_gate=True, reset_gate_posts=True)
+        page.goto(f"{origin}/s/run%3Ar-retry#gate", wait_until="networkidle")
+        page.reload(wait_until="networkidle")  # a same-URL goto keeps the SPA's answered state
+        try:
+            page.get_by_test_id("session-gate-row").wait_for(state="visible", timeout=15_000)
+        except Exception:
+            page.screenshot(path=str(SHOTS / "desk-gate-kinds-no-retry.png"))
+            fail("retry-gate-row", {
+                "why": "session-gate-row did not appear for r-retry",
+                "text": page.evaluate("() => document.body.innerText.slice(0, 600)"),
+            })
+
+    def chosen_then_wait(step: str) -> None:
+        try:
+            page.get_by_test_id("session-gate-chosen").wait_for(state="visible", timeout=10_000)
+        except Exception:
+            page.screenshot(path=str(SHOTS / f"desk-gate-kinds-{step}.png"))
+            fail(step, {"why": "chosen state did not appear"})
+        page.wait_for_timeout(11_500)  # the 10 s undo window, then the POST
+
+    open_retry()
+    retry_row = page.get_by_test_id("session-gate-row")
+    check("retry-reason", retry_row.get_attribute("data-reason") == "retry",
+          got=retry_row.get_attribute("data-reason"))
+    retry_keys = [el.get_attribute("data-choice-key") for el in page.query_selector_all("[data-testid='session-gate-choice']")]
+    check("retry-choices", retry_keys == ["retry", "reassign:claude", "stop"], got=retry_keys,
+          want=["retry", "reassign:claude", "stop"])
+    page.screenshot(path=str(SHOTS / "desk-gate-kinds-retry.png"))
+
+    # Retry → {approve:true, ord}, no action
+    page.locator("[data-testid='session-gate-choice'][data-choice-key='retry']").click()
+    chosen_then_wait("retry-retry-chosen")
+    retry_posts = gate_posts("r-retry")
+    retry_body = retry_posts[-1].get("body", {}) if retry_posts else {}
+    check("retry-retry-post",
+          len(retry_posts) == 1 and retry_body.get("approve") is True and "action" not in retry_body and "ord" in retry_body,
+          posts=retry_posts)
+
+    # Reassign → POST /runs/r-retry/reassign {cli: claude}; no gate POST
+    open_retry()
+    page.locator("[data-testid='session-gate-choice'][data-choice-key='reassign:claude']").click()
+    chosen_then_wait("retry-reassign-chosen")
+    retry_reassigns = reassign_posts("r-retry")
+    check("retry-reassign-post",
+          len(retry_reassigns) > 0 and retry_reassigns[-1].get("body", {}).get("cli") == "claude"
+          and gate_posts("r-retry") == [],
+          posts=retry_reassigns)
+
+    # Stop → {approve:false, ord}
+    open_retry()
+    page.locator("[data-testid='session-gate-choice'][data-choice-key='stop']").click()
+    chosen_then_wait("retry-stop-chosen")
+    stop_posts = gate_posts("r-retry")
+    stop_body = stop_posts[-1].get("body", {}) if stop_posts else {}
+    check("retry-stop-post",
+          len(stop_posts) == 1 and stop_body.get("approve") is False and "ord" in stop_body,
+          posts=stop_posts)
+    page.screenshot(path=str(SHOTS / "desk-gate-kinds-retry-done.png"))
 
     browser.close()
 
