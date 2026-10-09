@@ -18,18 +18,9 @@ import { planStepWords } from '../../board/planOrder.js';
 import { usePlanGate } from '../../store/planGates.js';
 import { dropGateDraft, gateDraftFor, gateDraftPlan, usePlanDrafts } from '../../store/planDrafts.js';
 import { gateVerdictFor, checkOutcome } from '../gateVerdictModel.js';
+import { diffstatOf } from '../gateMoveModel.js';
 import { PlanGateSummary } from '../PlanGateSummary.js';
 import { useSeatTrust } from './GateDepth.js';
-
-function parseDiffstat(diff: string): { files: number; additions: number; deletions: number } {
-  let files = 0, additions = 0, deletions = 0;
-  for (const line of diff.split('\n')) {
-    if (line.startsWith('diff --git ')) files++;
-    else if (line.startsWith('+') && !line.startsWith('+++ ')) additions++;
-    else if (line.startsWith('-') && !line.startsWith('--- ')) deletions++;
-  }
-  return { files, additions, deletions };
-}
 
 /**
  * THE PROPOSAL CARD (DES-STUDIO-REBUILD-001 §3 scenes 07/08/24/42, slice S6b): a run's plan or
@@ -203,16 +194,7 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
             const repoName = repoNameOf(view);
             // Primary diffstat: parse GET /runs/:id/diff?base=merge-base (files changed / +lines / −lines).
             // Fallback: changed-file count from repoChecksEvaluated event when diff is unavailable.
-            let diffstatText: string | null = null;
-            if (runDiff !== null && typeof runDiff.diff === 'string' && runDiff.diff !== '') {
-              const { files, additions, deletions } = parseDiffstat(runDiff.diff);
-              if (files > 0) {
-                const parts = [`${files} file${files !== 1 ? 's' : ''} changed`];
-                if (additions > 0) parts.push(`+${additions}`);
-                if (deletions > 0) parts.push(`−${deletions}`);
-                diffstatText = parts.join(', ');
-              }
-            }
+            let diffstatText: string | null = runDiff !== null && typeof runDiff.diff === 'string' ? diffstatOf(runDiff.diff) : null;
             if (diffstatText === null) {
               // Fallback: event-based changed-file count when diff is unavailable, empty, or parsed to 0.
               const events = eventsRaw ?? [];

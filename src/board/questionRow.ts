@@ -1,5 +1,5 @@
 import type { CoreEvent, GateDecision, WorkUnit } from '../api/types.js';
-import { isDeliverGate } from '../components/gateMoveModel.js';
+import { proposalKindOf } from './proposalCard.js';
 import { gateFrameFor, gateVerdictFor, isEscalationGate, isLaunchRefusal, isRestoredRetry } from '../components/gateVerdictModel.js';
 import type { OpenGate } from '../store/gates.js';
 
@@ -59,7 +59,10 @@ export function classifyRowGate(input: {
   // A late join carries no `gateKind` (GET /runs/:id/gate does not); the log's same-ord
   // `awaitingHuman` does (Copilot).
   const kind = gate.gateKind ?? (events === null ? undefined : gateFrameFor(events, gate.ord)?.gateKind ?? undefined);
-  if (kind === 'deliver' || isDeliverGate(runId, units, gate.ord)) return { kind: 'card', reason: 'deliver' };
+  // studio#403: the hand-over card takes exactly the gates `proposalKindOf` calls a deliver — never a
+  // failure gate on the deliver unit (a refused push, a lift conflict): those are answered here, or
+  // neither the card nor the row would render them (the refused push's retry was unanswerable).
+  if (proposalKindOf(runId, gate, units) === 'deliver') return { kind: 'card', reason: 'deliver' };
   if (kind !== undefined && TEAM_PAUSES.has(kind)) return { kind: 'card', reason: 'team' };
   // studio#600: the engine's restored-tree gate (the evaluator edited the tree under review; its
   // edit was discarded and the creator's tree restored) leads with the NOT PASS spelling and may

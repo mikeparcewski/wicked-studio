@@ -39,6 +39,11 @@ export function plainGateQuestion(prompt: string | undefined, gateKind: string |
     const steps = list === undefined ? 0 : list.split('→').map((s) => s.trim()).filter((s) => s !== '').length;
     return steps > 1 ? `Approve the plan (${steps} steps)` : 'Approve the plan';
   }
+  // studio#403: the engine's retry gate after a refused hand-over — the remote's refusal, or the
+  // deliver script's own failure; the reason itself leads the row, under this question.
+  if (/^The deliver phase refused:/i.test(p)) {
+    return /the remote refused the push of /i.test(p) ? 'The remote refused the push — deliver again or stop?' : 'The hand-over failed — deliver again or stop?';
+  }
   // A deliver gate (crew's "Approve delivery before unit N runs. <card>"): the hand-over (studio#441).
   if (gateKind === 'deliver' || /^Approve delivery\b/i.test(p)) return 'Approve the hand-over';
   const phase = /^Approve the output of unit \d+\s*\(\s*([A-Za-z0-9_-]+)/i.exec(p)?.[1];

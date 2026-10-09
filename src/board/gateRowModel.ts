@@ -4,8 +4,11 @@ import { classifyRowGate } from './questionRow.js';
 import {
   escalationSummaryFor,
   failingItems,
+  deliverRefusalOf,
   findingsNote,
   INSTRUCTION_SEP,
+  isDeliverGate,
+  type DeliverRefusal,
   recommendGateMove,
   type GateMove,
 } from '../components/gateMoveModel.js';
@@ -87,6 +90,9 @@ export interface GateRowModel {
   failing: readonly string[];
   /** S16a-1b: the unit the deciding verdict judged (VerdictDiff's reviewed ord), or null. */
   reviewedOrd: number | null;
+  /** studio#403: a refused hand-over's reason (the row leads with it, and says what Deliver again
+   *  re-pushes above the choices); absent on every other gate. */
+  refusal?: DeliverRefusal;
 }
 
 /** The choice set before the depth fields (`withDepth` adds them). */
@@ -342,6 +348,26 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
       noteDefault: '',
       recommended: null,
       detailItems: [shownPrompt(gate.prompt)],
+    };
+  }
+
+  // studio#403: a refused hand-over (the engine's retry gate on the deliver unit). Its arms are the
+  // engine's two: approve re-runs the deliver phase (it re-lifts, re-verifies and pushes again),
+  // reject cancels and keeps the worktree. Nothing is preselected: a re-push leaves the machine.
+  const refusal = isDeliverGate(runId, units, gate.ord) ? deliverRefusalOf(gate.prompt) : null;
+  if (refusal !== null) {
+    return {
+      reason: 'retry',
+      question: gate.prompt,
+      choices: [
+        { key: 'retry', label: 'Deliver again', decision: { approve: true }, needsNote: false, title: 'Re-run the deliver phase: it re-checks the work and pushes again.' },
+        { key: 'stop', label: 'Stop', decision: { approve: false }, needsNote: false, title: 'Cancel the run and keep the worktree; nothing is pushed.' },
+      ],
+      overflow: [],
+      noteDefault: '',
+      recommended: null,
+      detailItems: [shownPrompt(gate.prompt)],
+      refusal,
     };
   }
 

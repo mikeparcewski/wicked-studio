@@ -12,8 +12,8 @@
   "studioVersion": "0.6.8",
   "counts": {
     "files": 173,
-    "occurrences": 1928,
-    "static": 1715,
+    "occurrences": 1930,
+    "static": 1717,
     "dynamic": 37,
     "computed": 6
   },
@@ -6413,6 +6413,12 @@
       ]
     },
     {
+      "testId": "session-gate-deliver-consent",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
       "testId": "session-gate-detail",
       "files": [
         "src/components/session/GateRow.tsx"
@@ -6450,6 +6456,12 @@
     },
     {
       "testId": "session-gate-raw-prompt",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-refusal",
       "files": [
         "src/components/session/GateRow.tsx"
       ]
