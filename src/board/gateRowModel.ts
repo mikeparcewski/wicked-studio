@@ -415,7 +415,8 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
     const allUnknown = all.length > 0 && all.every((c) => c.disabled === true);
     if (allUnknown) {
       all.push({ key: 'stop', label: 'Stop', decision: { approve: false }, needsNote: false, title: 'Cancel the run; the work stops here.' });
-      all.push({ key: 'send-note-instead', label: 'Send a note instead', decision: { approve: false, action: 'request_changes' }, needsNote: true, title: 'Send a note and cancel the run.' });
+      // studio#627 (codex r1): the note escape hatch IS a request_changes — only where it lands.
+      if (sendBackAccepted(units, gate.ord)) all.push({ key: 'send-note-instead', label: 'Send a note instead', decision: { approve: false, action: 'request_changes' }, needsNote: true, title: 'Send a note and cancel the run.' });
     }
     const r = gate.recommended;
     const recommended = typeof r === 'number' && r >= 0 && r < offered.length && keep[r] === true

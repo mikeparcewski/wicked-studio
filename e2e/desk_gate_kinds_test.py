@@ -110,8 +110,10 @@ with sync_playwright() as p:
 
     choices = page.get_by_test_id("session-gate-choice").all()
     keys = [c.get_attribute("data-choice-key") for c in choices]
-    check("def-gate-choices", keys == ["approve", "steer", "send-back", "stop"],
-          got=keys, want=["approve", "steer", "send-back", "stop"])
+    # studio#627: the intake gate on the triage step has no creator at or before it, so the engine
+    # refuses a Send back there ("no creator phase precedes unit 1"); the row does not offer it.
+    check("def-gate-choices", keys == ["approve", "steer", "stop"],
+          got=keys, want=["approve", "steer", "stop"])
 
     page.screenshot(path=str(SHOTS / "desk-gate-kinds-def.png"))
 

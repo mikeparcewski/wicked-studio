@@ -10,8 +10,8 @@ const NOW = 1_700_000_000_000;
 
 /** A feature run: clarify (1) and design (2) are evaluators/neutral, build (3) the creator. */
 const UNITS: WorkUnit[] = [
-  makeUnit({ id: `${RUN}:u1`, session_id: RUN, ord: 1, stage: 'clarify', description: 'clarify — Add a cover card ||| PHASE SCOPE: this is the clarify phase.', role: 'neutral', status: 'done' }),
-  makeUnit({ id: `${RUN}:u2`, session_id: RUN, ord: 2, stage: 'design', description: 'design — Add a cover card ||| PHASE SCOPE: this is the design phase.', role: 'neutral', status: 'pending' }),
+  makeUnit({ id: `${RUN}:u1`, session_id: RUN, ord: 1, stage: 'recon', description: 'clarify — Add a cover card ||| PHASE SCOPE: this is the clarify phase.', role: 'neutral', status: 'done' }),
+  makeUnit({ id: `${RUN}:u2`, session_id: RUN, ord: 2, stage: 'recon', description: 'design — Add a cover card ||| PHASE SCOPE: this is the design phase.', role: 'neutral', status: 'pending' }),
   makeUnit({ id: `${RUN}:u3`, session_id: RUN, ord: 3, stage: 'build', description: 'build — Add a cover card', role: 'creator', status: 'pending' }),
   makeUnit({ id: `${RUN}:u4`, session_id: RUN, ord: 4, stage: 'review', description: 'review — Add a cover card', role: 'evaluator', status: 'pending' }),
 ];
@@ -111,5 +111,14 @@ describe('studio#547 — a team dispute sends back WITH the finding', () => {
     expect(m.choices.map((c) => c.label)).toEqual(['Approve', 'Request changes', 'Reject']);
     expect(m.choices[1]!.needsNote).toBe(false);
     expect(m.noteDefault).toBe('');
+  });
+});
+
+describe('studio#627 (codex r1) — the all-unknown escape hatch', () => {
+  it('drops "Send a note instead" where a send back would be refused', () => {
+    const early = model(gate({ ord: 2, gateKind: 'def', choices: ['mystery_arm'] }))!;
+    expect([...early.choices, ...early.overflow].map((c) => c.key)).toEqual(['choice-0', 'stop']);
+    const late = model(gate({ ord: 4, gateKind: 'def', choices: ['mystery_arm'] }))!;
+    expect([...late.choices, ...late.overflow].map((c) => c.key)).toEqual(['choice-0', 'stop', 'send-note-instead']);
   });
 });
