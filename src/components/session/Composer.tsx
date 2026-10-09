@@ -288,25 +288,27 @@ export function Composer({
   const launchWorkflow = async (workflowId: string, intent: string): Promise<void> => {
     setLaunching(true);
     setLaunchError(null);
-    const seats = (roster ?? []).filter((s) => s.enabled_for_council);
-    const body: LaunchBodyWithDeliver = { problem: intent, workflow: workflowId };
-    if (seats.length > 0) body.clisJson = JSON.stringify(seats);
-    const targetRepo = repoRef ?? (repos !== null && repos.length === 1 ? repos[0]?.id ?? null : null);
-    if (targetRepo !== null) body.repoRef = targetRepo;
-    if (project !== null) body.projectId = project.projectId;
-    // The gate posture is the form's rule: the `before:N` shift past the PA's scope step is read off
-    // the same launch preview (`mode` is undefined here — a composer has no mode pill — so the
-    // posture select speaks, exactly as it does on a Balanced form).
-    const humanConfirm = await launchPreview.resolveHumanConfirm();
-    if (humanConfirm !== undefined) body.humanConfirm = humanConfirm;
-    if (deliverVisible) body.deliver = deliverOn ? 'pr' : 'none';
-    // F-E2E-030: only the explicitly unattended posture sends the opt-out, and only with a delivery.
-    if (body.deliver === 'pr' && autoDeliver && deliverGate === true) body.deliverGate = 'auto';
-    // A chat's composer names the chat (only on a daemon that accepts the key), so the run lands in
-    // that chat's session; a Desk launch opens a `run:<id>` session instead.
-    const chat = chatIdOnLaunch && composerKey !== 'desk' && !composerKey.startsWith('run:') ? composerKey : null;
-    if (chat !== null) body.chatId = chat;
+    // Everything that can fail — the launch preview's gate placement included — sits inside the try,
+    // so a refusal is said on screen and the composer never stays "Launching…".
     try {
+      const seats = (roster ?? []).filter((s) => s.enabled_for_council);
+      const body: LaunchBodyWithDeliver = { problem: intent, workflow: workflowId };
+      if (seats.length > 0) body.clisJson = JSON.stringify(seats);
+      const targetRepo = repoRef ?? (repos !== null && repos.length === 1 ? repos[0]?.id ?? null : null);
+      if (targetRepo !== null) body.repoRef = targetRepo;
+      if (project !== null) body.projectId = project.projectId;
+      // The gate posture is the form's rule: the `before:N` shift past the PA's scope step is read off
+      // the same launch preview (`mode` is undefined here — a composer has no mode pill — so the
+      // posture select speaks, exactly as it does on a Balanced form).
+      const humanConfirm = await launchPreview.resolveHumanConfirm();
+      if (humanConfirm !== undefined) body.humanConfirm = humanConfirm;
+      if (deliverVisible) body.deliver = deliverOn ? 'pr' : 'none';
+      // F-E2E-030: only the explicitly unattended posture sends the opt-out, and only with a delivery.
+      if (body.deliver === 'pr' && autoDeliver && deliverGate === true) body.deliverGate = 'auto';
+      // A chat's composer names the chat (only on a daemon that accepts the key), so the run lands in
+      // that chat's session; a Desk launch opens a `run:<id>` session instead.
+      const chat = chatIdOnLaunch && composerKey !== 'desk' && !composerKey.startsWith('run:') ? composerKey : null;
+      if (chat !== null) body.chatId = chat;
       const { runId } = await api.launchRun(body);
       useProvenanceStore.getState().markLaunchedHere(runId);
       clearAboutChips(composerKey);
@@ -332,7 +334,13 @@ export function Composer({
     // then asks for the repository. Nothing is sent until the next Enter.
     const typed = parseWorkflowCommand(text);
     if (typed !== null && refusal === null) {
-      addAboutChip(composerKey, { kind: 'workflow', key: `wf:${typed.key}`, label: `/workflow-${typed.key}`, workflowId: typed.key });
+      // Only a key the daemon lists becomes a chip — studio keeps no list and never invents a name.
+      const known = workflowItems(typed.key, defs, presets).find((r) => r.key === typed.key);
+      if (known === undefined) {
+        setNote(defs === null ? WORKFLOWS_LOADING_LINE : `This daemon lists no workflow named ${typed.key} — nothing was sent.`);
+        return;
+      }
+      addAboutChip(composerKey, { kind: 'workflow', key: `wf:${known.key}`, label: `/workflow-${known.key}`, workflowId: known.workflowId });
       setText(typed.rest);
       setNote(null);
       return;

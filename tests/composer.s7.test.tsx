@@ -339,6 +339,19 @@ describe('S19a: a workflow is named in the composer and launched from it', () =>
     expect(posts.find((p) => p.path === '/runs')!.body).toMatchObject({ workflow: 'bug', problem: 'the charge never clears' });
   });
 
+  it('a typed command the daemon does not list names nothing and sends nothing', async () => {
+    const onSend = vi.fn();
+    render(<Harness runs={[]} onSend={onSend} />);
+    type('/workflow-bgu');
+    await screen.findByTestId('composer-menu');
+    key('Escape');
+    key('Enter');
+    expect(screen.queryByTestId('composer-chip')).toBeNull();
+    expect(screen.getByTestId('composer-note').textContent).toMatch(/lists no workflow named bgu/);
+    expect(posts).toStrictEqual([]);
+    expect(onSend).not.toHaveBeenCalled();
+  });
+
   it('Escape closes the workflow menu and never launches', async () => {
     render(<Harness runs={[]} onSend={() => {}} />);
     type('/workflow-');
