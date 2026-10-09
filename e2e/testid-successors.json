@@ -5,6 +5,7 @@
   ],
   "successors": {
     "launch-workflow": "composer-menu-item",
+    "steering-form-rule-type": "steering-form-rule-type-label",
     "desk-start-chip": "composer-menu-item",
     "desk-start-row": "composer-hint",
     "session-run-open": "session-run-look",

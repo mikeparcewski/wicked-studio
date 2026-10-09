@@ -198,21 +198,19 @@ export function SteeringRuleFormModal({ type, initial, onClose, onSaved, create 
         </div>
 
         <div className="flex flex-wrap items-end gap-2">
-          <label className="flex flex-col gap-1 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
-            Rule type
-            <select
-              data-testid="steering-form-rule-type"
-              aria-label="Rule type"
-              value={form.rule_type}
-              disabled
-              onChange={() => undefined}
-              className="rounded px-1.5 py-1 text-[11px] focus:outline-none disabled:opacity-50"
-              style={{ background: 'var(--surface-base)', border: '1px solid var(--surface-raised)', color: 'var(--ink-high)' }}
+          {/* Coverage exception X6 (operator ruling): the rule type is never chosen here — it was a
+              select disabled for every rule. It is said, read-only, as what it is. */}
+          <div className="flex flex-col gap-1 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
+            <span id="steering-form-rule-type-caption">Rule type</span>
+            <span
+              data-testid="steering-form-rule-type-label"
+              aria-labelledby="steering-form-rule-type-caption"
+              className="rounded px-1.5 py-1 text-[11px]"
+              style={{ border: '1px solid var(--surface-raised)', color: 'var(--ink-high)' }}
             >
-              <option value="pattern">pattern</option>
-              <option value="policy">policy</option>
-            </select>
-          </label>
+              {form.rule_type}
+            </span>
+          </div>
           <label className="flex flex-col gap-1 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
             Id
             <input

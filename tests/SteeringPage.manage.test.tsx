@@ -414,7 +414,9 @@ describe('SteeringPage — edit (the drawer’s modal, unchanged wires)', () => 
     expect(within(form).getByTestId('steering-form-id')).toHaveValue('POL-300');
     expect(within(form).getByTestId('steering-form-id')).toHaveAttribute('readonly');
     expect(within(form).getByTestId('steering-form-statement')).toHaveValue('Old statement');
-    expect(within(form).getByTestId('steering-form-rule-type')).toBeDisabled();
+    // Coverage exception X6: the rule type is a read-only label, never a control.
+    expect(within(form).getByTestId('steering-form-rule-type-label')).toHaveTextContent('policy');
+    expect(within(form).queryByRole('combobox', { name: 'Rule type' })).toBeNull();
 
     await user.clear(within(form).getByTestId('steering-form-statement'));
     await user.type(within(form).getByTestId('steering-form-statement'), 'New statement');
