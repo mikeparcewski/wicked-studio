@@ -12,6 +12,9 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+### Fixed
+- Ask thread: the run-block header now shows the plain title ("A conversation about \<repo>") instead of crew's raw "# Chat scope" heading (studio#585).
+
 ## [0.6.8] — 2026-10-09
 
 S19 names a workflow by typing it: `/workflow-<key>` in the composer (S19a, studio#614), and the workflow buttons give way to the same grammar on the launch form (S19b, studio#620). Also: gate-row follow-ups (studio#619), the System page's Log out through the daemon, linked issues on the launch form and surface fixes (studio#621), the composer and worker-pool follow-ups (studio#624), and the steering form's rule-type label (studio#625).
