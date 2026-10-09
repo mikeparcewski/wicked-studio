@@ -78,6 +78,10 @@ export interface RunRowKind {
   label: string;
 }
 
+/** The run row's glyph per surface (moved beside its one user, RunLink, when S16a-4h deleted the
+ *  project shell's ModeSwitcher that held it). */
+export const RUN_ROW_GLYPHS: Record<RunRowKind['kind'], string> = { chat: '💬', build: '⚙', document: '▤' };
+
 /**
  * The run-list row's kind word (studio#230: every onboarding, document and bug run read "Build").
  * The daemon's `run_identity.name` (api-types 0.46.0) names the preset or workflow the run drove;

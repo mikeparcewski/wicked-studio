@@ -7,7 +7,6 @@ import { TESTING_UNSUPPORTED_COPY } from '../src/api/testing.js';
 import { CampaignScoreboard } from '../src/components/CampaignScoreboard.js';
 import { CampaignsPage } from '../src/components/CampaignsPage.js';
 import { ChatInput } from '../src/components/ChatInput.js';
-import { ProjectCampaignsView } from '../src/components/ProjectCampaignsView.js';
 import { TestingLaunchPanel } from '../src/components/TestingLaunchPanel.js';
 import { useCampaignsStore } from '../src/store/campaigns.js';
 import { useGateStore } from '../src/store/gates.js';
@@ -87,13 +86,6 @@ async function launchUnscoped(user: ReturnType<typeof userEvent.setup>, brief: s
 }
 
 describe('T30 — every rendered word on the Test surfaces says Test (#203)', () => {
-  it('T30 — the project-shell breadcrumb', async () => {
-    render(<ProjectCampaignsView projectId="proj-1" runs={[]} navigate={() => {}} />);
-    await screen.findByTestId('campaigns-page');
-    expect(screen.getByTestId('project-campaigns-crumb')).toHaveTextContent('Tests');
-    expectTestVocabulary(screen.getByTestId('project-campaigns'));
-  });
-
   it('T30 — the chat composer\'s group-attach chip', async () => {
     const user = userEvent.setup();
     // The composer refreshes the store on mount — answer the SAME fixture on the wire so the

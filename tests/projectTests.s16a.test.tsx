@@ -1,15 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, renderHook, screen, within } from '@testing-library/react';
 import { useRoute } from '../src/hooks/useRoute.js';
-import { expectTestVocabulary } from './renameGuard.js';
 
 /**
- * T13 — the project-shell route wiring for the project-scoped Test surface (`/p/:id/campaigns`):
- * `useRoute` parses the address to `{projectId, campaignsView: true}` with NO mode (a project-scoped
- * VIEW, not a fifth verb), and `ProjectCampaignsView` — what App renders for that route — frames
- * `CampaignsPage` with the project, so a "New test" there pre-selects it (T12's contract, reached
- * through the route). The breadcrumb speaks Test (#203); the route + testids keep the backend's
- * `campaigns` vocabulary.
+ * S16a-4f/4h — a project's tests: `/p/:id/campaigns` moved onto Testing (`?project=`), whose launch
+ * panel preselects the project (T12's contract, reached through the address). Successor of the
+ * retired ProjectCampaignsView suite (T13).
  */
 
 const listCampaigns = vi.fn();
@@ -33,7 +29,6 @@ vi.mock('../src/api/client.js', () => ({
   apiFetch: () => Promise.reject(new Error('not wired in this suite')),
 }));
 
-const { ProjectCampaignsView } = await import('../src/components/ProjectCampaignsView.js');
 const { TestingPage } = await import('../src/components/TestingPage.js');
 const { useCampaignsStore } = await import('../src/store/campaigns.js');
 
@@ -57,12 +52,12 @@ afterEach(() => {
 });
 
 describe('S16a-4f — /p/:projectId/campaigns MOVED onto Testing (?project=)', () => {
-  it('parses to the Testing landing — no project shell, no campaignsView (useMovedRoutes replaces it)', () => {
+  it('parses to the Testing landing — no project shell (useMovedRoutes replaces it)', () => {
     expect(routeAt('/p/proj-1/campaigns')).toMatchObject({
-      panel: 'testing', testingPage: 'campaigns', campaignsView: false, mode: null, runId: null, artifactId: null, showLaunch: false,
+      panel: 'testing', testingPage: 'campaigns', runId: null, artifactId: null, showLaunch: false,
     });
     expect(routeAt('/p/proj-1/campaigns/x').panel).toBe('not-found');
-    expect(routeAt('/testing/campaigns')).toMatchObject({ panel: 'testing', projectId: null, campaignsView: false });
+    expect(routeAt('/testing/campaigns')).toMatchObject({ panel: 'testing', projectId: null });
   });
 
   it('the Testing landing\'s `?project=` preselects THIS project in a new test\'s launch panel', async () => {
@@ -83,38 +78,5 @@ describe('S16a-4f — /p/:projectId/campaigns MOVED onto Testing (?project=)', (
     const select = within(panel).getByTestId('testing-launch-project') as HTMLSelectElement;
     await within(select).findByRole('option', { name: 'Merge the skins' });
     expect(select.value).toBe('');
-  });
-});
-
-describe('T13 — ProjectCampaignsView: the project frames the test landing', () => {
-  it('T13 — renders the project-campaigns container for the project, a "Tests" crumb, and a back door to the dashboard', async () => {
-    const navigate = vi.fn();
-    render(<ProjectCampaignsView projectId="proj-1" runs={[]} navigate={navigate} />);
-    expect(screen.getByTestId('project-campaigns')).toHaveAttribute('data-project-id', 'proj-1');
-    expect(screen.getByTestId('project-campaigns-crumb')).toHaveTextContent('Tests');
-    fireEvent.click(screen.getByTestId('project-campaigns-back'));
-    expect(navigate).toHaveBeenCalledWith('/p/proj-1');
-    // The landing mounts inside it — its probe runs and the page renders.
-    await screen.findByTestId('campaigns-page');
-  });
-
-  it('T13 → T12 — "New test" from the project shell pre-selects THIS project and resolves its repos as via-project chips', async () => {
-    render(<ProjectCampaignsView projectId="proj-1" runs={[]} navigate={() => {}} />);
-    await screen.findByTestId('campaigns-page');
-    fireEvent.click(screen.getByTestId('testing-campaign-open'));
-    const panel = await screen.findByTestId('testing-launch-panel');
-    const select = within(panel).getByTestId('testing-launch-project') as HTMLSelectElement;
-    await within(select).findByRole('option', { name: 'Merge the skins' });
-    expect(select.value).toBe('proj-1');
-    expect(listProjectMembers).toHaveBeenCalledWith('proj-1');
-    const chips = await within(panel).findAllByTestId('testing-launch-chip');
-    expect(chips.map((c) => c.dataset.repo)).toEqual(['r-1']);
-    expect(chips[0]!.dataset.source).toBe('project');
-  });
-
-  it('T30 — nothing rendered in the project frame says "Campaign" (the route + testids keep the word; the copy does not)', async () => {
-    render(<ProjectCampaignsView projectId="proj-1" runs={[]} navigate={() => {}} />);
-    await screen.findByTestId('campaigns-page');
-    expectTestVocabulary(screen.getByTestId('project-campaigns'));
   });
 });

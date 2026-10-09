@@ -46,8 +46,8 @@ def check(step: str, ok: bool, **detail) -> None:
 
 
 
-# Everything the Desk paints that animates in view (a live edge, a pulsing dot, a glow).
-ANIMATED = """() => [...document.querySelectorAll('[data-testid="desk"] *, [data-testid="live-edge"]')].filter((el) => {
+# Everything the Desk paints that animates in view (a pulsing dot, a glow).
+ANIMATED = """() => [...document.querySelectorAll('[data-testid="desk"] *')].filter((el) => {
   const r = el.getBoundingClientRect();
   const inView = r.width > 0 && r.height > 0 && r.bottom > 0 && r.top < innerHeight;
   const cs = getComputedStyle(el);

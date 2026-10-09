@@ -89,11 +89,6 @@ with sync_playwright() as p:
     set_fixture(origin, demo_runs=True, reset_demo=True, appearance={**DEFAULT_APPEARANCE})
     state: dict = {}
 
-    def stage_is(stage: str, timeout: int = 15000) -> None:
-        page.wait_for_function(
-            f"""() => document.querySelector('[data-testid="demo-run"]')?.dataset.stage === '{stage}'""",
-            timeout=timeout)
-
     def api(method: str, path: str, body: dict | None = None) -> dict:
         req = urllib.request.Request(f"{origin}/api/v1{path}", method=method, data=json.dumps(body or {}).encode())
         req.add_header("Content-Type", "application/json")

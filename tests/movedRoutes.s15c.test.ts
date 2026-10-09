@@ -65,9 +65,9 @@ describe('the redirect table (static moves)', () => {
       expect(parseRoute(p).panel, p).toBe('not-found');
     }
     // each parses to where it lands (no headless tick)
-    expect(parseRoute('/p/kes/build')).toMatchObject({ panel: 'everything', projectId: 'kes', mode: null });
-    expect(parseRoute('/p/kes/build/new')).toMatchObject({ panel: 'home', mode: null, showLaunch: false });
-    expect(parseRoute('/p/kes/campaigns')).toMatchObject({ panel: 'testing', testingPage: 'campaigns', campaignsView: false, mode: null });
+    expect(parseRoute('/p/kes/build')).toMatchObject({ panel: 'everything', projectId: 'kes' });
+    expect(parseRoute('/p/kes/build/new')).toMatchObject({ panel: 'home', showLaunch: false });
+    expect(parseRoute('/p/kes/campaigns')).toMatchObject({ panel: 'testing', testingPage: 'campaigns' });
   });
 
   it('is not a move: the launch form, a run, the project shell, a real page, a typo', () => {
@@ -84,8 +84,8 @@ describe('the moved addresses parse to "See everything" (no headless tick)', () 
     expect(parseRoute(p.split('?')[0]!).panel).toBe('everything');
   });
   it('/p/:id and /p/:id/chronicle parse to everything, scoped to the project', () => {
-    expect(parseRoute('/p/kes')).toMatchObject({ panel: 'everything', projectId: 'kes', mode: null });
-    expect(parseRoute('/p/kes/chronicle')).toMatchObject({ panel: 'everything', projectId: 'kes', mode: null });
+    expect(parseRoute('/p/kes')).toMatchObject({ panel: 'everything', projectId: 'kes' });
+    expect(parseRoute('/p/kes/chronicle')).toMatchObject({ panel: 'everything', projectId: 'kes' });
   });
   it('typos stay dead addresses: a segment under /everything, a non-mode under /p/:id, garbage', () => {
     for (const p of ['/everything/x', '/everything//typo', '/everything///typo', '/p/kes/bogus', '/nope', '/work//typo', '/work///typo', '/demo///typo', '/p/kes/chronicle/typo', '/p/kes/chronicle//typo', '/p/kes///typo', '/p/kes//x']) {
