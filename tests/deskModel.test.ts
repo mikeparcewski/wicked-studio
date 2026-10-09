@@ -8,7 +8,6 @@ import {
   ADDITIONAL_SETTINGS,
   DESK_RAIL_LINKS,
   noSignedInHelper,
-  START_CHIPS,
   deskGreeting,
   deskProjects,
   lapsedSeatChores,
@@ -196,12 +195,7 @@ describe('chores for whoever runs studio', () => {
   });
 });
 
-describe('the Start row and the rail destinations', () => {
-  it('offers the concept chips, Test included', () => {
-    expect(START_CHIPS.map((c) => c.label)).toEqual(
-      ['Research', 'Brainstorm', 'Plan', 'Build', 'Write a proposal', 'Make a demo', 'Test', 'Just ask']);
-  });
-
+describe('the rail destinations', () => {
   it('the rail: Skills · MCP tools · Steering; Additional settings: Configuration, Repositories, Workflows, Evals, Theme (Amendment 5)', () => {
     expect(DESK_RAIL_LINKS.map((l) => [l.label, l.path])).toEqual([['Skills', '/skills'], ['MCP tools', '/mcp'], ['Steering', '/rules']]);
     expect(ADDITIONAL_SETTINGS.map((d) => [d.label, d.path])).toEqual([

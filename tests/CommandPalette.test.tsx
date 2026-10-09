@@ -45,6 +45,7 @@ const { useGateStore } = await import('../src/store/gates.js');
 const { useAppearanceStore } = await import('../src/theming/appearance.js');
 const { chipsOf, useComposerChips } = await import('../src/store/composerChips.js');
 const { useSessionDrafts } = await import('../src/store/sessionDrafts.js');
+const { useComposerSeed } = await import('../src/store/composerSeed.js');
 
 function proj(id: string, name: string, updated_at: number): Project {
   return { id, name, description: null, status: 'active', scope: `project:${id}`, created_at: 1, updated_at };
@@ -243,21 +244,41 @@ describe('the verb table (§1.3)', () => {
     expect(useAppearanceStore.getState().appearance.theme).not.toBe(before);
   });
 
-  it('S16a-4f: New Build starts in the Desk composer (the project\'s @ chip inside a project) and sends nothing', () => {
+  it('S19b: New Build seeds the Desk composer with /workflow- (the project\'s @ chip inside a project) and sends nothing', () => {
     useComposerChips.setState({ byComposer: {} });
+    useComposerSeed.setState({ seed: null });
     const { navigate } = renderPalette();
     fireEvent.change(screen.getByTestId('palette-input'), { target: { value: '> new build' } });
     fireEvent.click(rows().find((r) => r.textContent?.includes('New Build'))!);
+    // From a page with no composer: the Desk first, its composer seeded with the command's start.
     expect(navigate).toHaveBeenCalledWith('/');
+    expect(useComposerSeed.getState().seed).toEqual({ composerKey: 'desk', text: '/workflow-' });
     expect(chipsOf(useComposerChips.getState(), 'desk')).toEqual([]);
 
     cleanup();
+    useComposerSeed.setState({ seed: null });
     const scoped = renderPalette({ projectId: 'q3-review-deck' });
     fireEvent.change(screen.getByTestId('palette-input'), { target: { value: '> new build' } });
     fireEvent.click(rows().find((r) => r.textContent?.includes('New Build'))!);
     expect(scoped.navigate).toHaveBeenCalledWith('/');
     expect(scoped.navigate.mock.calls.flat().some((p) => String(p).startsWith('/p/'))).toBe(false);
     expect(chipsOf(useComposerChips.getState(), 'desk').map((c) => c.key)).toEqual(['project:q3-review-deck']);
+    expect(useComposerSeed.getState().seed).toEqual({ composerKey: 'desk', text: '/workflow-' });
+    // The seed is not a draft: nothing is written as the message, nothing is sent.
     expect(useSessionDrafts.getState().drafts['desk'] ?? '').toBe('');
+  });
+
+  it('S19b: on a session page New Build seeds THAT composer and stays (no navigation)', () => {
+    useComposerSeed.setState({ seed: null });
+    const host = document.createElement('div');
+    host.setAttribute('data-testid', 'composer');
+    host.setAttribute('data-composer', 'run:r-1');
+    document.body.appendChild(host);
+    const { navigate } = renderPalette();
+    fireEvent.change(screen.getByTestId('palette-input'), { target: { value: '> new build' } });
+    fireEvent.click(rows().find((r) => r.textContent?.includes('New Build'))!);
+    expect(navigate).not.toHaveBeenCalled();
+    expect(useComposerSeed.getState().seed).toEqual({ composerKey: 'run:r-1', text: '/workflow-' });
+    host.remove();
   });
 });

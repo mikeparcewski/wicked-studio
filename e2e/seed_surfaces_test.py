@@ -4440,11 +4440,10 @@ def run_scenarios(rig: Rig, page) -> None:
                 "() => document.querySelectorAll('[data-testid=\"repo-chip\"][data-auto-attached=\"true\"]').length === 2", timeout=20_000)
             chips = attr_values(page, "repo-chip", "data-repo-ref")
             assert sorted(chips) == sorted([REPO_ID, repo2]), f"the composer attached {chips}, expected both project repos"
-            drawer = page.get_by_role("button", name=re.compile(r"open launch options", re.I))
-            drawer.click()
-            tid(page, "launch-workflow").wait_for(timeout=10_000)
-            tid(page, "launch-workflow").select_option("bug")
-            drawer.click()
+            # S19b: the workflow is named in the problem box — `/` opens the menu, a pick sets it.
+            tid(page, "launch-problem").click()
+            tid(page, "launch-problem").type("/")
+            page.locator('[data-testid="composer-menu-item"][data-workflow="bug"]').click(timeout=10_000)
             # (1) REQUIRED, no default; Send disabled with the reason; the notice says why there is no PR yet.
             target = tid(page, "launch-target-repo")
             target.wait_for(timeout=10_000)

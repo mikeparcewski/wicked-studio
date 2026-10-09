@@ -6,6 +6,7 @@ import * as client from '../src/api/client.js';
 import type { LaunchBodyWithDeliver } from '../src/api/types.js';
 import { DEFAULT_COMPOSER_PREFS, useComposerPrefsStore } from '../src/store/composerPrefs.js';
 import { clearRetryPrefill } from '../src/store/retryPrefill.js';
+import { pickLaunchWorkflow } from './launchWorkflowPick.js';
 
 /**
  * F-028 (acceptance run 1f12f9ab) — the launch composer must ASK which repo a
@@ -63,11 +64,9 @@ function renderBound(): void {
 
 /** Open the launch options drawer, pick the workflow and/or tick a repo, close it. */
 async function bind(user: User, opts: { workflow?: string; tick?: string }): Promise<void> {
+  // S19b: the workflow is named in the problem box (`/` → the menu), before the options drawer.
+  if (opts.workflow !== undefined) await pickLaunchWorkflow(user, opts.workflow);
   await user.click(screen.getByRole('button', { name: /open launch options/i }));
-  if (opts.workflow !== undefined) {
-    await waitFor(() => expect(screen.getByTestId('launch-workflow')).toBeInTheDocument());
-    await user.selectOptions(screen.getByTestId('launch-workflow'), opts.workflow);
-  }
   if (opts.tick !== undefined) await user.click(screen.getByTestId(`launch-repo-${opts.tick}`));
   await user.click(screen.getByRole('button', { name: /open launch options/i }));
 }

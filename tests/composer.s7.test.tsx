@@ -7,6 +7,7 @@ import { flushDecisionsForTest, resetDecisionsForTest } from '../src/board/undoQ
 import { Composer, type ComposerSend } from '../src/components/session/Composer.js';
 import { ProposalCard } from '../src/components/session/ProposalCard.js';
 import { useComposerChips } from '../src/store/composerChips.js';
+import { seedComposer, useComposerSeed } from '../src/store/composerSeed.js';
 import { useGateStore } from '../src/store/gates.js';
 import { resetPlanCatalog } from '../src/store/planCatalog.js';
 import { usePlanGateStore } from '../src/store/planGates.js';
@@ -374,5 +375,57 @@ describe('S19a: a workflow is named in the composer and launched from it', () =>
     key('Backspace');
     expect(screen.queryByTestId('composer-chip')).toBeNull();
     expect(screen.queryByTestId('composer-launch-row')).toBeNull();
+  });
+});
+
+describe('S19b: no Detected banner, the hint, and the composer seed', () => {
+  function DeskHarness(): React.ReactElement {
+    const [text, setText] = useState('');
+    return (
+      <Composer composerKey="desk" text={text} setText={setText} onSend={() => {}} placeholder="p" ariaLabel="a" variant="desk" hint
+        footer={<span data-testid="foot-slot">capture</span>} />
+    );
+  }
+  const deskType = (text: string): void => {
+    const box = screen.getByTestId('desk-composer-input') as HTMLTextAreaElement;
+    fireEvent.change(box, { target: { value: text, selectionStart: text.length } });
+    box.setSelectionRange(text.length, text.length);
+    fireEvent.select(box);
+  };
+
+  it('a code-shaped sentence names no workflow: no "Detected" text, no chip, nothing sent', () => {
+    render(<DeskHarness />);
+    deskType('fix the crash in checkout');
+    expect(document.body.textContent ?? '').not.toMatch(/Detected/);
+    expect(screen.queryByTestId('composer-chip')).toBeNull();
+    expect(posts).toStrictEqual([]);
+  });
+
+  it('"Type / for workflows" sits under the box beside the footer; hidden while the menu is open or a chip is present', async () => {
+    render(<DeskHarness />);
+    expect(screen.getByTestId('composer-hint').textContent).toBe('Type / for workflows');
+    expect(screen.getByTestId('foot-slot')).toBeInTheDocument();
+    deskType('/workflow-');
+    await screen.findByTestId('composer-menu');
+    expect(screen.queryByTestId('composer-hint')).toBeNull();
+    fireEvent.mouseDown(screen.getAllByTestId('composer-menu-item').filter((r) => r.getAttribute('data-cmd') === 'workflow-bug')[0]!);
+    expect(screen.getByTestId('composer-chip')).toBeInTheDocument();
+    expect(screen.queryByTestId('composer-menu')).toBeNull();
+    expect(screen.queryByTestId('composer-hint')).toBeNull();
+    expect(screen.getByTestId('foot-slot')).toBeInTheDocument();
+  });
+
+  it('a seed for this composer lands once, focused, and opens the / menu; a seed for another composer is left alone', async () => {
+    useComposerSeed.setState({ seed: null });
+    render(<DeskHarness />);
+    act(() => { seedComposer('s-other', '/workflow-'); });
+    expect((screen.getByTestId('desk-composer-input') as HTMLTextAreaElement).value).toBe('');
+    expect(useComposerSeed.getState().seed).not.toBeNull();
+    act(() => { seedComposer('desk', '/workflow-'); });
+    await waitFor(() => expect((screen.getByTestId('desk-composer-input') as HTMLTextAreaElement).value).toBe('/workflow-'));
+    expect(useComposerSeed.getState().seed).toBeNull();
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByTestId('desk-composer-input')));
+    await screen.findByTestId('composer-menu');
+    expect(screen.getAllByTestId('composer-menu-item').some((r) => r.getAttribute('data-group') === 'start-work')).toBe(true);
   });
 });

@@ -7,7 +7,7 @@ import {
   COMPOSER_DEFAULT_GATE_POSTURE,
 } from '../composerDefaults.js';
 import {
-  parseWorkflowCommand, workflowItems, WORKFLOWS_EMPTY_LINE, WORKFLOWS_LOADING_LINE, type WorkflowRow,
+  parseWorkflowCommand, workflowItems, WORKFLOWS_LOADING_LINE, type WorkflowRow,
 } from '../../board/workflowCommand.js';
 import {
   draftTarget, dropToken, menuToken, slashItems, wordOf, type DraftRunState, type DraftTarget, type SlashItem,
@@ -31,6 +31,8 @@ import { describeGate } from '../launchTarget.js';
 import type { ConfirmMode } from '../ContextPopover.js';
 import { useCapabilities } from '../../store/capabilities.js';
 import { useLaunchPreview } from '../../hooks/useLaunchPlan.js';
+import { takeComposerSeed, useComposerSeed } from '../../store/composerSeed.js';
+import { SlashMenu, type AtItem } from './SlashMenu.js';
 
 /** Where a send goes besides the words: the project an `@project` chip named, and whether it opens a fresh session. */
 export interface ComposerSend {
@@ -44,14 +46,6 @@ export interface ComposerSend {
   /** S16a-4e: the live chat this composer stands in (a chat's own session page) — the send is a
    *  reply INTO that chat, never into the Ask dock's own stored chat. */
   chatId?: string;
-}
-
-/** One `@` row: a project (a destination) or a helper (a subject). */
-interface AtItem {
-  kind: 'project' | 'helper';
-  id: string;
-  label: string;
-  line: string;
 }
 
 const TERMINAL = new Set(['completed', 'failed', 'cancelled']);
@@ -107,7 +101,7 @@ function useDraftTarget(runs: readonly SessionView[]): { target: DraftTarget; ga
  */
 export function Composer({
   composerKey, text, setText, onSend, runs = [], started = false, placeholder, ariaLabel, variant, className = '',
-  inputRef, navigate,
+  inputRef, navigate, hint = false, footer = null,
 }: {
   /** `desk`, or the session id. */
   composerKey: string;
@@ -126,6 +120,11 @@ export function Composer({
   inputRef?: React.MutableRefObject<HTMLTextAreaElement | null>;
   /** App-level route navigation (App.tsx's useRoute().navigate): a launched run opens its session. */
   navigate?: (path: string) => void;
+  /** S19b: the quiet "Type / for workflows" line under the box (the Desk's) — hidden while the menu
+   *  is open or a chip is present. */
+  hint?: boolean;
+  /** S19b: what sits beside the hint under the box (the Desk's Capture). */
+  footer?: React.ReactNode;
 }): React.ReactElement {
   const chips = useComposerChips((s) => chipsOf(s, composerKey));
   const roster = useRoster();
@@ -238,6 +237,22 @@ export function Composer({
       setCaret(value.length);
     });
   };
+
+  // S19b: a seed a command left for THIS composer (⌘K "New Build" → `/workflow-`) is taken once —
+  // the words land, the box is focused with the caret at the end, so a `/` seed opens the menu.
+  const seeded = useComposerSeed((s) => s.seed !== null && s.seed.composerKey === composerKey);
+  useEffect(() => {
+    if (!seeded) return;
+    const words = takeComposerSeed(composerKey);
+    if (words === null) return;
+    setText(words);
+    setClosedAt(null);
+    setCursor(0);
+    setNote(null);
+    focusEnd(words);
+    // focusEnd/setText are this render's closures; the seed is read at its edge only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seeded, composerKey]);
 
   const pickSlash = (item: SlashItem): void => {
     if (token === null) return;
@@ -362,76 +377,20 @@ export function Composer({
   return (
     <div className={`wk-composer ${className}`} data-testid="composer" data-composer={composerKey}>
       {menuOpen && token !== null && (
-        <div data-testid="composer-menu" id={`composer-menu-list-${composerKey}`} data-trigger={token.trigger} role="listbox" aria-label={token.trigger === '/' ? 'Add a step' : 'Name a project or a helper'} className="wk-composer-menu">
-          <p className="wk-composer-menu-head">{token.trigger === '/' ? (startCommands ? 'Start work, or add a step' : 'Add a step to this session') : 'Name a project or a helper'} · ↑↓ Enter</p>
-          {count === 0 && startCommands && defs === null && <p data-testid="composer-menu-empty" className="wk-composer-menu-empty">{WORKFLOWS_LOADING_LINE}</p>}
-          {count === 0 && startCommands && defs !== null && !anyWorkflows && <p data-testid="composer-menu-empty" className="wk-composer-menu-empty">{WORKFLOWS_EMPTY_LINE}</p>}
-          {count === 0 && !(startCommands && (defs === null || !anyWorkflows)) && <p data-testid="composer-menu-empty" className="wk-composer-menu-empty">Nothing matches.</p>}
-          {token.trigger === '/' && wf.length > 0 && (
-            <>
-              <p data-testid="composer-menu-group" data-group="start-work" className="wk-composer-menu-group">Start work</p>
-              {wf.map((it, i) => (
-                <button
-                  key={it.cmd}
-                  type="button"
-                  id={`composer-menu-option-${composerKey}-${i}`}
-                  role="option"
-                  aria-selected={i === active}
-                  data-testid="composer-menu-item"
-                  data-cmd={it.cmd}
-                  data-group="start-work"
-                  data-workflow={it.workflowId}
-                  title={it.line}
-                  onMouseDown={(e) => { e.preventDefault(); pickWorkflow(it); }}
-                  className={`wk-composer-menu-item${i === active ? ' wk-composer-menu-item--on' : ''}`}
-                >
-                  <code className="wk-composer-cmd">/{it.cmd}</code>
-                  <span><b>{it.key}</b> <small>{it.line}</small></span>
-                </button>
-              ))}
-            </>
-          )}
-          {token.trigger === '/' && (wf.length > 0 && slash.length > 0) && (
-            <p data-testid="composer-menu-group" data-group="add-step" className="wk-composer-menu-group">Add a step</p>
-          )}
-          {token.trigger === '/' && slash.map((it, i) => (
-            <button
-              key={it.command.cmd}
-              type="button"
-              id={`composer-menu-option-${composerKey}-${wf.length + i}`}
-              role="option"
-              aria-selected={wf.length + i === active}
-              aria-disabled={it.refused !== null}
-              data-testid="composer-menu-item"
-              data-cmd={it.command.cmd}
-              data-group="add-step"
-              data-refused={it.refused !== null ? 'true' : 'false'}
-              title={it.refused ?? it.command.line}
-              onMouseDown={(e) => { e.preventDefault(); pickSlash(it); }}
-              className={`wk-composer-menu-item${wf.length + i === active ? ' wk-composer-menu-item--on' : ''}${it.refused !== null ? ' wk-composer-menu-item--off' : ''}`}
-            >
-              <code className="wk-composer-cmd">/{it.command.cmd}</code>
-              <span><b>{it.command.word}</b> <small>{it.refused ?? it.command.line}</small></span>
-            </button>
-          ))}
-          {token.trigger === '@' && ats.map((it, i) => (
-            <button
-              key={`${it.kind}:${it.id}`}
-              type="button"
-              id={`composer-menu-option-${composerKey}-${i}`}
-              role="option"
-              aria-selected={i === active}
-              data-testid="composer-menu-item"
-              data-kind={it.kind}
-              data-id={it.id}
-              onMouseDown={(e) => { e.preventDefault(); pickAt(it); }}
-              className={`wk-composer-menu-item${i === active ? ' wk-composer-menu-item--on' : ''}`}
-            >
-              <code className="wk-composer-cmd">@</code>
-              <span><b>{it.label}</b> <small>{it.line}</small></span>
-            </button>
-          ))}
-        </div>
+        <SlashMenu
+          menuKey={composerKey}
+          trigger={token.trigger}
+          startCommands={startCommands}
+          defsLoading={defs === null}
+          anyWorkflows={anyWorkflows}
+          wf={wf}
+          slash={slash}
+          ats={ats}
+          active={active}
+          onPickWorkflow={pickWorkflow}
+          onPickSlash={pickSlash}
+          onPickAt={pickAt}
+        />
       )}
       {(chips.length > 0 || note !== null || refusal !== null) && (
         <div className="wk-composer-chips">
@@ -535,6 +494,14 @@ export function Composer({
         />
         <button type="submit" data-testid={variant === 'desk' ? 'desk-composer-send' : 'session-composer-send'} aria-label={wfChip !== null ? 'Launch' : 'Send'} disabled={!canSend} className="wk-desk-send">↑</button>
       </form>
+      {(hint || footer !== null) && (
+        <div className="wk-composer-foot">
+          {hint && !menuOpen && chips.length === 0 && (
+            <p data-testid="composer-hint" className="wk-composer-hint">Type <kbd>/</kbd> for workflows</p>
+          )}
+          {footer}
+        </div>
+      )}
     </div>
   );
 }

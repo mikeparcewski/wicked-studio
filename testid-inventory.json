@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.6.7",
   "counts": {
-    "files": 170,
-    "occurrences": 1916,
-    "static": 1704,
+    "files": 171,
+    "occurrences": 1915,
+    "static": 1703,
     "dynamic": 36,
     "computed": 6
   },
@@ -1024,6 +1024,13 @@
       ]
     },
     {
+      "testId": "composer-hint",
+      "files": [
+        "src/board/objectActions.ts",
+        "src/components/session/Composer.tsx"
+      ]
+    },
+    {
       "testId": "composer-launch-deliver-word",
       "files": [
         "src/components/session/Composer.tsx"
@@ -1068,25 +1075,25 @@
     {
       "testId": "composer-menu",
       "files": [
-        "src/components/session/Composer.tsx"
+        "src/components/session/SlashMenu.tsx"
       ]
     },
     {
       "testId": "composer-menu-empty",
       "files": [
-        "src/components/session/Composer.tsx"
+        "src/components/session/SlashMenu.tsx"
       ]
     },
     {
       "testId": "composer-menu-group",
       "files": [
-        "src/components/session/Composer.tsx"
+        "src/components/session/SlashMenu.tsx"
       ]
     },
     {
       "testId": "composer-menu-item",
       "files": [
-        "src/components/session/Composer.tsx"
+        "src/components/session/SlashMenu.tsx"
       ]
     },
     {
@@ -1677,19 +1684,6 @@
     {
       "testId": "desk-signin-lead",
       "files": [
-        "src/components/desk/Desk.tsx"
-      ]
-    },
-    {
-      "testId": "desk-start-chip",
-      "files": [
-        "src/components/desk/Desk.tsx"
-      ]
-    },
-    {
-      "testId": "desk-start-row",
-      "files": [
-        "src/board/objectActions.ts",
         "src/components/desk/Desk.tsx"
       ]
     },
@@ -3128,9 +3122,9 @@
       ]
     },
     {
-      "testId": "launch-workflow",
+      "testId": "launch-workflow-pill",
       "files": [
-        "src/components/ContextPopover.tsx"
+        "src/components/ChatInput.tsx"
       ]
     },
     {

@@ -1,5 +1,5 @@
 import { seatStandingWord } from './HealthRailSection.js';
-import type { EntityMode, RepoEntry, RosterSeat, WorkflowDef } from '../api/types.js';
+import type { EntityMode, RepoEntry, RosterSeat } from '../api/types.js';
 
 export type ConfirmMode = 'none' | 'all' | 'before';
 
@@ -13,26 +13,9 @@ interface Props {
   onBeforeOrdChange: (ord: number) => void;
   entityMode: EntityMode;
   onEntityModeChange: (mode: EntityMode) => void;
-  workflows: WorkflowDef[];
-  workflow: string;
-  onWorkflowChange: (wf: string) => void;
   repos: RepoEntry[];
   repoRefs: string[];
   onRepoRefsChange: (refs: string[]) => void;
-}
-
-const WORKFLOW_LABELS: Record<string, string> = {
-  feature: 'Feature (6 phases)',
-  bug: 'Bug (4 phases)',
-  migration: 'Migration (5 phases)',
-};
-
-function getWorkflowLabel(id: string, workflows: WorkflowDef[]): string {
-  const wf = workflows.find((w) => w.id === id);
-  if (wf) {
-    return `${id.charAt(0).toUpperCase()}${id.slice(1)} (${wf.phases.length} phases)`;
-  }
-  return WORKFLOW_LABELS[id] ?? id;
 }
 
 function SectionHead({ children }: { children: React.ReactNode }): React.ReactElement {
@@ -51,7 +34,8 @@ function Divider(): React.ReactElement {
 }
 
 /**
- * Options popover for the chat input launch form.
+ * Options popover for the chat input launch form. The workflow is not chosen here (S19b): a leading
+ * `/` in the problem box opens the workflow menu.
  * Rendered absolutely above the + button by ChatInput; close logic lives there.
  */
 export function ContextPopover({
@@ -64,9 +48,6 @@ export function ContextPopover({
   onBeforeOrdChange,
   entityMode,
   onEntityModeChange,
-  workflows,
-  workflow,
-  onWorkflowChange,
   repos,
   repoRefs,
   onRepoRefsChange,
@@ -201,34 +182,7 @@ export function ContextPopover({
 
       <Divider />
 
-      {/* ── Workflow ──────────────────────────────────────────────── */}
-      <div className="px-4 py-3">
-        <SectionHead>Choose workflow</SectionHead>
-        <select
-          data-testid="launch-workflow"
-          className="rounded-lg px-2 py-1 w-full"
-          style={{
-            background: 'var(--surface-base)',
-            border: '1px solid var(--surface-raised)',
-            color: 'var(--ink-high)',
-          }}
-          value={workflow}
-          onChange={(e) => onWorkflowChange(e.target.value)}
-        >
-          <option value="">(free-text)</option>
-          {(workflows.length > 0
-            ? workflows.map((w) => w.id)
-            : Object.keys(WORKFLOW_LABELS)
-          ).map((id) => (
-            <option key={id} value={id}>
-              {getWorkflowLabel(id, workflows)}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <Divider />
-
+      {/* S19b: no "Choose workflow" here — the problem box names one with `/workflow-<key>`. */}
       {/* ── Repos ────────────────────────────────────────────────── */}
       <div className="px-4 py-3">
         <SectionHead>Add repos</SectionHead>

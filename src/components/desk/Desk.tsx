@@ -8,7 +8,6 @@ import { ReplayMove } from '../ReplayMove.js';
 import { StandingOrdersPanel } from '../StandingOrdersPanel.js';
 import {
   deskGreeting, deskProjects, deskReadState, lapsedSeatChores, needsByRun, needsHeadline, needTextByRun, noSignedInHelper, railGroups,
-  START_CHIPS,
 } from '../../board/deskModel.js';
 import { needCount } from '../../board/needsQueue.js';
 import type { NeedRow } from '../../board/needsYou.js';
@@ -50,7 +49,7 @@ const CARDS_MAX = 3;
  * The greeting, Studio's one sentence ("N things need you."), "While you were away" after an
  * absence, the needs-you list (the ONE fold, rendered as its `desk` variant), the chores "for
  * whoever runs studio" (lapsed sign-ins from `GET /roster`, never counted as needing you), "Your
- * projects" in sentences, the Start row and the composer. No KPI tile, no chart, no status bar.
+ * projects" in sentences, and the composer ("Type / for workflows" under it, Capture beside that). No KPI tile, no chart, no status bar.
  *
  * Render only: counts and sentences are `board/deskModel.ts` over `useNeedsRows`, `useBoardModel`,
  * `useHandover` and the roster.
@@ -140,16 +139,6 @@ export function Desk({ runs, runsLoaded, runsError = null, onRetryRuns, needRows
             )}
     </>
   );
-
-  const seed = (s: string): void => {
-    setText(s);
-    requestAnimationFrame(() => {
-      const el = box.current;
-      if (el === null) return;
-      el.focus();
-      el.setSelectionRange(s.length, s.length);
-    });
-  };
 
   return (
     <div data-testid="desk" data-object="desk" className="wk-desk">
@@ -244,17 +233,9 @@ export function Desk({ runs, runsLoaded, runsError = null, onRetryRuns, needRows
 
       {signIn !== null && <SignInPanel seat={signIn} onClose={() => setSignIn(null)} />}
       <div className="wk-desk-bottom">
-        <div data-testid="desk-start-row" className="wk-desk-start">
-          <span className="wk-desk-start-label">Start something:</span>
-          {START_CHIPS.map((c) => (
-            <button key={c.label} type="button" data-testid="desk-start-chip" data-chip={c.label} onClick={() => seed(c.seed)} className="wk-desk-chip">
-              {c.label}
-            </button>
-          ))}
-          {/* S15a: Capture (Studio OS behaviour 8) — Home's verb row carried it beside Do Work; on the
-              Desk it is the last way to start something. What it files lands in the list above. */}
-          <CaptureDrop runs={runs} opens="up" />
-        </div>
+        {/* S19b: the Start row is gone — work starts with `/workflow-<key>` in the composer, and the
+            quiet hint under it says so. Capture (S15a, Studio OS behaviour 8) sits beside the hint;
+            what it files lands in the list above. */}
         <Composer
           composerKey="desk"
           text={text}
@@ -265,6 +246,8 @@ export function Desk({ runs, runsLoaded, runsError = null, onRetryRuns, needRows
           ariaLabel="Ask or tell studio what to do"
           placeholder="Ask anything across your projects, or tell one what to do"
           variant="desk"
+          hint
+          footer={<CaptureDrop runs={runs} opens="up" />}
         />
       </div>
     </div>

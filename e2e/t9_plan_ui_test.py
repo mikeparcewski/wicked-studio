@@ -232,9 +232,10 @@ with sync_playwright() as p:
               and unscoped.get("plan", {}).get("touch") == ["src/upload/limiter.ts"], body=unscoped)
 
         open_composer(page, origin)
-        page.get_by_role("button", name="Open launch options").click()
-        page.get_by_test_id("launch-workflow").select_option("feature")
-        page.keyboard.press("Escape")
+        # S19b: the workflow is named in the problem box — `/` opens the menu, a pick sets it.
+        page.get_by_test_id("launch-problem").click()
+        page.get_by_test_id("launch-problem").type("/")
+        page.locator('[data-testid="composer-menu-item"][data-workflow="feature"]').click()
         wait_attr(page, "launch-preview", "data-of", "preset")
         wait_attr(page, "launch-preview", "data-state", "pending-scope")
         page.get_by_test_id("launch-problem").fill("add a rate limiter to the upload endpoint")

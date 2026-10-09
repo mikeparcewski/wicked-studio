@@ -283,19 +283,7 @@ export function lapsedSeatChores(roster: readonly RosterSeat[] | null): DeskChor
     });
 }
 
-// ── Start something, and where the rail reaches ──────────────────────────────
-
-/** The Start row: each chip puts its first words in the composer; nothing is sent. */
-export const START_CHIPS: readonly { label: string; seed: string }[] = [
-  { label: 'Research', seed: 'Research ' },
-  { label: 'Brainstorm', seed: 'Brainstorm ' },
-  { label: 'Plan', seed: 'Plan ' },
-  { label: 'Build', seed: 'Build ' },
-  { label: 'Write a proposal', seed: 'Write a proposal for ' },
-  { label: 'Make a demo', seed: 'Make a demo of ' },
-  { label: 'Test', seed: 'Test ' },
-  { label: 'Just ask', seed: '' },
-];
+// ── Where the rail reaches ───────────────────────────────────────────────────
 
 /**
  * THE RAIL'S FIXED ENTRIES (DES-STUDIO-REBUILD-001 Amendment 5, as revised). Skills, MCP tools and
