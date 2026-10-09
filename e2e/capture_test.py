@@ -25,8 +25,8 @@ rule into the `proposals` queue):
   5 ask        the Ask dock carries the same drop, inline, with its consequence; opening it posts
                nothing.
 
-On the Desk (the one shell since S18d) the drop point is the Desk's
-Start row (its last way to start something — the Desk has no verb row), the triage is the Desk's list,
+On the Desk (the one shell since S18d) the drop point sits under the Desk's composer, beside its
+"Type / for workflows" hint (S19b retired the Start row — the Desk has no verb row), the triage is the Desk's list,
 and the Ask dock opens with ⌘/Ctrl+Shift+A (the Desk's composer stands in for Home's Ask invite).
 
 Captures (e2e/shots/): capture-desk-drop.png, capture-desk-triage.png, capture-desk-ask.png.
@@ -110,10 +110,20 @@ with sync_playwright() as p:
 
     def section_verb() -> None:
         page.goto(f"{origin}/", wait_until="networkidle")
-        # The Desk has no verb row: Capture is the Start row's last way to start something.
-        order = page.evaluate("""() => [...document.querySelector('[data-testid="desk-start-row"]').children]
-            .map(e => e.dataset.testid).filter(Boolean)""")
-        check("capture-on-the-start-row", order[-1:] == ["capture"] and "desk-start-chip" in order, order=order)
+        # The Desk has no verb row (and, since S19b, no Start row): Capture sits under the composer,
+        # beside the "Type / for workflows" hint.
+        place = page.evaluate("""() => {
+            const cap = document.querySelector('[data-testid="composer"][data-composer="desk"] [data-testid="capture"]');
+            const composer = document.querySelector('[data-testid="composer"][data-composer="desk"]');
+            const input = document.querySelector('[data-testid="desk-composer-input"]');
+            if (!cap || !composer || !input) return null;
+            return { order: [...cap.parentElement.children].map(e => e.dataset.testid).filter(Boolean),
+                     inComposer: true,
+                     below: cap.getBoundingClientRect().top >= input.getBoundingClientRect().bottom - 0.5,
+                     startRow: document.querySelectorAll('[data-testid="desk-start-row"]').length };
+        }""")
+        check("capture-beside-the-hint", place is not None and place["order"] == ["composer-hint", "capture"]
+              and place["inComposer"] and place["below"] and place["startRow"] == 0, place=place)
         page.get_by_test_id("capture-open").click()
         drop = page.get_by_test_id("capture-drop")
         drop.wait_for(state="visible")
@@ -178,8 +188,8 @@ with sync_playwright() as p:
               chip.inner_text() == "· 5 waiting"
               and status.startswith("5 proposals from your capture waiting in Needs You: 4 memory-only, 1 changes enforcement"),
               chip=chip.inner_text(), status=status)
-        # The Start row's label, chips and Capture differ in height: one row = one shared band.
-        header_rows = page.evaluate("""() => { const rs = [...document.querySelector('[data-testid="desk-start-row"]').children]
+        # The hint and Capture differ in height: one row = one shared band.
+        header_rows = page.evaluate("""() => { const rs = [...document.querySelector('[data-testid="composer"][data-composer="desk"] [data-testid="capture"]').parentElement.children]
             .map(c => c.getBoundingClientRect()).filter(r => r.height > 0);
             return Math.max(...rs.map(r => r.top)) < Math.min(...rs.map(r => r.bottom)) ? 1 : 2; }""")
         check("verb-row-stays-one-row", header_rows == 1, rows=header_rows)

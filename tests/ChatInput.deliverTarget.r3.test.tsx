@@ -13,6 +13,7 @@ import { DEFAULT_COMPOSER_PREFS, useComposerPrefsStore } from '../src/store/comp
 import { clearRetryPrefill } from '../src/store/retryPrefill.js';
 import { deliverPreview } from '../src/board/undoQueue.js';
 import type { DeliverTargetResponse } from '../src/api/types.js';
+import { pickLaunchWorkflow } from './launchWorkflowPick.js';
 
 const LOCAL_SENTENCE =
   'Pushes the run branch to origin (/srv/proof/remote.git) — a local path, so no pull request can be opened against it: unless another remote in this checkout is a GitHub repository gh resolves, the pushed branch IS the delivery.';
@@ -40,9 +41,9 @@ beforeEach(() => {
 });
 
 async function bind(user: ReturnType<typeof userEvent.setup>): Promise<void> {
+  // S19b: the workflow is named in the problem box (`/` → the menu), before the options drawer.
+  await pickLaunchWorkflow(user, 'feature');
   await user.click(screen.getByRole('button', { name: /open launch options/i }));
-  await waitFor(() => expect(screen.getByTestId('launch-workflow')).toBeInTheDocument());
-  await user.selectOptions(screen.getByTestId('launch-workflow'), 'feature');
   await user.click(screen.getByTestId('launch-repo-shipproof-local'));
   await user.click(screen.getByRole('button', { name: /open launch options/i }));
 }

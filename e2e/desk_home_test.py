@@ -12,11 +12,12 @@ proves the S4 acceptance:
      every session badge in the rail names a run the needs-you list holds.
   3. CHORES: the lapsed-seat chore ("For whoever runs studio") comes from GET /roster, is not in
      the count, and no disk chore is rendered.
-  4. FIT: every needs-you row, every chore and every project card ends above the Start row.
+  4. FIT: every needs-you row, every chore and every project card ends above the composer.
   5. WHILE YOU WERE AWAY: after a 3 h absence the handover renders on the Desk, from
      board/handover.ts, as its `desk-away` variant.
-  6. LETTERS TYPE: a letter typed with the body focused lands in the Desk composer; the Start row's
-     Test chip puts "Test " in it; neither sends anything. The composer's own Send hands the message
+  6. LETTERS TYPE: a letter typed with the body focused lands in the Desk composer; S19b: no Start
+     row — the quiet "Type / for workflows" hint sits under the box, and `/` opens the menu (the hint
+     hides while it is open); neither sends anything. The composer's own Send hands the message
      to the Ask dock, which sends it exactly once — closing and reopening the dock sends nothing.
   7. THE RAIL (Amendment 5): Desk · Watchtower · sessions · Skills · MCP tools · Steering · Health ·
      "Additional settings" (Configuration, Repositories, Workflows, Evals, Theme), in that order, no
@@ -88,7 +89,7 @@ KEYS = """() => [...document.querySelectorAll('[data-testid="need-row"], [data-t
   .map(r => r.dataset.key)"""
 
 FIT = """() => {
-  const start = document.querySelector('[data-testid="desk-start-row"]');
+  const start = document.querySelector('[data-testid="composer"][data-composer="desk"]');
   const top = start ? start.getBoundingClientRect().top : -1;
   const items = [...document.querySelectorAll(
     '[data-testid="need-row"], [data-testid="desk-chore"], [data-testid="desk-project"]')];
@@ -167,28 +168,34 @@ with sync_playwright() as p:
           and not any(w in label.lower() for w in ("disk", "space", "storage")),
           chores=chores)
 
-    # ── 4. everything fits above the Start row ───────────────────────────────────
+    # ── 4. everything fits above the composer (S19b: the Start row is gone) ───────
     fit = page.evaluate(FIT)
     cards = page.locator('[data-testid="desk-project"]').count()
-    check("fits-above-start-row", fit["startTop"] > 0 and fit["n"] > 0 and not fit["below"]
+    check("fits-above-composer", fit["startTop"] > 0 and fit["n"] > 0 and not fit["below"]
           and 1 <= cards <= 3, cards=cards, **fit)
 
-    # ── 6. letters type; the Start row only fills the box ─────────────────────────
+    # ── 6. letters type; "Type / for workflows" is the hint, and `/` opens the menu ──
     before = len(posts)
     page.evaluate("() => document.activeElement && document.activeElement.blur()")
     page.keyboard.type("hi")
     typed = page.evaluate("() => document.querySelector('[data-testid=\"desk-composer-input\"]')?.value ?? null")
     page.get_by_test_id("desk-composer-input").fill("")
-    page.locator('[data-testid="desk-start-chip"][data-chip="Test"]').click()
-    seeded = page.evaluate("() => document.querySelector('[data-testid=\"desk-composer-input\"]')?.value ?? null")
+    hint = page.get_by_test_id("composer-hint").inner_text() if page.get_by_test_id("composer-hint").count() else None
+    start_row = page.locator('[data-testid="desk-start-row"], [data-testid="desk-start-chip"]').count()
+    page.get_by_test_id("desk-composer-input").type("/")
     try:
-        page.wait_for_function("() => document.activeElement?.dataset?.testid === 'desk-composer-input'", timeout=2000)
+        page.get_by_test_id("composer-menu").wait_for(state="visible", timeout=4000)
+        menu = True
     except Exception:
-        pass
+        menu = False
+    hint_while_open = page.get_by_test_id("composer-hint").count()
     focused = page.evaluate("() => document.activeElement?.dataset?.testid ?? null")
+    page.keyboard.press("Escape")
     page.wait_for_timeout(300)
-    check("letters-type-and-chips-fill", typed == "hi" and seeded == "Test " and focused == "desk-composer-input"
-          and len(posts) == before, typed=typed, seeded=seeded, focused=focused, posts=posts[before:])
+    check("letters-type-and-slash-opens-the-menu", typed == "hi" and hint == "Type / for workflows" and start_row == 0
+          and menu and hint_while_open == 0 and focused == "desk-composer-input" and len(posts) == before,
+          typed=typed, hint=hint, start_row=start_row, menu=menu, hint_while_open=hint_while_open,
+          focused=focused, posts=posts[before:])
     page.get_by_test_id("desk-composer-input").fill("")
 
     # ── 6b. the composer's Send hands the message to the Ask dock, which sends it ONCE ──────

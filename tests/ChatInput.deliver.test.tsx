@@ -8,6 +8,7 @@ import { DEFAULT_COMPOSER_PREFS, useComposerPrefsStore } from '../src/store/comp
 import { clearRetryPrefill, setRetryPrefill } from '../src/store/retryPrefill.js';
 import { teamPlanApi } from '../src/api/teamPlan.js';
 import { resetPlanCatalog } from '../src/store/planCatalog.js';
+import { pickLaunchWorkflow } from './launchWorkflowPick.js';
 
 /**
  * studio#123, wire reworked by crew#393 (api-types 0.18.0) — the composer's
@@ -58,11 +59,9 @@ async function bind(
   user: ReturnType<typeof userEvent.setup>,
   opts: { workflow?: string; repo?: string },
 ): Promise<void> {
+  // S19b: the workflow is named in the problem box (`/` → the menu), before the options drawer.
+  if (opts.workflow !== undefined) await pickLaunchWorkflow(user, opts.workflow);
   await user.click(screen.getByRole('button', { name: /open launch options/i }));
-  if (opts.workflow !== undefined) {
-    await waitFor(() => expect(screen.getByTestId('launch-workflow')).toBeInTheDocument());
-    await user.selectOptions(screen.getByTestId('launch-workflow'), opts.workflow);
-  }
   if (opts.repo !== undefined) {
     await user.click(screen.getByTestId(`launch-repo-${opts.repo}`));
   }

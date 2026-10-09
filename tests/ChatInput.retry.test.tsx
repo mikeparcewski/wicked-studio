@@ -53,7 +53,7 @@ describe('ChatInput — retry-as-prefill (§4.3)', () => {
     // Intent equals the original problem (§4.5 AC).
     expect(screen.getByTestId('launch-problem')).toHaveValue('refactor the auth middleware');
     // Workflow / repo / gate posture surface as the editable pills.
-    expect(screen.getByText('Workflow: feature')).toBeInTheDocument();
+    expect(screen.getByText('/workflow-feature')).toBeInTheDocument();
     expect(screen.getByText('Repo: studio-api')).toBeInTheDocument();
     expect(screen.getByText('Gate: every unit')).toBeInTheDocument();
     // The lineage claim is visible and clearable.

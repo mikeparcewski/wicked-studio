@@ -16,7 +16,10 @@ import { seatStandingWord } from './HealthRailSection.js';
 import { noCarryingSeatReason } from './gateVerdictModel.js';
 import { detectWorkflow, launchNeedsRepo, launchSubmit, readyLead } from '../board/launchModel.js';
 import { isSystemWorkflowIn, setCachedWorkflows } from '../store/workflowCache.js';
-import { presetSystemFlag, usePlanCatalog } from '../store/planCatalog.js';
+import { loadPresets, presetSystemFlag, usePlanCatalog } from '../store/planCatalog.js';
+import { menuToken, dropToken } from '../board/planDraft.js';
+import { workflowItems, type WorkflowRow } from '../board/workflowCommand.js';
+import { SlashMenu } from './session/SlashMenu.js';
 import { ContextPopover } from './ContextPopover.js';
 import { describeGate, normalizeRepoRefs, repoSlugOf, resolveLaunchTarget } from './launchTarget.js';
 import type { ConfirmMode } from './ContextPopover.js';
@@ -222,10 +225,8 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     [workflows, presets],
   );
 
-  const selectableWorkflows = useMemo(
-    () => workflows.filter((w) => !w.is_system),
-    [workflows],
-  );
+  /** Whether `GET /workflows` has answered (or failed): before it, the `/` menu says it is reading. */
+  const [workflowsRead, setWorkflowsRead] = useState(false);
   const [selectedClis, setSelectedClis] = useState<Set<string>>(new Set());
   const [repos, setRepos] = useState<RepoEntry[]>([]);
   const [repoRefs, setRepoRefs] = useState<string[]>(prefill?.repoRef ? [prefill.repoRef] : []);
@@ -462,8 +463,10 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   const [submitting, setSubmitting] = useState(false);
   const [elapsedSecs, setElapsedSecs] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const [detectedWorkflow, setDetectedWorkflow] = useState<string | null>(null);
-  const [workflowDismissed, setWorkflowDismissed] = useState(false);
+  // S19b: the problem box takes the composer's grammar — a leading `/` opens the workflow menu.
+  const [problemCaret, setProblemCaret] = useState(0);
+  const [menuCursor, setMenuCursor] = useState(0);
+  const [menuClosedAt, setMenuClosedAt] = useState<number | null>(null);
 
   // ── Popover state ──────────────────────────────────────────────────────────
   const [popoverOpen, setPopoverOpen] = useState(false);
@@ -515,8 +518,9 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
         // side asks first, the session pays for ONE `GET /workflows`.
         setCachedWorkflows(wfs);
         setWorkflows(wfs);
+        setWorkflowsRead(true);
       })
-      .catch(() => {});
+      .catch(() => setWorkflowsRead(true));
     // `prefill` is lazy-initialized state: stable for the component's lifetime,
     // so this still runs exactly once per mount.
   }, [prefill]);
@@ -584,15 +588,6 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     const maxHeight = 20 * 5; // 5 lines × 20 px line-height
     ta.style.height = `${Math.min(ta.scrollHeight, maxHeight)}px`;
   }, [problem]);
-
-  // ── Workflow signal detection ───────────────────────────────────────────────
-  useEffect(() => {
-    if (!problem.trim() || workflow || workflowOverride) {
-      setDetectedWorkflow(null);
-      return;
-    }
-    setDetectedWorkflow(detectWorkflow(problem));
-  }, [problem, workflow, workflowOverride]);
 
   // ── Close popover on outside click ─────────────────────────────────────────
   useEffect(() => {
@@ -809,6 +804,42 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     }
   }
 
+  // S19b: the `/` menu on the problem box (DES-STUDIO-REBUILD-001 §5.5) — the composer's "Start work"
+  // rows, read off the daemon's own catalog, as the box's FIRST token only. A forced workflow
+  // (`workflowOverride`) or a composed plan already names the work: no menu then.
+  const slashToken = runId || workflowOverride?.trim() || selection.composing ? null : menuToken(problem, problemCaret);
+  const startToken = slashToken !== null && slashToken.trigger === '/' && slashToken.start === 0 ? slashToken : null;
+  const launchMenuOpen = startToken !== null && menuClosedAt !== startToken.start;
+  const menuProjectId = lockedProjectId ?? selectedProjectId;
+  const menuPresetsState = presets[menuProjectId ?? ''];
+  const menuPresets = Array.isArray(menuPresetsState) ? menuPresetsState : null;
+  const menuDefs = workflowsRead ? workflows : null;
+  const menuRows = useMemo(
+    () => (startToken !== null ? workflowItems(startToken.query, menuDefs, menuPresets) : []),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [startToken?.query, startToken !== null, menuDefs, menuPresets],
+  );
+  const anyMenuWorkflows = useMemo(() => workflowItems('', menuDefs, menuPresets).length > 0, [menuDefs, menuPresets]);
+  const menuActive = menuRows.length === 0 ? 0 : Math.min(menuCursor, menuRows.length - 1);
+  useEffect(() => {
+    if (launchMenuOpen) loadPresets(menuProjectId ?? null);
+  }, [launchMenuOpen, menuProjectId]);
+  /** A pick names the form's workflow and takes the `/…` token out of the problem. */
+  const pickLaunchWorkflow = (row: WorkflowRow): void => {
+    if (startToken === null) return;
+    const next = dropToken(problem, startToken.start, problemCaret).replace(/^\s+/, '');
+    setProblem(next);
+    setWorkflow(row.workflowId);
+    setMenuCursor(0);
+    requestAnimationFrame(() => {
+      const el = textareaRef.current;
+      if (el === null) return;
+      el.focus();
+      el.setSelectionRange(next.length, next.length);
+      setProblemCaret(next.length);
+    });
+  };
+
   // ══════════════════════════════════════════════════════════════════════════
   // Run-selected mode: steer at gates, inject if executing, placeholder otherwise
   // ══════════════════════════════════════════════════════════════════════════
@@ -1007,9 +1038,6 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   // says what it will be before it does, instead of promising a planned run.
   const planMissing = targetRepoRef !== null && selection.plan === null && launchWorkflow === '';
   const { canSubmit, noSeatReason, planNote } = launchSubmit({ problem, selectedClis, submitting, targetRequired, roster, planMissing });
-  // A composed plan replaces the workflow, so a detected workflow is no suggestion while one is in hand.
-  const showDetection =
-    detectedWorkflow !== null && !workflowDismissed && !workflow && !workflowOverride && !selection.composing;
 
   // The switcher's current binding (§5.2). Pre-bound (§4.3): the project rides
   // the route, so it shows even before the name resolves — id first, name once
@@ -1179,11 +1207,10 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   }
   if (workflow) {
     activePills.push({
-      label: `Workflow: ${workflow}`,
-      onClear: () => {
-        setWorkflow('');
-        setWorkflowDismissed(true);
-      },
+      // S19b: the pill reads as the command that named it.
+      label: `/workflow-${workflow}`,
+      onClear: () => setWorkflow(''),
+      attrs: { 'data-testid': 'launch-workflow-pill', 'data-workflow': workflow },
     });
   }
   for (const rid of attachedRefs) {
@@ -1403,40 +1430,6 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
           navigate={navigate ?? ((): void => undefined)}
           onClose={() => setShowNewProject(false)}
         />
-      )}
-
-      {/* Workflow detection hint */}
-      {showDetection && (
-        <div
-          className="flex items-center gap-2 text-xs rounded-xl px-4 py-2 font-mono"
-          style={{
-            background: 'var(--surface-rail)',
-            border: '1px solid var(--surface-raised)',
-            color: 'var(--ink-muted)',
-          }}
-        >
-          <span>
-            Detected: <strong style={{ color: 'var(--accent)' }}>{detectedWorkflow}</strong> workflow
-          </span>
-          <button
-            type="button"
-            onClick={() => {
-              setWorkflow(detectedWorkflow!);
-              setWorkflowDismissed(true);
-            }}
-            className="wk-btn wk-btn--primary wk-btn--sm"
-          >
-            Apply
-          </button>
-          <button
-            type="button"
-            onClick={() => setWorkflowDismissed(true)}
-            className="ml-auto"
-            style={{ color: 'var(--ink-dim)' }}
-          >
-            ✕
-          </button>
-        </div>
       )}
 
       {/* F-A45-006: the daemon SAYS a council would not seat these — its reason, the rail's words. */}
@@ -1726,9 +1719,23 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
 
       {/* ── Main input bubble ────────────────────────────────────────────── */}
       <div
-        className="flex items-end gap-2 rounded-2xl px-4 py-3 transition-all"
+        className="relative flex items-end gap-2 rounded-2xl px-4 py-3 transition-all"
         style={{ background: 'var(--surface-card)', border: '1px solid var(--surface-raised)' }}
       >
+        {launchMenuOpen && (
+          <SlashMenu
+            menuKey="launch"
+            trigger="/"
+            startCommands
+            defsLoading={menuDefs === null}
+            anyWorkflows={anyMenuWorkflows}
+            wf={menuRows}
+            active={menuActive}
+            head="Name the workflow this runs"
+            ariaLabel="Name the workflow this runs"
+            onPickWorkflow={pickLaunchWorkflow}
+          />
+        )}
         {/* + button with floating popover — both share the anchor ref */}
         <div className="relative shrink-0" ref={popoverAnchorRef}>
           {/* Floating popover, opens upward */}
@@ -1751,12 +1758,6 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
                 onBeforeOrdChange={setBeforeOrd}
                 entityMode={entityMode}
                 onEntityModeChange={setEntityMode}
-                workflows={selectableWorkflows}
-                workflow={workflow}
-                onWorkflowChange={(wf) => {
-                  setWorkflow(wf);
-                  setWorkflowDismissed(true);
-                }}
                 repos={repos}
                 repoRefs={repoRefs}
                 onRepoRefsChange={onPopoverRepoRefs}
@@ -1798,12 +1799,33 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
           className="flex-1 resize-none text-base outline-none border-0 bg-transparent leading-6"
           style={{ minHeight: '28px', color: 'var(--ink-high)', fontFamily: 'inherit' }}
           placeholder="What do you need built?"
+          aria-expanded={launchMenuOpen}
+          aria-controls={launchMenuOpen ? 'composer-menu-list-launch' : undefined}
+          aria-activedescendant={launchMenuOpen && menuRows.length > 0 ? `composer-menu-option-launch-${menuActive}` : undefined}
           value={problem}
           onChange={(e) => {
             setProblem(e.target.value);
-            setWorkflowDismissed(false);
+            const caretNow = e.target.selectionStart ?? e.target.value.length;
+            setProblemCaret(caretNow);
+            setMenuCursor(0);
+            // An Escape closes THIS leading token's menu; once the token is gone, a new `/` opens it again.
+            if (menuToken(e.target.value, caretNow)?.start !== 0) setMenuClosedAt(null);
           }}
+          onSelect={(e) => setProblemCaret(e.currentTarget.selectionStart ?? e.currentTarget.value.length)}
           onKeyDown={(e) => {
+            if (e.nativeEvent.isComposing) return;
+            if (launchMenuOpen && startToken !== null) {
+              const n = menuRows.length;
+              if (n > 0 && e.key === 'ArrowDown') { e.preventDefault(); setMenuCursor((menuActive + 1) % n); return; }
+              if (n > 0 && e.key === 'ArrowUp') { e.preventDefault(); setMenuCursor((menuActive - 1 + n) % n); return; }
+              if (n > 0 && ((e.key === 'Enter' && !e.shiftKey && !e.metaKey && !e.ctrlKey) || e.key === 'Tab')) {
+                e.preventDefault();
+                const row = menuRows[menuActive];
+                if (row !== undefined) pickLaunchWorkflow(row);
+                return;
+              }
+              if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setMenuClosedAt(startToken.start); return; }
+            }
             if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
               e.preventDefault();
               void submit();

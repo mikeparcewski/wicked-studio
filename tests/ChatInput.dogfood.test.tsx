@@ -14,6 +14,7 @@ import { teamPlanApi } from '../src/api/teamPlan.js';
 import { resetPlanCatalog } from '../src/store/planCatalog.js';
 import { DEFAULT_COMPOSER_PREFS, useComposerPrefsStore } from '../src/store/composerPrefs.js';
 import { clearRetryPrefill } from '../src/store/retryPrefill.js';
+import { pickLaunchWorkflow } from './launchWorkflowPick.js';
 
 const CATALOG = ['understand', 'build', 'review', 'deliver'].map((id) => ({
   id, kind: 'build', role: id === 'build' ? 'creator' : 'neutral', gate: 'auto', gate_type: null,
@@ -70,9 +71,8 @@ describe('D2 — the repo picker beside Project, and the no-PR notice only when 
     expect(picker.value).toBe('');
 
     // A build launch with no repo: the notice says there is no PR, and why.
-    const options = await openOptions(user);
-    await user.selectOptions(within(options).getByTestId('launch-workflow'), 'feature');
-    await user.click(screen.getByRole('button', { name: /open launch options/i }));
+    // S19b: the workflow is named in the problem box (`/` → the menu).
+    await pickLaunchWorkflow(user, 'feature');
     expect(screen.getByTestId('deliver-notice').dataset.deliverState).toBe('no-repo');
 
     await user.selectOptions(picker, 'studio-api');

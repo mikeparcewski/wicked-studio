@@ -178,7 +178,8 @@ export const RAW_CONTROLS: ReadonlyArray<{ control: string; homes: readonly RawH
   { control: 'Queue column with option grids', homes: [{ surface: 'Needs you rows', testid: 'need-row' }] },
   { control: 'Masthead DoD bar, rule counters', homes: [{ surface: 'Session status sentence', testid: 'session-status-sentence' }] },
   { control: 'Run sections (What/Where … Delivery)', homes: RUN_SECTION_TABS.map((t) => ({ on: 'session' as const, tab: t.id })) },
-  { control: 'Mode tags', homes: [{ surface: 'Start something', testid: 'desk-start-row' }] },
+  // S19b: the Start row is gone — work is named with `/workflow-<key>`, the hint under the composer says so.
+  { control: 'Mode tags', homes: [{ surface: 'Type / for workflows', testid: 'composer-hint' }] },
   { control: 'Keycaps and chord hints', homes: [{ surface: 'Shortcuts sheet', testid: 'shortcut-overlay' }] },
   // S16a-1d: the retired run page header's actions (the mid-run mode pill is not carried: a change of
   // pace is a message in the session composer).

@@ -26,6 +26,7 @@ import { useSessionDrafts } from '../store/sessionDrafts.js';
 import { addAboutChip } from '../store/composerChips.js';
 import { everythingPath } from '../board/everythingModel.js';
 import { seedNewChat } from '../board/chatMoves.js';
+import { pageComposerKey, seedComposer } from '../store/composerSeed.js';
 
 /**
  * The universal command palette (DES-FEEDBACK-002 §1, slice G): Cmd+K / Ctrl+K /
@@ -536,13 +537,20 @@ export function CommandPalette({
     // Verbs (§1.3's table — each names its existing mechanism, none invents one).
     const verbs: Array<{ name: string; action: () => void; when?: boolean }> = [
       {
-        // S16a-4f: a build starts in the Desk composer too (the project's @ chip when one is
-        // ambient); nothing is sent until the user sends.
+        // S19b: a build starts by naming its workflow — the page's composer (a session's), else the
+        // Desk's (the project's @ chip when one is ambient), gets `/workflow-` focused so the `/`
+        // menu opens. Nothing is sent until the user sends.
         name: 'New Build',
         action: () => {
           onClose();
+          const here = pageComposerKey();
+          if (here !== null && here !== 'desk') {
+            seedComposer(here, '/workflow-');
+            return;
+          }
           navigate('/');
           seedNewChat(projectId, projectId === null ? null : projects.find((p) => p.id === projectId)?.name ?? null);
+          seedComposer('desk', '/workflow-');
         },
       },
       {

@@ -257,7 +257,7 @@ function FinishedRunRowItem({ view, onReuse, ...rest }: {
     </button>
   ) : s.phase === 'saved' ? (
     <span data-testid="run-reuse-saved" className="wk-overlay-note" style={{ color: 'var(--status-done)' }}>
-      {`Saved as preset “${s.name}”`}
+      {`Saved as preset “${s.name}” — launch it with /workflow-${s.name}`}
     </span>
   ) : null;
   return <FinishedRow {...rest} move={move} panel={panelOpen ? <ReusePresetPanel reuse={reuse} /> : null} />;
