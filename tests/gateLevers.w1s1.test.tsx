@@ -5,25 +5,23 @@
 // over four unusable seats; the operator took it and the second, byte-identical refusal lost the
 // run. Shape 2 (F-RC2-041): Send stayed enabled beside the composer's own "not council-eligible"
 // warning for every selected seat, and the launch failed at distribution ("no eligible seat").
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as client from '../src/api/client.js';
 import { teamPlanApi } from '../src/api/teamPlan.js';
-import type { CoreEvent, RosterSeat } from '../src/api/types.js';
+import type { RosterSeat } from '../src/api/types.js';
 import { retryBlocker, retryLaunchOf } from '../src/board/repairMoves.js';
 import { deliverPreview, describeDecision, setUndoWindowForTest, undoDecision, useUndoQueue } from '../src/board/undoQueue.js';
 import { ChatInput, teamReceiptLine } from '../src/components/ChatInput.js';
-import { isLaunchRefusal, noCarryingSeatReason } from '../src/components/gateVerdictModel.js';
-import { SteeringGate } from '../src/components/SteeringGate.js';
-import { UndoToasts } from '../src/components/UndoToasts.js';
+import { noCarryingSeatReason } from '../src/components/gateVerdictModel.js';
 import { useAnnotationStore } from '../src/store/annotations.js';
 import { useRunEventStore } from '../src/store/events.js';
 import { useGateStore } from '../src/store/gates.js';
 import { usePlanGateStore } from '../src/store/planGates.js';
-import { clearCachedRoster, setCachedRoster } from '../src/store/rosterCache.js';
+import { clearCachedRoster } from '../src/store/rosterCache.js';
 import { useSteeringStore } from '../src/store/steering.js';
-import { makeUnit, makeView } from './factories.js';
+import { makeView } from './factories.js';
 
 const bag = (o: Record<string, unknown>): Partial<RosterSeat> => o as Partial<RosterSeat>;
 function seat(key: string, extra: Partial<RosterSeat> = {}): RosterSeat {
@@ -128,79 +126,7 @@ describe('studio#315 — Retry on a run no seat can take', () => {
   });
 });
 
-// ── #315 shape 1: the reassign lever ──────────────────────────────────────────
 
-const RUN = 'r-refused';
-const POOL = ['claude', 'codex', 'pi', 'opencode', 'agy'];
-const UNITS = [
-  makeUnit({ id: `${RUN}:u1`, session_id: RUN, ord: 1, stage: 'recon', status: 'done', assigned_cli: 'claude' }),
-  makeUnit({ id: `${RUN}:u2`, session_id: RUN, ord: 2, stage: 'build', status: 'pending', assigned_cli: 'claude' }),
-];
-const TRIAGE_PROMPT = 'Unit 2 failed and triage escalated: triage judge errored: codex exited 1';
-
-function mountGate(prompt: string, events: CoreEvent[]): void {
-  useGateStore.setState({ gates: { [RUN]: { runId: RUN, ord: 2, prompt, lifecycle: 'open', receivedAt: 1 } } });
-  useRunEventStore.setState({ byRun: { [RUN]: events } });
-  vi.spyOn(teamPlanApi, 'team').mockResolvedValue({ rows: [], units: [] });
-  render(<SteeringGate runId={RUN} ord={2} prompt={prompt} units={UNITS} clis={POOL} />);
-}
-
-describe('studio#315 — no seat-shaped remedy for a failure no seat can fix', () => {
-  it('an environment-refused launch (the engine\'s prompt) renders no reassign row, and says why', () => {
-    setCachedRoster([seat('codex', { signed_in: true })]);
-    mountGate('Unit 2 (claude) refused its environment on attempt 2: claude folder-trust prompt — "Do you trust the files in this folder?". Approve to retry (optionally amend), reject to stop the run, or reassign the unit to a different CLI first.', []);
-    expect(screen.queryByTestId('steering-reassign-row')).toBeNull();
-    expect(screen.getByTestId('steering-reassign-none')).toHaveAttribute('data-reason', 'launch-refusal');
-  });
-
-  it('a triage gate whose unit\'s latest step failure is `environmentRefused` renders no reassign row', () => {
-    setCachedRoster([seat('codex', { signed_in: true })]);
-    mountGate(TRIAGE_PROMPT, [
-      { type: 'stepFailed', session: RUN, ord: 2, attempt: 0, detail: 'refused', failureKind: 'environmentRefused' },
-    ] as unknown as CoreEvent[]);
-    expect(screen.queryByTestId('steering-reassign-row')).toBeNull();
-    expect(screen.getByTestId('steering-reassign-none')).toHaveAttribute('data-reason', 'launch-refusal');
-  });
-
-  it('a seat-attributable failure lists only usable seats, and names the rest with their reason', () => {
-    setCachedRoster([
-      seat('codex', { signed_in: true }),
-      seat('pi', { signed_in: false, ...bag({ auth: 'signed_out', council_eligible: true }) }),
-      BENCHED('opencode', 'quota exhausted'),
-      INELIGIBLE('agy', 'no council credential'),
-    ]);
-    mountGate(TRIAGE_PROMPT, [
-      { type: 'stepFailed', session: RUN, ord: 2, attempt: 0, detail: 'codex exited 1', failureKind: 'workerError' },
-    ] as unknown as CoreEvent[]);
-    const row = screen.getByTestId('steering-reassign-row');
-    const options = within(row).getAllByTestId('steering-reassign-option');
-    expect(options.map((o) => o.getAttribute('value'))).toEqual(['codex']);
-    const withheld = screen.getByTestId('steering-reassign-withheld');
-    expect(withheld).toHaveTextContent('opencode (inactive: quota exhausted)');
-    expect(withheld).toHaveTextContent('agy (no council credential)');
-    // Signed out is not offered even when the daemon still calls the seat council-eligible (codex on #375).
-    expect(withheld).toHaveTextContent('pi (no sign-in observed — still council-eligible)');
-  });
-
-  it('when no other seat can take the retry there is no button, only the reasons', () => {
-    setCachedRoster([seat('codex', { signed_in: false }), BENCHED('pi', 'quota'), BENCHED('opencode', 'quota'), INELIGIBLE('agy', 'x')]);
-    mountGate(TRIAGE_PROMPT, []);
-    expect(screen.queryByTestId('steering-reassign')).toBeNull();
-    expect(screen.getByTestId('steering-reassign-none')).toHaveTextContent('reassign: no other seat can take the retry — not offered: codex');
-  });
-
-  it('isLaunchRefusal reads the engine\'s spellings and the unit\'s LATEST step failure only', () => {
-    expect(isLaunchRefusal('Unit 3 failed again on attempt 2 before its work was judged: fence refused', [], 3)).toBe(true);
-    expect(isLaunchRefusal('Unit 3 (codex) refused its environment: codex refused untrusted directory — "x"', [], 3)).toBe(true);
-    const later = [
-      { type: 'stepFailed', session: RUN, ord: 3, failureKind: 'environmentRefused' },
-      { type: 'stepFailed', session: RUN, ord: 3, failureKind: 'workerError' },
-    ] as unknown as CoreEvent[];
-    expect(isLaunchRefusal(TRIAGE_PROMPT, later, 3)).toBe(false);
-    expect(isLaunchRefusal(TRIAGE_PROMPT, later.slice(0, 1), 3)).toBe(true);
-    expect(isLaunchRefusal(TRIAGE_PROMPT, later.slice(0, 1), 4)).toBe(false);
-  });
-});
 
 // ── #367: the team-message receipt ────────────────────────────────────────────
 
@@ -261,28 +187,5 @@ describe('studio#368 — approving the deliver gate says it pushes and opens a P
     expect(deliverPreview({ branch: null, repo: null })).toBe('Pushes the run branch, under the daemon\'s GitHub sign-in; a pull request opens only if that origin is a GitHub repository.');
   });
 
-  it('the gate card\'s approve on the deliver unit puts the push line in the undo toast', async () => {
-    const DRUN = 'r-deliver';
-    const units = [
-      makeUnit({ id: `${DRUN}:fix`, session_id: DRUN, ord: 3, status: 'done' }),
-      makeUnit({ id: `${DRUN}:deliver`, session_id: DRUN, ord: 4, status: 'pending' }),
-    ];
-    useGateStore.setState({ gates: { [DRUN]: { runId: DRUN, ord: 4, prompt: 'Approve unit 4 before it runs: deliver', lifecycle: 'open', receivedAt: 1, gateKind: 'deliver' } } });
-    vi.spyOn(teamPlanApi, 'team').mockResolvedValue({ rows: [], units: [] });
-    vi.spyOn(client.api, 'getRunDiff').mockResolvedValue({ diff: '', truncated: false, source: 'branch', branch: 'wicked/r-deliver' } as never);
-    render(
-      <>
-        <SteeringGate runId={DRUN} ord={4} prompt="Approve unit 4 before it runs: deliver" units={units} delivery={{ branch: null, repo: 'wicked-crew' }} />
-        <UndoToasts />
-      </>,
-    );
-    // The deliver move is two steps (open the diff, then deliver); take it through the primary.
-    const primary = await screen.findByTestId('gate-recommended');
-    fireEvent.click(primary);
-    if (screen.queryByTestId('undo-toast') === null) fireEvent.click(screen.getByTestId('gate-recommended'));
-    const toast = await screen.findByTestId('undo-toast');
-    expect(toast).toHaveTextContent('Pushes branch wicked/r-deliver to the origin of wicked-crew');
-    expect(toast).not.toHaveTextContent('The run resumes past this gate');
-  });
 });
 

@@ -74,7 +74,7 @@ export interface AssistNote {
 }
 
 /** What a send launched: a governed RUN (narrated by the run block) or a governed CHAT
- *  session (streamed by the chat block — the GroupChat seat machinery's wire, §11-adjacent). */
+ *  session (streamed by the chat block — the retired chat page's seat machinery's wire, §11-adjacent). */
 export type AssistLaunch = { runId: string } | { chatId: string };
 
 export interface AssistVerbs {
@@ -243,9 +243,9 @@ interface DockChatMsg {
 }
 
 /**
- * One launched CHAT session (the GroupChat seat machinery's wire — `POST /chats` +
+ * One launched CHAT session (the retired chat page's seat machinery's wire — `POST /chats` +
  * `POST /chats/:id/messages`, replies streaming back as `chatDelta`/`chatReply` frames).
- * The block folds ONLY frames whose `chat` matches, per-seat FIFO (the GroupChat §7.9-3
+ * The block folds ONLY frames whose `chat` matches, per-seat FIFO (the retired chat page's §7.9-3
  * correlation: a seat's frames belong to its oldest unfinished turn; the terminal
  * `chatReply` text is authoritative and replaces the accumulated deltas). Seats come from
  * the one `GET /chats/:id` snapshot — frames that streamed before this block mounted are
@@ -294,7 +294,7 @@ function DockChat({ chatId, resumed = false, onResumeProbe }: {
       .then((detail) => {
         if (cancelled) return;
         const warm = detail.seats;
-        // GroupChat's rejoin rule: ONLY a 200 with no seats means reclaimed — a resumed
+        // the retired chat page's rejoin rule: ONLY a 200 with no seats means reclaimed — a resumed
         // block must not keep presenting a session the daemon no longer holds.
         if (resumed && warm.length === 0) {
           onResumeProbeRef.current?.({ kind: 'gone' });

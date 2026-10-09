@@ -93,7 +93,8 @@ with sync_playwright() as p:
     focused = page.evaluate("() => { const a = document.activeElement; return a ? a.tagName.toLowerCase() : ''; }")
     if focused not in ("textarea", "input"):
         # The page focuses its composer on arrival; if this build does not, focus it as an operator would.
-        page.locator('[data-testid="chat-composer"] textarea').first.focus()
+        # S16a-4i: /chat/new is the Desk composer.
+        page.locator('[data-testid="composer"][data-composer="desk"] textarea').first.focus()
         focused = page.evaluate("() => document.activeElement.tagName.toLowerCase()")
     page.keyboard.press("ControlOrMeta+k")
     try:

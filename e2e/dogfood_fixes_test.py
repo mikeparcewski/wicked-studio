@@ -157,8 +157,7 @@ with sync_playwright() as p:
         check("d10-manual-mode-once", prompt.count("manual mode") <= 1, prompt=prompt[:400])
         check("d10-no-verdict-wall", page.get_by_test_id("gate-verdict").count() == 0)
         check("d11-no-steer", card.get_by_test_id("session-gate-note").count() == 0
-              and page.locator('[data-testid="session-gate-choice"][data-choice-key="steer"]').count() == 0
-              and page.get_by_test_id("amend-prepopulated").count() == 0)
+              and page.locator('[data-testid="session-gate-choice"][data-choice-key="steer"]').count() == 0)
         plan = page.locator('[data-testid="artifact"][data-kind="plan"]')
         check("d11-plan-actions", page.get_by_test_id("session-proposal-go").is_visible()
               and page.get_by_test_id("session-proposal-not-now").is_visible()

@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { isSteeringSection, isSteeringType, type SteeringSection } from '../api/steering.js';
 import { isTestingSubPage } from '../api/testing.js';
-import { everythingPath } from '../board/everythingModel.js';
 import { announceNavigateAway, inAppEntryState, isInAppEntry, replacedEntryState } from './useHistoryState.js';
 
 // `everything` is "See everything" (`/everything`, DES-STUDIO-REBUILD-001 §5.4, slices S15c/S17a): five
@@ -63,15 +62,6 @@ const PANELS: Panel[] = ['runs', 'workflows', 'skills', 'mcp', 'repos', 'system'
 /** The list and dashboard addresses that MOVED onto `/everything` (S15c) — see `useMovedRoutes`. */
 export const MOVED_LISTS: ReadonlySet<string> = new Set(['projects', 'chats', 'work', 'execute', 'vibe', 'demo', 'make', 'runs']);
 
-/**
- * The four verbs on a project (DES-MERGE-001 §1.3). Mode is a ROUTE SEGMENT, not
- * app state: `/p/:projectId/:mode[/:artifactId]`, so it is deep-linkable,
- * back-button-correct and Playwright-addressable.
- */
-export type Mode = 'chat' | 'build' | 'document' | 'video';
-
-export const MODES: readonly Mode[] = ['chat', 'build', 'document', 'video'] as const;
-
 export interface Route {
   panel: Panel;
   /** Non-null only when panel === 'runs' and a run is selected. */
@@ -86,16 +76,8 @@ export interface Route {
   chatMode: boolean;
   /** Non-null on the legacy `/projects/:id` panel AND on every `/p/*` route. */
   projectId: string | null;
-  /** Non-null only on `/p/:projectId/:mode` — the active mode of the project shell. */
-  mode: Mode | null;
-  /** What the mode has open: run id (Build), thread id (Chat), doc id, demo id. */
+  /** The addressed thing: a session id (`/s/:id`), a run (`/runs/:id/events|files`), an editor. */
   artifactId: string | null;
-  /** True on `/p/:projectId/campaigns` (nav-reorg): the project-scoped Campaigns surface,
-   *  re-homed under the project shell (a campaign is a DAG workload, not a project — so it
-   *  is a project-scoped VIEW, not a fifth Mode). Rides no mode segment; `renderCenter`
-   *  selects the campaign surface off this flag. The unscoped cross-project sweep keeps its
-   *  own top-level `/testing/campaigns` route. */
-  campaignsView: boolean;
   /** Non-null only on `/testing/campaigns/:id` (DES-CAMPAIGN-001 §3.5 / TH-14) — the campaign
    *  label. The legacy flat `/campaigns/:id` parses to the same route while `useTestingRedirect`
    *  rewrites the address. */
@@ -127,9 +109,7 @@ const INERT: Route = {
   showRegisterRepo: false,
   chatMode: false,
   projectId: null,
-  mode: null,
   artifactId: null,
-  campaignsView: false,
   campaignId: null,
   steeringSection: null,
   testingPage: null,
@@ -156,18 +136,6 @@ export function projectPath(projectId: string): string {
 /** Where `/projects/:id` lands — the project management page (Edit + Archive/Restore). */
 export function projectDetailPath(projectId: string): string {
   return `/projects/${encodeURIComponent(projectId)}`;
-}
-
-/** Build a project-shell path. The single spelling of `/p/:projectId/:mode[/:artifactId]`. */
-export function modePath(projectId: string, mode: Mode, artifactId?: string | null): string {
-  const base = `${projectPath(projectId)}/${mode}`;
-  return artifactId ? `${base}/${encodeURIComponent(artifactId)}` : base;
-}
-
-/** Where the work chronicle lives since S15c: one project's sessions on "See everything" (§4.1
- *  "reshape"). Callers that linked `/p/:id/chronicle` land on the live address with no edit. */
-export function chroniclePath(projectId: string): string {
-  return everythingPath({ tab: 'sessions', project: projectId });
 }
 
 /**
@@ -199,35 +167,6 @@ export function runFilesPath(runId: string): string {
 export function leaveRoute(navigate: Navigate, fallback = '/'): void {
   if (isInAppEntry()) window.history.back();
   else navigate(fallback);
-}
-
-/**
- * Where a document version lives (DES-MERGE-001 §4.2, slice 9): `?v=N` on the doc
- * route. A query param rather than a fifth path segment — the version is a LENS on
- * one artifact, not a different artifact — and it is still a real navigation, so a
- * selected version is deep-linkable and Back returns to the previously viewed one.
- * `null` addresses the manifest head, i.e. the bare doc route.
- *
- * `mode` defaults to Document; Video passes `'video'` (DES-FEEDBACK-001 §7.4 — a demo
- * is a doc whose storyboard versions are addressed the same way, on its own route).
- */
-export function versionPath(
-  projectId: string, docId: string, version: number | null, mode: Mode = 'document',
-): string {
-  const base = modePath(projectId, mode, docId);
-  return version === null ? base : `${base}?v=${version}`;
-}
-
-/**
- * The routed version, read from a `location.search` string. Anything that is not a
- * positive integer is not a version and resolves to the head — a mangled bookmark
- * should show the document, not an error about its URL.
- */
-export function routedVersion(search: string): number | null {
-  const raw = new URLSearchParams(search).get('v');
-  if (raw === null) return null;
-  const n = Number(raw);
-  return Number.isInteger(n) && n > 0 ? n : null;
 }
 
 function parse(pathname: string): Route {
@@ -387,7 +326,7 @@ function parse(pathname: string): Route {
   // `/chat/:id` — a live chat SESSION's real URL (J4/C6: an opened chat is
   // findable again). The id is the pool session's chatId, carried in
   // `artifactId` (it is NOT a run — `runId` stays null so no run-selected
-  // machinery fires against it). GroupChat rejoins the warm session, or says
+  // machinery fires against it). the retired chat page rejoins the warm session, or says
   // honestly that it is gone.
   if (first === 'chat' && second) {
     return restEmpty(3) ? route({ panel: 'session', artifactId: safeDecode(second) }) : route({ panel: 'not-found' });

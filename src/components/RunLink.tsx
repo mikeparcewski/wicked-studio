@@ -1,10 +1,9 @@
 import type { SessionStatus, SessionView } from '../api/types.js';
 import { useMembershipStore } from '../store/membership.js';
-import { MODE_SPECS } from './ModeSwitcher.js';
 import { ageVerdict } from '../board/ageHonesty.js';
 import { AgeStamp } from './AgeStamp.js';
 import { runTitle, runWhenWord, WHEN_TITLE } from './runIdentity.js';
-import { runRowKind } from './runMode.js';
+import { RUN_ROW_GLYPHS, runRowKind } from './runMode.js';
 import { DeliveryChip } from './RunDelivery.js';
 import { Tech, runTechParts } from './Tech.js';
 import { useDisplayText } from '../hooks/useHomePath.js';
@@ -53,7 +52,6 @@ export function RunLink({ view, selectedRunId, onSelect }: Props): React.ReactEl
   // Onboarding, Document, Bug fix — not "Build" for every one of them).
   const rowKind = runRowKind(session);
   const kind = rowKind.kind;
-  const spec = MODE_SPECS[kind];
 
   return (
     <button
@@ -69,7 +67,7 @@ export function RunLink({ view, selectedRunId, onSelect }: Props): React.ReactEl
     >
       <div className="flex items-center gap-2">
         <span aria-hidden className="shrink-0 text-[11px]" title={rowKind.label}>
-          {spec.glyph}
+          {RUN_ROW_GLYPHS[kind]}
         </span>
         {/* The status sits beside the name it describes, and takes a SHAPE per state (a ring
             for a gate, a cross for a failure) so it never relies on hue alone (WCAG 1.4.1). */}

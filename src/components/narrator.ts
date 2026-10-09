@@ -161,7 +161,7 @@ function restates(a: string, b: string): boolean {
 
 /**
  * The gate prompt's actionable headline — the bracketed architectural footnote
- * (the SteeringGate's `cleanPrompt` contract) stays out of the one-liner.
+ * (the retired gate card's `cleanPrompt` contract) stays out of the one-liner.
  */
 function promptHeadline(raw: string): string {
   const bracket = raw.indexOf('[');
@@ -675,7 +675,7 @@ export function lastNarration(events: readonly CoreEvent[], ctx: NarratorContext
 
 // ── The chat surface (DES-RUN-NARRATOR §11) ──────────────────────────────────
 //
-// GroupChat's transcript is a different wire (chatDelta/chatReply — arrival IS
+// the retired chat page's transcript is a different wire (chatDelta/chatReply — arrival IS
 // the order, §11.2) but the SAME narrator: this section is the one place the
 // chat surface's narration-vs-conversation classification and its templates
 // live. The rule (§11.1): the user's messages and the crew's direct
@@ -684,7 +684,7 @@ export function lastNarration(events: readonly CoreEvent[], ctx: NarratorContext
 // reply, seat lifecycle mechanics — collapses into a short narration line with
 // the seat's identity as a chip and the raw bytes behind an expander.
 
-/** The structural seat-message view the chat classifier reads (GroupChat's
+/** The structural seat-message view the chat classifier reads (the retired chat page's
  *  `SeatMsg` satisfies it). */
 export interface ChatSeatView {
   kind: 'seat';
@@ -692,7 +692,7 @@ export interface ChatSeatView {
   text: string;
   pending: boolean;
   ok: boolean;
-  /** The send ordinal this reply answers (GroupChat's `SeatMsg.turn`) — groups a multi-seat round. */
+  /** The send ordinal this reply answers (the retired chat page's `SeatMsg.turn`) — groups a multi-seat round. */
   turn?: number;
 }
 export interface ChatUserView {

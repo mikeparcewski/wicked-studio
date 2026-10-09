@@ -14,7 +14,7 @@ import { rememberWorkTitles } from '../board/gateActions.js';
  * event, via `refresh()` — it re-fetches `GET /runs` (daemon-sorted actionable-
  * first) and self-heals the gate cache: prune to still-`awaiting_human`, then
  * backfill any missing prompt from the daemon cache (`GET /runs/:id/gate`). If a
- * prompt is unavailable (daemon restarted, §3.3 known limit), the SteeringGate
+ * prompt is unavailable (daemon restarted, §3.3 known limit), the retired gate card
  * still works id-only.
  *
  * `refresh()` is debounced at 400 ms so a burst of WS lifecycle events (e.g.

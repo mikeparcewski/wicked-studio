@@ -90,7 +90,8 @@ describe('§5.6 rule 1 — every global chord carries a modifier', () => {
   it('the chord enumeration finds no printable key without a modifier anywhere under src/', () => {
     const all = enumerateChords();
     // The scan must actually see the registry's users (guards against a regex that matches nothing).
-    expect(all.length).toBeGreaterThan(20);
+    // S16a-4h/4i: the deleted shell, gate card and chat page registered their own chords (20+ → 17).
+    expect(all.length).toBeGreaterThan(12);
     const unreadable = all.filter((f) => f.chord === null).map((f) => `${f.file}: ${f.literal}`);
     const bare = all
       .filter((f) => f.chord !== null && isBarePrintable(f.chord))

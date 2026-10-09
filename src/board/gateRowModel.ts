@@ -397,7 +397,7 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
 
   if (reason === 'def') {
     // steerScopeTarget: only include amendScope:'creator' when a later creator phase exists
-    // (same rule SteeringGate.tsx:376-379 + 522-524 uses). Gate 13 Item 1.
+    // (same rule the retired gate card uses). Gate 13 Item 1.
     const scopeTarget = steerScopeTarget(units, gate.ord);
     choices.push({ key: 'approve', label: 'Approve', decision: { approve: true }, needsNote: false, title: 'Continue the run.' });
     choices.push({ key: 'steer', label: 'Approve and steer', decision: scopeTarget !== null ? { approve: true, amendScope: 'creator' } : { approve: true }, needsNote: true, title: 'Approve and add a note to steer the next phase.' });
@@ -409,7 +409,7 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
   if (reason === 'escalation') {
     // steerScopeTarget: only include amendScope:'creator' when a later creator phase exists.
     // For canonical escalation (cursor ON the denied evaluator, creator behind it) steerScopeTarget
-    // returns null because no creator sits at or after gate.ord — matching SteeringGate.tsx:377.
+    // returns null because no creator sits at or after gate.ord — matching the retired gate card.
     const escalationScopeTarget = steerScopeTarget(units, gate.ord);
 
     // studio#573: a denied unit's row carries the engine's arms as its prompt states them — Approve

@@ -1,7 +1,7 @@
 import type { RetryPrefill } from '../store/retryPrefill.js';
 
 /**
- * S16a-4e: "Continue in Build" on a chat's own session (a chat off the ask path) — the GroupChat
+ * S16a-4e: "Continue in Build" on a chat's own session (a chat off the ask path) — the retired chat page's
  * promote, said on the session: the WHOLE conversation rides into the Build composer as context
  * (studio#238), the run is filed under this chat (`chatId`, studio#446), the seats that replied are
  * the launch's seats; nothing launches until the operator sends.

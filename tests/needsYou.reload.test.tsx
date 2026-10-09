@@ -19,7 +19,7 @@ vi.mock('../src/api/client.js', () => ({
 
 const { useRunEventStore } = await import('../src/store/events.js');
 const { useStallEscalationStore, needsYouOf } = await import('../src/store/stallEscalations.js');
-const { ApprovalDock } = await import('../src/components/ApprovalDock.js');
+const { RunQuestions } = await import('../src/components/session/ThreadQuestions.js');
 
 const RUN = 'run-1';
 const T0 = 1_760_000_000_000;
@@ -78,9 +78,9 @@ describe('needs-you after a reload (studio#284)', () => {
     expect(useRunEventStore.getState().byRun[RUN]).toHaveLength(recorded().length);
   });
 
-  it('the reloaded run page says what needs you and offers an arm besides Cancel', async () => {
+  it('the reloaded run\'s thread (S16a-4g/4i: RunQuestions) says what needs you and offers an arm besides Cancel', async () => {
     useRunEventStore.getState().hydrate(RUN, recorded());
-    render(<ApprovalDock view={view} onResolved={() => undefined} />);
+    render(<RunQuestions view={view} />);
     expect(screen.getByTestId('needs-you-headline')).toHaveTextContent(
       'Needs you: unit 5 (deliver) silent 30 min; 2 automatic recoveries spent (bash → claude → codex)',
     );
@@ -94,7 +94,7 @@ describe('needs-you after a reload (studio#284)', () => {
   it('shows nothing once the run is no longer executing', () => {
     useRunEventStore.getState().hydrate(RUN, recorded());
     const done = makeView({ id: RUN, status: 'completed' }, view.units);
-    const { container } = render(<ApprovalDock view={done} onResolved={() => undefined} />);
+    const { container } = render(<RunQuestions view={done} />);
     expect(container).toBeEmptyDOMElement();
   });
 });

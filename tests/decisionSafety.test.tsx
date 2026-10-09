@@ -25,8 +25,6 @@ const { runBatchDecision, toggleBatchSelect, useBatchGateStore } = await import(
 const { setUndoWindowForTest, undoDecision, useUndoQueue, UNDO_WINDOW_MS } = await import('../src/board/undoQueue.js');
 const { useGateStore } = await import('../src/store/gates.js');
 const { useMembershipStore } = await import('../src/store/membership.js');
-const { UndoToasts } = await import('../src/components/UndoToasts.js');
-const { SteeringGate } = await import('../src/components/SteeringGate.js');
 const { NeedsQueueSurface } = await import('../src/components/NeedsYouQueue.js');
 const { QuestionRow } = await import('../src/components/desk/QuestionRow.js');
 type NeedRow = import('../src/board/needsYou.js').NeedRow;
@@ -120,15 +118,6 @@ describe('never silent', () => {
     expect(results()).toEqual(['not-sent: Not sent: a run in beta already has a decision that is waiting to send (see its Undo toast).']);
   });
 
-  it('the gate card shows the shared queued state with its controls disabled', () => {
-    openGate('b1', 3);
-    render(<><SteeringGate runId="b1" ord={3} prompt="gate b1" /><UndoToasts /></>);
-    act(() => { void decideGate('b1', { approve: true }); }); // decided on the board chip
-    expect(screen.getByTestId('steering-queued').textContent).toBe('queued · undo in toast');
-    expect(screen.getByTestId('steering-approve')).toBeDisabled();
-    expect(screen.getByTestId('steering-reject')).toBeDisabled();
-    expect(screen.getByTestId('undo-toast').textContent).toContain('Approving a run in beta in 10 s');
-  });
 });
 
 describe('what survives an Undo — the Desk carriers (S18a, boundary 2)', () => {

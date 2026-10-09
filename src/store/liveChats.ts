@@ -9,7 +9,7 @@ import { forgetAskSession } from './askSession.js';
  * on mount. So the sessions the app already learned about for free are
  * event-sourced here:
  *
- *   - GroupChat deposits the session it MINTS or REJOINS (it made those
+ *   - the retired chat page deposits the session it MINTS or REJOINS (it made those
  *     wire calls anyway) and retracts on End;
  *   - the app-level /ws fold deposits sessions announced by their own
  *     frames (chatSessionReady / chatDelta / chatReply) and retracts on

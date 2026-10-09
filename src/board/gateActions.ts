@@ -44,7 +44,7 @@ export type GateAnswer = GateDecision & { plan?: LaunchPlan };
  * the gate it answered (`clearGate`) until the daemon's frame moves the run.
  */
 
-/** One-shot focus intent for the thread's gate card, read by `SteeringGate`.
+/** One-shot focus intent for the thread's gate card, read by the retired gate card.
  *  (Lives here so the chip, the palette, and the triage cursor share it without
  *  a component-module cycle; `GateChip` re-exports it for its old importers.) */
 export const GATE_HASH = '#gate';

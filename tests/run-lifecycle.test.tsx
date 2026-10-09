@@ -15,7 +15,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { ApiError } from '../src/api/errors.js';
 import { useAnnotationStore } from '../src/store/annotations.js';
 import { useGateStore } from '../src/store/gates.js';
 
@@ -44,7 +43,6 @@ vi.mock('../src/api/client.js', () => ({
 }));
 
 // Dynamic imports after mock hoisting — the pattern the repo uses throughout.
-const { SteeringGate } = await import('../src/components/SteeringGate.js');
 const { RepositoriesPanel } = await import('../src/components/RepositoriesPanel.js');
 
 // ── Shared fixtures ───────────────────────────────────────────────────────────
@@ -70,22 +68,6 @@ beforeEach(() => {
 });
 
 // ── GA-6: SteeringGate — failed cancelRun ────────────────────────────────────
-
-describe('SteeringGate — GA-6: failed cancelRun', () => {
-  it('a cancelRun rejection shows the daemon error on the gate; gate stays open; onResolved not called', async () => {
-    const user = userEvent.setup();
-    const onResolved = vi.fn();
-    cancelRun.mockRejectedValue(new ApiError(503, 'daemon unavailable'));
-
-    render(<SteeringGate runId="run-42" ord={3} prompt="Proceed?" onResolved={onResolved} />);
-    await user.click(screen.getByTestId('steering-cancel'));
-
-    expect(await screen.findByTestId('steering-error')).toHaveTextContent('daemon unavailable');
-    expect(screen.getByTestId('steering-gate')).toBeInTheDocument();
-    expect(onResolved).not.toHaveBeenCalled();
-    expect(confirmGate).not.toHaveBeenCalled();
-  });
-});
 
 // ── AU-4 / AU-5: WorkPage Archived chip edge cases ───────────────────────────
 

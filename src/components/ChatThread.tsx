@@ -15,7 +15,7 @@ import {
 
 /**
  * The chat transcript renderer (DES-RUN-NARRATOR §11), extracted from
- * GroupChat so the surface component holds the machinery and this module holds
+ * the retired chat page so the surface component holds the machinery and this module holds
  * the pixels. Two views over ONE message log:
  *
  * - `narrated` (§11.1, the default): the user's messages and the crew's direct
@@ -29,7 +29,7 @@ import {
  *   columns arrangement (DES-FEEDBACK-002 §6, slice K, unchanged).
  */
 
-// ── Message log types (moved from GroupChat — same shapes, same contracts) ──
+// ── Message log types (moved from the retired chat page — same shapes, same contracts) ──
 
 export interface UserMsg {
   kind: 'user';
@@ -293,7 +293,7 @@ export function writeStoredView(view: ChatView): void {
   }
 }
 
-// ── Bubbles (§5.3 token usage — moved verbatim from GroupChat) ───────────────
+// ── Bubbles (§5.3 token usage — moved verbatim from the retired chat page) ───────────────
 
 /** §5.3 token usage: user messages are transparent — the hairline keeps the
  *  bubble shape without claiming a surface of its own. */
@@ -413,7 +413,7 @@ interface Props {
 }
 
 /**
- * Renders as a fragment INSIDE the caller's one scrolling region — GroupChat
+ * Renders as a fragment INSIDE the caller's one scrolling region — the retired chat page
  * keeps the container (and its boundary notes) so the dock stays a structural
  * sibling of the scroll region.
  */
