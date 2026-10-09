@@ -217,6 +217,7 @@ export function QuestionRow({ runId, units, openPath, openLabel, onOpen }: {
             ref={reasonRef}
             type="text"
             data-testid="need-choice-reason"
+            aria-label="Reason for rejecting (optional)"
             placeholder="reason (optional)"
             value={reasonText}
             onChange={(e) => setReasonText(e.target.value)}

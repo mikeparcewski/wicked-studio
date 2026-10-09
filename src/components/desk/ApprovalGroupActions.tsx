@@ -65,6 +65,7 @@ export function ApprovalGroupActions({ runIds, label }: {
             ref={noteRef}
             type="text"
             data-testid="need-group-reject-reason"
+            aria-label="Reason for rejecting all (optional)"
             placeholder="reason (optional)"
             value={note}
             onChange={(e) => setNote(e.target.value)}
