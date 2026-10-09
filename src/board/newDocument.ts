@@ -19,8 +19,9 @@ export function newDocName(brief: string, typedName: string): string {
   return parseCreateAsk(brief)?.name ?? docNameFromBrief(brief);
 }
 
-/** The create body (no seats: the daemon's own roster answers — `clisJson` is not sent). */
-export function newDocBody(projectId: string, input: { brief: string; typedName: string; repoRefs: readonly string[]; format: string; sourceMessageId?: string }): CreateDocBody {
+/** The create body. `clisJson` (studio#302) is the council the form shows — the draft run convenes
+ *  exactly those seats (crew#631). */
+export function newDocBody(projectId: string, input: { brief: string; typedName: string; repoRefs: readonly string[]; format: string; sourceMessageId?: string; clisJson?: string }): CreateDocBody {
   const parsed = parseCreateAsk(input.brief);
   return {
     name: newDocName(input.brief, input.typedName),
@@ -30,5 +31,6 @@ export function newDocBody(projectId: string, input: { brief: string; typedName:
     ...(input.sourceMessageId !== undefined ? { source_message_id: input.sourceMessageId } : {}),
     ...(input.repoRefs.length > 0 ? { repo_refs: [...input.repoRefs] } : {}),
     ...(input.format !== '' ? { style: input.format } : {}),
+    ...(input.clisJson !== undefined ? { clisJson: input.clisJson } : {}),
   } as CreateDocBody;
 }
