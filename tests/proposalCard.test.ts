@@ -5,7 +5,7 @@ import type { SessionView, SessionWithDelivery } from '../src/api/types.js';
 import type { ChainModel, ChainStep } from '../src/board/chainModel.js';
 import { IDLE_GATE_ACTION } from '../src/board/gateActions.js';
 import {
-  finishedDeliveryArm, gateInstance, handedOf, outcomeLine, planSentence, planSteps, proposalCard, proposalKindOf, statusSentence,
+  deliverFailureOf, finishedDeliveryArm, gateInstance, handedOf, outcomeLine, planSentence, planSteps, proposalCard, proposalKindOf, statusSentence,
   strandedCard,
 } from '../src/board/proposalCard.js';
 import { basedOnLine, parsePlace, passageCandidates, passageHasLine, passageWindow, sourcesOf } from '../src/board/sources.js';
@@ -71,7 +71,7 @@ describe('the proposal: the plan, in one sentence, with Go / Not now', () => {
   it('"Not now" sends nothing and keeps the proposal, for this gate only', () => {
     const c = proposalCard({ view: run('r1', 'awaiting_human'), gate: planGate(2), chain: EMPTY, action: IDLE_GATE_ACTION, ui: { dismissed: gateInstance(planGate(2)), confirming: null } })!;
     expect(c.state).toBe('no');
-    expect(c.text).toBe('Not now — nothing started.');
+    expect(c.text).toBe('Not now — nothing was sent; the question stays open and the run waits for you.');
     const next = proposalCard({ view: run('r1', 'awaiting_human'), gate: planGate(5), chain: EMPTY, action: IDLE_GATE_ACTION, ui: { dismissed: gateInstance(planGate(2)), confirming: null } })!;
     expect(next.state).toBe('ask');
     // The same ord reopened (a new gate instance) asks afresh (Copilot).
@@ -209,6 +209,31 @@ describe('the deliver card: the one "Are you sure?"', () => {
     const sure = proposalCard({ view: v, gate, chain: EMPTY, action: IDLE_GATE_ACTION, ui: { dismissed: null, confirming: gateInstance(gate) } })!;
     expect(sure.state).toBe('confirm');
     expect(sure.confirm).toStrictEqual({ q: 'This leaves studio.', w: ask.why, a: 'Yes, deliver' });
+  });
+
+  it('studio#606: every deliver card carries the gate\'s reject as "Stop the run"', () => {
+    const ask = proposalCard({ view: run('r9', 'awaiting_human', units), gate, chain: EMPTY, action: IDLE_GATE_ACTION, ui: NO_UI })!;
+    expect(ask.end).toBe('Stop the run');
+  });
+
+  it('studio#606: a deliver gate re-opened after a FAILED hand-over says so — not a fresh offer', () => {
+    const events = [
+      { type: 'gateDecided', session: 'r9', ord: 2, seq: 1, ts: 1, allow: true },
+      { type: 'unitDispatched', session: 'r9', ord: 2, seq: 2, ts: 2, attempt: 1 },
+      { type: 'stepFailed', session: 'r9', ord: 2, seq: 3, ts: 3, detail: 'gh pr create: a pull request for branch "wicked/r9" already exists' },
+      { type: 'awaitingHuman', session: 'r9', ord: 2, seq: 4, ts: 4, prompt: 'Approve unit 2 before it runs: deliver' },
+    ] as unknown as Parameters<typeof deliverFailureOf>[0];
+    const failure = deliverFailureOf(events, 2);
+    expect(failure).toMatch(/already exists/);
+    // A first offer (nothing approved yet), another unit's failure, or an approve that did not fail: none.
+    expect(deliverFailureOf(events.slice(3), 2)).toBeNull();
+    expect(deliverFailureOf(events, 1)).toBeNull();
+    expect(deliverFailureOf(events.filter((e) => e.type !== 'stepFailed'), 2)).toBeNull();
+    const c = proposalCard({ view: run('r9', 'awaiting_human', units), gate, chain: EMPTY, action: IDLE_GATE_ACTION, ui: NO_UI, deliverFailure: failure })!;
+    expect(c.text).toBe('The last hand-over didn’t work.');
+    expect(c.why).toContain('already exists');
+    expect(c.act).toBe('Deliver again');
+    expect(c.end).toBe('Stop the run');
   });
 
   it('without the unit’s target sentence the pull request is a condition, never a promise', () => {

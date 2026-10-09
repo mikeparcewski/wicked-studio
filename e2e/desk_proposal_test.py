@@ -108,7 +108,7 @@ with sync_playwright() as p:
     sent_after_no = len(posts("r-ship-plan"))
     plan.get_by_test_id("session-proposal-bring-back").click()
     page.wait_for_function(f"() => document.querySelector('{CARD.format('r-ship-plan')}')?.dataset.state === 'ask'", timeout=5000)
-    check("not-now-sends-nothing", no_text == "Not now — nothing started." and sent_after_no == 0,
+    check("not-now-sends-nothing", no_text == "Not now — nothing was sent; the question stays open and the run waits for you." and sent_after_no == 0,
           text=no_text, posts=sent_after_no)
 
     # ── 3. refused: a double click posts once; the reason, the buttons kept ───────

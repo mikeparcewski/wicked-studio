@@ -11,10 +11,10 @@
   "version": 1,
   "studioVersion": "0.6.7",
   "counts": {
-    "files": 171,
-    "occurrences": 1915,
-    "static": 1703,
-    "dynamic": 36,
+    "files": 172,
+    "occurrences": 1922,
+    "static": 1709,
+    "dynamic": 37,
     "computed": 6
   },
   "static": [
@@ -3011,6 +3011,36 @@
       "testId": "launch-gate",
       "files": [
         "src/components/ContextPopover.tsx"
+      ]
+    },
+    {
+      "testId": "launch-linked-issue",
+      "files": [
+        "src/components/LinkedIssuesLine.tsx"
+      ]
+    },
+    {
+      "testId": "launch-linked-issue-include",
+      "files": [
+        "src/components/LinkedIssuesLine.tsx"
+      ]
+    },
+    {
+      "testId": "launch-linked-issues",
+      "files": [
+        "src/components/LinkedIssuesLine.tsx"
+      ]
+    },
+    {
+      "testId": "launch-linked-issues-error",
+      "files": [
+        "src/components/LinkedIssuesLine.tsx"
+      ]
+    },
+    {
+      "testId": "launch-linked-issues-line",
+      "files": [
+        "src/components/LinkedIssuesLine.tsx"
       ]
     },
     {
@@ -6206,6 +6236,12 @@
       "testId": "seat-citations",
       "files": [
         "src/components/citations.tsx"
+      ]
+    },
+    {
+      "testId": "seat-logout-line",
+      "files": [
+        "src/components/SystemSettings.tsx"
       ]
     },
     {
@@ -10453,6 +10489,12 @@
       "pattern": "seat-health-*",
       "files": [
         "src/components/ContextPopover.tsx"
+      ]
+    },
+    {
+      "pattern": "seat-logout-*",
+      "files": [
+        "src/components/SystemSettings.tsx"
       ]
     },
     {

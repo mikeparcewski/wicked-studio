@@ -297,6 +297,18 @@ describe('GovernanceAudit — the conformance section (crew ≥ 0.8 wire)', () =
     expect(screen.getByTestId('governance-enforcement').getAttribute('data-status')).toBe('guardrailed');
   });
 
+  it('studio#618: the QE gate reason draws a home path as ~/ (the display rule)', async () => {
+    const view = acceptanceWith(conformanceWith(), false);
+    view.gate.reason = 'no QE ledger at /home/reel-operator/Projects/demo/repos/app/.wicked-qe — run the QE acceptance first';
+    getRunAcceptance.mockResolvedValue(view);
+    const model = mergeRunModel(makeView({ id: 'r-home' }, [makeUnit({ ord: 0 })]), []);
+    render(<GovernanceAudit model={model} />);
+    await waitFor(() => expect(screen.getByTestId('acceptance-gate-line')).toBeInTheDocument());
+    const text = screen.getByTestId('acceptance-gate-line').textContent ?? '';
+    expect(text).toContain('~/Projects/demo/repos/app/.wicked-qe');
+    expect(text).not.toContain('/home/');
+  });
+
   it('an unreadable claims wire is surfaced as unavailable, never as clean-empty', async () => {
     getRunAcceptance.mockResolvedValue(
       acceptanceWith(

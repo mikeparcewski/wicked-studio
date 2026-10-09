@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { artifactPath, readArtifactAddress, versionOf } from '../src/board/artifactAddress.js';
-import { ArtifactVersions, lensVersion } from '../src/components/session/ArtifactVersions.js';
+import { ArtifactVersions, VersionLens, lensVersion } from '../src/components/session/ArtifactVersions.js';
 import * as interactive from '../src/api/interactive.js';
 
 vi.mock('../src/api/interactive.js', async (orig) => {
@@ -68,5 +68,16 @@ describe('S16a-4b — the version list', () => {
     expect(await screen.findByTestId('artifact-version-line')).toHaveTextContent('Not restored — version 4 landed since. Look again.');
     expect(onRestored).not.toHaveBeenCalled();
     expect(interactive.postFork).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('studio#616 — the lens Back is a control; a row\'s age and restore arm read apart', () => {
+  it('the lens line takes the pointer (its own class), and an older row reads "<age> · Make this the working version"', () => {
+    render(<VersionLens projectId="notes" docId="doc" version={1} onBack={vi.fn()} />);
+    expect(screen.getByTestId('artifact-lens-line').className).toContain('wk-artifact-hint--control');
+    cleanup();
+    render(<ArtifactVersions projectId="notes" docId="doc" head={2} list={LIST} lens={null} onLook={vi.fn()} onRestored={vi.fn()} />);
+    const older = screen.getAllByTestId('artifact-version-row').find((r) => r.dataset.working === 'false')!;
+    expect(older.textContent).toMatch(/ · Make this the working version$/);
   });
 });

@@ -21,7 +21,7 @@ export type * from 'wicked-crew-api-types';
 
 // ── Delivery wire (crew#393 — api-types 0.18.0) ──────────────────────────────
 //
-// `DeliverRunResult` and `DeliverTargetResponse` come from the contract package (pin 0.92.0,
+// `DeliverRunResult` and `DeliverTargetResponse` come from the contract package (pin 0.99.0,
 // ASK-S1). `RunDeliveryState`, `SessionDelivery`, `SessionWithDelivery` and `LaunchBodyWithDeliver`
 // stay: they are studio's tolerant readings of the delivery field across the 0.11–0.18 wire
 // reshape (`src/components/delivery.ts` still reads the legacy object off an older daemon).

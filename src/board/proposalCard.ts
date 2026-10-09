@@ -1,5 +1,5 @@
 import { executingOrd } from '../api/run-state.js';
-import type { SessionView, WorkUnit } from '../api/types.js';
+import type { CoreEvent, SessionView, WorkUnit } from '../api/types.js';
 import { deliverUnit, deliveryOf, resolveDelivery } from '../components/delivery.js';
 import { deliverTargetOf, isDeliverGate } from '../components/gateMoveModel.js';
 import type { OpenGate } from '../store/gates.js';
@@ -169,6 +169,32 @@ export interface ProposalInput {
   /** ASK-S2 (DES-ASK-TEAM-CHAT-001 §4.7): the PA's pending proposal to build on an ask path — the
    *  plan gate is "Continue in Build?", with the band and the blast radius, and three answers. */
   ask?: AskProposal | null;
+  /** studio#606 (1): why the LAST approved hand-over failed (`deliverFailureOf`), when this deliver
+   *  gate re-opened after one — the card then says so instead of reading as a fresh offer. */
+  deliverFailure?: string | null;
+}
+
+/**
+ * studio#606 (1): the failure of the deliver unit's last APPROVED attempt — the newest `stepFailed`
+ * (its `detail`) for `ord` after the newest approving `gateDecided` for it. `null` on a first offer
+ * (nothing approved yet) and when the approved attempt did not fail. A failure with no detail still
+ * counts, in plain words.
+ */
+export function deliverFailureOf(events: readonly CoreEvent[], ord: number | undefined): string | null {
+  if (ord === undefined) return null;
+  let approvedAt = -1;
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i]! as CoreEvent & { allow?: unknown };
+    if (e.type === 'gateDecided' && e.ord === ord && e.allow === true) { approvedAt = i; break; }
+  }
+  if (approvedAt < 0) return null;
+  for (let i = events.length - 1; i > approvedAt; i--) {
+    const e = events[i]! as CoreEvent & { detail?: unknown };
+    if (e.type === 'stepFailed' && e.ord === ord) {
+      return typeof e.detail === 'string' && e.detail.trim() !== '' ? e.detail.trim() : 'the deliver step failed';
+    }
+  }
+  return null;
 }
 
 /** The ask's plan card words: the steps (floor additions marked), then the band and blast radius. */
@@ -277,10 +303,13 @@ export function proposalCard(input: ProposalInput): ProposalCardModel | null {
       // Not now was SENT (the accepted rev re-approved): the card is the proposal kept, not progress.
       if (ui.dismissed === instance) return { ...card, state: 'no', text: 'Not now — the conversation goes on; the proposal stays here.' };
     } else {
-      card.text = kind === 'plan' ? planSentence(planSteps(chain, gate.prompt)) : 'Ready to hand it over.';
+      const failed = kind === 'deliver' ? input.deliverFailure ?? null : null;
+      card.text = kind === 'plan' ? planSentence(planSteps(chain, gate.prompt)) : failed !== null ? 'The last hand-over didn’t work.' : 'Ready to hand it over.';
       card.why = kind === 'plan'
         ? ['Go starts the work; nothing is built until you say so.', floorLine(gate.prompt, chain)].filter((x) => x !== null).join(' ')
-        : deliverLine(view, gate, input.repoName ?? null);
+        : failed !== null ? `It failed: ${failed} Deliver again tries it once more; Stop cancels the run.` : deliverLine(view, gate, input.repoName ?? null);
+      // studio#606 (1): the deliver gate's own reject arm ("reject to cancel the run") is on the card.
+      if (kind === 'deliver') { card.end = 'Stop the run'; if (failed !== null) card.act = 'Deliver again'; }
     }
     if (action.queued || action.busy || action.answered !== null) {
       return {
@@ -294,7 +323,8 @@ export function proposalCard(input: ProposalInput): ProposalCardModel | null {
         confirm: { q: 'This leaves studio.', w: card.why ?? '', a: 'Yes, deliver' },
       };
     }
-    if (ui.dismissed === instance) return { ...card, state: 'no', text: 'Not now — nothing started.' };
+    // studio#606 (2): Not now is a local "later" — nothing was sent, so the gate is still open.
+    if (ui.dismissed === instance) return { ...card, state: 'no', text: 'Not now — nothing was sent; the question stays open and the run waits for you.' };
     // A refused answer on the ask's card keeps its THREE explicit choices — Try again would re-send an
     // approve for a Not now or an End (codex on ASK-S2 #3).
     if (action.error !== null) return { ...card, state: 'fail', reason: action.error, canRetry: true, ...(ask !== null ? {} : { act: 'Try again' }) };

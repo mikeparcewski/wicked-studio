@@ -60,4 +60,17 @@ describe('S17a Projects surface', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'Projects' }));
     expect(navigate).toHaveBeenCalledWith('/everything?tab=projects');
   });
+
+  it('studio#613: the lens is a chip group, the card is titled with controls, and no separator dangles', () => {
+    render(<EverythingPage runs={[]} runsLoaded needRows={[]} navigate={() => undefined} search="?tab=projects" />);
+    const lens = screen.getByTestId('projects-filter');
+    expect(lens.className).toContain('wk-everything-chips');
+    expect([...lens.querySelectorAll('button')].every((b) => b.className.includes('wk-chip'))).toBe(true);
+    const row = screen.getAllByTestId('projects-row')[0]!;
+    expect(row.querySelector('h2')?.className).toContain('wk-project-title');
+    expect(row.querySelector('[data-testid="projects-row-rename"]')?.className).toContain('wk-btn');
+    const counts = row.querySelector('[data-state="quiet"]')!.parentElement!.textContent!;
+    expect(counts.trim().endsWith('·')).toBe(false);
+    expect(counts).toContain('blocked: 0 · quiet: 0');
+  });
 });
