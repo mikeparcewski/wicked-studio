@@ -16,7 +16,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 
 vi.mock('../src/api/client.js', async (orig) => {
   const real = await orig<typeof import('../src/api/client.js')>();
-  return { ...real, api: { ...real.api, confirmGate: vi.fn(), getRunDiff: vi.fn(), getCoverageReportForRepo: vi.fn() } };
+  return { ...real, api: { ...real.api, confirmGate: vi.fn(), getRunDiff: vi.fn(), getCoverageReportForRepo: vi.fn(), getRunEvents: vi.fn() } };
 });
 
 const { api, ApiError } = await import('../src/api/client.js');
@@ -26,23 +26,35 @@ const { setUndoWindowForTest, undoDecision, useUndoQueue, UNDO_WINDOW_MS } = awa
 const { useGateStore } = await import('../src/store/gates.js');
 const { useMembershipStore } = await import('../src/store/membership.js');
 const { UndoToasts } = await import('../src/components/UndoToasts.js');
-const { GateRejectNote } = await import('../src/components/GateRejectNote.js');
 const { SteeringGate } = await import('../src/components/SteeringGate.js');
+const { NeedsQueueSurface } = await import('../src/components/NeedsYouQueue.js');
+const { QuestionRow } = await import('../src/components/desk/QuestionRow.js');
+type NeedRow = import('../src/board/needsYou.js').NeedRow;
 
 const confirmGate = vi.mocked(api.confirmGate);
+const getRunEvents = vi.mocked(api.getRunEvents);
 const openGate = (runId: string, ord: number): void =>
   useGateStore.getState().setGate({ runId, ord, prompt: `gate ${runId}`, lifecycle: 'open', receivedAt: Date.now() });
 const results = (): string[] => useUndoQueue.getState().results.map((r) => `${r.kind}: ${r.text}`);
+
+const NOW_DS = 1_700_000_000_000;
+const gateRow = (id: string): NeedRow => ({
+  key: `gate:${id}`, kind: 'gate', severity: 100, stakes: 1, groupKey: 'approval',
+  subject: id, text: `gate ${id}`, tone: 'gate', at: NOW_DS,
+  subjectPath: `/runs/${id}`, action: { kind: 'open', path: `/runs/${id}#gate`, label: 'Open gate ›' },
+});
 
 beforeEach(() => {
   setUndoWindowForTest(null); // the REAL window
   vi.useFakeTimers();
   confirmGate.mockReset().mockResolvedValue({ status: 'resumed' } as never);
+  getRunEvents.mockReset().mockResolvedValue({ events: [] } as never);
   useGateStore.setState({ gates: {}, approaching: {} });
   useMembershipStore.setState({ projectNameByRun: { b1: 'beta' } });
   useBatchGateStore.setState({
     selected: [], running: false, queued: false, done: 0, total: 0, failures: [], lastDecision: null,
   });
+  useGateActionStore.setState({ byGate: {} });
 });
 
 afterEach(() => {
@@ -119,17 +131,55 @@ describe('never silent', () => {
   });
 });
 
-describe('what survives an Undo', () => {
-  it('the reject reason is handed back to the note', async () => {
-    openGate('b1', 3);
-    const { unmount } = render(<GateRejectNote runId="b1" onClose={() => {}} />);
-    const input = screen.getByTestId('gate-reject-note');
+describe('what survives an Undo — the Desk carriers (S18a, boundary 2)', () => {
+  it('group row: the BATCH_NOTE_KEY reject reason is handed back to the reason input after Undo', () => {
+    openGate('g1', 0);
+    openGate('g2', 0);
+    const { unmount } = render(
+      <NeedsQueueSurface rows={[gateRow('g1'), gateRow('g2')]} runs={[]} navigate={() => {}} now={NOW_DS} variant="desk" />,
+    );
+    // Open the reason input and type a note, then submit.
+    fireEvent.click(screen.getByTestId('need-group-reject'));
+    const input = screen.getByTestId('need-group-reject-reason');
     fireEvent.change(input, { target: { value: 'needs the Q3 numbers' } });
     fireEvent.keyDown(input, { key: 'Enter' });
+    // Undo within the window: the note is handed back via BATCH_NOTE_KEY.
+    const pending = useUndoQueue.getState().pending[0];
+    if (pending !== undefined) act(() => { undoDecision(pending.id); });
+    // Remount: the component seeds its initial note from takeRestoredNote(BATCH_NOTE_KEY);
+    // clicking "Reject with reason…" opens the input pre-populated.
     unmount();
-    act(() => { undoDecision(useUndoQueue.getState().pending[0]!.id); });
-    render(<GateRejectNote runId="b1" onClose={() => {}} />);
-    expect((screen.getByTestId('gate-reject-note') as HTMLInputElement).value).toBe('needs the Q3 numbers');
+    render(
+      <NeedsQueueSurface rows={[gateRow('g1'), gateRow('g2')]} runs={[]} navigate={() => {}} now={NOW_DS} variant="desk" />,
+    );
+    fireEvent.click(screen.getByTestId('need-group-reject'));
+    expect((screen.getByTestId('need-group-reject-reason') as HTMLInputElement).value).toBe('needs the Q3 numbers');
+  });
+
+  it('QuestionRow: the per-run reject reason is handed back after Undo', async () => {
+    openGate('qr1', 0);
+    const { unmount } = render(
+      <QuestionRow runId="qr1" units={[]} openPath="/runs/qr1#gate" openLabel="Open gate ›" onOpen={() => {}} />,
+    );
+    // Open the answer panel and click Reject (mouse path — reveals the reason input).
+    fireEvent.click(screen.getByTestId('need-answer'));
+    await act(async () => { await vi.advanceTimersByTimeAsync(1); }); // settle events read
+    fireEvent.click(screen.getByTestId('need-choices').querySelector('[data-choice="reject"]')!);
+    const input = screen.getByTestId('need-choice-reason');
+    fireEvent.change(input, { target: { value: 'needs the Q3 numbers' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    // Undo: the note is handed back via the run id key (restoreNote(runId, amend)).
+    const pending = useUndoQueue.getState().pending[0];
+    if (pending !== undefined) act(() => { undoDecision(pending.id); });
+    // Remount, open again: onChoiceClick seeds reasonText from takeRestoredNote(runId).
+    unmount();
+    render(
+      <QuestionRow runId="qr1" units={[]} openPath="/runs/qr1#gate" openLabel="Open gate ›" onOpen={() => {}} />,
+    );
+    fireEvent.click(screen.getByTestId('need-answer'));
+    await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+    fireEvent.click(screen.getByTestId('need-choices').querySelector('[data-choice="reject"]')!);
+    expect((screen.getByTestId('need-choice-reason') as HTMLInputElement).value).toBe('needs the Q3 numbers');
   });
 });
 

@@ -1,4 +1,5 @@
 import { plausibleClock } from './ageHonesty.js';
+import { needRunId } from './deskModel.js';
 import { rankNeeds, type NeedAction, type NeedGroupKey, type NeedRow } from './needsYou.js';
 import { batchOnboardConsequence, batchOnboardLabel } from './repairMoves.js';
 import { acceptMemoryLabel, consequenceRank, PROPOSAL_PAGE, type ProposalConsequence } from './proposalTriage.js';
@@ -63,7 +64,15 @@ function groupMove(key: NeedGroupKey, ranked: readonly NeedRow[]): { action: Nee
       text: parts.length > 0 ? parts.join(' · ') : GROUP_WORDS[key].line,
     };
   }
-  return { action: lead.action, text: GROUP_WORDS[key].line };
+  // S18a: the approvals group (the only remaining key) answers in place — Approve all / Reject all
+  // (+ an optional reason) fan out one `POST /runs/:id/gate` per member through the shared batch
+  // path. `needRunId` extracts each member's run id from its `gate:<id>` key; the fan-out order is
+  // the ranking's. The group still expands to open each member ("Show each").
+  const runIds = ranked.map((m) => needRunId(m)).filter((id): id is string => id !== null);
+  return {
+    action: { kind: 'batch-approve', runIds, label: `Approve all ${runIds.length}` },
+    text: GROUP_WORDS.approval.line,
+  };
 }
 
 /** A proposal group lists what changes enforcement first (then unknown kinds, then memories);

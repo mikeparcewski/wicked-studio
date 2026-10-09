@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.6.5",
   "counts": {
-    "files": 222,
-    "occurrences": 2581,
-    "static": 2252,
+    "files": 223,
+    "occurrences": 2588,
+    "static": 2259,
     "dynamic": 79,
     "computed": 9
   },
@@ -6255,6 +6255,12 @@
       ]
     },
     {
+      "testId": "need-choice-reason",
+      "files": [
+        "src/components/desk/QuestionRow.tsx"
+      ]
+    },
+    {
       "testId": "need-choices",
       "files": [
         "src/components/desk/QuestionRow.tsx"
@@ -6288,6 +6294,42 @@
       "testId": "need-focus-show-all",
       "files": [
         "src/components/NeedsYouQueue.tsx"
+      ]
+    },
+    {
+      "testId": "need-group-approve-all",
+      "files": [
+        "src/components/desk/ApprovalGroupActions.tsx"
+      ]
+    },
+    {
+      "testId": "need-group-failure",
+      "files": [
+        "src/components/desk/ApprovalGroupActions.tsx"
+      ]
+    },
+    {
+      "testId": "need-group-reject",
+      "files": [
+        "src/components/desk/ApprovalGroupActions.tsx"
+      ]
+    },
+    {
+      "testId": "need-group-reject-all",
+      "files": [
+        "src/components/desk/ApprovalGroupActions.tsx"
+      ]
+    },
+    {
+      "testId": "need-group-reject-reason",
+      "files": [
+        "src/components/desk/ApprovalGroupActions.tsx"
+      ]
+    },
+    {
+      "testId": "need-group-retry",
+      "files": [
+        "src/components/desk/ApprovalGroupActions.tsx"
       ]
     },
     {

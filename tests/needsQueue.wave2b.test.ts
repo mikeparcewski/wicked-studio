@@ -165,6 +165,12 @@ describe('groupAlike — alike simple items fold into one row', () => {
     expect(needCount(rows)).toBe(4);
   });
 
+  it('S18a: the approval group carries a batch-approve move naming its members\' run ids', () => {
+    const group = groupAlike(twoGates, NOW).find((r) => r.key === 'group:approval')!;
+    // The old behaviour returned the lead member's `open` action; now it fans out in place.
+    expect(group.action).toEqual({ kind: 'batch-approve', runIds: ['g1', 'g2'], label: 'Approve all 2' });
+  });
+
   it('a lone simple gate is a plain row — a group of one is not a group', () => {
     const one = groupAlike(twoGates.filter((r) => r.key !== 'gate:g2'), NOW);
     expect(one.map((r) => r.key)).toEqual(['gate:g1', 'gate:cx', 'fail:f']);

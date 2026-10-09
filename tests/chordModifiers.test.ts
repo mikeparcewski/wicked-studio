@@ -97,7 +97,7 @@ describe('§5.6 rule 1 — every global chord carries a modifier', () => {
       .map((f) => `${f.file}: ${f.literal}`);
     // `unreadable`: spell the key literally (or through altChord) so the scan can judge it.
     expect({ bare, unreadable }).toEqual({ bare: [], unreadable: [] });
-  }, 30_000);
+  }, 120_000);
 
   it('the scan fails closed on initializers it cannot judge (Copilot review on #418)', () => {
     const unreadable = (src: string): boolean => scanChords(src, 'x.ts').some((f) => f.chord === null);

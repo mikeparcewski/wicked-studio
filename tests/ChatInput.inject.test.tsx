@@ -129,7 +129,7 @@ describe('ChatInput composer routes by run state (unified conversation)', () => 
     const field = screen.getByPlaceholderText(/send steering guidance/i);
     await user.type(field, 'prefer pytest');
     await user.click(screen.getByRole('button', { name: /steer/i }));
-    expect(confirmGate).toHaveBeenCalledWith('run-1', { approve: true, amend: 'prefer pytest' });
+    await waitFor(() => expect(confirmGate).toHaveBeenCalledWith('run-1', { approve: true, amend: 'prefer pytest' }));
     // Gate answering must never route through the mid-run inject endpoint.
     expect(client.api.injectMessage).not.toHaveBeenCalled();
   });

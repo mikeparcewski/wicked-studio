@@ -20,7 +20,7 @@ const {
   undoHeadline, useUndoQueue,
 } = await import('../src/board/undoQueue.js');
 const { UndoToasts } = await import('../src/components/UndoToasts.js');
-const { GateChip } = await import('../src/components/GateChip.js');
+const { ApprovalGroupActions } = await import('../src/components/desk/ApprovalGroupActions.js');
 
 const confirmGate = vi.mocked(api.confirmGate);
 
@@ -130,24 +130,22 @@ describe('the copy', () => {
   });
 });
 
-describe('the toast and the chip render the queue', () => {
-  it('shows "Approving in 10 s" with Undo; Undo clears it and the chip is answerable again', async () => {
-    const gate = { runId: 'r1', ord: 0, prompt: 'Ship it?', lifecycle: 'open', receivedAt: Date.now() };
+describe('the toast and the approval-group-row render the queue', () => {
+  it('shows "Approving in 10 s" with Undo; Undo clears it and the group row is answerable again', async () => {
     render(
       <>
-        <GateChip runId="r1" projectId="p1" gate={gate} navigate={() => {}} />
+        <ApprovalGroupActions runIds={['r1']} label="Approve all 1" />
         <UndoToasts />
       </>,
     );
-    act(() => { fireEvent.click(screen.getByTestId('gate-approve-r1')); });
+    act(() => { fireEvent.click(screen.getByTestId('need-group-approve-all')); });
     const toast = screen.getByTestId('undo-toast');
-    expect(toast.textContent).toContain('Approving this run in 10 s');
+    expect(toast.textContent).toContain('Approving in 10 s');
     expect(screen.getByTestId('undo-preview').textContent).toBe('The run resumes past this gate.');
     expect(screen.getByTestId('undo-close-note').textContent).toBe(CLOSE_NOTE);
-    expect(screen.getByTestId('gate-queued-r1')).toBeTruthy();
     act(() => { fireEvent.click(screen.getByRole('button', { name: 'Undo' })); });
     expect(screen.queryByTestId('undo-toast')).toBeNull();
-    expect(screen.getByTestId('gate-approve-r1')).toBeTruthy();
+    expect(screen.getByTestId('need-group-approve-all')).not.toBeDisabled();
     await act(async () => { await vi.advanceTimersByTimeAsync(UNDO_WINDOW_MS * 2); });
     expect(confirmGate).not.toHaveBeenCalled();
   });

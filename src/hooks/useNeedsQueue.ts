@@ -157,6 +157,12 @@ export function useNeedsQueue(flat: NeedRow[], navigate: Navigate, now: number):
         void runBatch(a.repoIds);
         return;
       }
+      if (a.kind === 'batch-approve') {
+        // S18a: the approvals group drives its own fan-out through ApprovalGroupActions (like a
+        // gate's QuestionRow) — nothing to do on the generic act path. Enter on a group row toggles
+        // it (it has members), so this branch is only reached for type-exhaustiveness.
+        return;
+      }
       if (a.kind === 'open') {
         if (a.ack !== undefined) {
           const { markRead } = useNotificationStore.getState();
