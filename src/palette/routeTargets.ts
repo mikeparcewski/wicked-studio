@@ -2,7 +2,8 @@ import type { Project, SessionView } from '../api/types.js';
 import { sessionIdOf, sessionPath } from '../board/sessionModel.js';
 import { humanTitle } from '../components/runIdentity.js';
 import { everythingPath } from '../board/everythingModel.js';
-import { modePath, projectDetailPath, projectPath, runEventsPath, runFilesPath, type Route } from '../hooks/useRoute.js';
+import { projectDetailPath, runEventsPath, runFilesPath, type Route } from '../hooks/useRoute.js';
+import { projectTestsPath } from '../api/testing.js';
 
 /**
  * EVERY ROUTE IN ⌘K (the skin contract, DES-STUDIO-REBUILD-001 §10 / §14 Q2: "every route is
@@ -40,13 +41,12 @@ export const ROUTE_SHAPES: readonly RouteShape[] = [
   { id: 'project-detail', example: '/projects/p1', is: (r) => r.panel === 'project-detail' && r.projectId !== null },
   // `/p/:id` moves directly to the project's scoped Sessions tab (S17a).
   { id: 'project', example: '/p/p1', is: (r) => r.panel === 'everything' && r.projectId !== null },
-  { id: 'p-build', example: '/p/p1/build', is: (r) => r.mode === 'build' && r.artifactId === null && !r.showLaunch },
-  { id: 'p-build-new', example: '/p/p1/build/new', is: (r) => r.mode === 'build' && r.showLaunch },
   // S16a-2d: `/p/:pid/build/:run`, `/runs/:id` and `/runs/:id/timeline` are MOVES to the run's
   // session (hooks/useMovedRoutes.ts) — redirects, not shapes; they parse as `session`.
   // S16a-4c: `/p/:pid/document[/:doc]` and `/p/:pid/video[/:run]` MOVED (a made thing opens in its
   // session, or on the project's Made list) — redirects, not shapes.
-  { id: 'p-campaigns', example: '/p/p1/campaigns', is: (r) => r.campaignsView },
+  // S16a-4f: `/p/:pid/build[/new]` and `/p/:pid/campaigns` MOVED (the project's Sessions, the Desk
+  // composer, Testing with `?project=`) — redirects, not shapes.
   { id: 'steering-dashboard', example: '/steering/dashboard', is: (r) => r.panel === 'steering' && r.steeringSection === 'dashboard' },
   { id: 'steering-policies', example: '/steering/policies', is: (r) => r.panel === 'steering' && r.steeringSection === 'policies' },
   { id: 'steering-memories', example: '/steering/memories', is: (r) => r.panel === 'steering' && r.steeringSection === 'memories' },
@@ -142,12 +142,10 @@ export function routeTargets(d: RouteTargetData): RouteTarget[] {
     if (p.id === 'default') continue;
     out.push(
       { shape: 'project-detail', label: `${p.name} · details`, href: projectDetailPath(p.id) },
-      { shape: 'p-build', label: `${p.name} · build`, href: modePath(p.id, 'build') },
-      { shape: 'p-build-new', label: `${p.name} · start a build`, href: `${modePath(p.id, 'build')}/new` },
       { shape: 'everything', label: `${p.name} · documents`, href: everythingPath({ tab: 'made', kind: 'documents', project: p.id }) },
       { shape: 'everything', label: `${p.name} · demos`, href: everythingPath({ tab: 'made', kind: 'videos', project: p.id }) },
       { shape: 'project', label: `${p.name} · sessions`, href: everythingPath({ tab: 'sessions', project: p.id }) },
-      { shape: 'p-campaigns', label: `${p.name} · campaigns`, href: `${projectPath(p.id)}/campaigns` },
+      { shape: 'testing-campaigns', label: `${p.name} · campaigns`, href: projectTestsPath(p.id) },
     );
   }
   for (const c of d.chats) out.push({ shape: 'session', label: `${c.title} · chat`, href: sessionPath(c.id) });

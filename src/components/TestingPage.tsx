@@ -474,7 +474,7 @@ function EvalsPage({ navigate }: { navigate: (path: string) => void }): React.Re
 
 // ── The page ──────────────────────────────────────────────────────────────────────────────────
 
-export function TestingPage({ page, campaignId, runs, navigate, launchIntent = null }: {
+export function TestingPage({ page, campaignId, runs, navigate, launchIntent = null, projectId = null }: {
   page: TestingSubPage;
   /** Non-null only on `/testing/campaigns/:id` — renders that campaign's scoreboard. */
   campaignId: string | null;
@@ -483,6 +483,8 @@ export function TestingPage({ page, campaignId, runs, navigate, launchIntent = n
   navigate: Navigate;
   /** The landing's `?new=` arrival intent (`readLaunchIntent(search)`) — opens that launch panel. */
   launchIntent?: LaunchIntent | null;
+  /** S16a-4f: the landing's `?project=` — the project a new test's launch panel preselects. */
+  projectId?: string | null;
 }): React.ReactElement {
   return (
     <div data-testid="testing-page" data-testing-page={page} className="flex flex-col">
@@ -500,7 +502,7 @@ export function TestingPage({ page, campaignId, runs, navigate, launchIntent = n
         campaignId !== null ? (
           <CampaignScoreboard campaignId={campaignId} runs={runs} navigate={navigate} />
         ) : (
-          <CampaignsPage runs={runs} navigate={navigate} launchIntent={launchIntent} />
+          <CampaignsPage runs={runs} navigate={navigate} launchIntent={launchIntent} projectId={projectId} />
         )
       ) : (
         <div className="max-w-5xl px-6 py-4">

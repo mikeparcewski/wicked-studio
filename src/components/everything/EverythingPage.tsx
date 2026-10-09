@@ -13,7 +13,8 @@ import { filterRunRows, pageRunRows, runRows, sortRunRows, type RunSortKey, type
 import { openSheet } from '../../store/sheets.js';
 import { useBoardModel } from '../../hooks/useBoardModel.js';
 import { useRoster } from '../../hooks/useRoster.js';
-import { projectDetailPath, projectPath, type Navigate } from '../../hooks/useRoute.js';
+import { projectDetailPath, type Navigate } from '../../hooks/useRoute.js';
+import { projectTestsPath as testsPath } from '../../api/testing.js';
 import { useCapabilities } from '../../store/capabilities.js';
 import { useDocsCache } from '../../store/docsCache.js';
 import { useNeedsSources } from '../../store/needsSources.js';
@@ -296,7 +297,7 @@ function SessionsTab({ runs, runsLoaded, runsError, onRetryRuns, needRows, q, na
               <span className="wk-desk-card-aside wk-everything-aside">
                 <a href={projectDetailPath(g.projectId)} onClick={go(projectDetailPath(g.projectId))} data-testid="everything-group-details">details</a>
                 {' · '}
-                <a href={`${projectPath(g.projectId)}/campaigns`} onClick={go(`${projectPath(g.projectId)}/campaigns`)} data-testid="everything-group-tests">tests</a>
+                <a href={testsPath(g.projectId)} onClick={go(testsPath(g.projectId))} data-testid="everything-group-tests">tests</a>
               </span>
             )}
           </p>

@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api/client.js';
 import type { AuditEntry, CoreEvent, SessionView } from '../api/types.js';
-import { launchPath } from '../hooks/ambientProject.js';
 import type { Navigate } from '../hooks/useRoute.js';
 import { useRunEventStore } from '../store/events.js';
 import { useMembershipStore } from '../store/membership.js';
@@ -130,7 +129,8 @@ export function WorkChronicle({ runs, projectId, navigate }: Props): React.React
     const amend = entry.detail?.['amend'];
     if (typeof amend !== 'string') return;
     setSteerPrefill({ steer: amend, projectId });
-    navigate(launchPath(projectId, 'build'));
+    // S16a-4f: the launch form, pre-bound by the prefill's project.
+    navigate('/runs/new');
   }
 
   const tipDate = shortDate(tipId !== null ? attachedAt[tipId] : undefined);

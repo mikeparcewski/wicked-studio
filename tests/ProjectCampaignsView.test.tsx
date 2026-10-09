@@ -34,6 +34,7 @@ vi.mock('../src/api/client.js', () => ({
 }));
 
 const { ProjectCampaignsView } = await import('../src/components/ProjectCampaignsView.js');
+const { TestingPage } = await import('../src/components/TestingPage.js');
 const { useCampaignsStore } = await import('../src/store/campaigns.js');
 
 function routeAt(path: string): ReturnType<typeof useRoute> {
@@ -55,17 +56,33 @@ afterEach(() => {
   window.history.replaceState(null, '', '/');
 });
 
-describe('T13 — useRoute: /p/:projectId/campaigns', () => {
-  it('T13 — parses to the project with campaignsView and NO mode/run — the flag selects the surface', () => {
+describe('S16a-4f — /p/:projectId/campaigns MOVED onto Testing (?project=)', () => {
+  it('parses to the Testing landing — no project shell, no campaignsView (useMovedRoutes replaces it)', () => {
     expect(routeAt('/p/proj-1/campaigns')).toMatchObject({
-      projectId: 'proj-1', campaignsView: true, mode: null, runId: null, artifactId: null, showLaunch: false,
+      panel: 'testing', testingPage: 'campaigns', campaignsView: false, mode: null, runId: null, artifactId: null, showLaunch: false,
     });
+    expect(routeAt('/p/proj-1/campaigns/x').panel).toBe('not-found');
+    expect(routeAt('/testing/campaigns')).toMatchObject({ panel: 'testing', projectId: null, campaignsView: false });
   });
 
-  it('T13 — decodes the project id; a mode route and the top-level landing never claim campaignsView', () => {
-    expect(routeAt('/p/my%20proj/campaigns')).toMatchObject({ projectId: 'my proj', campaignsView: true });
-    expect(routeAt('/p/proj-1/build')).toMatchObject({ projectId: 'proj-1', campaignsView: false, mode: 'build' });
-    expect(routeAt('/testing/campaigns')).toMatchObject({ panel: 'testing', projectId: null, campaignsView: false });
+  it('the Testing landing\'s `?project=` preselects THIS project in a new test\'s launch panel', async () => {
+    render(<TestingPage page="campaigns" campaignId={null} runs={[]} navigate={() => {}} projectId="proj-1" />);
+    await screen.findByTestId('campaigns-page');
+    fireEvent.click(screen.getByTestId('testing-campaign-open'));
+    const panel = await screen.findByTestId('testing-launch-panel');
+    const select = within(panel).getByTestId('testing-launch-project') as HTMLSelectElement;
+    await within(select).findByRole('option', { name: 'Merge the skins' });
+    expect(select.value).toBe('proj-1');
+  });
+
+  it('without `?project=` nothing is preselected', async () => {
+    render(<TestingPage page="campaigns" campaignId={null} runs={[]} navigate={() => {}} />);
+    await screen.findByTestId('campaigns-page');
+    fireEvent.click(screen.getByTestId('testing-campaign-open'));
+    const panel = await screen.findByTestId('testing-launch-panel');
+    const select = within(panel).getByTestId('testing-launch-project') as HTMLSelectElement;
+    await within(select).findByRole('option', { name: 'Merge the skins' });
+    expect(select.value).toBe('');
   });
 });
 

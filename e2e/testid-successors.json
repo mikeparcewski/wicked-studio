@@ -319,6 +319,7 @@
     "unit-list": "sheet-steps",
     "unit-transcript": "sheet-output",
     "unit-transcript-toggle": "sheet-output",
-    "work-unit": "sheet-step-row"
+    "work-unit": "sheet-step-row",
+    "new-project-start": "new-project-create"
   }
 }

@@ -6,6 +6,7 @@ import { runMadeMove, staticMadeMove } from '../board/madeMoves.js';
 import { chatSessionMove, newChatOf, seedNewChat } from '../board/chatMoves.js';
 import { useProjectsStore } from '../store/projects.js';
 import type { Navigate } from './useRoute.js';
+import { projectTestsPath } from '../api/testing.js';
 
 /**
  * THE §5.4 MOVES (DES-STUDIO-REBUILD-001 §5.4, slice S15c) — "redirects only for moves, never for
@@ -27,10 +28,13 @@ import type { Navigate } from './useRoute.js';
  * | `/runs/:id`              | `/s/run%3A:id` (search and hash kept — `?jump=`, `#gate`, …) |
  * | `/runs/:id/timeline`     | `/s/run%3A:id` (search and hash kept)                        |
  * | `/p/:pid/build/:run`     | `/s/run%3A:run` (search and hash kept)                       |
+ * | `/p/:pid/build`          | `/everything?tab=sessions&project=:pid`                      |
+ * | `/p/:pid/build/new`      | `/` — the Desk composer with the project's `@` chip          |
+ * | `/p/:pid/campaigns`      | `/testing/campaigns?project=:pid`                            |
  *
- * S16a-2d: the run page's addresses moved once the session carried what it did (S16a-1a…2c). Not
- * moves: `/runs/new`, `/p/:pid/build/new`, `/p/:pid/build`, `/runs/:id/events|files`, the project
- * shell's other modes (`/p/:id/:mode[/:artifact]` waits for S16a-4), and typos.
+ * S16a-2d: the run page's addresses moved once the session carried what it did (S16a-1a…2c);
+ * S16a-4c/4e/4f moved the project shell's modes (the rows below). Not moves: `/runs/new`,
+ * `/runs/:id/events|files`, and typos.
  */
 
 /** The redirect table as data (the ⌘K coverage and the docs read it; the parse in `useRoute` and
@@ -59,6 +63,10 @@ export const MOVES: readonly { from: string; to: string }[] = [
   { from: '/chat/new', to: '/ (the Desk composer, focused)' },
   { from: '/p/:pid/chat', to: '/ (the Desk composer, the project\'s @ chip)' },
   { from: '/p/:pid/chat/:run', to: '/s/run%3A:run[?…][#…]' },
+  // S16a-4f: the shell's Build view and its project Tests view.
+  { from: '/p/:pid/build', to: '/everything?tab=sessions&project=:pid' },
+  { from: '/p/:pid/build/new', to: '/ (the Desk composer, the project\'s @ chip)' },
+  { from: '/p/:pid/campaigns', to: '/testing/campaigns?project=:pid' },
 ];
 
 /** The static moves — the new address for an old one, or `null` when the address is not a move. */
@@ -99,6 +107,13 @@ export function movedAddress(pathname: string, search: string, hash = ''): strin
   if (first === 'p' && second !== '' && third === 'build' && fourth !== '' && fourth !== 'new' && restEmpty(5)) {
     return runSession(fourth);
   }
+  // S16a-4f: the shell's Build view is the project's Sessions; its Tests view is Testing, scoped.
+  if (first === 'p' && second !== '' && third === 'build' && restEmpty(4)) {
+    return everythingPath({ tab: 'sessions', project: decode(second) });
+  }
+  if (first === 'p' && second !== '' && third === 'campaigns' && restEmpty(4)) {
+    return projectTestsPath(decode(second));
+  }
   return null;
 }
 
@@ -121,8 +136,10 @@ export function useMovedRoutes(args: {
   const { panel, pathname, search, navigate, runs, runsLoaded, runChatId } = args;
   useEffect(() => {
     // The S15c moves parse to Everything; the S16a-2d run moves parse straight to the session; the
-    // S16a-4e new-chat forms parse to the Desk.
-    if (panel !== 'everything' && panel !== 'session' && panel !== 'home') return;
+    // S16a-4e new-chat forms (and S16a-4f's `/p/:pid/build/new`) parse to the Desk; S16a-4f's
+    // `/p/:pid/campaigns` parses to Testing.
+    if (panel !== 'everything' && panel !== 'session' && panel !== 'home' && panel !== 'testing') return;
+    if (panel === 'testing' && !pathname.startsWith('/p/')) return;
     if (panel === 'session' && pathname.startsWith('/s/')) return;
     if (panel === 'home') {
       const fresh = newChatOf(pathname);

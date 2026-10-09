@@ -24,6 +24,12 @@ describe('S16a-4e — the chat moves', () => {
     expect(newChatOf('/p/notes/chat/r9')).toBeNull();
     expect(parseRoute('/chat/new').panel).toBe('home');
     expect(parseRoute('/p/notes/chat').panel).toBe('home');
+    // S16a-4f: a build starts in the Desk composer too.
+    expect(newChatOf('/p/notes/build/new')).toStrictEqual({ projectId: 'notes' });
+    expect(newChatOf('/p/notes/build')).toBeNull();
+    expect(newChatOf('/p/notes/build/new/x')).toBeNull();
+    expect(parseRoute('/p/notes/build/new').panel).toBe('home');
+    expect(parseRoute('/p/notes/build/new/x').panel).toBe('not-found');
   });
 
   it('seeding a new chat puts the project\'s @ chip on the Desk composer and sends nothing', () => {

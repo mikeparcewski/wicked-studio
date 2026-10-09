@@ -417,7 +417,8 @@ interface Props {
   /** The board's live run list — KPI windows, gate jumps and narration read it, zero extra fetches. */
   runs: SessionView[];
   navigate: Navigate;
-  /** When rendered inside a project shell (`/p/:id/campaigns`), the project a new test auto-scopes to. */
+  /** The landing's `?project=` (S16a-4f: the moved `/p/:id/campaigns`), the project a new test's
+   *  launch panel preselects. No other scoping is claimed. */
   projectId?: string | null;
   /** The `?new=` arrival intent (`readLaunchIntent`) — the rail's ＋ / "Run recon" row land here
    *  with that launch panel OPEN. `null` = a plain arrival, nothing opens. */

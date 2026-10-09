@@ -10,7 +10,7 @@ Against the in-process fixture (wave-1 corpus + the team corpus for a project wi
      (none renders the not-found page).
   2. Each parameterless destination is reached by opening the palette, typing its label and
      pressing Enter: the address is the row's, and the page is not the not-found page.
-  3. One row of each parametric shape the corpus holds (a project's build/sessions/
+  3. One row of each parametric shape the corpus holds (a project's sessions/
      campaigns, a run's events/files, a session) is reached the same way.
   4. 0 page errors.
 
@@ -133,7 +133,7 @@ with sync_playwright() as p:
     # ── 3. one of each parametric shape the corpus holds ────────────────────────────
     # S16a-4e: a project's " · chat" row is gone (`/p/:pid/chat` moved to the Desk composer); a
     # chat's own row is a session (" · chat" on `/s/<chat>`), and this corpus lists no live chat.
-    want = (" · build", " · sessions", " · campaigns", " · raw events", " · files and diff", " · session", " · details")
+    want = (" · sessions", " · campaigns", " · raw events", " · files and diff", " · session", " · details")
     picked: dict = {}
     for r in rows:
         for w in want:

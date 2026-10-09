@@ -6,8 +6,7 @@ import { UNFILED_MOUNT } from '../api/interactive.js';
 import { fetchReposCached, getCachedRepos } from '../store/repoCache.js';
 import { fuzzyMatch, type FuzzyResult } from '../palette/fuzzy.js';
 import { runTargetHits } from '../palette/runTargets.js';
-import { launchPath } from '../hooks/ambientProject.js';
-import { modePath, projectPath, type Navigate } from '../hooks/useRoute.js';
+import { projectPath, type Navigate } from '../hooks/useRoute.js';
 import type { ShortcutEntry } from '../hooks/useGlobalShortcuts.js';
 import { useMembershipStore } from '../store/membership.js';
 import { useLiveChatsStore } from '../store/liveChats.js';
@@ -536,11 +535,15 @@ export function CommandPalette({
 
     // Verbs (§1.3's table — each names its existing mechanism, none invents one).
     const verbs: Array<{ name: string; action: () => void; when?: boolean }> = [
-      // Slice S: the pre-bound-vs-flat fork is the shared `launchPath` spelling
-      // (DES-UX-001 §2.3 rule 1) — the palette may not hand-roll it.
       {
+        // S16a-4f: a build starts in the Desk composer too (the project's @ chip when one is
+        // ambient); nothing is sent until the user sends.
         name: 'New Build',
-        action: () => navigate(launchPath(projectId, 'build')),
+        action: () => {
+          onClose();
+          navigate('/');
+          seedNewChat(projectId, projectId === null ? null : projects.find((p) => p.id === projectId)?.name ?? null);
+        },
       },
       {
         // S16a-4e: a new chat starts in the Desk composer (the project's @ chip when one is ambient).
@@ -967,7 +970,7 @@ export function CommandPalette({
                 const m = pickProjectFor;
                 setPickProjectFor(null);
                 if (m === 'video') seedDemo(pid);
-                else navigate(modePath(pid ?? UNFILED_MOUNT, m));
+                else navigate(everythingPath({ tab: 'made', kind: 'documents', project: pid ?? UNFILED_MOUNT, new: 'document' }));
               }}
             />
           </div>

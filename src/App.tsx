@@ -55,7 +55,7 @@ import { useRetiredSettingsRedirect, useSteeringRedirect, useTestingRedirect } f
 import { useMovedRoutes } from './hooks/useMovedRoutes.js';
 import { EverythingPage } from './components/everything/EverythingPage.js';
 import { everythingPath } from './board/everythingModel.js';
-import { modePath, routedVersion, useRoute, type Mode } from './hooks/useRoute.js';
+import { routedVersion, useRoute, type Mode } from './hooks/useRoute.js';
 import { useRuns } from './hooks/useRuns.js';
 import { useAnnotationStore } from './store/annotations.js';
 import { useCampaignsStore } from './store/campaigns.js';
@@ -263,15 +263,8 @@ export function App(): React.ReactElement {
     };
   }, [runId]);
 
-  // S16a-2d: a run opens its session thread (the run page retired); inside the project shell's Chat
-  // mode a run stays in the chat (that address moves with S16a-4).
-  const runPath = useCallback(
-    (id: string) =>
-      projectId && mode === 'chat'
-        ? modePath(projectId, 'chat', id)
-        : sessionPath(`run:${id}`),
-    [projectId, mode],
-  );
+  // S16a-2d: a run opens its session thread (the run page retired); S16a-4f: never a `/p/` address.
+  const runPath = useCallback((id: string) => sessionPath(`run:${id}`), []);
 
   const selectRun = useCallback((id: string) => navigate(runPath(id)), [navigate, runPath]);
 
@@ -283,13 +276,11 @@ export function App(): React.ReactElement {
     [navigate, refresh, runPath],
   );
 
-  // Outside the project shell, "back" belongs to the list the run was opened from —
-  // `/work`, the ONE canonical runs surface (DES-UX-001 §7.4, slice Y — the bare
-  // `/runs` listing retired into a redirect): `/` is a different surface, not this
-  // one's parent.
+  // "Back" belongs to the list a run was opened from: the Sessions list (scoped to the project when
+  // one is ambient). S16a-4f: never a `/p/` address.
   const onNavigateBack = useCallback(
-    () => navigate(projectId && mode ? modePath(projectId, mode) : everythingPath({ tab: 'sessions' })),
-    [navigate, projectId, mode],
+    () => navigate(everythingPath({ tab: 'sessions', ...(projectId ? { project: projectId } : {}) })),
+    [navigate, projectId],
   );
 
   const onKill = useCallback(
@@ -731,6 +722,8 @@ export function App(): React.ReactElement {
             navigate={navigate}
             // The landing's `?new=` arrival intent (the rail's ＋ / Run recon row — #203).
             launchIntent={readLaunchIntent(search)}
+            // S16a-4f: `?project=` (the moved `/p/:pid/campaigns`) preselects the launch panel's project.
+            projectId={new URLSearchParams(search).get('project')}
           />
         </div>
       );

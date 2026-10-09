@@ -11,18 +11,20 @@ import { addAboutChip } from '../store/composerChips.js';
  * | `/p/:pid/chat/:run`       | `/s/run%3A:run` (search and hash kept)                      |
  * | `/chat/new`               | `/` — the Desk composer, focused; nothing is sent           |
  * | `/p/:pid/chat[/new]`      | `/` — the Desk composer with the project's `@` chip         |
+ * | `/p/:pid/build/new`       | the same (S16a-4f: the composer launches; nothing is sent)  |
  */
 
 function decode(s: string): string {
   try { return decodeURIComponent(s); } catch { return s; }
 }
 
-/** The new-chat forms: `{ projectId }` (null for `/chat/new`), else null. */
+/** The new-chat forms — and S16a-4f's `/p/:pid/build/new`, the composer being where a build
+ *  starts too: `{ projectId }` (null for `/chat/new`), else null. */
 export function newChatOf(pathname: string): { projectId: string | null } | null {
   const segs = pathname.split('/');
   const [, first = '', second = '', third = '', fourth = ''] = segs;
   if (first === 'chat' && second === 'new' && segs.slice(3).every((x) => x === '')) return { projectId: null };
-  if (first === 'p' && second !== '' && third === 'chat' && (fourth === '' || fourth === 'new') && segs.slice(5).every((x) => x === '')) {
+  if (first === 'p' && second !== '' && ((third === 'chat' && fourth === '') || ((third === 'chat' || third === 'build') && fourth === 'new')) && segs.slice(5).every((x) => x === '')) {
     return { projectId: decode(second) };
   }
   return null;

@@ -53,6 +53,12 @@ export function testingPath(page: TestingSubPage): string {
   return `/testing/${page}`;
 }
 
+/** S16a-4f: a project's tests — the Testing landing with `?project=` (its launch panel preselects
+ *  the project). Where the retired `/p/:id/campaigns` lands. */
+export function projectTestsPath(projectId: string): string {
+  return `${testingPath('campaigns')}?${new URLSearchParams({ project: projectId }).toString()}`;
+}
+
 /** One campaign's scoreboard address — MOVED under Testing (the flat `/campaigns/:id`
  *  redirects here; `useTestingRedirect` is the normalizer). */
 export function campaignPath(id: string): string {

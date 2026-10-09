@@ -72,10 +72,6 @@ export type Mode = 'chat' | 'build' | 'document' | 'video';
 
 export const MODES: readonly Mode[] = ['chat', 'build', 'document', 'video'] as const;
 
-function asMode(s: string): Mode | null {
-  return (MODES as readonly string[]).includes(s) ? (s as Mode) : null;
-}
-
 export interface Route {
   panel: Panel;
   /** Non-null only when panel === 'runs' and a run is selected. */
@@ -256,12 +252,11 @@ function parse(pathname: string): Route {
     if ((third === 'chronicle' && restEmpty(4)) || (third === '' && restEmpty(3))) {
       return route({ panel: 'everything', projectId: safeDecode(second) });
     }
-    // `/p/:projectId/campaigns` (nav-reorg): the project-scoped Campaigns surface. Rides no
-    // mode (mode stays null — the ModeSwitcher's four-verb vocabulary is untouched); the
-    // flag selects the campaign surface, exactly the chronicle idiom. Never an artifact named
-    // "campaigns".
+    // S16a-4f: `/p/:projectId/campaigns` MOVED — Testing, scoped to the project by `?project=` (the
+    // launch panel's preselect). Parsed to the Campaigns landing so it renders on the pre-redirect
+    // tick; `useMovedRoutes` replaces the address. A deeper path is a typo.
     if (third === 'campaigns') {
-      return route({ projectId: safeDecode(second), campaignsView: true });
+      return restEmpty(4) ? route({ panel: 'testing', testingPage: 'campaigns' }) : route({ panel: 'not-found' });
     }
     // S16a-4c: `/p/:pid/document[/:doc]` and `/p/:pid/video[/:run]` MOVED — a made thing opens in its
     // session (or on the project's Made list). Parsed to "See everything" so the page renders on the
@@ -275,34 +270,19 @@ function parse(pathname: string): Route {
     if (third === 'document' || third === 'video') {
       return restEmpty(5) ? route({ panel: 'everything', projectId: safeDecode(second) }) : route({ panel: 'not-found' });
     }
-    const mode = asMode(third);
-    // A segment that names no mode (`/p/:id/bogus`) is a dead address — not-found, never a silent
-    // swap onto the project (usability review #4).
-    if (mode === null) return route({ panel: 'not-found' });
-    const raw = fourth ? safeDecode(fourth) : null;
-    // `/p/:projectId/:mode/new` is the project-scoped CREATE route (DES-FEEDBACK-001
-    // §4.3, slice B): the launch form pre-bound to the project — never an artifact
-    // named "new", so `artifactId` stays null and no run-selected machinery
-    // (event backfill, kill shortcut) fires against a non-id.
-    const isNew = raw === 'new';
-    // S16a-2d (§5.4): `/p/:pid/build/:run` MOVED — a run lives in its session thread. Parsed straight
-    // to the session so the thread renders on the pre-redirect tick; `useMovedRoutes` replaces the
-    // address (`/s/run%3A<run>`, search and hash kept). `/p/:pid/build` and `/build/new` stay.
-    if (mode === 'build' && raw !== null && !isNew && restEmpty(5)) {
-      return route({ panel: 'session', artifactId: `run:${raw}` });
+    // S16a-4f: the shell's Build mode MOVED with the rest of the shell — `/p/:pid/build` is the
+    // project's Sessions, `/p/:pid/build/new` the Desk composer with the project's @ chip (nothing
+    // sent), and (S16a-2d) `/p/:pid/build/:run` the run's session. Each parses to where it lands so
+    // nothing headless renders on the pre-redirect tick; `useMovedRoutes` replaces the address.
+    if (third === 'build') {
+      if (!restEmpty(5)) return route({ panel: 'not-found' });
+      if (fourth === '') return route({ panel: 'everything', projectId: safeDecode(second) });
+      if (fourth === 'new') return route({ panel: 'home' });
+      return route({ panel: 'session', artifactId: `run:${safeDecode(fourth)}` });
     }
-    const artifactId = isNew ? null : raw;
-    return route({
-      projectId: safeDecode(second),
-      mode,
-      artifactId,
-      showLaunch: isNew,
-      // Build and Chat wire straight into the existing run surfaces, so the artifact IS
-      // the run: every run-selected behaviour (event backfill, Ctrl+K kill, RightPanel,
-      // gate toasts) keeps working unchanged inside the shell.
-      runId: mode === 'build' || mode === 'chat' ? artifactId : null,
-      chatMode: mode === 'chat',
-    });
+    // A segment that names no move (`/p/:id/bogus`) is a dead address — not-found, never a silent
+    // swap onto the project (usability review #4).
+    return route({ panel: 'not-found' });
   }
   // `/steering/{policies,memories}` — the unified governed-knowledge surface: one page per
   // sub-section, each managing existing items AND reviewing proposals. Bare `/steering` and a

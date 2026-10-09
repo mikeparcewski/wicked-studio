@@ -12,8 +12,8 @@
   "studioVersion": "0.6.6",
   "counts": {
     "files": 194,
-    "occurrences": 2293,
-    "static": 2035,
+    "occurrences": 2292,
+    "static": 2034,
     "dynamic": 48,
     "computed": 8
   },
@@ -5708,12 +5708,6 @@
     },
     {
       "testId": "new-project-repo",
-      "files": [
-        "src/components/NewProjectModal.tsx"
-      ]
-    },
-    {
-      "testId": "new-project-start",
       "files": [
         "src/components/NewProjectModal.tsx"
       ]

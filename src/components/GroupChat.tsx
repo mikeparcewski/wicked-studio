@@ -7,7 +7,6 @@ import type {
   ChatOpenBody, ChatScope, ChatSeatRefusal, ChatTranscriptRecord, ChatUsage, Project, RepoEntry, RosterSeat,
 } from '../api/types.js';
 import type { ChatCitationsFrame } from '../api/chat-wire.js';
-import { launchPath } from '../hooks/ambientProject.js';
 import { useEventStream } from '../hooks/useEventStream.js';
 import { pinAwaiting } from '../store/awaitingPins.js';
 import { fetchReposCached, getCachedRepos } from '../store/repoCache.js';
@@ -1592,7 +1591,8 @@ export function GroupChat({
       humanConfirm: { before: 1 },
       projectId: ambient,
     });
-    navigate(launchPath(ambient, 'build'));
+    // S16a-4f: the launch form, pre-bound by the prefill's project.
+    navigate('/runs/new');
   }
 
   async function endChat(): Promise<void> {

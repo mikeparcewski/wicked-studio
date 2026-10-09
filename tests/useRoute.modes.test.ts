@@ -14,11 +14,10 @@ afterEach(() => {
 });
 
 describe('useRoute — project + mode routes (DES-MERGE-001 §1.5)', () => {
-  it('parses /p/:projectId/:mode', () => {
+  it('S16a-4f: /p/:projectId/build parses to the project\'s Sessions — no mode, no artifact', () => {
     const r = routeAt('/p/proj-1/build');
-    expect(r.current.projectId).toBe('proj-1');
-    expect(r.current.mode).toBe('build');
-    expect(r.current.artifactId).toBeNull();
+    expect(r.current).toMatchObject({ panel: 'everything', projectId: 'proj-1', mode: null, artifactId: null });
+    expect(routeAt('/p/proj-1/build/new').current).toMatchObject({ panel: 'home', mode: null, showLaunch: false });
   });
 
   it('every artifact-bearing mode address moved (S16a-2d build, S16a-4c document / video, S16a-4e chat)', () => {
@@ -50,7 +49,7 @@ describe('useRoute — project + mode routes (DES-MERGE-001 §1.5)', () => {
   });
 
   it('decodes percent-encoded ids', () => {
-    expect(routeAt('/p/proj%20one/campaigns').current.projectId).toBe('proj one');
+    expect(routeAt('/p/proj%20one/build').current.projectId).toBe('proj one');
     // A moved build or chat-run address decodes its run id into the session id.
     expect(routeAt('/p/proj%20one/chat/c%2F9').current.artifactId).toBe('run:c/9');
     expect(routeAt('/p/proj%20one/build/run%2F9').current.artifactId).toBe('run:run/9');
@@ -104,14 +103,15 @@ describe('useRoute — the existing panel routes keep working', () => {
 });
 
 describe('navigate', () => {
-  it('pushes a history entry by default, so Back returns to the previous mode', () => {
-    const r = routeAt('/p/proj-1/campaigns');
+  it('pushes a history entry by default, so Back returns to the previous page', () => {
+    const r = routeAt('/testing/campaigns');
     const before = window.history.length;
 
-    act(() => r.current.navigate('/p/proj-1/build'));
+    act(() => r.current.navigate('/everything?tab=sessions&project=proj-1'));
 
-    expect(window.location.pathname).toBe('/p/proj-1/build');
-    expect(r.current.mode).toBe('build');
+    expect(window.location.pathname).toBe('/everything');
+    expect(r.current.projectId).toBeNull();
+    expect(r.current.panel).toBe('everything');
     expect(window.history.length).toBe(before + 1);
   });
 
