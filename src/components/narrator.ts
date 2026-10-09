@@ -335,6 +335,9 @@ export function narrate(event: CoreEvent, ctx: NarratorContext): NarrationLine |
     case 'gateDecided':
       return event.allow === true ? line('Gate: approved', 'work') : line('Gate: denied', 'fail');
     case 'unitReworkAmended':
+      // studio#612 (wicked-core#782): a floor fix — a seat other than the read-only phase makes the
+      // note's fix, then only the floor re-runs; the phase itself is not re-dispatched.
+      if (event['scope'] === 'floor_fix') return line(`You asked for a fix on ${phase} — another seat makes it, then only the floor re-runs`, 'human');
       return line(`You amended ${phase} — re-dispatching with your note`, 'human');
     case 'unitDone':
       return line(`${phase} approved and done`, 'work');

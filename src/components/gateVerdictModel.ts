@@ -145,6 +145,12 @@ export interface GateVerdictView {
   judgeSkipped: string | null;
   agentReasoning: string | null;
   evaluatorPass: boolean | null;
+  /** studio#601: the evaluator's own `VERDICT:` token (`gateEvaluated.evaluatorVerdict`, api-types
+   *  0.38.0) — `"PASS"`, `"FAIL"`, … — `null` when none was parsed or the frame predates the field. */
+  evaluatorVerdict?: string | null;
+  /** studio#612: the gate's floor note (`gateEvaluated.floorNote`) — a waiver, or core#782's floor
+   *  fix disclosure (the verdict was given on the pre-fix tree); `null` when none. */
+  floorNote?: string | null;
   evaluatorPolicies: string[];
   denial: GateDenialView | null;
   floor: GateFloorView | null;
@@ -357,6 +363,8 @@ export function gateVerdict(events: readonly CoreEvent[], gateOrd?: number): Gat
     judgeSkipped,
     agentReasoning: str(ev.agentReasoning),
     evaluatorPass: typeof ev.evaluatorPass === 'boolean' ? ev.evaluatorPass : null,
+    evaluatorVerdict: str((ev as Record<string, unknown>)['evaluatorVerdict']),
+    floorNote: tail((ev as Record<string, unknown>)['floorNote']),
     evaluatorPolicies,
     denial,
     floor: floorFrame === null ? null : floorOf(floorFrame),
@@ -463,6 +471,31 @@ export interface EscalationOffer {
   action: EscalationAction;
   label: string;
   consequence: string;
+}
+
+/**
+ * studio#612 (wicked-core#782 / #811): whether "approve with a note" at this gate is a FLOOR FIX —
+ * the gate's unit is a read-only phase (worktree-guarded, `executes_code: false`) whose own
+ * repo-checks floor denied it. There the engine hands the note to a seat DISTINCT from the phase,
+ * which makes the fix in the worktree; then only the floor re-runs (the phase's verdict stands).
+ * The engine's prompt names that arm on exactly that gate ("approve with a note to have a seat
+ * other than this read-only phase's make that fix …"), which is the authoritative reading; a gate
+ * read before its prompt carries the arm still qualifies on the unit's own plan-time flags
+ * (`worktree_guarded` + `repo_checks_floor`, when the wire carries them) and a floor denial of
+ * THIS unit.
+ */
+export function isFloorFixGate(
+  prompt: string | undefined,
+  view: GateVerdictView | null,
+  units: readonly WorkUnit[] | undefined,
+  gateOrd: number | undefined,
+): boolean {
+  if (prompt !== undefined && /\bapprove with a note to have a seat other than this read-only phase/i.test(prompt)) return true;
+  if (view === null || typeof gateOrd !== 'number' || view.ord !== gateOrd || view.outcome !== 'fail') return false;
+  const source = view.denial?.source;
+  if (source !== 'repo_checks' && source !== 'repo_checks_timeout') return false;
+  const unit = units?.find((u) => u.ord === gateOrd) as (WorkUnit & Record<string, unknown>) | undefined;
+  return unit !== undefined && unit['worktree_guarded'] === true && unit['repo_checks_floor'] === true;
 }
 
 /**

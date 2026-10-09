@@ -12,8 +12,8 @@
   "studioVersion": "0.6.7",
   "counts": {
     "files": 170,
-    "occurrences": 1912,
-    "static": 1700,
+    "occurrences": 1916,
+    "static": 1704,
     "dynamic": 36,
     "computed": 6
   },
@@ -6290,6 +6290,30 @@
       "testId": "session-composer-send",
       "files": [
         "src/components/session/Composer.tsx"
+      ]
+    },
+    {
+      "testId": "session-failed-resume",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
+      "testId": "session-failed-resume-asked",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
+      "testId": "session-failed-resume-button",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
+      "testId": "session-failed-resume-error",
+      "files": [
+        "src/components/session/SessionView.tsx"
       ]
     },
     {

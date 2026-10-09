@@ -19,7 +19,7 @@ graph file's absolute path — plus the wave-1 and team corpora, and proves:
      in the needs-you fold (rows already known may show), no "Nothing has been started yet."; when
      /runs answers, the headline appears, the loading line goes, and the projects sentence is back.
   4. #464: the Desk row of a run paused before its first unit (crew's unit prompt: the goal and the
-     ` ||| PHASE SCOPE:` scaffold) reads "Approve the triage step"; no "|||" on the Desk.
+     ` ||| PHASE SCOPE:` scaffold) reads "Start the triage step?"; no "|||" on the Desk.
   5. #479: the delivered run's page — What / Where (worktree), Files referenced, Data used, Delivery (the push
      target) and every unit output (the deliver unit's push line) — names no home directory.
   6. #467: Health → pi's sign-in move: the "Running …" line reads `~/…`; no home directory in the panel.
@@ -223,7 +223,7 @@ with sync_playwright() as p:
     page.wait_for_timeout(500)
     desk_text = page.evaluate("() => (document.querySelector('[data-testid=\"desk\"]') || document.body).innerText")
     page.screenshot(path=str(SHOTS / "desk-home-paths-prerun-gate.png"))
-    check("prerun-gate-says-the-step", "Approve the triage step" in desk_text and "|||" not in desk_text
+    check("prerun-gate-says-the-step", "Start the triage step?" in desk_text and "|||" not in desk_text
           and "PHASE SCOPE" not in desk_text,
           snippet=desk_text[max(0, desk_text.find("SAVE20") - 40):desk_text.find("SAVE20") + 200] if "SAVE20" in desk_text else desk_text[:300])
 

@@ -22,6 +22,7 @@ import {
   layerLine,
   reassignCandidates,
   isRestoredRetry,
+  isFloorFixGate,
   steerScopeTarget,
   type GateVerdictView,
 } from '../components/gateVerdictModel.js';
@@ -160,6 +161,20 @@ export function deniedUnitJudgedOk(verdict: GateVerdictView | null): boolean {
   return verdict.evaluatorPass !== false;
 }
 
+/**
+ * studio#606 (5): whether the gate's unit is a TOOL unit (`tool_cmd` — a bash install, the deliver
+ * script): no seat runs it, so moving it to another seat changes nothing and "Reassign to <seat>"
+ * is never offered on its gate.
+ */
+export function isToolUnitGate(units: readonly WorkUnit[], gateOrd: number): boolean {
+  const cmd = units.find((u) => u.ord === gateOrd)?.tool_cmd;
+  return Array.isArray(cmd) && cmd.length > 0;
+}
+
+/** studio#612: the floor fix's words — what an approve with a note does at a read-only phase's floor gate. */
+export const FLOOR_FIX_LABEL = 'Fix with a note';
+export const FLOOR_FIX_TITLE = 'A seat other than this read-only phase makes this fix in the worktree, then only the floor re-runs; the phase does not run again and its verdict stands.';
+
 export interface SessionGateInput {
   runId: string;
   gate: OpenGate;
@@ -243,8 +258,14 @@ function withDepth(base: BaseRowModel, input: SessionGateInput): GateRowModel {
     : null;
   // The consequence rides the suggested choice only when that choice IS the recommended move
   // (studio#556's mapping: send back, retry with findings, approve) — never above another choice.
-  const consequence = rec !== null && base.recommended !== null && recommendedChoiceIndex(base.choices, rec) === base.recommended && rec.consequence !== ''
-    ? rec.consequence : null;
+  const suggested = rec !== null && base.recommended !== null && recommendedChoiceIndex(base.choices, rec) === base.recommended;
+  // studio#612: on a read-only phase's floor gate the suggested approve-with-note is a FLOOR FIX —
+  // no seat re-runs the phase with the note, so the move's "reruns with N failing checks" is not
+  // what happens; the fix's own consequence is said instead.
+  const floorFix = suggested && base.choices[base.recommended!]?.key === 'steer' && isFloorFixGate(gate.prompt, verdict, units, gate.ord);
+  const consequence = floorFix
+    ? `A seat other than this phase makes the fix from the ${rec!.items.length > 0 ? `${rec!.items.length} failing check${rec!.items.length === 1 ? '' : 's'}` : 'note'}; only the floor re-runs`
+    : suggested && rec!.consequence !== '' ? rec!.consequence : null;
   const source = gateSourceLine(gate.gateKind ?? gateFrameFor(events, gate.ord)?.gateKind ?? null);
   const overflow = [...base.overflow];
   const offer = input.rerun ?? null;
@@ -393,6 +414,9 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
       ...(verdict.floor.skipped.length > 0 ? [`skipped: ${verdict.floor.skipped.join(', ')}`] : []),
     ]
     : [];
+  // studio#612: the gate's floor note (a waiver, or a floor fix's "the verdict was given on the
+  // pre-fix tree") rides the disclosure verbatim.
+  if (verdict?.floorNote != null) floorDetailLines.push(`Floor note: ${verdict.floorNote}`);
 
   if (reason === 'escalation') {
     const tail = escalationSummaryFor(events, gate.ord);
@@ -459,7 +483,13 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
       });
     }
 
-    coreWithoutStop.push({ key: 'steer', label: 'Approve and steer', decision: escalationScopeTarget !== null ? { approve: true, amendScope: 'creator' } : { approve: true }, needsNote: true, title: 'Approve and add a note to steer the next creator phase.' });
+    // studio#612 (wicked-core#782): at a read-only phase's floor gate the same approve-with-note is a
+    // FLOOR FIX — a distinct seat makes the note's fix, then only the floor re-runs. No creator phase
+    // runs, so "steer the next creator phase" would be wrong there; the wire is unchanged.
+    const floorFix = isFloorFixGate(gate.prompt, verdict, units, gate.ord);
+    coreWithoutStop.push(floorFix
+      ? { key: 'steer', label: FLOOR_FIX_LABEL, decision: { approve: true }, needsNote: true, title: FLOOR_FIX_TITLE }
+      : { key: 'steer', label: 'Approve and steer', decision: escalationScopeTarget !== null ? { approve: true, amendScope: 'creator' } : { approve: true }, needsNote: true, title: 'Approve and add a note to steer the next creator phase.' });
 
     // Cap at 3 (stop always occupies the 4th inline slot); excess goes to overflow.
     const escInline = coreWithoutStop.slice(0, 3);
@@ -468,7 +498,7 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
     // Reassign candidates
     const failedCli = failedSeatOf(units, gate.ord);
     const reassignList: GateRowChoice[] = [];
-    if (isSeatFailure(isEscalationGate(gate.prompt, verdict), failedCli)) {
+    if (!isToolUnitGate(units, gate.ord) && isSeatFailure(isEscalationGate(gate.prompt, verdict), failedCli)) {
       for (const c of reassignCandidates(pool, failedCli ?? null, roster)) {
         if (isOfferable(c)) {
           reassignList.push({ key: `reassign:${c.cli}`, label: `Reassign to ${c.label}`, decision: null, reassignCli: c.cli, needsNote: false, title: `Move the failed unit to ${c.label}; it retries there.` });
@@ -515,12 +545,17 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
 
   if (reason === 'retry') {
     choices.push({ key: 'retry', label: 'Retry', decision: { approve: true }, needsNote: false, title: 'Try the same unit again with the same seat.' });
+    // studio#600: the restored-tree gate's other engine arm — adopt the evaluator's pinned edit —
+    // when the engine pinned it (`escalationOffers` mirrors the engine's own acceptance check).
+    for (const offer of escalationOffers(verdict, gate.ord, units, runId)) {
+      choices.push({ key: `offer:${offer.action}`, label: offer.label, title: offer.consequence, decision: { approve: true, action: offer.action } as unknown as GateAnswer, needsNote: false });
+    }
     const failedCli = failedSeatOf(units, gate.ord);
     const retryOverflow: GateRowChoice[] = [];
     // Launch refusals (environment refused / failed before work judged) must not offer reassign:
     // another seat meets the same environment. Gate 11 Item 2 operator ruling.
     const launchRefusal = isLaunchRefusal(gate.prompt, events, gate.ord);
-    if (!launchRefusal && failedCli !== null && failedCli !== undefined) {
+    if (!launchRefusal && !isToolUnitGate(units, gate.ord) && failedCli !== null && failedCli !== undefined) {
       const candidates = reassignCandidates(pool, failedCli, roster);
       let inlineReassignDone = false;
       for (const c of candidates) {

@@ -724,6 +724,10 @@ export function recommendGateMove(input: GateMoveInput): GateMove | null {
   // core#469: a floor that did not FINISH judged nothing — "retry with its findings" would re-run the
   // seat over a timeout. The card's extend / targeted / accept arms are that gate's moves.
   if (own && source === 'repo_checks_timeout') return null;
+  // studio#601: an agent JUDGE that refused a review whose evaluator itself said PASS
+  // (`gateEvaluated.evaluatorVerdict: "PASS"`, `denial.source: agent_validator`) is not a reviewer
+  // FAIL: there is no reviewer finding to send back, and the layers disagree — nothing is suggested.
+  if (own && source === 'agent_validator' && (verdict.evaluatorVerdict ?? '').trim().toUpperCase() === 'PASS') return null;
   if (own && judged) {
     const items = failingItems(verdict, verdictSummary);
     const reviewer = phaseLabel(runId, units, verdict.ord);

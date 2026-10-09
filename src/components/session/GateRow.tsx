@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { RosterSeat, SessionView as RunView } from '../../api/types.js';
 import { GATE_HASH, IDLE_GATE_ACTION, commitGateDecision, commitGateReassign, useGateActionStore, type GateAnswer } from '../../board/gateActions.js';
-import { sessionGateChoices, type GateRowChoice, type GateRowModel } from '../../board/gateRowModel.js';
+import { FLOOR_FIX_LABEL, sessionGateChoices, type GateRowChoice, type GateRowModel } from '../../board/gateRowModel.js';
 import { INITIAL_PICK, pickKey, type RowPick } from '../../board/questionRow.js';
 import { plainGateQuestion } from '../../board/deskWords.js';
 import { secondsLeft, undoDecision, useUndoQueue } from '../../board/undoQueue.js';
@@ -333,7 +333,10 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
     rowRef.current?.focus();
   };
 
-  const notePlaceholder = noteChoice?.key === 'steer'
+  // studio#612: the floor fix's note is the fixing seat's whole task, not a steer.
+  const notePlaceholder = noteChoice?.key === 'steer' && noteChoice.label === FLOOR_FIX_LABEL
+    ? 'What should the fixing seat change…'
+    : noteChoice?.key === 'steer'
     ? 'Steer the next creator phase…'
     : noteChoice?.key === 'send-back'
       ? 'Explain what to fix…'
