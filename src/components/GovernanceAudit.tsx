@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api/client.js';
+import { useDisplayText } from '../hooks/useHomePath.js';
 import type {
   AcceptanceConformance,
   AcceptanceConformanceClaim,
@@ -348,6 +349,8 @@ function CoverageBoundaryNote(): React.ReactElement {
 }
 
 export function GovernanceAudit({ model }: Props): React.ReactElement {
+  // studio#618: the QE ledger path in the gate's reason is drawn as `~/…` (raw under technical details).
+  const showText = useDisplayText();
   const [acceptance, setAcceptance] = useState<RunAcceptanceView | null>(null);
   const [claims, setClaims] = useState<GovernanceClaim[]>([]);
   const [loading, setLoading] = useState(true);
@@ -439,7 +442,7 @@ export function GovernanceAudit({ model }: Props): React.ReactElement {
           >
             QE acceptance: {acceptance.gate.satisfied ? 'SATISFIED' : 'DENIED'}
           </span>
-          {' — '}{acceptance.gate.reason}
+          {' — '}{showText(acceptance.gate.reason)}
         </p>
 
         {!conf.claimsAvailable && (

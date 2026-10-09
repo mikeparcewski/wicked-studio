@@ -1,6 +1,6 @@
 import { seatStandingWord } from './HealthRailSection.js';
 import { useEffect, useRef, useState } from 'react';
-import { api } from '../api/client.js';
+import { ApiError, api } from '../api/client.js';
 import type { RosterSeat, SystemSettings as Settings } from '../api/types.js';
 import { useComposerPrefsStore } from '../store/composerPrefs.js';
 import { useViewPrefsStore } from '../store/viewPrefs.js';
@@ -37,23 +37,6 @@ type LocalSettings = Settings & { deliverIdentityLogin?: string };
  */
 function isGitHubLoginLike(login: string): boolean {
   return /^[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}$/.test(login);
-}
-
-/**
- * Derive a seat's logout shell line from its engine-owned `login_invocation` by
- * swapping the trailing login verb → `logout` (`codex auth login` → `codex auth
- * logout`; `XDG_CONFIG_HOME=… opencode auth login` → `… opencode auth logout`).
- * The roster carries no `logout_invocation` — `login_invocation` is passed through
- * VERBATIM and there is no logout equivalent — so this is a client-side derivation.
- * It returns `null` when the line has no recognizable trailing `login` verb, so a
- * seat whose shape we don't recognize gets NO (possibly-wrong) logout button
- * rather than a guessed command. Same PTY-terminal surface as sign-in — no daemon
- * logout route exists (F-E2E-040); this runs the seat's OWN logout in the operator
- * shell, symmetric to how sign-in runs `login_invocation`.
- */
-function deriveLogoutInvocation(loginInvocation: string): string | null {
-  const line = loginInvocation.trimEnd();
-  return /\blogin$/.test(line) ? line.replace(/\blogin$/, 'logout') : null;
 }
 
 interface SettingRowProps {
@@ -104,10 +87,10 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
   const [clisSaved, setClisSaved] = useState(false);
   const clisSavedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  /** The seat action whose PTY terminal modal is open (sign in OR log out), or null. */
-  const [seatAction, setSeatAction] = useState<
-    { seat: RosterSeat; line: string; title: string } | null
-  >(null);
+  /** The seat whose log-out terminal is open, or null (crew#615: the daemon runs the seat's logout). */
+  const [logoutSeat, setLogoutSeat] = useState<RosterSeat | null>(null);
+  /** Seats the daemon answered 404 for — no documented logout: their button is hidden. */
+  const [noLogout, setNoLogout] = useState<ReadonlySet<string>>(new Set());
   /** The seat whose sign-in panel is open (Amendment 5: plain words, the one command, Copy, check again). */
   const [signInSeat, setSignInSeat] = useState<RosterSeat | null>(null);
   /** Daemon 400 from a save whose patch included worker_config_root — rendered inline at the field. */
@@ -505,7 +488,7 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
         <p className="text-xs mb-4" style={{ color: 'var(--ink-dim)' }}>
           Checked CLIs are pre-selected when you open the launch form (takes effect on the next new
           session). The status shows whether each seat looks signed in; Sign in shows the one command
-          that signs that CLI in (you run it in a terminal), and Log out runs its logout so you can re-authenticate.
+          that signs that CLI in (you run it in a terminal), and Log out has the daemon run that CLI's own logout so you can re-authenticate.
         </p>
         {roster.length === 0 ? (
           <p className="text-xs italic pb-4 font-mono" style={{ color: 'var(--ink-dim)' }}>Loading roster…</p>
@@ -569,11 +552,12 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
                       // #1: a `not_required` seat (opencode) now OFFERS its provider login like the
                       // others — the only seat we never offer it to is one already signed in.
                       const offerLogin = hasLogin && standing.kind !== 'signed-in';
-                      // #2: a logout line DERIVED from the seat's own `login_invocation` (the roster
-                      // carries no logout field), offered where there is a session to end.
-                      const logoutInvocation = hasLogin ? deriveLogoutInvocation(seat.login_invocation as string) : null;
+                      // Log out runs the DAEMON's route (crew 0.8.9 `POST /seats/:cli/logout`, the engine
+                      // roster's own `logout_invocation`) — offered where the roster names one and there
+                      // is a session to end; a 404 (no logout for that seat) hides it.
+                      const hasLogout = typeof seat.logout_invocation === 'string' && seat.logout_invocation.trim() !== '';
                       const offerLogout =
-                        logoutInvocation !== null &&
+                        hasLogout && !noLogout.has(seat.key) &&
                         (standing.kind === 'signed-in' || standing.kind === 'no-sign-in-needed');
                       const verb = stderrFailed ? 'Re-authenticate' : 'Sign in';
                       return (
@@ -604,7 +588,8 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
                           {offerLogout && (
                             <button
                               type="button"
-                              onClick={() => setSeatAction({ seat, line: logoutInvocation ?? '', title: `Log out — ${seat.display_name}` })}
+                              data-testid={`seat-logout-${seat.key}`}
+                              onClick={() => setLogoutSeat(seat)}
                               aria-label={`Log out ${seat.display_name}`}
                               className="px-2.5 py-1 rounded-lg text-xs font-medium shrink-0"
                               style={{ background: 'var(--surface-raised)', color: 'var(--ink-muted)', border: '1px solid var(--surface-raised)' }}
@@ -650,37 +635,42 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
         )}
       </section>
 
-      {/* ── Seat sign-in / log-out terminal ───────────────────────────────────
-          An interactive login shell (NO cmd — the invocation is a SHELL LINE,
-          not an argv) into which Terminal types the line + "\n" over the terminal
-          WS once the PTY is up. The same surface for sign-in (`login_invocation`)
-          and log-out (derived) — no daemon route exists for either (F-E2E-040).
-          The operator completes the CLI's URL/paste flow right here. Keyed by
-          seat + title so switching seat or action starts a fresh session. */}
+      {/* ── Seat log-out terminal ──────────────────────────────────────────────
+          crew#615: the daemon opens the PTY running the seat's own documented logout
+          (`POST /seats/:cli/logout`) and answers its terminal id; Terminal drives it over
+          the terminal WS like any other. Studio builds no command of its own. A 404 means
+          the seat has no logout: the panel closes and that seat's button is hidden. */}
       {signInSeat !== null && (
         <SignInPanel seat={signInSeat} onClose={() => setSignInSeat(null)} onChecked={(r) => setRoster(r)} />
       )}
-      {seatAction !== null && (
+      {logoutSeat !== null && (
         <Modal
-          title={seatAction.title}
-          onClose={() => setSeatAction(null)}
+          title={`Log out — ${logoutSeat.display_name}`}
+          onClose={() => setLogoutSeat(null)}
         >
           <div className="flex flex-col gap-3">
-            <p className="text-xs font-mono" style={{ color: 'var(--ink-muted)' }}>
-              Running{' '}
+            <p className="text-xs font-mono" style={{ color: 'var(--ink-muted)' }} data-testid="seat-logout-line">
+              The daemon runs{' '}
               <code
                 className="rounded px-1 py-0.5"
                 style={{ background: 'var(--surface-raised)', color: 'var(--ink-high)' }}
               >
-                {showText(seatAction.line)}
+                {showText(logoutSeat.logout_invocation ?? '')}
               </code>{' '}
-              in your shell — complete the flow below, then close this panel.
+              — complete any prompt below, then close this panel.
             </p>
             <Terminal
-              key={`${seatAction.seat.key}:${seatAction.title}`}
+              key={logoutSeat.key}
               cwd="."
-              initialInput={`${seatAction.line}\n`}
-              concealHome={techDetails ? [] : homeDirsIn(seatAction.line)}
+              open={(cols, rows) => api.seatLogout(logoutSeat.key, { cols, rows }).then((r) => ({ id: r.terminalId }))}
+              onOpenError={(err) => {
+                if (err instanceof ApiError && err.status === 404) {
+                  const key = logoutSeat.key;
+                  setNoLogout((s) => new Set([...s, key]));
+                  setLogoutSeat(null);
+                }
+              }}
+              concealHome={techDetails ? [] : homeDirsIn(logoutSeat.logout_invocation ?? '')}
             />
           </div>
         </Modal>

@@ -74,11 +74,12 @@ export function ArtifactVersions({ projectId, docId, head, list, lens, onLook, o
               </button>
               {' · '}<AgeStamp at={Date.parse(v.created_at) || null} now={Date.now()} testId="artifact-version-age" />
               {working && <span className="wk-session-grey"> · working</span>}
-              {!working && (
+              {/* studio#616: the age and the restore arm apart ("18h · Make this the working version"). */}
+              {!working && <>{' · '}
                 <button type="button" data-testid="artifact-version-restore" disabled={busy || head === null} onClick={() => void restore(v.version)} className="wk-since-toggle">
                   Make this the working version
                 </button>
-              )}
+              </>}
             </li>
           );
         })}
@@ -92,7 +93,9 @@ export function ArtifactVersions({ projectId, docId, head, list, lens, onLook, o
 export function VersionLens({ projectId, docId, version, onBack }: { projectId: string; docId: string; version: number; onBack: () => void }): React.ReactElement {
   return (
     <div className="wk-artifact-body" data-testid="artifact-version-frame" data-version={version}>
-      <p data-testid="artifact-lens-line" className="wk-artifact-hint">
+      {/* studio#616: the lens line carries a CONTROL — its own class, stacked above the frame and taking
+          the pointer (the read-only hint style is `pointer-events: none` and paints under the frame). */}
+      <p data-testid="artifact-lens-line" className="wk-artifact-hint wk-artifact-hint--control">
         Looking at version {version} — <button type="button" data-testid="artifact-lens-back" onClick={onBack} className="wk-since-toggle">Back to the working version</button>
       </p>
       <iframe title={`${docId} version ${version}`} className="wk-artifact-frame" sandbox="allow-scripts" src={interactiveDocUrl(projectId, docId, version)} />

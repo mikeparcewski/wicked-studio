@@ -17,7 +17,11 @@ import type {
   HealthResponse,
   LaunchBodyWithDeliver,
   OnboardRef,
+  LinkedIssuesPreviewBody,
+  LinkedIssuesPreviewResponse,
   OpenTerminalBody,
+  SeatSessionBody,
+  SeatSessionResponse,
   Project,
   ProjectDetail,
   ProjectMember,
@@ -72,6 +76,9 @@ export function wsBase(): string {
  */
 export const terminalWsUrl = (id: string): string =>
   `${wsBase()}/ws/terminals/${encodeURIComponent(id)}`;
+
+/** The largest gate-answer body sent with `keepalive` (under the browser's 64 KiB shared budget). */
+export const KEEPALIVE_MAX_BYTES = 48 * 1024;
 
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   // Only advertise a JSON body when we actually send one — Fastify v5 rejects
@@ -206,6 +213,14 @@ export const api = {
     apiFetch<{ runId: string }>('/runs', { method: 'POST', body: JSON.stringify(body) }),
 
   /**
+   * What a workflow launch of `problem` WOULD append as linked issues (crew#825, crew ≥ 0.8.8): the
+   * same read `POST /runs` does, nothing launched. Call only when `GET /health.capabilities
+   * .linkedIssuesExclude === true`.
+   */
+  previewLinkedIssues: (body: LinkedIssuesPreviewBody) =>
+    apiFetch<LinkedIssuesPreviewResponse>('/linked-issues/preview', { method: 'POST', body: JSON.stringify(body) }),
+
+  /**
    * Post-hoc delivery (crew#393): lift a COMPLETED run's stranded worktree into
    * a PR — the same hardened script the deliver phase runs, idempotent (a
    * delivered run answers the same `prUrl` without re-running it). Takes no
@@ -220,11 +235,19 @@ export const api = {
    * The steering gate (§11.1). `{approve:true}` = approve; `{approve:true, amend}`
    * = approve-with-steer; `{approve:false}` = reject (cancels the run).
    */
-  confirmGate: (id: string, decision: GateDecision) =>
-    apiFetch<{ status: string }>(`/runs/${encodeURIComponent(id)}/gate`, {
+  confirmGate: (id: string, decision: GateDecision) => {
+    const body = JSON.stringify(decision);
+    return apiFetch<{ status: string }>(`/runs/${encodeURIComponent(id)}/gate`, {
       method: 'POST',
-      body: JSON.stringify(decision),
-    }),
+      body,
+      // studio#606 (3): this POST goes out only AFTER the undo window — the operator saw the
+      // decision and let it land. On a slow daemon it can still be in flight when the tab closes;
+      // `keepalive` lets it finish instead of dropping the answer with the page. The browser caps
+      // keepalive bodies (64 KiB, shared), so a long note goes as an ordinary POST (codex r1) — the
+      // in-flight unload warning still covers it.
+      ...(new TextEncoder().encode(body).length <= KEEPALIVE_MAX_BYTES ? { keepalive: true } : {}),
+    });
+  },
 
   /** Cancel a running or paused run (the distinct third action, §11.1). */
   cancelRun: (id: string) =>
@@ -379,6 +402,14 @@ export const api = {
    */
   openTerminal: (body: OpenTerminalBody) =>
     apiFetch<{ id: string }>('/terminals', { method: 'POST', body: JSON.stringify(body) }),
+
+  /**
+   * Run a seat's own sign-out in a daemon-opened PTY (crew#615, crew 0.8.9: the engine roster's
+   * `logout_invocation`, verbatim) → its terminal id, driven over `terminalWsUrl` like any other.
+   * 404 when the seat is unknown or its CLI documents no logout.
+   */
+  seatLogout: (cli: string, body: SeatSessionBody) =>
+    apiFetch<SeatSessionResponse>(`/seats/${encodeURIComponent(cli)}/logout`, { method: 'POST', body: JSON.stringify(body) }),
 
   /** Resize a live terminal's PTY to `cols`x`rows`. */
   resizeTerminal: (id: string, cols: number, rows: number) =>

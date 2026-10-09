@@ -29,6 +29,7 @@ import { deliverKindOf, type RunKind, type RunMode } from './runMode.js';
 import { HOME_FRESH_MS, useNeedsSources } from '../store/needsSources.js';
 import { useLaunchPreview, usePhaseSelection } from '../hooks/useLaunchPlan.js';
 import { LaunchPreview } from './LaunchPreview.js';
+import { LinkedIssuesLine, useLinkedIssuesPreview } from './LinkedIssuesLine.js';
 import { PhasePicker } from './PhasePicker.js';
 import { isPlanGateNow, usePlanGate } from '../store/planGates.js';
 import { DELIVER_STEP } from '../board/planModel.js';
@@ -270,6 +271,11 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   // …and whether it accepts the chat a launch was promoted from (`capabilities.chatIdOnLaunch`,
   // crew#619; studio#446). `null` = not yet known: the key is not sent.
   const [daemonChatId, setDaemonChatId] = useState<boolean | null>(null);
+  // studio#596: whether the daemon previews linked issues and takes `excludeLinkedIssues`
+  // (`capabilities.linkedIssuesExclude`, crew#825). Absent/false: neither is sent.
+  const [daemonLinkedIssues, setDaemonLinkedIssues] = useState(false);
+  /** The linked-issue refs the operator left out of THIS launch, as the preview spelled them. */
+  const [linkedExclude, setLinkedExclude] = useState<string[]>([]);
   useEffect(() => {
     let cancelled = false;
     Promise.resolve()
@@ -279,6 +285,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
         setDaemonDeliverGate(h.capabilities?.deliverGate === true);
         setDaemonRevisesPr(h.capabilities?.revisesPr === true);
         setDaemonChatId(h.capabilities?.chatIdOnLaunch === true);
+        setDaemonLinkedIssues(h.capabilities?.linkedIssuesExclude === true);
       })
       .catch(() => { if (!cancelled) { setDaemonDeliverGate(null); setDaemonRevisesPr(null); setDaemonChatId(null); } });
     return () => { cancelled = true; };
@@ -375,6 +382,14 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     requireExplicit: launchKind === 'build',
   });
   const targetRepoRef = target.kind === 'resolved' ? target.repoRef : null;
+  // studio#596: the daemon reads linked issues for a WORKFLOW launch only (crew's `POST /runs`), so
+  // the preview is read for exactly that launch — the one this form is about to send.
+  // The SAME problem the launch sends — the steer field rides it as "Operator guidance" (codex r1).
+  const launchProblem = launchSteer.trim().length > 0 ? `${problem.trim()}\n\nOperator guidance: ${launchSteer.trim()}` : problem.trim();
+  const linkedPreview = useLinkedIssuesPreview({
+    enabled: daemonLinkedIssues && runId == null && selection.plan === null && Boolean(launchWorkflow),
+    problem: launchProblem, repoRef: targetRepoRef, exclude: linkedExclude,
+  });
   const targetLabel =
     targetRepoRef === null ? null : repoSlugOf(repos.find((r) => r.id === targetRepoRef) ?? { name: targetRepoRef });
   const targetRequired = launchKind === 'build' && target.kind === 'ambiguous';
@@ -661,10 +676,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     // The steer prefill rides the problem body as a labelled trailing
     // paragraph (see the steer field's own caption) — LaunchRunBody carries
     // no guidance key until CREW-UX-4 lands (DES-UX-002 §7.2).
-    const guidance = launchSteer.trim();
-    const body: LaunchBodyWithDeliver = {
-      problem: guidance.length > 0 ? `${problem.trim()}\n\nOperator guidance: ${guidance}` : problem.trim(),
-    };
+    const body: LaunchBodyWithDeliver = { problem: launchProblem };
     const seats = roster.filter((s) => selectedClis.has(s.key));
     if (seats.length > 0) body.clisJson = JSON.stringify(seats);
     body.entityMode = entityMode;
@@ -677,6 +689,8 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     // tick or the Target-repo choice wins over auto-attached project members;
     // a lone attached repo needs no choice. Never `repoRefs[0]`.
     if (targetRepoRef !== null) body.repoRef = targetRepoRef;
+    // studio#596: the linked issues the operator left out (only to a daemon that takes the key).
+    if (daemonLinkedIssues && linkedExclude.length > 0) body.excludeLinkedIssues = [...linkedExclude];
     const wf = launchWorkflow;
     if (selection.plan !== null) body.plan = selection.plan;
     else if (wf) body.workflow = wf;
@@ -1424,6 +1438,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
           so the picker does not offer a second one the preview would refuse. */}
       {pickerOpen && <PhasePicker model={selection} {...(launchDelivers ? { hide: [DELIVER_STEP] } : {})} />}
       <LaunchPreview model={launchPreview} />
+      <LinkedIssuesLine preview={linkedPreview} exclude={linkedExclude} onToggle={(ref, out) => setLinkedExclude((xs) => out ? [...xs.filter((x) => x !== ref), ref] : xs.filter((x) => x !== ref))} />
 
       {showNewProject && (
         <NewProjectModal

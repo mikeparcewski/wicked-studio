@@ -52,19 +52,22 @@ export function ProjectEntry({ row, navigate, onStatusChanged, header = false }:
   const archived = row.project.status === 'archived';
   const path = everythingPath({ tab: 'sessions', project: row.project.id });
   return <section data-testid={header ? 'everything-project-header' : 'projects-row'} data-project-id={row.project.id} className="wk-desk-card wk-everything-group">
-    {editing ? <form onSubmit={(e) => { e.preventDefault(); void apply({ name: name.trim(), description: description.trim() }); }}>
-      <label>Name <input aria-label="Project name" value={name} onChange={(e) => setName(e.target.value)} /></label>
-      <label>Description <input aria-label="Project description" value={description} onChange={(e) => setDescription(e.target.value)} /></label>
-      <button type="submit" disabled={busy || name.trim() === ''}>Save</button>
-      <button type="button" onClick={() => setEditing(false)}>Cancel</button>
-    </form> : <><h2>{row.project.name}</h2><p>{row.project.description}</p></>}
+    {editing ? <form className="wk-project-edit" onSubmit={(e) => { e.preventDefault(); void apply({ name: name.trim(), description: description.trim() }); }}>
+      <label>Name <input className="wk-field" aria-label="Project name" value={name} onChange={(e) => setName(e.target.value)} /></label>
+      <label>Description <input className="wk-field" aria-label="Project description" value={description} onChange={(e) => setDescription(e.target.value)} /></label>
+      <span className="wk-project-actions">
+        <button type="submit" className="wk-btn wk-btn--sm wk-btn--primary" disabled={busy || name.trim() === ''}>Save</button>
+        <button type="button" className="wk-btn wk-btn--sm wk-btn--quiet" onClick={() => setEditing(false)}>Cancel</button>
+      </span>
+    </form> : <><h2 className="wk-project-title">{row.project.name}</h2><p>{row.project.description}</p></>}
     {row.repos.length > 0 && <p>Repositories: {row.repos.join(', ')}</p>}
-    <p>{(['working', 'waiting', 'done', 'blocked', 'quiet'] as const).map((state) => <span key={state} data-state={state}>{state}: {row.counts[state]}{' · '}</span>)}</p>
+    {/* studio#613: the separator goes BETWEEN the states, never after the last one. */}
+    <p>{(['working', 'waiting', 'done', 'blocked', 'quiet'] as const).map((state, i) => <span key={state} data-state={state}>{i > 0 ? ' · ' : ''}{state}: {row.counts[state]}</span>)}</p>
     <p>Latest activity: <time dateTime={new Date(row.latestMs).toISOString()}>{new Date(row.latestMs).toLocaleString()}</time></p>
-    <div>
-      {!header && <a href={path} data-testid="projects-row-open" onClick={(e) => { e.preventDefault(); navigate(path); }}>Open</a>}{' '}
-      <button type="button" data-testid={header ? 'everything-project-rename' : 'projects-row-rename'} onClick={() => setEditing(true)}>Rename</button>{' '}
-      <button type="button" disabled={busy} data-testid={header ? 'everything-project-archive' : archived ? 'projects-row-unarchive' : 'projects-row-archive'} onClick={() => { void apply({ status: archived ? 'active' : 'archived' }); }}>{archived ? 'Unarchive' : 'Archive'}</button>
+    <div className="wk-project-actions">
+      {!header && <a href={path} data-testid="projects-row-open" className="wk-btn wk-btn--sm wk-btn--secondary" onClick={(e) => { e.preventDefault(); navigate(path); }}>Open</a>}{' '}
+      <button type="button" className="wk-btn wk-btn--sm wk-btn--quiet" data-testid={header ? 'everything-project-rename' : 'projects-row-rename'} onClick={() => setEditing(true)}>Rename</button>{' '}
+      <button type="button" className="wk-btn wk-btn--sm wk-btn--quiet" disabled={busy} data-testid={header ? 'everything-project-archive' : archived ? 'projects-row-unarchive' : 'projects-row-archive'} onClick={() => { void apply({ status: archived ? 'active' : 'archived' }); }}>{archived ? 'Unarchive' : 'Archive'}</button>
     </div>
     {error !== null && <p role="alert" data-testid="projects-row-error">{error}</p>}
   </section>;
@@ -97,12 +100,13 @@ export function ProjectsTab({ q, runs, needRows, navigate }: { q: EverythingQuer
   const lens = (filter: 'all' | 'archived') => navigate(everythingPath({ tab: 'projects', filter }), { replace: true });
   return <div data-testid="projects-tab">
     <div className="wk-everything-bar">
-      <button type="button" data-testid="projects-new" onClick={() => setNewOpen(true)}>New project</button>
-      <div role="group" aria-label="Projects" data-testid="projects-filter">
-        <button type="button" aria-pressed={!archivedLens} onClick={() => lens('all')}>Active</button>
-        <button type="button" aria-pressed={archivedLens} onClick={() => lens('archived')}>Archived</button>
+      <button type="button" className="wk-btn wk-btn--sm wk-btn--primary" data-testid="projects-new" onClick={() => setNewOpen(true)}>New project</button>
+      {/* studio#613: the Active / Archived lens is the See everything tabs' chip group, not two bare buttons. */}
+      <div role="group" aria-label="Projects" data-testid="projects-filter" className="wk-everything-chips">
+        <button type="button" className="wk-chip" aria-pressed={!archivedLens} onClick={() => lens('all')}>Active</button>
+        <button type="button" className="wk-chip" aria-pressed={archivedLens} onClick={() => lens('archived')}>Archived</button>
       </div>
-      <label>Find project <input aria-label="Find project" value={name} onChange={(e) => setName(e.target.value)} /></label>
+      <label>Find project <input className="wk-field" aria-label="Find project" value={name} onChange={(e) => setName(e.target.value)} /></label>
     </div>
     {!archivedLens && <p>Not in a project: {unfiled}</p>}
     {filterProjectRows(shown, name).filter((row) => !archivedLens || !hidden.includes(row.project.id)).map((row) => <ProjectEntry key={row.project.id} row={row} navigate={navigate} onStatusChanged={(project) => { if (archivedLens && project.status === 'active') setHidden((ids) => [...ids, project.id]); }} />)}

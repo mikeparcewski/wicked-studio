@@ -10,7 +10,9 @@ Against the in-process fixture with the bound document desk_page_editor uses (pr
   1. LIST: full screen lists two versions newest first, version 2 marked working.
   2. LENS: picking version 1 puts `v=1` in the address and shows "Looking at version 1 — Back to the
      working version" over a read-only frame of v1.
-  3. BACK: the browser's Back returns to the working version (no `v`, no lens).
+  3. BACK: the browser's Back returns to the working version (no `v`, no lens); the lens line's own
+     "Back to the working version" is hit at its centre (not the frame) and a click leaves the lens
+     (studio#616).
   4. RESTORE: "Make this the working version" on version 1 sends exactly ONE fork (from 1, expect_head
      2) and version 3 is the working one; the address carries no `v`.
   5. RELOAD: a `v=1` address loaded fresh opens the lens at once.
@@ -114,6 +116,21 @@ with sync_playwright() as p:
     page.wait_for_function("() => !document.querySelector('[data-testid=\"artifact-lens-line\"]')", timeout=8000)
     v_back = urllib.parse.parse_qs(urllib.parse.urlparse(page.url).query).get("v", [None])[0]
     check("back-to-the-head", v_back is None, url=page.url)
+
+    # ── 3b. studio#616: the lens line's OWN Back is a control — its centre hits the button (not the
+    #        frame painted over it) and a real click leaves the lens ─────────────────────────────
+    page.locator('[data-testid="artifact-version-row"][data-version="1"] [data-testid="artifact-version-lens"]').click()
+    page.get_by_test_id("artifact-lens-line").wait_for(state="visible", timeout=8000)
+    hit = page.evaluate("""() => {
+      const b = document.querySelector('[data-testid="artifact-lens-back"]');
+      if (!b) return 'missing';
+      const r = b.getBoundingClientRect();
+      const e = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      return e === b || b.contains(e) ? 'button' : (e?.className || e?.tagName || 'nothing');
+    }""")
+    page.get_by_test_id("artifact-lens-back").click(timeout=5000)
+    page.wait_for_function("() => !document.querySelector('[data-testid=\"artifact-lens-line\"]')", timeout=8000)
+    check("lens-back-is-clickable", hit == "button", hit=hit)
 
     # ── 4. restore v1: one fork with the expected head; v3 is the working version ──────────────
     page.locator('[data-testid="artifact-version-row"][data-version="1"] [data-testid="artifact-version-restore"]').click()

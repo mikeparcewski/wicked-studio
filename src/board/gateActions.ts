@@ -71,6 +71,23 @@ interface GateActionsStore {
 
 export const useGateActionStore = create<GateActionsStore>(() => ({ byGate: {} }));
 
+/**
+ * studio#606 (3): while a gate answer is IN FLIGHT (past its undo window, the POST sent and not yet
+ * answered), leaving the page asks first. The undo window itself stays unguarded on purpose (a
+ * decision the operator could not see land must not land — `undoQueue.ts`), and the POST is sent
+ * with `keepalive`, so this is a warning, never a flush.
+ */
+export function answerInFlight(): boolean {
+  return Object.values(useGateActionStore.getState().byGate).some((g) => g.busy);
+}
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeunload', (e) => {
+    if (!answerInFlight()) return;
+    e.preventDefault();
+    e.returnValue = '';
+  });
+}
+
 onDecisionTestReset(() => useGateActionStore.setState({ byGate: {} }));
 
 function patch(runId: string, part: Partial<GateActionState>): void {

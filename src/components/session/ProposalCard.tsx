@@ -4,7 +4,8 @@ import type { RunDiff } from '../../api/wave6-wire.js';
 import type { ChainModel } from '../../board/chainModel.js';
 import { api } from '../../api/client.js';
 import { commitGateDecision, GATE_HASH, IDLE_GATE_ACTION, useGateActionStore, type GateAnswer } from '../../board/gateActions.js';
-import { deliverCardOf, deliverLine, gateInstance, proposalCard, proposalKindOf, type ProposalKind } from '../../board/proposalCard.js';
+import { deliverCardOf, deliverFailureOf, deliverLine, gateInstance, proposalCard, proposalKindOf, type ProposalKind } from '../../board/proposalCard.js';
+import { useDisplayText } from '../../hooks/useHomePath.js';
 import { repoNameOf } from '../../board/deskWords.js';
 import type { AskProposal } from '../../board/askThread.js';
 import { deliverAcceptance, ownEvidenceOf } from '../../board/checkState.js';
@@ -58,6 +59,7 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
   handedOver?: boolean;
 }): React.ReactElement | null {
   const runId = view.session.id;
+  const showText = useDisplayText();
   const gate = useGateStore((s) => s.gates[runId]);
   const action = useGateActionStore((s) => s.byGate[runId] ?? IDLE_GATE_ACTION);
   // studio#574: the plan gate's view (the editor's seed) — read only while a plan proposal is open,
@@ -90,7 +92,8 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
   // a deliver gate is not orderable); a plan gate reads no trust.
   const openKind = proposalKindOf(runId, gate, view.units);
   const seat = useSeatTrust(view, openKind === 'deliver' ? gate : undefined, { isPlanGate: openKind === 'plan', isDeliverGate: openKind === 'deliver', isEscalation: false });
-  const card = proposalCard({ view, gate, chain, action, ui, lastKind: lastKinds.get(runId) ?? (handedOver ? 'deliver' : null), ask });
+  const deliverFailure = openKind === 'deliver' ? deliverFailureOf(eventsRaw ?? [], gate?.ord) : null;
+  const card = proposalCard({ view, gate, chain, action, ui, lastKind: lastKinds.get(runId) ?? (handedOver ? 'deliver' : null), ask, deliverFailure: deliverFailure === null ? null : showText(deliverFailure) });
   const asked = card !== null && gate !== undefined ? card.kind : null;
   useEffect(() => { if (asked !== null) lastKinds.set(runId, asked); }, [runId, asked]);
   // The one "Are you sure?" takes focus when it opens; Cancel gives it back to Deliver (Copilot).
@@ -163,7 +166,11 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
   const end = (): void => {
     if (sending.current || gate === undefined) return;
     sending.current = true;
-    commitGateDecision(runId, { approve: false }, { notice: { preview: 'The conversation ends; the helpers stand down.', sent: 'Ended the conversation.' }, receipt: { kind: card.kind === 'deliver' ? 'deliver' : 'plan', chosenLabel: 'End' } })
+    // studio#606 (1): on a deliver card the same reject is "Stop the run" — the run is cancelled.
+    const notice = card.kind === 'deliver'
+      ? { preview: 'The run stops here; nothing is pushed.', sent: 'Stopped the run; nothing was pushed.' }
+      : { preview: 'The conversation ends; the helpers stand down.', sent: 'Ended the conversation.' };
+    commitGateDecision(runId, { approve: false }, { notice, receipt: { kind: card.kind === 'deliver' ? 'deliver' : 'plan', chosenLabel: card.end ?? 'End' } })
       .catch(() => { /* said in the shared action state */ })
       .finally(() => { sending.current = false; });
   };

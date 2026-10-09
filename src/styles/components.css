@@ -762,6 +762,11 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
 .wk-everything-scope a, .wk-everything-aside a, .wk-everything-row a { color: var(--ink-muted); }
 .wk-everything-scope a:hover, .wk-everything-aside a:hover, .wk-everything-row a:hover { color: var(--ink-high); }
 .wk-everything-group { padding-bottom: 6px; }
+/* studio#613: the Projects tab's card — a titled card, its actions as controls with a gap, the
+   rename form's fields and buttons apart. */
+.wk-project-title { font-size: var(--text-md, 1rem); font-weight: 600; color: var(--ink-high); margin: 0 0 2px; }
+.wk-project-actions { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.wk-project-edit { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .wk-everything-list { list-style: none; margin: 0; padding: 0; }
 .wk-everything-list > li { border-top: 1px solid var(--border-subtle); }
 .wk-everything-list > li:first-child { border-top: none; }
@@ -1248,6 +1253,7 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
 .wk-check-findings li { margin: 2px 0 0 10px; }
 .wk-check-where { color: var(--ink-high); }
 .wk-artifact-hint { position: absolute; left: 8px; bottom: 8px; margin: 0; padding: 2px 8px; font-size: var(--text-xs); color: var(--ink-muted); background: var(--surface-card); border: 1px solid var(--border); border-radius: var(--radius-sm); pointer-events: none; }
+.wk-artifact-hint--control { pointer-events: auto; z-index: 2; }
 @media (prefers-reduced-motion: no-preference) {
   .wk-artifact { transition: height 220ms ease, width 220ms ease, box-shadow 220ms ease; }
 }
@@ -1368,3 +1374,5 @@ button.wk-walk-chapter-btn:hover .wk-walk-chapter-title { text-decoration: under
 .wk-artifact--inline .wk-plan-add { display: none; }
 /* S16a-4g: the questions a run or a chat asks, answered in its thread. */
 .wk-session-questions { display: flex; flex-direction: column; gap: 8px; margin: 0 0 8px; }
+/* studio#596: the linked issues a launch appends, one per line with its toggle. */
+.wk-linked-issues { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }

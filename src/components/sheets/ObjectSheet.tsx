@@ -456,6 +456,8 @@ function eventAtMs(e: CoreEvent): number | null {
  */
 function ActivityTail({ view }: { view: SessionView }): React.ReactElement {
   const ev = useRunRawEvents(view.session.id);
+  // studio#618: a narrated line can quote a home path (a deliver gate's push target): `~/…` here.
+  const showText = useDisplayText();
   const ctx = useMemo(() => narratorCtxOf(view), [view]);
   if (ev.state === 'loading') return <p className="wk-session-grey">Reading the activity…</p>;
   if (ev.state === 'error') return <p role="alert" className="wk-composer-note wk-composer-note--bad">Could not read the activity: {ev.message}</p>;
@@ -470,7 +472,7 @@ function ActivityTail({ view }: { view: SessionView }): React.ReactElement {
       {lines.length === 0 && <li className="wk-session-grey">Nothing has happened yet.</li>}
       {lines.map((x, i) => (
         <li key={i} data-testid="sheet-activity-line" data-tone={x.line.tone} className="wk-sheet-line">
-          <span aria-hidden>{TONE_GLYPH[x.line.tone]}</span> {x.line.text} · <AgeStamp at={x.at} now={now} />
+          <span aria-hidden>{TONE_GLYPH[x.line.tone]}</span> {showText(x.line.text)} · <AgeStamp at={x.at} now={now} />
         </li>
       ))}
     </ul>

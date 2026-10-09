@@ -31,6 +31,15 @@ interface Props {
    * only — what is typed and what runs is unchanged. Omit (or pass none) to draw the bytes as-is.
    */
   concealHome?: readonly string[];
+  /**
+   * Open the PTY some other way than `POST /terminals` — the daemon's own seat route (crew#615
+   * `POST /seats/:cli/logout` runs the seat's documented logout and answers its `terminalId`). The
+   * terminal then drives and reads that id exactly like its own; `cwd` / `cmd` / `initialInput`
+   * are not used. A rejection is drawn in the terminal and handed to `onOpenError`.
+   */
+  open?: (cols: number, rows: number) => Promise<{ id: string }>;
+  /** Told when opening failed (the error the open rejected with). */
+  onOpenError?: (err: unknown) => void;
 }
 
 /**
@@ -46,11 +55,11 @@ interface Props {
  * A terminal is a stateful session: it opens ONCE for the component's lifetime.
  * Remount with a React `key` to start a fresh terminal (e.g. a different cwd).
  */
-export function Terminal({ cwd, cmd, governed = true, initialInput, concealHome }: Props): React.ReactElement {
+export function Terminal({ cwd, cmd, governed = true, initialInput, concealHome, open, onOpenError }: Props): React.ReactElement {
   const hostRef = useRef<HTMLDivElement>(null);
   // Snapshot the open-time props; the session opens once (see effect deps: []).
-  const propsRef = useRef({ cwd, cmd, governed, initialInput, concealHome });
-  propsRef.current = { cwd, cmd, governed, initialInput, concealHome };
+  const propsRef = useRef({ cwd, cmd, governed, initialInput, concealHome, open, onOpenError });
+  propsRef.current = { cwd, cmd, governed, initialInput, concealHome, open, onOpenError };
 
   useEffect(() => {
     const host = hostRef.current;
@@ -119,17 +128,22 @@ export function Terminal({ cwd, cmd, governed = true, initialInput, concealHome 
         const p = propsRef.current;
         let id: string;
         try {
-          const opts: Parameters<typeof api.openTerminal>[0] = {
-            cwd: p.cwd,
-            cols: term.cols,
-            rows: term.rows,
-            governed: p.governed,
-          };
-          if (p.cmd !== undefined) opts.cmd = p.cmd;
-          id = (await api.openTerminal(opts)).id;
+          if (p.open !== undefined) {
+            id = (await p.open(term.cols, term.rows)).id;
+          } else {
+            const opts: Parameters<typeof api.openTerminal>[0] = {
+              cwd: p.cwd,
+              cols: term.cols,
+              rows: term.rows,
+              governed: p.governed,
+            };
+            if (p.cmd !== undefined) opts.cmd = p.cmd;
+            id = (await api.openTerminal(opts)).id;
+          }
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           term.write(`\r\n\x1b[31m[failed to open terminal: ${msg}]\x1b[0m\r\n`);
+          propsRef.current.onOpenError?.(err);
           return;
         }
         if (disposed) {
@@ -144,7 +158,7 @@ export function Terminal({ cwd, cmd, governed = true, initialInput, concealHome 
         // Type `initialInput` into the PTY the moment the stdin channel is up —
         // once, over the same WS text-frame path as keystrokes. The PTY's input is
         // kernel-buffered, so sending at open is safe even before the shell prompts.
-        const line = propsRef.current.initialInput;
+        const line = propsRef.current.open === undefined ? propsRef.current.initialInput : undefined;
         if (line !== undefined && line.length > 0) {
           if (ws.readyState === WebSocket.OPEN) ws.send(line);
           else ws.onopen = () => ws.send(line);
