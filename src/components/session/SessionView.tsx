@@ -128,7 +128,14 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
     if (ref.kind !== 'run' || !runChatId) return;
     const v = runs.find((r) => r.session.id === ref.runId);
     const chat = v === undefined ? null : runChatIdOf(v);
-    if (chat !== null) navigate(sessionPath(chat), { replace: true });
+    // The address's search and hash ride along (a Watchtower `?jump=`, a `#gate`), so the moment the
+    // operator was sent to survives the move onto the chat's thread.
+    if (chat === null) return;
+    // A jump names a moment of THIS run: on the chat's thread (many runs) it is pinned to the run.
+    const q = new URLSearchParams(window.location.search);
+    if (q.has('jump')) q.set('jumpRun', ref.runId);
+    const search = q.toString();
+    navigate(`${sessionPath(chat)}${search !== '' ? `?${search}` : ''}${window.location.hash}`, { replace: true });
   }, [ref, runChatId, runs, navigate]);
   const mine = useMemo(() => {
     const list = ref.kind === 'run'
@@ -631,7 +638,13 @@ export function RunBlock({ view, badge, sessionId, navigate }: {
   // Recomputed whenever the address's search changes (an in-app navigation re-renders the thread), so
   // a second Jump in onto the same mounted run is read afresh (codex r1).
   const searchNow = typeof window === 'undefined' ? '' : window.location.search;
-  const jump = useMemo(() => parseJump(searchNow), [searchNow]);
+  // The jump is this run's when the thread is the run's own (`run:<id>`), or — on a chat's thread of
+  // many runs — when the address pins it to this run (`jumpRun=<id>`, set by the run → chat move).
+  const jump = useMemo(() => {
+    const pinned = new URLSearchParams(searchNow).get('jumpRun');
+    const mine = pinned !== null ? pinned === id : sessionId === `run:${id}`;
+    return mine ? parseJump(searchNow) : null;
+  }, [searchNow, id, sessionId]);
   return (
     <section data-testid="session-run" data-run-id={id} data-state={state} {...(acceptance !== null ? { 'data-acceptance': 'read' } : {})} className="wk-session-run">
       <p className="wk-session-run-head">
