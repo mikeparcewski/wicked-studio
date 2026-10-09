@@ -1,3 +1,4 @@
+import { isAskTurnRun } from './askTurn.js';
 import type { Campaign } from '../api/campaigns.js';
 import { memoryPayload, policyPayload, proposalKind, type Proposal } from '../api/proposals.js';
 import type { DecisionView } from '../api/decisions.js';
@@ -410,6 +411,9 @@ export function needsYouRows(inputs: NeedsYouInputs): NeedRow[] {
   for (const v of live) {
     const s = v.session;
     if (s.status === 'awaiting_human') {
+      // studio#588: crew says the run waits at an ask's turn gate — not a gate needing you, even when
+      // the gate store holds its terminal gate after a reload (the ask store knows nothing yet).
+      if (isAskTurnRun(s)) continue;
       const gate = gates[s.id];
       if (gate === undefined && inputs.askTurnRuns?.has(s.id) === true) continue; // the ask's turn: the composer is the answer
       // The gate's own one-liner IS the narrator's awaitingHuman template —

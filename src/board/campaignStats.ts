@@ -5,6 +5,7 @@ import type {
   CampaignNodeStatus,
   RunGroup,
 } from '../api/campaigns.js';
+import { isAskTurnRun } from './askTurn.js';
 import type { SessionView } from '../api/types.js';
 import type { TestSet } from '../api/wave6-wire.js';
 import { isPrUrl } from '../components/delivery.js';
@@ -188,10 +189,17 @@ export interface CampaignTotals {
   terminal: number;
 }
 
-function groupStatusCounts(g: RunGroup): { running: number; awaitingHuman: number; landed: number; failed: number; cancelled: number } {
+function groupStatusCounts(
+  g: RunGroup,
+  runsById?: ReadonlyMap<string, SessionView>,
+): { running: number; awaitingHuman: number; landed: number; failed: number; cancelled: number } {
   const t = { running: 0, awaitingHuman: 0, landed: 0, failed: 0, cancelled: 0 };
   for (const r of g.runs) {
-    if (r.status === 'awaiting_human') t.awaitingHuman += 1;
+    // studio#588: the group's attached-run wire carries no ask_turn — the live run list does. An
+    // ask's turn gate is the chat waiting for its next message: live, not waiting on a human.
+    const live = runsById?.get(r.runId);
+    if (r.status === 'awaiting_human' && live !== undefined && isAskTurnRun(live.session)) t.running += 1;
+    else if (r.status === 'awaiting_human') t.awaitingHuman += 1;
     else if (r.status === 'completed') t.landed += 1;
     else if (r.status === 'failed') t.failed += 1;
     else if (r.status === 'cancelled') t.cancelled += 1;
@@ -200,7 +208,12 @@ function groupStatusCounts(g: RunGroup): { running: number; awaitingHuman: numbe
   return t;
 }
 
-export function campaignTotals(campaigns: readonly Campaign[], groups: readonly RunGroup[]): CampaignTotals {
+export function campaignTotals(
+  campaigns: readonly Campaign[],
+  groups: readonly RunGroup[],
+  /** The live run list, keyed by id — lets a group's ask turn gate read as live (studio#588). */
+  runsById?: ReadonlyMap<string, SessionView>,
+): CampaignTotals {
   const t: CampaignTotals = {
     campaigns: campaigns.length, groups: groups.length, activeNow: 0,
     landed: 0, failed: 0, running: 0, awaitingHuman: 0, terminal: 0,
@@ -215,7 +228,7 @@ export function campaignTotals(campaigns: readonly Campaign[], groups: readonly 
     t.terminal += n.landed + n.failed + n.cancelled;
   }
   for (const g of groups) {
-    const n = groupStatusCounts(g);
+    const n = groupStatusCounts(g, runsById);
     if (n.running > 0 || n.awaitingHuman > 0) t.activeNow += 1;
     t.landed += n.landed;
     t.failed += n.failed;
@@ -414,7 +427,7 @@ function withLiveJoin(
     .filter((v): v is SessionView => v !== undefined);
   return {
     ...m,
-    waiting: members.filter((v) => v.session.status === 'awaiting_human'),
+    waiting: members.filter((v) => v.session.status === 'awaiting_human' && !isAskTurnRun(v.session)),
     inWindow: m.memberRunIds.some((id) => windowIds.has(id)),
     // Distinct, live-list order — `chat` is a system workflow, not a test's.
     workflowIds: [...new Set(members.map((v) => v.session.workflow_id).filter((w) => typeof w === 'string' && w !== '' && w !== 'chat'))],
@@ -458,7 +471,7 @@ export function campaignCards(
     }, runsById, windowIds));
   }
   for (const g of groups) {
-    const n = groupStatusCounts(g);
+    const n = groupStatusCounts(g, runsById);
     models.push(withLiveJoin({
       kind: 'group',
       id: g.label,

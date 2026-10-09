@@ -1,3 +1,4 @@
+import { isAskTurnRun } from './askTurn.js';
 import type { CoreEvent, SessionStatus, SessionView } from '../api/types.js';
 import type { LoggedEvent } from '../store/runtime.js';
 
@@ -88,7 +89,9 @@ export function runStats(runs: SessionView[]): RunStats {
   for (const v of runs) {
     if (v.session.archived_at != null) continue;
     const s = v.session.status;
-    if (s === 'awaiting_human') gates += 1;
+    // studio#588: an ask's turn gate is the chat waiting for its next message — live, not a gate.
+    if (s === 'awaiting_human' && isAskTurnRun(v.session)) working += 1;
+    else if (s === 'awaiting_human') gates += 1;
     else if (s === 'failed') failed += 1;
     else if (!TERMINAL.has(s)) working += 1;
   }

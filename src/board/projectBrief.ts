@@ -1,3 +1,4 @@
+import { isAskTurnRun } from './askTurn.js';
 import type { SessionView } from '../api/types.js';
 import { clockTime } from './handover.js';
 
@@ -43,7 +44,8 @@ export function projectBrief(before: StatusSnapshot, runs: readonly SessionView[
     if (v.session.archived_at != null) continue;
     const was = before[v.session.id];
     const now = v.session.status;
-    if (now === 'awaiting_human') counts.gates += 1;
+    // studio#588: an ask's turn gate is not an open decision.
+    if (now === 'awaiting_human' && !isAskTurnRun(v.session)) counts.gates += 1;
     if (was === undefined) {
       const created = v.session.created_at;
       if (typeof created === 'number' && created * 1000 >= leftAt) counts.started += 1;

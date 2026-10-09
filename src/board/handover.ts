@@ -1,3 +1,4 @@
+import { isAskTurnRun } from './askTurn.js';
 import type { AuditEntry, SessionView } from '../api/types.js';
 import { endedAtMs, type ElicitationLite, type GateLite } from './needsYou.js';
 import { standingOrderActionText } from './standingOrders.js';
@@ -154,6 +155,7 @@ export function handoverSections(inp: HandoverInputs): HandoverSection[] {
   const decisions: HandoverItem[] = [];
   for (const v of live) {
     if (v.session.status !== 'awaiting_human') continue;
+    if (isAskTurnRun(v.session)) continue; // studio#588: an ask's turn gate is not a decision
     const g = gates[v.session.id];
     decisions.push({
       key: `gate:${v.session.id}`,
