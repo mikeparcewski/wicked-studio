@@ -124,9 +124,14 @@ export function ArtifactMorph({ artifactKey, title, projectId, docId, composerKe
     if (from === to) return;
     const apply = (): void => flushSync(() => setArtifactSize(artifactKey, to));
     const reduced = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const vt = (document as Document & { startViewTransition?: (cb: () => void) => unknown }).startViewTransition;
-    if (!reduced && typeof vt === 'function') vt.call(document, apply);
-    else apply();
+    type Transition = { ready?: Promise<unknown>; finished?: Promise<unknown>; updateCallbackDone?: Promise<unknown> };
+    const vt = (document as Document & { startViewTransition?: (cb: () => void) => Transition | undefined }).startViewTransition;
+    if (!reduced && typeof vt === 'function') {
+      // A step that lands while the previous morph is still animating SKIPS that transition (the
+      // browser rejects its promises with "Transition was skipped"): expected, never a page error.
+      const t = vt.call(document, apply);
+      for (const p of [t?.ready, t?.finished, t?.updateCallbackDone]) p?.catch(() => undefined);
+    } else apply();
     writeAddress?.(artifactKey, from, to);
   }, [artifactKey, writeAddress]);
 
