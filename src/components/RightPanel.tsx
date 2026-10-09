@@ -7,7 +7,7 @@ import type { RunModel } from '../hooks/useRunModel.js';
 import { useProvenanceStore } from '../store/provenance.js';
 import { useIsSystemWorkflow } from '../store/workflowCache.js';
 import { AssumptionsPanel } from './AssumptionsPanel.js';
-import { LiveNarration } from './ChatPanel.js';
+import { LiveNarration } from './LiveNarration.js';
 import { hasDeliverySection } from './delivery.js';
 import { Burn } from './Burn.js';
 import { FileViewer } from './FileViewer.js';

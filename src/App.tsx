@@ -25,7 +25,7 @@ import { SteeringPage } from './components/SteeringPage.js';
 import { MemoriesPanel } from './components/MemoriesPanel.js';
 import { GovernanceDashboard } from './components/GovernanceDashboard.js';
 import { TestingPage } from './components/TestingPage.js';
-import { ChatPanel } from './components/ChatPanel.js';
+import { LaunchPanel } from './components/LaunchPanel.js';
 import { GroupChat } from './components/GroupChat.js';
 import { WorkflowViewer } from './components/WorkflowViewer.js';
 import { ShortcutOverlay } from './components/ShortcutOverlay.js';
@@ -475,23 +475,15 @@ export function App(): React.ReactElement {
   // project; the flat `/runs/new` stays unbound (Unfiled default, §5.1).
   const launchProjectId = projectId !== null && mode === 'build' && showLaunch ? projectId : null;
 
-  // overflow-y-auto, not hidden: at 1440x700 a tall gate card plus the composer outgrow the pane,
-  // and a hidden overflow left the run header unreachable above the fold.
+  // S16a-3: the run page retired — a run lives in its session thread (`/s/run%3A<id>`), so the run
+  // surface is only the launch form (`/runs/new`, `/p/:pid/build/new`, `/chat/new`).
   const runSurface = (): React.ReactElement => (
     <div className="flex-1 overflow-y-auto">
-      <ChatPanel
-        view={selected}
+      <LaunchPanel
         chatMode={chatMode}
         onLaunched={onLaunched}
-        onNavigateBack={onNavigateBack}
-        onRefresh={refresh}
         navigate={navigate}
         launchProjectId={launchProjectId}
-        // Slice Z (§7.6): the route names a run the index has not resolved —
-        // a just-launched navigation or a mid-run reload racing GET /runs.
-        // ChatPanel holds the honest pending state, never the composer.
-        pendingRunId={selected === null ? runId : null}
-        runsLoaded={runsLoaded}
       />
     </div>
   );
@@ -536,8 +528,13 @@ export function App(): React.ReactElement {
       return <DemoMode projectId={pid} runId={artifactId} runs={runs} navigate={navigate} />;
     }
     if (m === 'chat' && !artifactId) return groupChatSurface(null, pid);
+    // S16a-3: a run inside the shell's Chat mode (`/p/:pid/chat/:run`, the address S16a-4e moves) is
+    // its session thread — the run page that rendered it is gone.
+    if (m === 'chat' && artifactId) {
+      return <SessionPage sessionId={`run:${artifactId}`} runs={runs} runsLoaded={runsLoaded} needRows={needRows} navigate={navigate} onAsk={handToAsk} />;
+    }
     // `showLaunch` here is `/p/:pid/build/new` — the §4.3 pre-bound launch form.
-    return artifactId || showLaunch ? runSurface() : dashboardSurface();
+    return showLaunch ? runSurface() : dashboardSurface();
   }
 
   // Center panel content based on route
@@ -763,12 +760,9 @@ export function App(): React.ReactElement {
     if (chatMode && selected === null) {
       return groupChatSurface(repoId, null, artifactId, true);
     }
-    // Home dashboard: no run selected and not launching — three-panel home view + manager controls
-    if (panel === 'runs' && !runId && !selected && !showLaunch) {
-      return dashboardSurface();
-    }
-    // Run selected or launch form
-    return runSurface();
+    // The launch form; anything else with no surface of its own is the home dashboard (S16a-3: no
+    // route renders a run page any more).
+    return showLaunch ? runSurface() : dashboardSurface();
   }
 
   return (

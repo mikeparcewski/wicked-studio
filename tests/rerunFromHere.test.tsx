@@ -1,19 +1,13 @@
-// Brainstorm-actionable idea 6: "Rerun from here" on the run's phase breadcrumb. The open gate's
+// Brainstorm-actionable idea 6: "Rerun from here" (the model; the run page's breadcrumb retired in
+// S16a-3 and the session row's ⋯ choice is pinned in gateRowDepth.s16a). The open gate's
 // rewind target (wicked-core's rewind_to_creator: the gated unit when it is a creator, else the newest
 // creator before it) carries the offer; its preview names what is kept, what is redone and how long it
 // took last time BEFORE the move; the move is the real gate route: POST /runs/:id/gate
 // {approve:false, action:'request_changes', ord}.
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, cleanup, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
-import { ProcessStepper } from '../src/components/ChatPanel.js';
+import { describe, it, expect } from 'vitest';
 import { rerunOffer, rewindTarget, unitDurations } from '../src/components/rerunModel.js';
-import { useRerunFromHere } from '../src/hooks/useRerunFromHere.js';
-import * as client from '../src/api/client.js';
-import type { CoreEvent, SessionView, WorkUnit } from '../src/api/types.js';
-import { useGateStore } from '../src/store/gates.js';
-import { useRunEventStore } from '../src/store/events.js';
-import { makeSession, makeUnit } from './factories.js';
+import type { CoreEvent, WorkUnit } from '../src/api/types.js';
+import { makeUnit } from './factories.js';
 
 const RUN = 'run-rerun';
 const MIN = 60_000;
@@ -92,45 +86,5 @@ describe('rerunModel — the offer is the engine\'s own rewind, with its consequ
   });
 });
 
-function Harness({ view }: { view: SessionView }): React.ReactElement {
-  const rerun = useRerunFromHere(view);
-  return <ProcessStepper runId={view.session.id} units={[...view.units]} executingUnitOrd={null} rerun={rerun} />;
-}
-
-const VIEW: SessionView = {
-  session: makeSession({ id: RUN, status: 'awaiting_human', unit_ix: 2 }),
-  units: units(),
-};
-
-describe('the breadcrumb — preview first, then the real gate route', () => {
-  beforeEach(() => {
-    vi.restoreAllMocks();
-    useGateStore.setState({ gates: {} });
-    useRunEventStore.setState({ byRun: { [RUN]: EVENTS } });
-    useGateStore.getState().setGate({ runId: RUN, ord: 3, prompt: 'Unit 3 verdict is NOT PASS — confirm to retry the phase', lifecycle: 'open', receivedAt: T0 });
-    vi.spyOn(client.api, 'confirmGate').mockResolvedValue({ status: 'executing' });
-  });
-  afterEach(cleanup);
-
-  it('only the rewind target offers it; the preview shows before the move; the move calls POST /runs/:id/gate', async () => {
-    const user = userEvent.setup();
-    render(<Harness view={VIEW} />);
-    expect(screen.getByTestId('stepper-phase-2')).toHaveAttribute('data-rerun', 'offered');
-    for (const ord of [1, 3, 4]) expect(screen.getByTestId(`stepper-phase-${ord}`)).not.toHaveAttribute('data-rerun');
-    expect(screen.queryByTestId('rerun-preview')).toBeNull();
-    await user.click(screen.getByTestId('stepper-phase-2'));
-    expect(screen.getByTestId('rerun-consequence')).toHaveTextContent(
-      'Keeps understand, redoes build → review → deliver, ~9 min from past durations (deliver not timed yet)',
-    );
-    expect(client.api.confirmGate).not.toHaveBeenCalled();
-    await user.click(screen.getByTestId('rerun-confirm'));
-    await waitFor(() => expect(client.api.confirmGate).toHaveBeenCalledWith(RUN, { approve: false, action: 'request_changes', ord: 3 }));
-    await screen.findByTestId('rerun-sent');
-  });
-
-  it('a finished run\'s breadcrumb offers nothing', () => {
-    useGateStore.setState({ gates: {} });
-    render(<Harness view={{ ...VIEW, session: { ...VIEW.session, status: 'completed' } }} />);
-    expect(document.querySelector('[data-rerun]')).toBeNull();
-  });
-});
+// S16a-3: the run page's breadcrumb (ProcessStepper + RerunPreview) retired with the run view; the
+// session's "Rerun from <step>" choice is pinned in tests/gateRowDepth.s16a.test.tsx.

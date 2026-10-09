@@ -5,7 +5,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, render, screen } from '@testing-library/react';
-import { ChatPanel } from '../src/components/ChatPanel.js';
+import { RunBlock } from '../src/components/session/SessionView.js';
 import { RunLink } from '../src/components/RunLink.js';
 import { SteeringGate } from '../src/components/SteeringGate.js';
 import { Tech, runTechParts } from '../src/components/Tech.js';
@@ -72,15 +72,19 @@ describe('Tech', () => {
 });
 
 describe('the three surfaces', () => {
-  it('run header: hidden by default, shown when on, hidden again when turned off', () => {
-    render(<ChatPanel view={view()} onLaunched={vi.fn()} onNavigateBack={vi.fn()} onRefresh={vi.fn()} />);
-    expect(screen.queryByTestId('tech-run-header')).toBeNull();
+  it('run head (S16a-3: the session run block; the run page header retired): hidden by default, shown when on, hidden again when turned off', () => {
+    // The run block reads its run's watch / events / team plan: held open (never answered) so nothing
+    // resolves after the test environment is torn down.
+    vi.stubGlobal('fetch', vi.fn(() => new Promise(() => {})));
+    render(<RunBlock view={view()} badge={0} sessionId={`run:${RUN}`} />);
+    expect(screen.queryByTestId('tech-session-run')).toBeNull();
     setTech(true);
-    const h = screen.getByTestId('tech-run-header');
-    expect(screen.getByTestId('run-header').contains(h)).toBe(true);
+    const h = screen.getByTestId('tech-session-run');
+    expect(screen.getByTestId('session-run').contains(h)).toBe(true);
     expect(h).toHaveTextContent(`run ${RUN} · base a41c9e2 · seats claude, codex`);
     setTech(false);
-    expect(screen.queryByTestId('tech-run-header')).toBeNull();
+    expect(screen.queryByTestId('tech-session-run')).toBeNull();
+    vi.unstubAllGlobals();
   });
 
   it('run row: hidden by default, shown when on', () => {
