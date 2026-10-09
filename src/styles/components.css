@@ -1376,3 +1376,5 @@ button.wk-walk-chapter-btn:hover .wk-walk-chapter-title { text-decoration: under
 .wk-session-questions { display: flex; flex-direction: column; gap: 8px; margin: 0 0 8px; }
 /* studio#596: the linked issues a launch appends, one per line with its toggle. */
 .wk-linked-issues { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+/* studio#617: a unit's worker pool seated short — said in the warning tone. */
+.wk-run-pool-short { color: var(--status-gate); }
