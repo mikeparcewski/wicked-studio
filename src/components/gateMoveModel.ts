@@ -427,7 +427,9 @@ function findingsItems(text: string | null | undefined): string[] | null {
     }
   }
   // The must-fix tier is why the review failed; its Concerns ride beside it, labelled, so nothing
-  // the reviewer raised is silently out of scope (studio#559 F24).
+  // the reviewer raised is silently out of scope (studio#559 F24). `failing()` pushes every item to
+  // `severe` and the must-fix ones to `mustFix` too, so severe ⊇ mustFix: a must-fix-only verdict
+  // takes this branch (and `tiered` returns it bare).
   if (severe.length > 0) return tiered(mustFix, severe);
   if (allBullets.length > 0) return allBullets;
   return prose;
