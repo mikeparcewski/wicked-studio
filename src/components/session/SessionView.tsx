@@ -628,7 +628,10 @@ export function RunBlock({ view, badge, sessionId, navigate }: {
   // branch) for a hand-over, the "Deliver — open a PR" door for a stranded run.
   const finished = effectiveKind === null ? finishedDeliveryArm(view, gate) : null;
   // S16a-1c: the Watchtower's "Jump in" lands here with `?jump=ord:attempt:at` — read on arrival.
-  const [jump] = useState(() => (typeof window === 'undefined' ? null : parseJump(window.location.search)));
+  // Recomputed whenever the address's search changes (an in-app navigation re-renders the thread), so
+  // a second Jump in onto the same mounted run is read afresh (codex r1).
+  const searchNow = typeof window === 'undefined' ? '' : window.location.search;
+  const jump = useMemo(() => parseJump(searchNow), [searchNow]);
   return (
     <section data-testid="session-run" data-run-id={id} data-state={state} {...(acceptance !== null ? { 'data-acceptance': 'read' } : {})} className="wk-session-run">
       <p className="wk-session-run-head">
