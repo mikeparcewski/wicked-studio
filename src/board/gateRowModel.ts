@@ -40,7 +40,7 @@ import type { RerunOffer } from '../components/rerunModel.js';
  */
 
 /** Why the gate row renders what it renders. */
-export type SessionGateReason = 'escalation' | 'retry' | 'def' | 'team' | 'free-text' | 'choices' | 'unknown';
+export type SessionGateReason = 'escalation' | 'retry' | 'def' | 'team' | 'free-text' | 'choices' | 'consent' | 'unknown';
 
 /** One answerable choice in the session gate row. */
 export interface GateRowChoice {
@@ -266,6 +266,26 @@ function withDepth(base: BaseRowModel, input: SessionGateInput): GateRowModel {
 
 function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
   const { runId, gate, units, events, pool, roster } = input;
+
+  // crew#888 / wicked-core#801: a `consent` gate pauses BEFORE a `consent_before` phase runs (the
+  // mcp-server install). Nothing has run, so there is nothing to steer or send back: Approve gives
+  // consent and runs the phase; Decline cancels the run without running it. Never preselected —
+  // consent is the operator's decision every time.
+  const kind = gate.gateKind ?? (events === null ? undefined : gateFrameFor(events, gate.ord)?.gateKind ?? undefined);
+  if (kind === 'consent') {
+    return {
+      reason: 'consent',
+      question: gate.prompt,
+      choices: [
+        { key: 'approve', label: 'Approve', decision: { approve: true }, needsNote: false, title: 'Give consent: the phase runs now. Nothing in it has run yet.' },
+        { key: 'decline', label: 'Decline', decision: { approve: false }, needsNote: false, title: 'Cancel the run without running this phase.' },
+      ],
+      overflow: [],
+      noteDefault: '',
+      recommended: null,
+      detailItems: [gate.prompt],
+    };
+  }
 
   const rowClass = classifyRowGate({ runId, gate, units, events });
   if (rowClass.kind === 'checking') return null;

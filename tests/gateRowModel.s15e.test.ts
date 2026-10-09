@@ -626,3 +626,26 @@ describe('sessionGateChoices — a denied unit re-runs: Approve (suggested) · s
     expect(isDeniedUnitEscalation(undefined, view, 3)).toBe(false);
   });
 });
+
+// crew#888 / wicked-core#801: the engine pauses BEFORE a `consent_before` phase runs.
+describe('sessionGateChoices — consent gate', () => {
+  it('renders Approve (consent) and Decline only, nothing preselected, nothing to steer or send back', () => {
+    const gate = plainGate({ gateKind: 'consent', prompt: 'Consent needed before unit 9 runs — nothing in it has run yet.' });
+    const model = sessionGateChoices(input(gate));
+    expect(model).not.toBeNull();
+    expect(model!.reason).toBe('consent');
+    expect(model!.choices.map((c) => [c.key, c.label, c.decision])).toEqual([
+      ['approve', 'Approve', { approve: true }],
+      ['decline', 'Decline', { approve: false }],
+    ]);
+    expect(model!.overflow).toEqual([]);
+    expect(model!.recommended).toBeNull();
+    expect(model!.question).toContain('nothing in it has run yet');
+  });
+
+  it('reads the kind from the log on a late join (no gateKind on the gate)', () => {
+    const gate = plainGate({ ord: 9 });
+    const events = [{ type: 'awaitingHuman', session: RUN, ord: 9, gateKind: 'consent', prompt: gate.prompt } as unknown as CoreEvent];
+    expect(sessionGateChoices(input(gate, events))!.reason).toBe('consent');
+  });
+});
