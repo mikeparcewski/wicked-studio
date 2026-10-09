@@ -1,7 +1,7 @@
 import { commitGateDecision } from '../board/gateActions.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, ApiError } from '../api/client.js';
-import type { DeliverTargetResponse, EntityMode, LaunchBodyWithDeliver, Project, RepoEntry, RosterSeat, WorkflowDef } from '../api/types.js';
+import type { BaseSkillPosture, BaseSkillRefusedResponse, DeliverTargetResponse, EntityMode, LaunchBodyWithDeliver, Project, RepoEntry, RosterSeat, WorkflowDef } from '../api/types.js';
 import { COMPOSER_DEFAULT_GATE_POSTURE } from './composerDefaults.js';
 import { isShortcutsPaletteOpen } from '../hooks/useGlobalShortcuts.js';
 import { useCampaignsStore } from '../store/campaigns.js';
@@ -14,7 +14,7 @@ import { clearSteerPrefill, peekSteerPrefill } from '../store/steerPrefill.js';
 import { setCachedRoster } from '../store/rosterCache.js';
 import { seatStandingWord } from './HealthRailSection.js';
 import { noCarryingSeatReason } from './gateVerdictModel.js';
-import { detectWorkflow, launchNeedsRepo, launchSubmit, readyLead } from '../board/launchModel.js';
+import { baseSkillRefusalOf, describeBaseSkill, detectWorkflow, LAUNCH_PROBE_AFTER_SECS, launchNeedsRepo, launchSubmit, newLaunchId, readyLead } from '../board/launchModel.js';
 import { isSystemWorkflowIn, setCachedWorkflows } from '../store/workflowCache.js';
 import { loadPresets, presetSystemFlag, usePlanCatalog } from '../store/planCatalog.js';
 import { menuToken, dropToken } from '../board/planDraft.js';
@@ -274,6 +274,9 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   // studio#596: whether the daemon previews linked issues and takes `excludeLinkedIssues`
   // (`capabilities.linkedIssuesExclude`, crew#825). Absent/false: neither is sent.
   const [daemonLinkedIssues, setDaemonLinkedIssues] = useState(false);
+  /** studio#275: the BASE skill posture for the next launch (`GET /health.baseSkill`); `undefined`
+   *  until read and on a daemon before the field. */
+  const [baseSkill, setBaseSkill] = useState<BaseSkillPosture | null | undefined>(undefined);
   /** The linked-issue refs the operator left out of THIS launch, as the preview spelled them. */
   const [linkedExclude, setLinkedExclude] = useState<string[]>([]);
   useEffect(() => {
@@ -286,6 +289,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
         setDaemonRevisesPr(h.capabilities?.revisesPr === true);
         setDaemonChatId(h.capabilities?.chatIdOnLaunch === true);
         setDaemonLinkedIssues(h.capabilities?.linkedIssuesExclude === true);
+        setBaseSkill(h.baseSkill);
       })
       .catch(() => { if (!cancelled) { setDaemonDeliverGate(null); setDaemonRevisesPr(null); setDaemonChatId(null); } });
     return () => { cancelled = true; };
@@ -478,6 +482,14 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   const [submitting, setSubmitting] = useState(false);
   const [elapsedSecs, setElapsedSecs] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  /** studio#275: a 422 `base_skill_refused` launch — the typed card, not a bare sentence. */
+  const [baseSkillRefusal, setBaseSkillRefusal] = useState<BaseSkillRefusedResponse | null>(null);
+  /** studio#404: the id this launch was sent under (client-minted), while its POST is outstanding. */
+  const [pendingRunId, setPendingRunId] = useState<string | null>(null);
+  /** studio#404: the pending run is already on the daemon — offered while the POST is still out. */
+  const [startedRunId, setStartedRunId] = useState<string | null>(null);
+  /** studio#404: the operator opened the started run before the 201 — the 201 must not navigate again. */
+  const openedEarly = useRef<string | null>(null);
   // S19b: the problem box takes the composer's grammar — a leading `/` opens the workflow menu.
   const [problemCaret, setProblemCaret] = useState(0);
   const [menuCursor, setMenuCursor] = useState(0);
@@ -595,6 +607,28 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     };
   }, [submitting]);
 
+  // ── Slow launch (studio#404): look for the run under the id we sent ────────
+  // While `POST /runs` is outstanding past LAUNCH_PROBE_AFTER_SECS, read `GET /runs/:id` every other
+  // second; once the daemon serves the run, the composer offers it ("Your run started — open it")
+  // instead of sitting on a spinner. The 201 stays the authority: it navigates when it lands.
+  useEffect(() => {
+    if (!submitting || pendingRunId === null || startedRunId !== null) return;
+    if (elapsedSecs < LAUNCH_PROBE_AFTER_SECS || elapsedSecs % 2 !== 1) return;
+    let cancelled = false;
+    const id = pendingRunId;
+    Promise.resolve()
+      .then(() => api.getRun(id))
+      .then(() => { if (!cancelled) setStartedRunId(id); })
+      .catch(() => { /* not there yet (404) or unreadable — keep waiting on the POST */ });
+    return () => { cancelled = true; };
+  }, [submitting, pendingRunId, startedRunId, elapsedSecs]);
+
+  function openStartedRun(id: string): void {
+    openedEarly.current = id;
+    useProvenanceStore.getState().markLaunchedHere(id);
+    onLaunched(id);
+  }
+
   // ── Auto-resize textarea ───────────────────────────────────────────────────
   useEffect(() => {
     const ta = textareaRef.current;
@@ -672,11 +706,18 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     setPreflightBlocked(false);
     setSubmitting(true);
     setError(null);
+    setBaseSkillRefusal(null);
+    setStartedRunId(null);
+    openedEarly.current = null;
 
     // The steer prefill rides the problem body as a labelled trailing
     // paragraph (see the steer field's own caption) — LaunchRunBody carries
     // no guidance key until CREW-UX-4 lands (DES-UX-002 §7.2).
     const body: LaunchBodyWithDeliver = { problem: launchProblem };
+    // studio#404: name the run up front, so a slow POST can still be followed (see the probe above).
+    const launchId = newLaunchId();
+    if (launchId !== null) body.sessionId = launchId;
+    setPendingRunId(launchId);
     const seats = roster.filter((s) => selectedClis.has(s.key));
     if (seats.length > 0) body.clisJson = JSON.stringify(seats);
     body.entityMode = entityMode;
@@ -764,11 +805,16 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
       // 'via studio' channel derives from exactly this record (§3.3).
       useProvenanceStore.getState().markLaunchedHere(newRunId);
       setProblem('');
-      onLaunched(newRunId);
+      // Opened early from the "your run started" offer: the operator is already there.
+      if (openedEarly.current !== newRunId) onLaunched(newRunId);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      const refused = baseSkillRefusalOf(err);
+      if (refused !== null) setBaseSkillRefusal(refused);
+      else setError(err instanceof Error ? err.message : String(err));
     } finally {
       setSubmitting(false);
+      setPendingRunId(null);
+      setStartedRunId(null);
     }
   }
 
@@ -1706,6 +1752,19 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
         </p>
       )}
 
+      {/* studio#275: the discipline (base) skill every agent unit of this launch is told to follow —
+          on every launch kind, read off `GET /health.baseSkill`; nothing on a daemon without it. */}
+      {describeBaseSkill(baseSkill) !== null && (
+        <p
+          data-testid="launch-base-skill"
+          data-present={String(baseSkill?.present === true)}
+          className="text-xs px-1 font-mono"
+          style={{ color: baseSkill?.present === true ? 'var(--ink-muted)' : 'var(--status-gate)' }}
+        >
+          {describeBaseSkill(baseSkill)}
+        </p>
+      )}
+
       {/* ── Guidance steer field (DES-UX-002 §3.3, slice BC) — rendered only
              when the chronicle deposited a prefill; `--surface-raised` with the
              `--accent-subtle` left border (operator-authored content, §3.4). ── */}
@@ -1860,7 +1919,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
           aria-label="Send"
           className="wk-btn wk-btn--primary wk-btn--lg shrink-0"
         >
-          {submitting ? `${elapsedSecs}s` : 'Send'}
+          {submitting ? `Starting… ${elapsedSecs}s` : 'Send'}
         </button>
       </div>
 
@@ -1870,6 +1929,40 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
           {activePills.map((pill, i) => (
             <ActivePill key={i} label={pill.label} onClear={pill.onClear} {...(pill.attrs ? { attrs: pill.attrs } : {})} />
           ))}
+        </div>
+      )}
+
+      {/* studio#404: the run is on the daemon while its POST is still outstanding — offer it. */}
+      {submitting && startedRunId !== null && (
+        <p className="text-xs px-1 flex items-center gap-2" data-testid="launch-started" style={{ color: 'var(--ink-muted)' }}>
+          Your run started — the daemon is still answering the launch.
+          <button
+            type="button"
+            data-testid="launch-started-open"
+            onClick={() => openStartedRun(startedRunId)}
+            className="wk-btn wk-btn--secondary wk-btn--sm"
+          >
+            Open it
+          </button>
+        </p>
+      )}
+
+      {/* studio#275: the 422 `base_skill_refused` card — what was refused, and the fix. */}
+      {baseSkillRefusal !== null && (
+        <div
+          data-testid="launch-base-skill-refused"
+          className="text-xs px-2 py-1.5 rounded"
+          style={{ border: '1px solid var(--status-fail)', color: 'var(--ink-high)' }}
+        >
+          <p style={{ color: 'var(--status-fail)', margin: 0 }}>
+            Launch refused — the discipline skill{baseSkillRefusal.baseSkill !== null ? ` ${baseSkillRefusal.baseSkill.name}` : ''} is not in the published skills.
+          </p>
+          <p className="font-mono" style={{ margin: '2px 0 0' }}>{baseSkillRefusal.error}</p>
+          {baseSkillRefusal.remedy !== '' && (
+            <p data-testid="launch-base-skill-remedy" style={{ margin: '2px 0 0', color: 'var(--ink-muted)' }}>
+              Fix: {baseSkillRefusal.remedy}
+            </p>
+          )}
         </div>
       )}
 

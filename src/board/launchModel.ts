@@ -1,4 +1,5 @@
-import type { RosterSeat } from '../api/types.js';
+import type { BaseSkillPosture, BaseSkillRefusedResponse, RosterSeat } from '../api/types.js';
+import { ApiError } from '../api/errors.js';
 import { chatAdmissionOf } from './chatOpen.js';
 import { noCarryingSeatReason, seatCanCarry } from '../components/gateVerdictModel.js';
 
@@ -122,3 +123,46 @@ export function workflowLaunchState(
   }
   return { ready: true, reason: null, missing: null };
 }
+
+/**
+ * studio#275: the composer's confirm line for the BASE (discipline) skill the next launch carries,
+ * read off `GET /health.baseSkill` — `discipline skill: <name> gen N`, or what a missing skill does
+ * under the daemon's policy. `null` (setting off, seam disabled) and ABSENT (an older daemon) say
+ * nothing: there is no discipline to disclose.
+ */
+export function describeBaseSkill(posture: BaseSkillPosture | null | undefined): string | null {
+  if (posture === null || posture === undefined) return null;
+  if (posture.present) return `discipline skill: ${posture.name} gen ${posture.gen ?? '?'}`;
+  return posture.policy === 'require'
+    ? `discipline skill: ${posture.name} MISSING — runs will be refused at intake`
+    : `discipline skill: ${posture.name} MISSING — runs proceed without it`;
+}
+
+/** studio#275: the typed `POST /runs` 422 `base_skill_refused` body, or `null` for any other error. */
+export function baseSkillRefusalOf(err: unknown): BaseSkillRefusedResponse | null {
+  if (!(err instanceof ApiError) || err.status !== 422) return null;
+  const b = err.body;
+  if (typeof b !== 'object' || b === null) return null;
+  const r = b as Partial<BaseSkillRefusedResponse>;
+  if (r.code !== 'base_skill_refused' || typeof r.error !== 'string') return null;
+  return {
+    code: 'base_skill_refused',
+    error: r.error,
+    baseSkill: r.baseSkill ?? null,
+    remedy: typeof r.remedy === 'string' ? r.remedy : '',
+  };
+}
+
+/**
+ * studio#404: a client-minted run id for `POST /runs {sessionId}` — the daemon launches under the id
+ * the caller names, so the composer knows the run before the 201 lands and can offer it while a slow
+ * POST is outstanding. `null` where the browser has no `crypto.randomUUID` (an insecure origin): the
+ * launch then waits for the 201 as before.
+ */
+export function newLaunchId(): string | null {
+  const c = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto;
+  return typeof c?.randomUUID === 'function' ? c.randomUUID() : null;
+}
+
+/** studio#404: how long a launch POST is outstanding before the composer looks for the run itself. */
+export const LAUNCH_PROBE_AFTER_SECS = 5;
