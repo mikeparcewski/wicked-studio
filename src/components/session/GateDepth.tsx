@@ -1,4 +1,10 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { api } from '../../api/client.js';
+import type { CoreEvent } from '../../api/types.js';
+import { verdictHeadCut } from '../../board/gateRowModel.js';
+import { escalationSummaryFor } from '../gateMoveModel.js';
+import { gateVerdictFor } from '../gateVerdictModel.js';
+import { unitKey } from '../NarratorFeed.js';
 import type { SessionView, WorkUnit } from '../../api/types.js';
 import type { OpenGate } from '../../store/gates.js';
 import { useGateTrust, type GateTrust } from '../../hooks/useGateTrust.js';
@@ -116,4 +122,33 @@ export function GateDepthDetails({ view, gate, failing, reviewedOrd, source, und
       {source !== null && <p data-testid="session-gate-source" className="wk-session-gate-detail-item">{source}</p>}
     </>
   );
+}
+
+/**
+ * S16a-2a (studio#430): the engine keeps the 4 KB TAIL of a long failing verdict (head-cut with
+ * "…"), so its first findings are not in what the gate row reads. The row reads the reviewed unit's
+ * whole output once — the run page card's read — and works from it; only the document that ENDS
+ * with the kept tail is taken (anything else is not that verdict, and the tail stands).
+ */
+export function useFullVerdict(runId: string, units: readonly WorkUnit[], events: readonly CoreEvent[] | null, gate: OpenGate | undefined): string | null {
+  const raw = useMemo(() => (gate === undefined || events === null ? null : gateVerdictFor(events, gate.ord, gate.prompt)), [events, gate]);
+  const tail = useMemo(() => (raw === null || events === null ? null : escalationSummaryFor(events, raw.ord ?? gate?.ord) ?? null), [raw, events, gate?.ord]);
+  const kept = verdictHeadCut(raw, tail);
+  const reviewed = raw === null ? undefined : units.find((u) => u.ord === raw.ord);
+  const key = kept !== null && reviewed !== undefined ? unitKey(runId, reviewed.id, reviewed.ord) : null;
+  const id = key === null ? null : `${runId}\u0000${key}`;
+  const [full, setFull] = useState<{ id: string; text: string } | null>(null);
+  useEffect(() => {
+    if (id === null || key === null || full?.id === id) return;
+    let cancelled = false;
+    api.getUnitOutput(runId, key)
+      .then(({ output }) => {
+        if (cancelled || typeof output !== 'string' || output.trim() === '') return;
+        const t = (kept ?? '').replace(/^\s*(…|\.\.\.)/, '').trim();
+        if (t !== '' && output.trimEnd().endsWith(t)) setFull({ id, text: output });
+      })
+      .catch(() => { /* the tail stands */ });
+    return () => { cancelled = true; };
+  }, [runId, id, key, kept, full?.id]);
+  return full !== null && full.id === id ? full.text : null;
 }

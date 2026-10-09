@@ -66,21 +66,25 @@ with sync_playwright() as p:
     page = browser.new_page(viewport={"width": W, "height": H}, device_scale_factor=1)
     page.on("pageerror", lambda e: errors.append(str(e)))
 
+    REASSIGN = '[data-testid="session-gate-choice"][data-choice-key="reassign:claude"]'
+
     def open_card() -> None:
-        page.goto(f"{origin}/runs/r-seat", wait_until="networkidle")
-        row = page.get_by_test_id("steering-reassign-row").first
+        # S16a-2a: the seat failure is answered in r-seat's session thread, on its gate row.
+        page.goto(f"{origin}/s/run%3Ar-seat", wait_until="networkidle")
+        row = page.locator(REASSIGN)
         try:
-            row.wait_for(state="visible", timeout=15000)
+            row.wait_for(state="attached", timeout=15000)
         except Exception:
             page.screenshot(path=str(SHOTS / "desk-gate-moves-no-reassign.png"))
-            fail("reassign-offered", {"why": "no steering-reassign-row on the escalation card",
+            fail("reassign-offered", {"why": "no Reassign to Claude choice on the session gate row",
                                       "text": page.evaluate("() => document.body.innerText.slice(0, 600)")})
-        page.get_by_test_id("steering-reassign-seat").first.select_option("claude")
+        if not row.is_visible():
+            page.locator(".wk-session-gate-overflow-summary").click()
 
     # ── 1. one move ──────────────────────────────────────────────────────────────
     set_fixture(origin, seat_escalation=True, reassign_refuse=0, reset_gate_posts=True)
     open_card()
-    page.get_by_test_id("steering-reassign").first.click()
+    page.locator(REASSIGN).click()
     page.wait_for_timeout(11500)  # the 10 s undo window, then the send
     re1, gate1 = posts("reassign"), posts("gate")
     page.screenshot(path=str(SHOTS / "desk-gate-moves-one-call.png"))
@@ -90,18 +94,19 @@ with sync_playwright() as p:
     # ── 2. a refused move stays in view ──────────────────────────────────────────
     set_fixture(origin, reassign_refuse=1, reset_gate_posts=True)
     open_card()
-    page.get_by_test_id("steering-reassign").first.click()
+    page.locator(REASSIGN).click()
     try:
-        page.get_by_test_id("steering-reassign-error").first.wait_for(state="visible", timeout=15000)
-        err = page.get_by_test_id("steering-reassign-error").first.inner_text()
+        page.get_by_test_id("session-gate-error").first.wait_for(state="visible", timeout=20000)
+        err = page.get_by_test_id("session-gate-error").first.inner_text()
     except Exception:
         err = None
-    body = page.evaluate("() => document.body.innerText")
     page.screenshot(path=str(SHOTS / "desk-gate-moves-refused.png"))
+    # The row keeps the refusal in view, in the daemon's words, with the move still offered.
+    if page.locator(REASSIGN).count() and not page.locator(REASSIGN).is_visible():
+        page.locator(".wk-session-gate-overflow-summary").click()
     check("refused-move-in-view", err is not None and "not in this run" in err
-          and page.get_by_test_id("steering-reassign-retry").count() >= 1 and posts("gate") == []
-          and "Not moved" in body, error=err, gate=posts("gate"))
-    page.get_by_test_id("steering-reassign-retry").first.click()
+          and page.locator(REASSIGN).count() == 1 and posts("gate") == [], error=err, gate=posts("gate"))
+    page.locator(REASSIGN).click()
     page.wait_for_timeout(11500)
     re2 = posts("reassign")
     check("move-again-is-a-second-reassign", len(re2) == 2 and posts("gate") == [], reassign=re2)
@@ -135,12 +140,14 @@ with sync_playwright() as p:
 
     # ── 4. #430: the send-back carries the whole verdict ─────────────────────────
     set_fixture(origin, gate_move=True, gate_move_tail=True)
-    page.goto(f"{origin}/runs/r-review", wait_until="networkidle")
+    # S16a-2a: the send-back is the session gate row's choice; its note opens pre-filled.
+    page.goto(f"{origin}/s/run%3Ar-review", wait_until="networkidle")
     try:
-        page.wait_for_function("""() => { const f = document.querySelector('[data-testid="amend-prepopulated"], [data-testid="steering-amend"]');
+        page.locator('[data-testid="session-gate-choice"][data-choice-key="send-back"]').click(timeout=15000)
+        page.wait_for_function("""() => { const f = document.querySelector('[data-testid="session-gate-note"]');
           return f && f.value.includes('still reads'); }""", timeout=15000)
         page.wait_for_timeout(800)
-        note = page.evaluate("""() => document.querySelector('[data-testid="amend-prepopulated"], [data-testid="steering-amend"]').value""")
+        note = page.evaluate("""() => document.querySelector('[data-testid="session-gate-note"]').value""")
     except Exception:
         note = None
     page.screenshot(path=str(SHOTS / "desk-gate-moves-full-verdict.png"))

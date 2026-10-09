@@ -11,8 +11,9 @@ REAL 10 s window throughout. Against the `wave1` corpus with a SIMPLE gate waiti
   new gate  fresh page, a again; mid-window a NEW gate opens on b1 (awaitingHuman, unit 4): NO POST,
             the notice says a new gate opened — the old decision is never applied to the new gate.
   ord       fresh page, a, no interference: exactly ONE POST after 10 s, body {approve:true, ord:3}.
-  card      on /p/beta/build/b1, Approve on the gate card: the card reads "queued · undo in toast"
-            with Approve disabled; its a key then says why it did nothing (a visible notice).
+  card      on /s/run%3Ab1 (S16a-2a: the session's gate row), Approve: the row folds to "You chose:
+            Approve · Undo N s" with no choice left to take, so a second key answers nothing (no
+            POST); Undo re-arms Approve.
 
 On the Desk (the one shell since S18d) the board is the Desk: the
 decision is queued from b1's Desk row (Answer, then 1 — the row's own pick, DES-STUDIO-REBUILD-001
@@ -154,30 +155,33 @@ with sync_playwright() as p:
     check("sent-result", "sent: Approved “migrate beta's settings page to the new form kit”." in notice(page), notice=notice(page))
     page.close()
 
-    # ── the gate card shows the shared queued state ─────────────────────────────
-    set_fixture(origin, wave1=True, gate_now=["b1"], gate_simple=[], status_over={}, extra_gates=[],
+    # ── the session's gate row shows the shared queued state (S16a-2a: off the run page) ─────
+    set_fixture(origin, wave1=True, gate_now=["b1"], gate_simple=["b1"], status_over={}, extra_gates=[],
                 extra_frames=[], reset_gate_posts=True)
     page = browser.new_page(viewport={"width": W, "height": H}, device_scale_factor=1)
-    page.goto(f"{origin}/p/beta/build/b1", wait_until="networkidle")
-    page.get_by_test_id("steering-approve").wait_for(state="visible", timeout=15000)
-    page.get_by_test_id("steering-approve").click()
+    page.goto(f"{origin}/s/run%3Ab1", wait_until="networkidle")
+    APPROVE = '[data-testid="session-gate-choice"][data-choice-key="approve"]'
+    page.locator(APPROVE).wait_for(state="visible", timeout=15000)
+    page.locator(APPROVE).click()
     try:
-        page.get_by_test_id("steering-queued").wait_for(state="visible", timeout=3000)
+        page.get_by_test_id("session-gate-chosen").wait_for(state="visible", timeout=3000)
     except Exception:  # noqa: BLE001 — reported by the check below
         pass
-    check("card-queued-state", page.get_by_test_id("steering-queued").count() == 1
-          and (page.get_by_test_id("steering-queued").text_content() or "") == "queued · undo in toast"
-          and page.get_by_test_id("steering-approve").is_disabled())
-    page.get_by_test_id("steering-prompt").focus()
-    page.keyboard.press("Alt+a")
+    chosen = page.get_by_test_id("session-gate-chosen").text_content() or "" if page.get_by_test_id("session-gate-chosen").count() else ""
+    # The row's undo fold is its queued state: "You chose: Approve · Undo N s", the choices gone.
+    check("card-queued-state", chosen.startswith("You chose: Approve · Undo ")
+          and page.locator(APPROVE).count() == 0, chosen=chosen)
+    page.get_by_test_id("session-gate-row").focus()
+    page.keyboard.press("1")
     page.wait_for_timeout(500)
     page.screenshot(path=str(SHOTS / "wave2a-safety-card.png"))
-    check("card-second-a-not-silent", "not-sent:" in notice(page), notice=notice(page))
-    if page.get_by_test_id("undo-toast").count():
-        page.get_by_test_id("undo-toast").first.get_by_role("button", name="Undo").click()
+    # A second answer while one is queued is never taken silently: the row offers no choice to take.
+    check("card-second-a-not-silent", page.locator('[data-testid="session-gate-choice"]').count() == 0
+          and len(server_posts(origin)) == 0, posts=len(server_posts(origin)))
+    page.get_by_test_id("session-gate-row").get_by_role("button", name="Undo").click()
     page.wait_for_timeout(500)
-    check("card-undo-rearms", page.get_by_test_id("steering-queued").count() == 0
-          and page.get_by_test_id("steering-approve").is_enabled())
+    check("card-undo-rearms", page.get_by_test_id("session-gate-chosen").count() == 0
+          and page.locator(APPROVE).is_enabled())
     page.close()
 
     set_fixture(origin, wave1=False, gate_now=[], gate_simple=[], status_over={}, reset_gate_posts=True)

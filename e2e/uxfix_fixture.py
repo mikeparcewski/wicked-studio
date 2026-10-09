@@ -5915,8 +5915,10 @@ class W2Handler(SimpleHTTPRequestHandler):
                 esc_on = state["escalation_arms"]
             if esc_on and rid in ESC_GATES:
                 g_ord, g_prompt = ESC_GATES[rid]
+                # S16a-2a: the daemon's GateInfo carries no `options` (api-types GateInfo): a plain
+                # workflow gate is not free text, so the session row reads it as the def gate it is.
                 self._json(200, {"runId": rid, "ord": g_ord, "lifecycle": "open", "prompt": g_prompt,
-                                 "receivedAt": iso(ESC_T0 + 12 * MIN + SEC), "options": None})
+                                 "receivedAt": iso(ESC_T0 + 12 * MIN + SEC)})
                 return True
             with state_lock:
                 trust_on = state["trust_rules"]

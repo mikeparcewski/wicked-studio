@@ -9,7 +9,7 @@ import { useRunEvents } from '../../hooks/useRunEvents.js';
 import { getCachedRoster, subscribeRoster } from '../../store/rosterCache.js';
 import type { OpenGate } from '../../store/gates.js';
 import { useRerunFromHere } from '../../hooks/useRerunFromHere.js';
-import { GateDepthDetails, RuleOfferBlock, useSeatTrust } from './GateDepth.js';
+import { GateDepthDetails, RuleOfferBlock, useFullVerdict, useSeatTrust } from './GateDepth.js';
 import { WatchGateLine } from '../WatchLines.js';
 
 /**
@@ -81,16 +81,22 @@ export function GateRow({ view, gate }: {
 
   // S16a-1b: "Rerun from <step>" — the run page breadcrumb's offer, one more ⋯ choice here.
   const { offer: rerunOffer } = useRerunFromHere(view);
+  // S16a-2a (studio#430): the whole verdict when the engine head-cut it, so the send-back carries
+  // the first findings too.
+  const fullVerdict = useFullVerdict(runId, view.units, events, gate);
   const model = useMemo<GateRowModel | null>(() => {
     if (gate === undefined || events === null) return null;
-    return sessionGateChoices({ runId, gate, units: view.units, events, pool, roster, rerun: rerunOffer });
-  }, [runId, gate, view.units, events, pool, roster, rerunOffer]);
+    return sessionGateChoices({ runId, gate, units: view.units, events, pool, roster, rerun: rerunOffer, fullVerdict });
+  }, [runId, gate, view.units, events, pool, roster, rerunOffer, fullVerdict]);
   // S16a-1b: the creator seat's record on Approve and the standing-order offer (review gates).
   const seat = useSeatTrust(view, gate, {
     isPlanGate: false, isDeliverGate: gate?.gateKind === 'deliver',
     isEscalation: model !== null && (model.reason === 'escalation' || model.reason === 'retry'),
   });
   const [confirmRerun, setConfirmRerun] = useState(false);
+  // S16a-2a: the choice under the pointer or the keyboard says what it does BEFORE it is taken —
+  // the run page's per-arm consequence lines (escalation arms, reassign), one line above the row.
+  const [peek, setPeek] = useState<string | null>(null);
 
   // A new gate instance is a fresh question — reset all state.
   // When gate clears (becomes undefined) after a successful send, do NOT clear `chosen`:
@@ -310,6 +316,9 @@ export function GateRow({ view, gate }: {
         data-testid="session-gate-choices"
         role="radiogroup"
         aria-label="Answer this gate"
+        // S16a-2a: the row picks by arrows / digits / Enter only — a typed letter goes on to the
+        // page's composer (§5.6 rule 4); typing never answers the gate.
+        data-releases-letters="true"
         className="wk-session-gate-choices"
       >
         {model.choices.map((choice, i) => (
@@ -329,6 +338,10 @@ export function GateRow({ view, gate }: {
               choice.disabled === true ? 'wk-session-gate-choice--disabled' : '',
             ].filter(Boolean).join(' ')}
             disabled={action.busy || choice.disabled === true}
+            onMouseEnter={() => setPeek(choice.key)}
+            onMouseLeave={() => setPeek(null)}
+            onFocus={() => setPeek(choice.key)}
+            onBlur={() => setPeek(null)}
             onClick={() => {
               if (choice.disabled === true) return;
               setPick({ focus: i, moved: true });
@@ -362,6 +375,10 @@ export function GateRow({ view, gate }: {
                   choice.disabled === true ? 'wk-session-gate-choice--disabled' : '',
                 ].filter(Boolean).join(' ')}
                 disabled={action.busy || choice.disabled === true}
+                onMouseEnter={() => setPeek(choice.key)}
+                onMouseLeave={() => setPeek(null)}
+                onFocus={() => setPeek(choice.key)}
+                onBlur={() => setPeek(null)}
                 onClick={() => {
                   if (choice.disabled === true) return;
                   sendDirect(choice);
@@ -373,6 +390,14 @@ export function GateRow({ view, gate }: {
           </div>
         </details>
       )}
+      {/* S16a-2a: the peeked choice's consequence, before it is taken. */}
+      {(() => {
+        const keyed = peek ?? (pick.moved && pick.focus !== null ? model.choices[pick.focus]?.key ?? null : null);
+        const c = keyed === null ? undefined : allChoices.find((x) => x.key === keyed);
+        const shown = c === undefined || c.title === '' || (model.consequence !== null && model.recommended !== null && model.choices[model.recommended]?.key === c.key) ? null : c;
+        // Below the choices, so the line under the pointer never moves a button; empty while nothing is peeked.
+        return <p data-testid="session-gate-choice-consequence" {...(shown !== null ? { 'data-choice-key': shown.key } : {})} aria-live="polite" className="wk-gate-peek">{shown?.title ?? ''}</p>;
+      })()}
       {/* S16a-1b: Rerun from <step> — its consequence first, then the one confirm. */}
       {confirmRerun && rerunOffer !== null && (
         <div data-testid="session-gate-rerun" data-ord={rerunOffer.ord} className="wk-session-gate-detail">

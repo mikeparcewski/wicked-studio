@@ -157,15 +157,13 @@ with sync_playwright() as p:
         page.keyboard.press("Escape")
 
     def approve_deliver() -> None:
-        page.goto(f"{origin}/runs/r-trust-deliver", wait_until="networkidle")
-        move = page.get_by_test_id("gate-recommended")
+        # S16a-2a: the deliver gate is answered in r-trust-deliver's session thread — its hand-over
+        # card's Deliver, then the one "Are you sure?" (Yes, deliver).
+        page.goto(f"{origin}/s/run%3Ar-trust-deliver", wait_until="networkidle")
+        move = page.get_by_test_id("session-proposal-go")
         move.wait_for(state="visible", timeout=15000)
-        before = (move.text_content() or "").strip()
         move.click()
-        page.wait_for_timeout(400)
-        # With a diff to read, the first press opens it and relabels the move "Deliver"; the second delivers.
-        if not before.startswith("Deliver") and page.get_by_test_id("undo-toast").count() == 0:
-            move.click()
+        page.get_by_test_id("session-proposal-confirm-yes").click()
 
     def desk_freeze_open() -> None:
         """The Desk keeps the switch under "Look underneath" › Hold deliveries."""
@@ -202,12 +200,12 @@ with sync_playwright() as p:
             page.wait_for_timeout(250)
         posts = gate_posts(origin, "r-trust-deliver")
         check("approve-sent", len(posts) == 1 and posts[0]["body"].get("approve") is True, posts=posts)
-        page.wait_for_function("""() => [...document.querySelectorAll('[data-testid="undo-result"], [data-testid="steering-error"]')]
+        page.wait_for_function("""() => [...document.querySelectorAll('[data-testid="undo-result"], [data-testid="steering-error"], [data-testid="session-proposal-reason"]')]
             .some(e => e.textContent.includes('Deliveries are frozen'))""", timeout=10000)
-        msg = page.evaluate("""() => [...document.querySelectorAll('[data-testid="undo-result"], [data-testid="steering-error"]')]
+        msg = page.evaluate("""() => [...document.querySelectorAll('[data-testid="undo-result"], [data-testid="steering-error"], [data-testid="session-proposal-reason"]')]
             .map(e => e.textContent).find(t => t.includes('Deliveries are frozen'))""")
         check("frozen-refusal-is-clear", "unfreeze deliveries, then approve again" in msg
-              and "incident 42" in msg and page.get_by_test_id("gate-recommended").count() == 1, message=msg)
+              and "incident 42" in msg and page.get_by_test_id("session-proposal-go").count() == 1, message=msg)
         page.wait_for_timeout(800)
         report["steps"]["frozen-refusal-is-clear"]["toasts_after"] = page.get_by_test_id("undo-toast").count()
         report["steps"]["frozen-refusal-is-clear"]["gate_error"] = (page.get_by_test_id("steering-error").first.text_content()
@@ -254,12 +252,12 @@ with sync_playwright() as p:
             page.wait_for_timeout(250)
         posts = gate_posts(origin, "r-trust-deliver")
         check("approve-sent", len(posts) == 1 and posts[0]["body"].get("approve") is True, posts=posts)
-        page.wait_for_function("""() => [...document.querySelectorAll('[data-testid="undo-result"], [data-testid="steering-error"]')]
+        page.wait_for_function("""() => [...document.querySelectorAll('[data-testid="undo-result"], [data-testid="steering-error"], [data-testid="session-proposal-reason"]')]
             .some(e => e.textContent.includes('Deliveries are frozen'))""", timeout=10000)
-        msg = page.evaluate("""() => [...document.querySelectorAll('[data-testid="undo-result"], [data-testid="steering-error"]')]
+        msg = page.evaluate("""() => [...document.querySelectorAll('[data-testid="undo-result"], [data-testid="steering-error"], [data-testid="session-proposal-reason"]')]
             .map(e => e.textContent).find(t => t.includes('Deliveries are frozen'))""")
         check("frozen-refusal-is-clear", "unfreeze deliveries, then approve again" in msg
-              and "incident 42" in msg and page.get_by_test_id("gate-recommended").count() == 1, message=msg)
+              and "incident 42" in msg and page.get_by_test_id("session-proposal-go").count() == 1, message=msg)
         page.screenshot(path=str(SHOTS / f"wavec-desk-refused.png"))
 
         # Unfreeze from the Desk's own row.

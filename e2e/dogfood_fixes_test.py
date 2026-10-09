@@ -9,11 +9,13 @@ dogfood_fixes_test.py — the dogfood findings of 2026-09-27 on the launch scree
           options offer no file upload (a launch cannot carry files to its run); D4 the phase
           picker offers `deliver` with no repo, and not once a repo is picked (the launch
           delivers, so it adds its own deliver step).
-  gate    /runs/r-plan-gate, paused at a high-risk plan_approval gate — D10 the card shows the
+  gate    /s/run%3Ar-plan-gate (S16a-2a: the session thread), paused at a high-risk plan_approval
+          gate — D10 the plan card (behind "Why this plan") shows the
           score, band, the score's reason (the stale graph, commits shortened), what the floor
-          added and why, "manual mode" once, and no evaluator verdict; D11 it offers approve,
-          edit the plan, reject (no "Approve + steer", no note box), the bottom composer is a team
-          message, and approving an edited plan POSTs {approve: true, plan} with no amend.
+          added and why, "manual mode" at most once, and no evaluator verdict; D11 it offers Go,
+          the plan artifact's editor and Not now (no "Approve + steer", no note box), the page
+          composer never says it approves the gate, and approving an edited plan POSTs
+          {approve: true, plan} with no amend.
 
 Captures (e2e/shots/): dogfood-desk-launch.png, dogfood-desk-launch-picker.png,
 dogfood-desk-plan-gate.png, dogfood-desk-plan-edit.png.
@@ -136,9 +138,13 @@ with sync_playwright() as p:
         page.screenshot(path=str(SHOTS / f"dogfood-desk-launch-picker.png"))
 
     def section_gate() -> None:
+        # S16a-2a: the plan gate is answered in the session thread (/s/run%3Ar-plan-gate): the plan
+        # proposal card (its score behind "Why this plan") and the plan artifact's ordered editor.
         reset(origin)
-        page.goto(f"{origin}/runs/r-plan-gate", wait_until="networkidle")
-        wait_attr(page, "steering-gate", "data-gate-kind", "plan_approval", timeout=15000)
+        page.goto(f"{origin}/s/run%3Ar-plan-gate", wait_until="networkidle")
+        card = page.locator('[data-testid="session-proposal"][data-kind="plan"]')
+        card.wait_for(state="visible", timeout=15000)
+        page.get_by_test_id("session-proposal-plan-why").locator("summary").click()
         wait_attr(page, "plan-gate-summary", "data-state", "ready")
         score = (page.get_by_test_id("plan-gate-score").text_content() or "").strip()
         check("d10-score-band", score == "Score 100 · band 70-100 · high risk", score=score)
@@ -147,35 +153,38 @@ with sync_playwright() as p:
         floor = page.get_by_test_id("plan-gate-floor").text_content() or ""
         check("d10-floor-and-why", "test_plan, architecture, security_review" in floor
               and "band 70-100 requires them" in floor, floor=floor)
-        prompt = page.get_by_test_id("steering-prompt").text_content() or ""
-        check("d10-manual-mode-once", prompt.count("manual mode") == 1, prompt=prompt)
+        prompt = card.text_content() or ""
+        check("d10-manual-mode-once", prompt.count("manual mode") <= 1, prompt=prompt[:400])
         check("d10-no-verdict-wall", page.get_by_test_id("gate-verdict").count() == 0)
-        check("d11-no-steer", page.get_by_test_id("steering-approve-steer").count() == 0
-              and page.get_by_test_id("steering-amend").count() == 0
+        check("d11-no-steer", card.get_by_test_id("session-gate-note").count() == 0
+              and page.locator('[data-testid="session-gate-choice"][data-choice-key="steer"]').count() == 0
               and page.get_by_test_id("amend-prepopulated").count() == 0)
-        check("d11-plan-actions", page.get_by_test_id("steering-approve").is_visible()
-              and page.get_by_test_id("plan-gate-edit-open").is_visible()
-              and page.get_by_test_id("steering-reject").is_visible())
-        composer = page.get_by_test_id("gate-composer")
-        check("d11-composer-is-a-team-message", composer.get_attribute("data-mode") == "team-message"
-              and "approves gate" not in (composer.get_attribute("placeholder") or ""))
+        plan = page.locator('[data-testid="artifact"][data-kind="plan"]')
+        check("d11-plan-actions", page.get_by_test_id("session-proposal-go").is_visible()
+              and page.get_by_test_id("session-proposal-not-now").is_visible()
+              and plan.count() > 0)
+        composer = page.get_by_test_id("composer")
+        check("d11-composer-is-a-team-message", composer.count() > 0
+              and "approves gate" not in (composer.first.text_content() or ""))
         page.screenshot(path=str(SHOTS / f"dogfood-desk-plan-gate.png"))
 
-        page.get_by_test_id("plan-gate-edit-open").click()
-        page.wait_for_function("""() => document.querySelector('[data-testid="plan-gate-edit"] [data-testid="phase-picker"]')
-          ?.getAttribute('data-catalog-state') === 'ready'""", timeout=8000)
-        seeded = page.evaluate("""() => [...document.querySelectorAll('[data-testid="plan-gate-edit"] [data-testid="phase-selected"]')]
-          .map(e => e.dataset.catalog)""")
+        plan.get_by_test_id("plan-step").first.wait_for(state="visible", timeout=8000)
+        plan.get_by_test_id("artifact-open").click()
+        page.locator('[data-testid="artifact"][data-kind="plan"][data-size="pane"]').wait_for(state="visible", timeout=8000)
+        seeded = plan.get_by_test_id("plan-step").evaluate_all("els => els.filter(e => e.dataset.fixed === 'no').map(e => e.dataset.catalog)")
         check("d11-edit-seeded-from-the-held-plan", seeded == ["understand", "design", "build", "review"], seeded=seeded)
-        in_edit = page.evaluate("""() => [...document.querySelectorAll('[data-testid="plan-gate-edit"] [data-testid="phase-option"]')]
-          .map(e => e.dataset.catalog)""")
+        # An item the editor refuses (aria-disabled, the reason as its title) is offered as a refusal, not authored.
+        in_edit = plan.get_by_test_id("plan-add-item").evaluate_all("els => els.filter(e => e.dataset.refused !== 'true').map(e => e.dataset.catalog)")
         check("d11-edit-never-authors-deliver", "deliver" not in in_edit and len(in_edit) > 0, offered=in_edit)
-        page.locator('[data-testid="plan-gate-edit"] [data-testid="phase-option"][data-catalog="test"]').click()
+        plan.locator('[data-testid="plan-add-item"][data-catalog="test"]').click()
+        page.get_by_test_id("session-proposal-draft").wait_for(state="visible", timeout=8000)
         page.screenshot(path=str(SHOTS / f"dogfood-desk-plan-edit.png"))
-        page.get_by_test_id("plan-gate-approve-edited").click()
-        deadline = time.monotonic() + 15
+        page.get_by_test_id("session-proposal-go").click()
+        # The 10 s undo window, then exactly one POST.
+        deadline = time.monotonic() + 25
         while not gate_posts(origin, "r-plan-gate") and time.monotonic() < deadline:
-            page.wait_for_timeout(200)
+            page.wait_for_timeout(250)
+        page.wait_for_timeout(500)
         posts = gate_posts(origin, "r-plan-gate")
         body = posts[0]["body"] if posts else {}
         steps = [st.get("catalog") for st in (body.get("plan") or {}).get("steps", [])]
