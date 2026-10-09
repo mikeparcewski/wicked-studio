@@ -9,7 +9,7 @@
     "Forwarded ids count: a literal handed to a component through a testId-like prop or key (`testId`, `testid`, `tid`, `triggerTestId`), a parameter typed as a union of id literals, or a string literal marked `/* testid */` is listed as static/dynamic at the call site — the component renders it — so static + dynamic is the whole denominator of ids a surface can show."
   ],
   "version": 1,
-  "studioVersion": "0.6.7",
+  "studioVersion": "0.6.8",
   "counts": {
     "files": 173,
     "occurrences": 1925,

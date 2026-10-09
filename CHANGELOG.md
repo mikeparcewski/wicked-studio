@@ -12,8 +12,34 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.6.8] — 2026-10-09
+
+S19 names a workflow by typing it: `/workflow-<key>` in the composer (S19a, studio#614), and the workflow buttons give way to the same grammar on the launch form (S19b, studio#620). Also: gate-row follow-ups (studio#619), the System page's Log out through the daemon, linked issues on the launch form and surface fixes (studio#621), the composer and worker-pool follow-ups (studio#624), and the steering form's rule-type label (studio#625).
+
 ### Added
-- S19a: a workflow is named in the Desk composer by typing `/workflow-<key>` as the FIRST token, and Enter launches it (DES-STUDIO-REBUILD-001 §5.5/§5.7). The keys come from the daemon — `GET /workflows` ordinary defs plus the project scope's `GET /presets`, never authored in studio — and a system flow is never offered; `/workflow-` opens two groups, **Start work** (the workflow rows, first-token only) and **Add a step** (the phase rows), with the menu line derived from the catalog ("2 phases: recon → build"). Picking a row drops the token and names the work in one `/workflow-<key>` chip (a second pick replaces it, `×` or Backspace in the empty box removes it) plus an options row for the repository, the gate (the form's First gate / Every unit / No gates posture select) and Deliver; Enter with no chip takes the Ask path unchanged. The composer performs the launch itself — `POST /runs` with `{problem: <intent>, workflow, repoRef, projectId?, clisJson, humanConfirm, deliver, deliverGate?, chatId?}` — `humanConfirm` read off the SAME launch preview the form uses (the `before:N` shift past the PA's scope step included, so the composer and the form can never disagree), and it opens the new run's session. The no-repo refusal and its ready line moved from `ChatInput.tsx` into pure `launchModel.ts` helpers shared by the launch form (no behavior change); `capabilities.deliverGate` gates the `deliverGate: 'auto'` opt-out and `capabilities.chatIdOnLaunch` gates the `chatId` so a chat session keeps its provenance. Refused with no repository, nothing is posted.
+- S19a: a workflow is named in the Desk composer by typing `/workflow-<key>` as the FIRST token, and Enter launches it (DES-STUDIO-REBUILD-001 §5.5/§5.7). The keys come from the daemon — `GET /workflows` ordinary defs plus the project scope's `GET /presets`, never authored in studio — and a system flow is never offered; `/workflow-` opens two groups, **Start work** (the workflow rows, first-token only) and **Add a step** (the phase rows), with the menu line derived from the catalog ("2 phases: recon → build"). Picking a row drops the token and names the work in one `/workflow-<key>` chip (a second pick replaces it, `×` or Backspace in the empty box removes it) plus an options row for the repository, the gate (the form's First gate / Every unit / No gates posture select) and Deliver; Enter with no chip takes the Ask path unchanged. The composer performs the launch itself — `POST /runs` with `{problem: <intent>, workflow, repoRef, projectId?, clisJson, humanConfirm, deliver, deliverGate?, chatId?}` — `humanConfirm` read off the SAME launch preview the form uses (the `before:N` shift past the PA's scope step included, so the composer and the form can never disagree), and it opens the new run's session. The no-repo refusal and its ready line moved from `ChatInput.tsx` into pure `launchModel.ts` helpers shared by the launch form (no behavior change); `capabilities.deliverGate` gates the `deliverGate: 'auto'` opt-out and `capabilities.chatIdOnLaunch` gates the `chatId` so a chat session keeps its provenance. Refused with no repository, nothing is posted. (studio#614).
+- The launch form shows the linked issues a workflow launch will append — "N linked issues will be appended (≈K chars)", each issue with a leave-out toggle sent as `excludeLinkedIssues` (gated on `capabilities.linkedIssuesExclude`; a preview error is a line, never a blocker) (studio#596, crew#825; studio#621).
+- A failed run offers **Resume** in its session block (one `POST /runs/:id/resume`, the refusal said beside it); Retry stays the start-over (studio#615; studio#619).
+- The run record shows each unit's worker pool ("build: pool 3 · seated 2 · monitors claude#2"), and a pool seated short names its missing instances and the remedy (studio#617, wicked-core#810; studio#624).
+- "Fix with a note" on a read-only phase's floor gate — a seat other than the phase makes the fix, then only the floor re-runs; the `floor_fix` rework is narrated and the gate's floor note shown (studio#612, wicked-core#782; studio#619).
+
+### Changed
+- **S19b:** the workflow buttons go and the launch form takes `/workflow-<key>`. Removed: the launch options' "Choose workflow" select, the "Detected: <wf> workflow · Apply" banner and the Desk's "Start something" row. The launch form's problem box takes the composer's grammar (a leading `/` opens the same "Start work" menu; the pill reads `/workflow-<key>`); the Desk shows a quiet "Type / for workflows" hint under its composer with Capture beside it; ⌘K "New Build" puts `/workflow-` in the composer with the menu open; a saved preset's line says "launch it with /workflow-<name>". Removed testids map to successors (`launch-workflow`, `desk-start-chip` → `composer-menu-item`; `desk-start-row` → `composer-hint`) (studio#620).
+- System › CLI seats › **Log out** runs the seat's own logout through the daemon (crew 0.8.9 `POST /seats/:cli/logout`); studio no longer derives a command, and a 404 hides the button. The api-types pin is 0.99.0 (studio#621).
+- The session gate row reads the engine's restored-tree gate as a **retry** (Retry / adopt the edit / Reassign / Stop, no Send back) (studio#600; studio#619).
+- No Send back is preselected when an agent judge refused a review its evaluator passed (studio#601; studio#619).
+- A pre-run gate reads "Start the <step>?", no longer like the step's output gate (studio#606; studio#619).
+- A deliver gate re-opened after a failed hand-over says so ("The last hand-over didn't work", "Deliver again"), every deliver card can **Stop the run**, and "Not now" says the question stays open (studio#606; studio#621).
+
+### Fixed
+- A gate answer past its undo window survives a tab close (`keepalive`), and leaving the page while one is in flight asks first (studio#606; studio#621).
+- No Reassign on a Tool unit's gate (studio#606; studio#619).
+- Everything › Projects is styled: the Active / Archived chip lens, a titled card, button controls, no dangling separator (studio#613; studio#621).
+- The version lens's "Back to the working version" is clickable, and version rows read "18h · Make this the working version" (studio#616; studio#621).
+- The look-underneath sheet's Activity lines and the QE acceptance reason draw home paths as `~/` (studio#618; studio#621).
+- ⌘K New Demo puts "Make a demo of " in the Desk composer (studio#622; studio#624).
+- The composer's `/` menu opens again for a new token after Escape (studio#623; studio#624).
+- The steering rule form shows the rule type as a read-only label instead of a select that was disabled for every rule (coverage exception X6; studio#625).
 
 ## [0.6.7] — 2026-10-09
 
@@ -1901,7 +1927,8 @@ The merged interactive layer: wicked-interactive's UI moved into this skin (DES-
   `git subtree split` (92 commits).
 - The SPA as a pure HTTP/WS client of the wicked-crew daemon: runs, gates, live CoreEvents.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.6.7...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.6.8...HEAD
+[0.6.8]: https://github.com/mikeparcewski/wicked-studio/compare/v0.6.7...v0.6.8
 [0.6.7]: https://github.com/mikeparcewski/wicked-studio/compare/v0.6.6...v0.6.7
 [0.6.6]: https://github.com/mikeparcewski/wicked-studio/compare/v0.6.5...v0.6.6
 [0.6.5]: https://github.com/mikeparcewski/wicked-studio/compare/v0.6.4...v0.6.5
