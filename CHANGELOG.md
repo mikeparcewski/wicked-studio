@@ -12,6 +12,30 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.6.7] — 2026-10-09
+
+S16a moves the run page into the session thread and deletes the old shells. The run page's controls come first (S16a-1, studio#602), then its addresses (S16a-2, studio#605). The run page itself is deleted (S16a-3, studio#607). The project shell's addresses move onto the Desk and every question is answered in its thread (S16a-4a…4g, studio#608). The project shell, the old gate card and the chat page are deleted (S16a-4h/4i, studio#609). Also: the session gate row answers the engine's new `consent` gate (studio#610, crew#888), and a NOT PASS gate's wording follows the reviewer's own verdict (studio#604).
+
+### Added
+- The session gate row answers the engine's `consent` gate (a `consent_before` phase such as the mcp-server install) with **Approve** (gives consent, runs it) or **Decline** (cancels without running it). Nothing is preselected (studio#610, crew#888).
+- **S16a-1a…1d:** the run page's controls now live in the session thread. A finished run opened fresh shows its hand-over receipt. A stranded run gets a "Deliver — open a PR" door, which the Desk row opens. The gate row carries the recommended move's consequence, the creator seat's record, the standing-order offer, "Why it failed", the source line and "Rerun from <step>". The plan card carries the plan's score. The run record (why it stopped, amendments, short council, the verdict in the Steps tab, watch lines, Jump in) is in the thread. Retry, Archive, Draft update and the technical handles are under the session. The mode pill and PreGateAnnotate's durable note are not carried over (studio#602).
+- **S16a-4a…4g:** the project shell's addresses move onto the Desk (studio#608):
+  - A grown artifact has an address (`/s/:id/a/:key?size=`). At full size it lists its versions, with a read-only `?v=N` lens and "Make this the working version".
+  - Documents and demo videos open in their session. Made gains "New document" and "Delete…".
+  - A chat is its session: `/chat/:id` lands on `/s/:id`, and a new chat or build starts in the Desk composer with the project's `@` chip.
+  - `/p/:pid/build` lands on the project's Sessions, and `/p/:pid/campaigns` on Testing scoped to the project.
+  - Every question a run or a chat asks is answered in its session thread. The Ask dock, the Steering dock and the Testing panels show "Answer in its thread ›" instead of a gate card.
+
+### Changed
+- **S16a-2a…2d:** the run page's address moved. `/runs/:id`, `/runs/:id/timeline` and `/p/:pid/build/:run` now land on the run's session thread with their query and fragment, and Back never re-enters the old address. Every Desk link, sheet link, palette entry, Everything link and MCP usage link opens the session. The gate row says a choice's consequence before you take it, reads a head-cut verdict whole, and lets typed letters reach the composer. `wave1_switch` and `wave2b_switch` are retired (studio#605).
+
+### Fixed
+- A NOT PASS gate reads "the reviewer said FAIL" only when the reviewer's own verdict denied the step, not when the agent judge refused a reviewer PASS (studio#604, #601).
+
+### Removed
+- **S16a-3:** the run page. ChatPanel's run view goes, along with FailureBanner, RunTimeline, UnitList, WorkUnitDetail, FollowUpComposer, RerunPreview and AgentTerminal and their 19 suites. The launch form moves to `LaunchPanel`. Each of the 51 removed testids names its session successor (studio#607).
+- **S16a-4h + 4i:** the project shell is deleted: ProjectShell, the mode switcher, the Build dashboard, Document mode (canvas, thread, panel, version strip, takes), Video mode and the project Tests view, with 37 suites, 8 `--all`-only journeys and 260 testids. The old gate card and the chat page are deleted too: SteeringGate, ApprovalDock and GroupChat, with 33 suites and 103 testids. Their gate behaviours are held by the session's GateRow and ProposalCard pins. The chat-open helpers the Ask dock uses move to `board/chatOpen.ts` (studio#609).
+
 ## [0.6.6] — 2026-10-08
 
 The Desk is the only shell (S18d, studio#599): the classic skins' remaining pieces of value moved onto the
@@ -1874,7 +1898,8 @@ The merged interactive layer: wicked-interactive's UI moved into this skin (DES-
   `git subtree split` (92 commits).
 - The SPA as a pure HTTP/WS client of the wicked-crew daemon: runs, gates, live CoreEvents.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.6.6...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.6.7...HEAD
+[0.6.7]: https://github.com/mikeparcewski/wicked-studio/compare/v0.6.6...v0.6.7
 [0.6.6]: https://github.com/mikeparcewski/wicked-studio/compare/v0.6.5...v0.6.6
 [0.6.5]: https://github.com/mikeparcewski/wicked-studio/compare/v0.6.4...v0.6.5
 [0.6.4]: https://github.com/mikeparcewski/wicked-studio/compare/v0.6.3...v0.6.4
