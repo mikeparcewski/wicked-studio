@@ -112,6 +112,21 @@ describe('the 503 card — the engine\'s finding and the remedy controls (F-A45-
     expect(card.textContent).not.toContain('/Users/');
   });
 
+  it("the daemon's sentences — the skills.garden finding and the quoted 503 body — print ~/… mid-sentence, never the home directory (#560)", async () => {
+    const GARDEN = 'wicked-garden 12.38.1 (the installed plugin at /Users/reel-operator/.claude/plugins/cache/wicked-garden/wicked-garden/12.38.1) is older than the required 12.40.0';
+    const NOT_SEEDED = 'skills root /Users/reel-operator/.wicked-crew/state/skills is not seeded — no manifest.json.';
+    const diag = { skills: { ...DIAG_CONFIG_ERROR.skills, findings: [{ kind: 'skills.garden', severity: 'error', message: GARDEN }] } };
+    const card = await renderUnavailable({
+      'GET /skills': () => Promise.reject(new ApiError(503, NOT_SEEDED)),
+      'GET /diagnostics': () => Promise.resolve(diag),
+    });
+    const finding = await within(card).findByTestId('skills-recovery-finding');
+    expect(finding).toHaveTextContent('(the installed plugin at ~/.claude/plugins/cache/wicked-garden/wicked-garden/12.38.1) is older');
+    expect(card).toHaveTextContent('skills root ~/.wicked-crew/state/skills is not seeded');
+    expect(card.textContent).not.toContain('/Users/');
+    expect(card.textContent).not.toContain('reel-operator');
+  });
+
   it('a daemon without diagnostics: the controls still stand, with the honest "no engine word" line', async () => {
     wire({ 'GET /skills': unavailable503 });
     render(<SkillsPage navigate={() => {}} />);

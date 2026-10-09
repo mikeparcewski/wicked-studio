@@ -34,7 +34,7 @@ import { SkillFilesMapModal } from './SkillFilesMapModal.js';
 import { SkillFindings } from './SkillFindings.js';
 import { SkillsGrid, SKILLS_FACETS_DEFAULT, type SkillsFacets } from './SkillsGrid.js';
 import type { SkillsWriter } from './skillsWriter.js';
-import { useDisplayPath } from '../hooks/useHomePath.js';
+import { useDisplayPath, useDisplayText } from '../hooks/useHomePath.js';
 
 /**
  * The Skills surface (`/skills`, the skills keystone) — a FILE MANAGER over the daemon's one
@@ -108,6 +108,9 @@ export function SkillsPage({ navigate, search = '' }: {
   search?: string;
 }): React.ReactElement {
   const showPath = useDisplayPath();
+  // #560: the daemon's sentences (a finding, the 503 body, a recovery error) embed home paths
+  // mid-sentence — the same `~/…` rule as the path fields, over free text.
+  const showText = useDisplayText();
   const [catalog, setCatalog] = useState<SkillsCatalog | null>(null);
   const [state, setState] = useState<LoadState>({ kind: 'loading' });
   const [facets, setFacets] = useState<SkillsFacets>(SKILLS_FACETS_DEFAULT);
@@ -541,7 +544,7 @@ export function SkillsPage({ navigate, search = '' }: {
                 {engine.current !== null && ` · gen ${engine.current.gen}`}
                 {engine.findings.map((f, i) => (
                   <span key={`${f.kind}-${i}`} data-testid="skills-engine-finding" data-kind={f.kind} data-severity={f.severity} className="block">
-                    {f.kind} · {f.severity} · {f.message}
+                    {f.kind} · {f.severity} · {showText(f.message)}
                   </span>
                 ))}
               </p>
@@ -602,7 +605,7 @@ export function SkillsPage({ navigate, search = '' }: {
               the published snapshot fails verification, or the daemon booted without the skills seam. Nothing is shown as an
               empty catalog. The daemon says:
             </p>
-            <p className="font-mono text-[11px]" style={{ color: 'var(--ink-high)' }}>{state.message}</p>
+            <p className="font-mono text-[11px]" style={{ color: 'var(--ink-high)' }}>{showText(state.message)}</p>
 
             {/* F-A45-001: what the engine is being handed and WHY (diagnostics.skills), then the
                 remedy the finding names — Refresh baseline / Publish — with pending + result states. */}
@@ -627,7 +630,7 @@ export function SkillsPage({ navigate, search = '' }: {
                   ) : (
                     engine.findings.map((f, i) => (
                       <p key={`${f.kind}-${i}`} data-testid="skills-recovery-finding" data-kind={f.kind} data-severity={f.severity} className="text-[11px] font-mono" style={{ color: f.severity === 'error' ? 'var(--status-fail)' : 'var(--status-gate)', overflowWrap: 'anywhere' }}>
-                        {f.kind} · {f.severity} · {f.message}
+                        {f.kind} · {f.severity} · {showText(f.message)}
                       </p>
                     ))
                   )}
@@ -675,7 +678,7 @@ export function SkillsPage({ navigate, search = '' }: {
 
               {recovery.error !== null && (
                 <p data-testid="skills-recovery-error" className="rounded px-2 py-1 text-[11px]" style={{ background: 'var(--status-fail-dim)', color: 'var(--status-fail)', overflowWrap: 'anywhere' }}>
-                  {recovery.error}
+                  {showText(recovery.error)}
                 </p>
               )}
               {recovery.result !== null && (
@@ -685,7 +688,7 @@ export function SkillsPage({ navigate, search = '' }: {
           </div>
         ) : state.kind === 'failed' ? (
           <p data-testid="skills-error" className="rounded px-2 py-1 text-xs" style={{ background: 'var(--status-fail-dim)', color: 'var(--status-fail)' }}>
-            {state.message}
+            {showText(state.message)}
           </p>
         ) : (
           <>
@@ -742,7 +745,7 @@ export function SkillsPage({ navigate, search = '' }: {
             {/* A comparison the daemon could not make is STATED, never read as "current". */}
             {drift?.state === 'unknown' && drift.reason !== null && (
               <p data-testid="skills-drift-unknown" className="text-[11px]" style={{ color: 'var(--ink-dim)' }}>
-                Whether this root is behind the installed plugin could not be determined — {drift.reason}.
+                Whether this root is behind the installed plugin could not be determined — {showText(drift.reason)}.
               </p>
             )}
             <KpiBand testId="skills-kpis">
@@ -801,7 +804,7 @@ export function SkillsPage({ navigate, search = '' }: {
                 style={{ background: 'var(--surface-rail)', border: '1px solid var(--status-gate)', color: 'var(--ink-muted)' }}
               >
                 <span className="font-semibold" style={{ color: 'var(--status-gate)' }}>The catalog could not be re-read.</span>
-                <span>{stale} — what is shown may be behind the daemon; writes wait until a re-read succeeds.</span>
+                <span>{showText(stale)} — what is shown may be behind the daemon; writes wait until a re-read succeeds.</span>
                 <span className="flex-1" />
                 <button
                   data-testid="skills-stale-retry"
@@ -825,7 +828,7 @@ export function SkillsPage({ navigate, search = '' }: {
             )}
             {pageError !== null && (
               <p data-testid="skills-page-error" className="rounded px-3 py-2 text-[11px]" style={{ background: 'var(--status-fail-dim)', color: 'var(--status-fail)' }}>
-                {pageError}
+                {showText(pageError)}
               </p>
             )}
             {pageResult !== null && (
@@ -896,7 +899,7 @@ export function SkillsPage({ navigate, search = '' }: {
         >
           <span className="font-semibold" style={{ color: 'var(--status-gate)' }}>The skills catalog changed under this page.</span>
           <span>
-            Nothing was written{conflict !== '' ? ` — ${conflict}` : ''}. Reload to pick up the current revision;
+            Nothing was written{conflict !== '' ? ` — ${showText(conflict)}` : ''}. Reload to pick up the current revision;
             unsaved edits in the drawer are kept as drafts.
           </span>
           <span className="flex-1" />
