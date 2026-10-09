@@ -15,9 +15,9 @@ dogfood_fixes_test.py — the dogfood findings of 2026-09-27 on the launch scree
           edit the plan, reject (no "Approve + steer", no note box), the bottom composer is a team
           message, and approving an edited plan POSTs {approve: true, plan} with no amend.
 
-Captures (e2e/shots/): dogfood-<skin>-launch.png, dogfood-<skin>-launch-picker.png,
-dogfood-<skin>-plan-gate.png, dogfood-<skin>-plan-edit.png.
-Env: FEEDBACK_PORT (default 4391), STUDIO_SKIN. JSON report; exit 0/1.
+Captures (e2e/shots/): dogfood-desk-launch.png, dogfood-desk-launch-picker.png,
+dogfood-desk-plan-gate.png, dogfood-desk-plan-edit.png.
+Env: FEEDBACK_PORT (default 4391). JSON report; exit 0/1.
 """
 
 import json
@@ -26,15 +26,13 @@ import sys
 import time
 import urllib.request
 
-from uxfix_fixture import (DEFAULT_APPEARANCE, HIDE_GATE_TOASTS, REPO, STUDIO_SKIN, ensure_build,
+from uxfix_fixture import (DEFAULT_APPEARANCE, HIDE_GATE_TOASTS, REPO, ensure_build,
                            set_fixture, start_server)
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4391"))
 W, H = 1440, 700
 SHOTS = REPO / "e2e" / "shots"
-SKIN = STUDIO_SKIN
-
-report: dict = {"ok": False, "skin": SKIN, "steps": {}}
+report: dict = {"ok": False, "steps": {}}
 
 
 class SectionFailed(Exception):
@@ -64,7 +62,7 @@ def gate_posts(origin: str, rid: str) -> list:
 
 def reset(origin: str) -> None:
     set_fixture(origin, **{"team_plan": True, "plan_gate": True, "repo": True, "reset_gate_posts": True,
-                           "appearance": {**DEFAULT_APPEARANCE, "skin": SKIN}})
+                           "appearance": {**DEFAULT_APPEARANCE}})
 
 
 def wait_attr(page, testid: str, name: str, value: str, timeout: int = 8000) -> None:
@@ -112,7 +110,7 @@ with sync_playwright() as p:
               and "Upload files" not in (dialog.text_content() or ""))
         page.get_by_role("button", name="Open launch options").click()
         page.get_by_test_id("launch-problem").fill("add a rate limiter to the upload endpoint")
-        page.screenshot(path=str(SHOTS / f"dogfood-{SKIN}-launch.png"))
+        page.screenshot(path=str(SHOTS / f"dogfood-desk-launch.png"))
 
         page.get_by_test_id("phase-picker-toggle").click()
         check("d4-deliver-offered-without-a-repo", "deliver" in offered(page), offered=offered(page))
@@ -135,7 +133,7 @@ with sync_playwright() as p:
         check("d2-deliver-gate-promised", "WITHOUT a deliver gate" not in notice
               and page.get_by_test_id("launch-confirm-deliver").get_attribute("data-deliver-gate") == "human",
               notice=notice)
-        page.screenshot(path=str(SHOTS / f"dogfood-{SKIN}-launch-picker.png"))
+        page.screenshot(path=str(SHOTS / f"dogfood-desk-launch-picker.png"))
 
     def section_gate() -> None:
         reset(origin)
@@ -161,7 +159,7 @@ with sync_playwright() as p:
         composer = page.get_by_test_id("gate-composer")
         check("d11-composer-is-a-team-message", composer.get_attribute("data-mode") == "team-message"
               and "approves gate" not in (composer.get_attribute("placeholder") or ""))
-        page.screenshot(path=str(SHOTS / f"dogfood-{SKIN}-plan-gate.png"))
+        page.screenshot(path=str(SHOTS / f"dogfood-desk-plan-gate.png"))
 
         page.get_by_test_id("plan-gate-edit-open").click()
         page.wait_for_function("""() => document.querySelector('[data-testid="plan-gate-edit"] [data-testid="phase-picker"]')
@@ -173,7 +171,7 @@ with sync_playwright() as p:
           .map(e => e.dataset.catalog)""")
         check("d11-edit-never-authors-deliver", "deliver" not in in_edit and len(in_edit) > 0, offered=in_edit)
         page.locator('[data-testid="plan-gate-edit"] [data-testid="phase-option"][data-catalog="test"]').click()
-        page.screenshot(path=str(SHOTS / f"dogfood-{SKIN}-plan-edit.png"))
+        page.screenshot(path=str(SHOTS / f"dogfood-desk-plan-edit.png"))
         page.get_by_test_id("plan-gate-approve-edited").click()
         deadline = time.monotonic() + 15
         while not gate_posts(origin, "r-plan-gate") and time.monotonic() < deadline:

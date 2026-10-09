@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 desk_answer_test.py — ANSWER A QUESTION IN ITS ROW (DES-STUDIO-REBUILD-001 §11 S5), 1440x700,
-under STUDIO_SKIN=desk. REAL 10 s undo window throughout.
+on the Desk. REAL 10 s undo window throughout.
 
 The wave-1 corpus with a SIMPLE gate waiting on b1 (unit 3), answered from its Desk row:
 
@@ -34,13 +34,13 @@ import sys
 import time
 import urllib.request
 
-from uxfix_fixture import HIDE_GATE_TOASTS, REPO, STUDIO_SKIN, ensure_build, set_fixture, start_server
+from uxfix_fixture import HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4348"))
 W, H = 1440, 700
 SHOTS = REPO / "e2e" / "shots"
 
-report: dict = {"ok": False, "skin": STUDIO_SKIN, "steps": {}}
+report: dict = {"ok": False, "steps": {}}
 
 
 def fail(step: str, why) -> None:
@@ -56,8 +56,6 @@ def check(step: str, ok: bool, **detail) -> None:
         sys.exit(1)
 
 
-if STUDIO_SKIN != "desk":
-    fail("skin", f"desk journeys run under STUDIO_SKIN=desk, not {STUDIO_SKIN}")
 
 
 def server_posts(origin: str, rid: str = "b1") -> list:

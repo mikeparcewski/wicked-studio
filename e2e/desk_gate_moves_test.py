@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-desk_gate_moves_test.py — moves made from a gate say what happened, under STUDIO_SKIN=desk at 1440x700
+desk_gate_moves_test.py — moves made from a gate say what happened, on the Desk at 1440x700
 against the in-process fixture:
 
   1. #480 REASSIGN IS ONE MOVE: on a run paused at a seat-failure escalation (unit 1 failed on codex),
@@ -24,13 +24,13 @@ import os
 import sys
 import urllib.request
 
-from uxfix_fixture import REPO, STUDIO_SKIN, ensure_build, set_fixture, start_server
+from uxfix_fixture import REPO, ensure_build, set_fixture, start_server
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4358"))
 W, H = 1440, 700
 SHOTS = REPO / "e2e" / "shots"
 
-report: dict = {"ok": False, "skin": STUDIO_SKIN, "steps": {}}
+report: dict = {"ok": False, "steps": {}}
 
 
 def fail(step: str, why) -> None:
@@ -46,8 +46,6 @@ def check(step: str, ok: bool, **detail) -> None:
         sys.exit(1)
 
 
-if STUDIO_SKIN != "desk":
-    fail("skin", f"desk journeys run under STUDIO_SKIN=desk, not {STUDIO_SKIN}")
 
 dist = ensure_build(fail)
 origin = start_server(PORT, dist)

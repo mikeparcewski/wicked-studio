@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 live_ask_path_test.py — ASK-S1/S2 LIVE (DES-ASK-TEAM-CHAT-001 §9 "E2E"; DES-STUDIO-REBUILD-001
-Amendment 6) at 1440x700 under STUDIO_SKIN=desk, against a REAL wicked-crew daemon (crew ≥ 0.8.1 on
+Amendment 6) at 1440x700 on the Desk, against a REAL wicked-crew daemon (crew ≥ 0.8.1 on
 core-ts ≥ 0.7.38, `capabilities.askPath`) with real CLI seats — not the fixture.
 
 Operator-run (LIVE list, never CI): point it at a running daemon with CREW_ORIGIN (default

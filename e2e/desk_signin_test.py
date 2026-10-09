@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 desk_signin_test.py — CLI SIGN-IN IS OBVIOUS (DES-STUDIO-REBUILD-001 Amendment 5, decision 5) at
-1440x700 under STUDIO_SKIN=desk.
+1440x700 on the Desk.
 
 Against the in-process fixture, whose roster has a seat whose sign-in lapsed (codex) and, through the
 `roster_login_lines` / `roster_signed_in` switches, the daemon's own login line and a later re-read:
@@ -26,7 +26,7 @@ import json
 import os
 import sys
 
-from uxfix_fixture import HIDE_GATE_TOASTS, REPO, STUDIO_SKIN, ensure_build, set_fixture, start_server
+from uxfix_fixture import HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4368"))
 W, H = 1440, 700
@@ -35,7 +35,7 @@ SHOTS = REPO / "e2e" / "shots"
 # draws it as ~/… (studio#467's rule) — a home-directory spelling `displayText` recognises.
 LINE = 'CODEX_HOME="/Users/reel-operator/.wicked-worker/codex" codex login'
 
-report: dict = {"ok": False, "skin": STUDIO_SKIN, "steps": {}}
+report: dict = {"ok": False, "steps": {}}
 
 
 def fail(step: str, why) -> None:
@@ -51,8 +51,6 @@ def check(step: str, ok: bool, **detail) -> None:
         sys.exit(1)
 
 
-if STUDIO_SKIN != "desk":
-    fail("skin", f"desk journeys run under STUDIO_SKIN=desk, not {STUDIO_SKIN}")
 
 dist = ensure_build(fail)
 origin = start_server(PORT, dist)

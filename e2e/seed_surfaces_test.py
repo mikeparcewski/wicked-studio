@@ -1917,7 +1917,7 @@ class Rig:
         # record past the flip (`skin_migrated`), which the app honours as chosen.
         skin_status, _ = api("PUT", "/settings", {"studio.appearance": {
             "accent_h": 230, "accent_s": 74, "accent_l": 68, "logo_url": None, "theme": "dark",
-            "site_name": None, "skin": "studio", "skin_migrated": True}})
+            "site_name": None}})
         if skin_status != 200:
             raise SetupFailure("daemon", f"PUT /settings studio.appearance (classic skin) → {skin_status}")
         _, diagnostics = api("GET", "/diagnostics")

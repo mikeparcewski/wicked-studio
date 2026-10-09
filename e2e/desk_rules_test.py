@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 desk_rules_test.py — DC-S8 (DES-DECISION-CAPTURE §3 B10, B11): the considered line on a reply and on a
-run step, and ORIGIN + "Where it was considered" on the rule page, at 1440x700 under STUDIO_SKIN=desk.
+run step, and ORIGIN + "Where it was considered" on the rule page, at 1440x700 on the Desk.
 
 Drives the built UI against the in-process fixture's sessions corpus plus `decisions` (chat-pay's
 turns with crew's `/considered` reads on the DC-S7 wire) and `steering_rules` (GET /governance/rules
@@ -34,13 +34,13 @@ import os
 import sys
 import time
 
-from uxfix_fixture import HIDE_GATE_TOASTS, REPO, STUDIO_SKIN, ensure_build, set_fixture, start_server
+from uxfix_fixture import HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4357"))
 W, H = 1440, 700
 SHOTS = REPO / "e2e" / "shots"
 
-report: dict = {"ok": False, "skin": STUDIO_SKIN, "steps": {}}
+report: dict = {"ok": False, "steps": {}}
 
 
 def fail(step: str, why) -> None:
@@ -56,8 +56,6 @@ def check(step: str, ok: bool, **detail) -> None:
         sys.exit(1)
 
 
-if STUDIO_SKIN != "desk":
-    fail("skin", f"desk journeys run under STUDIO_SKIN=desk, not {STUDIO_SKIN}")
 
 dist = ensure_build(fail)
 origin = start_server(PORT, dist)

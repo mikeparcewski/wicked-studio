@@ -331,7 +331,7 @@ try:
     # does — a stored record past the flip (`skin_migrated`), which the app honours as chosen.
     status, _, _ = http_json("PUT", f"{API}/settings", {"studio.appearance": {
         "accent_h": 230, "accent_s": 74, "accent_l": 68, "logo_url": None, "theme": "dark",
-        "site_name": None, "skin": "studio", "skin_migrated": True}}, origin=STUDIO_ORIGIN)
+        "site_name": None}}, origin=STUDIO_ORIGIN)
     if status != 200:
         fail("classic-skin", f"PUT /settings studio.appearance → {status}")
     report["steps"]["classic-skin"] = {"ok": True}

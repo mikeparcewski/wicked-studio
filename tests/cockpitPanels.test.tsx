@@ -3,7 +3,6 @@ import { render, screen } from '@testing-library/react';
 import { mergeRunModel, type RunModel } from '../src/hooks/useRunModel.js';
 import type { CoreEvent } from '../src/api/types.js';
 import { makeView, makeUnit } from './factories.js';
-import { PhaseLadder } from '../src/components/PhaseLadder.js';
 import { DecisionsLedger } from '../src/components/DecisionsLedger.js';
 import { Burn } from '../src/components/Burn.js';
 import { DataUsed } from '../src/components/DataUsed.js';
@@ -30,40 +29,6 @@ function modelWith(events: CoreEvent[] = []): RunModel {
   ]);
   return mergeRunModel(view, events);
 }
-
-describe('PhaseLadder (FR-1)', () => {
-  it('renders each unit as a track node with status', () => {
-    render(<PhaseLadder model={modelWith()} />);
-    expect(screen.getAllByTestId('ladder-unit')).toHaveLength(2);
-    expect(screen.getByTestId('phase-ladder')).toHaveTextContent('recon');
-  });
-
-  it('renders an insight-only ord as neutral "resolving…", not a green BUILD tile (S2)', () => {
-    // A gateEvaluated for ord 9 the snapshot never described mints a phantom unit — it must
-    // NOT show an invented BUILD stage/pending status as if it were real.
-    const model = modelWith([
-      {
-        type: 'gateEvaluated',
-        session: 'run-1',
-        ord: 9,
-        criterion: null,
-        hasDeterministicFloor: false,
-        deterministicPass: false,
-        agentVerdict: null,
-        agentReasoning: null,
-        evaluatorPass: null,
-        denialReason: null,
-        combined: true,
-      },
-    ]);
-    render(<PhaseLadder model={model} />);
-    const phantom = document.querySelector('[data-ord="9"]');
-    expect(phantom).not.toBeNull();
-    expect(phantom).toHaveAttribute('data-resolving', 'true');
-    expect(phantom).toHaveTextContent('resolving');
-    expect(phantom).not.toHaveTextContent(/build/i);
-  });
-});
 
 describe('DecisionsLedger (FR-5)', () => {
   it('renders routing (council) + skill_ref + live gate detail', () => {

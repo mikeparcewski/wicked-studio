@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 desk_repo_page_test.py — the repo page says what is true about its code graph (studio#461), under
-STUDIO_SKIN=desk at 1440x700 against the in-process fixture's registered repo:
+the Desk at 1440x700 against the in-process fixture's registered repo:
 
   1. A BUILT GRAPH WITH NO CODE (a Markdown-only repo: 7 symbols, 2 files, nothing to rank): the
      hotspots and the language mix say so, and nothing on the page says "run onboarding".
@@ -16,13 +16,13 @@ import json
 import os
 import sys
 
-from uxfix_fixture import REPO, STUDIO_SKIN, ensure_build, set_fixture, start_server
+from uxfix_fixture import REPO, ensure_build, set_fixture, start_server
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4359"))
 W, H = 1440, 700
 SHOTS = REPO / "e2e" / "shots"
 
-report: dict = {"ok": False, "skin": STUDIO_SKIN, "steps": {}}
+report: dict = {"ok": False, "steps": {}}
 
 
 def fail(step: str, why) -> None:
@@ -38,8 +38,6 @@ def check(step: str, ok: bool, **detail) -> None:
         sys.exit(1)
 
 
-if STUDIO_SKIN != "desk":
-    fail("skin", f"desk journeys run under STUDIO_SKIN=desk, not {STUDIO_SKIN}")
 
 dist = ensure_build(fail)
 origin = start_server(PORT, dist)

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 desk_everything_test.py — "SEE EVERYTHING" and the §5.4 moves (DES-STUDIO-REBUILD-001 §5.4, slice
-S15c) at 1440x700 under STUDIO_SKIN=desk.
+S15c) at 1440x700 on the Desk.
 
 Against the in-process fixture (wave-1 + wave-2b corpus: alpha/beta/gamma with runs, one failed):
 
@@ -25,13 +25,13 @@ import os
 import sys
 import urllib.parse
 
-from uxfix_fixture import HIDE_GATE_TOASTS, REPO, STUDIO_SKIN, ensure_build, set_fixture, start_server
+from uxfix_fixture import HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4367"))
 W, H = 1440, 700
 SHOTS = REPO / "e2e" / "shots"
 
-report: dict = {"ok": False, "skin": STUDIO_SKIN, "steps": {}}
+report: dict = {"ok": False, "steps": {}}
 
 
 def fail(step: str, why) -> None:
@@ -47,8 +47,6 @@ def check(step: str, ok: bool, **detail) -> None:
         sys.exit(1)
 
 
-if STUDIO_SKIN != "desk":
-    fail("skin", f"desk journeys run under STUDIO_SKIN=desk, not {STUDIO_SKIN}")
 
 dist = ensure_build(fail)
 origin = start_server(PORT, dist)

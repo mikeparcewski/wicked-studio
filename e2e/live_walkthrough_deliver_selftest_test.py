@@ -2,7 +2,7 @@
 """
 live_walkthrough_deliver_selftest_test.py — S13: the LIVE walkthrough + deliver script
 (`e2e/live_walkthrough_deliver_test.py`) proven over the in-process fixture's corpus under
-STUDIO_SKIN=desk, so the proof lane runs a script whose UI logic CI has already exercised.
+the Desk, so the proof lane runs a script whose UI logic CI has already exercised.
 
 Runs the live script as a subprocess, three times, pointed at the fixture's origin:
   1. r-walk-fail   legs inline,failed,fix — "✗ Failed at 0:41", Watch → pane at 0:41 → ⤢ full (the same
@@ -26,10 +26,10 @@ import subprocess
 import sys
 import urllib.request
 
-from uxfix_fixture import REPO, STUDIO_SKIN, ensure_build, set_fixture, start_server
+from uxfix_fixture import REPO, ensure_build, set_fixture, start_server
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4363"))
-report: dict = {"ok": False, "skin": STUDIO_SKIN, "steps": {}}
+report: dict = {"ok": False, "steps": {}}
 
 
 def fail(step: str, why) -> None:
@@ -45,8 +45,6 @@ def check(step: str, ok: bool, **detail) -> None:
         sys.exit(1)
 
 
-if STUDIO_SKIN != "desk":
-    fail("skin", f"desk journeys run under STUDIO_SKIN=desk, not {STUDIO_SKIN}")
 
 dist = ensure_build(fail)
 origin = start_server(PORT, dist)

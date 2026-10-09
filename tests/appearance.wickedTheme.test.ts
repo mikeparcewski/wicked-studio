@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
  * The wicked themes (DES-STUDIO-REBUILD-001 S1, DESIGN-simple §1a): `wicked-light` and
  * `wicked-dark` are THEMES beside `dark` and `light`, carried on `data-theme`. Choosing one
  * writes the harbor accent preset (#224A5E) into the three accent primitives, so the accent
- * picker keeps owning `--accent` afterwards. A skin never selects a theme (§5.1, review S9).
+ * picker keeps owning `--accent` afterwards.
  * jsdom resolves no custom properties: the computed `--accent` half is
  * e2e/wicked_theme_test.py.
  */
@@ -111,21 +111,6 @@ describe('chooseTheme', () => {
     const a = useAppearanceStore.getState().appearance;
     expect([a.accent_h, a.accent_s, a.accent_l]).toEqual([230, 74, 68]);
     expect(root().hasAttribute('data-theme')).toBe(false);
-  });
-});
-
-describe('a skin never selects a theme (§5.1)', () => {
-  it('changing the skin under every theme leaves the theme and the accent as they were', () => {
-    for (const t of THEMES) {
-      useAppearanceStore.getState().chooseTheme(t.id);
-      const before = useAppearanceStore.getState().appearance;
-      useAppearanceStore.getState().update({ skin: 'compact-rail' });
-      useAppearanceStore.getState().update({ skin: 'studio' });
-      const after = useAppearanceStore.getState().appearance;
-      expect(after.theme).toBe(t.id);
-      expect([after.accent_h, after.accent_s, after.accent_l]).toEqual([before.accent_h, before.accent_s, before.accent_l]);
-      expect(root().getAttribute('data-theme') ?? 'dark').toBe(t.id);
-    }
   });
 });
 

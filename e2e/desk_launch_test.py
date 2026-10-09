@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-desk_launch_test.py — the launch form says what the launch will be, under STUDIO_SKIN=desk at 1440x700
+desk_launch_test.py — the launch form says what the launch will be, on the Desk at 1440x700
 against the in-process fixture (team_plan + repo):
 
   1. #431 A SLOW PREVIEW SAYS SO: with POST /plans/preview held 12 s, the preview says the engine
@@ -18,13 +18,13 @@ import json
 import os
 import sys
 
-from uxfix_fixture import REPO, STUDIO_SKIN, ensure_build, set_fixture, start_server
+from uxfix_fixture import REPO, ensure_build, set_fixture, start_server
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4360"))
 W, H = 1440, 700
 SHOTS = REPO / "e2e" / "shots"
 
-report: dict = {"ok": False, "skin": STUDIO_SKIN, "steps": {}}
+report: dict = {"ok": False, "steps": {}}
 
 
 def fail(step: str, why) -> None:
@@ -40,8 +40,6 @@ def check(step: str, ok: bool, **detail) -> None:
         sys.exit(1)
 
 
-if STUDIO_SKIN != "desk":
-    fail("skin", f"desk journeys run under STUDIO_SKIN=desk, not {STUDIO_SKIN}")
 
 dist = ensure_build(fail)
 origin = start_server(PORT, dist)

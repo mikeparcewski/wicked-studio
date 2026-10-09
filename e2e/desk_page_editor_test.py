@@ -2,7 +2,7 @@
 """
 desk_page_editor_test.py — S8, the morphing artifact and the page element editor, now the `wicked-page`
 PLUGIN in the kind slot (EP-P2; DES-STUDIO-REBUILD-001 §11 S8; DES-EDITOR-PLUGINS-001 §7.1, §9.3;
-DESIGN-interaction rules 1, 2 and 3) at 1440x700 under STUDIO_SKIN=desk.
+DESIGN-interaction rules 1, 2 and 3) at 1440x700 on the Desk.
 
 Against the in-process fixture: a document created on project `notes`, a run bound to it
 (`doc_bound_run` — the draft seam's write root names the doc) in the sessions corpus, crew's editor
@@ -46,7 +46,7 @@ import sys
 import time
 import urllib.request
 
-from uxfix_fixture import HIDE_GATE_TOASTS, REPO, STUDIO_SKIN, ensure_build, set_fixture, start_server
+from uxfix_fixture import HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4358"))
 W, H = 1440, 700
@@ -56,7 +56,7 @@ DOC = "offsite-plan"
 RUN = "r-doc-bound"
 HEADLINE_V1 = "Q3 was a quarter of significant and wide-ranging positive developments"
 
-report: dict = {"ok": False, "skin": STUDIO_SKIN, "steps": {}}
+report: dict = {"ok": False, "steps": {}}
 
 
 def fail(step: str, why) -> None:
@@ -79,8 +79,6 @@ def post_json(url: str, body: dict) -> dict:
         return json.loads(res.read() or b"{}")
 
 
-if STUDIO_SKIN != "desk":
-    fail("skin", f"desk journeys run under STUDIO_SKIN=desk, not {STUDIO_SKIN}")
 
 dist = ensure_build(fail)
 if not (dist / "editors" / "wicked-page" / "editor.json").is_file():

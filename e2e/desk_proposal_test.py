@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 desk_proposal_test.py — S6b (DES-STUDIO-REBUILD-001 §11): the proposal card, the status sentence,
-the sources and the deliver card, at 1440x700 under STUDIO_SKIN=desk.
+the sources and the deliver card, at 1440x700 on the Desk.
 
 Drives the built UI against the in-process fixture's sessions corpus plus `ship_proposals` (chat-ship:
 r-ship-plan waiting at its plan gate, r-ship-deliver waiting at its deliver gate, and a helper
@@ -32,14 +32,14 @@ import sys
 import time
 import urllib.request
 
-from uxfix_fixture import HIDE_GATE_TOASTS, REPO, STUDIO_SKIN, ensure_build, set_fixture, start_server
+from uxfix_fixture import HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4348"))
 W, H = 1440, 700
 SHOTS = REPO / "e2e" / "shots"
 UNDO_S = 10.0
 
-report: dict = {"ok": False, "skin": STUDIO_SKIN, "steps": {}}
+report: dict = {"ok": False, "steps": {}}
 
 
 def fail(step: str, why) -> None:
@@ -55,8 +55,6 @@ def check(step: str, ok: bool, **detail) -> None:
         sys.exit(1)
 
 
-if STUDIO_SKIN != "desk":
-    fail("skin", f"desk journeys run under STUDIO_SKIN=desk, not {STUDIO_SKIN}")
 
 dist = ensure_build(fail)
 origin = start_server(PORT, dist)

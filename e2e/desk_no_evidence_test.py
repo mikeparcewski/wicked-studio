@@ -5,7 +5,7 @@ checked governance entries says so once ("No governance evidence was recorded fo
 it ended <ago>"), the reasons are only under ⋯ (closed by default), and the chain sentence
 adds "· nothing checked".
 
-Against the in-process fixture at 1440x700 under STUDIO_SKIN=desk:
+Against the in-process fixture at 1440x700 on the Desk:
 
   1. NO-EVIDENCE LINE: r-pay-1's run page shows the one line, not individual reason bullets.
   2. REASONS CLOSED: the disclosure starts closed; ⋯ opens it; 8 entries visible.
@@ -20,13 +20,13 @@ import json
 import os
 import sys
 
-from uxfix_fixture import HIDE_GATE_TOASTS, REPO, STUDIO_SKIN, ensure_build, set_fixture, start_server
+from uxfix_fixture import HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4349"))
 W, H = 1440, 700
 SHOTS = REPO / "e2e" / "shots"
 
-report: dict = {"ok": False, "skin": STUDIO_SKIN, "steps": {}}
+report: dict = {"ok": False, "steps": {}}
 
 
 def fail(step: str, why) -> None:
@@ -42,8 +42,6 @@ def check(step: str, ok: bool, **detail) -> None:
         sys.exit(1)
 
 
-if STUDIO_SKIN != "desk":
-    fail("skin", f"desk journeys run under STUDIO_SKIN=desk, not {STUDIO_SKIN}")
 
 dist = ensure_build(fail)
 origin = start_server(PORT, dist)

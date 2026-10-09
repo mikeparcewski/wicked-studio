@@ -5,8 +5,6 @@ import { useGateStore } from '../store/gates.js';
 import type { OpenGate } from '../store/gates.js';
 import { useMembershipStore } from '../store/membership.js';
 import { plainGateQuestion, plainRunTitle } from '../board/deskWords.js';
-import { useSkin } from '../hooks/useSkin.js';
-import { deskShell } from '../theming/skins.js';
 
 /**
  * §7.1 (DES-UX-001, slice AA): how long an announcement dwells before it
@@ -55,9 +53,8 @@ interface Props {
 
 export function GateNotifications({ onSelect, runId, projectId = null, runs = [] }: Props): React.ReactElement {
   const gates = useGateStore((s) => s.gates);
-  // studio#441: under the desk skin the toast speaks the Desk's words (the plain question, the
-  // work's title), in its palette — no run hash, engine ordinal, raw prompt, violet or mono.
-  const desk = deskShell(useSkin());
+  // studio#441: the toast speaks the Desk's words (the plain question, the work's title), in its
+  // palette — no run hash, engine ordinal, raw prompt, violet or mono. The Desk is the one shell (S18d).
   const projectIdByRun = useMembershipStore((s) => s.projectIdByRun);
   // Expiry needs a re-render at the moment a dwell elapses; nothing else here
   // is stateful — the gate record itself lives (and stays) in the gate store.
@@ -125,13 +122,15 @@ export function GateNotifications({ onSelect, runId, projectId = null, runs = []
       // the classic runs bar it once sat above is retired (S18c).
       style={{ bottom: 12, pointerEvents: 'none' }}
     >
-      {cards.map((gate) => desk ? (
+      {cards.map((gate) => (
         <div
           key={toastKey(gate)}
           data-testid="gate-notification"
           data-run-id={gate.runId}
           data-variant="desk"
           className="wk-desk-toast"
+          // EC38: only the cards accept clicks (inline, so the layer contract holds without the stylesheet).
+          style={{ pointerEvents: 'auto' }}
         >
           <button
             type="button"
@@ -160,67 +159,16 @@ export function GateNotifications({ onSelect, runId, projectId = null, runs = []
             <span className="wk-desk-toast-open">Open →</span>
           </button>
         </div>
-      ) : (
-        <div
-          key={toastKey(gate)}
-          data-testid="gate-notification"
-          data-run-id={gate.runId}
-          className="relative w-72 rounded-xl p-3 transition-all"
-          style={{
-            background: 'var(--surface-card)',
-            border: '1px solid var(--status-gate-dim)',
-            boxShadow: 'var(--shadow-overlay)',
-            pointerEvents: 'auto',
-          }}
-          onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--status-gate)'; }}
-          onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--status-gate-dim)'; }}
-        >
-          <button
-            type="button"
-            data-testid="toast-dismiss"
-            aria-label="Dismiss notification"
-            title="Dismiss — the gate stays in the runs bar"
-            onClick={() => { dismissed.add(toastKey(gate)); bump(); }}
-            className="absolute top-1.5 right-1.5 w-5 h-5 flex items-center justify-center rounded text-xs leading-none"
-            style={{ background: 'transparent', color: 'var(--ink-dim)', cursor: 'pointer' }}
-            onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--ink-high)'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--ink-dim)'; }}
-          >
-            ✕
-          </button>
-          <button
-            type="button"
-            onClick={() => onSelect(gate.runId)}
-            data-testid="gate-toast"
-            data-run-id={gate.runId}
-            className="w-full text-left pr-5"
-            style={{ background: 'transparent', cursor: 'pointer' }}
-          >
-            <div className="flex items-center gap-2 mb-1">
-              <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: 'var(--status-gate)' }} />
-              <p className="text-xs font-semibold" style={{ color: 'var(--status-gate)' }}>Run awaiting human</p>
-            </div>
-            <p className="text-[11px] font-mono" style={{ color: 'var(--ink-dim)' }}>
-              {gate.runId.slice(0, 8)} · before unit #{gate.ord}
-            </p>
-            {gate.prompt && (
-              <p className="mt-1 text-xs line-clamp-2" style={{ color: 'var(--ink-muted)' }}>{gate.prompt}</p>
-            )}
-            <p className="mt-1.5 text-[11px] font-mono" style={{ color: 'var(--accent)' }}>Review →</p>
-          </button>
-        </div>
       ))}
       {visible.length > cards.length && (
         <p
           data-testid="gate-toast-overflow"
-          className={desk ? 'wk-toast wk-toast-line wk-desk-toast-more' : 'wk-toast wk-toast--gate wk-toast-line'}
+          className="wk-toast wk-toast-line wk-desk-toast-more"
           // Inert by design: the overflow line is a pointer, not a control —
           // the runs bar's gate count is the actionable record.
           style={{ pointerEvents: 'none', margin: 0 }}
         >
-          {desk
-            ? `+${visible.length - cards.length} more waiting on the Desk`
-            : `+${visible.length - cards.length} more waiting — see the runs bar`}
+          {`+${visible.length - cards.length} more waiting on the Desk`}
         </p>
       )}
     </div>

@@ -29,7 +29,7 @@ r1, a turn timeout on f2, a delivery on d2 — `GET /audit?since=`).
      Open gate and Retry from the queue, Draft update on the finished run, the audit entry of what
      the system did — clears the handover without Got it.
 
-Capture: e2e/shots/wave2b-handover-<skin>.png (+ -finished, -done). Skin: STUDIO_SKIN.
+Capture: e2e/shots/wave2b-handover-desk.png (+ -finished, -done).
 
 Prereqs: Python Playwright. Builds dist-sameorigin/ itself unless SKIP_STUDIO_BUILD=1.
 Env: FEEDBACK_PORT (default 4346). Prints a JSON report; exit 0/1.
@@ -39,14 +39,14 @@ import json
 import os
 import sys
 
-from uxfix_fixture import HIDE_GATE_TOASTS, REPO, STUDIO_SKIN, ensure_build, set_fixture, start_server
+from uxfix_fixture import HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4346"))
 W, H = int(os.environ.get("HANDOVER_W", "1440")), int(os.environ.get("HANDOVER_H", "700"))
 SHOTS = REPO / "e2e" / "shots"
 HOUR_MS = 3_600_000
 
-report: dict = {"ok": False, "skin": STUDIO_SKIN, "steps": {}}
+report: dict = {"ok": False, "steps": {}}
 
 
 def fail(step: str, why) -> None:
@@ -122,7 +122,7 @@ with sync_playwright() as p:
     try:
         page.get_by_test_id("handover-panel").wait_for(state="visible", timeout=15000)
     except Exception:
-        page.screenshot(path=str(SHOTS / f"wave2b-handover-missing-{STUDIO_SKIN}.png"))
+        page.screenshot(path=str(SHOTS / f"wave2b-handover-missing-desk.png"))
         fail("handover-shows", "no handover after a 3 h absence")
     done = page.locator('[data-testid="handover-chip"][data-section="done"]')
     try:
@@ -146,14 +146,14 @@ with sync_playwright() as p:
     check("since-and-age", since.startswith("Since ") and "3h" in since, since=since)
     check("got-it", page.get_by_test_id("handover-dismiss").inner_text().strip() == "Got it")
     page.wait_for_timeout(400)
-    page.screenshot(path=str(SHOTS / f"wave2b-handover-{STUDIO_SKIN}.png"))
+    page.screenshot(path=str(SHOTS / f"wave2b-handover-desk.png"))
 
     # ── 2. one line; the queue's top is above the fold ─────────────────────────
     strip = page.get_by_test_id("handover-panel").bounding_box()
     tops = sorted({round(b["y"]) for b in (page.locator('[data-testid="handover-chip"]').nth(i).bounding_box()
                                             for i in range(4))})
     lines = len({t // 12 for t in tops})
-    max_lines = 2 if STUDIO_SKIN == "compact-rail" else 1
+    max_lines = 1
     check("strip-is-one-line", lines <= max_lines and strip["height"] <= 44 * max_lines,
           height=strip["height"], chip_tops=tops, lines=lines, max_lines=max_lines)
     queue_box = page.get_by_test_id("needs-you-queue").bounding_box()
@@ -233,7 +233,7 @@ with sync_playwright() as p:
     ok = all("handover-item-open" in i["acts"] and "handover-item-draft" in i["acts"] for i in items) \
         and "handover-item-reuse" in next(i for i in items if i["run"] == "d3")["acts"]
     check("finished-next-use-actions", ok, items=items)
-    page.screenshot(path=str(SHOTS / f"wave2b-handover-finished-{STUDIO_SKIN}.png"))
+    page.screenshot(path=str(SHOTS / f"wave2b-handover-finished-desk.png"))
     # Reuse as preset: the save's consequence is said first (the Runs list's model).
     overlay.locator('[data-testid="handover-item"][data-run-id="d3"] [data-testid="handover-item-reuse"]').click()
     try:
@@ -274,7 +274,7 @@ with sync_playwright() as p:
           sorted(i["run"] for i in ditems) == ["d2", "f2", "r1"]
           and all("handover-item-open" in i["acts"] and "handover-item-audit" in i["acts"] for i in ditems),
           items=ditems)
-    page.screenshot(path=str(SHOTS / f"wave2b-handover-done-{STUDIO_SKIN}.png"))
+    page.screenshot(path=str(SHOTS / f"wave2b-handover-done-desk.png"))
     doverlay.locator('[data-testid="handover-item"][data-run-id="r1"] [data-testid="handover-item-audit"]').click()
     entry = doverlay.get_by_test_id("handover-item-audit-entry")
     entry.wait_for(state="visible", timeout=3000)
@@ -307,7 +307,7 @@ with sync_playwright() as p:
     page.wait_for_timeout(300)
     without_top = page.get_by_test_id("needs-you-queue").bounding_box()["y"]
     # The handover costs the page at most its one line — never a block that grows with its items.
-    check("handover-holds-at-most-one-line", with_top - without_top <= (96 if STUDIO_SKIN == "compact-rail" else 52),
+    check("handover-holds-at-most-one-line", with_top - without_top <= (52),
           with_handover=with_top, without=without_top, delta=with_top - without_top)
     page.reload(wait_until="networkidle")
     page.get_by_test_id("needs-you-queue").wait_for(state="visible", timeout=15000)

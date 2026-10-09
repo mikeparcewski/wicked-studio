@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 desk_calm_test.py — S15a: the Desk is DARK WHEN HEALTHY, a STALL IS AN EXCEPTION, and ZERO IS QUIET
-(1440x700, under STUDIO_SKIN=desk). The desk counterpart of wave1_dark, wave1_stall and wave1_tone:
+(1440x700, on the Desk). The desk counterpart of wave1_dark, wave1_stall and wave1_tone:
 Home showed these through its bands and count tiles; the Desk has neither, so the same behaviours are
 read off its one sentence, its list and its project sentences.
 
@@ -23,13 +23,13 @@ import json
 import os
 import sys
 
-from uxfix_fixture import HIDE_GATE_TOASTS, REPO, STUDIO_SKIN, ensure_build, set_fixture, start_server
+from uxfix_fixture import HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4363"))
 W, H = 1440, 700
 SHOTS = REPO / "e2e" / "shots"
 
-report: dict = {"ok": False, "skin": STUDIO_SKIN, "steps": {}}
+report: dict = {"ok": False, "steps": {}}
 
 
 def fail(step: str, why) -> None:
@@ -45,8 +45,6 @@ def check(step: str, ok: bool, **detail) -> None:
         sys.exit(1)
 
 
-if STUDIO_SKIN != "desk":
-    fail("skin", f"desk journeys run under STUDIO_SKIN=desk, not {STUDIO_SKIN}")
 
 # Everything the Desk paints that animates in view (a live edge, a pulsing dot, a glow).
 ANIMATED = """() => [...document.querySelectorAll('[data-testid="desk"] *, [data-testid="live-edge"]')].filter((el) => {

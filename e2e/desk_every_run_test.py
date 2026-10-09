@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 desk_every_run_test.py — SEE EVERYTHING › Sessions › "Every run" (S17b) at 1440x700 under
-STUDIO_SKIN=desk.
+the Desk.
 
 Against the in-process fixture (wave-1 + wave-2b corpus) with runs_delay_ms=3000, plus a Playwright
 route on GET /runs that synthesizes a 1200-run list over the fixture's own answer. The daemon serves
@@ -28,7 +28,7 @@ import re
 import sys
 import time
 
-from uxfix_fixture import HIDE_GATE_TOASTS, REPO, STUDIO_SKIN, ensure_build, set_fixture, start_server
+from uxfix_fixture import HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4486"))
 W, H = 1440, 700
@@ -36,7 +36,7 @@ SHOTS = REPO / "e2e" / "shots"
 EXTRA = 1200
 ARCHIVED_EXTRA_ID = "r-extra-archived-1"
 
-report: dict = {"ok": False, "skin": STUDIO_SKIN, "steps": {}}
+report: dict = {"ok": False, "steps": {}}
 
 
 def fail(step: str, why) -> None:
@@ -52,8 +52,6 @@ def check(step: str, ok: bool, **detail) -> None:
         sys.exit(1)
 
 
-if STUDIO_SKIN != "desk":
-    fail("skin", f"desk journeys run under STUDIO_SKIN=desk, not {STUDIO_SKIN}")
 
 dist = ensure_build(fail)
 origin = start_server(PORT, dist)

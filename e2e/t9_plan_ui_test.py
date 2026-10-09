@@ -25,9 +25,9 @@ POST /plans/preview, POST /runs/:id/plan, the 409 gate_changed, run_identity on 
               workdir; a completed user-plan run (per-run def no catalog serves) gets the
               licensed "no deliver phase" claim.
 
-Captures (e2e/shots/): t9-<skin>-composer-pending.png, t9-<skin>-composer-floor.png,
-t9-<skin>-plan-edit.png, t9-<skin>-gate-moved.png, t9-<skin>-phone-composer.png,
-t9-<skin>-phone-run.png. Env: FEEDBACK_PORT (default 4381), STUDIO_SKIN. JSON report; exit 0/1.
+Captures (e2e/shots/): t9-desk-composer-pending.png, t9-desk-composer-floor.png,
+t9-desk-plan-edit.png, t9-desk-gate-moved.png, t9-desk-phone-composer.png,
+t9-desk-phone-run.png. Env: FEEDBACK_PORT (default 4381). JSON report; exit 0/1.
 """
 
 import json
@@ -36,16 +36,14 @@ import sys
 import time
 import urllib.request
 
-from uxfix_fixture import (DEFAULT_APPEARANCE, HIDE_GATE_TOASTS, REPO, STUDIO_SKIN, ensure_build,
+from uxfix_fixture import (DEFAULT_APPEARANCE, HIDE_GATE_TOASTS, REPO, ensure_build,
                            set_fixture, start_server)
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4381"))
 W, H = 1440, 700
 SHOTS = REPO / "e2e" / "shots"
 PROJECT = "upload-endpoint"
-SKIN = STUDIO_SKIN
-
-report: dict = {"ok": False, "skin": SKIN, "steps": {}}
+report: dict = {"ok": False, "steps": {}}
 
 
 class SectionFailed(Exception):
@@ -80,7 +78,7 @@ def gate_posts(origin: str, rid: str) -> list:
 def reset(origin: str, **extra) -> None:
     set_fixture(origin, **{"team_plan": True, "repo": True, "repo_member": True, "reset_plan": True,
                            "reset_gate_posts": True, "gate_moved": [], "plan_edit_fail_once": False,
-                           "appearance": {**DEFAULT_APPEARANCE, "skin": SKIN}, **extra})
+                           "appearance": {**DEFAULT_APPEARANCE}, **extra})
 
 
 def attr(page, testid: str, name: str):
@@ -136,7 +134,6 @@ with sync_playwright() as p:
     def section_picker() -> None:
         # ── 1. the picker lists exactly the catalog ─────────────────────────────────────
         open_composer(page, origin)
-        check("skin-applied", page.evaluate("() => document.documentElement.getAttribute('data-skin')") == SKIN)
         open_picker(page)
         offered = page.evaluate("""() => [...document.querySelectorAll('[data-testid="phase-option"]')]
           .map(e => e.dataset.catalog)""")
@@ -165,7 +162,7 @@ with sync_playwright() as p:
         check("pending-pauses-manual", attr(page, "launch-preview-pause", "data-pauses") == "true",
               text=page.get_by_test_id("launch-preview-pause").text_content())
         page.get_by_test_id("launch-problem").fill("add a rate limiter to the upload endpoint")
-        page.screenshot(path=str(SHOTS / f"t9-{SKIN}-composer-pending.png"))
+        page.screenshot(path=str(SHOTS / f"t9-desk-composer-pending.png"))
 
         page.get_by_test_id("plan-touch").fill("src/upload/limiter.ts")
         wait_attr(page, "launch-preview", "data-state", "scored")
@@ -177,7 +174,7 @@ with sync_playwright() as p:
               steps=steps)
         check("scored-pauses-manual-mode", attr(page, "launch-preview-pause", "data-pauses") == "true"
               and "approve the plan" in (page.get_by_test_id("launch-preview-pause").text_content() or ""))
-        page.screenshot(path=str(SHOTS / f"t9-{SKIN}-composer-floor.png"))
+        page.screenshot(path=str(SHOTS / f"t9-desk-composer-floor.png"))
         page.get_by_test_id("gate-posture").select_option("none")
         wait_attr(page, "launch-preview-pause", "data-pauses", "false")
         check("no-gates-does-not-pause", True)
@@ -258,7 +255,7 @@ with sync_playwright() as p:
           .includes('70-100')""", timeout=8000)
         check("edit-2-high-risk-and-floor", page.get_by_test_id("plan-edit-high-risk").is_visible()
               and "design, review" in (page.get_by_test_id("plan-edit-floor-added").text_content() or ""))
-        page.screenshot(path=str(SHOTS / f"t9-{SKIN}-plan-edit.png"))
+        page.screenshot(path=str(SHOTS / f"t9-desk-plan-edit.png"))
         edits = plan_posts(origin, "edit")
         ids = [e["body"].get("requestId") for e in edits]
         check("fresh-request-id-per-edit", len(edits) == 2 and all(ids) and ids[0] != ids[1],
@@ -295,7 +292,7 @@ with sync_playwright() as p:
         posts = gate_posts(origin, "r-team-gate")
         check("gate-decision-sends-ord-once", len(posts) == 1 and posts[0]["body"].get("ord") == 3,
               posts=[x["body"] for x in posts])
-        page.screenshot(path=str(SHOTS / f"t9-{SKIN}-gate-moved.png"))
+        page.screenshot(path=str(SHOTS / f"t9-desk-gate-moved.png"))
         page.wait_for_timeout(3000)
         check("no-blind-retry", len(gate_posts(origin, "r-team-gate")) == 1)
         check("refreshed-gate-is-answerable", page.get_by_test_id("steering-approve").is_enabled())
@@ -332,10 +329,10 @@ with sync_playwright() as p:
           const r = t.getBoundingClientRect(); const hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
           return !(hit && t.contains(hit)); }""")
         if covered:
-            # compact-rail reserves a fixed 340 px right rail on every route (theming/skins.ts); at 390 px
-            # it covers the main column — the composer is unreachable on main too. Recorded, not hidden.
-            report["steps"]["phone-main-column-covered-by-skin-rail"] = {"ok": True, "skin": SKIN}
-            page.screenshot(path=str(SHOTS / f"t9-{SKIN}-phone-composer.png"))
+            # Something covers the main column at 390 px (the retired compact-rail's right rail did) —
+            # recorded, not hidden.
+            report["steps"]["phone-main-column-covered"] = {"ok": True}
+            page.screenshot(path=str(SHOTS / f"t9-desk-phone-composer.png"))
             page.set_viewport_size({"width": W, "height": H})
             return
         page.get_by_test_id("phase-picker-toggle").click()
@@ -344,12 +341,12 @@ with sync_playwright() as p:
         page.get_by_test_id("plan-touch").fill("src/upload/limiter.ts")
         wait_attr(page, "launch-preview", "data-state", "scored")
         page.get_by_test_id("launch-preview").scroll_into_view_if_needed()
-        page.screenshot(path=str(SHOTS / f"t9-{SKIN}-phone-composer.png"))
+        page.screenshot(path=str(SHOTS / f"t9-desk-phone-composer.png"))
         box = page.get_by_test_id("launch-preview").bounding_box()
         check("phone-preview-renders", box is not None and box["width"] > 0, box=box)
         page.goto(f"{origin}/p/{PROJECT}/build/r-team", wait_until="networkidle")
         page.wait_for_timeout(800)
-        page.screenshot(path=str(SHOTS / f"t9-{SKIN}-phone-run.png"))
+        page.screenshot(path=str(SHOTS / f"t9-desk-phone-run.png"))
         page.set_viewport_size({"width": W, "height": H})
 
     sections = [section_picker, section_preview, section_before_n, section_mid_run_edits,

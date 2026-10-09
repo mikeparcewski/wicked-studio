@@ -50,7 +50,6 @@ function renderGroup(): void {
       runs={[]}
       navigate={() => {}}
       now={NOW}
-      variant="desk"
     />,
   );
 }

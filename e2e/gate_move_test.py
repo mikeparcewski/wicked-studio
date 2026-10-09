@@ -14,8 +14,8 @@ at 1440x700.
   home    the Home "Needs you" row for r-review names the move ("Send back… ›") and opens the gate in the
           session thread (S15e: /s/run%3Ar-review#gate, the move preselected in the gate row).
 
-Captures (e2e/shots/): gate-move-<skin>-card.png, gate-move-<skin>-diff.png, gate-move-<skin>-home.png.
-Env: FEEDBACK_PORT (default 4471), STUDIO_SKIN. JSON report; exit 0/1.
+Captures (e2e/shots/): gate-move-desk-card.png, gate-move-desk-diff.png, gate-move-desk-home.png.
+Env: FEEDBACK_PORT (default 4471). JSON report; exit 0/1.
 """
 
 import json
@@ -24,17 +24,16 @@ import sys
 import time
 import urllib.request
 
-from uxfix_fixture import (DEFAULT_APPEARANCE, HIDE_GATE_TOASTS, REPO, STUDIO_SKIN, ensure_build,
+from uxfix_fixture import (DEFAULT_APPEARANCE, HIDE_GATE_TOASTS, REPO, ensure_build,
                            set_fixture, start_server)
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4471"))
 W, H = 1440, 700
 SHOTS = REPO / "e2e" / "shots"
-SKIN = STUDIO_SKIN
 PREFILL = ("Fix the reviewer's failing items:\n- the regression test is missing\n"
            "- src/app.ts still reads `buggy`")
 
-report: dict = {"ok": False, "skin": SKIN, "steps": {}}
+report: dict = {"ok": False, "steps": {}}
 
 
 class SectionFailed(Exception):
@@ -60,7 +59,7 @@ def gate_posts(origin: str, rid: str) -> list:
 
 def reset(origin: str) -> None:
     set_fixture(origin, **{"gate_move": True, "reset_gate_posts": True,
-                           "appearance": {**DEFAULT_APPEARANCE, "skin": SKIN}})
+                           "appearance": {**DEFAULT_APPEARANCE}})
 
 
 def text(page, testid: str) -> str:
@@ -104,7 +103,7 @@ with sync_playwright() as p:
         check("button-on-screen", page.get_by_test_id("gate-recommended").is_visible()
               and page.evaluate("""() => { const b = document.querySelector('[data-testid="gate-recommended"]').getBoundingClientRect();
                   return b.top >= 0 && b.bottom <= window.innerHeight; }"""))
-        page.screenshot(path=str(SHOTS / f"gate-move-{SKIN}-card.png"))
+        page.screenshot(path=str(SHOTS / f"gate-move-desk-card.png"))
 
         page.get_by_test_id("verdict-diff-toggle").click()
         page.wait_for_function("""() => document.querySelector('[data-testid="verdict-diff"]')
@@ -118,7 +117,7 @@ with sync_playwright() as p:
         check("diff-beside-creator-claims", claims == ["added a regression test for the buggy path",
                                                        "src/app.ts now reads `fixed` instead of `buggy`"], claims=claims)
         page.get_by_test_id("verdict-diff").scroll_into_view_if_needed()
-        page.screenshot(path=str(SHOTS / f"gate-move-{SKIN}-diff.png"))
+        page.screenshot(path=str(SHOTS / f"gate-move-desk-diff.png"))
 
         page.get_by_test_id("gate-recommended").click()
         deadline = time.monotonic() + 15
@@ -141,7 +140,7 @@ with sync_playwright() as p:
         act = row.first.get_by_test_id("need-act")
         verb = (act.text_content() or "").strip()
         check("home-row-names-the-move", verb == "Send back… ›" and act.get_attribute("data-act") == "open", verb=verb)
-        page.screenshot(path=str(SHOTS / f"gate-move-{SKIN}-home.png"))
+        page.screenshot(path=str(SHOTS / f"gate-move-desk-home.png"))
         act.click()
         # S15e: the row opens the session thread at the gate (`/s/run%3Ar-review#gate`), where the
         # move is the preselected choice of `session-gate-row`; the run page's `gate-recommended`

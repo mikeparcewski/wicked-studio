@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 desk_ports_pages_test.py — S18b: the classic skins' pieces of value, on the Desk's pages, at 1440x700
-under STUDIO_SKIN=desk, against the in-process fixture (project_create, wave2b, provenance).
+on the Desk, against the in-process fixture (project_create, wave2b, provenance).
 
   1. SEARCH (port 1c): on /everything › Sessions under the Blocked filter, typing into everything-search
      finds a working session the filter hid (a non-empty search lifts the state filter); clearing it
@@ -26,13 +26,13 @@ import os
 import sys
 import urllib.parse
 
-from uxfix_fixture import DEFAULT_APPEARANCE, HIDE_GATE_TOASTS, REPO, STUDIO_SKIN, ensure_build, set_fixture, start_server
+from uxfix_fixture import DEFAULT_APPEARANCE, HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4398"))
 W, H = 1440, 700
 SHOTS = REPO / "e2e" / "shots"
 
-report: dict = {"ok": False, "skin": STUDIO_SKIN, "steps": {}}
+report: dict = {"ok": False, "steps": {}}
 
 
 def check(step: str, ok: bool, **detail) -> None:
@@ -42,8 +42,6 @@ def check(step: str, ok: bool, **detail) -> None:
         sys.exit(1)
 
 
-if STUDIO_SKIN != "desk":
-    check("skin", False, error=f"desk journeys run under STUDIO_SKIN=desk, not {STUDIO_SKIN}")
 
 dist = ensure_build(lambda step, why: check(step, False, error=why))
 origin = start_server(PORT, dist)

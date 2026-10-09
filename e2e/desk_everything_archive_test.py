@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 desk_everything_archive_test.py — SEE EVERYTHING › Sessions: onboarding runs are named, and Unarchive
-re-reads the list (studio#510, #511) at 1440x700 under STUDIO_SKIN=desk.
+re-reads the list (studio#510, #511) at 1440x700 on the Desk.
 
 Against the in-process fixture (wave-1 + wave-2b corpus), plus three onboarding runs the fixture does
 not carry, served by Playwright routes over the fixture's own answers: two finished ("Onboard
@@ -23,13 +23,13 @@ import json
 import os
 import sys
 
-from uxfix_fixture import HIDE_GATE_TOASTS, REPO, STUDIO_SKIN, ensure_build, set_fixture, start_server
+from uxfix_fixture import HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4472"))
 W, H = 1440, 700
 SHOTS = REPO / "e2e" / "shots"
 
-report: dict = {"ok": False, "skin": STUDIO_SKIN, "steps": {}}
+report: dict = {"ok": False, "steps": {}}
 
 
 def fail(step: str, why) -> None:
@@ -45,8 +45,6 @@ def check(step: str, ok: bool, **detail) -> None:
         sys.exit(1)
 
 
-if STUDIO_SKIN != "desk":
-    fail("skin", f"desk journeys run under STUDIO_SKIN=desk, not {STUDIO_SKIN}")
 
 dist = ensure_build(fail)
 origin = start_server(PORT, dist)

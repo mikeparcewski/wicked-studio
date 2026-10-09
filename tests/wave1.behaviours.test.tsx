@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
 import { makeView } from './factories.js';
-import { bandCountLine, bandExpandsByDefault } from '../src/board/bandExpansion.js';
 import { bandFor, isStalled } from '../src/board/boardAttention.js';
 import { countTone } from '../src/board/countTone.js';
 import { needsYouRows } from '../src/board/needsYou.js';
@@ -20,19 +19,6 @@ import { leaveRoute, runEventsPath, runFilesPath, useRoute } from '../src/hooks/
 afterEach(() => {
   window.history.replaceState(null, '', '/');
   vi.unstubAllGlobals();
-});
-
-describe('dark when healthy — band expansion', () => {
-  it('only the exception band opens by default', () => {
-    expect(bandExpandsByDefault('needs-you')).toBe(true);
-    expect(bandExpandsByDefault('working')).toBe(false);
-    expect(bandExpandsByDefault('quiet')).toBe(false);
-  });
-
-  it('a collapsed band is one count line', () => {
-    expect(bandCountLine('working', 3)).toBe('Working (3)');
-    expect(bandCountLine('quiet', 20)).toBe('Quiet (20)');
-  });
 });
 
 describe('raw in one step — run targets', () => {

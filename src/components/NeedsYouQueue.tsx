@@ -7,15 +7,13 @@ import { useNeedsQueue, type NeedsQueue } from '../hooks/useNeedsQueue.js';
 import { useFocusLockStore } from '../store/focusLock.js';
 import { REVEAL_FRESH_MS, REVEAL_MS, useQueueReveal } from '../store/queueReveal.js';
 import type { Navigate } from '../hooks/useRoute.js';
-import type { SkinVariants } from '../theming/skins.js';
-import { TONE_COLOR, TONE_GLYPH } from './narrator.js';
+import { TONE_COLOR } from './narrator.js';
 import { AgeStamp } from './AgeStamp.js';
 import { QuestionRow } from './desk/QuestionRow.js';
 import { ApprovalGroupActions } from './desk/ApprovalGroupActions.js';
 import { needRunId } from '../board/deskModel.js';
 import { plainRunTitle } from '../board/deskWords.js';
 import { Tech } from './Tech.js';
-import { humanTitle } from './runIdentity.js';
 
 /**
  * THE NEEDS-YOU QUEUE (DES-HOME-COMMAND-CENTER §3) — the home page's spine.
@@ -46,13 +44,6 @@ const CSS = {
     padding: '7px 10px',
     borderBottom: '1px solid var(--border-subtle)',
   },
-  // The queue scans as a table (design council M12): a bold title column, a dimmer sans
-  // rationale, the age in a fixed right-aligned tabular cell.
-  subject: {
-    fontSize: 'var(--text-xs)', fontWeight: 650, color: 'var(--ink-high)',
-    textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-    flexShrink: 1, minWidth: '80px',
-  },
   line: {
     fontSize: 'var(--text-xs)',
     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0,
@@ -63,16 +54,13 @@ const CSS = {
   },
 } as const satisfies Record<string, React.CSSProperties>;
 
-export function NeedsYouQueue({ queue, runs, navigate, now, variant = 'inline' }: {
+export function NeedsYouQueue({ queue, runs, navigate, now }: {
   /** The queue's behaviour (`useNeedsQueue`): rows, groups, cursor, verbs. */
   queue: NeedsQueue;
   /** For the calm line's live working count — `calmCopy` reads `runStats`. */
   runs: SessionView[];
   navigate: Navigate;
   now?: number;
-  /** The skin's variant (theming/skins.ts): a column of the command center, or the
-   *  full height of the shell's right rail. Same rows, same verbs either way. */
-  variant?: SkinVariants['needsQueue'];
 }): React.ReactElement {
   const at = now ?? Date.now();
   const sectionEl = useRef<HTMLElement | null>(null);
@@ -278,80 +266,8 @@ export function NeedsYouQueue({ queue, runs, navigate, now, variant = 'inline' }
     );
   };
 
-  const line = (row: NeedRow, testId: 'need-row' | 'need-member'): React.ReactElement => {
-    if (variant === 'desk') return deskLine(row, testId);
-    const selected = queue.selectedKey === row.key;
-    const isGroup = row.members !== undefined;
-    const open = isGroup && queue.expanded.has(row.key);
-    return (
-      <div
-        key={row.key}
-        data-testid={testId}
-        data-kind={row.kind}
-        data-key={row.key}
-        data-count={row.members?.length ?? 1}
-        data-queue-item={row.key}
-        data-kbd-selected={selected ? 'true' : undefined}
-        data-reveal={revealed.has(row.key) ? 'true' : undefined}
-        tabIndex={-1}
-        className={`wk-need-row wk-need-row--${row.tone}${revealed.has(row.key) ? ' wk-need-row--reveal' : ''}`}
-        // Severity stripe (command-deck redesign): a left edge colored by the row's tone, so what
-        // needs you reads by color at a glance (gate/failed/stranded/…); the glyph repeats it.
-        style={{
-          ...CSS.row,
-          borderLeft: `2px solid ${TONE_COLOR[row.tone]}`,
-          paddingLeft: testId === 'need-member' ? '28px' : '10px',
-          outline: selected ? '1px solid var(--accent)' : 'none',
-          outlineOffset: '-1px',
-          background: selected ? 'var(--surface-raised)' : undefined,
-          // A group row carrying a batch move wraps its buttons under the line when the queue is
-          // narrow (the rail skin), rather than pushing them out of view.
-          ...(row.action.kind === 'accept-memory' || row.action.kind === 'batch-onboard' ? { flexWrap: 'wrap' as const } : {}),
-        }}
-      >
-        <span aria-hidden style={{ color: TONE_COLOR[row.tone], flexShrink: 0, fontSize: 'var(--text-xs)' }}>
-          {TONE_GLYPH[row.tone]}
-        </span>
-        {isGroup ? (
-          <span title={row.subject} style={CSS.subject}>{row.subject}</span>
-        ) : (
-          <a {...link(row.subjectPath)} title={row.subject} style={CSS.subject}>
-            {humanTitle(row.subject)}
-          </a>
-        )}
-        {/* A batch move's line IS its consequence: it wraps rather than truncate (idea 3). */}
-        <span data-testid="need-line" className="wk-need-line" title={row.text} style={{
-          ...CSS.line,
-          ...(row.action.kind === 'batch-onboard' || row.action.kind === 'accept-memory' ? { whiteSpace: 'normal' } : {}),
-        }}>
-          {row.text}
-        </span>
-        {/* Idea 14: an absent or impossible clock is a pill that says so and opens the record. */}
-        <AgeStamp
-          at={row.at}
-          now={at}
-          testId="need-age"
-          style={CSS.age}
-          {...(isGroup ? {} : { href: row.subjectPath, onOpen: navigate })}
-        />
-        {isGroup && row.action.kind === 'batch-onboard' && batchAct(row.action, row.text)}
-        {isGroup && row.action.kind === 'accept-memory' && acceptAct(row.action)}
-        {isGroup ? (
-          <button
-            type="button"
-            data-testid="need-group-toggle"
-            aria-expanded={open}
-            onClick={() => queue.toggle(row.key)}
-            className="wk-need-act"
-          >
-            {open ? 'Collapse ▴' : 'Expand ▾'}
-          </button>
-        ) : (
-          act(row)
-        )}
-      </div>
-    );
-  };
+  // The Desk's row is the only row since the classic skins retired (S18d).
+  const line = deskLine;
 
   return (
     <section
@@ -361,26 +277,9 @@ export function NeedsYouQueue({ queue, runs, navigate, now, variant = 'inline' }
       data-testid="needs-you-queue"
       data-count={queue.count}
       data-focus-lock={queue.focus.on ? 'on' : 'off'}
-      data-skin-variant={variant}
-      className={variant === 'desk' ? 'wk-desk-needs' : undefined}
-      style={variant === 'desk' ? undefined : {
-        flex: variant === 'rail' ? '1 1 auto' : '1.4 1 0', minWidth: 0, display: 'flex', flexDirection: 'column',
-        background: 'var(--surface-card)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-card)',
-        borderRadius: 'var(--radius-lg)', overflow: 'hidden', outline: 'none',
-      }}
+      className="wk-desk-needs"
     >
-      {variant === 'desk' ? (
-        <p className="wk-desk-label">Needs you <span className="wk-desk-label-aside">most urgent first</span></p>
-      ) : <p
-        style={{
-          margin: 0, padding: '8px 10px 6px',
-          fontSize: 'var(--text-2xs)', fontWeight: 'var(--weight-bold)',
-          letterSpacing: '0.08em', textTransform: 'uppercase',
-          color: queue.count > 0 ? 'var(--status-gate)' : 'var(--ink-dim)',
-        }}
-      >
-        Needs you{queue.count > 0 ? ` (${queue.count})` : ''}
-      </p>}
+      <p className="wk-desk-label">Needs you <span className="wk-desk-label-aside">most urgent first</span></p>
       {/* Just the top one (idea 10): the rest are hidden, never dropped — they come back when the
           held item clears, or at once with "Show all". */}
       {queue.focus.on && (
@@ -412,7 +311,7 @@ export function NeedsYouQueue({ queue, runs, navigate, now, variant = 'inline' }
           {calmCopy(runs)}
         </p>
       ) : (
-        <div style={variant === 'desk' ? undefined : { overflowY: 'auto', minHeight: 0 }}>
+        <div>
           {queue.rows.map((row) => (
             <div key={row.key} role="group">
               {line(row, 'need-row')}
@@ -474,16 +373,15 @@ function useRevealed(queue: NeedsQueue, rootEl: React.RefObject<HTMLElement | nu
  * mounted at a time (Home stands down while the rail holds the queue), so the queue's keys are
  * registered once.
  */
-export function NeedsQueueSurface({ rows, runs, navigate, now, variant = 'inline' }: {
+export function NeedsQueueSurface({ rows, runs, navigate, now }: {
   /** The ranked rows — `useNeedsRows`, the one fold. */
   rows: NeedRow[];
   runs: SessionView[];
   navigate: Navigate;
   now: number;
-  variant?: SkinVariants['needsQueue'];
 }): React.ReactElement {
   const queue = useNeedsQueue(rows, navigate, now);
-  return <NeedsYouQueue queue={queue} runs={runs} navigate={navigate} now={now} variant={variant} />;
+  return <NeedsYouQueue queue={queue} runs={runs} navigate={navigate} now={now} />;
 }
 
 /**

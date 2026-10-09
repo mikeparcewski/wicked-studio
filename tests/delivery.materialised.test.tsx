@@ -1,12 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import * as client from '../src/api/client.js';
-import { ProjectDashboard } from '../src/components/ProjectDashboard.js';
 import { RightPanel } from '../src/components/RightPanel.js';
 import { canDeliver, deliverySummary } from '../src/components/delivery.js';
 import { useDeliveryStore } from '../src/store/delivery.js';
-import { useGateStore } from '../src/store/gates.js';
-import { useProjectsStore } from '../src/store/projects.js';
 import { useRunEventStore } from '../src/store/events.js';
 import { useProvenanceStore } from '../src/store/provenance.js';
 import { clearCachedWorkflows, isSystemWorkflowIn } from '../src/store/workflowCache.js';
@@ -18,7 +15,7 @@ import {
   materialised,
 } from './fixtures/workflows.js';
 import { NOTHING_REASON, REAL_DELIVER_OUTPUT, REAL_PR_URL } from './fixtures/deliverOutput.js';
-import type { Project, SessionView, UnitStatus } from '../src/api/types.js';
+import type { SessionView, UnitStatus } from '../src/api/types.js';
 
 /**
  * THE MATERIALISED PER-RUN DEF (wicked-studio#122, D5 re-opened).
@@ -48,7 +45,6 @@ import type { Project, SessionView, UnitStatus } from '../src/api/types.js';
  */
 
 const KNOWN = (id: string): boolean | undefined => isSystemWorkflowIn(LIVE_WORKFLOWS, id);
-const NOW = Date.now();
 
 const listDocs = vi.fn();
 vi.mock('../src/api/interactive.js', async (importOriginal) => ({
@@ -249,81 +245,5 @@ describe('the rail (RightPanel)', () => {
     expect(body).toHaveAttribute('data-state', 'none');
     expect(body).toHaveTextContent('This run has no deliver phase.');
     expect(body).toHaveTextContent('launch with deliver: pr');
-  });
-});
-
-describe('the project census surface', () => {
-  beforeEach(() => {
-    vi.restoreAllMocks();
-    clearCachedWorkflows();
-    listDocs.mockReset().mockResolvedValue([]);
-    vi.spyOn(client.api, 'listWorkflows').mockResolvedValue({ workflows: LIVE_WORKFLOWS });
-    vi.spyOn(client.api, 'listProjectMembers').mockResolvedValue({ members: [] });
-    vi.spyOn(client.api, 'listProjects').mockResolvedValue({ projects: [] });
-    vi.spyOn(client.api, 'listRepos').mockResolvedValue({ repos: [] });
-    useGateStore.setState({ gates: {} });
-    useRunEventStore.setState({ byRun: {} });
-    useProjectsStore.setState({
-      projects: [{
-        id: 'proj-1', name: 'The proof project', description: null, status: 'active',
-        scope: 'project:proj-1', created_at: NOW - 1000, updated_at: NOW - 100,
-      } as Project],
-      loading: false,
-      error: null,
-    });
-  });
-  afterEach(() => { cleanup(); clearCachedWorkflows(); });
-
-  it('proj_178674023693500000: eight document threads, and NO census line at all', async () => {
-    render(
-      <ProjectDashboard projectId="proj-1" runs={DOC_THREAD_RUN_IDS.map(docThread)} navigate={() => {}} />,
-    );
-
-    await screen.findByTestId('dashboard-runs');
-    expect(screen.getAllByTestId('dashboard-run').length).toBeGreaterThan(0);
-    // Was: "8 no deliver phase" — the D5 complaint at 100% of the line.
-    await waitFor(() => expect(client.api.listWorkflows).toHaveBeenCalled());
-    expect(screen.queryByTestId('dashboard-delivery-summary')).not.toBeInTheDocument();
-    expect(document.body.textContent).not.toContain('no deliver phase');
-  });
-
-  it('a mixed project still censuses everything that has a deliver phase', async () => {
-    render(
-      <ProjectDashboard
-        projectId="proj-1"
-        runs={[
-          delivering(LIVE_RUN_IDS.prOpened, 'done'),
-          delivering(LIVE_RUN_IDS.deliverRan, 'done'),
-          delivering('r-inflight', 'pending'),
-          ...DOC_THREAD_RUN_IDS.map(docThread),
-        ]}
-        navigate={() => {}}
-      />,
-    );
-
-    const summary = await screen.findByTestId('dashboard-delivery-summary');
-    expect(summary.textContent).toStrictEqual('2 ran deliver · 1 deliver pending');
-  });
-
-  it('D2: a row chips only what the rail would open — and reads no defs of its own', async () => {
-    const runs = [
-      delivering('r-chip-done', 'done'),
-      delivering('r-chip-empty', 'rejected', NOTHING_REASON),
-      delivering('r-chip-pending', 'pending'),
-      ...DOC_THREAD_RUN_IDS.slice(0, 3).map(docThread),
-    ];
-    render(<ProjectDashboard projectId="proj-1" runs={runs} navigate={() => {}} />);
-
-    const rows = await screen.findAllByTestId('dashboard-run');
-    for (const row of rows) {
-      const id = row.getAttribute('data-run-id') ?? '';
-      const view = runs.find((v) => v.session.id === id) as SessionView;
-      const chip = within(row).queryByTestId('run-delivery-chip');
-      // The invariant: nothing may be chipped that the section itself withholds.
-      if (chip !== null) expect(canDeliver(view, KNOWN), `${id} chipped`).toBe(true);
-    }
-    // …and the whole surface still costs ONE /workflows, zero per row.
-    await waitFor(() => expect(client.api.listWorkflows).toHaveBeenCalledTimes(1));
-    expect(client.api.listWorkflows).toHaveBeenCalledTimes(1);
   });
 });

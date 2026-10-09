@@ -21,17 +21,12 @@ answer HITL gates, browse projects/evidence/coverage, watch live CoreEvents.
   commit, so a fresh clone has none of it; do not treat a missing `.product/` as a
   mistake, and do not cite a `.product/…` path as something a reviewer can open.
 - `tests/` — vitest (jsdom): `npm test`; typecheck with `npm run typecheck`.
-- `e2e/` — Python Playwright journeys on the in-process fixture (`e2e/uxfix_fixture.py`);
-  `python3 e2e/run_journeys.py` runs the behaviour set CI runs (under the studio and compact-rail
-  skins, via `STUDIO_SKIN`); `--all` runs every journey except the desk-only ones and the few marked
-  `LIVE` there (they need a real daemon or bridge). `--list desk` runs the `DESK` list under
-  `STUDIO_SKIN=desk` (CI's two `journeys (desk K/2)` shards, `--shard K/N`): the desk-only journeys plus
-  every behaviour journey (S15a). A desk journey goes in `DESK_ONLY`, never in `BEHAVIOUR`; a new
-  behaviour journey runs under desk too (branch on `STUDIO_SKIN` where the Desk differs), or names its
-  desk counterpart in `DESK_COUNTERPARTS` — `--check-desk` (run by CI) fails otherwise.
-  The Desk is the default skin (S15b). A rig that walks the classic shell picks `studio` the way
-  the Theme page does: a stored `studio.appearance` with `skin_migrated: true` (the fixture's record
-  carries it); a record without the marker predates the flip and opens the Desk.
+- `e2e/` — Python Playwright journeys on the in-process fixture (`e2e/uxfix_fixture.py`), all on
+  the Desk — the one shell since S18d retired the classic and compact-rail skins (no skin switch).
+  `python3 e2e/run_journeys.py` runs the one journey list CI runs (two `journeys (desk K/2)` shards,
+  `--shard K/N`); `--all` runs every journey except the few marked `LIVE` there (they need a real
+  daemon or bridge). A new journey goes in `DESK_ONLY`; `--check-desk` (run by CI) fails if a listed
+  journey is missing or listed twice.
 - `testid-inventory.json` — regenerate with `npm run manifest:testids`, never hand-merge it.
   Removing a testid fails `tests/testidRemovals.test.ts` unless `e2e/testid-successors.json`
   names its successor.

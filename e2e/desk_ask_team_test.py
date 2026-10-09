@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 desk_ask_team_test.py — ASK-S1 (DES-ASK-TEAM-CHAT-001 §4.8; DES-STUDIO-REBUILD-001 Amendment 6) at
-1440x700, under STUDIO_SKIN=desk.
+1440x700, on the Desk.
 
 An ask is a team path driven by one agent. Against the fixture's `ask_path` replay of the frames the
 crew lane captured live (one primary helper picked at random, a reviewer member, a finding on the
@@ -34,13 +34,13 @@ import sys
 import time
 import urllib.request
 
-from uxfix_fixture import HIDE_GATE_TOASTS, REPO, STUDIO_SKIN, ensure_build, set_fixture, start_server
+from uxfix_fixture import HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4466"))
 W, H = 1440, 700
 SHOTS = REPO / "e2e" / "shots"
 
-report: dict = {"ok": False, "skin": STUDIO_SKIN, "steps": {}}
+report: dict = {"ok": False, "steps": {}}
 
 
 def fail(step: str, why) -> None:
@@ -61,8 +61,6 @@ def ask_posts(origin: str) -> list:
         return json.loads(res.read())["posts"]
 
 
-if STUDIO_SKIN != "desk":
-    fail("skin", f"desk journeys run under STUDIO_SKIN=desk, not {STUDIO_SKIN}")
 
 dist = ensure_build(fail)
 origin = start_server(PORT, dist)

@@ -75,7 +75,7 @@ describe('studio#444: the hand-over says the target in one plain sentence', () =
 
 describe('studio#441: desk-skin gate toasts speak the Desk’s words', () => {
   it('the plain question and the work, no run hash, ordinal, raw prompt or mono, and the toast marks are not violet', () => {
-    useAppearanceStore.setState({ appearance: { ...DEFAULT_APPEARANCE, skin: 'desk' }, loaded: true });
+    useAppearanceStore.setState({ appearance: { ...DEFAULT_APPEARANCE }, loaded: true });
     useGateStore.setState({ gates: { [UUID]: gate() } });
     const runs = [makeView({ id: UUID, status: 'awaiting_human', problem: PROBLEM }, [])];
     render(<GateNotifications onSelect={() => {}} runs={runs} />);
@@ -86,18 +86,12 @@ describe('studio#441: desk-skin gate toasts speak the Desk’s words', () => {
     expect(text).not.toMatch(/Run awaiting human|before unit|75c25923|band|manual mode|pa-scope/);
     expect(toast.innerHTML).not.toMatch(/font-mono|status-gate|monospace/);
   });
-  it('the overflow line does not send the reader to a runs bar the desk skin has no', () => {
-    useAppearanceStore.setState({ appearance: { ...DEFAULT_APPEARANCE, skin: 'desk' }, loaded: true });
+  it('the overflow line does not send the reader to a runs bar the Desk has no', () => {
+    useAppearanceStore.setState({ appearance: { ...DEFAULT_APPEARANCE }, loaded: true });
     const gates = Object.fromEntries(['a', 'b', 'c', 'd'].map((id) => [id, gate({ runId: id })]));
     useGateStore.setState({ gates });
     render(<GateNotifications onSelect={() => {}} />);
     expect(screen.getByTestId('gate-toast-overflow').textContent).toBe('+1 more waiting on the Desk');
-  });
-  it('the studio skin keeps its toast as it was', () => {
-    useAppearanceStore.setState({ appearance: { ...DEFAULT_APPEARANCE, skin: 'studio' }, loaded: true });
-    useGateStore.setState({ gates: { [UUID]: gate() } });
-    render(<GateNotifications onSelect={() => {}} />);
-    expect(screen.getByTestId('gate-notification').textContent).toContain('Run awaiting human');
   });
 });
 

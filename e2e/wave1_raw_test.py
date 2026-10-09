@@ -23,7 +23,7 @@ import json
 import os
 import sys
 
-from uxfix_fixture import (HIDE_GATE_TOASTS, REPO, STUDIO_SKIN, WAVE1_R1_EVENTS, ensure_build, set_fixture,
+from uxfix_fixture import (HIDE_GATE_TOASTS, REPO, WAVE1_R1_EVENTS, ensure_build, set_fixture,
                            start_server)
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4342"))
@@ -31,13 +31,12 @@ W, H = 1440, 700
 SHOTS = REPO / "e2e" / "shots"
 SCROLL_TO = 240
 
-report: dict = {"ok": False, "skin": STUDIO_SKIN, "steps": {}}
-# Under STUDIO_SKIN=desk (S15a: the desk variant, in run_journeys.py DESK) Home is the Desk: "where you
+report: dict = {"ok": False, "steps": {}}
+# On the Desk (the one shell since S18d) Home is the Desk: "where you
 # were" is the Desk's own scroller (data-place-scroll="desk") — the Desk has no Working band to expand —
 # and every palette, route and Back assertion is the same.
-DESK = STUDIO_SKIN == "desk"
-HOME = "desk" if DESK else "project-board"
-SCROLLER = '[data-place-scroll="desk"]' if DESK else '[data-place-scroll="home-board"]'
+HOME = "desk"
+SCROLLER = '[data-place-scroll="desk"]'
 
 
 def fail(step: str, why: str) -> None:
@@ -83,23 +82,12 @@ with sync_playwright() as p:
 
     set_fixture(origin, wave1=True, gate_now=[])
     page.goto(f"{origin}/", wait_until="networkidle")
-    if DESK:
-        page.wait_for_selector('[data-testid="desk-headline"][data-count="0"]', timeout=15000)
-        # The calm Desk is short at 1440x700: room below its content (a style in <head>, so it outlives the
-        # Desk's remount on Back) makes "where you were" a real scroll position.
-        page.evaluate("() => { const s = document.createElement('style');"
-                      " s.textContent = '[data-place-scroll=\"desk\"]::after { content: \"\"; display: block; height: 1200px; }';"
-                      " document.head.appendChild(s); }")
-    else:
-        page.get_by_test_id("home-calm").wait_for(state="visible", timeout=15000)
-
-        # ── where you were: the Working band expanded, the board scrolled ──────────
-        page.get_by_test_id("band-working").wait_for(state="visible", timeout=10000)
-        if page.get_by_test_id("band-working").get_attribute("data-expanded") == "false":
-            page.get_by_test_id("band-working-toggle").click()
-        page.wait_for_function(
-            "() => document.querySelectorAll('[data-testid=\"band-working\"] [data-testid=\"project-card\"]').length === 3",
-            timeout=10000)
+    page.wait_for_selector('[data-testid="desk-headline"][data-count="0"]', timeout=15000)
+    # The calm Desk is short at 1440x700: room below its content (a style in <head>, so it outlives the
+    # Desk's remount on Back) makes "where you were" a real scroll position.
+    page.evaluate("() => { const s = document.createElement('style');"
+                  " s.textContent = '[data-place-scroll=\"desk\"]::after { content: \"\"; display: block; height: 1200px; }';"
+                  " document.head.appendChild(s); }")
     page.evaluate(f"(sel) => {{ document.querySelector(sel).scrollTop = {SCROLL_TO}; }}", SCROLLER)
     page.wait_for_timeout(300)
     before = page.evaluate("(sel) => document.querySelector(sel).scrollTop", SCROLLER)
@@ -120,10 +108,6 @@ with sync_playwright() as p:
 
     # ── Back → `/`, palette closed, scroll restored ─────────────────────────────
     back_home(page, "events")
-    if not DESK:
-        band = page.get_by_test_id("band-working")
-        check("back-band-still-expanded", band.get_attribute("data-expanded") == "true",
-              expanded=band.get_attribute("data-expanded"))
     try:
         page.wait_for_function(
             f"(sel) => Math.abs(document.querySelector(sel).scrollTop - {before}) <= 2", arg=SCROLLER,

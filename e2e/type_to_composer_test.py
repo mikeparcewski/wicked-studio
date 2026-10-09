@@ -15,18 +15,18 @@ SIMPLE gate waiting on b1:
             the page's composer (launch-problem), and no Ask dock opens.
   gate      the b1 thread (/p/beta/build/b1), the gate card's Approve focused: the gate card's
             own steer box (whose send approves the gate) stays EMPTY; the text lands in the dock.
-  composite /theme, a skin radio focused: a typed letter and digit stay with the radiogroup —
+  composite /everything, its selected tab focused: a typed letter and digit stay with the tablist —
             no dock opens, no composer receives them.
   zero      after waiting past the 10 s undo window, NO gate POST reached the daemon (browser
             and fixture both) and no undo toast ever appeared.
 
 Captures: e2e/shots/type-to-composer-{home,gate,page}.png.
-Under STUDIO_SKIN=desk (S15a: the desk variant, in run_journeys.py DESK) Home is the Desk, whose
+On the Desk (the one shell since S18d) Home is the Desk, whose
 composer IS the page's composer (rule 4: the page's composer if one is mounted): body / card / button
 type into `desk-composer-input` and open no dock. "card" is b1's Desk row selected with ⌥J inside the
 needs-you list; "button" is that row's Answer button. page / gate / composite / zero are unchanged.
 
-Env: FEEDBACK_PORT (default 4362), STUDIO_SKIN. Prints a JSON report; exit 0/1.
+Env: FEEDBACK_PORT (default 4362). Prints a JSON report; exit 0/1.
 """
 
 import json
@@ -35,15 +35,14 @@ import sys
 import time
 import urllib.request
 
-from uxfix_fixture import HIDE_GATE_TOASTS, REPO, STUDIO_SKIN, ensure_build, set_fixture, start_server
+from uxfix_fixture import HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4362"))
 W, H = 1440, 700
 SHOTS = REPO / "e2e" / "shots"
 TEXT = "approve this"
 
-report: dict = {"ok": False, "skin": STUDIO_SKIN, "steps": {}}
-DESK = STUDIO_SKIN == "desk"
+report: dict = {"ok": False, "steps": {}}
 DESK_ROW = '[data-testid="need-row"][data-key="gate:b1"], [data-testid="need-member"][data-key="gate:b1"]'
 
 
@@ -108,17 +107,16 @@ with sync_playwright() as p:
 
     def home() -> None:
         page.goto(f"{origin}/", wait_until="networkidle")
-        if DESK:
-            page.get_by_test_id("needs-you-queue").wait_for(state="visible", timeout=15000)
-            for t in page.locator('[data-testid="need-group-toggle"][aria-expanded="false"]').all():
-                t.click()
-            page.locator(DESK_ROW).wait_for(state="visible", timeout=10000)
-            return
+        page.get_by_test_id("needs-you-queue").wait_for(state="visible", timeout=15000)
+        for t in page.locator('[data-testid="need-group-toggle"][aria-expanded="false"]').all():
+            t.click()
+        page.locator(DESK_ROW).wait_for(state="visible", timeout=10000)
+        return
         page.get_by_test_id("gate-chip-b1").wait_for(state="visible", timeout=15000)
 
     def typed_into_dock(step: str) -> None:
         # Under desk the Desk's composer is the page's composer: the letters land there, no dock opens.
-        target = "desk-composer-input" if DESK else "assist-input"
+        target = "desk-composer-input"
         page.keyboard.type(TEXT)
         try:
             page.wait_for_function(f"() => ({VALUE})({json.dumps(target)}) === {json.dumps(TEXT)}", timeout=5000)
@@ -129,9 +127,8 @@ with sync_playwright() as p:
         # pressing the card/button that held focus before.
         active = page.evaluate(ACTIVE)
         ok = page.evaluate(VALUE, target) == TEXT and active == target and not toasts
-        dock = page.get_by_test_id("assist-input").count() if DESK else None
-        if DESK:
-            ok = ok and dock == 0
+        dock = page.get_by_test_id("assist-input").count()
+        ok = ok and dock == 0
         check(step, ok, composer=page.evaluate(VALUE, target), active=active, toasts=toasts, dock_open=dock)
 
     # ── body: nothing focused on Home ──────────────────────────────────────────────
@@ -142,33 +139,23 @@ with sync_playwright() as p:
 
     # ── card: the triage-selected card holds focus ─────────────────────────────────
     home()
-    if DESK:
-        # The Desk's list walks with ⌥J from inside it; the selected row holds real focus.
-        page.get_by_test_id("needs-you-queue").focus()
-        for _ in range(6):
-            if page.evaluate("(sel) => !!document.querySelector(sel)?.closest('[data-kbd-selected=\"true\"]') || "
-                             "[...document.querySelectorAll(sel)].some(e => e.dataset.kbdSelected === 'true')", DESK_ROW):
-                break
-            page.keyboard.press("Alt+j")
-        page.wait_for_function("(sel) => [...document.querySelectorAll(sel)].some(e => e.dataset.kbdSelected === 'true'"
-                               " && e.contains(document.activeElement))", arg=DESK_ROW, timeout=5000)
-    else:
-        page.evaluate("() => document.activeElement && document.activeElement.blur()")
+    # The Desk's list walks with ⌥J from inside it; the selected row holds real focus.
+    page.get_by_test_id("needs-you-queue").focus()
+    for _ in range(6):
+        if page.evaluate("(sel) => !!document.querySelector(sel)?.closest('[data-kbd-selected=\"true\"]') || "
+                         "[...document.querySelectorAll(sel)].some(e => e.dataset.kbdSelected === 'true')", DESK_ROW):
+            break
         page.keyboard.press("Alt+j")
-        page.wait_for_function(
-            "() => document.activeElement?.getAttribute('data-kbd-item') === 'beta'", timeout=5000)
+    page.wait_for_function("(sel) => [...document.querySelectorAll(sel)].some(e => e.dataset.kbdSelected === 'true'"
+                           " && e.contains(document.activeElement))", arg=DESK_ROW, timeout=5000)
     typed_into_dock("focused-card-types-into-ask-dock")
 
     # ── button: the gate chip's Approve button holds focus ─────────────────────────
     home()
-    if DESK:
-        answer = page.locator(DESK_ROW).locator('[data-testid="need-answer"]')
-        answer.focus()
-        check("approve-button-focused", page.evaluate("(el) => el === document.activeElement", answer.element_handle()),
-              active=page.evaluate(ACTIVE))
-    else:
-        page.get_by_test_id("gate-approve-b1").focus()
-        check("approve-button-focused", page.evaluate(ACTIVE) == "gate-approve-b1", active=page.evaluate(ACTIVE))
+    answer = page.locator(DESK_ROW).locator('[data-testid="need-answer"]')
+    answer.focus()
+    check("approve-button-focused", page.evaluate("(el) => el === document.activeElement", answer.element_handle()),
+          active=page.evaluate(ACTIVE))
     typed_into_dock("focused-approve-button-types-into-ask-dock")
 
     # ── page: the launch composer is the page's composer ───────────────────────────
@@ -210,10 +197,12 @@ with sync_playwright() as p:
           dock=page.evaluate(VALUE, "assist-input"), active=gate_active, gate_composer=gate_box,
           steering_amend=amend, toasts=toasts)
 
-    # ── composite: a focused radiogroup keeps its keys ─────────────────────────────
-    page.goto(f"{origin}/theme", wait_until="networkidle")
-    page.get_by_test_id("skin-picker").wait_for(state="visible", timeout=10000)
-    page.get_by_test_id("skin-option-studio").focus()
+    # ── composite: a focused tablist keeps its keys (S18d: the skin picker is gone; Everything's
+    #    tabs are the composite on the Desk) ───────────────────────────────────────────────────
+    page.goto(f"{origin}/everything", wait_until="networkidle")
+    TAB = '[data-testid="everything-tab"][aria-selected="true"]'
+    page.locator(TAB).wait_for(state="visible", timeout=10000)
+    page.locator(TAB).focus()
     page.evaluate("() => { window.__keys = []; }")
     page.keyboard.press("x")
     page.keyboard.press("2")
@@ -222,7 +211,7 @@ with sync_playwright() as p:
     # The redirect prevents the default of every key it takes; inside the composite it took none.
     check("composite-keeps-its-keys",
           page.get_by_test_id("assist-input").count() == 0
-          and page.evaluate(ACTIVE) == "skin-option-studio"
+          and page.evaluate(ACTIVE) == "everything-tab"
           and keys == [["x", False], ["2", False]],
           dock_open=page.get_by_test_id("assist-input").count(), active=page.evaluate(ACTIVE), keys=keys)
 

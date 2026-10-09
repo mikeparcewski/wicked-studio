@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 desk_sheets_test.py — S11 (DES-STUDIO-REBUILD-001 §11 S11; DESIGN-simple §4-§5; DESIGN-interaction
-rule 9): look underneath, ⌘K for the pointed object, ⌥ peek — at 1440x700 under STUDIO_SKIN=desk.
+rule 9): look underneath, ⌘K for the pointed object, ⌥ peek — at 1440x700 on the Desk.
 
 Against the in-process fixture (wave1 corpus; `sheets`: every unit names a seat, cancels recorded):
 
@@ -26,13 +26,13 @@ import os
 import sys
 import urllib.request
 
-from uxfix_fixture import HIDE_GATE_TOASTS, REPO, STUDIO_SKIN, ensure_build, set_fixture, start_server
+from uxfix_fixture import HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4356"))
 W, H = 1440, 700
 SHOTS = REPO / "e2e" / "shots"
 
-report: dict = {"ok": False, "skin": STUDIO_SKIN, "steps": {}}
+report: dict = {"ok": False, "steps": {}}
 
 
 def fail(step: str, why) -> None:
@@ -48,8 +48,6 @@ def check(step: str, ok: bool, **detail) -> None:
         sys.exit(1)
 
 
-if STUDIO_SKIN != "desk":
-    fail("skin", f"desk journeys run under STUDIO_SKIN=desk, not {STUDIO_SKIN}")
 
 dist = ensure_build(fail)
 origin = start_server(PORT, dist)

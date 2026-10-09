@@ -36,7 +36,7 @@ vi.mock('../src/hooks/useBoardModel.js', () => ({
 }));
 
 const { HealthRailSection, PROBE_DEADLINE_MS, probeOverdueWord } = await import('../src/components/HealthRailSection.js');
-const { LeftSidebar } = await import('../src/components/LeftSidebar.js');
+const { SessionRail } = await import('../src/components/desk/SessionRail.js');
 const { clearCachedRoster, getCachedRoster } = await import('../src/store/rosterCache.js');
 
 const LONG_MESSAGE =
@@ -52,7 +52,7 @@ const SEATS: RosterSeat[] = [
   { key: 'pi', display_name: 'pi', binary: 'pi', enabled_for_council: true },
 ];
 
-/** The rail's controlled-open harness (LeftSidebar owns the state, §6.2). */
+/** The rail's controlled-open harness (the session rail owns the state, §6.2). */
 function Harness({ initialOpen = false }: { initialOpen?: boolean }): React.ReactElement {
   const [open, setOpen] = useState(initialOpen);
   return <HealthRailSection open={open} onToggle={() => setOpen((v) => !v)} />;
@@ -168,14 +168,14 @@ describe('the passive summary dot (§6.2/§6.3)', () => {
 
 describe('the rail-foot section (nav-ui-tweaks removed the chrome dot)', () => {
   it('renders the section at the rail foot, collapsed, with the old testid gone', () => {
-    render(<LeftSidebar runs={[]} navigate={() => {}} pathname="/" />);
+    render(<SessionRail runs={[]} needRows={[]} navigate={() => {}} pathname="/" />);
     expect(screen.getByTestId('rail-health-section')).toHaveAttribute('data-open', 'false');
     expect(screen.queryByTestId('rail-settings-section')).toBeNull();
     expect(getRoster).not.toHaveBeenCalled();
   });
 
   it('the chrome paints no connection dot; the section opens from its own header', async () => {
-    render(<LeftSidebar runs={[]} navigate={() => {}} pathname="/" />);
+    render(<SessionRail runs={[]} needRows={[]} navigate={() => {}} pathname="/" />);
     // The chrome dot that used to expand this section is gone (nav-ui-tweaks).
     expect(screen.queryByTestId('connection-dot')).toBeNull();
     fireEvent.click(screen.getByTestId('rail-health-toggle'));

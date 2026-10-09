@@ -24,11 +24,11 @@ vi.mock('../src/api/client.js', () => ({
   },
 }));
 
-const { LeftSidebar } = await import('../src/components/LeftSidebar.js');
+const { SessionRail } = await import('../src/components/desk/SessionRail.js');
 const { AskLauncher } = await import('../src/components/AskLauncher.js');
 
 function rail(): void {
-  render(<LeftSidebar runs={[]} navigate={() => undefined} pathname="/" />);
+  render(<SessionRail runs={[]} needRows={[]} navigate={() => undefined} pathname="/" />);
 }
 
 beforeEach(() => {
@@ -36,12 +36,10 @@ beforeEach(() => {
 });
 
 describe('the Ask entry — out of the rail chrome (studio#323 R1)', () => {
-  it('the rail carries NO Ask entry, expanded or collapsed', async () => {
+  it('the session rail carries NO Ask entry (it has no collapsed state since S18d)', () => {
     rail();
     expect(screen.queryByTestId('rail-ask')).toBeNull();
     expect(screen.queryByTestId('ask-launcher')).toBeNull();
-    await userEvent.setup().click(screen.getByRole('button', { name: 'Collapse sidebar' }));
-    expect(screen.queryByTestId('rail-ask')).toBeNull();
   });
 });
 

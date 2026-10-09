@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 desk_chat_launch_test.py — studio#446: a run launched from a chat lands in that chat's session, at
-1440x900 under STUDIO_SKIN=desk. No `chat_id` is seeded: the launch itself carries it.
+1440x900 on the Desk. No `chat_id` is seeded: the launch itself carries it.
 
 Drives the built UI against the fixture's sessions corpus (`sessions` + `run_chat_id`; crew's
 `capabilities.chatIdOnLaunch` is on) and proves:
@@ -22,13 +22,13 @@ import sys
 import time
 import urllib.request
 
-from uxfix_fixture import REPO, STUDIO_SKIN, ensure_build, set_fixture, start_server
+from uxfix_fixture import REPO, ensure_build, set_fixture, start_server
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4350"))
 W, H = 1440, 900
 SHOTS = REPO / "e2e" / "shots"
 
-report: dict = {"ok": False, "skin": STUDIO_SKIN, "steps": {}}
+report: dict = {"ok": False, "steps": {}}
 
 
 def fail(step: str, why) -> None:
@@ -44,8 +44,6 @@ def check(step: str, ok: bool, **detail) -> None:
         sys.exit(1)
 
 
-if STUDIO_SKIN != "desk":
-    fail("skin", f"desk journeys run under STUDIO_SKIN=desk, not {STUDIO_SKIN}")
 
 dist = ensure_build(fail)
 origin = start_server(PORT, dist)

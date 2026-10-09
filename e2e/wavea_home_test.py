@@ -12,14 +12,14 @@ move, with the consequence shown before it runs.
   idea 14  broken-clock pill — a never-indexed repo whose registered_at reads 1970 shows an
            "impossible age" pill linking to the repo, never "20702d".
 
-Under STUDIO_SKIN=desk (S15a: the desk variant, in run_journeys.py DESK) the Desk has no tiles, so idea
+On the Desk (the one shell since S18d) the Desk has no tiles, so idea
 5's moves live where the Desk keeps them: "Replay" is the dead-letter chore "for whoever runs studio"
 (same dry run → confirm → result → re-read), and a failed run is retried from ITS row ("Retry ›" →
 the launch form prefilled → one POST /runs with retryOf). Ideas 3 and 14 are the same rows.
 
-Captures (e2e/shots/): wavea-<skin>-clones.png, wavea-<skin>-replay-preview.png,
-wavea-<skin>-replay-done.png, wavea-<skin>-pill.png.
-Env: FEEDBACK_PORT (default 4397), STUDIO_SKIN. JSON report; exit 0/1.
+Captures (e2e/shots/): wavea-desk-clones.png, wavea-desk-replay-preview.png,
+wavea-desk-replay-done.png, wavea-desk-pill.png.
+Env: FEEDBACK_PORT (default 4397). JSON report; exit 0/1.
 """
 
 import json
@@ -28,16 +28,13 @@ import re
 import sys
 import urllib.request
 
-from uxfix_fixture import (DEFAULT_APPEARANCE, HIDE_GATE_TOASTS, REPO, STUDIO_SKIN, ensure_build,
+from uxfix_fixture import (DEFAULT_APPEARANCE, HIDE_GATE_TOASTS, REPO, ensure_build,
                            set_fixture, start_server)
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4397"))
 W, H = 1440, 700
 SHOTS = REPO / "e2e" / "shots"
-SKIN = STUDIO_SKIN
-DESK = SKIN == "desk"
-
-report: dict = {"ok": False, "skin": SKIN, "steps": {}}
+report: dict = {"ok": False, "steps": {}}
 
 
 class SectionFailed(Exception):
@@ -63,7 +60,7 @@ def get_json(origin: str, path: str):
 
 def reset(origin: str, **switches) -> None:
     set_fixture(origin, **{"never_indexed": 0, "broken_clock": False, "governance": None,
-                           "reset_repairs": True, "appearance": {**DEFAULT_APPEARANCE, "skin": SKIN},
+                           "reset_repairs": True, "appearance": {**DEFAULT_APPEARANCE},
                            **switches})
 
 
@@ -99,7 +96,7 @@ with sync_playwright() as p:
         act = row.get_by_test_id("need-batch-act")
         check("clones-batch-label", act.inner_text().strip() == "Index all 9 repos ›", label=act.inner_text())
         check("clones-nothing-posted-yet", get_json(origin, "/__fixture/onboard-posts")["posts"] == [])
-        page.screenshot(path=str(SHOTS / f"wavea-{SKIN}-clones.png"))
+        page.screenshot(path=str(SHOTS / f"wavea-desk-clones.png"))
         act.click()
         page.wait_for_function(
             """() => document.querySelector('[data-testid="need-batch-act"]')?.dataset.batchPhase === 'done'""")
@@ -110,15 +107,14 @@ with sync_playwright() as p:
     def section_replay() -> None:
         reset(origin, governance="deadletters")
         home()
-        if DESK:
-            # The Desk: the chore row carries the count and the move (no tile to overlap).
-            tile = page.locator('[data-testid="desk-chore"][data-chore="deadletters"]')
-            tile.wait_for(state="visible")
-            check("replay-count-shown", "128+ governance events dead-lettered" in tile.inner_text(), text=tile.inner_text())
-            repair = tile.locator('[data-testid="kpi-repair"][data-repair="replay"]')
-            check("replay-move-on-chore", repair.count() == 1)
-            replay_tail(repair, "desk-chore-line")
-            return
+        # The Desk: the chore row carries the count and the move (no tile to overlap).
+        tile = page.locator('[data-testid="desk-chore"][data-chore="deadletters"]')
+        tile.wait_for(state="visible")
+        check("replay-count-shown", "128+ governance events dead-lettered" in tile.inner_text(), text=tile.inner_text())
+        repair = tile.locator('[data-testid="kpi-repair"][data-repair="replay"]')
+        check("replay-move-on-chore", repair.count() == 1)
+        replay_tail(repair, "desk-chore-line")
+        return
         tile = page.get_by_test_id("home-kpi-governed")
         tile.wait_for(state="visible")
         check("replay-count-shown", "128+ governance events dead-lettered" in tile.inner_text())
@@ -153,7 +149,7 @@ with sync_playwright() as p:
               and "stay quarantined" in text, text=text)
         check("replay-only-dry-run-posted", get_json(origin, "/__fixture/replay-posts")["posts"] == [{"dryRun": True}],
               posts=get_json(origin, "/__fixture/replay-posts")["posts"])
-        page.screenshot(path=str(SHOTS / f"wavea-{SKIN}-replay-preview.png"))
+        page.screenshot(path=str(SHOTS / f"wavea-desk-replay-preview.png"))
         page.get_by_test_id("kpi-repair-confirm").click()
         page.get_by_test_id("kpi-repair-result").wait_for(state="visible")
         result = page.get_by_test_id("kpi-repair-result").inner_text()
@@ -164,7 +160,7 @@ with sync_playwright() as p:
         page.wait_for_function(
             """(id) => !(document.querySelector(`[data-testid="${id}"]`)?.textContent || '')
                       .includes('dead-lettered')""", arg=where)
-        page.screenshot(path=str(SHOTS / f"wavea-{SKIN}-replay-done.png"))
+        page.screenshot(path=str(SHOTS / f"wavea-desk-replay-done.png"))
 
     def section_pill() -> None:
         reset(origin, never_indexed=1, broken_clock=True)
@@ -178,7 +174,7 @@ with sync_playwright() as p:
         check("pill-says-so", "impossible age" in age.inner_text() and not re.search(r"\d{3,}d", row.inner_text()),
               row=row.inner_text())
         check("pill-links-record", age.get_attribute("href") == "/repo-detail/idx-0", href=age.get_attribute("href"))
-        page.screenshot(path=str(SHOTS / f"wavea-{SKIN}-pill.png"))
+        page.screenshot(path=str(SHOTS / f"wavea-desk-pill.png"))
         age.click()
         page.wait_for_function("() => window.location.pathname === '/repo-detail/idx-0'")
         check("pill-opens-record", True)
@@ -191,9 +187,8 @@ with sync_playwright() as p:
         page.on("request", lambda r: launches.append(json.loads(r.post_data or "{}"))
                 if r.method == "POST" and r.url.endswith("/api/v1/runs") else None)
         home()
-        if DESK:
-            desk_retry(launches)
-            return
+        desk_retry(launches)
+        return
         repair = page.locator('[data-testid="kpi-repair"][data-repair="retry"]')
         repair.wait_for(state="visible")
         repair.click()
@@ -206,7 +201,7 @@ with sync_playwright() as p:
         result.wait_for(state="visible")
         check("retry-relaunched", result.inner_text().startswith("Relaunched 1")
               and len(launches) == 1 and launches[0].get("retryOf") == "f1", result=result.inner_text(), launches=launches)
-        page.screenshot(path=str(SHOTS / f"wavea-{SKIN}-retry.png"))
+        page.screenshot(path=str(SHOTS / f"wavea-desk-retry.png"))
         # The relaunch echoes `retry_of` on the runs wire (api-types 0.8.0), so a retried failure has its answer:
         # after a reload the Failed tile no longer offers Retry for it.
         runs = get_json(origin, "/api/v1/runs")
@@ -247,7 +242,7 @@ with sync_playwright() as p:
             page.get_by_test_id("preflight-override").click()
         page.wait_for_timeout(600)
         check("retry-relaunched", len(launches) == 1 and launches[0].get("retryOf") == "f1", launches=launches)
-        page.screenshot(path=str(SHOTS / f"wavea-{SKIN}-retry.png"))
+        page.screenshot(path=str(SHOTS / f"wavea-desk-retry.png"))
         runs = get_json(origin, "/api/v1/runs")
         rows = runs if isinstance(runs, list) else runs.get("runs", [])
         echoed = [r["session"].get("retry_of") for r in rows if r["session"]["id"].startswith("r-launched-")]

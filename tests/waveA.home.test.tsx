@@ -8,9 +8,8 @@
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { GovernanceClaim, RepoEntry } from '../src/api/types.js';
+import type { RepoEntry } from '../src/api/types.js';
 import { makeView } from './factories.js';
-import { GOVERNANCE_DEADLETTERS } from './fixtures/wave2.js';
 
 const { rerunOnboarding, launchRun, getRoster } = vi.hoisted(() => ({
   rerunOnboarding: vi.fn(async (id: string) => ({ runId: `onboard-${id}` })),
@@ -25,13 +24,11 @@ vi.mock('../src/api/client.js', async (orig) => {
 const { replayGovernanceDeadletters } = vi.hoisted(() => ({ replayGovernanceDeadletters: vi.fn() }));
 vi.mock('../src/api/governanceReplay.js', () => ({ replayGovernanceDeadletters }));
 
-import { ApiError } from '../src/api/errors.js';
 import { ageVerdict, CLOCK_FLOOR_MS } from '../src/board/ageHonesty.js';
 import { groupAlike } from '../src/board/needsQueue.js';
 import { needsYouRows, type NeedsYouInputs } from '../src/board/needsYou.js';
-import { onboardEstimate, retryLaunchOf, retryableFailed } from '../src/board/repairMoves.js';
+import { onboardEstimate } from '../src/board/repairMoves.js';
 import { AgeStamp } from '../src/components/AgeStamp.js';
-import { DeckKpiRibbon } from '../src/components/DeckKpiRibbon.js';
 import { NeedsQueueSurface } from '../src/components/NeedsYouQueue.js';
 
 const NOW = Date.UTC(2026, 8, 27, 12);
@@ -100,102 +97,6 @@ describe('idea 3 — collapse clones: never-indexed repos fold into one batch ro
     expect(rerunOnboarding).toHaveBeenCalledTimes(9);
     expect(rerunOnboarding.mock.calls.map((c) => c[0]).sort()).toEqual(NINE.map((r) => r.id).sort());
     expect(screen.getByTestId('need-batch-act')).toHaveTextContent('Launched 9');
-  });
-});
-
-const CLAIMS = [{ claim_id: 'c1', scope: 'wicked-agent/a', phase: 'build' }] as unknown as GovernanceClaim[];
-
-describe('idea 5 — the dead-letter count carries Replay, dry run first', () => {
-  const PREVIEW = {
-    outbox: '/o', store: { path: '/s', source: 'flag' }, archive: null, read: 128, replayed: 0,
-    alreadyPresent: null, failed: 0, dryRun: true, note: null, blocker: null,
-    fold: { ...GOVERNANCE_DEADLETTERS.deadletters, legacyOutbox: undefined },
-  };
-  const DONE = { ...PREVIEW, dryRun: false, archive: '/o.replayed', replayed: 120, alreadyPresent: 0, failed: 8, fold: undefined };
-
-  it('shows the dry-run preview before replaying, and replays only on confirm', async () => {
-    replayGovernanceDeadletters.mockImplementation(async (dry: boolean) => (dry ? PREVIEW : DONE));
-    const onRepaired = vi.fn();
-    render(<DeckKpiRibbon runs={[makeView({ id: 'a', status: 'completed' })]} claims={CLAIMS}
-      governance={GOVERNANCE_DEADLETTERS} needCount={0} navigate={() => {}} now={NOW} onRepaired={onRepaired} />);
-    const repair = screen.getByTestId('kpi-repair');
-    expect(repair).toHaveAttribute('data-repair', 'replay');
-    await userEvent.click(repair);
-    const preview = await screen.findByTestId('kpi-repair-preview');
-    await waitFor(() => expect(preview).toHaveTextContent('Would replay 128 dead-lettered events'));
-    expect(preview).toHaveTextContent('Dry run — nothing has moved yet');
-    expect(preview).toHaveTextContent('any that fail stay quarantined');
-    // Only the dry run has been asked for.
-    expect(replayGovernanceDeadletters.mock.calls).toEqual([[true]]);
-    expect(onRepaired).not.toHaveBeenCalled();
-    await userEvent.click(screen.getByTestId('kpi-repair-confirm'));
-    await waitFor(() => expect(screen.getByTestId('kpi-repair-result')).toHaveTextContent(
-      'Replayed 128 events: 120 landed · 8 still quarantined',
-    ));
-    expect(replayGovernanceDeadletters.mock.calls).toEqual([[true], [false]]);
-    expect(onRepaired).toHaveBeenCalledTimes(1);
-  });
-
-  it('a blocker disables the replay and says why', async () => {
-    replayGovernanceDeadletters.mockResolvedValue({ ...PREVIEW, blocker: 'the installed engine cannot replay a dead-letter outbox — upgrade wicked-core-ts' });
-    render(<DeckKpiRibbon runs={[]} claims={CLAIMS} governance={GOVERNANCE_DEADLETTERS} needCount={0} navigate={() => {}} now={NOW} />);
-    await userEvent.click(screen.getByTestId('kpi-repair'));
-    await waitFor(() => expect(screen.getByTestId('kpi-repair-preview')).toHaveTextContent('Cannot replay here'));
-    expect(screen.getByTestId('kpi-repair-confirm')).toBeDisabled();
-  });
-
-  it('a daemon without the replay route (404) is named as too old, with the CLI that still works', async () => {
-    replayGovernanceDeadletters.mockRejectedValue(new ApiError(404, 'not found'));
-    render(<DeckKpiRibbon runs={[]} claims={CLAIMS} governance={GOVERNANCE_DEADLETTERS} needCount={0} navigate={() => {}} now={NOW} />);
-    await userEvent.click(screen.getByTestId('kpi-repair'));
-    const preview = await screen.findByTestId('kpi-repair-preview');
-    await waitFor(() => expect(preview).toHaveTextContent('This daemon predates dead-letter replay'));
-    expect(preview).toHaveTextContent('wicked-crew governance replay');
-    expect(preview).not.toHaveTextContent('the daemon refused this — not found');
-  });
-
-  it('a healthy governance block carries no repair move', () => {
-    render(<DeckKpiRibbon runs={[]} claims={CLAIMS} governance={null} needCount={0} navigate={() => {}} now={NOW} />);
-    expect(screen.queryByTestId('kpi-repair')).toBeNull();
-  });
-});
-
-describe('idea 5 — the Failed tile carries Retry failed', () => {
-  it('previews the failures not yet retried, then relaunches exactly those', async () => {
-    const runs = [
-      makeView({ id: 'f1', status: 'failed', problem: 'fix the flaky upload test', repo_ref: 'repo-a', workflow_id: 'bug', clis: ['claude'] }),
-      makeView({ id: 'f2', status: 'failed', problem: 'already retried one' }),
-      makeView({ id: 'r2', status: 'completed', retry_of: 'f2' }),
-    ];
-    render(<DeckKpiRibbon runs={runs} claims={null} needCount={0} navigate={() => {}} now={NOW} />);
-    const repair = screen.getByTestId('kpi-repair');
-    expect(repair).toHaveAttribute('data-repair', 'retry');
-    await userEvent.click(repair);
-    const preview = screen.getByTestId('kpi-repair-preview');
-    expect(preview).toHaveTextContent('Relaunches 1 run with the same brief, workflow, gates and seats (where the roster still has them); none opens a PR on its own');
-    expect(preview).toHaveTextContent('1 failure already retried, skipped');
-    expect(launchRun).not.toHaveBeenCalled();
-    await userEvent.click(screen.getByTestId('kpi-repair-confirm'));
-    await waitFor(() => expect(screen.getByTestId('kpi-repair-result')).toHaveTextContent('Relaunched 1'));
-    expect(launchRun).toHaveBeenCalledTimes(1);
-    expect(launchRun).toHaveBeenCalledWith(expect.objectContaining({
-      problem: 'fix the flaky upload test', retryOf: 'f1', repoRef: 'repo-a', workflow: 'bug', deliver: 'none',
-      // Roster SEAT objects, never bare keys (the composer's clisJson spelling).
-      clisJson: JSON.stringify([{ key: 'claude', command: 'claude' }]),
-    }));
-  });
-
-  it('with no roster at hand the seats key is omitted (the daemon default), never bare keys', () => {
-    const v = makeView({ id: 'x', status: 'failed', clis: ['claude'] });
-    const plan = retryLaunchOf(v, null);
-    expect(plan.via).toBe('runs');
-    expect(plan.via === 'runs' && plan.body.clisJson).toBeFalsy();
-  });
-
-  it('a failed onboarding run retries through its repo onboard route', () => {
-    const v = makeView({ id: 'o', status: 'failed', workflow_id: 'onboarding', repo_ref: 'repo-x' });
-    expect(retryLaunchOf(v)).toEqual({ via: 'onboard', repoId: 'repo-x' });
-    expect(retryableFailed([v], [v])).toHaveLength(1);
   });
 });
 

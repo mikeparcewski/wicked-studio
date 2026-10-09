@@ -152,7 +152,7 @@ export function PluginArtifact({ projectId, docId, title, composerKey, size, mor
   useEffect(() => {
     if (typeof MutationObserver !== 'function') return undefined;
     const seen = new MutationObserver(() => hostRef.current?.setTheme(readThemeTokens()));
-    seen.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'data-skin', 'style', 'class'] });
+    seen.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'style', 'class'] });
     return () => seen.disconnect();
   }, []);
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-desk_run_state_test.py — the gate and run-state defects the desk reel found, under STUDIO_SKIN=desk at
+desk_run_state_test.py — the gate and run-state defects the desk reel found, on the Desk at
 1440x700 against the in-process fixture:
 
   1. #466 A FAILED READ IS NOT AN EMPTY LIST: with GET /runs answering 500 and a registered repo, the
@@ -25,13 +25,13 @@ import os
 import sys
 import urllib.request
 
-from uxfix_fixture import HIDE_GATE_TOASTS, REPO, STUDIO_SKIN, ensure_build, set_fixture, start_server
+from uxfix_fixture import HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4357"))
 W, H = 1440, 700
 SHOTS = REPO / "e2e" / "shots"
 
-report: dict = {"ok": False, "skin": STUDIO_SKIN, "steps": {}}
+report: dict = {"ok": False, "steps": {}}
 
 
 def fail(step: str, why) -> None:
@@ -47,8 +47,6 @@ def check(step: str, ok: bool, **detail) -> None:
         sys.exit(1)
 
 
-if STUDIO_SKIN != "desk":
-    fail("skin", f"desk journeys run under STUDIO_SKIN=desk, not {STUDIO_SKIN}")
 
 dist = ensure_build(fail)
 origin = start_server(PORT, dist)
