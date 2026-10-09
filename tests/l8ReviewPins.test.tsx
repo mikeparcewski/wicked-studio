@@ -12,7 +12,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { buildFeed, escalationLookups, narrate } from '../src/components/narrator.js';
-import { timelineRows } from '../src/components/RunTimeline.js';
 import { ChatInput } from '../src/components/ChatInput.js';
 import * as client from '../src/api/client.js';
 import { setRetryPrefill, takeRetryPrefill } from '../src/store/retryPrefill.js';
@@ -52,39 +51,17 @@ describe('MED-1 — <cmd> and the seat reach the copy table from the run\'s othe
     expect(narrate(escalated, ctx)?.text).toBe('Gate approaching — Unit #2: a command was refused by governance');
   });
 
-  it('dead_seat names the unit\'s seat in the feed and the timeline; without one it says "the seat" (no filler)', () => {
+  it('dead_seat names the unit\'s seat in the feed; without one it says "the seat" (no filler)', () => {
     const dead = ev({ type: 'gateEscalated', ord: 3, condition: 'dead_seat', denialSource: 'dead_seat', ts: 4, seq: 4 });
     const feed = buildFeed([dead], units, 3, ctx);
     const line = feed.find((i) => i.kind === 'line');
     expect(line?.kind === 'line' ? line.line.text : '').toBe('Gate approaching — Unit #3: seat claude is unusable (signed out / not installed) — no eligible seat remains');
     expect(narrate(dead, ctx)?.text).toBe('Gate approaching — Unit #3: the seat is unusable (signed out / not installed) — no eligible seat remains');
-    const rows = timelineRows([dead], units);
-    expect(rows.find((r) => r.label === 'gate')?.meta).toBe('Unit #3: seat claude is unusable (signed out / not installed) — no eligible seat remains');
-  });
-
-  it('the TIMELINE gate row carries the refused command too', () => {
-    const rows = timelineRows([denied, escalated], units);
-    expect(rows.find((r) => r.label === 'gate')?.meta).toBe('Unit #2: a command was refused by governance: `ls -la /`');
+    // S16a-3: the TIMELINE rows (RunTimeline) retired with the run page; the feed above carries the line.
   });
 });
 
-describe('MED-2a — unitDispatched meta: discipline named; "(not handed)" ONLY on handed === false', () => {
-  const units = [makeUnit({ id: 'run-1:build', ord: 1, stage: 'build', status: 'pending', assigned_cli: 'claude' })];
-  const dispatch = (baseSkill: Record<string, unknown> | undefined) =>
-    timelineRows([ev({ type: 'unitDispatched', ord: 1, attempt: 0, ...(baseSkill !== undefined ? { baseSkill } : {}), ts: 1, seq: 1 })], units)
-      .find((r) => r.label === 'unit 1')?.meta ?? '';
-
-  it('handed ABSENT ⇒ discipline named, no "(not handed)" (absent = unknown, core #479)', () => {
-    const meta = dispatch({ name: 'wicked-garden-governed-worker', role: 'creator' });
-    expect(meta).toContain('discipline: wicked-garden-governed-worker §creator');
-    expect(meta).not.toContain('not handed');
-  });
-  it('handed === false ⇒ "discipline named only (not handed)"; handed === true ⇒ no suffix; no baseSkill ⇒ no discipline at all', () => {
-    expect(dispatch({ name: 'wg', role: 'creator', handed: false })).toContain('discipline: wg §creator · discipline named only (not handed)');
-    expect(dispatch({ name: 'wg', role: 'creator', handed: true })).not.toContain('not handed');
-    expect(dispatch(undefined)).toBe('claude · attempt 0');
-  });
-});
+// S16a-3: MED-2a pinned RunTimeline's unitDispatched rows; the timeline retired with the run page.
 
 describe('MED-2b/2c — ChatInput: revisesPr gating and the F-089 no-repo shape', () => {
   beforeEach(() => {

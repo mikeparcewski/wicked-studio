@@ -11,10 +11,10 @@
   "version": 1,
   "studioVersion": "0.6.6",
   "counts": {
-    "files": 198,
-    "occurrences": 2333,
-    "static": 2063,
-    "dynamic": 49,
+    "files": 191,
+    "occurrences": 2271,
+    "static": 2013,
+    "dynamic": 48,
     "computed": 8
   },
   "static": [
@@ -120,24 +120,6 @@
       "testId": "amend-prepopulated",
       "files": [
         "src/components/SteeringGate.tsx"
-      ]
-    },
-    {
-      "testId": "amendment-amended",
-      "files": [
-        "src/components/RunTimeline.tsx"
-      ]
-    },
-    {
-      "testId": "amendment-diff",
-      "files": [
-        "src/components/RunTimeline.tsx"
-      ]
-    },
-    {
-      "testId": "amendment-original",
-      "files": [
-        "src/components/RunTimeline.tsx"
       ]
     },
     {
@@ -2877,12 +2859,6 @@
       ]
     },
     {
-      "testId": "escalation-headline",
-      "files": [
-        "src/components/RunTimeline.tsx"
-      ]
-    },
-    {
       "testId": "eval-history",
       "files": [
         "src/components/EvalHistory.tsx"
@@ -3263,49 +3239,42 @@
     {
       "testId": "failure-all-runs",
       "files": [
-        "src/components/FailureBanner.tsx",
         "src/components/session/RunRecord.tsx"
       ]
     },
     {
       "testId": "failure-banner",
       "files": [
-        "src/components/FailureBanner.tsx",
         "src/components/session/RunRecord.tsx"
       ]
     },
     {
       "testId": "failure-engine-detail",
       "files": [
-        "src/components/FailureBanner.tsx",
         "src/components/session/RunRecord.tsx"
       ]
     },
     {
       "testId": "failure-plain",
       "files": [
-        "src/components/FailureBanner.tsx",
         "src/components/session/RunRecord.tsx"
       ]
     },
     {
       "testId": "failure-reject-note",
       "files": [
-        "src/components/FailureBanner.tsx",
         "src/components/session/RunRecord.tsx"
       ]
     },
     {
       "testId": "failure-rule-link",
       "files": [
-        "src/components/FailureBanner.tsx",
         "src/components/session/RunRecord.tsx"
       ]
     },
     {
       "testId": "failure-send-back-note",
       "files": [
-        "src/components/FailureBanner.tsx",
         "src/components/session/RunRecord.tsx"
       ]
     },
@@ -3427,36 +3396,6 @@
       "testId": "floor-marker",
       "files": [
         "src/components/LaunchPreview.tsx"
-      ]
-    },
-    {
-      "testId": "followup-bar",
-      "files": [
-        "src/components/FollowUpComposer.tsx"
-      ]
-    },
-    {
-      "testId": "followup-close",
-      "files": [
-        "src/components/FollowUpComposer.tsx"
-      ]
-    },
-    {
-      "testId": "followup-composer",
-      "files": [
-        "src/components/FollowUpComposer.tsx"
-      ]
-    },
-    {
-      "testId": "followup-label",
-      "files": [
-        "src/components/FollowUpComposer.tsx"
-      ]
-    },
-    {
-      "testId": "followup-open",
-      "files": [
-        "src/components/FollowUpComposer.tsx"
       ]
     },
     {
@@ -6342,12 +6281,6 @@
       ]
     },
     {
-      "testId": "process-stepper",
-      "files": [
-        "src/components/ChatPanel.tsx"
-      ]
-    },
-    {
       "testId": "project-brief",
       "files": [
         "src/components/ProjectBrief.tsx"
@@ -7164,48 +7097,6 @@
       ]
     },
     {
-      "testId": "rerun-cancel",
-      "files": [
-        "src/components/RerunPreview.tsx"
-      ]
-    },
-    {
-      "testId": "rerun-confirm",
-      "files": [
-        "src/components/RerunPreview.tsx"
-      ]
-    },
-    {
-      "testId": "rerun-consequence",
-      "files": [
-        "src/components/RerunPreview.tsx"
-      ]
-    },
-    {
-      "testId": "rerun-error",
-      "files": [
-        "src/components/RerunPreview.tsx"
-      ]
-    },
-    {
-      "testId": "rerun-preview",
-      "files": [
-        "src/components/RerunPreview.tsx"
-      ]
-    },
-    {
-      "testId": "rerun-sent",
-      "files": [
-        "src/components/RerunPreview.tsx"
-      ]
-    },
-    {
-      "testId": "retry-link",
-      "files": [
-        "src/components/RunTimeline.tsx"
-      ]
-    },
-    {
       "testId": "rework-badge",
       "files": [
         "src/components/DecisionsLedger.tsx"
@@ -7416,39 +7307,9 @@
       ]
     },
     {
-      "testId": "run-archive",
-      "files": [
-        "src/components/ChatPanel.tsx"
-      ]
-    },
-    {
-      "testId": "run-archive-confirm",
-      "files": [
-        "src/components/ChatPanel.tsx"
-      ]
-    },
-    {
-      "testId": "run-archive-error",
-      "files": [
-        "src/components/ChatPanel.tsx"
-      ]
-    },
-    {
-      "testId": "run-archive-keep",
-      "files": [
-        "src/components/ChatPanel.tsx"
-      ]
-    },
-    {
       "testId": "run-archive-row",
       "files": [
         "src/components/FinishedRunRow.tsx"
-      ]
-    },
-    {
-      "testId": "run-archive-yes",
-      "files": [
-        "src/components/ChatPanel.tsx"
       ]
     },
     {
@@ -7461,42 +7322,6 @@
       "testId": "run-base",
       "files": [
         "src/components/WhatWhere.tsx"
-      ]
-    },
-    {
-      "testId": "run-base-detail",
-      "files": [
-        "src/components/RunTimeline.tsx"
-      ]
-    },
-    {
-      "testId": "run-cancel",
-      "files": [
-        "src/components/ChatPanel.tsx"
-      ]
-    },
-    {
-      "testId": "run-cancel-confirm",
-      "files": [
-        "src/components/ChatPanel.tsx"
-      ]
-    },
-    {
-      "testId": "run-cancel-error",
-      "files": [
-        "src/components/ChatPanel.tsx"
-      ]
-    },
-    {
-      "testId": "run-cancel-keep",
-      "files": [
-        "src/components/ChatPanel.tsx"
-      ]
-    },
-    {
-      "testId": "run-cancel-yes",
-      "files": [
-        "src/components/ChatPanel.tsx"
       ]
     },
     {
@@ -7566,12 +7391,6 @@
       ]
     },
     {
-      "testId": "run-draft-update",
-      "files": [
-        "src/components/ChatPanel.tsx"
-      ]
-    },
-    {
       "testId": "run-draft-update-row",
       "files": [
         "src/components/FinishedRunRow.tsx"
@@ -7581,24 +7400,6 @@
       "testId": "run-finished-row",
       "files": [
         "src/components/FinishedRunRow.tsx"
-      ]
-    },
-    {
-      "testId": "run-header",
-      "files": [
-        "src/components/ChatPanel.tsx"
-      ]
-    },
-    {
-      "testId": "run-inspect",
-      "files": [
-        "src/components/ChatPanel.tsx"
-      ]
-    },
-    {
-      "testId": "run-inspect-menu",
-      "files": [
-        "src/components/ChatPanel.tsx"
       ]
     },
     {
@@ -7620,12 +7421,6 @@
       ]
     },
     {
-      "testId": "run-pending",
-      "files": [
-        "src/components/ChatPanel.tsx"
-      ]
-    },
-    {
       "testId": "run-provenance",
       "files": [
         "src/components/WhatWhere.tsx"
@@ -7635,12 +7430,6 @@
       "testId": "run-raw-back",
       "files": [
         "src/components/RunRawView.tsx"
-      ]
-    },
-    {
-      "testId": "run-retry",
-      "files": [
-        "src/components/ChatPanel.tsx"
       ]
     },
     {
@@ -10863,18 +10652,6 @@
       ]
     },
     {
-      "testId": "step-failed-detail",
-      "files": [
-        "src/components/RunTimeline.tsx"
-      ]
-    },
-    {
-      "testId": "stepper-rerun",
-      "files": [
-        "src/components/ChatPanel.tsx"
-      ]
-    },
-    {
       "testId": "strip-sensor",
       "files": [
         "src/components/ThreadDrawer.tsx"
@@ -11046,12 +10823,6 @@
       "testId": "tech-rule-origin-error",
       "files": [
         "src/components/decisions/RuleOrigin.tsx"
-      ]
-    },
-    {
-      "testId": "tech-run-header",
-      "files": [
-        "src/components/ChatPanel.tsx"
       ]
     },
     {
@@ -11562,7 +11333,6 @@
     {
       "testId": "thread",
       "files": [
-        "src/components/ChatPanel.tsx",
         "src/components/DocumentThread.tsx",
         "src/components/NarratorFeed.tsx",
         "src/components/threadAnchor.ts"
@@ -11635,45 +11405,9 @@
       ]
     },
     {
-      "testId": "timeline",
-      "files": [
-        "src/components/RunTimeline.tsx"
-      ]
-    },
-    {
-      "testId": "timeline-detail",
-      "files": [
-        "src/components/RunTimeline.tsx"
-      ]
-    },
-    {
-      "testId": "timeline-phase",
-      "files": [
-        "src/components/RunTimeline.tsx"
-      ]
-    },
-    {
-      "testId": "timeline-provenance",
-      "files": [
-        "src/components/RunTimeline.tsx"
-      ]
-    },
-    {
-      "testId": "timeline-row",
-      "files": [
-        "src/components/RunTimeline.tsx"
-      ]
-    },
-    {
       "testId": "toast-dismiss",
       "files": [
         "src/components/GateNotifications.tsx"
-      ]
-    },
-    {
-      "testId": "tool-call-denied-detail",
-      "files": [
-        "src/components/RunTimeline.tsx"
       ]
     },
     {
@@ -11752,36 +11486,6 @@
       "testId": "undo-toast",
       "files": [
         "src/components/UndoToasts.tsx"
-      ]
-    },
-    {
-      "testId": "unit-approve",
-      "files": [
-        "src/components/WorkUnitDetail.tsx"
-      ]
-    },
-    {
-      "testId": "unit-denial-reason",
-      "files": [
-        "src/components/WorkUnitDetail.tsx"
-      ]
-    },
-    {
-      "testId": "unit-list",
-      "files": [
-        "src/components/UnitList.tsx"
-      ]
-    },
-    {
-      "testId": "unit-transcript",
-      "files": [
-        "src/components/WorkUnitDetail.tsx"
-      ]
-    },
-    {
-      "testId": "unit-transcript-toggle",
-      "files": [
-        "src/components/WorkUnitDetail.tsx"
       ]
     },
     {
@@ -12413,12 +12117,6 @@
       ]
     },
     {
-      "testId": "work-unit",
-      "files": [
-        "src/components/WorkUnitDetail.tsx"
-      ]
-    },
-    {
       "testId": "worker-root-error",
       "files": [
         "src/components/SystemSettings.tsx"
@@ -12440,12 +12138,6 @@
       "testId": "workflows-refused-row",
       "files": [
         "src/components/WorkflowViewer.tsx"
-      ]
-    },
-    {
-      "testId": "worktree-restored-detail",
-      "files": [
-        "src/components/RunTimeline.tsx"
       ]
     }
   ],
@@ -12724,12 +12416,6 @@
       ]
     },
     {
-      "pattern": "stepper-phase-*",
-      "files": [
-        "src/components/ChatPanel.tsx"
-      ]
-    },
-    {
       "pattern": "theme-*",
       "files": [
         "src/components/AppearanceSettings.tsx"
@@ -12780,7 +12466,6 @@
         "src/components/AnchoredOverlay.tsx",
         "src/components/AppearanceSettings.tsx",
         "src/components/CaptureDrop.tsx",
-        "src/components/ChatPanel.tsx",
         "src/components/DashboardTiles.tsx",
         "src/components/DemoMode.tsx",
         "src/components/FacetAutocomplete.tsx",
