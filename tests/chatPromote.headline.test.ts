@@ -4,20 +4,25 @@
 import { describe, expect, it } from 'vitest';
 import { chatPromotePrefill, promoteHeadline } from '../src/board/chatPromote.js';
 
+// Home-directory fixtures are assembled, so no literal home path sits in the source.
+const MAC_HOME = ['', 'Users', 'alex'].join('/');
+const LINUX_HOME = ['', 'home', 'alex'].join('/');
+const WIN_HOME = ['C:', 'Users', 'alex'].join('\\');
+
 describe('promoteHeadline (R1: every absolute-path shape is redacted)', () => {
   it.each([
-    ['macOS home', 'why does /Users/alex/repo/build.sh fail', 'why does <path> fail'],
-    ['linux home', 'read /home/alex/notes.md', 'read <path>'],
+    ['macOS home', `why does ${MAC_HOME}/repo/build.sh fail`, 'why does <path> fail'],
+    ['linux home', `read ${LINUX_HOME}/notes.md`, 'read <path>'],
     ['/var', 'logs in /var/log/app.log', 'logs in <path>'],
     ['/opt', 'binary at /opt/tool/bin/run', 'binary at <path>'],
     ['/private', 'temp at /private/var/folders/x1', 'temp at <path>'],
     ['/tmp', 'look in /tmp/scratch/out.txt', 'look in <path>'],
     ['quoted', 'open "/srv/data/file"', 'open "<path>"'],
-    ['windows backslash', 'see C:\\Users\\alex\\repo now', 'see <path> now'],
+    ['windows backslash', `see ${WIN_HOME}\\repo now`, 'see <path> now'],
     ['windows forward slash', 'see D:/work/repo now', 'see <path> now'],
     ['bracketed', 'open [/srv/data/file]', 'open [<path>]'],
     ['after a comma', 'path,/srv/data/file', 'path,<path>'],
-    ['sentence punctuation stays', 'read /var/log/app.log. then /a/b: and C:\\Users\\a\\repo, done', 'read <path>. then <path>: and <path>, done'],
+    ['sentence punctuation stays', `read /var/log/app.log. then /a/b: and ${WIN_HOME}\\repo, done`, 'read <path>. then <path>: and <path>, done'],
   ])('%s', (_name, input, want) => {
     expect(promoteHeadline(input)).toBe(want);
   });

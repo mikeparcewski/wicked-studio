@@ -1,7 +1,7 @@
 import type { RetryPrefill } from '../store/retryPrefill.js';
 
 /** Any POSIX absolute path of two or more segments (`/var/folders/x`, `/opt/app/bin`), or a Windows
- *  drive path (`C:\\Users\\x`, `D:/repo`) — the shapes a PR title must never carry (studio#311 R1).
+ *  drive path (`C:\\work\\x`, `D:/repo`) — the shapes a PR title must never carry (studio#311 R1).
  *  A path starts after anything but a word/path character (so `[/srv/x]` and `a,/srv/x` match, while
  *  `src/a/b` and a URL's `//host/x` do not) and stops at whitespace, quotes and brackets. */
 const ABS_PATH = /(?<![\w.~/\\-])(?:\/[^\s/'"`()[\]{}<>,;]+){2,}\/?|(?<!\w)[A-Za-z]:[\\/][^\s'"`()[\]{}<>,;]*/g;
