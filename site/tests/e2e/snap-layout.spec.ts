@@ -164,3 +164,19 @@ test.describe('scroll-snap layout', () => {
     }
   });
 });
+
+test.describe('scroll-snap under reduced motion', () => {
+  // wicked-web#31: snapping moves the viewport for you, the motion the preference asks the page to
+  // suppress. studio.css re-declares `scroll-snap-type` on html after the chrome's guard, so it
+  // carries the guard too; assert at a desktop width, where snapping would otherwise be on.
+  test.use({ contextOptions: { reducedMotion: 'reduce' } });
+
+  test('no scroll snapping at desktop width', async ({ page }) => {
+    await page.setViewportSize(LAPTOP);
+    await page.goto('/');
+    expect(await page.evaluate(() => matchMedia('(prefers-reduced-motion: reduce)').matches)).toBe(true);
+    expect(
+      await page.evaluate(() => getComputedStyle(document.documentElement).scrollSnapType),
+    ).toBe('none');
+  });
+});
