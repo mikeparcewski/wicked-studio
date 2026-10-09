@@ -74,7 +74,9 @@ with sync_playwright() as p:
     page.on("pageerror", lambda e: errors.append(str(e)))
     creates: list = []
     deletes: list = []
+    create_bodies: list = []
     page.on("request", lambda r: creates.append(r.url) if r.method == "POST" and r.url.endswith(f"/projects/{PID}/interactive/api/docs") else None)
+    page.on("request", lambda r: create_bodies.append(r.post_data) if r.method == "POST" and r.url.endswith(f"/projects/{PID}/interactive/api/docs") else None)
     page.on("request", lambda r: deletes.append(r.url) if r.method == "DELETE" and "/interactive/docs/" in r.url else None)
     page.add_init_script(
         "document.addEventListener('DOMContentLoaded', () => { const s = document.createElement('style'); "
@@ -88,9 +90,15 @@ with sync_playwright() as p:
     page.get_by_test_id("made-new-document").click()
     page.get_by_test_id("made-new-document-form").wait_for(state="visible", timeout=8000)
     page.get_by_test_id("made-new-document-brief").fill("Offsite plan for the team")
+    # studio#302: the council is chosen here; the create carries it as clisJson.
+    page.get_by_test_id("made-new-document-seats").wait_for(state="visible", timeout=8000)
+    council = page.get_by_test_id("made-new-document-council").inner_text()
+    pressed = page.eval_on_selector_all('[data-testid="made-new-document-seat"][aria-pressed="true"]', "els => els.map(e => e.dataset.seat)")
     page.wait_for_function("() => !document.querySelector('[data-testid=\"made-new-document-create\"]')?.disabled", timeout=15000)
     page.get_by_test_id("made-new-document-create").click()
     page.wait_for_function("() => new URLSearchParams(location.search).get('open') !== null", timeout=15000)
+    sent = [s.get("key") for s in json.loads(json.loads(create_bodies[0] or "{}").get("clisJson") or "[]")] if create_bodies else None
+    check("new-document-seats", len(pressed) > 0 and sent == pressed and council.startswith("council: "), pressed=pressed, sent=sent, council=council)
     opened = urllib.parse.parse_qs(urllib.parse.urlparse(page.url).query).get("open", [None])[0]
     page.screenshot(path=str(SHOTS / "desk-made-doors-created.png"))
     check("new-document-one-post", len(creates) == 1 and opened is not None and opened.startswith("offsite-plan"), creates=creates, open=opened)
