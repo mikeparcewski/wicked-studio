@@ -46,13 +46,14 @@ function headerPath(header: string): string {
   return m === null ? header.replace(/^diff --git /, '') : (m[3] ?? m[4] ?? m[1] ?? m[2])!;
 }
 
-/** A unified diff split per file (each `diff --git` header starts one), each file's patch hashed. */
+/** A unified diff split per file (each `diff --git` header starts one), each file's patch hashed,
+ *  keyed by the WHOLE header (codex r2: a path guessed out of a spaced header can collide). */
 export function diffFiles(diff: string): Record<string, string> {
   const out: Record<string, string> = {};
   for (const part of diff.split(/^(?=diff --git )/m)) {
     if (!part.startsWith('diff --git ')) continue;
     const header = part.slice(0, part.indexOf('\n') === -1 ? part.length : part.indexOf('\n'));
-    out[headerPath(header)] = fnv(part);
+    out[header] = fnv(part);
   }
   return out;
 }
@@ -63,6 +64,7 @@ export function diffDrift(seen: DiffSeen | null, nowDiff: string): DiffDrift | n
   const now = diffFiles(nowDiff);
   const paths = [...new Set([...Object.keys(seen.files), ...Object.keys(now)])]
     .filter((p) => seen.files[p] !== now[p])
+    .map(headerPath)
     .sort();
   return paths.length === 0 ? { kind: 'same', ord: seen.ord } : { kind: 'changed', ord: seen.ord, paths, now: diffstatOf(nowDiff) };
 }

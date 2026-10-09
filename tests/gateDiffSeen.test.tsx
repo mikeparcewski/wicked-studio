@@ -23,7 +23,7 @@ beforeEach(() => {
 
 describe('studio#244 — the comparison', () => {
   it('per-file patch hashes; same / changed / added / removed', () => {
-    expect(Object.keys(diffFiles(A1 + B1))).toEqual(['src/a.ts', 'src/b.ts']);
+    expect(Object.keys(diffFiles(A1 + B1))).toHaveLength(2);
     const seen = { ord: 3, at: 1, files: diffFiles(A1 + B1) };
     expect(diffDrift(seen, A1 + B1)).toEqual({ kind: 'same', ord: 3 });
     expect(diffDrift(seen, A2 + B1)).toMatchObject({ kind: 'changed', paths: ['src/a.ts'] });
@@ -99,8 +99,16 @@ describe('studio#244 (codex r1) — paths with spaces and git quoting are compar
   it('a quoted header and a spaced path each count as a file', () => {
     const spaced = 'diff --git a/docs/User Guide.md b/docs/User Guide.md\n+x\n';
     const quoted = 'diff --git "a/caf\\303\\251.md" "b/caf\\303\\251.md"\n+y\n';
-    expect(Object.keys(diffFiles(spaced + quoted)).sort()).toEqual(['caf\\303\\251.md', 'docs/User Guide.md']);
+    expect(diffDrift({ ord: 1, at: 1, files: {} }, spaced + quoted)).toMatchObject({ paths: ['caf\\303\\251.md', 'docs/User Guide.md'] });
     const seen = { ord: 1, at: 1, files: diffFiles(spaced) };
     expect(diffDrift(seen, spaced.replace('+x', '+z'))).toMatchObject({ kind: 'changed', paths: ['docs/User Guide.md'] });
+  });
+
+  it('two spaced paths that share a tail stay two files (codex r2)', () => {
+    const one = 'diff --git a/docs/one b/shared.txt b/docs/one b/shared.txt\n+1\n';
+    const two = 'diff --git a/docs/two b/shared.txt b/docs/two b/shared.txt\n+2\n';
+    expect(Object.keys(diffFiles(one + two))).toHaveLength(2);
+    const seen = { ord: 1, at: 1, files: diffFiles(one + two) };
+    expect(diffDrift(seen, one.replace('+1', '+9') + two)).toMatchObject({ kind: 'changed' });
   });
 });
