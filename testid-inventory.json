@@ -12,8 +12,8 @@
   "studioVersion": "0.6.7",
   "counts": {
     "files": 170,
-    "occurrences": 1895,
-    "static": 1687,
+    "occurrences": 1912,
+    "static": 1700,
     "dynamic": 36,
     "computed": 6
   },
@@ -1024,7 +1024,61 @@
       ]
     },
     {
+      "testId": "composer-launch-deliver-word",
+      "files": [
+        "src/components/session/Composer.tsx"
+      ]
+    },
+    {
+      "testId": "composer-launch-error",
+      "files": [
+        "src/components/session/Composer.tsx"
+      ]
+    },
+    {
+      "testId": "composer-launch-gate-word",
+      "files": [
+        "src/components/session/Composer.tsx"
+      ]
+    },
+    {
+      "testId": "composer-launch-line",
+      "files": [
+        "src/components/session/Composer.tsx"
+      ]
+    },
+    {
+      "testId": "composer-launch-row",
+      "files": [
+        "src/components/session/Composer.tsx"
+      ]
+    },
+    {
+      "testId": "composer-launch-target",
+      "files": [
+        "src/components/session/Composer.tsx"
+      ]
+    },
+    {
+      "testId": "composer-launch-workflow",
+      "files": [
+        "src/components/session/Composer.tsx"
+      ]
+    },
+    {
       "testId": "composer-menu",
+      "files": [
+        "src/components/session/Composer.tsx"
+      ]
+    },
+    {
+      "testId": "composer-menu-empty",
+      "files": [
+        "src/components/session/Composer.tsx"
+      ]
+    },
+    {
+      "testId": "composer-menu-group",
       "files": [
         "src/components/session/Composer.tsx"
       ]
@@ -3023,6 +3077,30 @@
       "testId": "launch-revises-pr",
       "files": [
         "src/components/ChatInput.tsx"
+      ]
+    },
+    {
+      "testId": "launch-row-deliver",
+      "files": [
+        "src/components/session/Composer.tsx"
+      ]
+    },
+    {
+      "testId": "launch-row-deliver-toggle",
+      "files": [
+        "src/components/session/Composer.tsx"
+      ]
+    },
+    {
+      "testId": "launch-row-gate",
+      "files": [
+        "src/components/session/Composer.tsx"
+      ]
+    },
+    {
+      "testId": "launch-row-repo",
+      "files": [
+        "src/components/session/Composer.tsx"
       ]
     },
     {

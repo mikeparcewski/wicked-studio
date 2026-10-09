@@ -14,7 +14,9 @@ export type AboutChip =
   /** A subject: the next message is about it. `label` is the words after "about: ". */
   | { kind: 'about'; key: string; label: string }
   /** A destination: the project the message goes to. */
-  | { kind: 'project'; key: string; label: string; projectId: string };
+  | { kind: 'project'; key: string; label: string; projectId: string }
+  /** S19a: the workflow this message STARTS (`/workflow-<id>` is `label`). One at a time. */
+  | { kind: 'workflow'; key: string; label: string; workflowId: string };
 
 /** The longest quote a selection becomes before it is cut with "…". */
 export const QUOTE_MAX = 42;
@@ -33,6 +35,7 @@ export function quoteLabel(selected: string): string | null {
  */
 export function addChip(chips: readonly AboutChip[], chip: AboutChip): AboutChip[] {
   if (chip.kind === 'project') return [...chips.filter((c) => c.kind !== 'project'), chip];
+  if (chip.kind === 'workflow') return [...chips.filter((c) => c.kind !== 'workflow'), chip];
   if (chips.some((c) => c.kind === 'about' && c.key === chip.key)) {
     return chips.map((c) => (c.kind === 'about' && c.key === chip.key ? chip : c));
   }
@@ -51,7 +54,9 @@ export function backspaceChips(chips: readonly AboutChip[], text: string): About
 
 /** The words a chip shows. */
 export function chipText(chip: AboutChip): string {
-  return chip.kind === 'project' ? `in: ${chip.label}` : `about: ${chip.label}`;
+  if (chip.kind === 'project') return `in: ${chip.label}`;
+  if (chip.kind === 'workflow') return chip.label;
+  return `about: ${chip.label}`;
 }
 
 /** The project chip, if any. */

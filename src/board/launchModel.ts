@@ -74,3 +74,51 @@ export function composerSendRefusal(roster: readonly RosterSeat[] | null, scoped
   }
   return `No helper can take this right now — ${reasons.join(' · ')}.`;
 }
+
+/** THE WORKFLOW COMMAND (DES-STUDIO-REBUILD-001 §5.5/§5.7, slice S19a): a workflow is named with a
+ *  `/workflow-<key>` FIRST token in the composer, and Enter launches it. These are the ONE shared
+ *  rules the launch form and the composer read — the no-repo preflight predicate and the
+ *  launch-confirm line's lead — so the two surfaces can never disagree on what is ready. */
+
+/** S19a: the composer refuses to launch a workflow with no repository, and says so. */
+export const NO_REPO_REASON = 'Pick the repository this works in';
+
+/** §7.8 preflight (EC43): a code-shaped intent with no repo attached cannot produce reviewable
+ *  work. The launch form warns and blocks; the composer refuses the chip the same way. */
+export function launchNeedsRepo(codeShaped: boolean, noRepoAttached: boolean): boolean {
+  return codeShaped && noRepoAttached;
+}
+
+/** The launch-confirm line's lead — from the SAME `canSubmit` that disables Send, so the line and
+ *  the button can never disagree ("Send enabled but Not ready to send", F-089 / F-E2E-035). */
+export function readyLead(canSubmit: boolean, noSeatReason: string | null): string {
+  return canSubmit
+    ? 'Ready to send: '
+    : noSeatReason !== null
+      ? 'Not ready to send (no seat can take it): '
+      : 'Not ready to send: ';
+}
+
+/** What a `/workflow-<key>` launch still needs before Enter may send. */
+export interface WorkflowLaunchState {
+  ready: boolean;
+  /** Why it cannot send yet (`null` = ready). */
+  reason: string | null;
+  /** The one thing missing, when it is the repository. */
+  missing: 'repo' | null;
+}
+
+/** S19a: the composer's own readiness for a named workflow — a repository to work in, and a roster
+ *  that can take it. The repo is the composer's to pick (the form's is in its popover). */
+export function workflowLaunchState(
+  repoRef: string | null,
+  roster: readonly RosterSeat[] | null,
+): WorkflowLaunchState {
+  if (repoRef === null || repoRef.trim() === '') {
+    return { ready: false, reason: NO_REPO_REASON, missing: 'repo' };
+  }
+  if (roster !== null && roster.length === 0) {
+    return { ready: false, reason: 'No helper is set up on this daemon yet — add one under Settings.', missing: null };
+  }
+  return { ready: true, reason: null, missing: null };
+}

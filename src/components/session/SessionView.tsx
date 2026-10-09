@@ -607,6 +607,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
         onSend={(text, opts) => onAsk(text, ref.kind === 'chat' && conversation === 'live' && opts.fresh !== true && opts.projectId === undefined ? { ...opts, chatId: ref.chatId } : opts)}
         runs={mine}
         started={entries.length > 0}
+        navigate={navigate}
         className="wk-session-composer"
         ariaLabel="Ask or tell studio what to do next"
         placeholder="Ask about this, or tell studio what to do next — / adds a step, @ names a project or a helper"

@@ -14,7 +14,7 @@ import { clearSteerPrefill, peekSteerPrefill } from '../store/steerPrefill.js';
 import { setCachedRoster } from '../store/rosterCache.js';
 import { seatStandingWord } from './HealthRailSection.js';
 import { noCarryingSeatReason } from './gateVerdictModel.js';
-import { detectWorkflow, launchSubmit } from '../board/launchModel.js';
+import { detectWorkflow, launchNeedsRepo, launchSubmit, readyLead } from '../board/launchModel.js';
 import { isSystemWorkflowIn, setCachedWorkflows } from '../store/workflowCache.js';
 import { presetSystemFlag, usePlanCatalog } from '../store/planCatalog.js';
 import { ContextPopover } from './ContextPopover.js';
@@ -651,7 +651,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     // cannot produce reviewable work. Warn-and-block: ZERO POST /runs until a
     // repo attaches or the operator overrides ("Launch anyway").
     const codeShaped = Boolean(selection.composing || workflowOverride?.trim() || workflow || detectWorkflow(problem));
-    if (!preflightOverride && codeShaped && noRepoAttached) {
+    if (!preflightOverride && launchNeedsRepo(codeShaped, noRepoAttached)) {
       setPreflightBlocked(true);
       return;
     }
@@ -1664,7 +1664,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
         >
           {/* F-089 / F-E2E-035: ONE predicate — the same `canSubmit` that disables Send — so the
               line and the button can never disagree ("Send enabled but Not ready to send"). */}
-          {canSubmit ? 'Ready to send: ' : noSeatReason !== null ? 'Not ready to send (no seat can take it): ' : 'Not ready to send: '}
+          {readyLead(canSubmit, noSeatReason)}
           <span data-testid="launch-confirm-workflow" style={{ color: 'var(--ink-high)' }}>
             {selection.plan === null
               ? launchWorkflow

@@ -4,7 +4,7 @@ import {
   draftLine, draftTarget, dropToken, gateDraftPlan, menuToken, midRunPlan, slashItems, type DraftRunState,
 } from '../src/board/planDraft.js';
 import { addChip, backspaceChips, chipText, messageWithAbout, quoteLabel, type AboutChip } from '../src/board/aboutChips.js';
-import { composerSendRefusal, detectWorkflow, launchSubmit } from '../src/board/launchModel.js';
+import { composerSendRefusal, detectWorkflow, launchNeedsRepo, launchSubmit, NO_REPO_REASON, readyLead, workflowLaunchState } from '../src/board/launchModel.js';
 import type { RosterSeat } from '../src/api/types.js';
 
 /** S7 (DES-STUDIO-REBUILD-001 §5.7): plan drafts, about-chips and the extracted launch rules — pure. */
@@ -80,10 +80,18 @@ describe('about-chips', () => {
     expect(messageWithAbout(' make it bigger ', [pay, ...a])).toBe('About “the Pay button”: make it bigger');
     expect(messageWithAbout('hi', a)).toBe('hi');
   });
+  it('S19a: one workflow chip — a second named workflow REPLACES the first, and carries its own words', () => {
+    const bug = { kind: 'workflow', key: 'wf:bug', label: '/workflow-bug', workflowId: 'bug' } as const;
+    const feature = { kind: 'workflow', key: 'wf:feature', label: '/workflow-feature', workflowId: 'feature' } as const;
+    expect(addChip(addChip([], bug), feature).map((c) => c.key)).toStrictEqual(['wf:feature']);
+    expect(chipText(bug)).toBe('/workflow-bug');
+    expect(addChip([pay, bug], feature)).toHaveLength(2); // the subject stays; only the workflow swaps
+  });
 });
 
 describe('the launch rules, extracted (launchModel)', () => {
   const benched = { key: 'codex', display_name: 'Codex', binary: 'codex', enabled_for_council: true, health: { status: 'inactive', message: 'rate limited' } } as unknown as RosterSeat;
+  const good = { key: 'claude', display_name: 'Claude', binary: 'claude', enabled_for_council: true } as unknown as RosterSeat;
   it('studio#315: no seat that can carry the work refuses the send and says why', () => {
     expect(launchSubmit({ problem: 'x', selectedClis: new Set(['codex']), submitting: false, targetRequired: false, roster: [benched] }))
       .toMatchObject({ canSubmit: false, noSeatReason: expect.stringMatching(/codex: benched/) });
@@ -96,6 +104,21 @@ describe('the launch rules, extracted (launchModel)', () => {
     expect(detectWorkflow('add a button')).toBe('feature');
     expect(detectWorkflow('migrate the tables')).toBe('migration');
     expect(detectWorkflow('hello')).toBeNull();
+  });
+  it('S19a: the no-repo preflight and the launch-confirm lead are the SAME rules the composer reads', () => {
+    expect(launchNeedsRepo(true, true)).toBe(true);
+    expect(launchNeedsRepo(true, false)).toBe(false);
+    expect(launchNeedsRepo(false, true)).toBe(false);
+    expect(readyLead(true, null)).toBe('Ready to send: ');
+    expect(readyLead(false, 'No helper')).toBe('Not ready to send (no seat can take it): ');
+    expect(readyLead(false, null)).toBe('Not ready to send: ');
+  });
+  it('S19a: a named workflow needs a repository, then a roster that can take it', () => {
+    expect(workflowLaunchState(null, [good])).toStrictEqual({ ready: false, reason: NO_REPO_REASON, missing: 'repo' });
+    expect(workflowLaunchState('', [good])).toStrictEqual({ ready: false, reason: NO_REPO_REASON, missing: 'repo' });
+    expect(workflowLaunchState('repo-1', [])).toMatchObject({ ready: false, missing: null });
+    expect(workflowLaunchState('repo-1', [good])).toStrictEqual({ ready: true, reason: null, missing: null });
+    expect(workflowLaunchState('repo-1', null).ready).toBe(true);
   });
 });
 
