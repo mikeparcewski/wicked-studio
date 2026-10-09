@@ -261,6 +261,7 @@ export function Desk({ runs, runsLoaded, runsError = null, onRetryRuns, needRows
           setText={setText}
           onSend={onAsk}
           inputRef={box}
+          navigate={navigate}
           ariaLabel="Ask or tell studio what to do"
           placeholder="Ask anything across your projects, or tell one what to do"
           variant="desk"

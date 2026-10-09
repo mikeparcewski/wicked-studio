@@ -1,7 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { RosterSeat, SessionView } from '../src/api/types.js';
+import type { RepoEntry, RosterSeat, SessionView, WorkflowDef } from '../src/api/types.js';
 import type { ChainModel } from '../src/board/chainModel.js';
 import { flushDecisionsForTest, resetDecisionsForTest } from '../src/board/undoQueue.js';
 import { Composer, type ComposerSend } from '../src/components/session/Composer.js';
@@ -12,7 +12,9 @@ import { resetPlanCatalog } from '../src/store/planCatalog.js';
 import { usePlanGateStore } from '../src/store/planGates.js';
 import { resetPlanEdits } from '../src/store/planEdits.js';
 import { useProjectsStore } from '../src/store/projects.js';
+import { clearRepoCache } from '../src/store/repoCache.js';
 import { setCachedRoster } from '../src/store/rosterCache.js';
+import { clearCachedWorkflows, setCachedWorkflows } from '../src/store/workflowCache.js';
 import { makeView } from './factories.js';
 
 /**
@@ -23,6 +25,13 @@ import { makeView } from './factories.js';
 const PLANNED = { kind: 'preset', name: 'feature', user_plan: false, system: false };
 const EMPTY: ChainModel = { source: 'units', steps: [], proposed: false, transportLine: null, done: 0, total: 0, checked: null };
 const SEAT = { key: 'claude', display_name: 'Claude', binary: 'claude', enabled_for_council: true } as RosterSeat;
+/** S19a: the daemon's own catalog — two ordinary defs and one system flow that must never be offered. */
+const WF = [
+  { id: 'bug', phases: [{ id: 'recon' }, { id: 'build', executes_code: true }] },
+  { id: 'feature', phases: [{ id: 'plan' }, { id: 'build', executes_code: true }] },
+  { id: 'chat', phases: [{ id: 'ask' }], is_system: true },
+] as unknown as WorkflowDef[];
+const REPO = { id: 'repo-1', name: 'wicked-studio', root_path: '/tmp/ws', default_branch: 'main', registered_at: 0 } as RepoEntry;
 const TEAM_AT_PLAN_GATE = {
   rows: [{ event_id: 1, event_type: 'wicked.team.plan.proposed', payload: { steps: [{ catalog: 'understand', id: 'understand' }, { catalog: 'build', id: 'build' }, { catalog: 'deliver', id: 'deliver' }] } }],
   units: [{ ord: 2, rows: [{ event_id: 2, event_type: 'wicked.team.gate.opened', payload: { kind: 'plan_approval', gate_id: 'g1', ord: 2, plan_rev: 1, band: '20-39' } }] }],
@@ -36,21 +45,24 @@ function stubWire(): void {
     const path = new URL(url, 'http://x').pathname.replace(/^\/api\/v1/, '');
     if (init?.method === 'POST') {
       posts.push({ path, body: JSON.parse(String(init.body ?? '{}')) as Record<string, unknown> });
-      const answer = path.endsWith('/plan') ? { proposal_id: 'p1', duplicate: false, band: null, high_risk: null, floor_added: [] } : { ok: true };
+      const answer = path === '/runs' ? { runId: 'r-new' }
+        : path.endsWith('/plan') ? { proposal_id: 'p1', duplicate: false, band: null, high_risk: null, floor_added: [] } : { ok: true };
       return Promise.resolve(new Response(JSON.stringify(answer), { status: 200, headers: { 'content-type': 'application/json' } }));
     }
     const body = path.endsWith('/team') ? TEAM_AT_PLAN_GATE
       : path === '/catalog' ? { entries: ['understand', 'build', 'test', 'review', 'deliver'].map((id) => ({ id })) }
-        : path === '/roster' ? { roster: [SEAT] } : {};
+        : path === '/roster' ? { roster: [SEAT] }
+          : path === '/repos' ? { repos: [REPO] }
+            : path === '/workflows' ? { workflows: WF } : {};
     return Promise.resolve(new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } }));
   }));
 }
 
-function Harness({ runs, started = false, onSend }: { runs: SessionView[]; started?: boolean; onSend: (m: string, o: ComposerSend) => void }): React.ReactElement {
+function Harness({ runs, started = false, onSend, navigate }: { runs: SessionView[]; started?: boolean; onSend: (m: string, o: ComposerSend) => void; navigate?: (p: string) => void }): React.ReactElement {
   const [text, setText] = useState('');
   return (
     <Composer composerKey="s1" text={text} setText={setText} onSend={onSend} runs={runs} started={started}
-      placeholder="p" ariaLabel="a" variant="session" />
+      placeholder="p" ariaLabel="a" variant="session" navigate={navigate ?? (() => {})} />
   );
 }
 
@@ -68,6 +80,9 @@ beforeEach(() => {
   resetDecisionsForTest();
   resetPlanEdits();
   resetPlanCatalog();
+  clearCachedWorkflows();
+  setCachedWorkflows(WF);
+  clearRepoCache();
   useComposerChips.setState({ byComposer: {} });
   useGateStore.setState({ gates: {} });
   usePlanGateStore.setState({ byRun: {}, readFor: {} } as never);
@@ -262,5 +277,102 @@ describe('codex on S7: IME and a moved gate', () => {
     fireEvent.click(go);
     await act(async () => { await flushDecisionsForTest(); });
     expect(posts.filter((p) => p.path.endsWith('/gate') && (p.body as { plan?: unknown }).plan !== undefined)).toStrictEqual([]);
+  });
+});
+
+describe('S19a: a workflow is named in the composer and launched from it', () => {
+  it('the / menu groups Start work and Add a step, hides the system flow, and Enter launches the named one', async () => {
+    const navigate = vi.fn();
+    render(<Harness runs={[]} onSend={() => {}} navigate={navigate} />);
+    type('/workflow-');
+    await screen.findByTestId('composer-menu');
+    expect(screen.getByTestId('composer-menu').textContent).toContain('Start work');
+    const startRows = screen.getAllByTestId('composer-menu-item').filter((r) => r.getAttribute('data-group') === 'start-work');
+    expect(startRows.map((r) => r.getAttribute('data-cmd'))).toStrictEqual(['workflow-bug', 'workflow-feature']);
+    fireEvent.mouseDown(startRows[0]!);
+    expect(screen.queryByTestId('composer-menu')).toBeNull();
+    expect(screen.getByTestId('composer-chip').getAttribute('data-kind')).toBe('workflow');
+    expect(screen.getByTestId('composer-chip').textContent).toContain('/workflow-bug');
+    // No repository chosen yet: the composer refuses, says why, and sends nothing.
+    type('the charge never clears');
+    expect(screen.getByTestId('composer-launch-line').textContent).toMatch(/Pick the repository/);
+    key('Enter');
+    expect(posts).toStrictEqual([]);
+    // The lone repo is chosen for the operator; then Enter is the launch.
+    await waitFor(() => expect((screen.getByTestId('launch-row-repo') as HTMLSelectElement).value).toBe('repo-1'));
+    expect(screen.getByTestId('composer-launch-line').textContent).toMatch(/Ready to send/);
+    key('Enter');
+    await waitFor(() => expect(posts.some((p) => p.path === '/runs')).toBe(true));
+    const body = posts.find((p) => p.path === '/runs')!.body;
+    expect(body).toMatchObject({ problem: 'the charge never clears', workflow: 'bug', repoRef: 'repo-1', humanConfirm: 'before:1', deliver: 'pr' });
+    expect(String(body.clisJson)).toContain('"claude"');
+    expect(navigate).toHaveBeenCalledTimes(1);
+    expect(navigate.mock.calls[0]![0]).toContain('r-new');
+  });
+
+  it('a /workflow- token that is not the first token opens no rows, makes no chip, and launches nothing', async () => {
+    const onSend = vi.fn();
+    render(<Harness runs={[]} onSend={onSend} />);
+    type('please /workflow-bug');
+    await screen.findByTestId('composer-menu');
+    expect(screen.queryAllByTestId('composer-menu-item').filter((r) => r.getAttribute('data-group') === 'start-work')).toHaveLength(0);
+    key('Enter');
+    expect(posts).toStrictEqual([]);
+    expect(onSend).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId('composer-chip')).toBeNull();
+  });
+
+  it('a whole command typed in sends nothing on the first Enter (it names the work), then launches on the next', async () => {
+    const navigate = vi.fn();
+    render(<Harness runs={[]} onSend={() => {}} navigate={navigate} />);
+    type('/workflow-bug');
+    await screen.findByTestId('composer-menu');
+    key('Escape');
+    expect(screen.queryByTestId('composer-menu')).toBeNull();
+    key('Enter');
+    expect(screen.getByTestId('composer-chip').textContent).toContain('/workflow-bug');
+    expect(posts).toStrictEqual([]);
+    type('the charge never clears');
+    await waitFor(() => expect((screen.getByTestId('launch-row-repo') as HTMLSelectElement).value).toBe('repo-1'));
+    key('Enter');
+    await waitFor(() => expect(posts.some((p) => p.path === '/runs')).toBe(true));
+    expect(posts.find((p) => p.path === '/runs')!.body).toMatchObject({ workflow: 'bug', problem: 'the charge never clears' });
+  });
+
+  it('a typed command the daemon does not list names nothing and sends nothing', async () => {
+    const onSend = vi.fn();
+    render(<Harness runs={[]} onSend={onSend} />);
+    type('/workflow-bgu');
+    await screen.findByTestId('composer-menu');
+    key('Escape');
+    key('Enter');
+    expect(screen.queryByTestId('composer-chip')).toBeNull();
+    expect(screen.getByTestId('composer-note').textContent).toMatch(/lists no workflow named bgu/);
+    expect(posts).toStrictEqual([]);
+    expect(onSend).not.toHaveBeenCalled();
+  });
+
+  it('Escape closes the workflow menu and never launches', async () => {
+    render(<Harness runs={[]} onSend={() => {}} />);
+    type('/workflow-');
+    await screen.findByTestId('composer-menu');
+    key('Escape');
+    expect(screen.queryByTestId('composer-menu')).toBeNull();
+    expect(posts).toStrictEqual([]);
+    expect(screen.queryByTestId('composer-chip')).toBeNull();
+  });
+
+  it('Backspace in the empty box removes the workflow chip, and the options row offers the form gate postures', async () => {
+    render(<Harness runs={[]} onSend={() => {}} />);
+    type('/workflow-');
+    await screen.findByTestId('composer-menu');
+    fireEvent.mouseDown(screen.getAllByTestId('composer-menu-item').filter((r) => r.getAttribute('data-cmd') === 'workflow-bug')[0]!);
+    expect(screen.getByTestId('composer-chip').getAttribute('data-kind')).toBe('workflow');
+    // The options row names the form's gate postures, not a static line.
+    const gate = screen.getByTestId('launch-row-gate') as HTMLSelectElement;
+    expect([...gate.options].map((o) => o.textContent)).toStrictEqual(['First gate', 'Every unit', 'No gates']);
+    key('Backspace');
+    expect(screen.queryByTestId('composer-chip')).toBeNull();
+    expect(screen.queryByTestId('composer-launch-row')).toBeNull();
   });
 });

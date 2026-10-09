@@ -603,6 +603,12 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          #   NO `qe-author-tests` (a daemon predating the wave): the panel shows the
          #   plain-run banner and POST /testing/recon takes the launch.
          "governed_testing": False, "governed_testing_workflow_absent": False,
+         # ── S19a (e2e/desk_slash_workflows_test.py) ──
+         # workflow_catalog — GET /workflows serves WC_WORKFLOWS (feature / bug / migration / domain-extraction /
+         #   capture-learnings ordinary, chat
+         #   system); the composer's `/workflow-` rows read them. Default False: the standing
+         #   governed_testing gating / unknown-route 404 is untouched.
+         "workflow_catalog": False,
          # ── Studio wave 1 (e2e/wave1_*_test.py) ──
          # wave1 — REPLACES the W2 corpus with a small healthy portfolio: three
          #   projects (alpha / beta / gamma), each with ONE executing run (a1 / b1 /
@@ -3231,6 +3237,22 @@ GT_WORKFLOW_DEF = {
 GT_WORKFLOWS_ELSE = [{"id": "feature", "phases": []}, {"id": "bug", "phases": []},
                      {"id": "chat", "phases": [], "is_system": True}]
 
+# S19a (e2e/desk_slash_workflows_test.py): the daemon's ordinary catalog the composer's
+# `/workflow-` rows read — two code defs (a repo+deliver launch) and one system flow that must
+# never be offered. Served only when the `workflow_catalog` switch is on.
+WC_WORKFLOWS = [
+    {"id": "feature", "phases": [{"id": "plan", "kind": "recon"},
+                                 {"id": "build", "kind": "build", "executes_code": True}]},
+    {"id": "bug", "phases": [{"id": "recon", "kind": "recon"},
+                             {"id": "build", "kind": "build", "executes_code": True}]},
+    {"id": "migration", "phases": [{"id": "inventory", "kind": "recon"}, {"id": "plan", "kind": "recon"},
+                                   {"id": "migrate", "kind": "build", "executes_code": True},
+                                   {"id": "verify", "kind": "review"}, {"id": "deliver", "kind": "build"}]},
+    {"id": "domain-extraction", "phases": [{"id": "recon", "kind": "recon"}, {"id": "extract", "kind": "build"}]},
+    {"id": "capture-learnings", "phases": [{"id": "mine", "kind": "recon"}, {"id": "capture", "kind": "build"}]},
+    {"id": "chat", "phases": [{"id": "ask", "kind": "recon"}], "is_system": True},
+]
+
 
 def _gt_unit(rid: str, ord_: int, phase: str, stage: str, status: str, **extra) -> dict:
     u = {"id": f"{rid}:{phase}", "session_id": rid, "ord": ord_, "description": f"{phase} — {GT_PROBLEM}",
@@ -5448,7 +5470,10 @@ class W2Handler(SimpleHTTPRequestHandler):
             with state_lock:
                 gt_on = state["governed_testing"]
                 absent = state["governed_testing_workflow_absent"]
-            if not gt_on:
+                catalog_on = state["workflow_catalog"]
+            if catalog_on:
+                self._json(200, {"workflows": WC_WORKFLOWS})
+            elif not gt_on:
                 self._json(404, {"error": f"w2 fixture: no such endpoint {path}"})
             else:
                 self._json(200, {"workflows": GT_WORKFLOWS_ELSE + ([] if absent else [GT_WORKFLOW_DEF])})
