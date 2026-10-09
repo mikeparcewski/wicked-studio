@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.6.6",
   "counts": {
-    "files": 196,
-    "occurrences": 2320,
-    "static": 2050,
+    "files": 198,
+    "occurrences": 2333,
+    "static": 2063,
     "dynamic": 49,
     "computed": 8
   },
@@ -2604,6 +2604,36 @@
       "testId": "doc-gate-option",
       "files": [
         "src/components/DocumentThread.tsx"
+      ]
+    },
+    {
+      "testId": "doc-grounding-chip",
+      "files": [
+        "src/components/GroundingChip.tsx"
+      ]
+    },
+    {
+      "testId": "doc-grounding-line",
+      "files": [
+        "src/components/DocumentThread.tsx"
+      ]
+    },
+    {
+      "testId": "doc-grounding-repos",
+      "files": [
+        "src/components/GroundingChip.tsx"
+      ]
+    },
+    {
+      "testId": "doc-grounding-skipped",
+      "files": [
+        "src/components/GroundingChip.tsx"
+      ]
+    },
+    {
+      "testId": "doc-grounding-source",
+      "files": [
+        "src/components/GroundingChip.tsx"
       ]
     },
     {
@@ -5389,6 +5419,12 @@
       ]
     },
     {
+      "testId": "need-choice-reason",
+      "files": [
+        "src/components/desk/QuestionRow.tsx"
+      ]
+    },
+    {
       "testId": "need-choices",
       "files": [
         "src/components/desk/QuestionRow.tsx"
@@ -5422,6 +5458,42 @@
       "testId": "need-focus-show-all",
       "files": [
         "src/components/NeedsYouQueue.tsx"
+      ]
+    },
+    {
+      "testId": "need-group-approve-all",
+      "files": [
+        "src/components/desk/ApprovalGroupActions.tsx"
+      ]
+    },
+    {
+      "testId": "need-group-failure",
+      "files": [
+        "src/components/desk/ApprovalGroupActions.tsx"
+      ]
+    },
+    {
+      "testId": "need-group-reject",
+      "files": [
+        "src/components/desk/ApprovalGroupActions.tsx"
+      ]
+    },
+    {
+      "testId": "need-group-reject-all",
+      "files": [
+        "src/components/desk/ApprovalGroupActions.tsx"
+      ]
+    },
+    {
+      "testId": "need-group-reject-reason",
+      "files": [
+        "src/components/desk/ApprovalGroupActions.tsx"
+      ]
+    },
+    {
+      "testId": "need-group-retry",
+      "files": [
+        "src/components/desk/ApprovalGroupActions.tsx"
       ]
     },
     {
@@ -8226,6 +8298,12 @@
     },
     {
       "testId": "session-run-look",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
+      "testId": "session-run-pending",
       "files": [
         "src/components/session/SessionView.tsx"
       ]

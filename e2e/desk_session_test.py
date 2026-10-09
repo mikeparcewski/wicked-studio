@@ -23,7 +23,8 @@ transport, and r-old, launched from a chat the daemon reclaimed) and proves the 
      it moves nothing in the thread; the next visit shows no card.
  10. LETTERS TYPE: a letter typed with the body focused lands in the session composer.
  11. CAPABILITY ABSENT: without runChatId every run is its own session (run:r-pay-1, run:r-pay-2).
- 12. OLD PAGES: /runs/r-pay-2 still renders the run page (no redirect).
+ 12. OLD PAGES MOVED (S16a-2d): /runs/r-pay-2 lands on its session thread, the history entry
+     replaced (Back never re-enters /runs/r-pay-2).
  13. 0 page errors, no horizontal scroll.
 
 Captures: e2e/shots/desk-session*.png. Env: FEEDBACK_PORT (default 4347).
@@ -323,12 +324,19 @@ with sync_playwright() as p:
     check("no-capability-session", page.get_by_test_id("session-title").inner_text()
           == "fix the double charge on checkout, then show me")
 
-    # ── 12. the old run page still renders ────────────────────────────────────────
+    # ── 12. the old run page MOVED (S16a-2d): /runs/r-pay-2 lands on its session thread ──────────
+    page.goto(f"{origin}/", wait_until="networkidle")
     page.goto(f"{origin}/runs/r-pay-2", wait_until="networkidle")
-    page.wait_for_timeout(1500)
+    page.wait_for_function("() => location.pathname.startsWith('/s/')", timeout=10000)
+    page.wait_for_timeout(800)
     old = page.evaluate("() => ({path: location.pathname, session: !!document.querySelector('[data-testid=\"session\"]'), "
                         "text: document.body.innerText.includes('fix the double charge')})")
-    check("old-run-page", not old["path"].startswith("/s/") and not old["session"] and old["text"], **old)
+    # Back never re-enters /runs/r-pay-2: the move replaced its history entry.
+    page.go_back(wait_until="networkidle")
+    page.wait_for_timeout(600)
+    back = page.evaluate("() => location.pathname")
+    check("old-run-page", old["path"].startswith("/s/") and old["session"] and old["text"]
+          and back != "/runs/r-pay-2", back=back, **old)
 
     # ── 13. errors ────────────────────────────────────────────────────────────────
     check("no-page-errors", not errors, errors=errors[:5])

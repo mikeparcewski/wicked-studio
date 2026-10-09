@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import type { SessionView } from '../api/types.js';
 import { everythingPath, isSessionFilter } from '../board/everythingModel.js';
+import { sessionPath } from '../board/sessionModel.js';
 import type { Navigate } from './useRoute.js';
 
 /**
@@ -20,14 +21,13 @@ import type { Navigate } from './useRoute.js';
  * | `/demo`                  | `/everything?tab=made&kind=videos`                           |
  * | `/p/:id/chronicle`       | `/everything?tab=sessions&project=:id`                       |
  * | `/p/:id`                 | `/everything?tab=sessions&project=:id`                       |
+ * | `/runs/:id`              | `/s/run%3A:id` (search and hash kept — `?jump=`, `#gate`, …) |
+ * | `/runs/:id/timeline`     | `/s/run%3A:id` (search and hash kept)                        |
+ * | `/p/:pid/build/:run`     | `/s/run%3A:run` (search and hash kept)                       |
  *
- * NOT moved in S15c — two §5.4 rows wait for S16a: `/runs/:id` → `/s/:sessionId` and
- * `/p/:id/:mode[/:artifact]` → `/s/:sessionId[/a/:artifactKey]`. The run page and the project shell
- * still carry behaviours the session page does not (the gate trust record, re-run from a phase, the
- * reject-note banner, seat reassignment, the demo start form, the document canvas): 19 behaviour
- * journeys and 5 desk journeys prove them at those addresses, and the Desk's own sheets still send
- * "Full record →" to `/runs/:id`. Moving the address before the behaviours move would strand both.
- * `useLegacyRedirect` keeps filing `/runs/:id` into its project shell meanwhile.
+ * S16a-2d: the run page's addresses moved once the session carried what it did (S16a-1a…2c). Not
+ * moves: `/runs/new`, `/p/:pid/build/new`, `/p/:pid/build`, `/runs/:id/events|files`, the project
+ * shell's other modes (`/p/:id/:mode[/:artifact]` waits for S16a-4), and typos.
  */
 
 /** The redirect table as data (the ⌘K coverage and the docs read it; the parse in `useRoute` and
@@ -43,12 +43,15 @@ export const MOVES: readonly { from: string; to: string }[] = [
   { from: '/demo', to: '/everything?tab=made&kind=videos' },
   { from: '/p/:id/chronicle', to: '/everything?tab=sessions&project=:id' },
   { from: '/p/:id', to: '/everything?tab=sessions&project=:id' },
+  { from: '/runs/:id', to: '/s/run%3A:id[?…][#…]' },
+  { from: '/runs/:id/timeline', to: '/s/run%3A:id[?…][#…]' },
+  { from: '/p/:pid/build/:run', to: '/s/run%3A:run[?…][#…]' },
 ];
 
 /** The static moves — the new address for an old one, or `null` when the address is not a move. */
-export function movedAddress(pathname: string, search: string): string | null {
+export function movedAddress(pathname: string, search: string, hash = ''): string | null {
   const segs = pathname.split('/');
-  const [, first = '', second = '', third = ''] = segs;
+  const [, first = '', second = '', third = '', fourth = ''] = segs;
   const restEmpty = (from: number): boolean => segs.slice(from).every((x) => x === '');
   const raw = new URLSearchParams(search).get('filter');
   const filter = isSessionFilter(raw) ? raw : undefined;
@@ -73,6 +76,16 @@ export function movedAddress(pathname: string, search: string): string | null {
   if (first === 'p' && second !== '' && third === '' && restEmpty(3)) {
     return everythingPath({ tab: 'sessions', project: decode(second) });
   }
+  // S16a-2d: the run page's addresses → the run's session thread; every query and fragment the old
+  // page honoured rides along verbatim (`?jump=` from the Watchtower, `#gate`, `#governance`).
+  const runSession = (id: string): string => `${sessionPath(`run:${decode(id)}`)}${search}${hash}`;
+  if (first === 'runs' && second !== '' && second !== 'new'
+    && ((third === '' && restEmpty(3)) || (third === 'timeline' && restEmpty(4)))) {
+    return runSession(second);
+  }
+  if (first === 'p' && second !== '' && third === 'build' && fourth !== '' && fourth !== 'new' && restEmpty(5)) {
+    return runSession(fourth);
+  }
   return null;
 }
 
@@ -94,8 +107,10 @@ export function useMovedRoutes(args: {
 }): void {
   const { panel, pathname, search, navigate } = args;
   useEffect(() => {
-    if (panel !== 'everything') return;
-    const to = movedAddress(pathname, search);
+    // The S15c moves parse to Everything; the S16a-2d run moves parse straight to the session.
+    if (panel !== 'everything' && panel !== 'session') return;
+    if (panel === 'session' && pathname.startsWith('/s/')) return;
+    const to = movedAddress(pathname, search, window.location.hash);
     if (to !== null) {
       navigate(to, { replace: true });
       return;

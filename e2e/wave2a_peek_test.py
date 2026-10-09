@@ -164,21 +164,26 @@ with sync_playwright() as p:
                                   "Back to exactly where you were")), text=text[-600:])
     page.keyboard.press("Escape")
 
-    # ── a message to the team on the live run: crew's POST /runs/:id/inject answers ok ──
+    # ── a message on the live run: crew's POST /runs/:id/inject answers ok ──
+    # S16a-2d: the run page's "message all agents" box retired with the page; the session's home is
+    # the working step's sheet — "Message it" sends to the helper doing the step (its seat is the
+    # target, where the run page said "all").
     note = "Keep the 5 GB cap from standup"
-    # PORT GAP (S16a-2b): the session has no "message every helper" box (the step sheet's
-    # "Message it" targets the working helper), so this step still reads the run page.
-    page.goto(f"{origin}/p/gamma/build/r1", wait_until="networkidle")
-    composer = page.get_by_placeholder("Send message to all agents…")
-    composer.fill(note)
-    page.keyboard.press("Control+Enter")
+    page.goto(f"{origin}{WHERE}", wait_until="networkidle")
+    step = page.locator('[data-testid="chain"][data-run-id="r1"] [data-testid="chain-step"][data-state="running"] [data-testid="chain-step-open"]').first
+    step.wait_for(state="visible", timeout=10000)
+    step.click()
+    page.get_by_test_id("sheet-primary").click()
+    box = page.get_by_test_id("sheet-message-input")
+    box.fill(note)
+    box.press("Enter")
     check("team-message-sent", wait_ok(
-        page, "() => (document.querySelector('textarea[placeholder=\"Send message to all agents…\"]')?.value ?? 'x') === ''",
-        5000) and "refused" not in (page.evaluate("() => document.body.innerText") or ""),
+        page, "() => !!document.querySelector('[data-testid=\"sheet-message-sent\"]')", 5000),
         body=page.evaluate("() => document.body.innerText")[-300:])
     with urllib.request.urlopen(f"{origin}/__fixture/inject-posts", timeout=10) as res:
         injected = json.loads(res.read())["posts"]
-    check("team-message-on-the-wire", injected == [{"runId": "r1", "body": {"message": note, "target": "all"}}],
+    check("team-message-on-the-wire", len(injected) == 1 and injected[0]["runId"] == "r1"
+          and injected[0]["body"].get("message") == note and injected[0]["body"].get("target") not in (None, ""),
           injected=injected)
 
     # ── the ranked queue (wave 2b) holds focus: P peeks the QUEUE's top item ────

@@ -42,11 +42,14 @@ describe('the redirect table (static moves)', () => {
   it('the table is published for the ⌘K / docs readers, one row per old address', () => {
     expect(MOVES.map((m) => m.from)).toEqual([
       '/projects', '/chats', '/work', '/execute', '/runs', '/make', '/vibe', '/demo', '/p/:id/chronicle', '/p/:id',
+      // S16a-2d: the run page's addresses.
+      '/runs/:id', '/runs/:id/timeline', '/p/:pid/build/:run',
     ]);
   });
 
   it('is not a move: the launch form, a run, the project shell, a real page, a typo', () => {
-    for (const p of ['/runs/new', '/runs/r1', '/p/kes/build', '/p/kes/build/r1', '/everything', '/skills', '/nope', '/projects/kes', '/p/kes/campaigns', '/work//typo', '/work///typo', '/demo///typo', '/p/kes/chronicle//typo']) {
+    // S16a-2d: /runs/r1 and /p/kes/build/r1 are moves now (below); /runs/new and /p/kes/build stay.
+    for (const p of ['/runs/new', '/p/kes/build', '/p/kes/build/new', '/runs/r1/events', '/runs/r1/files', '/runs/r1/zzz', '/p/kes/document/d1', '/p/kes/chat/r1', '/everything', '/skills', '/nope', '/projects/kes', '/p/kes/campaigns', '/work//typo', '/work///typo', '/demo///typo', '/p/kes/chronicle//typo']) {
       expect(movedAddress(p, ''), p).toBeNull();
     }
   });
@@ -69,12 +72,38 @@ describe('the moved addresses parse to "See everything" (no headless tick)', () 
   });
 });
 
-describe('deferred to S16a (goes red on purpose when those rows move)', () => {
-  it('/runs/:id is still the run page and /p/:id/:mode the project shell', () => {
-    expect(parseRoute('/runs/r1')).toMatchObject({ panel: 'runs', runId: 'r1' });
+describe('S16a-2d: the run page moved to the run\'s session thread', () => {
+  const RUN_MOVES: Array<[string, string, string, string]> = [
+    ['/runs/r1', '', '', '/s/run%3Ar1'],
+    ['/runs/r1/', '', '', '/s/run%3Ar1'],
+    ['/runs/r1/timeline', '', '', '/s/run%3Ar1'],
+    ['/runs/r1', '?jump=3:1:900', '', '/s/run%3Ar1?jump=3:1:900'],
+    ['/runs/r1', '', '#gate', '/s/run%3Ar1#gate'],
+    ['/runs/r1', '', '#governance', '/s/run%3Ar1#governance'],
+    ['/runs/r1/timeline', '?jump=0::5', '#gate', '/s/run%3Ar1?jump=0::5#gate'],
+    ['/p/kes/build/r1', '', '', '/s/run%3Ar1'],
+    ['/p/kes/build/r1', '?jump=2:0:7', '#gate', '/s/run%3Ar1?jump=2:0:7#gate'],
+    ['/runs/a%20b', '', '', '/s/run%3Aa%20b'],
+  ];
+  it.each(RUN_MOVES)('%s%s%s → %s (search and hash kept)', (path, search, hash, to) => {
+    expect(movedAddress(path, search, hash)).toBe(to);
+  });
+
+  it('the moved run addresses parse straight to the session (no headless tick)', () => {
+    expect(parseRoute('/runs/r1')).toMatchObject({ panel: 'session', artifactId: 'run:r1' });
+    expect(parseRoute('/runs/r1/timeline')).toMatchObject({ panel: 'session', artifactId: 'run:r1' });
+    expect(parseRoute('/p/kes/build/r1')).toMatchObject({ panel: 'session', artifactId: 'run:r1' });
+  });
+
+  it('not moves: the launch forms, the Build view, the raw views, the shell\'s other modes, typos', () => {
     expect(parseRoute('/runs/new')).toMatchObject({ panel: 'runs', showLaunch: true });
-    expect(parseRoute('/p/kes/build/r1')).toMatchObject({ projectId: 'kes', mode: 'build', runId: 'r1' });
+    expect(parseRoute('/p/kes/build/new')).toMatchObject({ projectId: 'kes', mode: 'build', showLaunch: true });
+    expect(parseRoute('/p/kes/build')).toMatchObject({ projectId: 'kes', mode: 'build', runId: null });
+    expect(parseRoute('/runs/r1/events')).toMatchObject({ panel: 'run-events', artifactId: 'r1' });
+    expect(parseRoute('/runs/r1/files')).toMatchObject({ panel: 'run-files', artifactId: 'r1' });
     expect(parseRoute('/p/kes/document/d1')).toMatchObject({ projectId: 'kes', mode: 'document', artifactId: 'd1' });
+    expect(parseRoute('/runs/r1/zzz').panel).toBe('not-found');
+    expect(parseRoute('/runs//x').panel).toBe('not-found');
     expect(parseRoute('/s/run:r1/a/k1').panel).toBe('not-found');
   });
 });

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, renderHook, screen } from '@testing-library/react';
-import { useRoute } from '../src/hooks/useRoute.js';
-import { useLegacyRedirect } from '../src/hooks/useLegacyRedirect.js';
+import { parseRoute, useRoute } from '../src/hooks/useRoute.js';
+import { movedAddress } from '../src/hooks/useMovedRoutes.js';
 import { NotFoundPage } from '../src/components/NotFoundPage.js';
 
 /**
@@ -57,7 +57,8 @@ describe('useRoute — dead addresses parse to the not-found panel', () => {
     expect(routeAt('/steering/security').current.panel).toBe('steering');
     expect(routeAt('/skills').current.panel).toBe('skills');
     expect(routeAt('/testing/harness').current.panel).toBe('testing');
-    expect(routeAt('/runs/r-1').current).toMatchObject({ panel: 'runs', runId: 'r-1' });
+    // S16a-2d: /runs/:id moved — it parses straight to the run's session thread.
+    expect(routeAt('/runs/r-1').current).toMatchObject({ panel: 'session', artifactId: 'run:r-1' });
     expect(routeAt('/runs/new').current).toMatchObject({ panel: 'runs', showLaunch: true });
   });
 
@@ -72,15 +73,12 @@ describe('useRoute — dead addresses parse to the not-found panel', () => {
 });
 
 describe('the not-found panel never redirects — the typed URL is preserved', () => {
-  it('useLegacyRedirect leaves a not-found route alone', () => {
-    const navigate = vi.fn();
-    renderHook(() =>
-      useLegacyRedirect(
-        { panel: 'not-found', runId: null, projectId: null, mode: null, showLaunch: false, chatMode: false },
-        navigate,
-      ),
-    );
-    expect(navigate).not.toHaveBeenCalled();
+  it('a typo is never a move: /runs/r1/zzz and /p/kes/bogus parse to not-found and move nowhere', () => {
+    // S16a-2d: the legacy run filing (useLegacyRedirect) is gone; moves are the useMovedRoutes table.
+    for (const typo of ['/runs/r1/zzz', '/runs//x', '/p/kes/bogus']) {
+      expect(parseRoute(typo).panel, typo).toBe('not-found');
+      expect(movedAddress(typo, ''), typo).toBeNull();
+    }
   });
 });
 

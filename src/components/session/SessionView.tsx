@@ -519,7 +519,14 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
               <button type="button" data-testid="session-chat-retry" onClick={() => { setChat(null); setChatTry((n) => n + 1); }} className="wk-since-toggle">Try again</button>
             </p>
           )}
-          {missing && (
+          {/* S16a-2d: a run address the index has not resolved (a just-launched run, landed on from the
+              launch form or a moved /runs/:id) says so honestly — the run page's pending view. */}
+          {missing && ref.kind === 'run' && (
+            <p data-testid="session-run-pending" data-run-id={ref.runId} className="wk-session-grey">
+              Opening run {ref.runId} — not in the run index yet: a just-launched run appears within one live-update cycle; an id the daemon no longer serves will not.
+            </p>
+          )}
+          {missing && ref.kind !== 'run' && (
             <p data-testid="session-missing" className="wk-session-grey">
               {ref.kind === 'chat' && !runChatId
                 ? 'This daemon does not link runs to their chat, so this session has no runs to show.'
