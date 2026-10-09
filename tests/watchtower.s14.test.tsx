@@ -74,7 +74,8 @@ describe('the page', () => {
     fireEvent.click(screen.getAllByTestId('watchtower-kind').find((b) => b.getAttribute('data-kind') === 'problem')!);
     expect(screen.getAllByTestId('watchtower-row').map((r) => r.getAttribute('data-row-id'))).toStrictEqual(['w1']);
     fireEvent.click(screen.getByTestId('watchtower-jump'));
-    expect(navigate).toHaveBeenCalledWith(`/runs/b1?jump=0:1:${NOW - 5 * 60_000}`);
+    // S16a-1c: Jump in lands on the run's session thread, the moment in the address.
+    expect(navigate).toHaveBeenCalledWith(`/s/run%3Ab1?jump=0:1:${NOW - 5 * 60_000}`);
     expect(screen.queryByTestId('watchtower-no-registry')).toBeNull();
   });
 
