@@ -25,7 +25,17 @@ export function artifactSizeOf(s: ArtifactSizesStore, key: string): ArtifactSize
 
 /** Sets the size. ONE artifact is open at a time: growing one folds every other back to inline, so
  *  what is drawn on top and what Esc shrinks are the same thing ({@link topmostArtifact}). */
+/** Bumped by every size write — a morph whose animated apply lands after a newer write (the
+ *  address's Back, a second step) is stale and must not resurrect its size (CI race, S16a-4a). */
+let sizeWrites = 0;
+
+/** The write count now — a morph reads it before its (possibly deferred) apply. */
+export function artifactSizeWrites(): number {
+  return sizeWrites;
+}
+
 export function setArtifactSize(key: string, size: ArtifactSize): void {
+  sizeWrites += 1;
   useArtifactSizes.setState((s) => {
     if (size !== 'inline') return { sizes: { [key]: size } };
     return { sizes: Object.fromEntries(Object.entries(s.sizes).filter(([k]) => k !== key)) };

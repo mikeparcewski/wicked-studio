@@ -3,7 +3,7 @@ import { flushSync } from 'react-dom';
 import { interactiveUrl, type ExportFormat } from '../../api/interactive.js';
 import { grow, shrink, type ArtifactSize, type EditorKind } from '../../board/artifactMorph.js';
 import { exportReadyText, runExport } from '../../interactive/exportWire.js';
-import { artifactSizeOf, registerArtifact, setArtifactSize, topmostArtifact, useArtifactSizes } from '../../store/artifactSizes.js';
+import { artifactSizeOf, artifactSizeWrites, registerArtifact, setArtifactSize, topmostArtifact, useArtifactSizes } from '../../store/artifactSizes.js';
 import { useArtifactAddress } from './ArtifactAddress.js';
 import { ArtifactVersions, lensVersion, useVersionList, VersionLens } from './ArtifactVersions.js';
 import { DocCoverage } from './DocCoverage.js';
@@ -122,7 +122,13 @@ export function ArtifactMorph({ artifactKey, title, projectId, docId, composerKe
   const morph = useCallback((to: ArtifactSize): void => {
     const from = artifactSizeOf(useArtifactSizes.getState(), artifactKey);
     if (from === to) return;
-    const apply = (): void => flushSync(() => setArtifactSize(artifactKey, to));
+    // A view transition runs its callback on a later frame: if any size write lands first (the
+    // address writing this same step, or a Back already shrinking it), this apply is stale.
+    const writes = artifactSizeWrites();
+    const apply = (): void => {
+      if (artifactSizeWrites() !== writes) return;
+      flushSync(() => setArtifactSize(artifactKey, to));
+    };
     const reduced = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
     type Transition = { ready?: Promise<unknown>; finished?: Promise<unknown>; updateCallbackDone?: Promise<unknown> };
     const vt = (document as Document & { startViewTransition?: (cb: () => void) => Transition | undefined }).startViewTransition;
