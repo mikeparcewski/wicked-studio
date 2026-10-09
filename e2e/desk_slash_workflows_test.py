@@ -5,10 +5,10 @@ desk_slash_workflows_test.py — S19a (DES-STUDIO-REBUILD-001 §5.5/§5.7): a wo
 in-process fixture (`workflow_catalog` serves GET /workflows; `repo` serves GET /repos; `sessions`
 records POST /runs):
 
-  1. MENU: `/workflow-` groups "Start work" with the daemon's ordinary defs (workflow-bug,
-     workflow-feature) and never the system flow (chat); a mid-text `/workflow-` is a sentence —
-     no rows.
-  2. NAME: picking a rowNames it — a `/workflow-bug` chip and the options row, no POST.
+  1. MENU: `/wo` groups "Start work" with the daemon's five ordinary defs (feature, bug, migration,
+     domain-extraction, capture-learnings), each line read off the catalog ("2 phases: plan → build"),
+     and never the system flow (chat); a mid-text `/workflow-` is a sentence — no rows.
+  2. NAME: picking a row names it — a `/workflow-bug` chip and the options row, no POST.
   3. REFUSE: with no repository the composer says "Pick the repository this works in" and Enter
      sends NOTHING (0 POST /runs recorded).
   4. LAUNCH: with a repository the lone repo is picked, the line reads ready, and Enter makes
@@ -88,17 +88,21 @@ with sync_playwright() as p:
     open_desk()
     box = page.get_by_test_id("desk-composer-input")
     box.click()
-    box.type("/workflow-")
+    box.type("/wo")
     page.get_by_test_id("composer-menu").wait_for(state="visible", timeout=8000)
     cmds = page.eval_on_selector_all(
         '[data-testid="composer-menu-item"][data-group="start-work"]',
         "els => els.map(e => e.dataset.cmd)")
+    feature_line = page.eval_on_selector_all(
+        '[data-testid="composer-menu-item"][data-cmd="workflow-feature"]', "els => els.map(e => e.innerText)")
     groups = page.eval_on_selector_all('[data-testid="composer-menu-group"]', "els => els.map(e => e.dataset.group)")
     page.screenshot(path=str(SHOTS / "desk-slash-workflows-menu.png"))
+    ordinary = ["workflow-feature", "workflow-bug", "workflow-migration", "workflow-domain-extraction",
+                "workflow-capture-learnings"]
     check("menu-lists-workflows",
-          "start-work" in groups and "workflow-bug" in cmds and "workflow-feature" in cmds
-          and "workflow-chat" not in cmds,
-          groups=groups, cmds=cmds)
+          "start-work" in groups and all(c in cmds for c in ordinary) and "workflow-chat" not in cmds
+          and len(feature_line) == 1 and "2 phases: plan → build" in feature_line[0],
+          groups=groups, cmds=cmds, feature_line=feature_line)
 
     page.locator('[data-testid="composer-menu-item"][data-cmd="workflow-bug"]').click()
     page.get_by_test_id("composer-chip").wait_for(state="visible", timeout=8000)

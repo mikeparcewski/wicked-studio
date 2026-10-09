@@ -604,7 +604,8 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          #   plain-run banner and POST /testing/recon takes the launch.
          "governed_testing": False, "governed_testing_workflow_absent": False,
          # ── S19a (e2e/desk_slash_workflows_test.py) ──
-         # workflow_catalog — GET /workflows serves WC_WORKFLOWS (feature / bug ordinary, chat
+         # workflow_catalog — GET /workflows serves WC_WORKFLOWS (feature / bug / migration / domain-extraction /
+         #   capture-learnings ordinary, chat
          #   system); the composer's `/workflow-` rows read them. Default False: the standing
          #   governed_testing gating / unknown-route 404 is untouched.
          "workflow_catalog": False,
@@ -3244,6 +3245,11 @@ WC_WORKFLOWS = [
                                  {"id": "build", "kind": "build", "executes_code": True}]},
     {"id": "bug", "phases": [{"id": "recon", "kind": "recon"},
                              {"id": "build", "kind": "build", "executes_code": True}]},
+    {"id": "migration", "phases": [{"id": "inventory", "kind": "recon"}, {"id": "plan", "kind": "recon"},
+                                   {"id": "migrate", "kind": "build", "executes_code": True},
+                                   {"id": "verify", "kind": "review"}, {"id": "deliver", "kind": "build"}]},
+    {"id": "domain-extraction", "phases": [{"id": "recon", "kind": "recon"}, {"id": "extract", "kind": "build"}]},
+    {"id": "capture-learnings", "phases": [{"id": "mine", "kind": "recon"}, {"id": "capture", "kind": "build"}]},
     {"id": "chat", "phases": [{"id": "ask", "kind": "recon"}], "is_system": True},
 ]
 

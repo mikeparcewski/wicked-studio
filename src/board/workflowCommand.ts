@@ -47,11 +47,17 @@ export interface WorkflowRow {
 }
 
 /** "5 phases: recon → author → verify → review" — the def's first four phases, and the count. */
+/** The first four ids in order, then "…" when there are more (DES-slash-workflows §2). */
+function headOf(ids: readonly string[]): string {
+  const head = ids.slice(0, 4).join(' → ');
+  return ids.length > 4 ? `${head} → …` : head;
+}
+
 export function commandLine(def: WorkflowDef): string {
   const ids = def.phases.map((p) => p.id);
   if (ids.length === 0) return 'no phases listed';
   const word = ids.length === 1 ? 'phase' : 'phases';
-  return `${ids.length} ${word}: ${ids.slice(0, 4).join(' → ')}`;
+  return `${ids.length} ${word}: ${headOf(ids)}`;
 }
 
 /** "preset · 3 steps: understand → build → deliver" — a preset's steps, in order. */
@@ -59,7 +65,7 @@ export function presetCommandLine(preset: Preset): string {
   const ids = preset.steps.map((s) => s.catalog ?? s.id);
   if (ids.length === 0) return `preset · ${preset.name}`;
   const word = ids.length === 1 ? 'step' : 'steps';
-  return `preset · ${ids.length} ${word}: ${ids.slice(0, 4).join(' → ')}`;
+  return `preset · ${ids.length} ${word}: ${headOf(ids)}`;
 }
 
 /** The line the menu shows while the daemon's workflow list is still being read. */

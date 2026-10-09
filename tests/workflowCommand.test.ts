@@ -56,7 +56,7 @@ describe('parseWorkflowCommand', () => {
 describe('commandLine', () => {
   it('names the phase count and the first four phases', () => {
     expect(commandLine(def('qe-author-tests', ['recon', 'author', 'verify', 'review', 'deliver'])))
-      .toBe('5 phases: recon → author → verify → review');
+      .toBe('5 phases: recon → author → verify → review → …');
   });
   it('singularizes one phase and says so for none', () => {
     expect(commandLine(def('solo', ['recon']))).toBe('1 phase: recon');
@@ -102,6 +102,16 @@ describe('workflowItems', () => {
   it('caps the rows at WORKFLOW_ROWS_MAX', () => {
     const many = Array.from({ length: 12 }, (_, i) => def(`wf-${i}`, []));
     expect(workflowItems('', many, null)).toHaveLength(WORKFLOW_ROWS_MAX);
+  });
+  it('offers a row for an id studio has never seen, its line read off the catalog', () => {
+    const rows = workflowItems('wo', [def('qe-author-tests', ['recon', 'author', 'verify', 'review', 'deliver'])], null);
+    expect(rows).toStrictEqual([{
+      key: 'qe-author-tests', cmd: 'workflow-qe-author-tests', workflowId: 'qe-author-tests',
+      line: '5 phases: recon → author → verify → review → …', source: 'workflow',
+    }]);
+  });
+  it('a preset of more than four steps ends in "…"', () => {
+    expect(presetCommandLine(preset('long', ['a', 'b', 'c', 'd', 'e']))).toBe('preset · 5 steps: a → b → c → d → …');
   });
   it('reads a cold catalog as no rows, never a throw', () => {
     expect(workflowItems('', null, null)).toStrictEqual([]);
