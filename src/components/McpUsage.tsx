@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { sessionPath } from '../board/sessionModel.js';
 import {
   ageOf,
   CALL_DECISION_LABELS,
@@ -39,7 +40,8 @@ type Load =
   | { kind: 'loaded'; usage: McpUsageResponse };
 
 const msg = (e: unknown): string => (e instanceof Error ? e.message : String(e));
-const runGovernancePath = (runId: string): string => `/runs/${encodeURIComponent(runId)}#governance`;
+// S16a-2c: the run's session thread; `#governance` opens its sheet on the Governance tab on arrival.
+const runGovernancePath = (runId: string): string => `${sessionPath(`run:${runId}`)}#governance`;
 
 function Tile({ testid, label, value, sub, children }: { testid: string; label: string; value: string; sub?: string; children?: React.ReactNode }): React.ReactElement {
   return (

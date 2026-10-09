@@ -53,6 +53,9 @@ import { useAskThreadStore } from '../../store/askThread.js';
 import { useTeamFold } from '../../hooks/useTeamFold.js';
 import { AskLineView, AskTyping } from './AskThread.js';
 
+/** S16a-2c: the hash that lands a run's session on its sheet's Governance tab. */
+export const GOVERNANCE_HASH = '#governance';
+
 /**
  * A SESSION (`/s/:id`, DES-STUDIO-REBUILD-001 §5.4, slice S6a): the goal sentence, the thread (the
  * chat's turns and the runs launched from it, in time order), each run's chain line, and the
@@ -122,6 +125,12 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
 }): React.ReactElement {
   const ref = useMemo(() => parseSessionId(sessionId), [sessionId]);
   const runChatId = useCapabilities((s) => s.runChatId);
+  // S16a-2c: a run address with `#governance` (the MCP usage page's link) opens that run's ⋯ sheet
+  // on its Governance tab on arrival — the run page's rule, said on the session.
+  useEffect(() => {
+    if (ref.kind !== 'run' || window.location.hash !== GOVERNANCE_HASH) return;
+    openSheet({ kind: 'session', sessionId: `run:${ref.runId}` }, 'governance');
+  }, [ref]);
   // With C1, a run launched from a chat belongs to that chat's session: a `run:<id>` address for
   // it (followed while `/health` was still loading) is replaced by the chat's (Copilot).
   useEffect(() => {

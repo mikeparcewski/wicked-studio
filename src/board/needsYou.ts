@@ -259,7 +259,8 @@ export interface NeedsYouInputs {
   failedAt: Record<string, number>;
   /** Membership attach clocks, merged across projects. */
   attachedAt: Record<string, number>;
-  /** run id → project id (the membership mirror) — gate deep-links ride it. */
+  /** run id → project id (the membership mirror). S16a-2c: no row address reads it any more (every
+   *  run opens its session thread); kept on the input for the callers that still pass it. */
   projectIds: Record<string, string>;
   /** `GET /chats` snapshot; empty when the wire is absent — absence adds no rows. */
   chats: readonly LiveChatSnapshot[];
@@ -319,11 +320,10 @@ function silentWord(ms: number): string {
 
 const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? '' : 's'}`;
 
-/** A run's own surface: its project's Build view when filed, else the flat run route. */
-function runOpenPath(runId: string, projectId: string | undefined): string {
-  return projectId !== undefined
-    ? `/p/${encodeURIComponent(projectId)}/build/${encodeURIComponent(runId)}`
-    : `/runs/${encodeURIComponent(runId)}`;
+/** A run's own surface: its session thread (S16a-2c — never the retired run page or a project's
+ *  Build view; the project id no longer shapes the address). */
+function runOpenPath(runId: string): string {
+  return sessionPath(`run:${runId}`);
 }
 
 /** The daemon's own terminal clock (`ended_at`, unix SECONDS) in ms, when the wire carries it. */
@@ -347,7 +347,7 @@ const clipLine = (t: string, n = 120): string => {
 };
 
 export function needsYouRows(inputs: NeedsYouInputs): NeedRow[] {
-  const { runs, gates, failedAt, attachedAt, projectIds, chats, repos, campaigns, now, deliveryAttempted, deliveredNow } = inputs;
+  const { runs, gates, failedAt, attachedAt, chats, repos, campaigns, now, deliveryAttempted, deliveredNow } = inputs;
   const stalledAt = inputs.stalledAt ?? {};
   const orphanedAt = inputs.orphanedAt ?? {};
   const escalations = inputs.stallEscalations ?? {};
@@ -460,7 +460,7 @@ export function needsYouRows(inputs: NeedsYouInputs): NeedRow[] {
         // terminal clock (`finished_at`, millis — present when the daemon booted after the run
         // ended and so has no `run.ended` entry), then the durable-log tail, then the attach clock.
         at: endedAtMs(v) ?? finishedAtMs(v) ?? failedAt[s.id] ?? attachedAt[s.id] ?? null,
-        subjectPath: `/runs/${encodeURIComponent(s.id)}`,
+        subjectPath: runOpenPath(s.id),
         action: { kind: 'retry-prefill', prefill: retryPrefillOf(v), label: 'Retry ›' },
       });
     } else if (s.status === 'executing' && orphanedAt[s.id] !== undefined) {
@@ -495,7 +495,6 @@ export function needsYouRows(inputs: NeedsYouInputs): NeedRow[] {
         },
         QUEUE_CTX,
       );
-      const projectId = typeof s.project_id === 'string' ? s.project_id : projectIds[s.id];
       shownRunIds.add(s.id);
       rows.push({
         key: `stall-esc:${s.id}`,
@@ -506,8 +505,8 @@ export function needsYouRows(inputs: NeedsYouInputs): NeedRow[] {
         text: line?.text ?? 'Needs you — the watchdog could not recover this run',
         tone: 'gate',
         at: esc.at,
-        subjectPath: runOpenPath(s.id, projectId),
-        action: { kind: 'open', path: runOpenPath(s.id, projectId), label: 'Check run ›' },
+        subjectPath: runOpenPath(s.id),
+        action: { kind: 'open', path: runOpenPath(s.id), label: 'Check run ›' },
       });
     } else if (stalledAt[s.id] !== undefined) {
       shownRunIds.add(s.id);
@@ -521,8 +520,8 @@ export function needsYouRows(inputs: NeedsYouInputs): NeedRow[] {
         text: `No activity for ${silentWord(silent)} — the run may be wedged`,
         tone: 'gate',
         at: stalledAt[s.id]!,
-        subjectPath: `/runs/${encodeURIComponent(s.id)}`,
-        action: { kind: 'open', path: `/runs/${encodeURIComponent(s.id)}`, label: 'Check run ›' },
+        subjectPath: runOpenPath(s.id),
+        action: { kind: 'open', path: runOpenPath(s.id), label: 'Check run ›' },
       });
     } else if (s.status === 'completed' && deliveryOf(v).state === 'stranded' && !keptLocally(v, deliveryAttempted?.has(s.id) ?? false) && !(deliveredNow?.has(s.id) ?? false)) {
       // A run launched without delivery is finished work kept on this machine, as asked
@@ -617,7 +616,6 @@ export function needsYouRows(inputs: NeedsYouInputs): NeedRow[] {
   for (const [runId, e] of Object.entries(inputs.elicitations ?? {})) {
     const v = liveRuns.get(runId);
     if (v === undefined) continue; // a chat-keyed or finished run's prompt belongs elsewhere
-    const projectId = typeof v.session.project_id === 'string' ? v.session.project_id : projectIds[runId];
     const at = typeof e.receivedAt === 'number' ? e.receivedAt : Date.parse(e.receivedAt);
     rows.push({
       key: `elicit:${runId}`,
@@ -628,8 +626,8 @@ export function needsYouRows(inputs: NeedsYouInputs): NeedRow[] {
       text: `Question: ${clipLine(e.message)}`,
       tone: 'gate',
       at: Number.isFinite(at) ? at : null,
-      subjectPath: runOpenPath(runId, projectId),
-      action: { kind: 'open', path: runOpenPath(runId, projectId), label: 'Answer ›' },
+      subjectPath: runOpenPath(runId),
+      action: { kind: 'open', path: runOpenPath(runId), label: 'Answer ›' },
     });
   }
   // One row per run: the newest unread ask carries the line; opening acks them all.
@@ -642,7 +640,6 @@ export function needsYouRows(inputs: NeedsYouInputs): NeedRow[] {
     const v = liveRuns.get(runId)!;
     const newest = asks.reduce((a, b) => (b.ts > a.ts ? b : a));
     const oldest = asks.reduce((a, b) => (b.ts < a.ts ? b : a));
-    const projectId = typeof v.session.project_id === 'string' ? v.session.project_id : projectIds[runId];
     rows.push({
       key: `steer:${runId}`,
       kind: 'steer-request',
@@ -652,8 +649,8 @@ export function needsYouRows(inputs: NeedsYouInputs): NeedRow[] {
       text: `Agent asks for direction — ${clipLine(newest.message)}`,
       tone: 'gate',
       at: oldest.ts,
-      subjectPath: runOpenPath(runId, projectId),
-      action: { kind: 'open', path: runOpenPath(runId, projectId), label: 'Steer ›', ack: asks.map((a) => a.id) },
+      subjectPath: runOpenPath(runId),
+      action: { kind: 'open', path: runOpenPath(runId), label: 'Steer ›', ack: asks.map((a) => a.id) },
     });
   }
 

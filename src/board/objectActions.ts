@@ -84,7 +84,7 @@ export const OBJECT_ACTIONS: Readonly<Record<ObjectKind, readonly ObjectAction[]
     { id: 'message', label: 'Message it', primary: true },
     { id: 'rerun', label: 'Re-run from here' },
     { id: 'changes', label: 'See its changes', tab: 'changes' },
-    { id: 'record', label: 'Full record' },
+    { id: 'record', label: 'Open its thread' },
     { id: 'stop', label: 'Stop it', undoable: true },
   ],
   helper: [
@@ -94,7 +94,7 @@ export const OBJECT_ACTIONS: Readonly<Record<ObjectKind, readonly ObjectAction[]
     { id: 'stop', label: 'Stop it', undoable: true },
   ],
   session: [
-    { id: 'record', label: 'Full record', primary: true },
+    { id: 'record', label: 'Open its thread', primary: true },
     { id: 'steps', label: 'Steps and what each did', tab: 'steps' },
     { id: 'changes', label: 'Changes', tab: 'changes' },
     { id: 'evidence', label: 'Evidence', tab: 'evidence' },

@@ -2,6 +2,7 @@ import { isAskTurnRun } from './askTurn.js';
 import type { AuditEntry, SessionView } from '../api/types.js';
 import { endedAtMs, type ElicitationLite, type GateLite } from './needsYou.js';
 import { standingOrderActionText } from './standingOrders.js';
+import { sessionPath } from './sessionModel.js';
 
 /**
  * HANDOVER ON ARRIVAL (studio wave 2b, behaviour 1) — the pure half.
@@ -135,10 +136,10 @@ function systemText(e: AuditEntry): string {
   return SYSTEM_ACTION_TEXT[e.action] ?? `System action: ${e.action}`;
 }
 
-function runPath(runId: string, projectId: string | undefined, hash = ''): string {
-  return projectId !== undefined
-    ? `/p/${encodeURIComponent(projectId)}/build/${encodeURIComponent(runId)}${hash}`
-    : `/runs/${encodeURIComponent(runId)}${hash}`;
+/** S16a-2c: a run's place is its session thread (`/s/run%3A<id>`), its fragment kept (#gate). The
+ *  project id is no longer part of the address (a run does not live inside its project's shell). */
+function runPath(runId: string, _projectId: string | undefined, hash = ''): string {
+  return `${sessionPath(`run:${runId}`)}${hash}`;
 }
 
 const TERMINAL: ReadonlySet<string> = new Set(['completed', 'failed', 'cancelled']);

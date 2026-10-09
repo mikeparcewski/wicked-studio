@@ -40,6 +40,9 @@ describe('the router, enumerated', () => {
     const targets = routeTargets(DATA);
     for (const s of ROUTE_SHAPES) {
       if (REACHED_BY_OTHER_GROUPS.includes(s.id)) continue;
+      // S16a-2c: a run no longer lives inside its project, so ⌘K offers no "· in its project" row;
+      // the address still parses (it redirects to the run's session, S16a-2d).
+      if (s.id === 'p-build-run') continue;
       const mine = targets.filter((t) => t.shape === s.id);
       expect(mine.length, `no ⌘K entry for ${s.id}`).toBeGreaterThan(0);
       for (const t of mine) expect(s.is(parseRoute(t.href)), `${t.label} → ${t.href}`).toBe(true);

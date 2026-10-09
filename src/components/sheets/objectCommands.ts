@@ -5,7 +5,7 @@ import { parseSessionId, runChatIdOf, sessionPath } from '../../board/sessionMod
 import { GATE_HASH } from '../../board/gateActions.js';
 import { STEP_WORD, unitPhaseId } from '../../board/chainModel.js';
 import type { Navigate } from '../../hooks/useRoute.js';
-import { openSheet, stopRun } from '../../store/sheets.js';
+import { closeSheet, openSheet, stopRun } from '../../store/sheets.js';
 import { humanTitle } from '../runIdentity.js';
 import { archiveBlocked, askRunAction, retryBlocked, startRetry } from '../session/RunActions.js';
 
@@ -54,7 +54,8 @@ export function objectCommands(ref: ObjectRef, ctx: { runs: readonly SessionView
           // S16a-1b: the rewind is a ⋯ choice on the session thread's gate row ("Rerun from <step>").
           return { id: a.id, label: `${a.label} (at its gate in the thread)`, run: go(`${sessionPath(`run:${ref.runId}`)}${GATE_HASH}`), disabled: null };
         case 'record':
-          return { id: a.id, label: a.label, run: go(`/runs/${encodeURIComponent(ref.runId)}`), disabled: null };
+          // S16a-2c: "Open its thread" — the run's session, never the run page.
+          return { id: a.id, label: a.label, run: go(sessionPath(`run:${ref.runId}`)), disabled: null };
         case 'stop':
           return { id: a.id, label: `${a.label} — 10 s to undo`, run: () => { stopRun([ref.runId], `“${runTitle}”`); }, disabled: live ? null : 'It has already ended.' };
         default:
@@ -72,7 +73,7 @@ export function objectCommands(ref: ObjectRef, ctx: { runs: readonly SessionView
     const title = mine[0] !== undefined ? humanTitle(mine[0].session.problem || mine[0].session.id) : 'this session';
     const rows = actions.map((a): ObjectCommand => {
       if (a.tab !== undefined) return tabRow(a.id, a.label, a.tab);
-      if (a.id === 'record') return { id: a.id, label: a.label, run: newest !== undefined ? go(`/runs/${encodeURIComponent(newest.session.id)}`) : () => {}, disabled: newest === undefined ? 'Nothing in it is on this daemon.' : null };
+      if (a.id === 'record') return { id: a.id, label: a.label, run: newest !== undefined ? () => { closeSheet(); ctx.navigate(sessionPath(`run:${newest.session.id}`)); } : () => {}, disabled: newest === undefined ? 'Nothing in it is on this daemon.' : null };
       if (a.id === 'stop') return { id: a.id, label: `${a.label} — 10 s to undo`, run: () => { stopRun(live, `“${title}”`); }, disabled: live.length === 0 ? 'Nothing in it is running.' : null };
       // S16a-1d: Retry deposits the prefill and opens the launch form (no POST); Archive and Draft
       // open the session sheet at their confirm / the draft (the sheet owns both; no POST here).

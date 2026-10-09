@@ -135,10 +135,7 @@ export function routeTargets(d: RouteTargetData): RouteTarget[] {
     }
     out.push({ shape: 'run-events', label: `${title} · raw events`, href: runEventsPath(id) });
     out.push({ shape: 'run-files', label: `${title} · files and diff`, href: runFilesPath(id) });
-    const pid = d.projectIdByRun[id];
-    if (pid !== undefined && pid !== 'default') {
-      out.push({ shape: 'p-build-run', label: `${title} · in its project`, href: modePath(pid, 'build', id) });
-    }
+    // S16a-2c: no "· in its project" row — a run lives in its session, not inside its project.
   }
   for (const p of d.projects) {
     if (p.id === 'default') continue;

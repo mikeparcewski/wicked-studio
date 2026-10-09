@@ -684,7 +684,7 @@ function MadeTab({ runs, q, navigate, go }: { runs: SessionView[]; q: Everything
   const lens = (kind: EverythingQuery['kind'], project: string | null = q.project): string => everythingPath({ tab: 'made', kind, project });
   const scopeName = q.project !== null ? nameOf(q.project) : null;
   const hrefOf = (r: MadeRow): string => {
-    if (r.runId !== undefined) return r.projectId !== null ? modePath(r.projectId, 'video', r.runId) : `/runs/${encodeURIComponent(r.runId)}`;
+    if (r.runId !== undefined) return r.projectId !== null ? modePath(r.projectId, 'video', r.runId) : sessionPath(`run:${r.runId}`);
     // A registry document — a demo's script included — opens as a document: the video surface takes
     // a RUN id, and a document name is not one (the retired dashboard did the same).
     return versionPath(r.projectId ?? 'default', r.doc!.name, null, 'document');
