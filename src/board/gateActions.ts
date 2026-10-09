@@ -8,6 +8,7 @@ import { plainGateQuestion, plainRunTitle } from './deskWords.js';
 import type { LaunchPlan } from '../api/teamPlan.js';
 import { sessionPath } from './sessionModel.js';
 import { choicesOf, recommendedOf, useGateStore } from '../store/gates.js';
+import { readDecisionDiff, recordSeen } from '../store/gateDiffSeen.js';
 import { useMembershipStore } from '../store/membership.js';
 import {
   cancelDecision, describeDecision, onDecisionTestReset, queueDecision, reportDecision, restoreNote,
@@ -281,8 +282,15 @@ export function commitGateDecision(
       commit: async () => {
         watched.delete(runId);
         patch(runId, { queued: false });
+        // studio#244: what the operator decided on, kept for the run's next gate ("diff changed since
+        // your review"). Read before the post; recorded only once the decision was accepted.
+        const seenDiff = ord === undefined ? null : readDecisionDiff(runId);
+        const decidedAt = Date.now();
         const error = await sendGateDecision(runId, ord === undefined ? decision : { ...decision, ord });
         if (error === null) {
+          if (seenDiff !== null && ord !== undefined) {
+            void seenDiff.then((files) => { if (files !== null) recordSeen(runId, { ord, at: decidedAt, files }); });
+          }
           if (opts.receipt !== undefined) {
             patch(runId, { receipt: { ...opts.receipt, sentAt: Date.now() } });
           }
