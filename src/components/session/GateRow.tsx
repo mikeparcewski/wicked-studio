@@ -3,7 +3,10 @@ import type { RosterSeat, SessionView as RunView } from '../../api/types.js';
 import { GATE_HASH, IDLE_GATE_ACTION, commitGateDecision, commitGateReassign, useGateActionStore, type GateAnswer } from '../../board/gateActions.js';
 import { FLOOR_FIX_LABEL, sessionGateChoices, type GateRowChoice, type GateRowModel } from '../../board/gateRowModel.js';
 import { INITIAL_PICK, pickKey, type RowPick } from '../../board/questionRow.js';
-import { plainGateQuestion } from '../../board/deskWords.js';
+import { plainGateQuestion, repoNameOf } from '../../board/deskWords.js';
+import { api } from '../../api/client.js';
+import { useDisplayText } from '../../hooks/useHomePath.js';
+import { diffstatOf, type DeliverRefusal } from '../gateMoveModel.js';
 import { secondsLeft, undoDecision, useUndoQueue } from '../../board/undoQueue.js';
 import { useRunEvents } from '../../hooks/useRunEvents.js';
 import { getCachedRoster, subscribeRoster } from '../../store/rosterCache.js';
@@ -106,6 +109,25 @@ function RunGateRow({ view, gate }: { view: RunView; gate: OpenGate | undefined 
     isPlanGate: false, isDeliverGate: gate?.gateKind === 'deliver',
     isEscalation: model !== null && (model.reason === 'escalation' || model.reason === 'retry'),
   });
+  // studio#403: a refused hand-over's own lines — the reason first, then what Deliver again
+  // re-pushes, with the same diffstat the deliver card shows (GET /runs/:id/diff, merge-base).
+  const refused = model?.refusal ?? null;
+  const [diffstat, setDiffstat] = useState<{ runId: string; text: string | null } | null>(null);
+  useEffect(() => {
+    if (refused === null) return;
+    let live = true;
+    api.getRunDiff(runId, undefined, 'merge-base')
+      .then((d) => { if (live) setDiffstat({ runId, text: typeof d.diff === 'string' ? diffstatOf(d.diff) : null }); })
+      .catch(() => { /* no diff read: the consent line names the branch only */ });
+    return () => { live = false; };
+  }, [runId, refused !== null]); // eslint-disable-line react-hooks/exhaustive-deps
+  const showText = useDisplayText();
+  const refusalWords_ = refused === null ? null : refusalWords(refused, {
+    branch: (view.session as unknown as { run_branch?: string }).run_branch ?? null,
+    repo: repoNameOf(view),
+    diffstat: diffstat?.runId === runId ? diffstat.text : null,
+  });
+  const refusalLines = refusalWords_ === null ? null : { lead: showText(refusalWords_.lead), consent: showText(refusalWords_.consent) };
   const depth = gate !== undefined && model !== null
     ? <GateDepthDetails view={view} gate={gate} failing={model.failing} reviewedOrd={model.reviewedOrd} source={model.source} underReview={model.reason === 'def'} />
     : null;
@@ -113,12 +135,28 @@ function RunGateRow({ view, gate }: { view: RunView; gate: OpenGate | undefined 
     <GateRowBody
       runId={runId} gate={gate} model={model} seat={seat} rerunOffer={rerunOffer}
       eventsUnavailable={gate !== undefined && events === null && eventsFetchFailed}
-      retryEvents={retryEvents} depth={depth}
+      retryEvents={retryEvents} depth={depth} refusalLines={refusalLines}
     />
   );
 }
 
-function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, retryEvents, depth }: {
+/**
+ * studio#403: the refused hand-over in words — the reason leads ("The remote refused the push:
+ * <hook message>. Nothing was pushed; the work is committed on <branch>."), and the consent line
+ * above the choices says what Deliver again sends: "Deliver again re-pushes <branch> to <repo>:
+ * N files changed, +A, −D." The deliver script's raw lines stay under ⋯ Details.
+ */
+export function refusalWords(r: DeliverRefusal, at: { branch: string | null; repo: string | null; diffstat: string | null }): { lead: string; consent: string } {
+  const branch = r.branch ?? at.branch;
+  const reason = r.reason.replace(/[.;\s]+$/, '');
+  const lead = r.remote
+    ? `The remote refused the push: ${reason}. Nothing was pushed; the work is committed on ${branch ?? 'the run branch'}.`
+    : `The hand-over failed: ${reason}.`;
+  const consent = `Deliver again re-pushes ${branch ?? 'the run branch'}${at.repo !== null ? ` to ${at.repo}` : ''}${at.diffstat !== null ? `: ${at.diffstat}` : ''}.`;
+  return { lead, consent };
+}
+
+function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, retryEvents, depth, refusalLines = null }: {
   runId: string;
   gate: OpenGate | undefined;
   model: GateRowModel | null;
@@ -130,6 +168,8 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
   retryEvents: () => void;
   /** ⋯ Details' depth block (the run's); null on a chat's gate. */
   depth: React.ReactNode;
+  /** studio#403: a refused hand-over's reason and consent line; null on every other gate. */
+  refusalLines?: { lead: string; consent: string } | null;
 }): React.ReactElement | null {
   const action = useGateActionStore((s) => s.byGate[runId] ?? IDLE_GATE_ACTION);
   const pending = useUndoQueue((s) => s.pending.find((p) => p.runIds.length === 1 && p.runIds[0] === runId) ?? null);
@@ -359,6 +399,12 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
       }}
     >
       <p data-testid="session-gate-question" className="wk-session-gate-question">{question}</p>
+      {refusalLines !== null && (
+        <>
+          <p data-testid="session-gate-refusal" className="wk-session-gate-detail-item">{refusalLines.lead}</p>
+          <p data-testid="session-gate-deliver-consent" className="wk-gate-consequence">{refusalLines.consent}</p>
+        </>
+      )}
       {/* S16a-1c (TR-W8): a watch finding attached to this gate, as one quiet line (nothing when absent). */}
       {gate !== undefined && <WatchGateLine runId={runId} ord={typeof gate.ord === 'number' ? gate.ord : null} />}
       {/* S16a-1b: the recommended move's consequence, above the choice that takes it. */}

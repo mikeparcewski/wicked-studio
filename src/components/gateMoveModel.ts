@@ -598,6 +598,54 @@ const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? '' 
  *  instructions (wicked-core `plan::INSTRUCTION_SEP`). Never rendered. */
 export const INSTRUCTION_SEP = ' ||| ';
 
+/**
+ * studio#403: what a refused hand-over says, read off the engine's retry gate ("The deliver phase
+ * refused: <the deliver script's output>. Approve to re-run the deliver phase now …"). `remote` is
+ * crew's push refusal sentence ("deliver: the remote refused the push of <branch> after commit:
+ * <reason>; the work is committed on <branch> and nothing was pushed …"); anything else is the
+ * script's own first line, with its identity line ("deliver: pushing as …") and markers dropped.
+ * `null` when the gate is not a refused hand-over.
+ */
+export interface DeliverRefusal {
+  remote: boolean;
+  branch: string | null;
+  reason: string;
+}
+const DELIVER_REFUSED_HEAD = /^\s*The deliver phase refused:\s*/i;
+export function deliverRefusalOf(prompt: string | undefined): DeliverRefusal | null {
+  if (prompt === undefined || !DELIVER_REFUSED_HEAD.test(prompt)) return null;
+  const tail = prompt.search(/\.\s*Approve to re-run the deliver phase\b/i);
+  const body = (tail === -1 ? prompt : prompt.slice(0, tail)).replace(DELIVER_REFUSED_HEAD, '');
+  const remote = /the remote refused the push of (\S+?)(?: after commit: ([\s\S]+?)| because ([\s\S]+?)); the work is committed on/i.exec(body);
+  if (remote !== null) {
+    const why = (remote[2] ?? remote[3] ?? '').replace(/\s+/g, ' ').trim();
+    return { remote: true, branch: remote[1]!, reason: why === '' ? 'no reason was given' : why };
+  }
+  const lines = body
+    .split(/\n/)
+    .map((l) => l.trim())
+    .filter((l) => l !== '' && !/^deliver: pushing as\b/i.test(l) && !/^deliver: [A-Z-]+$/.test(l))
+    .map((l) => l.replace(/^deliver:\s*/i, ''));
+  const first = lines[0] ?? 'the deliver step failed';
+  return { remote: false, branch: null, reason: first.length > 240 ? `${first.slice(0, 239)}…` : first };
+}
+
+/** A unified diff's size in words ("3 files changed, +40, −2"), or null when it changes no file —
+ *  the deliver card's and the refused hand-over's one diffstat (studio#403: the same numbers). */
+export function diffstatOf(diff: string): string | null {
+  let files = 0, additions = 0, deletions = 0;
+  for (const line of diff.split('\n')) {
+    if (line.startsWith('diff --git ')) files++;
+    else if (line.startsWith('+') && !line.startsWith('+++ ')) additions++;
+    else if (line.startsWith('-') && !line.startsWith('--- ')) deletions++;
+  }
+  if (files === 0) return null;
+  const parts = [`${files} file${files !== 1 ? 's' : ''} changed`];
+  if (additions > 0) parts.push(`+${additions}`);
+  if (deletions > 0) parts.push(`−${deletions}`);
+  return parts.join(', ');
+}
+
 /** The head of an approved intent amendment's segment (wicked-core `INTENT_AMENDMENT_PREFIX`). */
 const INTENT_AMENDMENT_HEAD = 'APPROVED INTENT AMENDMENT';
 
