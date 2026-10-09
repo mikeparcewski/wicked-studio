@@ -627,8 +627,9 @@ export function needsYouRows(inputs: NeedsYouInputs): NeedRow[] {
       text: `Question: ${clipLine(e.message)}`,
       tone: 'gate',
       at: Number.isFinite(at) ? at : null,
-      subjectPath: runOpenPath(runId),
-      action: { kind: 'open', path: runOpenPath(runId), label: 'Answer ›' },
+      // S16a-4g: the question is answered in the run's thread; `#gate` focuses it on arrival.
+      subjectPath: `${runOpenPath(runId)}#gate`,
+      action: { kind: 'open', path: `${runOpenPath(runId)}#gate`, label: 'Answer ›' },
     });
   }
   // One row per run: the newest unread ask carries the line; opening acks them all.

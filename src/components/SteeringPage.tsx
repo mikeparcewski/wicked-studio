@@ -475,7 +475,7 @@ export function SteeringPage({ type, navigate, search = '', runs = [] }: {
           placeholder: `Describe the ${STEERING_TYPE_LABELS[pageType]} rules to author…`,
           hint: 'A message launches a governed authoring run: it reads what you attach, drafts '
             + `${STEERING_TYPE_LABELS[pageType]} steering rules, and stops at a propose gate — nothing `
-            + 'is written until you approve it here. Drop .md/.json rule files to import them directly.',
+            + 'is written until you approve it in the run\'s thread. Drop .md/.json rule files to import them directly.',
         }}
         verbs={dockVerbs}
         importable={(name) => /\.(md|markdown|json)$/i.test(name)}

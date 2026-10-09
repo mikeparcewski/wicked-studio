@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.6.6",
   "counts": {
-    "files": 194,
-    "occurrences": 2292,
-    "static": 2034,
+    "files": 196,
+    "occurrences": 2296,
+    "static": 2038,
     "dynamic": 48,
     "computed": 8
   },
@@ -120,6 +120,18 @@
       "testId": "amend-prepopulated",
       "files": [
         "src/components/SteeringGate.tsx"
+      ]
+    },
+    {
+      "testId": "answer-in-thread",
+      "files": [
+        "src/components/AnswerInThread.tsx"
+      ]
+    },
+    {
+      "testId": "answer-in-thread-open",
+      "files": [
+        "src/components/AnswerInThread.tsx"
       ]
     },
     {
@@ -7790,6 +7802,12 @@
       ]
     },
     {
+      "testId": "session-chat-questions",
+      "files": [
+        "src/components/session/ThreadQuestions.tsx"
+      ]
+    },
+    {
       "testId": "session-chat-retry",
       "files": [
         "src/components/session/SessionView.tsx"
@@ -8221,6 +8239,12 @@
       "testId": "session-run-pending",
       "files": [
         "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
+      "testId": "session-run-questions",
+      "files": [
+        "src/components/session/ThreadQuestions.tsx"
       ]
     },
     {

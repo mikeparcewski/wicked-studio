@@ -11,8 +11,8 @@ import { useGateStore } from '../src/store/gates.js';
  *  - attachments: `importable(name)` files offer the Import-directly vs Analyze-with-chat
  *    fork; Import fires `verbs.importDirect` and echoes its notes; plain files attach for
  *    analysis with no fork; analysis documents ride the NEXT send and clear with it;
- *  - a gate keyed to the active run renders in the PINNED ApprovalDock inside the panel
- *    (a structural sibling of the thread scroll), and resolving fires `onRunResolved`;
+ *  - S16a-4g: a gate keyed to the active run shows one "Answer in its thread ›" line (no card),
+ *    and the gate store clearing it fires `onRunResolved`;
  *  - collapse is a per-surface persisted preference (localStorage), restored across mounts.
  *
  * The Steering BINDING of these verbs (author/import wires, types, 501 copy) is pinned in
@@ -157,10 +157,9 @@ describe('AssistDock — the import-vs-analyze fork', () => {
   });
 });
 
-describe('AssistDock — the pinned gate', () => {
-  it('a gate keyed to the active run renders in the panel-pinned ApprovalDock; resolving fires onRunResolved', async () => {
+describe('AssistDock — S16a-4g: the active run\'s gate is answered in its thread', () => {
+  it('a gate keyed to the active run shows ONE "Answer in its thread ›" line (no card, nothing sent); the store clearing it fires onRunResolved', async () => {
     const user = userEvent.setup();
-    confirmGate.mockResolvedValue({ status: 'ok' });
     const onRunResolved = vi.fn();
     const v = verbs({ onRunResolved });
     dock(v);
@@ -178,14 +177,19 @@ describe('AssistDock — the pinned gate', () => {
       } as never);
     });
 
-    const gate = await screen.findByTestId('steering-gate');
-    expect(gate).toHaveAttribute('data-run-id', 'run-x1');
-    // Structural (DES-RUN-NARRATOR §2): pinned BELOW the thread scroll, never inside it.
-    expect(screen.getByTestId('assist-thread').contains(gate)).toBe(false);
+    const line = await screen.findByTestId('answer-in-thread');
+    expect(line).toHaveAttribute('data-subject', 'run-x1');
+    expect(within(line).getByTestId('answer-in-thread-open')).toHaveAttribute('href', '/s/run%3Arun-x1#gate');
+    expect(screen.queryByTestId('steering-gate')).toBeNull();
+    expect(screen.queryByTestId('approval-dock')).toBeNull();
+    // Below the thread scroll, never inside it.
+    expect(screen.getByTestId('assist-thread').contains(line)).toBe(false);
+    expect(onRunResolved).not.toHaveBeenCalled();
 
-    await user.click(within(gate).getByTestId('steering-approve'));
-    await waitFor(() => expect(confirmGate).toHaveBeenCalledWith('run-x1', { approve: true, ord: 0 }));
-    expect(onRunResolved).toHaveBeenCalledTimes(1);
+    act(() => { useGateStore.getState().clearGate('run-x1'); });
+    await waitFor(() => expect(onRunResolved).toHaveBeenCalledTimes(1));
+    expect(screen.queryByTestId('answer-in-thread')).toBeNull();
+    expect(confirmGate).not.toHaveBeenCalled();
   });
 });
 

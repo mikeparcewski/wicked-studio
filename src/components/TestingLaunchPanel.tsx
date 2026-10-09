@@ -13,13 +13,14 @@ import {
   type GovernedLaunchRoute,
   type LaunchIntent,
 } from '../api/testing.js';
-import type { Project, RepoEntry, RosterSeat, WorkUnit, WorkflowDef } from '../api/types.js';
+import type { Project, RepoEntry, RosterSeat, WorkflowDef } from '../api/types.js';
 import { QE_AUTHOR_TESTS_WORKFLOW_ID } from '../api/wave6-wire.js';
 import { useGateStore } from '../store/gates.js';
 import { getCachedRoster, setCachedRoster, subscribeRoster } from '../store/rosterCache.js';
 import { setCachedWorkflows } from '../store/workflowCache.js';
 import { runShortId } from './runIdentity.js';
-import { SteeringGate } from './SteeringGate.js';
+import { AnswerInThread, useGateCleared } from './AnswerInThread.js';
+import { sessionPath } from '../board/sessionModel.js';
 
 /**
  * The testing LAUNCH panel — "New test" runs the GOVERNED `qe-author-tests` workflow (wave 6:
@@ -74,7 +75,7 @@ const INTENT_COPY: Record<LaunchIntent, { title: string; blurb: string; governed
     title: 'Run recon',
     blurb:
       'Launches a governed recon run. It pauses at its intake gate before the survey starts — ' +
-      'approve it here to let the survey run. The survey reads the attached codebases and writes a ' +
+      'approve it in the run’s thread to let the survey run. The survey reads the attached codebases and writes a ' +
       'test plan (the scenarios and their dependencies) as the run’s output; it launches nothing.',
     governedBlurb: '',
     cta: 'Launch recon',
@@ -170,11 +171,6 @@ interface Launched {
   scopeNote: string | null;
 }
 
-/** The launched run's snapshot, read ONCE when its intake gate arrives — the plan's units + pool. */
-interface RunSnapshot {
-  units: WorkUnit[];
-  clis: string[];
-}
 
 export function TestingLaunchPanel({ intent, navigate, onClose, onLaunched, initialProjectId }: {
   intent: LaunchIntent;
@@ -246,31 +242,15 @@ export function TestingLaunchPanel({ intent, navigate, onClose, onLaunched, init
   const [error, setError] = useState<string | null>(null);
   const [launched, setLaunched] = useState<Launched | null>(null);
   const [resolved, setResolved] = useState(false);
-  const [snapshot, setSnapshot] = useState<RunSnapshot | null>(null);
 
   // The single-run intake gate arrives as a normal awaitingHuman frame on the app's one /ws
-  // fold — this panel just watches for it and renders the EXISTING gate card. A fan-out
+  // fold — S16a-4g: it is answered in the run's session thread; this panel points there in one
+  // line, and its resolved state follows the gate store (open, then cleared). A fan-out
   // (ids.length > 1) never watches: each sibling's gate shows everywhere gates do.
   const gateRunId = launched !== null && launched.ids.length === 1 ? launched.ids[0]! : null;
   const gate = useGateStore((s) => (gateRunId !== null ? s.gates[gateRunId] : undefined));
+  useGateCleared(gateRunId, () => setResolved(true));
 
-  // F-7R2-008: the gate card shows the PLAN — read the run ONCE when its intake gate arrives (the
-  // units are planned by then; before it there is nothing to show). A failed read shows the card
-  // without the plan, never a fabricated one.
-  useEffect(() => {
-    if (gateRunId === null || gate === undefined || snapshot !== null) return;
-    let disposed = false;
-    // `Promise.resolve().then` so a host without the read (an older client shell, a test double)
-    // degrades to "no plan block" instead of a thrown effect.
-    Promise.resolve()
-      .then(() => api.getRun(gateRunId))
-      .then(({ run }) => {
-        if (disposed) return;
-        setSnapshot({ units: run.units, clis: Array.isArray(run.session.clis) ? run.session.clis : [] });
-      })
-      .catch(() => { /* no plan block — the prompt and the answers still render */ });
-    return () => { disposed = true; };
-  }, [gateRunId, gate, snapshot]);
 
   useEffect(() => {
     let disposed = false;
@@ -707,7 +687,7 @@ export function TestingLaunchPanel({ intent, navigate, onClose, onLaunched, init
               , and the run itself is at{' '}
               <button
                 type="button"
-                onClick={() => navigate(`/runs/${encodeURIComponent(gateRunId!)}`)}
+                onClick={() => navigate(sessionPath(`run:${gateRunId!}`))}
                 className="font-mono underline"
                 style={{ color: 'var(--accent)' }}
               >
@@ -721,17 +701,9 @@ export function TestingLaunchPanel({ intent, navigate, onClose, onLaunched, init
               gate will appear here the moment the run asks{governed ? `, with the plan (${qeWorkflow.phases.map((p) => p.id).join(' → ')}) above the prompt` : ''}. It also shows up everywhere gates do.
             </p>
           ) : (
-            // The intake gate — the EXISTING gate card, reused verbatim, with the PLAN above the
-            // prompt (F-7R2-008). Approving (optionally with steer text) is what launches the
-            // proposed test; rejecting launches nothing.
-            <SteeringGate
-              runId={gateRunId!}
-              ord={gate.ord}
-              prompt={gate.prompt}
-              {...(snapshot !== null ? { units: snapshot.units, clis: snapshot.clis } : {})}
-              workflow={qeWorkflow}
-              onResolved={() => setResolved(true)}
-            />
+            // S16a-4g: the intake gate is answered in the run's thread (approving — optionally with a
+            // steer — launches the proposed test; rejecting launches nothing; the plan reads there).
+            <AnswerInThread subject={{ kind: 'run', runId: gateRunId! }} navigate={navigate} />
           )}
         </div>
       )}

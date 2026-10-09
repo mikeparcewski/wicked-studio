@@ -31,6 +31,7 @@ import { startRetry } from './RunActions.js';
 import { Tech, runTechParts } from '../Tech.js';
 import { parseJump } from '../../store/watch.js';
 import { GateRow } from './GateRow.js';
+import { ChatQuestions, RunQuestions } from './ThreadQuestions.js';
 import { SourceChips } from './SourceChips.js';
 import { SinceYouLeft } from './SinceYouLeft.js';
 import { Composer, type ComposerSend } from './Composer.js';
@@ -589,6 +590,8 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
               </div>
             )
             : <RunBlock key={e.key} view={e.view} badge={badges[e.view.session.id] ?? 0} sessionId={sessionId} navigate={navigate} />))}
+          {/* S16a-4g: the chat's own question and gate (keyed by the chat id) at the thread's foot. */}
+          {ref.kind === 'chat' && <ChatQuestions chatId={ref.chatId} />}
         </div>
       </div>
       {/* Rule 3: while the thread is the chain, the shape line names the path's steps for the operator. */}
@@ -727,6 +730,8 @@ export function RunBlock({ view, badge, sessionId, navigate }: {
           : finished === 'stranded'
             ? <StrandedCard view={view} />
             : <GateRow view={view} gate={gate} />}
+      {/* S16a-4g: an MCP server's question and the stall watchdog's hand-off, under the run's card. */}
+      <RunQuestions view={view} />
       <PlanStepLines runId={id} />
       <ChainLine chain={chain} runId={id} units={view.units} teamError={teamError} onRetry={retry} checks={checks} momentOf={momentOf} onOpenAt={(sec) => requestWalkthroughSeek(id, sec)} nothingChecked={noEvidenceSummary !== null} jumpOrd={jump?.ord ?? null} />
       {/* S8: the page the run is producing — a live preview that morphs inline → pane → full. */}

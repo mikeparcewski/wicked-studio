@@ -8,14 +8,15 @@ import {
 } from '../api/steering.js';
 import { useGateStore } from '../store/gates.js';
 import { readFileText } from './fileText.js';
-import { SteeringGate } from './SteeringGate.js';
+import { AnswerInThread, useGateCleared } from './AnswerInThread.js';
 
 /**
  * "Add with chat" — the governed authoring flow, opened on demand from the Add menu (and, on
  * the Testing surface's Harness page, REUSED VERBATIM with type `"testing"` — one governed-run
  * authoring UX, not a fork). `POST /governance/steering/author` launches the run; its PROPOSE
- * gate arrives as a normal awaitingHuman frame and renders through the EXISTING SteeringGate
- * component — no second gate UI, no polling.
+ * gate arrives as a normal awaitingHuman frame; S16a-4g: it is answered in the run's session thread —
+ * the panel says so in one line ("Answer in its thread ›") and reloads when the gate store clears it.
+ * No second gate UI, no polling.
  */
 export function AuthorPanel({ type, onClose, onAuthored }: {
   type: SteeringType;
@@ -31,9 +32,10 @@ export function AuthorPanel({ type, onClose, onAuthored }: {
   const [runId, setRunId] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   // The propose gate arrives as a normal awaitingHuman frame on the launched run — the app's
-  // one /ws subscription already folds it into the gate store; this panel just watches for it
-  // and renders the EXISTING gate card. No second gate UI, no polling.
+  // one /ws subscription already folds it into the gate store; this panel watches for it, points
+  // at the thread that answers it, and fires onAuthored when the store clears it.
   const gate = useGateStore((s) => (runId !== null ? s.gates[runId] : undefined));
+  useGateCleared(runId, onAuthored);
 
   const launch = async (): Promise<void> => {
     if (busy || instructions.trim() === '') return;
@@ -83,7 +85,7 @@ export function AuthorPanel({ type, onClose, onAuthored }: {
           <p className="text-[10px]" style={{ color: 'var(--ink-dim)' }}>
             Launches a governed authoring run: it reads what you attach, drafts{' '}
             <span className="font-mono">{type}</span> steering rules, and stops at a propose gate —
-            nothing is written until you approve it here.
+            nothing is written until you approve it in the run&rsquo;s thread.
           </p>
           <textarea
             data-testid="steering-author-instructions"
@@ -153,14 +155,9 @@ export function AuthorPanel({ type, onClose, onAuthored }: {
           gate will appear here the moment the run asks. It also shows up everywhere gates do.
         </p>
       ) : (
-        // The propose gate — the EXISTING gate card, reused verbatim. Approving (optionally with
-        // steer text) is what writes the proposed rules; rejecting writes nothing.
-        <SteeringGate
-          runId={runId}
-          ord={gate.ord}
-          prompt={gate.prompt}
-          onResolved={onAuthored}
-        />
+        // S16a-4g: the propose gate is answered in the run's thread (approving — optionally with a
+        // steer — writes the proposed rules; rejecting writes nothing). One line, no card here.
+        <AnswerInThread subject={{ kind: 'run', runId }} />
       )}
     </div>
   );
