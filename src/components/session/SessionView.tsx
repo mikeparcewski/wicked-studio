@@ -21,6 +21,7 @@ import { useGateStore } from '../../store/gates.js';
 import { useRunEventStore } from '../../store/events.js';
 import { ChainLine, useRunChain } from './ChainLine.js';
 import { ProposalCard } from './ProposalCard.js';
+import { useRunEvents } from '../../hooks/useRunEvents.js';
 import { GateRow } from './GateRow.js';
 import { SourceChips } from './SourceChips.js';
 import { SinceYouLeft } from './SinceYouLeft.js';
@@ -651,15 +652,8 @@ export function RunBlock({ view, badge, sessionId }: {
 function OrphanedRow({ view }: { view: RunView }): React.ReactElement | null {
   const id = view.session.id;
   const status = view.session.status;
-  const frames = useRunEventStore((s) => s.byRun[id]);
-  const fetchedFor = useRef<string | null>(null);
-  useEffect(() => {
-    if (frames !== undefined || status !== 'executing' || fetchedFor.current === id) return;
-    fetchedFor.current = id;
-    api.getRunEvents(id)
-      .then(({ events }) => { useRunEventStore.getState().hydrate(id, events); })
-      .catch(() => { /* no trail read, no verdict */ });
-  }, [id, status, frames]);
+  // studio#558: the session page's one run-event read (a failed read is no verdict: frames stay unread).
+  const frames = useRunEvents(id, status === 'executing').events ?? undefined;
   const [sent, setSent] = useState<'idle' | 'sending' | 'asked' | 'failed'>('idle');
   const [error, setError] = useState<string | null>(null);
   useEffect(() => { setSent('idle'); setError(null); }, [id]);

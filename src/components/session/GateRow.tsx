@@ -1,12 +1,11 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import type { CoreEvent, RosterSeat, SessionView as RunView } from '../../api/types.js';
-import { api } from '../../api/client.js';
+import type { RosterSeat, SessionView as RunView } from '../../api/types.js';
 import { GATE_HASH, IDLE_GATE_ACTION, commitGateDecision, commitGateReassign, useGateActionStore, type GateAnswer } from '../../board/gateActions.js';
 import { sessionGateChoices, type GateRowChoice, type GateRowModel } from '../../board/gateRowModel.js';
 import { INITIAL_PICK, pickKey, type RowPick } from '../../board/questionRow.js';
 import { plainGateQuestion } from '../../board/deskWords.js';
 import { secondsLeft, undoDecision, useUndoQueue } from '../../board/undoQueue.js';
-import { useRunEventStore } from '../../store/events.js';
+import { useRunEvents } from '../../hooks/useRunEvents.js';
 import { getCachedRoster, subscribeRoster } from '../../store/rosterCache.js';
 import type { OpenGate } from '../../store/gates.js';
 
@@ -48,29 +47,9 @@ export function GateRow({ view, gate }: {
   gate: OpenGate | undefined;
 }): React.ReactElement | null {
   const runId = view.session.id;
-  const eventsRaw = useRunEventStore((s) => s.byRun[runId]);
-  // Hydrate the run event store on mount — the session page has no board-level hydration
-  const fetchedForRef = useRef<string | null>(null);
-  const [eventsFetchFailed, setEventsFetchFailed] = useState(false);
-  const [eventsFetchAttempt, setEventsFetchAttempt] = useState(0);
-  useEffect(() => {
-    if (eventsRaw !== undefined || fetchedForRef.current === runId) return;
-    fetchedForRef.current = runId;
-    api.getRunEvents(runId)
-      .then(({ events: fetched }) => {
-        useRunEventStore.getState().hydrate(runId, fetched);
-        if (useRunEventStore.getState().byRun[runId] === undefined) {
-          useRunEventStore.setState((s) => ({ byRun: { ...s.byRun, [runId]: [] as CoreEvent[] } }));
-        }
-      })
-      .catch(() => {
-        // A failed read is NOT an empty log: leave the store untouched so the row cannot classify
-        // a late-joined gate without its verdict evidence (fail closed); offer a Retry instead.
-        if (fetchedForRef.current === runId) setEventsFetchFailed(true);
-      });
-  }, [runId, eventsRaw, eventsFetchAttempt]);
+  // studio#558: the session page's one run-event read (shared with ProposalCard / OrphanedRow).
+  const { events, failed: eventsFetchFailed, retry: retryEvents } = useRunEvents(runId);
   // null = loading; [] = loaded but empty; [...] = loaded with events
-  const events: CoreEvent[] | null = eventsRaw !== undefined ? eventsRaw : null;
 
   // Roster subscription for reassign eligibility checks
   const [roster, setRoster] = useState<readonly RosterSeat[] | null>(() => getCachedRoster());
@@ -195,7 +174,7 @@ export function GateRow({ view, gate }: {
 
   // Fail closed (security review, unit 10): the events read failed and nothing else hydrated the
   // log, so no choice is offered on missing evidence; the operator retries the read from the row.
-  if (gate !== undefined && eventsRaw === undefined && eventsFetchFailed) {
+  if (gate !== undefined && events === null && eventsFetchFailed) {
     return (
       <div data-testid="session-gate-row" data-reason="events-unavailable" ref={rowRef} tabIndex={-1} className="wk-session-gate-row" role="alert">
         <p data-testid="session-gate-question" className="wk-session-gate-question">{question}</p>
@@ -206,7 +185,7 @@ export function GateRow({ view, gate }: {
           type="button"
           data-testid="session-gate-events-retry"
           className="wk-session-gate-send"
-          onClick={() => { fetchedForRef.current = null; setEventsFetchFailed(false); setEventsFetchAttempt((n) => n + 1); }}
+          onClick={retryEvents}
         >
           Retry
         </button>

@@ -10,7 +10,7 @@ import type { AskProposal } from '../../board/askThread.js';
 import { deliverAcceptance, ownEvidenceOf } from '../../board/checkState.js';
 import type { RunAcceptanceSummary } from '../../api/types.js';
 import { useGateStore } from '../../store/gates.js';
-import { useRunEventStore } from '../../store/events.js';
+import { useRunEvents } from '../../hooks/useRunEvents.js';
 import { Tech } from '../Tech.js';
 import { draftLine } from '../../board/planDraft.js';
 import { planStepWords } from '../../board/planOrder.js';
@@ -61,24 +61,10 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
   const [ui, setUi] = useState<{ dismissed: string | null; confirming: string | null }>({ dismissed: null, confirming: null });
   const sending = useRef(false);
   // Fetch events for deliver cards — fallback file count from repoChecksEvaluated.changed.
-  const eventsRaw = useRunEventStore((s) => s.byRun[runId]);
+  // studio#558: the session page's one run-event read (shared with GateRow / OrphanedRow).
+  const eventsRaw = useRunEvents(runId).events ?? undefined;
   // studio#577: the acceptance line, with the run's own evidence when crew's gate has no verdict.
   const accept = deliverAcceptance(acceptance, ownEvidenceOf(eventsRaw ?? []));
-  const fetchedEventsRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (eventsRaw !== undefined || fetchedEventsRef.current === runId) return;
-    fetchedEventsRef.current = runId;
-    api.getRunEvents(runId)
-      .then(({ events: fetched }) => {
-        useRunEventStore.getState().hydrate(runId, fetched);
-        if (useRunEventStore.getState().byRun[runId] === undefined) {
-          useRunEventStore.setState((s) => ({ byRun: { ...s.byRun, [runId]: [] } }));
-        }
-      })
-      .catch(() => {
-        useRunEventStore.setState((s) => ({ byRun: { ...s.byRun, [runId]: s.byRun[runId] ?? [] } }));
-      });
-  }, [runId, eventsRaw]);
   // Fetch the diff for deliver cards — primary diffstat source (GET /runs/:id/diff?base=merge-base).
   // Keyed by runId so a run change re-fetches and stale responses are discarded.
   const [runDiffState, setRunDiffState] = useState<{ runId: string; data: RunDiff } | null>(null);
