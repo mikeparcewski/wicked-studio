@@ -22,7 +22,6 @@ import { Modal } from './Modal.js';
 import { ProjectSwitcher } from './ProjectSwitcher.js';
 import { humanTitle, INTENT_MAX, runTitle, runWhenWord, WHEN_TITLE } from './runIdentity.js';
 import { Terminal } from './Terminal.js';
-import { useSessionDrafts } from '../store/sessionDrafts.js';
 import { addAboutChip } from '../store/composerChips.js';
 import { everythingPath } from '../board/everythingModel.js';
 import { seedNewChat } from '../board/chatMoves.js';
@@ -246,12 +245,14 @@ export function CommandPalette({
 
   const projects = useProjectsStore((s) => s.projects);
   // S16a-4c: "New Demo" seeds the Desk composer (and the project's @ chip); nothing is sent.
+  // studio#622: the words go through the composer seed (the store the Desk composer TAKES once, the
+  // way New Build seeds `/workflow-`) — a session draft keyed `desk` was read by no composer.
   const seedDemo = useCallback((pid: string | null): void => {
-    useSessionDrafts.getState().setDraft('desk', 'Make a demo of ');
     const p = pid !== null && pid !== 'default' && pid !== UNFILED_MOUNT ? projects.find((x) => x.id === pid) ?? null : null;
     if (p !== null) addAboutChip('desk', { kind: 'project', key: `project:${p.id}`, label: p.name, projectId: p.id });
     onClose();
     navigate('/');
+    seedComposer('desk', 'Make a demo of ');
   }, [projects, onClose, navigate]);
   const gates = useGateStore((s) => s.gates);
 

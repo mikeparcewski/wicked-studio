@@ -353,6 +353,30 @@ describe('S19a: a workflow is named in the composer and launched from it', () =>
     expect(onSend).not.toHaveBeenCalled();
   });
 
+  it('studio#623: after Escape, a NEW leading / opens the menu again; the same token stays closed', async () => {
+    render(<Harness runs={[]} onSend={() => {}} />);
+    type('/wo');
+    await screen.findByTestId('composer-menu');
+    key('Escape');
+    expect(screen.queryByTestId('composer-menu')).toBeNull();
+    // Still the token Escape closed: it stays closed while it is being typed.
+    type('/wor');
+    expect(screen.queryByTestId('composer-menu')).toBeNull();
+    // The token is gone, then a new leading `/` is typed: the menu opens again.
+    type('');
+    type('/');
+    await screen.findByTestId('composer-menu');
+    // Escape, then the caret moves straight into ANOTHER token (a different start): it opens.
+    key('Escape');
+    type('/ @');
+    await screen.findByTestId('composer-menu');
+    // The same in a non-empty box: Escape on `/x` after words, words only, then a new `/`.
+    key('Escape');
+    type('fix the charge');
+    type('fix the charge /');
+    await screen.findByTestId('composer-menu');
+  });
+
   it('Escape closes the workflow menu and never launches', async () => {
     render(<Harness runs={[]} onSend={() => {}} />);
     type('/workflow-');

@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.6.7",
   "counts": {
-    "files": 172,
-    "occurrences": 1922,
-    "static": 1709,
+    "files": 173,
+    "occurrences": 1925,
+    "static": 1712,
     "dynamic": 37,
     "computed": 6
   },
@@ -6053,6 +6053,24 @@
       "testId": "run-link",
       "files": [
         "src/components/RunLink.tsx"
+      ]
+    },
+    {
+      "testId": "run-pool",
+      "files": [
+        "src/components/RunPoolNote.tsx"
+      ]
+    },
+    {
+      "testId": "run-pool-shortfall",
+      "files": [
+        "src/components/RunPoolNote.tsx"
+      ]
+    },
+    {
+      "testId": "run-pools",
+      "files": [
+        "src/components/RunPoolNote.tsx"
       ]
     },
     {

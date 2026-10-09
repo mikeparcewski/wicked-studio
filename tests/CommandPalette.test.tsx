@@ -268,6 +268,19 @@ describe('the verb table (§1.3)', () => {
     expect(useSessionDrafts.getState().drafts['desk'] ?? '').toBe('');
   });
 
+  it('studio#622: New Demo seeds the Desk composer through the composer seed (with the project\'s @ chip), and writes no draft', () => {
+    useComposerChips.setState({ byComposer: {} });
+    useComposerSeed.setState({ seed: null });
+    useSessionDrafts.setState({ drafts: {} });
+    const { navigate } = renderPalette({ projectId: 'q3-review-deck' });
+    fireEvent.change(screen.getByTestId('palette-input'), { target: { value: '> new demo' } });
+    fireEvent.click(rows().find((r) => r.textContent?.includes('New Demo'))!);
+    expect(navigate).toHaveBeenCalledWith('/');
+    expect(useComposerSeed.getState().seed).toEqual({ composerKey: 'desk', text: 'Make a demo of ' });
+    expect(chipsOf(useComposerChips.getState(), 'desk').map((c) => c.key)).toEqual(['project:q3-review-deck']);
+    expect(useSessionDrafts.getState().drafts['desk'] ?? '').toBe('');
+  });
+
   it('S19b: on a session page New Build seeds THAT composer and stays (no navigation)', () => {
     useComposerSeed.setState({ seed: null });
     const host = document.createElement('div');

@@ -475,7 +475,13 @@ export function Composer({
           aria-activedescendant={menuOpen && count > 0 ? `composer-menu-option-${composerKey}-${active}` : undefined}
           rows={1}
           value={text}
-          onChange={(e) => { setText(e.target.value); syncCaret(e.target); setCursor(0); if (note !== null && e.target.value !== '') setNote(null); }}
+          onChange={(e) => {
+            setText(e.target.value); syncCaret(e.target); setCursor(0); if (note !== null && e.target.value !== '') setNote(null);
+            // studio#623 (#620's launch-form rule): an Escape closes THIS token's menu; once that token
+            // is gone (or the caret is in another one), a new `/` or `@` opens the menu again.
+            const tok = menuToken(e.target.value, e.target.selectionStart ?? e.target.value.length);
+            if (tok === null || `${tok.trigger}${tok.start}` !== closedAt) setClosedAt(null);
+          }}
           onSelect={(e) => syncCaret(e.currentTarget)}
           onKeyDown={(e) => {
             // An IME confirming its composition with Enter picks nothing and sends nothing (codex on S7).
