@@ -6,6 +6,7 @@ import {
   failingItems,
   findingsNote,
   recommendGateMove,
+  type GateMove,
 } from '../components/gateMoveModel.js';
 import {
   checkOutcome,
@@ -153,6 +154,26 @@ export interface SessionGateInput {
   pool: readonly string[];
   /** The roster for eligibility checks; null when not yet loaded. */
   roster: readonly RosterSeat[] | null;
+}
+
+/**
+ * studio#556: the inline choice that IS `recommendGateMove`'s move, or null when the row has no
+ * such choice inline (an overflow entry is never the suggestion). Send back → `send-back`; retry
+ * with findings → `retry` where the row has one, else `steer` (approve WITH the note — the same
+ * `{approve:true, amend}` the gate card's retry sends); approve-plan / deliver → `approve`.
+ */
+export function recommendedChoiceIndex(choices: readonly GateRowChoice[], move: GateMove | null): number | null {
+  if (move === null) return null;
+  const keys: readonly string[] = move.kind === 'send-back'
+    ? ['send-back']
+    : move.kind === 'retry-findings'
+      ? ['retry', 'steer']
+      : ['approve'];
+  for (const key of keys) {
+    const i = choices.findIndex((c) => c.key === key && c.disabled !== true);
+    if (i >= 0) return i;
+  }
+  return null;
 }
 
 /**
@@ -375,7 +396,14 @@ export function sessionGateChoices(input: SessionGateInput): GateRowModel | null
       diffstat: null,
     });
     // The denied unit's suggested arm is the re-run (index 0) when its other layers passed.
-    const recommended = deniedUnit ? (deniedUnitJudgedOk(verdict) ? 0 : null) : rec?.kind === 'send-back' ? 0 : null;
+    // studio#556: otherwise the row suggests whatever recommendGateMove recommends — send back,
+    // retry with findings, or approve — on the inline choice that IS that move.
+    const recommended = deniedUnit ? (deniedUnitJudgedOk(verdict) ? 0 : null) : recommendedChoiceIndex(escInline, rec);
+    // A retry with findings is taken with ITS note (a validator's failing checks are not "the
+    // reviewer's"), so the note field opens on the move's own prefill.
+    if (!deniedUnit && recommended !== null && rec?.kind === 'retry-findings' && rec.prefill !== null) {
+      noteDefault = rec.prefill;
+    }
     return { reason, question, choices: escInline, overflow, noteDefault, recommended, detailItems };
   }
 

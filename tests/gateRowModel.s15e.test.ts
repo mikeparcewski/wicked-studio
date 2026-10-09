@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { CoreEvent, WorkUnit } from '../src/api/types.js';
 import type { OpenGate } from '../src/store/gates.js';
-import { deniedUnitJudgedOk, isDeniedUnitEscalation, sessionGateChoices } from '../src/board/gateRowModel.js';
+import { deniedUnitJudgedOk, isDeniedUnitEscalation, recommendedChoiceIndex, sessionGateChoices, type GateRowChoice } from '../src/board/gateRowModel.js';
+import type { GateMove } from '../src/components/gateMoveModel.js';
 import { NOT_PASS_PROMPT, NOT_PASS_EVENTS, MOVE_RUN, MOVE_UNITS } from './fixtures/gateMove.js';
 import { makeUnit } from './factories.js';
 
@@ -124,6 +125,54 @@ describe('sessionGateChoices — escalation gate', () => {
     if (model!.noteDefault.length > 0) {
       expect(model!.recommended).toBe(0);
     }
+  });
+});
+
+// studio#556: the row suggests recommendGateMove's move whatever its kind — send back, retry
+// with findings, approve — on the inline choice that IS that move.
+describe('sessionGateChoices — the suggestion is recommendGateMove\'s, every kind (#556)', () => {
+  const FLOOR_PROMPT = 'Unit 2 failed its deterministic floor (repo_checks): test exited 1.';
+  const FLOOR_EVENTS = [
+    { type: 'unitDispatched', session: MOVE_RUN, ord: 2, attempt: 0 },
+    { type: 'repoChecksEvaluated', session: MOVE_RUN, ord: 2, passed: false, criterion: 'checks', checks: [{ name: 'test', argv: ['npm', 'test'], exitCode: 1, durationMs: 5 }] },
+    { type: 'gateEvaluated', session: MOVE_RUN, ord: 2, combined: false, hasDeterministicFloor: true, denial: { source: 'repo_checks', reason: 'Repository checks failed' } },
+    { type: 'gateEscalated', session: MOVE_RUN, ord: 2, attempt: 0, condition: 'floor_failed', denialSource: 'repo_checks', outputCaptured: true },
+  ] as unknown as CoreEvent[];
+
+  it('send back: an evaluator FAIL suggests Send back', () => {
+    const gate: OpenGate = { runId: MOVE_RUN, ord: 2, prompt: NOT_PASS_PROMPT, lifecycle: 'open', receivedAt: NOW };
+    const model = sessionGateChoices({ runId: MOVE_RUN, gate, units: MOVE_UNITS, events: NOT_PASS_EVENTS, pool: [], roster: null })!;
+    expect(model.choices[model.recommended!]!.key).toBe('send-back');
+  });
+
+  it('retry with findings: a failed floor suggests the approve-with-note arm, its note the failing checks', () => {
+    const gate: OpenGate = { runId: MOVE_RUN, ord: 2, prompt: FLOOR_PROMPT, lifecycle: 'open', receivedAt: NOW };
+    const model = sessionGateChoices({ runId: MOVE_RUN, gate, units: MOVE_UNITS, events: FLOOR_EVENTS, pool: [], roster: null })!;
+    expect(model.reason).toBe('escalation');
+    expect(model.recommended).not.toBeNull();
+    const suggested = model.choices[model.recommended!]!;
+    expect(suggested.key).toBe('steer');
+    expect(suggested.decision).toEqual({ approve: true });
+    expect(model.noteDefault).toContain("validator");
+    expect(model.noteDefault).toContain('- test — exit 1');
+  });
+
+  const choice = (key: string, disabled = false): GateRowChoice => ({ key, label: key, decision: { approve: true }, needsNote: false, title: key, ...(disabled ? { disabled } : {}) });
+  const move = (kind: GateMove['kind']): GateMove => ({ kind, label: kind, consequence: '', prefill: null, items: [] });
+
+  it('approve: an approve-plan or deliver move suggests Approve', () => {
+    const row = [choice('approve'), choice('steer'), choice('send-back'), choice('stop')];
+    expect(recommendedChoiceIndex(row, move('approve-plan'))).toBe(0);
+    expect(recommendedChoiceIndex(row, move('deliver'))).toBe(0);
+    expect(recommendedChoiceIndex(row, move('send-back'))).toBe(2);
+    expect(recommendedChoiceIndex(row, move('retry-findings'))).toBe(1);
+  });
+
+  it('retry with findings prefers a Retry choice; no matching inline (or an enabled) choice suggests nothing', () => {
+    expect(recommendedChoiceIndex([choice('retry'), choice('steer'), choice('stop')], move('retry-findings'))).toBe(0);
+    expect(recommendedChoiceIndex([choice('send-back'), choice('stop')], move('approve-plan'))).toBeNull();
+    expect(recommendedChoiceIndex([choice('approve', true), choice('stop')], move('deliver'))).toBeNull();
+    expect(recommendedChoiceIndex([choice('stop')], null)).toBeNull();
   });
 });
 
