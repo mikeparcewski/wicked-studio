@@ -205,10 +205,15 @@ export function draftChanges(d: Pick<GateDraft, 'seed' | 'added' | 'order'> & Pi
 }
 
 /** The plan a gate-amend draft sends with the card's approve: the authored steps in the draft's order. */
-export function gateDraftPlan(d: Pick<GateDraft, 'seed' | 'added' | 'order'> & Pick<Partial<GateDraft>, 'pools'>): LaunchPlan {
-  // studio#617: a step's pool rides with it once the draft carries pools (the held plan's, plus
-  // what the editor lowered), so approving with an order change does not reset a lowered pool.
-  return planFromSelection(draftSteps(d).map(({ catalog, pool }) => (pool !== undefined ? { catalog, pool } : { catalog })), []);
+export function gateDraftPlan(
+  d: Pick<GateDraft, 'seed' | 'added' | 'order'> & Pick<Partial<GateDraft>, 'pools'>,
+  held?: Readonly<Record<string, number>>,
+): LaunchPlan {
+  // studio#617: every step's pool rides with it — the held plan's (`held`, from the gate view, so a
+  // draft that only adds or moves a step does not reset a pool the plan lowered) under what the
+  // editor set — keyed by step id, so it follows the step through moves.
+  const steps = held !== undefined || d.pools !== undefined ? draftSteps({ ...d, pools: { ...held, ...d.pools } }) : draftSteps(d);
+  return planFromSelection(steps.map(({ catalog, pool }) => (pool !== undefined ? { catalog, pool } : { catalog })), []);
 }
 
 /** The plan a mid-run edit POSTs: the added steps only (the engine appends them). */

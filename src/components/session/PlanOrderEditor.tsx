@@ -75,7 +75,7 @@ export function PlanOrderEditor({ view, chain, size }: { view: SessionView; chai
     if (!atGate || g === null || gateKey === null || r.pool === null) return;
     const refused = poolRefusal(r.label, value, r.pool.ceiling);
     if (refused !== null) { setNote(refused); return; }
-    setGateDraftPool(runId, gateKey, g.editSeed, heldPoolsOf(g.editSeed, g.editPools), r.key, value);
+    setGateDraftPool(runId, gateKey, g.editSeed, heldPoolsOf(g.editSeed, g.editPools), r.key, value, r.pool.ceiling);
     setNote(value < r.pool.ceiling
       ? `${r.label} runs with ${value} of its ${r.pool.ceiling} seats — approve on the card to send it. Nothing has been sent.`
       : `${r.label} runs with its full pool of ${r.pool.ceiling}.`);

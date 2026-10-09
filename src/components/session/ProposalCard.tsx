@@ -13,7 +13,7 @@ import type { RunAcceptanceSummary } from '../../api/types.js';
 import { useGateStore } from '../../store/gates.js';
 import { useRunEvents } from '../../hooks/useRunEvents.js';
 import { Tech } from '../Tech.js';
-import { draftLine } from '../../board/planDraft.js';
+import { draftLine, heldPoolsOf } from '../../board/planDraft.js';
 import { planStepWords } from '../../board/planOrder.js';
 import { usePlanGate } from '../../store/planGates.js';
 import { dropGateDraft, gateDraftFor, gateDraftPlan, usePlanDrafts } from '../../store/planDrafts.js';
@@ -139,7 +139,10 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
     // A draft answers only the gate it was made on: if the gate moved under it, nothing is sent
     // and the card re-renders for the new gate (codex on S7).
     if (draft !== null && gateInstance(useGateStore.getState().gates[runId]) !== draft.gateKey) { sending.current = false; return; }
-    const answer: GateAnswer = draft !== null ? { approve: true, plan: gateDraftPlan(draft) } : { approve: true };
+    // studio#617: the held plan's pools ride the amended plan (a draft that only adds or moves a step
+    // must not reset a pool the plan lowered).
+    const held = planGate.view !== null ? heldPoolsOf(planGate.view.editSeed, planGate.view.editPools) : undefined;
+    const answer: GateAnswer = draft !== null ? { approve: true, plan: gateDraftPlan(draft, held) } : { approve: true };
     commitGateDecision(runId, answer, { ...deliver, receipt: { kind: card.kind === 'deliver' ? 'deliver' : 'plan', chosenLabel: card.act ?? 'Approve' } })
       .then((outcome) => { if (outcome === 'sent' && draft !== null) dropGateDraft(runId, draft.gateKey); })
       .catch(() => { /* the refusal is in the shared action state, which the card renders */ })

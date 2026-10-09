@@ -55,11 +55,17 @@ export function reorderGateDraft(runId: string, gateKey: string, seed: readonly 
  * step's pool, not only the one changed. Lower-only is the caller's rule (`planOrder.setPool`): the
  * store takes the value it is handed.
  */
-export function setGateDraftPool(runId: string, gateKey: string, seed: readonly string[], held: Readonly<Record<string, number>>, stepId: string, pool: number): void {
+export function setGateDraftPool(
+  runId: string, gateKey: string, seed: readonly string[], held: Readonly<Record<string, number>>, stepId: string, pool: number, ceiling: number,
+): void {
   usePlanDrafts.setState((s) => {
     const base = draftOn(s.gate[runId], runId, gateKey, seed);
     const heldPools = base.heldPools ?? { ...held };
-    const pools = { ...(base.pools ?? heldPools), [stepId]: pool };
+    const pools: Record<string, number> = { ...(base.pools ?? heldPools) };
+    // Back to what the step would run with anyway (the plan set none, and this is its entry's pool):
+    // no override, so no change is reported and nothing extra is sent (codex r1).
+    if (heldPools[stepId] === undefined && pool === ceiling) delete pools[stepId];
+    else pools[stepId] = pool;
     return { gate: { ...s.gate, [runId]: { ...base, pools, heldPools } } };
   });
 }

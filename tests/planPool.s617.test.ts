@@ -81,6 +81,13 @@ describe('the draft', () => {
       { catalog: 'understand' }, { catalog: 'build', pool: 2 }, { catalog: 'review' }, { catalog: 'test' },
     ]);
   });
+  it('an add-only draft still sends the held plan’s pools (codex r1): the held pools ride under the draft’s', () => {
+    const d = draft({ added: ['test'] });
+    expect(gateDraftPlan(d, { 'build#1': 2 }).steps).toStrictEqual([
+      { catalog: 'understand' }, { catalog: 'build', pool: 2 }, { catalog: 'review' }, { catalog: 'test' },
+    ]);
+    expect(gateDraftPlan(draft({ pools: { 'build#1': 1 }, heldPools: { 'build#1': 2 } }), { 'build#1': 2 }).steps[1]).toStrictEqual({ catalog: 'build', pool: 1 });
+  });
   it('a moved step keeps its pool (the pool follows the step id, not its place)', () => {
     const order = [...draftSteps(draft())].reverse();
     const d = draft({ order, pools: { 'build#1': 1 }, heldPools: {} });
@@ -95,20 +102,36 @@ describe('the draft', () => {
 describe('the store', () => {
   beforeEach(() => usePlanDrafts.setState({ gate: {}, added: {}, queued: {} }));
   it('the first pool set seeds the held pools, a later one keeps them; a reorder keeps the pools', () => {
-    setGateDraftPool('r1', '2:9', ['understand', 'build', 'review'], { 'review#1': 1 }, 'build#1', 2);
+    setGateDraftPool('r1', '2:9', ['understand', 'build', 'review'], { 'review#1': 1 }, 'build#1', 2, 3);
     let d = usePlanDrafts.getState().gate['r1']!;
     expect(d.pools).toStrictEqual({ 'review#1': 1, 'build#1': 2 });
     expect(d.heldPools).toStrictEqual({ 'review#1': 1 });
-    setGateDraftPool('r1', '2:9', ['understand', 'build', 'review'], { 'review#1': 1 }, 'build#1', 1);
+    setGateDraftPool('r1', '2:9', ['understand', 'build', 'review'], { 'review#1': 1 }, 'build#1', 1, 3);
     reorderGateDraft('r1', '2:9', ['understand', 'build', 'review'], [...draftSteps(d)].reverse());
     d = usePlanDrafts.getState().gate['r1']!;
     expect(d.pools).toStrictEqual({ 'review#1': 1, 'build#1': 1 });
     expect(d.order?.some((s) => 'pool' in s)).toBe(false);
     expect(gateDraftPlan(d).steps).toStrictEqual([{ catalog: 'review', pool: 1 }, { catalog: 'build', pool: 1 }, { catalog: 'understand' }]);
   });
+  it('set back to the entry pool of a step the plan set none on: no override, no change (codex r1)', () => {
+    setGateDraftPool('r1', '2:9', ['build'], {}, 'build#1', 2, 3);
+    setGateDraftPool('r1', '2:9', ['build'], {}, 'build#1', 3, 3);
+    const d = usePlanDrafts.getState().gate['r1']!;
+    expect(d.pools).toStrictEqual({});
+    expect(draftChanges(d)).toBe(false);
+    expect(draftLine(d)).toBe('');
+    expect(gateDraftPlan(d).steps).toStrictEqual([{ catalog: 'build' }]);
+  });
+  it('a held pool the editor restores stays sent; restoring a held pool is no change', () => {
+    setGateDraftPool('r1', '2:9', ['build'], { 'build#1': 2 }, 'build#1', 1, 3);
+    setGateDraftPool('r1', '2:9', ['build'], { 'build#1': 2 }, 'build#1', 2, 3);
+    const d = usePlanDrafts.getState().gate['r1']!;
+    expect(draftChanges(d)).toBe(false);
+    expect(gateDraftPlan(d).steps).toStrictEqual([{ catalog: 'build', pool: 2 }]);
+  });
   it('a new gate instance starts a fresh draft with no pools', () => {
-    setGateDraftPool('r1', '2:9', ['build'], {}, 'build#1', 2);
-    setGateDraftPool('r1', '3:10', ['build'], {}, 'build#1', 1);
+    setGateDraftPool('r1', '2:9', ['build'], {}, 'build#1', 2, 3);
+    setGateDraftPool('r1', '3:10', ['build'], {}, 'build#1', 1, 3);
     expect(usePlanDrafts.getState().gate['r1']).toMatchObject({ gateKey: '3:10', pools: { 'build#1': 1 }, heldPools: {} });
   });
 });
