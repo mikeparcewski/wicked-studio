@@ -12,8 +12,24 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.6.6] — 2026-10-08
+
+The Desk is the only shell (S18d, studio#599): the classic skins' remaining pieces of value moved onto the
+Desk first (S18a, studio#595; S18b + S18c, studio#591), then the classic and compact-rail skins were retired.
+Also: an answered ask's turn gate no longer counts after a reload (#598), the session gate row suggests every
+recommended move (#597), and documents show crew's grounding record (#594).
+
 ### Added
 - S18a: two gate-answering ports from the classic skin land on the Desk (DES-STUDIO-REBUILD-001 Amendment 5). (1) The approvals group row ("2 approvals") answers in place — **Approve all** / **Reject all**, plus an optional **Reject with reason…**, fanning out one `POST /runs/:id/gate` per member through the shared batch path (the one 10 s undo window, per-id failure rows with retry-just-this-one — never an optimistic "approved all"); the group still expands to open each member. (2) The Desk question row's **Reject** choice opens an optional one-line reason that upgrades the decision to `{approve:false, amend}` — while the keyboard fast path (a digit, or Enter on a moved-to choice) still commits the bare reject at once.
+- S18b + S18c: the classic skins' remaining pieces of value now live on the Desk's pages: a session search on Everything › Sessions, Cancel and a project scope on Everything made, the project Documents root on `/projects/:id`, narrated Activity, the observed-spend line and retry lineage on the sheets, and the Theme logo in the rail brand. The helpers live Desk files took from classic-skin files (`ago`, `headingForPath`, `GATE_HASH`, `STATUS_STYLE`, `ReplayMove`, `SESSION_RAIL_PX`) moved to live modules, the runs-bar offset (`RUNS_BAR_PX`) is gone, and Archivo is the stylesheet's sans (#591).
+
+### Removed
+- S18d: the classic and compact-rail skins are retired, and the Desk is the only shell. This removes 42 src files, 46 vitest suites, 16 e2e journeys and the skin-matrix CI job. Legacy `skin` / `skin_migrated` settings keys are ignored. Every removed testid names its successor in `e2e/testid-successors.json` (#599).
+
+### Fixed
+- Documents: document rows and the document thread show a grounding chip from crew's structured grounding record (#567); learn-a-look errors and thread lines show home paths as `~/…` (#592); a walkthrough whose storyline the lint refused says so, with the reason, instead of "Checking the storyline" (#593) (studio#594).
+- Session gate row: suggests every kind of recommended move (#556), not only send-back. The session page reads a run's events once and keeps a failed read failed (#558). The send-back note keeps the reviewer's Concerns, labelled, and reads one item per bold-paragraph finding (#559). The desk_gate_kinds journey's deliver-branch, needs-you-focus and retry-row steps can now fail (#557) (studio#597).
+- Needs-you: after a reload, or on a Desk that never opened the chat, an answered ask's turn gate no longer counts in Needs-you, the approvals group, the run stats, the project brief, campaign groups, the handover's decisions or repo waiting lists. Studio reads crew's `ask_turn` (crew#854/#863) (#588, studio#598).
 
 ## [0.6.5] — 2026-10-08
 
@@ -1858,7 +1874,8 @@ The merged interactive layer: wicked-interactive's UI moved into this skin (DES-
   `git subtree split` (92 commits).
 - The SPA as a pure HTTP/WS client of the wicked-crew daemon: runs, gates, live CoreEvents.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.6.5...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.6.6...HEAD
+[0.6.6]: https://github.com/mikeparcewski/wicked-studio/compare/v0.6.5...v0.6.6
 [0.6.5]: https://github.com/mikeparcewski/wicked-studio/compare/v0.6.4...v0.6.5
 [0.6.4]: https://github.com/mikeparcewski/wicked-studio/compare/v0.6.3...v0.6.4
 [0.6.3]: https://github.com/mikeparcewski/wicked-studio/compare/v0.6.2...v0.6.3
