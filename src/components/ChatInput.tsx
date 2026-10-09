@@ -616,6 +616,9 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   const pendingRunRef = useRef<string | null>(null);
   pendingRunRef.current = submitting ? pendingRunId : null;
   const probeInFlight = useRef(false);
+  // Unmounted (the operator opened the run, or left): a probe still in flight lands nowhere (codex r1).
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   useEffect(() => {
     if (!submitting || pendingRunId === null || startedRunId !== null || probeInFlight.current) return;
     if (elapsedSecs < LAUNCH_PROBE_AFTER_SECS || elapsedSecs % 2 !== 1) return;
@@ -623,12 +626,13 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     probeInFlight.current = true;
     Promise.resolve()
       .then(() => api.getRun(id))
-      .then(() => { if (pendingRunRef.current === id) setStartedRunId(id); })
+      .then(() => { if (mounted.current && pendingRunRef.current === id) setStartedRunId(id); })
       .catch(() => { /* not there yet (404) or unreadable — keep waiting on the POST */ })
       .finally(() => { probeInFlight.current = false; });
   }, [submitting, pendingRunId, startedRunId, elapsedSecs]);
 
   function openStartedRun(id: string): void {
+    if (openedEarly.current === id) return; // a second click opens nothing twice (codex r1)
     openedEarly.current = id;
     useProvenanceStore.getState().markLaunchedHere(id);
     onLaunched(id);

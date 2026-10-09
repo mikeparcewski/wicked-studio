@@ -63,7 +63,9 @@ describe('studio#404: a slow launch is followed, not waited on', () => {
     await waitFor(() => expect(getRun).toHaveBeenCalledWith(body.sessionId));
     await waitFor(() => expect(screen.getByTestId('launch-started')).toBeInTheDocument());
     fireEvent.click(screen.getByTestId('launch-started-open'));
+    fireEvent.click(screen.getByTestId('launch-started-open'));
     expect(onLaunched).toHaveBeenCalledWith(body.sessionId);
+    expect(onLaunched).toHaveBeenCalledTimes(1);
 
     // The late 201 does not navigate a second time.
     await act(async () => { answer({ runId: body.sessionId! }); });
