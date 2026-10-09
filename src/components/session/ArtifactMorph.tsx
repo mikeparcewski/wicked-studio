@@ -3,7 +3,8 @@ import { flushSync } from 'react-dom';
 import { interactiveUrl, type ExportFormat } from '../../api/interactive.js';
 import { grow, shrink, type ArtifactSize, type EditorKind } from '../../board/artifactMorph.js';
 import { exportReadyText, runExport } from '../../interactive/exportWire.js';
-import { artifactSizeOf, setArtifactSize, topmostArtifact, useArtifactSizes } from '../../store/artifactSizes.js';
+import { artifactSizeOf, registerArtifact, setArtifactSize, topmostArtifact, useArtifactSizes } from '../../store/artifactSizes.js';
+import { useArtifactAddressWriter } from './ArtifactAddress.js';
 import { DocCoverage } from './DocCoverage.js';
 import { PageEditor, type FrameParts } from './PageEditor.js';
 import { NoEditorPage, PluginArtifact } from './PluginArtifact.js';
@@ -112,13 +113,20 @@ export function ArtifactMorph({ artifactKey, title, projectId, docId, composerKe
   // Folded back to the preview, the menu is gone — it must not be open when the artifact grows again.
   useEffect(() => { if (size === 'inline') setExportOpen(false); }, [size]);
 
+  // S16a-4a: the morph writes the address too (grow pushes, shrink goes Back or replaces) — Esc and
+  // the buttons share this one path.
+  const writeAddress = useArtifactAddressWriter();
+  useEffect(() => registerArtifact(artifactKey), [artifactKey]);
   const morph = useCallback((to: ArtifactSize): void => {
+    const from = artifactSizeOf(useArtifactSizes.getState(), artifactKey);
+    if (from === to) return;
     const apply = (): void => flushSync(() => setArtifactSize(artifactKey, to));
     const reduced = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
     const vt = (document as Document & { startViewTransition?: (cb: () => void) => unknown }).startViewTransition;
     if (!reduced && typeof vt === 'function') vt.call(document, apply);
     else apply();
-  }, [artifactKey]);
+    writeAddress?.(artifactKey, from, to);
+  }, [artifactKey, writeAddress]);
 
   // Esc shrinks one step (rule 1) — the topmost open artifact only, and not while something inside
   // it is consuming it (a pick, an edit field), which stops the event before it reaches the document.

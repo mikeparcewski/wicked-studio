@@ -117,6 +117,9 @@ export interface Route {
   /** Non-null only on `/rules/:ruleId` (DES-STUDIO-REBUILD-001 §5.4, slice S12): the rule the Rules
    *  page opens. Bare `/rules` parses with `panel: 'rules'` and `ruleId: null`. */
   ruleId: string | null;
+  /** S16a-4a: on `/s/:sessionId/a/:artifactKey` — the grown artifact's key (the morph store's own,
+   *  decoded); its size rides `?size=` (read with `board/artifactAddress.ts`). Null everywhere else. */
+  artifactKey: string | null;
 }
 
 /** Route options a caller can override; everything else takes its inert default. */
@@ -135,6 +138,7 @@ const INERT: Route = {
   steeringSection: null,
   testingPage: null,
   ruleId: null,
+  artifactKey: null,
 };
 
 function route(over: Partial<Route>): Route {
@@ -361,13 +365,17 @@ function parse(pathname: string): Route {
   // `/s/:sessionId` (DES-STUDIO-REBUILD-001 §5.4, slice S6a): a session — a chat and the runs
   // launched from it, or one run (`run:<id>`). A real route under every skin (a route is not a skin
   // concern). The id rides in `artifactId`, never `runId`: no run-selected machinery fires here.
-  // `/s/:id/a/:artifact` belongs to S8; until then any deeper address is a dead one.
+  // S16a-4a: `/s/:id/a/:artifactKey` is the session with that artifact grown (its size in `?size=`);
+  // any other deeper address is a dead one.
   // EP-P1: the editor plugin host's dev route and its conformance host page (no nav entry: no user
   // surface until EP-P2 places the first plugin).
   if (first === 'editors' && (second === 'dev' || second === 'conformance') && !third) {
     return route({ panel: 'editors', artifactId: second });
   }
   if (first === 's' && second) {
+    if (third === 'a' && fourth !== '' && restEmpty(5)) {
+      return route({ panel: 'session', artifactId: safeDecode(second), artifactKey: safeDecode(fourth) });
+    }
     return third ? route({ panel: 'not-found' }) : route({ panel: 'session', artifactId: safeDecode(second) });
   }
   if (first === 'repo-detail' && second) {

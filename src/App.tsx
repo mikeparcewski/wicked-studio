@@ -86,6 +86,7 @@ import { useViewPrefsStore } from './store/viewPrefs.js';
 import { useDeliveryFreezeStore } from './store/deliveryFreeze.js';
 import { notifyGateIfUnfocused } from './board/desktopNotify.js';
 import { sessionPath } from './board/sessionModel.js';
+import { sizeOf } from './board/artifactAddress.js';
 
 /** Frames that change run-list / unit state → trigger a `GET /runs` reconcile. */
 const LIFECYCLE_EVENTS: ReadonlySet<string> = new Set([
@@ -111,7 +112,7 @@ const RIGHT_PANEL_PX = 288;
 const DESK_COMPOSER_PX = 96;
 
 export function App(): React.ReactElement {
-  const { panel, runId, repoId, projectId, mode, artifactId, showLaunch, showRegisterRepo, chatMode, campaignsView, campaignId, steeringSection, testingPage, ruleId, navigate, search, pathname } = useRoute();
+  const { panel, runId, repoId, projectId, mode, artifactId, showLaunch, showRegisterRepo, chatMode, campaignsView, campaignId, steeringSection, testingPage, ruleId, artifactKey, navigate, search, pathname } = useRoute();
   const { runs, refresh, loaded: runsLoaded, error: runsError } = useRuns();
   const movedRunChatId = useCapabilities((s) => s.runChatId);
   const ingestGate = useGateStore((s) => s.ingest);
@@ -592,6 +593,8 @@ export function App(): React.ReactElement {
       return (
         <SessionPage
           sessionId={artifactId}
+          artifactKey={artifactKey}
+          artifactSize={sizeOf(search)}
           runs={runs}
           runsLoaded={runsLoaded}
           needRows={needRows}

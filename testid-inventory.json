@@ -12,8 +12,8 @@
   "studioVersion": "0.6.6",
   "counts": {
     "files": 191,
-    "occurrences": 2271,
-    "static": 2013,
+    "occurrences": 2272,
+    "static": 2014,
     "dynamic": 48,
     "computed": 8
   },
@@ -7635,6 +7635,12 @@
     },
     {
       "testId": "session",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
+      "testId": "session-artifact-missing",
       "files": [
         "src/components/session/SessionView.tsx"
       ]

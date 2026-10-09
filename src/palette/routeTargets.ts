@@ -26,7 +26,9 @@ export interface RouteShape {
 
 export const ROUTE_SHAPES: readonly RouteShape[] = [
   { id: 'home', example: '/', is: (r) => r.panel === 'home' },
-  { id: 'session', example: '/s/run:r1', is: (r) => r.panel === 'session' && r.artifactId !== null },
+  { id: 'session', example: '/s/run:r1', is: (r) => r.panel === 'session' && r.artifactId !== null && r.artifactKey === null },
+  // S16a-4a: a session with one artifact grown — reached from the artifact itself, never GO TO.
+  { id: 'session-artifact', example: '/s/run:r1/a/r1%3Ap1%2Fd1', is: (r) => r.panel === 'session' && r.artifactKey !== null },
   { id: 'watch', example: '/watch', is: (r) => r.panel === 'watch' },
   { id: 'rules', example: '/rules', is: (r) => r.panel === 'rules' },
   // "See everything" (S15c/S17a): one page, five tabs in `?tab=`; the list pages that moved onto it

@@ -51,3 +51,17 @@ export function collapseArtifacts(): void {
 export function resetArtifactSizes(): void {
   useArtifactSizes.setState({ sizes: {} });
 }
+
+/** S16a-4a: which artifacts are on the page right now (an ArtifactMorph registers while mounted), so
+ *  an address naming a key the session does not hold grows nothing and says so. */
+export const useMountedArtifacts = create<{ keys: Record<string, number> }>(() => ({ keys: {} }));
+
+export function registerArtifact(key: string): () => void {
+  useMountedArtifacts.setState((s) => ({ keys: { ...s.keys, [key]: (s.keys[key] ?? 0) + 1 } }));
+  return () => useMountedArtifacts.setState((s) => {
+    const n = (s.keys[key] ?? 1) - 1;
+    const keys = { ...s.keys };
+    if (n <= 0) delete keys[key]; else keys[key] = n;
+    return { keys };
+  });
+}

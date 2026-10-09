@@ -24,6 +24,7 @@ import { ProposalCard } from './ProposalCard.js';
 import { useRunEvents } from '../../hooks/useRunEvents.js';
 import { StrandedCard } from './StrandedCard.js';
 import { RunRecordLines } from './RunRecord.js';
+import { ArtifactAddressProvider, useArtifactMissing } from './ArtifactAddress.js';
 import { startRetry } from './RunActions.js';
 import { Tech, runTechParts } from '../Tech.js';
 import { parseJump } from '../../store/watch.js';
@@ -115,8 +116,11 @@ function launchedMs(v: RunView): number {
   return typeof c === 'number' && Number.isFinite(c) ? c * 1000 : 0;
 }
 
-export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, onAsk }: {
+export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, onAsk, artifactKey = null, artifactSize = 'pane' }: {
   sessionId: string;
+  /** S16a-4a: the artifact the address grows (`/s/:id/a/:key`) and its size (`?size=`). */
+  artifactKey?: string | null;
+  artifactSize?: 'pane' | 'full';
   runs: RunView[];
   runsLoaded: boolean;
   needRows: NeedRow[];
@@ -144,8 +148,10 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
     const q = new URLSearchParams(window.location.search);
     if (q.has('jump')) q.set('jumpRun', ref.runId);
     const search = q.toString();
-    navigate(`${sessionPath(chat)}${search !== '' ? `?${search}` : ''}${window.location.hash}`, { replace: true });
-  }, [ref, runChatId, runs, navigate]);
+    // S16a-4a: a grown artifact's segment rides along too (`/a/<key>`).
+    const grownAt = artifactKey !== null ? `/a/${encodeURIComponent(artifactKey)}` : '';
+    navigate(`${sessionPath(chat)}${grownAt}${search !== '' ? `?${search}` : ''}${window.location.hash}`, { replace: true });
+  }, [ref, runChatId, runs, navigate, artifactKey]);
   const mine = useMemo(() => {
     const list = ref.kind === 'run'
       ? runs.filter((v) => v.session.id === ref.runId)
@@ -468,9 +474,11 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
   // Leaving the session (or switching to another) folds them back: a remembered pane from
   // another session must not narrow this one.
   const pane = useArtifactSizes(paneOpen);
+  const artifactMissing = useArtifactMissing(artifactKey, ready && mine.length > 0);
   useEffect(() => () => collapseArtifacts(), [sessionId]);
 
   return (
+    <ArtifactAddressProvider sessionId={sessionId} routeKey={artifactKey} routeSize={artifactSize} navigate={navigate}>
     <div data-testid="session" data-object={`session:${sessionId}`} data-session-id={sessionId} data-conversation={conversation} data-state={state} data-pane={pane} className={`wk-session${pane ? ' wk-session--pane' : ''}`}>
       <header className="wk-session-head">
         <span aria-hidden className={`wk-desk-dot wk-desk-dot--${state}`} />
@@ -488,6 +496,8 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
 
       <div className="wk-session-body">
         {since !== null && ready && <SinceYouLeft key={sessionId} card={since} runs={mine} />}
+        {/* S16a-4a: an address naming an artifact this session does not hold grows nothing and says so. */}
+        {artifactMissing && <p data-testid="session-artifact-missing" className="wk-session-grey">That artifact is not in this session any more.</p>}
         <div
           ref={scroller}
           data-testid="session-thread"
@@ -579,6 +589,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
         variant="session"
       />
     </div>
+    </ArtifactAddressProvider>
   );
 }
 
