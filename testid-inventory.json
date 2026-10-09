@@ -8534,7 +8534,7 @@
       ]
     },
     {
-      "testId": "steering-form-rule-type",
+      "testId": "steering-form-rule-type-label",
       "files": [
         "src/components/SteeringRuleForm.tsx"
       ]
