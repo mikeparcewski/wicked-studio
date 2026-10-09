@@ -47,7 +47,9 @@ describe('the committed inventory is the whole denominator', () => {
   const inv = JSON.parse(readFileSync(fileURLToPath(new URL('../testid-inventory.json', import.meta.url)), 'utf8')) as TestidInventory;
   it('carries forwarded ids and no misread type', () => {
     const ids = new Set(inv.static.map((e) => e.testId));
-    for (const id of ['stat-repos', 'need-row', 'need-member', 'diff-line-add', 'chat-scope-system', 'context-learn', 'project-name']) {
+    // S16a-4h/4i: the forwarded examples whose components were deleted (chat-scope-system, context-learn,
+    // project-name) give way to live ones — a table key (desk-rail-mcp, rail-health-recheck).
+    for (const id of ['stat-repos', 'need-row', 'need-member', 'diff-line-add', 'desk-rail-mcp', 'rail-health-recheck']) {
       expect(ids.has(id), id).toBe(true);
     }
     for (const c of inv.computed) expect(c.expression, c.expression.slice(0, 60)).not.toMatch(/;/);
