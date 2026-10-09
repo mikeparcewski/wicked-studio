@@ -17,6 +17,8 @@ import { planStepWords } from '../../board/planOrder.js';
 import { usePlanGate } from '../../store/planGates.js';
 import { dropGateDraft, gateDraftFor, gateDraftPlan, usePlanDrafts } from '../../store/planDrafts.js';
 import { gateVerdictFor, checkOutcome } from '../gateVerdictModel.js';
+import { PlanGateSummary } from '../PlanGateSummary.js';
+import { useSeatTrust } from './GateDepth.js';
 
 function parseDiffstat(diff: string): { files: number; additions: number; deletions: number } {
   let files = 0, additions = 0, deletions = 0;
@@ -42,7 +44,7 @@ function parseDiffstat(diff: string): { files: number; additions: number; deleti
  *  deliver unit then says so (`proposalCard`'s late-join evidence). */
 const lastKinds = new Map<string, ProposalKind>();
 
-export function ProposalCard({ view, chain, acceptance = null, ask = null, onBringBack }: {
+export function ProposalCard({ view, chain, acceptance = null, ask = null, onBringBack, handedOver = false }: {
   view: SessionView;
   chain: ChainModel;
   /** WT-U2 / WT-W3: crew's acceptance summary for the run — the deliver card's one line, verbatim. */
@@ -51,6 +53,9 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
   ask?: AskProposal | null;
   /** ASK-S2: "Bring it back" prefills the composer with the operator's own words, so the PA re-proposes. */
   onBringBack?: (() => void) | undefined;
+  /** S16a-1a: the run finished with a hand-over on record (delivered / pushed) and this browser holds
+   *  no receipt — the card is that hand-over's receipt, read off the run's delivery verdict. */
+  handedOver?: boolean;
 }): React.ReactElement | null {
   const runId = view.session.id;
   const gate = useGateStore((s) => s.gates[runId]);
@@ -81,7 +86,11 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
   }, [runId]);
   // Diff for the current run only; null while loading or when the fetch failed.
   const runDiff = runDiffState?.runId === runId ? runDiffState.data : null;
-  const card = proposalCard({ view, gate, chain, action, ui, lastKind: lastKinds.get(runId) ?? null, ask });
+  // S16a-1b: the creator seat's record rides the deliver card's primary button (never an offer:
+  // a deliver gate is not orderable); a plan gate reads no trust.
+  const openKind = proposalKindOf(runId, gate, view.units);
+  const seat = useSeatTrust(view, openKind === 'deliver' ? gate : undefined, { isPlanGate: openKind === 'plan', isDeliverGate: openKind === 'deliver', isEscalation: false });
+  const card = proposalCard({ view, gate, chain, action, ui, lastKind: lastKinds.get(runId) ?? (handedOver ? 'deliver' : null), ask });
   const asked = card !== null && gate !== undefined ? card.kind : null;
   useEffect(() => { if (asked !== null) lastKinds.set(runId, asked); }, [runId, asked]);
   // The one "Are you sure?" takes focus when it opens; Cancel gives it back to Deliver (Copilot).
@@ -165,6 +174,14 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
         <>
           <p data-testid="session-proposal-text" className="wk-prop-text">{card.text}</p>
           {card.why !== null && card.state === 'ask' && <p data-testid="session-proposal-why" className="wk-prop-why">{card.why}</p>}
+          {/* S16a-1b: the plan gate's score, band, the score's reasons and the floor's additions —
+              behind the why line (PlanGateSummary's own testids kept). */}
+          {card.kind === 'plan' && card.state === 'ask' && ask === null && gate !== undefined && (
+            <details data-testid="session-proposal-plan-why" className="wk-prop-deliver-detail">
+              <summary className="wk-prop-deliver-summary">Why this plan</summary>
+              <PlanGateSummary view={planGate.view} />
+            </details>
+          )}
           {/* WT-U2: what the acceptance gate says before the hand-over — crew's line, studio's tone. */}
           {card.kind === 'deliver' && accept !== null && (
             <p data-testid="session-proposal-acceptance" data-tone={accept.tone} className={`wk-prop-why wk-prop-accept wk-prop-accept--${accept.tone}`}>{accept.text}</p>
@@ -248,7 +265,10 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
             <>
               {draft !== null && <p data-testid="session-proposal-draft" className="wk-prop-why"><b>{draftLine(draft, planWords)}</b> Approving sends your changes with it; nothing has been sent yet.</p>}
               <div className="wk-prop-btns">
-                <button ref={goRef} type="button" data-testid="session-proposal-go" data-draft={draft !== null ? 'true' : 'false'} onClick={go} className="wk-prop-btn wk-prop-btn--primary">{draft !== null ? 'Approve with these changes' : card.act}</button>
+                <button ref={goRef} type="button" data-testid="session-proposal-go" data-draft={draft !== null ? 'true' : 'false'} onClick={go} className="wk-prop-btn wk-prop-btn--primary">
+                  {draft !== null ? 'Approve with these changes' : card.act}
+                  {card.kind === 'deliver' && seat.record !== null && <span data-testid="session-proposal-track-record" className="wk-session-gate-record">{seat.record}</span>}
+                </button>
                 {draft !== null && <button type="button" data-testid="session-proposal-drop-draft" onClick={() => dropGateDraft(runId, draft.gateKey)} className="wk-prop-btn wk-prop-btn--ghost">Drop the changes</button>}
                 <button type="button" data-testid="session-proposal-not-now" onClick={notNow} className="wk-prop-btn wk-prop-btn--ghost">Not now</button>
                 {card.end !== undefined && <button type="button" data-testid="session-proposal-end" onClick={end} className="wk-prop-btn wk-prop-btn--ghost">{card.end}</button>}

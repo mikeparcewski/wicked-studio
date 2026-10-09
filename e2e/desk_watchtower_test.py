@@ -105,8 +105,8 @@ with sync_playwright() as p:
     # ── 3. jump in ─────────────────────────────────────────────────────────────────
     page.locator('[data-testid="watchtower-row"][data-row-id="w-claim-b1"] [data-testid="watchtower-jump"]').click()
     page.get_by_test_id("watch-jumped").wait_for(state="visible", timeout=8000)
-    # /runs/b1 lands, and the legacy project redirect may carry it to /p/<project>/build/b1, jump intact.
-    check("jump-in", "/b1?jump=0:1:" in page.url, url=page.url)
+    # S16a-1c: Jump in lands on the run's session thread (/s/run%3Ab1?jump=…), the moment intact.
+    check("jump-in", "/s/run%3Ab1?jump=0:1:" in page.url, url=page.url)
 
     # ── 4. ⌥W from the Desk ────────────────────────────────────────────────────────
     page.goto(f"{origin}/", wait_until="networkidle")

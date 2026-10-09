@@ -1,18 +1,19 @@
 #!/usr/bin/env python3
 """
-wavec_runpage_test.py — the run page carries its next move (brainstorm-actionable ideas 6 + 13), 1440x700.
+wavec_runpage_test.py — the run carries its next move (brainstorm-actionable ideas 6 + 13), 1440x700.
+S16a-1b: said in the session thread (/s/run%3A<id>) and its sheet, not on the run page.
 
-  rerun    /runs/r-rerun (paused at a NOT PASS escalation on review): ONLY the build phase of the
-           breadcrumb offers "Rerun from here" (the engine's request_changes rewinds to the newest
-           creator before the gate). Clicking it shows the consequence first — "Keeps understand,
+  rerun    r-rerun (paused at a NOT PASS escalation on review): the gate row's ⋯ offers ONE
+           "Rerun from build" (the engine's request_changes rewinds to the newest creator before the
+           gate). Clicking it shows the consequence first — "Keeps understand,
            redoes build → review → deliver, ~9 min from past durations (deliver not timed yet)" —
            and "Rerun from build" POSTs /runs/r-rerun/gate {approve:false, action:'request_changes', ord:3}.
-  trust    the same run's Insights (What / Where): "Trust this route for low-risk runs like this", its
+  trust    the same run's sheet, What and where tab: "Trust this route for low-risk runs like this", its
            consequence (bugfix runs on Northwind at band 0-19 skip plan approval; the deliver gate stays
            manual) above "Trust this route", which POSTs /standing-orders with the band-scoped
            plan-approval rule — never deliver, never a wider band.
-  done     /runs/r-rerun-done (completed): no phase offers a rerun; the receipt reads as in force.
-  mid      /runs/r-rerun-mid (band 40-69): no receipt at all.
+  done     r-rerun-done (completed): nothing offers a rerun; the receipt reads as in force.
+  mid      r-rerun-mid (band 40-69): no receipt at all.
 
 Captures (e2e/shots/): wavec-runpage-desk-rerun.png, wavec-runpage-desk-trust.png, wavec-runpage-desk-done.png.
 Env: FEEDBACK_PORT (default 4481). JSON report; exit 0/1.
@@ -84,24 +85,34 @@ with sync_playwright() as p:
         "document.addEventListener('DOMContentLoaded', () => { const s = document.createElement('style'); "
         f"s.textContent = {json.dumps(HIDE_GATE_TOASTS)}; document.head.appendChild(s); }});")
 
+    def open_whatwhere(rid: str) -> None:
+        # S16a-1b: the run page's Insights (What / Where) is the session sheet's "What and where" tab.
+        page.goto(f"{origin}/s/run%3A{rid}", wait_until="networkidle")
+        page.get_by_test_id("session-run-look").first.wait_for(state="visible", timeout=15000)
+        page.get_by_test_id("session-run-look").first.click()
+        page.locator('[data-testid="sheet-tab"][data-tab="whatwhere"]').click()
+
     def section_rerun() -> None:
-        page.goto(f"{origin}/runs/r-rerun", wait_until="networkidle")
-        crumb = page.get_by_test_id("stepper-phase-2")
-        crumb.wait_for(state="visible", timeout=15000)
-        page.locator('[data-testid="stepper-phase-2"][data-rerun="offered"]').wait_for(timeout=10000)
-        offered = page.evaluate("""() => [...document.querySelectorAll('[data-rerun="offered"]')].map(e => e.dataset.testid)""")
-        check("only-the-rewind-target-offers", offered == ["stepper-phase-2"], offered=offered)
-        check("no-preview-before-asked", page.get_by_test_id("rerun-preview").count() == 0)
-        crumb.click()
-        page.get_by_test_id("rerun-consequence").wait_for(state="visible")
-        consequence = text(page, "rerun-consequence")
+        # S16a-1b: "Rerun from <step>" is one more ⋯ choice on the session thread's gate row.
+        page.goto(f"{origin}/s/run%3Ar-rerun", wait_until="networkidle")
+        page.get_by_test_id("session-gate-row").wait_for(state="visible", timeout=15000)
+        choice = page.locator('[data-testid="session-gate-choice"][data-choice-key="rerun"]')
+        choice.wait_for(state="attached", timeout=10000)
+        labels = page.evaluate("""() => [...document.querySelectorAll('[data-testid="session-gate-choice"][data-choice-key="rerun"]')].map(e => e.textContent.trim())""")
+        check("only-the-rewind-target-offers", labels == ["Rerun from build"], labels=labels)
+        check("no-preview-before-asked", page.get_by_test_id("session-gate-rerun").count() == 0)
+        page.locator(".wk-session-gate-overflow-summary").click()
+        choice.click()
+        page.get_by_test_id("session-gate-rerun-consequence").wait_for(state="visible")
+        consequence = text(page, "session-gate-rerun-consequence")
         check("preview-names-kept-and-redone", consequence == CONSEQUENCE, consequence=consequence)
-        check("preview-on-screen", on_screen(page, "rerun-consequence") and on_screen(page, "rerun-confirm"))
+        check("preview-on-screen", on_screen(page, "session-gate-rerun-consequence") and on_screen(page, "session-gate-rerun-confirm"))
         check("nothing-sent-by-the-preview", fixture_posts(origin, "gate-posts") == [])
         page.screenshot(path=str(SHOTS / f"wavec-runpage-desk-rerun.png"))
-        label = text(page, "rerun-confirm")
-        page.get_by_test_id("rerun-confirm").click()
-        page.get_by_test_id("rerun-sent").wait_for(state="visible", timeout=20000)
+        label = text(page, "session-gate-rerun-confirm")
+        page.get_by_test_id("session-gate-rerun-confirm").click()
+        # The 10 s undo window, then the one POST; the row folds to its receipt.
+        page.wait_for_function("""() => (document.querySelector('[data-testid="session-gate-chosen"]')?.textContent || '').includes('Rerun from build,')""", timeout=25000)
         posts = fixture_posts(origin, "gate-posts")
         check("action-calls-the-gate-route", label == "Rerun from build" and len(posts) == 1
               and posts[0]["runId"] == "r-rerun"
@@ -109,7 +120,7 @@ with sync_playwright() as p:
               label=label, posts=posts)
 
     def section_trust() -> None:
-        page.goto(f"{origin}/runs/r-rerun", wait_until="networkidle")
+        open_whatwhere("r-rerun")
         page.get_by_test_id("trust-receipt").wait_for(state="visible", timeout=15000)
         question = text(page, "trust-receipt-question")
         consequence = text(page, "trust-receipt-consequence")
@@ -130,14 +141,16 @@ with sync_playwright() as p:
               and posts[0]["rule"]["trigger"]["band"] == "0-19")
 
     def section_done() -> None:
-        page.goto(f"{origin}/runs/r-rerun-done", wait_until="networkidle")
-        page.get_by_test_id("stepper-phase-2").wait_for(state="visible", timeout=15000)
+        page.goto(f"{origin}/s/run%3Ar-rerun-done", wait_until="networkidle")
+        page.get_by_test_id("session-run").first.wait_for(state="visible", timeout=15000)
+        page.wait_for_timeout(600)
+        check("finished-run-offers-no-rerun", page.locator('[data-choice-key="rerun"]').count() == 0)
+        open_whatwhere("r-rerun-done")
         page.get_by_test_id("trust-receipt-in-force").wait_for(state="visible", timeout=10000)
-        check("finished-run-offers-no-rerun", page.locator("[data-rerun]").count() == 0)
         page.screenshot(path=str(SHOTS / f"wavec-runpage-desk-done.png"))
 
     def section_mid() -> None:
-        page.goto(f"{origin}/runs/r-rerun-mid", wait_until="networkidle")
+        open_whatwhere("r-rerun-mid")
         page.get_by_test_id("what-where").wait_for(state="visible", timeout=15000)
         page.wait_for_timeout(600)
         check("no-receipt-above-band-0-19", page.get_by_test_id("trust-receipt").count() == 0

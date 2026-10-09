@@ -8,7 +8,7 @@ desk_run_state_test.py — the gate and run-state defects the desk reel found, o
      "Index all" batch, no "Nothing has been started yet". Retry after the daemon recovers → headline.
   2. #473 ⌘K FROM A FOCUSED FIELD: on /chat/new (the composer takes focus on arrival) ⌘K opens the
      palette; ⌘K inside the palette's own input closes it.
-  3. #478 A REJECTED PLAN ENDS CANCELLED: the run page's banner says "Run cancelled.", shows the
+  3. #478 A REJECTED PLAN ENDS CANCELLED: the run's thread (S16a-1c) says "Run cancelled.", shows the
      operator's reject note (crew's `gate.decided` audit, `detail.amend`), and its all-runs link lands
      on /work with the Cancelled filter, where the run is listed.
   4. #469 A STEP GATE IS ANSWERABLE ON THE SESSION: a run paused before its first unit shows a
@@ -109,8 +109,9 @@ with sync_playwright() as p:
 
     # ── 3. #478: the cancelled run's banner keeps the note; the link finds the run ──
     set_fixture(origin, reject_note=True)
-    page.goto(f"{origin}/runs/r-rejected", wait_until="networkidle")
-    banner = page.locator('[data-testid="failure-banner"][data-kind="cancelled"]').first
+    # S16a-1c: the stop story is said in the run's session thread, under its status sentence.
+    page.goto(f"{origin}/s/run%3Ar-rejected", wait_until="networkidle")
+    banner = page.locator('[data-testid="session-run"] [data-testid="failure-banner"][data-kind="cancelled"]').first
     banner.wait_for(state="visible", timeout=15000)
     try:
         page.get_by_test_id("failure-reject-note").first.wait_for(state="visible", timeout=8000)

@@ -100,7 +100,7 @@ function whyOf(s: ChainStep): string {
   return [ADDED_WORD[s.addedBy], s.reason].filter(Boolean).join(' — ');
 }
 
-export function ChainLine({ chain, runId, units = [], teamError = null, onRetry, checks = null, momentOf, onOpenAt, nothingChecked = false }: {
+export function ChainLine({ chain, runId, units = [], teamError = null, onRetry, checks = null, momentOf, onOpenAt, nothingChecked = false, jumpOrd = null }: {
   chain: ChainModel;
   runId: string;
   /** The run's units: a step that has one opens its sheet (S11). */
@@ -115,6 +115,8 @@ export function ChainLine({ chain, runId, units = [], teamError = null, onRetry,
   onOpenAt?: (sec: number) => void;
   /** S17c: true when the run is terminal with no checked governance entries → "· nothing checked". */
   nothingChecked?: boolean;
+  /** S16a-1c: the unit the Watchtower's "Jump in" named (`?jump=`): its step is marked. */
+  jumpOrd?: number | null;
 }): React.ReactElement {
   return (
     <div data-testid="chain" data-run-id={runId} data-source={chain.source} data-proposed={chain.proposed ? 'true' : 'false'} className="wk-chain">
@@ -133,6 +135,8 @@ export function ChainLine({ chain, runId, units = [], teamError = null, onRetry,
               data-state={s.state}
               data-added-by={s.addedBy}
               {...(s.late ? { 'data-late': 'true' } : {})}
+              {...(ord !== null ? { 'data-unit-ord': String(ord) } : {})}
+              {...(ord !== null && jumpOrd !== null && ord === jumpOrd ? { 'data-jumped': 'true' } : {})}
               title={whyOf(s)}
               aria-label={`${s.label}: ${STATE_WORD[s.state]} — ${whyOf(s)}`}
               className={`wk-chain-step wk-chain-step--${s.state}`}

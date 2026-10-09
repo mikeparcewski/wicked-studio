@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.6.6",
   "counts": {
-    "files": 194,
-    "occurrences": 2280,
-    "static": 2028,
+    "files": 198,
+    "occurrences": 2331,
+    "static": 2061,
     "dynamic": 49,
     "computed": 8
   },
@@ -3263,43 +3263,50 @@
     {
       "testId": "failure-all-runs",
       "files": [
-        "src/components/FailureBanner.tsx"
+        "src/components/FailureBanner.tsx",
+        "src/components/session/RunRecord.tsx"
       ]
     },
     {
       "testId": "failure-banner",
       "files": [
-        "src/components/FailureBanner.tsx"
+        "src/components/FailureBanner.tsx",
+        "src/components/session/RunRecord.tsx"
       ]
     },
     {
       "testId": "failure-engine-detail",
       "files": [
-        "src/components/FailureBanner.tsx"
+        "src/components/FailureBanner.tsx",
+        "src/components/session/RunRecord.tsx"
       ]
     },
     {
       "testId": "failure-plain",
       "files": [
-        "src/components/FailureBanner.tsx"
+        "src/components/FailureBanner.tsx",
+        "src/components/session/RunRecord.tsx"
       ]
     },
     {
       "testId": "failure-reject-note",
       "files": [
-        "src/components/FailureBanner.tsx"
+        "src/components/FailureBanner.tsx",
+        "src/components/session/RunRecord.tsx"
       ]
     },
     {
       "testId": "failure-rule-link",
       "files": [
-        "src/components/FailureBanner.tsx"
+        "src/components/FailureBanner.tsx",
+        "src/components/session/RunRecord.tsx"
       ]
     },
     {
       "testId": "failure-send-back-note",
       "files": [
-        "src/components/FailureBanner.tsx"
+        "src/components/FailureBanner.tsx",
+        "src/components/session/RunRecord.tsx"
       ]
     },
     {
@@ -7910,6 +7917,12 @@
       ]
     },
     {
+      "testId": "session-gate-consequence",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
       "testId": "session-gate-detail",
       "files": [
         "src/components/session/GateRow.tsx"
@@ -7952,15 +7965,87 @@
       ]
     },
     {
+      "testId": "session-gate-rerun",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-rerun-confirm",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-rerun-consequence",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
       "testId": "session-gate-row",
       "files": [
         "src/components/session/GateRow.tsx"
       ]
     },
     {
+      "testId": "session-gate-rule-error",
+      "files": [
+        "src/components/session/GateDepth.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-rule-made",
+      "files": [
+        "src/components/session/GateDepth.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-rule-make",
+      "files": [
+        "src/components/session/GateDepth.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-rule-offer",
+      "files": [
+        "src/components/session/GateDepth.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-rule-preview",
+      "files": [
+        "src/components/session/GateDepth.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-rule-question",
+      "files": [
+        "src/components/session/GateDepth.tsx"
+      ]
+    },
+    {
       "testId": "session-gate-send",
       "files": [
         "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-source",
+      "files": [
+        "src/components/session/GateDepth.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-track-record",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-under-review",
+      "files": [
+        "src/components/session/GateDepth.tsx"
       ]
     },
     {
@@ -8134,13 +8219,21 @@
     {
       "testId": "session-proposal-outcome",
       "files": [
+        "src/components/session/ProposalCard.tsx",
+        "src/components/session/StrandedCard.tsx"
+      ]
+    },
+    {
+      "testId": "session-proposal-plan-why",
+      "files": [
         "src/components/session/ProposalCard.tsx"
       ]
     },
     {
       "testId": "session-proposal-pr",
       "files": [
-        "src/components/session/ProposalCard.tsx"
+        "src/components/session/ProposalCard.tsx",
+        "src/components/session/StrandedCard.tsx"
       ]
     },
     {
@@ -8151,6 +8244,12 @@
     },
     {
       "testId": "session-proposal-text",
+      "files": [
+        "src/components/session/ProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "session-proposal-track-record",
       "files": [
         "src/components/session/ProposalCard.tsx"
       ]
@@ -8174,6 +8273,12 @@
       ]
     },
     {
+      "testId": "session-run-archived",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
       "testId": "session-run-helper",
       "files": [
         "src/components/session/SessionView.tsx"
@@ -8188,6 +8293,13 @@
     {
       "testId": "session-run-look",
       "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
+      "testId": "session-run-retry",
+      "files": [
+        "src/board/objectActions.ts",
         "src/components/session/SessionView.tsx"
       ]
     },
@@ -8242,6 +8354,42 @@
       ]
     },
     {
+      "testId": "session-stranded",
+      "files": [
+        "src/components/session/StrandedCard.tsx"
+      ]
+    },
+    {
+      "testId": "session-stranded-deliver",
+      "files": [
+        "src/components/session/StrandedCard.tsx"
+      ]
+    },
+    {
+      "testId": "session-stranded-error",
+      "files": [
+        "src/components/session/StrandedCard.tsx"
+      ]
+    },
+    {
+      "testId": "session-stranded-leave",
+      "files": [
+        "src/components/session/StrandedCard.tsx"
+      ]
+    },
+    {
+      "testId": "session-stranded-show",
+      "files": [
+        "src/components/session/StrandedCard.tsx"
+      ]
+    },
+    {
+      "testId": "session-stranded-worktree",
+      "files": [
+        "src/components/session/StrandedCard.tsx"
+      ]
+    },
+    {
       "testId": "session-thread",
       "files": [
         "src/components/session/SessionView.tsx"
@@ -8290,6 +8438,43 @@
       ]
     },
     {
+      "testId": "sheet-archive",
+      "files": [
+        "src/board/objectActions.ts",
+        "src/components/session/RunActions.tsx"
+      ]
+    },
+    {
+      "testId": "sheet-archive-confirm",
+      "files": [
+        "src/components/session/RunActions.tsx"
+      ]
+    },
+    {
+      "testId": "sheet-archive-error",
+      "files": [
+        "src/components/session/RunActions.tsx"
+      ]
+    },
+    {
+      "testId": "sheet-archive-keep",
+      "files": [
+        "src/components/session/RunActions.tsx"
+      ]
+    },
+    {
+      "testId": "sheet-archive-yes",
+      "files": [
+        "src/components/session/RunActions.tsx"
+      ]
+    },
+    {
+      "testId": "sheet-archived",
+      "files": [
+        "src/components/session/RunActions.tsx"
+      ]
+    },
+    {
       "testId": "sheet-body",
       "files": [
         "src/components/sheets/Sheet.tsx"
@@ -8323,6 +8508,13 @@
       "testId": "sheet-did-row",
       "files": [
         "src/components/sheets/ObjectSheet.tsx"
+      ]
+    },
+    {
+      "testId": "sheet-draft-update",
+      "files": [
+        "src/board/objectActions.ts",
+        "src/components/session/RunActions.tsx"
       ]
     },
     {
@@ -8446,6 +8638,12 @@
       ]
     },
     {
+      "testId": "sheet-run-actions",
+      "files": [
+        "src/components/session/RunActions.tsx"
+      ]
+    },
+    {
       "testId": "sheet-seat",
       "files": [
         "src/components/sheets/ObjectSheet.tsx"
@@ -8551,6 +8749,12 @@
       "testId": "sheet-title",
       "files": [
         "src/components/sheets/Sheet.tsx"
+      ]
+    },
+    {
+      "testId": "sheet-verdict",
+      "files": [
+        "src/components/sheets/ObjectSheet.tsx"
       ]
     },
     {
@@ -10848,6 +11052,13 @@
       "testId": "tech-session-row",
       "files": [
         "src/components/everything/EverythingPage.tsx"
+      ]
+    },
+    {
+      "testId": "tech-session-run",
+      "files": [
+        "src/board/objectActions.ts",
+        "src/components/session/SessionView.tsx"
       ]
     },
     {

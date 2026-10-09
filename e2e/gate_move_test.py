@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 """
-gate_move_test.py — the gate card carries its own next move (brainstorm-actionable ideas 1 + 2),
-at 1440x700.
+gate_move_test.py — the gate row carries its own next move (brainstorm-actionable ideas 1 + 2),
+at 1440x700. S16a-1b: said in the session thread (/s/run%3Ar-review), not on the run page.
 
-  card    /runs/r-review, paused at an evaluator NOT PASS escalation (the engine's recorded
-          `VERDICT: FAIL` frames): the primary button names the recommended move ("Send back to the
-          creator: …") with its consequence line above it ("produce reruns with 2 items; critique
-          re-reviews"); the note is pre-filled with the reviewer's failing lines; the duplicate
-          "Request changes" answer is not repeated while Retry / Reject / Cancel stay secondary.
-  diff    the "Why it failed" toggle lists the reviewer's failing criteria beside what the creator
+  card    /s/run%3Ar-review, paused at an evaluator NOT PASS escalation (the engine's recorded
+          `VERDICT: FAIL` frames): the suggested choice is the recommended move (Send back) with its
+          consequence line above it ("produce reruns with 2 items; critique re-reviews"); the note
+          opens pre-filled with the reviewer's failing lines; no duplicate "Request changes" choice,
+          Stop stays last.
+  diff    ⋯ Details › "Why it failed" lists the reviewer's failing criteria beside what the creator
           (produce) claimed, read from the creator's transcript.
-  send    taking the move POSTs {approve: false, action: "request_changes", amend: <the items>}.
+  send    taking the move POSTs {approve: false, action: "request_changes", amend: <the items>} once.
   home    the Home "Needs you" row for r-review names the move ("Send back… ›") and opens the gate in the
           session thread (S15e: /s/run%3Ar-review#gate, the move preselected in the gate row).
 
@@ -81,30 +81,31 @@ with sync_playwright() as p:
         f"s.textContent = {json.dumps(HIDE_GATE_TOASTS)}; document.head.appendChild(s); }});")
 
     def section_card() -> None:
+        # S16a-1b: the gate is answered in the session thread (GateRow); its depth moved with it.
         reset(origin)
-        page.goto(f"{origin}/runs/r-review", wait_until="networkidle")
-        page.get_by_test_id("gate-recommended").wait_for(state="visible", timeout=15000)
-        move = page.get_by_test_id("gate-move").get_attribute("data-move")
-        label = text(page, "gate-recommended")
-        check("move-named-on-the-primary-button", move == "send-back"
-              and label == "Send back to the creator: the regression test is missing (+1 more)", move=move, label=label)
-        consequence = text(page, "gate-move-consequence")
+        page.goto(f"{origin}/s/run%3Ar-review", wait_until="networkidle")
+        page.get_by_test_id("session-gate-row").wait_for(state="visible", timeout=15000)
+        page.locator('[data-testid="session-gate-choice"][data-recommended="true"]').wait_for(timeout=10000)
+        rec = page.locator('[data-testid="session-gate-choice"][data-recommended="true"]')
+        move = rec.get_attribute("data-choice-key")
+        label = (rec.text_content() or "").replace("suggested", "").strip()
+        check("move-named-on-the-primary-button", move == "send-back" and label == "Send back", move=move, label=label)
+        consequence = text(page, "session-gate-consequence")
         check("consequence-above-the-button", consequence == "produce reruns with 2 items; critique re-reviews"
-              and page.evaluate("""() => { const c = document.querySelector('[data-testid="gate-move-consequence"]');
-                  const b = document.querySelector('[data-testid="gate-recommended"]');
+              and page.evaluate("""() => { const c = document.querySelector('[data-testid="session-gate-consequence"]');
+                  const b = document.querySelector('[data-testid="session-gate-choice"][data-recommended="true"]');
                   return c.getBoundingClientRect().bottom <= b.getBoundingClientRect().top; }"""), consequence=consequence)
-        note = page.get_by_test_id("steering-amend")
-        check("note-pre-filled", note.input_value() == PREFILL
-              and note.get_attribute("data-prefill") == "verdict", note=note.input_value())
-        check("others-secondary", page.get_by_test_id("steering-request-changes").count() == 0
-              and page.get_by_test_id("steering-retry").is_visible()
-              and page.get_by_test_id("steering-reject").is_visible()
-              and page.get_by_test_id("steering-cancel").is_visible())
-        check("button-on-screen", page.get_by_test_id("gate-recommended").is_visible()
-              and page.evaluate("""() => { const b = document.querySelector('[data-testid="gate-recommended"]').getBoundingClientRect();
+        keys = page.evaluate("""() => [...document.querySelectorAll('[data-testid="session-gate-choices"] [data-testid="session-gate-choice"]')]
+          .map(e => e.dataset.choiceKey)""")
+        check("others-secondary", "request_changes" not in keys and keys.count("send-back") == 1
+              and keys[-1] == "stop" and "steer" in keys, keys=keys)
+        check("button-on-screen", rec.is_visible()
+              and page.evaluate("""() => { const b = document.querySelector('[data-testid="session-gate-choice"][data-recommended="true"]').getBoundingClientRect();
                   return b.top >= 0 && b.bottom <= window.innerHeight; }"""))
         page.screenshot(path=str(SHOTS / f"gate-move-desk-card.png"))
 
+        # "Why it failed" sits behind the row's ⋯ Details.
+        page.locator(".wk-session-gate-prompt-summary").click()
         page.get_by_test_id("verdict-diff-toggle").click()
         page.wait_for_function("""() => document.querySelector('[data-testid="verdict-diff"]')
           ?.getAttribute('data-state') === 'ready'""", timeout=8000)
@@ -119,10 +120,16 @@ with sync_playwright() as p:
         page.get_by_test_id("verdict-diff").scroll_into_view_if_needed()
         page.screenshot(path=str(SHOTS / f"gate-move-desk-diff.png"))
 
-        page.get_by_test_id("gate-recommended").click()
-        deadline = time.monotonic() + 15
+        rec.click()
+        note = page.get_by_test_id("session-gate-note")
+        note.wait_for(state="visible", timeout=5000)
+        check("note-pre-filled", note.input_value() == PREFILL, note=note.input_value())
+        page.get_by_test_id("session-gate-send").click()
+        # The 10 s undo window, then exactly one POST.
+        deadline = time.monotonic() + 25
         while not gate_posts(origin, "r-review") and time.monotonic() < deadline:
-            page.wait_for_timeout(200)
+            page.wait_for_timeout(250)
+        page.wait_for_timeout(500)
         posts = gate_posts(origin, "r-review")
         body = posts[0]["body"] if posts else {}
         check("move-sends-request-changes", len(posts) == 1 and body.get("approve") is False
@@ -143,9 +150,8 @@ with sync_playwright() as p:
         page.screenshot(path=str(SHOTS / f"gate-move-desk-home.png"))
         act.click()
         # S15e: the row opens the session thread at the gate (`/s/run%3Ar-review#gate`), where the
-        # move is the preselected choice of `session-gate-row`; the run page's `gate-recommended`
-        # stays accepted for a skin that still routes there.
-        page.locator('[data-testid="session-gate-row"], [data-testid="gate-recommended"]').first.wait_for(state="visible", timeout=15000)
+        # move is the preselected choice of `session-gate-row`.
+        page.get_by_test_id("session-gate-row").wait_for(state="visible", timeout=15000)
         check("home-row-opens-the-gate", "r-review" in page.url, url=page.url)
 
     for section in (section_card, section_home):

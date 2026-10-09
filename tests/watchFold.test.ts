@@ -175,14 +175,16 @@ describe('jump in, coverage, the store', () => {
   it('Copilot r2: no jump without a unit to land on; a legacy delivery object still reads Delivered', () => {
     expect(jumpPath({ runId: 'r-1', anchor: { run_id: 'r-1', ord: null, attempt: null, at: 5 } })).toBeNull();
     expect(jumpPath({ runId: 'r-1', anchor: null })).toBeNull();
-    expect(runPath({ runId: 'r-1', anchor: null })).toBe('/runs/r-1');
+    // S16a-1c: a row with no moment opens the run's session thread, never the run page.
+    expect(runPath({ runId: 'r-1', anchor: null })).toBe('/s/run%3Ar-1');
     const legacy = { session: { id: 'old', status: 'completed', problem: 'x', ended_at: 9, delivery: { kind: 'pull_request', url: 'https://github.com/a/b/pull/1' } }, units: [] } as unknown as SessionView;
     expect(foldRuns(EMPTY_WATCH, [legacy]).rows['delivered:old']?.sentence).toBe('Delivered');
   });
 
   it('jump paths round-trip', () => {
     const p = jumpPath({ runId: 'r-88', anchor: { run_id: 'r-88', ord: 5, attempt: 1, at: 900 } })!;
-    expect(p).toBe('/runs/r-88?jump=5:1:900');
+    // S16a-1c: Jump in lands on the session thread with the moment in the address.
+    expect(p).toBe('/s/run%3Ar-88?jump=5:1:900');
     expect(parseJump(p.slice(p.indexOf('?')))).toStrictEqual({ ord: 5, attempt: 1, at: 900 });
     expect(parseJump('?x=1')).toBeNull();
   });

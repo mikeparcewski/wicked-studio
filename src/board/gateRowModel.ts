@@ -16,6 +16,8 @@ import {
   isLaunchRefusal,
   isOfferable,
   isSeatFailure,
+  gateFrameFor,
+  gateSourceLine,
   gateVerdictFor,
   layerLine,
   reassignCandidates,
@@ -24,6 +26,7 @@ import {
   type GateVerdictView,
 } from '../components/gateVerdictModel.js';
 import type { GateAnswer } from './gateActions.js';
+import type { RerunOffer } from '../components/rerunModel.js';
 
 /**
  * SESSION GATE ROW MODEL (S15e): pure classification and choice set for the session thread's
@@ -72,7 +75,19 @@ export interface GateRowModel {
   recommended: number | null;
   /** Items for the ⋯ disclosure: raw prompt, verdict layers, failing items, reviewer's note. */
   detailItems: readonly string[];
+  /** S16a-1b: the recommended move's consequence ("produce reruns with 2 items; critique
+   *  re-reviews"), said above the suggested choice — only when the suggested choice IS that move. */
+  consequence: string | null;
+  /** S16a-1b: where the gate comes from (run-level / workflow-declared / deliver / final), or null. */
+  source: string | null;
+  /** S16a-1b: the reviewer's failing criteria ("Why it failed", beside the creator's claims). */
+  failing: readonly string[];
+  /** S16a-1b: the unit the deciding verdict judged (VerdictDiff's reviewed ord), or null. */
+  reviewedOrd: number | null;
 }
+
+/** The choice set before the depth fields (`withDepth` adds them). */
+type BaseRowModel = Omit<GateRowModel, 'consequence' | 'source' | 'failing' | 'reviewedOrd'>;
 
 /**
  * Map an engine choice value to a wire decision. Returns null for unrecognized values — those
@@ -154,6 +169,8 @@ export interface SessionGateInput {
   pool: readonly string[];
   /** The roster for eligibility checks; null when not yet loaded. */
   roster: readonly RosterSeat[] | null;
+  /** S16a-1b: the run's "Rerun from here" offer (`useRerunFromHere`), or null/absent. */
+  rerun?: RerunOffer | null;
 }
 
 /**
@@ -181,6 +198,51 @@ export function recommendedChoiceIndex(choices: readonly GateRowChoice[], move: 
  * (`classifyRowGate` returns `{kind:'checking'}`), or for deliver gates (ProposalCard handles those).
  */
 export function sessionGateChoices(input: SessionGateInput): GateRowModel | null {
+  const base = baseGateChoices(input);
+  return base === null ? null : withDepth(base, input);
+}
+
+/**
+ * S16a-1b: the gate card's depth, carried into the row model — the recommended move's consequence
+ * (only above the choice that takes it), the gate's source line, the failing criteria for "Why it
+ * failed", and "Rerun from <step>" as one more ⋯ choice (the rewind `useRerunFromHere` offers, sent
+ * through the one decision path). The inline choice set is never changed (S15e pins).
+ */
+function withDepth(base: BaseRowModel, input: SessionGateInput): GateRowModel {
+  const { runId, gate, units, events } = input;
+  const verdict = gateVerdictFor(events, gate.ord, gate.prompt);
+  const escalationGate = isEscalationGate(gate.prompt, verdict);
+  const rec = base.reason === 'def' || base.reason === 'escalation'
+    ? recommendGateMove({
+      runId, ord: gate.ord, units: units as WorkUnit[], verdict,
+      verdictSummary: escalationSummaryFor(events, gate.ord) ?? null, escalationGate,
+      hasLift: false, restoredRetry: isRestoredRetry(verdict, gate.ord), isPlanGate: false, planView: null, diffstat: null,
+    })
+    : null;
+  // The consequence rides the suggested choice only when that choice IS the recommended move
+  // (studio#556's mapping: send back, retry with findings, approve) — never above another choice.
+  const consequence = rec !== null && base.recommended !== null && recommendedChoiceIndex(base.choices, rec) === base.recommended && rec.consequence !== ''
+    ? rec.consequence : null;
+  const source = gateSourceLine(gate.gateKind ?? gateFrameFor(events, gate.ord)?.gateKind ?? null);
+  const overflow = [...base.overflow];
+  const offer = input.rerun ?? null;
+  // The rewind IS a request_changes: offered only where Send back is one of the gate's arms (never on
+  // a denied unit's escalation, studio#573, nor a retry gate, whose engine arms are retry / stop).
+  const sendsBack = [...base.choices, ...base.overflow].some((c) => c.key === 'send-back');
+  if (offer !== null && sendsBack) {
+    overflow.push({
+      key: 'rerun', label: `Rerun from ${offer.phase}`, decision: offer.decision, needsNote: false,
+      title: offer.consequence,
+    });
+  }
+  return {
+    ...base, overflow, consequence, source,
+    failing: rec?.items ?? [],
+    reviewedOrd: verdict?.ord ?? null,
+  };
+}
+
+function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
   const { runId, gate, units, events, pool, roster } = input;
 
   const rowClass = classifyRowGate({ runId, gate, units, events });
@@ -222,7 +284,7 @@ export function sessionGateChoices(input: SessionGateInput): GateRowModel | null
           label: mapChoiceLabel(v),
           decision: null,
           needsNote: false,
-          title: 'No wire for this choice yet — answer on the run page',
+          title: 'No wire for this choice yet — send a note instead',
           disabled: true,
         };
       }

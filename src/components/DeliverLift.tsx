@@ -105,8 +105,8 @@ export function DeliverLift({ view, omitFailure = false }: { view: DeliverLiftVi
           <p data-testid="deliver-lift-remedy" style={{ color: 'var(--ink-body)' }}>
             <span className="font-semibold">remedy:</span> on the run branch, rebase onto {base}, resolve{' '}
             {view.conflicts.length === 0 ? 'the conflict' : view.conflicts.join(', ')}, regenerate any generated files and
-            re-run the repository's checks — then approve to retry the deliver phase, or reject to leave the work in
-            its worktree (the run reads as stranded until a PR is on record).
+            re-run the repository's checks — then use Deliver — open a PR on the run (its thread or its Delivery
+            tab), or leave the work in its worktree (the run reads as stranded until a PR is on record).
           </p>
         </>
       )}

@@ -19,6 +19,9 @@ import { onboardEstimate, type OnboardEstimate } from './repairMoves.js';
 import { plausibleClock } from './ageHonesty.js';
 import { captureClass, decisionIdOf, proposalConsequence, proposalConsequenceLine, type ProposalConsequence } from './proposalTriage.js';
 
+/** S16a-1a: the hash that lands a stranded run's thread on its Deliver door. */
+export const DELIVER_HASH = '#deliver';
+
 /**
  * THE needs-you queue fold (DES-HOME-COMMAND-CENTER §3) — the home page's spine.
  * ONE aggregated, deduped list of everything across every section that is waiting
@@ -541,11 +544,12 @@ export function needsYouRows(inputs: NeedsYouInputs): NeedRow[] {
         subject: s.problem,
         text: line.text,
         tone: line.tone,
-        at: attachedAt[s.id] ?? null,
-        subjectPath: `/runs/${encodeURIComponent(s.id)}`,
-        // Open-in-place, never a POST from the queue (the fold's standing rule):
-        // the run's Delivery card carries the one-click Deliver.
-        action: { kind: 'open', path: `/runs/${encodeURIComponent(s.id)}`, label: 'Open run ›' },
+        // S16a-1a (studio#587): the daemon's own terminal clocks first, as the failed row reads them.
+        at: endedAtMs(v) ?? finishedAtMs(v) ?? attachedAt[s.id] ?? null,
+        subjectPath: `${sessionPath(`run:${s.id}`)}${DELIVER_HASH}`,
+        // Open-in-place, never a POST from the queue (the fold's standing rule): the run's thread
+        // carries the stranded card's one-click Deliver; `#deliver` focuses it on arrival.
+        action: { kind: 'open', path: `${sessionPath(`run:${s.id}`)}${DELIVER_HASH}`, label: 'Deliver ›' },
       });
     }
   }

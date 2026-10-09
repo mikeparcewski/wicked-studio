@@ -31,6 +31,9 @@ import { RunSectionBody, runSections, type AccordionId } from '../RightPanel.js'
 import { humanTitle } from '../runIdentity.js';
 import { Sheet } from './Sheet.js';
 import { useDisplayText } from '../../hooks/useHomePath.js';
+import { useRunEvents } from '../../hooks/useRunEvents.js';
+import { VerdictDetail } from '../VerdictDetail.js';
+import { SheetRunActions } from '../session/RunActions.js';
 
 /** A run can take a message only while a helper is working in it (crew's inject surface). */
 const MESSAGEABLE = new Set(['executing', 'distributing', 'planning']);
@@ -269,6 +272,7 @@ function SessionSheet({ r, tab: asked, runs, navigate }: { r: Extract<ObjectRef,
       onTab={setSheetTab}
       primary={{ label: primaryAction('session').label, onClick: () => { if (record !== null) { closeSheet(); navigate(record); } }, disabled: record === null ? 'Nothing in this session is on this daemon.' : null }}
       onClose={closeSheet}
+      {...(newest !== null ? { actions: <SheetRunActions key={newest.session.id} view={newest} /> } : {})}
     >
       {tab === 'goal' && (
         <ul data-testid="sheet-goal" className="wk-sheet-list">
@@ -312,10 +316,25 @@ function RunSection({ id, view, runs, navigate }: { id: AccordionId; view: Sessi
  * step, what state it is in and who has it; the row opens the step's own sheet on "What it did"
  * (its transcript; Changes and Live events are its other tabs). A stopped step says why.
  */
+/** S16a-1c: a finished run's deciding verdict (the run page's VerdictDetail) above its steps — the
+ *  deciding evaluation, its criteria, a skipped judge, an ungated run. The log is read once when no
+ *  surface on the page has hydrated it. */
+function FinishedVerdict({ view }: { view: SessionView }): React.ReactElement | null {
+  const runId = view.session.id;
+  const terminal = ['completed', 'failed', 'cancelled'].includes(view.session.status);
+  // The session's ONE run-event read (studio#558); no log yet → nothing, never a guessed verdict.
+  const events = useRunEvents(runId, terminal).events;
+  if (!terminal || events === null) return null;
+  const units = [...view.units].sort((a, b) => a.ord - b.ord);
+  return <div data-testid="sheet-verdict" className="wk-sheet-section"><VerdictDetail runId={runId} units={units} /></div>;
+}
+
 function StepsList({ view }: { view: SessionView }): React.ReactElement {
   const live = executingOrd(view.session, view.units);
   const units = [...view.units].sort((a, b) => a.ord - b.ord);
   return (
+    <>
+    <FinishedVerdict view={view} />
     <ul data-testid="sheet-steps" className="wk-sheet-list">
       {units.length === 0 && <li className="wk-session-grey">No step has been planned yet.</li>}
       {units.map((u) => {
@@ -331,6 +350,7 @@ function StepsList({ view }: { view: SessionView }): React.ReactElement {
         );
       })}
     </ul>
+    </>
   );
 }
 

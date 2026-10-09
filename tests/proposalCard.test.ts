@@ -5,7 +5,8 @@ import type { SessionView, SessionWithDelivery } from '../src/api/types.js';
 import type { ChainModel, ChainStep } from '../src/board/chainModel.js';
 import { IDLE_GATE_ACTION } from '../src/board/gateActions.js';
 import {
-  gateInstance, handedOf, outcomeLine, planSentence, planSteps, proposalCard, proposalKindOf, statusSentence,
+  finishedDeliveryArm, gateInstance, handedOf, outcomeLine, planSentence, planSteps, proposalCard, proposalKindOf, statusSentence,
+  strandedCard,
 } from '../src/board/proposalCard.js';
 import { basedOnLine, parsePlace, passageCandidates, passageHasLine, passageWindow, sourcesOf } from '../src/board/sources.js';
 import type { OpenGate } from '../src/store/gates.js';
@@ -423,5 +424,56 @@ describe('studio#575: the done receipt carries the pull request, else the branch
     expect(handedOf(run('r2', 'completed'))).toBeNull();
     (v.session as SessionWithDelivery).deliverUrl = 'javascript:alert(1)';
     expect(handedOf(v)).toBeNull();
+  });
+});
+
+// ── S16a-1a: a finished run opened fresh answers its hand-over in the thread ────────────────────
+
+describe('S16a-1a: the finished run\'s card off its delivery verdict (no gate, no receipt)', () => {
+  const PR = 'https://github.com/example/studio-api/pull/1001';
+  const finished = (delivery: string | undefined, over: Record<string, unknown> = {}): SessionView => {
+    const v = run('r1', 'completed');
+    if (delivery !== undefined) Object.assign(v.session as object, { delivery, ...over });
+    return v;
+  };
+  it('delivered → the receipt with its pull request; pushed → the branch (a fresh load: no lastKind, no units under way)', () => {
+    const delivered = finished('delivered', { deliverUrl: PR });
+    expect(finishedDeliveryArm(delivered, undefined)).toBe('handed');
+    // The host passes the hand-over as the card's memory (ProposalCard `handedOver`).
+    const done = proposalCard({ view: delivered, gate: undefined, chain: EMPTY, action: IDLE_GATE_ACTION, ui: NO_UI, lastKind: 'deliver' })!;
+    expect(done.state).toBe('done');
+    expect(done.out).toBe('Finished · delivered');
+    expect(done.handed).toStrictEqual({ href: PR, branch: null });
+    const pushed = finished('pushed', { deliverBranch: 'wicked/r1', deliverRemote: 'origin' });
+    expect(finishedDeliveryArm(pushed, undefined)).toBe('handed');
+    const p = proposalCard({ view: pushed, gate: undefined, chain: EMPTY, action: IDLE_GATE_ACTION, ui: NO_UI, lastKind: 'deliver' })!;
+    expect(p.out).toBe('Finished · branch pushed');
+    expect(p.handed).toStrictEqual({ href: null, branch: 'wicked/r1' });
+  });
+  it('stranded → the stranded door; nothing-to-deliver / failed / none / an older wire → the outcome line only', () => {
+    expect(finishedDeliveryArm(finished('stranded'), undefined)).toBe('stranded');
+    expect(finishedDeliveryArm(finished('nothing-to-deliver'), undefined)).toBeNull();
+    expect(finishedDeliveryArm(finished('failed'), undefined)).toBeNull();
+    expect(finishedDeliveryArm(finished('none'), undefined)).toBeNull();
+    expect(finishedDeliveryArm(finished(undefined), undefined)).toBeNull();
+  });
+  it('an open gate, or a run that is not completed, gets no inferred card (the gate\'s own card answers)', () => {
+    expect(finishedDeliveryArm(finished('stranded'), openGate({ prompt: 'Approve?' }))).toBeNull();
+    const v = finished('delivered', { deliverUrl: PR });
+    expect(finishedDeliveryArm({ ...v, session: { ...v.session, status: 'failed' } }, undefined)).toBeNull();
+    expect(finishedDeliveryArm({ ...v, session: { ...v.session, status: 'executing' } }, undefined)).toBeNull();
+  });
+  it('the stranded card: ask → delivering (button words change) → delivered (receipt + PR) | error (headline + the daemon\'s words verbatim)', () => {
+    const v = finished('stranded');
+    const ask = strandedCard(v, undefined);
+    expect(ask.state).toBe('ask');
+    expect(ask.act).toBe('Deliver — open a PR');
+    expect(ask.out).toBe(outcomeLine(v));
+    expect(strandedCard(v, { phase: 'delivering' })).toMatchObject({ state: 'delivering', act: 'Delivering…' });
+    expect(strandedCard(v, { phase: 'delivered', prUrl: PR })).toMatchObject({ state: 'delivered', out: 'Finished · delivered', prUrl: PR });
+    const words = 'the daemon refused this — rebase onto origin/main failed:\n  CONFLICT (content): testid-inventory.json';
+    expect(strandedCard(v, { phase: 'error', error: words })).toMatchObject({
+      state: 'error', error: { headline: 'Delivery failed — the run is still stranded.', detail: words },
+    });
   });
 });

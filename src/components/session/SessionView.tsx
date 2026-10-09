@@ -16,12 +16,17 @@ import { readSessionVisit, useSessionDrafts, writeSessionVisit } from '../../sto
 import { humanTitle } from '../runIdentity.js';
 import type { ChatCitations } from '../../api/chat-wire.js';
 import { IDLE_GATE_ACTION, useGateActionStore } from '../../board/gateActions.js';
-import { proposalKindOf, statusSentence } from '../../board/proposalCard.js';
+import { finishedDeliveryArm, proposalKindOf, statusSentence } from '../../board/proposalCard.js';
 import { useGateStore } from '../../store/gates.js';
 import { useRunEventStore } from '../../store/events.js';
 import { ChainLine, useRunChain } from './ChainLine.js';
 import { ProposalCard } from './ProposalCard.js';
 import { useRunEvents } from '../../hooks/useRunEvents.js';
+import { StrandedCard } from './StrandedCard.js';
+import { RunRecordLines } from './RunRecord.js';
+import { startRetry } from './RunActions.js';
+import { Tech, runTechParts } from '../Tech.js';
+import { parseJump } from '../../store/watch.js';
 import { GateRow } from './GateRow.js';
 import { SourceChips } from './SourceChips.js';
 import { SinceYouLeft } from './SinceYouLeft.js';
@@ -123,7 +128,14 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
     if (ref.kind !== 'run' || !runChatId) return;
     const v = runs.find((r) => r.session.id === ref.runId);
     const chat = v === undefined ? null : runChatIdOf(v);
-    if (chat !== null) navigate(sessionPath(chat), { replace: true });
+    // The address's search and hash ride along (a Watchtower `?jump=`, a `#gate`), so the moment the
+    // operator was sent to survives the move onto the chat's thread.
+    if (chat === null) return;
+    // A jump names a moment of THIS run: on the chat's thread (many runs) it is pinned to the run.
+    const q = new URLSearchParams(window.location.search);
+    if (q.has('jump')) q.set('jumpRun', ref.runId);
+    const search = q.toString();
+    navigate(`${sessionPath(chat)}${search !== '' ? `?${search}` : ''}${window.location.hash}`, { replace: true });
   }, [ref, runChatId, runs, navigate]);
   const mine = useMemo(() => {
     const list = ref.kind === 'run'
@@ -530,7 +542,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
                 {e.who === 'you' && ref.kind === 'chat' && e.turnId !== null && <TurnDecisions chatId={ref.chatId} turnId={e.turnId} navigate={navigate} />}
               </div>
             )
-            : <RunBlock key={e.key} view={e.view} badge={badges[e.view.session.id] ?? 0} sessionId={sessionId} />))}
+            : <RunBlock key={e.key} view={e.view} badge={badges[e.view.session.id] ?? 0} sessionId={sessionId} navigate={navigate} />))}
         </div>
       </div>
       {/* Rule 3: while the thread is the chain, the shape line names the path's steps for the operator. */}
@@ -575,10 +587,12 @@ function TurnDecisions({ chatId, turnId, navigate }: { chatId: string; turnId: s
   return <DecisionLine decisions={decisions} navigate={navigate} />;
 }
 
-export function RunBlock({ view, badge, sessionId }: {
+export function RunBlock({ view, badge, sessionId, navigate }: {
   view: RunView;
   badge: number;
   sessionId: string;
+  /** S16a-1c: the record lines' links (the stop story's "All runs ›", rule links). */
+  navigate?: Navigate;
 }): React.ReactElement {
   const { chain: planChain, teamError, retry } = useRunChain(view);
   const id = view.session.id;
@@ -616,6 +630,21 @@ export function RunBlock({ view, badge, sessionId }: {
   // Rule 5: store-based receipt survives remount; no useRef.
   const effectiveKind = gate !== undefined ? proposalKind
     : action.receipt?.kind === 'plan' || action.receipt?.kind === 'deliver' ? action.receipt.kind : null;
+  // S16a-1a (studio#583 / #587): a finished run opened fresh — no gate, no receipt here — still
+  // answers its hand-over in the thread, off the daemon's delivery verdict: the receipt (PR link or
+  // branch) for a hand-over, the "Deliver — open a PR" door for a stranded run.
+  const finished = effectiveKind === null ? finishedDeliveryArm(view, gate) : null;
+  // S16a-1c: the Watchtower's "Jump in" lands here with `?jump=ord:attempt:at` — read on arrival.
+  // Recomputed whenever the address's search changes (an in-app navigation re-renders the thread), so
+  // a second Jump in onto the same mounted run is read afresh (codex r1).
+  const searchNow = typeof window === 'undefined' ? '' : window.location.search;
+  // The jump is this run's when the thread is the run's own (`run:<id>`), or — on a chat's thread of
+  // many runs — when the address pins it to this run (`jumpRun=<id>`, set by the run → chat move).
+  const jump = useMemo(() => {
+    const pinned = new URLSearchParams(searchNow).get('jumpRun');
+    const mine = pinned !== null ? pinned === id : sessionId === `run:${id}`;
+    return mine ? parseJump(searchNow) : null;
+  }, [searchNow, id, sessionId]);
   return (
     <section data-testid="session-run" data-run-id={id} data-state={state} {...(acceptance !== null ? { 'data-acceptance': 'read' } : {})} className="wk-session-run">
       <p className="wk-session-run-head">
@@ -628,14 +657,30 @@ export function RunBlock({ view, badge, sessionId }: {
         <button type="button" data-testid="session-run-look" aria-label="Look underneath this run: its steps, changes and evidence" title="Steps, changes, evidence" onClick={() => openSheet({ kind: 'session', sessionId: `run:${id}` }, 'steps')} className="wk-sheet-open wk-sheet-open--run">⋯</button>
       </p>
       {/* S6b: the run's ONE status sentence, then its proposal (the plan, the hand-over). */}
-      <p data-testid="session-status-sentence" role="status" className="wk-session-status-sentence">{statusSentence(view, chain, gate, action)}</p>
+      <p data-testid="session-status-sentence" role="status" className="wk-session-status-sentence">
+        {statusSentence(view, chain, gate, action)}
+        {view.session.archived_at != null && <span data-testid="session-run-archived" className="wk-session-grey"> · Archived</span>}
+        {/* S16a-1d: Retry a failed or cancelled run — the Desk row's prefill, the launch form; no POST. */}
+        {navigate !== undefined && (view.session.status === 'failed' || view.session.status === 'cancelled') && (
+          <button type="button" data-testid="session-run-retry" onClick={() => startRetry(view, navigate)} className="wk-since-toggle" title="Open the launch form prefilled with this run's intent and settings — nothing starts until you send">Retry ›</button>
+        )}
+      </p>
+      {/* S16a-1d: the run's technical handles, when Settings › Show technical details is on. */}
+      <Tech data-testid="tech-session-run" parts={runTechParts({ id, base_commit: view.session.base_commit, clis: view.session.clis })} block />
       <OrphanedRow view={view} />
+      {/* S16a-1c: the run's record lines — why it stopped, the amended acceptance list, a short
+          council, the Watchtower's lines (and "You jumped in" when the address carries ?jump=). */}
+      <RunRecordLines view={view} jumped={jump !== null} {...(navigate === undefined ? {} : { navigate })} />
       {/* S15e: plan and deliver go through ProposalCard; every other gate kind is answered in the thread. */}
       {effectiveKind === 'plan' || effectiveKind === 'deliver'
         ? <ProposalCard view={view} chain={chain} acceptance={acceptance?.summary ?? null} />
-        : <GateRow view={view} gate={gate} />}
+        : finished === 'handed'
+          ? <ProposalCard view={view} chain={chain} acceptance={acceptance?.summary ?? null} handedOver />
+          : finished === 'stranded'
+            ? <StrandedCard view={view} />
+            : <GateRow view={view} gate={gate} />}
       <PlanStepLines runId={id} />
-      <ChainLine chain={chain} runId={id} units={view.units} teamError={teamError} onRetry={retry} checks={checks} momentOf={momentOf} onOpenAt={(sec) => requestWalkthroughSeek(id, sec)} nothingChecked={noEvidenceSummary !== null} />
+      <ChainLine chain={chain} runId={id} units={view.units} teamError={teamError} onRetry={retry} checks={checks} momentOf={momentOf} onOpenAt={(sec) => requestWalkthroughSeek(id, sec)} nothingChecked={noEvidenceSummary !== null} jumpOrd={jump?.ord ?? null} />
       {/* S8: the page the run is producing — a live preview that morphs inline → pane → full. */}
       <RunArtifacts view={view} composerKey={sessionId} chain={chain} />
       <RunHelpers view={view} />

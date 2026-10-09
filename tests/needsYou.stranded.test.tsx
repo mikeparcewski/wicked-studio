@@ -56,8 +56,22 @@ describe('stranded completed runs queue (crew#393)', () => {
     const row = rows[0]!;
     expect(row.kind).toBe('stranded-run');
     expect(row.subject).toBe('problem of r-stranded');
-    expect(row.subjectPath).toBe('/runs/r-stranded');
-    expect(row.action).toStrictEqual({ kind: 'open', path: '/runs/r-stranded', label: 'Open run ›' });
+    // S16a-1a: the row opens the run's THREAD on its Deliver door (`#deliver`), never the run page.
+    expect(row.subjectPath).toBe('/s/run%3Ar-stranded#deliver');
+    expect(row.action).toStrictEqual({ kind: 'open', path: '/s/run%3Ar-stranded#deliver', label: 'Deliver ›' });
+  });
+
+  it('S16a-1a: the row reads the daemon’s terminal clock (ended_at, then finished_at), then the attach clock — never "age unknown" when the wire has one', () => {
+    const ended = completedRun('r-ended', 'stranded');
+    (ended.session as unknown as { ended_at: number }).ended_at = 1_699_999_000;
+    const finished = completedRun('r-finished', 'stranded');
+    (finished.session as unknown as { finished_at: number }).finished_at = 1_699_998_000_000;
+    const bare = completedRun('r-bare', 'stranded');
+    const rows = needsYouRows(inputs({ runs: [ended, finished, bare], attachedAt: { 'r-bare': 1_699_997_000_000 } }));
+    const at = Object.fromEntries(rows.map((r) => [r.key, r.at]));
+    expect(at['stranded:r-ended']).toBe(1_699_999_000_000);
+    expect(at['stranded:r-finished']).toBe(1_699_998_000_000);
+    expect(at['stranded:r-bare']).toBe(1_699_997_000_000);
   });
 
   it('speaks the narrator’s ONE stranded template — queue and template cannot fork', () => {
@@ -143,6 +157,6 @@ describe('the home queue component counts stranded runs', () => {
     // Open-in-place — the queue never POSTs; the Delivery card owns the click.
     const act = screen.getByTestId('need-act');
     expect(act.dataset.act).toBe('open');
-    expect(act).toHaveAttribute('href', '/runs/r-str');
+    expect(act).toHaveAttribute('href', '/s/run%3Ar-str#deliver');
   });
 });

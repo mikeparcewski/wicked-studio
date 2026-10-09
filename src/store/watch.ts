@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { api } from '../api/client.js';
 import type { CoreEvent, SessionView } from '../api/types.js';
-import { ORPHANED_LINE, orphanedOf } from '../board/sessionModel.js';
+import { ORPHANED_LINE, orphanedOf, sessionPath } from '../board/sessionModel.js';
 import { wireDelivery } from '../board/windowStats.js';
 import {
   WATCH_CLEARED, WATCH_RAISED, type WatchAnchor, type WatchFeedResponse, type WatchFinding, type WatchFindingCleared,
@@ -362,18 +362,19 @@ export function gateLine(fold: WatchFold, runId: string, ord?: number | null): s
   return rows[0]?.sentence ?? null;
 }
 
-/** "Jump in": the run page, at the row's moment — or null when the row names no unit to land on
- *  (a Finished row, a quiet run with no cursor): the row then opens its run, it does not "jump" (Copilot). */
+/** "Jump in": the run's session thread, at the row's moment — or null when the row names no unit to
+ *  land on (a Finished row, a quiet run with no cursor): the row then opens its run, it does not
+ *  "jump" (Copilot). S16a-1c: the thread (`/s/run%3A<id>?jump=…`), never the run page. */
 export function jumpPath(row: Pick<WatchRow, 'anchor' | 'runId'>): string | null {
   const a = row.anchor;
   if (a === null || a.ord === null) return null;
-  return `/runs/${encodeURIComponent(a.run_id)}?jump=${a.ord}:${a.attempt ?? ''}:${a.at}`;
+  return `${sessionPath(`run:${a.run_id}`)}?jump=${a.ord}:${a.attempt ?? ''}:${a.at}`;
 }
 
-/** The run a row opens when it has no moment to jump to. */
+/** The run a row opens when it has no moment to jump to: its session thread (S16a-1c). */
 export function runPath(row: Pick<WatchRow, 'anchor' | 'runId'>): string | null {
   const id = row.anchor?.run_id ?? row.runId;
-  return id === null ? null : `/runs/${encodeURIComponent(id)}`;
+  return id === null ? null : sessionPath(`run:${id}`);
 }
 
 /** `?jump=ord:attempt:at` → its parts, or null. */

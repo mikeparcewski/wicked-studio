@@ -849,6 +849,11 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
 /* S6b: the run's one status sentence, the proposal card (ask → progress → receipt), the sources
    under a helper's reply and a source's passage. Tokens only. */
 .wk-session-status-sentence { margin: 0 0 6px; font-size: var(--text-sm); color: var(--ink-body); }
+/* S16a-1c: why the run stopped — one quiet line under the status sentence, the note quoted. */
+.wk-session-run-story { margin: 0 0 6px; font-size: var(--text-xs); color: var(--ink-muted); }
+.wk-session-run-story-line { margin: 0; }
+.wk-session-run-story-note { margin: 2px 0 0; color: var(--ink-body); white-space: pre-wrap; overflow-wrap: anywhere; }
+.wk-session-run-story--failed .wk-session-run-story-line { color: var(--status-fail); }
 .wk-prop { margin: 0 0 8px; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-base); }
 .wk-prop--fail { border-color: color-mix(in oklab, var(--status-fail) 45%, var(--border)); }
 .wk-prop-text { margin: 0; color: var(--ink-high); font-weight: var(--weight-semi); }
@@ -891,6 +896,9 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
 .wk-session-gate-choice:disabled, .wk-session-gate-choice--disabled { opacity: 0.5; cursor: default; }
 .wk-session-gate-choice:disabled:hover { border-color: var(--border); }
 .wk-session-gate-suggested { padding: 0 6px; border: 1px solid var(--border); border-radius: var(--radius-full); background: var(--accent-wash); font-size: var(--text-2xs); color: var(--ink-muted); }
+/* S16a-1b: the creator seat's record on Approve (neutral, never a tone) and the rule offer. */
+.wk-session-gate-record { display: block; font-size: var(--text-2xs); font-weight: 400; color: inherit; opacity: 0.85; }
+.wk-session-gate-rule { margin-top: 8px; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius-md, 8px); display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
 /* The three disclosures: ⋯ (the rest of the choices), Details (the engine's words), the note. */
 .wk-session-gate-overflow, .wk-session-gate-prompt-detail, .wk-session-gate-detail { margin: 0; }
 .wk-session-gate-overflow-summary, .wk-session-gate-prompt-summary, .wk-session-gate-detail-summary { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; list-style: none; font-size: var(--text-xs); color: var(--ink-muted); }
@@ -1103,6 +1111,8 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
 .wk-sheet-head-body { flex: 1; min-width: 0; }
 .wk-sheet-title { margin: 0; font-size: var(--text-lg); font-weight: var(--weight-semi); color: var(--ink-high); }
 .wk-sheet-sub { margin: 2px 0 0; font-size: var(--text-xs); color: var(--ink-muted); }
+/* S16a-1d: a session sheet's secondary actions (Draft update, Archive with its confirm). */
+.wk-sheet-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; }
 .wk-sheet-x { border: 0; background: transparent; color: var(--ink-muted); font-size: var(--text-lg); cursor: pointer; line-height: 1; }
 .wk-sheet-tabs { display: flex; flex-wrap: wrap; gap: 4px; padding: 0 16px 8px; border-bottom: 1px solid var(--border-subtle); }
 .wk-sheet-tab { border: 0; background: transparent; padding: 4px 10px; border-radius: 999px; font-size: var(--text-xs); color: var(--ink-muted); cursor: pointer; }
