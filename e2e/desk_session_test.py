@@ -15,7 +15,8 @@ transport, and r-old, launched from a chat the daemon reclaimed) and proves the 
   4. LIVE, NO DOUBLE-APPLY: teamEvent frames over /ws (build completed — sent twice — then review
      claimed) move the chain in event order; the count reads 2 of 5 done, not 3.
   5. NEVER "CHECKED": no step or sentence says "checked" (no check_state on the wire).
-  6. UN-TEAMED: run:r-solo says "Team transport unavailable: <reason>".
+  6. UN-TEAMED: run:r-solo says "Team transport unavailable: <reason>"; its composer says that Send
+     starts a separate Ask and does not steer the live run (studio#606 item 4).
   7. CLOSED: /s/chat-gone renders r-old under "The conversation before this was closed. …"; a
      FAILED chat read says so with a retry and never claims the conversation closed.
   8. R4: a draft and the thread's scroll survive switching to another session and back.
@@ -203,6 +204,10 @@ with sync_playwright() as p:
     page.wait_for_function(
         "() => !!document.querySelector('[data-testid=\"chain-transport\"]')", timeout=10000)
     solo = page.evaluate(CHAIN, "r-solo")
+    scope = page.get_by_test_id("session-composer-scope")
+    scope_text = scope.inner_text() if scope.count() == 1 else None
+    check("composer-scope", scope_text is not None and scope_text.startswith("Send asks a separate question")
+          and "does not steer this one" in scope_text, scope=scope_text)
     check("un-teamed", solo["transport"] == "Team transport unavailable: the team bus was unreachable at launch"
           and page.get_by_test_id("session-composer-input").input_value() == ""
           # a first visit starts at the top, not at the last session's scroll (Copilot)

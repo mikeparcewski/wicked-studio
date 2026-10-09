@@ -27,6 +27,9 @@ export const PA_SCOPE_STEP = 'pa-scope';
 /** One picked phase, in the operator's order. */
 export interface PickedPhase {
   catalog: string;
+  /** (studio#617, wicked-core#810) The step's worker pool, when one is set: at most the entry's
+   *  pool (a step may only lower it; the engine refuses a raise as `pool_raised`). */
+  pool?: number;
 }
 
 /**
@@ -39,7 +42,9 @@ export function planFromSelection(picked: readonly PickedPhase[], touch: readonl
   const steps = picked.map((p) => {
     const n = (seen.get(p.catalog) ?? 0) + 1;
     seen.set(p.catalog, n);
-    return n === 1 ? { catalog: p.catalog } : { catalog: p.catalog, id: `${p.catalog}-${n}` };
+    const step: { catalog: string; id?: string; pool?: number } = n === 1 ? { catalog: p.catalog } : { catalog: p.catalog, id: `${p.catalog}-${n}` };
+    if (p.pool !== undefined) step.pool = p.pool;
+    return step;
   });
   const cleaned = touch.map((t) => t.trim()).filter((t) => t !== '');
   return cleaned.length > 0 ? { steps, touch: [...new Set(cleaned)] } : { steps };
@@ -259,6 +264,12 @@ export interface PlanGateView {
   /** The held plan's authored phases (catalog ids), for an edit: no `pa-scope`, no deliver step. */
   editSeed: string[];
   /**
+   * (studio#617, wicked-core#810) Each {@link editSeed} step's worker pool as the held plan sets it
+   * (`plan.proposed.steps[].pool`), aligned with `editSeed`; `null` where the step sets none (it
+   * takes its entry's). Optional so a hand-built view reads as "none set".
+   */
+  editPools?: Array<number | null>;
+  /**
    * THE PLAN THIS GATE HOLDS (ship-proof F4): every step of `plan.proposed`, in order — nothing
    * stripped — with the `id` the card shows it under and the `catalog` that says WHAT it is.
    *
@@ -323,8 +334,9 @@ export function planGateOf(team: RunTeamResponse): PlanGateView | null {
     ? (scored.payload['reasons'] as unknown[]).filter((x): x is string => typeof x === 'string')
     : [];
   const steps = Array.isArray(proposed?.payload['steps'])
-    ? (proposed.payload['steps'] as Array<{ catalog?: unknown; id?: unknown }>)
+    ? (proposed.payload['steps'] as Array<{ catalog?: unknown; id?: unknown; pool?: unknown }>)
     : [];
+  const authored = steps.filter((st) => st.id !== PA_SCOPE_STEP && st.catalog !== DELIVER_STEP && typeof st.catalog === 'string');
   return {
     gateId: str(p['gate_id']) ?? '',
     ord: typeof p['ord'] === 'number' ? p['ord'] : 0,
@@ -335,9 +347,8 @@ export function planGateOf(team: RunTeamResponse): PlanGateView | null {
     score: typeof scored?.payload['score'] === 'number' ? scored.payload['score'] : null,
     reasons: reasons.map((r) => r.replace(SHA40, '$1')),
     floorAdded: Array.isArray(diff?.added) ? diff.added.filter((x): x is string => typeof x === 'string') : [],
-    editSeed: steps
-      .filter((st) => st.id !== PA_SCOPE_STEP && st.catalog !== DELIVER_STEP && typeof st.catalog === 'string')
-      .map((st) => st.catalog as string),
+    editSeed: authored.map((st) => st.catalog as string),
+    editPools: authored.map((st) => (typeof st.pool === 'number' && Number.isInteger(st.pool) && st.pool >= 1 ? st.pool : null)),
     // Nothing stripped, nothing renamed, NOTHING DROPPED: a step the payload could not name stays
     // in the list as `id: null`, because losing it would make the count disagree with the plan
     // again — which is the whole defect (codex review of the F4 PR, LOW).

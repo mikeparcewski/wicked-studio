@@ -1,6 +1,6 @@
 import type { SessionView } from '../api/types.js';
 import { distinctLabels, planStepLabel, stepLabelOf, type ChainModel } from './chainModel.js';
-import { draftSteps, type DraftStep, type GateDraft } from './planDraft.js';
+import { draftSteps, heldPoolsOf, type DraftStep, type GateDraft } from './planDraft.js';
 import { DELIVER_STEP, PA_SCOPE_STEP, type PlanGateView } from './planModel.js';
 
 /**
@@ -41,6 +41,45 @@ export interface OrderRow {
   added: boolean;
   /** The row's index in the editable list; `null` for the fixed ends and every mid-run row. */
   index: number | null;
+  /**
+   * (studio#617, wicked-core#810) The step's worker pool where the editor may LOWER it: an editable
+   * gate row whose entry's pool is above 1. `value` is what the step is sent with (the draft's, else
+   * the held plan's, else the entry's); `ceiling` is the entry's pool, never exceeded. `null`
+   * everywhere else (a pool of 1 has nothing to lower; a running plan's steps are set).
+   */
+  pool: { value: number; ceiling: number } | null;
+}
+
+/**
+ * (studio#617, wicked-core#810) A catalog entry's worker pool: the most a plan step of it may ask
+ * for. Read off `GET /catalog`'s entry as `pool` (wicked-core's `CatalogEntry.pool`); an entry
+ * without one, or an engine before the field, is a pool of 1 — which a step cannot lower.
+ */
+export function poolCeiling(entry: object | undefined): number {
+  const p = (entry as { pool?: unknown } | undefined)?.pool;
+  return typeof p === 'number' && Number.isInteger(p) && p >= 1 ? p : 1;
+}
+
+/** Each catalog id's pool ceiling, for the entries whose pool is above 1. */
+export function poolCeilings(entries: readonly { id: string }[]): ReadonlyMap<string, number> {
+  const out = new Map<string, number>();
+  for (const e of entries) {
+    const c = poolCeiling(e);
+    if (c > 1) out.set(e.id, c);
+  }
+  return out;
+}
+
+/** The pools a step may be sent with: 1 up to its entry's (lower-only — a raise is `pool_raised`). */
+export function poolChoices(ceiling: number): number[] {
+  return Array.from({ length: Math.max(1, ceiling) }, (_, i) => i + 1);
+}
+
+/** Whether `pool` may be set on a step whose entry's pool is `ceiling`; the refusal in words when not. */
+export function poolRefusal(label: string, pool: number, ceiling: number): string | null {
+  if (!Number.isInteger(pool) || pool < 1) return `${label}’s pool is at least 1.`;
+  if (pool > ceiling) return `${label}’s pool can only be lowered: its step allows ${ceiling}, and the engine refuses a raise.`;
+  return null;
 }
 
 /** What the engine's ratchet and floor fix at this gate — and the words its steps go by. */
@@ -121,12 +160,23 @@ function keyed(steps: readonly { catalog: string }[]): string[] {
 }
 
 /** The editor's rows at a plan gate: the fixed scope row, the editable steps, the fixed hand-over. */
-export function gateRows(gate: Pick<PlanGateView, 'ord' | 'floorAdded' | 'planSteps' | 'editSeed'>, draft: GateDraft | null): OrderRow[] {
+export function gateRows(
+  gate: Pick<PlanGateView, 'ord' | 'floorAdded' | 'planSteps' | 'editSeed' | 'editPools'>,
+  draft: GateDraft | null,
+  ceilings: ReadonlyMap<string, number> = new Map(),
+): OrderRow[] {
   const ctx = orderContext(gate);
   const steps = draftSteps(draft ?? { seed: gate.editSeed, added: [], order: null });
-  const rows: OrderRow[] = steps.map((s, i) => ({ key: s.id, catalog: s.catalog, label: stepWord(s, ctx.words), fixed: fixedAt(steps, i, ctx), added: s.added, index: i }));
-  if (ctx.scope) rows.unshift({ key: 'scope', catalog: PA_SCOPE_STEP, label: stepLabelOf(PA_SCOPE_STEP), fixed: 'scope', added: false, index: null });
-  if (ctx.deliver) rows.push({ key: 'deliver', catalog: DELIVER_STEP, label: stepLabelOf(DELIVER_STEP), fixed: 'deliver', added: false, index: null });
+  const held = heldPoolsOf(gate.editSeed, gate.editPools);
+  const rows: OrderRow[] = steps.map((s, i) => {
+    const fixed = fixedAt(steps, i, ctx);
+    const ceiling = ceilings.get(s.catalog) ?? 1;
+    // A step that has run (or the floor placed) keeps its pool too: only an editable row offers it.
+    const pool = fixed === null && ceiling > 1 ? { value: Math.min(ceiling, s.pool ?? held[s.id] ?? ceiling), ceiling } : null;
+    return { key: s.id, catalog: s.catalog, label: stepWord(s, ctx.words), fixed, added: s.added, index: i, pool };
+  });
+  if (ctx.scope) rows.unshift({ key: 'scope', catalog: PA_SCOPE_STEP, label: stepLabelOf(PA_SCOPE_STEP), fixed: 'scope', added: false, index: null, pool: null });
+  if (ctx.deliver) rows.push({ key: 'deliver', catalog: DELIVER_STEP, label: stepLabelOf(DELIVER_STEP), fixed: 'deliver', added: false, index: null, pool: null });
   return rows;
 }
 
@@ -141,6 +191,7 @@ export function midRunRows(chain: ChainModel): OrderRow[] {
     fixed: s.catalog === DELIVER_STEP ? 'deliver' : s.state === 'done' || s.state === 'checked' || s.state === 'failed' ? 'done' : 'set',
     added: false,
     index: null,
+    pool: null,
   }));
 }
 

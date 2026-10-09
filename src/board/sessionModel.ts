@@ -237,3 +237,20 @@ export function orphanedOf(status: string, frames: readonly OrphanFrame[] | unde
   }
   return null;
 }
+
+const LIVE_RUN_ENDS = new Set(['completed', 'failed', 'cancelled']);
+
+/**
+ * studio#606 (4): what the session composer's Send does while the session holds a live run. Free
+ * text is handed to Ask, which starts its OWN run — the daemon has no free-text steer for a running
+ * run — so a "Stop this run …" typed here used to start a second run and steer nothing. The
+ * composer says so before Send, and names what does change this run. `null` when nothing is live,
+ * and on a live chat's own session (the text replies into that chat).
+ */
+export const SEPARATE_ASK_NOTE =
+  'Send asks a separate question: it starts its own run and does not steer this one. To change this run, answer its question in the thread, add a step with /, or message a working step from its ⋯ — and ⋯ → Stop this session stops it.';
+
+export function composerScopeNote(runs: readonly SessionView[], repliesIntoChat: boolean): string | null {
+  if (repliesIntoChat) return null;
+  return runs.some((v) => !LIVE_RUN_ENDS.has(v.session.status)) ? SEPARATE_ASK_NOTE : null;
+}
