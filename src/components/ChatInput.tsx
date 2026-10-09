@@ -611,16 +611,21 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   // While `POST /runs` is outstanding past LAUNCH_PROBE_AFTER_SECS, read `GET /runs/:id` every other
   // second; once the daemon serves the run, the composer offers it ("Your run started — open it")
   // instead of sitting on a spinner. The 201 stays the authority: it navigates when it lands.
+  // The answer is matched against the CURRENT pending id (a ref), not cancelled per tick: a probe
+  // slower than the 1 s ticker must still land. One probe in flight at a time.
+  const pendingRunRef = useRef<string | null>(null);
+  pendingRunRef.current = submitting ? pendingRunId : null;
+  const probeInFlight = useRef(false);
   useEffect(() => {
-    if (!submitting || pendingRunId === null || startedRunId !== null) return;
+    if (!submitting || pendingRunId === null || startedRunId !== null || probeInFlight.current) return;
     if (elapsedSecs < LAUNCH_PROBE_AFTER_SECS || elapsedSecs % 2 !== 1) return;
-    let cancelled = false;
     const id = pendingRunId;
+    probeInFlight.current = true;
     Promise.resolve()
       .then(() => api.getRun(id))
-      .then(() => { if (!cancelled) setStartedRunId(id); })
-      .catch(() => { /* not there yet (404) or unreadable — keep waiting on the POST */ });
-    return () => { cancelled = true; };
+      .then(() => { if (pendingRunRef.current === id) setStartedRunId(id); })
+      .catch(() => { /* not there yet (404) or unreadable — keep waiting on the POST */ })
+      .finally(() => { probeInFlight.current = false; });
   }, [submitting, pendingRunId, startedRunId, elapsedSecs]);
 
   function openStartedRun(id: string): void {
