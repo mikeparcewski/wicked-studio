@@ -32,7 +32,7 @@ const PHASE2 = 'Crew phase 2/3: writing the draft (draft)…';
 beforeEach(() => {
   useDocThreadStore.setState({
     messages: {}, genState: {}, pending: {}, hydrated: {}, landed: {}, lastError: {},
-    lastSignalAt: {}, expectedDividers: {}, bindings: {}, held: {}, boundRun: {},
+    lastSignalAt: {}, expectedDividers: {}, boundRun: {},
   });
   vi.useRealTimers();
 });
