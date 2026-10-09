@@ -426,7 +426,9 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   // default — byte-identical to the pre-slice request. The list loads lazily on
   // the dropdown's first open (or on mount when pre-bound, to resolve the name).
   const [projects, setProjects] = useState<Project[]>([]);
-  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(prefill?.projectId ?? null);
+  // S16a-4f (codex r1): the flat launch form is pre-bound by whichever seed carried a project — the
+  // retry prefill, else the steer prefill (the pre-bound `/p/:id/build/new` route moved to the Desk).
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(prefill?.projectId ?? steerSeed?.projectId ?? null);
   const [showNewProject, setShowNewProject] = useState(false);
   const projectsRequested = useRef(false);
 

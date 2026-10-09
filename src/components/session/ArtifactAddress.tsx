@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo } from 'react';
 import type { ArtifactSize } from '../../board/artifactMorph.js';
 import { addressFor, artifactPath } from '../../board/artifactAddress.js';
 import type { Navigate } from '../../hooks/useRoute.js';
@@ -39,6 +39,19 @@ export function useArtifactAddress(): ArtifactAddressValue | null {
 
 const RANK: Record<ArtifactSize, number> = { inline: 0, pane: 1, full: 2 };
 
+const GROW_MARK = 'wkArtifactGrow';
+
+/** Mark the entry just pushed as an artifact grow (merged into its existing state). */
+function markGrowEntry(): void {
+  const cur = (window.history.state ?? {}) as Record<string, unknown>;
+  window.history.replaceState({ ...cur, [GROW_MARK]: true }, '');
+}
+
+function isGrowEntry(): boolean {
+  const cur = window.history.state as Record<string, unknown> | null;
+  return cur !== null && typeof cur === 'object' && cur[GROW_MARK] === true;
+}
+
 export function ArtifactAddressProvider({ sessionId, routeKey, routeSize, routeVersion = null, navigate, children }: {
   sessionId: string;
   /** The key the address names (`/s/:id/a/:key`), or null on the session's own address. */
@@ -49,18 +62,16 @@ export function ArtifactAddressProvider({ sessionId, routeKey, routeSize, routeV
   navigate: Navigate;
   children: React.ReactNode;
 }): React.ReactElement {
-  // How many artifact entries THIS page pushed and has not popped: a shrink pops one of them.
-  const pushed = useRef(0);
-  useEffect(() => { pushed.current = 0; }, [sessionId]);
-
+  // A grow marks the entry it pushes (in the entry's own history state, so browser Back / Forward
+  // keep it exact — codex r1): a shrink from a marked entry goes Back to the step below it; from any
+  // other entry (a first-entry deep link, a version lens) it replaces in place.
   const write = useCallback<Writer>((key, from, to) => {
     if (RANK[to] > RANK[from]) {
-      pushed.current += 1;
       navigate(addressFor(sessionId, key, to));
+      markGrowEntry();
       return;
     }
-    if (pushed.current > 0) {
-      pushed.current -= 1;
+    if (isGrowEntry()) {
       window.history.back();
       return;
     }
@@ -71,19 +82,21 @@ export function ArtifactAddressProvider({ sessionId, routeKey, routeSize, routeV
   // address folds the open one back.
   const mounted = useMountedArtifacts((s) => (routeKey !== null ? (s.keys[routeKey] ?? 0) > 0 : false));
   useEffect(() => {
-    const store = useArtifactSizes.getState();
     if (routeKey === null) {
-      const top = topmostArtifact(store);
-      if (top !== null) setArtifactSize(top, 'inline');
+      // Every grown one folds back (codex r1: not only the topmost).
+      for (let top = topmostArtifact(useArtifactSizes.getState()); top !== null; top = topmostArtifact(useArtifactSizes.getState())) {
+        setArtifactSize(top, 'inline');
+      }
       return;
     }
     if (!mounted) return;
-    if (store.sizes[routeKey] !== routeSize) setArtifactSize(routeKey, routeSize);
+    if (useArtifactSizes.getState().sizes[routeKey] !== routeSize) setArtifactSize(routeKey, routeSize);
   }, [routeKey, routeSize, mounted]);
 
   const pickVersion = useCallback((key: string, version: number | null, how: 'push' | 'replace') => {
     const to = artifactPath(sessionId, key, 'full', version);
-    if (how === 'push') { pushed.current += 1; navigate(to); } else navigate(to, { replace: true });
+    // A lens entry is not a grow: shrinking from it replaces (one step), Back returns to the head.
+    if (how === 'push') navigate(to); else navigate(to, { replace: true });
   }, [sessionId, navigate]);
   const value = useMemo<ArtifactAddressValue>(() => ({ write, routeKey, routeVersion, pickVersion }), [write, routeKey, routeVersion, pickVersion]);
   return <ArtifactAddressContext.Provider value={value}>{children}</ArtifactAddressContext.Provider>;

@@ -46,7 +46,8 @@ function Missing({ k }: { k: string | null }): React.ReactElement {
 }
 
 describe('the morph and the address in step', () => {
-  beforeEach(() => { resetArtifactSizes(); useMountedArtifacts.setState({ keys: {} }); });
+  // The grow mark lives in the history entry's state (codex r1); a mocked navigate pushes no entry.
+  beforeEach(() => { resetArtifactSizes(); useMountedArtifacts.setState({ keys: {} }); window.history.replaceState(null, '', '/'); });
   afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
   it('grow pushes /a/<key>?size=pane, ⤢ pushes ?size=full; a shrink after them goes Back', () => {
@@ -86,5 +87,28 @@ describe('the morph and the address in step', () => {
     render(<Missing k="r9:nope/none" />);
     expect(screen.getByTestId('missing')).toHaveTextContent('missing');
     expect(Object.keys(useArtifactSizes.getState().sizes)).toEqual([]);
+  });
+});
+
+describe('codex r1 — browser Back keeps the shrink exact', () => {
+  beforeEach(() => { resetArtifactSizes(); useMountedArtifacts.setState({ keys: {} }); window.history.replaceState(null, '', '/'); });
+  afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+
+  it('a shrink goes Back only from an entry a grow pushed; on any other entry it replaces', () => {
+    // A real push per grow, so each entry carries its own mark.
+    const navigate = vi.fn((path: string, opts?: { replace?: boolean }) => {
+      if (opts?.replace) window.history.replaceState(window.history.state, '', path);
+      else window.history.pushState({}, '', path);
+    });
+    const back = vi.spyOn(window.history, 'back').mockImplementation(() => {});
+    let write: ReturnType<typeof useArtifactAddressWriter> = null;
+    render(<ArtifactAddressProvider sessionId="run:r1" routeKey={null} routeSize="pane" navigate={navigate}><Probe onWriter={(w) => { write = w; }} /></ArtifactAddressProvider>);
+    write!(KEY, 'inline', 'pane');
+    expect((window.history.state as Record<string, unknown>)['wkArtifactGrow']).toBe(true);
+    // The browser's Back left the grown entry: the entry now current was not pushed by a grow.
+    window.history.replaceState({}, '', '/s/run%3Ar1');
+    write!(KEY, 'pane', 'inline');
+    expect(back).not.toHaveBeenCalled();
+    expect(navigate).toHaveBeenLastCalledWith('/s/run%3Ar1', { replace: true });
   });
 });
