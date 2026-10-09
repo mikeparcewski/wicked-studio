@@ -241,6 +241,23 @@ describe('the chat-launch wire — the GroupChat seat machinery, one warm sessio
     expect(useLiveChatsStore.getState().sessions[body.chatId]?.seats).toEqual(['claude', 'pi']);
   });
 
+  it('studio#631: a seat the composer helpers row turned off is not opened on the chat', async () => {
+    const { useComposerSeats, resetComposerSeats } = await import('../src/store/composerSeats.js');
+    resetComposerSeats();
+    useComposerSeats.getState().toggle('pi');
+    try {
+      const user = userEvent.setup();
+      wireDiagnostics('present');
+      dock();
+      await user.type(screen.getByTestId('assist-input'), 'what is in the estate store?');
+      await user.click(screen.getByTestId('assist-send'));
+      await waitFor(() => expect(openChat).toHaveBeenCalledTimes(1));
+      expect((openChat.mock.calls[0]?.[0] as { clis?: string[] }).clis).toEqual(['claude']);
+    } finally {
+      resetComposerSeats();
+    }
+  });
+
   it('a second send REUSES the warm session and the pack rides the FIRST message only', async () => {
     const user = userEvent.setup();
     wireDiagnostics('present');
