@@ -4,8 +4,8 @@ wicked_theme_test.py — DES-STUDIO-REBUILD-001 S1: the wicked themes and self-h
 in a real browser at 1440x700.
 
   1. DEFAULT UNCHANGED: with the fixture's default appearance, <html> carries no data-theme,
-     the body's computed font is Archivo (the base --font-sans in styles/tokens.css since S18c,
-     under every skin), that face is actually loaded (document.fonts), and the
+     the body's computed font is Archivo (the base --font-sans in styles/tokens.css since S18c),
+     that face is actually loaded (document.fonts), and the
      computed --accent is the default accent (230/74/68).
   2. WICKED-LIGHT: on /theme, choosing "Wicked light" stamps data-theme="wicked-light",
      writes the harbor preset inline (200 / 47% / 25%), the computed --accent is #224A5E
@@ -13,14 +13,12 @@ in a real browser at 1440x700.
      carries theme "wicked-light" with the preset.
   3. THE ACCENT PICKER STILL WORKS: ArrowRight x10 on the hue wheel moves --_accent-h and
      the computed --accent, and the theme stays wicked-light.
-  4. A SKIN NEVER CHANGES THE THEME: choosing the other skin flips data-skin, and
-     data-theme plus the accent stay exactly as they were.
   5. WICKED-DARK stamps data-theme="wicked-dark".
   6. 0 FONT CDN REQUESTS over the whole session, and at least one woff2 served same-origin.
   7. THE OFL LICENCES SHIP: dist/fonts/LICENSE-{Inter,Archivo,JetBrainsMono}.txt are served.
 
 Captures: e2e/shots/wicked-light-theme.png, e2e/shots/wicked-dark-theme.png.
-Env: FEEDBACK_PORT (default 4351), STUDIO_SKIN. Prints a JSON report; exit 0/1.
+Env: FEEDBACK_PORT (default 4351). Prints a JSON report; exit 0/1.
 """
 
 import json
@@ -28,7 +26,7 @@ import os
 import re
 import sys
 
-from uxfix_fixture import DEFAULT_APPEARANCE, HIDE_GATE_TOASTS, REPO, STUDIO_SKIN, ensure_build, set_fixture, start_server
+from uxfix_fixture import DEFAULT_APPEARANCE, HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4351"))
 W, H = 1440, 700
@@ -60,7 +58,6 @@ STATE = """async () => {
   const fam = getComputedStyle(document.body).fontFamily;
   return {
     theme: root.getAttribute('data-theme'),
-    skin: root.getAttribute('data-skin'),
     h: root.style.getPropertyValue('--_accent-h'),
     s: root.style.getPropertyValue('--_accent-s'),
     l: root.style.getPropertyValue('--_accent-l'),
@@ -95,11 +92,10 @@ with sync_playwright() as p:
     page.add_style_tag(content=HIDE_GATE_TOASTS)
     page.wait_for_function("() => document.documentElement.style.getPropertyValue('--_accent-h') !== ''", timeout=15000)
     s0 = page.evaluate(STATE)
-    # S18c moved the Desk's face into styles/tokens.css (--font-sans Archivo), so the default body font
-    # is Archivo under every skin; the theme and the accent are the defaults either way.
+    # S18c moved the Desk's face into styles/tokens.css (--font-sans Archivo): the default body font.
     face, face_loaded = "Archivo", s0["archivoLoaded"]
     check("default_unchanged", s0["theme"] is None and s0["bodyFont"] == face and face_loaded
-          and s0["accent"] == s0["defaultAccent"] and s0["skin"] == STUDIO_SKIN, state=s0)
+          and s0["accent"] == s0["defaultAccent"], state=s0)
 
     # 2. wicked-light writes the harbor accent; computed --accent is #224A5E
     try:
@@ -125,15 +121,6 @@ with sync_playwright() as p:
     s2 = page.evaluate(STATE)
     check("accent_picker_works", s2["h"] == "210" and s2["accent"] != s1["accent"] and s2["theme"] == "wicked-light",
           state=s2)
-
-    # 4. choosing a skin never changes the theme
-    other = "compact-rail" if STUDIO_SKIN != "compact-rail" else "studio"
-    page.get_by_test_id(f"skin-option-{other}").click()
-    page.wait_for_function(f"() => document.documentElement.getAttribute('data-skin') === '{other}'", timeout=5000)
-    s3 = page.evaluate(STATE)
-    check("skin_keeps_theme", s3["theme"] == "wicked-light" and s3["accent"] == s2["accent"] and s3["h"] == s2["h"],
-          state=s3)
-    page.get_by_test_id(f"skin-option-{STUDIO_SKIN}").click()
 
     # 5. wicked-dark
     page.get_by_test_id("theme-wicked-dark").click()

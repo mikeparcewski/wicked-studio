@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-desk_demo_video_status_test.py — studio#507 at 1440x900, under STUDIO_SKIN=desk.
+desk_demo_video_status_test.py — studio#507 at 1440x900, on the Desk.
 
 On the released 0.6.1 Desk the inline "Demo video" artifact played in place (S15d, #503), but its state
 line ("✓ Ready to watch · 3 chapters · 1:45 · codex reviews, claude records") rendered half-hidden
@@ -33,14 +33,14 @@ import json
 import os
 import sys
 
-from uxfix_fixture import DEFAULT_APPEARANCE, HIDE_GATE_TOASTS, REPO, STUDIO_SKIN, ensure_build, set_fixture, start_server
+from uxfix_fixture import DEFAULT_APPEARANCE, HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4464"))
 W, H = 1440, 900
 SHOTS = REPO / "e2e" / "shots"
 ART = '[data-testid="artifact"][data-kind="demo-video"]'
 
-report: dict = {"ok": False, "skin": STUDIO_SKIN, "steps": {}}
+report: dict = {"ok": False, "steps": {}}
 
 
 def fail(step: str, why) -> None:
@@ -56,8 +56,6 @@ def check(step: str, ok: bool, **detail) -> None:
         sys.exit(1)
 
 
-if STUDIO_SKIN != "desk":
-    fail("skin", f"desk journeys run under STUDIO_SKIN=desk, not {STUDIO_SKIN}")
 
 dist = ensure_build(fail)
 origin = start_server(PORT, dist)

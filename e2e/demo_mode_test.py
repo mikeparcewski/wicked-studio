@@ -24,8 +24,8 @@ review gate → watch. Against the `demo_runs` fixture (crew api-types 0.61.0 wi
               says evaluator ≠ creator (claude recorded, codex reviewed), read-only, synthetic
               labelled; /demo lists the run.
 
-Captures (e2e/shots/): demo-<skin>-plan.png, demo-<skin>-review.png, demo-<skin>-watch.png.
-Env: FEEDBACK_PORT (default 4391), STUDIO_SKIN. JSON report; exit 0/1.
+Captures (e2e/shots/): demo-desk-plan.png, demo-desk-review.png, demo-desk-watch.png.
+Env: FEEDBACK_PORT (default 4391). JSON report; exit 0/1.
 """
 
 import json
@@ -33,19 +33,18 @@ import os
 import sys
 import urllib.request
 
-from uxfix_fixture import (DEFAULT_APPEARANCE, HIDE_GATE_TOASTS, REPO, STUDIO_SKIN, ensure_build,
+from uxfix_fixture import (DEFAULT_APPEARANCE, HIDE_GATE_TOASTS, REPO, ensure_build,
                            set_fixture, start_server)
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4391"))
 W, H = 1440, 700
 SHOTS = REPO / "e2e" / "shots"
 PROJECT = "upload-endpoint"
-SKIN = STUDIO_SKIN
 APP = "http://127.0.0.1:5173/"
 AUDIENCE = "New team leads who have never seen the app"
 SHOW = "How a request goes from intake to done, and where people approve"
 
-report: dict = {"ok": False, "skin": SKIN, "steps": {}}
+report: dict = {"ok": False, "steps": {}}
 
 
 class SectionFailed(Exception):
@@ -86,7 +85,7 @@ with sync_playwright() as p:
     page.on("request", lambda r: run_posts.append(r.url)
             if r.method == "POST" and r.url.endswith("/api/v1/runs") else None)
 
-    set_fixture(origin, demo_runs=True, reset_demo=True, appearance={**DEFAULT_APPEARANCE, "skin": SKIN})
+    set_fixture(origin, demo_runs=True, reset_demo=True, appearance={**DEFAULT_APPEARANCE})
     state: dict = {}
 
     def stage_is(stage: str, timeout: int = 15000) -> None:
@@ -99,7 +98,6 @@ with sync_playwright() as p:
         # "Make a demo" chip is the way in, and a project's Video mode still holds the start form.
         page.goto(f"{origin}/demo", wait_until="networkidle")
         page.wait_for_function("() => location.pathname === '/everything' && new URLSearchParams(location.search).get('kind') === 'videos'", timeout=10000)
-        check("skin-applied", page.evaluate("() => document.documentElement.getAttribute('data-skin')") == SKIN)
         page.get_by_test_id("everything-made").wait_for(state="visible", timeout=10000)
         page.wait_for_function("() => document.querySelector('[data-testid=\"everything-made\"]')?.dataset.index !== 'untried'", timeout=10000)
         check("demo-page-empty-says-how", "No videos yet" in page.get_by_test_id("everything-empty").inner_text())
@@ -129,7 +127,7 @@ with sync_playwright() as p:
         check("nothing-recorded-before-approval",
               page.get_by_test_id("demo-record-progress").inner_text() == "0/3 recorded")
         check("stepper-on-plan", page.get_by_test_id("demo-stepper").get_attribute("data-step") == "plan")
-        page.screenshot(path=str(SHOTS / f"demo-{SKIN}-plan.png"))
+        page.screenshot(path=str(SHOTS / f"demo-desk-plan.png"))
         page.get_by_test_id("demo-edit-script").click()
         editor = page.get_by_test_id("demo-script-editor")
         editor.fill(editor.input_value() + "\n\nOpen on the dashboard.")
@@ -163,7 +161,7 @@ with sync_playwright() as p:
         verdicts = page.locator('[data-testid="demo-finding"]').evaluate_all("els => els.map(e => e.dataset.verdict)")
         check("per-issue-verdicts", verdicts == ["re-record", "re-encode"], verdicts=verdicts)
         check("governance-seats-apart", page.get_by_test_id("demo-gov-seats").get_attribute("data-ok") == "true")
-        page.screenshot(path=str(SHOTS / f"demo-{SKIN}-review.png"))
+        page.screenshot(path=str(SHOTS / f"demo-desk-review.png"))
         page.locator('[data-testid="demo-rerecord"][data-key="02-approve"]').click()
         stage_is("recording")
         gate = [x for x in posts(origin) if x["route"] == "gate"][-1]
@@ -197,7 +195,7 @@ with sync_playwright() as p:
         check("draft-update-offered", page.get_by_test_id("demo-draft-update").is_visible())
         check("stepper-on-watch", page.get_by_test_id("demo-stepper").get_attribute("data-step") == "watch")
         page.get_by_test_id("demo-watch").scroll_into_view_if_needed()
-        page.screenshot(path=str(SHOTS / f"demo-{SKIN}-watch.png"))
+        page.screenshot(path=str(SHOTS / f"demo-desk-watch.png"))
         page.goto(f"{origin}/demo", wait_until="networkidle")
         rows = page.locator('[data-testid="everything-made-row"][data-kind="videos"]')
         rows.first.wait_for(state="visible")
@@ -213,11 +211,11 @@ with sync_playwright() as p:
             section()
         except SectionFailed:
             ok = False
-            page.screenshot(path=str(SHOTS / f"demo-{SKIN}-fail.png"))
+            page.screenshot(path=str(SHOTS / f"demo-desk-fail.png"))
             break
         except Exception as e:  # noqa: BLE001 — a journey reports, never tracebacks
             report["steps"][section.__name__] = {"ok": False, "error": repr(e)[:400]}
-            page.screenshot(path=str(SHOTS / f"demo-{SKIN}-fail.png"))
+            page.screenshot(path=str(SHOTS / f"demo-desk-fail.png"))
             ok = False
             break
     browser.close()

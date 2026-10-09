@@ -6,9 +6,7 @@ import { useAskThreadStore } from './store/askThread.js';
 import { AskLauncher } from './components/AskLauncher.js';
 import { CommandPalette, paletteShortcutEntries } from './components/CommandPalette.js';
 import { GateNotifications } from './components/GateNotifications.js';
-import { HomeBoard } from './components/HomeBoard.js';
 import { ProjectCampaignsView } from './components/ProjectCampaignsView.js';
-import { LeftSidebar } from './components/LeftSidebar.js';
 import { DocumentCanvas } from './components/DocumentCanvas.js';
 import { DocumentThread } from './components/DocumentThread.js';
 import { DemoMode } from './components/DemoMode.js';
@@ -27,7 +25,6 @@ import { SteeringPage } from './components/SteeringPage.js';
 import { MemoriesPanel } from './components/MemoriesPanel.js';
 import { GovernanceDashboard } from './components/GovernanceDashboard.js';
 import { TestingPage } from './components/TestingPage.js';
-import { RunsBottomPanel, RUNS_BAR_PX } from './components/RunsBottomPanel.js';
 import { ChatPanel } from './components/ChatPanel.js';
 import { GroupChat } from './components/GroupChat.js';
 import { WorkflowViewer } from './components/WorkflowViewer.js';
@@ -37,7 +34,6 @@ import { UndoToasts } from './components/UndoToasts.js';
 import { ConnectionStatus } from './components/ConnectionStatus.js';
 import { SystemSettings } from './components/SystemSettings.js';
 import { ThemePage } from './components/ThemePage.js';
-import { SkinRightRail } from './components/SkinRightRail.js';
 import { Desk } from './components/desk/Desk.js';
 import { SessionRail } from './components/desk/SessionRail.js';
 import { SessionPage } from './components/session/SessionView.js';
@@ -46,17 +42,13 @@ import { ObjectSheet } from './components/sheets/ObjectSheet.js';
 import { AltPeek } from './components/sheets/AltPeek.js';
 import { objectCommands, type ObjectCommands } from './components/sheets/objectCommands.js';
 import { cmdkObject, trackPointedObject } from './store/sheets.js';
-import { NeedsQueueSurface } from './components/NeedsYouQueue.js';
-import { useSkin } from './hooks/useSkin.js';
 import { useNeedsClock, useNeedsRows } from './hooks/useNeedsRows.js';
-import { deskShell, RIGHT_RAIL_PX, rightRailOpen } from './theming/skins.js';
 import { ambientProjectId } from './hooks/ambientProject.js';
 import { useEventStream } from './hooks/useEventStream.js';
 import { useVisitClock } from './hooks/useVisitClock.js';
 import { useProjectVisits } from './hooks/useProjectVisits.js';
 import { usePeekJump } from './hooks/usePeekJump.js';
 import { usePlacePanel } from './hooks/usePlacePanel.js';
-import { useRunsPanelStore } from './store/runsPanel.js';
 import { altChord, setShortcutsPaletteOpen, useGlobalShortcuts } from './hooks/useGlobalShortcuts.js';
 import { useTypeToComposer } from './hooks/useTypeToComposer.js';
 import { useLegacyRedirect, useRetiredSettingsRedirect, useSteeringRedirect, useTestingRedirect } from './hooks/useLegacyRedirect.js';
@@ -418,13 +410,6 @@ export function App(): React.ReactElement {
   // ── Studio wave 2a: peek (P), jump (G), back (B) — and the panels "back" reopens ──
   const peek = usePeekJump(runs, navigate, needRows);
   usePlacePanel('ask-dock', askOpen, setAskOpen);
-  const runsSheetOpen = useRunsPanelStore((s) => s.expanded);
-  const setRunsSheetOpen = useCallback((open: boolean) => {
-    const sheet = useRunsPanelStore.getState();
-    if (open) sheet.expand();
-    else sheet.collapse();
-  }, []);
-  usePlacePanel('runs-sheet', runsSheetOpen, setRunsSheetOpen);
 
   // ── Repo graph modal — opened from RepoDetailPage via onOpenGraph ───────────
   const [graphModalRepo, setGraphModalRepo] = useState<RepoEntry | null>(null);
@@ -621,12 +606,8 @@ export function App(): React.ReactElement {
     // `/` is the orchestrator board (§1.4, slice 5); the flat run list it replaced is
     // still at `/runs`, which the `panel === 'runs'` fallback below keeps rendering.
     if (panel === 'home') {
-      // The Desk (skin `desk`, S4) replaces the command center; same fold, same stores.
-      if (desk) {
-        return <Desk runs={runs} runsLoaded={runsLoaded} runsError={runsError} onRetryRuns={refresh} needRows={needRows} now={needsNow} navigate={navigate} onAsk={handToAsk} />;
-      }
-      // The board-level Ask invite opens the SAME dock the rail button opens.
-      return <HomeBoard runs={runs} runsLoaded={runsLoaded} navigate={navigate} onOpenAsk={() => setAskOpen(true)} />;
+      // The Desk (S4) — the one shell since the classic skins retired (S18d).
+      return <Desk runs={runs} runsLoaded={runsLoaded} runsError={runsError} onRetryRuns={refresh} needRows={needRows} now={needsNow} navigate={navigate} onAsk={handToAsk} />;
     }
     if (panel === 'workflows') {
       return (
@@ -790,51 +771,18 @@ export function App(): React.ReactElement {
     return runSurface();
   }
 
-  // DES-FEEDBACK-001 §7.3 / DES-FEEDBACK-003 §5.5: Document and Video are
-  // canvas-first — the rail auto-collapses on entry, and the runs bottom
-  // sheet auto-collapses on the same transition (EC27).
-  const immersive = projectId !== null && (mode === 'document' || mode === 'video');
-
-  // The skin's shell layout (theming/skins.ts): a right-rail skin reserves a full-height
-  // column at the right edge on EVERY route, which the Needs-you queue docks into by variant.
-  const skin = useSkin();
-  const railOpen = rightRailOpen(skin);
-  // The desk shell (S4): the session rail replaces the classic nav, and the runs bottom bar's
-  // job moves to the rail's rows — so the root reserves no bar.
-  const desk = deskShell(skin);
-
   return (
-    // §5.2: the root reserves the bar's 28px as padding — the collapsed bar is
-    // a ROW, not an overlay, so every surface (board, dashboards, canvas — and
-    // with it the version strip's proximity-sensor band, which ends at the
-    // canvas edge) ends ABOVE the bar. Nothing is ever covered while collapsed.
-    <div className="flex h-screen overflow-hidden bg-surface-base" data-shell={skin.shell} style={{ paddingBottom: desk ? 0 : RUNS_BAR_PX }}>
+    // One shell (S18d): the session rail on every route, the Desk on `/`. `data-shell="desk"` stays
+    // stamped as a constant — e2e waits on it.
+    <div className="flex h-screen overflow-hidden bg-surface-base" data-shell="desk">
       {/* The FIRST tabbable element (usability review #10): one Tab reaches a
           jump to the main content instead of a page's top-right Refresh. */}
       <SkipLink />
-      {desk ? (
-        <SessionRail runs={runs} needRows={needRows} navigate={navigate} pathname={pathname} />
-      ) : (
-        <LeftSidebar
-          runs={runs}
-          navigate={navigate}
-          pathname={pathname}
-          runPath={runPath}
-          immersive={immersive}
-        />
-      )}
+      <SessionRail runs={runs} needRows={needRows} navigate={navigate} pathname={pathname} />
 
       <div id="main" tabIndex={-1} className="flex flex-1 overflow-hidden" style={{ outline: 'none' }}>
         {renderCenter()}
       </div>
-
-      {railOpen && (
-        <SkinRightRail>
-          {skin.variants.needsQueue === 'rail' && (
-            <NeedsQueueSurface rows={needRows} runs={runs} navigate={navigate} now={needsNow} variant="rail" />
-          )}
-        </SkinRightRail>
-      )}
 
       {/* Right panel only when a run is selected */}
       {selected !== null && (
@@ -848,10 +796,10 @@ export function App(): React.ReactElement {
       <AskLauncher
         open={askOpen}
         onToggle={() => setAskOpen((v) => !v)}
-        rightOffsetPx={(selected !== null ? RIGHT_PANEL_PX : 0) + (railOpen ? RIGHT_RAIL_PX : 0)}
-        bottomOffsetPx={(desk && panel === 'home') || panel === 'session' ? DESK_COMPOSER_PX : chatComposerPx}
+        rightOffsetPx={selected !== null ? RIGHT_PANEL_PX : 0}
+        bottomOffsetPx={panel === 'home' || panel === 'session' ? DESK_COMPOSER_PX : chatComposerPx}
         // The Desk and a session have their own composer in this corner: there the bubble stands down.
-        bubble={!((desk && panel === 'home') || panel === 'session')}
+        bubble={!(panel === 'home' || panel === 'session')}
       >
         {askOpen && (
           <AskDock
@@ -890,20 +838,6 @@ export function App(): React.ReactElement {
         object={paletteObject}
       />
 
-      {/* The runs bottom panel (DES-FEEDBACK-003 §5, slice N): a fourth reader
-          of the SAME `useRuns()` array plus the client-held stores — zero new
-          requests, zero new sockets. Fixed at the viewport bottom, everywhere.
-          Inside a project route its counters scope to THAT project's runs
-          (DES-UX-001 §2.3 rule 2, slice S — `data-scope="project"`). */}
-      {!desk && (
-        <RunsBottomPanel
-          runs={runs}
-          runPath={runPath}
-          navigate={navigate}
-          immersive={immersive}
-          scopeProjectId={projectId}
-        />
-      )}
 
       {/* Gate toasts — renders above everything; scoped to the current run. NOT on the
           orchestrator board: there every waiting gate is already an answerable chip on

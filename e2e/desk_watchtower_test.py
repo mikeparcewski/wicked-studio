@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 desk_watchtower_test.py — S14 (DES-STUDIO-REBUILD-001 §5.4, §11 S14): the Watchtower placed, at
-1440x700 under STUDIO_SKIN=desk.
+1440x700 on the Desk.
 
 Against the in-process fixture (wave-1 corpus, b1 waiting at a gate, `watch_feed` on):
 
@@ -24,13 +24,13 @@ import json
 import os
 import sys
 
-from uxfix_fixture import HIDE_GATE_TOASTS, REPO, STUDIO_SKIN, ensure_build, set_fixture, start_server
+from uxfix_fixture import HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4352"))
 W, H = 1440, 700
 SHOTS = REPO / "e2e" / "shots"
 
-report: dict = {"ok": False, "skin": STUDIO_SKIN, "steps": {}}
+report: dict = {"ok": False, "steps": {}}
 
 
 def fail(step: str, why) -> None:
@@ -46,8 +46,6 @@ def check(step: str, ok: bool, **detail) -> None:
         sys.exit(1)
 
 
-if STUDIO_SKIN != "desk":
-    fail("skin", f"desk journeys run under STUDIO_SKIN=desk, not {STUDIO_SKIN}")
 
 CORPUS = dict(wave1=True, gate_now=["b1"], gate_simple=["b1"], status_over={}, extra_gates=[], extra_frames=[],
               trust_rules=False, gate_move=False)

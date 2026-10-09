@@ -78,9 +78,18 @@ describe('load (§3.3 startup)', () => {
 });
 
 describe('sanitizeAppearance (external store — never trusted)', () => {
+  it('ignores the legacy skin keys a <=0.6.2 record carries — never a failure, never a migration (S18d)', () => {
+    const legacy = { accent_h: 200, accent_s: 47, accent_l: 25, logo_url: null, theme: 'wicked-light', site_name: null,
+      skin: 'compact-rail', skin_migrated: true };
+    const clean = sanitizeAppearance(legacy);
+    expect(clean).toEqual({ accent_h: 200, accent_s: 47, accent_l: 25, logo_url: null, theme: 'wicked-light', site_name: null });
+    expect('skin' in clean).toBe(false);
+    expect('skin_migrated' in clean).toBe(false);
+  });
+
   it('clamps channels, defaults junk, and empties logo/theme correctly', () => {
     expect(sanitizeAppearance({ accent_h: 999, accent_s: -4, accent_l: 'x', logo_url: '', theme: 'sepia' }))
-      .toEqual({ accent_h: 359, accent_s: 0, accent_l: 68, logo_url: null, theme: 'dark', site_name: null, skin: 'desk', skin_migrated: true });
+      .toEqual({ accent_h: 359, accent_s: 0, accent_l: 68, logo_url: null, theme: 'dark', site_name: null });
     expect(sanitizeAppearance(null)).toEqual(NEW_INSTALL_APPEARANCE);
     expect(sanitizeAppearance({ accent_h: 179.6 }).accent_h).toBe(180);
     // site_name: a blank/whitespace value is the default (null); a real name is kept.

@@ -11,11 +11,11 @@
   "version": 1,
   "studioVersion": "0.6.5",
   "counts": {
-    "files": 223,
-    "occurrences": 2588,
-    "static": 2259,
-    "dynamic": 79,
-    "computed": 9
+    "files": 194,
+    "occurrences": 2280,
+    "static": 2028,
+    "dynamic": 49,
+    "computed": 8
   },
   "static": [
     {
@@ -48,24 +48,6 @@
         "src/components/RepoDetailPage.tsx",
         "src/components/RepoGraphModal.tsx",
         "src/components/RepositoriesPanel.tsx"
-      ]
-    },
-    {
-      "testId": "active-plan",
-      "files": [
-        "src/components/ProjectCard.tsx"
-      ]
-    },
-    {
-      "testId": "active-unit-description",
-      "files": [
-        "src/components/ProjectCard.tsx"
-      ]
-    },
-    {
-      "testId": "activity-line",
-      "files": [
-        "src/components/HomeCommand.tsx"
       ]
     },
     {
@@ -129,12 +111,6 @@
       ]
     },
     {
-      "testId": "all-runs-link",
-      "files": [
-        "src/components/HomeBoard.tsx"
-      ]
-    },
-    {
       "testId": "alt-peek",
       "files": [
         "src/components/sheets/AltPeek.tsx"
@@ -162,18 +138,6 @@
       "testId": "amendment-original",
       "files": [
         "src/components/RunTimeline.tsx"
-      ]
-    },
-    {
-      "testId": "annotation-scope-label",
-      "files": [
-        "src/components/PreGateAnnotate.tsx"
-      ]
-    },
-    {
-      "testId": "app-chrome",
-      "files": [
-        "src/components/AppChrome.tsx"
       ]
     },
     {
@@ -556,120 +520,6 @@
       ]
     },
     {
-      "testId": "attention-pill",
-      "files": [
-        "src/components/ProjectCard.tsx"
-      ]
-    },
-    {
-      "testId": "band-needs-you",
-      "files": [
-        "src/components/HomeBoard.tsx"
-      ]
-    },
-    {
-      "testId": "band-not-in-project",
-      "files": [
-        "src/components/HomeBoard.tsx"
-      ]
-    },
-    {
-      "testId": "band-not-in-project-toggle",
-      "files": [
-        "src/components/HomeBoard.tsx"
-      ]
-    },
-    {
-      "testId": "band-quiet",
-      "files": [
-        "src/components/HomeBoard.tsx"
-      ]
-    },
-    {
-      "testId": "band-quiet-toggle",
-      "files": [
-        "src/components/HomeBoard.tsx"
-      ]
-    },
-    {
-      "testId": "band-working",
-      "files": [
-        "src/components/HomeBoard.tsx"
-      ]
-    },
-    {
-      "testId": "band-working-toggle",
-      "files": [
-        "src/components/HomeBoard.tsx"
-      ]
-    },
-    {
-      "testId": "batch-approve-all",
-      "files": [
-        "src/components/BatchGateBar.tsx"
-      ]
-    },
-    {
-      "testId": "batch-bar",
-      "files": [
-        "src/components/BatchGateBar.tsx"
-      ]
-    },
-    {
-      "testId": "batch-clear",
-      "files": [
-        "src/components/BatchGateBar.tsx"
-      ]
-    },
-    {
-      "testId": "batch-failure-row",
-      "files": [
-        "src/components/BatchGateBar.tsx"
-      ]
-    },
-    {
-      "testId": "batch-ineligible",
-      "files": [
-        "src/components/BatchGateBar.tsx"
-      ]
-    },
-    {
-      "testId": "batch-preview",
-      "files": [
-        "src/components/BatchGateBar.tsx"
-      ]
-    },
-    {
-      "testId": "batch-reject-all",
-      "files": [
-        "src/components/BatchGateBar.tsx"
-      ]
-    },
-    {
-      "testId": "batch-reject-note",
-      "files": [
-        "src/components/BatchGateBar.tsx"
-      ]
-    },
-    {
-      "testId": "bell-popover",
-      "files": [
-        "src/components/NotificationBell.tsx"
-      ]
-    },
-    {
-      "testId": "bell-unread-count",
-      "files": [
-        "src/components/NotificationBell.tsx"
-      ]
-    },
-    {
-      "testId": "bell-window",
-      "files": [
-        "src/components/NotificationBell.tsx"
-      ]
-    },
-    {
       "testId": "brand-learn",
       "files": [
         "src/components/BrandLearn.tsx"
@@ -745,12 +595,6 @@
       "testId": "burn-rework",
       "files": [
         "src/components/Burn.tsx"
-      ]
-    },
-    {
-      "testId": "burn-total",
-      "files": [
-        "src/components/DeckBurnChart.tsx"
       ]
     },
     {
@@ -1108,18 +952,6 @@
       ]
     },
     {
-      "testId": "card-runs",
-      "files": [
-        "src/components/ProjectsPage.tsx"
-      ]
-    },
-    {
-      "testId": "card-split",
-      "files": [
-        "src/components/ProjectsPage.tsx"
-      ]
-    },
-    {
       "testId": "chain",
       "files": [
         "src/components/session/ChainLine.tsx"
@@ -1258,12 +1090,6 @@
       ]
     },
     {
-      "testId": "chat-needs-you",
-      "files": [
-        "src/components/ChatsPage.tsx"
-      ]
-    },
-    {
       "testId": "chat-open-error",
       "files": [
         "src/components/GroupChat.tsx"
@@ -1297,18 +1123,6 @@
       "testId": "chat-round-grid",
       "files": [
         "src/components/ChatThread.tsx"
-      ]
-    },
-    {
-      "testId": "chat-row",
-      "files": [
-        "src/components/ChatsPage.tsx"
-      ]
-    },
-    {
-      "testId": "chat-run-title",
-      "files": [
-        "src/components/ChatsPage.tsx"
       ]
     },
     {
@@ -1432,12 +1246,6 @@
       ]
     },
     {
-      "testId": "chat-seat",
-      "files": [
-        "src/components/ChatsPage.tsx"
-      ]
-    },
-    {
       "testId": "chat-send",
       "files": [
         "src/components/GroupChat.tsx"
@@ -1480,66 +1288,6 @@
       ]
     },
     {
-      "testId": "chats-clear-filters",
-      "files": [
-        "src/components/ChatsPage.tsx"
-      ]
-    },
-    {
-      "testId": "chats-empty",
-      "files": [
-        "src/components/ChatsPage.tsx"
-      ]
-    },
-    {
-      "testId": "chats-empty-filter",
-      "files": [
-        "src/components/ChatsPage.tsx"
-      ]
-    },
-    {
-      "testId": "chats-empty-live",
-      "files": [
-        "src/components/ChatsPage.tsx"
-      ]
-    },
-    {
-      "testId": "chats-filter",
-      "files": [
-        "src/components/ChatsPage.tsx"
-      ]
-    },
-    {
-      "testId": "chats-hidden-chip",
-      "files": [
-        "src/components/ChatsPage.tsx"
-      ]
-    },
-    {
-      "testId": "chats-kpis",
-      "files": [
-        "src/components/ChatsPage.tsx"
-      ]
-    },
-    {
-      "testId": "chats-list",
-      "files": [
-        "src/components/ChatsPage.tsx"
-      ]
-    },
-    {
-      "testId": "chats-new",
-      "files": [
-        "src/components/ChatsPage.tsx"
-      ]
-    },
-    {
-      "testId": "chats-page",
-      "files": [
-        "src/components/ChatsPage.tsx"
-      ]
-    },
-    {
       "testId": "chronicle-state",
       "files": [
         "src/components/WorkChronicle.tsx"
@@ -1567,12 +1315,6 @@
       "testId": "citation-mark",
       "files": [
         "src/components/citations.tsx"
-      ]
-    },
-    {
-      "testId": "command-center",
-      "files": [
-        "src/components/HomeBoard.tsx"
       ]
     },
     {
@@ -1822,213 +1564,9 @@
       ]
     },
     {
-      "testId": "create-first-project",
-      "files": [
-        "src/components/HomeBoard.tsx"
-      ]
-    },
-    {
       "testId": "create-parse",
       "files": [
         "src/components/DocumentThread.tsx"
-      ]
-    },
-    {
-      "testId": "dashboard-campaigns",
-      "files": [
-        "src/components/ProjectDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "dashboard-clear-filters",
-      "files": [
-        "src/components/ProjectDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "dashboard-delivery-summary",
-      "files": [
-        "src/components/ProjectDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "dashboard-do-work",
-      "files": [
-        "src/components/ProjectDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "dashboard-doc",
-      "files": [
-        "src/components/ProjectDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "dashboard-docs",
-      "files": [
-        "src/components/ProjectDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "dashboard-docs-grid",
-      "files": [
-        "src/components/ProjectDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "dashboard-docs-root",
-      "files": [
-        "src/components/ProjectDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "dashboard-docs-root-cancel",
-      "files": [
-        "src/components/ProjectDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "dashboard-docs-root-clear",
-      "files": [
-        "src/components/ProjectDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "dashboard-docs-root-edit",
-      "files": [
-        "src/components/ProjectDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "dashboard-docs-root-error",
-      "files": [
-        "src/components/ProjectDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "dashboard-docs-root-input",
-      "files": [
-        "src/components/ProjectDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "dashboard-docs-root-save",
-      "files": [
-        "src/components/ProjectDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "dashboard-docs-root-value",
-      "files": [
-        "src/components/ProjectDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "dashboard-empty-build",
-      "files": [
-        "src/components/ProjectDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "dashboard-empty-doc",
-      "files": [
-        "src/components/ProjectDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "dashboard-filter",
-      "files": [
-        "src/components/ProjectDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "dashboard-gate",
-      "files": [
-        "src/components/ProjectDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "dashboard-gates",
-      "files": [
-        "src/components/ProjectDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "dashboard-hidden-chip",
-      "files": [
-        "src/components/ProjectDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "dashboard-manage",
-      "files": [
-        "src/components/ProjectDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "dashboard-meta",
-      "files": [
-        "src/components/ProjectDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "dashboard-repo",
-      "files": [
-        "src/components/ProjectDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "dashboard-repos",
-      "files": [
-        "src/components/ProjectDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "dashboard-run",
-      "files": [
-        "src/components/ProjectDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "dashboard-run-needs-you",
-      "files": [
-        "src/components/ProjectDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "dashboard-run-retry",
-      "files": [
-        "src/components/ProjectDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "dashboard-run-title",
-      "files": [
-        "src/components/ProjectDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "dashboard-runs",
-      "files": [
-        "src/components/ProjectDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "dashboard-runs-empty",
-      "files": [
-        "src/components/ProjectDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "dashboard-runs-grid",
-      "files": [
-        "src/components/ProjectDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "dashboard-runs-window",
-      "files": [
-        "src/components/ProjectDashboard.tsx"
       ]
     },
     {
@@ -2374,12 +1912,6 @@
       ]
     },
     {
-      "testId": "demo-kpis",
-      "files": [
-        "src/components/MadeDashboard.tsx"
-      ]
-    },
-    {
       "testId": "demo-launch",
       "files": [
         "src/components/DemoMode.tsx"
@@ -2419,12 +1951,6 @@
       "testId": "demo-mode",
       "files": [
         "src/components/DemoMode.tsx"
-      ]
-    },
-    {
-      "testId": "demo-new",
-      "files": [
-        "src/components/MadeDashboard.tsx"
       ]
     },
     {
@@ -2497,30 +2023,6 @@
       "testId": "demo-run",
       "files": [
         "src/components/DemoMode.tsx"
-      ]
-    },
-    {
-      "testId": "demo-run-row",
-      "files": [
-        "src/components/MadeDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "demo-run-title",
-      "files": [
-        "src/components/MadeDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "demo-runs-empty",
-      "files": [
-        "src/components/MadeDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "demo-runs-grid",
-      "files": [
-        "src/components/MadeDashboard.tsx"
       ]
     },
     {
@@ -2955,12 +2457,6 @@
       ]
     },
     {
-      "testId": "doc-activity",
-      "files": [
-        "src/components/ProjectCard.tsx"
-      ]
-    },
-    {
       "testId": "doc-artifact-download",
       "files": [
         "src/components/DocumentThread.tsx"
@@ -3177,12 +2673,6 @@
       ]
     },
     {
-      "testId": "doc-overflow",
-      "files": [
-        "src/components/ProjectCard.tsx"
-      ]
-    },
-    {
       "testId": "doc-panel",
       "files": [
         "src/components/DocPanel.tsx"
@@ -3291,12 +2781,6 @@
       ]
     },
     {
-      "testId": "doc-tile",
-      "files": [
-        "src/components/ProjectCard.tsx"
-      ]
-    },
-    {
       "testId": "document-canvas",
       "files": [
         "src/components/DocumentCanvas.tsx"
@@ -3399,12 +2883,6 @@
       ]
     },
     {
-      "testId": "essence-entry",
-      "files": [
-        "src/components/HomeCommand.tsx"
-      ]
-    },
-    {
       "testId": "eval-history",
       "files": [
         "src/components/EvalHistory.tsx"
@@ -3450,12 +2928,6 @@
       "testId": "eval-history-unavailable",
       "files": [
         "src/components/EvalHistory.tsx"
-      ]
-    },
-    {
-      "testId": "event-log",
-      "files": [
-        "src/components/LiveOutput.tsx"
       ]
     },
     {
@@ -3747,78 +3219,6 @@
       ]
     },
     {
-      "testId": "execute-clear-filters",
-      "files": [
-        "src/components/MadeDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "execute-filter",
-      "files": [
-        "src/components/MadeDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "execute-hidden-chip",
-      "files": [
-        "src/components/MadeDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "execute-kpis",
-      "files": [
-        "src/components/MadeDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "execute-list",
-      "files": [
-        "src/components/MadeDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "execute-needs-you",
-      "files": [
-        "src/components/MadeDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "execute-new",
-      "files": [
-        "src/components/MadeDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "execute-retry",
-      "files": [
-        "src/components/MadeDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "execute-run-row",
-      "files": [
-        "src/components/MadeDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "execute-run-title",
-      "files": [
-        "src/components/MadeDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "execute-runs-empty",
-      "files": [
-        "src/components/MadeDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "execute-runs-grid",
-      "files": [
-        "src/components/MadeDashboard.tsx"
-      ]
-    },
-    {
       "testId": "export-format",
       "files": [
         "src/components/ExportMenu.tsx"
@@ -4053,12 +3453,6 @@
       ]
     },
     {
-      "testId": "gate-approaching",
-      "files": [
-        "src/components/ProjectCard.tsx"
-      ]
-    },
-    {
       "testId": "gate-badge",
       "files": [
         "src/components/DecisionsLedger.tsx"
@@ -4101,12 +3495,6 @@
       ]
     },
     {
-      "testId": "gate-latency-chart",
-      "files": [
-        "src/components/GateLatencyChart.tsx"
-      ]
-    },
-    {
       "testId": "gate-move",
       "files": [
         "src/components/SteeringGate.tsx"
@@ -4146,18 +3534,6 @@
       "testId": "gate-recommended",
       "files": [
         "src/components/SteeringGate.tsx"
-      ]
-    },
-    {
-      "testId": "gate-reject-note",
-      "files": [
-        "src/components/GateRejectNote.tsx"
-      ]
-    },
-    {
-      "testId": "gate-reject-preview",
-      "files": [
-        "src/components/GateRejectNote.tsx"
       ]
     },
     {
@@ -4605,12 +3981,6 @@
       ]
     },
     {
-      "testId": "guidance-save-state",
-      "files": [
-        "src/components/PreGateAnnotate.tsx"
-      ]
-    },
-    {
       "testId": "guidance-summary",
       "files": [
         "src/components/WorkChronicle.tsx"
@@ -4695,148 +4065,15 @@
       ]
     },
     {
-      "testId": "heading-dashboard",
-      "files": [
-        "src/components/LeftSidebar.tsx"
-      ]
-    },
-    {
-      "testId": "heading-new",
-      "files": [
-        "src/components/LeftSidebar.tsx"
-      ]
-    },
-    {
-      "testId": "home-activity",
-      "files": [
-        "src/components/HomeCommand.tsx"
-      ]
-    },
-    {
-      "testId": "home-ask",
-      "files": [
-        "src/components/HomeCommand.tsx"
-      ]
-    },
-    {
-      "testId": "home-burn-chart",
-      "files": [
-        "src/components/DeckBurnChart.tsx"
-      ]
-    },
-    {
       "testId": "home-calm",
       "files": [
         "src/components/NeedsYouQueue.tsx"
       ]
     },
     {
-      "testId": "home-delivery-strip",
-      "files": [
-        "src/components/DeckVerifiedStrip.tsx"
-      ]
-    },
-    {
-      "testId": "home-essence",
-      "files": [
-        "src/components/HomeCommand.tsx"
-      ]
-    },
-    {
       "testId": "home-focus-toggle",
       "files": [
         "src/components/NeedsYouQueue.tsx"
-      ]
-    },
-    {
-      "testId": "home-kpi-active",
-      "files": [
-        "src/components/DeckKpiRibbon.tsx",
-        "src/components/HomeCommand.tsx"
-      ]
-    },
-    {
-      "testId": "home-kpi-failed",
-      "files": [
-        "src/components/DeckKpiRibbon.tsx",
-        "src/components/HomeCommand.tsx"
-      ]
-    },
-    {
-      "testId": "home-kpi-governed",
-      "files": [
-        "src/components/DeckKpiRibbon.tsx",
-        "src/components/HomeCommand.tsx"
-      ]
-    },
-    {
-      "testId": "home-kpi-needs",
-      "files": [
-        "src/components/DeckKpiRibbon.tsx",
-        "src/components/HomeCommand.tsx"
-      ]
-    },
-    {
-      "testId": "home-kpi-review",
-      "files": [
-        "src/components/DeckKpiRibbon.tsx"
-      ]
-    },
-    {
-      "testId": "home-kpi-rework",
-      "files": [
-        "src/components/DeckKpiRibbon.tsx"
-      ]
-    },
-    {
-      "testId": "home-kpi-runs",
-      "files": [
-        "src/components/DeckKpiRibbon.tsx",
-        "src/components/HomeCommand.tsx"
-      ]
-    },
-    {
-      "testId": "home-kpi-spend",
-      "files": [
-        "src/components/DeckKpiRibbon.tsx"
-      ]
-    },
-    {
-      "testId": "home-kpi-success",
-      "files": [
-        "src/components/DeckKpiRibbon.tsx",
-        "src/components/HomeCommand.tsx"
-      ]
-    },
-    {
-      "testId": "home-kpis",
-      "files": [
-        "src/components/DeckKpiRibbon.tsx",
-        "src/components/HomeCommand.tsx"
-      ]
-    },
-    {
-      "testId": "home-section-doors",
-      "files": [
-        "src/components/DeckSectionDoors.tsx"
-      ]
-    },
-    {
-      "testId": "home-verb-project",
-      "files": [
-        "src/components/HomeCommand.tsx"
-      ]
-    },
-    {
-      "testId": "home-verbs",
-      "files": [
-        "src/components/HomeCommand.tsx"
-      ]
-    },
-    {
-      "testId": "home-welcome",
-      "files": [
-        "src/components/HomeBoard.tsx"
       ]
     },
     {
@@ -4968,20 +4205,7 @@
     {
       "testId": "kpi-repair-result",
       "files": [
-        "src/components/DeckKpiRibbon.tsx",
         "src/components/ReplayMove.tsx"
-      ]
-    },
-    {
-      "testId": "ladder-gate",
-      "files": [
-        "src/components/PhaseLadder.tsx"
-      ]
-    },
-    {
-      "testId": "ladder-unit",
-      "files": [
-        "src/components/PhaseLadder.tsx"
       ]
     },
     {
@@ -5275,12 +4499,6 @@
       ]
     },
     {
-      "testId": "left-rail",
-      "files": [
-        "src/components/LeftSidebar.tsx"
-      ]
-    },
-    {
       "testId": "lineage-retried-as",
       "files": [
         "src/components/ProvenanceLine.tsx"
@@ -5293,76 +4511,21 @@
       ]
     },
     {
-      "testId": "live-activity",
-      "files": [
-        "src/components/ProjectCard.tsx"
-      ]
-    },
-    {
-      "testId": "live-chat-end",
-      "files": [
-        "src/components/ChatsPage.tsx"
-      ]
-    },
-    {
-      "testId": "live-chat-origin",
-      "files": [
-        "src/components/ChatsPage.tsx"
-      ]
-    },
-    {
-      "testId": "live-chat-row",
-      "files": [
-        "src/components/ChatsPage.tsx"
-      ]
-    },
-    {
-      "testId": "live-chat-streaming",
-      "files": [
-        "src/components/ChatsPage.tsx"
-      ]
-    },
-    {
-      "testId": "live-chat-title",
-      "files": [
-        "src/components/ChatsPage.tsx"
-      ]
-    },
-    {
       "testId": "live-edge",
       "files": [
         "src/components/LiveEdge.tsx"
       ]
     },
     {
-      "testId": "live-line",
-      "files": [
-        "src/components/ProjectCard.tsx"
-      ]
-    },
-    {
       "testId": "live-output",
       "files": [
-        "src/components/LiveNarration.tsx",
-        "src/components/LiveOutput.tsx"
+        "src/components/LiveNarration.tsx"
       ]
     },
     {
       "testId": "live-output-label",
       "files": [
         "src/components/LiveNarration.tsx"
-      ]
-    },
-    {
-      "testId": "live-output-pane",
-      "files": [
-        "src/components/LiveOutput.tsx"
-      ]
-    },
-    {
-      "testId": "live-overflow",
-      "files": [
-        "src/components/ProjectCard.tsx"
       ]
     },
     {
@@ -5381,12 +4544,6 @@
       "testId": "logo-remove",
       "files": [
         "src/components/AppearanceSettings.tsx"
-      ]
-    },
-    {
-      "testId": "logo-slot",
-      "files": [
-        "src/components/AppChrome.tsx"
       ]
     },
     {
@@ -6538,12 +5695,6 @@
       ]
     },
     {
-      "testId": "notif-provenance",
-      "files": [
-        "src/components/NotificationBell.tsx"
-      ]
-    },
-    {
       "testId": "notif-settings",
       "files": [
         "src/components/NotificationSettings.tsx"
@@ -6854,18 +6005,6 @@
       ]
     },
     {
-      "testId": "phase-ladder",
-      "files": [
-        "src/components/PhaseLadder.tsx"
-      ]
-    },
-    {
-      "testId": "phase-node",
-      "files": [
-        "src/components/PhaseStrip.tsx"
-      ]
-    },
-    {
       "testId": "phase-option",
       "files": [
         "src/components/PhasePicker.tsx"
@@ -6899,18 +6038,6 @@
       "testId": "phase-selection",
       "files": [
         "src/components/PhasePicker.tsx"
-      ]
-    },
-    {
-      "testId": "phase-strip",
-      "files": [
-        "src/components/PhaseStrip.tsx"
-      ]
-    },
-    {
-      "testId": "phase-strip-overflow",
-      "files": [
-        "src/components/PhaseStrip.tsx"
       ]
     },
     {
@@ -7130,18 +6257,6 @@
       ]
     },
     {
-      "testId": "pre-gate-annotate",
-      "files": [
-        "src/components/PreGateAnnotate.tsx"
-      ]
-    },
-    {
-      "testId": "pre-gate-annotate-input",
-      "files": [
-        "src/components/PreGateAnnotate.tsx"
-      ]
-    },
-    {
       "testId": "preflight-attach",
       "files": [
         "src/components/ChatInput.tsx"
@@ -7226,12 +6341,6 @@
       ]
     },
     {
-      "testId": "project-board",
-      "files": [
-        "src/components/HomeBoard.tsx"
-      ]
-    },
-    {
       "testId": "project-brief",
       "files": [
         "src/components/ProjectBrief.tsx"
@@ -7268,22 +6377,9 @@
       ]
     },
     {
-      "testId": "project-card",
-      "files": [
-        "src/components/ProjectCard.tsx",
-        "src/components/ProjectsPage.tsx"
-      ]
-    },
-    {
       "testId": "project-context-header",
       "files": [
         "src/components/ProjectShell.tsx"
-      ]
-    },
-    {
-      "testId": "project-dashboard",
-      "files": [
-        "src/components/ProjectDashboard.tsx"
       ]
     },
     {
@@ -7377,39 +6473,9 @@
       ]
     },
     {
-      "testId": "project-kpis",
-      "files": [
-        "src/components/ProjectDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "project-mode-picker",
-      "files": [
-        "src/components/LeftSidebar.tsx"
-      ]
-    },
-    {
-      "testId": "project-mode-picker-stage",
-      "files": [
-        "src/components/LeftSidebar.tsx"
-      ]
-    },
-    {
       "testId": "project-name",
       "files": [
         "src/components/ProjectShell.tsx"
-      ]
-    },
-    {
-      "testId": "project-needs-you",
-      "files": [
-        "src/components/ProjectsPage.tsx"
-      ]
-    },
-    {
-      "testId": "project-repo",
-      "files": [
-        "src/components/ProjectCard.tsx"
       ]
     },
     {
@@ -7509,18 +6575,6 @@
       ]
     },
     {
-      "testId": "project-sparkline",
-      "files": [
-        "src/components/ProjectSparkline.tsx"
-      ]
-    },
-    {
-      "testId": "project-status-dot",
-      "files": [
-        "src/components/ProjectCard.tsx"
-      ]
-    },
-    {
       "testId": "project-switcher",
       "files": [
         "src/components/ProjectSwitcher.tsx"
@@ -7551,52 +6605,15 @@
       ]
     },
     {
-      "testId": "projects-archived",
-      "files": [
-        "src/components/ProjectsPage.tsx"
-      ]
-    },
-    {
-      "testId": "projects-do-work",
-      "files": [
-        "src/components/ProjectsPage.tsx"
-      ]
-    },
-    {
-      "testId": "projects-empty-filter",
-      "files": [
-        "src/components/ProjectsPage.tsx"
-      ]
-    },
-    {
       "testId": "projects-filter",
       "files": [
-        "src/components/ProjectsPage.tsx",
         "src/components/everything/ProjectsTab.tsx"
-      ]
-    },
-    {
-      "testId": "projects-kpis",
-      "files": [
-        "src/components/ProjectsPage.tsx"
-      ]
-    },
-    {
-      "testId": "projects-list",
-      "files": [
-        "src/components/ProjectsPage.tsx"
       ]
     },
     {
       "testId": "projects-new",
       "files": [
         "src/components/everything/ProjectsTab.tsx"
-      ]
-    },
-    {
-      "testId": "projects-page",
-      "files": [
-        "src/components/ProjectsPage.tsx"
       ]
     },
     {
@@ -7774,81 +6791,9 @@
       ]
     },
     {
-      "testId": "quick-action",
-      "files": [
-        "src/components/ProjectCard.tsx"
-      ]
-    },
-    {
-      "testId": "quick-action-sublabel",
-      "files": [
-        "src/components/ProjectCard.tsx"
-      ]
-    },
-    {
-      "testId": "quick-actions",
-      "files": [
-        "src/components/ProjectCard.tsx"
-      ]
-    },
-    {
-      "testId": "quiet-chip",
-      "files": [
-        "src/components/HomeBoard.tsx"
-      ]
-    },
-    {
-      "testId": "quiet-preview-cap",
-      "files": [
-        "src/components/HomeBoard.tsx"
-      ]
-    },
-    {
-      "testId": "quiet-summary",
-      "files": [
-        "src/components/ProjectCard.tsx"
-      ]
-    },
-    {
-      "testId": "rail-all-runs",
-      "files": [
-        "src/components/RunsSection.tsx"
-      ]
-    },
-    {
       "testId": "rail-api-server",
       "files": [
         "src/components/HealthRailSection.tsx"
-      ]
-    },
-    {
-      "testId": "rail-chevron",
-      "files": [
-        "src/components/LeftSidebar.tsx"
-      ]
-    },
-    {
-      "testId": "rail-collapsed-glyph",
-      "files": [
-        "src/components/LeftSidebar.tsx"
-      ]
-    },
-    {
-      "testId": "rail-divider",
-      "files": [
-        "src/components/LeftSidebar.tsx"
-      ]
-    },
-    {
-      "testId": "rail-doc",
-      "files": [
-        "src/components/LeftSidebar.tsx"
-      ]
-    },
-    {
-      "testId": "rail-evals-run",
-      "files": [
-        "src/components/LeftSidebar.tsx"
       ]
     },
     {
@@ -7966,70 +6911,9 @@
       ]
     },
     {
-      "testId": "rail-icon-settings",
-      "files": [
-        "src/components/LeftSidebar.tsx"
-      ]
-    },
-    {
-      "testId": "rail-live-chat",
-      "files": [
-        "src/components/LeftSidebar.tsx"
-      ]
-    },
-    {
-      "testId": "rail-mcp-servers",
-      "files": [
-        "src/components/LeftSidebar.tsx"
-      ]
-    },
-    {
-      "testId": "rail-mcp-usage",
-      "files": [
-        "src/components/LeftSidebar.tsx"
-      ]
-    },
-    {
       "testId": "rail-probe-checked",
       "files": [
         "src/components/HealthRailSection.tsx"
-      ]
-    },
-    {
-      "testId": "rail-project",
-      "files": [
-        "src/components/LeftSidebar.tsx"
-      ]
-    },
-    {
-      "testId": "rail-repo",
-      "files": [
-        "src/components/LeftSidebar.tsx"
-      ]
-    },
-    {
-      "testId": "rail-run",
-      "files": [
-        "src/components/LeftSidebar.tsx",
-        "src/components/RunsSection.tsx"
-      ]
-    },
-    {
-      "testId": "rail-run-intent",
-      "files": [
-        "src/components/RunsSection.tsx"
-      ]
-    },
-    {
-      "testId": "rail-run-phase",
-      "files": [
-        "src/components/RunsSection.tsx"
-      ]
-    },
-    {
-      "testId": "rail-runs",
-      "files": [
-        "src/components/RunsSection.tsx"
       ]
     },
     {
@@ -8108,36 +6992,6 @@
       "testId": "rail-session",
       "files": [
         "src/components/desk/SessionRail.tsx"
-      ]
-    },
-    {
-      "testId": "rail-settings-flyout",
-      "files": [
-        "src/components/LeftSidebar.tsx"
-      ]
-    },
-    {
-      "testId": "rail-skills-browse",
-      "files": [
-        "src/components/LeftSidebar.tsx"
-      ]
-    },
-    {
-      "testId": "rail-steering-section",
-      "files": [
-        "src/components/LeftSidebar.tsx"
-      ]
-    },
-    {
-      "testId": "rail-test-recon",
-      "files": [
-        "src/components/LeftSidebar.tsx"
-      ]
-    },
-    {
-      "testId": "rail-view-all",
-      "files": [
-        "src/components/LeftSidebar.tsx"
       ]
     },
     {
@@ -8639,24 +7493,6 @@
       ]
     },
     {
-      "testId": "run-card",
-      "files": [
-        "src/components/RunCard.tsx"
-      ]
-    },
-    {
-      "testId": "run-card-gate-flag",
-      "files": [
-        "src/components/RunCard.tsx"
-      ]
-    },
-    {
-      "testId": "run-chip",
-      "files": [
-        "src/components/ProjectCard.tsx"
-      ]
-    },
-    {
       "testId": "run-cost-chip",
       "files": [
         "src/components/CenterDashboard.tsx"
@@ -8777,18 +7613,6 @@
       ]
     },
     {
-      "testId": "run-list",
-      "files": [
-        "src/components/RunList.tsx"
-      ]
-    },
-    {
-      "testId": "run-overflow",
-      "files": [
-        "src/components/ProjectCard.tsx"
-      ]
-    },
-    {
       "testId": "run-pending",
       "files": [
         "src/components/ChatPanel.tsx"
@@ -8871,52 +7695,14 @@
       "testId": "run-title",
       "files": [
         "src/components/CommandPalette.tsx",
-        "src/components/RunLink.tsx",
-        "src/components/RunsBottomPanel.tsx"
+        "src/components/RunLink.tsx"
       ]
     },
     {
       "testId": "run-when",
       "files": [
         "src/components/CommandPalette.tsx",
-        "src/components/RunLink.tsx",
-        "src/components/RunsBottomPanel.tsx"
-      ]
-    },
-    {
-      "testId": "runs-bar-gates-elsewhere",
-      "files": [
-        "src/components/RunsBottomPanel.tsx"
-      ]
-    },
-    {
-      "testId": "runs-bar-spend-window",
-      "files": [
-        "src/components/RunsBottomPanel.tsx"
-      ]
-    },
-    {
-      "testId": "runs-bar-toggle",
-      "files": [
-        "src/components/RunsBottomPanel.tsx"
-      ]
-    },
-    {
-      "testId": "runs-bar-window",
-      "files": [
-        "src/components/RunsBottomPanel.tsx"
-      ]
-    },
-    {
-      "testId": "runs-bottom-bar",
-      "files": [
-        "src/components/RunsBottomPanel.tsx"
-      ]
-    },
-    {
-      "testId": "runs-bottom-sheet",
-      "files": [
-        "src/components/RunsBottomPanel.tsx"
+        "src/components/RunLink.tsx"
       ]
     },
     {
@@ -8986,36 +7772,6 @@
       ]
     },
     {
-      "testId": "runs-sheet-cap",
-      "files": [
-        "src/components/RunsBottomPanel.tsx"
-      ]
-    },
-    {
-      "testId": "runs-sheet-collapse",
-      "files": [
-        "src/components/RunsBottomPanel.tsx"
-      ]
-    },
-    {
-      "testId": "runs-sheet-row",
-      "files": [
-        "src/components/RunsBottomPanel.tsx"
-      ]
-    },
-    {
-      "testId": "runs-sheet-row-project",
-      "files": [
-        "src/components/RunsBottomPanel.tsx"
-      ]
-    },
-    {
-      "testId": "save-guidance",
-      "files": [
-        "src/components/PreGateAnnotate.tsx"
-      ]
-    },
-    {
       "testId": "search-corpus-label",
       "files": [
         "src/components/CommandPalette.tsx"
@@ -9079,12 +7835,6 @@
       "testId": "seat-usage",
       "files": [
         "src/components/ChatThread.tsx"
-      ]
-    },
-    {
-      "testId": "section-door",
-      "files": [
-        "src/components/DeckSectionDoors.tsx"
       ]
     },
     {
@@ -10598,18 +9348,6 @@
       ]
     },
     {
-      "testId": "skin-picker",
-      "files": [
-        "src/components/AppearanceSettings.tsx"
-      ]
-    },
-    {
-      "testId": "skin-right-rail",
-      "files": [
-        "src/components/SkinRightRail.tsx"
-      ]
-    },
-    {
       "testId": "skip-link",
       "files": [
         "src/components/SkipLink.tsx"
@@ -10786,10 +9524,6 @@
     {
       "testId": "stat-active",
       "files": [
-        "src/components/ChatsPage.tsx",
-        "src/components/MadeDashboard.tsx",
-        "src/components/ProjectDashboard.tsx",
-        "src/components/ProjectsPage.tsx",
         "src/components/RepositoriesPanel.tsx"
       ]
     },
@@ -10830,12 +9564,6 @@
       ]
     },
     {
-      "testId": "stat-chats",
-      "files": [
-        "src/components/ChatsPage.tsx"
-      ]
-    },
-    {
       "testId": "stat-context",
       "files": [
         "src/components/dashboardKit.tsx"
@@ -10848,30 +9576,8 @@
       ]
     },
     {
-      "testId": "stat-demo-done",
-      "files": [
-        "src/components/MadeDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "stat-demo-items",
-      "files": [
-        "src/components/MadeDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "stat-demo-waiting",
-      "files": [
-        "src/components/MadeDashboard.tsx"
-      ]
-    },
-    {
       "testId": "stat-failed",
       "files": [
-        "src/components/ChatsPage.tsx",
-        "src/components/MadeDashboard.tsx",
-        "src/components/ProjectDashboard.tsx",
-        "src/components/ProjectsPage.tsx",
         "src/components/RepositoriesPanel.tsx"
       ]
     },
@@ -10879,38 +9585,6 @@
       "testId": "stat-gaps",
       "files": [
         "src/components/RepositoriesPanel.tsx"
-      ]
-    },
-    {
-      "testId": "stat-gates",
-      "files": [
-        "src/components/ChatsPage.tsx",
-        "src/components/ProjectDashboard.tsx",
-        "src/components/ProjectsPage.tsx"
-      ]
-    },
-    {
-      "testId": "stat-live-seats",
-      "files": [
-        "src/components/ChatsPage.tsx"
-      ]
-    },
-    {
-      "testId": "stat-needs-review",
-      "files": [
-        "src/components/ProjectDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "stat-needs-you",
-      "files": [
-        "src/components/MadeDashboard.tsx"
-      ]
-    },
-    {
-      "testId": "stat-projects",
-      "files": [
-        "src/components/ProjectsPage.tsx"
       ]
     },
     {
@@ -10929,26 +9603,6 @@
       "testId": "stat-repos",
       "files": [
         "src/components/RepositoriesPanel.tsx"
-      ]
-    },
-    {
-      "testId": "stat-runs",
-      "files": [
-        "src/components/MadeDashboard.tsx",
-        "src/components/ProjectDashboard.tsx",
-        "src/components/ProjectsPage.tsx"
-      ]
-    },
-    {
-      "testId": "stat-stalled",
-      "files": [
-        "src/components/ChatsPage.tsx"
-      ]
-    },
-    {
-      "testId": "stat-unfiled",
-      "files": [
-        "src/components/ProjectsPage.tsx"
       ]
     },
     {
@@ -12800,12 +11454,6 @@
       ]
     },
     {
-      "testId": "triage-hint",
-      "files": [
-        "src/components/HomeBoard.tsx"
-      ]
-    },
-    {
       "testId": "trust-receipt",
       "files": [
         "src/components/TrustReceipt.tsx"
@@ -12881,24 +11529,6 @@
       "testId": "undo-toast",
       "files": [
         "src/components/UndoToasts.tsx"
-      ]
-    },
-    {
-      "testId": "unfiled-card",
-      "files": [
-        "src/components/ProjectsPage.tsx"
-      ]
-    },
-    {
-      "testId": "unfiled-needs-you",
-      "files": [
-        "src/components/ProjectsPage.tsx"
-      ]
-    },
-    {
-      "testId": "unfiled-run",
-      "files": [
-        "src/components/HomeBoard.tsx"
       ]
     },
     {
@@ -13560,48 +12190,6 @@
       ]
     },
     {
-      "testId": "work-hidden-chip",
-      "files": [
-        "src/components/WorkPage.tsx"
-      ]
-    },
-    {
-      "testId": "work-metric-active",
-      "files": [
-        "src/components/WorkPage.tsx"
-      ]
-    },
-    {
-      "testId": "work-metric-top",
-      "files": [
-        "src/components/WorkPage.tsx"
-      ]
-    },
-    {
-      "testId": "work-metric-total",
-      "files": [
-        "src/components/WorkPage.tsx"
-      ]
-    },
-    {
-      "testId": "work-range-hidden-note",
-      "files": [
-        "src/components/WorkPage.tsx"
-      ]
-    },
-    {
-      "testId": "work-range-widen",
-      "files": [
-        "src/components/WorkPage.tsx"
-      ]
-    },
-    {
-      "testId": "work-success-rate",
-      "files": [
-        "src/components/WorkPage.tsx"
-      ]
-    },
-    {
       "testId": "work-unit",
       "files": [
         "src/components/WorkUnitDetail.tsx"
@@ -13683,30 +12271,6 @@
       ]
     },
     {
-      "pattern": "*-corpus-label",
-      "files": [
-        "src/components/MadeDashboard.tsx"
-      ]
-    },
-    {
-      "pattern": "*-corpus-why",
-      "files": [
-        "src/components/MadeDashboard.tsx"
-      ]
-    },
-    {
-      "pattern": "*-corpus-why-popover",
-      "files": [
-        "src/components/MadeDashboard.tsx"
-      ]
-    },
-    {
-      "pattern": "*-doc-row",
-      "files": [
-        "src/components/MadeDashboard.tsx"
-      ]
-    },
-    {
       "pattern": "*-editor",
       "files": [
         "src/components/SteeringGrid.tsx"
@@ -13719,30 +12283,6 @@
       ]
     },
     {
-      "pattern": "*-fanout-cancel",
-      "files": [
-        "src/components/MadeDashboard.tsx"
-      ]
-    },
-    {
-      "pattern": "*-fanout-progress",
-      "files": [
-        "src/components/MadeDashboard.tsx"
-      ]
-    },
-    {
-      "pattern": "*-filter",
-      "files": [
-        "src/components/MadeDashboard.tsx"
-      ]
-    },
-    {
-      "pattern": "*-grid",
-      "files": [
-        "src/components/MadeDashboard.tsx"
-      ]
-    },
-    {
       "pattern": "*-input",
       "files": [
         "src/components/FacetAutocomplete.tsx",
@@ -13750,33 +12290,9 @@
       ]
     },
     {
-      "pattern": "*-kpis",
-      "files": [
-        "src/components/MadeDashboard.tsx"
-      ]
-    },
-    {
       "pattern": "*-line",
       "files": [
         "src/components/CaptureDrop.tsx"
-      ]
-    },
-    {
-      "pattern": "*-list",
-      "files": [
-        "src/components/MadeDashboard.tsx"
-      ]
-    },
-    {
-      "pattern": "*-load-all",
-      "files": [
-        "src/components/MadeDashboard.tsx"
-      ]
-    },
-    {
-      "pattern": "*-new",
-      "files": [
-        "src/components/MadeDashboard.tsx"
       ]
     },
     {
@@ -13810,33 +12326,9 @@
       ]
     },
     {
-      "pattern": "*-unreachable",
-      "files": [
-        "src/components/MadeDashboard.tsx"
-      ]
-    },
-    {
       "pattern": "*-value",
       "files": [
         "src/components/McpUsage.tsx"
-      ]
-    },
-    {
-      "pattern": "batch-open-*",
-      "files": [
-        "src/components/BatchGateBar.tsx"
-      ]
-    },
-    {
-      "pattern": "batch-retry-*",
-      "files": [
-        "src/components/BatchGateBar.tsx"
-      ]
-    },
-    {
-      "pattern": "batch-select-*",
-      "files": [
-        "src/components/BatchGateBar.tsx"
       ]
     },
     {
@@ -13858,21 +12350,9 @@
       ]
     },
     {
-      "pattern": "dashboard-mode-*",
-      "files": [
-        "src/components/ProjectDashboard.tsx"
-      ]
-    },
-    {
       "pattern": "decision-*",
       "files": [
         "src/components/decisions/DecisionLine.tsx"
-      ]
-    },
-    {
-      "pattern": "delivery-*",
-      "files": [
-        "src/components/DeckVerifiedStrip.tsx"
       ]
     },
     {
@@ -13906,30 +12386,6 @@
       ]
     },
     {
-      "pattern": "gate-answered-*",
-      "files": [
-        "src/components/GateChip.tsx"
-      ]
-    },
-    {
-      "pattern": "gate-approve-*",
-      "files": [
-        "src/components/GateChip.tsx"
-      ]
-    },
-    {
-      "pattern": "gate-chip-*",
-      "files": [
-        "src/components/GateChip.tsx"
-      ]
-    },
-    {
-      "pattern": "gate-error-*",
-      "files": [
-        "src/components/GateChip.tsx"
-      ]
-    },
-    {
       "pattern": "gate-escalation-*",
       "files": [
         "src/components/SteeringGate.tsx"
@@ -13939,30 +12395,6 @@
       "pattern": "gate-escalation-consequence-*",
       "files": [
         "src/components/SteeringGate.tsx"
-      ]
-    },
-    {
-      "pattern": "gate-open-*",
-      "files": [
-        "src/components/GateChip.tsx"
-      ]
-    },
-    {
-      "pattern": "gate-queued-*",
-      "files": [
-        "src/components/GateChip.tsx"
-      ]
-    },
-    {
-      "pattern": "gate-reject-*",
-      "files": [
-        "src/components/GateChip.tsx"
-      ]
-    },
-    {
-      "pattern": "gate-reject-note-row-*",
-      "files": [
-        "src/components/GateRejectNote.tsx"
       ]
     },
     {
@@ -14032,18 +12464,6 @@
       ]
     },
     {
-      "pattern": "rail-heading-*",
-      "files": [
-        "src/components/LeftSidebar.tsx"
-      ]
-    },
-    {
-      "pattern": "rail-title-*",
-      "files": [
-        "src/components/LeftSidebar.tsx"
-      ]
-    },
-    {
       "pattern": "run-raw-*",
       "files": [
         "src/components/RunRawView.tsx"
@@ -14078,18 +12498,6 @@
       "pattern": "skills-tab-*",
       "files": [
         "src/components/SkillDrawer.tsx"
-      ]
-    },
-    {
-      "pattern": "skin-option-*",
-      "files": [
-        "src/components/AppearanceSettings.tsx"
-      ]
-    },
-    {
-      "pattern": "stat-*-items",
-      "files": [
-        "src/components/MadeDashboard.tsx"
       ]
     },
     {
@@ -14143,12 +12551,6 @@
       ]
     },
     {
-      "expression": "s.testid",
-      "files": [
-        "src/components/WorkPage.tsx"
-      ]
-    },
-    {
       "expression": "testId",
       "files": [
         "src/components/AgeStamp.tsx",
@@ -14157,17 +12559,14 @@
         "src/components/CaptureDrop.tsx",
         "src/components/ChatPanel.tsx",
         "src/components/DashboardTiles.tsx",
-        "src/components/DeckKpiRibbon.tsx",
         "src/components/DemoMode.tsx",
         "src/components/FacetAutocomplete.tsx",
         "src/components/HealthRailSection.tsx",
-        "src/components/HomeCommand.tsx",
         "src/components/MetricTile.tsx",
         "src/components/NeedsYouQueue.tsx",
         "src/components/ProvenanceLine.tsx",
         "src/components/RepoFindings.tsx",
         "src/components/RunSparkline.tsx",
-        "src/components/RunsBottomPanel.tsx",
         "src/components/SkillChips.tsx",
         "src/components/SkillFindings.tsx",
         "src/components/SkillsPage.tsx",

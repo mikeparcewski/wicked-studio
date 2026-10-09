@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-desk_session_live_test.py — S15d (DES-STUDIO-REBUILD-001 Amendment 5, item 1) at 1440x700, under STUDIO_SKIN=desk.
+desk_session_live_test.py — S15d (DES-STUDIO-REBUILD-001 Amendment 5, item 1) at 1440x700, on the Desk.
 
 The session IS the running chat. Against the fixture's sessions corpus (chat-pay: r-pay-1 finished,
 r-pay-2 a team run mid-build with live frames over /ws), it proves at `/s/chat-pay`:
@@ -21,13 +21,13 @@ import json
 import os
 import sys
 
-from uxfix_fixture import HIDE_GATE_TOASTS, REPO, STUDIO_SKIN, ensure_build, set_fixture, start_server
+from uxfix_fixture import HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4465"))
 W, H = 1440, 700
 SHOTS = REPO / "e2e" / "shots"
 
-report: dict = {"ok": False, "skin": STUDIO_SKIN, "steps": {}}
+report: dict = {"ok": False, "steps": {}}
 
 
 def fail(step: str, why) -> None:
@@ -49,8 +49,6 @@ def team_frame(eid: int, etype: str, **payload) -> dict:
                                            "payload": dict(base, **payload)}}
 
 
-if STUDIO_SKIN != "desk":
-    fail("skin", f"desk journeys run under STUDIO_SKIN=desk, not {STUDIO_SKIN}")
 
 dist = ensure_build(fail)
 origin = start_server(PORT, dist)

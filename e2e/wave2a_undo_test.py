@@ -15,12 +15,12 @@ beta's card sits in NEEDS YOU and the triage cursor answers it in place.
   close    a third decision queued, then the tab is CLOSED inside the window → the
            fixture never receives a POST (the gate stays open), and the toast said so.
 
-Under STUDIO_SKIN=desk (S15a: the desk variant, in run_journeys.py DESK) the decision is queued from
+On the Desk (the one shell since S18d) the decision is queued from
 b1's Desk row (Answer, then 1) instead of the card wall's ⌥J ⌥A, and "the gate is still open" reads
 the row offering Answer again; every count, window and toast assertion is the same.
 
 Capture: e2e/shots/wave2a-undo-toast.png, wave2a-undo-after.png.
-Env: FEEDBACK_PORT (default 4352), STUDIO_SKIN. Prints a JSON report; exit 0/1.
+Env: FEEDBACK_PORT (default 4352). Prints a JSON report; exit 0/1.
 """
 
 import json
@@ -29,14 +29,13 @@ import sys
 import time
 import urllib.request
 
-from uxfix_fixture import HIDE_GATE_TOASTS, REPO, STUDIO_SKIN, ensure_build, set_fixture, start_server
+from uxfix_fixture import HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4352"))
 W, H = 1440, 700
 SHOTS = REPO / "e2e" / "shots"
 
-report: dict = {"ok": False, "skin": STUDIO_SKIN, "steps": {}}
-DESK = STUDIO_SKIN == "desk"
+report: dict = {"ok": False, "steps": {}}
 DESK_ROW = '[data-testid="need-row"][data-key="gate:b1"], [data-testid="need-member"][data-key="gate:b1"]'
 
 
@@ -75,29 +74,26 @@ def open_board(browser):
     page.on("request", lambda r: posts.append(time.monotonic())
             if r.method == "POST" and r.url.endswith("/api/v1/runs/b1/gate") else None)
     page.goto(f"{origin}/", wait_until="networkidle")
-    if DESK:
-        page.get_by_test_id("needs-you-queue").wait_for(state="visible", timeout=15000)
-        for t in page.locator('[data-testid="need-group-toggle"][aria-expanded="false"]').all():
-            t.click()
-        page.locator(DESK_ROW).wait_for(state="visible", timeout=10000)
-        return page, posts
+    page.get_by_test_id("needs-you-queue").wait_for(state="visible", timeout=15000)
+    for t in page.locator('[data-testid="need-group-toggle"][aria-expanded="false"]').all():
+        t.click()
+    page.locator(DESK_ROW).wait_for(state="visible", timeout=10000)
+    return page, posts
     page.get_by_test_id("gate-chip-b1").wait_for(state="visible", timeout=15000)
     return page, posts
 
 
 def gate_still_open(page) -> bool:
-    if DESK:
-        return page.locator(DESK_ROW).locator('[data-testid="need-answer"]').count() == 1
+    return page.locator(DESK_ROW).locator('[data-testid="need-answer"]').count() == 1
     return page.get_by_test_id("gate-approve-b1").count() == 1
 
 
 def approve_with_a(page) -> float:
-    if DESK:
-        row = page.locator(DESK_ROW)
-        row.locator('[data-testid="need-answer"]').click()
-        row.locator('[data-testid="need-choices"]').wait_for(state="visible", timeout=10000)
-        page.keyboard.press("1")
-        return time.monotonic()
+    row = page.locator(DESK_ROW)
+    row.locator('[data-testid="need-answer"]').click()
+    row.locator('[data-testid="need-choices"]').wait_for(state="visible", timeout=10000)
+    page.keyboard.press("1")
+    return time.monotonic()
     page.evaluate("() => document.activeElement && document.activeElement.blur()")
     page.keyboard.press("Alt+j")
     # The cursor is on beta: first press selects it; after an Undo it is still there.

@@ -24,7 +24,7 @@ order answers a matching open gate and writes crew's `gate.decided` line with th
   5. The handover after the absence: its "done for you" overlay has a "What your standing orders
      did" group listing the order's action, NAMING the order, opening g1.
 
-Capture: e2e/shots/standing-orders-<skin>.png. Skin: STUDIO_SKIN (studio | compact-rail).
+Capture: e2e/shots/standing-orders-desk.png.
 
 Prereqs: Python Playwright. Builds dist-sameorigin/ itself unless SKIP_STUDIO_BUILD=1.
 Env: FEEDBACK_PORT (default 4347). Prints a JSON report; exit 0/1.
@@ -36,7 +36,7 @@ import sys
 import time
 import urllib.request
 
-from uxfix_fixture import HIDE_GATE_TOASTS, REPO, SKIN_SHELL, STUDIO_SKIN, ensure_build, set_fixture, start_server, wait_for_skin
+from uxfix_fixture import HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server, wait_for_skin
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4347"))
 W, H = 1440, 700
@@ -56,7 +56,7 @@ SEED = [
               "action": "approve", "activeWhen": "always"}},
 ]
 
-report: dict = {"ok": False, "skin": STUDIO_SKIN, "steps": {}}
+report: dict = {"ok": False, "steps": {}}
 
 
 def fail(step: str, why: str) -> None:
@@ -97,13 +97,12 @@ with sync_playwright() as p:
                 status_over={}, extra_frames=[], audit_delay_ms=0, standing_orders=True,
                 reset_standing=True, standing_seed=SEED, settings_delay_ms=1500)
     page.goto(f"{origin}/", wait_until="domcontentloaded")
-    # GET /settings is slowed (settings_delay_ms) so the default skin's first paint is on screen
-    # long enough to be read by mistake; every read below waits for this journey's skin first.
+    # GET /settings is slowed (settings_delay_ms); every read below waits for the Desk's shell first.
     wait_for_skin(page)
     try:
         page.get_by_test_id("standing-orders-panel").wait_for(state="visible", timeout=15000)
     except Exception:
-        page.screenshot(path=str(SHOTS / f"standing-orders-missing-{STUDIO_SKIN}.png"))
+        page.screenshot(path=str(SHOTS / f"standing-orders-missing-desk.png"))
         fail("panel-shows", "no standing-orders panel on Home")
     check("panel-shows", True)
 
@@ -115,9 +114,8 @@ with sync_playwright() as p:
                  count: e.querySelector('[data-testid="standing-orders-count"]').innerText,
                  summary: e.querySelector('[data-testid="standing-orders-summary"]').textContent,
                  title: e.getAttribute('title') }; }""")
-    # The panel read is this skin's: the first paint is the default skin (desk since S15b) until
-    # studio.appearance lands, and the Desk's header carries the same panel.
-    check("read-under-this-skin", line["shell"] == SKIN_SHELL[STUDIO_SKIN], shell=line["shell"], skin=STUDIO_SKIN)
+    # The panel read is the Desk's (the one shell since S18d): its header carries the panel.
+    check("read-under-this-skin", line["shell"] == "desk", shell=line["shell"])
     check("one-line-in-the-header",
           line["inHeader"] and line["variant"] == "line" and line["height"] <= 32
           and line["count"] == "2 orders active"
@@ -143,7 +141,7 @@ with sync_playwright() as p:
         .map(r => [r.dataset.origin, r.querySelector('[data-testid="standing-order-origin"]').innerText])""")
     check("gate-and-receipt-orders-in-the-list",
           origins == [["gate", "made at a gate"], ["receipt", "trust receipt"]], origins=origins)
-    page.screenshot(path=str(SHOTS / f"standing-orders-preview-{STUDIO_SKIN}.png"))
+    page.screenshot(path=str(SHOTS / f"standing-orders-preview-desk.png"))
 
     # ── 1. words → the rule said back ─────────────────────────────────────────
     page.get_by_test_id("standing-order-input").fill(ORDER)
@@ -183,7 +181,7 @@ with sync_playwright() as p:
           text=refused.inner_text())
     page.get_by_test_id("standing-order-cancel").click()
     check("g1-still-waiting-while-present", run_status(origin, "g1") == "awaiting_human")
-    page.screenshot(path=str(SHOTS / f"standing-orders-{STUDIO_SKIN}.png"))
+    page.screenshot(path=str(SHOTS / f"standing-orders-desk.png"))
 
     # ── 4. away → the intake gate on alpha clears within 5 s ─────────────────
     page.evaluate(f"localStorage.setItem('studio.visit', JSON.stringify({{ lastSeenAt: Date.now() - {HOUR_MS} }}))")
@@ -213,7 +211,7 @@ with sync_playwright() as p:
             """() => { const c = document.querySelector('[data-testid="handover-chip"][data-section="done"]');
                        return c && c.dataset.state === 'ready' && Number(c.dataset.count) >= 1; }""", timeout=10000)
     except Exception:
-        page.screenshot(path=str(SHOTS / f"standing-orders-handover-missing-{STUDIO_SKIN}.png"))
+        page.screenshot(path=str(SHOTS / f"standing-orders-handover-missing-desk.png"))
         fail("handover", "no handover after the absence")
     page.locator('[data-testid="handover-chip"][data-section="done"]').click()
     group = page.locator('[data-testid="handover-overlay-group"][data-group="orders"]')
@@ -228,7 +226,7 @@ with sync_playwright() as p:
     check("handover-names-the-order", len(named) == 1 and "g1" in (named[0]["href"] or ""), rows=rows)
     title = group.inner_text()
     check("handover-says-what-orders-did", "what your standing orders did" in title.lower(), title=title)
-    page.screenshot(path=str(SHOTS / f"standing-orders-handover-{STUDIO_SKIN}.png"))
+    page.screenshot(path=str(SHOTS / f"standing-orders-handover-desk.png"))
     browser.close()
 
 report["ok"] = True

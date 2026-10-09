@@ -6,10 +6,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { ProjectCard } from '../src/components/ProjectCard.js';
 import { VersionStrip } from '../src/components/VersionStrip.js';
 import { ExportMenu } from '../src/components/ExportMenu.js';
-import type { BoardProject } from '../src/hooks/useBoardModel.js';
 import type { CoreEvent } from '../src/api/types.js';
 import { threadKey, useDocThreadStore, type DocMsg } from '../src/store/docThread.js';
 import { exportKey, useExportAnswers } from '../src/store/exportAnswers.js';
@@ -38,7 +36,6 @@ vi.mock('../src/api/interactive.js', () => ({
 
 const PROJECT = 'proj-abc';
 const DOC = 'roadmap';
-const PPTX_HINT = 'pip install python-pptx and export again';
 
 const MANIFEST = {
   head: 3,
@@ -67,26 +64,6 @@ function strip(selected = 3): void {
       onForked={() => {}}
     />,
   );
-}
-
-/** One board card carrying one document — §1.4's card, at the tile that owns the export.
- *  Doc tiles are ACTIVE-variant furniture (DES-UXFIX-001 §2.1.1, slice 2): a quiet
- *  card is one line and no tiles, so this card is pinned into NEEDS YOU. */
-function card(): void {
-  const item = {
-    project: {
-      id: PROJECT, name: 'Wicked', description: null, status: 'active',
-      scope: `project:${PROJECT}`, created_at: 1, updated_at: 1,
-    },
-    repo: null,
-    runs: [],
-    docs: [{ name: DOC, kind: 'doc' as const, head: 3, versions: 3, updated_at: '2026-08-18T11:30:00Z' }],
-    attention: 'drafts' as const,
-    score: 40,
-    band: 'needs-you' as const,
-    signal: { kind: 'running' as const, at: Date.now() },
-  } as unknown as BoardProject;
-  render(<ProjectCard item={item} navigate={() => {}} />);
 }
 
 /** Press one format button inside the menu on screen. */
@@ -222,33 +199,6 @@ describe('the version strip exports the SELECTED version (§4.4, §4.2)', () => 
     // Acting on the answer (the download click) is what retires it.
     await userEvent.setup().click(ready);
     expect(screen.queryByTestId('export-ready')).toBeNull();
-  });
-});
-
-describe('the board card exports without opening the document (§1.4, §4.4)', () => {
-  it('AC: the doc tile offers export at that document’s head version', async () => {
-    card();
-    const menu = within(screen.getByTestId('doc-tile')).getByTestId('export-menu');
-    expect(menu).toHaveAttribute('data-doc-id', DOC);
-    expect(menu).toHaveAttribute('data-version', '3');
-
-    await press('pdf', menu);
-    await waitFor(() => expect(postExport).toHaveBeenCalledWith(PROJECT, DOC, 3, 'pdf'));
-    // The transcript is still where it lands, even though no thread is on screen (§2.5).
-    await waitFor(() => expect(messages()[1]).toMatchObject({ kind: 'agent', author: 'export' }));
-  });
-
-  it('AC: a refusal names its fix ON THE CARD, with the control that retries it adjacent', async () => {
-    postExport.mockRejectedValue(new ServiceHintError('API 400: no python-pptx', PPTX_HINT));
-    card();
-    const menu = within(screen.getByTestId('doc-tile')).getByTestId('export-menu');
-
-    await press('pptx', menu);
-
-    await waitFor(() => expect(within(menu).getByTestId('export-hint')).toHaveTextContent(PPTX_HINT));
-    // §3.3: the control is in the same block, so the retry is one press away.
-    expect(within(menu).getAllByTestId('export-format')).toHaveLength(3);
-    expect(within(menu).getAllByTestId('export-format')[2]).toBeEnabled();
   });
 });
 

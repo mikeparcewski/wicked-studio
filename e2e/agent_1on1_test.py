@@ -13,9 +13,9 @@ agent_1on1_test.py — the weekly 1:1 per agent on the Health panel's seat rows
   signin  taking pi's move opens pi's own sign-in line in a terminal dialog.
   absent  a daemon without the route: the caption says so and no seat offers a move.
 
-Captures (e2e/shots/): agent-1on1-<skin>-week.png, agent-1on1-<skin>-done.png,
-agent-1on1-<skin>-signin.png.
-Env: FEEDBACK_PORT (default 4481), STUDIO_SKIN. JSON report; exit 0/1.
+Captures (e2e/shots/): agent-1on1-desk-week.png, agent-1on1-desk-done.png,
+agent-1on1-desk-signin.png.
+Env: FEEDBACK_PORT (default 4481). JSON report; exit 0/1.
 """
 
 import json
@@ -24,15 +24,13 @@ import sys
 import time
 import urllib.request
 
-from uxfix_fixture import (DEFAULT_APPEARANCE, HIDE_GATE_TOASTS, REPO, STUDIO_SKIN, ensure_build,
+from uxfix_fixture import (DEFAULT_APPEARANCE, HIDE_GATE_TOASTS, REPO, ensure_build,
                            set_fixture, start_server)
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4481"))
 W, H = 1440, 700
 SHOTS = REPO / "e2e" / "shots"
-SKIN = STUDIO_SKIN
-
-report: dict = {"ok": False, "skin": SKIN, "steps": {}}
+report: dict = {"ok": False, "steps": {}}
 
 
 class SectionFailed(Exception):
@@ -58,7 +56,7 @@ def rule_posts(origin: str) -> list:
 
 def reset(origin: str, week: bool) -> None:
     set_fixture(origin, **{"seat_week": week, "reset_rule_posts": True,
-                           "appearance": {**DEFAULT_APPEARANCE, "skin": SKIN}})
+                           "appearance": {**DEFAULT_APPEARANCE}})
 
 
 dist = ensure_build(fail)
@@ -110,7 +108,7 @@ with sync_playwright() as p:
                   const b = m.querySelector('[data-testid="rail-seat-move-button"]').getBoundingClientRect();
                   return c.bottom <= b.top && b.top >= 0 && b.bottom <= window.innerHeight; }"""), consequence=consequence)
         check("no-change-has-no-button", move("claude").get_by_test_id("rail-seat-move-button").count() == 0)
-        page.screenshot(path=str(SHOTS / f"agent-1on1-{SKIN}-week.png"))
+        page.screenshot(path=str(SHOTS / f"agent-1on1-desk-week.png"))
 
         codex.get_by_test_id("rail-seat-move-button").click()
         deadline = time.monotonic() + 10
@@ -125,7 +123,7 @@ with sync_playwright() as p:
         result.wait_for(state="visible", timeout=8000)
         check("result-in-place", result.get_attribute("data-status") == "done"
               and "Rule seat-coach:codex:review added" in (result.text_content() or ""))
-        page.screenshot(path=str(SHOTS / f"agent-1on1-{SKIN}-done.png"))
+        page.screenshot(path=str(SHOTS / f"agent-1on1-desk-done.png"))
 
         pi = move("pi")
         pi.scroll_into_view_if_needed()
@@ -137,7 +135,7 @@ with sync_playwright() as p:
         dialog.wait_for(state="visible", timeout=8000)
         check("signin-opens-terminal", "Sign in — pi" in (dialog.text_content() or "")
               and "pi login" in (dialog.text_content() or ""))
-        page.screenshot(path=str(SHOTS / f"agent-1on1-{SKIN}-signin.png"))
+        page.screenshot(path=str(SHOTS / f"agent-1on1-desk-signin.png"))
         page.keyboard.press("Escape")
         check("no-rule-for-signin", len(rule_posts(origin)) == 1)
 

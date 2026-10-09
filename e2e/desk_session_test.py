@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-desk_session_test.py — A SESSION (DES-STUDIO-REBUILD-001 §11 S6a) at 1440x700, under STUDIO_SKIN=desk.
+desk_session_test.py — A SESSION (DES-STUDIO-REBUILD-001 §11 S6a) at 1440x700, on the Desk.
 
 Drives the built UI against the in-process fixture's sessions corpus (two runs launched from
 chat-pay — one not a team run, one a team run mid-build —, r-solo, a team run with no team
@@ -34,13 +34,13 @@ import os
 import sys
 import time
 
-from uxfix_fixture import HIDE_GATE_TOASTS, REPO, STUDIO_SKIN, ensure_build, set_fixture, start_server
+from uxfix_fixture import HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4347"))
 W, H = 1440, 700
 SHOTS = REPO / "e2e" / "shots"
 
-report: dict = {"ok": False, "skin": STUDIO_SKIN, "steps": {}}
+report: dict = {"ok": False, "steps": {}}
 
 
 def fail(step: str, why) -> None:
@@ -56,8 +56,6 @@ def check(step: str, ok: bool, **detail) -> None:
         sys.exit(1)
 
 
-if STUDIO_SKIN != "desk":
-    fail("skin", f"desk journeys run under STUDIO_SKIN=desk, not {STUDIO_SKIN}")
 
 RAIL = """() => [...document.querySelectorAll('[data-testid="rail-session"]')]
   .map(s => ({id: s.dataset.sessionId, runs: s.dataset.runIds, href: s.getAttribute('href')}))"""

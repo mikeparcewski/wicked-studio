@@ -1,6 +1,5 @@
 import { create } from 'zustand';
 import { api } from '../api/client.js';
-import { DEFAULT_SKIN_ID, isSkinId, skinById, skinTokenKeys, type SkinId } from './skins.js';
 
 /**
  * Per-install appearance (DES-VISION-001 §3.3): the three accent primitives,
@@ -27,20 +26,15 @@ export interface StudioAppearance {
   /** A custom product name for the chrome (nav-ui-tweaks). `null` = the default
    *  wordmark (`DEFAULT_SITE_NAME`); a non-empty string overrides it. */
   site_name: string | null;
-  /** The skin (theming/skins.ts) — shape over the one behaviour layer. Applied as
-   *  `data-skin` on <html> next to `data-theme`; `desk` is the default since the flip (S15b). */
-  skin: SkinId;
-  /** True once the record is past the flip (S15b): its skin is the operator's choice. A record
-   *  without it predates the flip, so its skin (stamped with the old default) resolves to `desk`;
-   *  reading never writes (§3.3), so the record is rewritten by the operator's next change. */
-  skin_migrated: boolean;
+  // The skin keys (`skin`, `skin_migrated`) retired with the classic skins (S18d): the Desk is the
+  // one shell. Records from ≤0.6.2 still carry them; sanitizeAppearance ignores them.
 }
 
 export const APPEARANCE_KEY = 'studio.appearance';
 
 /** The theme instances, each a `data-theme` value (absent = `dark`, tokens.css itself).
  *  The wicked pair (DES-STUDIO-REBUILD-001 S1, DESIGN-simple §1a) is the family palette:
- *  themes/wicked-light.css and themes/wicked-dark.css. A skin never selects one (§5.1). */
+ *  themes/wicked-light.css and themes/wicked-dark.css. */
 export const THEMES = [
   { id: 'dark', label: 'Dark' },
   { id: 'light', label: 'Light' },
@@ -84,8 +78,6 @@ export const DEFAULT_APPEARANCE: StudioAppearance = {
   logo_url: null,
   theme: 'dark',
   site_name: null,
-  skin: DEFAULT_SKIN_ID,
-  skin_migrated: true,
 };
 
 /** A new install — nothing stored (S15b, BUILD-PLAN Q-R3): the Desk on wicked-light with the
@@ -131,11 +123,11 @@ function clamp(raw: unknown, lo: number, hi: number, fallback: number): number {
 }
 
 /** Never trust the stored shape (§3.3 is an external store): clamp and default. Nothing stored
- *  is a new install (`NEW_INSTALL_APPEARANCE`); a record from before the flip gets `desk`. */
+ *  is a new install (`NEW_INSTALL_APPEARANCE`). The legacy `skin` / `skin_migrated` keys a ≤0.6.2
+ *  record carries are ignored — never a failure, never a migration (S18d). */
 export function sanitizeAppearance(raw: unknown): StudioAppearance {
   if (raw === null || typeof raw !== 'object') return { ...NEW_INSTALL_APPEARANCE };
   const o = raw as Record<string, unknown>;
-  const migrated = o.skin_migrated === true;
   return {
     accent_h: clamp(o.accent_h, 0, 359, DEFAULT_APPEARANCE.accent_h),
     accent_s: clamp(o.accent_s, 0, 100, DEFAULT_APPEARANCE.accent_s),
@@ -143,8 +135,6 @@ export function sanitizeAppearance(raw: unknown): StudioAppearance {
     logo_url: typeof o.logo_url === 'string' && o.logo_url !== '' ? o.logo_url : null,
     theme: isThemeId(o.theme) ? o.theme : 'dark',
     site_name: typeof o.site_name === 'string' && o.site_name.trim() !== '' ? o.site_name.trim() : null,
-    skin: migrated && isSkinId(o.skin) ? o.skin : DEFAULT_SKIN_ID,
-    skin_migrated: true,
   };
 }
 
@@ -153,8 +143,8 @@ export function sanitizeAppearance(raw: unknown): StudioAppearance {
  * spells them, `--logo-url` as a quoted `url(...)` (removed when unset, so the
  * slot's `var(--logo-url, none)` fallback renders the default mark), and the
  * theme instance as the `data-theme` attribute (§2.14 — absent = dark, §2.13; otherwise the
- * theme id: `light`, `wicked-light`, `wicked-dark`), and the
- * skin as `data-skin` plus its token overrides (theming/skins.ts).
+ * theme id: `light`, `wicked-light`, `wicked-dark`). The Desk's face and radii are the
+ * stylesheet's own tokens (styles/tokens.css, S18c) — nothing skin-shaped is stamped (S18d).
  */
 export function applyAppearance(a: StudioAppearance): void {
   writeCachedAppearance(a);
@@ -169,21 +159,6 @@ export function applyAppearance(a: StudioAppearance): void {
   }
   if (a.theme === 'dark') root.removeAttribute('data-theme');
   else root.setAttribute('data-theme', a.theme);
-  applySkin(root, a.skin);
-}
-
-/**
- * The skin half: `data-skin` (always stamped — `studio` included) and the skin's token
- * overrides as inline custom properties. Every token ANY skin overrides is cleared first,
- * so a swap never leaves the previous skin's density behind.
- */
-function applySkin(root: HTMLElement, id: SkinId): void {
-  const skin = skinById(id);
-  root.setAttribute('data-skin', skin.id);
-  for (const name of skinTokenKeys()) root.style.removeProperty(name);
-  for (const [name, value] of Object.entries(skin.tokens)) {
-    if (value !== undefined) root.style.setProperty(name, value);
-  }
 }
 
 interface AppearanceStore {

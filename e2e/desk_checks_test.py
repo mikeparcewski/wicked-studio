@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 desk_checks_test.py — WT-U2 (DES-WALKTHROUGH-PROOF-001 §3 scenes 21, 22, 28; §4.9; WT-W3): "checked"
-comes only from crew's acceptance read, at 1440x700 under STUDIO_SKIN=desk.
+comes only from crew's acceptance read, at 1440x700 on the Desk.
 
 Against the in-process fixture's `walkthrough` corpus with its `acceptance_wt` wire (GET
 /runs/:id/acceptance → the WT-W2 `walkthrough` block and the WT-W3 `summary`), in the session thread:
@@ -28,13 +28,13 @@ import os
 import sys
 import urllib.request
 
-from uxfix_fixture import HIDE_GATE_TOASTS, REPO, STUDIO_SKIN, ensure_build, set_fixture, start_server
+from uxfix_fixture import HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4359"))
 W, H = 1440, 700
 SHOTS = REPO / "e2e" / "shots"
 
-report: dict = {"ok": False, "skin": STUDIO_SKIN, "steps": {}}
+report: dict = {"ok": False, "steps": {}}
 
 
 def fail(step: str, why) -> None:
@@ -55,8 +55,6 @@ def get_json(url: str) -> dict:
         return json.loads(res.read())
 
 
-if STUDIO_SKIN != "desk":
-    fail("skin", f"desk journeys run under STUDIO_SKIN=desk, not {STUDIO_SKIN}")
 
 dist = ensure_build(fail)
 origin = start_server(PORT, dist)

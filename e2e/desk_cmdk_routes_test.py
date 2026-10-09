@@ -2,7 +2,7 @@
 """
 desk_cmdk_routes_test.py — the skin contract's "by ⌘K" half (DES-STUDIO-REBUILD-001 §10, §14 Q2;
 COVERAGE.md finding 1): every route the router serves is reachable from ⌘K, at 1440x700 under
-STUDIO_SKIN=desk (the skin with the least nav, so ⌘K carries the most).
+the Desk (the skin with the least nav, so ⌘K carries the most).
 
 Against the in-process fixture (wave-1 corpus + the team corpus for a project with runs):
 
@@ -22,13 +22,13 @@ import os
 import sys
 import urllib.parse
 
-from uxfix_fixture import HIDE_GATE_TOASTS, REPO, STUDIO_SKIN, ensure_build, set_fixture, start_server
+from uxfix_fixture import HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4353"))
 W, H = 1440, 700
 SHOTS = REPO / "e2e" / "shots"
 
-report: dict = {"ok": False, "skin": STUDIO_SKIN, "steps": {}}
+report: dict = {"ok": False, "steps": {}}
 
 
 def fail(step: str, why) -> None:
@@ -44,8 +44,6 @@ def check(step: str, ok: bool, **detail) -> None:
         sys.exit(1)
 
 
-if STUDIO_SKIN != "desk":
-    fail("skin", f"desk journeys run under STUDIO_SKIN=desk, not {STUDIO_SKIN}")
 
 dist = ensure_build(fail)
 origin = start_server(PORT, dist)

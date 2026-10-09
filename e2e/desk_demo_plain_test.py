@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-desk_demo_plain_test.py — DEMO MODE IN PLAIN WORDS at 1440x700 under STUDIO_SKIN=desk (studio#520,
+desk_demo_plain_test.py — DEMO MODE IN PLAIN WORDS at 1440x700 on the Desk (studio#520,
 #521 — two defects the W12 reel found on the released 0.6.1 Desk; the frames had to be blurred).
 
   1. #520 — Project › Demo mode › "This project's demos": a row read the run's raw `problem`, which on
@@ -24,7 +24,7 @@ import json
 import os
 import sys
 
-from uxfix_fixture import DEFAULT_APPEARANCE, HIDE_GATE_TOASTS, REPO, STUDIO_SKIN, ensure_build, set_fixture, start_server
+from uxfix_fixture import DEFAULT_APPEARANCE, HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4474"))
 W, H = 1440, 700
@@ -37,7 +37,7 @@ PROBLEM = (f"Make a demo of {URL} with the wicked-garden-demo skill for new team
 GATE_PROMPT = ("Unit 3 was DENIED by input governance — a tool call was refused (`Bash`): input governance denied a "
                "tool-call in unit-3 (claim witness-deny:unit-3). Approve to retry, or reject to cancel the run.")
 
-report: dict = {"ok": False, "skin": STUDIO_SKIN, "steps": {}}
+report: dict = {"ok": False, "steps": {}}
 
 
 def fail(step: str, why) -> None:
@@ -53,8 +53,6 @@ def check(step: str, ok: bool, **detail) -> None:
         sys.exit(1)
 
 
-if STUDIO_SKIN != "desk":
-    fail("skin", f"desk journeys run under STUDIO_SKIN=desk, not {STUDIO_SKIN}")
 
 dist = ensure_build(fail)
 origin = start_server(PORT, dist)
@@ -107,7 +105,7 @@ with sync_playwright() as p:
     # strips it with replaceState) — so the destination the button pushed is recorded here.
     page.add_init_script("window.__pushed = []; const _ps = history.pushState.bind(history); "
                          "history.pushState = (st, t, u) => { window.__pushed.push(String(u)); return _ps(st, t, u); };")
-    set_fixture(origin, wave1=True, demo_runs=True, reset_demo=True, appearance={**DEFAULT_APPEARANCE, "skin": "desk", "skin_migrated": True})
+    set_fixture(origin, wave1=True, demo_runs=True, reset_demo=True, appearance={**DEFAULT_APPEARANCE})
     page.route("**/api/v1/runs", route_runs)
     page.route("**/api/v1/runs?*", route_runs)
     page.route(f"**/api/v1/runs/{RID}/demo", lambda r: r.fulfill(status=200, content_type="application/json", body=json.dumps(demo_view())))

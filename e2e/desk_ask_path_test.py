@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 desk_ask_path_test.py — ASK-S2 (DES-ASK-TEAM-CHAT-001 §4.7, §9's Playwright item) at 1440x700, under
-STUDIO_SKIN=desk: Continue in Build happens IN the thread.
+the Desk: Continue in Build happens IN the thread.
 
 Against the fixture's `ask_path` replay: question → one reply + the reviewer line → "Build this" →
 the PA proposes the work (a `change` adding the first creator step, scored on its declared touch,
@@ -29,13 +29,13 @@ import sys
 import time
 import urllib.request
 
-from uxfix_fixture import HIDE_GATE_TOASTS, REPO, STUDIO_SKIN, ensure_build, set_fixture, start_server
+from uxfix_fixture import HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4467"))
 W, H = 1440, 700
 SHOTS = REPO / "e2e" / "shots"
 
-report: dict = {"ok": False, "skin": STUDIO_SKIN, "steps": {}}
+report: dict = {"ok": False, "steps": {}}
 
 
 def fail(step: str, why) -> None:
@@ -56,8 +56,6 @@ def fixture_get(origin: str, path: str):
         return json.loads(res.read())
 
 
-if STUDIO_SKIN != "desk":
-    fail("skin", f"desk journeys run under STUDIO_SKIN=desk, not {STUDIO_SKIN}")
 
 dist = ensure_build(fail)
 origin = start_server(PORT, dist)

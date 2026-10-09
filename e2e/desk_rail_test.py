@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 desk_rail_test.py — THE DESK RAIL after Amendment 5 (DES-STUDIO-REBUILD-001 Amendment 5, as revised;
-S15c) at 1440x700 under STUDIO_SKIN=desk.
+S15c) at 1440x700 on the Desk.
 
 Against the in-process fixture (wave-1 + wave-2b corpus):
 
@@ -21,13 +21,13 @@ import json
 import os
 import sys
 
-from uxfix_fixture import HIDE_GATE_TOASTS, REPO, STUDIO_SKIN, ensure_build, set_fixture, start_server
+from uxfix_fixture import HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4366"))
 W, H = 1440, 700
 SHOTS = REPO / "e2e" / "shots"
 
-report: dict = {"ok": False, "skin": STUDIO_SKIN, "steps": {}}
+report: dict = {"ok": False, "steps": {}}
 
 
 def fail(step: str, why) -> None:
@@ -43,8 +43,6 @@ def check(step: str, ok: bool, **detail) -> None:
         sys.exit(1)
 
 
-if STUDIO_SKIN != "desk":
-    fail("skin", f"desk journeys run under STUDIO_SKIN=desk, not {STUDIO_SKIN}")
 
 RAIL = """() => {
   const rail = document.querySelector('[data-testid="session-rail"]');

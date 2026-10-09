@@ -16,8 +16,8 @@ work under review, at 1440x700.
            "Run-level gate" (never "Workflow-declared"), and the steer scope defaults to the fix
            phase; Approve + steer POSTs {approve: true, amend, amendScope: "creator"}.
 
-Captures (e2e/shots/): escalation-arms-<skin>-{timeout,suggest,prerun}.png.
-Env: FEEDBACK_PORT (default 4472), STUDIO_SKIN. JSON report; exit 0/1.
+Captures (e2e/shots/): escalation-arms-desk-{timeout,suggest,prerun}.png.
+Env: FEEDBACK_PORT (default 4472). JSON report; exit 0/1.
 """
 
 import json
@@ -26,15 +26,13 @@ import sys
 import time
 import urllib.request
 
-from uxfix_fixture import (DEFAULT_APPEARANCE, HIDE_GATE_TOASTS, REPO, STUDIO_SKIN, ensure_build,
+from uxfix_fixture import (DEFAULT_APPEARANCE, HIDE_GATE_TOASTS, REPO, ensure_build,
                            set_fixture, start_server)
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4472"))
 W, H = 1440, 700
 SHOTS = REPO / "e2e" / "shots"
-SKIN = STUDIO_SKIN
-
-report: dict = {"ok": False, "skin": SKIN, "steps": {}}
+report: dict = {"ok": False, "steps": {}}
 
 
 class SectionFailed(Exception):
@@ -68,7 +66,7 @@ def wait_post(page, origin: str, rid: str) -> dict:
 
 def reset(origin: str) -> None:
     set_fixture(origin, **{"escalation_arms": True, "reset_gate_posts": True,
-                           "appearance": {**DEFAULT_APPEARANCE, "skin": SKIN}})
+                           "appearance": {**DEFAULT_APPEARANCE}})
 
 
 def text(page, testid: str) -> str:
@@ -108,7 +106,7 @@ with sync_playwright() as p:
         check("escalation-layout", page.get_by_test_id("steering-retry").count() == 1
               and page.get_by_test_id("steering-approve").count() == 0)
         page.get_by_test_id("gate-escalation-offers").scroll_into_view_if_needed()
-        page.screenshot(path=str(SHOTS / f"escalation-arms-{SKIN}-timeout.png"))
+        page.screenshot(path=str(SHOTS / f"escalation-arms-desk-timeout.png"))
         page.get_by_test_id("gate-escalation-extend").click()
         body = wait_post(page, origin, "r-timeout")
         check("extend-posts-the-arm-alone", body.get("approve") is True and body.get("action") == "extend"
@@ -123,7 +121,7 @@ with sync_playwright() as p:
         check("no-timeout-arms", page.get_by_test_id("gate-escalation-extend").count() == 0)
         check("consequence-above-suggestion", page.evaluate(ABOVE, ["gate-escalation-consequence-accept_suggestion", "gate-escalation-accept_suggestion"]))
         page.get_by_test_id("gate-escalation-offers").scroll_into_view_if_needed()
-        page.screenshot(path=str(SHOTS / f"escalation-arms-{SKIN}-suggest.png"))
+        page.screenshot(path=str(SHOTS / f"escalation-arms-desk-suggest.png"))
         page.get_by_test_id("gate-escalation-accept_suggestion").click()
         body = wait_post(page, origin, "r-suggest")
         check("suggestion-posts-the-arm-alone", body.get("approve") is True and body.get("action") == "accept_suggestion"
@@ -146,7 +144,7 @@ with sync_playwright() as p:
         check("scope-defaults-to-fix", page.get_by_test_id("steer-scope-creator").is_checked()
               and "fix" in text(page, "steer-scope"))
         page.get_by_test_id("steering-amend").fill("merge the parser branch first")
-        page.screenshot(path=str(SHOTS / f"escalation-arms-{SKIN}-prerun.png"))
+        page.screenshot(path=str(SHOTS / f"escalation-arms-desk-prerun.png"))
         page.get_by_test_id("steering-approve-steer").click()
         body = wait_post(page, origin, "r-prerun")
         check("steer-targets-the-creator", body.get("approve") is True and body.get("amend") == "merge the parser branch first"

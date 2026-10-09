@@ -13,8 +13,8 @@ gate_trust_test.py — trust at the gate (brainstorm-actionable ideas 7 + 8), at
   covered  r-trust-codex (same project and band) then offers nothing: the order covers it.
   deliver  /runs/r-trust-deliver: the deliver gate carries the record but NEVER the offer.
 
-Captures (e2e/shots/): gate-trust-<skin>-offer.png, gate-trust-<skin>-codex.png, gate-trust-<skin>-deliver.png.
-Env: FEEDBACK_PORT (default 4473), STUDIO_SKIN. JSON report; exit 0/1.
+Captures (e2e/shots/): gate-trust-desk-offer.png, gate-trust-desk-codex.png, gate-trust-desk-deliver.png.
+Env: FEEDBACK_PORT (default 4473). JSON report; exit 0/1.
 """
 
 import json
@@ -23,18 +23,17 @@ import sys
 import time
 import urllib.request
 
-from uxfix_fixture import (DEFAULT_APPEARANCE, HIDE_GATE_TOASTS, REPO, STUDIO_SKIN, ensure_build,
+from uxfix_fixture import (DEFAULT_APPEARANCE, HIDE_GATE_TOASTS, REPO, ensure_build,
                            set_fixture, start_server)
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4473"))
 W, H = 1440, 700
 SHOTS = REPO / "e2e" / "shots"
-SKIN = STUDIO_SKIN
 RULE = {"scope": {"kind": "project", "projectId": "northwind"},
         "trigger": {"kind": "gate", "phase": "*", "band": "0-19"},
         "action": "approve", "activeWhen": "always"}
 
-report: dict = {"ok": False, "skin": SKIN, "steps": {}}
+report: dict = {"ok": False, "steps": {}}
 
 
 class SectionFailed(Exception):
@@ -70,7 +69,7 @@ def on_screen(page, testid: str) -> bool:
 dist = ensure_build(fail)
 origin = start_server(PORT, dist)
 set_fixture(origin, **{"trust_rules": True, "reset_orders": True, "reset_gate_posts": True,
-                       "appearance": {**DEFAULT_APPEARANCE, "skin": SKIN}})
+                       "appearance": {**DEFAULT_APPEARANCE}})
 
 from playwright.sync_api import sync_playwright  # noqa: E402
 
@@ -99,7 +98,7 @@ with sync_playwright() as p:
               and "It also approves this gate now." in (preview.text_content() or ""), counts=counts)
         page.get_by_test_id("gate-rule-make").scroll_into_view_if_needed()
         check("offer-on-screen", on_screen(page, "gate-rule-make") and on_screen(page, "gate-rule-preview"))
-        page.screenshot(path=str(SHOTS / f"gate-trust-{SKIN}-offer.png"))
+        page.screenshot(path=str(SHOTS / f"gate-trust-desk-offer.png"))
         page.get_by_test_id("gate-rule-make").click()
         page.get_by_test_id("gate-rule-made").wait_for(state="visible", timeout=10000)
         posts = fixture_posts(origin, "standing-order-posts")
@@ -115,7 +114,7 @@ with sync_playwright() as p:
         check("codex-record-differs", record == "codex: 1/5 approvals held · 3 sent back · 1 rejected", record=record)
         page.wait_for_timeout(500)
         check("covered-by-the-order-no-offer", page.get_by_test_id("gate-rule-offer").count() == 0)
-        page.screenshot(path=str(SHOTS / f"gate-trust-{SKIN}-codex.png"))
+        page.screenshot(path=str(SHOTS / f"gate-trust-desk-codex.png"))
 
     def section_deliver() -> None:
         # A fresh fixture with no orders: the deliver gate is refused on its own, not because an order covers it.
@@ -145,7 +144,7 @@ with sync_playwright() as p:
         check("first-press-opens-the-diff", "src/importer/dates.ts" in full
               and text(page, "gate-recommended").startswith("Deliver")
               and fixture_posts(origin, "gate-posts") == [], label=text(page, "gate-recommended"))
-        page.screenshot(path=str(SHOTS / f"gate-trust-{SKIN}-deliver.png"))
+        page.screenshot(path=str(SHOTS / f"gate-trust-desk-deliver.png"))
 
     for section in (section_offer, section_codex, section_deliver):
         try:

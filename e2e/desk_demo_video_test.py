@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-desk_demo_video_test.py — S15d (DES-STUDIO-REBUILD-001 Amendment 5, item 2) at 1440x700, under STUDIO_SKIN=desk.
+desk_demo_video_test.py — S15d (DES-STUDIO-REBUILD-001 Amendment 5, item 2) at 1440x700, on the Desk.
 
 A demo run's recording is an artifact of its session (studio#502). Against the fixture's finished
 demo run (`r-walk-demo`: `GET /runs/:id/demo` stage done, the take under `…/demo/file`), it proves in
@@ -24,13 +24,13 @@ import os
 import sys
 import urllib.request
 
-from uxfix_fixture import HIDE_GATE_TOASTS, REPO, STUDIO_SKIN, ensure_build, set_fixture, start_server
+from uxfix_fixture import HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4463"))
 W, H = 1440, 700
 SHOTS = REPO / "e2e" / "shots"
 
-report: dict = {"ok": False, "skin": STUDIO_SKIN, "steps": {}}
+report: dict = {"ok": False, "steps": {}}
 
 
 def fail(step: str, why) -> None:
@@ -60,8 +60,6 @@ def fetch_of(href: str) -> tuple:
         return e.code, "", b""
 
 
-if STUDIO_SKIN != "desk":
-    fail("skin", f"desk journeys run under STUDIO_SKIN=desk, not {STUDIO_SKIN}")
 
 dist = ensure_build(fail)
 origin = start_server(PORT, dist)

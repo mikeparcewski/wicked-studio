@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 desk_controls_test.py — COVERAGE.md finding 2 (wave 5): the delivery freeze and standing orders
-have a desk home, at 1440x700 under STUDIO_SKIN=desk (where the runs bar and HomeBoard that held
+have a desk home, at 1440x700 on the Desk (where the runs bar and HomeBoard that held
 them are not drawn).
 
 Against the in-process fixture (home_runs: the freeze surface; standing_orders on, no orders):
@@ -22,13 +22,13 @@ import json
 import os
 import sys
 
-from uxfix_fixture import HIDE_GATE_TOASTS, REPO, STUDIO_SKIN, ensure_build, set_fixture, start_server
+from uxfix_fixture import HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4355"))
 W, H = 1440, 700
 SHOTS = REPO / "e2e" / "shots"
 
-report: dict = {"ok": False, "skin": STUDIO_SKIN, "steps": {}}
+report: dict = {"ok": False, "steps": {}}
 
 
 def fail(step: str, why) -> None:
@@ -44,8 +44,6 @@ def check(step: str, ok: bool, **detail) -> None:
         sys.exit(1)
 
 
-if STUDIO_SKIN != "desk":
-    fail("skin", f"desk journeys run under STUDIO_SKIN=desk, not {STUDIO_SKIN}")
 
 dist = ensure_build(fail)
 origin = start_server(PORT, dist)

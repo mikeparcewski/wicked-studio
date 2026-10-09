@@ -29,7 +29,7 @@ an unapproved write, Auto runs).
      the rig's call records (hand-computed below); a tool drills down to seat × run, and a run opens
      its Governance panel. No horizontal overflow at 1440x700.
 
-Captures: e2e/shots/mcp-tools-{preview,approved,rest,steering,usage}-<skin>.png. Skin: STUDIO_SKIN.
+Captures: e2e/shots/mcp-tools-{preview,approved,rest,steering,usage}-desk.png.
 Env: FEEDBACK_PORT (default 4512). Prints a JSON report; exit 0/1.
 """
 
@@ -38,7 +38,7 @@ import os
 import sys
 import urllib.parse
 
-from uxfix_fixture import HIDE_GATE_TOASTS, REPO, STUDIO_SKIN, ensure_build, set_fixture, start_server
+from uxfix_fixture import HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4512"))
 W, H = 1440, 700
@@ -58,7 +58,7 @@ REST_TOOLS = [
     {"name": "deleteIssue", "method": "DELETE", "path": "/issues/{id}", "annotations": {"readOnlyHint": False, "destructiveHint": True}, "class": "destructive"},
 ]
 
-report: dict = {"ok": False, "skin": STUDIO_SKIN, "steps": {}}
+report: dict = {"ok": False, "steps": {}}
 mcp = {"servers": [], "approved": set(), "posts": [], "usage_queries": []}
 RULES = [
     {"id": "PAT-001", "rule_type": "pattern", "statement": "Pin the fetch boundary", "severity": "warn",
@@ -274,23 +274,15 @@ with sync_playwright() as p:
     try:
         page.get_by_test_id("mcp-empty").wait_for(state="visible", timeout=15000)
     except Exception:
-        page.screenshot(path=str(SHOTS / f"mcp-tools-missing-{STUDIO_SKIN}.png"))
+        page.screenshot(path=str(SHOTS / f"mcp-tools-missing-desk.png"))
         fail("page-shows", page.locator("body").inner_text()[:2000])
-    if STUDIO_SKIN == "desk":
-        # Amendment 5: Skills · MCP tools · Steering sit in the Desk's rail itself (they change what
-        # in-flight work does) — MCP tools between Skills and Steering.
-        dests = page.evaluate("""() => [...document.querySelectorAll('[data-testid="session-rail"] [data-nav-dest]')]
-            .map(e => e.getAttribute('data-nav-dest'))""")
-        nav = {"dests": dests}
-        order = dests
-        want = ["section:skills", "section:mcp", "section:steering"]
-    else:
-        nav = page.evaluate("""() => {
-            const glyphs = [...document.querySelectorAll('[data-testid="rail-collapsed-glyph"]')].map(g => g.getAttribute('href'));
-            const heads = [...document.querySelectorAll('[data-testid^="rail-heading-"]')].map(h => h.dataset.testid.slice('rail-heading-'.length));
-            return { glyphs, heads }; }""")
-        order = nav["glyphs"] if STUDIO_SKIN == "compact-rail" else nav["heads"]
-        want = ["/skills", "/mcp", "/steering/dashboard"] if STUDIO_SKIN == "compact-rail" else ["skills", "mcp", "steering"]
+    # Amendment 5: Skills · MCP tools · Steering sit in the Desk's rail itself (they change what
+    # in-flight work does) — MCP tools between Skills and Steering.
+    dests = page.evaluate("""() => [...document.querySelectorAll('[data-testid="session-rail"] [data-nav-dest]')]
+        .map(e => e.getAttribute('data-nav-dest'))""")
+    nav = {"dests": dests}
+    order = dests
+    want = ["section:skills", "section:mcp", "section:steering"]
     idx = [order.index(x) if x in order else -1 for x in want]
     check("nav-between-skills-and-steering", -1 not in idx and idx[1] == idx[0] + 1 and idx[2] == idx[1] + 1, nav=nav)
 
@@ -313,7 +305,7 @@ with sync_playwright() as p:
           and all(c == "creator:ask" for c in note["cells"][:6]) and all(c.endswith(":deny") for c in note["cells"][6:]),
           preview=prev)
     check("nothing-registered-before-save", not any(x["method"] == "POST" and x["path"] == "/mcp/servers" for x in mcp["posts"]))
-    page.screenshot(path=str(SHOTS / f"mcp-tools-preview-{STUDIO_SKIN}.png"))
+    page.screenshot(path=str(SHOTS / f"mcp-tools-preview-desk.png"))
 
     # ── 2. save that preview ─────────────────────────────────────────────────────
     page.get_by_test_id("mcp-add-save").click()
@@ -356,7 +348,7 @@ with sync_playwright() as p:
           creator=c1, evaluator=c2)
     ov = no_overflow(page)
     check("no-horizontal-overflow", ov["docW"] <= ov["winW"] and ov["main"] is not None and ov["main"]["sw"] <= ov["main"]["cw"], **ov)
-    page.screenshot(path=str(SHOTS / f"mcp-tools-approved-{STUDIO_SKIN}.png"))
+    page.screenshot(path=str(SHOTS / f"mcp-tools-approved-desk.png"))
 
     # ── 4b. wrap a REST API (S5a) ────────────────────────────────────────────────
     page.get_by_test_id("mcp-add-open").click()
@@ -383,7 +375,7 @@ with sync_playwright() as p:
     ov = no_overflow(page)
     check("rest-no-horizontal-overflow", ov["docW"] <= ov["winW"], **ov)
     page.get_by_test_id("mcp-add-panel").scroll_into_view_if_needed()
-    page.screenshot(path=str(SHOTS / f"mcp-tools-rest-{STUDIO_SKIN}.png"))
+    page.screenshot(path=str(SHOTS / f"mcp-tools-rest-desk.png"))
     page.get_by_test_id("mcp-add-cancel").click()
 
     # ── 5. Steering: the MCP filter and the Subject picker ───────────────────────
@@ -407,7 +399,7 @@ with sync_playwright() as p:
     page.get_by_test_id("steering-mcp-add-subject").click()
     chips = page.evaluate("() => [...document.querySelectorAll('[data-testid=\"steering-form-applies-chip\"]')].map(c => c.textContent.replace('×', ''))")
     check("subject-picker-fills-applies-to", chips == ["mcp:jira/wt_note"], chips=chips)
-    page.screenshot(path=str(SHOTS / f"mcp-tools-steering-{STUDIO_SKIN}.png"))
+    page.screenshot(path=str(SHOTS / f"mcp-tools-steering-desk.png"))
 
     # ── 6. Usage (slice S7) ──────────────────────────────────────────────────────
     page.goto(f"{origin}/mcp", wait_until="domcontentloaded")
@@ -441,7 +433,7 @@ with sync_playwright() as p:
     runs = page.evaluate("""() => [...document.querySelectorAll('[data-testid="mcp-usage-run"]')].map(r => r.dataset.seat + '@' + r.dataset.run)""")
     check("usage-drill-down", runs == ["codex@r-other", "claude@c1", "codex@c1"]
           and any("subject=mcp%3Ajira%2Fwt_note" in q for q in mcp["usage_queries"]), runs=runs, queries=mcp["usage_queries"])
-    page.screenshot(path=str(SHOTS / f"mcp-tools-usage-{STUDIO_SKIN}.png"))
+    page.screenshot(path=str(SHOTS / f"mcp-tools-usage-desk.png"))
     page.locator('[data-testid="mcp-usage-run"][data-seat="claude"] [data-testid="mcp-usage-run-link"]').click()
     try:
         # /runs/c1 is the legacy address; it redirects to the run's project path, keeping the fragment.

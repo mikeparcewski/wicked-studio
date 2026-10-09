@@ -136,7 +136,7 @@ describe('what survives an Undo — the Desk carriers (S18a, boundary 2)', () =>
     openGate('g1', 0);
     openGate('g2', 0);
     const { unmount } = render(
-      <NeedsQueueSurface rows={[gateRow('g1'), gateRow('g2')]} runs={[]} navigate={() => {}} now={NOW_DS} variant="desk" />,
+      <NeedsQueueSurface rows={[gateRow('g1'), gateRow('g2')]} runs={[]} navigate={() => {}} now={NOW_DS} />,
     );
     // Open the reason input and type a note, then submit.
     fireEvent.click(screen.getByTestId('need-group-reject'));
@@ -150,7 +150,7 @@ describe('what survives an Undo — the Desk carriers (S18a, boundary 2)', () =>
     // clicking "Reject with reason…" opens the input pre-populated.
     unmount();
     render(
-      <NeedsQueueSurface rows={[gateRow('g1'), gateRow('g2')]} runs={[]} navigate={() => {}} now={NOW_DS} variant="desk" />,
+      <NeedsQueueSurface rows={[gateRow('g1'), gateRow('g2')]} runs={[]} navigate={() => {}} now={NOW_DS} />,
     );
     fireEvent.click(screen.getByTestId('need-group-reject'));
     expect((screen.getByTestId('need-group-reject-reason') as HTMLInputElement).value).toBe('needs the Q3 numbers');

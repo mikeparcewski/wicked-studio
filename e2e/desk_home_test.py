@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-desk_home_test.py — THE DESK (DES-STUDIO-REBUILD-001 §11 S4) at 1440x700, under STUDIO_SKIN=desk.
+desk_home_test.py — THE DESK (DES-STUDIO-REBUILD-001 §11 S4) at 1440x700, on the Desk.
 
 Drives the built UI against the in-process fixture (the wave-2b queue corpus: two simple gates
 grouped, one MCP elicitation, one failure; the fixture roster has a seat whose sign-in lapsed) and
 proves the S4 acceptance:
 
-  1. SHELL: <html data-skin="desk">, the session rail is 236 px, and the classic left nav, the runs
+  1. SHELL: data-shell="desk" (the one shell since S18d), the session rail is 236 px, and the classic left nav, the runs
      bottom bar and every KPI tile are gone.
   2. ONE COUNT: the Desk sentence's count = the Desk rail badge = the needs-you list's count, and
      every session badge in the rail names a run the needs-you list holds.
@@ -30,14 +30,14 @@ import json
 import os
 import sys
 
-from uxfix_fixture import HIDE_GATE_TOASTS, REPO, STUDIO_SKIN, ensure_build, set_fixture, start_server
+from uxfix_fixture import HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4346"))
 W, H = 1440, 700
 SHOTS = REPO / "e2e" / "shots"
 HOUR_MS = 3_600_000
 
-report: dict = {"ok": False, "skin": STUDIO_SKIN, "steps": {}}
+report: dict = {"ok": False, "steps": {}}
 
 
 def fail(step: str, why) -> None:
@@ -53,8 +53,6 @@ def check(step: str, ok: bool, **detail) -> None:
         sys.exit(1)
 
 
-if STUDIO_SKIN != "desk":
-    fail("skin", f"desk journeys run under STUDIO_SKIN=desk, not {STUDIO_SKIN}")
 
 CORPUS = dict(wave1=True, wave2b=True, simple_gates=["g1", "g2"], gate_now=[], status_over={},
               extra_frames=[])
@@ -62,7 +60,7 @@ CORPUS = dict(wave1=True, wave2b=True, simple_gates=["g1", "g2"], gate_now=[], s
 SHELL = """() => {
   const rail = document.querySelector('[data-testid="session-rail"]');
   return {
-    skin: document.documentElement.getAttribute('data-skin'),
+    skin: document.querySelector('[data-shell]')?.getAttribute('data-shell') ?? null,
     rail: rail ? Math.round(rail.getBoundingClientRect().width) : null,
     leftNav: !!document.querySelector('[data-testid="left-rail"]'),
     runsBar: !!document.querySelector('[data-testid="runs-bottom-bar"]'),
@@ -79,7 +77,7 @@ COUNTS = """() => {
   const sessions = [...document.querySelectorAll('[data-testid="rail-session"]')]
     .map(s => ({run: s.dataset.runId, badge: Number(s.dataset.badge || '0')}));
   return {
-    queue: q ? Number(q.dataset.count) : null, variant: q ? q.dataset.skinVariant : null,
+    queue: q ? Number(q.dataset.count) : null, variant: q ? (q.classList.contains('wk-desk-needs') ? 'desk' : 'other') : null,
     headline: h ? Number(h.dataset.count) : null, headlineText: h ? h.innerText : null,
     badge: b ? Number(b.innerText) : 0,
     sessions,
@@ -123,7 +121,7 @@ with sync_playwright() as p:
         page.get_by_test_id("desk").wait_for(state="visible", timeout=15000)
     except Exception:
         page.screenshot(path=str(SHOTS / "desk-home-missing.png"))
-        fail("desk-renders", "no [data-testid=desk] on / under the desk skin")
+        fail("desk-renders", "no [data-testid=desk] on /")
     page.get_by_test_id("needs-you-queue").wait_for(state="visible", timeout=10000)
     set_fixture(origin, extra_frames=[{"type": "elicitationCreated", "session": "e1", "elicitationId": "el-1",
                                        "message": "Which region should the backfill target?", "options": None}])
@@ -244,7 +242,7 @@ with sync_playwright() as p:
         fail("while-you-were-away", "no handover on the Desk after a 3 h absence")
     away = page.evaluate("""() => { const h = document.querySelector('[data-testid="handover-panel"]');
       const d = document.querySelector('[data-testid="desk"]');
-      return {variant: h.dataset.skinVariant, inDesk: !!d && d.contains(h), text: h.innerText}; }""")
+      return {variant: h.classList.contains('wk-handover--desk-away') ? 'desk-away' : 'other', inDesk: !!d && d.contains(h), text: h.innerText}; }""")
     page.screenshot(path=str(SHOTS / "desk-home-away.png"))
     away_fit = page.evaluate(FIT)
     check("while-you-were-away", away["variant"] == "desk-away" and away["inDesk"]

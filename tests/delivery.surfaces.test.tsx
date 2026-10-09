@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
-import { ProjectDashboard } from '../src/components/ProjectDashboard.js';
+import { cleanup, render, screen, within } from '@testing-library/react';
 import { CenterDashboard } from '../src/components/CenterDashboard.js';
 import { useGateStore } from '../src/store/gates.js';
 import { useProjectsStore } from '../src/store/projects.js';
@@ -74,14 +73,6 @@ function plain(id: string): SessionView {
   );
 }
 
-/** A CHAT thread filed into `proj-1` — a run that can never deliver (D5). */
-function chat(id: string): SessionView {
-  return makeView(
-    { id, workflow_id: 'chat', status: 'completed', problem: `chat ${id}`, project_id: 'proj-1' },
-    [],
-  );
-}
-
 /**
  * Nineteen runs: 3 delivered, 2 delivered nothing, 14 with no deliver phase —
  * deliberately more than the tile's MAX_ROWS of 6, and with the interesting ones
@@ -112,126 +103,6 @@ beforeEach(() => {
   vi.stubGlobal('fetch', fetchSpy);
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); clearCachedWorkflows(); });
-
-describe('the project page (EC57, EC58)', () => {
-  it('chips each run row with what it produced, and stays silent for runs that have no deliver phase', async () => {
-    render(<ProjectDashboard projectId="proj-1" runs={corpus()} navigate={() => {}} />);
-
-    const rows = await screen.findAllByTestId('dashboard-run');
-    expect(rows).toHaveLength(19); // the full last-30 window — no row cap on the card grid
-
-    const chipped = rows.filter((r) => within(r).queryByTestId('run-delivery-chip') !== null);
-    for (const row of chipped) {
-      const chip = within(row).getByTestId('run-delivery-chip');
-      expect(['delivered', 'nothing-to-deliver', 'failed']).toContain(chip.getAttribute('data-state'));
-      // D2: a list surface holds no url, so no chip on it may claim a PR.
-      expect(chip.textContent).not.toMatch(/\bPR\b/);
-    }
-    // Rows for runs with no deliver phase carry no chip — silence, never "unknown".
-    const plainRow = rows.find((r) => r.getAttribute('data-run-id')?.startsWith('r-plain-'));
-    expect(plainRow).toBeDefined();
-    expect(within(plainRow as HTMLElement).queryByTestId('run-delivery-chip')).toBeNull();
-  });
-
-  it('an UNRESOLVED deliver phase gets no row chip — the status pill already owns motion', async () => {
-    // Verification gap closed: `DeliveryChip` returns null for `in-flight` by
-    // deliberate design (a cancelled run's deliver unit stays `pending` forever,
-    // so a second motion word on the row would claim progress that stopped) and
-    // nothing pinned it — dropping the `in-flight` arm left every test green.
-    render(
-      <ProjectDashboard
-        projectId="proj-1"
-        runs={[run('r-pending', 'pending'), run('r-dist', 'distributed'), run('r-pr-1', 'done')]}
-        navigate={() => {}}
-      />,
-    );
-
-    const rows = await screen.findAllByTestId('dashboard-run');
-    const chipOf = (id: string): string | null | undefined =>
-      within(rows.find((r) => r.getAttribute('data-run-id') === id) as HTMLElement)
-        .queryByTestId('run-delivery-chip')?.getAttribute('data-state');
-    expect(chipOf('r-pending')).toBeUndefined();
-    expect(chipOf('r-dist')).toBeUndefined();
-    expect(chipOf('r-pr-1')).toBe('delivered');
-  });
-
-  it('the RUNS-tile census counts ALL runs, not the MAX_ROWS window', async () => {
-    render(<ProjectDashboard projectId="proj-1" runs={corpus()} navigate={() => {}} />);
-
-    const summary = await screen.findByTestId('dashboard-delivery-summary');
-    // 19 runs, all in the last-30 window. The census sees all nineteen — and says "ran
-    // deliver", never "delivered": zero fetches means zero urls in hand.
-    // The fourteen land in "no deliver phase" only because the defs prove
-    // `feature` is an ordinary workflow — the bucket is a claim about a
-    // classification, so it waits for one. (`delivery.materialised.test.tsx`
-    // owns the other side: a run whose def no catalog carries is never counted.)
-    await waitFor(() =>
-      expect(screen.getByTestId('dashboard-delivery-summary').textContent)
-        .toStrictEqual('3 ran deliver · 2 delivered nothing · 14 no deliver phase'),
-    );
-    expect(summary.textContent).not.toMatch(/\bPR\b/);
-    expect(screen.getAllByTestId('dashboard-run')).toHaveLength(19);
-  });
-
-  it('D5: chat threads are OUT of the census — the rail hides Delivery from them', async () => {
-    // The reported symptom, exactly: a chat-heavy project read
-    // "3 delivered · 30 no deliver phase", a count of conversations dressed up
-    // as a delivery finding. The rail already refused to show Delivery on those
-    // threads; now both surfaces agree on what a deliverable run is.
-    const runs = [
-      run('r-pr-1', 'done'), run('r-pr-2', 'done'), run('r-pr-3', 'done'),
-      ...Array.from({ length: 30 }, (_, i) => chat(`c-${i}`)),
-    ];
-    render(<ProjectDashboard projectId="proj-1" runs={runs} navigate={() => {}} />);
-
-    const summary = await screen.findByTestId('dashboard-delivery-summary');
-    expect(summary.textContent).toStrictEqual('3 ran deliver');
-    expect(summary.textContent).not.toContain('no deliver phase');
-  });
-
-  it('a project of ONLY chats shows no census line at all, not an empty one', async () => {
-    render(
-      <ProjectDashboard
-        projectId="proj-1"
-        runs={Array.from({ length: 5 }, (_, i) => chat(`c-${i}`))}
-        navigate={() => {}}
-      />,
-    );
-
-    await screen.findByTestId('dashboard-runs');
-    expect(screen.getAllByTestId('dashboard-run').length).toBeGreaterThan(0);
-    expect(screen.queryByTestId('dashboard-delivery-summary')).not.toBeInTheDocument();
-  });
-
-  it('a project with no runs shows no census line rather than "0 delivered"', async () => {
-    render(<ProjectDashboard projectId="proj-1" runs={[]} navigate={() => {}} />);
-
-    await screen.findByTestId('dashboard-runs');
-    expect(screen.queryByTestId('dashboard-delivery-summary')).not.toBeInTheDocument();
-  });
-
-  it('EC58: rendering the page fires ZERO /units/*/output and ZERO /evidence requests', async () => {
-    render(<ProjectDashboard projectId="proj-1" runs={corpus()} navigate={() => {}} />);
-    await screen.findByTestId('dashboard-delivery-summary');
-    await waitFor(() => expect(listProjectMembers).toHaveBeenCalled());
-
-    expect(getUnitOutput).not.toHaveBeenCalled();
-    const urls = fetchSpy.mock.calls.map((c) => String(c[0]));
-    expect(urls.filter((u) => u.includes('/output') || u.includes('/evidence'))).toEqual([]);
-  });
-
-  it('no delivery TILE is added — the 2×2 grid keeps its four sections', async () => {
-    render(<ProjectDashboard projectId="proj-1" runs={corpus()} navigate={() => {}} />);
-    await screen.findByTestId('dashboard-runs');
-
-    expect(screen.getByTestId('dashboard-runs')).toBeInTheDocument();
-    expect(screen.getByTestId('dashboard-docs')).toBeInTheDocument();
-    expect(screen.queryByTestId('dashboard-delivery')).not.toBeInTheDocument();
-    // The census lives INSIDE the runs tile, not in a tile of its own.
-    expect(screen.getByTestId('dashboard-runs'))
-      .toContainElement(screen.getByTestId('dashboard-delivery-summary'));
-  });
-});
 
 describe('the Build run list (EC57, EC58)', () => {
   function build(runs: SessionView[]): void {

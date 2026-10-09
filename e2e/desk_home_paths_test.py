@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-desk_home_paths_test.py — under STUDIO_SKIN=desk at 1440x700, no rendered text carries the operator's
+desk_home_paths_test.py — on the Desk at 1440x700, no rendered text carries the operator's
 home directory on any route (studio#458 settings, #460 skills, #462 run output — the rule #444 set for
 the hand-over card), and the Desk shows an honest loading state while GET /runs is held (studio#459).
 
@@ -36,13 +36,13 @@ import re
 import sys
 import urllib.parse
 
-from uxfix_fixture import FAKE_HOME, HIDE_GATE_TOASTS, REPO, STUDIO_SKIN, ensure_build, set_fixture, start_server
+from uxfix_fixture import FAKE_HOME, HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4356"))
 W, H = 1440, 700
 SHOTS = REPO / "e2e" / "shots"
 
-report: dict = {"ok": False, "skin": STUDIO_SKIN, "steps": {}}
+report: dict = {"ok": False, "steps": {}}
 
 
 def fail(step: str, why) -> None:
@@ -58,8 +58,6 @@ def check(step: str, ok: bool, **detail) -> None:
         sys.exit(1)
 
 
-if STUDIO_SKIN != "desk":
-    fail("skin", f"desk journeys run under STUDIO_SKIN=desk, not {STUDIO_SKIN}")
 
 dist = ensure_build(fail)
 origin = start_server(PORT, dist)

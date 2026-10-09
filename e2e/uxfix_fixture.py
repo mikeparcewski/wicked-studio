@@ -631,7 +631,7 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          #   in-flight state is observable).
          "wave2b": False, "simple_gates": [], "audit_delay_ms": 0,
          # settings_delay_ms — GET /settings answers only after this delay, so the page's first
-         #   paint (the default skin, before studio.appearance lands) is observable. Like every key
+         #   paint (before studio.appearance lands) is observable. Like every key
          #   here it holds until a later set_fixture passes it again (0 clears it); the state lives
          #   in one journey's process, so it never reaches another journey.
          "settings_delay_ms": 0,
@@ -1166,28 +1166,19 @@ def capture_rows(run_id: str, project_id: str) -> list:
 # page loads via POST /__fixture {"appearance": {...}} (None restores defaults)
 # and reads back what the page PUT.
 #
-# STUDIO_SKIN (env) — the skin every rig boots under (src/theming/skins.ts). It rides the
-# stored `studio.appearance.skin`, the SAME path the Theme page's picker persists through,
-# so `STUDIO_SKIN=compact-rail python3 e2e/wave2b_queue_test.py` runs a behaviour journey
-# under the proof skin with no rig change. Unset = `studio`, the classic look. The record is
-# past the flip (`skin_migrated`, S15b), so the stored skin is honoured as chosen — a record
-# without it would resolve to `desk`, the default since the flip.
-STUDIO_SKIN = os.environ.get("STUDIO_SKIN", "studio")
-# Each skin's shell (src/theming/skins.ts `shell`), as App's root stamps it in `data-shell`.
-SKIN_SHELL = {"studio": "classic", "compact-rail": "right-rail", "desk": "desk"}
+# One shell (S18d): the Desk. The classic skins and the skin env switch retired; the stored
+# appearance carries no skin keys (a legacy record's `skin` / `skin_migrated` are ignored).
 
 
 def wait_for_skin(page, timeout: int = 15000) -> None:
-    """Wait until the page renders under STUDIO_SKIN. The first paint is the default skin (the
-    Desk since S15b) until GET /settings lands `studio.appearance`; an element both shells carry
-    can be visible in that first paint and then remount. Waits for `<html data-skin>` and App's
-    `data-shell` together, so React has committed the swap."""
+    """Wait until the Desk's shell has committed: App's `data-shell="desk"` and the session rail.
+    GET /settings may land `studio.appearance` after the first paint (settings_delay_ms)."""
     page.wait_for_function(
-        """([skin, shell]) => document.documentElement.getAttribute('data-skin') === skin
-            && document.querySelector('[data-shell]')?.getAttribute('data-shell') === shell""",
-        arg=[STUDIO_SKIN, SKIN_SHELL[STUDIO_SKIN]], timeout=timeout)
+        """() => document.querySelector('[data-shell]')?.getAttribute('data-shell') === 'desk'
+            && !!document.querySelector('[data-testid="session-rail"]')""",
+        timeout=timeout)
 DEFAULT_APPEARANCE = {"accent_h": 230, "accent_s": 74, "accent_l": 68,
-                      "logo_url": None, "theme": "dark", "skin": STUDIO_SKIN, "skin_migrated": True}
+                      "logo_url": None, "theme": "dark"}
 settings_store: dict = {"graphNodeLimit": 150,
                         "studio.appearance": dict(DEFAULT_APPEARANCE)}
 

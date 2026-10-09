@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 desk_walkthrough_test.py — WT-U1, the walkthrough / demo-video artifact (DES-WALKTHROUGH-PROOF-001 §3
-scenes 18, 19, 20, 23 and 41) at 1440x700 under STUDIO_SKIN=desk.
+scenes 18, 19, 20, 23 and 41) at 1440x700 on the Desk.
 
 Against the in-process fixture's `walkthrough` corpus — crew's WT-W1..W3 wire (`GET
 /runs/:id/walkthrough`, `…/walkthrough/file`, `PUT …/walkthrough/storyline`) and a finished demo run
@@ -41,7 +41,7 @@ import os
 import sys
 import urllib.request
 
-from uxfix_fixture import HIDE_GATE_TOASTS, REPO, STUDIO_SKIN, ensure_build, set_fixture, start_server
+from uxfix_fixture import HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4361"))
 PART = os.environ.get("DESK_WALK_PART", "")
@@ -49,7 +49,7 @@ W, H = 1440, 700
 SHOTS = REPO / "e2e" / "shots"
 KINDS = {"on_screen", "saved_state", "events", "side_effects", "output", "must_not_happen", "cross_check"}
 
-report: dict = {"ok": False, "skin": STUDIO_SKIN, "part": PART or "all", "steps": {}}
+report: dict = {"ok": False, "part": PART or "all", "steps": {}}
 
 
 def fail(step: str, why) -> None:
@@ -84,8 +84,6 @@ def fetch_of(href: str) -> tuple:
         return e.code, "", b""
 
 
-if STUDIO_SKIN != "desk":
-    fail("skin", f"desk journeys run under STUDIO_SKIN=desk, not {STUDIO_SKIN}")
 if PART not in ("", "a", "b"):
     fail("part", f"DESK_WALK_PART is {PART!r}: it names one half, a or b (empty runs both)")
 

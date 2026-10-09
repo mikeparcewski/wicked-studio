@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-desk_settings_honest_test.py — SETTINGS AND THEME SAY WHAT IS TRUE at 1440x700 under STUDIO_SKIN=desk
+desk_settings_honest_test.py — SETTINGS AND THEME SAY WHAT IS TRUE at 1440x700 on the Desk
 (studio#512, #513, #517, #518 — four defects the W12 reel found on the released 0.6.1 Desk).
 
   1. #512 — Theme › Site name is shown under the Desk skin: the rail's brand reads the saved name
@@ -27,13 +27,13 @@ import json
 import os
 import sys
 
-from uxfix_fixture import DEFAULT_APPEARANCE, HIDE_GATE_TOASTS, REPO, STUDIO_SKIN, ensure_build, set_fixture, start_server
+from uxfix_fixture import DEFAULT_APPEARANCE, HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4473"))
 W, H = 1440, 700
 SHOTS = REPO / "e2e" / "shots"
 
-report: dict = {"ok": False, "skin": STUDIO_SKIN, "steps": {}}
+report: dict = {"ok": False, "steps": {}}
 
 
 def fail(step: str, why) -> None:
@@ -49,8 +49,6 @@ def check(step: str, ok: bool, **detail) -> None:
         sys.exit(1)
 
 
-if STUDIO_SKIN != "desk":
-    fail("skin", f"desk journeys run under STUDIO_SKIN=desk, not {STUDIO_SKIN}")
 
 dist = ensure_build(fail)
 origin = start_server(PORT, dist)
@@ -59,7 +57,7 @@ from playwright.sync_api import sync_playwright  # noqa: E402
 
 SHOTS.mkdir(parents=True, exist_ok=True)
 errors: list[str] = []
-LIGHT = {**DEFAULT_APPEARANCE, "theme": "wicked-light", "accent_h": 200, "accent_s": 47, "accent_l": 25, "skin": "desk", "skin_migrated": True}
+LIGHT = {**DEFAULT_APPEARANCE, "theme": "wicked-light", "accent_h": 200, "accent_s": 47, "accent_l": 25}
 
 
 def notification_stub(permission: str, result: str) -> str:

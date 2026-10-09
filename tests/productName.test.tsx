@@ -17,17 +17,13 @@ vi.mock('../src/api/client.js', () => ({
   },
 }));
 
-const { LeftSidebar } = await import('../src/components/LeftSidebar.js');
+const { SessionRail } = await import('../src/components/desk/SessionRail.js');
 
 describe('visible product name', () => {
-  it('the sidebar wordmark reads wicked-studio', async () => {
-    render(<LeftSidebar runs={[]} navigate={() => {}} pathname="/" />);
-
-    // The wordmark is the home button next to the logo. `findByRole` also settles the
-    // health/repos fetches the sidebar kicks off on mount. Matched exactly, so the old
-    // "wicked-crew studio" (which contains this text) cannot satisfy it.
-    const wordmark = await screen.findByRole('button', { name: 'wicked-studio' });
-    expect(wordmark.textContent?.trim()).toBe('wicked-studio');
+  it('the session rail brand reads wicked studio', () => {
+    render(<SessionRail runs={[]} needRows={[]} navigate={() => {}} pathname="/" />);
+    // The Desk's rail brand (the classic sidebar's "wicked-studio" button retired with S18d).
+    expect(screen.getByTestId('desk-rail-brand').textContent?.replace(/\s+/g, ' ').trim()).toBe('wicked studio');
   });
 
   it('the document title reads wicked-studio', () => {

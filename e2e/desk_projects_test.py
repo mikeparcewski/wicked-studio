@@ -6,7 +6,7 @@ import os
 import sys
 import urllib.parse
 
-from uxfix_fixture import REPO, STUDIO_SKIN, ensure_build, set_fixture, start_server
+from uxfix_fixture import REPO, ensure_build, set_fixture, start_server
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4397"))
 report = {"ok": False, "steps": {}}
@@ -24,8 +24,6 @@ def address(page):
     return u.path + ("?" + u.query if u.query else "")
 
 
-if STUDIO_SKIN != "desk":
-    check("skin", False, actual=STUDIO_SKIN)
 
 dist = ensure_build(lambda step, why: check(step, False, error=why))
 origin = start_server(PORT, dist)

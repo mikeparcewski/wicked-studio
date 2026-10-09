@@ -14,8 +14,8 @@ Against 11 pending proposals (5 memory, 6 policy) served on crew's GET /proposal
            for exactly the 5 memories, none for a policy; the row then lists the 6 that change
            enforcement, with no batch accept left.
 
-Captures (e2e/shots/): waveb-<skin>-row.png, waveb-<skin>-preview.png, waveb-<skin>-after.png.
-Env: FEEDBACK_PORT (default 4419), STUDIO_SKIN. JSON report; exit 0/1.
+Captures (e2e/shots/): waveb-desk-row.png, waveb-desk-preview.png, waveb-desk-after.png.
+Env: FEEDBACK_PORT (default 4419). JSON report; exit 0/1.
 """
 
 import json
@@ -24,15 +24,13 @@ import sys
 import time
 import urllib.request
 
-from uxfix_fixture import (DEFAULT_APPEARANCE, HIDE_GATE_TOASTS, REPO, STUDIO_SKIN, ensure_build,
+from uxfix_fixture import (DEFAULT_APPEARANCE, HIDE_GATE_TOASTS, REPO, ensure_build,
                            set_fixture, start_server)
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4419"))
 W, H = 1440, 700
 SHOTS = REPO / "e2e" / "shots"
-SKIN = STUDIO_SKIN
-
-report: dict = {"ok": False, "skin": SKIN, "steps": {}}
+report: dict = {"ok": False, "steps": {}}
 
 NOW_S = int(time.time())
 MEMS = [{"id": f"mem-{i}", "kind_type": "memory",
@@ -85,7 +83,7 @@ with sync_playwright() as p:
 
     def run() -> None:
         set_fixture(origin, proposals=[dict(r) for r in MEMS + POLS], reset_repairs=True,
-                    appearance={**DEFAULT_APPEARANCE, "skin": SKIN})
+                    appearance={**DEFAULT_APPEARANCE})
         page.goto(f"{origin}/", wait_until="networkidle")
         page.get_by_test_id("needs-you-queue").wait_for(state="visible", timeout=15000)
         page.wait_for_selector(GROUP)
@@ -105,7 +103,7 @@ with sync_playwright() as p:
         check("list-enforcement-first", all(k.startswith("proposal:pol-") for k in keys), keys=keys)
         check("list-member-consequence",
               "Changes enforcement" in members.first.get_by_test_id("need-line").inner_text())
-        page.screenshot(path=str(SHOTS / f"waveb-{SKIN}-row.png"))
+        page.screenshot(path=str(SHOTS / f"waveb-desk-row.png"))
         page.get_by_test_id("need-page-next").click()
         check("list-pages", "Showing 5–8 of 11" in page.get_by_test_id("need-members-pager").inner_text(),
               pager=page.get_by_test_id("need-members-pager").inner_text())
@@ -119,7 +117,7 @@ with sync_playwright() as p:
         check("preview-consequence", "no rule is written and enforcement is unchanged" in preview.inner_text()
               and "6 proposals stay for individual review" in preview.inner_text(), text=preview.inner_text())
         check("preview-posts-nothing", posts(origin) == [])
-        page.screenshot(path=str(SHOTS / f"waveb-{SKIN}-preview.png"))
+        page.screenshot(path=str(SHOTS / f"waveb-desk-preview.png"))
 
         # Undo: confirm, then Undo in the toast — nothing is sent.
         page.get_by_test_id("need-accept-confirm").click()
@@ -147,7 +145,7 @@ with sync_playwright() as p:
         check("enforcement-ones-remain", row.get_attribute("data-count") == "6", count=row.get_attribute("data-count"))
         line = row.get_by_test_id("need-line").inner_text()
         check("remaining-line", line == "6 change enforcement", line=line)
-        page.screenshot(path=str(SHOTS / f"waveb-{SKIN}-after.png"))
+        page.screenshot(path=str(SHOTS / f"waveb-desk-after.png"))
 
     ok = True
     try:

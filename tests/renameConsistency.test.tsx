@@ -7,7 +7,6 @@ import { TESTING_UNSUPPORTED_COPY } from '../src/api/testing.js';
 import { CampaignScoreboard } from '../src/components/CampaignScoreboard.js';
 import { CampaignsPage } from '../src/components/CampaignsPage.js';
 import { ChatInput } from '../src/components/ChatInput.js';
-import { LeftSidebar } from '../src/components/LeftSidebar.js';
 import { ProjectCampaignsView } from '../src/components/ProjectCampaignsView.js';
 import { TestingLaunchPanel } from '../src/components/TestingLaunchPanel.js';
 import { useCampaignsStore } from '../src/store/campaigns.js';
@@ -88,19 +87,6 @@ async function launchUnscoped(user: ReturnType<typeof userEvent.setup>, brief: s
 }
 
 describe('T30 — every rendered word on the Test surfaces says Test (#203)', () => {
-  it('T30 — the Test rail heading: its title, the ▦/＋ labels, and the Run recon row', async () => {
-    render(<LeftSidebar runs={[]} navigate={() => {}} pathname="/testing/campaigns" />);
-    await screen.findByRole('button', { name: 'wicked-studio' });
-    const heading = screen.getByTestId('rail-heading-test');
-    expect(heading.getAttribute('aria-expanded')).toBe('true');
-    expect(within(heading).getByTestId('rail-title-test')).toHaveTextContent('Test');
-    const plus = within(heading).getByTestId('heading-new');
-    expect(plus).toHaveAttribute('aria-label', 'New Test');
-    expect(plus).toHaveAttribute('title', 'New Test');
-    expect(within(heading).getByTestId('rail-test-recon')).toHaveTextContent('Run recon');
-    expectTestVocabulary(heading);
-  });
-
   it('T30 — the project-shell breadcrumb', async () => {
     render(<ProjectCampaignsView projectId="proj-1" runs={[]} navigate={() => {}} />);
     await screen.findByTestId('campaigns-page');

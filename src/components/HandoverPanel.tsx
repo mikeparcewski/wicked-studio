@@ -16,7 +16,6 @@ import { COUNT_TONE_COLOR, countTone, type CountKind } from '../board/countTone.
 import type { Handover } from '../hooks/useHandover.js';
 import { useReusePreset } from '../hooks/useReusePreset.js';
 import type { Navigate } from '../hooks/useRoute.js';
-import type { SkinVariants } from '../theming/skins.js';
 import { useQueueReveal } from '../store/queueReveal.js';
 import { useHandoverProgress } from '../store/visit.js';
 import { AnchoredOverlay } from './AnchoredOverlay.js';
@@ -50,14 +49,11 @@ const CHIP_KIND: Record<HandoverChipKey, CountKind> = {
   done: 'neutral',
 };
 
-export function HandoverPanel({ handover, navigate, now, runs, variant = 'banner' }: {
+export function HandoverPanel({ handover, navigate, now, runs }: {
   handover: Handover;
   navigate: Navigate;
   now: number;
   runs: readonly SessionView[];
-  /** The skin's variant (theming/skins.ts): the strip above Home's KPIs, or the Desk's quieter
-   *  "While you were away" line. Same chips, same fold, same verbs. */
-  variant?: SkinVariants['handover'];
 }): React.ReactElement | null {
   const { since, sections, dismiss } = handover;
   const chips = useMemo(() => handoverChips(sections), [sections]);
@@ -102,9 +98,8 @@ export function HandoverPanel({ handover, navigate, now, runs, variant = 'banner
   return (
     <section
       data-testid="handover-panel"
-      data-skin-variant={variant}
       aria-label="While you were away"
-      className={variant === 'desk-away' ? 'wk-handover wk-handover--desk-away' : 'wk-handover'}
+      className="wk-handover wk-handover--desk-away"
     >
       <span className="wk-handover-label">While you were away</span>
       <span data-testid="handover-since" className="wk-handover-since" title={`Away from ${clockTime(since)}`}>

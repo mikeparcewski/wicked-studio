@@ -133,7 +133,8 @@ describe('the home queue component counts stranded runs', () => {
 
     const queue = screen.getByTestId('needs-you-queue');
     expect(queue.dataset.count).toBe('1');
-    expect(queue.textContent).toContain('Needs you (1)');
+    // The Desk's label carries no count (S18d: the classic header "Needs you (1)" retired); data-count does.
+    expect(queue.textContent).toContain('Needs you');
     expect(screen.queryByTestId('home-calm')).toBeNull(); // a row bans calm (§3)
 
     const row = screen.getByTestId('need-row');

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 desk_ports_gates_test.py — S18a: two gate-answering ports on the Desk (DES-STUDIO-REBUILD-001
-Amendment 5), 1440x700 under STUDIO_SKIN=desk. REAL 10 s undo window throughout.
+Amendment 5), 1440x700 on the Desk. REAL 10 s undo window throughout.
 
 Against the in-process fixture's wave-1 + wave-2b corpus with g1 + g2 served as simple def gates
 (they fold into the "2 approvals" group on the Desk):
@@ -27,13 +27,13 @@ import sys
 import time
 import urllib.request
 
-from uxfix_fixture import HIDE_GATE_TOASTS, REPO, STUDIO_SKIN, ensure_build, set_fixture, start_server
+from uxfix_fixture import HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4372"))
 W, H = 1440, 700
 SHOTS = REPO / "e2e" / "shots"
 
-report: dict = {"ok": False, "skin": STUDIO_SKIN, "steps": {}}
+report: dict = {"ok": False, "steps": {}}
 
 
 def fail(step: str, why) -> None:
@@ -49,8 +49,6 @@ def check(step: str, ok: bool, **detail) -> None:
         sys.exit(1)
 
 
-if STUDIO_SKIN != "desk":
-    fail("skin", f"desk journeys run under STUDIO_SKIN=desk, not {STUDIO_SKIN}")
 
 
 def gate_posts(origin: str, rid: str | None = None) -> list:

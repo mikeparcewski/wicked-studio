@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 desk_decisions_test.py — DC-S6 (DES-DECISION-CAPTURE §9): the decision line, the Remember chip, the
-Needs You rule row and the Desk sentence, at 1440x700 under STUDIO_SKIN=desk.
+Needs You rule row and the Desk sentence, at 1440x700 on the Desk.
 
 Drives the built UI against the in-process fixture's sessions corpus plus `decisions` (chat-pay's
 transcript grows one operator turn per scene, each with crew's `decisions` record; GET /decisions
@@ -32,13 +32,13 @@ import sys
 import time
 import urllib.request
 
-from uxfix_fixture import HIDE_GATE_TOASTS, REPO, STUDIO_SKIN, ensure_build, set_fixture, start_server
+from uxfix_fixture import HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4356"))
 W, H = 1440, 700
 SHOTS = REPO / "e2e" / "shots"
 
-report: dict = {"ok": False, "skin": STUDIO_SKIN, "steps": {}}
+report: dict = {"ok": False, "steps": {}}
 
 
 def fail(step: str, why) -> None:
@@ -54,8 +54,6 @@ def check(step: str, ok: bool, **detail) -> None:
         sys.exit(1)
 
 
-if STUDIO_SKIN != "desk":
-    fail("skin", f"desk journeys run under STUDIO_SKIN=desk, not {STUDIO_SKIN}")
 
 dist = ensure_build(fail)
 origin = start_server(PORT, dist)

@@ -25,12 +25,12 @@ rule into the `proposals` queue):
   5 ask        the Ask dock carries the same drop, inline, with its consequence; opening it posts
                nothing.
 
-Under STUDIO_SKIN=desk (S15a: the desk variant, in run_journeys.py DESK) the drop point is the Desk's
+On the Desk (the one shell since S18d) the drop point is the Desk's
 Start row (its last way to start something — the Desk has no verb row), the triage is the Desk's list,
 and the Ask dock opens with ⌘/Ctrl+Shift+A (the Desk's composer stands in for Home's Ask invite).
 
-Captures (e2e/shots/): capture-<skin>-drop.png, capture-<skin>-triage.png, capture-<skin>-ask.png.
-Env: FEEDBACK_PORT (default 4383), STUDIO_SKIN. JSON report; exit 0/1.
+Captures (e2e/shots/): capture-desk-drop.png, capture-desk-triage.png, capture-desk-ask.png.
+Env: FEEDBACK_PORT (default 4383). JSON report; exit 0/1.
 """
 
 import json
@@ -39,14 +39,13 @@ import sys
 import time
 import urllib.request
 
-from uxfix_fixture import (DEFAULT_APPEARANCE, HIDE_GATE_TOASTS, REPO, STUDIO_SKIN, ensure_build,
+from uxfix_fixture import (DEFAULT_APPEARANCE, HIDE_GATE_TOASTS, REPO, ensure_build,
                            set_fixture, start_server)
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4383"))
 W, H = 1440, 700
 SHOTS = REPO / "e2e" / "shots"
 PROJECT = "upload-endpoint"
-SKIN = STUDIO_SKIN
 # A real 1x1 PNG — the "whiteboard photo".
 PNG = bytes.fromhex(
     "89504e470d0a1a0a0000000d4948445200000001000000010806000000"
@@ -57,7 +56,7 @@ TRANSCRIPT = "Maya: cap uploads at 5 GB for launch.\nLee: agreed."
 GROUP = '[data-testid="need-row"][data-key="group:proposal"]'
 MEMBERS = '[data-testid="need-members"][data-group="group:proposal"] [data-testid="need-member"]'
 
-report: dict = {"ok": False, "skin": SKIN, "steps": {}}
+report: dict = {"ok": False, "steps": {}}
 
 
 class SectionFailed(Exception):
@@ -107,20 +106,14 @@ with sync_playwright() as p:
             if r.method == "POST" and r.url.endswith("/api/v1/runs") else None)
 
     set_fixture(origin, capture=True, reset_capture=True, reset_repairs=True, proposals=[],
-                appearance={**DEFAULT_APPEARANCE, "skin": SKIN})
+                appearance={**DEFAULT_APPEARANCE})
 
     def section_verb() -> None:
         page.goto(f"{origin}/", wait_until="networkidle")
-        check("skin-applied", page.evaluate("() => document.documentElement.getAttribute('data-skin')") == SKIN)
-        if SKIN == "desk":
-            # The Desk has no verb row: Capture is the Start row's last way to start something.
-            order = page.evaluate("""() => [...document.querySelector('[data-testid="desk-start-row"]').children]
-                .map(e => e.dataset.testid).filter(Boolean)""")
-            check("capture-on-the-start-row", order[-1:] == ["capture"] and "desk-start-chip" in order, order=order)
-        else:
-            order = page.evaluate("""() => [...document.querySelector('[data-testid="home-verbs"]').children]
-                .map(e => e.dataset.testid)""")
-            check("capture-beside-do-work", order[:2] == ["home-verb-work", "capture"], order=order)
+        # The Desk has no verb row: Capture is the Start row's last way to start something.
+        order = page.evaluate("""() => [...document.querySelector('[data-testid="desk-start-row"]').children]
+            .map(e => e.dataset.testid).filter(Boolean)""")
+        check("capture-on-the-start-row", order[-1:] == ["capture"] and "desk-start-chip" in order, order=order)
         page.get_by_test_id("capture-open").click()
         drop = page.get_by_test_id("capture-drop")
         drop.wait_for(state="visible")
@@ -152,7 +145,7 @@ with sync_playwright() as p:
         ])
         kinds = page.locator('[data-testid="capture-file"]').evaluate_all("els => els.map(e => e.dataset.kind)")
         check("files-attached-as-text-and-photo", kinds == ["text", "image"], kinds=kinds)
-        page.screenshot(path=str(SHOTS / f"capture-{SKIN}-drop.png"))
+        page.screenshot(path=str(SHOTS / f"capture-desk-drop.png"))
         page.get_by_test_id("capture-send").click()
         page.get_by_test_id("capture-status").wait_for(state="visible")
         sent = captures(origin)
@@ -185,14 +178,10 @@ with sync_playwright() as p:
               chip.inner_text() == "· 5 waiting"
               and status.startswith("5 proposals from your capture waiting in Needs You: 4 memory-only, 1 changes enforcement"),
               chip=chip.inner_text(), status=status)
-        if SKIN == "desk":
-            # The Start row's label, chips and Capture differ in height: one row = one shared band.
-            header_rows = page.evaluate("""() => { const rs = [...document.querySelector('[data-testid="desk-start-row"]').children]
-                .map(c => c.getBoundingClientRect()).filter(r => r.height > 0);
-                return Math.max(...rs.map(r => r.top)) < Math.min(...rs.map(r => r.bottom)) ? 1 : 2; }""")
-        else:
-            header_rows = page.evaluate("""() => { const v = document.querySelector('[data-testid="home-verbs"]');
-                return new Set([...v.children].map(c => Math.round(c.getBoundingClientRect().top))).size; }""")
+        # The Start row's label, chips and Capture differ in height: one row = one shared band.
+        header_rows = page.evaluate("""() => { const rs = [...document.querySelector('[data-testid="desk-start-row"]').children]
+            .map(c => c.getBoundingClientRect()).filter(r => r.height > 0);
+            return Math.max(...rs.map(r => r.top)) < Math.min(...rs.map(r => r.bottom)) ? 1 : 2; }""")
         check("verb-row-stays-one-row", header_rows == 1, rows=header_rows)
         row.get_by_test_id("need-group-toggle").click()
         members = page.locator(MEMBERS)
@@ -202,7 +191,7 @@ with sync_playwright() as p:
         check("captured-classes-named",
               any("a captured intent" in l for l in lines) and any("a captured decision" in l for l in lines),
               lines=lines)
-        page.screenshot(path=str(SHOTS / f"capture-{SKIN}-triage.png"))
+        page.screenshot(path=str(SHOTS / f"capture-desk-triage.png"))
 
     def section_decide() -> None:
         row = page.locator(GROUP)
@@ -222,10 +211,7 @@ with sync_playwright() as p:
               status.startswith("1 proposal from your capture waiting in Needs You: 1 changes enforcement"), status=status)
 
     def section_ask() -> None:
-        if SKIN == "desk":
-            page.keyboard.press("Control+Shift+A")  # the Desk's composer stands in for Home's Ask invite
-        else:
-            page.get_by_test_id("home-ask").click()
+        page.keyboard.press("Control+Shift+A")  # the Desk's composer stands in for Home's Ask invite
         dock_capture = page.locator('[data-testid="assist-thread"] [data-testid="capture-open"]')
         dock_capture.wait_for(state="visible")
         dock_capture.click()
@@ -236,7 +222,7 @@ with sync_playwright() as p:
         check("ask-dock-posts-nothing", len(captures(origin)) == 1)
         line = page.locator('[data-testid="assist-thread"] [data-testid="capture-status-line"]').inner_text()
         check("ask-dock-full-status", line.startswith("1 proposal from your capture waiting in Needs You"), line=line)
-        page.screenshot(path=str(SHOTS / f"capture-{SKIN}-ask.png"))
+        page.screenshot(path=str(SHOTS / f"capture-desk-ask.png"))
 
     ok = True
     for section in (section_verb, section_drop, section_triage, section_decide, section_ask):
@@ -247,7 +233,7 @@ with sync_playwright() as p:
             break
         except Exception as e:  # noqa: BLE001 — a journey reports, never tracebacks
             report["steps"][section.__name__] = {"ok": False, "error": repr(e)[:400]}
-            page.screenshot(path=str(SHOTS / f"capture-{SKIN}-fail.png"))
+            page.screenshot(path=str(SHOTS / f"capture-desk-fail.png"))
             ok = False
             break
     browser.close()

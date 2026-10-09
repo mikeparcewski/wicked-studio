@@ -198,7 +198,7 @@ export function Desk({ runs, runsLoaded, runsError = null, onRetryRuns, needRows
           </div>
         </div>
         {handover.since !== null && (
-          <HandoverPanel handover={handover} navigate={navigate} now={now} runs={runs} variant="desk-away" />
+          <HandoverPanel handover={handover} navigate={navigate} now={now} runs={runs} />
         )}
 
         <div className="wk-desk-cols">
@@ -206,7 +206,7 @@ export function Desk({ runs, runsLoaded, runsError = null, onRetryRuns, needRows
             {/* Rows already known (an elicitation, a memory proposal) show at once; only the fold's
                 calm copy waits for the first /runs answer (studio#459). */}
             {leadWithSignIn && chores_block}
-            {(runsLoaded || needRows.length > 0) && <NeedsQueueSurface rows={needRows} runs={runs} navigate={navigate} now={now} variant="desk" />}
+            {(runsLoaded || needRows.length > 0) && <NeedsQueueSurface rows={needRows} runs={runs} navigate={navigate} now={now} />}
             {!leadWithSignIn && chores_block}
           </div>
 

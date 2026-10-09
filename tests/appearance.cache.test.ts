@@ -19,7 +19,7 @@ vi.mock('../src/api/client.js', () => ({
 }));
 
 const root = () => document.documentElement;
-const WICKED_LIGHT = { accent_h: 200, accent_s: 47, accent_l: 25, logo_url: null, theme: 'wicked-light', site_name: 'Reel studio', skin: 'desk', skin_migrated: true };
+const WICKED_LIGHT = { accent_h: 200, accent_s: 47, accent_l: 25, logo_url: null, theme: 'wicked-light', site_name: 'Reel studio' };
 
 beforeEach(() => {
   vi.resetModules();

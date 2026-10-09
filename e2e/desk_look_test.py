@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-desk_look_test.py — THE DESK's look at 1440x900 under STUDIO_SKIN=desk + theme wicked-light
+desk_look_test.py — THE DESK's look at 1440x900 on the Desk + theme wicked-light
 (studio#425, studio#421; DESIGN-simple §1a, the restated skin contract).
 
 Drives the built UI against the in-process fixture (the wave-2b queue corpus, 9 rail sessions)
@@ -25,7 +25,7 @@ import json
 import os
 import sys
 
-from uxfix_fixture import (DEFAULT_APPEARANCE, HIDE_GATE_TOASTS, REPO, STUDIO_SKIN, ensure_build, set_fixture,
+from uxfix_fixture import (DEFAULT_APPEARANCE, HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture,
                            start_server)
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4347"))
@@ -34,7 +34,7 @@ SHOTS = REPO / "e2e" / "shots"
 SPARK = "rgb(255, 218, 25)"
 VIOLET = "rgb(111, 66, 193)"
 
-report: dict = {"ok": False, "skin": STUDIO_SKIN, "steps": {}}
+report: dict = {"ok": False, "steps": {}}
 
 
 def fail(step: str, why) -> None:
@@ -50,8 +50,6 @@ def check(step: str, ok: bool, **detail) -> None:
         sys.exit(1)
 
 
-if STUDIO_SKIN != "desk":
-    fail("skin", f"desk journeys run under STUDIO_SKIN=desk, not {STUDIO_SKIN}")
 
 # wicked-light with the harbor preset (appearance.ts HARBOR_ACCENT = 200/47/25), as the Theme
 # page stores it when the operator picks the theme.

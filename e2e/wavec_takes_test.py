@@ -17,8 +17,8 @@ Compare on, the split's panes are takes:
            thread: "Build on take 2 (v2), and keep take 1's (v3) headline." — it lands on the
            thread, and the fork it builds on (parent v2) is in the manifest. No second proposal.
 
-Captures (e2e/shots/): wavec-<skin>-takes.png, wavec-<skin>-preview.png, wavec-<skin>-picked.png,
-wavec-<skin>-remix.png. Env: FEEDBACK_PORT (default 4491), STUDIO_SKIN. JSON report; exit 0/1.
+Captures (e2e/shots/): wavec-desk-takes.png, wavec-desk-preview.png, wavec-desk-picked.png,
+wavec-desk-remix.png. Env: FEEDBACK_PORT (default 4491). JSON report; exit 0/1.
 """
 
 import json
@@ -27,17 +27,16 @@ import sys
 import urllib.request
 from urllib.parse import urlparse
 
-from uxfix_fixture import (DEFAULT_APPEARANCE, HIDE_GATE_TOASTS, REPO, STUDIO_SKIN, ensure_build,
+from uxfix_fixture import (DEFAULT_APPEARANCE, HIDE_GATE_TOASTS, REPO, ensure_build,
                            set_fixture, start_server)
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4491"))
 W, H = 1440, 700
 SHOTS = REPO / "e2e" / "shots"
-SKIN = STUDIO_SKIN
 BRIEF = "Make me a deck for the Q3 review"
 STEER = "Tighten the headline on slide one"
 
-report: dict = {"ok": False, "skin": SKIN, "steps": {}}
+report: dict = {"ok": False, "steps": {}}
 
 
 class SectionFailed(Exception):
@@ -77,7 +76,7 @@ with sync_playwright() as p:
 
     def run() -> None:
         set_fixture(origin, proposals=[], reset_repairs=True,
-                    appearance={**DEFAULT_APPEARANCE, "skin": SKIN})
+                    appearance={**DEFAULT_APPEARANCE})
         page.goto(f"{origin}/p/scratch/document", wait_until="domcontentloaded")
         page.locator('[data-testid="thread"][data-composer-state="idle"]').wait_for(timeout=30000)
 
@@ -111,7 +110,7 @@ with sync_playwright() as p:
         labels = [headers.nth(i).inner_text() for i in range(2)]
         check("split-take-labels", "Take 1" in labels[0] and "v2" in labels[0]
               and "Take 2" in labels[1] and "v1" in labels[1], labels=labels)
-        page.screenshot(path=str(SHOTS / f"wavec-{SKIN}-takes.png"))
+        page.screenshot(path=str(SHOTS / f"wavec-desk-takes.png"))
 
         # ── preview: consequence first, nothing sent ───────────────────────────────
         page.locator('[data-testid="take-pick"][data-take="2"]').click()
@@ -120,7 +119,7 @@ with sync_playwright() as p:
               "v1 becomes the latest version" in consequence and "filed for your review" in consequence,
               text=consequence)
         check("preview-posts-nothing", get_json(f"{origin}/__fixture/proposal-posts")["posts"] == [])
-        page.screenshot(path=str(SHOTS / f"wavec-{SKIN}-preview.png"))
+        page.screenshot(path=str(SHOTS / f"wavec-desk-preview.png"))
 
         # ── pick: the preference proposal, and v1 as the working version ───────────
         page.get_by_test_id("take-pick-confirm").click()
@@ -142,7 +141,7 @@ with sync_playwright() as p:
         receipt = page.get_by_test_id("takes-receipt").inner_text()
         check("pick-receipt", "Picked take 2 (v1)" in receipt and "as v3" in receipt
               and "filed for your review" in receipt, text=receipt)
-        page.screenshot(path=str(SHOTS / f"wavec-{SKIN}-picked.png"))
+        page.screenshot(path=str(SHOTS / f"wavec-desk-picked.png"))
 
         # ── remix: one steer to the document agent ─────────────────────────────────
         page.get_by_test_id("version-compare-toggle").click()
@@ -152,7 +151,7 @@ with sync_playwright() as p:
         steer = page.get_by_test_id("takes-remix-steer").inner_text()
         want = "Build on take 2 (v2), and keep take 1's (v3) headline."
         check("remix-steer-shown-first", want in steer, text=steer)
-        page.screenshot(path=str(SHOTS / f"wavec-{SKIN}-remix.png"))
+        page.screenshot(path=str(SHOTS / f"wavec-desk-remix.png"))
         page.get_by_test_id("takes-remix-send").click()
         page.locator('[data-testid="doc-panel"][data-tab="chat"]').wait_for()
         msg = page.locator('[data-testid="doc-message"]', has_text=want)
@@ -170,7 +169,7 @@ with sync_playwright() as p:
     except Exception as e:  # noqa: BLE001 — report any driver failure as the step it hit
         report["steps"]["exception"] = {"ok": False, "error": f"{type(e).__name__}: {e}"}
         try:
-            page.screenshot(path=str(SHOTS / f"wavec-{SKIN}-failure.png"))
+            page.screenshot(path=str(SHOTS / f"wavec-desk-failure.png"))
         except Exception:  # noqa: BLE001
             pass
     browser.close()

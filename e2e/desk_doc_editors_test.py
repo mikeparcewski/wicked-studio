@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 desk_doc_editors_test.py — S9, the document and slide editors (DES-STUDIO-REBUILD-001 §11 S9;
-DES-EDITOR-PLUGINS-001 §7.2) at 1440x700 under STUDIO_SKIN=desk.
+DES-EDITOR-PLUGINS-001 §7.2) at 1440x700 on the Desk.
 
 Against the in-process fixture: two documents created on project `notes` with a recorded style — a
 written document (`style: doc`) and a deck (`style: ppt`), anchored the way the real engine anchors
@@ -56,7 +56,7 @@ import sys
 import time
 import urllib.request
 
-from uxfix_fixture import HIDE_GATE_TOASTS, LONG_PARAGRAPH, REPO, STUDIO_SKIN, ensure_build, set_fixture, start_server
+from uxfix_fixture import HIDE_GATE_TOASTS, LONG_PARAGRAPH, REPO, ensure_build, set_fixture, start_server
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4359"))
 W, H = 1440, 700
@@ -76,7 +76,7 @@ P2 = "slide-0-paragraph-2"
 NEW_P2 = "Residents book a study room in two taps (REQ-002)."
 TITLE3 = "slide-2-heading-1"
 
-report: dict = {"ok": False, "skin": STUDIO_SKIN, "steps": {}}
+report: dict = {"ok": False, "steps": {}}
 
 
 def fail(step: str, why) -> None:
@@ -99,8 +99,6 @@ def post_json(url: str, body: dict) -> dict:
         return json.loads(res.read() or b"{}")
 
 
-if STUDIO_SKIN != "desk":
-    fail("skin", f"desk journeys run under STUDIO_SKIN=desk, not {STUDIO_SKIN}")
 
 dist = ensure_build(fail)
 origin = start_server(PORT, dist)

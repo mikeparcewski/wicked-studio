@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 desk_page_acts_test.py — EP-P3: the `wicked-page` plugin's act-first verbs, device widths and the host's
-checks panel (DES-EDITOR-PLUGINS-001 §7.1 R-a…R-d, §5.8, §12.4 J1) at 1440x700 under STUDIO_SKIN=desk.
+checks panel (DES-EDITOR-PLUGINS-001 §7.1 R-a…R-d, §5.8, §12.4 J1) at 1440x700 on the Desk.
 
 Against the in-process fixture: the `launch-page` document (its theme as `--wi-*` colours, its parts in
 `section-{i}` containers, as interactive renders a page) on project `notes`, a run bound to it, crew's
@@ -29,7 +29,7 @@ import sys
 import time
 import urllib.request
 
-from uxfix_fixture import HIDE_GATE_TOASTS, REPO, STUDIO_SKIN, ensure_build, set_fixture, start_server
+from uxfix_fixture import HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4362"))
 W, H = 1440, 700
@@ -38,7 +38,7 @@ PID = "notes"
 DOC = "launch-page"
 RUN = "r-doc-bound"
 
-report: dict = {"ok": False, "skin": STUDIO_SKIN, "steps": {}}
+report: dict = {"ok": False, "steps": {}}
 
 
 def fail(step: str, why) -> None:
@@ -75,8 +75,6 @@ CHECKS = [
     doc_check("c-qe", "qe", "review:quality", "inconclusive", "The reviewer could not open the page.", "claude", False),
 ]
 
-if STUDIO_SKIN != "desk":
-    fail("skin", f"desk journeys run under STUDIO_SKIN=desk, not {STUDIO_SKIN}")
 
 dist = ensure_build(fail)
 if not (dist / "editors" / "wicked-page" / "editor.json").is_file():

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-desk_fit_test.py — THE CHROME FITS at 1440x700 under STUDIO_SKIN=desk (the W12 reel's stage height,
+desk_fit_test.py — THE CHROME FITS at 1440x700 on the Desk (the W12 reel's stage height,
 a common laptop browser height). Four defects the released 0.6.1 Desk showed on that stage:
 
   1. studio#514 — Standing orders from the rail's "Additional settings": the anchored overlay opened
@@ -30,7 +30,7 @@ import json
 import os
 import sys
 
-from uxfix_fixture import HIDE_GATE_TOASTS, REPO, STUDIO_SKIN, ensure_build, set_fixture, start_server
+from uxfix_fixture import HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4471"))
 W, H = 1440, 700
@@ -39,7 +39,7 @@ ART = '[data-testid="artifact"][data-kind="demo-video"]'
 LONG_REFUSAL = ("worker_config_root must be an absolute path on the daemon host, and the directory it names "
                 "must exist and be writable by the daemon's user before any worker can be spawned from it")
 
-report: dict = {"ok": False, "skin": STUDIO_SKIN, "steps": {}}
+report: dict = {"ok": False, "steps": {}}
 
 
 def fail(step: str, why) -> None:
@@ -56,8 +56,6 @@ def check(step: str, ok: bool, **detail) -> None:
         sys.exit(1)
 
 
-if STUDIO_SKIN != "desk":
-    fail("skin", f"desk journeys run under STUDIO_SKIN=desk, not {STUDIO_SKIN}")
 
 dist = ensure_build(fail)
 origin = start_server(PORT, dist)

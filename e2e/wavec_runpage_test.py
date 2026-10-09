@@ -14,8 +14,8 @@ wavec_runpage_test.py — the run page carries its next move (brainstorm-actiona
   done     /runs/r-rerun-done (completed): no phase offers a rerun; the receipt reads as in force.
   mid      /runs/r-rerun-mid (band 40-69): no receipt at all.
 
-Captures (e2e/shots/): wavec-runpage-<skin>-rerun.png, wavec-runpage-<skin>-trust.png, wavec-runpage-<skin>-done.png.
-Env: FEEDBACK_PORT (default 4481), STUDIO_SKIN. JSON report; exit 0/1.
+Captures (e2e/shots/): wavec-runpage-desk-rerun.png, wavec-runpage-desk-trust.png, wavec-runpage-desk-done.png.
+Env: FEEDBACK_PORT (default 4481). JSON report; exit 0/1.
 """
 
 import json
@@ -23,20 +23,19 @@ import os
 import sys
 import urllib.request
 
-from uxfix_fixture import (DEFAULT_APPEARANCE, HIDE_GATE_TOASTS, REPO, STUDIO_SKIN, ensure_build,
+from uxfix_fixture import (DEFAULT_APPEARANCE, HIDE_GATE_TOASTS, REPO, ensure_build,
                            set_fixture, start_server)
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4481"))
 W, H = 1440, 700
 SHOTS = REPO / "e2e" / "shots"
-SKIN = STUDIO_SKIN
 CONSEQUENCE = "Keeps understand, redoes build → review → deliver, ~9 min from past durations (deliver not timed yet)"
 RULE = {"scope": {"kind": "project", "projectId": "northwind"},
         "trigger": {"kind": "gate", "phase": "plan_approval", "band": "0-19", "preset": "bugfix"},
         "action": "approve", "activeWhen": "always"}
 ORDER_TEXT = "Trust bugfix runs on Northwind at band 0-19: skip plan approval (deliver stays manual)"
 
-report: dict = {"ok": False, "skin": SKIN, "steps": {}}
+report: dict = {"ok": False, "steps": {}}
 
 
 class SectionFailed(Exception):
@@ -72,7 +71,7 @@ def on_screen(page, testid: str) -> bool:
 dist = ensure_build(fail)
 origin = start_server(PORT, dist)
 set_fixture(origin, **{"run_page": True, "reset_orders": True, "reset_gate_posts": True,
-                       "appearance": {**DEFAULT_APPEARANCE, "skin": SKIN}})
+                       "appearance": {**DEFAULT_APPEARANCE}})
 
 from playwright.sync_api import sync_playwright  # noqa: E402
 
@@ -99,7 +98,7 @@ with sync_playwright() as p:
         check("preview-names-kept-and-redone", consequence == CONSEQUENCE, consequence=consequence)
         check("preview-on-screen", on_screen(page, "rerun-consequence") and on_screen(page, "rerun-confirm"))
         check("nothing-sent-by-the-preview", fixture_posts(origin, "gate-posts") == [])
-        page.screenshot(path=str(SHOTS / f"wavec-runpage-{SKIN}-rerun.png"))
+        page.screenshot(path=str(SHOTS / f"wavec-runpage-desk-rerun.png"))
         label = text(page, "rerun-confirm")
         page.get_by_test_id("rerun-confirm").click()
         page.get_by_test_id("rerun-sent").wait_for(state="visible", timeout=20000)
@@ -121,7 +120,7 @@ with sync_playwright() as p:
               consequence=consequence)
         page.get_by_test_id("trust-receipt-make").scroll_into_view_if_needed()
         check("receipt-on-screen", on_screen(page, "trust-receipt-make"))
-        page.screenshot(path=str(SHOTS / f"wavec-runpage-{SKIN}-trust.png"))
+        page.screenshot(path=str(SHOTS / f"wavec-runpage-desk-trust.png"))
         page.get_by_test_id("trust-receipt-make").click()
         page.get_by_test_id("trust-receipt-made").wait_for(state="visible", timeout=10000)
         posts = fixture_posts(origin, "standing-order-posts")
@@ -135,7 +134,7 @@ with sync_playwright() as p:
         page.get_by_test_id("stepper-phase-2").wait_for(state="visible", timeout=15000)
         page.get_by_test_id("trust-receipt-in-force").wait_for(state="visible", timeout=10000)
         check("finished-run-offers-no-rerun", page.locator("[data-rerun]").count() == 0)
-        page.screenshot(path=str(SHOTS / f"wavec-runpage-{SKIN}-done.png"))
+        page.screenshot(path=str(SHOTS / f"wavec-runpage-desk-done.png"))
 
     def section_mid() -> None:
         page.goto(f"{origin}/runs/r-rerun-mid", wait_until="networkidle")

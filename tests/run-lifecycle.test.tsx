@@ -18,7 +18,6 @@ import userEvent from '@testing-library/user-event';
 import { ApiError } from '../src/api/errors.js';
 import { useAnnotationStore } from '../src/store/annotations.js';
 import { useGateStore } from '../src/store/gates.js';
-import { makeView } from './factories.js';
 
 // ── Module-level mocks ────────────────────────────────────────────────────────
 
@@ -46,18 +45,10 @@ vi.mock('../src/api/client.js', () => ({
 
 // Dynamic imports after mock hoisting — the pattern the repo uses throughout.
 const { SteeringGate } = await import('../src/components/SteeringGate.js');
-const { WorkPage } = await import('../src/components/WorkPage.js');
 const { RepositoriesPanel } = await import('../src/components/RepositoriesPanel.js');
 
 // ── Shared fixtures ───────────────────────────────────────────────────────────
 
-const live = makeView({
-  id: 'live-1', workflow_id: 'feature', problem: 'live work', status: 'completed',
-});
-const archived = makeView({
-  id: 'old-1', workflow_id: 'feature', problem: 'campaign leftover',
-  status: 'failed', archived_at: 1786700000000,
-});
 
 beforeEach(() => {
   cleanup();
@@ -97,48 +88,6 @@ describe('SteeringGate — GA-6: failed cancelRun', () => {
 });
 
 // ── AU-4 / AU-5: WorkPage Archived chip edge cases ───────────────────────────
-
-describe('WorkPage — Archived chip edge cases', () => {
-  function renderPage() {
-    return render(
-      <WorkPage runs={[live]} selectedRunId={null} onSelect={() => {}} navigate={() => {}} />,
-    );
-  }
-
-  it('AU-4: a failed archiveRun call keeps the archived row visible (the component swallows the error)', async () => {
-    listRuns.mockResolvedValue({ runs: [live, archived] });
-    archiveRun.mockRejectedValue(new ApiError(500, 'storage error'));
-    renderPage();
-
-    await userEvent.click(screen.getByRole('button', { name: /^Archived/ }));
-    await waitFor(() =>
-      expect(screen.getByText(/campaign leftover · old-1/)).toBeInTheDocument(),
-    );
-
-    await userEvent.click(screen.getByRole('button', { name: 'Unarchive' }));
-    expect(archiveRun).toHaveBeenCalledWith('old-1', false);
-    // The row stays — the component intentionally swallows the error and leaves
-    // the list unchanged so the operator can retry.
-    expect(screen.getByText(/campaign leftover · old-1/)).toBeInTheDocument();
-  });
-
-  it('AU-5: toggling the chip OFF hides the archived group while the normal list stays visible', async () => {
-    listRuns.mockResolvedValue({ runs: [live, archived] });
-    renderPage();
-
-    const chip = screen.getByRole('button', { name: /^Archived/ });
-    await userEvent.click(chip); // ON
-    await waitFor(() =>
-      expect(screen.getByText(/campaign leftover · old-1/)).toBeInTheDocument(),
-    );
-    expect(chip).toHaveAttribute('aria-pressed', 'true');
-
-    await userEvent.click(chip); // OFF
-    expect(chip).toHaveAttribute('aria-pressed', 'false');
-    expect(screen.queryByText(/campaign leftover/)).toBeNull();
-    expect(screen.getByText(/live work · live-1/)).toBeInTheDocument();
-  });
-});
 
 // ── RO-1/2/3/6: RepositoriesPanel register form ──────────────────────────────
 

@@ -671,7 +671,7 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
    terminal, the diff, keycaps and technical details. Shared components (the bell, the handover, the
    health rows) set mono inline for the other skins, so the desk skin overrides it here — except for
    code, keycaps and a technical handle (<Tech>, shown only with "Show technical details" on). */
-[data-skin="desk"] :is([data-testid="session-rail"], [data-testid="desk"]) :not(code, pre, kbd, samp, [data-tech], [data-tech] *) {
+:is([data-testid="session-rail"], [data-testid="desk"]) :not(code, pre, kbd, samp, [data-tech], [data-tech] *) {
   font-family: var(--font-sans) !important;
 }
 /* Focus that survives every mode (council M3), for the Desk's own controls. */
@@ -1029,9 +1029,6 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
 .wk-desk-toast-work { font-size: var(--text-xs); color: var(--ink-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wk-desk-toast-open { font-size: var(--text-xs); color: var(--accent); }
 .wk-desk-toast-more { box-shadow: inset 3px 0 0 var(--accent), var(--shadow-overlay); font-family: var(--font-sans); }
-/* The rail's Notifications count is harbor, not the gate violet (studio#441). */
-[data-skin="desk"] [data-testid="session-rail"] [data-testid="bell-unread-count"] { background: var(--accent) !important; color: var(--accent-fg) !important; }
-[data-skin="desk"] [data-testid="session-rail"] [data-nav-dest="notifications"] { color: var(--ink-muted) !important; }
 
 /* ── S7: the composer's about-chips, notes and `/` `@` menus (desk + session) ─────────────── */
 .wk-composer { position: relative; display: flex; flex-direction: column; gap: 6px; }

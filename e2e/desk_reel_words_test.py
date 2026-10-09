@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 desk_reel_words_test.py — the defects the wave-4 reel takes found on a live crew 0.7.46 stack
-(studio#440, #441, #442, #443, #444, #445), at 1440x900 under STUDIO_SKIN=desk, gate toasts SHOWN.
+(studio#440, #441, #442, #443, #444, #445), at 1440x900 on the Desk, gate toasts SHOWN.
 
 Drives the built UI against the fixture's `reel_runs` corpus (the live wire's shapes: unit
 descriptions `<phase> — <problem> ||| <instruction>`, UUID run ids, a deliver card naming a local
@@ -33,7 +33,7 @@ import time
 import urllib.parse
 import urllib.request
 
-from uxfix_fixture import REPO, STUDIO_SKIN, ensure_build, set_fixture, start_server
+from uxfix_fixture import REPO, ensure_build, set_fixture, start_server
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4349"))
 W, H = 1440, 900
@@ -46,7 +46,7 @@ WORDS = ["Scope", "Clarify", "Plan", "Build", "Challenge", "Test", "Review"]
 ENGINE = re.compile(r"\|\|\||—|/var/|/w/|pa-scope|Pa scope|adversarial-review|PHASE SCOPE|Rules for booking")
 UUIDISH = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-")
 
-report: dict = {"ok": False, "skin": STUDIO_SKIN, "steps": {}}
+report: dict = {"ok": False, "steps": {}}
 
 
 def fail(step: str, why) -> None:
@@ -62,8 +62,6 @@ def check(step: str, ok: bool, **detail) -> None:
         sys.exit(1)
 
 
-if STUDIO_SKIN != "desk":
-    fail("skin", f"desk journeys run under STUDIO_SKIN=desk, not {STUDIO_SKIN}")
 
 dist = ensure_build(fail)
 origin = start_server(PORT, dist)

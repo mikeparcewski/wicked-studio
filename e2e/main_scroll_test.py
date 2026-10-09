@@ -11,27 +11,25 @@ main_scroll_test.py — the main pane scrolls; nothing on a top-level page sits 
            the viewport tall hides content behind `overflow: hidden` (the clipping class the Home bug
            was) — a pane taller than its box must be one the user can scroll.
 
-Under STUDIO_SKIN=desk (S15a: the desk variant, in run_journeys.py DESK) Home is the Desk: its own
+On the Desk (the one shell since S18d) Home is the Desk: its own
 scroller must bring the last block of its list column fully into view above the Start row + composer
 band by the wheel alone, and the session rail and that band stay where they were. "pages" is the same.
 
-Captures (e2e/shots/): main-scroll-<skin>-home-top.png, main-scroll-<skin>-home-bottom.png.
-Env: FEEDBACK_PORT (default 4499), STUDIO_SKIN. JSON report; exit 0/1.
+Captures (e2e/shots/): main-scroll-desk-home-top.png, main-scroll-desk-home-bottom.png.
+Env: FEEDBACK_PORT (default 4499). JSON report; exit 0/1.
 """
 
 import json
 import os
 import sys
 
-from uxfix_fixture import (DEFAULT_APPEARANCE, HIDE_GATE_TOASTS, REPO, STUDIO_SKIN, ensure_build,
+from uxfix_fixture import (DEFAULT_APPEARANCE, HIDE_GATE_TOASTS, REPO, ensure_build,
                            set_fixture, start_server)
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4499"))
 W, H = 1440, 700
 SHOTS = REPO / "e2e" / "shots"
-SKIN = STUDIO_SKIN
-
-report: dict = {"ok": False, "skin": SKIN, "steps": {}}
+report: dict = {"ok": False, "steps": {}}
 
 
 class SectionFailed(Exception):
@@ -51,7 +49,7 @@ def check(step: str, ok: bool, **detail) -> None:
 
 
 CORPUS = {"home_runs": True, "trust_rules": True, "project_dto": True, "reset_home_runs": True,
-          "gate_move": True, "repo": True, "appearance": {**DEFAULT_APPEARANCE, "skin": SKIN}}
+          "gate_move": True, "repo": True, "appearance": {**DEFAULT_APPEARANCE}}
 
 # Every top-level page the rail and the palette reach, plus a run paused at a tall gate card.
 PAGES = ["/work", "/execute", "/vibe", "/demo", "/projects", "/chats", "/repos", "/skills",
@@ -92,7 +90,7 @@ LAST_SECTION = """() => {
            unobscured: !!hit && last.contains(hit) };
 }"""
 
-# The Desk (STUDIO_SKIN=desk, S15a's desk variant): its own scroller holds the list and the chores; the
+# The Desk (the one shell since S18d): its own scroller holds the list and the chores; the
 # floor is the Start row + composer band, which never scrolls.
 DESK_LAST_SECTION = """() => {
   const main = document.querySelector('[data-place-scroll="desk"] .wk-desk-main');
@@ -134,21 +132,19 @@ with sync_playwright() as p:
     page.add_init_script(
         "document.addEventListener('DOMContentLoaded', () => { const s = document.createElement('style'); "
         f"s.textContent = {json.dumps(HIDE_GATE_TOASTS)}; document.head.appendChild(s); }});")
-
-    desk = SKIN == "desk"
-    last_section = DESK_LAST_SECTION if desk else LAST_SECTION
-    chrome = DESK_CHROME if desk else CHROME
+    last_section = DESK_LAST_SECTION
+    chrome = DESK_CHROME
 
     def section_home() -> None:
         set_fixture(origin, **CORPUS)
         page.goto(f"{origin}/", wait_until="networkidle")
         page.get_by_test_id("needs-you-queue").wait_for(state="visible", timeout=15000)
-        page.get_by_test_id("desk" if desk else "project-board").wait_for(state="attached")
+        page.get_by_test_id("desk").wait_for(state="attached")
         page.wait_for_timeout(600)
         start = page.evaluate(last_section)
         check("home-last-section-starts-below-fold", start is not None and not start["inView"], start=start)
         chrome_before = page.evaluate(chrome)
-        page.screenshot(path=str(SHOTS / f"main-scroll-{SKIN}-home-top.png"))
+        page.screenshot(path=str(SHOTS / f"main-scroll-desk-home-top.png"))
         # The wheel only — the user's move. Parked over the Home header's empty stretch, which is no
         # nested scroller, so a pane that cannot scroll simply does not move.
         header = page.locator("#main header").first.bounding_box()  # the Desk's greeting under desk
@@ -160,7 +156,7 @@ with sync_playwright() as p:
             last = page.evaluate(last_section)
             if last["inView"] and last["unobscured"]:
                 break
-        page.screenshot(path=str(SHOTS / f"main-scroll-{SKIN}-home-bottom.png"))
+        page.screenshot(path=str(SHOTS / f"main-scroll-desk-home-bottom.png"))
         check("home-last-section-scrolls-into-view", last["inView"] and last["unobscured"], last=last)
         chrome_after = page.evaluate(chrome)
         check("home-sidebar-and-status-bar-stay-fixed", chrome_after == chrome_before,

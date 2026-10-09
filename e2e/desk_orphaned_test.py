@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 desk_orphaned_test.py — studio#545: a run the daemon restart orphaned says so and offers Resume, under
-STUDIO_SKIN=desk at 1440x700 against the in-process fixture. The fixture's `r-orphan` is `executing` and
+the Desk at 1440x700 against the in-process fixture. The fixture's `r-orphan` is `executing` and
 its trail ends on the engine's `runOrphaned` report (crew#830): no worker, nothing moving.
 
   1. THE DESK COUNTS IT: the needs-you queue carries the run with the orphan line and a `Resume ›` act —
@@ -22,14 +22,14 @@ import sys
 import time
 import urllib.request
 
-from uxfix_fixture import HIDE_GATE_TOASTS, REPO, STUDIO_SKIN, ensure_build, set_fixture, start_server
+from uxfix_fixture import HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4371"))
 W, H = 1440, 700
 SHOTS = REPO / "e2e" / "shots"
 LINE = "The daemon restarted while this step was running; nothing is working on it."
 
-report: dict = {"ok": False, "skin": STUDIO_SKIN, "steps": {}}
+report: dict = {"ok": False, "steps": {}}
 
 
 def fail(step: str, why) -> None:
@@ -50,8 +50,6 @@ def resume_posts(origin: str) -> list:
         return json.loads(r.read())["posts"]
 
 
-if STUDIO_SKIN != "desk":
-    fail("skin", f"desk journeys run under STUDIO_SKIN=desk, not {STUDIO_SKIN}")
 
 dist = ensure_build(fail)
 origin = start_server(PORT, dist)

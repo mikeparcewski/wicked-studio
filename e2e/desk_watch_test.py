@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 desk_watch_test.py — TR-W8 (DES-TRIGGER-REGISTRY-001 §4.10, §9): the Watchtower's fold on the
-surfaces that exist today, at 1440x700 under STUDIO_SKIN=desk.
+surfaces that exist today, at 1440x700 on the Desk.
 
 Against the in-process fixture (wave-1 corpus, b1 waiting at a gate, `watch_feed` on):
 
@@ -21,14 +21,14 @@ import json
 import os
 import sys
 
-from uxfix_fixture import HIDE_GATE_TOASTS, NOW0, REPO, STUDIO_SKIN, ensure_build, set_fixture, start_server
+from uxfix_fixture import HIDE_GATE_TOASTS, NOW0, REPO, ensure_build, set_fixture, start_server
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4349"))
 W, H = 1440, 700
 SHOTS = REPO / "e2e" / "shots"
 MIN = 60_000
 
-report: dict = {"ok": False, "skin": STUDIO_SKIN, "steps": {}}
+report: dict = {"ok": False, "steps": {}}
 
 
 def fail(step: str, why) -> None:
@@ -44,8 +44,6 @@ def check(step: str, ok: bool, **detail) -> None:
         sys.exit(1)
 
 
-if STUDIO_SKIN != "desk":
-    fail("skin", f"desk journeys run under STUDIO_SKIN=desk, not {STUDIO_SKIN}")
 
 CORPUS = dict(wave1=True, gate_now=["b1"], gate_simple=["b1"], status_over={}, extra_gates=[], extra_frames=[],
               trust_rules=False, gate_move=False)

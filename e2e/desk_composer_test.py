@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 desk_composer_test.py — S7 (DES-STUDIO-REBUILD-001 §5.7, §11 S7): the composer's about-chips, the
-`@` and `/` menus and plan drafts, at 1440x700 under STUDIO_SKIN=desk.
+`@` and `/` menus and plan drafts, at 1440x700 on the Desk.
 
 Against the in-process fixture (team_plan + plan_gate: r-team executing a preset plan, r-plan-gate
 paused at its plan_approval gate):
@@ -27,14 +27,14 @@ import os
 import sys
 import urllib.request
 
-from uxfix_fixture import HIDE_GATE_TOASTS, REPO, STUDIO_SKIN, ensure_build, set_fixture, start_server
+from uxfix_fixture import HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server
 
 PORT = int(os.environ.get("FEEDBACK_PORT", "4351"))
 W, H = 1440, 700
 SHOTS = REPO / "e2e" / "shots"
 WINDOW_MS = 11_500
 
-report: dict = {"ok": False, "skin": STUDIO_SKIN, "steps": {}}
+report: dict = {"ok": False, "steps": {}}
 
 
 def fail(step: str, why) -> None:
@@ -50,8 +50,6 @@ def check(step: str, ok: bool, **detail) -> None:
         sys.exit(1)
 
 
-if STUDIO_SKIN != "desk":
-    fail("skin", f"desk journeys run under STUDIO_SKIN=desk, not {STUDIO_SKIN}")
 
 dist = ensure_build(fail)
 origin = start_server(PORT, dist)
