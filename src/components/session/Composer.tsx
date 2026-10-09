@@ -27,6 +27,9 @@ export interface ComposerSend {
   /** ASK-S1: the helper an `@helper` chip named before the session's first send — under
    *  `capabilities.askPath` it is the one who answers (the path's `primary`). */
   primary?: string;
+  /** S16a-4e: the live chat this composer stands in (a chat's own session page) — the send is a
+   *  reply INTO that chat, never into the Ask dock's own stored chat. */
+  chatId?: string;
 }
 
 /** One `@` row: a project (a destination) or a helper (a subject). */

@@ -26,6 +26,7 @@ import { Terminal } from './Terminal.js';
 import { useSessionDrafts } from '../store/sessionDrafts.js';
 import { addAboutChip } from '../store/composerChips.js';
 import { everythingPath } from '../board/everythingModel.js';
+import { seedNewChat } from '../board/chatMoves.js';
 
 /**
  * The universal command palette (DES-FEEDBACK-002 §1, slice G): Cmd+K / Ctrl+K /
@@ -542,8 +543,13 @@ export function CommandPalette({
         action: () => navigate(launchPath(projectId, 'build')),
       },
       {
+        // S16a-4e: a new chat starts in the Desk composer (the project's @ chip when one is ambient).
         name: 'New Chat',
-        action: () => navigate(launchPath(projectId, 'chat')),
+        action: () => {
+          onClose();
+          navigate('/');
+          seedNewChat(projectId, projectId === null ? null : projects.find((p) => p.id === projectId)?.name ?? null);
+        },
       },
       // The §3.4 fork's other two tines (DES-FEEDBACK-003 §8.4, slice N): the
       // palette and Make's ＋ agree on what can be made. Inside a project shell

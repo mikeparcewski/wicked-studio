@@ -812,6 +812,7 @@ export function App(): React.ReactElement {
               ...(askHandoff.projectId !== undefined ? { sendProjectId: askHandoff.projectId } : {}),
               ...(askHandoff.fresh === true ? { sendFresh: true } : {}),
               ...(askHandoff.primary !== undefined ? { sendPrimary: askHandoff.primary } : {}),
+              ...(askHandoff.chatId !== undefined ? { sendChatId: askHandoff.chatId } : {}),
             } : {})}
           />
         )}

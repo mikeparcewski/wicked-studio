@@ -46,6 +46,8 @@ describe('the redirect table (static moves)', () => {
       '/runs/:id', '/runs/:id/timeline', '/p/:pid/build/:run',
       // S16a-4c: where a made thing opens.
       '/p/:pid/document', '/p/:pid/document/:doc', '/p/:pid/video', '/p/:pid/video/:run',
+      // S16a-4e: a chat is its session.
+      '/chat/:id', '/chat/new', '/p/:pid/chat', '/p/:pid/chat/:run',
     ]);
   });
 

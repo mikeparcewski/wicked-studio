@@ -649,7 +649,8 @@ function LiveChats({ known, go }: { known: ReadonlySet<string>; go: Go }): React
     <section data-testid="everything-live-chats" data-count={rows.length} className="wk-desk-card wk-everything-group">
       <p className="wk-desk-card-title"><span>Live chats</span></p>
       {rows.map((c) => {
-        const path = `/chat/${encodeURIComponent(c.chatId)}`;
+        // S16a-4e: a chat is its session.
+        const path = sessionPath(c.chatId);
         const idle = c.idleSecs === null ? null : c.idleSecs < 60 ? 'just now' : `${ageWord(c.idleSecs * 1000)} ago`;
         const seats = c.seats;
         return (

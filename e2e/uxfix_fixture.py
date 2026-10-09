@@ -358,7 +358,7 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          #                   False: the standing chat rigs see the pre-scope 201.
          #   chat_scope_501 — POST /chats answers crew's 501 "engine predates chat
          #                   scope" for any SCOPED open (default False).
-         "repo_findings": False, "governance": None, "chat_scope": False, "chat_scope_501": False,
+         "repo_findings": False, "governance": None, "chat_scope": False, "chat_scope_501": False, "chat_transcripts": False,
          # Studio Wave A (lane home):
          #   never_indexed — GET /repos appends N registered repos with NO onboarding run on record
          #                   (`idx-0`…), registered hours apart (epoch SECONDS, the real wire), and
@@ -3991,6 +3991,10 @@ CHAT_SCOPE_501 = ("the installed wicked-core-ts predates chat scope (wicked-core
                   "chat or hold its read roots read-only — upgrade the engine, or open the chat without "
                   "projectId/repoRefs.")
 chat_scopes: dict = {}  # chatId → the ChatScope recorded at open (crew#502), under chat_state_lock
+# S16a-4e: `chat_transcripts` — the transcript GET /chats/:id answers for a chat this fixture opened
+# (the daemon's stored messages): each send's user message, and each chatReply / chatCitations frame
+# a rig pushes over `chat_frames`. chatId → [message], under chat_state_lock.
+chat_transcripts: dict = {}
 
 
 def scope_repo(r: dict) -> dict:
@@ -5727,6 +5731,11 @@ class W2Handler(SimpleHTTPRequestHandler):
             detail = {"chatId": cid, "seats": seats}
             if scope_on:
                 detail["scope"] = scope  # None = a chat this daemon did not open (crew#502)
+            with state_lock:
+                keep = bool(state.get("chat_transcripts"))
+            if keep:
+                with chat_state_lock:
+                    detail["messages"] = list(chat_transcripts.get(cid, []))
             self._json(200, detail)
             return True
         parts = path.split("/")
@@ -7559,6 +7568,21 @@ class W2Handler(SimpleHTTPRequestHandler):
             # frame and when it arrives; the fixture adds nothing to it.
             for frame in body.get("chat_frames") or []:
                 broadcast_chat(frame)
+                # S16a-4e: under `chat_transcripts` the frame is also the daemon's stored message.
+                with state_lock:
+                    keep = bool(state.get("chat_transcripts"))
+                if keep and isinstance(frame, dict) and frame.get("chat"):
+                    cid_ = frame["chat"]
+                    with chat_state_lock:
+                        log = chat_transcripts.setdefault(cid_, [])
+                        turn_ = frame.get("turn_id") or f"t-{chat_send_count.get(cid_, 1)}"
+                        if frame.get("type") == "chatReply":
+                            log.append({"kind": "seat", "cliKey": frame.get("cliKey"), "ok": frame.get("ok", True),
+                                        "text": frame.get("text", ""), "turnId": turn_, "at": int(time.time() * 1000)})
+                        elif frame.get("type") == "chatCitations":
+                            log.append({"kind": "citations", "cliKey": frame.get("cliKey"), "turnId": turn_,
+                                        **{k: frame.get(k) for k in ("verified", "unverifiable", "corrected", "unchecked", "items") if k in frame},
+                                        "at": int(time.time() * 1000)})
             with state_lock:
                 # `appearance` rides the same control channel but lands in the
                 # settings store: a dict replaces studio.appearance wholesale,
@@ -8179,6 +8203,12 @@ class W2Handler(SimpleHTTPRequestHandler):
                 if not replies_on:
                     chat_send_count[chat_id] = chat_send_count.get(chat_id, 0) + 1
                 turn_n = chat_send_count.get(chat_id, 1)
+            with state_lock:
+                keep = bool(state.get("chat_transcripts"))
+            if keep:
+                with chat_state_lock:
+                    chat_transcripts.setdefault(chat_id, []).append(
+                        {"kind": "user", "text": body.get("text", ""), "turnId": f"t-{turn_n}", "at": int(time.time() * 1000)})
             return self._json(200, {"seats": [], "turnId": f"t-{turn_n}"})
         return self._json(404, {"error": f"w2 fixture: no such endpoint {path}"})
 

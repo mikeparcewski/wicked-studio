@@ -604,8 +604,9 @@ export function needsYouRows(inputs: NeedsYouInputs): NeedRow[] {
       text: `Idle ${Math.round(idle / 60)}m — ${plural(chat.seats.length, 'warm seat')} waiting on a message`,
       tone: 'gate',
       at: now - idle * 1000,
-      subjectPath: `/chat/${encodeURIComponent(chat.chatId)}`,
-      action: { kind: 'open', path: `/chat/${encodeURIComponent(chat.chatId)}`, label: 'Open chat ›' },
+      // S16a-4e: a chat is its session.
+      subjectPath: sessionPath(chat.chatId),
+      action: { kind: 'open', path: sessionPath(chat.chatId), label: 'Open chat ›' },
     });
   }
 

@@ -8,7 +8,8 @@ real SHA from an invented one, and a SHA is exactly what a reader copies into `g
 now verifies every citation against the repositories the chat can read and broadcasts one
 `chatCitations` frame per reply; this rig proves what a reader SEES.
 
-  1. a repo-scoped chat, one reply citing a real SHA, a fabricated SHA and an off-by line ref:
+  S16a-4e: a new chat starts in the Desk composer; a chat IS its session, whose thread wears the marks.
+  1. a chat, one reply citing a real SHA, a fabricated SHA and an off-by line ref:
      before the verdicts arrive, nothing is marked (the RC1 state);
   2. the `chatCitations` frame lands (pushed verbatim over POST /__fixture `chat_frames`, the way
      the daemon would broadcast it): the fabricated SHA is struck through and UNVERIFIED where it
@@ -88,46 +89,37 @@ with sync_playwright() as p:
         "document.addEventListener('DOMContentLoaded', () => { const s = document.createElement('style'); "
         f"s.textContent = {json.dumps(HIDE_GATE_TOASTS)}; document.head.appendChild(s); }});")
 
-    # A chat scoped to a repository — the only kind that HAS read roots to verify against.
-    set_fixture(origin, repo=True, chat_scope=True)
+    # S16a-4e: a new chat starts in the Desk composer (`/chat/new` lands there); the send opens the
+    # chat, and the chat IS its session (/s/<chat>), whose thread wears the daemon's verdicts. The
+    # fixture keeps the daemon's stored transcript (`chat_transcripts`), as GET /chats/:id answers.
+    set_fixture(origin, repo=True, chat_scope=True, chat_transcripts=True)
     page.goto(f"{origin}/chat/new", wait_until="networkidle")
-    page.locator(TID("chat-scope-row")).wait_for(timeout=15000)
-    page.locator(TID("chat-scope-repos")).click()
-    option = page.locator('[data-testid="chat-scope-repo-option"][data-repo-id="studio-api"]')
-    option.wait_for(timeout=10000)
-    option.locator('input[type="checkbox"]').check()
-    composer = page.locator("textarea")
+    page.wait_for_function("() => location.pathname === '/'", timeout=15000)
+    composer = page.get_by_test_id("desk-composer-input")
+    composer.wait_for(timeout=15000)
     composer.fill("summarize the last 10 commits as release notes")
     composer.press("Enter")
-    page.locator(TID("chat-scope")).wait_for(timeout=15000)
-    bubble = page.locator(TID("seat-bubble")).first
-    # The narrated feed (§11.1, the default view) keeps a STILL-STREAMING reply behind its
-    # narration line, so the pending bubble is attached but hidden — that is the state to read the
-    # seat from; the finished reply below is the one a reader sees.
-    bubble.wait_for(state="attached", timeout=15000)
-    seat = bubble.get_attribute("data-agent")
-    chat_id = page.url.rsplit("/", 1)[-1]
-    check("a-repo-scoped-chat-is-live", bool(seat) and chat_id not in ("", "new"),
-          seat=seat, chat=chat_id)
+    page.wait_for_function("() => !!JSON.parse(sessionStorage.getItem('wicked.ask.session') || '{}').chatId", timeout=15000)
+    chat_id = page.evaluate("() => JSON.parse(sessionStorage.getItem('wicked.ask.session') || '{}').chatId || ''")
+    seat = "claude"
+    check("a-chat-is-live", chat_id not in ("", "new"), chat=chat_id)
 
-    # The seat's answer, with the RC1 citation mix.
-    set_fixture(origin, chat_frames=[
-        {"type": "chatReply", "chat": chat_id, "cliKey": seat, "ok": True, "text": REPLY}])
-    page.wait_for_function(
-        '() => document.querySelector(\'[data-testid="seat-bubble"]\')'
-        '?.getAttribute("data-pending") === "false"', timeout=15000)
+    # The seat's answer, with the RC1 citation mix — read on the chat's own session.
+    set_fixture(origin, chat_frames=[{"type": "chatReply", "chat": chat_id, "cliKey": seat, "ok": True, "text": REPLY}])
+    HELPER = '[data-testid="session-turn"][data-who="helper"]'
+    page.goto(f"{origin}/s/{chat_id}", wait_until="networkidle")
+    page.locator(HELPER).first.wait_for(timeout=15000)
     page.wait_for_timeout(300)
     page.screenshot(path=str(SHOTS / "chat-citations-plain.png"))
     check("before-the-verdicts-nothing-is-marked",
           page.locator(TID("citation-mark")).count() == 0
           and page.locator(TID("seat-citations")).count() == 0
-          and FAKE_SHA in page.locator(TID("seat-bubble")).first.inner_text(),
+          and FAKE_SHA in page.locator(HELPER).first.inner_text(),
           marks=page.locator(TID("citation-mark")).count())
 
-    # The daemon's verdicts.
-    # Stamped with the turn the send opened (the fixture answers `t-<n>`, as the daemon does): a
-    # frame for a turn this client never saw is DELIBERATELY ignored, so the stamp must be right.
+    # The daemon's verdicts, stamped with the turn the send opened (`t-1`).
     set_fixture(origin, chat_frames=[{**CITATIONS, "chat": chat_id, "cliKey": seat, "turn_id": "t-1"}])
+    page.goto(f"{origin}/s/{chat_id}", wait_until="networkidle")
     page.locator(TID("seat-citations")).wait_for(timeout=15000)
     page.wait_for_timeout(300)
     page.screenshot(path=str(SHOTS / "chat-citations-marked.png"))
@@ -151,12 +143,11 @@ with sync_playwright() as p:
           and "acceptance.ts:80" in by_raw["acceptance.ts:79"]["text"],
           mark=by_raw.get("acceptance.ts:79"))
     check("a-verified-citation-is-left-alone",
-          REAL_SHA not in by_raw and REAL_SHA in page.locator(TID("seat-bubble")).first.inner_text(),
+          REAL_SHA not in by_raw and REAL_SHA in page.locator(HELPER).first.inner_text(),
           marked=sorted(by_raw))
-    # The struck-through token is the seat's own text: marked, never rewritten.
     check("the-seats-text-is-intact",
-          "defaulted on in" in page.locator(TID("seat-bubble")).first.inner_text(),
-          text=page.locator(TID("seat-bubble")).first.inner_text()[:160])
+          "defaulted on in" in page.locator(HELPER).first.inner_text(),
+          text=page.locator(HELPER).first.inner_text()[:160])
 
     browser.close()
 

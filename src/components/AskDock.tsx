@@ -87,7 +87,7 @@ function stillAnswering(chatId: string): (e: unknown) => never {
   };
 }
 
-export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoffTaken, sendProjectId, sendFresh = false, sendPrimary }: {
+export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoffTaken, sendProjectId, sendFresh = false, sendPrimary, sendChatId }: {
   runs: SessionView[];
   pathname: string;
   /** Collapsing the dock closes Ask entirely — the launcher bubble/shortcut reopen it. */
@@ -108,6 +108,9 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
   /** ASK-S1: the helper the operator named with `@` to answer — the path's `primary` (chosen) when
    *  this send opens a new chat on a daemon with `capabilities.askPath`. */
   sendPrimary?: string;
+  /** S16a-4e: the handoff is a reply into THIS chat (the chat session on screen): the dock resumes
+   *  it (and stores it as its session) instead of its own stored chat. */
+  sendChatId?: string;
 }): React.ReactElement {
   // The letters that opened the dock (type-to-composer, §5.6 rule 4): read on mount, cleared
   // in an effect (a StrictMode double initializer must not read an already-emptied seed).
@@ -178,6 +181,14 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
     if (sendText !== undefined && (sendFresh || sendProjectId !== undefined)) {
       forgetAskSession();
       return null;
+    }
+    if (sendText !== undefined && sendChatId !== undefined) {
+      const stored = readAskSession();
+      if (stored !== null && stored.chatId === sendChatId) return stored;
+      // The chat on screen, opened elsewhere: its context pack rode its own first send.
+      const session = { chatId: sendChatId, title: '', seeded: true, scope: null };
+      writeAskSession(session);
+      return session;
     }
     return readAskSession();
   });
@@ -390,7 +401,8 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
           : (chatId) => {
               // ASK-S1 (codex #8): under the capability the chat IS a path and its thread is the session;
               // the legacy fan-out surface (`/chat/:id`) would draw a pending bubble per eligible seat.
-              navigate(useCapabilities.getState().askPath ? `/s/${encodeURIComponent(chatId)}` : `/chat/${encodeURIComponent(chatId)}`);
+              // S16a-4e: a chat is its session — the promote door is always `/s/<id>`.
+              navigate(`/s/${encodeURIComponent(chatId)}`);
               onClose();
             }
       }

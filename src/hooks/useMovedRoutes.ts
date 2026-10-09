@@ -3,6 +3,8 @@ import type { SessionView } from '../api/types.js';
 import { everythingPath, isSessionFilter } from '../board/everythingModel.js';
 import { sessionPath } from '../board/sessionModel.js';
 import { runMadeMove, staticMadeMove } from '../board/madeMoves.js';
+import { chatSessionMove, newChatOf, seedNewChat } from '../board/chatMoves.js';
+import { useProjectsStore } from '../store/projects.js';
 import type { Navigate } from './useRoute.js';
 
 /**
@@ -52,6 +54,11 @@ export const MOVES: readonly { from: string; to: string }[] = [
   { from: '/p/:pid/document/:doc', to: '/s/<session>/a/<doc key>?size=full[&v=N] | …&open=:doc' },
   { from: '/p/:pid/video', to: '/everything?tab=made&kind=videos&project=:pid' },
   { from: '/p/:pid/video/:run', to: '/s/<session>/a/<demo-video key>?size=full' },
+  // S16a-4e: a chat is its session; a new chat starts in the Desk composer.
+  { from: '/chat/:id', to: '/s/:id[?…][#…]' },
+  { from: '/chat/new', to: '/ (the Desk composer, focused)' },
+  { from: '/p/:pid/chat', to: '/ (the Desk composer, the project\'s @ chip)' },
+  { from: '/p/:pid/chat/:run', to: '/s/run%3A:run[?…][#…]' },
 ];
 
 /** The static moves — the new address for an old one, or `null` when the address is not a move. */
@@ -113,10 +120,19 @@ export function useMovedRoutes(args: {
 }): void {
   const { panel, pathname, search, navigate, runs, runsLoaded, runChatId } = args;
   useEffect(() => {
-    // The S15c moves parse to Everything; the S16a-2d run moves parse straight to the session.
-    if (panel !== 'everything' && panel !== 'session') return;
+    // The S15c moves parse to Everything; the S16a-2d run moves parse straight to the session; the
+    // S16a-4e new-chat forms parse to the Desk.
+    if (panel !== 'everything' && panel !== 'session' && panel !== 'home') return;
     if (panel === 'session' && pathname.startsWith('/s/')) return;
-    const to = movedAddress(pathname, search, window.location.hash) ?? staticMadeMove(pathname);
+    if (panel === 'home') {
+      const fresh = newChatOf(pathname);
+      if (fresh === null) return;
+      navigate('/', { replace: true });
+      const name = fresh.projectId === null ? null : useProjectsStore.getState().projects.find((p) => p.id === fresh.projectId)?.name ?? null;
+      seedNewChat(fresh.projectId, name);
+      return;
+    }
+    const to = movedAddress(pathname, search, window.location.hash) ?? chatSessionMove(pathname, search, window.location.hash) ?? staticMadeMove(pathname);
     if (to !== null) {
       navigate(to, { replace: true });
       return;

@@ -266,6 +266,12 @@ function parse(pathname: string): Route {
     // S16a-4c: `/p/:pid/document[/:doc]` and `/p/:pid/video[/:run]` MOVED — a made thing opens in its
     // session (or on the project's Made list). Parsed to "See everything" so the page renders on the
     // pre-redirect tick; `useMovedRoutes` replaces the address (the named ones once the runs are read).
+    // S16a-4e: the shell's Chat mode MOVED — `/p/:pid/chat[/new]` starts a chat in the Desk composer
+    // (the project's @ chip), `/p/:pid/chat/:run` is the run's session.
+    if (third === 'chat') {
+      if (!restEmpty(5)) return route({ panel: 'not-found' });
+      return fourth === '' || fourth === 'new' ? route({ panel: 'home' }) : route({ panel: 'session', artifactId: `run:${safeDecode(fourth)}` });
+    }
     if (third === 'document' || third === 'video') {
       return restEmpty(5) ? route({ panel: 'everything', projectId: safeDecode(second) }) : route({ panel: 'not-found' });
     }
@@ -393,8 +399,10 @@ function parse(pathname: string): Route {
   if (first === 'repos' && second === 'new') {
     return route({ panel: 'repos', showRegisterRepo: true });
   }
-  if (first === 'chat' && second === 'new') {
-    return route({ panel: 'runs', showLaunch: true, chatMode: true });
+  // S16a-4e: a chat IS its session — `/chat/new` starts one in the Desk composer (parsed to home so
+  // the Desk renders on the pre-redirect tick), `/chat/:id` is the session `/s/:id`.
+  if (first === 'chat' && second === 'new' && restEmpty(3)) {
+    return route({ panel: 'home' });
   }
   // `/chat/:id` — a live chat SESSION's real URL (J4/C6: an opened chat is
   // findable again). The id is the pool session's chatId, carried in
@@ -402,7 +410,7 @@ function parse(pathname: string): Route {
   // machinery fires against it). GroupChat rejoins the warm session, or says
   // honestly that it is gone.
   if (first === 'chat' && second) {
-    return route({ panel: 'runs', chatMode: true, artifactId: safeDecode(second) });
+    return restEmpty(3) ? route({ panel: 'session', artifactId: safeDecode(second) }) : route({ panel: 'not-found' });
   }
   if (first === 'projects' && second) {
     return route({ panel: 'project-detail', projectId: safeDecode(second) });

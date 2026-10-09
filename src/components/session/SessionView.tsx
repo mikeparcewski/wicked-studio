@@ -25,6 +25,8 @@ import { useRunEvents } from '../../hooks/useRunEvents.js';
 import { StrandedCard } from './StrandedCard.js';
 import { RunRecordLines } from './RunRecord.js';
 import { ArtifactAddressProvider, useArtifactMissing } from './ArtifactAddress.js';
+import { chatPromotePrefill } from '../../board/chatPromote.js';
+import { setRetryPrefill } from '../../store/retryPrefill.js';
 import { startRetry } from './RunActions.js';
 import { Tech, runTechParts } from '../Tech.js';
 import { parseJump } from '../../store/watch.js';
@@ -45,6 +47,8 @@ import { TurnConsidered } from '../decisions/ConsideredLine.js';
 import { collapseArtifacts, paneOpen, useArtifactSizes } from '../../store/artifactSizes.js';
 import { RunArtifacts } from './RunArtifacts.js';
 import { OperatorMessage } from '../OperatorMessage.js';
+import { Markdown } from '../Markdown.js';
+import { CitationStrip, citationMarks } from '../citations.js';
 import { applyCheckState } from '../../board/checkState.js';
 import { useRunAcceptance } from '../../hooks/useRunAcceptance.js';
 import { momentOfRecording, useRecordingsStore } from '../../store/recordings.js';
@@ -493,6 +497,10 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
           </p>
         </div>
         {/* S11: look underneath the session — goal, helpers, activity, sign-ins and the run's sections. */}
+        {/* S16a-4e: a chat off the ask path promotes into Build from its own session (GroupChat's door). */}
+        {ref.kind === 'chat' && !askPathOn && conversation === 'live' && messages.some((m) => m.kind === 'user') && (
+          <button type="button" data-testid="session-chat-promote" title="Open the Build composer prefilled with this conversation as context — editable before launch" onClick={() => { setRetryPrefill(chatPromotePrefill(ref.chatId, messages, mine[0] !== undefined && typeof mine[0].session.project_id === 'string' ? mine[0].session.project_id : null)); navigate('/runs/new'); }} className="wk-prop-btn wk-prop-btn--ghost">Continue in Build</button>
+        )}
         <button type="button" data-testid="session-sheet-open" aria-label="Look underneath this session" title="Look underneath (⌘K for everything else)" onClick={() => openSheet({ kind: 'session', sessionId })} className="wk-sheet-open">⋯</button>
       </header>
 
@@ -560,7 +568,17 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
             ? (
               <div key={e.key} data-testid="session-turn" data-who={e.who === 'you' ? 'you' : 'helper'} {...(e.pending ? { 'data-pending': 'true' } : {})} className={`wk-session-turn wk-session-turn--${e.who === 'you' ? 'you' : 'helper'}${e.pending ? ' wk-session-turn--pending' : ''}`}>
                 <p className="wk-session-who">{e.who === 'you' ? 'You' : e.pending ? `${e.who} · answering` : e.who}</p>
-                <p className={`wk-session-text${e.ok ? '' : ' wk-session-grey'}`}>{e.who === 'you' ? <OperatorMessage text={e.text} /> : e.text}</p>
+                {e.who === 'you'
+                  ? <p className={`wk-session-text${e.ok ? '' : ' wk-session-grey'}`}><OperatorMessage text={e.text} /></p>
+                  : (
+                    // S16a-4e (crew#561): a helper's reply on the session wears the daemon's verdicts where
+                    // it cited — the marks and the strip GroupChat's thread had — so a fabricated SHA is
+                    // never read as a confirmed one here either. Mark, never edit.
+                    <div className={`wk-session-text${e.ok ? '' : ' wk-session-grey'}`}>
+                      <Markdown marks={citationMarks(e.citations)}>{e.text}</Markdown>
+                      {e.citations !== undefined && <CitationStrip citations={e.citations} />}
+                    </div>
+                  )}
                 {e.who !== 'you' && <SourceChips citations={e.citations} runs={readers} />}
                 {/* DC-S8: the rules the turn's seats were given — considered · set aside · cited (unchecked). */}
                 {e.who !== 'you' && ref.kind === 'chat' && e.turnId !== null && replies.last.get(e.turnId) === e.key && (
@@ -582,7 +600,8 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
         composerKey={sessionId}
         text={draft}
         setText={(t) => setDraft(sessionId, t)}
-        onSend={onAsk}
+        // S16a-4e: on a live chat's own session the composer replies into THAT chat.
+        onSend={(text, opts) => onAsk(text, ref.kind === 'chat' && conversation === 'live' && opts.fresh !== true && opts.projectId === undefined ? { ...opts, chatId: ref.chatId } : opts)}
         runs={mine}
         started={entries.length > 0}
         className="wk-session-composer"

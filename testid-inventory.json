@@ -12,8 +12,8 @@
   "studioVersion": "0.6.6",
   "counts": {
     "files": 194,
-    "occurrences": 2292,
-    "static": 2034,
+    "occurrences": 2293,
+    "static": 2035,
     "dynamic": 48,
     "computed": 8
   },
@@ -7785,6 +7785,12 @@
     },
     {
       "testId": "session-chat-error",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
+      "testId": "session-chat-promote",
       "files": [
         "src/components/session/SessionView.tsx"
       ]

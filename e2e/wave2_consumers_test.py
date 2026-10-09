@@ -24,7 +24,8 @@ The DOM ACs, verbatim mapping:
      the route ABSENT (older daemon) the group reads "not reported by this daemon"
      (the heart's governance contribution is pinned in the unit suite — this roster's
      inactive codex seat colours it on its own).
-  3. SCOPED NEW CHAT (#248): on /chat/new the Scope row is present; an Unfiled send
+  3. NEW CHAT (#248 → S16a-4e): /chat/new lands on the Desk composer (nothing POSTed); /p/<pid>/chat
+     lands with the project's @ chip. Formerly: on /chat/new the Scope row was present; an Unfiled send
      is BLOCKED (nothing POSTed, the gap stated, the draft kept); "System" (studio#323
      R4 renamed the old explicit "Unscoped" chip, `chat-scope-none` → `chat-scope-system`)
      then opens with scopeKind="system" and neither projectId nor repoRefs, and the
@@ -178,112 +179,25 @@ with sync_playwright() as p:
           state=gov.get_attribute("data-state"), why=gov.get_attribute("data-why"))
     set_fixture(ORIGIN, governance="deadletters")
 
-    # ── 4. #248 — the scope control, the gate, the statement, the refusals ──────────
-    page.goto(f"{ORIGIN}/chat/new")
-    page.locator(TID("chat-scope-row")).wait_for(timeout=15000)
+    # ── 4. #248 → S16a-4e: a new chat starts in the Desk composer ─────────────────────
+    # GroupChat's Scope row ("Unfiled" blocked, the System chip, "Choose repos…", the admitted
+    # subset, the 501 fallback) retired with the `/chat/*` addresses — a chat is its session, and a
+    # new one starts in the Desk composer, scoped by its `@` project chip. Replaced by that chip:
+    # `/chat/new` lands on the Desk, nothing POSTed; `/p/<pid>/chat` lands with the project's chip.
     posts.clear()
-    composer = page.locator("textarea")
-    composer.fill("hello crew")
-    composer.press("Enter")
-    page.locator(TID("chat-scope-gap")).wait_for(timeout=5000)
-    check("unfiled_send_is_blocked",
-          page.locator(TID("chat-scope-row")).get_attribute("data-blocked") == "true"
-          and not [u for m, u in posts if "/api/v1/chats" in u]
-          and composer.input_value() == "hello crew",
-          gap=page.locator(TID("chat-scope-gap")).inner_text())
-    # studio#323 R4 (#327): the explicit no-repository choice is the "System" chip now —
-    # a NAMED scope (`scopeKind: "system"`), not the absence of one.
-    system_bodies: list = []
-    page.on("request", lambda r: system_bodies.append(r.post_data_json)
-            if r.method == "POST" and r.url.endswith("/api/v1/chats") else None)
-    page.locator(TID("chat-scope-system")).click()
-    composer.press("Enter")
-    line = page.locator(TID("chat-scope"))
-    line.wait_for(timeout=10000)
-    chat_posts = [u for m, u in posts if u.endswith("/api/v1/chats")]
-    sys_body = system_bodies[0] if system_bodies else {}
-    check("system_opens_and_is_stated",
-          len(chat_posts) == 1 and len(system_bodies) == 1
-          and sys_body.get("scopeKind") == "system"
-          and "projectId" not in sys_body and "repoRefs" not in sys_body
-          and line.get_attribute("data-kind") == "system"
-          and "system — the platform itself" in line.inner_text(),
-          body=sys_body, kind=line.get_attribute("data-kind"), text=line.inner_text()[:160])
-
-    # A fresh chat, scoped to a picked repo.
-    page.locator(TID("chat-close")).click()
     page.goto(f"{ORIGIN}/chat/new")
-    page.locator(TID("chat-scope-row")).wait_for(timeout=15000)
-    bodies: list = []
-    page.on("request", lambda r: bodies.append(r.post_data_json) if r.method == "POST" and r.url.endswith("/api/v1/chats") else None)
-    page.locator(TID("chat-scope-repos")).click()
-    option = page.locator('[data-testid="chat-scope-repo-option"][data-repo-id="studio-api"]')
-    option.wait_for(timeout=10000)
-    option.locator('input[type="checkbox"]').check()
-    composer = page.locator("textarea")
-    composer.fill("what does studio-api do?")
-    composer.press("Enter")
-    line = page.locator(TID("chat-scope"))
-    line.wait_for(timeout=10000)
-    repo_chip = line.locator(TID("chat-scope-repo"))
-    check("repo_scope_sends_repoRefs_and_is_stated",
-          len(bodies) == 1 and bodies[0].get("repoRefs") == ["studio-api"] and "projectId" not in bodies[0]
-          and line.get_attribute("data-kind") == "repos"
-          and repo_chip.count() == 1 and repo_chip.inner_text() == "studio-api"
-          and repo_chip.get_attribute("title") == "/tmp/w2/studio-api"
-          and line.get_attribute("data-graph-bound") == "false"
-          and "no code graph" in line.locator(TID("chat-scope-graph")).inner_text(),
-          body=bodies[0] if bodies else None, kind=line.get_attribute("data-kind"))
+    page.wait_for_function("() => location.pathname === '/'", timeout=15000)
+    page.get_by_test_id("desk-composer-input").wait_for(timeout=15000)
+    page.wait_for_timeout(600)
+    check("new_chat_lands_on_the_desk_composer", not [u for m, u in posts if "/api/v1/chats" in u and m == "POST"],
+          posts=[u for m, u in posts if "/api/v1/chats" in u])
+    page.goto(f"{ORIGIN}/p/upload-endpoint/chat")
+    page.wait_for_function("() => location.pathname === '/'", timeout=15000)
+    chip = page.locator('[data-composer="desk"] [data-testid="composer-chip"][data-kind="project"]')
+    chip.wait_for(timeout=10000)
     page.screenshot(path=str(VSHOTS / "wave2-chat-scope.png"))
-    page.locator(TID("chat-close")).click()
-
-    # W3S-253-09: the daemon admits a STRICT SUBSET of the default chips — the header shows
-    # exactly the admitted seats (no phantom `connecting` chip) and the now-bar is not stuck
-    # on "connecting" once the turn is out.
-    set_fixture(ORIGIN, chat_admit_subset=True)
-    page.goto(f"{ORIGIN}/chat/new")
-    page.locator(TID("chat-scope-row")).wait_for(timeout=15000)
-    page.locator(TID("chat-scope-repos")).click()
-    option = page.locator('[data-testid="chat-scope-repo-option"][data-repo-id="studio-api"]')
-    option.wait_for(timeout=10000)
-    option.locator('input[type="checkbox"]').check()
-    default_chips = page.locator(TID("agent-chip")).count()
-    composer = page.locator("textarea")
-    composer.fill("who is admitted?")
-    composer.press("Enter")
-    page.locator(TID("chat-scope")).wait_for(timeout=10000)
-    page.wait_for_timeout(2500)
-    chips = page.locator(TID("seat-chip"))
-    agents = [chips.nth(i).get_attribute("data-agent") for i in range(chips.count())]
-    states = [chips.nth(i).get_attribute("data-state") for i in range(chips.count())]
-    status = page.locator(TID("now-bar-status")).inner_text() if page.locator(TID("now-bar-status")).count() else ""
-    check("admitted_subset_renders_exactly_the_admitted_seats",
-          default_chips >= 2 and agents == ["claude"] and "connecting" not in states
-          and "connecting" not in status.lower(),
-          default_chips=default_chips, agents=agents, states=states, status=status)
-    page.locator(TID("chat-close")).click()
-    set_fixture(ORIGIN, chat_admit_subset=False)
-
-    # crew#502's 501: the engine predates chat scope — stated inline, Unscoped offered.
-    set_fixture(ORIGIN, chat_scope_501=True)
-    page.goto(f"{ORIGIN}/chat/new")
-    page.locator(TID("chat-scope-row")).wait_for(timeout=15000)
-    page.locator(TID("chat-scope-repos")).click()
-    option = page.locator('[data-testid="chat-scope-repo-option"][data-repo-id="studio-api"]')
-    option.wait_for(timeout=10000)
-    option.locator('input[type="checkbox"]').check()
-    composer = page.locator("textarea")
-    composer.fill("scoped on an old engine")
-    composer.press("Enter")
-    err = page.locator(TID("chat-open-error"))
-    err.wait_for(timeout=10000)
-    check("scoped_open_501_is_stated_with_fallback",
-          err.get_attribute("data-status") == "501"
-          and "predates chat scope" in err.inner_text()
-          and err.locator(TID("chat-scope-fallback-none")).count() == 1
-          and "API 501" not in page.inner_text("body"),
-          text=err.inner_text()[:160])
-    set_fixture(ORIGIN, chat_scope_501=False)
+    check("project_chat_carries_the_project_chip", "upload-endpoint" in (chip.inner_text() or "")
+          and not [u for m, u in posts if "/api/v1/chats" in u and m == "POST"], chip=chip.inner_text())
 
     browser.close()
 

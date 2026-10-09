@@ -21,21 +21,18 @@ describe('useRoute — project + mode routes (DES-MERGE-001 §1.5)', () => {
     expect(r.current.artifactId).toBeNull();
   });
 
-  it('parses /p/:projectId/:mode/:artifactId for the shell\'s modes (S16a-2d: build/:run moved; S16a-4c: document and video moved)', () => {
-    for (const mode of MODES.filter((m) => m === 'chat')) {
-      const r = routeAt(`/p/proj-1/${mode}/art-7`);
-      expect(r.current.mode).toBe(mode);
-      expect(r.current.artifactId).toBe('art-7');
-    }
+  it('every artifact-bearing mode address moved (S16a-2d build, S16a-4c document / video, S16a-4e chat)', () => {
+    expect(MODES.length).toBe(4);
+    expect(routeAt('/p/proj-1/chat/art-7').current).toMatchObject({ panel: 'session', artifactId: 'run:art-7', mode: null });
   });
 
   it('maps the Build/Chat artifact onto runId so the existing run surfaces stay wired', () => {
     // S16a-2d: /p/:pid/build/:run MOVED — it parses straight to the run's session thread.
     expect(routeAt('/p/proj-1/build/run-9').current).toMatchObject({ panel: 'session', artifactId: 'run:run-9' });
 
-    const chat = routeAt('/p/proj-1/chat/run-9').current;
-    expect(chat.runId).toBe('run-9');
-    expect(chat.chatMode).toBe(true);
+    // S16a-4e: /p/:pid/chat/:run MOVED to the run's session; /p/:pid/chat starts a chat on the Desk.
+    expect(routeAt('/p/proj-1/chat/run-9').current).toMatchObject({ panel: 'session', artifactId: 'run:run-9', runId: null });
+    expect(routeAt('/p/proj-1/chat').current).toMatchObject({ panel: 'home' });
 
     // S16a-4c: document / video addresses moved — they parse to "See everything", never a runId.
     expect(routeAt('/p/proj-1/document/doc-3').current).toMatchObject({ panel: 'everything', projectId: 'proj-1', runId: null });
@@ -53,10 +50,9 @@ describe('useRoute — project + mode routes (DES-MERGE-001 §1.5)', () => {
   });
 
   it('decodes percent-encoded ids', () => {
-    const r = routeAt('/p/proj%20one/chat/c%2F9');
-    expect(r.current.projectId).toBe('proj one');
-    expect(r.current.artifactId).toBe('c/9');
-    // A moved build address decodes its run id into the session id.
+    expect(routeAt('/p/proj%20one/campaigns').current.projectId).toBe('proj one');
+    // A moved build or chat-run address decodes its run id into the session id.
+    expect(routeAt('/p/proj%20one/chat/c%2F9').current.artifactId).toBe('run:c/9');
     expect(routeAt('/p/proj%20one/build/run%2F9').current.artifactId).toBe('run:run/9');
   });
 });
@@ -86,12 +82,9 @@ describe('useRoute — the existing panel routes keep working', () => {
     expect(routeAt('/runs').current).toMatchObject({ panel: 'everything', runId: null }); // moved (S15c)
     expect(routeAt('/runs/run-1').current).toMatchObject({ panel: 'session', artifactId: 'run:run-1' }); // moved (S16a-2d)
     expect(routeAt('/runs/new').current).toMatchObject({ panel: 'runs', showLaunch: true });
-    expect(routeAt('/chat/new').current).toMatchObject({ showLaunch: true, chatMode: true });
-    // J4/C6: /chat/:id is a live SESSION's address — chat surface, never the
-    // launch form, and never a runId (a chat is not a run).
-    expect(routeAt('/chat/abc-123').current).toMatchObject({
-      panel: 'runs', chatMode: true, artifactId: 'abc-123', runId: null, showLaunch: false,
-    });
+    // S16a-4e: a chat IS its session — /chat/:id parses to /s/:id; /chat/new starts one on the Desk.
+    expect(routeAt('/chat/new').current).toMatchObject({ panel: 'home' });
+    expect(routeAt('/chat/abc-123').current).toMatchObject({ panel: 'session', artifactId: 'abc-123', runId: null, showLaunch: false });
     expect(routeAt('/work').current.panel).toBe('everything'); // moved (S15c)
     expect(routeAt('/repos/new').current).toMatchObject({ panel: 'repos', showRegisterRepo: true });
     expect(routeAt('/repo-detail/repo-1').current).toMatchObject({ panel: 'repo-detail', repoId: 'repo-1' });
@@ -112,7 +105,7 @@ describe('useRoute — the existing panel routes keep working', () => {
 
 describe('navigate', () => {
   it('pushes a history entry by default, so Back returns to the previous mode', () => {
-    const r = routeAt('/p/proj-1/chat');
+    const r = routeAt('/p/proj-1/campaigns');
     const before = window.history.length;
 
     act(() => r.current.navigate('/p/proj-1/build'));

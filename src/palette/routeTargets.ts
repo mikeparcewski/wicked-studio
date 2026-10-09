@@ -35,12 +35,11 @@ export const ROUTE_SHAPES: readonly RouteShape[] = [
   // (`/work`, `/chats`, `/projects`, `/execute`, `/vibe`, `/demo`, `/p/:id/chronicle`) are redirects
   // (hooks/useMovedRoutes.ts), not shapes — a redirect is not a destination.
   { id: 'everything', example: '/everything', is: (r) => r.panel === 'everything' && r.projectId === null },
-  { id: 'chat-new', example: '/chat/new', is: (r) => r.panel === 'runs' && r.showLaunch && r.chatMode && r.projectId === null },
-  { id: 'chat', example: '/chat/c1', is: (r) => r.panel === 'runs' && r.chatMode && r.artifactId !== null && r.projectId === null },
+  // S16a-4e: `/chat/:id`, `/chat/new` and the shell's `/p/:pid/chat[/…]` MOVED (a chat is its session; a
+  // new one starts in the Desk composer) — redirects, not shapes.
   { id: 'project-detail', example: '/projects/p1', is: (r) => r.panel === 'project-detail' && r.projectId !== null },
   // `/p/:id` moves directly to the project's scoped Sessions tab (S17a).
   { id: 'project', example: '/p/p1', is: (r) => r.panel === 'everything' && r.projectId !== null },
-  { id: 'p-chat', example: '/p/p1/chat', is: (r) => r.projectId !== null && r.mode === 'chat' && !r.showLaunch },
   { id: 'p-build', example: '/p/p1/build', is: (r) => r.mode === 'build' && r.artifactId === null && !r.showLaunch },
   { id: 'p-build-new', example: '/p/p1/build/new', is: (r) => r.mode === 'build' && r.showLaunch },
   // S16a-2d: `/p/:pid/build/:run`, `/runs/:id` and `/runs/:id/timeline` are MOVES to the run's
@@ -82,7 +81,7 @@ const DESTINATIONS: ReadonlyArray<{ shape: string; label: string; href: string }
   { shape: 'everything', label: 'Helpers — the CLIs and their sign-in', href: everythingPath({ tab: 'helpers' }) },
   { shape: 'everything', label: 'Handed over — pull requests and pushes', href: everythingPath({ tab: 'handed' }) },
   { shape: 'everything', label: 'Projects — all your projects', href: everythingPath({ tab: 'projects' }) },
-  { shape: 'chat-new', label: 'Start a chat', href: '/chat/new' },
+  { shape: 'home', label: 'Start a chat', href: '/chat/new' },
   { shape: 'steering-dashboard', label: 'Steering dashboard — proposals to review', href: '/steering/dashboard' },
   { shape: 'steering-policies', label: 'Steering — all rules and policies', href: '/steering/policies' },
   { shape: 'steering-memories', label: 'Steering — memories', href: '/steering/memories' },
@@ -143,7 +142,6 @@ export function routeTargets(d: RouteTargetData): RouteTarget[] {
     if (p.id === 'default') continue;
     out.push(
       { shape: 'project-detail', label: `${p.name} · details`, href: projectDetailPath(p.id) },
-      { shape: 'p-chat', label: `${p.name} · chat`, href: modePath(p.id, 'chat') },
       { shape: 'p-build', label: `${p.name} · build`, href: modePath(p.id, 'build') },
       { shape: 'p-build-new', label: `${p.name} · start a build`, href: `${modePath(p.id, 'build')}/new` },
       { shape: 'everything', label: `${p.name} · documents`, href: everythingPath({ tab: 'made', kind: 'documents', project: p.id }) },
@@ -152,7 +150,7 @@ export function routeTargets(d: RouteTargetData): RouteTarget[] {
       { shape: 'p-campaigns', label: `${p.name} · campaigns`, href: `${projectPath(p.id)}/campaigns` },
     );
   }
-  for (const c of d.chats) out.push({ shape: 'chat', label: `${c.title} · chat`, href: `/chat/${encodeURIComponent(c.id)}` });
+  for (const c of d.chats) out.push({ shape: 'session', label: `${c.title} · chat`, href: sessionPath(c.id) });
   for (const c of d.campaigns) {
     out.push({ shape: 'testing-campaign', label: `${c.label} · campaign`, href: `/testing/campaigns/${encodeURIComponent(c.id)}` });
   }
