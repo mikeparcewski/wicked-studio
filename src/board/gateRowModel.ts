@@ -219,8 +219,10 @@ function withDepth(base: BaseRowModel, input: SessionGateInput): GateRowModel {
       hasLift: false, restoredRetry: isRestoredRetry(verdict, gate.ord), isPlanGate: false, planView: null, diffstat: null,
     })
     : null;
-  const suggested = base.recommended === null ? null : base.choices[base.recommended] ?? null;
-  const consequence = rec !== null && rec.kind === 'send-back' && suggested?.key === 'send-back' ? rec.consequence : null;
+  // The consequence rides the suggested choice only when that choice IS the recommended move
+  // (studio#556's mapping: send back, retry with findings, approve) — never above another choice.
+  const consequence = rec !== null && base.recommended !== null && recommendedChoiceIndex(base.choices, rec) === base.recommended && rec.consequence !== ''
+    ? rec.consequence : null;
   const source = gateSourceLine(gate.gateKind ?? gateFrameFor(events, gate.ord)?.gateKind ?? null);
   const overflow = [...base.overflow];
   const offer = input.rerun ?? null;

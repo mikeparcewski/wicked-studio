@@ -1,5 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { api } from '../../api/client.js';
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { SessionView } from '../../api/types.js';
 import { strandedCard } from '../../board/proposalCard.js';
 import { DELIVER_HASH } from '../../board/needsYou.js';
@@ -8,7 +7,7 @@ import { DeliverLift } from '../DeliverLift.js';
 import { deliverLift } from '../deliverLiftModel.js';
 import { compactPath } from '../WhatWhere.js';
 import { useDisplayPath } from '../../hooks/useHomePath.js';
-import { useRunEventStore } from '../../store/events.js';
+import { useRunEvents } from '../../hooks/useRunEvents.js';
 import { usePostHocDeliverStore } from '../../store/postHocDeliver.js';
 
 /** "Leave it" folds the card for THIS browser only — nothing is sent, the run stays stranded. */
@@ -47,17 +46,9 @@ export function StrandedCard({ view }: { view: SessionView }): React.ReactElemen
   const showPath = useDisplayPath();
   const workdir = typeof view.session.workdir === 'string' ? showPath(view.session.workdir) : null;
 
-  // The lift story (a conflict's files + remedy) off the run's event log — read once when no other
-  // surface on the page has hydrated it; a failed read shows no lift, never a guess.
-  const events = useRunEventStore((s) => s.byRun[runId]);
-  const fetchedFor = useRef<string | null>(null);
-  useEffect(() => {
-    if (events !== undefined || fetchedFor.current === runId) return;
-    fetchedFor.current = runId;
-    api.getRunEvents(runId)
-      .then(({ events: fetched }) => { useRunEventStore.getState().hydrate(runId, fetched); })
-      .catch(() => { /* no log: the card carries no lift block */ });
-  }, [runId, events]);
+  // The lift story (a conflict's files + remedy) off the run's event log — through the session's ONE
+  // run-event read (studio#558); a failed read shows no lift, never a guess.
+  const events = useRunEvents(runId).events ?? undefined;
   const deliverOrd = deliverUnit(view)?.ord ?? null;
   const lift = useMemo(() => (deliverOrd === null || events === undefined ? null : deliverLift(events, deliverOrd)), [events, deliverOrd]);
 

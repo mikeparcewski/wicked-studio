@@ -31,7 +31,7 @@ import { RunSectionBody, runSections, type AccordionId } from '../RightPanel.js'
 import { humanTitle } from '../runIdentity.js';
 import { Sheet } from './Sheet.js';
 import { useDisplayText } from '../../hooks/useHomePath.js';
-import { useRunEventStore } from '../../store/events.js';
+import { useRunEvents } from '../../hooks/useRunEvents.js';
 import { VerdictDetail } from '../VerdictDetail.js';
 import { SheetRunActions } from '../session/RunActions.js';
 
@@ -322,14 +322,9 @@ function RunSection({ id, view, runs, navigate }: { id: AccordionId; view: Sessi
 function FinishedVerdict({ view }: { view: SessionView }): React.ReactElement | null {
   const runId = view.session.id;
   const terminal = ['completed', 'failed', 'cancelled'].includes(view.session.status);
-  const events = useRunEventStore((s) => s.byRun[runId]);
-  useEffect(() => {
-    if (!terminal || events !== undefined) return;
-    api.getRunEvents(runId)
-      .then(({ events: fetched }) => { useRunEventStore.getState().hydrate(runId, fetched); })
-      .catch(() => { /* no log: VerdictDetail says no evaluator record survives */ });
-  }, [runId, terminal, events]);
-  if (!terminal || events === undefined) return null;
+  // The session's ONE run-event read (studio#558); no log yet → nothing, never a guessed verdict.
+  const events = useRunEvents(runId, terminal).events;
+  if (!terminal || events === null) return null;
   const units = [...view.units].sort((a, b) => a.ord - b.ord);
   return <div data-testid="sheet-verdict" className="wk-sheet-section"><VerdictDetail runId={runId} units={units} /></div>;
 }
