@@ -51,7 +51,7 @@ import { usePeekJump } from './hooks/usePeekJump.js';
 import { usePlacePanel } from './hooks/usePlacePanel.js';
 import { altChord, setShortcutsPaletteOpen, useGlobalShortcuts } from './hooks/useGlobalShortcuts.js';
 import { useTypeToComposer } from './hooks/useTypeToComposer.js';
-import { useLegacyRedirect, useRetiredSettingsRedirect, useSteeringRedirect, useTestingRedirect } from './hooks/useLegacyRedirect.js';
+import { useRetiredSettingsRedirect, useSteeringRedirect, useTestingRedirect } from './hooks/useLegacyRedirect.js';
 import { useMovedRoutes } from './hooks/useMovedRoutes.js';
 import { EverythingPage } from './components/everything/EverythingPage.js';
 import { everythingPath } from './board/everythingModel.js';
@@ -85,6 +85,7 @@ import { useComposerPrefsStore } from './store/composerPrefs.js';
 import { useViewPrefsStore } from './store/viewPrefs.js';
 import { useDeliveryFreezeStore } from './store/deliveryFreeze.js';
 import { notifyGateIfUnfocused } from './board/desktopNotify.js';
+import { sessionPath } from './board/sessionModel.js';
 
 /** Frames that change run-list / unit state → trigger a `GET /runs` reconcile. */
 const LIFECYCLE_EVENTS: ReadonlySet<string> = new Set([
@@ -207,7 +208,6 @@ export function App(): React.ReactElement {
   }, []);
 
   // Pre-merge bookmarks (`/runs/:id`, `/projects/:id`) redirect into the shell (§1.5).
-  useLegacyRedirect({ panel, runId, projectId, mode, showLaunch, chatMode }, navigate);
 
   // Bare `/steering`, a legacy `/steering/:type`, the retired governance panels
   // (`/wiki`/`/rules`/`/policies`) and the retired standalone `/proposals` queue normalize onto
@@ -262,13 +262,13 @@ export function App(): React.ReactElement {
     };
   }, [runId]);
 
-  // Inside the project shell, selecting a run stays in the shell (Chat keeps Chat, every
-  // other mode opens Build) instead of bouncing out to /runs/:id and redirecting back.
+  // S16a-2d: a run opens its session thread (the run page retired); inside the project shell's Chat
+  // mode a run stays in the chat (that address moves with S16a-4).
   const runPath = useCallback(
     (id: string) =>
-      projectId && mode
-        ? modePath(projectId, mode === 'chat' ? 'chat' : 'build', id)
-        : `/runs/${encodeURIComponent(id)}`,
+      projectId && mode === 'chat'
+        ? modePath(projectId, 'chat', id)
+        : sessionPath(`run:${id}`),
     [projectId, mode],
   );
 

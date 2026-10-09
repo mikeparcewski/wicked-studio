@@ -12,8 +12,8 @@
   "studioVersion": "0.6.6",
   "counts": {
     "files": 198,
-    "occurrences": 2331,
-    "static": 2061,
+    "occurrences": 2333,
+    "static": 2063,
     "dynamic": 49,
     "computed": 8
   },
@@ -7905,6 +7905,12 @@
       ]
     },
     {
+      "testId": "session-gate-choice-consequence",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
       "testId": "session-gate-choices",
       "files": [
         "src/components/session/GateRow.tsx"
@@ -8292,6 +8298,12 @@
     },
     {
       "testId": "session-run-look",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
+      "testId": "session-run-pending",
       "files": [
         "src/components/session/SessionView.tsx"
       ]

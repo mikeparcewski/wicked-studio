@@ -237,11 +237,18 @@ with sync_playwright() as p:
         check("preset-launch-sends-before-2", preset.get("humanConfirm") == "before:2"
               and preset.get("workflow") == "feature" and "plan" not in preset, body=preset)
 
+    def open_sheet_tab(rid: str, tab: str) -> None:
+        page.goto(f"{origin}/s/run%3A{rid}", wait_until="networkidle")
+        look = page.locator(f'[data-testid="session-run"][data-run-id="{rid}"] [data-testid="session-run-look"]')
+        look.wait_for(state="visible", timeout=15000)
+        look.click()
+        page.locator(f'[data-testid="sheet-tab"][data-tab="{tab}"]').click()
+
     def section_mid_run_edits() -> None:
         # ── 3. mid-run edits ──────────────────────────────────────────────────────────────
         reset(origin)
-        page.goto(f"{origin}/p/{PROJECT}/build/r-team", wait_until="networkidle")
-        page.get_by_test_id("rail-accordion-plan").click()
+        # S16a-2b: the run's Plan section is its session sheet's Plan tab.
+        open_sheet_tab("r-team", "plan")
         wait_attr(page, "phase-picker", "data-catalog-state", "ready")
         pick(page, "review")
         page.get_by_test_id("plan-edit-propose").click()
@@ -273,21 +280,24 @@ with sync_playwright() as p:
               and "Already applied" in (page.get_by_test_id("plan-edit-result").text_content() or ""),
               request_ids=[e["body"].get("requestId") for e in edits])
 
-        page.goto(f"{origin}/p/{PROJECT}/build/r-team-gate", wait_until="networkidle")
-        page.get_by_test_id("rail-accordion-plan").click()
+        open_sheet_tab("r-team-gate", "plan")
+        page.get_by_test_id("plan-edit-unavailable").wait_for(state="visible", timeout=8000)
         check("gated-run-offers-no-edit", page.get_by_test_id("plan-edit-unavailable").is_visible()
               and page.get_by_test_id("plan-edit-propose").count() == 0)
 
     def section_gate_moved() -> None:
         # ── 4. the gate moved: one POST with ord, no retry, refreshed, said ──────────────
+        # S16a-2b: the gate is answered in the session thread's row (/s/run%3Ar-team-gate); its raw
+        # prompt is the row's ⋯ Details first line.
         reset(origin, gate_moved=["r-team-gate"])
-        page.goto(f"{origin}/p/{PROJECT}/build/r-team-gate", wait_until="networkidle")
-        approve = page.get_by_test_id("steering-approve")
+        page.goto(f"{origin}/s/run%3Ar-team-gate", wait_until="networkidle")
+        APPROVE = '[data-testid="session-gate-choice"][data-choice-key="approve"]'
+        approve = page.locator(APPROVE)
         approve.wait_for(state="visible", timeout=15000)
-        check("gate-before", "unit 3" in (page.get_by_test_id("steering-prompt").text_content() or ""))
+        raw = """(t) => (document.querySelector('[data-testid="session-gate-raw-prompt"]')?.textContent || '').includes(t)"""
+        check("gate-before", page.evaluate(raw, "unit 3"))
         approve.click()
-        page.wait_for_function("""() => (document.querySelector('[data-testid="steering-prompt"]')?.textContent || '')
-          .includes('unit 4')""", timeout=20000)
+        page.wait_for_function(raw, arg="unit 4", timeout=25000)
         page.wait_for_function("""() => document.body.innerText.includes('the gate moved')""", timeout=5000)
         posts = gate_posts(origin, "r-team-gate")
         check("gate-decision-sends-ord-once", len(posts) == 1 and posts[0]["body"].get("ord") == 3,
@@ -295,22 +305,19 @@ with sync_playwright() as p:
         page.screenshot(path=str(SHOTS / f"t9-desk-gate-moved.png"))
         page.wait_for_timeout(3000)
         check("no-blind-retry", len(gate_posts(origin, "r-team-gate")) == 1)
-        check("refreshed-gate-is-answerable", page.get_by_test_id("steering-approve").is_enabled())
+        check("refreshed-gate-is-answerable", page.locator(APPROVE).is_enabled())
 
     def section_run_mode() -> None:
         # ── 5. runMode from run_identity ──────────────────────────────────────────────────
         reset(origin)
-        # Located by role + text (the rail's own section buttons), so the check is the same on main.
-        def rail_section(label: str):
-            return page.locator("button[aria-expanded]", has_text=label)
+        # S16a-2b: the run's sections are its session sheet's tabs.
+        def tabs() -> list:
+            return page.get_by_test_id("sheet-tab").evaluate_all("els => els.map(e => e.dataset.tab)")
 
-        page.goto(f"{origin}/p/{PROJECT}/build/r-team-sys", wait_until="networkidle")
-        rail_section("What / Where").first.wait_for(state="visible", timeout=15000)
-        check("system-run-has-no-delivery", rail_section("Delivery").count() == 0,
-              sections=page.locator("button[aria-expanded]").all_text_contents())
-        page.goto(f"{origin}/p/{PROJECT}/build/r-team-plan", wait_until="networkidle")
-        rail_section("What / Where").first.wait_for(state="visible", timeout=15000)
-        rail_section("Delivery").first.click()
+        open_sheet_tab("r-team-sys", "whatwhere")
+        check("system-run-has-no-delivery", "delivery" not in tabs(), sections=tabs())
+        page.keyboard.press("Escape")
+        open_sheet_tab("r-team-plan", "delivery")
         page.get_by_test_id("run-delivery").wait_for(state="visible", timeout=8000)
         check("user-plan-run-gets-licensed-claim",
               "no deliver phase" in (page.get_by_test_id("run-delivery").text_content() or ""),
@@ -344,7 +351,7 @@ with sync_playwright() as p:
         page.screenshot(path=str(SHOTS / f"t9-desk-phone-composer.png"))
         box = page.get_by_test_id("launch-preview").bounding_box()
         check("phone-preview-renders", box is not None and box["width"] > 0, box=box)
-        page.goto(f"{origin}/p/{PROJECT}/build/r-team", wait_until="networkidle")
+        page.goto(f"{origin}/s/run%3Ar-team", wait_until="networkidle")
         page.wait_for_timeout(800)
         page.screenshot(path=str(SHOTS / f"t9-desk-phone-run.png"))
         page.set_viewport_size({"width": W, "height": H})

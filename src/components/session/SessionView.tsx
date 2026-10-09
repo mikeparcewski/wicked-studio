@@ -53,6 +53,9 @@ import { useAskThreadStore } from '../../store/askThread.js';
 import { useTeamFold } from '../../hooks/useTeamFold.js';
 import { AskLineView, AskTyping } from './AskThread.js';
 
+/** S16a-2c: the hash that lands a run's session on its sheet's Governance tab. */
+export const GOVERNANCE_HASH = '#governance';
+
 /**
  * A SESSION (`/s/:id`, DES-STUDIO-REBUILD-001 §5.4, slice S6a): the goal sentence, the thread (the
  * chat's turns and the runs launched from it, in time order), each run's chain line, and the
@@ -122,6 +125,12 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
 }): React.ReactElement {
   const ref = useMemo(() => parseSessionId(sessionId), [sessionId]);
   const runChatId = useCapabilities((s) => s.runChatId);
+  // S16a-2c: a run address with `#governance` (the MCP usage page's link) opens that run's ⋯ sheet
+  // on its Governance tab on arrival — the run page's rule, said on the session.
+  useEffect(() => {
+    if (ref.kind !== 'run' || window.location.hash !== GOVERNANCE_HASH) return;
+    openSheet({ kind: 'session', sessionId: `run:${ref.runId}` }, 'governance');
+  }, [ref]);
   // With C1, a run launched from a chat belongs to that chat's session: a `run:<id>` address for
   // it (followed while `/health` was still loading) is replaced by the chat's (Copilot).
   useEffect(() => {
@@ -510,7 +519,14 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
               <button type="button" data-testid="session-chat-retry" onClick={() => { setChat(null); setChatTry((n) => n + 1); }} className="wk-since-toggle">Try again</button>
             </p>
           )}
-          {missing && (
+          {/* S16a-2d: a run address the index has not resolved (a just-launched run, landed on from the
+              launch form or a moved /runs/:id) says so honestly — the run page's pending view. */}
+          {missing && ref.kind === 'run' && (
+            <p data-testid="session-run-pending" data-run-id={ref.runId} className="wk-session-grey">
+              Opening run {ref.runId} — not in the run index yet: a just-launched run appears within one live-update cycle; an id the daemon no longer serves will not.
+            </p>
+          )}
+          {missing && ref.kind !== 'run' && (
             <p data-testid="session-missing" className="wk-session-grey">
               {ref.kind === 'chat' && !runChatId
                 ? 'This daemon does not link runs to their chat, so this session has no runs to show.'

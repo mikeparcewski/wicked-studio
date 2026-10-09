@@ -76,7 +76,8 @@ describe('handoverSections — four sections, fixed order', () => {
 
   it('every row links to its run', () => {
     expect(sections.map((s) => s.items[0]!.path)).toEqual([
-      '/p/alpha/build/g1#gate', '/runs/f1', '/p/alpha/build/d1', '/runs/r1',
+      // S16a-2c: every run row opens the run's session thread (its #gate kept).
+      '/s/run%3Ag1#gate', '/s/run%3Af1', '/s/run%3Ad1', '/s/run%3Ar1',
     ]);
     expect(sections[3]!.items[0]!.text).toBe('The stall watchdog escalated a silent run to you');
   });

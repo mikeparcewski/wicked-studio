@@ -42,9 +42,15 @@ export function isTypedCharacter(e: KeyboardEvent): boolean {
   return [...key].length === 1 && key !== ' ';
 }
 
-/** Focus sits inside a composite control that claims its keys (rule 2): it keeps them. */
-export function insideClaimingComposite(el: Element | null): boolean {
-  return el !== null && el.closest(COMPOSITE_SELECTOR) !== null;
+/** Focus sits inside a composite control that claims its keys (rule 2): it keeps them — except a
+ *  composite that declares it uses no letters (`data-releases-letters`: the session gate row picks by
+ *  arrows / digits / Enter only, S16a-2a), which lets a typed LETTER go on to the composer. */
+export function insideClaimingComposite(el: Element | null, key?: string): boolean {
+  if (el === null) return false;
+  const c = el.closest(COMPOSITE_SELECTOR);
+  if (c === null) return false;
+  if (key !== undefined && /^\p{L}$/u.test(key) && c.closest('[data-releases-letters]') !== null) return false;
+  return true;
 }
 
 type Field = HTMLTextAreaElement | HTMLInputElement;
@@ -121,7 +127,7 @@ export type TypeAction = { kind: 'none' } | { kind: 'type'; into: HTMLTextAreaEl
 export function decideTyped(e: KeyboardEvent, doc: Document = document): TypeAction {
   if (e.defaultPrevented || !isTypedCharacter(e)) return { kind: 'none' };
   if (isTypingContext(e)) return { kind: 'none' };
-  if (insideClaimingComposite(doc.activeElement)) return { kind: 'none' };
+  if (insideClaimingComposite(doc.activeElement, e.key)) return { kind: 'none' };
   // A layer that owns the keyboard (palette, modal, the shortcut overlay) keeps it.
   if (isShortcutsPaletteOpen() || anyModalOpen() || useLayerStore.getState().shortcutOverlayOpen) {
     return { kind: 'none' };

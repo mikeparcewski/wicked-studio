@@ -7,10 +7,10 @@ adds "· nothing checked".
 
 Against the in-process fixture at 1440x700 on the Desk:
 
-  1. NO-EVIDENCE LINE: r-pay-1's run page shows the one line, not individual reason bullets.
+  1. NO-EVIDENCE LINE: r-pay-1's session (S16a-2d: the run page moved there) shows the one line, not individual reason bullets.
   2. REASONS CLOSED: the disclosure starts closed; ⋯ opens it; 8 entries visible.
   3. CHAIN SENTENCE: the session thread's RunBlock for r-pay-1 says "2 of 2 done · nothing checked".
-  4. LIVE-RUN BOUNDARY: b1's run page still shows the live "Not checked on this run: …" line.
+  4. LIVE-RUN BOUNDARY: b1's session still shows the live "Not checked on this run: …" line.
   5. 0 page errors.
 
 Captures: e2e/shots/desk-no-evidence*.png.
@@ -90,13 +90,13 @@ with sync_playwright() as p:
     set_fixture(origin, sessions=True, run_chat_id=True, watch_feed=True)
     page.route("**/api/v1/watch*", route_watch)
 
-    # ── 1. no-evidence line on r-pay-1's run page ──────────────────────────────────
-    page.goto(f"{origin}/runs/r-pay-1", wait_until="networkidle")
+    # ── 1. no-evidence line on r-pay-1's session ──────────────────────────────────
+    page.goto(f"{origin}/s/run%3Ar-pay-1", wait_until="networkidle")
     try:
         page.get_by_test_id("watch-coverage").wait_for(state="visible", timeout=10000)
     except Exception:  # noqa: BLE001
         page.screenshot(path=str(SHOTS / "desk-no-evidence-missing.png"))
-        fail("no-evidence-line", "watch-coverage not visible on r-pay-1's run page")
+        fail("no-evidence-line", "watch-coverage not visible on r-pay-1's session")
     cov = page.get_by_test_id("watch-coverage").inner_text()
     check(
         "no-evidence-line",
@@ -136,12 +136,12 @@ with sync_playwright() as p:
 
     # ── 4. live-run boundary: b1 still shows per-entry line ────────────────────────
     set_fixture(origin, sessions=False, wave1=True, gate_now=["b1"], watch_feed=True)
-    page.goto(f"{origin}/runs/b1", wait_until="networkidle")
+    page.goto(f"{origin}/s/run%3Ab1", wait_until="networkidle")
     try:
         page.get_by_test_id("watch-coverage").wait_for(state="visible", timeout=10000)
     except Exception:  # noqa: BLE001
         page.screenshot(path=str(SHOTS / "desk-no-evidence-b1-missing.png"))
-        fail("live-run-unchanged", "watch-coverage not visible on b1's run page")
+        fail("live-run-unchanged", "watch-coverage not visible on b1's session")
     cov_b1 = page.get_by_test_id("watch-coverage").inner_text()
     check(
         "live-run-unchanged",

@@ -2,15 +2,15 @@
 """
 wave2a_gatecard_test.py — studio wave 2a round 2: ONE DECISION MECHANISM (1440x700).
 
-The run page's own gate card (SteeringGate) decides through the same undo window as the board.
-Against the `wave1` corpus with a gate waiting on b1 (`gate_now`):
+The session thread's gate row (S16a-2a: moved off the run page) decides through the same undo
+window as the board. Against the `wave1` corpus with a gate waiting on b1 (`gate_now`):
 
-  approve  on /p/beta/build/b1, click the gate card's Approve: the toast reads
+  approve  on /s/run%3Ab1, click the gate row's Approve: the toast reads
            "Approving “migrate beta's settings page to the new form kit” in 10 s" with Undo; ZERO POST /runs/b1/gate for the first 9 s
            (browser tap AND the fixture's server log).
-  undo     Undo → still zero POSTs past the window; the gate card is still there with
+  undo     Undo → still zero POSTs past the window; the gate row is still there with
            Approve enabled (the gate stays open).
-  key      focus the card, press a → the same toast; let it run → exactly ONE POST, after 10 s.
+  key      focus the row, press 1 (its first choice) → the same toast; let it run → exactly ONE POST, after 10 s.
 
 Capture: e2e/shots/wave2a-gatecard-toast.png, wave2a-gatecard-undo.png.
 Env: FEEDBACK_PORT (default 4353). Prints a JSON report; exit 0/1.
@@ -73,13 +73,17 @@ with sync_playwright() as p:
     page.on("request", lambda r: posts.append(time.monotonic())
             if r.method == "POST" and r.url.endswith("/api/v1/runs/b1/gate") else None)
 
-    set_fixture(origin, wave1=True, gate_now=["b1"], gate_simple=[], status_over={},
+    # S16a-2a: b1's gate in its SIMPLE shape (the daemon's GateInfo, no `options`): the session's
+    # row answers it in place with Approve / Approve and steer / Send back / Stop.
+    set_fixture(origin, wave1=True, gate_now=["b1"], gate_simple=["b1"], status_over={},
                 extra_gates=[], reset_gate_posts=True)
-    page.goto(f"{origin}/p/beta/build/b1", wait_until="networkidle")
-    approve = page.get_by_test_id("steering-approve")
+    # S16a-2a: the gate is answered in b1's session thread, on its gate row.
+    page.goto(f"{origin}/s/run%3Ab1", wait_until="networkidle")
+    APPROVE = '[data-testid="session-gate-choice"][data-choice-key="approve"]'
+    approve = page.locator(APPROVE)
     approve.wait_for(state="visible", timeout=15000)
 
-    # ── approve from the run page's gate card ───────────────────────────────────
+    # ── approve from the session's gate row ─────────────────────────────────────
     pressed = time.monotonic()
     approve.click()
     shown = toast_shown(page)
@@ -98,14 +102,14 @@ with sync_playwright() as p:
     page.wait_for_timeout(3000)
     check("undo-zero-posts", len(posts) == 0 and len(server_posts(origin)) == 0,
           browser_posts=len(posts), server=len(server_posts(origin)))
-    check("undo-gate-still-open", page.get_by_test_id("steering-approve").count() == 1
-          and page.get_by_test_id("steering-approve").is_enabled())
+    check("undo-gate-still-open", page.locator(APPROVE).count() == 1
+          and page.locator(APPROVE).is_enabled())
     page.screenshot(path=str(SHOTS / "wave2a-gatecard-undo.png"))
 
-    # ── the card's a key: same window, then exactly one POST ────────────────────
-    page.get_by_test_id("steering-prompt").focus()
+    # ── the row's keyboard (digit 1 = its first choice, Approve): same window, then exactly one POST ──
+    page.get_by_test_id("session-gate-row").focus()
     pressed = time.monotonic()
-    page.keyboard.press("Alt+a")
+    page.keyboard.press("1")
     check("key-a-shows-toast", toast_shown(page))
     page.wait_for_timeout(max(0, int((pressed + 9.3 - time.monotonic()) * 1000)))
     check("key-nothing-before-window", len(posts) == 0, browser_posts=len(posts))

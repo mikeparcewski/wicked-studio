@@ -21,8 +21,8 @@ describe('useRoute — project + mode routes (DES-MERGE-001 §1.5)', () => {
     expect(r.current.artifactId).toBeNull();
   });
 
-  it('parses /p/:projectId/:mode/:artifactId for all four modes', () => {
-    for (const mode of MODES) {
+  it('parses /p/:projectId/:mode/:artifactId for the shell\'s modes (S16a-2d: build/:run moved to the session)', () => {
+    for (const mode of MODES.filter((m) => m !== 'build')) {
       const r = routeAt(`/p/proj-1/${mode}/art-7`);
       expect(r.current.mode).toBe(mode);
       expect(r.current.artifactId).toBe('art-7');
@@ -30,7 +30,8 @@ describe('useRoute — project + mode routes (DES-MERGE-001 §1.5)', () => {
   });
 
   it('maps the Build/Chat artifact onto runId so the existing run surfaces stay wired', () => {
-    expect(routeAt('/p/proj-1/build/run-9').current.runId).toBe('run-9');
+    // S16a-2d: /p/:pid/build/:run MOVED — it parses straight to the run's session thread.
+    expect(routeAt('/p/proj-1/build/run-9').current).toMatchObject({ panel: 'session', artifactId: 'run:run-9' });
 
     const chat = routeAt('/p/proj-1/chat/run-9').current;
     expect(chat.runId).toBe('run-9');
@@ -52,9 +53,11 @@ describe('useRoute — project + mode routes (DES-MERGE-001 §1.5)', () => {
   });
 
   it('decodes percent-encoded ids', () => {
-    const r = routeAt('/p/proj%20one/build/run%2F9');
+    const r = routeAt('/p/proj%20one/document/doc%2F9');
     expect(r.current.projectId).toBe('proj one');
-    expect(r.current.artifactId).toBe('run/9');
+    expect(r.current.artifactId).toBe('doc/9');
+    // A moved build address decodes its run id into the session id.
+    expect(routeAt('/p/proj%20one/build/run%2F9').current.artifactId).toBe('run:run/9');
   });
 });
 
@@ -71,9 +74,8 @@ describe('useRoute — the chronicle moved onto "See everything" (S15c)', () => 
   it('chroniclePath spells the live address; runTimelinePath is unchanged and the alias resolves', () => {
     expect(chroniclePath('proj one')).toBe('/everything?tab=sessions&project=proj+one');
     expect(runTimelinePath('run/9')).toBe('/runs/run%2F9/timeline');
-    // `/runs/:id/timeline` is the §5.2 alias of `/runs/:id` — same run detail,
-    // whose default layout the timeline already is (slice BB, terminal runs).
-    expect(routeAt('/runs/run-1/timeline').current).toMatchObject({ panel: 'runs', runId: 'run-1' });
+    // `/runs/:id/timeline` is the §5.2 alias of `/runs/:id` — both MOVED to the run's session (S16a-2d).
+    expect(routeAt('/runs/run-1/timeline').current).toMatchObject({ panel: 'session', artifactId: 'run:run-1' });
   });
 });
 
@@ -82,7 +84,7 @@ describe('useRoute — the existing panel routes keep working', () => {
     // `/` became the orchestrator board in slice 5; the run list moved to `/runs`.
     expect(routeAt('/').current).toMatchObject({ panel: 'home', runId: null, mode: null });
     expect(routeAt('/runs').current).toMatchObject({ panel: 'everything', runId: null }); // moved (S15c)
-    expect(routeAt('/runs/run-1').current).toMatchObject({ panel: 'runs', runId: 'run-1' });
+    expect(routeAt('/runs/run-1').current).toMatchObject({ panel: 'session', artifactId: 'run:run-1' }); // moved (S16a-2d)
     expect(routeAt('/runs/new').current).toMatchObject({ panel: 'runs', showLaunch: true });
     expect(routeAt('/chat/new').current).toMatchObject({ showLaunch: true, chatMode: true });
     // J4/C6: /chat/:id is a live SESSION's address — chat surface, never the
@@ -124,10 +126,10 @@ describe('navigate', () => {
     const r = routeAt('/runs/run-9');
     const before = window.history.length;
 
-    act(() => r.current.navigate('/p/proj-1/build/run-9', { replace: true }));
+    act(() => r.current.navigate('/s/run%3Arun-9', { replace: true }));
 
-    expect(window.location.pathname).toBe('/p/proj-1/build/run-9');
-    expect(r.current.runId).toBe('run-9');
+    expect(window.location.pathname).toBe('/s/run%3Arun-9');
+    expect(r.current.artifactId).toBe('run:run-9');
     expect(window.history.length).toBe(before);
   });
 });

@@ -436,17 +436,18 @@ with sync_playwright() as p:
     page.screenshot(path=str(SHOTS / f"mcp-tools-usage-desk.png"))
     page.locator('[data-testid="mcp-usage-run"][data-seat="claude"] [data-testid="mcp-usage-run-link"]').click()
     try:
-        # /runs/c1 is the legacy address; it redirects to the run's project path, keeping the fragment.
-        page.wait_for_function("() => location.pathname.endsWith('/c1') && location.hash === '#governance'", timeout=8000)
+        # S16a-2c: the link is the run's session thread with #governance.
+        page.wait_for_function("() => location.pathname === '/s/run%3Ac1' && location.hash === '#governance'", timeout=8000)
     except Exception:
         fail("usage-run-link", page.url)
-    gov = page.locator('[data-testid="rail-accordion-governance"]')
+    # The session opens the run's ⋯ sheet on its Governance tab on arrival.
+    gov = page.locator('[data-testid="sheet-section"][data-section="governance"]')
     try:
         gov.wait_for(state="visible", timeout=8000)
-        expanded = gov.get_attribute("aria-expanded")
+        on = page.locator('[data-testid="sheet-tab"][data-tab="governance"]').get_attribute("aria-selected")
     except Exception:
-        expanded = None
-    check("usage-run-opens-governance", expanded == "true", url=page.url, expanded=expanded)
+        on = None
+    check("usage-run-opens-governance", on == "true", url=page.url, tab_selected=on)
     browser.close()
 
 report["ok"] = True

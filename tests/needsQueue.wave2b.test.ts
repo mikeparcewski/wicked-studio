@@ -76,7 +76,8 @@ describe('needsYouRows — the kinds wave 2b adds', () => {
     const e = rows[1]!;
     expect(e.text).toBe('Question: Which region?');
     expect(e.at).toBe(NOW - 2 * MIN);
-    expect(e.action).toEqual({ kind: 'open', path: '/p/p1/build/e', label: 'Answer ›' });
+    // S16a-2c: the run's session thread, never its project's Build view.
+    expect(e.action).toEqual({ kind: 'open', path: '/s/run%3Ae', label: 'Answer ›' });
   });
 
   it('an elicitation on a finished or unknown run adds no row', () => {

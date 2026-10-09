@@ -171,7 +171,7 @@ describe('HandoverPanel — the strip', () => {
     fireEvent.click(system.getByTestId('handover-item-audit'));
     expect(system.getByTestId('handover-item-audit-entry')).toHaveTextContent('run.stall.escalated');
     fireEvent.click(system.getByTestId('handover-item-open'));
-    expect(navigate).toHaveBeenCalledWith('/runs/r1');
+    expect(navigate).toHaveBeenCalledWith('/s/run%3Ar1');
     expect(useHandoverProgress.getState().acted).toContain(`audit:${NOW - 30 * MIN}:run.stall.escalated:r1`);
     expect(screen.queryByTestId('handover-overlay')).toBeNull();
   });

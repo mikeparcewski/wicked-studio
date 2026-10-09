@@ -5915,8 +5915,10 @@ class W2Handler(SimpleHTTPRequestHandler):
                 esc_on = state["escalation_arms"]
             if esc_on and rid in ESC_GATES:
                 g_ord, g_prompt = ESC_GATES[rid]
+                # S16a-2a: the daemon's GateInfo carries no `options` (api-types GateInfo): a plain
+                # workflow gate is not free text, so the session row reads it as the def gate it is.
                 self._json(200, {"runId": rid, "ord": g_ord, "lifecycle": "open", "prompt": g_prompt,
-                                 "receivedAt": iso(ESC_T0 + 12 * MIN + SEC), "options": None})
+                                 "receivedAt": iso(ESC_T0 + 12 * MIN + SEC)})
                 return True
             with state_lock:
                 trust_on = state["trust_rules"]
@@ -5983,9 +5985,13 @@ class W2Handler(SimpleHTTPRequestHandler):
                 # T9: the gate a decision is made on (ord 3), or — once the gate moved — the one
                 # that replaced it (ord 4). Complex shape: answered on the run page's card.
                 moved = rid in gate_moved_done
+                # S16a-2b: under `gate_moved` (t9's gate-moved step, answered in the session row) the
+                # gate is the daemon's plain GateInfo — no `options` — so the row offers Approve; the
+                # other corpora keep the complex shape they were written against.
+                plain = rid in state["gate_moved"]
                 self._json(200, {"runId": rid, "ord": 4 if moved else 3, "lifecycle": "open",
                                  "prompt": TEAM_GATE_MOVED_PROMPT if moved else TEAM_GATE_PROMPT,
-                                 "receivedAt": iso(NOW0), "options": None})
+                                 "receivedAt": iso(NOW0), **({} if plain else {"options": None})})
             elif any(r["session"]["id"] == rid for r in gt_launched):
                 # Wave 6: every New test launched this lifetime pauses at its intake gate
                 # (`before:1`) — the cached record a page load reconciles against.

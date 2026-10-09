@@ -41,7 +41,8 @@ export const ROUTE_SHAPES: readonly RouteShape[] = [
   { id: 'p-chat', example: '/p/p1/chat', is: (r) => r.projectId !== null && r.mode === 'chat' && !r.showLaunch },
   { id: 'p-build', example: '/p/p1/build', is: (r) => r.mode === 'build' && r.artifactId === null && !r.showLaunch },
   { id: 'p-build-new', example: '/p/p1/build/new', is: (r) => r.mode === 'build' && r.showLaunch },
-  { id: 'p-build-run', example: '/p/p1/build/r1', is: (r) => r.mode === 'build' && r.runId !== null },
+  // S16a-2d: `/p/:pid/build/:run`, `/runs/:id` and `/runs/:id/timeline` are MOVES to the run's
+  // session (hooks/useMovedRoutes.ts) — redirects, not shapes; they parse as `session`.
   { id: 'p-document', example: '/p/p1/document', is: (r) => r.mode === 'document' },
   { id: 'p-video', example: '/p/p1/video', is: (r) => r.mode === 'video' },
   { id: 'p-campaigns', example: '/p/p1/campaigns', is: (r) => r.campaignsView },
@@ -55,7 +56,6 @@ export const ROUTE_SHAPES: readonly RouteShape[] = [
   { id: 'repos-new', example: '/repos/new', is: (r) => r.panel === 'repos' && r.showRegisterRepo },
   { id: 'repo-detail', example: '/repo-detail/x1', is: (r) => r.panel === 'repo-detail' && r.repoId !== null },
   { id: 'runs-new', example: '/runs/new', is: (r) => r.panel === 'runs' && r.showLaunch && !r.chatMode && r.projectId === null },
-  { id: 'run', example: '/runs/r1', is: (r) => r.panel === 'runs' && r.runId !== null && r.projectId === null },
   { id: 'run-events', example: '/runs/r1/events', is: (r) => r.panel === 'run-events' },
   { id: 'run-files', example: '/runs/r1/files', is: (r) => r.panel === 'run-files' },
   { id: 'workflows', example: '/workflows', is: (r) => r.panel === 'workflows' },
@@ -135,10 +135,7 @@ export function routeTargets(d: RouteTargetData): RouteTarget[] {
     }
     out.push({ shape: 'run-events', label: `${title} · raw events`, href: runEventsPath(id) });
     out.push({ shape: 'run-files', label: `${title} · files and diff`, href: runFilesPath(id) });
-    const pid = d.projectIdByRun[id];
-    if (pid !== undefined && pid !== 'default') {
-      out.push({ shape: 'p-build-run', label: `${title} · in its project`, href: modePath(pid, 'build', id) });
-    }
+    // S16a-2c: no "· in its project" row — a run lives in its session, not inside its project.
   }
   for (const p of d.projects) {
     if (p.id === 'default') continue;
@@ -161,7 +158,8 @@ export function routeTargets(d: RouteTargetData): RouteTarget[] {
 }
 
 /**
- * The shapes the palette reaches through its OTHER groups (a run row opens `/runs/:id`, a project
- * row `/p/:id`, a repo row `/repo-detail/:id`) — so "Go to" does not repeat them.
+ * The shapes the palette reaches through its OTHER groups (a project row `/p/:id`, a repo row
+ * `/repo-detail/:id`) — so "Go to" does not repeat them. A run row opens its session (S16a-2d), a
+ * shape GO TO already carries.
  */
-export const REACHED_BY_OTHER_GROUPS: readonly string[] = ['run', 'project', 'repo-detail'];
+export const REACHED_BY_OTHER_GROUPS: readonly string[] = ['project', 'repo-detail'];

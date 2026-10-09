@@ -160,3 +160,46 @@ describe('S16a-1b — the rewind is offered only where Send back is an arm', () 
     expect([...m.choices, ...m.overflow].map((c) => c.key)).not.toContain('send-back');
   });
 });
+
+describe('S16a-2a — the row says a choice\'s consequence before it is taken; the whole verdict', () => {
+  afterEach(() => { cleanup(); });
+  it('hovering an escalation arm says what it does on the line under the choices; leaving clears it', async () => {
+    vi.spyOn(client.api, 'confirmGate').mockResolvedValue({ status: 'ok' });
+    const RUN = 'run-peek';
+    const units: WorkUnit[] = [
+      makeUnit({ id: `${RUN}:build`, session_id: RUN, ord: 1, stage: 'build', role: 'creator', status: 'done', assigned_cli: 'claude' }),
+      makeUnit({ id: `${RUN}:review`, session_id: RUN, ord: 2, stage: 'review', role: 'evaluator', status: 'rejected', assigned_cli: 'codex' }),
+    ];
+    const view = makeView({ id: RUN, status: 'awaiting_human', problem: 'Fix it' }, units);
+    const prompt = 'Unit 2 verdict is NOT PASS — confirm to retry the phase, request changes to send the review back to the creator phase, or reject to cancel the run.';
+    const gate: OpenGate = { runId: RUN, ord: 2, prompt, lifecycle: 'open', receivedAt: Date.now(), gateKind: 'escalation' };
+    useGateStore.setState({ gates: { [RUN]: gate } });
+    useRunEventStore.setState({ byRun: { [RUN]: [] } });
+    render(<GateRow view={view} gate={gate} />);
+    const stop = await waitFor(() => screen.getAllByTestId('session-gate-choice').find((b) => b.dataset.choiceKey === 'stop')!);
+    const line = screen.getByTestId('session-gate-choice-consequence');
+    expect(line.textContent).toBe('');
+    await userEvent.hover(stop);
+    expect(line).toHaveTextContent('Cancel the run; the work stops here.');
+    expect(line).toHaveAttribute('data-choice-key', 'stop');
+    // Below the choices: the line never moves the button under the pointer.
+    expect(screen.getByTestId('session-gate-choices').compareDocumentPosition(line) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    await userEvent.unhover(stop);
+    expect(line.textContent).toBe('');
+  });
+
+  it('studio#430: a head-cut verdict is read whole — the send-back note carries the first findings', () => {
+    const gate: OpenGate = { runId: MOVE_RUN, ord: 2, prompt: NOT_PASS_PROMPT, lifecycle: 'open', receivedAt: T };
+    const cut = (NOT_PASS_EVENTS as unknown as Record<string, unknown>[]).map((e) => (e['type'] === 'gateEscalated'
+      ? { ...e, verdictSummary: '…- src/app.ts still reads `buggy`\nVERDICT: FAIL' }
+      : e['type'] === 'gateEvaluated'
+        ? { ...e, denialReason: '…- src/app.ts still reads `buggy`\nVERDICT: FAIL', denial: { ...(e['denial'] as object), reason: '…- src/app.ts still reads `buggy`\nVERDICT: FAIL' } }
+        : e)) as unknown as CoreEvent[];
+    const tailOnly = sessionGateChoices({ runId: MOVE_RUN, gate, units: MOVE_UNITS, events: cut, pool: [], roster: null })!;
+    expect(tailOnly.noteDefault).not.toContain('the regression test is missing');
+    expect(tailOnly.noteDefault).not.toContain('…');
+    const whole = sessionGateChoices({ runId: MOVE_RUN, gate, units: MOVE_UNITS, events: cut, pool: [], roster: null, fullVerdict: "Reviewed the fix.\n- the regression test is missing\n- src/app.ts still reads `buggy`\nVERDICT: FAIL" })!;
+    expect(whole.noteDefault).toContain('the regression test is missing');
+    expect(whole.noteDefault).toContain('still reads');
+  });
+});

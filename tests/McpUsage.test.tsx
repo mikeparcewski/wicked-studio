@@ -95,7 +95,8 @@ describe('MCP tools → Usage', () => {
     expect(runs.map((r) => [r.dataset['seat'], r.dataset['run']])).toEqual([['claude', 'r1aaaaaaaaaa'], ['codex', 'r1aaaaaaaaaa'], ['', '']]);
     expect(within(runs[2] as HTMLElement).queryByTestId('mcp-usage-run-link')).toBeNull();
     fireEvent.click(within(runs[0] as HTMLElement).getByTestId('mcp-usage-run-link'));
-    expect(navigate).toHaveBeenCalledWith('/runs/r1aaaaaaaaaa#governance');
+    // S16a-2c: the run's session thread; #governance opens its sheet's Governance tab on arrival.
+    expect(navigate).toHaveBeenCalledWith('/s/run%3Ar1aaaaaaaaaa#governance');
     fireEvent.click(screen.getByTestId('mcp-usage-subject-clear'));
     await waitFor(() => expect(screen.queryByTestId('mcp-usage-runs')).toBeNull());
   });

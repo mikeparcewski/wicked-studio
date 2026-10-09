@@ -269,6 +269,12 @@ function parse(pathname: string): Route {
     // named "new", so `artifactId` stays null and no run-selected machinery
     // (event backfill, kill shortcut) fires against a non-id.
     const isNew = raw === 'new';
+    // S16a-2d (§5.4): `/p/:pid/build/:run` MOVED — a run lives in its session thread. Parsed straight
+    // to the session so the thread renders on the pre-redirect tick; `useMovedRoutes` replaces the
+    // address (`/s/run%3A<run>`, search and hash kept). `/p/:pid/build` and `/build/new` stay.
+    if (mode === 'build' && raw !== null && !isNew && restEmpty(5)) {
+      return route({ panel: 'session', artifactId: `run:${raw}` });
+    }
     const artifactId = isNew ? null : raw;
     return route({
       projectId: safeDecode(second),
@@ -397,7 +403,12 @@ function parse(pathname: string): Route {
     if (second === 'new') return route({ panel: 'runs', showLaunch: true });
     if (second && third === 'events') return route({ panel: 'run-events', artifactId: safeDecode(second) });
     if (second && third === 'files') return route({ panel: 'run-files', artifactId: safeDecode(second) });
-    if (second) return route({ panel: 'runs', runId: safeDecode(second) });
+    // S16a-2d (§5.4): `/runs/:id` and `/runs/:id/timeline` MOVED to the run's session thread — parsed
+    // straight to it (no headless tick); `useMovedRoutes` replaces the address. Any other third
+    // segment is a typo now, not the run page.
+    if (second && ((third === '' && restEmpty(3)) || (third === 'timeline' && restEmpty(4)))) {
+      return route({ panel: 'session', artifactId: `run:${safeDecode(second)}` });
+    }
     return route({ panel: 'not-found' });
   }
   return route({ panel: 'not-found' });

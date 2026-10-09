@@ -23,10 +23,9 @@ import { gateOpenPath } from './gateActions.js';
  *     id) additionally collapses same-run notifications at the OS level.
  *
  * Body: the prompt's first line, `· <project name>` when the membership
- * mirror knows it. Click focuses the window and lands on the run's gate —
- * `…/build/<run>#gate` when the run's project is known (the same one-shot
- * `#gate` intent the triage cursor uses), else the legacy `/runs/:id` route,
- * which resolves the project itself.
+ * mirror knows it. Click focuses the window and lands on the run's gate in
+ * its session thread — `/s/run%3A<run>#gate` (`gateOpenPath`, the same one-shot
+ * `#gate` intent the triage cursor uses).
  *
  * The chime (§8.2): ~0.4s two-tone (sine, 880→1175 Hz, gain-enveloped) built
  * with the Web Audio API — zero asset bytes, no `<audio>`, CSP-clean. Played

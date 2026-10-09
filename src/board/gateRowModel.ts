@@ -171,6 +171,27 @@ export interface SessionGateInput {
   roster: readonly RosterSeat[] | null;
   /** S16a-1b: the run's "Rerun from here" offer (`useRerunFromHere`), or null/absent. */
   rerun?: RerunOffer | null;
+  /** S16a-2a (studio#430): the reviewed unit's WHOLE output when the engine kept only a head-cut
+   *  4 KB tail of a failing verdict (`useFullVerdict`); null/absent = the tail stands. */
+  fullVerdict?: string | null;
+}
+
+const HEAD_CUT = /^\s*(…|\.\.\.)/;
+const uncut = (t: string | null): string | null => (t === null ? null : t.replace(/^\s*(…|\.\.\.)\s*/, ''));
+
+/** studio#430: the verdict and summary the row works from — the whole verdict when one was read,
+ *  else the kept tail without the engine's "…" (which would glue itself to the first kept finding). */
+export function wholeVerdict(verdict: GateVerdictView | null, tail: string | null, full: string | null | undefined): { verdict: GateVerdictView | null; summary: string | null } {
+  const whole = full ?? null;
+  const summary = whole ?? uncut(tail);
+  if (verdict === null || verdict.denial === null || !HEAD_CUT.test(verdict.denial.reason ?? '')) return { verdict, summary };
+  return { verdict: { ...verdict, denial: { ...verdict.denial, reason: whole ?? verdict.denial.reason.replace(/^\s*(…|\.\.\.)\s*/, '') } }, summary };
+}
+
+/** Whether the engine head-cut this failing verdict (the first findings are not in what it kept). */
+export function verdictHeadCut(verdict: GateVerdictView | null, tail: string | null): string | null {
+  if (verdict === null || verdict.outcome !== 'fail') return null;
+  return [tail, verdict.denial?.reason ?? null].find((t): t is string => t !== null && HEAD_CUT.test(t)) ?? null;
 }
 
 /**
@@ -210,12 +231,13 @@ export function sessionGateChoices(input: SessionGateInput): GateRowModel | null
  */
 function withDepth(base: BaseRowModel, input: SessionGateInput): GateRowModel {
   const { runId, gate, units, events } = input;
-  const verdict = gateVerdictFor(events, gate.ord, gate.prompt);
-  const escalationGate = isEscalationGate(gate.prompt, verdict);
+  const raw = gateVerdictFor(events, gate.ord, gate.prompt);
+  const escalationGate = isEscalationGate(gate.prompt, raw);
+  const { verdict, summary: wholeSummary } = wholeVerdict(raw, escalationSummaryFor(events, raw?.ord ?? gate.ord) ?? null, input.fullVerdict);
   const rec = base.reason === 'def' || base.reason === 'escalation'
     ? recommendGateMove({
       runId, ord: gate.ord, units: units as WorkUnit[], verdict,
-      verdictSummary: escalationSummaryFor(events, gate.ord) ?? null, escalationGate,
+      verdictSummary: wholeSummary, escalationGate,
       hasLift: false, restoredRetry: isRestoredRetry(verdict, gate.ord), isPlanGate: false, planView: null, diffstat: null,
     })
     : null;
@@ -353,8 +375,10 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
     : [];
 
   if (reason === 'escalation') {
-    const summary = escalationSummaryFor(events, gate.ord);
-    const items = failingItems(verdict, summary ?? undefined);
+    const tail = escalationSummaryFor(events, gate.ord);
+    // studio#430: the whole verdict when the engine head-cut it, else the kept tail without its "…".
+    const { verdict: whole, summary } = wholeVerdict(verdict, tail ?? null, input.fullVerdict);
+    const items = failingItems(whole, summary ?? undefined);
     if (items.length > 0) noteDefault = findingsNote(items, 'reviewer');
 
     // ⋯ detail: raw prompt, verdict layer line, failing items, reviewer note, floor checks

@@ -13,8 +13,8 @@ SIMPLE gate waiting on b1:
             the button is not pressed (no undo toast).
   page      /runs/new, the launch composer mounted, a button focused: "approve this" lands in
             the page's composer (launch-problem), and no Ask dock opens.
-  gate      the b1 thread (/p/beta/build/b1), the gate card's Approve focused: the gate card's
-            own steer box (whose send approves the gate) stays EMPTY; the text lands in the dock.
+  gate      b1's session thread (/s/run%3Ab1, S16a-2a), the gate row's Approve focused: the row's
+            note box stays EMPTY and nothing is chosen; the text lands in the page's own composer.
   composite /everything, its selected tab focused: a typed letter and digit stay with the tablist —
             no dock opens, no composer receives them.
   zero      after waiting past the 10 s undo window, NO gate POST reached the daemon (browser
@@ -175,27 +175,30 @@ with sync_playwright() as p:
     check("page-composer-takes-the-letters", launch == TEXT and dock_open == 0,
           launch=launch, dock_open=dock_open, active=page.evaluate(ACTIVE))
 
-    # ── gate: the gate card's steer box never takes typed-elsewhere letters ────────
-    page.goto(f"{origin}/p/beta/build/b1", wait_until="networkidle")
-    page.get_by_test_id("steering-approve").wait_for(state="visible", timeout=15000)
-    page.get_by_test_id("steering-approve").focus()
-    check("gate-approve-focused", page.evaluate(ACTIVE) == "steering-approve", active=page.evaluate(ACTIVE))
+    # ── gate: a focused gate choice never answers from typed letters (S16a-2a: the session row) ──
+    set_fixture(origin, gate_simple=["b1"])
+    page.goto(f"{origin}/s/run%3Ab1", wait_until="networkidle")
+    APPROVE = '[data-testid="session-gate-choice"][data-choice-key="approve"]'
+    page.locator(APPROVE).wait_for(state="visible", timeout=15000)
+    page.locator(APPROVE).focus()
+    check("gate-approve-focused", page.evaluate("() => document.activeElement?.dataset.choiceKey") == "approve",
+          active=page.evaluate(ACTIVE))
     page.keyboard.type(TEXT)
+    COMPOSER = "() => document.querySelector('[data-testid=\"composer\"] textarea')?.value ?? null"
     try:
-        page.wait_for_function(f"() => ({VALUE})('assist-input') === {json.dumps(TEXT)}", timeout=5000)
+        page.wait_for_function(f"() => ({COMPOSER})() === {json.dumps(TEXT)}", timeout=5000)
     except Exception:  # noqa: BLE001 — reported by the check below
         pass
     note_toast()
-    gate_box = page.evaluate(VALUE, "gate-composer")
-    amend = page.evaluate(VALUE, "steering-amend")
+    note = page.evaluate(VALUE, "session-gate-note")
     page.screenshot(path=str(SHOTS / "type-to-composer-gate.png"))
-    gate_active = page.evaluate(ACTIVE)
+    composer_text = page.evaluate(COMPOSER)
+    # §5.6 rule 4: the page's own composer takes the letters before the Ask dock; the choice is not
+    # pressed (no fold, no undo), and the row's note box stays empty.
     check("gate-steer-boxes-stay-empty",
-          page.evaluate(VALUE, "assist-input") == TEXT and gate_active == "assist-input"
-          and not gate_box and not amend
-          and page.get_by_test_id("steering-queued").count() == 0 and not toasts,
-          dock=page.evaluate(VALUE, "assist-input"), active=gate_active, gate_composer=gate_box,
-          steering_amend=amend, toasts=toasts)
+          composer_text == TEXT and page.get_by_test_id("assist-input").count() == 0
+          and not note and page.get_by_test_id("session-gate-chosen").count() == 0 and not toasts,
+          composer=composer_text, active=page.evaluate(ACTIVE), note=note, toasts=toasts)
 
     # ── composite: a focused tablist keeps its keys (S18d: the skin picker is gone; Everything's
     #    tabs are the composite on the Desk) ───────────────────────────────────────────────────
