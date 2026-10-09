@@ -21,8 +21,8 @@ describe('useRoute — project + mode routes (DES-MERGE-001 §1.5)', () => {
     expect(r.current.artifactId).toBeNull();
   });
 
-  it('parses /p/:projectId/:mode/:artifactId for the shell\'s modes (S16a-2d: build/:run moved to the session)', () => {
-    for (const mode of MODES.filter((m) => m !== 'build')) {
+  it('parses /p/:projectId/:mode/:artifactId for the shell\'s modes (S16a-2d: build/:run moved; S16a-4c: document and video moved)', () => {
+    for (const mode of MODES.filter((m) => m === 'chat')) {
       const r = routeAt(`/p/proj-1/${mode}/art-7`);
       expect(r.current.mode).toBe(mode);
       expect(r.current.artifactId).toBe('art-7');
@@ -37,9 +37,9 @@ describe('useRoute — project + mode routes (DES-MERGE-001 §1.5)', () => {
     expect(chat.runId).toBe('run-9');
     expect(chat.chatMode).toBe(true);
 
-    // Document/Video artifacts are docs and demos, NOT crew runs — never a runId.
-    expect(routeAt('/p/proj-1/document/doc-3').current.runId).toBeNull();
-    expect(routeAt('/p/proj-1/video/demo-3').current.runId).toBeNull();
+    // S16a-4c: document / video addresses moved — they parse to "See everything", never a runId.
+    expect(routeAt('/p/proj-1/document/doc-3').current).toMatchObject({ panel: 'everything', projectId: 'proj-1', runId: null });
+    expect(routeAt('/p/proj-1/video/demo-3').current).toMatchObject({ panel: 'everything', projectId: 'proj-1', runId: null });
   });
 
   it('leaves mode null for /p/:projectId; an unknown mode segment is a dead address (S15c, usability review #4)', () => {
@@ -53,9 +53,9 @@ describe('useRoute — project + mode routes (DES-MERGE-001 §1.5)', () => {
   });
 
   it('decodes percent-encoded ids', () => {
-    const r = routeAt('/p/proj%20one/document/doc%2F9');
+    const r = routeAt('/p/proj%20one/chat/c%2F9');
     expect(r.current.projectId).toBe('proj one');
-    expect(r.current.artifactId).toBe('doc/9');
+    expect(r.current.artifactId).toBe('c/9');
     // A moved build address decodes its run id into the session id.
     expect(routeAt('/p/proj%20one/build/run%2F9').current.artifactId).toBe('run:run/9');
   });

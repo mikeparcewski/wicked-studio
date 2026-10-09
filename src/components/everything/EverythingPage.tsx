@@ -13,7 +13,7 @@ import { filterRunRows, pageRunRows, runRows, sortRunRows, type RunSortKey, type
 import { openSheet } from '../../store/sheets.js';
 import { useBoardModel } from '../../hooks/useBoardModel.js';
 import { useRoster } from '../../hooks/useRoster.js';
-import { modePath, projectDetailPath, projectPath, type Navigate, versionPath } from '../../hooks/useRoute.js';
+import { projectDetailPath, projectPath, type Navigate } from '../../hooks/useRoute.js';
 import { useCapabilities } from '../../store/capabilities.js';
 import { useDocsCache } from '../../store/docsCache.js';
 import { useNeedsSources } from '../../store/needsSources.js';
@@ -32,6 +32,8 @@ import { runTechParts, Tech } from '../Tech.js';
 import { ProjectEntry, ProjectsTab } from './ProjectsTab.js';
 import { projectRows } from '../../board/projectsModel.js';
 import { GroundingChip } from '../GroundingChip.js';
+import { madeOpenAddress } from '../../board/madeMoves.js';
+import { MadeOpen } from './MadeOpen.js';
 
 /**
  * "SEE EVERYTHING" (`/everything`, DES-STUDIO-REBUILD-001 §5.4, slice S15c/S17a) — one page, five tabs,
@@ -683,12 +685,15 @@ function MadeTab({ runs, q, navigate, go }: { runs: SessionView[]; q: Everything
   // The kind is a lens on the scope: a chip click keeps `?project=` (S18b).
   const lens = (kind: EverythingQuery['kind'], project: string | null = q.project): string => everythingPath({ tab: 'made', kind, project });
   const scopeName = q.project !== null ? nameOf(q.project) : null;
+  // S16a-4c: a made thing opens in the session that made it — a demo video at full size on its run's
+  // session, a document on its bound run's session (live first, else newest, else archived), and a
+  // document no run is bound to on this list, opened at full size (`?open=`).
+  const runChatId = useCapabilities((s) => s.runChatId);
   const hrefOf = (r: MadeRow): string => {
-    if (r.runId !== undefined) return r.projectId !== null ? modePath(r.projectId, 'video', r.runId) : sessionPath(`run:${r.runId}`);
-    // A registry document — a demo's script included — opens as a document: the video surface takes
-    // a RUN id, and a document name is not one (the retired dashboard did the same).
-    return versionPath(r.projectId ?? 'default', r.doc!.name, null, 'document');
+    if (r.runId !== undefined) return madeOpenAddress('video', r.projectId ?? 'default', r.runId, runs, runChatId);
+    return madeOpenAddress('document', r.projectId ?? 'default', r.doc!.name, runs, runChatId);
   };
+  const opened = q.open !== null && q.open !== undefined ? rows.find((r) => r.doc !== undefined && r.doc.name === q.open && (q.project === null || r.projectId === q.project)) ?? null : null;
   const askable = projects.filter((p) => p.id !== 'default').map((p) => p.id);
   const loadAll = (): void => { void useDocsCache.getState().loadAll(askable); };
   const censusLine = index === 'untried' || (index === 'present' && census === 'opened')
@@ -701,6 +706,9 @@ function MadeTab({ runs, q, navigate, go }: { runs: SessionView[]; q: Everything
 
   return (
     <div data-testid="everything-made" data-count={rows.length} data-kind={q.kind} data-census={census} data-index={index}>
+      {opened !== null && opened.doc !== undefined && (
+        <MadeOpen projectId={opened.projectId ?? 'default'} docId={opened.doc.name} title={showText(opened.title)} style={opened.doc.kind ?? null} onClose={() => navigate(everythingPath({ tab: 'made', kind: q.kind, project: q.project }), { replace: true })} />
+      )}
       <div className="wk-everything-bar">
         <div role="group" aria-label="Show" className="wk-everything-chips">
           {MADE_KINDS.map((k) => (

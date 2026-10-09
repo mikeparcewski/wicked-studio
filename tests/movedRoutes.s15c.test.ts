@@ -44,6 +44,8 @@ describe('the redirect table (static moves)', () => {
       '/projects', '/chats', '/work', '/execute', '/runs', '/make', '/vibe', '/demo', '/p/:id/chronicle', '/p/:id',
       // S16a-2d: the run page's addresses.
       '/runs/:id', '/runs/:id/timeline', '/p/:pid/build/:run',
+      // S16a-4c: where a made thing opens.
+      '/p/:pid/document', '/p/:pid/document/:doc', '/p/:pid/video', '/p/:pid/video/:run',
     ]);
   });
 
@@ -101,9 +103,10 @@ describe('S16a-2d: the run page moved to the run\'s session thread', () => {
     expect(parseRoute('/p/kes/build')).toMatchObject({ projectId: 'kes', mode: 'build', runId: null });
     expect(parseRoute('/runs/r1/events')).toMatchObject({ panel: 'run-events', artifactId: 'r1' });
     expect(parseRoute('/runs/r1/files')).toMatchObject({ panel: 'run-files', artifactId: 'r1' });
-    expect(parseRoute('/p/kes/document/d1')).toMatchObject({ projectId: 'kes', mode: 'document', artifactId: 'd1' });
+    expect(parseRoute('/p/kes/document/d1')).toMatchObject({ panel: 'everything', projectId: 'kes' }); // S16a-4c: moved
     expect(parseRoute('/runs/r1/zzz').panel).toBe('not-found');
     expect(parseRoute('/runs//x').panel).toBe('not-found');
-    expect(parseRoute('/s/run:r1/a/k1').panel).toBe('not-found');
+    // S16a-4a: /s/:id/a/:key is the artifact's address; a deeper path is still a dead one.
+    expect(parseRoute('/s/run:r1/a/k1/x').panel).toBe('not-found');
   });
 });

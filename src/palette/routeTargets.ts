@@ -45,8 +45,8 @@ export const ROUTE_SHAPES: readonly RouteShape[] = [
   { id: 'p-build-new', example: '/p/p1/build/new', is: (r) => r.mode === 'build' && r.showLaunch },
   // S16a-2d: `/p/:pid/build/:run`, `/runs/:id` and `/runs/:id/timeline` are MOVES to the run's
   // session (hooks/useMovedRoutes.ts) — redirects, not shapes; they parse as `session`.
-  { id: 'p-document', example: '/p/p1/document', is: (r) => r.mode === 'document' },
-  { id: 'p-video', example: '/p/p1/video', is: (r) => r.mode === 'video' },
+  // S16a-4c: `/p/:pid/document[/:doc]` and `/p/:pid/video[/:run]` MOVED (a made thing opens in its
+  // session, or on the project's Made list) — redirects, not shapes.
   { id: 'p-campaigns', example: '/p/p1/campaigns', is: (r) => r.campaignsView },
   { id: 'steering-dashboard', example: '/steering/dashboard', is: (r) => r.panel === 'steering' && r.steeringSection === 'dashboard' },
   { id: 'steering-policies', example: '/steering/policies', is: (r) => r.panel === 'steering' && r.steeringSection === 'policies' },
@@ -146,8 +146,8 @@ export function routeTargets(d: RouteTargetData): RouteTarget[] {
       { shape: 'p-chat', label: `${p.name} · chat`, href: modePath(p.id, 'chat') },
       { shape: 'p-build', label: `${p.name} · build`, href: modePath(p.id, 'build') },
       { shape: 'p-build-new', label: `${p.name} · start a build`, href: `${modePath(p.id, 'build')}/new` },
-      { shape: 'p-document', label: `${p.name} · documents`, href: modePath(p.id, 'document') },
-      { shape: 'p-video', label: `${p.name} · demos`, href: modePath(p.id, 'video') },
+      { shape: 'everything', label: `${p.name} · documents`, href: everythingPath({ tab: 'made', kind: 'documents', project: p.id }) },
+      { shape: 'everything', label: `${p.name} · demos`, href: everythingPath({ tab: 'made', kind: 'videos', project: p.id }) },
       { shape: 'project', label: `${p.name} · sessions`, href: everythingPath({ tab: 'sessions', project: p.id }) },
       { shape: 'p-campaigns', label: `${p.name} · campaigns`, href: `${projectPath(p.id)}/campaigns` },
     );

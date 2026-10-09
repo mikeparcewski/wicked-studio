@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import type { SessionView } from '../api/types.js';
 import { everythingPath, isSessionFilter } from '../board/everythingModel.js';
 import { sessionPath } from '../board/sessionModel.js';
+import { runMadeMove, staticMadeMove } from '../board/madeMoves.js';
 import type { Navigate } from './useRoute.js';
 
 /**
@@ -46,6 +47,11 @@ export const MOVES: readonly { from: string; to: string }[] = [
   { from: '/runs/:id', to: '/s/run%3A:id[?…][#…]' },
   { from: '/runs/:id/timeline', to: '/s/run%3A:id[?…][#…]' },
   { from: '/p/:pid/build/:run', to: '/s/run%3A:run[?…][#…]' },
+  // S16a-4c: a made thing opens in its session, else on the project's Made list.
+  { from: '/p/:pid/document', to: '/everything?tab=made&kind=documents&project=:pid' },
+  { from: '/p/:pid/document/:doc', to: '/s/<session>/a/<doc key>?size=full[&v=N] | …&open=:doc' },
+  { from: '/p/:pid/video', to: '/everything?tab=made&kind=videos&project=:pid' },
+  { from: '/p/:pid/video/:run', to: '/s/<session>/a/<demo-video key>?size=full' },
 ];
 
 /** The static moves — the new address for an old one, or `null` when the address is not a move. */
@@ -105,15 +111,19 @@ export function useMovedRoutes(args: {
   runChatId: boolean;
   navigate: Navigate;
 }): void {
-  const { panel, pathname, search, navigate } = args;
+  const { panel, pathname, search, navigate, runs, runsLoaded, runChatId } = args;
   useEffect(() => {
     // The S15c moves parse to Everything; the S16a-2d run moves parse straight to the session.
     if (panel !== 'everything' && panel !== 'session') return;
     if (panel === 'session' && pathname.startsWith('/s/')) return;
-    const to = movedAddress(pathname, search, window.location.hash);
+    const to = movedAddress(pathname, search, window.location.hash) ?? staticMadeMove(pathname);
     if (to !== null) {
       navigate(to, { replace: true });
       return;
     }
-  }, [panel, pathname, search, navigate]);
+    // S16a-4c: a named document / video needs the run list (which session made it).
+    if (!runsLoaded) return;
+    const made = runMadeMove(pathname, search, runs, runChatId);
+    if (made !== null) navigate(made, { replace: true });
+  }, [panel, pathname, search, navigate, runs, runsLoaded, runChatId]);
 }

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Search } from 'lucide-react';
 import type { GovernanceClaim, InteractionRequest, RepoEntry, SessionView } from '../api/types.js';
 import { api } from '../api/client.js';
@@ -23,6 +23,8 @@ import { Modal } from './Modal.js';
 import { ProjectSwitcher } from './ProjectSwitcher.js';
 import { humanTitle, INTENT_MAX, runTitle, runWhenWord, WHEN_TITLE } from './runIdentity.js';
 import { Terminal } from './Terminal.js';
+import { useSessionDrafts } from '../store/sessionDrafts.js';
+import { addAboutChip } from '../store/composerChips.js';
 
 /**
  * The universal command palette (DES-FEEDBACK-002 §1, slice G): Cmd+K / Ctrl+K /
@@ -241,6 +243,14 @@ export function CommandPalette({
   const restoreRef = useRef<HTMLElement | null>(null);
 
   const projects = useProjectsStore((s) => s.projects);
+  // S16a-4c: "New Demo" seeds the Desk composer (and the project's @ chip); nothing is sent.
+  const seedDemo = useCallback((pid: string | null): void => {
+    useSessionDrafts.getState().setDraft('desk', 'Make a demo of ');
+    const p = pid !== null && pid !== 'default' && pid !== UNFILED_MOUNT ? projects.find((x) => x.id === pid) ?? null : null;
+    if (p !== null) addAboutChip('desk', { kind: 'project', key: `project:${p.id}`, label: p.name, projectId: p.id });
+    onClose();
+    navigate('/');
+  }, [projects, onClose, navigate]);
   const gates = useGateStore((s) => s.gates);
 
   // Open: remember focus and focus the input; fetch the repo list only when the
@@ -549,9 +559,11 @@ export function CommandPalette({
         },
       },
       {
+        // S16a-4c: a demo is made by a run — the Desk composer, seeded "Make a demo of " with the
+        // project's @ chip when one is ambient (nothing is sent).
         name: 'New Demo',
         action: () => {
-          if (projectId !== null) navigate(modePath(projectId, 'video'));
+          if (projectId !== null) seedDemo(projectId);
           else {
             if (projects.length === 0) void useProjectsStore.getState().load();
             setPickProjectFor('video');
@@ -637,7 +649,7 @@ export function CommandPalette({
       return [...targeted, ...matched];
     }
     return matched;
-  }, [runs, projects, repos, gates, claims, prompts, projectNameByRun, attachedAtByRun, goTargets, object, scope, needle, runPath, navigate, projectId, selectedRun, onKill]);
+  }, [runs, projects, repos, gates, claims, prompts, projectNameByRun, attachedAtByRun, goTargets, object, scope, needle, runPath, navigate, projectId, selectedRun, onKill, seedDemo]);
 
   // Clamp the selection whenever the row set changes.
   const selIx = Math.min(sel, Math.max(0, rows.length - 1));
@@ -948,7 +960,8 @@ export function CommandPalette({
                 // close (the same repair as the Make ＋ picker's stage).
                 const m = pickProjectFor;
                 setPickProjectFor(null);
-                navigate(modePath(pid ?? UNFILED_MOUNT, m));
+                if (m === 'video') seedDemo(pid);
+                else navigate(modePath(pid ?? UNFILED_MOUNT, m));
               }}
             />
           </div>

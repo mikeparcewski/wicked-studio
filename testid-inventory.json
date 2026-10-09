@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.6.6",
   "counts": {
-    "files": 192,
-    "occurrences": 2281,
-    "static": 2023,
+    "files": 193,
+    "occurrences": 2282,
+    "static": 2024,
     "dynamic": 48,
     "computed": 8
   },
@@ -3126,6 +3126,12 @@
       "testId": "everything-made-load",
       "files": [
         "src/components/everything/EverythingPage.tsx"
+      ]
+    },
+    {
+      "testId": "everything-made-open",
+      "files": [
+        "src/components/everything/MadeOpen.tsx"
       ]
     },
     {

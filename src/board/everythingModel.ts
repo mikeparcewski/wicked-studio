@@ -268,6 +268,8 @@ export interface EverythingQuery {
   kind: MadeKind;
   /** The Sessions view (`?view=`): grouped by session (default) or every run as a table. */
   view: EverythingView;
+  /** S16a-4c: on the Made tab, a document no run is bound to, opened at full size (`?open=<doc>`). */
+  open?: string | null;
 }
 
 /** `?tab=` · `?filter=` · `?project=` · `?kind=` off a `location.search`; anything unknown takes the default. */
@@ -284,6 +286,7 @@ export function readEverythingQuery(search: string): EverythingQuery {
     project: project !== null && project !== '' ? project : null,
     kind: isMadeKind(kind) ? kind : 'all',
     view: isEverythingView(view) ? view : 'grouped',
+    open: q.get('open') !== null && q.get('open') !== '' ? q.get('open') : null,
   };
 }
 
@@ -299,6 +302,7 @@ export function everythingPath(q: Partial<EverythingQuery> = {}): string {
   if (q.project !== undefined && q.project !== null && q.project !== '') p.set('project', q.project);
   if (q.kind !== undefined && q.kind !== 'all') p.set('kind', q.kind);
   if (q.view !== undefined && q.view !== 'grouped') p.set('view', q.view);
+  if (q.open !== undefined && q.open !== null && q.open !== '') p.set('open', q.open);
   const s = p.toString();
   return s === '' ? '/everything' : `/everything?${s}`;
 }

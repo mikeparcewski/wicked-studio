@@ -263,6 +263,12 @@ function parse(pathname: string): Route {
     if (third === 'campaigns') {
       return route({ projectId: safeDecode(second), campaignsView: true });
     }
+    // S16a-4c: `/p/:pid/document[/:doc]` and `/p/:pid/video[/:run]` MOVED — a made thing opens in its
+    // session (or on the project's Made list). Parsed to "See everything" so the page renders on the
+    // pre-redirect tick; `useMovedRoutes` replaces the address (the named ones once the runs are read).
+    if (third === 'document' || third === 'video') {
+      return restEmpty(5) ? route({ panel: 'everything', projectId: safeDecode(second) }) : route({ panel: 'not-found' });
+    }
     const mode = asMode(third);
     // A segment that names no mode (`/p/:id/bogus`) is a dead address — not-found, never a silent
     // swap onto the project (usability review #4).
