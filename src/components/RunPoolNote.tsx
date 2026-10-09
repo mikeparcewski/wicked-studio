@@ -1,17 +1,7 @@
-import type { CoreEvent, SessionView } from '../api/types.js';
-
-/** `unitDistributed.pool` (core-ts 0.7.44 `UnitPoolSeatingJson`; api-types `UnitPoolSeating` from
- *  crew#894 — read here until studio's pin carries it). */
-export interface UnitPoolSeating {
-  requested: number;
-  seated: number;
-  monitors: string[];
-  missing: string[];
-  shortfall: string | null;
-}
+import type { CoreEvent, SessionView, UnitPoolSeating } from '../api/types.js';
 
 /**
- * studio#617 (wicked-core#810, core-ts 0.7.44): how each unit's WORKER POOL was filled — one creator
+ * studio#617 (wicked-core#810, core-ts 0.7.44; `UnitPoolSeating` from api-types 0.100.0): how each unit's WORKER POOL was filled — one creator
  * plus monitors (`unitDistributed.pool`). A pool larger than the signed-in instances is seated SHORT
  * and the engine says so rather than refusing the run; the run's record says it too: one quiet line
  * per pooled unit ("build: pool 3 · seated 3 · monitors claude#2, claude#3"), and a shortfall in the

@@ -44,7 +44,23 @@ export function addGateDraftStep(runId: string, gateKey: string, seed: readonly 
 export function reorderGateDraft(runId: string, gateKey: string, seed: readonly string[], order: readonly DraftStep[]): void {
   usePlanDrafts.setState((s) => {
     const base = draftOn(s.gate[runId], runId, gateKey, seed);
-    return { gate: { ...s.gate, [runId]: { ...base, order: order.map((st) => ({ ...st })) } } };
+    // A step's pool lives in the draft's `pools` (studio#617), never on the stored order.
+    return { gate: { ...s.gate, [runId]: { ...base, order: order.map((st) => ({ id: st.id, catalog: st.catalog, added: st.added })) } } };
+  });
+}
+
+/**
+ * Set the worker pool a plan gate's step is sent with (studio#617, wicked-core#810). The first pool
+ * set seeds the draft's pools with the held plan's (`held`, by draft id), so approving sends every
+ * step's pool, not only the one changed. Lower-only is the caller's rule (`planOrder.setPool`): the
+ * store takes the value it is handed.
+ */
+export function setGateDraftPool(runId: string, gateKey: string, seed: readonly string[], held: Readonly<Record<string, number>>, stepId: string, pool: number): void {
+  usePlanDrafts.setState((s) => {
+    const base = draftOn(s.gate[runId], runId, gateKey, seed);
+    const heldPools = base.heldPools ?? { ...held };
+    const pools = { ...(base.pools ?? heldPools), [stepId]: pool };
+    return { gate: { ...s.gate, [runId]: { ...base, pools, heldPools } } };
   });
 }
 

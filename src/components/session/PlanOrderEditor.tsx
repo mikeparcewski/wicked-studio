@@ -2,12 +2,12 @@ import { useEffect, useMemo, useState } from 'react';
 import type { SessionView } from '../../api/types.js';
 import type { ArtifactSize } from '../../board/artifactMorph.js';
 import type { ChainModel } from '../../board/chainModel.js';
-import { draftLine, draftSteps, draftTarget, slashItems, wordOf, type DraftRunState } from '../../board/planDraft.js';
-import { FIXED_WORD, gateRows, midRunRows, moveStep, plannedRun, orderContext, type Fixed, type OrderRow } from '../../board/planOrder.js';
+import { draftLine, draftSteps, draftTarget, heldPoolsOf, slashItems, wordOf, type DraftRunState } from '../../board/planDraft.js';
+import { FIXED_WORD, gateRows, midRunRows, moveStep, plannedRun, orderContext, poolCeilings, poolChoices, poolRefusal, type Fixed, type OrderRow } from '../../board/planOrder.js';
 import { gateInstance } from '../../board/proposalCard.js';
 import { useGateStore } from '../../store/gates.js';
 import { loadCatalog, usePlanCatalog } from '../../store/planCatalog.js';
-import { addGateDraftStep, gateDraftFor, queueMidRunStep, reorderGateDraft, usePlanDrafts } from '../../store/planDrafts.js';
+import { addGateDraftStep, gateDraftFor, queueMidRunStep, reorderGateDraft, setGateDraftPool, usePlanDrafts } from '../../store/planDrafts.js';
 import { usePlanGate } from '../../store/planGates.js';
 import { humanTitle } from '../runIdentity.js';
 
@@ -36,6 +36,8 @@ export function PlanOrderEditor({ view, chain, size }: { view: SessionView; chai
   const entries = usePlanCatalog((s) => s.entries);
   useEffect(() => { loadCatalog(); }, []);
   const catalog = useMemo(() => (catalogState === 'ready' ? entries.map((e) => e.id) : null), [catalogState, entries]);
+  // studio#617: the entries whose worker pool a step may lower (an entry's pool above 1).
+  const ceilings = useMemo(() => (catalogState === 'ready' ? poolCeilings(entries) : new Map<string, number>()), [catalogState, entries]);
   const [note, setNote] = useState<string | null>(null);
 
   const state: DraftRunState = {
@@ -56,7 +58,9 @@ export function PlanOrderEditor({ view, chain, size }: { view: SessionView; chai
   const atGate = target.kind === 'gate-amend' && planGate.view !== null && gateKey !== null;
   const g = planGate.view;
   const draft = atGate && g !== null ? gateDraftFor(drafts, runId, gateKey) : null;
-  const rows: OrderRow[] = atGate && g !== null ? gateRows(g, draft) : midRunRows(chain);
+  // The raw draft (not `gateDraftFor`'s changed-only view) holds a pool set back to the held value.
+  const rawDraft = atGate && drafts[runId]?.gateKey === gateKey ? drafts[runId]! : null;
+  const rows: OrderRow[] = atGate && g !== null ? gateRows(g, rawDraft, ceilings) : midRunRows(chain);
   const mode = atGate ? 'gate' : 'mid-run';
 
   const move = (index: number, dir: -1 | 1): void => {
@@ -66,6 +70,15 @@ export function PlanOrderEditor({ view, chain, size }: { view: SessionView; chai
     if ('refused' in r) { setNote(r.refused); return; }
     reorderGateDraft(runId, gateKey, g.editSeed, r.steps);
     setNote(null);
+  };
+  const setPool = (r: OrderRow, value: number): void => {
+    if (!atGate || g === null || gateKey === null || r.pool === null) return;
+    const refused = poolRefusal(r.label, value, r.pool.ceiling);
+    if (refused !== null) { setNote(refused); return; }
+    setGateDraftPool(runId, gateKey, g.editSeed, heldPoolsOf(g.editSeed, g.editPools), r.key, value);
+    setNote(value < r.pool.ceiling
+      ? `${r.label} runs with ${value} of its ${r.pool.ceiling} seats — approve on the card to send it. Nothing has been sent.`
+      : `${r.label} runs with its full pool of ${r.pool.ceiling}.`);
   };
   const add = (catalogId: string): void => {
     const word = wordOf(catalogId);
@@ -93,6 +106,20 @@ export function PlanOrderEditor({ view, chain, size }: { view: SessionView; chai
             <span aria-hidden className="wk-plan-n">{i + 1}</span>
             <span className="wk-plan-label">{r.label}</span>
             {r.added && <span data-testid="plan-step-added" className="wk-plan-tag">added</span>}
+            {r.pool !== null && (
+              <label data-testid="plan-step-pool" className="wk-plan-pool" title={`One builder plus monitors. A step can lower its pool, never raise it above ${r.pool.ceiling}.`}>
+                <span className="wk-plan-pool-word">pool</span>
+                <select
+                  data-testid="plan-step-pool-select"
+                  aria-label={`${r.label} (step ${i + 1}) worker pool, at most ${r.pool.ceiling}`}
+                  value={r.pool.value}
+                  onChange={(e) => setPool(r, Number(e.target.value))}
+                  className="wk-plan-pool-select"
+                >
+                  {poolChoices(r.pool.ceiling).map((n) => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </label>
+            )}
             {r.fixed !== null ? (
               <span data-testid="plan-step-fixed" className="wk-plan-fixed" title={`${r.label} ${FIXED_WORD[r.fixed]}.`} aria-label={`${r.label} stays where it is: it ${FIXED_WORD[r.fixed]}.`}>{FIXED_SHORT[r.fixed]}</span>
             ) : r.index !== null ? (

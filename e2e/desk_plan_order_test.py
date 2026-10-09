@@ -17,8 +17,10 @@ before unit 2 of pa-scope → understand → design → build → review → del
   4. ADD HERE: + Test → the card's line says "+ Test" and the order; Test is movable: Test ↑ puts it
      before Build.
   5. DROP: "Drop the changes" on the card → the list is the held order again, no draft line.
-  6. SEND: Review ↑ again, then "Approve with these changes" → after the 10 s window exactly ONE
-     POST /runs/r-plan-gate/gate with approve: true and plan.steps = understand, design, review, build.
+  6. SEND: Review ↑ again, lower Build's pool 3 → 2 (studio#617: the only row with a pool, offering
+     1..3 and never more), then "Approve with these changes" → after the 10 s window exactly ONE
+     POST /runs/r-plan-gate/gate with approve: true, plan.steps = understand, design, review, build,
+     and build carrying pool 2 (no other step a pool).
   7. MID-RUN: r-team's plan artifact says the order is set — every row fixed, no arrows; + Test
      queues "Adding Test · Undo" (S7's window); Undo → 0 plan POSTs.
   8. 0 page errors, no horizontal scroll.
@@ -165,15 +167,27 @@ with sync_playwright() as p:
     # ── 6. approve with the order: ONE gate POST carrying the plan in that order ─────
     row("Review").get_by_test_id("plan-step-up").click()
     page.get_by_test_id("session-proposal-draft").wait_for(state="visible", timeout=8000)
+    pool_rows = plan.get_by_test_id("plan-step-pool").count()
+    pool_select = row("Build").get_by_test_id("plan-step-pool-select")
+    pool_options = pool_select.locator("option").all_inner_texts()
+    pool_select.select_option("2")
+    page.wait_for_timeout(200)
+    pool_draft = page.get_by_test_id("session-proposal-draft").inner_text()
+    pool_note = plan.get_by_test_id("plan-order-note").inner_text()
+    check("pool", pool_rows == 1 and pool_options == ["1", "2", "3"]
+          and "The pool changes: Build to 2." in pool_draft and "2 of its 3" in pool_note,
+          rows=pool_rows, options=pool_options, draft=pool_draft, note=pool_note)
     before = len(gate_posts())
     page.get_by_test_id("session-proposal-go").click()
     page.wait_for_timeout(WINDOW_MS)
     posts = gate_posts()[before:]
-    steps = [s.get("catalog") for s in (posts[-1]["body"].get("plan", {}).get("steps", []) if posts else [])]
+    sent = posts[-1]["body"].get("plan", {}).get("steps", []) if posts else []
+    steps = [s.get("catalog") for s in sent]
+    pools = {s.get("catalog"): s["pool"] for s in sent if "pool" in s}
     page.screenshot(path=str(SHOTS / "desk-plan-order-sent.png"))
     check("send", len(posts) == 1 and posts[0]["body"].get("approve") is True
-          and steps == ["understand", "design", "review", "build"],
-          posts=len(posts), steps=steps)
+          and steps == ["understand", "design", "review", "build"] and pools == {"build": 2},
+          posts=len(posts), steps=steps, pools=pools)
 
     # ── 7. mid-run: the order is set; a step added here is S7's undo window ──────────
     open_session("r-team")

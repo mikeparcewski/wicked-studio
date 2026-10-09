@@ -12,8 +12,8 @@
   "studioVersion": "0.6.8",
   "counts": {
     "files": 173,
-    "occurrences": 1925,
-    "static": 1712,
+    "occurrences": 1928,
+    "static": 1715,
     "dynamic": 37,
     "computed": 6
   },
@@ -4910,6 +4910,18 @@
       ]
     },
     {
+      "testId": "plan-step-pool",
+      "files": [
+        "src/components/session/PlanOrderEditor.tsx"
+      ]
+    },
+    {
+      "testId": "plan-step-pool-select",
+      "files": [
+        "src/components/session/PlanOrderEditor.tsx"
+      ]
+    },
+    {
       "testId": "plan-step-up",
       "files": [
         "src/components/session/PlanOrderEditor.tsx"
@@ -6332,6 +6344,12 @@
       "testId": "session-composer-input",
       "files": [
         "src/components/session/Composer.tsx"
+      ]
+    },
+    {
+      "testId": "session-composer-scope",
+      "files": [
+        "src/components/session/SessionView.tsx"
       ]
     },
     {

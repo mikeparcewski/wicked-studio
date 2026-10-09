@@ -7,7 +7,7 @@ import { endedAtMs, finishedAtMs } from '../../board/needsYou.js';
 import type { WatchCoverage } from '../../api/watch-wire.js';
 import { coverageSummary } from '../../store/watch.js';
 import {
-  CLOSED_LINE, conversationOf, ORPHANED_LINE, orphanedOf, parseSessionId, runChatIdOf, sessionPath, sessionState, sessionTitle, sinceYouLeft,
+  CLOSED_LINE, composerScopeNote, conversationOf, ORPHANED_LINE, orphanedOf, parseSessionId, runChatIdOf, sessionPath, sessionState, sessionTitle, sinceYouLeft,
   type Conversation, type SessionState,
 } from '../../board/sessionModel.js';
 import type { Navigate } from '../../hooks/useRoute.js';
@@ -191,6 +191,9 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
     : chatError !== null ? 'unreadable'
       : chatDetail === null ? 'pending' : conversationOf(ref, chatDetail);
   const messages = useMemo(() => chatDetail?.messages ?? [], [chatDetail]);
+  // studio#606 (4): on a live chat's own session the text replies into that chat; anywhere else a
+  // live run here is NOT what Send reaches (it starts a separate Ask), and the composer says so.
+  const scopeNote = composerScopeNote(mine, ref.kind === 'chat' && conversation === 'live');
   const title = sessionTitle(messages, mine);
 
   // ── ASK-S1: the ask path behind this chat ──────────────────────────────────────────────────
@@ -601,6 +604,8 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
 
       <Composer
         composerKey={sessionId}
+        // studio#606 (4): while a run here is live, Send starts a separate Ask — say so before Send.
+        footer={scopeNote !== null ? <p data-testid="session-composer-scope" role="note" className="wk-composer-hint">{scopeNote}</p> : null}
         text={draft}
         setText={(t) => setDraft(sessionId, t)}
         // S16a-4e: on a live chat's own session the composer replies into THAT chat.

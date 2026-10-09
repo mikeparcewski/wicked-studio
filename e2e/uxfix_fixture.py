@@ -1898,14 +1898,15 @@ def _cat(cid: str, kind: str, role: str, executes_code: bool, desc: str, **extra
             "validator_pin": extra.get("pin"), "pinned": extra.get("pin") is not None,
             "evidence_floor": extra.get("evidence_floor", False),
             "verified_evidence": extra.get("verified", False), "skill_ref": None,
-            "description": desc}
+            "description": desc, **({"pool": extra["pool"]} if "pool" in extra else {})}
 
 
 TEAM_CATALOG = [
     _cat("understand", "recon", "neutral", False, "Read the repo and say what the work touches"),
     _cat("test_plan", "test", "evaluator", False, "Write the test plan before the change"),
     _cat("design", "recon", "neutral", False, "Design the change"),
-    _cat("build", "build", "creator", True, "Make the change"),
+    # studio#617: build's worker pool is 3 (one creator plus two monitors), so a plan step may lower it.
+    _cat("build", "build", "creator", True, "Make the change", pool=3),
     _cat("test", "test", "evaluator", True, "Run the tests", verified=True),
     _cat("review", "review", "evaluator", False, "Review the change"),
     _cat("domain_coverage", "test", "evaluator", True, "Check domain coverage",

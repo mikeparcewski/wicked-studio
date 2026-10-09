@@ -114,7 +114,14 @@ export function slashItems(query: string, target: DraftTarget, catalog: readonly
 /** One authored step as the operator has it: the catalog, whether it was added at this gate, and an
  *  id given once that follows it through moves (`<catalog>#<n>` for the n-th seed occurrence,
  *  `+<catalog>#<n>` for the n-th added one) — so a repeated step keeps its own row. */
-export interface DraftStep { id: string; catalog: string; added: boolean }
+export interface DraftStep {
+  id: string;
+  catalog: string;
+  added: boolean;
+  /** (studio#617, wicked-core#810) The worker pool the step is sent with, when one is set (the
+   *  draft's {@link GateDraft.pools}); absent = the step sets none and takes its entry's. */
+  pool?: number;
+}
 
 function withIds(catalogs: readonly string[], added: boolean): DraftStep[] {
   const seen = new Map<string, number>();
@@ -142,11 +149,46 @@ export interface GateDraft {
   /** The authored plan in the operator's order (S10: every seed step, maybe moved, and every added
    *  one); `null` until a move — the seed, then the added steps. */
   order: DraftStep[] | null;
+  /**
+   * (studio#617, wicked-core#810) The pool each step is sent with, by its draft id — the held
+   * plan's pools plus what the editor lowered. Absent until the editor sets a pool. Lower-only: the
+   * editor never offers more than the entry's pool (the engine refuses a raise as `pool_raised`).
+   */
+  pools?: Readonly<Record<string, number>>;
+  /** The held plan's own pools, by draft id, as {@link pools} was seeded with them: what a pool
+   *  change is measured against. */
+  heldPools?: Readonly<Record<string, number>>;
 }
 
 /** The authored steps as the draft has them: `order` when one was made, else seed then added. */
-export function draftSteps(d: Pick<GateDraft, 'seed' | 'added' | 'order'>): DraftStep[] {
-  return d.order ?? [...withIds(d.seed, false), ...withIds(d.added, true)];
+export function draftSteps(d: Pick<GateDraft, 'seed' | 'added' | 'order'> & Pick<Partial<GateDraft>, 'pools'>): DraftStep[] {
+  const steps = d.order ?? [...withIds(d.seed, false), ...withIds(d.added, true)];
+  const pools = d.pools;
+  if (pools === undefined) return steps;
+  return steps.map((s) => {
+    const bare: DraftStep = { id: s.id, catalog: s.catalog, added: s.added };
+    const pool = pools[s.id];
+    return pool !== undefined ? { ...bare, pool } : bare;
+  });
+}
+
+/** The held plan's pools keyed as the draft keys its seed steps (`<catalog>#<n>`), from the gate
+ *  view's `editSeed` / `editPools` (studio#617). Steps that set no pool are left out. */
+export function heldPoolsOf(seed: readonly string[], pools: readonly (number | null)[] | undefined): Record<string, number> {
+  const out: Record<string, number> = {};
+  if (pools === undefined) return out;
+  withIds(seed, false).forEach((s, i) => {
+    const p = pools[i];
+    if (typeof p === 'number') out[s.id] = p;
+  });
+  return out;
+}
+
+/** The steps whose pool the draft changes from the held plan's (studio#617), in the draft's order. */
+export function poolChanges(d: Pick<GateDraft, 'seed' | 'added' | 'order'> & Pick<Partial<GateDraft>, 'pools' | 'heldPools'>): DraftStep[] {
+  if (d.pools === undefined) return [];
+  const held = d.heldPools ?? {};
+  return draftSteps(d).filter((s) => s.pool !== undefined && s.pool !== held[s.id]);
 }
 
 /** Whether the order the card sends differs from the engine's with the added steps at the end — a
@@ -158,13 +200,15 @@ export function orderChanged(d: Pick<GateDraft, 'seed' | 'added' | 'order'>): bo
 }
 
 /** A draft that changes something: a step added, or the order. */
-export function draftChanges(d: Pick<GateDraft, 'seed' | 'added' | 'order'>): boolean {
-  return d.added.length > 0 || orderChanged(d);
+export function draftChanges(d: Pick<GateDraft, 'seed' | 'added' | 'order'> & Pick<Partial<GateDraft>, 'pools' | 'heldPools'>): boolean {
+  return d.added.length > 0 || orderChanged(d) || poolChanges(d).length > 0;
 }
 
 /** The plan a gate-amend draft sends with the card's approve: the authored steps in the draft's order. */
-export function gateDraftPlan(d: Pick<GateDraft, 'seed' | 'added' | 'order'>): LaunchPlan {
-  return planFromSelection(draftSteps(d).map(({ catalog }) => ({ catalog })), []);
+export function gateDraftPlan(d: Pick<GateDraft, 'seed' | 'added' | 'order'> & Pick<Partial<GateDraft>, 'pools'>): LaunchPlan {
+  // studio#617: a step's pool rides with it once the draft carries pools (the held plan's, plus
+  // what the editor lowered), so approving with an order change does not reset a lowered pool.
+  return planFromSelection(draftSteps(d).map(({ catalog, pool }) => (pool !== undefined ? { catalog, pool } : { catalog })), []);
 }
 
 /** The plan a mid-run edit POSTs: the added steps only (the engine appends them). */
@@ -175,12 +219,15 @@ export function midRunPlan(catalog: string): LaunchPlan {
 /** "The steps change: + Test, + Review." — the gate card's line for a draft; with a new order (S10),
  *  "The order changes: Research → Review → Build." — the whole authored order, in the chain's words,
  *  so nothing about what is sent is left to guess. */
-export function draftLine(d: Pick<GateDraft, 'seed' | 'added' | 'order'>, words?: ReadonlyMap<string, string>): string {
+export function draftLine(d: Pick<GateDraft, 'seed' | 'added' | 'order'> & Pick<Partial<GateDraft>, 'pools' | 'heldPools'>, words?: ReadonlyMap<string, string>): string {
   const parts: string[] = [];
   if (d.added.length > 0) parts.push(`The steps change: ${d.added.map((c) => `+ ${wordOf(c)}`).join(', ')}.`);
   // studio#574: a seed step goes by the plan's word for it (`planOrder.ts` planStepWords) when the
   // caller has the plan — the same word the editor's row and the chain use; else its catalog's.
   if (orderChanged(d)) parts.push(`The order changes: ${draftSteps(d).map((s) => words?.get(s.id) ?? stepLabelOf(s.catalog)).join(' → ')}.`);
+  // studio#617: "The pool changes: Build to 2." — each step whose worker pool the draft lowers.
+  const pooled = poolChanges(d);
+  if (pooled.length > 0) parts.push(`The pool changes: ${pooled.map((s) => `${words?.get(s.id) ?? stepLabelOf(s.catalog)} to ${s.pool}`).join(', ')}.`);
   return parts.join(' ');
 }
 
