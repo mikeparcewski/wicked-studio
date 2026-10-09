@@ -372,6 +372,16 @@ describe('SkillsPage — the catalog from the manifest', () => {
       expect(f).toHaveTextContent(`skills.fallback · warning · why ${state}`);
       cleanup();
     }
+
+    // #560: a finding's sentence that embeds a home path reads `~/…` in the header too.
+    wire({
+      'GET /skills': () => Promise.resolve(catalog()),
+      'GET /diagnostics': () => Promise.resolve(diagnostics('fallback', [{ kind: 'skills.garden', severity: 'error', message: 'the installed plugin at /Users/reel-operator/.claude/plugins/cache/wicked-garden is older' }])),
+    });
+    render(<Harness />);
+    const homeLine = await screen.findByTestId('skills-engine-finding');
+    expect(homeLine).toHaveTextContent('the installed plugin at ~/.claude/plugins/cache/wicked-garden is older');
+    expect(document.body.textContent).not.toContain('reel-operator');
   });
 
   it('the KPI tiles are doors into the matching filter chip', async () => {

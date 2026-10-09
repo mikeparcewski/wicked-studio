@@ -1,3 +1,4 @@
+import { useDisplayText } from '../hooks/useHomePath.js';
 import { portabilityReasonCopy, type SkillConflictFinding, type SkillGuardResult, type SkillVerdict } from '../api/skills.js';
 
 /**
@@ -40,6 +41,8 @@ export function SkillFindings({ verb, result, testId }: {
   result: SkillGuardResult;
   testId: string;
 }): React.ReactElement {
+  // #560: a guard finding's location, evidence and explanation are daemon text — `~/…`, never the home.
+  const showText = useDisplayText();
   const color = VERDICT_COLOR[result.verdict];
   const blocking = result.findings.filter((f) => f.severity === 'blocking').length;
   const warnings = result.findings.length - blocking;
@@ -90,7 +93,7 @@ export function SkillFindings({ verb, result, testId }: {
                     </span>
                   )}
                   {location !== null && (
-                    <code data-testid="skills-finding-location" className="text-[10px] font-mono" style={{ color: 'var(--ink-dim)' }}>{location}</code>
+                    <code data-testid="skills-finding-location" className="text-[10px] font-mono" style={{ color: 'var(--ink-dim)' }}>{showText(location)}</code>
                   )}
                   {f.portabilityReason != null && (
                     <span
@@ -105,9 +108,9 @@ export function SkillFindings({ verb, result, testId }: {
                   )}
                 </span>
                 {f.evidence !== '' && (
-                  <code data-testid="skills-finding-evidence" className="break-all text-[10px] font-mono" style={{ color: 'var(--ink-high)' }}>{f.evidence}</code>
+                  <code data-testid="skills-finding-evidence" className="break-all text-[10px] font-mono" style={{ color: 'var(--ink-high)' }}>{showText(f.evidence)}</code>
                 )}
-                <span>{f.explanation}</span>
+                <span>{showText(f.explanation)}</span>
               </li>
             );
           })}
