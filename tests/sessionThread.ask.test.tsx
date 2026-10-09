@@ -286,3 +286,27 @@ describe('the stored creator fact (codex r3 #3)', () => {
     expect(screen.queryAllByTestId('session-run')).toHaveLength(1);
   });
 });
+
+describe('studio#585 — the run-block title uses plainRunTitle, not humanTitle', () => {
+  // The exact format crew's chatScopeStatement() emits.
+  const CHAT_SCOPE_PROBLEM = '# Chat scope\n\nThis directory is the scratch root of wicked-crew chat `c-1`. It is the ONLY place you may write.\n\n## Repositories in scope (READ-ONLY)\n\n- **alpha** (`r-1`): `/srv/repos/alpha`\n';
+
+  it('an ask run whose problem is a chat-scope statement titles the block "A conversation about alpha", never "Chat scope"', async () => {
+    useAskThreadStore.getState().markCreatorAccepted(RUN);
+    teamBody = { ...(teamBody as Record<string, unknown>), rows: [] };
+    page([{ ...ASK_RUN, session: { ...ASK_RUN.session, problem: CHAT_SCOPE_PROBLEM, status: 'executing' } } as never]);
+    await screen.findByTestId('session-run');
+    const title = screen.getByTestId('session-run').querySelector('.wk-session-run-title');
+    expect(title?.textContent).toBe('A conversation about alpha');
+    expect(title?.textContent).not.toContain('Chat scope');
+  });
+
+  it('a plain non-ask problem still renders as its first clause, unchanged', async () => {
+    useAskThreadStore.getState().markCreatorAccepted(RUN);
+    teamBody = { ...(teamBody as Record<string, unknown>), rows: [] };
+    page([{ ...ASK_RUN, session: { ...ASK_RUN.session, problem: 'Improve the widget: fix layout', status: 'executing' } } as never]);
+    await screen.findByTestId('session-run');
+    const title = screen.getByTestId('session-run').querySelector('.wk-session-run-title');
+    expect(title?.textContent).toBe('Improve the widget');
+  });
+});
