@@ -290,6 +290,11 @@ state = {"orphan": True, "q3_gate_age_ms": 30 * SEC,
          #   /runs/r-seat/reassign is recorded (GET /__fixture/reassign-posts) and, while
          #   `reassign_refuse` > 0, refused with crew's 400 (studio#480).
          "seat_escalation": False, "reassign_refuse": 0,
+         # retry_gate — r-retry paused on the RETRY kind (studio#557): the review unit on codex
+         #   changed the tree under review, the engine restored the creator's tree (worktree_guard
+         #   denial, `restored: true`), and the gate carries no escalation kind or spelling — so the
+         #   session row is Retry / Reassign / Stop. Gate POSTs and reassigns are recorded as above.
+         "retry_gate": False,
          "no_runs": False, "usage_ws": False, "long_prompt": False,
          "extra_narration": [], "demo": False,
          "repo": False, "metrics_ws": False,
@@ -3910,6 +3915,39 @@ SEAT_PROMPT = "Unit 1 failed and triage escalated: codex exited 1 (the seat fail
 SEAT_T0 = NOW0 - 10 * 60_000
 
 
+# ── retry_gate (studio#557, e2e/desk_gate_kinds_test.py §15) ──────────────────
+RETRY_PROMPT = "Approve to retry unit 2 against the restored tree, or reject to cancel the run"
+RETRY_T0 = NOW0 - 12 * 60_000
+
+
+def _retry_run() -> dict:
+    r = session("r-retry", "awaiting_human", "Tidy the importer", "tidy the importer")
+    r["session"]["clis"] = ["codex", "claude"]
+    r["session"]["unit_ix"] = 1
+    base = r["units"][0]
+    r["units"] = [dict(base, id="r-retry:build", ord=1, stage="build", role="creator", phase_ref="build",
+                       status="done", assigned_cli="claude"),
+                  dict(base, id="r-retry:review", ord=2, stage="review", role="evaluator", phase_ref="review",
+                       status="pending", assigned_cli="codex")]
+    return r
+
+
+RETRY_EVENTS = [
+    {"type": "sessionStarted", "session": "r-retry", "problem": "Tidy the importer", "workflowId": "bug",
+     "cliCount": 2, "governed": True, "entityMode": "shared", "ts": RETRY_T0, "seq": 1},
+    {"type": "unitDispatched", "session": "r-retry", "ord": 2, "cli": "codex", "attempt": 0, "ts": RETRY_T0 + 1000, "seq": 2},
+    {"type": "evaluatorMutatedWorktree", "session": "r-retry", "ord": 2, "cli": "codex", "phase": "review",
+     "attempt": 0, "changed": [{"path": "src/importer.ts", "status": "M"}], "restored": True, "restoreError": None,
+     "ts": RETRY_T0 + 60_000, "seq": 3},
+    {"type": "gateEvaluated", "session": "r-retry", "ord": 2, "combined": False, "hasDeterministicFloor": False,
+     "denial": {"source": "worktree_guard", "reason": "the review phase changed the tree under review",
+                "claimId": None, "ruleIds": [], "deniedTool": None, "phase": "unit-2"},
+     "ts": RETRY_T0 + 60_500, "seq": 4},
+    {"type": "awaitingHuman", "session": "r-retry", "ord": 2, "prompt": RETRY_PROMPT, "reviewingOrd": 2,
+     "ts": RETRY_T0 + 61_000, "seq": 5},
+]
+
+
 def _seat_run() -> dict:
     r = session("r-seat", "awaiting_human", "Fix the flaky importer", "fix the flaky importer")
     r["session"]["clis"] = ["codex", "claude"]
@@ -4232,6 +4270,8 @@ def assemble_runs() -> list:
             runs = runs + [json.loads(json.dumps(FLOOR_RUN))]
         if state["seat_escalation"] and not state["no_runs"]:
             runs = runs + [_seat_run()]
+        if state["retry_gate"] and not state["no_runs"]:
+            runs = runs + [_retry_run()]
         if state["home_paths"] and not state["no_runs"]:
             runs = runs + _home_runs()
         if state["sessions"] and not state["no_runs"]:
@@ -5853,6 +5893,12 @@ class W2Handler(SimpleHTTPRequestHandler):
                 self._json(200, {"runId": rid, "ord": 1, "lifecycle": "open", "prompt": SEAT_PROMPT,
                                  "receivedAt": iso(NOW0 - 60_000), "gateKind": "escalation"})
                 return True
+            with state_lock:
+                retry_gate = state["retry_gate"] and rid == "r-retry"
+            if retry_gate:
+                self._json(200, {"runId": rid, "ord": 2, "lifecycle": "open", "prompt": RETRY_PROMPT,
+                                 "receivedAt": iso(RETRY_T0 + 61_000)})
+                return True
             if reel_open and rid in REEL_GATES:
                 g_ord, g_prompt = REEL_GATES[rid]
                 self._json(200, {"runId": rid, "ord": g_ord, "lifecycle": "open", "prompt": g_prompt,
@@ -5977,6 +6023,8 @@ class W2Handler(SimpleHTTPRequestHandler):
             with state_lock:
                 if state["seat_escalation"] and rid == "r-seat":
                     events = list(SEAT_EVENTS)
+                if state["retry_gate"] and rid == "r-retry":
+                    events = list(RETRY_EVENTS)
             with state_lock:
                 if state["home_paths"] and rid in HOME_EVENTS:
                     events = list(HOME_EVENTS[rid])
