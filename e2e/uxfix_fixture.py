@@ -4531,6 +4531,11 @@ def ask_runs_list() -> list:
                           ("review — review", "review", "pending")]
             r = _session_run(c["run_id"], c["status"] or "executing", c["first_text"], cid, c["started_s"], None, units)
             r["session"]["clis"] = list(c["eligible"])
+            # crew#863 (studio#588): an ask-launched run says so, and says when it waits at its TURN
+            # gate — awaiting_human with only answer steps (Continue in Build adds a creator: absent).
+            r["session"]["ask_path"] = True
+            if c["status"] == "awaiting_human" and not c.get("building"):
+                r["session"]["ask_turn"] = True
             for i, u in enumerate(r["units"], start=1):
                 u["assigned_cli"] = c["pa"]
                 # The engine's unit ords are 1-based (the proof frames: answer-1 is ord 1, the gate and the

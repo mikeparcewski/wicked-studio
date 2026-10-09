@@ -18,7 +18,8 @@ answer, a HELP: exchange), it proves:
      line under it ("asked <reviewer>: … · answered", expandable to the answer) — still one voice; the
      first turn's lines stay where they were.
   4. THE TURN GATE DRAWS NOTHING: the ask run is awaiting_human after the reply and the Desk lists no
-     gate row for it; the session is "waiting".
+     gate row for it; the session is "waiting". 4b (studio#588): a fresh browser context — a Desk that
+     never opened the chat — lists the same rows as before the ask (crew's `ask_turn: true`).
   5. ONE SEAT (ask_one_seat): "No reviewer — only <pa> is signed in." with Sign in, which opens the
      session sheet on Sign-ins; the one-seat refusal line reads in plain words.
   6. OLDER DAEMON (ask_path off): the chat-pay session renders as before and says every helper answers.
@@ -224,6 +225,29 @@ with sync_playwright() as p:
           and sorted(k for k in desk["keys"] if k) == sorted(k for k in rows_before if k)
           and desk["session"] == ["waiting"], desk=desk, rows_before=rows_before)
     page.close()
+
+    # ── 4b. studio#588: a Desk that never opened the chat (a fresh browser context: nothing in memory,
+    # nothing in storage) holds the turn gate in its gate store — crew's ask_turn keeps it out of
+    # Needs-you, and the rows are exactly the rows before the ask.
+    fresh_ctx = browser.new_context(viewport={"width": W, "height": H}, device_scale_factor=1)
+    page = fresh_ctx.new_page()
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    page.goto(f"{origin}/", wait_until="networkidle")
+    page.get_by_test_id("desk-composer-input").wait_for(state="visible", timeout=15000)
+    page.wait_for_timeout(500)
+    fresh = page.evaluate("""(rid) => ({
+      keys: [...document.querySelectorAll('[data-testid="need-row"]')].map((n) => n.dataset.key),
+      session: [...document.querySelectorAll('[data-testid="desk-session"]')].filter((s) => s.dataset.runId === rid).map((s) => s.dataset.state) })""", ask_run)
+    with urllib.request.urlopen(f"{origin}/api/v1/runs/{ask_run}", timeout=10) as res:
+        wire = json.loads(res.read())["run"]["session"]
+    page.screenshot(path=str(SHOTS / "desk-ask-team-fresh-desk.png"))
+    check("fresh-desk-no-gate-row",
+          wire.get("ask_turn") is True
+          and not any(ask_run in (k or "") for k in fresh["keys"])
+          and sorted(k for k in fresh["keys"] if k) == sorted(k for k in rows_before if k),
+          fresh=fresh, rows_before=rows_before, ask_turn=wire.get("ask_turn"))
+    page.close()
+    fresh_ctx.close()
 
     # ── 5. one seat: no reviewer, Sign in; the refusal line ───────────────────────
     set_fixture(origin, ask_one_seat=True)

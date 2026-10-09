@@ -477,7 +477,7 @@ export function CampaignsPage({ runs, navigate, projectId = null, launchIntent =
   const windowIds = useMemo(() => new Set(buckets.current.map((v) => v.session.id)), [buckets]);
 
   // ── KPI folds (pure, board/campaignStats) ───────────────────────────────────
-  const totals = useMemo(() => campaignTotals(campaigns, groups), [campaigns, groups]);
+  const totals = useMemo(() => campaignTotals(campaigns, groups, runsById), [campaigns, groups, runsById]);
   // The registered sets' rollup — `null` on a pre-0.36 daemon, so the tile says nothing about sets.
   const setTotals = useMemo(() => (testSets === null ? null : testSetTotals(testSets)), [testSets]);
   const runsDelta = useMemo(() => windowDelta(buckets, (rs) => rs.length), [buckets]);
