@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.6.6",
   "counts": {
-    "files": 191,
-    "occurrences": 2272,
-    "static": 2014,
+    "files": 192,
+    "occurrences": 2281,
+    "static": 2023,
     "dynamic": 48,
     "computed": 8
   },
@@ -255,6 +255,18 @@
       ]
     },
     {
+      "testId": "artifact-lens-back",
+      "files": [
+        "src/components/session/ArtifactVersions.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-lens-line",
+      "files": [
+        "src/components/session/ArtifactVersions.tsx"
+      ]
+    },
+    {
       "testId": "artifact-no-editor",
       "files": [
         "src/components/session/PluginArtifact.tsx"
@@ -289,6 +301,48 @@
       "testId": "artifact-version",
       "files": [
         "src/components/session/ArtifactMorph.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-version-age",
+      "files": [
+        "src/components/session/ArtifactVersions.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-version-frame",
+      "files": [
+        "src/components/session/ArtifactVersions.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-version-lens",
+      "files": [
+        "src/components/session/ArtifactVersions.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-version-line",
+      "files": [
+        "src/components/session/ArtifactVersions.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-version-restore",
+      "files": [
+        "src/components/session/ArtifactVersions.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-version-row",
+      "files": [
+        "src/components/session/ArtifactVersions.tsx"
+      ]
+    },
+    {
+      "testId": "artifact-versions",
+      "files": [
+        "src/components/session/ArtifactVersions.tsx"
       ]
     },
     {

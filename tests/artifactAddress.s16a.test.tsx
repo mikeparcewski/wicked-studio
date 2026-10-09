@@ -16,7 +16,7 @@ describe('the artifact address (pure)', () => {
     const p = artifactPath('run:r1', KEY, 'full');
     expect(p).toBe('/s/run%3Ar1/a/r1%3Aalpha%2Fbrief%2Fv2%20doc?size=full');
     const [path, q] = p.split('?');
-    expect(readArtifactAddress(path!, `?${q}`)).toStrictEqual({ sessionId: 'run:r1', key: KEY, size: 'full' });
+    expect(readArtifactAddress(path!, `?${q}`)).toStrictEqual({ sessionId: 'run:r1', key: KEY, size: 'full', version: null });
     expect(parseRoute(path!)).toMatchObject({ panel: 'session', artifactId: 'run:r1', artifactKey: KEY });
   });
 

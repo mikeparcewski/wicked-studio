@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef } from 'react';
 import type { ArtifactSize } from '../../board/artifactMorph.js';
-import { addressFor } from '../../board/artifactAddress.js';
+import { addressFor, artifactPath } from '../../board/artifactAddress.js';
 import type { Navigate } from '../../hooks/useRoute.js';
 import { setArtifactSize, topmostArtifact, useArtifactSizes, useMountedArtifacts } from '../../store/artifactSizes.js';
 
@@ -15,20 +15,37 @@ import { setArtifactSize, topmostArtifact, useArtifactSizes, useMountedArtifacts
  */
 type Writer = (key: string, from: ArtifactSize, to: ArtifactSize) => void;
 
-const ArtifactAddressContext = createContext<Writer | null>(null);
+interface ArtifactAddressValue {
+  write: Writer;
+  /** The artifact the address names, and the version picked to look at (S16a-4b), if any. */
+  routeKey: string | null;
+  routeVersion: number | null;
+  /** Look at a version (`v`), or back at the working one (`null`): a lens pushes one entry; a
+   *  restore drops `v` in place. */
+  pickVersion: (key: string, version: number | null, how: 'push' | 'replace') => void;
+}
+
+const ArtifactAddressContext = createContext<ArtifactAddressValue | null>(null);
 
 /** The writer an ArtifactMorph calls after its store write (`null` outside a session page). */
 export function useArtifactAddressWriter(): Writer | null {
+  return useContext(ArtifactAddressContext)?.write ?? null;
+}
+
+/** The address as the artifact reads it (`null` outside a session page). */
+export function useArtifactAddress(): ArtifactAddressValue | null {
   return useContext(ArtifactAddressContext);
 }
 
 const RANK: Record<ArtifactSize, number> = { inline: 0, pane: 1, full: 2 };
 
-export function ArtifactAddressProvider({ sessionId, routeKey, routeSize, navigate, children }: {
+export function ArtifactAddressProvider({ sessionId, routeKey, routeSize, routeVersion = null, navigate, children }: {
   sessionId: string;
   /** The key the address names (`/s/:id/a/:key`), or null on the session's own address. */
   routeKey: string | null;
   routeSize: 'pane' | 'full';
+  /** S16a-4b: `?v=N` on the artifact's address. */
+  routeVersion?: number | null;
   navigate: Navigate;
   children: React.ReactNode;
 }): React.ReactElement {
@@ -64,7 +81,11 @@ export function ArtifactAddressProvider({ sessionId, routeKey, routeSize, naviga
     if (store.sizes[routeKey] !== routeSize) setArtifactSize(routeKey, routeSize);
   }, [routeKey, routeSize, mounted]);
 
-  const value = useMemo(() => write, [write]);
+  const pickVersion = useCallback((key: string, version: number | null, how: 'push' | 'replace') => {
+    const to = artifactPath(sessionId, key, 'full', version);
+    if (how === 'push') { pushed.current += 1; navigate(to); } else navigate(to, { replace: true });
+  }, [sessionId, navigate]);
+  const value = useMemo<ArtifactAddressValue>(() => ({ write, routeKey, routeVersion, pickVersion }), [write, routeKey, routeVersion, pickVersion]);
   return <ArtifactAddressContext.Provider value={value}>{children}</ArtifactAddressContext.Provider>;
 }
 

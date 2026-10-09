@@ -86,7 +86,7 @@ import { useViewPrefsStore } from './store/viewPrefs.js';
 import { useDeliveryFreezeStore } from './store/deliveryFreeze.js';
 import { notifyGateIfUnfocused } from './board/desktopNotify.js';
 import { sessionPath } from './board/sessionModel.js';
-import { sizeOf } from './board/artifactAddress.js';
+import { sizeOf, versionOf } from './board/artifactAddress.js';
 
 /** Frames that change run-list / unit state → trigger a `GET /runs` reconcile. */
 const LIFECYCLE_EVENTS: ReadonlySet<string> = new Set([
@@ -595,6 +595,7 @@ export function App(): React.ReactElement {
           sessionId={artifactId}
           artifactKey={artifactKey}
           artifactSize={sizeOf(search)}
+          artifactVersion={versionOf(search)}
           runs={runs}
           runsLoaded={runsLoaded}
           needRows={needRows}

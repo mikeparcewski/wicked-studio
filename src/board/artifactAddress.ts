@@ -10,9 +10,18 @@ import type { ArtifactSize } from './artifactMorph.js';
 
 export type GrownSize = Exclude<ArtifactSize, 'inline'>;
 
-/** The address of an artifact at a grown size (inline is the session's own address). */
-export function artifactPath(sessionId: string, key: string, size: GrownSize): string {
-  return `${sessionPath(sessionId)}/a/${encodeURIComponent(key)}?size=${size}`;
+/** The address of an artifact at a grown size (inline is the session's own address); S16a-4b: a
+ *  version picked to look at rides beside the size (`&v=N`). */
+export function artifactPath(sessionId: string, key: string, size: GrownSize, version: number | null = null): string {
+  return `${sessionPath(sessionId)}/a/${encodeURIComponent(key)}?size=${size}${version !== null ? `&v=${version}` : ''}`;
+}
+
+/** `v=N` — a positive integer, else null (the head). */
+export function versionOf(search: string): number | null {
+  const raw = new URLSearchParams(search).get('v');
+  if (raw === null || !/^\d+$/.test(raw)) return null;
+  const n = Number(raw);
+  return Number.isSafeInteger(n) && n > 0 ? n : null;
 }
 
 /** The address an artifact at `size` lives at: the session's own when inline. */
@@ -30,7 +39,7 @@ function decode(s: string): string | null {
 }
 
 /** `/s/:id/a/:key[?size=]` → its parts; `null` for any other address (a deeper path included). */
-export function readArtifactAddress(pathname: string, search: string): { sessionId: string; key: string; size: GrownSize } | null {
+export function readArtifactAddress(pathname: string, search: string): { sessionId: string; key: string; size: GrownSize; version: number | null } | null {
   const segs = pathname.split('/');
   // ['', 's', id, 'a', key] — exactly; a trailing slash is the same address, a fifth segment is not.
   if (segs[1] !== 's' || segs[3] !== 'a') return null;
@@ -38,5 +47,5 @@ export function readArtifactAddress(pathname: string, search: string): { session
   if (rest.some((x) => x !== '')) return null;
   const id = decode(segs[2] ?? ''); const key = decode(segs[4] ?? '');
   if (id === null || id === '' || key === null || key === '') return null;
-  return { sessionId: id, key, size: sizeOf(search) };
+  return { sessionId: id, key, size: sizeOf(search), version: versionOf(search) };
 }

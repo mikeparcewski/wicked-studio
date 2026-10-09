@@ -116,11 +116,13 @@ function launchedMs(v: RunView): number {
   return typeof c === 'number' && Number.isFinite(c) ? c * 1000 : 0;
 }
 
-export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, onAsk, artifactKey = null, artifactSize = 'pane' }: {
+export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, onAsk, artifactKey = null, artifactSize = 'pane', artifactVersion = null }: {
   sessionId: string;
   /** S16a-4a: the artifact the address grows (`/s/:id/a/:key`) and its size (`?size=`). */
   artifactKey?: string | null;
   artifactSize?: 'pane' | 'full';
+  /** S16a-4b: `?v=N` — the version picked to look at. */
+  artifactVersion?: number | null;
   runs: RunView[];
   runsLoaded: boolean;
   needRows: NeedRow[];
@@ -478,7 +480,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
   useEffect(() => () => collapseArtifacts(), [sessionId]);
 
   return (
-    <ArtifactAddressProvider sessionId={sessionId} routeKey={artifactKey} routeSize={artifactSize} navigate={navigate}>
+    <ArtifactAddressProvider sessionId={sessionId} routeKey={artifactKey} routeSize={artifactSize} routeVersion={artifactVersion} navigate={navigate}>
     <div data-testid="session" data-object={`session:${sessionId}`} data-session-id={sessionId} data-conversation={conversation} data-state={state} data-pane={pane} className={`wk-session${pane ? ' wk-session--pane' : ''}`}>
       <header className="wk-session-head">
         <span aria-hidden className={`wk-desk-dot wk-desk-dot--${state}`} />
