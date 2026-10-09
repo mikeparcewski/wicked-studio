@@ -17,13 +17,17 @@ import reactHooks from 'eslint-plugin-react-hooks';
 // the rule is ERROR for all of src/ — a raw color anywhere is a build failure,
 // not a review finding. The per-file TOKEN_CLEAN allowlist that staged the
 // slice-by-slice conversion is retired.
+//
+// The hex selectors skip an issue reference (`crew#631`, `studio#302`): a `#` that directly follows
+// a word character or `-` is a `repo#N` citation, never a colour (studio#311 R5), so tooltips and
+// notes may cite the issue they are waiting on.
 const NO_RAW_COLOR = [
   {
-    selector: 'Literal[value=/#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})\\b/]',
+    selector: 'Literal[value=/(?<![\\w-])#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})\\b/]',
     message: 'Raw hex color — use a semantic token from src/styles/tokens.css, e.g. var(--surface-card) (DES-VISION-001 §2.11).',
   },
   {
-    selector: 'TemplateElement[value.raw=/#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})\\b/]',
+    selector: 'TemplateElement[value.raw=/(?<![\\w-])#(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})\\b/]',
     message: 'Raw hex color — use a semantic token from src/styles/tokens.css, e.g. var(--surface-card) (DES-VISION-001 §2.11).',
   },
   {

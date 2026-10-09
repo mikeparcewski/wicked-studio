@@ -1,6 +1,6 @@
 /**
  * CLIs chip row (#302). TestingLaunchPanel: still disabled chips — no clis/clisJson key enters
- * those bodies yet. (S16a-4h: the Document thread's seat toggles went with the project shell.)
+ * those bodies yet (crew#631 shipped the daemon half; studio#302 wires it). (S16a-4h: the Document thread's seat toggles went with the project shell.)
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -14,7 +14,12 @@ const SEAT: RosterSeat = {
   key: 'claude', display_name: 'Claude Code', binary: 'claude',
   enabled_for_council: true, health: { status: 'active', since: 'x' }, signed_in: true,
 };
-const ROSTER: RosterSeat[] = [SEAT];
+// Two seats (studio#311 R9): "one chip per seat" must be able to tell "per seat" from "exactly one".
+const SEAT_2: RosterSeat = {
+  key: 'codex', display_name: 'Codex', binary: 'codex',
+  enabled_for_council: true, health: { status: 'active', since: 'x' }, signed_in: true,
+};
+const ROSTER: RosterSeat[] = [SEAT, SEAT_2];
 
 const createDoc = vi.fn();
 const getRoster = vi.fn();
@@ -69,7 +74,7 @@ describe('testing-clis-row (TestingLaunchPanel)', () => {
   });
   afterEach(cleanup);
 
-  it('warm cache: renders one disabled chip per seat, note contains crew#631; launch body carries no clis/clisJson', async () => {
+  it('warm cache: renders one disabled chip per seat, note cites studio#302; launch body carries no clis/clisJson', async () => {
     setCachedRoster(ROSTER);
     const user = userEvent.setup();
     render(<TestingLaunchPanel intent="recon" navigate={vi.fn()} onClose={vi.fn()} />);
@@ -77,8 +82,9 @@ describe('testing-clis-row (TestingLaunchPanel)', () => {
     await act(async () => { await Promise.resolve(); });
     const row = screen.getByTestId('testing-clis-row');
     expect(row.querySelectorAll('span[title]')).toHaveLength(ROSTER.length);
-    expect(row.querySelectorAll('span[title]')[0]!.textContent).toBe(SEAT.key);
-    expect(row.textContent).toContain('crew#631');
+    expect([...row.querySelectorAll('span[title]')].map((c) => c.textContent)).toEqual([SEAT.key, SEAT_2.key]);
+    expect(row.querySelectorAll('span[title]')[0]!.getAttribute('title')).toContain('studio#302');
+    expect(row.textContent).toContain('studio#302');
     // submit: type instructions + select unscoped + launch
     await user.type(screen.getByTestId('testing-launch-instructions'), 'cover checkout end to end');
     await user.click(screen.getByTestId('testing-launch-unscoped'));

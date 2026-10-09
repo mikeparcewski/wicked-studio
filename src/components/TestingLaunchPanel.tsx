@@ -13,10 +13,10 @@ import {
   type GovernedLaunchRoute,
   type LaunchIntent,
 } from '../api/testing.js';
-import type { Project, RepoEntry, RosterSeat, WorkflowDef } from '../api/types.js';
+import type { Project, RepoEntry, WorkflowDef } from '../api/types.js';
 import { QE_AUTHOR_TESTS_WORKFLOW_ID } from '../api/wave6-wire.js';
 import { useGateStore } from '../store/gates.js';
-import { getCachedRoster, setCachedRoster, subscribeRoster } from '../store/rosterCache.js';
+import { useRoster } from '../hooks/useRoster.js';
 import { setCachedWorkflows } from '../store/workflowCache.js';
 import { runShortId } from './runIdentity.js';
 import { AnswerInThread, useGateCleared } from './AnswerInThread.js';
@@ -185,17 +185,7 @@ export function TestingLaunchPanel({ intent, navigate, onClose, onLaunched, init
   const copy = INTENT_COPY[intent];
   const [instructions, setInstructions] = useState('');
   // #302: CLIs chip row (disabled — crew schema has no clisJson on /testing/* bodies yet)
-  const [testRoster, setTestRoster] = useState<RosterSeat[] | null>(() => getCachedRoster());
-  useEffect(() => {
-    const unsubscribe = subscribeRoster(setTestRoster);
-    if (getCachedRoster() !== null) return unsubscribe;
-    let cancelled = false;
-    Promise.resolve()
-      .then(() => api.getRoster())
-      .then(({ roster: seats }) => { if (!cancelled) { setCachedRoster(seats); setTestRoster(seats); } })
-      .catch(() => { /* cold roster: chips appear only after the fetch resolves */ });
-    return () => { cancelled = true; unsubscribe(); };
-  }, []);
+  const testRoster = useRoster();
 
   // ── The governed workflow: read off the daemon, never assumed ─────────────
   const [workflows, setWorkflows] = useState<WorkflowsState>('loading');
@@ -553,8 +543,10 @@ export function TestingLaunchPanel({ intent, navigate, onClose, onLaunched, init
             </label>
           )}
 
-          {/* #302: CLIs chip row — same visual as Build composer; schema is strict (no clisJson
-              on TestingReconBody / TestingAuthorBody) so chips are disabled pending crew#631. */}
+          {/* #302: CLIs chip row — same visual as Build composer. crew#631 shipped the daemon half
+              (`clisJson` on the testing bodies, `capabilities.seatChipOnCreate`); until studio#302
+              threads it through every launch rung below, the chips stay disabled and no body
+              carries a seat list. */}
           {testRoster !== null && testRoster.length > 0 && (
             <div
               data-testid="testing-clis-row"
@@ -565,13 +557,13 @@ export function TestingLaunchPanel({ intent, navigate, onClose, onLaunched, init
                   key={s.key}
                   className="rounded-full px-2 py-0.5 text-[10px] font-mono opacity-40 cursor-not-allowed select-none"
                   style={{ background: 'var(--surface-raised)', color: 'var(--ink-body)', border: '1px solid var(--surface-overlay)' }}
-                  title="CLIs selection not yet available for Testing mode"
+                  title="CLIs selection not yet available for Testing mode (studio#302)"
                 >
                   {s.key}
                 </span>
               ))}
               <span className="text-[10px]" style={{ color: 'var(--ink-dim)' }}>
-                CLIs not yet configurable here — pending crew#631
+                CLIs not yet configurable here — pending studio#302
               </span>
             </div>
           )}
