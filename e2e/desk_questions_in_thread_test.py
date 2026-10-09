@@ -144,8 +144,8 @@ with sync_playwright() as p:
         page.screenshot(path=str(SHOTS / "desk-questions-steer-noline.png"))
         fail("steering-dock-line", str(e))
     page.screenshot(path=str(SHOTS / "desk-questions-steer-dock.png"))
-    check("steering-dock-line", page.get_by_test_id("steering-gate").count() == 0
-          and page.get_by_test_id("approval-dock").count() == 0, text=line.inner_text())
+    # No gate card in the dock: the page holds no gate row at all (the thread is where it is answered).
+    check("steering-dock-line", page.get_by_test_id("session-gate-row").count() == 0, text=line.inner_text())
     gate_posts.clear()
     line.get_by_test_id("answer-in-thread-open").click()
     try:
@@ -187,7 +187,7 @@ with sync_playwright() as p:
         fail("ask-dock-line", f"{e}; lines={page.locator('[data-testid=answer-in-thread]').evaluate_all('els => els.map(e => e.dataset.subject)')}; "
              f"chats={page.locator('[data-testid=assist-chat]').evaluate_all('els => els.map(e => e.outerHTML.slice(0, 200))')}")
     page.screenshot(path=str(SHOTS / "desk-questions-ask-dock.png"))
-    check("ask-dock-line", page.get_by_test_id("steering-gate").count() == 0, chat=chat_id, text=cline.inner_text())
+    check("ask-dock-line", page.get_by_test_id("session-gate-row").count() == 0, chat=chat_id, text=cline.inner_text())
     gate_posts.clear()
     cline.get_by_test_id("answer-in-thread-open").click()
     want = f"/s/{urllib.parse.quote(chat_id)}"

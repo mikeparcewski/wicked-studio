@@ -498,7 +498,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
           </p>
         </div>
         {/* S11: look underneath the session — goal, helpers, activity, sign-ins and the run's sections. */}
-        {/* S16a-4e: a chat off the ask path promotes into Build from its own session (GroupChat's door). */}
+        {/* S16a-4e: a chat off the ask path promotes into Build from its own session (the retired chat page's door). */}
         {ref.kind === 'chat' && !askPathOn && conversation === 'live' && messages.some((m) => m.kind === 'user') && (
           <button type="button" data-testid="session-chat-promote" title="Open the Build composer prefilled with this conversation as context — editable before launch" onClick={() => { setRetryPrefill(chatPromotePrefill(ref.chatId, messages, mine[0] !== undefined && typeof mine[0].session.project_id === 'string' ? mine[0].session.project_id : null)); navigate('/runs/new'); }} className="wk-prop-btn wk-prop-btn--ghost">Continue in Build</button>
         )}
@@ -573,7 +573,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
                   ? <p className={`wk-session-text${e.ok ? '' : ' wk-session-grey'}`}><OperatorMessage text={e.text} /></p>
                   : (
                     // S16a-4e (crew#561): a helper's reply on the session wears the daemon's verdicts where
-                    // it cited — the marks and the strip GroupChat's thread had — so a fabricated SHA is
+                    // it cited — the marks and the strip the retired chat page's thread had — so a fabricated SHA is
                     // never read as a confirmed one here either. Mark, never edit.
                     <div className={`wk-session-text${e.ok ? '' : ' wk-session-grey'}`}>
                       <Markdown marks={citationMarks(e.citations)}>{e.text}</Markdown>

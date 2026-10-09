@@ -20,7 +20,6 @@ import { MemoriesPanel } from './components/MemoriesPanel.js';
 import { GovernanceDashboard } from './components/GovernanceDashboard.js';
 import { TestingPage } from './components/TestingPage.js';
 import { LaunchPanel } from './components/LaunchPanel.js';
-import { GroupChat } from './components/GroupChat.js';
 import { WorkflowViewer } from './components/WorkflowViewer.js';
 import { ShortcutOverlay } from './components/ShortcutOverlay.js';
 import { PeekCard } from './components/PeekCard.js';
@@ -48,7 +47,6 @@ import { useTypeToComposer } from './hooks/useTypeToComposer.js';
 import { useRetiredSettingsRedirect, useSteeringRedirect, useTestingRedirect } from './hooks/useLegacyRedirect.js';
 import { useMovedRoutes } from './hooks/useMovedRoutes.js';
 import { EverythingPage } from './components/everything/EverythingPage.js';
-import { everythingPath } from './board/everythingModel.js';
 import { useRoute } from './hooks/useRoute.js';
 import { useRuns } from './hooks/useRuns.js';
 import { useAnnotationStore } from './store/annotations.js';
@@ -106,7 +104,7 @@ const RIGHT_PANEL_PX = 288;
 const DESK_COMPOSER_PX = 96;
 
 export function App(): React.ReactElement {
-  const { panel, runId, repoId, projectId, artifactId, showLaunch, showRegisterRepo, chatMode, campaignId, steeringSection, testingPage, ruleId, artifactKey, navigate, search, pathname } = useRoute();
+  const { panel, runId, repoId, projectId, artifactId, showLaunch, showRegisterRepo, campaignId, steeringSection, testingPage, ruleId, artifactKey, navigate, search, pathname } = useRoute();
   const { runs, refresh, loaded: runsLoaded, error: runsError } = useRuns();
   const movedRunChatId = useCapabilities((s) => s.runChatId);
   const ingestGate = useGateStore((s) => s.ingest);
@@ -259,13 +257,6 @@ export function App(): React.ReactElement {
     [navigate, refresh, runPath],
   );
 
-  // "Back" belongs to the list a run was opened from: the Sessions list (scoped to the project when
-  // one is ambient). S16a-4f: never a `/p/` address.
-  const onNavigateBack = useCallback(
-    () => navigate(everythingPath({ tab: 'sessions', ...(projectId ? { project: projectId } : {}) })),
-    [navigate, projectId],
-  );
-
   const onKill = useCallback(
     async (id: string) => {
       try {
@@ -320,10 +311,6 @@ export function App(): React.ReactElement {
   // §5.6 rule 4 (S2b): letters always type — into the open Ask dock, else the page's
   // composer, else the Ask dock opened with them (opening it only reads).
   useTypeToComposer(useCallback(() => setAskOpen(true), []));
-  // studio#333: the Chat surface's bottom composer puts its Send in the bubble's corner.
-  // GroupChat reports the band's LIVE height (a ResizeObserver — it grows with the scope
-  // picker) and 0 on unmount; the launcher clears it exactly as it clears the right panel.
-  const [chatComposerPx, setChatComposerPx] = useState(0);
 
   const shortcutEntries = useMemo(
     () => [
@@ -402,39 +389,11 @@ export function App(): React.ReactElement {
     [repoId],
   );
 
-  // In the project shell the new chat is FILED into the project at open time
-  // (DES-FEEDBACK-001 §5.1 — `projectId` on the POST body, never a silent unfiled
-  // thread); outside it, GroupChat renders its own ProjectSwitcher (§5.2).
-  // `routedChatId`/`reflectUrl` (J4/C6): on the FLAT chat routes the session's
-  // id lives in the URL — `/chat/:id` the moment the session exists — so an
-  // opened chat is findable again after navigating away. The project shell's
-  // chat keeps its own `/p/:pid/chat` address and does not reflect.
-  const groupChatSurface = (
-    repo: string | null,
-    pid: string | null = null,
-    routedChatId: string | null = null,
-    reflectUrl = false,
-  ): React.ReactElement => (
-    <div className="flex-1 overflow-hidden">
-      <GroupChat
-        repoId={repo}
-        onBack={onNavigateBack}
-        projectId={pid}
-        navigate={navigate}
-        routedChatId={routedChatId}
-        reflectUrl={reflectUrl}
-        onComposerResize={setChatComposerPx}
-      />
-    </div>
-  );
-
-
   // S16a-3: the run page retired — a run lives in its session thread (`/s/run%3A<id>`), so the run
   // surface is only the launch form (`/runs/new`, `/p/:pid/build/new`, `/chat/new`).
   const runSurface = (): React.ReactElement => (
     <div className="flex-1 overflow-y-auto">
       <LaunchPanel
-        chatMode={chatMode}
         onLaunched={onLaunched}
         navigate={navigate}
       />
@@ -647,13 +606,6 @@ export function App(): React.ReactElement {
         </div>
       );
     }
-    // CHAT: the group-chat surface (warm seats + fan-out), not a run (crew#165).
-    // Checked BEFORE the home-dashboard fallback: `/chat/:id` (J4/C6) carries no
-    // runId/showLaunch and must land here, not on the dashboard. `artifactId`
-    // is the routed session id; the flat routes reflect the live id in the URL.
-    if (chatMode && selected === null) {
-      return groupChatSurface(repoId, null, artifactId, true);
-    }
     // The launch form; anything else with no surface of its own is a dead address (S16a-4h: the
     // project shell's Build dashboard is gone) — the honest not-found view, never a silent swap.
     if (showLaunch) return runSurface();
@@ -690,7 +642,7 @@ export function App(): React.ReactElement {
         open={askOpen}
         onToggle={() => setAskOpen((v) => !v)}
         rightOffsetPx={selected !== null ? RIGHT_PANEL_PX : 0}
-        bottomOffsetPx={panel === 'home' || panel === 'session' ? DESK_COMPOSER_PX : chatComposerPx}
+        bottomOffsetPx={panel === 'home' || panel === 'session' ? DESK_COMPOSER_PX : 0}
         // The Desk and a session have their own composer in this corner: there the bubble stands down.
         bubble={!(panel === 'home' || panel === 'session')}
       >

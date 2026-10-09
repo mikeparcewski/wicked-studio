@@ -7,7 +7,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, render, screen } from '@testing-library/react';
 import { RunBlock } from '../src/components/session/SessionView.js';
 import { RunLink } from '../src/components/RunLink.js';
-import { SteeringGate } from '../src/components/SteeringGate.js';
 import { Tech, runTechParts } from '../src/components/Tech.js';
 import * as client from '../src/api/client.js';
 import { useGateStore } from '../src/store/gates.js';
@@ -96,12 +95,4 @@ describe('the three surfaces', () => {
     expect(h).toHaveTextContent(`run ${RUN} · base a41c9e2 · seats claude, codex`);
   });
 
-  it('gate card: hidden by default, shown when on', () => {
-    render(<SteeringGate runId={RUN} ord={1} prompt="Approve the plan?" clis={['claude', 'pi']} baseCommit={SHA} />);
-    expect(screen.queryByTestId('tech-gate')).toBeNull();
-    setTech(true);
-    const h = screen.getByTestId('tech-gate');
-    expect(screen.getByTestId('steering-gate').contains(h)).toBe(true);
-    expect(h).toHaveTextContent(`run ${RUN} · base a41c9e2 · seats claude, pi`);
-  });
 });

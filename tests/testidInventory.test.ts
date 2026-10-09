@@ -102,9 +102,9 @@ describe('testid-inventory.json (TH-13)', () => {
   it('normalises dynamic template testids to * patterns (live-DOM-only selectors are marked)', () => {
     const inv = committed();
     const patterns = new Set(inv.dynamic.map((e) => e.pattern));
-    // Representative template-literal testid: `gate-escalation-${o.action}` in SteeringGate (the
-    // classic GateChip's `gate-approve-${runId}` retired with the skins, S18d).
-    expect(patterns.has('gate-escalation-*')).toBe(true);
+    // Representative template-literal testid: `editor-size-${…}` (the retired gate card's
+    // `gate-escalation-${o.action}` went with it, S16a-4i).
+    expect(patterns.has('editor-size-*')).toBe(true);
     for (const p of patterns) expect(p).toContain('*');
   });
 });

@@ -1,5 +1,5 @@
 import type { RosterSeat } from '../api/types.js';
-import { chatAdmissionOf } from '../components/GroupChat.js';
+import { chatAdmissionOf } from './chatOpen.js';
 import { noCarryingSeatReason, seatCanCarry } from '../components/gateVerdictModel.js';
 
 /**

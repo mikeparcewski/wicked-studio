@@ -326,7 +326,7 @@ function parse(pathname: string): Route {
   // `/chat/:id` — a live chat SESSION's real URL (J4/C6: an opened chat is
   // findable again). The id is the pool session's chatId, carried in
   // `artifactId` (it is NOT a run — `runId` stays null so no run-selected
-  // machinery fires against it). GroupChat rejoins the warm session, or says
+  // machinery fires against it). the retired chat page rejoins the warm session, or says
   // honestly that it is gone.
   if (first === 'chat' && second) {
     return restEmpty(3) ? route({ panel: 'session', artifactId: safeDecode(second) }) : route({ panel: 'not-found' });

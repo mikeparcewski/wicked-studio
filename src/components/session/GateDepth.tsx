@@ -16,7 +16,7 @@ import { GateUnderReview } from '../GateUnderReview.js';
 import { VerdictDiff } from '../VerdictDiff.js';
 
 /**
- * S16a-1b: the gate card's depth in the session thread (ported from the run page's SteeringGate,
+ * S16a-1b: the gate card's depth in the session thread (ported from the run page's the retired gate card,
  * which other hosts still keep) — the creator seat's track record, the "make it a rule" offer, the
  * work under review and "Why it failed". Reads only: every gate answer still goes through
  * `commitGateDecision` / `commitGateReassign`; the rule offer's one write is POST /standing-orders

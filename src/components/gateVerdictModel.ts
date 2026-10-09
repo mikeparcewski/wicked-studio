@@ -809,7 +809,7 @@ export function checkTails(c: GateFloorCheck): Array<{ stream: 'stderr' | 'stdou
  * denied it, and the engine reports the creator's tree restored. That is the engine's own condition
  * for sending the restored-tree prompt (`actor.rs`: `denial.source == "worktree_guard" &&
  * mutation.restored`) — in a dual-deny another layer wins, the engine keeps the legacy prompt and this
- * keeps "Approve" (F-255-05). ONE predicate for every gate card — the run page's `SteeringGate` and the
+ * keeps "Approve" (F-255-05). ONE predicate for every gate card — the retired gate card and the
  * landing inbox's card (F-255-01) — so an open gate never reads "Retry" on one surface and "Approve"
  * on the other. Keyed on the evidence frames, never on the prompt text; a prose-only denial from an
  * older engine (`source: null`) cannot be shown to be the guard's and stays "Approve".

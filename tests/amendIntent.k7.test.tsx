@@ -7,28 +7,23 @@
 // "the run resumes". The run head then carries the amendment beside the intent it changed, read
 // off the RUN RECORD so it survives a reload.
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as client from '../src/api/client.js';
 import { teamPlanApi } from '../src/api/teamPlan.js';
-import type { AgentSession, CoreEvent } from '../src/api/types.js';
+import type { AgentSession } from '../src/api/types.js';
 import { intentAmendmentsOf } from '../src/api/wave6-wire.js';
-import { describeDecision, setUndoWindowForTest, undoDecision, useUndoQueue } from '../src/board/undoQueue.js';
+import { setUndoWindowForTest, undoDecision, useUndoQueue } from '../src/board/undoQueue.js';
 import { RunIntentAmendments } from '../src/components/RunIntentAmendments.js';
-import { SteeringGate } from '../src/components/SteeringGate.js';
 import { useAnnotationStore } from '../src/store/annotations.js';
 import { useRunEventStore } from '../src/store/events.js';
 import { useGateStore } from '../src/store/gates.js';
 import { usePlanGateStore } from '../src/store/planGates.js';
 import { clearCachedRoster } from '../src/store/rosterCache.js';
 import { useSteeringStore } from '../src/store/steering.js';
-import { makeUnit, makeView } from './factories.js';
+import { makeView } from './factories.js';
 
 const RUN = 'r-amend';
-const UNITS = [
-  makeUnit({ id: `${RUN}:u1`, session_id: RUN, ord: 1, stage: 'build', status: 'done', assigned_cli: 'claude' }),
-  makeUnit({ id: `${RUN}:u2`, session_id: RUN, ord: 2, stage: 'test', status: 'pending', assigned_cli: 'codex' }),
-];
 
 function stubLocalStorage(): void {
   const store = new Map<string, string>();
@@ -61,64 +56,6 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-function mountGate(prompt: string, events: CoreEvent[] = []): void {
-  useGateStore.setState({ gates: { [RUN]: { runId: RUN, ord: 2, prompt, lifecycle: 'open', receivedAt: 1 } } });
-  useRunEventStore.setState({ byRun: { [RUN]: events } });
-  render(<SteeringGate runId={RUN} ord={2} prompt={prompt} units={UNITS} clis={['claude', 'codex']} />);
-}
-
-describe('the Amend intent lever', () => {
-  it('sends {approve:true, action:"amend_intent", amend} — and nothing without a note', async () => {
-    const confirm = vi.spyOn(client.api, 'confirmGate').mockResolvedValue({ status: 'ok' });
-    mountGate('Unit 2 is gated. Approve, approve with a steer, or reject.');
-
-    // The note IS the amendment: the button is disabled until there is one.
-    const button = screen.getByTestId('steering-amend-intent');
-    expect(button).toBeDisabled();
-
-    fireEvent.change(screen.getByTestId('steering-amend'), {
-      target: { value: 'issue #621 is withdrawn from this run' },
-    });
-    // …and armed once the gate is known NOT to be a plan gate (the team read answers; the arm
-    // fails closed until then, like Approve + steer).
-    await vi.waitFor(() => expect(screen.getByTestId('steering-amend-intent')).not.toBeDisabled());
-    fireEvent.click(screen.getByTestId('steering-amend-intent'));
-
-    await vi.waitFor(() => expect(confirm).toHaveBeenCalled());
-    // …with the gate's own ord, so a decision made on a replaced gate is a 409, not an answer.
-    expect(confirm.mock.calls[0]?.[1]).toEqual({
-      approve: true,
-      action: 'amend_intent',
-      amend: 'issue #621 is withdrawn from this run',
-      ord: 2,
-    });
-  });
-
-  it('is NOT offered on a plan gate or a team pause — the engine refuses it there', () => {
-    // A team pause takes approve, request changes or reject; offering the lever would hand the
-    // operator a 409 instead of hiding an impossible action (codex review on #392).
-    for (const gateKind of ['team_dispute', 'team_transport', 'plan_approval']) {
-      useGateStore.setState({
-        gates: { [RUN]: { runId: RUN, ord: 2, prompt: 'The team is blocked.', lifecycle: 'open', receivedAt: 1, gateKind } },
-      });
-      render(<SteeringGate runId={RUN} ord={2} prompt="The team is blocked." units={UNITS} clis={['claude']} />);
-      expect(screen.queryByTestId('steering-amend-intent'), gateKind).toBeNull();
-      cleanup();
-    }
-  });
-
-  it("the preview says the acceptance list changes — not 'the run resumes'", () => {
-    const { verb, preview } = describeDecision({
-      approve: true,
-      action: 'amend_intent',
-      amend: 'issue #621 is withdrawn',
-    } as never);
-    expect(verb).toBe('approve');
-    expect(preview).toContain("acceptance list changes");
-    expect(preview).toContain('the evaluator included');
-    expect(preview).not.toContain('resumes past this gate');
-  });
-});
 
 describe('the run head carries the amendment (the run record, not an event fold)', () => {
   const session = (rows: unknown): AgentSession =>

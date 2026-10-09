@@ -11,11 +11,11 @@
   "version": 1,
   "studioVersion": "0.6.6",
   "counts": {
-    "files": 175,
-    "occurrences": 2009,
-    "static": 1788,
-    "dynamic": 38,
-    "computed": 7
+    "files": 170,
+    "occurrences": 1895,
+    "static": 1687,
+    "dynamic": 36,
+    "computed": 6
   },
   "static": [
     {
@@ -51,75 +51,9 @@
       ]
     },
     {
-      "testId": "add-agent",
-      "files": [
-        "src/components/GroupChat.tsx"
-      ]
-    },
-    {
-      "testId": "agent-chip",
-      "files": [
-        "src/components/GroupChat.tsx"
-      ]
-    },
-    {
-      "testId": "agent-chips-bar",
-      "files": [
-        "src/components/GroupChat.tsx"
-      ]
-    },
-    {
-      "testId": "agent-chips-empty-note",
-      "files": [
-        "src/components/GroupChat.tsx"
-      ]
-    },
-    {
-      "testId": "agent-chips-resolving",
-      "files": [
-        "src/components/GroupChat.tsx"
-      ]
-    },
-    {
-      "testId": "agent-chips-retry",
-      "files": [
-        "src/components/GroupChat.tsx"
-      ]
-    },
-    {
-      "testId": "agent-chips-unresolved",
-      "files": [
-        "src/components/GroupChat.tsx"
-      ]
-    },
-    {
-      "testId": "agent-picker",
-      "files": [
-        "src/components/GroupChat.tsx"
-      ]
-    },
-    {
-      "testId": "agent-picker-excluded",
-      "files": [
-        "src/components/GroupChat.tsx"
-      ]
-    },
-    {
-      "testId": "agent-picker-option",
-      "files": [
-        "src/components/GroupChat.tsx"
-      ]
-    },
-    {
       "testId": "alt-peek",
       "files": [
         "src/components/sheets/AltPeek.tsx"
-      ]
-    },
-    {
-      "testId": "amend-prepopulated",
-      "files": [
-        "src/components/SteeringGate.tsx"
       ]
     },
     {
@@ -144,12 +78,6 @@
       "testId": "appearance-settings",
       "files": [
         "src/components/AppearanceSettings.tsx"
-      ]
-    },
-    {
-      "testId": "approval-dock",
-      "files": [
-        "src/components/ApprovalDock.tsx"
       ]
     },
     {
@@ -1018,48 +946,6 @@
       ]
     },
     {
-      "testId": "chat-close",
-      "files": [
-        "src/components/GroupChat.tsx"
-      ]
-    },
-    {
-      "testId": "chat-composer",
-      "files": [
-        "src/components/GroupChat.tsx"
-      ]
-    },
-    {
-      "testId": "chat-cost-total",
-      "files": [
-        "src/components/GroupChat.tsx"
-      ]
-    },
-    {
-      "testId": "chat-firstrun",
-      "files": [
-        "src/components/GroupChat.tsx"
-      ]
-    },
-    {
-      "testId": "chat-firstrun-instruction",
-      "files": [
-        "src/components/GroupChat.tsx"
-      ]
-    },
-    {
-      "testId": "chat-firstrun-scope",
-      "files": [
-        "src/components/GroupChat.tsx"
-      ]
-    },
-    {
-      "testId": "chat-layout-toggle",
-      "files": [
-        "src/components/GroupChat.tsx"
-      ]
-    },
-    {
       "testId": "chat-narration-line",
       "files": [
         "src/components/ChatThread.tsx"
@@ -1072,30 +958,6 @@
       ]
     },
     {
-      "testId": "chat-open-error",
-      "files": [
-        "src/components/GroupChat.tsx"
-      ]
-    },
-    {
-      "testId": "chat-project-row",
-      "files": [
-        "src/components/GroupChat.tsx"
-      ]
-    },
-    {
-      "testId": "chat-promote",
-      "files": [
-        "src/components/GroupChat.tsx"
-      ]
-    },
-    {
-      "testId": "chat-rejoined-note",
-      "files": [
-        "src/components/GroupChat.tsx"
-      ]
-    },
-    {
       "testId": "chat-round",
       "files": [
         "src/components/ChatThread.tsx"
@@ -1105,168 +967,6 @@
       "testId": "chat-round-grid",
       "files": [
         "src/components/ChatThread.tsx"
-      ]
-    },
-    {
-      "testId": "chat-scope",
-      "files": [
-        "src/components/GroupChat.tsx"
-      ]
-    },
-    {
-      "testId": "chat-scope-admission",
-      "files": [
-        "src/components/GroupChat.tsx"
-      ]
-    },
-    {
-      "testId": "chat-scope-dangling",
-      "files": [
-        "src/components/GroupChat.tsx"
-      ]
-    },
-    {
-      "testId": "chat-scope-everything",
-      "files": [
-        "src/components/GroupChat.tsx"
-      ]
-    },
-    {
-      "testId": "chat-scope-fallback-none",
-      "files": [
-        "src/components/GroupChat.tsx"
-      ]
-    },
-    {
-      "testId": "chat-scope-fixed",
-      "files": [
-        "src/components/GroupChat.tsx"
-      ]
-    },
-    {
-      "testId": "chat-scope-gap",
-      "files": [
-        "src/components/GroupChat.tsx"
-      ]
-    },
-    {
-      "testId": "chat-scope-graph",
-      "files": [
-        "src/components/GroupChat.tsx"
-      ]
-    },
-    {
-      "testId": "chat-scope-picker",
-      "files": [
-        "src/components/GroupChat.tsx"
-      ]
-    },
-    {
-      "testId": "chat-scope-picker-empty",
-      "files": [
-        "src/components/GroupChat.tsx"
-      ]
-    },
-    {
-      "testId": "chat-scope-picker-error",
-      "files": [
-        "src/components/GroupChat.tsx"
-      ]
-    },
-    {
-      "testId": "chat-scope-picker-loading",
-      "files": [
-        "src/components/GroupChat.tsx"
-      ]
-    },
-    {
-      "testId": "chat-scope-project",
-      "files": [
-        "src/components/GroupChat.tsx"
-      ]
-    },
-    {
-      "testId": "chat-scope-repo",
-      "files": [
-        "src/components/GroupChat.tsx"
-      ]
-    },
-    {
-      "testId": "chat-scope-repo-option",
-      "files": [
-        "src/components/GroupChat.tsx"
-      ]
-    },
-    {
-      "testId": "chat-scope-repos",
-      "files": [
-        "src/components/GroupChat.tsx"
-      ]
-    },
-    {
-      "testId": "chat-scope-row",
-      "files": [
-        "src/components/GroupChat.tsx"
-      ]
-    },
-    {
-      "testId": "chat-scope-summary",
-      "files": [
-        "src/components/GroupChat.tsx"
-      ]
-    },
-    {
-      "testId": "chat-scope-system",
-      "files": [
-        "src/components/GroupChat.tsx"
-      ]
-    },
-    {
-      "testId": "chat-scope-unstated",
-      "files": [
-        "src/components/GroupChat.tsx"
-      ]
-    },
-    {
-      "testId": "chat-send",
-      "files": [
-        "src/components/GroupChat.tsx"
-      ]
-    },
-    {
-      "testId": "chat-send-failed",
-      "files": [
-        "src/components/GroupChat.tsx"
-      ]
-    },
-    {
-      "testId": "chat-send-retry",
-      "files": [
-        "src/components/GroupChat.tsx"
-      ]
-    },
-    {
-      "testId": "chat-session-ended",
-      "files": [
-        "src/components/GroupChat.tsx"
-      ]
-    },
-    {
-      "testId": "chat-thread",
-      "files": [
-        "src/components/GroupChat.tsx"
-      ]
-    },
-    {
-      "testId": "chat-turn-budget-note",
-      "files": [
-        "src/components/GroupChat.tsx"
-      ]
-    },
-    {
-      "testId": "chat-view-toggle",
-      "files": [
-        "src/components/GroupChat.tsx"
       ]
     },
     {
@@ -1525,18 +1225,6 @@
       "testId": "decisions-ledger",
       "files": [
         "src/components/DecisionsLedger.tsx"
-      ]
-    },
-    {
-      "testId": "deliver-gate-diffstat",
-      "files": [
-        "src/components/SteeringGate.tsx"
-      ]
-    },
-    {
-      "testId": "deliver-gate-full-diff",
-      "files": [
-        "src/components/SteeringGate.tsx"
       ]
     },
     {
@@ -2660,24 +2348,6 @@
       ]
     },
     {
-      "testId": "gate-escalation-offers",
-      "files": [
-        "src/components/SteeringGate.tsx"
-      ]
-    },
-    {
-      "testId": "gate-move",
-      "files": [
-        "src/components/SteeringGate.tsx"
-      ]
-    },
-    {
-      "testId": "gate-move-consequence",
-      "files": [
-        "src/components/SteeringGate.tsx"
-      ]
-    },
-    {
       "testId": "gate-next",
       "files": [
         "src/components/GateUnderReview.tsx"
@@ -2702,54 +2372,6 @@
       ]
     },
     {
-      "testId": "gate-recommended",
-      "files": [
-        "src/components/SteeringGate.tsx"
-      ]
-    },
-    {
-      "testId": "gate-rule-error",
-      "files": [
-        "src/components/SteeringGate.tsx"
-      ]
-    },
-    {
-      "testId": "gate-rule-made",
-      "files": [
-        "src/components/SteeringGate.tsx"
-      ]
-    },
-    {
-      "testId": "gate-rule-make",
-      "files": [
-        "src/components/SteeringGate.tsx"
-      ]
-    },
-    {
-      "testId": "gate-rule-offer",
-      "files": [
-        "src/components/SteeringGate.tsx"
-      ]
-    },
-    {
-      "testId": "gate-rule-preview",
-      "files": [
-        "src/components/SteeringGate.tsx"
-      ]
-    },
-    {
-      "testId": "gate-rule-question",
-      "files": [
-        "src/components/SteeringGate.tsx"
-      ]
-    },
-    {
-      "testId": "gate-source",
-      "files": [
-        "src/components/SteeringGate.tsx"
-      ]
-    },
-    {
       "testId": "gate-toast",
       "files": [
         "src/components/GateNotifications.tsx"
@@ -2771,12 +2393,6 @@
       "testId": "gate-toast-work",
       "files": [
         "src/components/GateNotifications.tsx"
-      ]
-    },
-    {
-      "testId": "gate-track-record",
-      "files": [
-        "src/components/SteeringGate.tsx"
       ]
     },
     {
@@ -3251,42 +2867,6 @@
       "testId": "ineligible-warning",
       "files": [
         "src/components/ChatInput.tsx"
-      ]
-    },
-    {
-      "testId": "intake-plan",
-      "files": [
-        "src/components/IntakePlan.tsx"
-      ]
-    },
-    {
-      "testId": "intake-plan-deliver-gate",
-      "files": [
-        "src/components/IntakePlan.tsx"
-      ]
-    },
-    {
-      "testId": "intake-plan-head",
-      "files": [
-        "src/components/IntakePlan.tsx"
-      ]
-    },
-    {
-      "testId": "intake-plan-seat",
-      "files": [
-        "src/components/IntakePlan.tsx"
-      ]
-    },
-    {
-      "testId": "intake-plan-skill",
-      "files": [
-        "src/components/IntakePlan.tsx"
-      ]
-    },
-    {
-      "testId": "intake-plan-unit",
-      "files": [
-        "src/components/IntakePlan.tsx"
       ]
     },
     {
@@ -5138,30 +4718,6 @@
       ]
     },
     {
-      "testId": "plan-gate-actions",
-      "files": [
-        "src/components/SteeringGate.tsx"
-      ]
-    },
-    {
-      "testId": "plan-gate-approve-edited",
-      "files": [
-        "src/components/SteeringGate.tsx"
-      ]
-    },
-    {
-      "testId": "plan-gate-edit",
-      "files": [
-        "src/components/SteeringGate.tsx"
-      ]
-    },
-    {
-      "testId": "plan-gate-edit-open",
-      "files": [
-        "src/components/SteeringGate.tsx"
-      ]
-    },
-    {
       "testId": "plan-gate-floor",
       "files": [
         "src/components/PlanGateSummary.tsx"
@@ -5417,36 +4973,6 @@
       "testId": "project-field",
       "files": [
         "src/components/ProjectSwitcher.tsx"
-      ]
-    },
-    {
-      "testId": "project-graph",
-      "files": [
-        "src/components/ProjectGraphAction.tsx"
-      ]
-    },
-    {
-      "testId": "project-graph-build",
-      "files": [
-        "src/components/ProjectGraphAction.tsx"
-      ]
-    },
-    {
-      "testId": "project-graph-error",
-      "files": [
-        "src/components/ProjectGraphAction.tsx"
-      ]
-    },
-    {
-      "testId": "project-graph-result",
-      "files": [
-        "src/components/ProjectGraphAction.tsx"
-      ]
-    },
-    {
-      "testId": "project-graph-state",
-      "files": [
-        "src/components/ProjectGraphAction.tsx"
       ]
     },
     {
@@ -6605,33 +6131,9 @@
       ]
     },
     {
-      "testId": "seat-chip",
-      "files": [
-        "src/components/GroupChat.tsx"
-      ]
-    },
-    {
       "testId": "seat-citations",
       "files": [
         "src/components/citations.tsx"
-      ]
-    },
-    {
-      "testId": "seat-grounding",
-      "files": [
-        "src/components/GroupChat.tsx"
-      ]
-    },
-    {
-      "testId": "seat-retry",
-      "files": [
-        "src/components/GroupChat.tsx"
-      ]
-    },
-    {
-      "testId": "seat-state",
-      "files": [
-        "src/components/GroupChat.tsx"
       ]
     },
     {
@@ -8630,30 +8132,6 @@
       ]
     },
     {
-      "testId": "steer-scope",
-      "files": [
-        "src/components/SteeringGate.tsx"
-      ]
-    },
-    {
-      "testId": "steer-scope-creator",
-      "files": [
-        "src/components/SteeringGate.tsx"
-      ]
-    },
-    {
-      "testId": "steer-scope-cursor",
-      "files": [
-        "src/components/SteeringGate.tsx"
-      ]
-    },
-    {
-      "testId": "steering-actions",
-      "files": [
-        "src/components/SteeringGate.tsx"
-      ]
-    },
-    {
       "testId": "steering-add-menu",
       "files": [
         "src/components/SteeringAddMenu.tsx"
@@ -8663,30 +8141,6 @@
       "testId": "steering-add-menu-list",
       "files": [
         "src/components/SteeringAddMenu.tsx"
-      ]
-    },
-    {
-      "testId": "steering-amend",
-      "files": [
-        "src/components/SteeringGate.tsx"
-      ]
-    },
-    {
-      "testId": "steering-amend-intent",
-      "files": [
-        "src/components/SteeringGate.tsx"
-      ]
-    },
-    {
-      "testId": "steering-approve",
-      "files": [
-        "src/components/SteeringGate.tsx"
-      ]
-    },
-    {
-      "testId": "steering-approve-steer",
-      "files": [
-        "src/components/SteeringGate.tsx"
       ]
     },
     {
@@ -8741,12 +8195,6 @@
       "testId": "steering-author-waiting",
       "files": [
         "src/components/SteeringAuthorPanel.tsx"
-      ]
-    },
-    {
-      "testId": "steering-cancel",
-      "files": [
-        "src/components/SteeringGate.tsx"
       ]
     },
     {
@@ -8894,12 +8342,6 @@
       ]
     },
     {
-      "testId": "steering-error",
-      "files": [
-        "src/components/SteeringGate.tsx"
-      ]
-    },
-    {
       "testId": "steering-filter-retired",
       "files": [
         "src/components/SteeringGrid.tsx"
@@ -8987,12 +8429,6 @@
       "testId": "steering-form-weight",
       "files": [
         "src/components/SteeringRuleForm.tsx"
-      ]
-    },
-    {
-      "testId": "steering-gate",
-      "files": [
-        "src/components/SteeringGate.tsx"
       ]
     },
     {
@@ -9170,18 +8606,6 @@
       ]
     },
     {
-      "testId": "steering-prompt",
-      "files": [
-        "src/components/SteeringGate.tsx"
-      ]
-    },
-    {
-      "testId": "steering-prompt-toggle",
-      "files": [
-        "src/components/SteeringGate.tsx"
-      ]
-    },
-    {
       "testId": "steering-provenance-chat",
       "files": [
         "src/components/SteeringRuleDrawer.tsx"
@@ -9191,12 +8615,6 @@
       "testId": "steering-provenance-ui",
       "files": [
         "src/components/SteeringRuleDrawer.tsx"
-      ]
-    },
-    {
-      "testId": "steering-queued",
-      "files": [
-        "src/components/SteeringGate.tsx"
       ]
     },
     {
@@ -9214,8 +8632,7 @@
     {
       "testId": "steering-reassign-none",
       "files": [
-        "src/components/ReassignControl.tsx",
-        "src/components/SteeringGate.tsx"
+        "src/components/ReassignControl.tsx"
       ]
     },
     {
@@ -9252,18 +8669,6 @@
       "testId": "steering-reassign-withheld",
       "files": [
         "src/components/ReassignControl.tsx"
-      ]
-    },
-    {
-      "testId": "steering-reject",
-      "files": [
-        "src/components/SteeringGate.tsx"
-      ]
-    },
-    {
-      "testId": "steering-request-changes",
-      "files": [
-        "src/components/SteeringGate.tsx"
       ]
     },
     {
@@ -9312,12 +8717,6 @@
       "testId": "steering-retired-note",
       "files": [
         "src/components/SteeringPage.tsx"
-      ]
-    },
-    {
-      "testId": "steering-retry",
-      "files": [
-        "src/components/SteeringGate.tsx"
       ]
     },
     {
@@ -9668,12 +9067,6 @@
       "testId": "tech-details-unsaved",
       "files": [
         "src/components/SystemSettings.tsx"
-      ]
-    },
-    {
-      "testId": "tech-gate",
-      "files": [
-        "src/components/SteeringGate.tsx"
       ]
     },
     {
@@ -10889,18 +10282,6 @@
       ]
     },
     {
-      "pattern": "gate-escalation-*",
-      "files": [
-        "src/components/SteeringGate.tsx"
-      ]
-    },
-    {
-      "pattern": "gate-escalation-consequence-*",
-      "files": [
-        "src/components/SteeringGate.tsx"
-      ]
-    },
-    {
       "pattern": "graph-stat-*",
       "files": [
         "src/components/RepoDetailPage.tsx"
@@ -11062,7 +10443,6 @@
       "expression": "testid",
       "files": [
         "src/components/CampaignScoreboard.tsx",
-        "src/components/GroupChat.tsx",
         "src/components/McpToolsPage.tsx",
         "src/components/McpUsage.tsx",
         "src/components/ProposalChips.tsx",
@@ -11073,12 +10453,6 @@
         "src/components/SteeringRuleDrawer.tsx",
         "src/components/SteeringRuleForm.tsx",
         "src/components/TestingPage.tsx"
-      ]
-    },
-    {
-      "expression": "tid",
-      "files": [
-        "src/components/GroupChat.tsx"
       ]
     },
     {

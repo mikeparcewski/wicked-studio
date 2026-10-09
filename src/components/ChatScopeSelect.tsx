@@ -1,7 +1,7 @@
 import type { ChatOpenBody, ChatScope, Project, RepoEntry } from '../api/types.js';
 
 /**
- * The Ask dock's scope control (studio#323 R4) — the same vocabulary as GroupChat's chips:
+ * The Ask dock's scope control (studio#323 R4) — the same vocabulary as the retired chat page's chips:
  * `system` (the platform itself: no repository), `everything` (every registered repo), a
  * `project:<id>`, or a `repo:<id>`. The scope is decided at OPEN, so the control is shown only
  * before the first send; afterwards the dock states the scope the daemon resolved.
@@ -17,7 +17,7 @@ export function defaultAskScope(routeProjectId: string | null): AskScopeChoice {
  * The open-body fields a choice puts on `POST /chats`. `system` / `everything` NAME their kind
  * (`scopeKind`, api-types 0.39.0); a project or repo keeps the legacy body (`projectId` /
  * `repoRefs`) every scoped daemon already accepts and resolves the same way. `filingProjectId` —
- * the project route Ask was opened on — FILES the chat there whatever its scope, as GroupChat does
+ * the project route Ask was opened on — FILES the chat there whatever its scope, as the retired chat page does
  * (crew accepts system/everything + projectId and repoRefs + projectId; codex on #327).
  */
 export function askScopeOpenFields(

@@ -29,7 +29,7 @@ import {
   describeResolvedScope,
   type AskScopeChoice,
 } from './ChatScopeSelect.js';
-import { defaultSelection, describeChatOpenRefusal } from './GroupChat.js';
+import { defaultSelection, describeChatOpenRefusal } from '../board/chatOpen.js';
 import { apiStatus, apiWire } from '../api/errors.js';
 import { ambientProjectId } from '../hooks/ambientProject.js';
 import { peekTypedSeed, takeTypedSeed } from '../hooks/useTypeToComposer.js';
@@ -40,7 +40,7 @@ import { useCapabilities } from '../store/capabilities.js';
  * ASK — the app-wide binding of the ASSIST DOCK (DES-ASSIST-DOCK §5: "the dock becomes
  * 'ask for work from anywhere'"), opened from the rail's Ask button or Ctrl/⌘+Shift+A.
  *
- * A question launches a governed CHAT SESSION over the GroupChat seat machinery
+ * A question launches a governed CHAT SESSION over the retired chat page's seat machinery
  * (`POST /chats` warms the chat-capable roster, `POST /chats/:id/messages` fans the
  * question out) — the seats carry the estate/garden tooling that can actually look at
  * the databases, the code graph, and the run record. The FIRST message rides with the
@@ -248,7 +248,7 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
             return { chatId: id };
           } catch (sendErr) {
             // A failed send is NOT proof the session is gone — a 5xx or a network blip
-            // against a still-warm chat must not orphan it. Ask the daemon, as GroupChat's
+            // against a still-warm chat must not orphan it. Ask the daemon, as the retired chat page's
             // rejoin does: ONLY an empty seat list (a 200) means reclaimed. Anything else —
             // warm seats, or a probe that itself fails ("do not know") — keeps the id and
             // surfaces the send's own error.
@@ -283,7 +283,7 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
           if (clis.length > 0) body.clis = clis;
           // ASK-S1: the helper named with `@` answers (`selection: chosen`); unnamed, the engine picks at random.
           if (sendPrimary !== undefined && useCapabilities.getState().askPath && (clis.length === 0 || clis.includes(sendPrimary))) body.primary = sendPrimary;
-          // A refused open reads as GroupChat's does (codex on #327): a pre-0.39.0 daemon's
+          // A refused open reads as the retired chat page's does (codex on #327): a pre-0.39.0 daemon's
           // "unknown field `scopeKind`" names the upgrade, never the raw wire.
           const { seats, scope } = await api.openChat(body).catch((e: unknown) => {
             throw new Error(describeChatOpenRefusal(apiStatus(e), apiWire(e), e instanceof Error ? e.message : String(e)));
