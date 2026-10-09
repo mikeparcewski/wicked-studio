@@ -94,7 +94,12 @@ export const useDocsCache = create<DocsCacheStore>((set, get) => ({
       }
       const grouped: Record<string, DocSummary[]> = {};
       for (const r of rows) {
-        (grouped[r.project_id] ??= []).push({ name: r.name, kind: r.kind as DocSummary['kind'], head: r.head, versions: r.versions, updated_at: r.updated_at });
+        // crew#896: the index carries the style and the grounding record too (the Made chip reads it).
+        (grouped[r.project_id] ??= []).push({
+          name: r.name, kind: r.kind as DocSummary['kind'], head: r.head, versions: r.versions, updated_at: r.updated_at,
+          ...(r.style !== undefined ? { style: r.style } : {}),
+          ...(r.grounding !== undefined ? { grounding: r.grounding } : {}),
+        });
       }
       set((s) => ({
         // The index is the daemon's word for EVERY project: a project it lists nothing for holds nothing.
