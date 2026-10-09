@@ -228,26 +228,31 @@ with sync_playwright() as p:
           snippet=desk_text[max(0, desk_text.find("SAVE20") - 40):desk_text.find("SAVE20") + 200] if "SAVE20" in desk_text else desk_text[:300])
 
     # ── 5. #479: the delivered run's page — rail sections and outputs ───────────────
-    page.goto(f"{origin}/runs/r-home-done", wait_until="networkidle")
+    # S16a-2b: the run's sections are its session sheet's tabs; its outputs are in its thread.
+    page.goto(f"{origin}/s/run%3Ar-home-done", wait_until="networkidle")
     page.wait_for_timeout(600)
     run_leaks: dict = {}
     sections: list[str] = []
-    for acc in ("whatwhere", "files", "data", "delivery"):
-        btn = page.get_by_test_id(f"rail-accordion-{acc}")
-        if btn.count() == 0:
-            continue
-        sections.append(acc)
-        if btn.first.get_attribute("aria-expanded") != "true":
-            btn.first.click()
-            page.wait_for_timeout(400)
-        got = scan_now(f"run-{acc}")
-        if got["text"] is not None or got["titles"]:
-            run_leaks[acc] = {"text": got["text"], "titles": got["titles"]}
+    run_text = ""
     open_outputs()
     got = scan_now("run-outputs")
     if got["text"] is not None or got["titles"]:
         run_leaks["outputs"] = {"text": got["text"], "titles": got["titles"]}
-    run_text = page.evaluate("() => document.body.innerText")
+    run_text += page.evaluate("() => document.body.innerText")
+    look = page.locator('[data-testid="session-run"][data-run-id="r-home-done"] [data-testid="session-run-look"]')
+    look.wait_for(state="visible", timeout=15000)
+    look.click()
+    for acc in ("whatwhere", "files", "data", "delivery"):
+        tab = page.locator(f'[data-testid="sheet-tab"][data-tab="{acc}"]')
+        if tab.count() == 0:
+            continue
+        sections.append(acc)
+        tab.first.click()
+        page.wait_for_timeout(400)
+        got = scan_now(f"run-{acc}")
+        if got["text"] is not None or got["titles"]:
+            run_leaks[acc] = {"text": got["text"], "titles": got["titles"]}
+        run_text += page.evaluate("() => document.body.innerText")
     check("run-page-no-home-path", not run_leaks and {"whatwhere", "files", "data", "delivery"} <= set(sections)
           and "~/w2/" in run_text, sections=sections, leaks=run_leaks)
 

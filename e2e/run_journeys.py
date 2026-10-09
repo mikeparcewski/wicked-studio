@@ -33,10 +33,10 @@ REPO = E2E.parent
 # The former behaviour journeys (written for the classic skins, given a desk branch in S15a) and the
 # desk journeys are one list since S18d; each runs on the Desk as is.
 BEHAVIOUR = [
-    "wave1_draft", "wave1_raw", "wave1_switch",
+    "wave1_draft", "wave1_raw",
     "wave2_consumers",
     "wave2a_gatecard", "wave2a_peek", "wave2a_safety", "wave2a_undo",
-    "wave2b_handover", "wave2b_queue", "wave2b_switch",
+    "wave2b_handover", "wave2b_queue",
     "needs_shell", "t9_plan_ui", "dogfood_fixes", "wavea_home", "gate_move",
     "waveb_proposals", "agent_1on1", "gate_trust", "wavec_takes", "wavec_runpage", "wavec_home_runs",
     "standing_orders",

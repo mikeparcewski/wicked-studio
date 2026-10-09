@@ -33,7 +33,8 @@ from uxfix_fixture import (HIDE_GATE_TOASTS, REPO, ensure_build,
 PORT = int(os.environ.get("FEEDBACK_PORT", "4352"))
 W, H = 1440, 700
 SHOTS = REPO / "e2e" / "shots"
-RUN_PAGE = "/p/gamma/build/r1"
+# S16a-2b: the run's place is its session thread now.
+RUN_PAGE = "/s/run%3Ar1"
 
 report: dict = {"ok": False, "steps": {}}
 
@@ -99,7 +100,7 @@ with sync_playwright() as p:
                 status_over={}, extra_frames=[], extra_gates=[], proposals=[PROPOSAL])
     page = new_page(browser)
     page.goto(f"{origin}{RUN_PAGE}", wait_until="networkidle")
-    page.locator('[data-testid="thread"]').wait_for(state="visible", timeout=15000)
+    page.locator('[data-testid="session-thread"]').wait_for(state="visible", timeout=15000)
     href0 = page.evaluate("() => window.location.href")
     page.evaluate("() => document.activeElement && document.activeElement.blur()")
 
