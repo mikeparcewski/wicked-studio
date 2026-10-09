@@ -76,9 +76,16 @@ function pausedStepQuestion(p: string, gateKind: string | undefined): string | n
     // The reviewer edited the tree instead of judging it (wicked-core#431 / the read-only guard):
     // the edit was discarded and Approve retries on the restored tree — not a FAIL verdict.
     if (/changed the tree under review/i.test(p)) return 'The reviewer changed the work instead of judging it — retry on the restored tree?';
-    // The evaluator's verdict names the request-changes arm (gateVerdictModel's own rule); the
-    // legacy worktree-guard prompt ("confirm to retry the phase, or reject") never does.
-    if (/\brequest\s+changes\b|verdict is FAIL|evaluator denied/i.test(p)) return 'The reviewer said FAIL — send it back?';
+    // The rework cap (wicked-core#761): the review was already sent back as often as it may be.
+    if (/^\s*Unit\s+\d+\s+verdict is NOT PASS again\b/i.test(p)) return 'The review hit its rework cap — land it, one more round, or stop?';
+    // studio#601: only the REVIEWER'S OWN verdict reads as "said FAIL". Core leads the prompt with
+    // it in parentheses when the evaluator's verdict denied (`denialSource: evaluator_verdict`:
+    // "NOT PASS (the evaluator's verdict is FAIL…)", or its missing `VERDICT:` line). The arms
+    // list ("…request changes to send the review back…") rides EVERY NOT PASS prompt, whoever
+    // denied — an agent judge refusing a passing review, a pinned validator — so it is never read.
+    if (/NOT PASS\s*\((?:the evaluator's|no `VERDICT:` line in the evaluator's)|verdict is FAIL|evaluator denied/i.test(p)) {
+      return 'The reviewer said FAIL — send it back?';
+    }
     return 'The step did not pass review — how should it go on?';
   }
   if (/^\s*Unit\s+\d+\s+failed its deterministic floor\b/i.test(p)) return 'The floor failed — how should the step go on?';
