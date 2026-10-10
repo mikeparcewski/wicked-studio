@@ -12,6 +12,16 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.7.4] — 2026-10-10
+
+An archived run opens to its record (studio#675), and the workflow builder saves presets (X-MIG M11 studio B).
+
+### Fixed
+- Opening an archived run from See everything › Archived shows its record, marked Archived, with Unarchive available. Before, the session waited forever on "not in the run index yet" (studio#675, #678; governed run cdfa0a49).
+
+### Changed
+- The workflow builder saves presets: steps over the engine's phase catalog, saved with `PUT /presets/:name`. A step can raise its entry's gate and flags but not lower them, and built-in presets are read-only (edit one as a copy) (#677).
+
 ## [0.7.3] — 2026-10-10
 
 The compact `/` and `@` menu (studio#674).
@@ -1997,7 +2007,8 @@ The merged interactive layer: wicked-interactive's UI moved into this skin (DES-
   `git subtree split` (92 commits).
 - The SPA as a pure HTTP/WS client of the wicked-crew daemon: runs, gates, live CoreEvents.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.3...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.4...HEAD
+[0.7.4]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.3...v0.7.4
 [0.7.3]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.2...v0.7.3
 [0.7.2]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.1...v0.7.2
 [0.7.1]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.0...v0.7.1
