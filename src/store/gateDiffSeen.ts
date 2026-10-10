@@ -114,13 +114,20 @@ export function recordSeen(runId: string, seen: DiffSeen): void {
  * race the resumed run and record changes the operator never saw, and never a wait in the send path.
  * In memory only; a decision with no row on screen (the palette, a Desk key) records nothing.
  */
-const shown = new Map<string, { ord: number; receivedAt: number; files: Record<string, string> }>();
+const shown = new Map<string, Record<string, string>>();
+/** One gate instance (codex r3: keyed per instance, so a late read for an older gate never
+ *  overwrites the open gate's snapshot). */
+const instanceKey = (runId: string, ord: number, receivedAt: number): string => `${runId}:${ord}:${receivedAt}`;
 
 /** Called by the one decision path once a decision on (`ord`, `receivedAt`) was accepted. */
 export function recordShown(runId: string, ord: number | undefined, receivedAt: number | undefined, at: number = Date.now()): void {
-  const s = shown.get(runId);
-  if (s === undefined || s.ord !== ord || s.receivedAt !== receivedAt) return;
-  recordSeen(runId, { ord: s.ord, at, files: s.files });
+  if (typeof ord !== 'number' || typeof receivedAt !== 'number') return;
+  const k = instanceKey(runId, ord, receivedAt);
+  const files = shown.get(k);
+  if (files === undefined) return;
+  // This run's other snapshots are older gates: none of them can be decided any more.
+  for (const key of [...shown.keys()]) if (key.startsWith(`${runId}:`)) shown.delete(key);
+  recordSeen(runId, { ord, at, files });
 }
 
 /**
@@ -141,7 +148,7 @@ export function useDiffDrift(runId: string, gate: { ord: number; receivedAt: num
       .then(() => api.getRunDiff(runId, undefined, 'merge-base'))
       .then((r) => {
         if (typeof r?.diff !== 'string') { if (live) setDrift({ key, d: null }); return; }
-        shown.set(runId, { ord: gate.ord, receivedAt: gate.receivedAt, files: diffFiles(r.diff) });
+        shown.set(instanceKey(runId, gate.ord, gate.receivedAt), diffFiles(r.diff));
         if (live) setDrift({ key, d: diffDrift(prior, r.diff) });
       })
       .catch(() => { if (live) setDrift({ key, d: null }); });
