@@ -220,6 +220,13 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
   useEffect(() => {
     if (askPathOn && chatId !== null && chatDetail?.path?.runId !== undefined) useAskThreadStore.getState().linkRun(chatId, chatDetail.path.runId);
   }, [askPathOn, chatId, chatDetail?.path?.runId]);
+  // studio#631: the session knows its own runs. On a first turn the chat's record has no `path` yet
+  // (crew learns it from `path.started`, after the first read) and nothing re-reads the chat until a
+  // reply lands — a PA that never answers left the thread with no ask lines at all, its takeover
+  // included. The same rule the runs poller applies (`learnRuns`) links the chat's ask run from here.
+  useEffect(() => {
+    if (askPathOn && chatId !== null && mine.length > 0) useAskThreadStore.getState().learnRuns(mine);
+  }, [askPathOn, chatId, mine]);
   const askView = askRunId === null ? null : mine.find((v) => v.session.id === askRunId) ?? null;
   const { fold: askFold, error: askTeamError, retry: askTeamRetry } = useTeamFold(askRunId, askView === null ? '' : `${askView.session.status}:${askView.session.unit_ix}`);
   const askRows = useMemo(() => askFold?.rows ?? [], [askFold]);

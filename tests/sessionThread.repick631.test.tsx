@@ -67,8 +67,6 @@ const texts = (testid: string): string[] => screen.queryAllByTestId(testid).map(
 
 describe('studio#631 — the failover line, live, on a first turn with no reply', () => {
   it('a live path.repicked frame says the takeover in the thread', async () => {
-    // As the app's runs poller does (useRuns → learnRuns): the chat's run is known as its ask run.
-    useAskThreadStore.getState().learnRuns([ASK_RUN]);
     render(<SessionPage sessionId="chat-631" runs={[ASK_RUN]} runsLoaded needRows={[]} navigate={() => {}} onAsk={() => {}} />);
     await waitFor(() => expect(texts('ask-line').length).toBeGreaterThan(0));
     act(() => { useTeamPlanStore.getState().ingest({ type: 'teamEvent', event: REPICKED } as never); });

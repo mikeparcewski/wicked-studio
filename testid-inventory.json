@@ -12,8 +12,8 @@
   "studioVersion": "0.6.8",
   "counts": {
     "files": 173,
-    "occurrences": 1953,
-    "static": 1739,
+    "occurrences": 1954,
+    "static": 1740,
     "dynamic": 37,
     "computed": 6
   },
@@ -6414,6 +6414,12 @@
     },
     {
       "testId": "session-chat-retry",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
+      "testId": "session-chat-stop",
       "files": [
         "src/components/session/SessionView.tsx"
       ]
