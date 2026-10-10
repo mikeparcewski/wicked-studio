@@ -543,7 +543,8 @@ export function RunDelivery({ view, navigate }: Props): React.ReactElement {
         * a failed claim's "Crew recorded:" reads straight into the unit's own reason and the lift
         * card then explains it (the remedy included); absent entirely on a daemon that never sent a
         * deliver-ord frame. */}
-      {lift !== null && <DeliverLift view={lift} omitFailure={liftOmitsFailure} />}
+      {/* EX-04: a post-hoc hand-over superseded the engine's lift — that story is an earlier attempt's. */}
+      {lift !== null && recorded?.via !== 'post_hoc' && <DeliverLift view={lift} omitFailure={liftOmitsFailure} />}
       {receipt !== null && <AssuranceReceipt receipt={receipt} passed={view.session.status === 'completed' && !unverified ? true : null} testId="run-delivery-assurance" />}
       <DeliveryAssuranceLines recorded={recorded} testIdPrefix="run-delivery" />
     </div>

@@ -84,6 +84,18 @@ describe('the recorded delivery assurance', () => {
     expect(screen.getByTestId('assurance-kind').textContent).toBe('Checked independently');
   });
 
+  it('codex r2: a post-hoc hand-over hides the superseded engine lift on the panel', () => {
+    const v = delivered({ verified: false, via: 'post_hoc', receipt: RECEIPT, treeBefore: null, treeAfter: null, qeAcceptance: null }, 'r-ph3');
+    useRunEventStore.setState({ byRun: { 'r-ph3': [{ type: 'deliverLiftEvaluated', session: 'r-ph3', ord: 1, outcome: 'conflict', baseRef: 'origin/main', baseBefore: 'a', baseAfter: 'b', treeBefore: 'c', treeAfter: 'd', conflicts: ['x.ts'], note: null }] as never } });
+    const { unmount } = render(<RunDelivery view={v} />);
+    expect(screen.queryByTestId('deliver-lift')).toBeNull();
+    expect(screen.getByTestId('run-delivery-unverified')).toBeTruthy();
+    unmount();
+    // Control: the same log under an in-run delivery shows the lift.
+    render(<RunDelivery view={delivered({ verified: true, via: 'deliver_lift', receipt: RECEIPT, treeBefore: null, treeAfter: null, qeAcceptance: null }, 'r-ph3')} />);
+    expect(screen.getByTestId('deliver-lift')).toBeTruthy();
+  });
+
   it('the panel: unverified, never "accepted", and the QE check said', () => {
     render(<RunDelivery view={delivered({ verified: false, via: 'post_hoc', receipt: RECEIPT, treeBefore: 'aaaaaaaaaa', treeAfter: 'bbbbbbbbbb', qeAcceptance: { satisfied: true, reason: 'PASS', verdictId: 'v-1', reviewer: 'qe-bot' } })} />);
     expect(screen.getByTestId('run-delivery-unverified').textContent).toMatch(/^Unverified delivery/);
