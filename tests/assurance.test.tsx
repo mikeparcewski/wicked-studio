@@ -139,6 +139,21 @@ describe('the receipt model', () => {
     expect(gateReceiptFor([...log, { type: 'unitDispatched', ord: 1, attempt: 1 }] as unknown as CoreEvent[], UNITS, 1)).toBeNull();
   });
 
+  it('codex r2: the delivery aggregate uses each unit\'s current attempt; a lift alone keeps its own evidence', () => {
+    const view = makeView({ id: RUN, status: 'awaiting_human' } as never, UNITS);
+    const log = [
+      { type: 'unitDispatched', ord: 1, attempt: 0 },
+      { type: 'gateEvaluated', ord: 1, assurance: wire({ ran: ['judge'], creator: 'claude', judge: 'codex' }) },
+      { type: 'unitDispatched', ord: 1, attempt: 1 },
+      { type: 'gateEvaluated', ord: 2, assurance: wire({ ran: ['repo_checks'], creator: 'claude' }) },
+    ] as unknown as CoreEvent[];
+    const r = deliveryReceiptOf(view, log)!;
+    expect(r.ran).toEqual(['repo_checks']);
+    expect(assuranceKind(r)).toBe('floor-only');
+    const lift = deliveryReceiptOf(view, [{ type: 'deliverLiftEvaluated', ord: 3, assurance: wire({ ran: ['distinct_evaluator', 'repo_checks'] }) }] as unknown as CoreEvent[])!;
+    expect(assuranceKind(lift)).toBe('independent');
+  });
+
   it('the session contract: the record, else sessionStarted', () => {
     expect(sessionAssurance(makeView({ id: RUN } as never, UNITS), [{ type: 'sessionStarted', assurance: { mode: 'reduced', required: [] } } as unknown as CoreEvent])!.mode).toBe('reduced');
     expect(sessionAssurance(makeView({ id: RUN } as never, UNITS), [])).toBeNull();

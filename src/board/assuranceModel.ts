@@ -168,6 +168,8 @@ export function deliveryReceiptOf(view: SessionView | null | undefined, events: 
  * some gate was independent but another skipped its judge or distinct evaluator.
  */
 function deliveryKind(r: AssuranceReceipt, gates: readonly AssuranceReceipt[]): AssuranceKind {
+  // No gate history in hand (a partial log): the lift's own receipt, read as one decision.
+  if (gates.length === 0) return assuranceKind({ ...r, aggregateKind: undefined });
   const kinds = gates.map(assuranceKind);
   if (kinds.includes('same-seat') || r.skipped.some((s) => s.instrument === 'distinct_evaluator')) return 'same-seat';
   const seatSkip = r.skipped.some((s) => s.instrument === 'judge');
@@ -175,18 +177,24 @@ function deliveryKind(r: AssuranceReceipt, gates: readonly AssuranceReceipt[]): 
   return r.ran.length > 0 ? 'floor-only' : 'unchecked';
 }
 
-/** Every unit's newest gate receipt, in ord order (the log first, the unit record as fallback). */
+/** Every unit's CURRENT gate receipt, in ord order, by {@link gateReceiptFor}'s rule: the newest
+ *  evaluation of the unit's newest attempt (a re-dispatch voids the one before it, and an evaluation
+ *  without a receipt carries none); the unit record only when no log is in hand. */
 function gateReceipts(view: SessionView | null | undefined, log: readonly CoreEvent[]): AssuranceReceipt[] {
   const byOrd = new Map<number, AssuranceReceipt>();
-  for (const e of log) {
-    if (e.type !== 'gateEvaluated' || typeof e.ord !== 'number') continue;
-    const r = receiptOf((e as Record<string, unknown>)['assurance']);
-    if (r !== null) byOrd.set(e.ord, r);
-  }
-  for (const u of view?.units ?? []) {
-    if (byOrd.has(u.ord)) continue;
-    const r = receiptOf((u as unknown as { assurance?: unknown }).assurance);
-    if (r !== null) byOrd.set(u.ord, r);
+  if (log.length > 0) {
+    for (const e of log) {
+      if (typeof e.ord !== 'number') continue;
+      if (e.type === 'unitDispatched') byOrd.delete(e.ord);
+      if (e.type !== 'gateEvaluated') continue;
+      const r = receiptOf((e as Record<string, unknown>)['assurance']);
+      if (r !== null) byOrd.set(e.ord, r); else byOrd.delete(e.ord);
+    }
+  } else {
+    for (const u of view?.units ?? []) {
+      const r = receiptOf((u as unknown as { assurance?: unknown }).assurance);
+      if (r !== null) byOrd.set(u.ord, r);
+    }
   }
   return [...byOrd.entries()].sort((a, b) => a[0] - b[0]).map(([, r]) => r);
 }
