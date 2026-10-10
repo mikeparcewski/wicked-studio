@@ -20,6 +20,11 @@ describe('planRefusalWords', () => {
     expect(planRefusalWords(msg)).toMatch(/\(rule TST-1003 requires it\)/);
     expect(refusingRule(msg)).toBe('TST-1003');
   });
+  it('keeps any rule id, slashes and spaces included (codex r4 on #671)', () => {
+    expect(refusingRule('security_review_on_non_code_plan: step s … (rule docs/security requires it) …')).toBe('docs/security');
+    expect(refusingRule('security_review_on_non_code_plan: step s … (rule my rule requires it) …')).toBe('my rule');
+    expect(planRefusalWords('security_review_on_non_code_plan: step s … (rule docs/security requires it) …')).toMatch(/\(rule docs\/security requires it\)/);
+  });
   it('writes_nothing_on_code, and null for a token it does not word', () => {
     expect(planRefusalWords('writes_nothing_on_code: step build …')).toBe('a step marked “writes nothing” is on a phase that changes code');
     expect(planRefusalWords('pool_raised: step build raises its pool')).toBeNull();

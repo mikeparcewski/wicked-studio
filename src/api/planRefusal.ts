@@ -30,7 +30,8 @@ function leadingToken(text: string): string | null {
 
 /** The held rule a refusal names (`… (rule TST-1002 requires it) …`), or null. */
 export function refusingRule(reason: string): string | null {
-  return /\brule ([A-Za-z0-9_.:-]+) requires it\b/.exec(reason)?.[1] ?? null;
+  // Any nonblank id (core allows `docs/security`, even spaces): everything up to ` requires it)`.
+  return /\(rule (.+?) requires it\)/.exec(reason)?.[1] ?? null;
 }
 
 /** The operator-facing sentence for a refusal whose token this table knows, else `null`. */
