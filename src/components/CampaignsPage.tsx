@@ -2,12 +2,14 @@ import { useEffect, useMemo, useState } from 'react';
 import { campaignPath, testingPath, type LaunchIntent } from '../api/testing.js';
 import type { SessionView } from '../api/types.js';
 import {
-  campaignCards, campaignTotals, deliveryRollupWord, matchesCampaignChip, memberRunIdSet,
+  campaignCards, campaignTotals, deliveryRollupWord, matchesCampaignChip, memberRunIdSet, soloTestRunIds, soloTotals,
   passRateHealth, passRateWord, progressWord, testSetCountsWord, testSetPrHref, testSetTotals, testSetsWord,
   unattributedTestSets,
   type CampaignCardModel, type CampaignChip,
 } from '../board/campaignStats.js';
 import { recentActivity } from '../board/homeActivity.js';
+import { api } from '../api/client.js';
+import { sessionPath } from '../board/sessionModel.js';
 import { outcomeOf } from '../board/metrics.js';
 import { healthColor, windowBuckets, windowDelta, deltaWord } from '../board/windowStats.js';
 import type { Navigate } from '../hooks/useRoute.js';
@@ -19,7 +21,7 @@ import {
   DashboardGrid, FilterStrip, KpiBand, KpiGroup, StatTile, type FilterChip,
 } from './dashboardKit.js';
 import { TONE_COLOR, TONE_GLYPH, type NarrationLine } from './narrator.js';
-import { runShortId } from './runIdentity.js';
+import { humanTitle, runShortId } from './runIdentity.js';
 import { AuthorPanel } from './SteeringAuthorPanel.js';
 import { TestingLaunchPanel } from './TestingLaunchPanel.js';
 
@@ -470,15 +472,43 @@ export function CampaignsPage({ runs, navigate, projectId = null, launchIntent =
     return m;
   }, [runs]);
   const memberIds = useMemo(() => memberRunIdSet(campaigns, groups), [campaigns, groups]);
+  // studio#216: the single-repo tests this landing launched — crew files them under no campaign and
+  // no group, so they are read off the `run.launched` trail (`detail.recon`). One read per visit; a
+  // daemon without the audit route shows none (never a guessed list).
+  const [soloLaunched, setSoloLaunched] = useState<string[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    Promise.resolve()
+      .then(() => api.getAuditByAction('run.launched'))
+      .then((page) => { if (!cancelled) setSoloLaunched(soloTestRunIds(page.entries, new Set())); })
+      .catch(() => { /* no audit trail: the landing shows campaigns and groups only */ });
+    return () => { cancelled = true; };
+  }, []);
+  const soloRuns = useMemo(
+    () => soloLaunched
+      .filter((id) => !memberIds.has(id))
+      .map((id) => runsById.get(id))
+      .filter((v): v is SessionView => v !== undefined && v.session.archived_at == null),
+    [soloLaunched, memberIds, runsById],
+  );
   const memberRuns = useMemo(
-    () => runs.filter((v) => v.session.archived_at == null && memberIds.has(v.session.id)),
-    [runs, memberIds],
+    () => runs.filter((v) => v.session.archived_at == null && memberIds.has(v.session.id)).concat(soloRuns),
+    [runs, memberIds, soloRuns],
   );
   const buckets = useMemo(() => windowBuckets(memberRuns, range), [memberRuns, range]);
   const windowIds = useMemo(() => new Set(buckets.current.map((v) => v.session.id)), [buckets]);
 
   // ── KPI folds (pure, board/campaignStats) ───────────────────────────────────
-  const totals = useMemo(() => campaignTotals(campaigns, groups, runsById), [campaigns, groups, runsById]);
+  const totals = useMemo(() => {
+    const t = campaignTotals(campaigns, groups, runsById);
+    const solo = soloTotals(soloRuns);
+    return {
+      ...t,
+      landed: t.landed + solo.landed, failed: t.failed + solo.failed, running: t.running + solo.running,
+      awaitingHuman: t.awaitingHuman + solo.awaitingHuman, terminal: t.terminal + solo.terminal,
+      cancelled: t.cancelled + solo.cancelled,
+    };
+  }, [campaigns, groups, runsById, soloRuns]);
   // The registered sets' rollup — `null` on a pre-0.36 daemon, so the tile says nothing about sets.
   const setTotals = useMemo(() => (testSets === null ? null : testSetTotals(testSets)), [testSets]);
   const runsDelta = useMemo(() => windowDelta(buckets, (rs) => rs.length), [buckets]);
@@ -728,7 +758,8 @@ export function CampaignsPage({ runs, navigate, projectId = null, launchIntent =
             label="Pass rate"
             value={passRateWord(totals.landed, totals.terminal)}
             valueColor={healthColor(passHealth)}
-            context={totals.terminal > 0 ? `${totals.landed} landed of ${totals.terminal} finished` : 'no finished runs yet'}
+            context={(totals.terminal > 0 ? `${totals.landed} landed of ${totals.terminal} finished` : 'no finished runs yet')
+              + (totals.cancelled > 0 ? ` · ${totals.cancelled} cancelled` : '')}
             title="Landed over finished, across every test — filter to the failing ones"
             onOpen={() => setChip('failing')}
           />
@@ -765,7 +796,38 @@ export function CampaignsPage({ runs, navigate, projectId = null, launchIntent =
         )}
       </FilterStrip>
 
-      {cards.length === 0 ? (
+      {/* studio#216: single-repo tests — each run New test / Run recon launched on ONE repository. */}
+      {soloRuns.length > 0 && (
+        <section data-testid="testing-solo-runs" style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <h3 style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: S.muted, margin: 0 }}>
+            Single-repository tests · {soloRuns.length}
+          </h3>
+          {soloRuns.map((v) => (
+            <a
+              key={v.session.id}
+              data-testid="testing-solo-run"
+              data-run-id={v.session.id}
+              data-status={v.session.status}
+              href={sessionPath(`run:${v.session.id}`)}
+              onClick={(e) => { e.preventDefault(); navigate(sessionPath(`run:${v.session.id}`)); }}
+              style={{
+                display: 'flex', gap: '10px', alignItems: 'baseline', minWidth: 0, textDecoration: 'none',
+                background: S.card, border: `1px solid ${S.border}`, borderRadius: 'var(--radius-md)', padding: '8px 12px',
+              }}
+            >
+              <span style={{ ...CARD_STAT, color: v.session.status === 'failed' ? 'var(--status-fail)' : v.session.status === 'completed' ? 'var(--status-done)' : S.faint, flexShrink: 0 }}>
+                {v.session.status.replace(/_/g, ' ')}
+              </span>
+              <span style={{ fontSize: 'var(--text-sm)', color: S.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
+                {humanTitle(v.session.problem || v.session.id)}
+              </span>
+              <span style={{ ...CARD_STAT, color: S.faint, marginLeft: 'auto', flexShrink: 0 }}>{v.session.repo_ref ?? 'no repository'}</span>
+            </a>
+          ))}
+        </section>
+      )}
+
+      {cards.length === 0 && soloRuns.length > 0 ? null : cards.length === 0 ? (
         // The honest empty state, with the way in: a campaign appears with its first run.
         <div data-testid="campaigns-empty" style={{
           textAlign: 'center', padding: '48px 24px',

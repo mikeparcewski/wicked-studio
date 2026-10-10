@@ -185,8 +185,11 @@ export interface CampaignTotals {
   failed: number;
   running: number;
   awaitingHuman: number;
-  /** landed + failed + cancelled — the pass-rate denominator. */
+  /** landed + failed — the pass-rate denominator. A cancelled run is not a verdict (studio#216): a
+   *  fan someone stopped must not read as a 0 % pass rate. */
   terminal: number;
+  /** Runs / nodes cancelled before a verdict — said beside the pass rate, never in it. */
+  cancelled: number;
 }
 
 function groupStatusCounts(
@@ -216,7 +219,7 @@ export function campaignTotals(
 ): CampaignTotals {
   const t: CampaignTotals = {
     campaigns: campaigns.length, groups: groups.length, activeNow: 0,
-    landed: 0, failed: 0, running: 0, awaitingHuman: 0, terminal: 0,
+    landed: 0, failed: 0, running: 0, awaitingHuman: 0, terminal: 0, cancelled: 0,
   };
   for (const c of campaigns) {
     const n = campaignCounts(c);
@@ -225,7 +228,8 @@ export function campaignTotals(
     t.failed += n.failed;
     t.running += n.running;
     t.awaitingHuman += n.awaitingHuman;
-    t.terminal += n.landed + n.failed + n.cancelled;
+    t.terminal += n.landed + n.failed;
+    t.cancelled += n.cancelled;
   }
   for (const g of groups) {
     const n = groupStatusCounts(g, runsById);
@@ -234,7 +238,54 @@ export function campaignTotals(
     t.failed += n.failed;
     t.running += n.running;
     t.awaitingHuman += n.awaitingHuman;
-    t.terminal += n.landed + n.failed + n.cancelled;
+    t.terminal += n.landed + n.failed;
+    t.cancelled += n.cancelled;
+  }
+  return t;
+}
+
+/**
+ * studio#216: what a campaign's status SAYS — the engine's `status`, except that a campaign whose
+ * every node was cancelled reads `cancelled` (the engine folds it to `partially_completed`, which
+ * claims work that never happened).
+ */
+export function campaignStatusWord(c: Campaign): Campaign['status'] {
+  const n = campaignCounts(c);
+  if (n.nodes > 0 && n.cancelled === n.nodes) return 'cancelled';
+  return c.status;
+}
+
+/**
+ * studio#216: the single-repo test runs the Test landing launched. Crew's per-run recon path files
+ * no campaign and no group (`POST /testing/recon` answers `campaignRegistered: false`), so the one
+ * durable mark is the `run.launched` audit entry's `detail.recon: true`. Newest first, de-duplicated,
+ * minus the runs a campaign or group already carries.
+ */
+export function soloTestRunIds(
+  entries: ReadonlyArray<{ action: string; runId?: string; detail?: Record<string, unknown> }>,
+  memberIds: ReadonlySet<string>,
+): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const e of entries) {
+    if (e.action !== 'run.launched' || e.detail?.['recon'] !== true || typeof e.runId !== 'string') continue;
+    if (seen.has(e.runId) || memberIds.has(e.runId)) continue;
+    seen.add(e.runId);
+    out.push(e.runId);
+  }
+  return out;
+}
+
+/** studio#216: the solo test runs' share of the KPI band, folded like a group's members. */
+export function soloTotals(runs: readonly SessionView[]): Pick<CampaignTotals, 'landed' | 'failed' | 'running' | 'awaitingHuman' | 'terminal' | 'cancelled'> {
+  const t = { landed: 0, failed: 0, running: 0, awaitingHuman: 0, terminal: 0, cancelled: 0 };
+  for (const v of runs) {
+    const st = v.session.status;
+    if (st === 'completed') { t.landed += 1; t.terminal += 1; }
+    else if (st === 'failed') { t.failed += 1; t.terminal += 1; }
+    else if (st === 'cancelled') t.cancelled += 1;
+    else if (st === 'awaiting_human' && !isAskTurnRun(v.session)) t.awaitingHuman += 1;
+    else t.running += 1;
   }
   return t;
 }

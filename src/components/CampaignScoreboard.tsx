@@ -5,7 +5,7 @@ import { downloadRunEvidence } from '../api/client.js';
 import { apiStatus } from '../api/errors.js';
 import type { SessionView } from '../api/types.js';
 import {
-  campaignCounts, campaignDeliveryRollup, deliveryRollupWord,
+  campaignStatusWord, campaignCounts, campaignDeliveryRollup, deliveryRollupWord,
 } from '../board/campaignStats.js';
 import { useAcceptanceStore } from '../store/acceptance.js';
 import { useCampaignsStore } from '../store/campaigns.js';
@@ -267,7 +267,8 @@ export function CampaignScoreboard({ campaignId, runs, navigate }: Props): React
   };
 
   const liveStatus = live?.status ?? null;
-  const statusWord = liveStatus ?? campaign.status;
+  // studio#216: an all-cancelled campaign reads cancelled, not the engine's `partially_completed`.
+  const statusWord = liveStatus ?? campaignStatusWord(campaign);
 
   return (
     <div data-testid="campaign-scoreboard" style={{ padding: '24px', maxWidth: '1100px' }}>
