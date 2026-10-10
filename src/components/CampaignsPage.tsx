@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { campaignPath, testingPath, type LaunchIntent } from '../api/testing.js';
 import type { SessionView } from '../api/types.js';
 import {
-  campaignCards, campaignTotals, deliveryRollupWord, matchesCampaignChip, memberRunIdSet, soloTestRunIds, soloTotals,
+  campaignCards, campaignTotals, deliveryRollupWord, matchesCampaignChip, memberRunIdSet, soloMatchesChip, soloTestRunIds, soloTotals,
   passRateHealth, passRateWord, progressWord, testSetCountsWord, testSetPrHref, testSetTotals, testSetsWord,
   unattributedTestSets,
   type CampaignCardModel, type CampaignChip,
@@ -479,7 +479,9 @@ export function CampaignsPage({ runs, navigate, projectId = null, launchIntent =
   useEffect(() => {
     let cancelled = false;
     Promise.resolve()
-      .then(() => api.getAuditByAction('run.launched'))
+      // The trail's own ceiling (crew audit.ts: at most 1000 per read, newest first) — the action
+      // filter runs before it, so this is the newest 1000 launches (codex r1 on #216).
+      .then(() => api.getAuditByAction('run.launched', 1000))
       .then((page) => { if (!cancelled) setSoloLaunched(soloTestRunIds(page.entries, new Set())); })
       .catch(() => { /* no audit trail: the landing shows campaigns and groups only */ });
     return () => { cancelled = true; };
@@ -557,12 +559,12 @@ export function CampaignsPage({ runs, navigate, projectId = null, launchIntent =
   }, [cards, runsById, byRun, logs]);
 
   const chipCounts: Record<CampaignChip, number> = useMemo(() => ({
-    all: cards.length,
-    'needs-you': cards.filter((m) => matchesCampaignChip(m, 'needs-you')).length,
-    running: cards.filter((m) => matchesCampaignChip(m, 'running')).length,
-    failing: cards.filter((m) => matchesCampaignChip(m, 'failing')).length,
-    quiet: cards.filter((m) => matchesCampaignChip(m, 'quiet')).length,
-  }), [cards]);
+    all: cards.length + soloRuns.length,
+    'needs-you': cards.filter((m) => matchesCampaignChip(m, 'needs-you')).length + soloRuns.filter((v) => soloMatchesChip(v, 'needs-you')).length,
+    running: cards.filter((m) => matchesCampaignChip(m, 'running')).length + soloRuns.filter((v) => soloMatchesChip(v, 'running')).length,
+    failing: cards.filter((m) => matchesCampaignChip(m, 'failing')).length + soloRuns.filter((v) => soloMatchesChip(v, 'failing')).length,
+    quiet: cards.filter((m) => matchesCampaignChip(m, 'quiet')).length + soloRuns.filter((v) => soloMatchesChip(v, 'quiet')).length,
+  }), [cards, soloRuns]);
 
   const q = query.trim().toLowerCase();
   const filtered = cards.filter((m) =>
@@ -571,7 +573,12 @@ export function CampaignsPage({ runs, navigate, projectId = null, launchIntent =
   // The recency window scopes the GRID to campaigns with a member run in it; older campaigns
   // stay one honest chip away ("+N older"), never silently gone — the FilterStrip idiom.
   const visible = range === 'all' ? filtered : filtered.filter((m) => m.inWindow);
-  const hiddenByWindow = filtered.length - visible.length;
+  // studio#216: the solo tests take the SAME query, chip and window as the grid (codex r1).
+  const soloFiltered = soloRuns.filter((v) =>
+    soloMatchesChip(v, chip)
+    && (q === '' || (v.session.problem ?? '').toLowerCase().includes(q) || v.session.id.toLowerCase().includes(q)));
+  const visibleSolo = range === 'all' ? soloFiltered : soloFiltered.filter((v) => windowIds.has(v.session.id));
+  const hiddenByWindow = filtered.length - visible.length + (soloFiltered.length - visibleSolo.length);
 
   const chips: FilterChip[] = [
     { id: 'all', label: 'All', count: chipCounts.all },
@@ -687,7 +694,7 @@ export function CampaignsPage({ runs, navigate, projectId = null, launchIntent =
           <StatTile
             testId="stat-campaigns"
             label="Tests"
-            value={totals.campaigns + totals.groups}
+            value={totals.campaigns + totals.groups + soloRuns.length}
             // The sets word leads (it is what the operator came for); "active now" follows. The
             // "N ad-hoc group" word is gone — every 0.36 New test IS a label group, so it only crowded
             // the line (#266 F-1 / F-8). The tile's `title` says what the value counts.
@@ -797,12 +804,12 @@ export function CampaignsPage({ runs, navigate, projectId = null, launchIntent =
       </FilterStrip>
 
       {/* studio#216: single-repo tests — each run New test / Run recon launched on ONE repository. */}
-      {soloRuns.length > 0 && (
+      {visibleSolo.length > 0 && (
         <section data-testid="testing-solo-runs" style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
           <h3 style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: S.muted, margin: 0 }}>
-            Single-repository tests · {soloRuns.length}
+            Single-repository tests · {visibleSolo.length}
           </h3>
-          {soloRuns.map((v) => (
+          {visibleSolo.map((v) => (
             <a
               key={v.session.id}
               data-testid="testing-solo-run"
@@ -827,7 +834,7 @@ export function CampaignsPage({ runs, navigate, projectId = null, launchIntent =
         </section>
       )}
 
-      {cards.length === 0 && soloRuns.length > 0 ? null : cards.length === 0 ? (
+      {cards.length === 0 && soloRuns.length === 0 ? (
         // The honest empty state, with the way in: a campaign appears with its first run.
         <div data-testid="campaigns-empty" style={{
           textAlign: 'center', padding: '48px 24px',
@@ -854,7 +861,7 @@ export function CampaignsPage({ runs, navigate, projectId = null, launchIntent =
             New test
           </button>
         </div>
-      ) : visible.length === 0 ? (
+      ) : visible.length === 0 && visibleSolo.length > 0 ? null : visible.length === 0 ? (
         <p data-testid="campaigns-empty-filter" style={{ fontSize: '13px', color: S.faint, margin: 0 }}>
           No tests match —{' '}
           <button

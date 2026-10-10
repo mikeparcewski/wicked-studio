@@ -183,8 +183,8 @@ export const api = {
    * gesture-gated, filtered client-side to the project's runs (DES-UX-002
    * §3.3; a `?projectId=` filter does not exist on this wire, §10).
    */
-  getAuditByAction: (action: string) =>
-    apiFetch<AuditPage>(`/audit?action=${encodeURIComponent(action)}`),
+  getAuditByAction: (action: string, limit?: number) =>
+    apiFetch<AuditPage>(`/audit?action=${encodeURIComponent(action)}${limit !== undefined ? `&limit=${Math.max(1, Math.floor(limit))}` : ''}`),
 
   /**
    * The audit trail since an instant (`GET /audit?since=<epoch ms>`, crew#677 — inclusive,

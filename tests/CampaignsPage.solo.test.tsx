@@ -21,7 +21,7 @@ vi.mock('../src/api/client.js', () => ({
     listRepos: () => Promise.resolve({ repos: [] }),
     listProjects: () => Promise.resolve({ projects: [] }),
     listProjectMembers: () => Promise.resolve({ members: [] }),
-    getAuditByAction: (a: string) => getAuditByAction(a),
+    getAuditByAction: (a: string, limit?: number) => getAuditByAction(a, limit),
   },
   apiFetch: () => Promise.reject(new Error('not wired in this suite')),
 }));
@@ -76,7 +76,8 @@ describe('the Test landing lists the single-repo tests it launched', () => {
     const navigate = vi.fn();
     render(<CampaignsPage runs={[view('solo-1', 'completed')]} navigate={navigate} />);
     const row = await screen.findByTestId('testing-solo-run');
-    expect(getAuditByAction).toHaveBeenCalledWith('run.launched');
+    expect(getAuditByAction).toHaveBeenCalledWith('run.launched', 1000);
+    expect(screen.getByTestId('stat-campaigns')).toHaveAttribute('data-value', '2'); // the fan + the solo test
     expect(row.dataset.runId).toBe('solo-1');
     expect(row.textContent).toContain('completed');
     fireEvent.click(row);
@@ -84,6 +85,17 @@ describe('the Test landing lists the single-repo tests it launched', () => {
     // The stale all-cancelled fan no longer drags the pass rate to 0 %: 1 landed of 1 finished.
     await waitFor(() => expect(screen.getByTestId('stat-campaign-pass-rate')).toHaveAttribute('data-value', '100%'));
     expect(screen.getByTestId('stat-campaign-pass-rate').textContent).toContain('2 cancelled');
+  });
+
+  it('the solo list takes the grid\'s chips and search', async () => {
+    listCampaigns.mockResolvedValue({ campaigns: [], groups: [] });
+    getAuditByAction.mockResolvedValue({ entries: [launched('ok-1', { recon: true }), launched('bad-1', { recon: true })] });
+    render(<CampaignsPage runs={[view('ok-1', 'completed'), view('bad-1', 'failed')]} navigate={() => {}} />);
+    await waitFor(() => expect(screen.getAllByTestId('testing-solo-run')).toHaveLength(2));
+    expect(screen.queryByTestId('campaigns-empty')).toBeNull();
+    const failing = screen.getAllByTestId('campaigns-filter-chip').find((c) => c.textContent?.includes('Failing'))!;
+    fireEvent.click(failing);
+    await waitFor(() => expect(screen.getAllByTestId('testing-solo-run').map((r) => r.dataset.runId)).toEqual(['bad-1']));
   });
 
   it('a daemon without the audit route shows no solo list and nothing breaks', async () => {

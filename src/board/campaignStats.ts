@@ -276,6 +276,19 @@ export function soloTestRunIds(
   return out;
 }
 
+/** studio#216: a solo test run against the landing's filter chips — the card rules, on one run. */
+export function soloMatchesChip(v: SessionView, chip: CampaignChip): boolean {
+  const st = v.session.status;
+  const waiting = st === 'awaiting_human' && !isAskTurnRun(v.session);
+  const failing = st === 'failed';
+  const running = !waiting && !failing && st !== 'completed' && st !== 'cancelled';
+  if (chip === 'all') return true;
+  if (chip === 'needs-you') return waiting;
+  if (chip === 'running') return running;
+  if (chip === 'failing') return failing;
+  return !waiting && !failing && !running; // quiet
+}
+
 /** studio#216: the solo test runs' share of the KPI band, folded like a group's members. */
 export function soloTotals(runs: readonly SessionView[]): Pick<CampaignTotals, 'landed' | 'failed' | 'running' | 'awaitingHuman' | 'terminal' | 'cancelled'> {
   const t = { landed: 0, failed: 0, running: 0, awaitingHuman: 0, terminal: 0, cancelled: 0 };
