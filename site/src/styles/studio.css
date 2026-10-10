@@ -351,7 +351,7 @@ code {
 .board-status-btn .bs-ic { font-size: 0.6rem; }
 .board-status-btn.is-playing .bs-ic { color: var(--amb); }
 
-/* ── One project, two skins ───────────────────────────────────────────── */
+/* ── One project, one feed, two lenses ───────────────────────────────────────────── */
 .proj { border-top: 1px solid var(--hairline); padding: clamp(40px, 6svh, 68px) 0; }
 .proj-card {
   border: 1px solid var(--hairline-strong); border-radius: 16px; overflow: hidden;
@@ -378,7 +378,7 @@ code {
 .pf-src--int { color: var(--amb); border: 1px solid color-mix(in oklab, var(--amb) 50%, transparent); }
 .proj-feed code { background: none; border: none; padding: 0; color: var(--ink); font-size: 0.74rem; }
 .pf-note { color: var(--muted); font-size: 0.7rem; }
-/* the skin toggle: both renderings are in the DOM; data-skin picks one */
+/* the lens toggle: both renderings are in the DOM; data-skin picks one */
 .proj-card[data-skin="studio"] .proj-feed--interactive { display: none; }
 .proj-card[data-skin="interactive"] .proj-feed--studio { display: none; }
 /* the two renderings carry their door's flavor */

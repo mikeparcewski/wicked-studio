@@ -22,9 +22,12 @@ reasoning in a scrollback you'll never read. wicked-studio flips that:
   work. Attention comes to *you* when a run hits a gate — you don't sit watching one terminal.
 - **Approve what matters.** Human-in-the-loop gates surface the real decisions (approve, approve
   with a steer, or reject) — with keyboard batch triage when several pile up.
-- **"Done" is proven, not claimed.** The evaluator is never the creator. Every run leaves
-  transcripts, diffs, and a downloadable evidence bundle; studio shows you the gate outcomes, it
-  never grades the work itself.
+- **"Done" is proven, not claimed — and the gate says how.** Review goes to a seat other than the
+  creator's whenever your roster has an eligible one. A team run, or one whose distinct seat is
+  benched, refuses to start without it; an ordinary run on a roster that is simply too small goes ahead
+  and says "evaluator ≠ creator not held". A gate with no distinct judge says "floor only", and an
+  ungated phase says "approved by default, not verified". Every run leaves transcripts, diffs, and a downloadable evidence bundle;
+  studio shows you the gate outcomes, it never grades the work itself.
 - **Understand the code first.** Onboard a repo and studio builds its graph — then blast-radius
   for any symbol, hotspots, the domain/requirements view, and a searchable map of what calls what.
 
@@ -33,19 +36,22 @@ reasoning in a scrollback you'll never read. wicked-studio flips that:
 - **Run governed agents on your repos** — register a local path or clone a URL; studio builds the
   code graph, then you launch runs (ask / balanced / autonomous), pick which agent seats join, and
   bind a repo with optional PR delivery.
-- **Steer runs live** — a real-time timeline of every run, human gates with approve / steer /
-  reject, elicitation prompts, pre-gate guidance notes, and lifecycle controls (cancel, inject a
-  message, retry).
+- **Steer runs live** — the Desk (the one shell) puts what needs you first; every run or chat
+  opens as a **session** (`/s/:id`): one thread with the live record, gate rows you answer in place
+  (approve / steer / reject), elicitation prompts, pre-gate guidance notes, and lifecycle controls
+  (cancel, inject a message, retry). Old `/runs/:id` links redirect to the session.
 - **See the evidence** — per-step transcripts, a worktree file + diff viewer, and one-click
   evidence-bundle download for any run.
 - **Explore your codebase** — graph view with focus navigation, blast radius, hotspots, and the
   domain graph with coverage.
-- **Ask your whole model roster at once** — fan one question out to every warm CLI and compare the
-  answers side by side.
+- **Ask several seats at once** — a chat can hold more than one warm CLI seat; each answers in the
+  thread, and the daemon checks every path, `path:line` and commit a reply cites against the repo.
 - **Govern the work** — author steering rules and policies, browse the decisions ledger, and review
   what the platform has learned about your repos.
-- **Work in projects** — group repos, runs, chats, and docs; a merged activity feed and dashboard
-  per project; deep-linkable routes throughout.
+- **Work in projects** — group repos, runs, chats, and docs; "See everything" (`/everything`) lists
+  them, filterable by project, and a project's address (`/p/:id`) opens its scoped Sessions list;
+  deep-linkable
+  routes throughout.
 - **Plus** governed terminals, a Cmd+K command palette, document & video creation modes, and
   desktop notifications when a run needs you.
 

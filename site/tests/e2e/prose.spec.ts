@@ -25,9 +25,9 @@ test('prose does not fuse words into the following bold or code span', async ({ 
     'spanning Rust and TypeScript',
     'edges do not resolve',
     'bounded at ten minutes each',
-    // Lowercase since the docs-R9 truth pass: the phrase now sits mid-sentence
-    // ("… — and the studio’s dedicated project browser is shipped in this skin").
-    'the studio’s dedicated project browser',
+    // The W5 truth pass: a project is a scope on the one Desk shell, not its own shell
+    // ("In studio a project is a <b>scope, not a separate shell</b>: …").
+    'a project is a scope, not a separate shell',
   ];
 
   for (const phrase of mustRead) {
