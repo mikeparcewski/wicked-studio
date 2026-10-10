@@ -4,6 +4,7 @@ import type { ActivityEntry, ProjectDetail, ProjectMember } from '../api/types.j
 import { useProjectsStore } from '../store/projects.js';
 import { ProjectRepositories } from './ProjectRepositories.js';
 import { ProjectDocumentsRoot } from './ProjectDocumentsRoot.js';
+import { ProjectCoverage, ProjectDomain } from './product/ProjectAggregates.js';
 import { everythingPath } from '../board/everythingModel.js';
 
 /** The Repositories section owns these rows; the generic Members list shows the rest. */
@@ -387,6 +388,15 @@ export function ProjectDetailPage({ projectId, navigate }: Props): React.ReactEl
           ))}
         />
       </div>
+
+      {/* studio#158: coverage and the domain model across the project's repositories (crew#371).
+          The synthesized `default` project has no members; neither section is drawn for it. */}
+      {projectId !== 'default' && (
+        <>
+          <ProjectCoverage projectId={projectId} navigate={navigate} />
+          <ProjectDomain projectId={projectId} navigate={navigate} />
+        </>
+      )}
 
       {/* Members */}
       <section style={{ marginBottom: '28px' }}>
