@@ -143,6 +143,19 @@ describe('the launch form', () => {
     expect('skipQeAcceptance' in sent()).toBe(false);
   });
 
+  it('codex r1: offered for the workflow the launch SENDS — an override to a non-QE workflow is not offered, and a change of target clears the tick', async () => {
+    health(true);
+    const user = userEvent.setup();
+    const { rerender } = render(<ChatInput runId={null} runStatus={null} onLaunched={vi.fn()} />);
+    await waitFor(() => expect(screen.getByTestId('launch-qe')).toBeTruthy());
+    await user.click(screen.getByTestId('launch-qe-force'));
+    rerender(<ChatInput runId={null} runStatus={null} onLaunched={vi.fn()} workflowOverride="chat" />);
+    await waitFor(() => expect(screen.queryByTestId('launch-qe')).toBeNull());
+    rerender(<ChatInput runId={null} runStatus={null} onLaunched={vi.fn()} />);
+    await waitFor(() => expect(screen.getByTestId('launch-qe')).toBeTruthy());
+    expect((screen.getByTestId('launch-qe-force') as HTMLInputElement).checked).toBe(false);
+  });
+
   it('a daemon that does not take it: not offered, nothing sent', async () => {
     health(false);
     render(<ChatInput runId={null} runStatus={null} onLaunched={vi.fn()} />);

@@ -288,7 +288,6 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   const [skipQe, setSkipQe] = useState(false);
   const [skipQeReason, setSkipQeReason] = useState('');
   const [forceQe, setForceQe] = useState(false);
-  const offerQe = daemonQe && workflowRequiresQe(workflows.find((w) => w.id === workflow));
   /** studio#275: the BASE skill posture for the next launch (`GET /health.baseSkill`); `undefined`
    *  until read and on a daemon before the field. */
   const [baseSkill, setBaseSkill] = useState<BaseSkillPosture | null | undefined>(undefined);
@@ -390,6 +389,16 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   // (`plan` and `workflow` are mutually exclusive) and is build work.
   const [pickerOpen, setPickerOpen] = useState(false);
   const selection = usePhaseSelection(pickerOpen);
+  // QE-IN-APP-WORKFLOWS (codex r1): offered for the workflow this launch actually sends — the
+  // override, else the picked one — and never for a composed plan, whose requirement the form
+  // cannot know. A change of that target clears the word: a tick is never carried to another one.
+  const qeTarget = selection.plan === null ? launchWorkflow : '';
+  const offerQe = daemonQe && qeTarget !== '' && workflowRequiresQe(workflows.find((w) => w.id === qeTarget));
+  useEffect(() => {
+    setSkipQe(false);
+    setSkipQeReason('');
+    setForceQe(false);
+  }, [qeTarget]);
   const launchKind: RunKind = selection.composing ? 'build' : deliverKind(launchWorkflow);
   // What is attached, as the resolver counts it — the chips, the Target-repo
   // options and the preflight's "no repository" all read this one list.
