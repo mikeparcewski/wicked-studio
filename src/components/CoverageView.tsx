@@ -14,7 +14,7 @@ function pct(n: number): string {
  *  `coverage` is `(resolved + risk_flagged) / behavior_bearing`, which the engine documents as
  *  "vacuously 1.0 when behavior_bearing == 0". Rendering that as "100.0%" told an operator their
  *  unannotated repo was fully covered (FINDING-009). 0/0 is undefined, not complete. */
-function coveragePct(r: { behavior_bearing: number; coverage: number; unaccounted: number }): string {
+export function coveragePct(r: { behavior_bearing: number; coverage: number; unaccounted: number }): string {
   if (r.behavior_bearing === 0) return '—';
   // Never let ROUNDING claim a completeness the gate denies. 9,999 of 10,000 is 99.99%, which
   // `toFixed(1)` renders as "100.0%" — displayed next to a GATE FAIL badge, since the engine gates

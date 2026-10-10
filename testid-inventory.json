@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.6.8",
   "counts": {
-    "files": 173,
-    "occurrences": 1954,
-    "static": 1740,
+    "files": 174,
+    "occurrences": 1966,
+    "static": 1752,
     "dynamic": 37,
     "computed": 6
   },
@@ -5120,6 +5120,36 @@
       ]
     },
     {
+      "testId": "project-coverage",
+      "files": [
+        "src/components/product/ProjectAggregates.tsx"
+      ]
+    },
+    {
+      "testId": "project-coverage-empty",
+      "files": [
+        "src/components/product/ProjectAggregates.tsx"
+      ]
+    },
+    {
+      "testId": "project-coverage-error",
+      "files": [
+        "src/components/product/ProjectAggregates.tsx"
+      ]
+    },
+    {
+      "testId": "project-coverage-row",
+      "files": [
+        "src/components/product/ProjectAggregates.tsx"
+      ]
+    },
+    {
+      "testId": "project-coverage-totals",
+      "files": [
+        "src/components/product/ProjectAggregates.tsx"
+      ]
+    },
+    {
       "testId": "project-docs-root",
       "files": [
         "src/components/ProjectDocumentsRoot.tsx"
@@ -5165,6 +5195,48 @@
       "testId": "project-docs-root-value",
       "files": [
         "src/components/ProjectDocumentsRoot.tsx"
+      ]
+    },
+    {
+      "testId": "project-domain",
+      "files": [
+        "src/components/product/ProjectAggregates.tsx"
+      ]
+    },
+    {
+      "testId": "project-domain-empty",
+      "files": [
+        "src/components/product/ProjectAggregates.tsx"
+      ]
+    },
+    {
+      "testId": "project-domain-error",
+      "files": [
+        "src/components/product/ProjectAggregates.tsx"
+      ]
+    },
+    {
+      "testId": "project-domain-merged",
+      "files": [
+        "src/components/product/ProjectAggregates.tsx"
+      ]
+    },
+    {
+      "testId": "project-domain-merged-row",
+      "files": [
+        "src/components/product/ProjectAggregates.tsx"
+      ]
+    },
+    {
+      "testId": "project-domain-row",
+      "files": [
+        "src/components/product/ProjectAggregates.tsx"
+      ]
+    },
+    {
+      "testId": "project-domain-totals",
+      "files": [
+        "src/components/product/ProjectAggregates.tsx"
       ]
     },
     {
