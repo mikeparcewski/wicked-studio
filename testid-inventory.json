@@ -12,8 +12,8 @@
   "studioVersion": "0.6.8",
   "counts": {
     "files": 173,
-    "occurrences": 1944,
-    "static": 1730,
+    "occurrences": 1947,
+    "static": 1733,
     "dynamic": 37,
     "computed": 6
   },
@@ -1116,6 +1116,24 @@
     },
     {
       "testId": "composer-refused",
+      "files": [
+        "src/components/session/Composer.tsx"
+      ]
+    },
+    {
+      "testId": "composer-seat",
+      "files": [
+        "src/components/session/Composer.tsx"
+      ]
+    },
+    {
+      "testId": "composer-seats",
+      "files": [
+        "src/components/session/Composer.tsx"
+      ]
+    },
+    {
+      "testId": "composer-seats-refused",
       "files": [
         "src/components/session/Composer.tsx"
       ]

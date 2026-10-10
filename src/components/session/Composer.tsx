@@ -15,6 +15,8 @@ import {
 import { gateInstance } from '../../board/proposalCard.js';
 import { sessionPath } from '../../board/sessionModel.js';
 import { useRoster } from '../../hooks/useRoster.js';
+import { defaultSelection } from '../../board/chatOpen.js';
+import { chosenSeats, NO_SEAT_PICKED, useComposerSeats } from '../../store/composerSeats.js';
 import { loadCatalog, loadPresets, usePlanCatalog } from '../../store/planCatalog.js';
 import { usePlanGate } from '../../store/planGates.js';
 import { addGateDraftStep, queueMidRunStep } from '../../store/planDrafts.js';
@@ -140,6 +142,7 @@ export function Composer({
   const wfChip = (chips.find((c) => c.kind === 'workflow') as Extract<AboutChip, { kind: 'workflow' }> | undefined) ?? null;
   const chatIdOnLaunch = useCapabilities((s) => s.chatIdOnLaunch);
   const deliverGate = useCapabilities((s) => s.deliverGate);
+  const askPathOn = useCapabilities((s) => s.askPath);
   const own = useRef<HTMLTextAreaElement | null>(null);
   const box = inputRef ?? own;
   const [caret, setCaret] = useState(0);
@@ -200,11 +203,41 @@ export function Composer({
   const active = count === 0 ? 0 : Math.min(cursor, count - 1);
 
   const refusal = composerSendRefusal(roster, project !== null);
+  // studio#631: which seats THIS send uses — the launch form's rule (every eligible seat, minus the
+  // ones you turned off), shown and editable here. A workflow launch convenes the council seats; an
+  // Ask's first send opens a chat with the seats the daemon would admit to it. A reply into a started
+  // chat keeps that chat's seats, so the row is not offered there.
+  const dropped = useComposerSeats((s) => s.dropped);
+  const toggleSeat = useComposerSeats((s) => s.toggle);
+  const eligibleSeats = useMemo(() => {
+    if (roster === null) return [];
+    // A handed-over Ask always opens SCOPED (the dock remounts per handoff, and its default scope is
+    // the route's project or everything — only a manual `system` pick is unscoped), so the row reads
+    // the scoped admission AskDock sends with (codex r1 on #631).
+    return wfChip !== null ? roster.filter((s) => s.enabled_for_council).map((s) => s.key) : defaultSelection(roster, true);
+  }, [roster, wfChip]);
+  // Shown while a send is being composed (words typed, or a workflow named) — an idle Desk keeps its
+  // fold (the desk_home fit), and the row is there whenever there is something to send.
+  // A send opens a chat before the first send, and after it whenever an `@project` chip starts a
+  // fresh session there (`fresh: started` below) — both take the row's seats (codex r2 on #631).
+  const opensChat = !started || project !== null;
+  const showSeats = eligibleSeats.length > 0 && (wfChip !== null || (opensChat && text.trim() !== ''));
+  const sendSeats = chosenSeats(eligibleSeats, dropped);
+  // An `@helper` named to answer (ASK-S1) but turned off in the row would be silently dropped as the
+  // chat's primary — refused instead, by name (codex r1 on #631).
+  const namedHelper = wfChip === null && opensChat && askPathOn
+    ? chips.find((c) => c.kind === 'about' && c.key.startsWith('h:'))
+    : undefined;
+  const namedDropped = namedHelper !== undefined && dropped.includes(namedHelper.key.slice(2));
+  const seatRefusal = !showSeats ? null
+    : sendSeats.length === 0 ? NO_SEAT_PICKED
+      : namedDropped ? `${namedHelper?.label ?? 'The helper you named'} is named to answer but is left out of the helpers row — turn it on, or remove the chip.`
+        : null;
   const launchState = wfChip !== null ? workflowLaunchState(repoRef, roster) : null;
   const wfDef = wfChip !== null ? (defs ?? []).find((d) => d.id === wfChip.workflowId) ?? null : null;
   // A named def that runs no code is not a delivering launch; an unknown name (a preset) may deliver.
   const deliverVisible = wfChip !== null && (wfDef === null ? true : wfDef.phases.some((p) => p.executes_code));
-  const canSend = text.trim() !== '' && refusal === null && (launchState === null || launchState.ready) && !launching;
+  const canSend = text.trim() !== '' && refusal === null && seatRefusal === null && (launchState === null || launchState.ready) && !launching;
 
   // S19a: the composer reads the SAME gate rule the launch form does — the `before:N` shift past the
   // PA's scope step included — so a launch from here and one from the form can never disagree.
@@ -306,7 +339,8 @@ export function Composer({
     // Everything that can fail — the launch preview's gate placement included — sits inside the try,
     // so a refusal is said on screen and the composer never stays "Launching…".
     try {
-      const seats = (roster ?? []).filter((s) => s.enabled_for_council);
+      // studio#631: only the seats the helpers row has on — never the whole council behind the row's back.
+      const seats = (roster ?? []).filter((s) => s.enabled_for_council && !dropped.includes(s.key));
       const body: LaunchBodyWithDeliver = { problem: intent, workflow: workflowId };
       if (seats.length > 0) body.clisJson = JSON.stringify(seats);
       const targetRepo = repoRef ?? (repos !== null && repos.length === 1 ? repos[0]?.id ?? null : null);
@@ -462,6 +496,31 @@ export function Composer({
                 )}
           </span>
           {launchError !== null && <span data-testid="composer-launch-error" role="alert" className="wk-composer-note wk-composer-note--bad">{launchError}</span>}
+        </div>
+      )}
+      {showSeats && (
+        <div data-testid="composer-seats" role="group" aria-label="Helpers this send uses" className="wk-composer-chips">
+          <span className="wk-composer-note">helpers:</span>
+          {eligibleSeats.map((key) => {
+            const on = !dropped.includes(key);
+            const seat = (roster ?? []).find((s) => s.key === key);
+            return (
+              <button
+                key={key}
+                type="button"
+                data-testid="composer-seat"
+                data-key={key}
+                aria-pressed={on}
+                title={on ? `${seat?.display_name || key} takes part — click to leave it out` : `${seat?.display_name || key} is left out — click to include it`}
+                onClick={() => toggleSeat(key)}
+                className="wk-composer-chip"
+                style={on ? undefined : { opacity: 0.45, textDecoration: 'line-through' }}
+              >
+                {key}
+              </button>
+            );
+          })}
+          {seatRefusal !== null && <span data-testid="composer-seats-refused" role="status" className="wk-composer-note wk-composer-note--bad">{seatRefusal}</span>}
         </div>
       )}
       <form className="wk-desk-composer" onSubmit={(e) => { e.preventDefault(); send(); }}>

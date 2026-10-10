@@ -11,6 +11,7 @@ import { useMembershipStore } from '../store/membership.js';
 import { useProjectsStore } from '../store/projects.js';
 import { fetchReposCached, getCachedRepos } from '../store/repoCache.js';
 import { getCachedRoster, setCachedRoster } from '../store/rosterCache.js';
+import { chosenSeats, NO_SEAT_PICKED, useComposerSeats } from '../store/composerSeats.js';
 import {
   askPrompts,
   buildContextPack,
@@ -277,7 +278,10 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
             roster = fetched;
           }
           const choice = scopeChoiceRef.current;
-          const clis = defaultSelection(roster, askScopeIsScoped(choice));
+          // studio#631: the composer's helpers row decides — the admitted seats minus the ones turned off.
+          const eligible = defaultSelection(roster, askScopeIsScoped(choice));
+          const clis = chosenSeats(eligible, useComposerSeats.getState().dropped);
+          if (eligible.length > 0 && clis.length === 0) throw new Error(NO_SEAT_PICKED);
           id = crypto.randomUUID();
           const body: ChatOpenBody = { chatId: id, ...askScopeOpenFields(choice, ambientProjectId(packInputs.current.pathname)) };
           if (clis.length > 0) body.clis = clis;
