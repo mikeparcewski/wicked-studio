@@ -1,4 +1,5 @@
 import { RunPoolNote } from '../RunPoolNote.js';
+import { RunInventoryNote, inventoryProgress } from '../RunInventoryNote.js';
 import { useEffect, useMemo } from 'react';
 import type { CoreEvent, SessionView } from '../../api/types.js';
 import { endedAtMs, finishedAtMs } from '../../board/needsYou.js';
@@ -106,6 +107,7 @@ export function RunRecordLines({ view, jumped, navigate }: {
       <RunIntentAmendments session={view.session} />
       <RunDegradedNote events={events} />
       <RunPoolNote events={events} units={view.units} />
+      <RunInventoryNote runId={view.session.id} progress={inventoryProgress(view.session.status, view.units)} />
       <WatchRunLines runId={runId} jumped={jumped} onBack={() => window.history.back()} isTerminal={isTerminal} endedMs={endedMs} />
     </>
   );

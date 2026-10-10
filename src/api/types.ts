@@ -208,3 +208,29 @@ export interface RunAcceptanceView {
 // `InteractiveDocDeleteLedgerReport` / `InteractiveDocDeleteResponse` are the contract's (imported
 // at the top of this file); the notes below describe the wire they name.
 
+
+// ── GET /runs/:id/inventory (wicked-crew#721, crew#917) ─────────────────────────
+//
+// Typed here until the pinned wicked-crew-api-types carries `RunInventoryResponse` (crew#926 adds
+// it); the shapes mirror crew's route exactly. Swap these for the contract's on the next pin.
+
+/** How fully an enumerating step's source answered. `unknown`: crew could not read the claim. */
+export type InventoryAnswered = 'full' | 'partial' | 'none' | 'unknown';
+
+/** One `wicked-inventory` block a step ended its reply with. */
+export interface InventoryClaim {
+  source: string | null;
+  answered: InventoryAnswered;
+  listed: number | null;
+  expected: number | null;
+  unread: string[];
+}
+
+/** `GET /runs/:id/inventory`: whether each enumerating step's list is complete. */
+export interface RunInventoryResponse {
+  runId: string;
+  readable: boolean;
+  complete: boolean;
+  units: { ord: number; unitId: string; claims: InventoryClaim[] }[];
+  unreadUnits: string[];
+}

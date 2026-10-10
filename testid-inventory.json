@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.7.1",
   "counts": {
-    "files": 177,
-    "occurrences": 2025,
-    "static": 1799,
+    "files": 178,
+    "occurrences": 2027,
+    "static": 1801,
     "dynamic": 43,
     "computed": 6
   },
@@ -6437,6 +6437,18 @@
       "testId": "run-intent-amendments",
       "files": [
         "src/components/RunIntentAmendments.tsx"
+      ]
+    },
+    {
+      "testId": "run-inventory",
+      "files": [
+        "src/components/RunInventoryNote.tsx"
+      ]
+    },
+    {
+      "testId": "run-inventory-line",
+      "files": [
+        "src/components/RunInventoryNote.tsx"
       ]
     },
     {
