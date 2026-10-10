@@ -1,3 +1,4 @@
+import { planRefusalWords } from '../api/planRefusal.js';
 import type { CoreEvent, SessionView, WorkUnit } from '../api/types.js';
 import {
   distributionAgreementPct, distributionDegradedReason, distributionDistinctnessFallback,
@@ -507,8 +508,14 @@ export function narrate(event: CoreEvent, ctx: NarratorContext): NarrationLine |
       return line('Run failed', 'fail');
     case 'runCancelled':
       return line('Run cancelled', 'info');
-    case 'error':
-      return line(`Error: ${clip(str(event.message)) || 'unspecified'}`, 'fail');
+    case 'error': {
+      // studio#665: a run a plan refusal failed mid-run says why in words, naming the rule — the
+      // clipped engine text alone can cut the rule off.
+      const refusal = planRefusalWords(str(event.message));
+      return refusal !== null
+        ? line(`Run stopped: ${refusal}`, 'fail')
+        : line(`Error: ${clip(str(event.message)) || 'unspecified'}`, 'fail');
+    }
     default:
       return null; // silent: deltas, heartbeat, terminal*, cliUsage, workerSession*, acpSession*, …
   }

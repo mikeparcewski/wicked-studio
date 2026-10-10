@@ -7,10 +7,22 @@
  * `null` and the caller shows the engine's text.
  */
 
-/** The token as the engine's `PlanRefusal` Display writes it: at the start of the text, or behind a
- *  context prefix that ends in `: ` (`the plan is refused: <token>: …`), and always followed by `: `
- *  — never a bare mention inside another refusal's detail (a step named `writes_nothing_on_code`). */
-const TOKEN = /(?:^|: )(security_review_on_non_code_plan|writes_nothing_on_code): /;
+/** The tokens this table words. */
+const WORDED = new Set(['security_review_on_non_code_plan', 'writes_nothing_on_code']);
+
+/**
+ * The refusal token as the engine writes it: the FIRST `snake_case` segment of the `: `-joined text.
+ * Context prefixes have spaces (`the plan is refused`, `run r1`) and are skipped; the first token-
+ * shaped segment is the refusal's own, so a token-shaped step id inside another refusal's detail
+ * (`unknown_catalog_entry: step inspect: writes_nothing_on_code: …`) never matches.
+ */
+function leadingToken(text: string): string | null {
+  for (const seg of text.split(': ')) {
+    const t = seg.trim();
+    if (/^[a-z][a-z0-9]*(_[a-z0-9]+)+$/.test(t)) return t;
+  }
+  return null;
+}
 
 /** The held rule a refusal names (`… (rule TST-1002 requires it) …`), or null. */
 export function refusingRule(reason: string): string | null {
@@ -19,7 +31,8 @@ export function refusingRule(reason: string): string | null {
 
 /** The operator-facing sentence for a refusal whose token this table knows, else `null`. */
 export function planRefusalWords(reason: string): string | null {
-  const token = TOKEN.exec(reason)?.[1];
+  const lead = leadingToken(reason);
+  const token = lead !== null && WORDED.has(lead) ? lead : null;
   if (token === 'security_review_on_non_code_plan') {
     const rule = refusingRule(reason);
     return `a security review was asked for on a run that writes no code${rule !== null ? ` (rule ${rule} requires it)` : ''} — its code-evidence check could never pass`;
