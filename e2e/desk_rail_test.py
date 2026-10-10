@@ -46,7 +46,7 @@ def check(step: str, ok: bool, **detail) -> None:
 
 RAIL = """() => {
   const rail = document.querySelector('[data-testid="session-rail"]');
-  const ids = ['desk-rail-home', 'desk-rail-watch', 'rail-group', 'desk-rail-start', 'desk-rail-skills', 'desk-rail-mcp',
+  const ids = ['desk-rail-home', 'desk-rail-watch', 'rail-group', 'desk-rail-start', 'desk-rail-product', 'desk-rail-skills', 'desk-rail-mcp',
                'desk-rail-steering', 'rail-health-section', 'desk-rail-more'];
   const seen = [];
   for (const el of rail.querySelectorAll('[data-testid]')) {
@@ -99,9 +99,9 @@ with sync_playwright() as p:
     # ── 1. the order ─────────────────────────────────────────────────────────────
     r = page.evaluate(RAIL)
     check("order",
-          r["order"] == ['desk-rail-home', 'desk-rail-watch', 'rail-group', 'desk-rail-start', 'desk-rail-skills', 'desk-rail-mcp',
+          r["order"] == ['desk-rail-home', 'desk-rail-watch', 'rail-group', 'desk-rail-start', 'desk-rail-product', 'desk-rail-skills', 'desk-rail-mcp',
                          'desk-rail-steering', 'rail-health-section', 'desk-rail-more']
-          and r["dests"] == ["watch", "section:skills", "section:mcp", "section:steering", "health"]
+          and r["dests"] == ["watch", "section:product", "section:skills", "section:mcp", "section:steering", "health"]
           and not r["bell"] and "Rules" not in r["text"] and "Everything else" not in r["text"]
           and "Steering" in r["text"] and "Skills" in r["text"] and "MCP tools" in r["text"]
           and r["steering"] == "/rules" and (r["more"] or "").startswith("Additional settings"),
@@ -125,7 +125,7 @@ with sync_playwright() as p:
 
     # ── 3. the rail entries navigate and mark the current one ────────────────────
     went = {}
-    for tid, path in (("desk-rail-steering", "/rules"), ("desk-rail-skills", "/skills"), ("desk-rail-mcp", "/mcp")):
+    for tid, path in (("desk-rail-product", "/product"), ("desk-rail-steering", "/rules"), ("desk-rail-skills", "/skills"), ("desk-rail-mcp", "/mcp")):
         page.get_by_test_id(tid).click()
         page.wait_for_function(f"() => window.location.pathname === '{path}'", timeout=5000)
         went[tid] = {"path": page.evaluate("() => window.location.pathname"),

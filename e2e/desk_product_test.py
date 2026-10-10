@@ -1,7 +1,10 @@
-"""Journey: the project's Coverage and Domain sections (studio#158) at 1440x700 on the Desk.
+"""Journey: the project's Coverage and Domain sections (studio#158) and the Product view (studio#157)
+at 1440x700 on the Desk.
 
 crew's project folds (crew#371: GET /projects/:id/{coverage,domain}) are stubbed with page.route,
-so the journey pins studio's rendering of the published wire. Every member repo is a row with its
+and the Product view's fold and compose launch (crew#371/#372: GET /projects/:id/requirements,
+POST /projects/:id/product/compose) are stubbed with page.route, so the journey pins studio's
+rendering of the published wire. Every member repo is a row with its
 state, an unread one names crew's reason, and the synthesized `default` project draws neither section.
 
 Captures: e2e/shots/desk-product-*.png. Env: FEEDBACK_PORT (default 4471).
@@ -117,6 +120,46 @@ with sync_playwright() as p:
     page.wait_for_timeout(500)
     on_default = page.get_by_test_id("project-coverage").count() + page.get_by_test_id("project-domain").count()
     check("default-none", on_default == 0 and folds == [], on_default=on_default, folds=folds)
+
+    # ── 5. Product: the rail entry, one project's requirements, Draft epics → the run's session ──
+    def req(n, **extra):
+        return {"key": f"k{n}", "domain": "billing", "reqId": f"REQ-{n}", "title": f"Refund rule {n}", "category": "functional",
+                "statement": "s", "status": "draft", "risk": False, "riskSource": None, "edited": False, **extra}
+    REQS = {"projectId": "shop", "offset": 0, "limit": 50,
+            "totals": {**TOTALS, "total": 3, "corpus": 3},
+            "rows": [{"repo": {"id": "r-api", "name": "shop-api"}, "state": "ok", "total": 3, "corpus": 3, "orphanedOverrides": 0,
+                      "items": [req(1, risk=True), req(2), req(3)]},
+                     {"repo": {"id": "r-web", "name": "shop-web"}, "state": "absent", "reason": "no requirements artifact yet",
+                      "total": 0, "corpus": 0, "orphanedOverrides": 0, "items": []}]}
+    composes: list = []
+
+    def compose_route(route):
+        composes.append(route.request.post_data_json)
+        route.fulfill(status=202, json={"runId": "r-auth", "requirements": len(route.request.post_data_json["requirements"])})
+
+    page.route("**/api/v1/projects/shop/requirements*", lambda r: r.fulfill(status=200, json=REQS))
+    page.route("**/api/v1/projects/shop/product/compose", compose_route)
+    page.goto(f"{origin}/", wait_until="networkidle")
+    page.get_by_test_id("desk-rail-product").click()
+    page.wait_for_function("() => window.location.pathname === '/product'", timeout=5000)
+    page.get_by_test_id("product-page").wait_for(state="visible", timeout=8000)
+    rail_current = page.get_by_test_id("desk-rail-product").get_attribute("aria-current")
+    page.goto(f"{origin}/product?project=shop", wait_until="networkidle")
+    page.get_by_test_id("product-repo").wait_for(state="visible", timeout=15000)
+    reqs = page.get_by_test_id("product-requirement").evaluate_all("els => els.map(e => e.dataset.key)")
+    unread = page.get_by_test_id("product-repo-unread").inner_text()
+    picks = page.get_by_test_id("product-requirement-pick")
+    picks.nth(0).check()
+    picks.nth(2).check()
+    page.get_by_test_id("product-instructions").fill("one epic per domain")
+    chosen = page.get_by_test_id("product-chosen").inner_text()
+    page.screenshot(path=str(SHOTS / "desk-product-view.png"))
+    check("product-list", rail_current == "page" and reqs == ["k1", "k2", "k3"] and "no requirements artifact yet" in unread
+          and chosen.startswith("2 requirements chosen"), rail_current=rail_current, reqs=reqs, unread=unread, chosen=chosen)
+    page.get_by_test_id("product-draft").click()
+    page.wait_for_function("() => window.location.pathname.startsWith('/s/')", timeout=8000)
+    check("product-draft", composes == [{"requirements": [{"repoId": "r-api", "key": "k1"}, {"repoId": "r-api", "key": "k3"}], "instructions": "one epic per domain"}]
+          and page.url.endswith("/s/run%3Ar-auth"), composes=composes, url=page.url)
 
     check("no-page-errors", not errors, errors=errors[:5])
     browser.close()

@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.6.8",
   "counts": {
-    "files": 174,
-    "occurrences": 1966,
-    "static": 1752,
+    "files": 175,
+    "occurrences": 1991,
+    "static": 1777,
     "dynamic": 37,
     "computed": 6
   },
@@ -1636,6 +1636,12 @@
       "testId": "desk-rail-more",
       "files": [
         "src/components/desk/SessionRail.tsx"
+      ]
+    },
+    {
+      "testId": "desk-rail-product",
+      "files": [
+        "src/board/deskModel.ts"
       ]
     },
     {
@@ -5117,6 +5123,150 @@
       "testId": "preview-steps",
       "files": [
         "src/components/LaunchPreview.tsx"
+      ]
+    },
+    {
+      "testId": "product-absent",
+      "files": [
+        "src/components/product/ProductPage.tsx"
+      ]
+    },
+    {
+      "testId": "product-chosen",
+      "files": [
+        "src/components/product/ProductPage.tsx"
+      ]
+    },
+    {
+      "testId": "product-clear",
+      "files": [
+        "src/components/product/ProductPage.tsx"
+      ]
+    },
+    {
+      "testId": "product-compose",
+      "files": [
+        "src/components/product/ProductPage.tsx"
+      ]
+    },
+    {
+      "testId": "product-compose-error",
+      "files": [
+        "src/components/product/ProductPage.tsx"
+      ]
+    },
+    {
+      "testId": "product-draft",
+      "files": [
+        "src/components/product/ProductPage.tsx"
+      ]
+    },
+    {
+      "testId": "product-empty",
+      "files": [
+        "src/components/product/ProductPage.tsx"
+      ]
+    },
+    {
+      "testId": "product-error",
+      "files": [
+        "src/components/product/ProductPage.tsx"
+      ]
+    },
+    {
+      "testId": "product-instructions",
+      "files": [
+        "src/components/product/ProductPage.tsx"
+      ]
+    },
+    {
+      "testId": "product-loading",
+      "files": [
+        "src/components/product/ProductPage.tsx"
+      ]
+    },
+    {
+      "testId": "product-next",
+      "files": [
+        "src/components/product/ProductPage.tsx"
+      ]
+    },
+    {
+      "testId": "product-no-project",
+      "files": [
+        "src/components/product/ProductPage.tsx"
+      ]
+    },
+    {
+      "testId": "product-page",
+      "files": [
+        "src/components/product/ProductPage.tsx"
+      ]
+    },
+    {
+      "testId": "product-prev",
+      "files": [
+        "src/components/product/ProductPage.tsx"
+      ]
+    },
+    {
+      "testId": "product-project",
+      "files": [
+        "src/components/product/ProductPage.tsx"
+      ]
+    },
+    {
+      "testId": "product-project-link",
+      "files": [
+        "src/components/product/ProductPage.tsx"
+      ]
+    },
+    {
+      "testId": "product-repo",
+      "files": [
+        "src/components/product/ProductPage.tsx"
+      ]
+    },
+    {
+      "testId": "product-repo-unread",
+      "files": [
+        "src/components/product/ProductPage.tsx"
+      ]
+    },
+    {
+      "testId": "product-requirement",
+      "files": [
+        "src/components/product/ProductPage.tsx"
+      ]
+    },
+    {
+      "testId": "product-requirement-pick",
+      "files": [
+        "src/components/product/ProductPage.tsx"
+      ]
+    },
+    {
+      "testId": "product-requirements",
+      "files": [
+        "src/components/product/ProductPage.tsx"
+      ]
+    },
+    {
+      "testId": "product-search",
+      "files": [
+        "src/components/product/ProductPage.tsx"
+      ]
+    },
+    {
+      "testId": "product-status",
+      "files": [
+        "src/components/product/ProductPage.tsx"
+      ]
+    },
+    {
+      "testId": "product-totals",
+      "files": [
+        "src/components/product/ProductPage.tsx"
       ]
     },
     {

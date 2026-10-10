@@ -196,8 +196,8 @@ describe('chores for whoever runs studio', () => {
 });
 
 describe('the rail destinations', () => {
-  it('the rail: Skills · MCP tools · Steering; Additional settings: Configuration, Repositories, Workflows, Evals, Theme (Amendment 5)', () => {
-    expect(DESK_RAIL_LINKS.map((l) => [l.label, l.path])).toEqual([['Skills', '/skills'], ['MCP tools', '/mcp'], ['Steering', '/rules']]);
+  it('the rail: Product · Skills · MCP tools · Steering; Additional settings: Configuration, Repositories, Workflows, Evals, Theme (Amendment 5)', () => {
+    expect(DESK_RAIL_LINKS.map((l) => [l.label, l.path])).toEqual([['Product', '/product'], ['Skills', '/skills'], ['MCP tools', '/mcp'], ['Steering', '/rules']]);
     expect(ADDITIONAL_SETTINGS.map((d) => [d.label, d.path])).toEqual([
       ['Configuration', '/system'], ['Repositories', '/repos'], ['Workflows', '/workflows'], ['Evals', '/testing/evals'], ['Theme', '/theme'],
     ]);

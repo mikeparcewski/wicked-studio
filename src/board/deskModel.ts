@@ -291,6 +291,8 @@ export function lapsedSeatChores(roster: readonly RosterSeat[] | null): DeskChor
  * away; Steering is the Rules page (`/rules`, S12), the steering grid one link behind it.
  */
 export const DESK_RAIL_LINKS: readonly { dest: string; label: string; path: string; testId: string }[] = [
+  // studio#157: Product — what we are building (requirements → drafted epics), above the run levers.
+  { dest: 'section:product', label: 'Product', path: '/product', testId: 'desk-rail-product' },
   { dest: 'section:skills', label: 'Skills', path: skillsPath(), testId: 'desk-rail-skills' },
   { dest: 'section:mcp', label: 'MCP tools', path: mcpPath(), testId: 'desk-rail-mcp' },
   { dest: 'section:steering', label: 'Steering', path: '/rules', testId: 'desk-rail-steering' },
