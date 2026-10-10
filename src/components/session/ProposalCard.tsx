@@ -23,6 +23,8 @@ import { PlanGateSummary } from '../PlanGateSummary.js';
 import { useSeatTrust } from './GateDepth.js';
 import { DriftLine } from './GateRow.js';
 import { useDiffDrift } from '../../store/gateDiffSeen.js';
+import { deliveryReceiptOf } from '../../board/assuranceModel.js';
+import { AssuranceReceipt } from './AssuranceReceipt.js';
 
 /**
  * THE PROPOSAL CARD (DES-STUDIO-REBUILD-001 §3 scenes 07/08/24/42, slice S6b): a run's plan or
@@ -65,6 +67,9 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
   const eventsRaw = useRunEvents(runId).events ?? undefined;
   // studio#577: the acceptance line, with the run's own evidence when crew's gate has no verdict.
   const accept = deliverAcceptance(acceptance, ownEvidenceOf(eventsRaw ?? []));
+  // core#850: the delivery's assurance receipt — what the run required, what its gates ran and
+  // skipped, who built and checked it, the tree delivered.
+  const deliveryReceipt = deliveryReceiptOf(view, eventsRaw ?? null);
   // Fetch the diff for deliver cards — primary diffstat source (GET /runs/:id/diff?base=merge-base).
   // Keyed by runId so a run change re-fetches and stale responses are discarded.
   const [runDiffState, setRunDiffState] = useState<{ runId: string; data: RunDiff } | null>(null);
@@ -192,6 +197,8 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
           {card.kind === 'deliver' && accept !== null && (
             <p data-testid="session-proposal-acceptance" data-tone={accept.tone} className={`wk-prop-why wk-prop-accept wk-prop-accept--${accept.tone}`}>{accept.text}</p>
           )}
+          {/* A re-opened deliver gate after a failed hand-over: what checked the work, never "accepted". */}
+          {card.kind === 'deliver' && deliveryReceipt !== null && <AssuranceReceipt receipt={deliveryReceipt} passed={deliverFailure === null ? true : null} testId="session-proposal-assurance" />}
           {/* The engine's own card (the origin's path, the run branch): underneath only (studio#444). */}
           {card.kind === 'deliver' && (() => {
             // Branch: prefer session.run_branch; fall back to the diff's branch field (source:'branch').
@@ -306,6 +313,7 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
           )}
         </p>
       )}
+      {card.state === 'done' && card.kind === 'deliver' && deliveryReceipt !== null && <AssuranceReceipt receipt={deliveryReceipt} passed testId="session-proposal-assurance" />}
       {card.state === 'fail' && (
         <>
           <p className="wk-prop-status">

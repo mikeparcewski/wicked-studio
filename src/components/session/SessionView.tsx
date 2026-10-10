@@ -31,6 +31,7 @@ import { startRetry } from './RunActions.js';
 import { Tech, runTechParts } from '../Tech.js';
 import { parseJump } from '../../store/watch.js';
 import { GateRow } from './GateRow.js';
+import { RunAssuranceLabel } from './AssuranceReceipt.js';
 import { ChatQuestions, RunQuestions } from './ThreadQuestions.js';
 import { SourceChips } from './SourceChips.js';
 import { SinceYouLeft } from './SinceYouLeft.js';
@@ -730,6 +731,7 @@ export function RunBlock({ view, badge, sessionId, navigate }: {
       <p className="wk-session-run-head">
         <span aria-hidden className={`wk-desk-dot wk-desk-dot--${state}`} />
         <span className="wk-session-run-title">{plainRunTitle(view.session.problem || id)}</span>
+        <RunAssuranceLabel view={view} />
         <span className="wk-session-run-state">{badge > 0 ? 'Needs you' : STATE_WORD[state]}</span>
         {/* S15d (Amendment 5 item 1): the run stays in the thread — its depth (every step and what it did,
             the changes, the evidence) is the look-underneath sheet of THIS run (its own `run:` session,
@@ -759,7 +761,7 @@ export function RunBlock({ view, badge, sessionId, navigate }: {
           ? <ProposalCard view={view} chain={chain} acceptance={acceptance?.summary ?? null} handedOver />
           : finished === 'stranded'
             ? <StrandedCard view={view} />
-            : <GateRow view={view} gate={gate} />}
+            : <GateRow view={view} gate={gate} {...(navigate !== undefined ? { navigate } : {})} />}
       {/* S16a-4g: an MCP server's question and the stall watchdog's hand-off, under the run's card. */}
       <RunQuestions view={view} />
       <PlanStepLines runId={id} />

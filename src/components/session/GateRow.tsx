@@ -16,6 +16,9 @@ import { useRerunFromHere } from '../../hooks/useRerunFromHere.js';
 import type { RerunOffer } from '../rerunModel.js';
 import { GateDepthDetails, RuleOfferBlock, useFullVerdict, useSeatTrust, type SeatTrust } from './GateDepth.js';
 import { WatchGateLine } from '../WatchLines.js';
+import { gatePassedFor, gateReceiptFor, isReduced, sessionAssurance, waitsForJudge } from '../../board/assuranceModel.js';
+import type { Navigate } from '../../hooks/useRoute.js';
+import { AssuranceReceipt, ReducedAssuranceLabel } from './AssuranceReceipt.js';
 
 /**
  * EVERY GATE KIND ANSWERABLE IN THE SESSION THREAD (S15e): an answerable row rendered inside
@@ -56,14 +59,16 @@ function formatSentTime(ts: number): string {
  * event hydration (a chat has no run log), no depth; every answer still goes through
  * `commitGateDecision` with its undo window.
  */
-export function GateRow({ view, gate, chatId }: {
+export function GateRow({ view, gate, chatId, navigate }: {
   view: RunView | null;
   gate: OpenGate | undefined;
   /** The chat id the gate is keyed by — required when `view` is null. */
   chatId?: string;
+  /** core#850: the seat gates' links (sign a judge seat in). Absent: the line names Settings. */
+  navigate?: Navigate;
 }): React.ReactElement | null {
   if (view === null) return chatId === undefined ? null : <ChatGateRow chatId={chatId} gate={gate} />;
-  return <RunGateRow view={view} gate={gate} />;
+  return <RunGateRow view={view} gate={gate} {...(navigate !== undefined ? { navigate } : {})} />;
 }
 
 const NO_UNITS: readonly never[] = [];
@@ -77,7 +82,7 @@ function ChatGateRow({ chatId, gate }: { chatId: string; gate: OpenGate | undefi
   return <GateRowBody runId={chatId} gate={gate} model={model} seat={null} rerunOffer={null} eventsUnavailable={false} retryEvents={() => undefined} depth={null} />;
 }
 
-function RunGateRow({ view, gate }: { view: RunView; gate: OpenGate | undefined }): React.ReactElement | null {
+function RunGateRow({ view, gate, navigate }: { view: RunView; gate: OpenGate | undefined; navigate?: Navigate }): React.ReactElement | null {
   const runId = view.session.id;
   // studio#558: the session page's one run-event read (shared with ProposalCard / OrphanedRow).
   const { events, failed: eventsFetchFailed, retry: retryEvents } = useRunEvents(runId);
@@ -134,12 +139,53 @@ function RunGateRow({ view, gate }: { view: RunView; gate: OpenGate | undefined 
   const depth = gate !== undefined && model !== null
     ? <GateDepthDetails view={view} gate={gate} failing={model.failing} reviewedOrd={model.reviewedOrd} source={model.source} underReview={model.reason === 'def'} />
     : null;
+  // core#850: what assured the evaluation this gate is about (the unit the deciding verdict judged),
+  // and the run's own contract — a reduced run says so on every gate, receipt or not.
+  // A pre-run gate (`def`) is about the previous unit's evaluation; every other gate — an escalation,
+  // a retry, a refused hand-over — only about its OWN unit's (never a neighbour's acceptance).
+  const receiptOrd = model === null || gate === undefined ? null
+    : model.reason === 'def' ? model.reviewedOrd
+      : model.reviewedOrd === gate.ord ? gate.ord : null;
+  const receipt = gateReceiptFor(events, view.units, receiptOrd);
+  const reduced = isReduced(sessionAssurance(view, events));
+  const judgeWait = gate !== undefined && model !== null && waitsForJudge(events, gate.ord, gate.prompt);
+  const assurance = model === null ? null : (
+    <>
+      {judgeWait && <JudgeWaitLine {...(navigate !== undefined ? { navigate } : {})} />}
+      {receipt !== null
+        ? <AssuranceReceipt receipt={receipt} passed={gatePassedFor(events, receiptOrd)} testId="session-gate-assurance" />
+        : reduced && <p className="wk-assurance"><ReducedAssuranceLabel testId="session-gate-reduced" /></p>}
+    </>
+  );
   return (
     <GateRowBody
       runId={runId} gate={gate} model={model} seat={seat} rerunOffer={rerunOffer}
       eventsUnavailable={gate !== undefined && events === null && eventsFetchFailed}
       retryEvents={retryEvents} depth={depth} refusalLines={refusalLines} drift={drift}
+      assurance={assurance}
     />
+  );
+}
+
+/**
+ * core#850 EX-02: a required judge that could not run HOLDS the gate — the work was not rejected.
+ * The row says it is waiting for a judge seat and offers the one move that ends the wait: sign a
+ * judge seat in (Settings › CLI seats), then Approve re-runs the phase with the judge.
+ */
+export function JudgeWaitLine({ navigate }: { navigate?: Navigate }): React.ReactElement {
+  return (
+    <p data-testid="session-gate-judge-wait" role="status" className="wk-gate-consequence">
+      <b>Waiting for a judge seat.</b> This run requires a judge, and no seat distinct from the one that
+      built the work could judge it. The work was not rejected: sign a judge seat in, then Approve to
+      re-run the step with the judge.{' '}
+      {navigate !== undefined
+        ? (
+          <button type="button" data-testid="session-gate-judge-signin" onClick={() => navigate('/system')} className="wk-since-toggle">
+            Sign a judge seat in ›
+          </button>
+        )
+        : <span data-testid="session-gate-judge-signin">Sign one in from Settings.</span>}
+    </p>
   );
 }
 
@@ -169,7 +215,7 @@ export function refusalWords(r: DeliverRefusal, at: { branch: string | null; rep
   return { lead, consent };
 }
 
-function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, retryEvents, depth, refusalLines = null, drift = null }: {
+function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, retryEvents, depth, refusalLines = null, drift = null, assurance = null }: {
   runId: string;
   gate: OpenGate | undefined;
   model: GateRowModel | null;
@@ -185,6 +231,8 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
   refusalLines?: { lead: string; consent: string } | null;
   /** studio#244: the diff against the operator's last decision on this run; null = nothing to say. */
   drift?: DiffDrift | null;
+  /** core#850: the assurance receipt (and the judge wait); null on a chat's gate. */
+  assurance?: React.ReactNode;
 }): React.ReactElement | null {
   const action = useGateActionStore((s) => s.byGate[runId] ?? IDLE_GATE_ACTION);
   const showPath = useDisplayPath();
@@ -418,6 +466,7 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
     >
       <p data-testid="session-gate-question" className="wk-session-gate-question">{question}</p>
       {drift !== null && <DriftLine drift={drift} />}
+      {assurance}
       {refusalLines !== null && (
         <>
           <p data-testid="session-gate-refusal" className="wk-session-gate-detail-item">{refusalLines.lead}</p>
