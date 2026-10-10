@@ -6,7 +6,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../src/api/client.js';
 import { runEndedWord, runWhenWord } from '../src/components/runIdentity.js';
-import { buildDef, builderPhaseOf } from '../src/components/WorkflowViewer.js';
+import { buildPresetSteps, builderPhaseOf, catalogOfPhase } from '../src/components/WorkflowViewer.js';
 import type { PhaseDef, WorkflowDef } from '../src/api/types.js';
 
 function setLocation(url: string): void {
@@ -59,7 +59,7 @@ describe('run clocks — the run record first, the attach clock as the fallback 
   });
 });
 
-describe('workflow builder round-trip (F-RC1-093)', () => {
+describe('preset builder round-trip (F-RC1-093; X-MIG M11: the builder saves a preset)', () => {
   const phase: PhaseDef = {
     id: 'churn',
     kind: 'recon',
@@ -76,25 +76,35 @@ describe('workflow builder round-trip (F-RC1-093)', () => {
   };
   const def: WorkflowDef = { id: 'capture-learnings', phases: [phase, { ...phase, id: 'hotspots', depends_on: ['churn'], executor: { type: 'tool', cmd: ['echo', 'hi'] } }] };
 
-  it('builderPhaseOf carries the four fields; buildDef writes them back verbatim (was: nulled on every save)', async () => {
-    const built = await buildDef(def.id, def.phases.map(builderPhaseOf));
-    expect(built.id).toBe('capture-learnings');
-    expect(built.phases.map((p) => [p.id, p.skill_ref, p.allowed_skills, p.required_deliverables, p.validator_pin])).toEqual([
-      ['churn', 'wicked-garden-repo-learn', ['wicked-garden-search'], ['NOTES.md'], 'wicked-validator:evidence-floor@1'],
-      ['hotspots', 'wicked-garden-repo-learn', ['wicked-garden-search'], ['NOTES.md'], 'wicked-validator:evidence-floor@1'],
-    ]);
-    // the tool executor survives the trip too
-    expect(built.phases[1]!.executor).toEqual({ type: 'tool', cmd: ['echo', 'hi'] });
-    expect(built.phases[0]!.executor).toEqual({ type: 'agent' });
+  it('a def maps onto catalog steps: an agent recon phase is `understand`, a Tool phase is `run`', () => {
+    expect(def.phases.map(catalogOfPhase)).toEqual(['understand', 'run']);
+    expect(catalogOfPhase({ kind: 'build', role: 'creator' })).toBe('build');
+    expect(catalogOfPhase({ kind: 'build', role: 'neutral' })).toBe('produce');
+    expect(catalogOfPhase({ kind: 'review', role: 'evaluator' })).toBe('review');
+    expect(catalogOfPhase({ kind: 'review', role: 'neutral' })).toBe('critique');
+    expect(catalogOfPhase({ kind: 'test', role: 'evaluator' })).toBe('test');
   });
 
-  it('a def without the fields (older shape) still builds — null / [] defaults, never undefined', async () => {
+  it('builderPhaseOf carries the four fields; buildPresetSteps writes them back verbatim (was: nulled on every save)', async () => {
+    const steps = await buildPresetSteps(def.phases.map(builderPhaseOf));
+    expect(steps.map((s) => [s.catalog, s.id, s['skill_ref'], s['allowed_skills'], s['required_deliverables'], s['validator_pin']])).toEqual([
+      ['understand', 'churn', 'wicked-garden-repo-learn', ['wicked-garden-search'], ['NOTES.md'], 'wicked-validator:evidence-floor@1'],
+      ['run', 'hotspots', 'wicked-garden-repo-learn', ['wicked-garden-search'], ['NOTES.md'], 'wicked-validator:evidence-floor@1'],
+    ]);
+    // A Tool step carries its command; an agent step carries no executor at all.
+    expect(steps[1]!['executor']).toEqual({ type: 'tool', cmd: ['echo', 'hi'] });
+    expect('executor' in steps[0]!).toBe(false);
+    // An `auto` gate is the entry's own: not stated.
+    expect('gate' in steps[0]!).toBe(false);
+  });
+
+  it('a def without the fields (older shape) still builds — the step states none of them', async () => {
     const bare = { ...phase } as Partial<PhaseDef> as PhaseDef;
     delete (bare as Partial<PhaseDef>).skill_ref;
     delete (bare as Partial<PhaseDef>).allowed_skills;
     delete (bare as Partial<PhaseDef>).required_deliverables;
     delete (bare as Partial<PhaseDef>).validator_pin;
-    const built = await buildDef('x', [builderPhaseOf(bare)]);
-    expect(built.phases[0]).toMatchObject({ skill_ref: null, allowed_skills: [], required_deliverables: [], validator_pin: null });
+    const [step] = await buildPresetSteps([builderPhaseOf(bare)]);
+    expect(step).toEqual({ catalog: 'understand', id: 'churn', depends_on: [] });
   });
 });

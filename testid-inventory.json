@@ -12,8 +12,8 @@
   "studioVersion": "0.7.3",
   "counts": {
     "files": 178,
-    "occurrences": 2040,
-    "static": 1807,
+    "occurrences": 2042,
+    "static": 1809,
     "dynamic": 48,
     "computed": 6
   },
@@ -547,6 +547,18 @@
       "testId": "brand-learn",
       "files": [
         "src/components/BrandLearn.tsx"
+      ]
+    },
+    {
+      "testId": "builder-step-catalog",
+      "files": [
+        "src/components/WorkflowViewer.tsx"
+      ]
+    },
+    {
+      "testId": "builder-step-role",
+      "files": [
+        "src/components/WorkflowViewer.tsx"
       ]
     },
     {

@@ -3,6 +3,7 @@ import { api } from '../api/client.js';
 import type { GateSpec, PhaseDef, PhaseExecutor, WorkflowDef } from '../api/types.js';
 import { setCachedWorkflows } from '../store/workflowCache.js';
 import { refusedWorkflowsOf, type RefusedWorkflow } from '../api/wave6-wire.js';
+import { teamPlanApi, type CatalogEntry } from '../api/teamPlan.js';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -90,14 +91,16 @@ type ScriptLang = 'bash' | 'python' | 'sh';
 interface BuilderPhase {
   _key: string;
   id: string;
-  kind: 'recon' | 'build' | 'review' | 'test';
+  /** (X-MIG M11) The phase-catalog entry the step instantiates; its kind and role come from it. */
+  catalog: string;
+  /** The step's own instructions, carried verbatim (a step may set them where its entry has none). */
+  instructions: string | null;
   execMode: ExecMode;
   cmd: string;
   script: string;
   scriptLang: ScriptLang;
   scriptPath: string;
   gate: GateMode;
-  role: 'neutral' | 'creator' | 'evaluator';
   dependsOn: string[];
   executesCode: boolean;
   verifiedEvidence: boolean;
@@ -109,20 +112,30 @@ interface BuilderPhase {
 }
 
 /** A def's phase as the builder holds it — the ONE def→builder mapper (the editor and the JSON
- *  import used two copies; F-RC1-093 needs both to carry the four fields `buildDef` writes back). */
+ *  import used two copies; F-RC1-093 needs both to carry the four fields `buildPresetSteps` writes back). */
+/** The catalog entry a def's phase maps onto (X-MIG M11, the §11.2 rule): a Tool phase is a `run`
+ *  step; an agent phase by its kind and role. */
+export function catalogOfPhase(p: Pick<PhaseDef, 'kind' | 'role' | 'executor'>): string {
+  if (p.executor?.type === 'tool') return 'run';
+  if (p.kind === 'recon') return 'understand';
+  if (p.kind === 'test') return 'test';
+  if (p.kind === 'review') return p.role === 'evaluator' ? 'review' : 'critique';
+  return p.role === 'creator' ? 'build' : 'produce';
+}
+
 export function builderPhaseOf(p: PhaseDef): BuilderPhase {
   const ex = p.executor;
   return {
     _key: Math.random().toString(36).slice(2),
     id: p.id,
-    kind: p.kind,
+    catalog: catalogOfPhase(p),
+    instructions: p.instructions ?? null,
     execMode: ex?.type === 'tool' ? 'command' : 'agent',
     cmd: ex?.type === 'tool' ? ex.cmd.join(' ') : '',
     script: '',
     scriptLang: 'bash',
     scriptPath: '',
     gate: p.gate === 'auto' ? 'auto' : (typeof p.gate === 'object' && p.gate !== null && 'human_confirm_if' in p.gate) ? 'human_if' : 'human',
-    role: p.role,
     dependsOn: p.depends_on,
     executesCode: p.executes_code,
     verifiedEvidence: p.verified_evidence,
@@ -137,14 +150,14 @@ function emptyPhase(): BuilderPhase {
   return {
     _key: Math.random().toString(36).slice(2),
     id: '',
-    kind: 'build',
+    catalog: 'build',
+    instructions: null,
     execMode: 'agent',
     cmd: '',
     script: '',
     scriptLang: 'bash',
     scriptPath: '',
     gate: 'auto',
-    role: 'neutral',
     dependsOn: [],
     executesCode: false,
     verifiedEvidence: false,
@@ -173,27 +186,63 @@ async function resolveExecutor(p: BuilderPhase): Promise<PhaseExecutor> {
   return { type: 'tool', cmd: [interp, path] };
 }
 
-export async function buildDef(id: string, phases: BuilderPhase[]): Promise<WorkflowDef> {
-  const resolvedPhases: PhaseDef[] = await Promise.all(
-    phases.map(async (p, i): Promise<PhaseDef> => ({
-      id: p.id || `phase-${i + 1}`,
-      kind: p.kind,
-      gate_type: p.gate === 'auto' ? null : 'execution',
-      gate: toGateSpec(p.gate),
-      executes_code: p.executesCode,
-      verified_evidence: p.verifiedEvidence,
-      // F-RC1-093: written back VERBATIM from the loaded def — a save used to null `skill_ref`
-      // (and empty the other three) on every workflow that carried them.
-      required_deliverables: p.requiredDeliverables,
-      depends_on: p.dependsOn,
-      role: p.role,
-      skill_ref: p.skillRef,
-      allowed_skills: p.allowedSkills,
-      validator_pin: p.validatorPin,
-      executor: await resolveExecutor(p),
-    })),
+/** One preset step as `PUT /presets/:name` takes it (X-MIG M11: the builder saves a preset). */
+export interface BuilderStep {
+  catalog: string;
+  id: string;
+  [k: string]: unknown;
+}
+
+/**
+ * The preset steps the builder's phases make. A step states a field only where it differs from what
+ * its entry would give, and only in the direction the engine accepts (a gate raised, code or
+ * verified evidence declared, a skill or instructions set); the ENGINE composes the preset and refuses
+ * a step that weakens its entry, naming the rule (`PUT /presets` answers with its words).
+ */
+export async function buildPresetSteps(phases: BuilderPhase[]): Promise<BuilderStep[]> {
+  return Promise.all(
+    phases.map(async (p, i): Promise<BuilderStep> => {
+      const step: BuilderStep = { catalog: p.catalog, id: p.id || `phase-${i + 1}`, depends_on: p.dependsOn };
+      if (p.gate !== 'auto') step['gate'] = toGateSpec(p.gate);
+      if (p.instructions !== null && p.instructions !== '') step['instructions'] = p.instructions;
+      if (p.executesCode) step['executes_code'] = true;
+      if (p.verifiedEvidence) step['verified_evidence'] = true;
+      // F-RC1-093: carried back VERBATIM — a save used to null them on every workflow that had them.
+      if (p.skillRef !== null) step['skill_ref'] = p.skillRef;
+      if (p.allowedSkills.length > 0) step['allowed_skills'] = p.allowedSkills;
+      if (p.requiredDeliverables.length > 0) step['required_deliverables'] = p.requiredDeliverables;
+      if (p.validatorPin !== null) step['validator_pin'] = p.validatorPin;
+      // A Tool command rides only a tool entry (`run`); an agent entry takes none.
+      if (p.execMode !== 'agent') step['executor'] = await resolveExecutor(p);
+      return step;
+    }),
   );
-  return { id, phases: resolvedPhases };
+}
+
+/** The saved preset as the viewer lists it this session: each step laid over its entry. */
+function presetSummary(name: string, steps: BuilderStep[], entries: CatalogEntry[]): WorkflowDef {
+  return {
+    id: name,
+    phases: steps.map((st): PhaseDef => {
+      const e = entries.find((x) => x.id === st.catalog);
+      return {
+        id: st.id,
+        kind: e?.kind ?? 'build',
+        instructions: typeof st['instructions'] === 'string' ? st['instructions'] : null,
+        gate_type: e?.gate_type ?? null,
+        gate: (st['gate'] as GateSpec | undefined) ?? e?.gate ?? 'auto',
+        executes_code: st['executes_code'] === true || e?.executes_code === true,
+        verified_evidence: st['verified_evidence'] === true || e?.verified_evidence === true,
+        required_deliverables: (st['required_deliverables'] as string[] | undefined) ?? [],
+        depends_on: (st['depends_on'] as string[] | undefined) ?? [],
+        role: e?.role ?? 'neutral',
+        skill_ref: (st['skill_ref'] as string | undefined) ?? e?.skill_ref ?? null,
+        allowed_skills: (st['allowed_skills'] as string[] | undefined) ?? [],
+        validator_pin: (st['validator_pin'] as string | undefined) ?? e?.validator_pin ?? null,
+        ...(st['executor'] !== undefined ? { executor: st['executor'] as PhaseExecutor } : {}),
+      };
+    }),
+  };
 }
 
 // ── Phase editor ───────────────────────────────────────────────────────────────
@@ -229,6 +278,7 @@ function PhaseEditor({
   index,
   total,
   allIds,
+  entries,
   onChange,
   onRemove,
   onMoveUp,
@@ -238,6 +288,8 @@ function PhaseEditor({
   index: number;
   total: number;
   allIds: string[];
+  /** The engine's phase catalog (`GET /catalog`): a step is one of its entries. */
+  entries: CatalogEntry[];
   onChange: (p: BuilderPhase) => void;
   onRemove: () => void;
   onMoveUp: () => void;
@@ -245,6 +297,8 @@ function PhaseEditor({
 }): React.ReactElement {
   const up = <T,>(field: keyof BuilderPhase, val: T) => onChange({ ...phase, [field]: val } as BuilderPhase);
   const prior = allIds.slice(0, index);
+  const entry = entries.find((e) => e.id === phase.catalog);
+  const toolEntry = entry?.executor === 'tool';
 
   return (
     <div
@@ -253,7 +307,7 @@ function PhaseEditor({
     >
       {/* header */}
       <div className="flex items-center gap-2">
-        <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: kindDotColor(phase.kind) }} />
+        <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: kindDotColor(entry?.kind ?? 'build') }} />
         <span className="text-[11px] font-semibold" style={{ color: 'var(--ink-muted)' }}>Phase {index + 1}</span>
         <div className="ml-auto flex items-center gap-1">
           <button
@@ -289,23 +343,29 @@ function PhaseEditor({
           style={inputStyle}
         />
         <select
+          data-testid="builder-step-catalog"
           className="rounded px-2 py-1 text-xs focus:outline-none"
-          value={phase.kind}
-          onChange={(e) => up('kind', e.target.value as BuilderPhase['kind'])}
+          value={phase.catalog}
+          onChange={(e) => {
+            const next = entries.find((x) => x.id === e.target.value);
+            // A tool entry runs a command; an agent entry runs a seat — the exec mode follows the entry.
+            onChange({ ...phase, catalog: e.target.value, execMode: next?.executor === 'tool' ? (phase.execMode === 'agent' ? 'command' : phase.execMode) : 'agent' });
+          }}
           style={inputStyle}
         >
-          {(['recon', 'build', 'review', 'test'] as const).map((k) => (
-            <option key={k} value={k}>{k}</option>
+          {(entries.length > 0 ? entries.map((x) => x.id) : [phase.catalog]).map((id) => (
+            <option key={id} value={id}>{id}</option>
           ))}
         </select>
       </div>
 
-      {/* executor */}
+      {/* executor: a tool entry (`run`) runs a command or a script; an agent entry runs a seat */}
+      {toolEntry && (
       <div className="flex flex-col gap-1.5">
         <div className="flex gap-1">
-          {(['agent', 'command', 'script'] as ExecMode[]).map((m) => (
+          {(['command', 'script'] as ExecMode[]).map((m) => (
             <ToggleBtn key={m} active={phase.execMode === m} onClick={() => up('execMode', m)}>
-              {m === 'agent' ? 'Agent' : m === 'command' ? 'Command' : 'Script'}
+              {m === 'command' ? 'Command' : 'Script'}
             </ToggleBtn>
           ))}
         </div>
@@ -347,6 +407,7 @@ function PhaseEditor({
           </div>
         )}
       </div>
+      )}
 
       {/* gate + role */}
       <div className="flex gap-2 flex-wrap">
@@ -360,15 +421,11 @@ function PhaseEditor({
             ))}
           </div>
         </div>
-        <div className="flex flex-col gap-0.5">
+        <div className="flex flex-col gap-0.5" data-testid="builder-step-role">
           <span className="text-[10px] font-mono" style={{ color: 'var(--ink-dim)' }}>Role</span>
-          <div className="flex gap-1">
-            {(['neutral', 'creator', 'evaluator'] as const).map((r) => (
-              <ToggleBtn key={r} active={phase.role === r} onClick={() => up('role', r)}>
-                {r}
-              </ToggleBtn>
-            ))}
-          </div>
+          <span className="text-[11px] font-mono" style={{ color: 'var(--ink-muted)' }}>
+            {entry ? `${entry.role} · ${entry.kind} (the catalog's)` : '—'}
+          </span>
         </div>
       </div>
 
@@ -428,6 +485,11 @@ function WorkflowBuilder({
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** The engine's phase catalog: every step is one of its entries (X-MIG M11). */
+  const [entries, setEntries] = useState<CatalogEntry[]>([]);
+  useEffect(() => {
+    teamPlanApi.catalog().then((c) => setEntries(c.entries)).catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)));
+  }, []);
   const [showJson, setShowJson] = useState(false);
   const [previewJson, setPreviewJson] = useState('');
 
@@ -451,21 +513,24 @@ function WorkflowBuilder({
 
   async function handlePreview() {
     try {
-      const def = await buildDef(workflowId, phases);
-      setPreviewJson(JSON.stringify(def, null, 2));
+      const steps = await buildPresetSteps(phases);
+      setPreviewJson(JSON.stringify({ name: workflowId, steps }, null, 2));
       setShowJson(true);
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
   }
 
   async function handleSave() {
-    if (!workflowId.trim()) { setError('Workflow ID is required'); return; }
+    if (!workflowId.trim()) { setError('A preset name is required'); return; }
     if (phases.length === 0) { setError('At least one phase is required'); return; }
     setSaving(true);
     setError(null);
     try {
-      const def = await buildDef(workflowId.trim(), phases);
-      await api.createWorkflow(def);
-      onSaved(def);
+      // X-MIG M11: the builder saves a PRESET (`PUT /presets/:name`); the engine composes its steps
+      // over the catalog and refuses one that weakens its entry, in words (translateWireError).
+      const name = workflowId.trim();
+      const steps = await buildPresetSteps(phases);
+      await teamPlanApi.putPreset(name, { steps });
+      onSaved(presetSummary(name, steps, entries));
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     finally { setSaving(false); }
   }
@@ -493,7 +558,7 @@ function WorkflowBuilder({
       <div className="flex items-center gap-2 flex-wrap">
         <input
           className="flex-1 rounded px-2 py-1 text-xs font-semibold focus:outline-none"
-          placeholder="workflow-id (e.g. my-deploy)"
+          placeholder="preset name (e.g. my-deploy)"
           value={workflowId}
           onChange={(e) => setWorkflowId(e.target.value)}
           style={inputStyle}
@@ -552,6 +617,7 @@ function WorkflowBuilder({
             index={i}
             total={phases.length}
             allIds={allIds}
+            entries={entries}
             onChange={(updated) => updatePhase(i, updated)}
             onRemove={() => removePhase(i)}
             onMoveUp={() => moveUp(i)}
@@ -578,7 +644,7 @@ function WorkflowBuilder({
         className="self-start rounded px-4 py-1.5 text-[11px] font-semibold disabled:opacity-50"
         style={{ background: 'var(--status-run)', color: 'var(--surface-base)' }}
       >
-        {saving ? 'Saving…' : 'Save workflow'}
+        {saving ? 'Saving…' : 'Save preset'}
       </button>
     </div>
   );
