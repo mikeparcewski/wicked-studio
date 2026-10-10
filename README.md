@@ -28,8 +28,8 @@ reasoning in a scrollback you'll never read. wicked-studio flips that:
   assurance**, an explicit opt-in that the launch form and composer also offer on a one-seat roster.
   A reduced run is labelled "Reduced assurance" on the session, every gate and the delivery. A team run
   never grades on its creator's seat. A required judge that could not run holds its gate as "Waiting
-  for a judge seat"; it is not a rejection. Every gate row and the delivery carry the run's
-  **assurance receipt**:
+  for a judge seat"; it is not a rejection. A gate row or delivery whose evaluation the engine
+  recorded one for (wicked-core-ts 0.7.46 and later) shows the run's **assurance receipt**:
   - what the run required and what actually ran;
   - who built, evaluated and judged the work, and whether those were separate seats;
   - what was skipped and why;
