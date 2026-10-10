@@ -1,3 +1,4 @@
+import { useEffect, useLayoutEffect, useRef } from 'react';
 import { WORKFLOWS_EMPTY_LINE, WORKFLOWS_LOADING_LINE, type WorkflowRow } from '../../board/workflowCommand.js';
 import type { SlashItem } from '../../board/planDraft.js';
 
@@ -47,8 +48,40 @@ export function SlashMenu({
 }): React.ReactElement {
   const count = trigger === '/' ? wf.length + slash.length : ats.length;
   const headLine = head ?? (trigger === '/' ? (startCommands ? 'Start work, or add a step' : 'Add a step to this session') : 'Name a project or a helper');
+  const menuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    menuRef.current?.querySelector('[aria-selected="true"]')?.scrollIntoView?.({ block: 'nearest' });
+  }, [active]);
+  // On narrow viewports the menu's absolute positioning can be clipped by an overflow:hidden ancestor.
+  // Switch to fixed (escaping all clip contexts) and compute coordinates from the composer's screen rect.
+  const applyNarrowFixed = useRef(() => {});
+  applyNarrowFixed.current = () => {
+    const el = menuRef.current;
+    if (!el) return;
+    el.style.position = '';
+    el.style.left = '';
+    el.style.right = '';
+    el.style.bottom = '';
+    el.style.width = '';
+    const vw = window.innerWidth;
+    if (vw > 600) return;
+    const parent = el.offsetParent as HTMLElement | null;
+    const parentRect = parent?.getBoundingClientRect() ?? { top: window.innerHeight / 2, left: 0 };
+    const menuW = Math.min(480, vw - 24);
+    el.style.position = 'fixed';
+    el.style.width = `${menuW}px`;
+    el.style.bottom = `${window.innerHeight - parentRect.top + 6}px`;
+    el.style.left = `${Math.max(12, Math.min(parentRect.left, vw - menuW - 12))}px`;
+    el.style.right = 'auto';
+  };
+  useLayoutEffect(() => applyNarrowFixed.current());
+  useEffect(() => {
+    const handler = () => applyNarrowFixed.current();
+    window.addEventListener('resize', handler);
+    return () => window.removeEventListener('resize', handler);
+  }, []);
   return (
-    <div data-testid="composer-menu" id={`composer-menu-list-${menuKey}`} data-trigger={trigger} role="listbox" aria-label={ariaLabel ?? (trigger === '/' ? 'Add a step' : 'Name a project or a helper')} className="wk-composer-menu">
+    <div ref={menuRef} data-testid="composer-menu" id={`composer-menu-list-${menuKey}`} data-trigger={trigger} role="listbox" aria-label={ariaLabel ?? (trigger === '/' ? 'Add a step' : 'Name a project or a helper')} className="wk-composer-menu">
       <p className="wk-composer-menu-head">{headLine} · ↑↓ Enter</p>
       {count === 0 && startCommands && defsLoading && <p data-testid="composer-menu-empty" className="wk-composer-menu-empty">{WORKFLOWS_LOADING_LINE}</p>}
       {count === 0 && startCommands && !defsLoading && !anyWorkflows && <p data-testid="composer-menu-empty" className="wk-composer-menu-empty">{WORKFLOWS_EMPTY_LINE}</p>}
@@ -71,8 +104,8 @@ export function SlashMenu({
               onMouseDown={(e) => { e.preventDefault(); onPickWorkflow(it); }}
               className={`wk-composer-menu-item${i === active ? ' wk-composer-menu-item--on' : ''}`}
             >
-              <code className="wk-composer-cmd">/{it.cmd}</code>
-              <span><b>{it.key}</b> <small>{it.line}</small></span>
+              <span className="wk-composer-cmd"><span className="wk-composer-cmd-pfx">/{it.cmd.slice(0, it.cmd.length - it.key.length)}</span><b>{it.key}</b></span>
+              <small className="wk-composer-cmd-desc">{it.line}</small>
             </button>
           ))}
         </>
@@ -96,8 +129,8 @@ export function SlashMenu({
           onMouseDown={(e) => { e.preventDefault(); onPickSlash?.(it); }}
           className={`wk-composer-menu-item${wf.length + i === active ? ' wk-composer-menu-item--on' : ''}${it.refused !== null ? ' wk-composer-menu-item--off' : ''}`}
         >
-          <code className="wk-composer-cmd">/{it.command.cmd}</code>
-          <span><b>{it.command.word}</b> <small>{it.refused ?? it.command.line}</small></span>
+          <span className="wk-composer-cmd"><span className="wk-composer-cmd-pfx">/</span><b>{it.command.cmd}</b></span>
+          <small className="wk-composer-cmd-desc">{it.refused ?? it.command.line}</small>
         </button>
       ))}
       {trigger === '@' && ats.map((it, i) => (
@@ -110,11 +143,12 @@ export function SlashMenu({
           data-testid="composer-menu-item"
           data-kind={it.kind}
           data-id={it.id}
+          title={it.line}
           onMouseDown={(e) => { e.preventDefault(); onPickAt?.(it); }}
           className={`wk-composer-menu-item${i === active ? ' wk-composer-menu-item--on' : ''}`}
         >
-          <code className="wk-composer-cmd">@</code>
-          <span><b>{it.label}</b> <small>{it.line}</small></span>
+          <span className="wk-composer-cmd"><span className="wk-composer-cmd-pfx">@</span><b>{it.label}</b></span>
+          <small className="wk-composer-cmd-desc">{it.line}</small>
         </button>
       ))}
     </div>

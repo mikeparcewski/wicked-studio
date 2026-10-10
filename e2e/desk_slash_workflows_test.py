@@ -111,6 +111,69 @@ with sync_playwright() as p:
           and len(feature_line) == 1 and "2 phases: plan → build" in feature_line[0],
           groups=groups, cmds=cmds, feature_line=feature_line)
 
+    # ── compact menu geometry: 1440×700 ──────────────────────────────────────────
+    _GEO_JS = """() => {
+        const menu = document.querySelector('[data-testid="composer-menu"]');
+        if (!menu) return { missing: true };
+        const box = menu.getBoundingClientRect();
+        const items = [...document.querySelectorAll('[data-testid="composer-menu-item"]')];
+        const rowHeights = items.map(e => Math.round(e.getBoundingClientRect().height));
+        const keyOnce = items.every(e => {
+            const key = e.dataset.workflow || e.dataset.cmd || '';
+            if (!key) return true;
+            const cnt = (e.innerText.toLowerCase().split(key.toLowerCase())).length - 1;
+            return cnt === 1;
+        });
+        const rowsHit = items.every(e => {
+            const rect = e.getBoundingClientRect();
+            const probeX = rect.left + 8;
+            const probeY = rect.top + rect.height / 2;
+            if (probeX < 0 || probeY < 0 || probeX > window.innerWidth || probeY > window.innerHeight) return false;
+            const hit = document.elementFromPoint(probeX, probeY);
+            return hit !== null && (e.contains(hit) || e === hit);
+        });
+        return {
+            inView: box.x >= 0 && box.y >= 0 && box.right <= window.innerWidth && box.bottom <= window.innerHeight,
+            maxRowH: Math.max(...rowHeights, 0),
+            keyOnce,
+            rowsHit,
+            hscroll: document.documentElement.scrollWidth > window.innerWidth + 1
+        };
+    }"""
+    page.screenshot(path=str(SHOTS / "desk-slash-menu-1440-dark.png"))
+    page.evaluate("() => { document.documentElement.dataset.theme = 'wicked-light'; }")
+    page.screenshot(path=str(SHOTS / "desk-slash-menu-1440-light.png"))
+    page.evaluate("() => { delete document.documentElement.dataset.theme; }")
+    geo_1440 = page.evaluate(_GEO_JS)
+    check("compact-menu-1440",
+          geo_1440.get("inView") and geo_1440.get("maxRowH", 99) <= 32
+          and geo_1440.get("keyOnce") and geo_1440.get("rowsHit") and not geo_1440.get("hscroll"),
+          geo=geo_1440)
+
+    # ── compact menu geometry: 390×844 ───────────────────────────────────────────
+    narrow = browser.new_page(viewport={"width": 390, "height": 844}, device_scale_factor=2)
+    narrow.on("pageerror", lambda e: errors.append(str(e)))
+    narrow.add_init_script(
+        "document.addEventListener('DOMContentLoaded', () => { const s = document.createElement('style'); "
+        f"s.textContent = {json.dumps(HIDE_GATE_TOASTS)}; document.head.appendChild(s); }});")
+    set_fixture(origin, workflow_catalog=True, repo=True, sessions=True, reset_gate_posts=True)
+    narrow.goto(f"{origin}/", wait_until="networkidle")
+    narrow.get_by_test_id("desk-composer-input").wait_for(state="visible", timeout=15000)
+    narrow_box = narrow.get_by_test_id("desk-composer-input")
+    narrow_box.click()
+    narrow_box.type("/wo")
+    narrow.get_by_test_id("composer-menu").wait_for(state="visible", timeout=8000)
+    narrow.screenshot(path=str(SHOTS / "desk-slash-menu-390-dark.png"))
+    narrow.evaluate("() => { document.documentElement.dataset.theme = 'wicked-light'; }")
+    narrow.screenshot(path=str(SHOTS / "desk-slash-menu-390-light.png"))
+    narrow.evaluate("() => { delete document.documentElement.dataset.theme; }")
+    geo_390 = narrow.evaluate(_GEO_JS)
+    narrow.close()
+    check("compact-menu-390",
+          geo_390.get("inView") and geo_390.get("maxRowH", 99) <= 32
+          and geo_390.get("keyOnce") and geo_390.get("rowsHit") and not geo_390.get("hscroll"),
+          geo=geo_390)
+
     page.locator('[data-testid="composer-menu-item"][data-cmd="workflow-bug"]').click()
     page.get_by_test_id("composer-chip").wait_for(state="visible", timeout=8000)
     chip = page.get_by_test_id("composer-chip").inner_text()
