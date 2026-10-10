@@ -11,10 +11,11 @@ SteeringGate), which is gone: a run lives on its session thread (`/s/run:<id>`) 
        old card-detaches assertion was wrong for a status-driven surface; the proof is the WIRE —
        after the undo window the fixture's gate tap holds exactly one `{approve: true, ord: 1}` —
        and the row's receipt ("You chose: Approve, …").
-  LC-3 Archived lens + Unarchive, and
-  LC-4 leaving the lens hides the archived row while live runs stay: both are the CI-wired
-       `desk_everything_archive` journey (steps 2 and 3, on the Everything page that replaced the
-       Work board's chip). They are not duplicated here.
+  LC-3 Archived lens + Unarchive: the CI-wired `desk_everything_archive` journey (steps 2–3, on the
+       Everything page that replaced the Work board's chip); not duplicated here.
+  LC-4 Lens switching keeps archived runs apart: with one run archived (`GET /runs` leaves it out,
+       `?include=archived` carries it, as crew#265 serves it), the All lens shows a live run and not
+       the archived one; Archived shows it; back on All it is gone again and the live run stays.
   LC-5 Repo register form (`/repos/new`): Register is disabled until both name and path are set;
        submit POSTs `/api/v1/repos {name, rootPath}` and lands on `/repo-detail/<id>` (the POST is
        answered by a Playwright route, so the fixture needs no register switch).
@@ -105,29 +106,89 @@ with sync_playwright() as p:
     page.get_by_test_id("session-gate-row").wait_for(state="visible", timeout=15000)
     page.locator('[data-testid="session-gate-choice"][data-choice-key="approve"]').click()
     page.get_by_test_id("session-gate-chosen").wait_for(state="visible", timeout=10000)
+    # The undo window is 10 s: still nothing on the wire 8 s in (a send at 1 s would fail here) …
+    page.wait_for_timeout(8_000)
     check("lc2-nothing-sent-in-undo-window", gate_posts("r-home-gate") == [])
-    page.wait_for_timeout(11_500)  # the 10 s undo window
-    posts = gate_posts("r-home-gate")
+    # … then the one POST and the settled receipt, polled (a loaded runner's timer may lag).
+    posts: list = []
+    chosen = ""
+    for _ in range(60):
+        posts = gate_posts("r-home-gate")
+        chosen = page.get_by_test_id("session-gate-chosen").inner_text() if page.get_by_test_id("session-gate-chosen").count() else ""
+        if posts and chosen.startswith("You chose: Approve,"):
+            break
+        page.wait_for_timeout(250)
     bodies = [x.get("body", {}) for x in posts]
-    chosen = page.get_by_test_id("session-gate-chosen").inner_text()
     page.screenshot(path=str(SHOTS / "desk-run-lifecycle-lc2.png"))
     check("lc2-one-approve-with-its-gate",
           len(bodies) == 1 and bodies[0].get("approve") is True and bodies[0].get("ord") == 1,
           bodies=bodies)
     check("lc2-row-says-what-was-sent", chosen.startswith("You chose: Approve,"), chosen=chosen)
 
+    # ── LC-4: lens switching keeps archived runs apart ───────────────────────────────────────
+    ARCHIVED_ID = "r-lc-archived"
+
+    def archived_run() -> dict:
+        return {"session": {
+            "id": ARCHIVED_ID, "workflow_id": "bug", "problem": "LC archived leftover", "entity_mode": "shared",
+            "collection_scope": None, "clis": ["claude"], "status": "cancelled", "human_confirm": "none",
+            "unit_ix": 1, "attempt": 0, "workdir": None, "repo_ref": None, "extra_write_roots": [],
+            "archived_at": 1_759_601_000, "archive_note": None, "project_id": None,
+            "created_at": 1_759_600_000, "ended_at": 1_759_600_600,
+        }, "units": [{
+            "id": f"{ARCHIVED_ID}:u0", "session_id": ARCHIVED_ID, "ord": 0, "description": "fix it", "stage": "build",
+            "assigned_cli": "claude", "assigned_invocation": None, "council_task_ref": None, "routing": None,
+            "denial_reason": None, "phase_ref": None, "conformance_ref": None, "phase_status": None,
+            "collection_scope": None, "status": "done",
+        }]}
+
+    def route_runs(route):
+        if route.request.method != "GET":
+            route.fallback()
+            return
+        body = route.fetch().json()
+        if "include=archived" in route.request.url:
+            body["runs"] = list(body.get("runs", [])) + [archived_run()]
+        route.fulfill(status=200, content_type="application/json", body=json.dumps(body))
+
+    set_fixture(origin, wave1=True, wave2b=True)
+    page.route("**/api/v1/runs", route_runs)
+    page.route("**/api/v1/runs?*", route_runs)
+    archived_sel = f'[data-run-id="{ARCHIVED_ID}"]'
+    page.goto(f"{origin}/everything?tab=sessions&filter=all", wait_until="networkidle")
+    page.get_by_test_id("everything-sessions").wait_for(state="visible", timeout=15000)
+    page.get_by_test_id("everything-session").first.wait_for(state="visible", timeout=10000)
+    live_before = page.get_by_test_id("everything-session").count()
+    check("lc4-all-has-live-not-archived", live_before > 0 and page.locator(archived_sel).count() == 0, live=live_before)
+    page.locator('[data-testid="everything-filter"][data-filter="archived"]').click()
+    page.locator(f'[data-testid="everything-archived-run"]{archived_sel}').wait_for(state="visible", timeout=10000)
+    check("lc4-archived-lens-shows-it", True)
+    page.locator('[data-testid="everything-filter"][data-filter="all"]').click()
+    page.get_by_test_id("everything-session").first.wait_for(state="visible", timeout=10000)
+    page.screenshot(path=str(SHOTS / "desk-run-lifecycle-lc4.png"))
+    check("lc4-back-on-all-hidden-live-stays",
+          page.locator(archived_sel).count() == 0 and page.get_by_test_id("everything-session").count() == live_before,
+          live=page.get_by_test_id("everything-session").count(), before=live_before)
+    page.unroute("**/api/v1/runs", route_runs)
+    page.unroute("**/api/v1/runs?*", route_runs)
+
     # ── LC-5: repo register form ─────────────────────────────────────────────────────────────
     registered: list = []
+    MY_REPO = {"id": "my-repo", "name": "my-repo", "root_path": "/tmp/my-repo", "created_at": 1_759_600_000}
 
     def route_register(route):
         if route.request.method != "POST":
-            route.fallback()
+            # The repo list after registration carries the new repo, as the daemon's does.
+            res = route.fetch()
+            body = res.json()
+            if registered:
+                body["repos"] = list(body.get("repos", [])) + [MY_REPO]
+            route.fulfill(status=200, content_type="application/json", body=json.dumps(body))
             return
         body = json.loads(route.request.post_data or "{}")
         registered.append(body)
-        route.fulfill(status=201, content_type="application/json", body=json.dumps({"repo": {
-            "id": "my-repo", "name": body.get("name", "my-repo"), "root_path": body.get("rootPath", ""),
-            "created_at": 1_759_600_000}, "onboardRunId": "r-onboard-my-repo"}))
+        route.fulfill(status=201, content_type="application/json",
+                      body=json.dumps({"repo": MY_REPO, "onboardRunId": "r-onboard-my-repo"}))
 
     page.route("**/api/v1/repos", route_register)
     page.goto(f"{origin}/repos/new", wait_until="networkidle")
@@ -140,8 +201,9 @@ with sync_playwright() as p:
     check("lc5-register-enabled", register.is_enabled())
     register.click()
     try:
-        page.wait_for_url("**/repo-detail/**", timeout=10000)
-        landed = True
+        page.wait_for_url("**/repo-detail/my-repo", timeout=10000)
+        page.get_by_text("my-repo").first.wait_for(state="visible", timeout=10000)
+        landed = page.get_by_text("Repo not found.").count() == 0
     except Exception:  # noqa: BLE001
         landed = False
     page.screenshot(path=str(SHOTS / "desk-run-lifecycle-lc5.png"))
