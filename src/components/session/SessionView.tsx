@@ -161,12 +161,20 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
     const grownAt = artifactKey !== null ? `/a/${encodeURIComponent(artifactKey)}` : '';
     navigate(`${sessionPath(chat)}${grownAt}${search !== '' ? `?${search}` : ''}${window.location.hash}`, { replace: true });
   }, [ref, runChatId, runs, navigate, artifactKey]);
+  // studio#675: a run absent from the live index (archived runs are excluded from GET /runs by
+  // default, crew#265) is resolved once via GET /runs/:id before the pending line shows for good.
+  const [detailRun, setDetailRun] = useState<RunView | null>(null);
+  const detailFetchedFor = useRef<string | null>(null);
+
   const mine = useMemo(() => {
-    const list = ref.kind === 'run'
+    const fromIndex = ref.kind === 'run'
       ? runs.filter((v) => v.session.id === ref.runId)
       : runChatId ? runs.filter((v) => runChatIdOf(v) === ref.chatId) : [];
-    return [...list].sort((a, b) => launchedMs(a) - launchedMs(b));
-  }, [ref, runs, runChatId]);
+    const base = fromIndex.length === 0 && ref.kind === 'run' && detailRun !== null
+      ? [detailRun]
+      : fromIndex;
+    return [...base].sort((a, b) => launchedMs(a) - launchedMs(b));
+  }, [ref, runs, runChatId, detailRun]);
 
   // The chat's transcript (and whether the daemon still holds it). Crew answers an unknown or
   // reclaimed chat with 200 `scope: null, messages: []`, so only that answer means "closed"; a
@@ -317,6 +325,23 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
     writeSessionVisit(sessionId, Date.now());
     return () => writeSessionVisit(sessionId, Date.now());
   }, [sessionId]);
+  // Reset the detail-fetch state on every address change so navigating between sessions re-fetches.
+  useEffect(() => {
+    setDetailRun(null);
+    detailFetchedFor.current = null;
+  }, [sessionId]);
+  // When the live index has loaded but lacks this run:id, try GET /runs/:id once (studio#675).
+  // A 404 confirms it is truly absent; the pending line stays. Any other failure is silent.
+  useEffect(() => {
+    if (ref.kind !== 'run' || !runsLoaded) return;
+    if (runs.some((v) => v.session.id === ref.runId)) return;
+    const id = ref.runId;
+    if (detailFetchedFor.current === id) return;
+    detailFetchedFor.current = id;
+    api.getRun(id)
+      .then(({ run }) => { setDetailRun(run); })
+      .catch(() => {});
+  }, [ref, runsLoaded, runs]);
   const since = useMemo(() => sinceYouLeft(lastSeen, Date.now(), mine, badges), [lastSeen, mine, badges]);
 
   const entries = useMemo<ThreadEntry[]>(() => {

@@ -101,6 +101,14 @@ def route_archive(route):
     route.fulfill(status=200, content_type="application/json", body=json.dumps({"runId": ARCHIVED_ID, "archived": state["archived"]}))
 
 
+def route_run_detail(route):
+    if route.request.method != "GET":
+        route.fallback()
+        return
+    body = onboarding(ARCHIVED_ID, "cancelled", "offsite-plan", 1_759_601_000 if state["archived"] else None)
+    route.fulfill(status=200, content_type="application/json", body=json.dumps({"run": body}))
+
+
 TITLES = """(sel) => [...document.querySelectorAll(sel)].map((e) => ({ id: e.dataset.runId || e.dataset.runIds || '', text: e.innerText.replace(/\\s+/g, ' ').trim() }))"""
 
 with sync_playwright() as p:
@@ -114,6 +122,7 @@ with sync_playwright() as p:
     page.route("**/api/v1/runs", route_runs)
     page.route("**/api/v1/runs?*", route_runs)
     page.route(f"**/api/v1/runs/{ARCHIVED_ID}/archive", route_archive)
+    page.route(f"**/api/v1/runs/{ARCHIVED_ID}", route_run_detail)
 
     # ── 1. the Done filter names the onboarding runs ─────────────────────────────────────────
     page.goto(f"{origin}/everything?tab=sessions&filter=completed", wait_until="networkidle")
@@ -135,7 +144,27 @@ with sync_playwright() as p:
     page.screenshot(path=str(SHOTS / "desk-everything-archive-lens.png"))
     check("archived-row-named", title == "Set up offsite-plan", title=title)
 
-    # ── 3. Unarchive re-reads the list; the Stopped lens shows the run in place ──────────────
+    # ── 3. clicking the archived row opens its session and shows · Archived (studio#675) ─────
+    # The session resolves via GET /runs/:id; the pending line must never appear.
+    row.locator("a").first.click()
+    try:
+        page.get_by_test_id("session-run-archived").wait_for(state="visible", timeout=5000)
+        session_archived_ok = True
+    except Exception:  # noqa: BLE001
+        session_archived_ok = False
+    session_pending_shown = page.query_selector('[data-testid="session-run-pending"]') is not None
+    page.screenshot(path=str(SHOTS / "desk-everything-archive-session.png"))
+    check("archived-session-resolves",
+          session_archived_ok and not session_pending_shown,
+          session_archived=session_archived_ok,
+          session_pending=session_pending_shown,
+          url=page.url.replace(origin, ""))
+    page.go_back()
+    page.get_by_test_id("everything-filter").filter(has_text="Archived").click()
+    row = page.locator(f'[data-testid="everything-archived-run"][data-run-id="{ARCHIVED_ID}"]')
+    row.wait_for(state="visible", timeout=10000)
+
+    # ── 4. Unarchive re-reads the list; the Stopped lens shows the run in place ──────────────
     gets_before = state["runs_gets"]
     row.get_by_test_id("everything-unarchive").click()
     try:
