@@ -28,7 +28,8 @@ import { ProjectSwitcher } from './ProjectSwitcher.js';
 import { deliverKindOf, type RunKind, type RunMode } from './runMode.js';
 import { HOME_FRESH_MS, useNeedsSources } from '../store/needsSources.js';
 import { useLaunchPreview, usePhaseSelection } from '../hooks/useLaunchPlan.js';
-import { ReducedAssuranceOptIn } from './session/AssuranceReceipt.js';
+import { QeAcceptanceOptions, ReducedAssuranceOptIn } from './session/AssuranceReceipt.js';
+import { workflowRequiresQe } from '../board/assuranceModel.js';
 import { LaunchPreview } from './LaunchPreview.js';
 import { LinkedIssuesLine, useLinkedIssuesPreview } from './LinkedIssuesLine.js';
 import { PhasePicker } from './PhasePicker.js';
@@ -281,6 +282,12 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   // The opt-in itself: ticked only by the operator, or by the dead-seat gate's "Run with reduced
   // assurance" prefill — the operator still launches.
   const [reducedAssurance, setReducedAssurance] = useState(prefill?.reducedAssurance === true);
+  // QE-IN-APP-WORKFLOWS: whether the daemon takes the operator's explicit QE word
+  // (`capabilities.qeAcceptanceOverride`), and the word itself — never set by studio.
+  const [daemonQe, setDaemonQe] = useState(false);
+  const [skipQe, setSkipQe] = useState(false);
+  const [skipQeReason, setSkipQeReason] = useState('');
+  const [forceQe, setForceQe] = useState(false);
   /** studio#275: the BASE skill posture for the next launch (`GET /health.baseSkill`); `undefined`
    *  until read and on a daemon before the field. */
   const [baseSkill, setBaseSkill] = useState<BaseSkillPosture | null | undefined>(undefined);
@@ -297,6 +304,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
         setDaemonChatId(h.capabilities?.chatIdOnLaunch === true);
         setDaemonLinkedIssues(h.capabilities?.linkedIssuesExclude === true);
         setDaemonReduced(h.capabilities?.reducedAssurance === true);
+        setDaemonQe(h.capabilities?.qeAcceptanceOverride === true);
         setBaseSkill(h.baseSkill);
       })
       .catch(() => { if (!cancelled) { setDaemonDeliverGate(null); setDaemonRevisesPr(null); setDaemonChatId(null); } });
@@ -381,6 +389,16 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   // (`plan` and `workflow` are mutually exclusive) and is build work.
   const [pickerOpen, setPickerOpen] = useState(false);
   const selection = usePhaseSelection(pickerOpen);
+  // QE-IN-APP-WORKFLOWS (codex r1): offered for the workflow this launch actually sends — the
+  // override, else the picked one — and never for a composed plan, whose requirement the form
+  // cannot know. A change of that target clears the word: a tick is never carried to another one.
+  const qeTarget = selection.plan === null ? launchWorkflow : '';
+  const offerQe = daemonQe && qeTarget !== '' && workflowRequiresQe(workflows.find((w) => w.id === qeTarget));
+  useEffect(() => {
+    setSkipQe(false);
+    setSkipQeReason('');
+    setForceQe(false);
+  }, [qeTarget]);
   const launchKind: RunKind = selection.composing ? 'build' : deliverKind(launchWorkflow);
   // What is attached, as the resolver counts it — the chips, the Target-repo
   // options and the preflight's "no repository" all read this one list.
@@ -734,6 +752,12 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
         return;
       }
     }
+    // QE-IN-APP-WORKFLOWS: a ticked skip is never sent without its reason.
+    if (offerQe && skipQe && skipQeReason.trim() === '') {
+      setSubmitting(false);
+      setError('Say why QE acceptance is skipped, or untick "Skip QE acceptance".');
+      return;
+    }
     setBaseSkillRefusal(null);
     setStartedRunId(null);
     openedEarly.current = null;
@@ -807,6 +831,10 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     if (groupAttach.groupLabel !== undefined) body.groupLabel = groupAttach.groupLabel;
     // wicked-core#850 EX-01: the explicit reduced-assurance opt-in, only to a daemon that takes it.
     if (reducedAssurance) body.reducedAssurance = true;
+    // QE-IN-APP-WORKFLOWS: the operator's explicit skip (with its reason) or force — only when ticked,
+    // only to a daemon that takes it, only for a workflow that requires QE acceptance.
+    if (offerQe && skipQe) body.skipQeAcceptance = { reason: skipQeReason.trim() };
+    if (offerQe && forceQe) body.forceQeAcceptance = true;
 
     try {
       let launched;
@@ -1595,6 +1623,15 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
           stops and asks for a second seat unless the launch opts into reduced assurance, said first. */}
       {((daemonReduced === true && selectedClis.size === 1) || reducedAssurance) && (
         <ReducedAssuranceOptIn checked={reducedAssurance} onChange={setReducedAssurance} />
+      )}
+
+      {/* QE-IN-APP-WORKFLOWS: a workflow that changes the application waits for a QE acceptance PASS
+          before it delivers; the operator may skip it (with a reason) or force it, said first. */}
+      {offerQe && (
+        <QeAcceptanceOptions
+          skip={skipQe} reason={skipQeReason} force={forceQe}
+          onSkip={setSkipQe} onReason={setSkipQeReason} onForce={setForceQe}
+        />
       )}
 
       {/* ── Preflight warn-and-block (§7.8, EC43) — a code intent with no repo

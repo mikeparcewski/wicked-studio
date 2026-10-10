@@ -12,9 +12,9 @@
   "studioVersion": "0.7.1",
   "counts": {
     "files": 178,
-    "occurrences": 2027,
-    "static": 1801,
-    "dynamic": 43,
+    "occurrences": 2039,
+    "static": 1806,
+    "dynamic": 48,
     "computed": 6
   },
   "static": [
@@ -503,6 +503,12 @@
     },
     {
       "testId": "assurance-kind",
+      "files": [
+        "src/components/session/AssuranceReceipt.tsx"
+      ]
+    },
+    {
+      "testId": "assurance-qe",
       "files": [
         "src/components/session/AssuranceReceipt.tsx"
       ]
@@ -3188,6 +3194,12 @@
       ]
     },
     {
+      "testId": "launch-qe",
+      "files": [
+        "src/components/session/AssuranceReceipt.tsx"
+      ]
+    },
+    {
       "testId": "launch-reduced-assurance",
       "files": [
         "src/components/session/AssuranceReceipt.tsx"
@@ -5738,6 +5750,12 @@
       ]
     },
     {
+      "testId": "qe-acceptance",
+      "files": [
+        "src/components/session/AssuranceReceipt.tsx"
+      ]
+    },
+    {
       "testId": "rail-api-server",
       "files": [
         "src/components/HealthRailSection.tsx"
@@ -6899,6 +6917,12 @@
       ]
     },
     {
+      "testId": "session-gate-qe",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
       "testId": "session-gate-question",
       "files": [
         "src/components/session/GateRow.tsx"
@@ -7276,6 +7300,12 @@
       "testId": "session-run-pending",
       "files": [
         "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
+      "testId": "session-run-qe",
+      "files": [
+        "src/components/session/AssuranceReceipt.tsx"
       ]
     },
     {
@@ -10893,6 +10923,18 @@
       ]
     },
     {
+      "pattern": "*-force",
+      "files": [
+        "src/components/session/AssuranceReceipt.tsx"
+      ]
+    },
+    {
+      "pattern": "*-force-disclosure",
+      "files": [
+        "src/components/session/AssuranceReceipt.tsx"
+      ]
+    },
+    {
       "pattern": "*-input",
       "files": [
         "src/components/FacetAutocomplete.tsx",
@@ -10951,6 +10993,24 @@
       "pattern": "*-sha",
       "files": [
         "src/components/session/CodebaseDownload.tsx"
+      ]
+    },
+    {
+      "pattern": "*-skip",
+      "files": [
+        "src/components/session/AssuranceReceipt.tsx"
+      ]
+    },
+    {
+      "pattern": "*-skip-disclosure",
+      "files": [
+        "src/components/session/AssuranceReceipt.tsx"
+      ]
+    },
+    {
+      "pattern": "*-skip-reason",
+      "files": [
+        "src/components/session/AssuranceReceipt.tsx"
       ]
     },
     {

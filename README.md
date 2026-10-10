@@ -37,7 +37,14 @@ reasoning in a scrollback you'll never read. wicked-studio flips that:
 
   So "Floor-only approval" reads differently from "Independently accepted". A post-hoc hand-over
   that nothing re-verified is labelled "Unverified delivery", along with whether its tree moved, and
-  the delivery shows the QE acceptance check when the run requires one. Every run leaves
+  the delivery shows the QE acceptance check when the run requires one.
+
+  A run that changes the application (`feature`, `bug`, `migration`, `mcp-server`) requires QE
+  acceptance before it delivers. The session header, every gate and the delivery say where that
+  stands: "QE acceptance: required", "waived (score N)" when the run's change scored in the lowest
+  band on every dimension, or "skipped by operator (reason)". The launch form offers **Skip QE
+  acceptance**, which needs a reason before it can be sent, and **Force QE acceptance**, which keeps
+  it required even when the score would waive it (wicked-core-ts 0.7.49 and later). Every run leaves
   transcripts, diffs, and a downloadable evidence bundle. Studio shows you the gate outcomes; it never
   grades the work itself.
 - **Understand the code first.** Onboard a repo and studio builds its graph — then blast-radius
