@@ -216,7 +216,9 @@ export function Composer({
     // the scoped admission AskDock sends with (codex r1 on #631).
     return wfChip !== null ? roster.filter((s) => s.enabled_for_council).map((s) => s.key) : defaultSelection(roster, true);
   }, [roster, wfChip]);
-  const showSeats = eligibleSeats.length > 0 && (wfChip !== null || !started);
+  // Shown while a send is being composed (words typed, or a workflow named) — an idle Desk keeps its
+  // fold (the desk_home fit), and the row is there whenever there is something to send.
+  const showSeats = eligibleSeats.length > 0 && (wfChip !== null || (!started && text.trim() !== ''));
   const sendSeats = chosenSeats(eligibleSeats, dropped);
   // An `@helper` named to answer (ASK-S1) but turned off in the row would be silently dropped as the
   // chat's primary — refused instead, by name (codex r1 on #631).

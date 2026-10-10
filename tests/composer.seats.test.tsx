@@ -62,8 +62,10 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); resetComposerSeats(); });
 
 describe('studio#631: the composer helpers row', () => {
-  it('shows every seat this send would use, all on by default', () => {
+  it('shows every seat this send would use, all on by default — once there is something to send', () => {
     render(<Harness onSend={() => {}} />);
+    expect(screen.queryByTestId('composer-seats')).toBeNull(); // an idle composer keeps the Desk's fold
+    type('what changed?');
     const row = screen.getByTestId('composer-seats');
     expect([...row.querySelectorAll('[data-testid="composer-seat"]')].map((b) => (b as HTMLElement).dataset.key)).toEqual(['claude', 'codex', 'pi', 'copilot']);
     expect(screen.getAllByTestId('composer-seat').every((b) => b.getAttribute('aria-pressed') === 'true')).toBe(true);
@@ -71,6 +73,7 @@ describe('studio#631: the composer helpers row', () => {
 
   it('a /workflow launch sends only the seats left on', async () => {
     render(<Harness onSend={() => {}} />);
+    type('x');
     fireEvent.click(seatButton('codex'));
     fireEvent.click(seatButton('copilot'));
     expect(seatButton('codex').getAttribute('aria-pressed')).toBe('false');
@@ -88,9 +91,9 @@ describe('studio#631: the composer helpers row', () => {
   it('dropping every seat refuses the send and says why — never a silent fall back to all', () => {
     const onSend = vi.fn();
     render(<Harness onSend={onSend} />);
+    type('what changed in the ledger?');
     for (const k of ['claude', 'codex', 'pi', 'copilot']) fireEvent.click(seatButton(k));
     expect(screen.getByTestId('composer-seats-refused').textContent).toMatch(/No helper is picked/);
-    type('what changed in the ledger?');
     key('Enter');
     expect(onSend).not.toHaveBeenCalled();
     expect(posts).toEqual([]);
@@ -98,6 +101,7 @@ describe('studio#631: the composer helpers row', () => {
 
   it('the choice persists per viewer, and the Ask reads the same choice', () => {
     render(<Harness onSend={() => {}} />);
+    type('x');
     fireEvent.click(seatButton('copilot'));
     expect(JSON.parse(localStorage.getItem('wicked_composer_dropped_seats') ?? '[]')).toEqual(['copilot']);
     expect(chosenSeats(['claude', 'codex', 'copilot'], useComposerSeats.getState().dropped)).toEqual(['claude', 'codex']);
@@ -109,9 +113,9 @@ describe('studio#631: the composer helpers row', () => {
       const onSend = vi.fn();
       addAboutChip('desk', { kind: 'about', key: 'h:codex', label: 'Codex' });
       render(<Harness onSend={onSend} />);
+      type('what changed?');
       fireEvent.click(seatButton('codex'));
       expect(screen.getByTestId('composer-seats-refused').textContent).toMatch(/Codex is named to answer but is left out/);
-      type('what changed?');
       key('Enter');
       expect(onSend).not.toHaveBeenCalled();
     } finally {
@@ -121,6 +125,7 @@ describe('studio#631: the composer helpers row', () => {
 
   it('a reply into a started chat keeps that chat\'s seats — no row', () => {
     render(<Harness started onSend={() => {}} />);
+    type('a follow-up');
     expect(screen.queryByTestId('composer-seats')).toBeNull();
   });
 });
