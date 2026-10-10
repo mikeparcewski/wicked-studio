@@ -8,6 +8,7 @@ import { plainGateQuestion, plainRunTitle } from './deskWords.js';
 import type { LaunchPlan } from '../api/teamPlan.js';
 import { sessionPath } from './sessionModel.js';
 import { choicesOf, recommendedOf, useGateStore } from '../store/gates.js';
+import { recordShown } from '../store/gateDiffSeen.js';
 import { useMembershipStore } from '../store/membership.js';
 import {
   cancelDecision, describeDecision, onDecisionTestReset, queueDecision, reportDecision, restoreNote,
@@ -281,8 +282,11 @@ export function commitGateDecision(
       commit: async () => {
         watched.delete(runId);
         patch(runId, { queued: false });
+        const decidedAt = Date.now();
         const error = await sendGateDecision(runId, ord === undefined ? decision : { ...decision, ord });
         if (error === null) {
+          // studio#244: the diff this gate showed is now the operator's last review of the run.
+          recordShown(runId, ord, at, decidedAt);
           if (opts.receipt !== undefined) {
             patch(runId, { receipt: { ...opts.receipt, sentAt: Date.now() } });
           }

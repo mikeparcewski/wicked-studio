@@ -21,6 +21,8 @@ import { gateVerdictFor, checkOutcome } from '../gateVerdictModel.js';
 import { diffstatOf, unitAmendmentsOf } from '../gateMoveModel.js';
 import { PlanGateSummary } from '../PlanGateSummary.js';
 import { useSeatTrust } from './GateDepth.js';
+import { DriftLine } from './GateRow.js';
+import { useDiffDrift } from '../../store/gateDiffSeen.js';
 
 /**
  * THE PROPOSAL CARD (DES-STUDIO-REBUILD-001 §3 scenes 07/08/24/42, slice S6b): a run's plan or
@@ -82,6 +84,8 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
   // S16a-1b: the creator seat's record rides the deliver card's primary button (never an offer:
   // a deliver gate is not orderable); a plan gate reads no trust.
   const openKind = proposalKindOf(runId, gate, view.units);
+  // studio#244: the hand-over says whether the diff moved since the operator's last decision.
+  const drift = useDiffDrift(runId, openKind === 'deliver' ? gate : undefined);
   const seat = useSeatTrust(view, openKind === 'deliver' ? gate : undefined, { isPlanGate: openKind === 'plan', isDeliverGate: openKind === 'deliver', isEscalation: false });
   const deliverFailure = openKind === 'deliver' ? deliverFailureOf(eventsRaw ?? [], gate?.ord) : null;
   const card = proposalCard({ view, gate, chain, action, ui, lastKind: lastKinds.get(runId) ?? (handedOver ? 'deliver' : null), ask, deliverFailure: deliverFailure === null ? null : showText(deliverFailure) });
@@ -175,6 +179,7 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
         <>
           <p data-testid="session-proposal-text" className="wk-prop-text">{card.text}</p>
           {card.why !== null && card.state === 'ask' && <p data-testid="session-proposal-why" className="wk-prop-why">{card.why}</p>}
+          {card.kind === 'deliver' && drift !== null && <DriftLine drift={drift} />}
           {/* S16a-1b: the plan gate's score, band, the score's reasons and the floor's additions —
               behind the why line (PlanGateSummary's own testids kept). */}
           {card.kind === 'plan' && card.state === 'ask' && ask === null && gate !== undefined && (

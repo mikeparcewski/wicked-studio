@@ -6,6 +6,7 @@ import { INITIAL_PICK, pickKey, type RowPick } from '../../board/questionRow.js'
 import { plainGateQuestion, repoNameOf } from '../../board/deskWords.js';
 import { api } from '../../api/client.js';
 import { useDisplayText } from '../../hooks/useHomePath.js';
+import { driftLine, useDiffDrift, type DiffDrift } from '../../store/gateDiffSeen.js';
 import { diffstatOf, type DeliverRefusal } from '../gateMoveModel.js';
 import { secondsLeft, undoDecision, useUndoQueue } from '../../board/undoQueue.js';
 import { useRunEvents } from '../../hooks/useRunEvents.js';
@@ -128,6 +129,8 @@ function RunGateRow({ view, gate }: { view: RunView; gate: OpenGate | undefined 
     diffstat: diffstat?.runId === runId ? diffstat.text : null,
   });
   const refusalLines = refusalWords_ === null ? null : { lead: showText(refusalWords_.lead), consent: showText(refusalWords_.consent) };
+  // studio#244: whether the work under this gate is still what the operator last decided on.
+  const drift = useDiffDrift(runId, gate);
   const depth = gate !== undefined && model !== null
     ? <GateDepthDetails view={view} gate={gate} failing={model.failing} reviewedOrd={model.reviewedOrd} source={model.source} underReview={model.reason === 'def'} />
     : null;
@@ -135,8 +138,18 @@ function RunGateRow({ view, gate }: { view: RunView; gate: OpenGate | undefined 
     <GateRowBody
       runId={runId} gate={gate} model={model} seat={seat} rerunOffer={rerunOffer}
       eventsUnavailable={gate !== undefined && events === null && eventsFetchFailed}
-      retryEvents={retryEvents} depth={depth} refusalLines={refusalLines}
+      retryEvents={retryEvents} depth={depth} refusalLines={refusalLines} drift={drift}
     />
+  );
+}
+
+/** studio#244: one line under the gate's question — unchanged, or which files differ since the
+ *  operator's last decision on this run (the full diff stays under Files → Full diff). */
+export function DriftLine({ drift }: { drift: DiffDrift }): React.ReactElement {
+  return (
+    <p data-testid="gate-diff-drift" data-drift={drift.kind} className={drift.kind === 'changed' ? 'wk-gate-consequence' : 'wk-session-gate-detail-item'}>
+      {driftLine(drift)}
+    </p>
   );
 }
 
@@ -156,7 +169,7 @@ export function refusalWords(r: DeliverRefusal, at: { branch: string | null; rep
   return { lead, consent };
 }
 
-function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, retryEvents, depth, refusalLines = null }: {
+function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, retryEvents, depth, refusalLines = null, drift = null }: {
   runId: string;
   gate: OpenGate | undefined;
   model: GateRowModel | null;
@@ -170,6 +183,8 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
   depth: React.ReactNode;
   /** studio#403: a refused hand-over's reason and consent line; null on every other gate. */
   refusalLines?: { lead: string; consent: string } | null;
+  /** studio#244: the diff against the operator's last decision on this run; null = nothing to say. */
+  drift?: DiffDrift | null;
 }): React.ReactElement | null {
   const action = useGateActionStore((s) => s.byGate[runId] ?? IDLE_GATE_ACTION);
   const pending = useUndoQueue((s) => s.pending.find((p) => p.runIds.length === 1 && p.runIds[0] === runId) ?? null);
@@ -399,6 +414,7 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
       }}
     >
       <p data-testid="session-gate-question" className="wk-session-gate-question">{question}</p>
+      {drift !== null && <DriftLine drift={drift} />}
       {refusalLines !== null && (
         <>
           <p data-testid="session-gate-refusal" className="wk-session-gate-detail-item">{refusalLines.lead}</p>
