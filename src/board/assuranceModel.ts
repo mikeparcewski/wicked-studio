@@ -20,7 +20,85 @@ export interface RunAssurance {
   mode: AssuranceMode;
   /** `distinct_evaluator` | `judge` | `qe_acceptance` (the contract, before any waiver). */
   required: string[];
+  /** (QE-IN-APP-WORKFLOWS, core-ts 0.7.48) The run's QE acceptance decision, when the contract
+   *  requires `qe_acceptance`; absent on an older engine. */
+  qe?: QeDecision;
 }
+
+/**
+ * A run's QE acceptance decision (`assurance.qe`, every receipt's `qe`, `qeAcceptanceDecided.qe`):
+ * `required` (provisional at launch — `basis: 'plan'` — or from the run's diff), `waived` (the
+ * diff scored in the lowest band on every dimension) or `skipped` (the operator, with a reason).
+ */
+export interface QeDecision {
+  status: 'required' | 'waived' | 'skipped' | (string & {});
+  basis: 'plan' | 'operator' | 'diff' | (string & {});
+  score: number | null;
+  threshold: number | null;
+  reason: string;
+  reasons: string[];
+}
+
+/** The decision off the wire, null-safe. */
+export function qeDecisionOf(raw: unknown): QeDecision | null {
+  if (!isRecord(raw) || typeof raw['status'] !== 'string' || raw['status'] === '') return null;
+  const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+  return {
+    status: raw['status'],
+    basis: typeof raw['basis'] === 'string' ? raw['basis'] : '',
+    score: num(raw['score']),
+    threshold: num(raw['threshold']),
+    reason: typeof raw['reason'] === 'string' ? raw['reason'] : '',
+    reasons: strings(raw['reasons']),
+  };
+}
+
+/**
+ * The ONE spelling of the decision — the plan, the gate and the delivery all show it:
+ * "QE acceptance: required" (", provisional" until the run's QE step scores the diff; ", forced by
+ * operator" when forced), "QE acceptance: waived (score N)", "QE acceptance: skipped by operator
+ * (<reason>)". `detail` is the engine's full words (the hover).
+ */
+export function qeWords(qe: QeDecision): { status: string; text: string; detail: string } {
+  if (qe.status === 'waived') {
+    return { status: 'waived', text: `QE acceptance: waived (score ${qe.score ?? '?'})`, detail: qe.reason };
+  }
+  if (qe.status === 'skipped') {
+    const why = qe.reason.replace(/^QE acceptance skipped by operator:\s*/, '');
+    return { status: 'skipped', text: `QE acceptance: skipped by operator (${why})`, detail: qe.reason };
+  }
+  const how = qe.basis === 'operator'
+    ? ', forced by operator'
+    : qe.basis === 'plan'
+      ? ', provisional'
+      : qe.score !== null ? ` (score ${qe.score})` : '';
+  return { status: 'required', text: `QE acceptance: required${how}`, detail: qe.reason };
+}
+
+/** The run's CURRENT decision: the newest `qeAcceptanceDecided` in the log, else the contract's. */
+export function sessionQe(view: SessionView | null | undefined, events: readonly CoreEvent[] | null): QeDecision | null {
+  const log = events ?? [];
+  for (let i = log.length - 1; i >= 0; i--) {
+    const e = log[i]! as Record<string, unknown>;
+    if (e['type'] !== 'qeAcceptanceDecided') continue;
+    const q = qeDecisionOf(e['qe']);
+    if (q !== null) return q;
+  }
+  return sessionAssurance(view, events)?.qe ?? null;
+}
+
+/** Whether a workflow def requires QE acceptance (`required_instruments` holds `qe_acceptance`). */
+export function workflowRequiresQe(def: { required_instruments?: string[] | null } | null | undefined): boolean {
+  return (def?.required_instruments ?? []).includes('qe_acceptance');
+}
+
+export const QE_SKIP_LABEL = 'Skip QE acceptance';
+export const QE_SKIP_DISCLOSURE =
+  'This workflow changes the application, so delivery waits for a QE acceptance PASS. Skipping needs '
+  + 'a reason, and the run, every gate and the delivery say "QE acceptance: skipped by operator".';
+export const QE_FORCE_LABEL = 'Force QE acceptance';
+export const QE_FORCE_DISCLOSURE =
+  'Require QE acceptance even if the run\'s change scores low enough to waive it.';
 
 export interface SkippedInstrument {
   instrument: string;
@@ -50,7 +128,8 @@ const strings = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is
 /** The run's contract off any record carrying `{mode, required}`; `null` when it carries none. */
 export function runAssuranceOf(raw: unknown): RunAssurance | null {
   if (!isRecord(raw) || typeof raw['mode'] !== 'string' || raw['mode'] === '') return null;
-  return { mode: raw['mode'], required: strings(raw['required']) };
+  const qe = qeDecisionOf(raw['qe']);
+  return { mode: raw['mode'], required: strings(raw['required']), ...(qe !== null ? { qe } : {}) };
 }
 
 /** A receipt off the wire, null-safe; `null` when the value is not one. */
@@ -236,7 +315,7 @@ export interface DeliveryAssuranceView {
   receipt: AssuranceReceipt | null;
   treeBefore: string | null;
   treeAfter: string | null;
-  qeAcceptance: { satisfied: boolean; reason: string; verdictId: string | null; reviewer: string | null } | null;
+  qeAcceptance: { status?: string; satisfied: boolean; reason: string; verdictId: string | null; reviewer: string | null } | null;
 }
 
 /**
@@ -264,7 +343,7 @@ function parseDeliveryAssurance(raw: unknown): DeliveryAssuranceView | null {
     treeBefore: str(raw['treeBefore']),
     treeAfter: str(raw['treeAfter']),
     qeAcceptance: isRecord(qe) && typeof qe['satisfied'] === 'boolean'
-      ? { satisfied: qe['satisfied'], reason: typeof qe['reason'] === 'string' ? qe['reason'] : '', verdictId: str(qe['verdictId']), reviewer: str(qe['reviewer']) }
+      ? { ...(typeof qe['status'] === 'string' ? { status: qe['status'] } : {}), satisfied: qe['satisfied'], reason: typeof qe['reason'] === 'string' ? qe['reason'] : '', verdictId: str(qe['verdictId']), reviewer: str(qe['reviewer']) }
       : null,
   };
 }

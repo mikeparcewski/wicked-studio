@@ -1,5 +1,5 @@
 import type { SessionView } from '../../api/types.js';
-import { REDUCED_ASSURANCE_LABEL, REDUCED_OPT_IN_DISCLOSURE, REDUCED_OPT_IN_LABEL, isReduced, unverifiedDeliveryLine, type DeliveryAssuranceView, receiptWords, sessionAssurance, type AssuranceReceipt as Receipt } from '../../board/assuranceModel.js';
+import { QE_FORCE_DISCLOSURE, QE_FORCE_LABEL, QE_SKIP_DISCLOSURE, QE_SKIP_LABEL, REDUCED_ASSURANCE_LABEL, REDUCED_OPT_IN_DISCLOSURE, REDUCED_OPT_IN_LABEL, isReduced, qeWords, sessionQe, unverifiedDeliveryLine, type DeliveryAssuranceView, type QeDecision, receiptWords, sessionAssurance, type AssuranceReceipt as Receipt } from '../../board/assuranceModel.js';
 import { useRunEvents } from '../../hooks/useRunEvents.js';
 import { useDisplayText } from '../../hooks/useHomePath.js';
 
@@ -24,6 +24,7 @@ export function AssuranceReceipt({ receipt, passed = null, testId = 'assurance-r
         {w.reduced && <ReducedAssuranceLabel />}
         <span className="wk-assurance-dim"> · {w.required} · {w.ran}</span>
       </p>
+      {receipt.qe !== undefined && <p className="wk-assurance-line"><QeAcceptanceLabel qe={receipt.qe} testId="assurance-qe" /></p>}
       {w.who !== null && <p data-testid="assurance-who" className="wk-assurance-line">{w.who}</p>}
       {(w.skipped !== null || w.where !== null) && (
         <p className="wk-assurance-line">
@@ -51,10 +52,72 @@ export function ReducedAssuranceLabel({ testId = 'assurance-reduced' }: { testId
   );
 }
 
-/** The session's label: a run launched with reduced assurance says so in its header. */
+/** The session's label: a run launched with reduced assurance says so in its header, and a run
+ *  that requires QE acceptance says where its decision stands (required / waived / skipped). */
 export function RunAssuranceLabel({ view }: { view: SessionView }): React.ReactElement | null {
   const { events } = useRunEvents(view.session.id);
-  return isReduced(sessionAssurance(view, events)) ? <ReducedAssuranceLabel testId="session-run-reduced" /> : null;
+  const reduced = isReduced(sessionAssurance(view, events));
+  const qe = sessionQe(view, events);
+  if (!reduced && qe === null) return null;
+  return (
+    <>
+      {reduced && <ReducedAssuranceLabel testId="session-run-reduced" />}
+      {qe !== null && <QeAcceptanceLabel qe={qe} testId="session-run-qe" />}
+    </>
+  );
+}
+
+/** The one rendering of a QE acceptance decision (session header, plan, gate, delivery). */
+export function QeAcceptanceLabel({ qe, testId = 'qe-acceptance' }: { qe: QeDecision; testId?: string }): React.ReactElement {
+  const showText = useDisplayText();
+  const w = qeWords(qe);
+  return (
+    <span data-testid={testId} data-status={w.status} className={`wk-assurance-qe wk-assurance-qe--${w.status}`} title={showText(w.detail)}>
+      {showText(w.text)}
+    </span>
+  );
+}
+
+/**
+ * The operator's explicit word on QE acceptance at launch (QE-IN-APP-WORKFLOWS): "Skip QE
+ * acceptance" needs a reason before it can be sent; "Force QE acceptance" requires it whatever the
+ * run's score says. One or the other, never both; nothing is ticked by studio.
+ */
+export function QeAcceptanceOptions({ skip, reason, force, onSkip, onReason, onForce, testId = 'launch-qe' }: {
+  skip: boolean;
+  reason: string;
+  force: boolean;
+  onSkip: (on: boolean) => void;
+  onReason: (text: string) => void;
+  onForce: (on: boolean) => void;
+  testId?: string;
+}): React.ReactElement {
+  return (
+    <div data-testid={testId} className="wk-assurance-optin">
+      <label className="wk-assurance-optin-label">
+        <input type="checkbox" data-testid={`${testId}-skip`} checked={skip} onChange={(e) => { onSkip(e.target.checked); if (e.target.checked) onForce(false); }} />
+        {' '}{QE_SKIP_LABEL}
+      </label>
+      <p data-testid={`${testId}-skip-disclosure`} className="wk-assurance-optin-why">{QE_SKIP_DISCLOSURE}</p>
+      {skip && (
+        <input
+          type="text"
+          data-testid={`${testId}-skip-reason`}
+          aria-label="Why skip QE acceptance"
+          placeholder="Why skip QE acceptance (required)"
+          className="wk-input"
+          value={reason}
+          maxLength={2000}
+          onChange={(e) => onReason(e.target.value)}
+        />
+      )}
+      <label className="wk-assurance-optin-label">
+        <input type="checkbox" data-testid={`${testId}-force`} checked={force} onChange={(e) => { onForce(e.target.checked); if (e.target.checked) onSkip(false); }} />
+        {' '}{QE_FORCE_LABEL}
+      </label>
+      <p data-testid={`${testId}-force-disclosure`} className="wk-assurance-optin-why">{QE_FORCE_DISCLOSURE}</p>
+    </div>
+  );
 }
 
 /**
@@ -92,10 +155,12 @@ export function DeliveryAssuranceLines({ recorded, testIdPrefix }: { recorded: D
     <>
       {unverified !== null && <p data-testid={`${testIdPrefix}-unverified`} className="wk-assurance wk-assurance-kind--floor-only">{unverified}</p>}
       {qe !== null && (
-        <p data-testid={`${testIdPrefix}-qe`} data-satisfied={qe.satisfied ? 'true' : 'false'} className={qe.satisfied ? 'wk-assurance' : 'wk-assurance wk-assurance-kind--unchecked'}>
-          {qe.satisfied
-            ? `QE acceptance: PASS${qe.reviewer !== null ? ` by ${qe.reviewer}` : ''}${qe.verdictId !== null ? ` (${qe.verdictId})` : ''}`
-            : `QE acceptance not met: ${showText(qe.reason)}`}
+        <p data-testid={`${testIdPrefix}-qe`} data-status={qe.status ?? 'required'} data-satisfied={qe.satisfied ? 'true' : 'false'} className={qe.satisfied ? 'wk-assurance' : 'wk-assurance wk-assurance-kind--unchecked'}>
+          {qe.status === 'waived' || qe.status === 'skipped'
+            ? showText(qe.status === 'waived' ? `QE acceptance: waived (${qe.reason.replace(/^waived:\s*/, '')})` : `QE acceptance: skipped by operator (${qe.reason.replace(/^QE acceptance skipped by operator:\s*/, '')})`)
+            : qe.satisfied
+              ? `QE acceptance: PASS${qe.reviewer !== null ? ` by ${qe.reviewer}` : ''}${qe.verdictId !== null ? ` (${qe.verdictId})` : ''}`
+              : `QE acceptance not met: ${showText(qe.reason)}`}
         </p>
       )}
     </>

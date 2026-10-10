@@ -16,12 +16,12 @@ import { useRerunFromHere } from '../../hooks/useRerunFromHere.js';
 import type { RerunOffer } from '../rerunModel.js';
 import { GateDepthDetails, RuleOfferBlock, useFullVerdict, useSeatTrust, type SeatTrust } from './GateDepth.js';
 import { WatchGateLine } from '../WatchLines.js';
-import { REDUCED_OPT_IN_DISCLOSURE, REDUCED_OPT_IN_LABEL, creatorSeatRefusal, gatePassedFor, gateReceiptFor, isReduced, sessionAssurance, waitsForJudge } from '../../board/assuranceModel.js';
+import { REDUCED_OPT_IN_DISCLOSURE, REDUCED_OPT_IN_LABEL, creatorSeatRefusal, gatePassedFor, gateReceiptFor, isReduced, sessionAssurance, sessionQe, waitsForJudge } from '../../board/assuranceModel.js';
 import { retryPrefillOf } from '../../board/needsYou.js';
 import { setRetryPrefill } from '../../store/retryPrefill.js';
 import { useCapabilities } from '../../store/capabilities.js';
 import type { Navigate } from '../../hooks/useRoute.js';
-import { AssuranceReceipt, ReducedAssuranceLabel } from './AssuranceReceipt.js';
+import { AssuranceReceipt, QeAcceptanceLabel, ReducedAssuranceLabel } from './AssuranceReceipt.js';
 
 /**
  * EVERY GATE KIND ANSWERABLE IN THE SESSION THREAD (S15e): an answerable row rendered inside
@@ -151,6 +151,9 @@ function RunGateRow({ view, gate, navigate }: { view: RunView; gate: OpenGate | 
       : model.reviewedOrd === gate.ord ? gate.ord : null;
   const receipt = gateReceiptFor(events, view.units, receiptOrd);
   const reduced = isReduced(sessionAssurance(view, events));
+  // QE-IN-APP-WORKFLOWS: the run's current QE decision on every gate (a plan gate has no receipt yet;
+  // a receipt that carries its own decision says it there).
+  const qe = sessionQe(view, events);
   const judgeWait = gate !== undefined && model !== null && waitsForJudge(events, gate.ord, gate.prompt);
   const seatRefusal = gate !== undefined && model !== null && !reduced && creatorSeatRefusal(events, gate.ord, gate.prompt);
   const assurance = model === null ? null : (
@@ -160,6 +163,7 @@ function RunGateRow({ view, gate, navigate }: { view: RunView; gate: OpenGate | 
       {receipt !== null
         ? <AssuranceReceipt receipt={receipt} passed={gatePassedFor(events, receiptOrd)} testId="session-gate-assurance" />
         : reduced && <p className="wk-assurance"><ReducedAssuranceLabel testId="session-gate-reduced" /></p>}
+      {qe !== null && receipt?.qe === undefined && <p className="wk-assurance"><QeAcceptanceLabel qe={qe} testId="session-gate-qe" /></p>}
     </>
   );
   return (
