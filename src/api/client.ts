@@ -493,12 +493,6 @@ export const api = {
   /** One workflow definition by id; 404 if unknown. */
   getWorkflow: (id: string) => apiFetch<{ workflow: import('./types.js').WorkflowDef }>(`/workflows/${encodeURIComponent(id)}`),
 
-  /** Register (or replace) a workflow definition. Returns the registered id. */
-  createWorkflow: (def: import('./types.js').WorkflowDef) =>
-    apiFetch<{ id: string; status: string }>('/workflows', {
-      method: 'POST',
-      body: JSON.stringify(def),
-    }),
 
   /**
    * Save an inline script to `~/.wicked/scripts/` and return its absolute path.

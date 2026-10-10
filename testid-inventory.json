@@ -12,8 +12,8 @@
   "studioVersion": "0.7.3",
   "counts": {
     "files": 178,
-    "occurrences": 2040,
-    "static": 1807,
+    "occurrences": 2050,
+    "static": 1817,
     "dynamic": 48,
     "computed": 6
   },
@@ -547,6 +547,60 @@
       "testId": "brand-learn",
       "files": [
         "src/components/BrandLearn.tsx"
+      ]
+    },
+    {
+      "testId": "builder-save-blocker",
+      "files": [
+        "src/components/WorkflowViewer.tsx"
+      ]
+    },
+    {
+      "testId": "builder-step-catalog",
+      "files": [
+        "src/components/WorkflowViewer.tsx"
+      ]
+    },
+    {
+      "testId": "builder-step-deps",
+      "files": [
+        "src/components/WorkflowViewer.tsx"
+      ]
+    },
+    {
+      "testId": "builder-step-deps-engine",
+      "files": [
+        "src/components/WorkflowViewer.tsx"
+      ]
+    },
+    {
+      "testId": "builder-step-executes-code",
+      "files": [
+        "src/components/WorkflowViewer.tsx"
+      ]
+    },
+    {
+      "testId": "builder-step-gate",
+      "files": [
+        "src/components/WorkflowViewer.tsx"
+      ]
+    },
+    {
+      "testId": "builder-step-kind",
+      "files": [
+        "src/components/WorkflowViewer.tsx"
+      ]
+    },
+    {
+      "testId": "builder-step-role",
+      "files": [
+        "src/components/WorkflowViewer.tsx"
+      ]
+    },
+    {
+      "testId": "builder-step-verified-evidence",
+      "files": [
+        "src/components/WorkflowViewer.tsx"
       ]
     },
     {
@@ -10875,6 +10929,12 @@
       "testId": "worker-root-invalid",
       "files": [
         "src/components/SystemSettings.tsx"
+      ]
+    },
+    {
+      "testId": "workflow-edit",
+      "files": [
+        "src/components/WorkflowViewer.tsx"
       ]
     },
     {
