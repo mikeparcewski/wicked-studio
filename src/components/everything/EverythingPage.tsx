@@ -8,7 +8,7 @@ import {
   SESSION_FILTERS, TAB_LABEL, type EverythingQuery, type EverythingTab, type HandedRow, type MadeRow,
 } from '../../board/everythingModel.js';
 import type { NeedRow } from '../../board/needsYou.js';
-import { sessionIdOf, sessionPath, type SessionState } from '../../board/sessionModel.js';
+import { sessionPath, type SessionState } from '../../board/sessionModel.js';
 import { filterRunRows, pageRunRows, runRows, sortRunRows, type RunSortKey, type SortDir } from '../../board/runsTableModel.js';
 import { openSheet } from '../../store/sheets.js';
 import { useBoardModel } from '../../hooks/useBoardModel.js';
@@ -263,7 +263,7 @@ function SessionsTab({ runs, runsLoaded, runsError, onRetryRuns, needRows, q, na
         />
       )}
       {q.view === 'grouped' && (<>
-      {q.filter === 'archived' && <ArchivedRuns key={q.project ?? ''} navigate={navigate} runChatId={runChatId} project={q.project} onChanged={onRetryRuns} />}
+      {q.filter === 'archived' && <ArchivedRuns key={q.project ?? ''} navigate={navigate} project={q.project} onChanged={onRetryRuns} />}
       {q.filter !== 'archived' && read === 'checking' && <p data-testid="everything-checking" className="wk-session-grey">Reading your work…</p>}
       {q.filter !== 'archived' && read === 'failed' && (
         <p data-testid="everything-failed" role="alert" className="wk-session-grey">
@@ -493,7 +493,8 @@ function RunsTable({ runs, runChatId, projects, q, runsLoaded, runsError, onRetr
             <span aria-hidden className="wk-runs-col wk-runs-col--menu" />
           </div>
           {pageData.slice.map((r) => {
-            const path = sessionPath(r.sessionId);
+            // studio#675: an archived run opens at its run address (its chat's session reads the live index).
+            const path = sessionPath(archivedMode ? `run:${r.runId}` : r.sessionId);
             const finished = !archivedMode && FINISHED.has(r.status) ? viewOf(r.runId) : undefined;
             const open = menuFor === r.runId;
             return (
@@ -556,7 +557,7 @@ const FINISHED: ReadonlySet<string> = new Set(['done', 'blocked', 'quiet']);
 /** The Archived lens: `GET /runs?archived` on pick, each run with Unarchive (the Work page's two calls).
  *  studio#511: Unarchive re-reads the runs list through `onChanged` (the same re-read Archive on a finished
  *  row triggers), so the run shows under its state filter without leaving the page. */
-function ArchivedRuns({ navigate, runChatId, project, onChanged }: { navigate: Navigate; runChatId: boolean; project: string | null; onChanged: (() => void) | undefined }): React.ReactElement {
+function ArchivedRuns({ navigate, project, onChanged }: { navigate: Navigate; project: string | null; onChanged: (() => void) | undefined }): React.ReactElement {
   const [rows, setRows] = useState<SessionView[] | null>(null);
   const [failed, setFailed] = useState(false);
   const showText = useDisplayText();
@@ -591,7 +592,9 @@ function ArchivedRuns({ navigate, runChatId, project, onChanged }: { navigate: N
       {rows !== null && rows.length > 0 && (
         <ul className="wk-everything-list">
           {rows.map((v) => {
-            const path = sessionPath(sessionIdOf(v, runChatId));
+            // studio#675: an archived run opens at its own run address, which the session resolves through
+            // GET /runs/:id. Its chat's session reads the live index, which leaves archived runs out.
+            const path = sessionPath(`run:${v.session.id}`);
             return (
               <li key={v.session.id} data-testid="everything-archived-run" data-run-id={v.session.id} className="wk-desk-session wk-everything-row" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <a href={path} onClick={(e) => { e.preventDefault(); navigate(path); }} className="wk-desk-need-body" style={{ flex: '1 1 auto', opacity: 0.7 }}>

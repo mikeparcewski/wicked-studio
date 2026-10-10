@@ -1,6 +1,6 @@
 import { CodebaseDownload, DeliverCredentialsNotice } from './CodebaseDownload.js';
 import { useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from 'react';
-import { api } from '../../api/client.js';
+import { ApiError, api } from '../../api/client.js';
 import type { ChatPathView, SessionView as RunView } from '../../api/types.js';
 import { needsByRun } from '../../board/deskModel.js';
 import type { NeedRow } from '../../board/needsYou.js';
@@ -161,12 +161,25 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
     const grownAt = artifactKey !== null ? `/a/${encodeURIComponent(artifactKey)}` : '';
     navigate(`${sessionPath(chat)}${grownAt}${search !== '' ? `?${search}` : ''}${window.location.hash}`, { replace: true });
   }, [ref, runChatId, runs, navigate, artifactKey]);
+  // studio#675: a run: address the live index lacks (crew#265 leaves archived runs out of GET /runs) is
+  // read through GET /runs/:id. The read belongs to its address; while the index holds the run there is
+  // no read, so a run that later leaves the index (archived) is read afresh.
+  const runInIndex = ref.kind === 'run' && runs.some((v) => v.session.id === ref.runId);
+  const [detail, setDetail] = useState<{ id: string; run: RunView | null; error: string | null } | null>(null);
+  const [detailTry, setDetailTry] = useState(0);
+  const detailOwn = detail !== null && ref.kind === 'run' && detail.id === ref.runId ? detail : null;
+  const detailRun = detailOwn?.run ?? null;
+  const detailError = detailOwn?.error ?? null;
+
   const mine = useMemo(() => {
-    const list = ref.kind === 'run'
+    const fromIndex = ref.kind === 'run'
       ? runs.filter((v) => v.session.id === ref.runId)
       : runChatId ? runs.filter((v) => runChatIdOf(v) === ref.chatId) : [];
-    return [...list].sort((a, b) => launchedMs(a) - launchedMs(b));
-  }, [ref, runs, runChatId]);
+    // Only this address's own detail read: a late answer for the previous address never shows here.
+    const base = fromIndex.length === 0 && detailRun !== null ? [detailRun]
+      : fromIndex;
+    return [...base].sort((a, b) => launchedMs(a) - launchedMs(b));
+  }, [ref, runs, runChatId, detailRun]);
 
   // The chat's transcript (and whether the daemon still holds it). Crew answers an unknown or
   // reclaimed chat with 200 `scope: null, messages: []`, so only that answer means "closed"; a
@@ -317,6 +330,21 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
     writeSessionVisit(sessionId, Date.now());
     return () => writeSessionVisit(sessionId, Date.now());
   }, [sessionId]);
+  useEffect(() => {
+    if (ref.kind !== 'run' || !runsLoaded || runInIndex) { setDetail(null); return; }
+    const id = ref.runId;
+    let cancelled = false;
+    api.getRun(id)
+      .then(({ run }) => { if (!cancelled) setDetail({ id, run, error: null }); })
+      .catch((e: unknown) => {
+        if (cancelled) return;
+        // A 404: the daemon does not serve this id, and the pending line says so. Any other failure is a
+        // failed read, said with a retry.
+        const gone = e instanceof ApiError && e.status === 404;
+        setDetail({ id, run: null, error: gone ? null : e instanceof Error ? e.message : String(e) });
+      });
+    return () => { cancelled = true; };
+  }, [ref, runsLoaded, runInIndex, detailTry]);
   const since = useMemo(() => sinceYouLeft(lastSeen, Date.now(), mine, badges), [lastSeen, mine, badges]);
 
   const entries = useMemo<ThreadEntry[]>(() => {
@@ -575,6 +603,12 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
               Opening run {ref.runId} — not in the run index yet: a just-launched run appears within one live-update cycle; an id the daemon no longer serves will not.
             </p>
           )}
+          {missing && ref.kind === 'run' && detailError !== null && (
+            <p data-testid="session-run-detail-error" className="wk-session-grey">
+              Could not read this run from the daemon ({detailError}).{' '}
+              <button type="button" data-testid="session-run-detail-retry" onClick={() => setDetailTry((n) => n + 1)} className="wk-since-toggle">Try again</button>
+            </p>
+          )}
           {missing && ref.kind !== 'run' && (
             <p data-testid="session-missing" className="wk-session-grey">
               {ref.kind === 'chat' && !runChatId
@@ -745,7 +779,7 @@ export function RunBlock({ view, badge, sessionId, navigate }: {
         {view.session.archived_at != null && <span data-testid="session-run-archived" className="wk-session-grey"> · Archived</span>}
         {/* S16a-1d: Retry a failed or cancelled run — the Desk row's prefill, the launch form; no POST. */}
         {navigate !== undefined && (view.session.status === 'failed' || view.session.status === 'cancelled') && (
-          <button type="button" data-testid="session-run-retry" onClick={() => startRetry(view, navigate)} className="wk-since-toggle" title="Open the launch form prefilled with this run's intent and settings — nothing starts until you send">Retry ›</button>
+          <>{' '}<button type="button" data-testid="session-run-retry" onClick={() => startRetry(view, navigate)} className="wk-since-toggle" title="Open the launch form prefilled with this run's intent and settings — nothing starts until you send">Retry ›</button></>
         )}
       </p>
       {/* S16a-1d: the run's technical handles, when Settings › Show technical details is on. */}
