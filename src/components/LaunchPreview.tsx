@@ -83,6 +83,9 @@ function Steps({ steps }: { steps: PreviewStepView[] }): React.ReactElement {
           {s.byFloor && (
             <span data-testid="floor-marker" style={{ color: 'var(--status-gate)' }}> · added by floor</span>
           )}
+          {s.writesNothing && (
+            <span data-testid="writes-nothing-marker" title="this step changes no file in the run's tree" style={{ color: 'var(--ink-dim)' }}> · writes nothing</span>
+          )}
         </li>
       ))}
     </ol>

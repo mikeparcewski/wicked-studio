@@ -1,3 +1,4 @@
+import { planRefusalWords } from '../api/planRefusal.js';
 import type { TeamRow } from '../api/teamPlan.js';
 import { blockOf } from './chainModel.js';
 
@@ -186,6 +187,8 @@ const bandWords = (band: string | null): string | null => (band === null ? null 
 
 /** `plan.refused.reason` in the operator's words (§4.7 one seat; F11 repo-less). */
 function refusedWords(reason: string, pa: string | null): { text: string; action?: 'signin' } {
+  const worded = planRefusalWords(reason);
+  if (worded !== null) return { text: `The plan was refused: ${worded}` };
   if (/NoEligibleSeat|no seat distinct|no eligible seat/i.test(reason)) {
     return { text: `Can’t build from here: only ${pa ?? 'one helper'} is signed in; sign in another helper so review can run.`, action: 'signin' };
   }

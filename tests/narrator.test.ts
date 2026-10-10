@@ -68,6 +68,13 @@ describe('narrate — the event → status-line templates (§4)', () => {
     [{ type: 'sessionFailed', session: 'r' }, 'Run failed', 'fail'],
     [{ type: 'runCancelled', session: 'r' }, 'Run cancelled', 'info'],
     [{ type: 'error', session: 'r', message: 'boom' }, 'Error: boom', 'fail'],
+    // studio#665: a run a mid-run plan refusal failed names why and the rule, in words (the core
+    // error is the anyhow chain, `{e:#}`: context: token: detail).
+    [
+      { type: 'error', session: 'r', message: `run r: the revised plan is refused: security_review_on_non_code_plan: step security_review is a security_review in a plan where no step executes code (rule TST-1003 requires it) — ${'x'.repeat(200)}` },
+      'Run stopped: a security review was asked for on a run that writes no code (rule TST-1003 requires it) — its code-evidence check could never pass',
+      'fail',
+    ],
   ];
 
   it.each(CASES)('narrates %j', (bag, expected, tone) => {

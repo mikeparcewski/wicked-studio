@@ -171,6 +171,18 @@ describe('askLines — the quiet lines, in row order, each expandable to its row
     expect(lines[4]!.action).toBe('signin');
   });
 
+  it('the core#854 refusals read in words, naming the rule that asked (studio#665)', () => {
+    const sec = row('plan.refused', { by: 'engine', proposal_id: 'p-4', base_rev: 1, reason: 'security_review_on_non_code_plan: step security_review is a security_review in a plan where no step executes code (rule TST-1002 requires it) — its diff evidence floor can never pass' });
+    const wn = row('plan.refused', { by: 'engine', proposal_id: 'p-5', base_rev: 1, reason: 'writes_nothing_on_code: step build declares writes_nothing on a phase that executes code' });
+    const lines = askLines([started, sec, wn]).filter((l) => l.kind === 'refused');
+    expect(lines.map((l) => l.text)).toStrictEqual([
+      'The plan was refused: a security review was asked for on a run that writes no code (rule TST-1002 requires it) — its code-evidence check could never pass',
+      'The plan was refused: a step marked “writes nothing” is on a phase that changes code',
+    ]);
+    // The engine's text stays one click away.
+    expect(lines[0]!.detail[0]).toMatch(/^security_review_on_non_code_plan: /);
+  });
+
   it('a restart redrives the answer as attempt+1 on the same seat: "started over"', () => {
     const again = row('step.claimed', { by: 'claude', ord: 1, attempt: 1, step_id: 'answer-1', role: 'creator', kind: 'agent', phase: 'understand', criterion: '', baseline_tree: null, repo: null, code_graph_db: null });
     const lines = askLines([started, accepted, claimed, again]);

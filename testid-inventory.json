@@ -12,8 +12,8 @@
   "studioVersion": "0.7.2",
   "counts": {
     "files": 178,
-    "occurrences": 2039,
-    "static": 1806,
+    "occurrences": 2040,
+    "static": 1807,
     "dynamic": 48,
     "computed": 6
   },
@@ -10887,6 +10887,12 @@
       "testId": "workflows-refused-row",
       "files": [
         "src/components/WorkflowViewer.tsx"
+      ]
+    },
+    {
+      "testId": "writes-nothing-marker",
+      "files": [
+        "src/components/LaunchPreview.tsx"
       ]
     }
   ],
