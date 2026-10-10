@@ -276,7 +276,8 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   // (`capabilities.linkedIssuesExclude`, crew#825). Absent/false: neither is sent.
   const [daemonLinkedIssues, setDaemonLinkedIssues] = useState(false);
   // wicked-core#850: whether the daemon takes the reduced-assurance opt-in (`capabilities.reducedAssurance`).
-  const [daemonReduced, setDaemonReduced] = useState(false);
+  // `null` = not yet known (loading, or the read failed).
+  const [daemonReduced, setDaemonReduced] = useState<boolean | null>(null);
   // The opt-in itself: ticked only by the operator, or by the dead-seat gate's "Run with reduced
   // assurance" prefill — the operator still launches.
   const [reducedAssurance, setReducedAssurance] = useState(prefill?.reducedAssurance === true);
@@ -719,6 +720,16 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     // does not launch — the Send button is already disabled with the reason on
     // screen; this guards the Cmd+Enter path the same way. Nothing is guessed.
     if (targetRequired) return;
+    // wicked-core#850: a ticked opt-in is never dropped in silence — a launch that asked for reduced
+    // assurance waits for the daemon's answer, and one that cannot take it is refused, not run full.
+    if (reducedAssurance) {
+      const takes = daemonReduced ?? await api.getHealth().then(
+        (h) => (h.capabilities as unknown as Record<string, unknown> | undefined)?.['reducedAssurance'] === true, () => false);
+      if (!takes) {
+        setError('This daemon does not take a reduced-assurance launch. Untick "Run with reduced assurance" to launch with full assurance, or sign a second seat in.');
+        return;
+      }
+    }
     setPreflightBlocked(false);
     setSubmitting(true);
     setError(null);
@@ -794,7 +805,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     if (groupAttach.campaignId !== undefined) body.campaignId = groupAttach.campaignId;
     if (groupAttach.groupLabel !== undefined) body.groupLabel = groupAttach.groupLabel;
     // wicked-core#850 EX-01: the explicit reduced-assurance opt-in, only to a daemon that takes it.
-    if (reducedAssurance && daemonReduced) body.reducedAssurance = true;
+    if (reducedAssurance) body.reducedAssurance = true;
 
     try {
       let launched;
@@ -1581,7 +1592,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
 
       {/* wicked-core#850 EX-01: one seat means the creator's seat is the only reviewer — a review step
           stops and asks for a second seat unless the launch opts into reduced assurance, said first. */}
-      {daemonReduced && (selectedClis.size === 1 || reducedAssurance) && (
+      {((daemonReduced === true && selectedClis.size === 1) || reducedAssurance) && (
         <ReducedAssuranceOptIn checked={reducedAssurance} onChange={setReducedAssurance} />
       )}
 

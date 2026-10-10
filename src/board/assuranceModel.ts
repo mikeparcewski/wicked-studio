@@ -398,8 +398,10 @@ export const REDUCED_OPT_IN_DISCLOSURE =
  */
 export function creatorSeatRefusal(events: readonly CoreEvent[] | null, ord: number | null | undefined, prompt: string | undefined): boolean {
   const esc = escalationFor(events, ord);
-  if (esc !== null && esc.denialSource === 'same_seat_evaluator') return true;
   const said = `${esc?.summary ?? ''}\n${prompt ?? ''}`;
+  // A team run's refusal is not waivable: reduced assurance would not let it grade on its creator seat.
+  if (/team run never grades on its creator seat/i.test(said)) return false;
+  if (esc !== null && esc.denialSource === 'same_seat_evaluator') return true;
   if (esc !== null && esc.condition !== 'dead_seat') return false;
   return /requires a distinct evaluator/i.test(said);
 }

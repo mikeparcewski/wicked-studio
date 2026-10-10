@@ -54,6 +54,8 @@ describe('the creator-seat refusal, detected', () => {
     expect(creatorSeatRefusal([esc('dead_seat', TEAM_WHY)], 2, `Unit 2 was never seated: ${TEAM_WHY}`)).toBe(false);
     expect(creatorSeatRefusal([esc('dead_seat', 'seat codex exhausted its quota')], 2, 'Unit 2 (codex) failed on a dead seat: quota')).toBe(false);
     expect(creatorSeatRefusal([esc('dead_seat', WHY)], 1, '')).toBe(false);
+    // codex r1: a team run's same-seat denial is not waivable either.
+    expect(creatorSeatRefusal([esc('same_seat_evaluator', 'a team run never grades on its creator seat')], 2, '')).toBe(false);
   });
 });
 
@@ -156,11 +158,24 @@ describe('the launch form', () => {
     expect('reducedAssurance' in body).toBe(false);
   });
 
-  it('a daemon that does not take it: not offered, never sent', async () => {
-    health(false); roster(['claude']); prefill(true);
+  it('a daemon that does not take it: one seat is not offered it, nothing is sent', async () => {
+    health(false); roster(['claude']); prefill();
     render(<ChatInput runId={null} runStatus={null} onLaunched={vi.fn()} />);
     const body = await launch();
     expect(screen.queryByTestId('launch-reduced-assurance')).toBeNull();
+    expect('reducedAssurance' in body).toBe(false);
+  });
+
+  it('codex r1: a ticked opt-in is never dropped in silence — refused, shown, and untickable', async () => {
+    health(false); roster(['claude']); prefill(true);
+    render(<ChatInput runId={null} runStatus={null} onLaunched={vi.fn()} />);
+    const user = userEvent.setup();
+    await waitFor(() => expect(screen.getByTestId('launch-submit')).toBeEnabled());
+    await user.click(screen.getByTestId('launch-submit'));
+    await waitFor(() => expect(document.body.textContent).toContain('This daemon does not take a reduced-assurance launch'));
+    expect(client.api.launchRun).not.toHaveBeenCalled();
+    await user.click(screen.getByTestId('launch-reduced-assurance-toggle'));
+    const body = await launch();
     expect('reducedAssurance' in body).toBe(false);
   });
 });
@@ -225,6 +240,9 @@ describe('the composer\'s /workflow row', () => {
     key('Enter');
     await waitFor(() => expect(posts.some((p) => p.path === '/runs')).toBe(true));
     expect(posts.find((p) => p.path === '/runs')!.body.reducedAssurance).toBe(true);
+    // codex r1: the opt-in was THAT launch's — the next one starts unticked.
+    await nameWorkflow();
+    expect((screen.getByTestId('launch-row-reduced-assurance-toggle') as HTMLInputElement).checked).toBe(false);
   });
 
   it('two seats: not offered, not sent', async () => {

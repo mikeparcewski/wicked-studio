@@ -340,6 +340,9 @@ export function Composer({
   const launchSeats = (roster ?? []).filter((s) => s.enabled_for_council && !dropped.includes(s.key));
   // EX-01: one seat builds and reviews — offer the opt-in (said first) on a daemon that takes it.
   const offerReduced = wfChip !== null && reducedCap && launchSeats.length === 1;
+  // The opt-in is THIS launch's: naming another workflow, dropping the chip or launching clears it.
+  const wfKey = wfChip?.workflowId ?? null;
+  useEffect(() => { setReduced(false); }, [wfKey]);
 
   /** S19a: POST the launch a named workflow runs — the wire the launch form sends, from the composer. */
   const launchWorkflow = async (workflowId: string, intent: string): Promise<void> => {
@@ -369,6 +372,7 @@ export function Composer({
       if (chat !== null) body.chatId = chat;
       const { runId } = await api.launchRun(body);
       useProvenanceStore.getState().markLaunchedHere(runId);
+      setReduced(false);
       clearAboutChips(composerKey);
       setText('');
       setNote(null);
