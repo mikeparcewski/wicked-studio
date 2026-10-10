@@ -141,6 +141,20 @@ describe('studio#631: the composer helpers row', () => {
     expect(useComposerSeats.getState().dropped).toEqual(['claude']);
   });
 
+  it('an @helper chip picks who answers without rewriting the question (studio#631)', () => {
+    useCapabilities.setState({ askPath: true });
+    try {
+      const onSend = vi.fn();
+      addAboutChip('desk', { kind: 'about', key: 'h:claude', label: 'Claude Code' });
+      render(<Harness onSend={onSend} />);
+      type('why is the ledger slow?');
+      key('Enter');
+      expect(onSend).toHaveBeenCalledWith('why is the ledger slow?', expect.objectContaining({ primary: 'claude' }));
+    } finally {
+      useCapabilities.setState({ askPath: false });
+    }
+  });
+
   it('a reply into a started chat keeps that chat\'s seats — no row', () => {
     render(<Harness started onSend={() => {}} />);
     type('a follow-up');

@@ -395,10 +395,11 @@ export function Composer({
       return;
     }
     if (!canSend) return;
-    const message = messageWithAbout(text, chips);
-    // ASK-S1: a helper named with `@` before the first send answers this conversation (its chip still
-    // leads the message as a subject, as before).
-    const helper = !started && useCapabilities.getState().askPath ? chips.find((c) => c.kind === 'about' && c.key.startsWith('h:')) : undefined;
+    // ASK-S1: a helper named with `@` before the first send answers this conversation. studio#631: the
+    // chip picks WHO answers — it no longer prefixes the question with "About <helper>:", which
+    // re-framed it as a question about the helper (and titled the session that way).
+    const helper = opensChat && askPathOn ? chips.find((c) => c.kind === 'about' && c.key.startsWith('h:')) : undefined;
+    const message = messageWithAbout(text, helper === undefined ? chips : chips.filter((c) => c !== helper));
     onSend(message, {
       ...(project === null ? {} : { projectId: project.projectId, fresh: started }),
       ...(helper !== undefined ? { primary: helper.key.slice(2) } : {}),
