@@ -24,6 +24,8 @@
  * `iFetch` (the interactive bridge behind crew's proxy).
  */
 
+import { planRefusalWords } from './planRefusal.js';
+
 /** Translate one wire refusal to its operator-facing sentence (EC33). */
 export function translateWireError(status: number, wire: string): string {
   const detail = wire.trim();
@@ -32,6 +34,9 @@ export function translateWireError(status: number, wire: string): string {
     // is stated in words, never as the bare `API NNN:` framing EC33 retires.
     return `the daemon refused this — it answered HTTP ${status} with no detail`;
   }
+  // studio#665: a plan refusal the engine names by token gets its words first, the sentence kept.
+  const plan = planRefusalWords(detail);
+  if (plan !== null) return `the daemon refused this plan: ${plan} — ${detail}`;
   return `the daemon refused this — ${detail}`;
 }
 

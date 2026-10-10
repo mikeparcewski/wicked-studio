@@ -1,4 +1,4 @@
-import { planRefusalWords } from '../board/planRefusal.js';
+import { planRefusalWords } from '../api/planRefusal.js';
 import { create } from 'zustand';
 import { isFiller } from './narration.js';
 import type { CoreEvent } from '../api/types.js';

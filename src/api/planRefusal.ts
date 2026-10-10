@@ -7,7 +7,10 @@
  * `null` and the caller shows the engine's text.
  */
 
-const TOKEN = /\b(security_review_on_non_code_plan|writes_nothing_on_code)\b/;
+/** The token as the engine's `PlanRefusal` Display writes it: at the start of the text, or behind a
+ *  context prefix that ends in `: ` (`the plan is refused: <token>: …`), and always followed by `: `
+ *  — never a bare mention inside another refusal's detail (a step named `writes_nothing_on_code`). */
+const TOKEN = /(?:^|: )(security_review_on_non_code_plan|writes_nothing_on_code): /;
 
 /** The held rule a refusal names (`… (rule TST-1002 requires it) …`), or null. */
 export function refusingRule(reason: string): string | null {

@@ -1,4 +1,4 @@
-import { planRefusalWords } from './planRefusal.js';
+import { planRefusalWords } from '../api/planRefusal.js';
 import type { TeamRow } from '../api/teamPlan.js';
 import { blockOf } from './chainModel.js';
 
