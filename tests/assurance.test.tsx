@@ -108,6 +108,37 @@ describe('the receipt model', () => {
     expect(deliveryReceiptOf(makeView({ id: RUN } as never, UNITS), [])).toBeNull();
   });
 
+  it('codex r1: a delivery is independent only when each gate was (the names are display only)', () => {
+    const view = makeView({ id: RUN, status: 'awaiting_human' } as never, UNITS);
+    // One gate judged on its creator's own seat, another floor-only: joined names must not read as separate seats.
+    const mixed = [
+      { type: 'gateEvaluated', ord: 1, assurance: wire({ mode: 'reduced', ran: ['judge'], creator: 'claude', judge: 'claude' }) },
+      { type: 'gateEvaluated', ord: 2, assurance: wire({ mode: 'reduced', ran: ['repo_checks'], creator: 'codex' }) },
+    ] as unknown as CoreEvent[];
+    const r = deliveryReceiptOf(view, mixed)!;
+    expect(assuranceKind(r)).toBe('same-seat');
+    expect(receiptWords(r, true).who).toBe('built by claude, codex · judged by claude (same seat, reduced assurance)');
+    // One independent gate, another that skipped its judge: partly independent.
+    const part = deliveryReceiptOf(view, [
+      { type: 'gateEvaluated', ord: 1, assurance: wire({ ran: ['judge'], creator: 'claude', judge: 'codex' }) },
+      { type: 'gateEvaluated', ord: 2, assurance: wire({ ran: ['repo_checks'], creator: 'claude', skipped: [{ instrument: 'judge', reason: 'error', detail: null }] }) },
+    ] as unknown as CoreEvent[])!;
+    expect(receiptWords(part, true).label).toBe('Accepted, partly independently');
+    // A judge with no known seat never establishes independence.
+    expect(assuranceKind(receiptOf(wire({ ran: ['judge'], creator: null, judge: null }))!)).toBe('floor-only');
+  });
+
+  it('codex r1: a re-dispatch voids the previous attempt\'s receipt (gate and lift)', () => {
+    const view = makeView({ id: RUN, status: 'awaiting_human', verified_tree: 'cafe00' } as never, UNITS);
+    const log = [
+      { type: 'gateEvaluated', ord: 1, assurance: wire({ ran: ['repo_checks'], creator: 'claude' }) },
+      { type: 'deliverLiftEvaluated', ord: 3, assurance: wire({ ran: ['repo_checks'], tree: 'aaaa1111', attempt: 0 }) },
+      { type: 'unitDispatched', ord: 3, attempt: 1 },
+    ] as unknown as CoreEvent[];
+    expect(deliveryReceiptOf(view, log)!.tree).toBe('cafe00');
+    expect(gateReceiptFor([...log, { type: 'unitDispatched', ord: 1, attempt: 1 }] as unknown as CoreEvent[], UNITS, 1)).toBeNull();
+  });
+
   it('the session contract: the record, else sessionStarted', () => {
     expect(sessionAssurance(makeView({ id: RUN } as never, UNITS), [{ type: 'sessionStarted', assurance: { mode: 'reduced', required: [] } } as unknown as CoreEvent])!.mode).toBe('reduced');
     expect(sessionAssurance(makeView({ id: RUN } as never, UNITS), [])).toBeNull();
@@ -143,6 +174,20 @@ describe('the receipt renders', () => {
     expect(screen.getByTestId('assurance-who').textContent).toBe('built by claude · judged by codex (judged on a separate seat)');
     expect(screen.getByTestId('assurance-where').textContent).toBe('tree feedfac · attempt 1');
     expect(screen.queryByTestId('assurance-reduced')).toBeNull();
+  });
+
+  it('codex r1: a refused hand-over row never shows the previous unit\'s acceptance', () => {
+    const units: WorkUnit[] = [
+      makeUnit({ id: `${RUN}:build`, session_id: RUN, ord: 1, role: 'creator', status: 'done', stage: 'build', assigned_cli: 'claude' }),
+      makeUnit({ id: `${RUN}:deliver`, session_id: RUN, ord: 2, description: 'deliver', stage: 'build', phase_ref: 'deliver', status: 'rejected' }),
+    ];
+    useRunEventStore.setState({ byRun: { [RUN]: [
+      { type: 'gateEvaluated', session: RUN, ord: 1, combined: true, denial: null, hasDeterministicFloor: true, deterministicPass: true, agentVerdict: 'PASS', judgeCli: 'codex', judgeDistinct: true, evaluatorPolicies: [], assurance: wire({ ran: ['judge'], creator: 'claude', judge: 'codex' }) },
+    ] as unknown as CoreEvent[] } });
+    const g: OpenGate = { runId: RUN, ord: 2, prompt: 'The deliver phase refused: deliver: identity mismatch — nothing was pushed. Approve to re-run the deliver phase now (the engine re-lifts and re-verifies first; no second deliver gate), reject to cancel the run and keep the worktree.', lifecycle: 'open', receivedAt: NOW, gateKind: 'escalation' };
+    render(<GateRow view={makeView({ id: RUN, status: 'awaiting_human' } as never, units)} gate={g} />);
+    expect(screen.getAllByTestId('session-gate-choice').map((b) => b.textContent)).toEqual(['Deliver again', 'Stop']);
+    expect(screen.queryByTestId('session-gate-assurance')).toBeNull();
   });
 
   it('a reduced run says so on the gate even with no receipt, and on the session', () => {

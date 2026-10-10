@@ -141,14 +141,19 @@ function RunGateRow({ view, gate, navigate }: { view: RunView; gate: OpenGate | 
     : null;
   // core#850: what assured the evaluation this gate is about (the unit the deciding verdict judged),
   // and the run's own contract — a reduced run says so on every gate, receipt or not.
-  const receipt = model === null ? null : gateReceiptFor(events, view.units, model.reviewedOrd);
+  // A pre-run gate (`def`) is about the previous unit's evaluation; every other gate — an escalation,
+  // a retry, a refused hand-over — only about its OWN unit's (never a neighbour's acceptance).
+  const receiptOrd = model === null || gate === undefined ? null
+    : model.reason === 'def' ? model.reviewedOrd
+      : model.reviewedOrd === gate.ord ? gate.ord : null;
+  const receipt = gateReceiptFor(events, view.units, receiptOrd);
   const reduced = isReduced(sessionAssurance(view, events));
   const judgeWait = gate !== undefined && model !== null && waitsForJudge(events, gate.ord, gate.prompt);
   const assurance = model === null ? null : (
     <>
       {judgeWait && <JudgeWaitLine {...(navigate !== undefined ? { navigate } : {})} />}
       {receipt !== null
-        ? <AssuranceReceipt receipt={receipt} passed={gatePassedFor(events, model.reviewedOrd)} testId="session-gate-assurance" />
+        ? <AssuranceReceipt receipt={receipt} passed={gatePassedFor(events, receiptOrd)} testId="session-gate-assurance" />
         : reduced && <p className="wk-assurance"><ReducedAssuranceLabel testId="session-gate-reduced" /></p>}
     </>
   );

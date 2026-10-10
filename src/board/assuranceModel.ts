@@ -38,6 +38,9 @@ export interface AssuranceReceipt extends RunAssurance {
   judge: string | null;
   tree: string | null;
   attempt: number;
+  /** Studio's mark on a DELIVERY receipt (every gate's instruments, unioned): its kind, decided per
+   *  gate before the union. Its seat names are the gates' names joined for display only. */
+  aggregateKind?: AssuranceKind;
 }
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -111,11 +114,13 @@ export function gateReceiptFor(events: readonly CoreEvent[] | null, units: reado
   const log = events ?? [];
   for (let i = log.length - 1; i >= 0; i--) {
     const e = log[i]!;
+    // A re-dispatch after the newest evaluation: that receipt is the previous attempt's, not this one's.
+    if (e.type === 'unitDispatched' && e.ord === ord) return null;
     if (e.type !== 'gateEvaluated' || e.ord !== ord) continue;
-    const r = receiptOf((e as Record<string, unknown>)['assurance']);
-    if (r !== null) return r;
-    break;
+    return receiptOf((e as Record<string, unknown>)['assurance']);
   }
+  // No log in hand (a session read before its events): the unit record's persisted receipt.
+  if (log.length > 0) return null;
   const unit = (units ?? []).find((u) => u.ord === ord);
   return receiptOf((unit as unknown as { assurance?: unknown } | undefined)?.assurance);
 }
@@ -129,14 +134,23 @@ export function gateReceiptFor(events: readonly CoreEvent[] | null, units: reado
  */
 export function deliveryReceiptOf(view: SessionView | null | undefined, events: readonly CoreEvent[] | null): AssuranceReceipt | null {
   const log = events ?? [];
-  let lifted: AssuranceReceipt | null = null;
-  for (let i = log.length - 1; i >= 0 && lifted === null; i--) {
-    const e = log[i]!;
-    if (e.type === 'deliverLiftEvaluated') lifted = receiptOf((e as Record<string, unknown>)['assurance']);
+  // The CURRENT deliver attempt's lift: a re-dispatch of the deliver unit after it voids it (the
+  // retry has not lifted yet), and the receipt falls back to the gates' aggregate.
+  let lifted: { ord: unknown; r: AssuranceReceipt } | null = null;
+  for (const e of log) {
+    if (e.type === 'deliverLiftEvaluated') {
+      const r = receiptOf((e as Record<string, unknown>)['assurance']);
+      lifted = r === null ? null : { ord: e.ord, r };
+    } else if (e.type === 'unitDispatched' && lifted !== null && e.ord === lifted.ord) {
+      lifted = null;
+    }
   }
   const gates = gateReceipts(view, log);
   const who = whoOf(gates);
-  if (lifted !== null) return { ...lifted, creator: lifted.creator ?? who.creator, evaluator: lifted.evaluator ?? who.evaluator, judge: lifted.judge ?? who.judge };
+  if (lifted !== null) {
+    const r = lifted.r;
+    return { ...r, creator: r.creator ?? who.creator, evaluator: r.evaluator ?? who.evaluator, judge: r.judge ?? who.judge, aggregateKind: deliveryKind(r, gates) };
+  }
   if (gates.length === 0) return null;
   const run = sessionAssurance(view, log) ?? { mode: gates[0]!.mode, required: gates[0]!.required };
   const out: AssuranceReceipt = { ...run, ran: [], skipped: [], ...who, tree: str((view?.session as unknown as { verified_tree?: unknown } | undefined)?.verified_tree), attempt: 0 };
@@ -144,7 +158,21 @@ export function deliveryReceiptOf(view: SessionView | null | undefined, events: 
     for (const r of g.ran) if (!out.ran.includes(r)) out.ran.push(r);
     for (const s of g.skipped) if (!out.skipped.some((k) => k.instrument === s.instrument)) out.skipped.push(s);
   }
-  return out;
+  return { ...out, aggregateKind: deliveryKind(out, gates) };
+}
+
+/**
+ * A delivery's kind, from each gate's own kind (a joined seat list proves nothing): `independent`
+ * only when some gate accepted on another seat and no gate ran on the creator's seat or skipped a
+ * seat-bound instrument; `same-seat` when any gate did run on the creator's seat; `partial` when
+ * some gate was independent but another skipped its judge or distinct evaluator.
+ */
+function deliveryKind(r: AssuranceReceipt, gates: readonly AssuranceReceipt[]): AssuranceKind {
+  const kinds = gates.map(assuranceKind);
+  if (kinds.includes('same-seat') || r.skipped.some((s) => s.instrument === 'distinct_evaluator')) return 'same-seat';
+  const seatSkip = r.skipped.some((s) => s.instrument === 'judge');
+  if (kinds.includes('independent')) return seatSkip ? 'partial' : 'independent';
+  return r.ran.length > 0 ? 'floor-only' : 'unchecked';
 }
 
 /** Every unit's newest gate receipt, in ord order (the log first, the unit record as fallback). */
@@ -208,19 +236,23 @@ export function skipReasonWord(t: string): string {
  * How the decision was assured, in one word the row leads with:
  *  - `independent` — the evaluator ran on a seat distinct from the creator's, or a judge answered
  *    on a seat that is not the creator's;
+ *  - `partial` — a delivery some of whose gates were independent and some skipped a judge or a
+ *    distinct evaluator;
  *  - `same-seat` — the work was evaluated or judged on the seat that built it (a reduced run, or a
  *    roster with one seat);
  *  - `floor-only` — only deterministic floors (pinned validator, repo checks) or the policy pass ran;
  *  - `unchecked` — nothing ran.
  */
-export type AssuranceKind = 'independent' | 'same-seat' | 'floor-only' | 'unchecked';
+export type AssuranceKind = 'independent' | 'partial' | 'same-seat' | 'floor-only' | 'unchecked';
 
 export function assuranceKind(r: AssuranceReceipt): AssuranceKind {
+  if (r.aggregateKind !== undefined) return r.aggregateKind;
+  const skippedSame = r.skipped.some((s) => s.instrument === 'distinct_evaluator');
   if (r.ran.includes('distinct_evaluator')) return 'independent';
+  // A judge accepts independently only on a KNOWN seat that is not the creator's.
   const judged = r.ran.includes('judge');
-  const judgeOnCreator = judged && r.judge !== null && r.creator !== null && r.judge === r.creator;
-  if (judged && !judgeOnCreator) return 'independent';
-  if (judgeOnCreator || r.skipped.some((s) => s.instrument === 'distinct_evaluator')) return 'same-seat';
+  if (judged && r.judge !== null && r.creator !== null && r.judge !== r.creator) return 'independent';
+  if ((judged && r.judge !== null && r.judge === r.creator) || skippedSame) return 'same-seat';
   if (r.ran.length > 0) return 'floor-only';
   return 'unchecked';
 }
@@ -228,6 +260,7 @@ export function assuranceKind(r: AssuranceReceipt): AssuranceKind {
 /** The lead word when the decision PASSED (an approval, a delivery) … */
 const ACCEPTED_LABEL: Record<AssuranceKind, string> = {
   independent: 'Independently accepted',
+  partial: 'Accepted, partly independently',
   'same-seat': 'Accepted on the creator\'s own seat',
   'floor-only': 'Floor-only approval',
   unchecked: 'Approved with nothing checked',
@@ -235,6 +268,7 @@ const ACCEPTED_LABEL: Record<AssuranceKind, string> = {
 /** … and when it did not, or the outcome is not known: what checked it, never "accepted". */
 const CHECKED_LABEL: Record<AssuranceKind, string> = {
   independent: 'Checked independently',
+  partial: 'Checked partly independently',
   'same-seat': 'Checked on the creator\'s own seat',
   'floor-only': 'Floor checks only',
   unchecked: 'Nothing checked this',
@@ -243,6 +277,10 @@ const CHECKED_LABEL: Record<AssuranceKind, string> = {
 /** How the evaluator stood to the creator: separate seats, the same seat (and why), or no
  *  evaluator on this gate. */
 export function separationWords(r: AssuranceReceipt): string | null {
+  if (r.aggregateKind !== undefined) {
+    const k = r.aggregateKind;
+    return k === 'independent' ? 'separate seats' : k === 'same-seat' ? (r.mode === 'reduced' ? 'same seat, reduced assurance' : 'same seat') : null;
+  }
   if (r.ran.includes('distinct_evaluator')) return 'separate seats';
   const same = r.skipped.find((s) => s.instrument === 'distinct_evaluator');
   if (same !== undefined) return same.reason === 'reduced_assurance' ? 'same seat, reduced assurance' : 'same seat';

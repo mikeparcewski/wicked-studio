@@ -197,7 +197,8 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
           {card.kind === 'deliver' && accept !== null && (
             <p data-testid="session-proposal-acceptance" data-tone={accept.tone} className={`wk-prop-why wk-prop-accept wk-prop-accept--${accept.tone}`}>{accept.text}</p>
           )}
-          {card.kind === 'deliver' && deliveryReceipt !== null && <AssuranceReceipt receipt={deliveryReceipt} passed testId="session-proposal-assurance" />}
+          {/* A re-opened deliver gate after a failed hand-over: what checked the work, never "accepted". */}
+          {card.kind === 'deliver' && deliveryReceipt !== null && <AssuranceReceipt receipt={deliveryReceipt} passed={deliverFailure === null ? true : null} testId="session-proposal-assurance" />}
           {/* The engine's own card (the origin's path, the run branch): underneath only (studio#444). */}
           {card.kind === 'deliver' && (() => {
             // Branch: prefer session.run_branch; fall back to the diff's branch field (source:'branch').
