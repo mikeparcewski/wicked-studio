@@ -127,7 +127,7 @@ describe('campaignTotals — campaigns and groups, one aggregate', () => {
     );
     expect(t).toEqual({
       campaigns: 2, groups: 1, activeNow: 2, landed: 5, failed: 1,
-      running: 3, awaitingHuman: 1, terminal: 7,
+      running: 3, awaitingHuman: 1, terminal: 6, cancelled: 1,
     });
   });
 });

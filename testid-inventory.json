@@ -12,8 +12,8 @@
   "studioVersion": "0.6.8",
   "counts": {
     "files": 173,
-    "occurrences": 1948,
-    "static": 1734,
+    "occurrences": 1950,
+    "static": 1736,
     "dynamic": 37,
     "computed": 6
   },
@@ -9834,6 +9834,18 @@
     },
     {
       "testId": "testing-recon-open",
+      "files": [
+        "src/components/CampaignsPage.tsx"
+      ]
+    },
+    {
+      "testId": "testing-solo-run",
+      "files": [
+        "src/components/CampaignsPage.tsx"
+      ]
+    },
+    {
+      "testId": "testing-solo-runs",
       "files": [
         "src/components/CampaignsPage.tsx"
       ]
