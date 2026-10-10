@@ -180,10 +180,15 @@ function gateModeOf(gate: unknown): GateMode | null {
   if (gate === 'auto') return 'auto';
   if (gate === 'consent_before') return 'consent';
   if (typeof gate !== 'object' || gate === null) return null;
-  if ('human_confirm_if' in gate) return 'human_if';
+  // Only a well-formed gate is a mode; anything else is carried as stated for the engine to judge.
+  const keys = Object.keys(gate);
+  if (keys.length !== 1) return null;
+  if ('human_confirm_if' in gate) return (gate as { human_confirm_if: unknown }).human_confirm_if === 'verdict_not_pass' ? 'human_if' : null;
   if ('human_confirm' in gate) {
-    const hc = (gate as { human_confirm?: { unconditional?: unknown } }).human_confirm;
-    return hc?.unconditional === true ? 'human_always' : 'human';
+    const hc = (gate as { human_confirm: unknown }).human_confirm;
+    if (typeof hc !== 'object' || hc === null) return null;
+    const u = (hc as { unconditional?: unknown }).unconditional;
+    return u === true ? 'human_always' : u === false ? 'human' : null;
   }
   return null;
 }
@@ -207,15 +212,16 @@ export function builderPhaseOfStep(step: PresetStep): BuilderPhase {
     _key: newKey(),
     id: step.id,
     catalog: step.catalog,
-    dependsOn: Array.isArray(step['depends_on']) ? strings(step['depends_on']) : null,
+    // A malformed value is NOT read here (it rides in `extra`, as stated), so nothing overwrites it.
+    dependsOn: isStrings(step['depends_on']) ? (step['depends_on'] as string[]) : null,
     kind: typeof step['kind'] === 'string' ? (step['kind'] as StageKind) : null,
     instructions: typeof step['instructions'] === 'string' ? step['instructions'] : null,
     gate: 'gate' in step ? gateModeOf(step['gate']) : null,
     executesCode: step['executes_code'] === true ? true : null,
     verifiedEvidence: step['verified_evidence'] === true ? true : null,
     skillRef: typeof step['skill_ref'] === 'string' ? step['skill_ref'] : null,
-    allowedSkills: strings(step['allowed_skills']),
-    requiredDeliverables: strings(step['required_deliverables']),
+    allowedSkills: isStrings(step['allowed_skills']) ? (step['allowed_skills'] as string[]) : [],
+    requiredDeliverables: isStrings(step['required_deliverables']) ? (step['required_deliverables'] as string[]) : [],
     validatorPin: typeof step['validator_pin'] === 'string' ? step['validator_pin'] : null,
     execMode: cmd !== null ? 'command' : 'inherit',
     cmd: cmd !== null ? commandText(cmd) : '',
@@ -325,13 +331,15 @@ export type BuilderStep = PresetStep;
  * ENGINE composes it over its entry and refuses a step that weakens the entry, naming the rule
  * (`PUT /presets` answers in its words).
  */
-export async function buildPresetSteps(phases: BuilderPhase[], entries: readonly CatalogEntry[] = []): Promise<BuilderStep[]> {
+export async function buildPresetSteps(phases: BuilderPhase[]): Promise<BuilderStep[]> {
   return Promise.all(
     phases.map(async (p, i): Promise<BuilderStep> => {
       const step: BuilderStep = { ...p.extra, catalog: p.catalog, id: p.id || `phase-${i + 1}` };
       if (p.dependsOn !== null) step['depends_on'] = p.dependsOn;
-      const tool = entries.find((e) => e.id === p.catalog)?.executor === 'tool' || p.catalog === 'run';
-      if (p.kind !== null && tool) step['kind'] = p.kind;
+      // A stated stage or command is SENT whatever the entry (codex r4): the engine allows them on
+      // `run` / Tool entries only and refuses the rest by name. The builder never decides that from
+      // a catalog it may not have loaded; a catalog change clears them ({@link withCatalog}).
+      if (p.kind !== null) step['kind'] = p.kind;
       if (p.gate !== null) step['gate'] = toGateSpec(p.gate);
       // An empty string is a statement too (the engine reads its presence), so it is kept.
       if (p.instructions !== null) step['instructions'] = p.instructions;
@@ -342,11 +350,9 @@ export async function buildPresetSteps(phases: BuilderPhase[], entries: readonly
       if (p.allowedSkills.length > 0) step['allowed_skills'] = p.allowedSkills;
       if (p.requiredDeliverables.length > 0) step['required_deliverables'] = p.requiredDeliverables;
       if (p.validatorPin !== null) step['validator_pin'] = p.validatorPin;
-      // A command rides only a Tool entry; with none stated the step keeps the entry's own.
-      if (tool) {
-        const executor = await resolveExecutor(p);
-        if (executor !== undefined) step['executor'] = executor;
-      }
+      // With no command stated the step keeps its entry's own.
+      const executor = await resolveExecutor(p);
+      if (executor !== undefined) step['executor'] = executor;
       return step;
     }),
   );
@@ -759,7 +765,7 @@ function WorkflowBuilder({
 
   async function handlePreview() {
     try {
-      const steps = await buildPresetSteps(phases, entries);
+      const steps = await buildPresetSteps(phases);
       setPreviewJson(JSON.stringify({ name: workflowId, steps }, null, 2));
       setShowJson(true);
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
@@ -774,7 +780,7 @@ function WorkflowBuilder({
     try {
       // X-MIG M11: the builder saves a PRESET (`PUT /presets/:name`); the engine composes its steps
       // over the catalog and refuses one that weakens its entry, in words (translateWireError).
-      await teamPlanApi.putPreset(name, { steps: await buildPresetSteps(phases, entries) });
+      await teamPlanApi.putPreset(name, { steps: await buildPresetSteps(phases) });
       onSaved(name);
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     finally { setSaving(false); }

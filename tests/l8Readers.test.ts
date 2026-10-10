@@ -154,7 +154,7 @@ describe('the preset builder keeps a preset exactly as saved (codex r1 on studio
       { catalog: 'domain_coverage', id: 'coverage', depends_on: ['write'] },
       { catalog: 'run', id: 'lint', kind: 'test', executor: { type: 'tool', cmd: ['npm', 'run', 'lint'] }, pool: 1 },
     ];
-    const again = await buildPresetSteps(saved.map(builderPhaseOfStep), entries);
+    const again = await buildPresetSteps(saved.map(builderPhaseOfStep));
     expect(again).toEqual([
       { catalog: 'produce', id: 'write', instructions: 'Write it.' },
       { catalog: 'domain_coverage', id: 'coverage', depends_on: ['write'] },
@@ -178,17 +178,17 @@ describe('the preset builder keeps a preset exactly as saved (codex r1 on studio
   });
 
   it("(5) an entry's own gate and flags are inherited, not cleared: a new test step states no gate and no flag", async () => {
-    const [step] = await buildPresetSteps([withCatalog(builderPhaseOfStep({ catalog: 'build', id: '' }), 'test')], entries);
+    const [step] = await buildPresetSteps([withCatalog(builderPhaseOfStep({ catalog: 'build', id: '' }), 'test')]);
     expect(step).toEqual({ catalog: 'test', id: 'phase-1' });
   });
 
   it("(6) a Tool step with no command stated keeps its entry's own (walkthrough_review); a typed one is sent", async () => {
     const own = builderPhaseOfStep({ catalog: 'walkthrough_review', id: 'walk' });
     expect(own.execMode).toBe('inherit');
-    const [a, b] = await buildPresetSteps([own, { ...own, id: 'blank', execMode: 'command', cmd: '  ' }], entries);
+    const [a, b] = await buildPresetSteps([own, { ...own, id: 'blank', execMode: 'command', cmd: '  ' }]);
     expect('executor' in a!).toBe(false);
     expect('executor' in b!).toBe(false);
-    const [c] = await buildPresetSteps([{ ...own, execMode: 'command', cmd: 'x --y' }], entries);
+    const [c] = await buildPresetSteps([{ ...own, execMode: 'command', cmd: 'x --y' }]);
     expect(c!['executor']).toEqual({ type: 'tool', cmd: ['x', '--y'] });
   });
 
@@ -317,3 +317,29 @@ describe('the preset builder round-trip, codex r3 on studio B', () => {
     expect(list.map((w) => [w.id, w.phases.map((p) => p.id)])).toEqual([['mine', ['write']]]);
   });
 });
+
+describe('the preset builder round-trip, codex r4 on studio B', () => {
+  it('(1) a stated command is sent whether or not the catalog has loaded (no entry lookup decides it)', async () => {
+    const p = builderPhaseOfStep({ catalog: 'walkthrough_review', id: 'w', executor: { type: 'tool', cmd: ['x'] } });
+    const [step] = await buildPresetSteps([p]);
+    expect(step!['executor']).toEqual({ type: 'tool', cmd: ['x'] });
+  });
+
+  it('(2) a stage or command stated on a non-tool entry is sent as stated, for the engine to refuse by name', async () => {
+    const [step] = await buildPresetSteps([builderPhaseOfStep({ catalog: 'produce', id: 'p', kind: 'test', executor: { type: 'tool', cmd: ['echo', 'hi'] } })]);
+    expect(step).toEqual({ catalog: 'produce', id: 'p', kind: 'test', executor: { type: 'tool', cmd: ['echo', 'hi'] } });
+  });
+
+  it('(3) a malformed list rides through unchanged: nothing the builder read overwrites it', async () => {
+    const [step] = await buildPresetSteps([builderPhaseOfStep({ catalog: 'produce', id: 'p', depends_on: [123], allowed_skills: ['a', 1], required_deliverables: [null] })]);
+    expect(step).toEqual({ catalog: 'produce', id: 'p', depends_on: [123], allowed_skills: ['a', 1], required_deliverables: [null] });
+  });
+
+  it('(4) a malformed gate is sent as stated, never "repaired" into a valid one', async () => {
+    for (const gate of [{ human_confirm_if: 'typo' }, { human_confirm: null }, { human_confirm: {} }, 'sometimes']) {
+      const [step] = await buildPresetSteps([builderPhaseOfStep({ catalog: 'review', id: 'r', gate })]);
+      expect(step!['gate']).toEqual(gate);
+    }
+  });
+});
+
