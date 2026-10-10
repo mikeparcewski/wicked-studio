@@ -12,8 +12,8 @@
   "studioVersion": "0.7.3",
   "counts": {
     "files": 178,
-    "occurrences": 2048,
-    "static": 1815,
+    "occurrences": 2049,
+    "static": 1816,
     "dynamic": 48,
     "computed": 6
   },
@@ -557,6 +557,12 @@
     },
     {
       "testId": "builder-step-catalog",
+      "files": [
+        "src/components/WorkflowViewer.tsx"
+      ]
+    },
+    {
+      "testId": "builder-step-deps-engine",
       "files": [
         "src/components/WorkflowViewer.tsx"
       ]

@@ -9,6 +9,8 @@ import { runEndedWord, runWhenWord } from '../src/components/runIdentity.js';
 import {
   buildPresetSteps,
   builderPhaseOf,
+  commandArgv,
+  commandText,
   builderPhaseOfStep,
   catalogOfPhase,
   parseBuilderImport,
@@ -259,8 +261,8 @@ describe('the preset builder round-trip, codex r2 on studio B', () => {
   it('(5) an import whose step fields have the wrong shape is refused as unreadable, never thrown', () => {
     const bad = JSON.stringify({ name: 'x', steps: [{ catalog: 'run', id: 'r', executor: { type: 'tool', cmd: 'echo hello' } }] });
     expect(() => parseBuilderImport(bad)).not.toThrow();
-    // A malformed executor is read as no command stated (the entry's own); the step itself loads.
-    expect(parseBuilderImport(bad)?.phases[0]).toMatchObject({ catalog: 'run', execMode: 'inherit', cmdArgs: null });
+    // A malformed executor is no command the builder can edit: it is carried as stated, for the engine to judge.
+    expect(parseBuilderImport(bad)?.phases[0]).toMatchObject({ catalog: 'run', execMode: 'inherit', extra: { executor: { type: 'tool', cmd: 'echo hello' } } });
   });
 
   it('(6) the viewer reading of a saved preset invents no dependency edge for a step that states none', () => {
@@ -268,5 +270,50 @@ describe('the preset builder round-trip, codex r2 on studio B', () => {
       { catalog: 'produce', id: 'a' }, { catalog: 'produce', id: 'b' }, { catalog: 'review', id: 'r' },
     ] }], [])];
     expect(list![0]!.phases.map((ph) => ph.depends_on)).toEqual([[], [], []]);
+  });
+});
+
+describe('the preset builder round-trip, codex r3 on studio B', () => {
+  it('(1) a command whose arguments hold spaces is shown and edited as a JSON argv, so an edit keeps each argument', async () => {
+    const p = builderPhaseOfStep({ catalog: 'run', id: 'v', executor: { type: 'tool', cmd: ['bash', '-lc', 'echo hello'] } });
+    expect(p.cmd).toBe('["bash","-lc","echo hello"]');
+    const [edited] = await buildPresetSteps([{ ...p, cmd: '["bash","-lc","echo goodbye"]' }]);
+    expect(edited!['executor']).toEqual({ type: 'tool', cmd: ['bash', '-lc', 'echo goodbye'] });
+    expect(commandText(['npm', 'run', 'build'])).toBe('npm run build');
+    expect(commandArgv('npm  run build')).toEqual(['npm', 'run', 'build']);
+    expect(() => commandArgv('["a", 1]')).toThrow(/not a JSON argv/);
+  });
+
+  it('(2) a step whose dependencies were edited can hand them back to the engine (null is omitted again)', async () => {
+    const p = { ...builderPhaseOfStep({ catalog: 'review', id: 'r' }), dependsOn: [] as string[] };
+    const [explicit] = await buildPresetSteps([p]);
+    expect(explicit!['depends_on']).toEqual([]);
+    const [back] = await buildPresetSteps([{ ...p, dependsOn: null }]);
+    expect('depends_on' in back!).toBe(false);
+  });
+
+  it('(3) a hand-written def with a malformed field loads with that field read as absent (no render-time crash)', () => {
+    const doc = JSON.stringify({ id: 'x', phases: [{ id: 'a', kind: 'build' }, { id: 'b', kind: 'review', depends_on: {}, allowed_skills: 'x' }] });
+    const parsed = parseBuilderImport(doc);
+    expect(parsed?.phases[1]).toMatchObject({ dependsOn: [], allowedSkills: [] });
+  });
+
+  it('(4) an explicit removal (validator_pin: null, executes_code: false) is sent as stated, for the engine to refuse', async () => {
+    const [step] = await buildPresetSteps([builderPhaseOfStep({ catalog: 'build', id: 'b', validator_pin: null, executes_code: false })]);
+    expect(step).toEqual({ catalog: 'build', id: 'b', validator_pin: null, executes_code: false });
+  });
+
+  it('(5) explicit empty instructions survive a no-change save (the engine reads their presence)', async () => {
+    const [step] = await buildPresetSteps([builderPhaseOfStep({ catalog: 'domain_coverage', id: 'c', instructions: '', executes_code: true })]);
+    expect(step).toEqual({ catalog: 'domain_coverage', id: 'c', instructions: '', executes_code: true });
+  });
+
+  it('(7) a saved user preset replaces a runtime workflow row of the same name (a launch resolves the preset first)', () => {
+    const list = viewerListOf(
+      [{ id: 'mine', phases: [] }],
+      [{ name: 'mine', scope: 'global', created_by: 'studio', updated_at: 0, steps: [{ catalog: 'produce', id: 'write' }] }],
+      [],
+    );
+    expect(list.map((w) => [w.id, w.phases.map((p) => p.id)])).toEqual([['mine', ['write']]]);
   });
 });

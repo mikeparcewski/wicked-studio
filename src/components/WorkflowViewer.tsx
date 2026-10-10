@@ -3,6 +3,7 @@ import { api } from '../api/client.js';
 import type { GateSpec, PhaseDef, PhaseExecutor, PresetStep, WorkflowDef } from '../api/types.js';
 import { setCachedWorkflows } from '../store/workflowCache.js';
 import { refusedWorkflowsOf, type RefusedWorkflow } from '../api/wave6-wire.js';
+import { ApiError } from '../api/errors.js';
 import { teamPlanApi, type CatalogEntry, type Preset } from '../api/teamPlan.js';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -118,21 +119,58 @@ export interface BuilderPhase {
   requiredDeliverables: string[];
   validatorPin: string | null;
   execMode: ExecMode;
+  /** The command as typed: words split on whitespace, or a JSON argv (`["bash", "-lc", "a b"]`)
+   *  when an argument holds a space, a quote or a newline ({@link commandText}). */
   cmd: string;
-  /** The command's argv as saved: sent back as-is while `cmd` still reads as it (an argument may
-   *  hold spaces or a whole script, which a whitespace split would break). */
-  cmdArgs: string[] | null;
   script: string;
   scriptLang: ScriptLang;
   /** Every step field the builder has no control for, carried back verbatim. */
   extra: Record<string, unknown>;
 }
 
-/** The step fields the builder edits (everything else rides in `extra`). */
-const EDITED_FIELDS = new Set([
-  'catalog', 'id', 'depends_on', 'kind', 'instructions', 'gate', 'executes_code', 'verified_evidence',
-  'skill_ref', 'allowed_skills', 'required_deliverables', 'validator_pin', 'executor',
-]);
+/**
+ * The step fields the builder edits, each with the values it can hold. A field whose value it cannot
+ * hold (`validator_pin: null`, `executes_code: false`, a malformed list) rides in `extra` instead and
+ * is sent back as stated, so the ENGINE judges it (a removal is refused as such) rather than the
+ * builder quietly dropping it (codex r3).
+ */
+const isStrings = (v: unknown): boolean => Array.isArray(v) && v.every((x) => typeof x === 'string');
+const EDITED_FIELDS: Record<string, (v: unknown) => boolean> = {
+  catalog: () => true,
+  id: () => true,
+  depends_on: isStrings,
+  kind: (v) => typeof v === 'string',
+  instructions: (v) => typeof v === 'string',
+  gate: (v) => gateModeOf(v) !== null,
+  executes_code: (v) => v === true,
+  verified_evidence: (v) => v === true,
+  skill_ref: (v) => typeof v === 'string',
+  allowed_skills: isStrings,
+  required_deliverables: isStrings,
+  validator_pin: (v) => typeof v === 'string',
+  executor: (v) => toolCmdOf(v) !== null,
+};
+
+/** A command as the builder shows it: plain words, or a JSON argv when a word would not survive a split. */
+export function commandText(cmd: readonly string[]): string {
+  return cmd.every((a) => /^[^\s"'[\]]+$/.test(a)) ? cmd.join(' ') : JSON.stringify(cmd);
+}
+
+/** The argv a typed command means (see {@link commandText}); throws on a JSON argv that is not one. */
+export function commandArgv(text: string): string[] {
+  const t = text.trim();
+  if (t.startsWith('[')) {
+    let argv: unknown;
+    try {
+      argv = JSON.parse(t);
+    } catch {
+      throw new Error(`The command \`${t}\` is not a JSON argv (a list of strings)`);
+    }
+    if (!isStrings(argv)) throw new Error(`The command \`${t}\` is not a JSON argv (a list of strings)`);
+    return argv as string[];
+  }
+  return t.split(/\s+/).filter(Boolean);
+}
 
 function newKey(): string {
   return Math.random().toString(36).slice(2);
@@ -164,7 +202,7 @@ function strings(v: unknown): string[] {
 export function builderPhaseOfStep(step: PresetStep): BuilderPhase {
   const cmd = toolCmdOf(step['executor']);
   const extra: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(step)) if (!EDITED_FIELDS.has(k)) extra[k] = v;
+  for (const [k, v] of Object.entries(step)) if (!(EDITED_FIELDS[k]?.(v) ?? false)) extra[k] = v;
   return {
     _key: newKey(),
     id: step.id,
@@ -180,8 +218,7 @@ export function builderPhaseOfStep(step: PresetStep): BuilderPhase {
     requiredDeliverables: strings(step['required_deliverables']),
     validatorPin: typeof step['validator_pin'] === 'string' ? step['validator_pin'] : null,
     execMode: cmd !== null ? 'command' : 'inherit',
-    cmd: cmd !== null ? cmd.join(' ') : '',
-    cmdArgs: cmd,
+    cmd: cmd !== null ? commandText(cmd) : '',
     script: '',
     scriptLang: 'bash',
     extra,
@@ -208,20 +245,20 @@ export function builderPhaseOf(p: PhaseDef): BuilderPhase {
     _key: newKey(),
     id: p.id,
     catalog,
-    dependsOn: p.depends_on,
+    // A hand-written file is read field by field: a value of the wrong shape is read as absent.
+    dependsOn: strings(p.depends_on),
     kind: catalog === 'run' ? p.kind : null,
-    instructions: p.instructions ?? null,
+    instructions: typeof p.instructions === 'string' ? p.instructions : null,
     // `auto` asks for no gate, so the entry's applies; a human gate is stated (a raise, or refused).
     gate: p.gate === 'auto' ? null : gateModeOf(p.gate),
-    executesCode: p.executes_code ? true : null,
-    verifiedEvidence: p.verified_evidence ? true : null,
-    skillRef: p.skill_ref ?? null,
-    allowedSkills: p.allowed_skills ?? [],
-    requiredDeliverables: p.required_deliverables ?? [],
-    validatorPin: p.validator_pin ?? null,
+    executesCode: p.executes_code === true ? true : null,
+    verifiedEvidence: p.verified_evidence === true ? true : null,
+    skillRef: typeof p.skill_ref === 'string' ? p.skill_ref : null,
+    allowedSkills: strings(p.allowed_skills),
+    requiredDeliverables: strings(p.required_deliverables),
+    validatorPin: typeof p.validator_pin === 'string' ? p.validator_pin : null,
     execMode: cmd !== null ? 'command' : 'inherit',
-    cmd: cmd !== null ? cmd.join(' ') : '',
-    cmdArgs: cmd,
+    cmd: cmd !== null ? commandText(cmd) : '',
     script: '',
     scriptLang: 'bash',
     extra: {},
@@ -251,7 +288,6 @@ export function withCatalog(p: BuilderPhase, catalog: string): BuilderPhase {
     allowedSkills: [],
     execMode: 'inherit',
     cmd: '',
-    cmdArgs: null,
     script: '',
     // The fields with no control here (`writes_nothing`, `role`, `pool`, …) were the old step's too.
     extra: {},
@@ -269,8 +305,7 @@ function toGateSpec(gate: GateMode): GateSpec {
 /** The executor a Tool step states, or `undefined` when it keeps its entry's own command. */
 async function resolveExecutor(p: BuilderPhase): Promise<PhaseExecutor | undefined> {
   if (p.execMode === 'command') {
-    if (p.cmdArgs !== null && p.cmdArgs.join(' ') === p.cmd) return { type: 'tool', cmd: p.cmdArgs };
-    const cmd = p.cmd.trim().split(/\s+/).filter(Boolean);
+    const cmd = commandArgv(p.cmd);
     return cmd.length > 0 ? { type: 'tool', cmd } : undefined;
   }
   if (p.execMode === 'script') {
@@ -298,7 +333,8 @@ export async function buildPresetSteps(phases: BuilderPhase[], entries: readonly
       const tool = entries.find((e) => e.id === p.catalog)?.executor === 'tool' || p.catalog === 'run';
       if (p.kind !== null && tool) step['kind'] = p.kind;
       if (p.gate !== null) step['gate'] = toGateSpec(p.gate);
-      if (p.instructions !== null && p.instructions !== '') step['instructions'] = p.instructions;
+      // An empty string is a statement too (the engine reads its presence), so it is kept.
+      if (p.instructions !== null) step['instructions'] = p.instructions;
       if (p.executesCode === true) step['executes_code'] = true;
       if (p.verifiedEvidence === true) step['verified_evidence'] = true;
       // F-RC1-093: carried back VERBATIM — a save used to null them on every workflow that had them.
@@ -545,7 +581,7 @@ function PhaseEditor({
         {phase.execMode === 'command' && (
           <input
             className="rounded px-2 py-1 text-xs font-mono focus:outline-none"
-            placeholder="e.g. wicked-estate index  or  npm run build"
+            placeholder='e.g. npm run build  or  ["bash", "-lc", "echo a b"]'
             value={phase.cmd}
             onChange={(e) => up('cmd', e.target.value)}
             style={inputStyle}
@@ -613,6 +649,17 @@ function PhaseEditor({
         <div className="flex flex-col gap-0.5">
           <span className="text-[10px] font-mono" style={{ color: 'var(--ink-dim)' }}>
             Depends on{phase.dependsOn === null ? ' — none stated: the engine wires its inputs' : ''}
+            {phase.dependsOn !== null && (
+              <button
+                type="button"
+                data-testid="builder-step-deps-engine"
+                onClick={() => up('dependsOn', null)}
+                className="ml-2 hover:underline"
+                style={{ color: 'var(--accent)' }}
+              >
+                let the engine wire them
+              </button>
+            )}
           </span>
           <div className="flex flex-wrap gap-1.5">
             {prior.map((pid) => (
@@ -861,12 +908,15 @@ function WorkflowBuilder({
  * preset (a machine-owned one) is left off, as the catalog leaves it off.
  */
 export function viewerListOf(workflows: readonly WorkflowDef[], presets: readonly Preset[], entries: readonly CatalogEntry[]): WorkflowDef[] {
+  // A launch resolves a preset before a registered def of the same name, so a saved user preset
+  // REPLACES that row: the viewer shows what a launch of the name runs.
   const out = [...workflows];
-  const seen = new Set(out.map((w) => w.id));
   for (const p of [...presets].sort((a, b) => a.name.localeCompare(b.name))) {
-    if (seen.has(p.name) || p.system === true || p.created_by === 'builtin') continue;
-    seen.add(p.name);
-    out.push(presetSummary(p.name, p.steps, entries));
+    if (p.system === true || p.created_by === 'builtin') continue;
+    const row = presetSummary(p.name, p.steps, entries);
+    const at = out.findIndex((w) => w.id === p.name);
+    if (at === -1) out.push(row);
+    else out[at] = row;
   }
   return out;
 }
@@ -889,6 +939,7 @@ export function WorkflowViewer(): React.ReactElement {
   // `load` on every selection change, causing the useEffect to re-fetch on every click.
   const selectedRef = useRef<string | null>(null);
   selectedRef.current = selected;
+  const presetsRef = useRef<Map<string, Preset>>(new Map());
 
   const load = useCallback(async (select?: string) => {
     setLoading(true);
@@ -903,11 +954,18 @@ export function WorkflowViewer(): React.ReactElement {
       setCachedWorkflows(wfs);
       // X-MIG M11: the builder saves presets, so the saved ones are listed from the preset store
       // (a daemon without the routes lists the catalog alone).
+      // A daemon without the route (404) has none; any other failure keeps the last good read and
+      // says so, rather than silently dropping the saved rows (codex r3).
       const [saved, catalog] = await Promise.all([
-        teamPlanApi.presets().then((r) => r.presets).catch(() => [] as Preset[]),
+        teamPlanApi.presets().then((r) => r.presets).catch((e: unknown) => {
+          if (e instanceof ApiError && e.status === 404) return [] as Preset[];
+          setError(`Saved presets could not be read: ${e instanceof Error ? e.message : String(e)}`);
+          return [...presetsRef.current.values()];
+        }),
         teamPlanApi.catalog().then((c) => c.entries).catch(() => [] as CatalogEntry[]),
       ]);
-      setPresets(new Map(saved.map((p) => [p.name, p])));
+      presetsRef.current = new Map(saved.map((p) => [p.name, p]));
+      setPresets(presetsRef.current);
       const list = viewerListOf(wfs, saved, catalog);
       setWorkflows(list);
       if (select !== undefined) setSelected(select);
