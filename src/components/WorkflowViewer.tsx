@@ -196,7 +196,8 @@ function gateModeOf(gate: unknown): GateMode | null {
 function toolCmdOf(ex: unknown): string[] | null {
   if (typeof ex !== 'object' || ex === null || (ex as { type?: unknown }).type !== 'tool') return null;
   const cmd = (ex as { cmd?: unknown }).cmd;
-  return Array.isArray(cmd) && cmd.every((a) => typeof a === 'string') ? (cmd as string[]) : null;
+  // An empty argv is no command the builder can show: it rides in `extra`, for the engine to judge.
+  return Array.isArray(cmd) && cmd.length > 0 && cmd.every((a) => typeof a === 'string') ? (cmd as string[]) : null;
 }
 
 function strings(v: unknown): string[] {
@@ -207,7 +208,11 @@ function strings(v: unknown): string[] {
 export function builderPhaseOfStep(step: PresetStep): BuilderPhase {
   const cmd = toolCmdOf(step['executor']);
   const extra: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(step)) if (!(EDITED_FIELDS[k]?.(v) ?? false)) extra[k] = v;
+  for (const [k, v] of Object.entries(step)) {
+    // An own-property lookup: an inherited name (`constructor`) is an unknown field, carried as stated.
+    const holds = Object.hasOwn(EDITED_FIELDS, k) ? EDITED_FIELDS[k] : undefined;
+    if (holds === undefined || !holds(v)) extra[k] = v;
+  }
   return {
     _key: newKey(),
     id: step.id,
@@ -229,6 +234,33 @@ export function builderPhaseOfStep(step: PresetStep): BuilderPhase {
     scriptLang: 'bash',
     extra,
   };
+}
+
+/** The step key each builder field writes: editing the field replaces whatever `extra` carried for it. */
+const STEP_KEY_OF: Partial<Record<keyof BuilderPhase, string>> = {
+  dependsOn: 'depends_on',
+  kind: 'kind',
+  instructions: 'instructions',
+  gate: 'gate',
+  executesCode: 'executes_code',
+  verifiedEvidence: 'verified_evidence',
+  skillRef: 'skill_ref',
+  allowedSkills: 'allowed_skills',
+  requiredDeliverables: 'required_deliverables',
+  validatorPin: 'validator_pin',
+  execMode: 'executor',
+  cmd: 'executor',
+  script: 'executor',
+  scriptLang: 'executor',
+};
+
+/** `p` with `field` set by the author: the value carried in `extra` for that step key goes (codex r5). */
+export function withField<K extends keyof BuilderPhase>(p: BuilderPhase, field: K, val: BuilderPhase[K]): BuilderPhase {
+  const key = STEP_KEY_OF[field];
+  if (key === undefined || !Object.hasOwn(p.extra, key)) return { ...p, [field]: val };
+  const extra = { ...p.extra };
+  delete extra[key];
+  return { ...p, [field]: val, extra };
 }
 
 /** The catalog entry a def's phase maps onto (the §11.2 rule): a Tool phase is a `run` step; an agent
@@ -489,7 +521,7 @@ function PhaseEditor({
   onMoveUp: () => void;
   onMoveDown: () => void;
 }): React.ReactElement {
-  const up = <K extends keyof BuilderPhase,>(field: K, val: BuilderPhase[K]) => onChange({ ...phase, [field]: val });
+  const up = <K extends keyof BuilderPhase,>(field: K, val: BuilderPhase[K]) => onChange(withField(phase, field, val));
   const prior = allIds.slice(0, index);
   const entry = entries.find((e) => e.id === phase.catalog);
   const toolEntry = entry?.executor === 'tool';

@@ -17,6 +17,7 @@ import {
   saveBlockerOf,
   viewerListOf,
   withCatalog,
+  withField,
 } from '../src/components/WorkflowViewer.js';
 import type { CatalogEntry, Preset } from '../src/api/teamPlan.js';
 import type { PhaseDef, WorkflowDef } from '../src/api/types.js';
@@ -340,6 +341,24 @@ describe('the preset builder round-trip, codex r4 on studio B', () => {
       const [step] = await buildPresetSteps([builderPhaseOfStep({ catalog: 'review', id: 'r', gate })]);
       expect(step!['gate']).toEqual(gate);
     }
+  });
+});
+
+describe('the preset builder round-trip, codex r5 on studio B', () => {
+  it('(1) an explicitly empty executor is sent as stated', async () => {
+    const [step] = await buildPresetSteps([builderPhaseOfStep({ catalog: 'produce', id: 'p', executor: { type: 'tool', cmd: [] } })]);
+    expect(step!['executor']).toEqual({ type: 'tool', cmd: [] });
+  });
+
+  it('(2) editing a field drops the malformed value carried for it: "let the engine wire them" really omits depends_on', async () => {
+    const p = builderPhaseOfStep({ catalog: 'review', id: 'r', depends_on: [123] });
+    const [step] = await buildPresetSteps([withField(withField(p, 'dependsOn', ['a']), 'dependsOn', null)]);
+    expect('depends_on' in step!).toBe(false);
+  });
+
+  it('(3) an inherited property name (`constructor`) is an unknown field, carried as stated', async () => {
+    const [step] = await buildPresetSteps([builderPhaseOfStep({ catalog: 'produce', id: 'p', constructor: 'unexpected' } as never)]);
+    expect(step!['constructor']).toBe('unexpected');
   });
 });
 
