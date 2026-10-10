@@ -9,8 +9,10 @@ import { teamPlanApi, type CatalogEntry, type Preset } from '../api/teamPlan.js'
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
-function gateLabel(gate: GateSpec): string {
+export function gateLabel(gate: GateSpec): string {
   if (gate === 'auto') return 'Auto';
+  // Consent is asked BEFORE the step runs (an install, a push) — not a reading of its result.
+  if (gate === 'consent_before') return 'Consent before';
   if (gate && typeof gate === 'object' && 'human_confirm' in gate) {
     return gate.human_confirm.unconditional ? 'Human (always)' : 'Human';
   }

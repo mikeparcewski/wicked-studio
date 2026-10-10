@@ -11,6 +11,7 @@ import {
   builderPhaseOf,
   commandArgv,
   commandText,
+  gateLabel,
   builderPhaseOfStep,
   catalogOfPhase,
   parseBuilderImport,
@@ -362,3 +363,8 @@ describe('the preset builder round-trip, codex r5 on studio B', () => {
   });
 });
 
+it('the viewer names a consent gate as consent before the step, not a result-conditional gate (codex r8 on studio B)', () => {
+  expect(gateLabel('consent_before')).toBe('Consent before');
+  expect(gateLabel({ human_confirm_if: 'verdict_not_pass' })).toBe('Human if not PASS');
+  expect(gateLabel({ human_confirm: { unconditional: true } })).toBe('Human (always)');
+});
