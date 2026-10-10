@@ -169,7 +169,11 @@ export function deliveryReceiptOf(view: SessionView | null | undefined, events: 
  */
 function deliveryKind(r: AssuranceReceipt, gates: readonly AssuranceReceipt[]): AssuranceKind {
   // No gate history in hand (a partial log): the lift's own receipt, read as one decision.
-  if (gates.length === 0) return assuranceKind({ ...r, aggregateKind: undefined });
+  if (gates.length === 0) {
+    const own: AssuranceReceipt = { ...r };
+    delete own.aggregateKind;
+    return assuranceKind(own);
+  }
   const kinds = gates.map(assuranceKind);
   if (kinds.includes('same-seat') || r.skipped.some((s) => s.instrument === 'distinct_evaluator')) return 'same-seat';
   const seatSkip = r.skipped.some((s) => s.instrument === 'judge');
