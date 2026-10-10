@@ -4,13 +4,18 @@ import { useRunEvents } from '../../hooks/useRunEvents.js';
 
 /**
  * The assurance receipt, compact (wicked-core#850): one lead line — how the decision was assured
- * ("Independently accepted" / "Checked on the creator's own seat" / "Floor-only approval" /
- * "Nothing checked this") and the Reduced assurance label on a reduced run — then what was
+ * (passed: "Independently accepted" / "Floor-only approval" / …; otherwise "Checked independently" /
+ * "Floor checks only" / …) and the Reduced assurance label on a reduced run — then what was
  * required and what ran, who built and checked it (and whether they were separate seats), what was
  * skipped and why, and the tree and attempt. The engine's detail for each skip rides the hover.
  */
-export function AssuranceReceipt({ receipt, testId = 'assurance-receipt' }: { receipt: Receipt; testId?: string }): React.ReactElement {
-  const w = receiptWords(receipt);
+export function AssuranceReceipt({ receipt, passed = null, testId = 'assurance-receipt' }: {
+  receipt: Receipt;
+  /** The decision passed (an approval, a delivery), did not, or is not known. */
+  passed?: boolean | null;
+  testId?: string;
+}): React.ReactElement {
+  const w = receiptWords(receipt, passed);
   return (
     <div data-testid={testId} data-kind={w.kind} data-mode={receipt.mode} className="wk-assurance" role="group" aria-label="Assurance receipt">
       <p className="wk-assurance-lead">

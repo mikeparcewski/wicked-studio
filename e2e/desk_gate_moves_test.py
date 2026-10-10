@@ -151,6 +151,13 @@ with sync_playwright() as p:
     except Exception:
         note = None
     page.screenshot(path=str(SHOTS / "desk-gate-moves-full-verdict.png"))
+    # core#850: the row carries the receipt of the evaluation it is about — a FAIL is "checked", never "accepted".
+    receipt = page.evaluate("""() => { const r = document.querySelector('[data-testid="session-gate-assurance"]');
+      return r ? {kind: r.getAttribute('data-kind'), text: r.textContent} : null; }""")
+    check("gate-row-assurance-receipt", receipt is not None and receipt["kind"] == "independent"
+          and receipt["text"].startswith("Checked independently")
+          and "built by claude · evaluated by codex (separate seats)" in receipt["text"]
+          and "skipped: repo checks (not applicable)" in receipt["text"], receipt=receipt)
     check("send-back-carries-the-first-finding", note is not None and "the regression test is missing" in note
           and "still reads" in note, note=note)
     set_fixture(origin, gate_move=False, gate_move_tail=False)

@@ -16,7 +16,7 @@ import { useRerunFromHere } from '../../hooks/useRerunFromHere.js';
 import type { RerunOffer } from '../rerunModel.js';
 import { GateDepthDetails, RuleOfferBlock, useFullVerdict, useSeatTrust, type SeatTrust } from './GateDepth.js';
 import { WatchGateLine } from '../WatchLines.js';
-import { gateReceiptFor, isReduced, sessionAssurance, waitsForJudge } from '../../board/assuranceModel.js';
+import { gatePassedFor, gateReceiptFor, isReduced, sessionAssurance, waitsForJudge } from '../../board/assuranceModel.js';
 import type { Navigate } from '../../hooks/useRoute.js';
 import { AssuranceReceipt, ReducedAssuranceLabel } from './AssuranceReceipt.js';
 
@@ -148,7 +148,7 @@ function RunGateRow({ view, gate, navigate }: { view: RunView; gate: OpenGate | 
     <>
       {judgeWait && <JudgeWaitLine {...(navigate !== undefined ? { navigate } : {})} />}
       {receipt !== null
-        ? <AssuranceReceipt receipt={receipt} testId="session-gate-assurance" />
+        ? <AssuranceReceipt receipt={receipt} passed={gatePassedFor(events, model.reviewedOrd)} testId="session-gate-assurance" />
         : reduced && <p className="wk-assurance"><ReducedAssuranceLabel testId="session-gate-reduced" /></p>}
     </>
   );

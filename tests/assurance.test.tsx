@@ -47,15 +47,19 @@ describe('the receipt model', () => {
   it('independent, same-seat, floor-only and unchecked read differently', () => {
     const indep = receiptOf(wire({ ran: ['repo_checks', 'judge', 'distinct_evaluator'], creator: 'claude', evaluator: 'codex', judge: 'pi' }))!;
     expect(assuranceKind(indep)).toBe('independent');
-    const w = receiptWords(indep);
+    const w = receiptWords(indep, true);
     expect(w.label).toBe('Independently accepted');
+    // A decision that did not pass is never "accepted": the words say what checked it.
+    expect(receiptWords(indep, false).label).toBe('Checked independently');
+    expect(receiptWords(indep).label).toBe('Checked independently');
     expect(w.who).toBe('built by claude · evaluated by codex · judged by pi (separate seats)');
     expect(w.ran).toBe('ran: repo checks, judge, distinct evaluator');
     expect(w.required).toBe('required: distinct evaluator, judge');
 
     const floor = receiptOf(wire({ ran: ['repo_checks', 'pinned_validator'], creator: 'claude', skipped: [{ instrument: 'judge', reason: 'no_distinct_seat', detail: 'no eligible judge seat distinct from creator `claude`' }] }))!;
     expect(assuranceKind(floor)).toBe('floor-only');
-    expect(receiptWords(floor).label).toBe('Floor-only approval');
+    expect(receiptWords(floor, true).label).toBe('Floor-only approval');
+    expect(receiptWords(floor, false).label).toBe('Floor checks only');
     expect(receiptWords(floor).skipped).toBe('skipped: judge (no distinct seat)');
     expect(receiptWords(floor).skippedDetail).toEqual(['judge: no eligible judge seat distinct from creator `claude`']);
 
@@ -150,8 +154,8 @@ describe('the receipt renders', () => {
     expect(screen.getByTestId('session-gate-reduced').textContent).toBe('Reduced assurance');
   });
 
-  it('a floor-only receipt reads differently, with the reduced label', () => {
-    render(<ReceiptView receipt={receiptOf(wire({ mode: 'reduced', ran: ['repo_checks'], skipped: [{ instrument: 'judge', reason: 'reduced_assurance', detail: null }] }))!} />);
+  it('a floor-only approval reads differently, with the reduced label', () => {
+    render(<ReceiptView passed receipt={receiptOf(wire({ mode: 'reduced', ran: ['repo_checks'], skipped: [{ instrument: 'judge', reason: 'reduced_assurance', detail: null }] }))!} />);
     expect(screen.getByTestId('assurance-receipt').getAttribute('data-kind')).toBe('floor-only');
     expect(screen.getByTestId('assurance-kind').textContent).toBe('Floor-only approval');
     expect(screen.getByTestId('assurance-reduced')).toBeTruthy();
@@ -170,6 +174,6 @@ describe('the receipt renders', () => {
     expect(screen.getByTestId('session-gate-judge-wait').textContent).toMatch(/^Waiting for a judge seat\./);
     fireEvent.click(screen.getByTestId('session-gate-judge-signin'));
     expect(navigate).toHaveBeenCalledWith('/system');
-    expect(screen.getByTestId('assurance-kind').textContent).toBe('Floor-only approval');
+    expect(screen.getByTestId('assurance-kind').textContent).toBe('Floor checks only');
   });
 });

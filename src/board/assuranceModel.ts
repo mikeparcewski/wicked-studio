@@ -94,6 +94,18 @@ export function isReduced(a: RunAssurance | null): boolean {
  * one, else that unit's persisted `WorkUnit.assurance` (a session read before its log is in hand).
  * `null` when neither carries a receipt (an older engine, or a unit that was never evaluated).
  */
+/** Whether the newest evaluation of `ord` passed (`combined` and no denial); `null` when the log has none. */
+export function gatePassedFor(events: readonly CoreEvent[] | null, ord: number | null | undefined): boolean | null {
+  if (typeof ord !== 'number') return null;
+  const log = events ?? [];
+  for (let i = log.length - 1; i >= 0; i--) {
+    const e = log[i]! as Record<string, unknown>;
+    if (e['type'] !== 'gateEvaluated' || e['ord'] !== ord) continue;
+    return e['combined'] === true && (e['denial'] === null || e['denial'] === undefined);
+  }
+  return null;
+}
+
 export function gateReceiptFor(events: readonly CoreEvent[] | null, units: readonly WorkUnit[] | undefined, ord: number | null | undefined): AssuranceReceipt | null {
   if (typeof ord !== 'number') return null;
   const log = events ?? [];
@@ -213,10 +225,18 @@ export function assuranceKind(r: AssuranceReceipt): AssuranceKind {
   return 'unchecked';
 }
 
-const KIND_LABEL: Record<AssuranceKind, string> = {
+/** The lead word when the decision PASSED (an approval, a delivery) … */
+const ACCEPTED_LABEL: Record<AssuranceKind, string> = {
   independent: 'Independently accepted',
-  'same-seat': 'Checked on the creator\'s own seat',
+  'same-seat': 'Accepted on the creator\'s own seat',
   'floor-only': 'Floor-only approval',
+  unchecked: 'Approved with nothing checked',
+};
+/** … and when it did not, or the outcome is not known: what checked it, never "accepted". */
+const CHECKED_LABEL: Record<AssuranceKind, string> = {
+  independent: 'Checked independently',
+  'same-seat': 'Checked on the creator\'s own seat',
+  'floor-only': 'Floor checks only',
   unchecked: 'Nothing checked this',
 };
 
@@ -232,7 +252,7 @@ export function separationWords(r: AssuranceReceipt): string | null {
 
 export interface ReceiptWords {
   kind: AssuranceKind;
-  /** "Independently accepted" / "Floor-only approval" / "Nothing checked this". */
+  /** Passed: "Independently accepted" / "Floor-only approval" / …; else "Checked independently" / "Floor checks only" / …. */
   label: string;
   reduced: boolean;
   /** "required: distinct evaluator, judge" — or "required: nothing" for an empty contract. */
@@ -249,7 +269,8 @@ export interface ReceiptWords {
   where: string | null;
 }
 
-export function receiptWords(r: AssuranceReceipt): ReceiptWords {
+/** `passed`: the decision the receipt is for passed (`true`), did not (`false`), or is unknown (`null`). */
+export function receiptWords(r: AssuranceReceipt, passed: boolean | null = null): ReceiptWords {
   const kind = assuranceKind(r);
   const list = (xs: readonly string[]): string => (xs.length === 0 ? 'nothing' : xs.map(instrumentWord).join(', '));
   const seats: string[] = [];
@@ -266,7 +287,7 @@ export function receiptWords(r: AssuranceReceipt): ReceiptWords {
   if (r.attempt > 0) where.push(`attempt ${r.attempt}`);
   return {
     kind,
-    label: KIND_LABEL[kind],
+    label: (passed === true ? ACCEPTED_LABEL : CHECKED_LABEL)[kind],
     reduced: r.mode === 'reduced',
     required: `required: ${list(r.required)}`,
     ran: `ran: ${list(r.ran)}`,

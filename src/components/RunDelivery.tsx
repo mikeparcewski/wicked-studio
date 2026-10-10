@@ -539,7 +539,7 @@ export function RunDelivery({ view, navigate }: Props): React.ReactElement {
         * card then explains it (the remedy included); absent entirely on a daemon that never sent a
         * deliver-ord frame. */}
       {lift !== null && <DeliverLift view={lift} omitFailure={liftOmitsFailure} />}
-      {receipt !== null && <AssuranceReceipt receipt={receipt} testId="run-delivery-assurance" />}
+      {receipt !== null && <AssuranceReceipt receipt={receipt} passed={view.session.status === 'completed' ? true : null} testId="run-delivery-assurance" />}
     </div>
   );
 }
