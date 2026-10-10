@@ -62,7 +62,7 @@ export function GateUnderReview({ runId, units, reviewed, next }: {
             {showText(shown.text)}
           </pre>
         ) : (
-          <p data-testid="gate-under-review-note" className="text-[11px] font-mono mt-1" style={{ color: 'var(--ink-dim)' }}>{shown.note}</p>
+          <p data-testid="gate-under-review-note" className="text-[11px] font-mono mt-1" style={{ color: 'var(--ink-dim)' }}>{showText(shown.note ?? '')}</p>
         )}
       </details>
     </div>

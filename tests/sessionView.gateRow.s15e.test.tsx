@@ -153,6 +153,19 @@ describe('GateRow — escalation gate', () => {
     expect(row!.dataset['reason']).toBe('escalation');
   });
 
+  it('studio#650: Details print the engine prompt with ~/ and $TMPDIR, never the home or temp dir', () => {
+    const escalationView = makeView({ id: MOVE_RUN, status: 'awaiting_human' }, MOVE_UNITS);
+    const leak = ' The guard could not re-verify: git -c core.excludesFile=/var/folders/q1/abc123xyz/T/wicked-worktree-guard-9.exclude -C /Users/reel-operator/wicked-rig/repos/library-booking/wicked-worktrees/r1 status';
+    const gate: OpenGate = { runId: MOVE_RUN, ord: 2, prompt: NOT_PASS_PROMPT + leak, lifecycle: 'open', receivedAt: NOW };
+    useRunEventStore.setState({ byRun: { [MOVE_RUN]: NOT_PASS_EVENTS } });
+    render(<GateRow view={escalationView} gate={gate} />);
+    const raw = screen.getByTestId('session-gate-raw-prompt');
+    expect(raw).toHaveTextContent('core.excludesFile=$TMPDIR/wicked-worktree-guard-9.exclude -C ~/wicked-rig/repos/library-booking/wicked-worktrees/r1 status');
+    const details = raw.closest('details')!;
+    expect(details.textContent).not.toContain('reel-operator');
+    expect(details.textContent).not.toContain('/var/folders/');
+  });
+
   it('escalation gate has Send back and Stop choices', () => {
     const escalationView = makeView({ id: MOVE_RUN, status: 'awaiting_human' }, MOVE_UNITS);
     const gate: OpenGate = { runId: MOVE_RUN, ord: 2, prompt: NOT_PASS_PROMPT, lifecycle: 'open', receivedAt: NOW };

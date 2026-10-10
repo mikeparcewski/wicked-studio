@@ -9,7 +9,7 @@ import { useConnectionStore } from '../store/connection.js';
 import { setCachedRoster, subscribeRoster } from '../store/rosterCache.js';
 import { SignInPanel } from './SignInPanel.js';
 import { signInLapsed } from '../board/deskModel.js';
-import { useDisplayPath } from '../hooks/useHomePath.js';
+import { useDisplayPath, useDisplayText } from '../hooks/useHomePath.js';
 
 /**
  * The rail-foot health section (DES-FEEDBACK-003 §6.2, slice O): the operator —
@@ -327,6 +327,8 @@ function GovernanceRows({ read, overdue = 0, onReprobe }: {
   onReprobe?: () => void;
 }): React.ReactElement {
   const showPath = useDisplayPath();
+  // studio#651: a finding's sentence (and the unreachable reason) quotes home paths mid-sentence.
+  const showText = useDisplayText();
   if (read.kind === 'loading') {
     return (
       <CheckRow
@@ -339,7 +341,7 @@ function GovernanceRows({ read, overdue = 0, onReprobe }: {
     return (
       <div data-testid="rail-governance" data-state="error">
         <CheckRow label="governance" ok={false} detail="unreachable" />
-        <DetailLine testId="rail-governance-error" label="why" value={read.message} color="var(--status-fail)" />
+        <DetailLine testId="rail-governance-error" label="why" value={showText(read.message)} color="var(--status-fail)" />
       </div>
     );
   }
@@ -381,7 +383,7 @@ function GovernanceRows({ read, overdue = 0, onReprobe }: {
       {dl.count > 0 && (
         <>
           <DetailLine testId="rail-governance-by-type" label="by type" value={tally(dl.byType)} />
-          <DetailLine testId="rail-governance-by-reason" label="by reason" value={tally(dl.byReason)} />
+          <DetailLine testId="rail-governance-by-reason" label="by reason" value={showText(tally(dl.byReason))} />
           <DetailLine
             testId="rail-governance-range"
             label="when"
@@ -412,7 +414,7 @@ function GovernanceRows({ read, overdue = 0, onReprobe }: {
         >
           <span style={{ color: FINDING_COLOR[f.severity], fontWeight: 'var(--weight-bold)' }}>{f.severity} · {f.kind}</span>
           {' — '}
-          {f.message}
+          {showText(f.message)}
         </p>
       ))}
     </div>
