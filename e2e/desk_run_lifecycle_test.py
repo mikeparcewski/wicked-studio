@@ -27,6 +27,7 @@ exit 0/1.
 import json
 import os
 import sys
+import time
 import urllib.request
 
 from uxfix_fixture import HIDE_GATE_TOASTS, REPO, ensure_build, set_fixture, start_server
@@ -73,6 +74,9 @@ with sync_playwright() as p:
         "document.addEventListener('DOMContentLoaded', () => { const s = document.createElement('style'); "
         f"s.textContent = {json.dumps(HIDE_GATE_TOASTS)}; document.head.appendChild(s); }});")
     run_posts: list = []
+    gate_sent_at: list = []  # when the browser sent each gate POST (LC-2's timing, off the request itself)
+    page.on("request", lambda r: gate_sent_at.append(time.monotonic())
+            if r.method == "POST" and "/r-home-gate/gate" in r.url else None)
     page.on("request", lambda r: run_posts.append(json.loads(r.post_data or "{}"))
             if r.method == "POST" and r.url.split("?")[0].endswith("/api/v1/runs") else None)
 
@@ -104,12 +108,11 @@ with sync_playwright() as p:
     set_fixture(origin, home_paths=True, reset_gate_posts=True)
     page.goto(f"{origin}/s/run%3Ar-home-gate#gate", wait_until="networkidle")
     page.get_by_test_id("session-gate-row").wait_for(state="visible", timeout=15000)
+    gate_sent_at.clear()
+    clicked_at = time.monotonic()
     page.locator('[data-testid="session-gate-choice"][data-choice-key="approve"]').click()
     page.get_by_test_id("session-gate-chosen").wait_for(state="visible", timeout=10000)
-    # The undo window is 10 s: still nothing on the wire 8 s in (a send at 1 s would fail here) …
-    page.wait_for_timeout(8_000)
-    check("lc2-nothing-sent-in-undo-window", gate_posts("r-home-gate") == [])
-    # … then the one POST and the settled receipt, polled (a loaded runner's timer may lag).
+    # The one POST and the settled receipt, polled (a loaded runner's timer may lag) …
     posts: list = []
     chosen = ""
     for _ in range(60):
@@ -119,6 +122,10 @@ with sync_playwright() as p:
             break
         page.wait_for_timeout(250)
     bodies = [x.get("body", {}) for x in posts]
+    # … and it left no earlier than the 10 s undo window allows: measured from just BEFORE the click
+    # to the request itself, so a slow runner can only make the gap longer, never fail it falsely.
+    waited = (gate_sent_at[0] - clicked_at) if gate_sent_at else None
+    check("lc2-sent-only-after-the-undo-window", waited is not None and waited >= 9.5, waited_s=waited)
     page.screenshot(path=str(SHOTS / "desk-run-lifecycle-lc2.png"))
     check("lc2-one-approve-with-its-gate",
           len(bodies) == 1 and bodies[0].get("approve") is True and bodies[0].get("ord") == 1,

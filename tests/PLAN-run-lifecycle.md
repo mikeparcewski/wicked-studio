@@ -120,7 +120,7 @@ shards run it on every PR.
 | ID | Scenario | Where | Status |
 |---|---|---|---|
 | LC-1 | Launch-form validation: Send disabled with no problem, enabled with a problem and a repository; Send POSTs `/runs` | `desk_run_lifecycle` | **runs in CI** |
-| LC-2 | Gate answering on `/s/run:<id>`: nothing on the wire 8 s into the 10 s undo window, then exactly one `{approve: true, ord}` and the settled receipt (polled). Re-specified: the old "card detaches" assertion was wrong for a status-driven surface, the proof is the wire | `desk_run_lifecycle` | **runs in CI** |
+| LC-2 | Gate answering on `/s/run:<id>`: the POST leaves no earlier than the 10 s undo window (timed from before the click to the request), exactly one `{approve: true, ord}`, and the settled receipt (polled). Re-specified: the old "card detaches" assertion was wrong for a status-driven surface, the proof is the wire | `desk_run_lifecycle` | **runs in CI** |
 | LC-3 | Archived lens lists the archived run; Unarchive re-reads the list | `desk_everything_archive` (steps 2–3; the Everything page replaced the Work board's chip) | **runs in CI** |
 | LC-4 | Lens switching: All shows a live run and not the archived one; Archived shows it; back on All it is gone and the live runs stay | `desk_run_lifecycle` | **runs in CI** |
 | LC-5 | Repo register form: disabled until name and path; submit POSTs `/repos {name, rootPath}` and lands on the new repo's `/repo-detail/my-repo` page (not "Repo not found") | `desk_run_lifecycle` | **runs in CI** |
