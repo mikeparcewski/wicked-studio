@@ -35,7 +35,9 @@ reasoning in a scrollback you'll never read. wicked-studio flips that:
   - what was skipped and why;
   - the tree and the attempt.
 
-  So "Floor-only approval" reads differently from "Independently accepted". Every run leaves
+  So "Floor-only approval" reads differently from "Independently accepted". A post-hoc hand-over
+  that nothing re-verified is labelled "Unverified delivery", along with whether its tree moved, and
+  the delivery shows the QE acceptance check when the run requires one. Every run leaves
   transcripts, diffs, and a downloadable evidence bundle. Studio shows you the gate outcomes; it never
   grades the work itself.
 - **Understand the code first.** Onboard a repo and studio builds its graph — then blast-radius
