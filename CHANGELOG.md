@@ -12,6 +12,13 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.7.3] — 2026-10-10
+
+The compact `/` and `@` menu (studio#674).
+
+### Fixed
+- The `/` and `@` menu shows each row on one line: a muted prefix, the key in bold (once), and an ellipsized description, with the full text on hover. The menu stays inside the viewport with an internal scroll, is fully visible on narrow screens, and marks the active row clearly in light and dark. The same menu serves the Desk composer, a session's composer and the launch form's problem box (studio#674).
+
 ## [0.7.2] — 2026-10-10
 
 The QE acceptance decision (wicked-crew#941, wicked-core#861) and the incomplete-inventory note (wicked-crew#721).
@@ -1990,7 +1997,8 @@ The merged interactive layer: wicked-interactive's UI moved into this skin (DES-
   `git subtree split` (92 commits).
 - The SPA as a pure HTTP/WS client of the wicked-crew daemon: runs, gates, live CoreEvents.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.2...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.3...HEAD
+[0.7.3]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.2...v0.7.3
 [0.7.2]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.1...v0.7.2
 [0.7.1]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/mikeparcewski/wicked-studio/compare/v0.6.8...v0.7.0
