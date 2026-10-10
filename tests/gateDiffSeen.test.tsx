@@ -69,10 +69,20 @@ describe('studio#244 — recorded on the one decision path, shown on the next ga
   });
   afterEach(() => cleanup());
 
-  it('a sent decision records the diff it was made on', async () => {
-    useGateStore.setState({ gates: { [RUN]: { runId: RUN, ord: 1, prompt: 'Approve the output of unit 1 (build)', lifecycle: 'open', receivedAt: NOW } } });
+  it('a sent decision records the diff its row showed — and a decision with no row records nothing', async () => {
+    const g1: OpenGate = { runId: RUN, ord: 2, prompt: 'Approve the output of unit 2 (review) before unit 3 runs', lifecycle: 'open', receivedAt: NOW, gateKind: 'def' };
+    useGateStore.setState({ gates: { [RUN]: g1 } });
     await expect(commitGateDecision(RUN, { approve: true })).resolves.toBe('sent');
-    await waitFor(() => expect(seenFor(RUN)?.ord).toBe(1));
+    expect(seenFor(RUN)).toBeNull();
+    const g2 = { ...g1, receivedAt: NOW + 1 };
+    useGateStore.setState({ gates: { [RUN]: g2 } });
+    render(<GateRow view={makeView({ id: RUN, status: 'awaiting_human' } as never, UNITS)} gate={g2} />);
+    await waitFor(() => expect(client.api.getRunDiff).toHaveBeenCalled());
+    await screen.findByTestId('session-gate-row');
+    diff = A2; // the run moves on after the read: the record is what was SHOWN
+    useGateActionStore.setState({ byGate: {} });
+    await expect(commitGateDecision(RUN, { approve: true })).resolves.toBe('sent');
+    expect(seenFor(RUN)?.ord).toBe(2);
     expect(seenFor(RUN)?.files).toEqual(diffFiles(A1));
   });
 

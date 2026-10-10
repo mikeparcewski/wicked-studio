@@ -108,22 +108,20 @@ export function recordSeen(runId: string, seen: DiffSeen): void {
   }
 }
 
-/** Read the diff the operator is deciding on — issued BEFORE the decision is posted, so it is the
- *  tree the gate showed, not one the resumed run went on to change. Best-effort: a failed read is
- *  `null`, and nothing is recorded (the next gate then says nothing rather than something wrong). */
-export function readDecisionDiff(runId: string, capMs = DECISION_DIFF_CAP_MS): Promise<Record<string, string> | null> {
-  // Inside the chain, so a read that throws synchronously (or answers nothing) is `null` too — the
-  // decision is never blocked on it.
-  const read = Promise.resolve()
-    .then(() => api.getRunDiff(runId, undefined, 'merge-base'))
-    .then((d) => (typeof d?.diff === 'string' ? diffFiles(d.diff) : null))
-    .catch(() => null);
-  // The decision waits on this read (codex r1: a read racing the resumed run could record changes the
-  // operator never saw), but never long: past the cap nothing is recorded and the decision goes.
-  return Promise.race([read, new Promise<null>((r) => { setTimeout(() => r(null), capMs); })]);
+/**
+ * What the open gate SHOWED (codex r1 on #644): the diff its row read when it rendered, per run and
+ * gate instance. The decision records THIS snapshot — never a read made at decision time, which could
+ * race the resumed run and record changes the operator never saw, and never a wait in the send path.
+ * In memory only; a decision with no row on screen (the palette, a Desk key) records nothing.
+ */
+const shown = new Map<string, { ord: number; receivedAt: number; files: Record<string, string> }>();
+
+/** Called by the one decision path once a decision on (`ord`, `receivedAt`) was accepted. */
+export function recordShown(runId: string, ord: number | undefined, receivedAt: number | undefined, at: number = Date.now()): void {
+  const s = shown.get(runId);
+  if (s === undefined || s.ord !== ord || s.receivedAt !== receivedAt) return;
+  recordSeen(runId, { ord: s.ord, at, files: s.files });
 }
-/** How long a decision waits for its diff read. */
-export const DECISION_DIFF_CAP_MS = 3000;
 
 /**
  * The drift line for an open gate, or null: the record the operator's LAST decision on this run left
@@ -135,10 +133,17 @@ export function useDiffDrift(runId: string, gate: { ord: number; receivedAt: num
   useEffect(() => {
     if (key === null || gate === undefined) return;
     const seen = seenFor(runId);
-    if (seen === null || seen.at >= gate.receivedAt) { setDrift({ key, d: null }); return; }
+    const prior = seen !== null && seen.at < gate.receivedAt ? seen : null;
     let live = true;
-    api.getRunDiff(runId, undefined, 'merge-base')
-      .then((r) => { if (live) setDrift({ key, d: typeof r.diff === 'string' ? diffDrift(seen, r.diff) : null }); })
+    // One read per gate instance: it is both what this gate shows (kept for its decision) and what
+    // the drift line compares against the last review.
+    Promise.resolve()
+      .then(() => api.getRunDiff(runId, undefined, 'merge-base'))
+      .then((r) => {
+        if (typeof r?.diff !== 'string') { if (live) setDrift({ key, d: null }); return; }
+        shown.set(runId, { ord: gate.ord, receivedAt: gate.receivedAt, files: diffFiles(r.diff) });
+        if (live) setDrift({ key, d: diffDrift(prior, r.diff) });
+      })
       .catch(() => { if (live) setDrift({ key, d: null }); });
     return () => { live = false; };
   }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
