@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
-import { interactiveUrl, type ExportFormat } from '../../api/interactive.js';
+import { exportFileUrl, interactiveUrl, listExports, type ExportFormat, type ExportListEntry } from '../../api/interactive.js';
 import { grow, shrink, type ArtifactSize, type EditorKind } from '../../board/artifactMorph.js';
 import { exportReadyText, runExport } from '../../interactive/exportWire.js';
 import { artifactSizeOf, artifactSizeWrites, registerArtifact, setArtifactSize, topmostArtifact, useArtifactSizes } from '../../store/artifactSizes.js';
@@ -101,14 +101,34 @@ export function ArtifactMorph({ artifactKey, title, projectId, docId, composerKe
     return null;
   }, [kind, size, repoId, docId, composerKey]);
 
+  // studio#236: version 0 is the "Building…" placeholder — nothing to export until a version lands.
+  const canExport = head !== null && head >= 1;
+  // studio#234: the exports already on disk for the version shown, read from the bridge's listing
+  // (wicked-interactive#236) whenever the artifact is open — so a download made in an earlier
+  // session (or one whose answer never reached this control) is still here after a reload.
+  // A listing that fails shows nothing: never a guessed link.
+  const [onDisk, setOnDisk] = useState<readonly ExportListEntry[]>([]);
+  const [listGen, setListGen] = useState(0);
+  const listOn = canExport && size !== 'inline' && slot === undefined && EXPORTS[kind].length > 0;
+  useEffect(() => {
+    if (!listOn) { setOnDisk([]); return undefined; }
+    let cancelled = false;
+    listExports(projectId, docId)
+      .then((rows) => { if (!cancelled) setOnDisk(Array.isArray(rows) ? rows : []); })
+      .catch(() => { if (!cancelled) setOnDisk([]); });
+    return () => { cancelled = true; };
+  }, [listOn, projectId, docId, head, listGen]);
+
   const exportAs = async (format: ExportFormat, label: string): Promise<void> => {
-    if (head === null) return;
+    if (head === null || head < 1) return;
     closeExport();
     setExported({ state: 'working', text: `Making the ${label} of version ${head}…` });
     const out = await runExport({ projectId, docId, version: head, format });
     if (!live.current) return;
     if (out.ok) setExported({ state: 'ready', text: exportReadyText(format, out.file, out.report), href: interactiveUrl(projectId, out.result.download), file: out.file });
     else setExported({ state: 'failed', text: `The ${label} was not made — ${out.hint}` });
+    // Either way the listing is re-read: a file the answer lost is still found on disk.
+    setListGen((g) => g + 1);
   };
   const exportsHere = size === 'inline' ? [] : EXPORTS[kind];
   // Folded back to the preview, the menu is gone — it must not be open when the artifact grows again.
@@ -226,7 +246,7 @@ export function ArtifactMorph({ artifactKey, title, projectId, docId, composerKe
       <header data-testid="artifact-head" className="wk-artifact-head">
         <span className="wk-artifact-title">{title}</span>
         <span data-testid="artifact-version">{lens !== null ? `looking at version ${lens}` : head === null ? '' : versionsOn ? `version ${head} (working)` : `version ${head}`}</span>
-        {exportsHere.length > 0 && head !== null && (
+        {exportsHere.length > 0 && canExport && (
           <span className="wk-artifact-export" onKeyDown={onExportKey}>
             <button ref={exportBtn} type="button" data-testid="artifact-export" aria-haspopup="menu" aria-expanded={exportOpen} onClick={() => setExportOpen((o) => !o)} className="wk-artifact-btn">Export ▾</button>
             {exportOpen && (
@@ -275,6 +295,23 @@ export function ArtifactMorph({ artifactKey, title, projectId, docId, composerKe
           )}
         </p>
       )}
+      {(() => {
+        // The files on disk for the version shown — minus the one the result line above already links.
+        const linked = exported?.state === 'ready' ? exported.file : null;
+        const files = size === 'inline' || head === null ? [] : onDisk.filter((x) => x.version === head && x.name !== linked);
+        if (files.length === 0) return null;
+        return (
+          <p data-testid="artifact-exports" className="wk-artifact-line">
+            Exported version {head}:{' '}
+            {files.map((x, i) => (
+              <span key={x.name}>
+                {i > 0 && ' · '}
+                <a data-testid="artifact-export-file" data-format={x.format} href={exportFileUrl(projectId, docId, x.name)} download={x.name} className="wk-since-toggle">{x.format.toUpperCase()}</a>
+              </span>
+            ))}
+          </p>
+        );
+      })()}
       {size === 'inline' && (
         <button type="button" data-testid="artifact-open" aria-label={`Open ${title}`} className="wk-artifact-catch" onClick={() => morph('pane')} />
       )}

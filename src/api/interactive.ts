@@ -487,6 +487,27 @@ export function postExport(
   );
 }
 
+/** One finished export on disk — a row of `GET /d/:docId/api/export` (wicked-interactive#236). */
+export interface ExportListEntry {
+  version: number;
+  format: ExportFormat;
+  /** The download name (`<doc>_v<N>.<format>`); served at `GET /d/:docId/api/export/file/:name`. */
+  name: string;
+  bytes: number;
+  generated_at: string;
+}
+
+/** `GET /d/:docId/api/export` — the doc's finished exports, oldest first (studio#234: a reload
+ *  finds the files made in an earlier session). */
+export function listExports(projectId: string, docId: string): Promise<ExportListEntry[]> {
+  return iFetch<ExportListEntry[]>(`${docBase(projectId, docId)}/api/export`);
+}
+
+/** Where a listed export downloads from, on the app's own origin. */
+export function exportFileUrl(projectId: string, docId: string, name: string): string {
+  return `${docBase(projectId, docId)}/api/export/file/${encodeURIComponent(name)}`;
+}
+
 /**
  * One line of `GET /d/:docId/api/conversation` — the doc's announce history
  * (user chat + agent narration, error states included), read from disk
