@@ -7,11 +7,11 @@ import { bringIntoView } from './utils';
  * the status button resumes the cycle.
  */
 test.describe('the Desk and its surfaces [data-board]', () => {
-  test('eight real surfaces render; clicking one pins the stage to it', async ({ page }) => {
+  test('nine real surfaces render; clicking one pins the stage to it', async ({ page }) => {
     await page.goto('/');
     const board = page.locator('[data-board]');
     await bringIntoView(board);
-    await expect(board.locator('[data-board-item]')).toHaveCount(8);
+    await expect(board.locator('[data-board-item]')).toHaveCount(9);
     // The one shell is first; the retired run board / work queue are not surfaces any more.
     await expect(board.locator('[data-board-item]').first()).toContainText('desk');
     await expect(board.getByRole('tab', { name: 'runs' })).toHaveCount(0);
@@ -22,6 +22,11 @@ test.describe('the Desk and its surfaces [data-board]', () => {
     await expect(page.locator('[data-bs-api]')).toHaveText('GET /workflows');
     await expect(page.locator('[data-bs-line]')).toContainText('WorkflowDef');
     await expect(board.getByRole('tab', { name: 'workflows' })).toHaveAttribute('aria-selected', 'true');
+
+    // The Product view (studio#655): requirements across a project's repos, Draft epics as a governed run.
+    await board.getByRole('tab', { name: 'product' }).click();
+    await expect(page.locator('[data-bs-api]')).toHaveText('GET /projects/:id/requirements');
+    await expect(page.locator('[data-bs-line]')).toContainText('Draft epics');
 
     // Pinning pauses the auto-cycle and says so.
     await expect(page.locator('[data-board-status-txt]')).toContainText('pinned');
