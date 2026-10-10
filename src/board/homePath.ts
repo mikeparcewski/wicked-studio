@@ -47,9 +47,16 @@ export function displayPath(path: string): string {
   return path.replace(PATH_RE, '~');
 }
 
-/** Free text (a unit's output, a finding's message, a deliver card) with every home path → `~/…`. */
+/** macOS's per-user temp directory (`/var/folders/<xx>/<id>/T`, also under `/private`): it names
+ *  the account as surely as a home path does (studio#650 — a worktree guard's excludes file). Same
+ *  token boundaries as `TEXT_RE`: it starts after a prose delimiter and ends where the token does
+ *  (`/srv/var/folders/…` and `…/T.backup/…` are other paths, codex on #650). */
+const MAC_TMP_RE = new RegExp(String.raw`(^|[\s"'\`(\[<=:,])(?:\/private)?\/var\/folders\/[^\/\s"'\`]+\/[^\/\s"'\`]+\/T(?=$|[\\\/\s"'\`()\[\]<>]|[,;:.!?](?=$|[\s"'\`()\[\]<>]))`, 'g');
+
+/** Free text (a unit's output, a finding's message, a deliver card) with every home path → `~/…`
+ *  and the macOS per-user temp directory → `$TMPDIR`. */
 export function displayText(text: string): string {
-  return text.replace(TEXT_RE, '$1~');
+  return text.replace(TEXT_RE, '$1~').replace(MAC_TMP_RE, (_m, pre: string) => `${pre}$TMPDIR`);
 }
 
 /** The home directories a text names, as written (`/Users/reel-operator`) — distinct, in order. */

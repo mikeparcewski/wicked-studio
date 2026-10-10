@@ -170,6 +170,32 @@ describe('the pre-fix HOME outbox', () => {
   });
 });
 
+describe('studio#651: finding text', () => {
+  it('a finding that quotes home paths mid-sentence reads ~/…, like the rows above it', async () => {
+    withGovernance({
+      ...GOVERNANCE_LEGACY_OUTBOX,
+      findings: [{ ...GOVERNANCE_LEGACY_OUTBOX.findings[0]!, message: 'a pre-fix dead-letter outbox exists at /Users/reel-operator/.something-wicked/wicked-apps/emit-outbox.ndjson (its state home is /Users/reel-operator/Projects/wicked/.wicked-crew)' }],
+    });
+    render(<Harness />);
+    const gov = await screen.findByTestId('rail-governance');
+    const finding = within(gov).getByTestId('rail-governance-finding');
+    expect(finding).toHaveTextContent('exists at ~/.something-wicked/wicked-apps/emit-outbox.ndjson (its state home is ~/Projects/wicked/.wicked-crew)');
+    expect(finding.textContent).not.toContain('reel-operator');
+  });
+
+  it('the dead-letter "by reason" tally reads ~/… too (codex r1)', async () => {
+    withGovernance({
+      ...GOVERNANCE_DEADLETTERS,
+      deadletters: { ...GOVERNANCE_DEADLETTERS.deadletters!, byReason: { 'EACCES: permission denied, open /Users/reel-operator/.wicked-crew/governance.db': 3 } },
+    });
+    render(<Harness />);
+    const gov = await screen.findByTestId('rail-governance');
+    const line = within(gov).getByTestId('rail-governance-by-reason');
+    expect(line).toHaveTextContent('open ~/.wicked-crew/governance.db');
+    expect(line.textContent).not.toContain('reel-operator');
+  });
+});
+
 describe('older daemons — null-safe by construction', () => {
   it('a /diagnostics WITHOUT a governance block says "not reported" and does not degrade', async () => {
     diagnosticsAnswer = () => Promise.resolve({ components: {}, daemon: {}, stores: [], recentErrors: [], acp: { byCli: {} } });

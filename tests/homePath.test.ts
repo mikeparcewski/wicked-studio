@@ -50,6 +50,15 @@ describe('displayPath — a path under the home directory reads as ~', () => {
 });
 
 describe('displayText — every home path inside prose reads as ~', () => {
+  it('studio#650: the macOS per-user temp directory reads as $TMPDIR (with or without /private)', () => {
+    expect(displayText('excludesFile=/var/folders/q1/abc123xyz/T/guard.exclude done')).toBe('excludesFile=$TMPDIR/guard.exclude done');
+    expect(displayText('in /private/var/folders/q1/abc/T, then')).toBe('in $TMPDIR, then');
+    expect(displayText('/var/folders/q1/abc/Tmp/x and /var/foldersx')).toBe('/var/folders/q1/abc/Tmp/x and /var/foldersx');
+    // Token boundaries as for home paths (codex r1): inside another path, or a longer segment, is not it.
+    expect(displayText('/srv/var/folders/q1/abc/T/file')).toBe('/srv/var/folders/q1/abc/T/file');
+    expect(displayText('/var/folders/q1/abc/T.backup/file')).toBe('/var/folders/q1/abc/T.backup/file');
+    expect(displayText('(/var/folders/q1/abc/T/x) and "/var/folders/q1/abc/T".')).toBe('($TMPDIR/x) and "$TMPDIR".');
+  });
   it('rewrites each occurrence, wherever it sits in the sentence', () => {
     const t = 'indexed /tmp/reel-repos/offsite-plan (/Users/mika/.wicked-crew/repo-graphs/offsite-plan-9c1e/estate.db) → 4 nodes';
     expect(displayText(t)).toBe('indexed /tmp/reel-repos/offsite-plan (~/.wicked-crew/repo-graphs/offsite-plan-9c1e/estate.db) → 4 nodes');

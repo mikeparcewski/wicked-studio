@@ -188,6 +188,8 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
 }): React.ReactElement | null {
   const action = useGateActionStore((s) => s.byGate[runId] ?? IDLE_GATE_ACTION);
   const showPath = useDisplayPath();
+  // studio#650: the engine's prompt, detail lines and reviewer note quote home and temp paths.
+  const showText = useDisplayText();
   const pending = useUndoQueue((s) => s.pending.find((p) => p.runIds.length === 1 && p.runIds[0] === runId) ?? null);
   const now = useTicker(pending !== null);
 
@@ -556,7 +558,7 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
         <details className="wk-session-gate-prompt-detail">
           <summary className="wk-session-gate-prompt-summary">Details</summary>
           {model.detailItems.map((item, idx) => (
-            <p key={idx} data-testid={idx === 0 ? 'session-gate-raw-prompt' : undefined} className="wk-session-gate-detail-item">{item}</p>
+            <p key={idx} data-testid={idx === 0 ? 'session-gate-raw-prompt' : undefined} className="wk-session-gate-detail-item">{showText(item)}</p>
           ))}
           {depth}
         </details>
