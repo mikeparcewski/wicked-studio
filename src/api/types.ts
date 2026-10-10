@@ -108,12 +108,6 @@ export type LaunchBodyWithDeliver = Omit<LaunchRunBody, 'deliver'> & {
    * body across the 0.11–0.18 `deliver` reshape.
    */
   plan?: import('./teamPlan.js').LaunchPlan;
-  /**
-   * The explicit reduced-assurance opt-in (wicked-core#850, core-ts `LaunchOptions.reducedAssurance`):
-   * the creator's seat may evaluate its own work and a skipped judge does not hold a gate, disclosed
-   * on every receipt. Sent only when `GET /health.capabilities.reducedAssurance === true`.
-   */
-  reducedAssurance?: boolean;
 };
 
 // ── GET /repos/:id/deliver-target (R3, ship-prove-3) ──────────────────────────

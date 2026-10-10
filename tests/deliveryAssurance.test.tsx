@@ -24,11 +24,11 @@ function delivered(da: Record<string, unknown> | undefined, id = 'r-ph'): Sessio
       makeUnit({ id: `${id}:deliver`, session_id: id, ord: 1, status: 'done' }),
     ],
   );
-  const s = v.session as SessionWithDelivery & { delivery_assurance?: unknown };
+  const s = v.session as SessionWithDelivery;
   s.delivery = 'pushed';
   s.deliverBranch = `wicked/${id}`;
   s.deliverRemote = 'https://example.invalid/tally.git';
-  if (da !== undefined) s.delivery_assurance = da;
+  if (da !== undefined) (s as unknown as { delivery_assurance?: unknown }).delivery_assurance = da;
   return v;
 }
 

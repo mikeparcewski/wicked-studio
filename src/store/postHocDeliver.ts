@@ -49,7 +49,7 @@ export const usePostHocDeliverStore = create<PostHocDeliverStore>((set, get) => 
       .deliverRun(runId)
       .then((r) => {
         // crew ≥ 0.9.0 (EX-04): the answer says what assured the hand-over (always unverified here).
-        const assurance = (r as { assurance?: unknown }).assurance;
+        const assurance = r.assurance;
         set((s) => ({ byRun: { ...s.byRun, [runId]: { phase: 'delivered', prUrl: r.prUrl, ...(assurance !== undefined ? { assurance } : {}) } } }));
       })
       .catch((err: unknown) => {

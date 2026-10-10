@@ -296,7 +296,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
         setDaemonRevisesPr(h.capabilities?.revisesPr === true);
         setDaemonChatId(h.capabilities?.chatIdOnLaunch === true);
         setDaemonLinkedIssues(h.capabilities?.linkedIssuesExclude === true);
-        setDaemonReduced((h.capabilities as unknown as Record<string, unknown> | undefined)?.['reducedAssurance'] === true);
+        setDaemonReduced(h.capabilities?.reducedAssurance === true);
         setBaseSkill(h.baseSkill);
       })
       .catch(() => { if (!cancelled) { setDaemonDeliverGate(null); setDaemonRevisesPr(null); setDaemonChatId(null); } });
@@ -727,8 +727,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     // assurance waits for the daemon's answer (Send already busy, so it cannot launch twice), and one
     // the daemon cannot take is refused, never run with full assurance instead.
     if (reducedAssurance) {
-      const takes = daemonReduced ?? await api.getHealth().then(
-        (h) => (h.capabilities as unknown as Record<string, unknown> | undefined)?.['reducedAssurance'] === true, () => false);
+      const takes = daemonReduced ?? await api.getHealth().then((h) => h.capabilities?.reducedAssurance === true, () => false);
       if (!takes) {
         setSubmitting(false);
         setError('This daemon does not take a reduced-assurance launch. Untick "Run with reduced assurance" to launch with full assurance, or sign a second seat in.');
