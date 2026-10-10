@@ -77,8 +77,13 @@ export function SlashMenu({
   useLayoutEffect(() => applyNarrowFixed.current());
   useEffect(() => {
     const handler = () => applyNarrowFixed.current();
+    // Capture phase: a scrolling ancestor (the launch form's column) moves the box, and scroll does not bubble.
     window.addEventListener('resize', handler);
-    return () => window.removeEventListener('resize', handler);
+    window.addEventListener('scroll', handler, true);
+    return () => {
+      window.removeEventListener('resize', handler);
+      window.removeEventListener('scroll', handler, true);
+    };
   }, []);
   return (
     <div ref={menuRef} data-testid="composer-menu" id={`composer-menu-list-${menuKey}`} data-trigger={trigger} role="listbox" aria-label={ariaLabel ?? (trigger === '/' ? 'Add a step' : 'Name a project or a helper')} className="wk-composer-menu">

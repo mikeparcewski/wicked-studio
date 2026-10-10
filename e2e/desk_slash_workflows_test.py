@@ -168,11 +168,45 @@ with sync_playwright() as p:
     narrow.screenshot(path=str(SHOTS / "desk-slash-menu-390-light.png"))
     narrow.evaluate("() => { delete document.documentElement.dataset.theme; }")
     geo_390 = narrow.evaluate(_GEO_JS)
-    narrow.close()
     check("compact-menu-390",
           geo_390.get("inView") and geo_390.get("maxRowH", 99) <= 32
           and geo_390.get("keyOnce") and geo_390.get("rowsHit") and not geo_390.get("hscroll"),
           geo=geo_390)
+
+    # ── a full `/` list (both groups) is taller than the cap: the MENU scrolls, no row is squeezed,
+    #    ArrowDown keeps the active row in view, and the active row is tinted in light as in dark ──
+    narrow_box.fill("")
+    narrow_box.type("/")
+    narrow.wait_for_function(
+        "() => document.querySelectorAll('[data-testid=\"composer-menu-item\"][data-group=\"add-step\"]').length > 0",
+        timeout=8000)
+    rows_n = narrow.locator('[data-testid="composer-menu-item"]').count()
+    for _ in range(rows_n - 1):
+        narrow_box.press("ArrowDown")
+    _FULL_JS = """() => {
+        const menu = document.querySelector('[data-testid="composer-menu"]');
+        const items = [...menu.querySelectorAll('[data-testid="composer-menu-item"]')];
+        const on = menu.querySelector('[aria-selected="true"]');
+        const m = menu.getBoundingClientRect(), a = on.getBoundingClientRect();
+        const bg = (e) => getComputedStyle(e).backgroundColor;
+        return {
+            scrolls: menu.scrollHeight > menu.clientHeight + 1,
+            squeezed: items.filter(e => e.scrollHeight > e.clientHeight + 1).map(e => e.dataset.cmd),
+            activeLast: on === items[items.length - 1],
+            activeInView: a.top >= m.top - 1 && a.bottom <= m.bottom + 1,
+            tinted: bg(on) !== bg(menu) && bg(on) !== 'rgba(0, 0, 0, 0)',
+        };
+    }"""
+    full_dark = narrow.evaluate(_FULL_JS)
+    narrow.evaluate("() => { document.documentElement.dataset.theme = 'wicked-light'; }")
+    full_light = narrow.evaluate(_FULL_JS)
+    narrow.screenshot(path=str(SHOTS / "desk-slash-menu-390-full-light.png"))
+    narrow.evaluate("() => { delete document.documentElement.dataset.theme; }")
+    narrow.close()
+    check("compact-menu-full-list",
+          full_dark["scrolls"] and full_dark["squeezed"] == [] and full_dark["activeLast"]
+          and full_dark["activeInView"] and full_dark["tinted"] and full_light["tinted"],
+          dark=full_dark, light=full_light)
 
     page.locator('[data-testid="composer-menu-item"][data-cmd="workflow-bug"]').click()
     page.get_by_test_id("composer-chip").wait_for(state="visible", timeout=8000)

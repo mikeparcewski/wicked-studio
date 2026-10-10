@@ -1091,10 +1091,12 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
 .wk-composer-menu-item {
   display: flex; align-items: center; gap: 8px; text-align: left; border: 0; background: transparent;
   padding: 5px 8px; border-radius: 6px; cursor: pointer; color: var(--ink-high); font-size: var(--text-sm);
-  overflow: hidden; white-space: nowrap; width: 100%;
+  overflow: hidden; white-space: nowrap; width: 100%; flex-shrink: 0;
 }
 .wk-composer-menu-item small { color: var(--ink-muted); font-size: var(--text-xs); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wk-composer-menu-item--on { background: var(--accent-subtle); box-shadow: inset 3px 0 0 var(--accent); }
+/* Light: --accent-subtle is lightness + 64%, which reaches white on a light accent; the wash tints in every accent. */
+[data-theme="light"] .wk-composer-menu-item--on, [data-theme="wicked-light"] .wk-composer-menu-item--on { background: var(--accent-wash); }
 .wk-composer-menu-item--off { color: var(--ink-dim); cursor: not-allowed; }
 .wk-composer-cmd { font-family: inherit; display: flex; align-items: center; flex-shrink: 0; }
 .wk-composer-cmd-pfx { color: var(--ink-muted); }
