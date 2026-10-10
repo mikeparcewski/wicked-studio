@@ -29,15 +29,24 @@ interface ComposerSeatsStore {
   toggle: (key: string) => void;
 }
 
-export const useComposerSeats = create<ComposerSeatsStore>((set, get) => ({
+export const useComposerSeats = create<ComposerSeatsStore>((set) => ({
   dropped: load(),
   toggle: (key) => {
-    const cur = get().dropped;
+    // Re-read the stored choice first: another tab may have changed it since this one loaded
+    // (codex r2 on #631) — a toggle applies to the latest choice, never overwrites it.
+    const cur = load();
     const dropped = cur.includes(key) ? cur.filter((k) => k !== key) : [...cur, key];
     save(dropped);
     set({ dropped });
   },
 }));
+
+// Another tab's toggle lands here too, so every tab sends the same choice.
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', (e) => {
+    if (e.key === KEY) useComposerSeats.setState({ dropped: load() });
+  });
+}
 
 /** The seats a send uses: the eligible ones, in roster order, minus the dropped. */
 export function chosenSeats(eligible: readonly string[], dropped: readonly string[]): string[] {

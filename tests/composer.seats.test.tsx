@@ -123,6 +123,24 @@ describe('studio#631: the composer helpers row', () => {
     }
   });
 
+  it('an @project chip in a started session opens a fresh chat — the row is offered for it', () => {
+    render(<Harness started onSend={() => {}} />);
+    addAboutChip('desk', { kind: 'project', key: 'p:kes', label: 'Kestrel', projectId: 'kes' } as never);
+    type('a new question there');
+    expect(screen.getByTestId('composer-seats')).toBeInTheDocument();
+  });
+
+  it('a toggle applies to the stored choice another tab made, and a storage event syncs this tab', () => {
+    render(<Harness onSend={() => {}} />);
+    type('x');
+    localStorage.setItem('wicked_composer_dropped_seats', JSON.stringify(['pi']));
+    fireEvent.click(seatButton('codex'));
+    expect(JSON.parse(localStorage.getItem('wicked_composer_dropped_seats') ?? '[]')).toEqual(['pi', 'codex']);
+    localStorage.setItem('wicked_composer_dropped_seats', JSON.stringify(['claude']));
+    window.dispatchEvent(new StorageEvent('storage', { key: 'wicked_composer_dropped_seats' }));
+    expect(useComposerSeats.getState().dropped).toEqual(['claude']);
+  });
+
   it('a reply into a started chat keeps that chat\'s seats — no row', () => {
     render(<Harness started onSend={() => {}} />);
     type('a follow-up');

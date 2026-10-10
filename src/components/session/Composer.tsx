@@ -218,11 +218,14 @@ export function Composer({
   }, [roster, wfChip]);
   // Shown while a send is being composed (words typed, or a workflow named) — an idle Desk keeps its
   // fold (the desk_home fit), and the row is there whenever there is something to send.
-  const showSeats = eligibleSeats.length > 0 && (wfChip !== null || (!started && text.trim() !== ''));
+  // A send opens a chat before the first send, and after it whenever an `@project` chip starts a
+  // fresh session there (`fresh: started` below) — both take the row's seats (codex r2 on #631).
+  const opensChat = !started || project !== null;
+  const showSeats = eligibleSeats.length > 0 && (wfChip !== null || (opensChat && text.trim() !== ''));
   const sendSeats = chosenSeats(eligibleSeats, dropped);
   // An `@helper` named to answer (ASK-S1) but turned off in the row would be silently dropped as the
   // chat's primary — refused instead, by name (codex r1 on #631).
-  const namedHelper = wfChip === null && !started && askPathOn
+  const namedHelper = wfChip === null && opensChat && askPathOn
     ? chips.find((c) => c.kind === 'about' && c.key.startsWith('h:'))
     : undefined;
   const namedDropped = namedHelper !== undefined && dropped.includes(namedHelper.key.slice(2));
