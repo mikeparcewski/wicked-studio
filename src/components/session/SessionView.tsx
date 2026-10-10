@@ -1,3 +1,4 @@
+import { CodebaseDownload, DeliverCredentialsNotice } from './CodebaseDownload.js';
 import { useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { api } from '../../api/client.js';
 import type { ChatPathView, SessionView as RunView } from '../../api/types.js';
@@ -762,6 +763,10 @@ export function RunBlock({ view, badge, sessionId, navigate }: {
           : finished === 'stranded'
             ? <StrandedCard view={view} />
             : <GateRow view={view} gate={gate} {...(navigate !== undefined ? { navigate } : {})} />}
+      {/* crew#720: whatever the card above says, a deliver phase that refused for want of the provider
+          credential says so, and the run's final code is downloadable — every outcome. */}
+      <DeliverCredentialsNotice view={view} />
+      <CodebaseDownload view={view} />
       {/* S16a-4g: an MCP server's question and the stall watchdog's hand-off, under the run's card. */}
       <RunQuestions view={view} />
       <PlanStepLines runId={id} />

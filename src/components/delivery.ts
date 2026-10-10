@@ -535,6 +535,10 @@ export function hasDeliverySection(
   isSystemWorkflow?: IsSystemWorkflow,
 ): boolean {
   if (canDeliver(view, isSystemWorkflow)) return true;
+  // crew#720: a run that carries a final-codebase zip always gets the section, so the run record
+  // offers "Download code (.zip)" whatever the run was (a free-text run that failed before any
+  // delivery included — codex r1 on this PR).
+  if (view.session.codebase_archive !== undefined) return true;
   if (runKindOfView(view.session, isSystemWorkflow) !== 'build') return false;
   const workdir = view.session.workdir;
   return typeof workdir === 'string' && workdir.trim() !== '';

@@ -1,3 +1,4 @@
+import { CodebaseDownload, DeliverCredentialsNotice } from './session/CodebaseDownload.js';
 import { useEffect, useMemo } from 'react';
 import type { CoreEvent, SessionView } from '../api/types.js';
 import { useDeliveryStore } from '../store/delivery.js';
@@ -547,6 +548,9 @@ export function RunDelivery({ view, navigate }: Props): React.ReactElement {
       {lift !== null && recorded?.via !== 'post_hoc' && <DeliverLift view={lift} omitFailure={liftOmitsFailure} />}
       {receipt !== null && <AssuranceReceipt receipt={receipt} passed={view.session.status === 'completed' && !unverified ? true : null} testId="run-delivery-assurance" />}
       <DeliveryAssuranceLines recorded={recorded} testIdPrefix="run-delivery" />
+      {/* crew#720: the credentials-missing state, and the final-codebase zip in every outcome. */}
+      <DeliverCredentialsNotice view={view} />
+      <CodebaseDownload view={view} testId="run-delivery-codebase-zip" />
     </div>
   );
 }

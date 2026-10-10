@@ -11,10 +11,10 @@
   "version": 1,
   "studioVersion": "0.7.0",
   "counts": {
-    "files": 176,
-    "occurrences": 2019,
-    "static": 1796,
-    "dynamic": 41,
+    "files": 177,
+    "occurrences": 2025,
+    "static": 1799,
+    "dynamic": 43,
     "computed": 6
   },
   "static": [
@@ -6332,6 +6332,12 @@
       ]
     },
     {
+      "testId": "run-codebase-zip",
+      "files": [
+        "src/components/session/CodebaseDownload.tsx"
+      ]
+    },
+    {
       "testId": "run-degraded",
       "files": [
         "src/components/RunDegradedNote.tsx"
@@ -6341,6 +6347,12 @@
       "testId": "run-deliver-button",
       "files": [
         "src/components/RunDelivery.tsx"
+      ]
+    },
+    {
+      "testId": "run-deliver-credentials",
+      "files": [
+        "src/components/session/CodebaseDownload.tsx"
       ]
     },
     {
@@ -6369,6 +6381,12 @@
     },
     {
       "testId": "run-delivery-chip",
+      "files": [
+        "src/components/RunDelivery.tsx"
+      ]
+    },
+    {
+      "testId": "run-delivery-codebase-zip",
       "files": [
         "src/components/RunDelivery.tsx"
       ]
@@ -10876,6 +10894,12 @@
       ]
     },
     {
+      "pattern": "*-link",
+      "files": [
+        "src/components/session/CodebaseDownload.tsx"
+      ]
+    },
+    {
       "pattern": "*-option",
       "files": [
         "src/components/FacetAutocomplete.tsx"
@@ -10909,6 +10933,12 @@
       "pattern": "*-search",
       "files": [
         "src/components/dashboardKit.tsx"
+      ]
+    },
+    {
+      "pattern": "*-sha",
+      "files": [
+        "src/components/session/CodebaseDownload.tsx"
       ]
     },
     {
@@ -11121,7 +11151,8 @@
         "src/components/Tech.tsx",
         "src/components/WhatWhere.tsx",
         "src/components/dashboardKit.tsx",
-        "src/components/session/AssuranceReceipt.tsx"
+        "src/components/session/AssuranceReceipt.tsx",
+        "src/components/session/CodebaseDownload.tsx"
       ]
     },
     {
