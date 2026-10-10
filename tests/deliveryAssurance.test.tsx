@@ -52,11 +52,36 @@ describe('the recorded delivery assurance', () => {
     expect(unverifiedDeliveryLine({ ...d, verified: true })).toBeNull();
   });
 
-  it('its receipt stands in when no lift ran; a current lift wins', () => {
+  it('its receipt stands in when no lift ran; an in-run delivery\'s current lift wins', () => {
     const v = delivered({ verified: false, via: 'post_hoc', receipt: RECEIPT, treeBefore: null, treeAfter: null, qeAcceptance: null });
     expect(deliveryReceiptOf(v, [])!.tree).toBe('bbbbbbbbbb');
-    const lift = deliveryReceiptOf(v, [{ type: 'deliverLiftEvaluated', ord: 1, assurance: { ...RECEIPT, tree: 'cccccccccc' } }] as never)!;
+    const inRun = delivered({ verified: true, via: 'deliver_lift', receipt: RECEIPT, treeBefore: null, treeAfter: null, qeAcceptance: null });
+    const lift = deliveryReceiptOf(inRun, [{ type: 'deliverLiftEvaluated', ord: 1, assurance: { ...RECEIPT, tree: 'cccccccccc' } }] as never)!;
     expect(lift.tree).toBe('cccccccccc');
+  });
+
+  it('codex: a post-hoc hand-over\'s receipt wins over an earlier attempt\'s lift', () => {
+    const v = delivered({ verified: false, via: 'post_hoc', receipt: RECEIPT, treeBefore: null, treeAfter: null, qeAcceptance: null });
+    const r = deliveryReceiptOf(v, [{ type: 'deliverLiftEvaluated', ord: 1, assurance: { ...RECEIPT, tree: 'aaaa000000' } }] as never)!;
+    expect(r.tree).toBe('bbbbbbbbbb');
+  });
+
+  it('codex: this browser\'s post-hoc answer stands in before the record refreshes; any post-hoc landing is unverified', () => {
+    const v = delivered(undefined);
+    const answered = deliveryAssuranceOf(v, { raw: { verified: false, via: 'post_hoc', receipt: null, treeBefore: 'a1a1a1a1', treeAfter: 'a1a1a1a1', qeAcceptance: null }, delivered: true })!;
+    expect(unverifiedDeliveryLine(answered)).toMatch(/did not move/);
+    const older = deliveryAssuranceOf(v, { delivered: true })!;
+    expect(older.verified).toBe(false);
+    expect(deliveryAssuranceOf(v, { delivered: false })).toBeNull();
+  });
+
+  it('codex: a post-hoc landing in this browser never reads "accepted" on the panel', () => {
+    const v = delivered(undefined, 'r-ph2');
+    useRunEventStore.setState({ byRun: { 'r-ph2': [{ type: 'gateEvaluated', ord: 0, combined: true, denial: null, assurance: { ...RECEIPT, ran: ['judge'], creator: 'claude', judge: 'codex' } }] as never } });
+    usePostHocDeliverStore.setState({ byRun: { 'r-ph2': { phase: 'delivered', prUrl: 'https://example.invalid/pr/1' } } });
+    render(<RunDelivery view={v} />);
+    expect(screen.getByTestId('run-delivery-unverified')).toBeTruthy();
+    expect(screen.getByTestId('assurance-kind').textContent).toBe('Checked independently');
   });
 
   it('the panel: unverified, never "accepted", and the QE check said', () => {

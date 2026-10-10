@@ -132,7 +132,11 @@ export function gateReceiptFor(events: readonly CoreEvent[] | null, units: reado
  * contract, every instrument any gate ran, every one any gate skipped (first reason per
  * instrument). `who` lists the seats the gates name, so the card says who built and who checked.
  */
-export function deliveryReceiptOf(view: SessionView | null | undefined, events: readonly CoreEvent[] | null): AssuranceReceipt | null {
+export function deliveryReceiptOf(
+  view: SessionView | null | undefined,
+  events: readonly CoreEvent[] | null,
+  recordedDelivery: DeliveryAssuranceView | null = deliveryAssuranceOf(view),
+): AssuranceReceipt | null {
   const log = events ?? [];
   // The CURRENT deliver attempt's lift: a re-dispatch of the deliver unit after it voids it (the
   // retry has not lifted yet), and the receipt falls back to the gates' aggregate.
@@ -147,8 +151,10 @@ export function deliveryReceiptOf(view: SessionView | null | undefined, events: 
   }
   const gates = gateReceipts(view, log);
   const who = whoOf(gates);
-  // EX-04: crew's record of a delivery no engine lift preceded (post-hoc) — its own receipt.
-  const recorded = lifted === null ? deliveryAssuranceOf(view)?.receipt ?? null : null;
+  // EX-04: a post-hoc hand-over is the delivery that happened — an earlier attempt's engine lift
+  // is not its receipt. Its recorded receipt, else the gates' aggregate below.
+  if (recordedDelivery?.via === 'post_hoc') lifted = null;
+  const recorded = lifted === null ? recordedDelivery?.receipt ?? null : null;
   if (lifted !== null || recorded !== null) {
     const r = lifted !== null ? lifted.r : recorded!;
     return { ...r, creator: r.creator ?? who.creator, evaluator: r.evaluator ?? who.evaluator, judge: r.judge ?? who.judge, aggregateKind: deliveryKind(r, gates) };
@@ -233,8 +239,22 @@ export interface DeliveryAssuranceView {
   qeAcceptance: { satisfied: boolean; reason: string; verdictId: string | null; reviewer: string | null } | null;
 }
 
-export function deliveryAssuranceOf(view: SessionView | null | undefined): DeliveryAssuranceView | null {
-  const raw = (view?.session as unknown as { delivery_assurance?: unknown } | undefined)?.delivery_assurance;
+/**
+ * `postHoc`: this browser's post-hoc hand-over answer (`DeliverRunResult.assurance`), read when the
+ * session record does not carry one yet; `postHocDelivered` says such a hand-over landed here, so
+ * even an answer without the field (an older daemon) is labelled unverified — nothing re-verified it.
+ */
+export function deliveryAssuranceOf(view: SessionView | null | undefined, postHoc?: { raw?: unknown; delivered: boolean }): DeliveryAssuranceView | null {
+  const own = parseDeliveryAssurance((view?.session as unknown as { delivery_assurance?: unknown } | undefined)?.delivery_assurance);
+  if (own !== null) return own;
+  const answered = parseDeliveryAssurance(postHoc?.raw);
+  if (answered !== null) return answered;
+  return postHoc?.delivered === true
+    ? { verified: false, via: 'post_hoc', receipt: null, treeBefore: null, treeAfter: null, qeAcceptance: null }
+    : null;
+}
+
+function parseDeliveryAssurance(raw: unknown): DeliveryAssuranceView | null {
   if (!isRecord(raw) || typeof raw['verified'] !== 'boolean') return null;
   const qe = raw['qeAcceptance'];
   return {

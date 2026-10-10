@@ -12,9 +12,9 @@
   "studioVersion": "0.6.8",
   "counts": {
     "files": 176,
-    "occurrences": 2020,
-    "static": 1799,
-    "dynamic": 39,
+    "occurrences": 2019,
+    "static": 1796,
+    "dynamic": 41,
     "computed": 6
   },
   "static": [
@@ -6392,19 +6392,7 @@
       ]
     },
     {
-      "testId": "run-delivery-qe",
-      "files": [
-        "src/components/RunDelivery.tsx"
-      ]
-    },
-    {
       "testId": "run-delivery-reason",
-      "files": [
-        "src/components/RunDelivery.tsx"
-      ]
-    },
-    {
-      "testId": "run-delivery-unverified",
       "files": [
         "src/components/RunDelivery.tsx"
       ]
@@ -7208,12 +7196,6 @@
     },
     {
       "testId": "session-proposal-track-record",
-      "files": [
-        "src/components/session/ProposalCard.tsx"
-      ]
-    },
-    {
-      "testId": "session-proposal-unverified",
       "files": [
         "src/components/session/ProposalCard.tsx"
       ]
@@ -10906,6 +10888,12 @@
       ]
     },
     {
+      "pattern": "*-qe",
+      "files": [
+        "src/components/session/AssuranceReceipt.tsx"
+      ]
+    },
+    {
       "pattern": "*-reonboard",
       "files": [
         "src/components/RepoFindings.tsx"
@@ -10925,6 +10913,12 @@
     },
     {
       "pattern": "*-toggle",
+      "files": [
+        "src/components/session/AssuranceReceipt.tsx"
+      ]
+    },
+    {
+      "pattern": "*-unverified",
       "files": [
         "src/components/session/AssuranceReceipt.tsx"
       ]

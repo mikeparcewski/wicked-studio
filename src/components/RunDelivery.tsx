@@ -6,8 +6,8 @@ import { usePostHocDeliverStore } from '../store/postHocDeliver.js';
 import { setRetryPrefill } from '../store/retryPrefill.js';
 import { useIsSystemWorkflow } from '../store/workflowCache.js';
 import { DeliverLift } from './DeliverLift.js';
-import { deliveryAssuranceOf, deliveryReceiptOf, unverifiedDeliveryLine } from '../board/assuranceModel.js';
-import { AssuranceReceipt } from './session/AssuranceReceipt.js';
+import { deliveryAssuranceOf, deliveryReceiptOf } from '../board/assuranceModel.js';
+import { AssuranceReceipt, DeliveryAssuranceLines } from './session/AssuranceReceipt.js';
 import { deliverLift, textCarriesFailure } from './deliverLiftModel.js';
 import {
   DELIVERY_COLOR,
@@ -327,10 +327,12 @@ export function RunDelivery({ view, navigate }: Props): React.ReactElement {
   // daemon serves no PR-review-thread route, so the run's own event log is the only source.
   const reviseContext = useMemo(() => reviseContextOf(events), [events]);
   // core#850: the delivery's assurance receipt (the lift's own, else the gates' aggregate).
-  const receipt = useMemo(() => deliveryReceiptOf(view, events), [view, events]);
-  // EX-03 / EX-04: crew's record of the delivery — unverified (post-hoc) and the QE acceptance check.
-  const recorded = deliveryAssuranceOf(view);
-  const unverified = recorded === null ? null : unverifiedDeliveryLine(recorded);
+  // EX-03 / EX-04: crew's record of the delivery — the session's, else this browser's post-hoc answer
+  // (a post-hoc hand-over that landed here is unverified even before the record refreshes).
+  const postHocNow = usePostHocDeliverStore((s) => s.byRun[runId]);
+  const recorded = useMemo(() => deliveryAssuranceOf(view, postHocNow?.phase === 'delivered' ? { raw: postHocNow.assurance, delivered: true } : undefined), [view, postHocNow]);
+  const receipt = useMemo(() => deliveryReceiptOf(view, events, recorded), [view, events, recorded]);
+  const unverified = recorded !== null && !recorded.verified;
   // A rejected deliver unit's `denial_reason` (rendered VERBATIM below) carries the engine's refusal
   // the lift view also holds as `failure` — FRAMED (`Worker FAILED on unit N: …`) and excerpted
   // differently from `stepFailed.detail` (actor.rs: 300/500 vs 150/250 head+tail) — so the lift block
@@ -542,15 +544,8 @@ export function RunDelivery({ view, navigate }: Props): React.ReactElement {
         * card then explains it (the remedy included); absent entirely on a daemon that never sent a
         * deliver-ord frame. */}
       {lift !== null && <DeliverLift view={lift} omitFailure={liftOmitsFailure} />}
-      {receipt !== null && <AssuranceReceipt receipt={receipt} passed={view.session.status === 'completed' && unverified === null ? true : null} testId="run-delivery-assurance" />}
-      {unverified !== null && <p data-testid="run-delivery-unverified" className="font-mono" style={{ color: 'var(--status-warn)' }}>{unverified}</p>}
-      {recorded?.qeAcceptance != null && (
-        <p data-testid="run-delivery-qe" data-satisfied={recorded.qeAcceptance.satisfied ? 'true' : 'false'} className="font-mono" style={{ color: recorded.qeAcceptance.satisfied ? 'var(--ink-muted)' : 'var(--status-fail)' }}>
-          {recorded.qeAcceptance.satisfied
-            ? `QE acceptance: PASS${recorded.qeAcceptance.reviewer !== null ? ` by ${recorded.qeAcceptance.reviewer}` : ''}${recorded.qeAcceptance.verdictId !== null ? ` (${recorded.qeAcceptance.verdictId})` : ''}`
-            : `QE acceptance not met: ${showText(recorded.qeAcceptance.reason)}`}
-        </p>
-      )}
+      {receipt !== null && <AssuranceReceipt receipt={receipt} passed={view.session.status === 'completed' && !unverified ? true : null} testId="run-delivery-assurance" />}
+      <DeliveryAssuranceLines recorded={recorded} testIdPrefix="run-delivery" />
     </div>
   );
 }
