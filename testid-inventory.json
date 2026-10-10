@@ -12,9 +12,9 @@
   "studioVersion": "0.6.8",
   "counts": {
     "files": 176,
-    "occurrences": 2008,
-    "static": 1790,
-    "dynamic": 37,
+    "occurrences": 2017,
+    "static": 1796,
+    "dynamic": 39,
     "computed": 6
   },
   "static": [
@@ -3188,6 +3188,12 @@
       ]
     },
     {
+      "testId": "launch-reduced-assurance",
+      "files": [
+        "src/components/session/AssuranceReceipt.tsx"
+      ]
+    },
+    {
       "testId": "launch-repo-picker",
       "files": [
         "src/components/ChatInput.tsx"
@@ -3213,6 +3219,12 @@
     },
     {
       "testId": "launch-row-gate",
+      "files": [
+        "src/components/session/Composer.tsx"
+      ]
+    },
+    {
+      "testId": "launch-row-reduced-assurance",
       "files": [
         "src/components/session/Composer.tsx"
       ]
@@ -6791,6 +6803,24 @@
       ]
     },
     {
+      "testId": "session-gate-creator-seat",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-creator-seat-disclosure",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-creator-seat-nocap",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
       "testId": "session-gate-deliver-consent",
       "files": [
         "src/components/session/GateRow.tsx"
@@ -6852,6 +6882,12 @@
     },
     {
       "testId": "session-gate-reduced",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-reduced-relaunch",
       "files": [
         "src/components/session/GateRow.tsx"
       ]
@@ -10815,6 +10851,12 @@
       ]
     },
     {
+      "pattern": "*-disclosure",
+      "files": [
+        "src/components/session/AssuranceReceipt.tsx"
+      ]
+    },
+    {
       "pattern": "*-editor",
       "files": [
         "src/components/SteeringGrid.tsx"
@@ -10861,6 +10903,12 @@
       "pattern": "*-search",
       "files": [
         "src/components/dashboardKit.tsx"
+      ]
+    },
+    {
+      "pattern": "*-toggle",
+      "files": [
+        "src/components/session/AssuranceReceipt.tsx"
       ]
     },
     {

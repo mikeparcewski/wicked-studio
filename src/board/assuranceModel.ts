@@ -378,3 +378,28 @@ export function waitsForJudge(events: readonly CoreEvent[] | null, ord: number |
   if (esc !== null) return esc.condition === 'judge_unavailable' || esc.denialSource === 'judge_unavailable';
   return /could not be judged\b.*no eligible judge seat/i.test(prompt ?? '');
 }
+
+// ── The reduced-assurance opt-in (EX-01) ──────────────────────────────────────────────────────
+
+export const REDUCED_OPT_IN_LABEL = 'Run with reduced assurance';
+
+/** What the opt-in means, said before it is taken. */
+export const REDUCED_OPT_IN_DISCLOSURE =
+  'With one seat, the seat that builds the work is the only one that can review it. Without this, a '
+  + 'review step stops and asks for a second seat. With it, the creator\'s seat reviews its own work, '
+  + 'a missing judge does not hold a gate, and the session, every gate and the delivery say "Reduced assurance".';
+
+/**
+ * EX-01: the dead-seat gate's CREATOR-SEAT refusal — the run requires a distinct evaluator and no
+ * seat other than the one that built the work can review it (distribution's refusal, parked at the
+ * dead-seat gate, or the fold's `same_seat_evaluator` denial). A team run refuses this for good
+ * ("a team run never grades on its creator seat"), so only the distinct-evaluator wording offers
+ * the reduced opt-in; a run already reduced never sees it.
+ */
+export function creatorSeatRefusal(events: readonly CoreEvent[] | null, ord: number | null | undefined, prompt: string | undefined): boolean {
+  const esc = escalationFor(events, ord);
+  if (esc !== null && esc.denialSource === 'same_seat_evaluator') return true;
+  const said = `${esc?.summary ?? ''}\n${prompt ?? ''}`;
+  if (esc !== null && esc.condition !== 'dead_seat') return false;
+  return /requires a distinct evaluator/i.test(said);
+}

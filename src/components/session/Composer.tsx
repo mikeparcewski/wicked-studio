@@ -35,6 +35,7 @@ import { useCapabilities } from '../../store/capabilities.js';
 import { useLaunchPreview } from '../../hooks/useLaunchPlan.js';
 import { takeComposerSeed, useComposerSeed } from '../../store/composerSeed.js';
 import { SlashMenu, type AtItem } from './SlashMenu.js';
+import { ReducedAssuranceOptIn } from './AssuranceReceipt.js';
 
 /** Where a send goes besides the words: the project an `@project` chip named, and whether it opens a fresh session. */
 export interface ComposerSend {
@@ -142,6 +143,7 @@ export function Composer({
   const wfChip = (chips.find((c) => c.kind === 'workflow') as Extract<AboutChip, { kind: 'workflow' }> | undefined) ?? null;
   const chatIdOnLaunch = useCapabilities((s) => s.chatIdOnLaunch);
   const deliverGate = useCapabilities((s) => s.deliverGate);
+  const reducedCap = useCapabilities((s) => s.reducedAssurance);
   const askPathOn = useCapabilities((s) => s.askPath);
   const own = useRef<HTMLTextAreaElement | null>(null);
   const box = inputRef ?? own;
@@ -155,6 +157,8 @@ export function Composer({
   const [confirmMode, setConfirmMode] = useState<ConfirmMode>(COMPOSER_DEFAULT_GATE_POSTURE.mode);
   const [launching, setLaunching] = useState(false);
   const [launchError, setLaunchError] = useState<string | null>(null);
+  // wicked-core#850 EX-01: the explicit reduced-assurance opt-in on a one-seat workflow launch.
+  const [reduced, setReduced] = useState(false);
 
   const token = menuToken(text, caret);
   const menuOpen = token !== null && closedAt !== `${token.trigger}${token.start}`;
@@ -332,6 +336,11 @@ export function Composer({
     } else { const it = ats[i]; if (it !== undefined) pickAt(it); }
   };
 
+  // studio#631: only the seats the helpers row has on — never the whole council behind the row's back.
+  const launchSeats = (roster ?? []).filter((s) => s.enabled_for_council && !dropped.includes(s.key));
+  // EX-01: one seat builds and reviews — offer the opt-in (said first) on a daemon that takes it.
+  const offerReduced = wfChip !== null && reducedCap && launchSeats.length === 1;
+
   /** S19a: POST the launch a named workflow runs — the wire the launch form sends, from the composer. */
   const launchWorkflow = async (workflowId: string, intent: string): Promise<void> => {
     setLaunching(true);
@@ -339,9 +348,9 @@ export function Composer({
     // Everything that can fail — the launch preview's gate placement included — sits inside the try,
     // so a refusal is said on screen and the composer never stays "Launching…".
     try {
-      // studio#631: only the seats the helpers row has on — never the whole council behind the row's back.
-      const seats = (roster ?? []).filter((s) => s.enabled_for_council && !dropped.includes(s.key));
+      const seats = launchSeats;
       const body: LaunchBodyWithDeliver = { problem: intent, workflow: workflowId };
+      if (offerReduced && reduced) body.reducedAssurance = true;
       if (seats.length > 0) body.clisJson = JSON.stringify(seats);
       const targetRepo = repoRef ?? (repos !== null && repos.length === 1 ? repos[0]?.id ?? null : null);
       if (targetRepo !== null) body.repoRef = targetRepo;
@@ -476,6 +485,7 @@ export function Composer({
               deliver when done
             </label>
           )}
+          {offerReduced && <ReducedAssuranceOptIn checked={reduced} onChange={setReduced} testId="launch-row-reduced-assurance" />}
           <span data-testid="composer-launch-line" role="status" className="wk-composer-launch-line">
             {launching ? 'Launching…'
               : launchState?.missing === 'repo' ? NO_REPO_REASON

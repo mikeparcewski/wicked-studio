@@ -39,6 +39,11 @@ export interface RetryPrefill {
    * belongs to that chat's session (S6a). `null`/absent = not from a chat.
    */
   chatId?: string | null;
+  /**
+   * wicked-core#850: the dead-seat gate's "Run with reduced assurance" — the launch form opens with
+   * the reduced-assurance opt-in ticked and says what it means; nothing launches until Launch.
+   */
+  reducedAssurance?: boolean;
 }
 
 let pending: RetryPrefill | null = null;

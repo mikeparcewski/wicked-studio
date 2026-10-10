@@ -23,6 +23,10 @@ interface CapabilitiesStore {
    *  by a human by default, and an unattended posture may opt out with `deliverGate: 'auto'`. Absent
    *  or false (an older daemon): studio sends no key so the older launch schema never rejects it. */
   deliverGate: boolean;
+  /** `reducedAssurance` (wicked-core#850) — a launch may opt into reduced assurance
+   *  (`POST /runs {reducedAssurance: true}`). Absent or false (an older daemon): the opt-in is not
+   *  offered and the key is never sent. */
+  reducedAssurance: boolean;
   load: () => Promise<void>;
 }
 
@@ -35,6 +39,7 @@ export const useCapabilities = create<CapabilitiesStore>((set, get) => ({
   askPath: false,
   chatIdOnLaunch: false,
   deliverGate: false,
+  reducedAssurance: false,
   load: () => {
     if (get().loaded) return Promise.resolve();
     // The HTTP client is reached lazily: the stores that read a capability (gates, the ask thread)
@@ -42,9 +47,9 @@ export const useCapabilities = create<CapabilitiesStore>((set, get) => ({
     inflight ??= import('../api/client.js').then(({ api }) => api.getHealth())
       .then((h) => {
         const caps = ((h as unknown as { capabilities?: Record<string, unknown> }).capabilities) ?? {};
-        set({ loaded: true, runChatId: caps['runChatId'] === true, walkthroughRoots: caps['walkthroughRoots'] === true, askPath: caps['askPath'] === true, chatIdOnLaunch: caps['chatIdOnLaunch'] === true, deliverGate: caps['deliverGate'] === true });
+        set({ loaded: true, runChatId: caps['runChatId'] === true, walkthroughRoots: caps['walkthroughRoots'] === true, askPath: caps['askPath'] === true, chatIdOnLaunch: caps['chatIdOnLaunch'] === true, deliverGate: caps['deliverGate'] === true, reducedAssurance: caps['reducedAssurance'] === true });
       })
-      .catch(() => { set({ loaded: true, runChatId: false, walkthroughRoots: false, askPath: false, chatIdOnLaunch: false, deliverGate: false }); })
+      .catch(() => { set({ loaded: true, runChatId: false, walkthroughRoots: false, askPath: false, chatIdOnLaunch: false, deliverGate: false, reducedAssurance: false }); })
       .finally(() => { inflight = null; });
     return inflight;
   },

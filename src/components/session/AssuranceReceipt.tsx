@@ -1,5 +1,5 @@
 import type { SessionView } from '../../api/types.js';
-import { REDUCED_ASSURANCE_LABEL, isReduced, receiptWords, sessionAssurance, type AssuranceReceipt as Receipt } from '../../board/assuranceModel.js';
+import { REDUCED_ASSURANCE_LABEL, REDUCED_OPT_IN_DISCLOSURE, REDUCED_OPT_IN_LABEL, isReduced, receiptWords, sessionAssurance, type AssuranceReceipt as Receipt } from '../../board/assuranceModel.js';
 import { useRunEvents } from '../../hooks/useRunEvents.js';
 
 /**
@@ -54,4 +54,26 @@ export function ReducedAssuranceLabel({ testId = 'assurance-reduced' }: { testId
 export function RunAssuranceLabel({ view }: { view: SessionView }): React.ReactElement | null {
   const { events } = useRunEvents(view.session.id);
   return isReduced(sessionAssurance(view, events)) ? <ReducedAssuranceLabel testId="session-run-reduced" /> : null;
+}
+
+/**
+ * EX-01's explicit opt-in on a one-seat launch (the launch form, the composer's `/workflow` row):
+ * a checkbox that says what it means before it is ticked. Never ticked by studio on its own — only
+ * the dead-seat gate's "Run with reduced assurance" opens the form with it ticked, and the operator
+ * still launches.
+ */
+export function ReducedAssuranceOptIn({ checked, onChange, testId = 'launch-reduced-assurance' }: {
+  checked: boolean;
+  onChange: (on: boolean) => void;
+  testId?: string;
+}): React.ReactElement {
+  return (
+    <div data-testid={testId} data-checked={checked ? 'true' : 'false'} className="wk-assurance-optin">
+      <label className="wk-assurance-optin-label">
+        <input type="checkbox" data-testid={`${testId}-toggle`} checked={checked} onChange={(e) => onChange(e.target.checked)} />
+        {' '}{REDUCED_OPT_IN_LABEL}
+      </label>
+      <p data-testid={`${testId}-disclosure`} className="wk-assurance-optin-why">{REDUCED_OPT_IN_DISCLOSURE}</p>
+    </div>
+  );
 }
