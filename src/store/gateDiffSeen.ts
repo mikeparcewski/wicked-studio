@@ -114,7 +114,7 @@ export function recordSeen(runId: string, seen: DiffSeen): void {
  * race the resumed run and record changes the operator never saw, and never a wait in the send path.
  * In memory only; a decision with no row on screen (the palette, a Desk key) records nothing.
  */
-const shown = new Map<string, Record<string, string>>();
+const shown = new Map<string, { runId: string; receivedAt: number; files: Record<string, string> }>();
 /** One gate instance (codex r3: keyed per instance, so a late read for an older gate never
  *  overwrites the open gate's snapshot). */
 const instanceKey = (runId: string, ord: number, receivedAt: number): string => `${runId}:${ord}:${receivedAt}`;
@@ -123,11 +123,12 @@ const instanceKey = (runId: string, ord: number, receivedAt: number): string => 
 export function recordShown(runId: string, ord: number | undefined, receivedAt: number | undefined, at: number = Date.now()): void {
   if (typeof ord !== 'number' || typeof receivedAt !== 'number') return;
   const k = instanceKey(runId, ord, receivedAt);
-  const files = shown.get(k);
-  if (files === undefined) return;
-  // This run's other snapshots are older gates: none of them can be decided any more.
-  for (const key of [...shown.keys()]) if (key.startsWith(`${runId}:`)) shown.delete(key);
-  recordSeen(runId, { ord, at, files });
+  const snap = shown.get(k);
+  if (snap === undefined) return;
+  // This gate and the run's OLDER gates can no longer be decided; a successor gate's snapshot (its
+  // row may have read before this decision's response landed — codex r4) is kept.
+  for (const [key, v] of [...shown.entries()]) if (v.runId === runId && v.receivedAt <= receivedAt) shown.delete(key);
+  recordSeen(runId, { ord, at, files: snap.files });
 }
 
 /**
@@ -148,7 +149,7 @@ export function useDiffDrift(runId: string, gate: { ord: number; receivedAt: num
       .then(() => api.getRunDiff(runId, undefined, 'merge-base'))
       .then((r) => {
         if (typeof r?.diff !== 'string') { if (live) setDrift({ key, d: null }); return; }
-        shown.set(instanceKey(runId, gate.ord, gate.receivedAt), diffFiles(r.diff));
+        shown.set(instanceKey(runId, gate.ord, gate.receivedAt), { runId, receivedAt: gate.receivedAt, files: diffFiles(r.diff) });
         if (live) setDrift({ key, d: diffDrift(prior, r.diff) });
       })
       .catch(() => { if (live) setDrift({ key, d: null }); });
