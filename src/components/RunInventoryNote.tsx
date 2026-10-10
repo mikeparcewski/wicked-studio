@@ -12,6 +12,12 @@ import type { InventoryClaim, RunInventoryResponse } from '../api/types.js';
  * claim is full, when no step claimed an inventory, or on a daemon without the route.
  */
 
+/** The refetch key for a run view: how many units have finished, and the run's status. Pure. */
+export function inventoryProgress(status: string, units: readonly { status: string }[]): string {
+  const settled = units.filter((u) => u.status === 'done' || u.status === 'rejected' || u.status === 'failed').length;
+  return `${status}:${settled}`;
+}
+
 export interface InventoryLine {
   key: string;
   ord: number | null;
@@ -46,14 +52,20 @@ export function inventoryLines(inv: RunInventoryResponse): InventoryLine[] {
   return out;
 }
 
-export function RunInventoryNote({ runId }: { runId: string }): React.ReactElement | null {
+/**
+ * `progress` is a key that changes whenever a unit finishes or the run's status moves (the caller
+ * folds it from the run view), so a run opened while live re-reads its inventory as each step
+ * settles and once more when it stops (codex r1). A response is shown only for the run it was
+ * fetched for, so switching runs never shows the previous run's warnings.
+ */
+export function RunInventoryNote({ runId, progress }: { runId: string; progress: string }): React.ReactElement | null {
   const [inv, setInv] = useState<RunInventoryResponse | null>(null);
   useEffect(() => {
     let live = true;
     api.getRunInventory(runId).then((r) => { if (live) setInv(r); }, () => { if (live) setInv(null); });
     return () => { live = false; };
-  }, [runId]);
-  if (inv === null) return null;
+  }, [runId, progress]);
+  if (inv === null || inv.runId !== runId) return null;
   const lines = inventoryLines(inv);
   if (lines.length === 0) return null;
   return (
