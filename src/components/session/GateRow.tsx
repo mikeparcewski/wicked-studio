@@ -5,7 +5,7 @@ import { FLOOR_FIX_LABEL, sessionGateChoices, type GateRowChoice, type GateRowMo
 import { INITIAL_PICK, pickKey, type RowPick } from '../../board/questionRow.js';
 import { plainGateQuestion, repoNameOf } from '../../board/deskWords.js';
 import { api } from '../../api/client.js';
-import { useDisplayText } from '../../hooks/useHomePath.js';
+import { useDisplayPath, useDisplayText } from '../../hooks/useHomePath.js';
 import { driftLine, useDiffDrift, type DiffDrift } from '../../store/gateDiffSeen.js';
 import { diffstatOf, type DeliverRefusal } from '../gateMoveModel.js';
 import { secondsLeft, undoDecision, useUndoQueue } from '../../board/undoQueue.js';
@@ -187,6 +187,7 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
   drift?: DiffDrift | null;
 }): React.ReactElement | null {
   const action = useGateActionStore((s) => s.byGate[runId] ?? IDLE_GATE_ACTION);
+  const showPath = useDisplayPath();
   const pending = useUndoQueue((s) => s.pending.find((p) => p.runIds.length === 1 && p.runIds[0] === runId) ?? null);
   const now = useTicker(pending !== null);
 
@@ -467,6 +468,10 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
             {i === model.recommended && (
               <span className="wk-session-gate-suggested" aria-hidden="true">suggested</span>
             )}
+            {/* core#820: the producer's default is MARKED, never preselected. */}
+            {choice.isDefault === true && (
+              <span data-testid="session-gate-choice-default" className="wk-session-gate-suggested">default</span>
+            )}
             {/* S16a-1b: the creator seat's record rides Approve as neutral text — never a tone. */}
             {choice.key === recordOn && seat !== null && seat.record !== null && (
               <span data-testid="session-gate-track-record" className="wk-session-gate-record">{seat.record}</span>
@@ -474,6 +479,19 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
           </button>
         ))}
       </div>
+      {/* core#820: what each install choice writes, before it is taken — the operator's own files said so. */}
+      {[...model.choices, ...model.overflow].filter((c) => c.writes !== undefined).map((c) => (
+        <div key={`writes-${c.key}`} data-testid="session-gate-consent-writes" data-choice-key={c.key} className="wk-session-gate-detail-item">
+          <p><b>{c.label}</b>{c.isDefault === true ? ' (default)' : ''} writes {c.writes!.length === 0 ? 'nothing it could list' : `${c.writes!.length} file${c.writes!.length === 1 ? '' : 's'}`}:</p>
+          <ul>
+            {c.writes!.map((w, j) => (
+              <li key={j} data-testid="session-gate-consent-write" data-own={w.operatorOwned ? 'true' : 'false'}>
+                {w.operatorOwned ? 'your own ' : ''}<code>{showPath(w.path)}</code>{w.what !== '' ? ` — ${w.what}` : ''}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
       {model.overflow.length > 0 && (
         <details className="wk-session-gate-overflow">
           <summary className="wk-session-gate-overflow-summary">⋯</summary>
