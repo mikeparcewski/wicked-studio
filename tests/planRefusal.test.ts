@@ -27,6 +27,9 @@ describe('planRefusalWords', () => {
   });
   it('a bare mention inside another refusal, or in prose, is not this refusal (codex r1 on #671)', () => {
     expect(planRefusalWords('unknown_catalog_entry: step inspect: writes_nothing_on_code: check names catalog entry nope')).toBeNull();
+    // A named resource that happens to end in a token is not a refusal (codex r3 on #671).
+    expect(planRefusalWords('unknown project: writes_nothing_on_code')).toBeNull();
+    expect(translateWireError(404, 'unknown project: security_review_on_non_code_plan')).toBe('the daemon refused this — unknown project: security_review_on_non_code_plan');
     expect(planRefusalWords('unknown_catalog_entry: step writes_nothing_on_code names catalog entry nope, which the catalog does not define')).toBeNull();
     expect(planRefusalWords('the plan mentions security_review_on_non_code_plan in passing')).toBeNull();
   });

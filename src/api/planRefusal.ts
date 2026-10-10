@@ -11,13 +11,17 @@
 const WORDED = new Set(['security_review_on_non_code_plan', 'writes_nothing_on_code']);
 
 /**
- * The refusal token as the engine writes it: the FIRST `snake_case` segment of the `: `-joined text.
- * Context prefixes have spaces (`the plan is refused`, `run r1`) and are skipped; the first token-
- * shaped segment is the refusal's own, so a token-shaped step id inside another refusal's detail
- * (`unknown_catalog_entry: step inspect: writes_nothing_on_code: …`) never matches.
+ * The refusal token as the engine writes it: the FIRST `snake_case` segment of the `: `-joined
+ * text that a detail follows. Context prefixes have spaces (`the plan is refused`, `run r1`) and
+ * are skipped; the first token-shaped segment is the refusal's own, so a token-shaped step id
+ * inside another refusal's detail (`unknown_catalog_entry: step inspect: writes_nothing_on_code: …`)
+ * never matches.
  */
 function leadingToken(text: string): string | null {
-  for (const seg of text.split(': ')) {
+  const segs = text.split(': ');
+  // The token always has a detail after it (`<token>: <detail>`): a token-shaped LAST segment is a
+  // name (`unknown project: writes_nothing_on_code`), never a refusal.
+  for (const seg of segs.slice(0, -1)) {
     const t = seg.trim();
     if (/^[a-z][a-z0-9]*(_[a-z0-9]+)+$/.test(t)) return t;
   }
