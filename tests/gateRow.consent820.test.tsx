@@ -56,8 +56,10 @@ describe('core#820 — the model', () => {
 
   it('no plan on the frame (an older engine, or writeTargetsMissing): Approve / Decline as before', () => {
     const missing = { ...(FRAME as unknown as Record<string, unknown>), choices: undefined, writeTargets: undefined, writeTargetsMissing: true } as unknown as CoreEvent;
-    expect(consentChoicesOf({ ...gate(), choices: undefined }, [missing])).toBeNull();
-    const m = sessionGateChoices({ runId: RUN, gate: { ...gate(), choices: undefined }, units: UNITS, events: [missing], pool: [], roster: null })!;
+    const { choices: _omit, ...bare } = gate();
+    void _omit;
+    expect(consentChoicesOf(bare, [missing])).toBeNull();
+    const m = sessionGateChoices({ runId: RUN, gate: bare, units: UNITS, events: [missing], pool: [], roster: null })!;
     expect(m.choices.map((c) => c.key)).toEqual(['approve', 'decline']);
     expect(consentChoicesOf(gate(), [])).toBeNull();
   });
