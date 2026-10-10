@@ -12,8 +12,8 @@
   "studioVersion": "0.7.3",
   "counts": {
     "files": 178,
-    "occurrences": 2050,
-    "static": 1817,
+    "occurrences": 2052,
+    "static": 1819,
     "dynamic": 48,
     "computed": 6
   },
@@ -7328,6 +7328,18 @@
     },
     {
       "testId": "session-run-archived",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
+      "testId": "session-run-detail-error",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
+      "testId": "session-run-detail-retry",
       "files": [
         "src/components/session/SessionView.tsx"
       ]

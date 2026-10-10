@@ -493,7 +493,8 @@ function RunsTable({ runs, runChatId, projects, q, runsLoaded, runsError, onRetr
             <span aria-hidden className="wk-runs-col wk-runs-col--menu" />
           </div>
           {pageData.slice.map((r) => {
-            const path = sessionPath(r.sessionId);
+            // studio#675: an archived run opens at its run address (its chat's session reads the live index).
+            const path = sessionPath(archivedMode ? `run:${r.runId}` : r.sessionId);
             const finished = !archivedMode && FINISHED.has(r.status) ? viewOf(r.runId) : undefined;
             const open = menuFor === r.runId;
             return (

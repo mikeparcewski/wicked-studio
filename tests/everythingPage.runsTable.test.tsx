@@ -190,4 +190,16 @@ describe('S17b Every-run table', () => {
     fireEvent.click(within(row).getByTestId('runs-row-open'));
     expect(navigate).toHaveBeenCalledWith('/s/run%3Ar-done');
   });
+  it('an archived run with a chat links its run address in the table too (studio#675)', async () => {
+    const { useCapabilities } = await import('../src/store/capabilities.js');
+    useCapabilities.setState({ loaded: true, runChatId: true });
+    const v = makeView('r-arch-chat', { status: 'cancelled' });
+    (v.session as unknown as { archived_at: number; chat_id: string }).archived_at = 1_759_000_000;
+    (v.session as unknown as { chat_id: string }).chat_id = 'chat-7';
+    listRuns.mockResolvedValue({ runs: [v] });
+    render(<EverythingPage runs={runs} runsLoaded needRows={[]} navigate={() => {}} search="?tab=sessions&view=runs&filter=archived" />);
+    const row = await screen.findByTestId('runs-row');
+    expect(row.querySelector('a')!.getAttribute('href')).toBe('/s/run%3Ar-arch-chat');
+    useCapabilities.setState({ runChatId: false });
+  });
 });
