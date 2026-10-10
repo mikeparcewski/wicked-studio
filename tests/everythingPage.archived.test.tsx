@@ -60,4 +60,18 @@ describe('Everything › Sessions › Archived', () => {
     // The row leaves the lens at once, as before.
     await waitFor(() => expect(screen.getAllByTestId('everything-archived-run')).toHaveLength(1));
   });
+  it('an archived row with a chat opens its run address, which resolves through GET /runs/:id (studio#675)', async () => {
+    const { useCapabilities } = await import('../src/store/capabilities.js');
+    useCapabilities.setState({ loaded: true, runChatId: true });
+    const withChat = archived('r-arch-3', 'Fix the menu');
+    (withChat.session as unknown as { chat_id: string }).chat_id = 'chat-9';
+    listRuns.mockResolvedValue({ runs: [withChat] });
+    const navigate = vi.fn();
+    render(<EverythingPage runs={[]} runsLoaded needRows={[]} navigate={navigate} search="?tab=sessions&filter=archived" />);
+    const [row] = await screen.findAllByTestId('everything-archived-run');
+    const link = row!.querySelector('a')!;
+    expect(link.getAttribute('href')).toBe('/s/run%3Ar-arch-3');
+    fireEvent.click(link);
+    expect(navigate).toHaveBeenCalledWith('/s/run%3Ar-arch-3');
+  });
 });

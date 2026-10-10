@@ -153,11 +153,13 @@ with sync_playwright() as p:
     except Exception:  # noqa: BLE001
         session_archived_ok = False
     session_pending_shown = page.query_selector('[data-testid="session-run-pending"]') is not None
+    status_line = page.get_by_test_id("session-status-sentence").first.inner_text() if session_archived_ok else ""
     page.screenshot(path=str(SHOTS / "desk-everything-archive-session.png"))
     check("archived-session-resolves",
-          session_archived_ok and not session_pending_shown,
+          session_archived_ok and not session_pending_shown and "ArchivedRetry" not in status_line,
           session_archived=session_archived_ok,
           session_pending=session_pending_shown,
+          status_line=status_line,
           url=page.url.replace(origin, ""))
     page.go_back()
     page.get_by_test_id("everything-filter").filter(has_text="Archived").click()

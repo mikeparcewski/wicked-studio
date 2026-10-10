@@ -170,7 +170,8 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
     const fromIndex = ref.kind === 'run'
       ? runs.filter((v) => v.session.id === ref.runId)
       : runChatId ? runs.filter((v) => runChatIdOf(v) === ref.chatId) : [];
-    const base = fromIndex.length === 0 && ref.kind === 'run' && detailRun !== null
+    // Only this address's own detail read: a late answer for the previous address never shows here.
+    const base = fromIndex.length === 0 && ref.kind === 'run' && detailRun !== null && detailRun.session.id === ref.runId
       ? [detailRun]
       : fromIndex;
     return [...base].sort((a, b) => launchedMs(a) - launchedMs(b));
@@ -338,9 +339,11 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
     const id = ref.runId;
     if (detailFetchedFor.current === id) return;
     detailFetchedFor.current = id;
+    let cancelled = false;
     api.getRun(id)
-      .then(({ run }) => { setDetailRun(run); })
+      .then(({ run }) => { if (!cancelled) setDetailRun(run); })
       .catch(() => {});
+    return () => { cancelled = true; };
   }, [ref, runsLoaded, runs]);
   const since = useMemo(() => sinceYouLeft(lastSeen, Date.now(), mine, badges), [lastSeen, mine, badges]);
 
@@ -770,7 +773,7 @@ export function RunBlock({ view, badge, sessionId, navigate }: {
         {view.session.archived_at != null && <span data-testid="session-run-archived" className="wk-session-grey"> · Archived</span>}
         {/* S16a-1d: Retry a failed or cancelled run — the Desk row's prefill, the launch form; no POST. */}
         {navigate !== undefined && (view.session.status === 'failed' || view.session.status === 'cancelled') && (
-          <button type="button" data-testid="session-run-retry" onClick={() => startRetry(view, navigate)} className="wk-since-toggle" title="Open the launch form prefilled with this run's intent and settings — nothing starts until you send">Retry ›</button>
+          <>{' '}<button type="button" data-testid="session-run-retry" onClick={() => startRetry(view, navigate)} className="wk-since-toggle" title="Open the launch form prefilled with this run's intent and settings — nothing starts until you send">Retry ›</button></>
         )}
       </p>
       {/* S16a-1d: the run's technical handles, when Settings › Show technical details is on. */}
