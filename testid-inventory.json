@@ -12,8 +12,8 @@
   "studioVersion": "0.6.8",
   "counts": {
     "files": 176,
-    "occurrences": 2017,
-    "static": 1796,
+    "occurrences": 2020,
+    "static": 1799,
     "dynamic": 39,
     "computed": 6
   },
@@ -6392,7 +6392,19 @@
       ]
     },
     {
+      "testId": "run-delivery-qe",
+      "files": [
+        "src/components/RunDelivery.tsx"
+      ]
+    },
+    {
       "testId": "run-delivery-reason",
+      "files": [
+        "src/components/RunDelivery.tsx"
+      ]
+    },
+    {
+      "testId": "run-delivery-unverified",
       "files": [
         "src/components/RunDelivery.tsx"
       ]
@@ -7196,6 +7208,12 @@
     },
     {
       "testId": "session-proposal-track-record",
+      "files": [
+        "src/components/session/ProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "session-proposal-unverified",
       "files": [
         "src/components/session/ProposalCard.tsx"
       ]

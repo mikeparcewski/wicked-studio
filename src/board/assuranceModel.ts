@@ -147,8 +147,10 @@ export function deliveryReceiptOf(view: SessionView | null | undefined, events: 
   }
   const gates = gateReceipts(view, log);
   const who = whoOf(gates);
-  if (lifted !== null) {
-    const r = lifted.r;
+  // EX-04: crew's record of a delivery no engine lift preceded (post-hoc) — its own receipt.
+  const recorded = lifted === null ? deliveryAssuranceOf(view)?.receipt ?? null : null;
+  if (lifted !== null || recorded !== null) {
+    const r = lifted !== null ? lifted.r : recorded!;
     return { ...r, creator: r.creator ?? who.creator, evaluator: r.evaluator ?? who.evaluator, judge: r.judge ?? who.judge, aggregateKind: deliveryKind(r, gates) };
   }
   if (gates.length === 0) return null;
@@ -214,6 +216,47 @@ function whoOf(gates: readonly AssuranceReceipt[]): { creator: string | null; ev
     return seen.length === 0 ? null : seen.join(', ');
   };
   return { creator: join((g) => g.creator), evaluator: join((g) => g.evaluator), judge: join((g) => g.judge) };
+}
+
+/**
+ * crew's record of what assured a DELIVERY (`AgentSession.delivery_assurance`, crew ≥ 0.9.0):
+ * `verified: false` (EX-04) is a post-hoc / recovery delivery — nothing re-verified the tree it
+ * pushed; `treeBefore` / `treeAfter` say whether the lift moved it. `qeAcceptance` is the QE check
+ * (EX-03) when the contract requires it. `null` on an older daemon or an undelivered run.
+ */
+export interface DeliveryAssuranceView {
+  verified: boolean;
+  via: string;
+  receipt: AssuranceReceipt | null;
+  treeBefore: string | null;
+  treeAfter: string | null;
+  qeAcceptance: { satisfied: boolean; reason: string; verdictId: string | null; reviewer: string | null } | null;
+}
+
+export function deliveryAssuranceOf(view: SessionView | null | undefined): DeliveryAssuranceView | null {
+  const raw = (view?.session as unknown as { delivery_assurance?: unknown } | undefined)?.delivery_assurance;
+  if (!isRecord(raw) || typeof raw['verified'] !== 'boolean') return null;
+  const qe = raw['qeAcceptance'];
+  return {
+    verified: raw['verified'],
+    via: typeof raw['via'] === 'string' ? raw['via'] : '',
+    receipt: receiptOf(raw['receipt']),
+    treeBefore: str(raw['treeBefore']),
+    treeAfter: str(raw['treeAfter']),
+    qeAcceptance: isRecord(qe) && typeof qe['satisfied'] === 'boolean'
+      ? { satisfied: qe['satisfied'], reason: typeof qe['reason'] === 'string' ? qe['reason'] : '', verdictId: str(qe['verdictId']), reviewer: str(qe['reviewer']) }
+      : null,
+  };
+}
+
+/** The unverified delivery's line (EX-04): what was not re-verified and whether the tree moved. */
+export function unverifiedDeliveryLine(d: DeliveryAssuranceView): string | null {
+  if (d.verified) return null;
+  const short = (t: string): string => t.slice(0, 7);
+  const moved = d.treeBefore !== null && d.treeAfter !== null
+    ? (d.treeBefore === d.treeAfter ? ` The tree did not move (${short(d.treeAfter)}).` : ` The tree moved from ${short(d.treeBefore)} to ${short(d.treeAfter)} in the hand-over.`)
+    : '';
+  return `Unverified delivery: nothing re-verified the tree this hand-over pushed.${moved}`;
 }
 
 // ── The words ─────────────────────────────────────────────────────────────────────────────────

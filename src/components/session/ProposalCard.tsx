@@ -23,7 +23,7 @@ import { PlanGateSummary } from '../PlanGateSummary.js';
 import { useSeatTrust } from './GateDepth.js';
 import { DriftLine } from './GateRow.js';
 import { useDiffDrift } from '../../store/gateDiffSeen.js';
-import { deliveryReceiptOf } from '../../board/assuranceModel.js';
+import { deliveryAssuranceOf, deliveryReceiptOf, unverifiedDeliveryLine } from '../../board/assuranceModel.js';
 import { AssuranceReceipt } from './AssuranceReceipt.js';
 
 /**
@@ -70,6 +70,9 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
   // core#850: the delivery's assurance receipt — what the run required, what its gates ran and
   // skipped, who built and checked it, the tree delivered.
   const deliveryReceipt = deliveryReceiptOf(view, eventsRaw ?? null);
+  // EX-04: a post-hoc hand-over nothing re-verified says so on its receipt.
+  const recordedDelivery = deliveryAssuranceOf(view);
+  const unverified = recordedDelivery === null ? null : unverifiedDeliveryLine(recordedDelivery);
   // Fetch the diff for deliver cards — primary diffstat source (GET /runs/:id/diff?base=merge-base).
   // Keyed by runId so a run change re-fetches and stale responses are discarded.
   const [runDiffState, setRunDiffState] = useState<{ runId: string; data: RunDiff } | null>(null);
@@ -313,7 +316,8 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
           )}
         </p>
       )}
-      {card.state === 'done' && card.kind === 'deliver' && deliveryReceipt !== null && <AssuranceReceipt receipt={deliveryReceipt} passed testId="session-proposal-assurance" />}
+      {card.state === 'done' && card.kind === 'deliver' && deliveryReceipt !== null && <AssuranceReceipt receipt={deliveryReceipt} passed={unverified === null ? true : null} testId="session-proposal-assurance" />}
+      {card.state === 'done' && card.kind === 'deliver' && unverified !== null && <p data-testid="session-proposal-unverified" className="wk-prop-why wk-assurance-kind--floor-only">{unverified}</p>}
       {card.state === 'fail' && (
         <>
           <p className="wk-prop-status">
