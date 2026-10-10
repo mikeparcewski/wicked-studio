@@ -12,6 +12,18 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.7.2] — 2026-10-10
+
+The QE acceptance decision (wicked-crew#941, wicked-core#861) and the incomplete-inventory note (wicked-crew#721).
+
+### Added
+- The run's **QE acceptance decision** is shown on the session, on every gate and on the delivery. It reads one of: required; waived (score N), with the reason; or skipped by the operator, with the reason (studio#672).
+- The launch form offers **Skip QE acceptance** (a reason is required) and **Force QE acceptance** for workflows that change the application: feature, bug, migration and mcp-server. In crew 0.9.3, `deliverGate: "auto"` on those workflows needs an explicit skip (studio#672).
+- The run record says when an enumerating step's inventory is incomplete: partial or unreadable claims, or unit outputs that could not be read. It reads this from crew's `GET /runs/:id/inventory` (studio#667).
+
+### Changed
+- `wicked-crew-api-types` 0.106.0 (studio#672).
+
 ## [0.7.1] — 2026-10-10
 
 The final-codebase zip and the credentials-missing state (wicked-crew#720).
@@ -1978,7 +1990,8 @@ The merged interactive layer: wicked-interactive's UI moved into this skin (DES-
   `git subtree split` (92 commits).
 - The SPA as a pure HTTP/WS client of the wicked-crew daemon: runs, gates, live CoreEvents.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.1...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.2...HEAD
+[0.7.2]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.1...v0.7.2
 [0.7.1]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/mikeparcewski/wicked-studio/compare/v0.6.8...v0.7.0
 [0.6.8]: https://github.com/mikeparcewski/wicked-studio/compare/v0.6.7...v0.6.8
