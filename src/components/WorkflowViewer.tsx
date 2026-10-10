@@ -86,7 +86,8 @@ function PhaseCard({ phase }: { phase: PhaseDef }): React.ReactElement {
 
 /** How a Tool step gets its command: the entry's own (`walkthrough_review`), a typed command, or a script. */
 type ExecMode = 'inherit' | 'command' | 'script';
-type GateMode = 'auto' | 'human' | 'human_if';
+/** Every gate a step can state, one mode each (codex r2: a mode the builder could not hold was dropped). */
+type GateMode = 'auto' | 'human' | 'human_always' | 'human_if' | 'consent';
 type ScriptLang = 'bash' | 'python' | 'sh';
 type StageKind = PhaseDef['kind'];
 
@@ -101,7 +102,9 @@ export interface BuilderPhase {
   id: string;
   /** The phase-catalog entry the step instantiates; its role comes from it. */
   catalog: string;
-  dependsOn: string[];
+  /** `null` = the step states none, and the ENGINE gives it its inputs (an evaluator every earlier
+   *  creator, `deliver` the step before it). An explicit list, even an empty one, replaces that. */
+  dependsOn: string[] | null;
   /** A `run` step's stage (the only entry whose kind a step may set); `null` = the entry's. */
   kind: StageKind | null;
   instructions: string | null;
@@ -116,6 +119,9 @@ export interface BuilderPhase {
   validatorPin: string | null;
   execMode: ExecMode;
   cmd: string;
+  /** The command's argv as saved: sent back as-is while `cmd` still reads as it (an argument may
+   *  hold spaces or a whole script, which a whitespace split would break). */
+  cmdArgs: string[] | null;
   script: string;
   scriptLang: ScriptLang;
   /** Every step field the builder has no control for, carried back verbatim. */
@@ -134,8 +140,20 @@ function newKey(): string {
 
 function gateModeOf(gate: unknown): GateMode | null {
   if (gate === 'auto') return 'auto';
+  if (gate === 'consent_before') return 'consent';
   if (typeof gate !== 'object' || gate === null) return null;
-  return 'human_confirm_if' in gate ? 'human_if' : 'human';
+  if ('human_confirm_if' in gate) return 'human_if';
+  if ('human_confirm' in gate) {
+    const hc = (gate as { human_confirm?: { unconditional?: unknown } }).human_confirm;
+    return hc?.unconditional === true ? 'human_always' : 'human';
+  }
+  return null;
+}
+
+function toolCmdOf(ex: unknown): string[] | null {
+  if (typeof ex !== 'object' || ex === null || (ex as { type?: unknown }).type !== 'tool') return null;
+  const cmd = (ex as { cmd?: unknown }).cmd;
+  return Array.isArray(cmd) && cmd.every((a) => typeof a === 'string') ? (cmd as string[]) : null;
 }
 
 function strings(v: unknown): string[] {
@@ -144,14 +162,14 @@ function strings(v: unknown): string[] {
 
 /** A saved preset's step as the builder holds it: exactly the fields it states. */
 export function builderPhaseOfStep(step: PresetStep): BuilderPhase {
-  const ex = step['executor'] as PhaseExecutor | undefined;
+  const cmd = toolCmdOf(step['executor']);
   const extra: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(step)) if (!EDITED_FIELDS.has(k)) extra[k] = v;
   return {
     _key: newKey(),
     id: step.id,
     catalog: step.catalog,
-    dependsOn: strings(step['depends_on']),
+    dependsOn: Array.isArray(step['depends_on']) ? strings(step['depends_on']) : null,
     kind: typeof step['kind'] === 'string' ? (step['kind'] as StageKind) : null,
     instructions: typeof step['instructions'] === 'string' ? step['instructions'] : null,
     gate: 'gate' in step ? gateModeOf(step['gate']) : null,
@@ -161,8 +179,9 @@ export function builderPhaseOfStep(step: PresetStep): BuilderPhase {
     allowedSkills: strings(step['allowed_skills']),
     requiredDeliverables: strings(step['required_deliverables']),
     validatorPin: typeof step['validator_pin'] === 'string' ? step['validator_pin'] : null,
-    execMode: ex?.type === 'tool' ? 'command' : 'inherit',
-    cmd: ex?.type === 'tool' ? ex.cmd.join(' ') : '',
+    execMode: cmd !== null ? 'command' : 'inherit',
+    cmd: cmd !== null ? cmd.join(' ') : '',
+    cmdArgs: cmd,
     script: '',
     scriptLang: 'bash',
     extra,
@@ -183,7 +202,7 @@ export function catalogOfPhase(p: Pick<PhaseDef, 'kind' | 'role' | 'executor'>):
 /** A def's phase (the old `{id, phases}` JSON shape) as a builder step. The entry is inferred and the
  *  phase's own values are stated, so the engine judges each one against the entry on save. */
 export function builderPhaseOf(p: PhaseDef): BuilderPhase {
-  const ex = p.executor;
+  const cmd = toolCmdOf(p.executor);
   const catalog = catalogOfPhase(p);
   return {
     _key: newKey(),
@@ -200,8 +219,9 @@ export function builderPhaseOf(p: PhaseDef): BuilderPhase {
     allowedSkills: p.allowed_skills ?? [],
     requiredDeliverables: p.required_deliverables ?? [],
     validatorPin: p.validator_pin ?? null,
-    execMode: ex?.type === 'tool' ? 'command' : 'inherit',
-    cmd: ex?.type === 'tool' ? ex.cmd.join(' ') : '',
+    execMode: cmd !== null ? 'command' : 'inherit',
+    cmd: cmd !== null ? cmd.join(' ') : '',
+    cmdArgs: cmd,
     script: '',
     scriptLang: 'bash',
     extra: {},
@@ -231,19 +251,25 @@ export function withCatalog(p: BuilderPhase, catalog: string): BuilderPhase {
     allowedSkills: [],
     execMode: 'inherit',
     cmd: '',
+    cmdArgs: null,
     script: '',
+    // The fields with no control here (`writes_nothing`, `role`, `pool`, …) were the old step's too.
+    extra: {},
   };
 }
 
 function toGateSpec(gate: GateMode): GateSpec {
   if (gate === 'human') return { human_confirm: { unconditional: false } };
+  if (gate === 'human_always') return { human_confirm: { unconditional: true } };
   if (gate === 'human_if') return { human_confirm_if: 'verdict_not_pass' };
+  if (gate === 'consent') return 'consent_before';
   return 'auto';
 }
 
 /** The executor a Tool step states, or `undefined` when it keeps its entry's own command. */
 async function resolveExecutor(p: BuilderPhase): Promise<PhaseExecutor | undefined> {
   if (p.execMode === 'command') {
+    if (p.cmdArgs !== null && p.cmdArgs.join(' ') === p.cmd) return { type: 'tool', cmd: p.cmdArgs };
     const cmd = p.cmd.trim().split(/\s+/).filter(Boolean);
     return cmd.length > 0 ? { type: 'tool', cmd } : undefined;
   }
@@ -267,7 +293,8 @@ export type BuilderStep = PresetStep;
 export async function buildPresetSteps(phases: BuilderPhase[], entries: readonly CatalogEntry[] = []): Promise<BuilderStep[]> {
   return Promise.all(
     phases.map(async (p, i): Promise<BuilderStep> => {
-      const step: BuilderStep = { ...p.extra, catalog: p.catalog, id: p.id || `phase-${i + 1}`, depends_on: p.dependsOn };
+      const step: BuilderStep = { ...p.extra, catalog: p.catalog, id: p.id || `phase-${i + 1}` };
+      if (p.dependsOn !== null) step['depends_on'] = p.dependsOn;
       const tool = entries.find((e) => e.id === p.catalog)?.executor === 'tool' || p.catalog === 'run';
       if (p.kind !== null && tool) step['kind'] = p.kind;
       if (p.gate !== null) step['gate'] = toGateSpec(p.gate);
@@ -293,9 +320,8 @@ export async function buildPresetSteps(phases: BuilderPhase[], entries: readonly
 export function presetSummary(name: string, steps: readonly PresetStep[], entries: readonly CatalogEntry[]): WorkflowDef {
   return {
     id: name,
-    phases: steps.map((st, i): PhaseDef => {
+    phases: steps.map((st): PhaseDef => {
       const e = entries.find((x) => x.id === st.catalog);
-      const previous = i > 0 ? steps[i - 1]?.id : undefined;
       return {
         id: st.id,
         kind: (st['kind'] as StageKind | undefined) ?? e?.kind ?? 'build',
@@ -305,7 +331,8 @@ export function presetSummary(name: string, steps: readonly PresetStep[], entrie
         executes_code: st['executes_code'] === true || e?.executes_code === true,
         verified_evidence: st['verified_evidence'] === true || e?.verified_evidence === true,
         required_deliverables: strings(st['required_deliverables']),
-        depends_on: Array.isArray(st['depends_on']) ? strings(st['depends_on']) : previous !== undefined ? [previous] : [],
+        // Only the edges the step states: an omitted list is the engine's to fill at launch.
+        depends_on: strings(st['depends_on']),
         role: e?.role ?? 'neutral',
         skill_ref: (st['skill_ref'] as string | undefined) ?? e?.skill_ref ?? null,
         allowed_skills: strings(st['allowed_skills']),
@@ -329,17 +356,27 @@ export function parseBuilderImport(text: string): { name: string; phases: Builde
   const d = doc as { name?: unknown; id?: unknown; steps?: unknown; phases?: unknown };
   const isStep = (s: unknown): s is PresetStep =>
     typeof s === 'object' && s !== null && typeof (s as PresetStep).catalog === 'string' && typeof (s as PresetStep).id === 'string';
+  const mapped = (f: () => BuilderPhase[]): BuilderPhase[] | null => {
+    try {
+      return f();
+    } catch {
+      return null;
+    }
+  };
   if (Array.isArray(d.steps) && d.steps.every(isStep)) {
-    return { name: typeof d.name === 'string' ? d.name : '', phases: d.steps.map(builderPhaseOfStep) };
+    const steps = d.steps;
+    const phases = mapped(() => steps.map(builderPhaseOfStep));
+    return phases === null ? null : { name: typeof d.name === 'string' ? d.name : '', phases };
   }
   // A hand-written def may leave the optional-looking fields out; they read as the def defaults.
   const isPhase = (p: unknown): p is Partial<PhaseDef> & Pick<PhaseDef, 'id' | 'kind'> =>
     typeof p === 'object' && p !== null && typeof (p as PhaseDef).id === 'string' && typeof (p as PhaseDef).kind === 'string';
   if (Array.isArray(d.phases) && d.phases.every(isPhase)) {
-    return {
-      name: typeof d.id === 'string' ? d.id : '',
-      phases: d.phases.map((p) => builderPhaseOf({ depends_on: [], executes_code: false, verified_evidence: false, gate: 'auto', gate_type: null, role: 'neutral', ...p } as PhaseDef)),
-    };
+    const defPhases = d.phases;
+    const phases = mapped(() =>
+      defPhases.map((p) => builderPhaseOf({ depends_on: [], executes_code: false, verified_evidence: false, gate: 'auto', gate_type: null, role: 'neutral', ...p } as PhaseDef)),
+    );
+    return phases === null ? null : { name: typeof d.id === 'string' ? d.id : '', phases };
   }
   return null;
 }
@@ -549,7 +586,7 @@ function PhaseEditor({
         <div className="flex flex-col gap-0.5" data-testid="builder-step-gate" data-gate={gate}>
           <span className="text-[10px] font-mono" style={{ color: 'var(--ink-dim)' }}>Gate</span>
           <div className="flex gap-1">
-            {([['auto', 'Auto'], ['human', 'Human'], ['human_if', 'Human if fails']] as [GateMode, string][]).map(([v, label]) => (
+            {([['auto', 'Auto'], ['human', 'Human'], ['human_always', 'Human (always)'], ['human_if', 'Human if fails'], ['consent', 'Consent before']] as [GateMode, string][]).map(([v, label]) => (
               <ToggleBtn
                 key={v}
                 active={gate === v}
@@ -574,18 +611,19 @@ function PhaseEditor({
       {/* depends on */}
       {prior.length > 0 && (
         <div className="flex flex-col gap-0.5">
-          <span className="text-[10px] font-mono" style={{ color: 'var(--ink-dim)' }}>Depends on</span>
+          <span className="text-[10px] font-mono" style={{ color: 'var(--ink-dim)' }}>
+            Depends on{phase.dependsOn === null ? ' — none stated: the engine wires its inputs' : ''}
+          </span>
           <div className="flex flex-wrap gap-1.5">
             {prior.map((pid) => (
               <label key={pid} className="flex items-center gap-1 text-[10px] cursor-pointer" style={{ color: 'var(--ink-muted)' }}>
                 <input
                   type="checkbox"
-                  checked={phase.dependsOn.includes(pid)}
-                  onChange={(e) =>
-                    up('dependsOn', e.target.checked
-                      ? [...phase.dependsOn, pid]
-                      : phase.dependsOn.filter((d) => d !== pid))
-                  }
+                  checked={phase.dependsOn?.includes(pid) === true}
+                  onChange={(e) => {
+                    const deps = phase.dependsOn ?? [];
+                    up('dependsOn', e.target.checked ? [...deps, pid] : deps.filter((d) => d !== pid));
+                  }}
                 />
                 <span className="font-mono">{pid}</span>
               </label>

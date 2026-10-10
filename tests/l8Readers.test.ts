@@ -154,10 +154,10 @@ describe('the preset builder keeps a preset exactly as saved (codex r1 on studio
     ];
     const again = await buildPresetSteps(saved.map(builderPhaseOfStep), entries);
     expect(again).toEqual([
-      { catalog: 'produce', id: 'write', depends_on: [], instructions: 'Write it.' },
+      { catalog: 'produce', id: 'write', instructions: 'Write it.' },
       { catalog: 'domain_coverage', id: 'coverage', depends_on: ['write'] },
       // (4) the run step's stage and (extra) a field the builder has no control for both survive.
-      { catalog: 'run', id: 'lint', kind: 'test', executor: { type: 'tool', cmd: ['npm', 'run', 'lint'] }, pool: 1, depends_on: [] },
+      { catalog: 'run', id: 'lint', kind: 'test', executor: { type: 'tool', cmd: ['npm', 'run', 'lint'] }, pool: 1 },
     ]);
   });
 
@@ -177,7 +177,7 @@ describe('the preset builder keeps a preset exactly as saved (codex r1 on studio
 
   it("(5) an entry's own gate and flags are inherited, not cleared: a new test step states no gate and no flag", async () => {
     const [step] = await buildPresetSteps([withCatalog(builderPhaseOfStep({ catalog: 'build', id: '' }), 'test')], entries);
-    expect(step).toEqual({ catalog: 'test', id: 'phase-1', depends_on: [] });
+    expect(step).toEqual({ catalog: 'test', id: 'phase-1' });
   });
 
   it("(6) a Tool step with no command stated keeps its entry's own (walkthrough_review); a typed one is sent", async () => {
@@ -217,5 +217,56 @@ describe('the preset builder keeps a preset exactly as saved (codex r1 on studio
     );
     expect(list.map((w) => w.id)).toEqual(['feature', 'mine']);
     expect(list[1]!.phases.map((p) => [p.id, p.role])).toEqual([['write', 'creator']]);
+  });
+});
+
+describe('the preset builder round-trip, codex r2 on studio B', () => {
+  it('(1) every gate a step can state survives a no-change save: consent, unconditional and conditional human', async () => {
+    const saved = [
+      { catalog: 'run', id: 'install', gate: 'consent_before', executor: { type: 'tool', cmd: ['i'] } },
+      { catalog: 'design', id: 'design', gate: { human_confirm: { unconditional: true } } },
+      { catalog: 'understand', id: 'scope', gate: { human_confirm: { unconditional: false } } },
+      { catalog: 'review', id: 'obs', gate: { human_confirm_if: 'verdict_not_pass' } },
+    ];
+    const again = await buildPresetSteps(saved.map(builderPhaseOfStep));
+    expect(again.map((st) => st['gate'])).toEqual(saved.map((st) => st.gate));
+  });
+
+  it('(2) an omitted depends_on stays omitted (the engine wires the inputs); an explicit empty list stays explicit', async () => {
+    const [a, b] = await buildPresetSteps([
+      builderPhaseOfStep({ catalog: 'review', id: 'review' }),
+      builderPhaseOfStep({ catalog: 'build', id: 'b', depends_on: [] }),
+    ]);
+    expect('depends_on' in a!).toBe(false);
+    expect(b!['depends_on']).toEqual([]);
+  });
+
+  it('(3) an unchanged command is sent with its argv as saved: an argument holding spaces or a script stays one argument', async () => {
+    const cmd = ['bash', '-lc', 'echo hello\nexit 0', ''];
+    const p = builderPhaseOfStep({ catalog: 'run', id: 'verify', executor: { type: 'tool', cmd } });
+    const [same] = await buildPresetSteps([p]);
+    expect(same!['executor']).toEqual({ type: 'tool', cmd });
+    const [edited] = await buildPresetSteps([{ ...p, cmd: 'npm test' }]);
+    expect(edited!['executor']).toEqual({ type: 'tool', cmd: ['npm', 'test'] });
+  });
+
+  it('(4) moving a step onto another entry drops the fields with no control too (writes_nothing, role, pool)', async () => {
+    const p = builderPhaseOfStep({ catalog: 'produce', id: 'propose', writes_nothing: true, role: 'creator', pool: 2 });
+    const [step] = await buildPresetSteps([withCatalog(p, 'build')]);
+    expect(step).toEqual({ catalog: 'build', id: 'propose' });
+  });
+
+  it('(5) an import whose step fields have the wrong shape is refused as unreadable, never thrown', () => {
+    const bad = JSON.stringify({ name: 'x', steps: [{ catalog: 'run', id: 'r', executor: { type: 'tool', cmd: 'echo hello' } }] });
+    expect(() => parseBuilderImport(bad)).not.toThrow();
+    // A malformed executor is read as no command stated (the entry's own); the step itself loads.
+    expect(parseBuilderImport(bad)?.phases[0]).toMatchObject({ catalog: 'run', execMode: 'inherit', cmdArgs: null });
+  });
+
+  it('(6) the viewer reading of a saved preset invents no dependency edge for a step that states none', () => {
+    const [list] = [viewerListOf([], [{ name: 'p', scope: 'global', created_by: 'studio', updated_at: 0, steps: [
+      { catalog: 'produce', id: 'a' }, { catalog: 'produce', id: 'b' }, { catalog: 'review', id: 'r' },
+    ] }], [])];
+    expect(list![0]!.phases.map((ph) => ph.depends_on)).toEqual([[], [], []]);
   });
 });
