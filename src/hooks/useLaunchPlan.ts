@@ -102,9 +102,11 @@ export function usePhaseSelection(pickerOpen: boolean): PhaseSelection {
 export function useLaunchPreview(input: LaunchPreviewInput): LaunchPreviewModel {
   const presets = usePlanCatalog((s) => s.presets);
   const previews = usePlanCatalog((s) => s.previews);
+  // Re-read when the scope is dropped too (a preset was saved: `invalidatePresets`).
+  const scopeLoaded = presets[input.projectId ?? ''] !== undefined;
   useEffect(() => {
-    loadPresets(input.projectId);
-  }, [input.projectId]);
+    if (!scopeLoaded) loadPresets(input.projectId);
+  }, [input.projectId, scopeLoaded]);
 
   const { plan } = input;
   // A system preset (chat, onboarding) is machine-owned: its launch previews nothing, as the def it

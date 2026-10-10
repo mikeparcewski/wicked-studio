@@ -69,3 +69,32 @@ it('a Refresh whose catalog read fails keeps the last good catalog: an inherited
   expect(await screen.findByText(/The phase catalog could not be read/)).toBeTruthy();
   expect(screen.getByText('evaluator')).toBeTruthy();
 });
+
+const TEST_ENTRY = {
+  id: 'test', kind: 'test', role: 'evaluator', gate: { human_confirm_if: 'verdict_not_pass' }, gate_type: null,
+  executes_code: false, executor: 'agent', validator_pin: null, pinned: false, evidence_floor: false,
+  verified_evidence: true, skill_ref: null, description: null,
+};
+
+it("Edit whose own catalog read fails shows the inherited gate from the viewer's catalog, not Auto (codex r7)", async () => {
+  presets.mockResolvedValue({ presets: [{ ...MINE, steps: [{ catalog: 'test', id: 'verify' }] }] });
+  catalog.mockResolvedValueOnce({ entries: [TEST_ENTRY] }).mockRejectedValueOnce(new ApiError(503, 'unavailable'));
+  render(<WorkflowViewer />);
+  fireEvent.click(await screen.findByText('mine'));
+  fireEvent.click(screen.getByTestId('workflow-edit'));
+  expect(await screen.findByText(/The phase catalog could not be read/)).toBeTruthy();
+  expect(screen.getByTestId('builder-step-gate').dataset.gate).toBe('human_if');
+  expect((screen.getByTestId('builder-step-verified-evidence') as HTMLInputElement).checked).toBe(true);
+});
+
+it('removing the step a dependency names keeps the dependency listed, with the reset to the engine (codex r7)', async () => {
+  presets.mockResolvedValue({ presets: [{ ...MINE, steps: [{ catalog: 'produce', id: 'a' }, { catalog: 'review', id: 'b', depends_on: ['a'] }] }] });
+  render(<WorkflowViewer />);
+  fireEvent.click(await screen.findByText('mine'));
+  fireEvent.click(screen.getByTestId('workflow-edit'));
+  await screen.findAllByTestId('builder-step-catalog');
+  fireEvent.click(screen.getAllByText('✕')[0]!);
+  const deps = await screen.findByTestId('builder-step-deps');
+  expect(deps.querySelector('[data-dangling="true"]')?.textContent).toContain('a');
+  expect(screen.getByTestId('builder-step-deps-engine')).toBeTruthy();
+});

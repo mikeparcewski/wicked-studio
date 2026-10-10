@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import type { GateSpec, PhaseDef, PhaseExecutor, PresetStep, WorkflowDef } from '../api/types.js';
 import { setCachedWorkflows } from '../store/workflowCache.js';
+import { invalidatePresets } from '../store/planCatalog.js';
 import { refusedWorkflowsOf, type RefusedWorkflow } from '../api/wave6-wire.js';
 import { ApiError } from '../api/errors.js';
 import { teamPlanApi, type CatalogEntry, type Preset } from '../api/teamPlan.js';
@@ -523,6 +524,10 @@ function PhaseEditor({
 }): React.ReactElement {
   const up = <K extends keyof BuilderPhase,>(field: K, val: BuilderPhase[K]) => onChange(withField(phase, field, val));
   const prior = allIds.slice(0, index);
+  // A stated dependency on a step that is no longer before this one stays listed (unchecking it, or
+  // handing the list back to the engine, is how the author repairs it — codex r7).
+  const dangling = (phase.dependsOn ?? []).filter((d) => !prior.includes(d));
+  const depChoices = [...prior, ...dangling];
   const entry = entries.find((e) => e.id === phase.catalog);
   const toolEntry = entry?.executor === 'tool';
   // What the step does is its own value where it states one, else its entry's: the controls show that.
@@ -683,8 +688,8 @@ function PhaseEditor({
       </div>
 
       {/* depends on */}
-      {prior.length > 0 && (
-        <div className="flex flex-col gap-0.5">
+      {(depChoices.length > 0 || phase.dependsOn !== null) && (
+        <div className="flex flex-col gap-0.5" data-testid="builder-step-deps">
           <span className="text-[10px] font-mono" style={{ color: 'var(--ink-dim)' }}>
             Depends on{phase.dependsOn === null ? ' — none stated: the engine wires its inputs' : ''}
             {phase.dependsOn !== null && (
@@ -700,8 +705,8 @@ function PhaseEditor({
             )}
           </span>
           <div className="flex flex-wrap gap-1.5">
-            {prior.map((pid) => (
-              <label key={pid} className="flex items-center gap-1 text-[10px] cursor-pointer" style={{ color: 'var(--ink-muted)' }}>
+            {depChoices.map((pid) => (
+              <label key={pid} {...(dangling.includes(pid) ? { 'data-dangling': 'true', title: 'not a step before this one' } : {})} className="flex items-center gap-1 text-[10px] cursor-pointer" style={{ color: 'var(--ink-muted)' }}>
                 <input
                   type="checkbox"
                   checked={phase.dependsOn?.includes(pid) === true}
@@ -752,12 +757,16 @@ export type BuilderInitial = { name: string; steps: PresetStep[] } | { name: str
 function WorkflowBuilder({
   initial,
   builtinNames,
+  initialEntries,
   onSaved,
   onCancel,
 }: {
   initial?: BuilderInitial;
   /** The built-in presets' names: read-only, so a save under one is refused before it is sent. */
   builtinNames: ReadonlySet<string>;
+  /** The catalog the viewer last read: the editor shows inherited values from it until its own
+   *  read answers, and keeps it if that read fails (codex r7). */
+  initialEntries: CatalogEntry[];
   onSaved: (name: string) => void;
   onCancel: () => void;
 }): React.ReactElement {
@@ -769,9 +778,12 @@ function WorkflowBuilder({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   /** The engine's phase catalog: every step is one of its entries (X-MIG M11). */
-  const [entries, setEntries] = useState<CatalogEntry[]>([]);
+  const [entries, setEntries] = useState<CatalogEntry[]>(initialEntries);
   useEffect(() => {
-    teamPlanApi.catalog().then((c) => setEntries(c.entries)).catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)));
+    teamPlanApi
+      .catalog()
+      .then((c) => setEntries(c.entries))
+      .catch((e: unknown) => setError(`The phase catalog could not be read: ${e instanceof Error ? e.message : String(e)}`));
   }, []);
   const [showJson, setShowJson] = useState(false);
   const [previewJson, setPreviewJson] = useState('');
@@ -1037,6 +1049,8 @@ export function WorkflowViewer(): React.ReactElement {
 
   function onSaved(name: string) {
     setBuilding(false);
+    // The composer's `/` menu and the launch preview cache presets: they read the store again.
+    invalidatePresets();
     void load(name);
   }
 
@@ -1120,6 +1134,7 @@ export function WorkflowViewer(): React.ReactElement {
             <WorkflowBuilder
               {...(editTarget !== undefined ? { initial: editTarget } : {})}
               builtinNames={builtinNames}
+              initialEntries={catalogRef.current}
               onSaved={onSaved}
               onCancel={() => setBuilding(false)}
             />

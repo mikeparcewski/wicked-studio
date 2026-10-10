@@ -72,10 +72,11 @@ export function loadPresets(projectId: string | null): void {
   const key = projectId ?? '';
   if (usePlanCatalog.getState().presets[key] !== undefined) return;
   setPresets(key, 'loading');
+  const born = epoch;
   teamPlanApi.presets(projectId).then(
-    (r) => setPresets(key, Array.isArray(r.presets) ? r.presets : []),
+    (r) => { if (born === epoch) setPresets(key, Array.isArray(r.presets) ? r.presets : []); },
     // Any failure: no preset is known, so no preset launch gets a preview. Never a guess.
-    () => setPresets(key, 'unsupported'),
+    () => { if (born === epoch) setPresets(key, 'unsupported'); },
   );
 }
 
@@ -118,6 +119,20 @@ const inflight = new Map<string, Promise<PreviewState>>();
 const answers = new Map<string, Promise<PreviewState>>();
 /** Per body, the newest request's number: only its late answer may land (codex r2 on #431). */
 const generation = new Map<string, number>();
+/** Bumped when the presets change ({@link invalidatePresets}): an answer from before never lands. */
+let epoch = 0;
+
+/**
+ * The saved presets changed (the workflow builder saved one, X-MIG M11): every loaded preset scope
+ * and every preview is dropped, so the composer's `/` menu and the launch preview read the store
+ * again rather than the steps from before the save (codex r7 on studio B).
+ */
+export function invalidatePresets(): void {
+  epoch += 1;
+  inflight.clear();
+  answers.clear();
+  usePlanCatalog.setState({ presets: {}, previews: {} });
+}
 
 /**
  * The engine's ANSWER for `body`, however long it takes (codex on #431): what places a
@@ -167,6 +182,7 @@ export function requestPreview(body: PlanPreviewBody): Promise<PreviewState> {
   const running = inflight.get(key);
   if (running !== undefined) return running;
   setPreview(key, { status: 'loading' });
+  const born = epoch;
   const answer = teamPlanApi.previewPlan(body).then(
     (preview): PreviewState => ({ status: 'ready', preview }),
     (e: unknown): PreviewState =>
@@ -181,10 +197,10 @@ export function requestPreview(body: PlanPreviewBody): Promise<PreviewState> {
   const late = new Promise<PreviewState>((resolve) => {
     timer = setTimeout(() => resolve({ status: 'error', error: PREVIEW_TIMEOUT_TEXT, timedOut: true }), PREVIEW_TIMEOUT_MS);
   });
-  const p = Promise.race([answer, late]).then((st) => {
+  const p: Promise<PreviewState> = Promise.race([answer, late]).then((st) => {
     if (timer !== undefined) clearTimeout(timer);
-    inflight.delete(key);
-    setPreview(key, st);
+    if (inflight.get(key) === p) inflight.delete(key);
+    if (born === epoch) setPreview(key, st);
     return st;
   });
   const gen = (generation.get(key) ?? 0) + 1;
@@ -194,7 +210,7 @@ export function requestPreview(body: PlanPreviewBody): Promise<PreviewState> {
     if (answers.get(key) === answer) answers.delete(key);
     // The answer after the timeout: shown only if this is the newest request for the body (codex
     // r2: an older late answer never lands over a newer one) and nothing newer is under way.
-    if (generation.get(key) === gen && !inflight.has(key) && usePlanCatalog.getState().previews[key]?.status === 'error') setPreview(key, st);
+    if (born === epoch && generation.get(key) === gen && !inflight.has(key) && usePlanCatalog.getState().previews[key]?.status === 'error') setPreview(key, st);
   });
   inflight.set(key, p);
   return p;
