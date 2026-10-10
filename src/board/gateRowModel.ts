@@ -66,6 +66,73 @@ export interface GateRowChoice {
   title: string;
   /** True when the engine value has no known wire meaning; rendered as a disabled button. */
   disabled?: boolean;
+  /** core#820: the files this choice would write (a consent gate's install choices); absent elsewhere. */
+  writes?: readonly ConsentWrite[];
+  /** core#820: the producer's default choice — MARKED, never preselected (consent is asked every time). */
+  isDefault?: boolean;
+}
+
+/** core#820: one file a consent choice would write, as the engine's dry-run plan lists it. */
+export interface ConsentWrite {
+  path: string;
+  what: string;
+  cli?: string;
+  /** Outside program-owned roots: the operator's own file ("your own ~/.codex/config.toml"). */
+  operatorOwned: boolean;
+}
+
+/**
+ * core#820: a consent gate's install choices off its `awaitingHuman` frame — `choices`
+ * (`consent:<id>` tokens and `reject`), `choiceLabels` and `writeTargets` keyed by token, and
+ * `recommended` (the default's index). `null` when the frame names no `consent:` choice (an older
+ * engine, or no dry-run plan ran: `writeTargetsMissing`) — the row then keeps Approve / Decline.
+ */
+export function consentChoicesOf(gate: OpenGate, events: readonly CoreEvent[] | null): GateRowChoice[] | null {
+  let frame: Record<string, unknown> | null = null;
+  for (let i = (events ?? []).length - 1; i >= 0; i--) {
+    const e = events![i] as unknown as Record<string, unknown>;
+    if (e['type'] === 'awaitingHuman' && e['ord'] === gate.ord) { frame = e; break; }
+  }
+  // The file lists ride the frame only: without it nothing is claimed (plain Approve takes the
+  // engine's default choice).
+  if (frame === null || frame['writeTargets'] === null || typeof frame['writeTargets'] !== 'object') return null;
+  const tokens = Array.isArray(frame['choices']) ? (frame['choices'] as unknown[]) : (gate.choices ?? []);
+  if (!tokens.some((t) => typeof t === 'string' && t.startsWith('consent:'))) return null;
+  const labels = (frame['choiceLabels'] ?? {}) as Record<string, unknown>;
+  const targets = frame['writeTargets'] as Record<string, unknown>;
+  const rec = typeof frame['recommended'] === 'number' ? frame['recommended'] : gate.recommended;
+  const out: GateRowChoice[] = [];
+  tokens.forEach((t, i) => {
+    if (typeof t !== 'string') return;
+    if (t === 'reject') {
+      out.push({ key: 'decline', label: 'Decline', decision: { approve: false }, needsNote: false, title: 'Cancel the run; nothing is installed and nothing in this phase runs.' });
+      return;
+    }
+    if (!t.startsWith('consent:')) return;
+    const rows = Array.isArray(targets[t]) ? (targets[t] as unknown[]) : [];
+    const writes: ConsentWrite[] = rows.flatMap((r) => {
+      const o = r as Record<string, unknown> | null;
+      if (o === null || typeof o !== 'object' || typeof o['path'] !== 'string') return [];
+      return [{
+        path: o['path'], what: typeof o['what'] === 'string' ? o['what'] : '',
+        ...(typeof o['cli'] === 'string' ? { cli: o['cli'] } : {}),
+        operatorOwned: o['operatorOwned'] === true,
+      }];
+    });
+    const label = typeof labels[t] === 'string' && labels[t] !== '' ? (labels[t] as string) : t.slice('consent:'.length);
+    const own = writes.filter((w) => w.operatorOwned).length;
+    out.push({
+      key: t, label,
+      decision: { approve: true, action: t } as unknown as GateAnswer,
+      needsNote: false,
+      title: `Install now: writes ${writes.length} file${writes.length === 1 ? '' : 's'}${own > 0 ? `, ${own} of them your own` : ''}.`,
+      writes,
+      ...(rec === i ? { isDefault: true } : {}),
+    });
+  });
+  // Decline is always an answer, even if a producer's list left it out.
+  if (!out.some((c) => c.key === 'decline')) out.push({ key: 'decline', label: 'Decline', decision: { approve: false }, needsNote: false, title: 'Cancel the run; nothing is installed and nothing in this phase runs.' });
+  return out;
 }
 
 export interface GateRowModel {
@@ -337,6 +404,12 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
   // consent is the operator's decision every time.
   const kind = gate.gateKind ?? (events === null ? undefined : gateFrameFor(events, gate.ord)?.gateKind ?? undefined);
   if (kind === 'consent') {
+    // core#820: the engine's install choices, each with its file list; the default is marked, and
+    // nothing is preselected.
+    const install = consentChoicesOf(gate, events);
+    if (install !== null) {
+      return { reason: 'consent', question: gate.prompt, choices: install.slice(0, 4), overflow: install.slice(4), noteDefault: '', recommended: null, detailItems: [shownPrompt(gate.prompt)] };
+    }
     return {
       reason: 'consent',
       question: gate.prompt,
