@@ -112,8 +112,11 @@ export function recordSeen(runId: string, seen: DiffSeen): void {
  *  tree the gate showed, not one the resumed run went on to change. Best-effort: a failed read is
  *  `null`, and nothing is recorded (the next gate then says nothing rather than something wrong). */
 export function readDecisionDiff(runId: string, capMs = DECISION_DIFF_CAP_MS): Promise<Record<string, string> | null> {
-  const read = api.getRunDiff(runId, undefined, 'merge-base')
-    .then((d) => (typeof d.diff === 'string' ? diffFiles(d.diff) : null))
+  // Inside the chain, so a read that throws synchronously (or answers nothing) is `null` too — the
+  // decision is never blocked on it.
+  const read = Promise.resolve()
+    .then(() => api.getRunDiff(runId, undefined, 'merge-base'))
+    .then((d) => (typeof d?.diff === 'string' ? diffFiles(d.diff) : null))
     .catch(() => null);
   // The decision waits on this read (codex r1: a read racing the resumed run could record changes the
   // operator never saw), but never long: past the cap nothing is recorded and the decision goes.
