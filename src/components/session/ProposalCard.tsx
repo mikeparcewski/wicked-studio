@@ -23,8 +23,9 @@ import { PlanGateSummary } from '../PlanGateSummary.js';
 import { useSeatTrust } from './GateDepth.js';
 import { DriftLine } from './GateRow.js';
 import { useDiffDrift } from '../../store/gateDiffSeen.js';
-import { deliveryReceiptOf } from '../../board/assuranceModel.js';
-import { AssuranceReceipt } from './AssuranceReceipt.js';
+import { deliveryAssuranceOf, deliveryReceiptOf } from '../../board/assuranceModel.js';
+import { usePostHocDeliverStore } from '../../store/postHocDeliver.js';
+import { AssuranceReceipt, DeliveryAssuranceLines } from './AssuranceReceipt.js';
 
 /**
  * THE PROPOSAL CARD (DES-STUDIO-REBUILD-001 §3 scenes 07/08/24/42, slice S6b): a run's plan or
@@ -69,7 +70,11 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
   const accept = deliverAcceptance(acceptance, ownEvidenceOf(eventsRaw ?? []));
   // core#850: the delivery's assurance receipt — what the run required, what its gates ran and
   // skipped, who built and checked it, the tree delivered.
-  const deliveryReceipt = deliveryReceiptOf(view, eventsRaw ?? null);
+  // EX-03 / EX-04: crew's record of the hand-over (unverified post-hoc, the QE check).
+  const postHocNow = usePostHocDeliverStore((s) => s.byRun[runId]);
+  const recordedDelivery = deliveryAssuranceOf(view, postHocNow?.phase === 'delivered' ? { raw: postHocNow.assurance, delivered: true } : undefined);
+  const unverified = recordedDelivery !== null && !recordedDelivery.verified;
+  const deliveryReceipt = deliveryReceiptOf(view, eventsRaw ?? null, recordedDelivery);
   // Fetch the diff for deliver cards — primary diffstat source (GET /runs/:id/diff?base=merge-base).
   // Keyed by runId so a run change re-fetches and stale responses are discarded.
   const [runDiffState, setRunDiffState] = useState<{ runId: string; data: RunDiff } | null>(null);
@@ -313,7 +318,8 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
           )}
         </p>
       )}
-      {card.state === 'done' && card.kind === 'deliver' && deliveryReceipt !== null && <AssuranceReceipt receipt={deliveryReceipt} passed testId="session-proposal-assurance" />}
+      {card.state === 'done' && card.kind === 'deliver' && deliveryReceipt !== null && <AssuranceReceipt receipt={deliveryReceipt} passed={unverified ? null : true} testId="session-proposal-assurance" />}
+      {card.state === 'done' && card.kind === 'deliver' && <DeliveryAssuranceLines recorded={recordedDelivery} testIdPrefix="session-proposal" />}
       {card.state === 'fail' && (
         <>
           <p className="wk-prop-status">

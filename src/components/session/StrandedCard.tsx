@@ -9,6 +9,8 @@ import { compactPath } from '../WhatWhere.js';
 import { useDisplayPath } from '../../hooks/useHomePath.js';
 import { useRunEvents } from '../../hooks/useRunEvents.js';
 import { usePostHocDeliverStore } from '../../store/postHocDeliver.js';
+import { deliveryAssuranceOf } from '../../board/assuranceModel.js';
+import { DeliveryAssuranceLines } from './AssuranceReceipt.js';
 
 /** "Leave it" folds the card for THIS browser only — nothing is sent, the run stays stranded. */
 const LEFT_KEY = (runId: string): string => `wk-stranded-left:${runId}`;
@@ -70,6 +72,8 @@ export function StrandedCard({ view }: { view: SessionView }): React.ReactElemen
             <span className="wk-prop-live"> · <a href={card.prUrl} target="_blank" rel="noreferrer" data-testid="session-proposal-pr">Pull request ↗</a></span>
           )}
         </p>
+        {/* EX-04: a post-hoc hand-over nothing re-verified says so, with the QE check (crew ≥ 0.9.0). */}
+        <DeliveryAssuranceLines recorded={deliveryAssuranceOf(view, press?.phase === 'delivered' ? { raw: press.assurance, delivered: true } : undefined)} testIdPrefix="session-stranded" />
       </div>
     );
   }

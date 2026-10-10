@@ -927,6 +927,9 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
 .wk-assurance-kind { font-weight: var(--weight-semi); color: var(--ink-high); }
 .wk-assurance-kind--partial, .wk-assurance-kind--same-seat, .wk-assurance-kind--floor-only, .wk-assurance-kind--unchecked { color: var(--status-warn); }
 .wk-assurance-dim { color: var(--ink-muted); }
+.wk-assurance-optin { margin: 6px 0; padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--radius-md); font-size: var(--text-xs); color: var(--ink-body); }
+.wk-assurance-optin-label { display: inline-flex; align-items: center; gap: 6px; font-weight: var(--weight-semi); cursor: pointer; }
+.wk-assurance-optin-why { margin: 4px 0 0; color: var(--ink-muted); }
 .wk-assurance-reduced { display: inline-block; margin-left: 6px; padding: 0 6px; border: 1px solid var(--status-warn); border-radius: var(--radius-full); font-size: var(--text-2xs); font-weight: var(--weight-semi); color: var(--status-warn); }
 .wk-session-gate-detail-item { margin: 4px 0 0 14px; max-height: 180px; overflow: auto; font-size: var(--text-xs); color: var(--ink-muted); white-space: pre-wrap; overflow-wrap: anywhere; }
 .wk-session-gate-detail-summary { font-size: var(--text-sm); font-weight: var(--weight-semi); color: var(--ink-high); }

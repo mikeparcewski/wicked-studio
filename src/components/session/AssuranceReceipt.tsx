@@ -1,6 +1,7 @@
 import type { SessionView } from '../../api/types.js';
-import { REDUCED_ASSURANCE_LABEL, isReduced, receiptWords, sessionAssurance, type AssuranceReceipt as Receipt } from '../../board/assuranceModel.js';
+import { REDUCED_ASSURANCE_LABEL, REDUCED_OPT_IN_DISCLOSURE, REDUCED_OPT_IN_LABEL, isReduced, unverifiedDeliveryLine, type DeliveryAssuranceView, receiptWords, sessionAssurance, type AssuranceReceipt as Receipt } from '../../board/assuranceModel.js';
 import { useRunEvents } from '../../hooks/useRunEvents.js';
+import { useDisplayText } from '../../hooks/useHomePath.js';
 
 /**
  * The assurance receipt, compact (wicked-core#850): one lead line — how the decision was assured
@@ -54,4 +55,49 @@ export function ReducedAssuranceLabel({ testId = 'assurance-reduced' }: { testId
 export function RunAssuranceLabel({ view }: { view: SessionView }): React.ReactElement | null {
   const { events } = useRunEvents(view.session.id);
   return isReduced(sessionAssurance(view, events)) ? <ReducedAssuranceLabel testId="session-run-reduced" /> : null;
+}
+
+/**
+ * EX-01's explicit opt-in on a one-seat launch (the launch form, the composer's `/workflow` row):
+ * a checkbox that says what it means before it is ticked. Never ticked by studio on its own — only
+ * the dead-seat gate's "Run with reduced assurance" opens the form with it ticked, and the operator
+ * still launches.
+ */
+export function ReducedAssuranceOptIn({ checked, onChange, testId = 'launch-reduced-assurance' }: {
+  checked: boolean;
+  onChange: (on: boolean) => void;
+  testId?: string;
+}): React.ReactElement {
+  return (
+    <div data-testid={testId} data-checked={checked ? 'true' : 'false'} className="wk-assurance-optin">
+      <label className="wk-assurance-optin-label">
+        <input type="checkbox" data-testid={`${testId}-toggle`} checked={checked} onChange={(e) => onChange(e.target.checked)} />
+        {' '}{REDUCED_OPT_IN_LABEL}
+      </label>
+      <p data-testid={`${testId}-disclosure`} className="wk-assurance-optin-why">{REDUCED_OPT_IN_DISCLOSURE}</p>
+    </div>
+  );
+}
+
+/**
+ * EX-03 / EX-04: crew's record of the delivery, under its receipt — an unverified (post-hoc)
+ * hand-over says so with whether the tree moved, and the QE acceptance check is said either way.
+ */
+export function DeliveryAssuranceLines({ recorded, testIdPrefix }: { recorded: DeliveryAssuranceView | null; testIdPrefix: string }): React.ReactElement | null {
+  const showText = useDisplayText();
+  if (recorded === null) return null;
+  const unverified = unverifiedDeliveryLine(recorded);
+  const qe = recorded.qeAcceptance;
+  return (
+    <>
+      {unverified !== null && <p data-testid={`${testIdPrefix}-unverified`} className="wk-assurance wk-assurance-kind--floor-only">{unverified}</p>}
+      {qe !== null && (
+        <p data-testid={`${testIdPrefix}-qe`} data-satisfied={qe.satisfied ? 'true' : 'false'} className={qe.satisfied ? 'wk-assurance' : 'wk-assurance wk-assurance-kind--unchecked'}>
+          {qe.satisfied
+            ? `QE acceptance: PASS${qe.reviewer !== null ? ` by ${qe.reviewer}` : ''}${qe.verdictId !== null ? ` (${qe.verdictId})` : ''}`
+            : `QE acceptance not met: ${showText(qe.reason)}`}
+        </p>
+      )}
+    </>
+  );
 }

@@ -16,7 +16,10 @@ import { useRerunFromHere } from '../../hooks/useRerunFromHere.js';
 import type { RerunOffer } from '../rerunModel.js';
 import { GateDepthDetails, RuleOfferBlock, useFullVerdict, useSeatTrust, type SeatTrust } from './GateDepth.js';
 import { WatchGateLine } from '../WatchLines.js';
-import { gatePassedFor, gateReceiptFor, isReduced, sessionAssurance, waitsForJudge } from '../../board/assuranceModel.js';
+import { REDUCED_OPT_IN_DISCLOSURE, REDUCED_OPT_IN_LABEL, creatorSeatRefusal, gatePassedFor, gateReceiptFor, isReduced, sessionAssurance, waitsForJudge } from '../../board/assuranceModel.js';
+import { retryPrefillOf } from '../../board/needsYou.js';
+import { setRetryPrefill } from '../../store/retryPrefill.js';
+import { useCapabilities } from '../../store/capabilities.js';
 import type { Navigate } from '../../hooks/useRoute.js';
 import { AssuranceReceipt, ReducedAssuranceLabel } from './AssuranceReceipt.js';
 
@@ -149,9 +152,11 @@ function RunGateRow({ view, gate, navigate }: { view: RunView; gate: OpenGate | 
   const receipt = gateReceiptFor(events, view.units, receiptOrd);
   const reduced = isReduced(sessionAssurance(view, events));
   const judgeWait = gate !== undefined && model !== null && waitsForJudge(events, gate.ord, gate.prompt);
+  const seatRefusal = gate !== undefined && model !== null && !reduced && creatorSeatRefusal(events, gate.ord, gate.prompt);
   const assurance = model === null ? null : (
     <>
       {judgeWait && <JudgeWaitLine {...(navigate !== undefined ? { navigate } : {})} />}
+      {seatRefusal && <CreatorSeatRefusal view={view} {...(navigate !== undefined ? { navigate } : {})} />}
       {receipt !== null
         ? <AssuranceReceipt receipt={receipt} passed={gatePassedFor(events, receiptOrd)} testId="session-gate-assurance" />
         : reduced && <p className="wk-assurance"><ReducedAssuranceLabel testId="session-gate-reduced" /></p>}
@@ -164,6 +169,42 @@ function RunGateRow({ view, gate, navigate }: { view: RunView; gate: OpenGate | 
       retryEvents={retryEvents} depth={depth} refusalLines={refusalLines} drift={drift}
       assurance={assurance}
     />
+  );
+}
+
+/**
+ * core#850 EX-01: the dead-seat gate's creator-seat refusal, explained — the run requires a distinct
+ * evaluator and the only seat that could review the work built it. The levers: sign a second seat
+ * in and Approve (or Reassign), or run it again with reduced assurance. That opens the launch form
+ * with this run's brief and the opt-in ticked (`reducedAssurance: true`), said before it is taken;
+ * nothing starts until the operator launches, and this run stays at its gate (Stop ends it).
+ */
+export function CreatorSeatRefusal({ view, navigate }: { view: RunView; navigate?: Navigate }): React.ReactElement {
+  const can = useCapabilities((s) => s.reducedAssurance);
+  return (
+    <div data-testid="session-gate-creator-seat" role="status" className="wk-gate-consequence">
+      <p className="wk-assurance-lead">
+        <b>Stopped: no second seat to review this.</b> This run requires a distinct evaluator, and the
+        only seat that could review the work is the one that built it. Sign a second seat in and Approve
+        to retry, or run it again with reduced assurance.
+      </p>
+      {can && navigate !== undefined
+        ? (
+          <>
+            <p data-testid="session-gate-creator-seat-disclosure" className="wk-assurance-optin-why">{REDUCED_OPT_IN_DISCLOSURE}</p>
+            <button
+              type="button"
+              data-testid="session-gate-reduced-relaunch"
+              title="Open the launch form with this run's brief and reduced assurance ticked; nothing starts until you launch, and this run stays at its gate."
+              onClick={() => { setRetryPrefill({ ...retryPrefillOf(view), reducedAssurance: true }); navigate('/runs/new'); }}
+              className="wk-session-gate-send"
+            >
+              {REDUCED_OPT_IN_LABEL}…
+            </button>
+          </>
+        )
+        : !can && <p data-testid="session-gate-creator-seat-nocap" className="wk-assurance-optin-why">This daemon does not take a reduced-assurance launch; sign a second seat in.</p>}
+    </div>
   );
 }
 

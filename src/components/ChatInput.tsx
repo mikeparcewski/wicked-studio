@@ -28,6 +28,7 @@ import { ProjectSwitcher } from './ProjectSwitcher.js';
 import { deliverKindOf, type RunKind, type RunMode } from './runMode.js';
 import { HOME_FRESH_MS, useNeedsSources } from '../store/needsSources.js';
 import { useLaunchPreview, usePhaseSelection } from '../hooks/useLaunchPlan.js';
+import { ReducedAssuranceOptIn } from './session/AssuranceReceipt.js';
 import { LaunchPreview } from './LaunchPreview.js';
 import { LinkedIssuesLine, useLinkedIssuesPreview } from './LinkedIssuesLine.js';
 import { PhasePicker } from './PhasePicker.js';
@@ -274,6 +275,12 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
   // studio#596: whether the daemon previews linked issues and takes `excludeLinkedIssues`
   // (`capabilities.linkedIssuesExclude`, crew#825). Absent/false: neither is sent.
   const [daemonLinkedIssues, setDaemonLinkedIssues] = useState(false);
+  // wicked-core#850: whether the daemon takes the reduced-assurance opt-in (`capabilities.reducedAssurance`).
+  // `null` = not yet known (loading, or the read failed).
+  const [daemonReduced, setDaemonReduced] = useState<boolean | null>(null);
+  // The opt-in itself: ticked only by the operator, or by the dead-seat gate's "Run with reduced
+  // assurance" prefill — the operator still launches.
+  const [reducedAssurance, setReducedAssurance] = useState(prefill?.reducedAssurance === true);
   /** studio#275: the BASE skill posture for the next launch (`GET /health.baseSkill`); `undefined`
    *  until read and on a daemon before the field. */
   const [baseSkill, setBaseSkill] = useState<BaseSkillPosture | null | undefined>(undefined);
@@ -289,6 +296,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
         setDaemonRevisesPr(h.capabilities?.revisesPr === true);
         setDaemonChatId(h.capabilities?.chatIdOnLaunch === true);
         setDaemonLinkedIssues(h.capabilities?.linkedIssuesExclude === true);
+        setDaemonReduced(h.capabilities?.reducedAssurance === true);
         setBaseSkill(h.baseSkill);
       })
       .catch(() => { if (!cancelled) { setDaemonDeliverGate(null); setDaemonRevisesPr(null); setDaemonChatId(null); } });
@@ -715,6 +723,17 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     setPreflightBlocked(false);
     setSubmitting(true);
     setError(null);
+    // wicked-core#850: a ticked opt-in is never dropped in silence — a launch that asked for reduced
+    // assurance waits for the daemon's answer (Send already busy, so it cannot launch twice), and one
+    // the daemon cannot take is refused, never run with full assurance instead.
+    if (reducedAssurance) {
+      const takes = daemonReduced ?? await api.getHealth().then((h) => h.capabilities?.reducedAssurance === true, () => false);
+      if (!takes) {
+        setSubmitting(false);
+        setError('This daemon does not take a reduced-assurance launch. Untick "Run with reduced assurance" to launch with full assurance, or sign a second seat in.');
+        return;
+      }
+    }
     setBaseSkillRefusal(null);
     setStartedRunId(null);
     openedEarly.current = null;
@@ -786,6 +805,8 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     // byte for byte) rather than a 400 the operator didn't mean.
     if (groupAttach.campaignId !== undefined) body.campaignId = groupAttach.campaignId;
     if (groupAttach.groupLabel !== undefined) body.groupLabel = groupAttach.groupLabel;
+    // wicked-core#850 EX-01: the explicit reduced-assurance opt-in, only to a daemon that takes it.
+    if (reducedAssurance) body.reducedAssurance = true;
 
     try {
       let launched;
@@ -1568,6 +1589,12 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
             Open Settings
           </button>
         </div>
+      )}
+
+      {/* wicked-core#850 EX-01: one seat means the creator's seat is the only reviewer — a review step
+          stops and asks for a second seat unless the launch opts into reduced assurance, said first. */}
+      {((daemonReduced === true && selectedClis.size === 1) || reducedAssurance) && (
+        <ReducedAssuranceOptIn checked={reducedAssurance} onChange={setReducedAssurance} />
       )}
 
       {/* ── Preflight warn-and-block (§7.8, EC43) — a code intent with no repo

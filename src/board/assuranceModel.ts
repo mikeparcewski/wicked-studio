@@ -132,7 +132,11 @@ export function gateReceiptFor(events: readonly CoreEvent[] | null, units: reado
  * contract, every instrument any gate ran, every one any gate skipped (first reason per
  * instrument). `who` lists the seats the gates name, so the card says who built and who checked.
  */
-export function deliveryReceiptOf(view: SessionView | null | undefined, events: readonly CoreEvent[] | null): AssuranceReceipt | null {
+export function deliveryReceiptOf(
+  view: SessionView | null | undefined,
+  events: readonly CoreEvent[] | null,
+  recordedDelivery: DeliveryAssuranceView | null = deliveryAssuranceOf(view),
+): AssuranceReceipt | null {
   const log = events ?? [];
   // The CURRENT deliver attempt's lift: a re-dispatch of the deliver unit after it voids it (the
   // retry has not lifted yet), and the receipt falls back to the gates' aggregate.
@@ -147,8 +151,12 @@ export function deliveryReceiptOf(view: SessionView | null | undefined, events: 
   }
   const gates = gateReceipts(view, log);
   const who = whoOf(gates);
-  if (lifted !== null) {
-    const r = lifted.r;
+  // EX-04: a post-hoc hand-over is the delivery that happened — an earlier attempt's engine lift
+  // is not its receipt. Its recorded receipt, else the gates' aggregate below.
+  if (recordedDelivery?.via === 'post_hoc') lifted = null;
+  const recorded = lifted === null ? recordedDelivery?.receipt ?? null : null;
+  if (lifted !== null || recorded !== null) {
+    const r = lifted !== null ? lifted.r : recorded!;
     return { ...r, creator: r.creator ?? who.creator, evaluator: r.evaluator ?? who.evaluator, judge: r.judge ?? who.judge, aggregateKind: deliveryKind(r, gates) };
   }
   if (gates.length === 0) return null;
@@ -214,6 +222,61 @@ function whoOf(gates: readonly AssuranceReceipt[]): { creator: string | null; ev
     return seen.length === 0 ? null : seen.join(', ');
   };
   return { creator: join((g) => g.creator), evaluator: join((g) => g.evaluator), judge: join((g) => g.judge) };
+}
+
+/**
+ * crew's record of what assured a DELIVERY (`AgentSession.delivery_assurance`, crew ≥ 0.9.0):
+ * `verified: false` (EX-04) is a post-hoc / recovery delivery — nothing re-verified the tree it
+ * pushed; `treeBefore` / `treeAfter` say whether the lift moved it. `qeAcceptance` is the QE check
+ * (EX-03) when the contract requires it. `null` on an older daemon or an undelivered run.
+ */
+export interface DeliveryAssuranceView {
+  verified: boolean;
+  via: string;
+  receipt: AssuranceReceipt | null;
+  treeBefore: string | null;
+  treeAfter: string | null;
+  qeAcceptance: { satisfied: boolean; reason: string; verdictId: string | null; reviewer: string | null } | null;
+}
+
+/**
+ * `postHoc`: this browser's post-hoc hand-over answer (`DeliverRunResult.assurance`), read when the
+ * session record does not carry one yet; `postHocDelivered` says such a hand-over landed here, so
+ * even an answer without the field (an older daemon) is labelled unverified — nothing re-verified it.
+ */
+export function deliveryAssuranceOf(view: SessionView | null | undefined, postHoc?: { raw?: unknown; delivered: boolean }): DeliveryAssuranceView | null {
+  const own = parseDeliveryAssurance((view?.session as unknown as { delivery_assurance?: unknown } | undefined)?.delivery_assurance);
+  if (own !== null) return own;
+  const answered = parseDeliveryAssurance(postHoc?.raw);
+  if (answered !== null) return answered;
+  return postHoc?.delivered === true
+    ? { verified: false, via: 'post_hoc', receipt: null, treeBefore: null, treeAfter: null, qeAcceptance: null }
+    : null;
+}
+
+function parseDeliveryAssurance(raw: unknown): DeliveryAssuranceView | null {
+  if (!isRecord(raw) || typeof raw['verified'] !== 'boolean') return null;
+  const qe = raw['qeAcceptance'];
+  return {
+    verified: raw['verified'],
+    via: typeof raw['via'] === 'string' ? raw['via'] : '',
+    receipt: receiptOf(raw['receipt']),
+    treeBefore: str(raw['treeBefore']),
+    treeAfter: str(raw['treeAfter']),
+    qeAcceptance: isRecord(qe) && typeof qe['satisfied'] === 'boolean'
+      ? { satisfied: qe['satisfied'], reason: typeof qe['reason'] === 'string' ? qe['reason'] : '', verdictId: str(qe['verdictId']), reviewer: str(qe['reviewer']) }
+      : null,
+  };
+}
+
+/** The unverified delivery's line (EX-04): what was not re-verified and whether the tree moved. */
+export function unverifiedDeliveryLine(d: DeliveryAssuranceView): string | null {
+  if (d.verified) return null;
+  const short = (t: string): string => t.slice(0, 7);
+  const moved = d.treeBefore !== null && d.treeAfter !== null
+    ? (d.treeBefore === d.treeAfter ? ` The tree did not move (${short(d.treeAfter)}).` : ` The tree moved from ${short(d.treeBefore)} to ${short(d.treeAfter)} in the hand-over.`)
+    : '';
+  return `Unverified delivery: nothing re-verified the tree this hand-over pushed.${moved}`;
 }
 
 // ── The words ─────────────────────────────────────────────────────────────────────────────────
@@ -377,4 +440,31 @@ export function waitsForJudge(events: readonly CoreEvent[] | null, ord: number |
   const esc = escalationFor(events, ord);
   if (esc !== null) return esc.condition === 'judge_unavailable' || esc.denialSource === 'judge_unavailable';
   return /could not be judged\b.*no eligible judge seat/i.test(prompt ?? '');
+}
+
+// ── The reduced-assurance opt-in (EX-01) ──────────────────────────────────────────────────────
+
+export const REDUCED_OPT_IN_LABEL = 'Run with reduced assurance';
+
+/** What the opt-in means, said before it is taken. */
+export const REDUCED_OPT_IN_DISCLOSURE =
+  'With one seat, the seat that builds the work is the only one that can review it. Without this, a '
+  + 'review step stops and asks for a second seat. With it, the creator\'s seat reviews its own work, '
+  + 'a missing judge does not hold a gate, and the session, every gate and the delivery say "Reduced assurance".';
+
+/**
+ * EX-01: the dead-seat gate's CREATOR-SEAT refusal — the run requires a distinct evaluator and no
+ * seat other than the one that built the work can review it (distribution's refusal, parked at the
+ * dead-seat gate, or the fold's `same_seat_evaluator` denial). A team run refuses this for good
+ * ("a team run never grades on its creator seat"), so only the distinct-evaluator wording offers
+ * the reduced opt-in; a run already reduced never sees it.
+ */
+export function creatorSeatRefusal(events: readonly CoreEvent[] | null, ord: number | null | undefined, prompt: string | undefined): boolean {
+  const esc = escalationFor(events, ord);
+  const said = `${esc?.summary ?? ''}\n${prompt ?? ''}`;
+  // A team run's refusal is not waivable: reduced assurance would not let it grade on its creator seat.
+  if (/team run never grades on its creator seat/i.test(said)) return false;
+  if (esc !== null && esc.denialSource === 'same_seat_evaluator') return true;
+  if (esc !== null && esc.condition !== 'dead_seat') return false;
+  return /requires a distinct evaluator/i.test(said);
 }

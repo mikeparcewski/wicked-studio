@@ -27,7 +27,7 @@ import { api } from '../api/client.js';
  */
 export type PostHocDeliver =
   | { phase: 'delivering' }
-  | { phase: 'delivered'; prUrl: string }
+  | { phase: 'delivered'; prUrl: string; assurance?: unknown }
   | { phase: 'error'; error: string };
 
 interface PostHocDeliverStore {
@@ -47,8 +47,10 @@ export const usePostHocDeliverStore = create<PostHocDeliverStore>((set, get) => 
     set((s) => ({ byRun: { ...s.byRun, [runId]: { phase: 'delivering' } } }));
     api
       .deliverRun(runId)
-      .then(({ prUrl }) => {
-        set((s) => ({ byRun: { ...s.byRun, [runId]: { phase: 'delivered', prUrl } } }));
+      .then((r) => {
+        // crew ≥ 0.9.0 (EX-04): the answer says what assured the hand-over (always unverified here).
+        const assurance = r.assurance;
+        set((s) => ({ byRun: { ...s.byRun, [runId]: { phase: 'delivered', prUrl: r.prUrl, ...(assurance !== undefined ? { assurance } : {}) } } }));
       })
       .catch((err: unknown) => {
         // ApiError.message is already the body's `error` (the script's own
