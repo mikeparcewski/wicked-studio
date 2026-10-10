@@ -63,6 +63,8 @@ describe('soloTestRunIds / soloTotals / campaignStatusWord', () => {
   it('an all-cancelled campaign reads cancelled, not partially_completed', () => {
     expect(campaignStatusWord(makeCampaign('fan', [{ status: 'cancelled' }, { status: 'cancelled' }], { status: 'partially_completed' }))).toBe('cancelled');
     expect(campaignStatusWord(makeCampaign('fan', [{ status: 'cancelled' }, { status: 'completed' }], { status: 'partially_completed' }))).toBe('partially_completed');
+    // Only the overclaim is rewritten: a live `running` over a stale all-cancelled snapshot stays.
+    expect(campaignStatusWord(makeCampaign('fan', [{ status: 'cancelled' }, { status: 'cancelled' }], { status: 'running' }))).toBe('running');
   });
 });
 
@@ -96,6 +98,14 @@ describe('the Test landing lists the single-repo tests it launched', () => {
     const failing = screen.getAllByTestId('campaigns-filter-chip').find((c) => c.textContent?.includes('Failing'))!;
     fireEvent.click(failing);
     await waitFor(() => expect(screen.getAllByTestId('testing-solo-run').map((r) => r.dataset.runId)).toEqual(['bad-1']));
+  });
+
+  it('a running solo test is a test active now', async () => {
+    listCampaigns.mockResolvedValue({ campaigns: [], groups: [] });
+    getAuditByAction.mockResolvedValue({ entries: [launched('live-1', { recon: true })] });
+    render(<CampaignsPage runs={[view('live-1', 'executing')]} navigate={() => {}} />);
+    await screen.findByTestId('testing-solo-run');
+    expect(screen.getByTestId('stat-campaigns').textContent).toContain('1 active now');
   });
 
   it('a daemon without the audit route shows no solo list and nothing breaks', async () => {

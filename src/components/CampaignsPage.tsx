@@ -476,6 +476,8 @@ export function CampaignsPage({ runs, navigate, projectId = null, launchIntent =
   // no group, so they are read off the `run.launched` trail (`detail.recon`). One read per visit; a
   // daemon without the audit route shows none (never a guessed list).
   const [soloLaunched, setSoloLaunched] = useState<string[]>([]);
+  /** Bumped by a launch from this page: the trail is re-read so the new solo test appears (codex r2). */
+  const [trailTick, setTrailTick] = useState(0);
   useEffect(() => {
     let cancelled = false;
     Promise.resolve()
@@ -485,7 +487,7 @@ export function CampaignsPage({ runs, navigate, projectId = null, launchIntent =
       .then((page) => { if (!cancelled) setSoloLaunched(soloTestRunIds(page.entries, new Set())); })
       .catch(() => { /* no audit trail: the landing shows campaigns and groups only */ });
     return () => { cancelled = true; };
-  }, []);
+  }, [trailTick]);
   const soloRuns = useMemo(
     () => soloLaunched
       .filter((id) => !memberIds.has(id))
@@ -506,6 +508,8 @@ export function CampaignsPage({ runs, navigate, projectId = null, launchIntent =
     const solo = soloTotals(soloRuns);
     return {
       ...t,
+      // A solo test moving or waiting is a test active now, like a campaign or group (codex r2).
+      activeNow: t.activeNow + solo.running + solo.awaitingHuman,
       landed: t.landed + solo.landed, failed: t.failed + solo.failed, running: t.running + solo.running,
       awaitingHuman: t.awaitingHuman + solo.awaitingHuman, terminal: t.terminal + solo.terminal,
       cancelled: t.cancelled + solo.cancelled,
@@ -650,7 +654,7 @@ export function CampaignsPage({ runs, navigate, projectId = null, launchIntent =
           intent={panel}
           navigate={navigate}
           onClose={() => setPanel(null)}
-          onLaunched={() => void refresh()}
+          onLaunched={() => { void refresh(); setTrailTick((n) => n + 1); }}
           initialProjectId={projectId ?? undefined}
         />
       )}

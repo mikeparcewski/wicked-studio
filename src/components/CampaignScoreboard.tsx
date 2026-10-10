@@ -268,7 +268,9 @@ export function CampaignScoreboard({ campaignId, runs, navigate }: Props): React
 
   const liveStatus = live?.status ?? null;
   // studio#216: an all-cancelled campaign reads cancelled, not the engine's `partially_completed`.
-  const statusWord = liveStatus ?? campaignStatusWord(campaign);
+  // The normalization applies to the LIVE word too: a frame's `partially_completed` over nodes that
+  // are all cancelled is the same overclaim (codex r2 on #216).
+  const statusWord = campaignStatusWord(liveStatus === null ? campaign : { ...campaign, status: liveStatus });
 
   return (
     <div data-testid="campaign-scoreboard" style={{ padding: '24px', maxWidth: '1100px' }}>

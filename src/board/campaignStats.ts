@@ -251,7 +251,9 @@ export function campaignTotals(
  */
 export function campaignStatusWord(c: Campaign): Campaign['status'] {
   const n = campaignCounts(c);
-  if (n.nodes > 0 && n.cancelled === n.nodes) return 'cancelled';
+  // Only the overclaiming word is rewritten: a live `running` over a stale all-cancelled snapshot
+  // stays `running`.
+  if (c.status === 'partially_completed' && n.nodes > 0 && n.cancelled === n.nodes) return 'cancelled';
   return c.status;
 }
 
