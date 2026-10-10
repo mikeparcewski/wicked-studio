@@ -1080,20 +1080,28 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
 .wk-composer-hint { margin: 0; font-size: var(--text-xs); color: var(--ink-dim); }
 .wk-composer-hint kbd { font: inherit; color: var(--ink-muted); }
 .wk-composer-menu {
-  position: absolute; left: 0; bottom: calc(100% + 6px); z-index: 30; min-width: 360px; max-width: 560px;
+  position: absolute; left: 0; bottom: calc(100% + 6px); z-index: 30;
+  width: min(480px, calc(100vw - 24px)); max-height: min(360px, 50vh); overflow-y: auto;
   background: var(--surface-card); border: 1px solid var(--surface-raised); border-radius: 10px;
   box-shadow: var(--shadow-raised); padding: 4px; display: flex; flex-direction: column;
 }
 .wk-composer-menu-head { margin: 0; padding: 6px 8px; font-size: var(--text-2xs); color: var(--ink-dim); }
+.wk-composer-menu-group { margin: 0; padding: 4px 8px 2px; font-size: var(--text-2xs); color: var(--ink-dim); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
 .wk-composer-menu-empty { margin: 0; padding: 8px; font-size: var(--text-xs); color: var(--ink-dim); }
 .wk-composer-menu-item {
-  display: flex; align-items: baseline; gap: 10px; text-align: left; border: 0; background: transparent;
-  padding: 6px 8px; border-radius: 6px; cursor: pointer; color: var(--ink-high); font-size: var(--text-sm);
+  display: flex; align-items: center; gap: 8px; text-align: left; border: 0; background: transparent;
+  padding: 5px 8px; border-radius: 6px; cursor: pointer; color: var(--ink-high); font-size: var(--text-sm);
+  overflow: hidden; white-space: nowrap; width: 100%; flex-shrink: 0;
 }
-.wk-composer-menu-item small { color: var(--ink-muted); font-size: var(--text-xs); }
-.wk-composer-menu-item--on { background: var(--accent-subtle); }
+.wk-composer-menu-item small { color: var(--ink-muted); font-size: var(--text-xs); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wk-composer-menu-item--on { background: var(--accent-subtle); box-shadow: inset 3px 0 0 var(--accent); }
+/* Light: --accent-subtle is lightness + 64%, which reaches white on a light accent; the wash tints in every accent. */
+[data-theme="light"] .wk-composer-menu-item--on, [data-theme="wicked-light"] .wk-composer-menu-item--on { background: var(--accent-wash); }
 .wk-composer-menu-item--off { color: var(--ink-dim); cursor: not-allowed; }
-.wk-composer-cmd { font-family: inherit; color: var(--accent); min-width: 72px; }
+.wk-composer-cmd { font-family: inherit; display: flex; align-items: center; flex-shrink: 0; }
+.wk-composer-cmd-pfx { color: var(--ink-muted); }
+.wk-composer-cmd b { color: var(--accent); }
+.wk-composer-cmd-desc { color: var(--ink-muted); font-size: var(--text-xs); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wk-session-steps { display: flex; flex-direction: column; gap: 2px; }
 /* ── S14: the Watchtower page and the pill's card ─────────────────────────────────────────── */
 .wk-watchtower { display: flex; flex-direction: column; flex: 1; min-width: 0; overflow: hidden; }
