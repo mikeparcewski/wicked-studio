@@ -12,8 +12,8 @@
   "studioVersion": "0.6.8",
   "counts": {
     "files": 173,
-    "occurrences": 1937,
-    "static": 1723,
+    "occurrences": 1944,
+    "static": 1730,
     "dynamic": 37,
     "computed": 6
   },
@@ -2978,6 +2978,24 @@
       ]
     },
     {
+      "testId": "launch-base-skill",
+      "files": [
+        "src/components/ChatInput.tsx"
+      ]
+    },
+    {
+      "testId": "launch-base-skill-refused",
+      "files": [
+        "src/components/ChatInput.tsx"
+      ]
+    },
+    {
+      "testId": "launch-base-skill-remedy",
+      "files": [
+        "src/components/ChatInput.tsx"
+      ]
+    },
+    {
       "testId": "launch-before-ord",
       "files": [
         "src/components/ContextPopover.tsx"
@@ -3137,6 +3155,18 @@
       "testId": "launch-row-repo",
       "files": [
         "src/components/session/Composer.tsx"
+      ]
+    },
+    {
+      "testId": "launch-started",
+      "files": [
+        "src/components/ChatInput.tsx"
+      ]
+    },
+    {
+      "testId": "launch-started-open",
+      "files": [
+        "src/components/ChatInput.tsx"
       ]
     },
     {
@@ -9265,6 +9295,18 @@
       "testId": "switcher-dashboard-row",
       "files": [
         "src/components/ProjectSwitcher.tsx"
+      ]
+    },
+    {
+      "testId": "system-base-skill",
+      "files": [
+        "src/components/SystemSettings.tsx"
+      ]
+    },
+    {
+      "testId": "system-base-skill-fix",
+      "files": [
+        "src/components/SystemSettings.tsx"
       ]
     },
     {

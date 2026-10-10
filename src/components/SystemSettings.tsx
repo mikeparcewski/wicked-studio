@@ -1,7 +1,9 @@
 import { seatStandingWord } from './HealthRailSection.js';
 import { useEffect, useRef, useState } from 'react';
 import { ApiError, api } from '../api/client.js';
-import type { RosterSeat, SystemSettings as Settings } from '../api/types.js';
+import type { BaseSkillPosture, RosterSeat, SystemSettings as Settings } from '../api/types.js';
+import { getDiagnostics } from '../api/diagnostics.js';
+import { describeBaseSkill } from '../board/launchModel.js';
 import { useComposerPrefsStore } from '../store/composerPrefs.js';
 import { useViewPrefsStore } from '../store/viewPrefs.js';
 import { setCachedRoster } from '../store/rosterCache.js';
@@ -112,6 +114,17 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
   /** Where the daemon says its settings file lives (`GET /settings.path`, crew 0.7.36); `null` =
    *  the daemon predates the field — the page then says so instead of naming a path it made up. */
   const [settingsPath, setSettingsPath] = useState<string | null>(null);
+  /** studio#275: the discipline (base) skill posture (`GET /diagnostics.skills.baseSkill`); `undefined`
+   *  until read, and when the daemon predates the field or has no diagnostics route. */
+  const [baseSkill, setBaseSkill] = useState<BaseSkillPosture | null | undefined>(undefined);
+  useEffect(() => {
+    let cancelled = false;
+    Promise.resolve()
+      .then(() => getDiagnostics())
+      .then((d) => { if (!cancelled) setBaseSkill(d.skills === undefined ? undefined : (d.skills.baseSkill ?? null)); })
+      .catch(() => { /* no diagnostics: the row says "not reported", never a guessed posture */ });
+    return () => { cancelled = true; };
+  }, []);
   useEffect(() => {
     api.getSettings()
       .then((res) => {
@@ -310,6 +323,29 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
         >
           Runs
         </h2>
+
+        <SettingRow
+          label="Discipline skill"
+          description="The base skill every agent step is told to follow, by role (creator, evaluator, neutral), from the published skills generation. Set by baseSkillRef and baseSkillPolicy in the daemon settings."
+        >
+          <p
+            data-testid="system-base-skill"
+            data-present={baseSkill === undefined || baseSkill === null ? '' : String(baseSkill.present)}
+            className="w-56 text-xs font-mono text-right break-words"
+            style={{ color: baseSkill !== undefined && baseSkill !== null && !baseSkill.present ? 'var(--status-gate)' : 'var(--ink-high)', overflowWrap: 'anywhere' }}
+          >
+            {baseSkill === undefined
+              ? 'not reported by this daemon'
+              : describeBaseSkill(baseSkill) ?? 'discipline skill: off'}
+            {baseSkill !== undefined && baseSkill !== null && !baseSkill.present && (
+              <span data-testid="system-base-skill-fix" className="block" style={{ color: 'var(--ink-muted)' }}>
+                {baseSkill.inCatalog
+                  ? 'the catalog holds it — the next skills publish hands it'
+                  : 'not in the skills catalog — add and publish it'}
+              </span>
+            )}
+          </p>
+        </SettingRow>
 
         <SettingRow
           label="Open a PR when a build run finishes"

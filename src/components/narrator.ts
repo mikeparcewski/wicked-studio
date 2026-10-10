@@ -80,6 +80,37 @@ export interface NarratorContext {
   /** The refused command for a `boundary_deny` escalation, in DES-L8's order:
    *  `gateEvaluated.denial.deniedTool` → the unit's latest `workerToolCallDenied.command` → null. */
   deniedCommandOf?: (ord: number | null | undefined) => string | null;
+  /** studio#275: the skills generation a unit was handed (`skillsSnapshotHanded.gen`, latest for the
+   *  ord) — the `gen N` of its discipline line. Absent ⇒ unknown (`gen ?`). */
+  handedGenOf?: (ord: number | null | undefined) => string | null;
+}
+
+/** studio#275: the per-ord handed generation, from the run's `skillsSnapshotHanded` frames. */
+export function handedGenLookup(events: readonly CoreEvent[]): (ord: number | null | undefined) => string | null {
+  const gen = new Map<number, string>();
+  for (const e of events) {
+    const ord = num(e.ord);
+    if (ord === null || e.type !== 'skillsSnapshotHanded') continue;
+    const g = (e as Record<string, unknown>)['gen'];
+    if (typeof g === 'string' && g !== '') gen.set(ord, g);
+    else if (typeof g === 'number') gen.set(ord, String(g));
+  }
+  return (ord) => (ord == null ? null : gen.get(ord) ?? null);
+}
+
+/**
+ * studio#275: a unit's discipline line off `unitDispatched.baseSkill` — `discipline: <name> §<role>
+ * gen N`. `handed: false` = the seat was only told the skill's name (no per-launch skills lever), so
+ * no generation is claimed; `handed` ABSENT (an engine before the field) ⇒ `gen ?`. `null` when the
+ * frame carries no base skill.
+ */
+export function disciplineLine(baseSkill: unknown, handedGen: string | null): string | null {
+  if (typeof baseSkill !== 'object' || baseSkill === null) return null;
+  const b = baseSkill as { name?: unknown; role?: unknown; handed?: unknown };
+  if (typeof b.name !== 'string' || b.name === '' || typeof b.role !== 'string') return null;
+  const head = `discipline: ${b.name} §${b.role}`;
+  if (b.handed === false) return `${head} (named only — this seat cannot load skills)`;
+  return `${head} gen ${b.handed === true && handedGen !== null ? handedGen : '?'}`;
 }
 
 /**
@@ -121,9 +152,14 @@ export function escalationLookups(
 
 /** The caller's ctx with the escalation lookups filled in where it left them out. */
 function withLookups(ctx: NarratorContext, events: readonly CoreEvent[], units: readonly WorkUnit[] = []): NarratorContext {
-  if (ctx.seatOf !== undefined && ctx.deniedCommandOf !== undefined) return ctx;
+  if (ctx.seatOf !== undefined && ctx.deniedCommandOf !== undefined && ctx.handedGenOf !== undefined) return ctx;
   const lookups = escalationLookups(events, units);
-  return { ...ctx, seatOf: ctx.seatOf ?? lookups.seatOf, deniedCommandOf: ctx.deniedCommandOf ?? lookups.deniedCommandOf };
+  return {
+    ...ctx,
+    seatOf: ctx.seatOf ?? lookups.seatOf,
+    deniedCommandOf: ctx.deniedCommandOf ?? lookups.deniedCommandOf,
+    handedGenOf: ctx.handedGenOf ?? handedGenLookup(events),
+  };
 }
 
 /** Longest free-text fragment kept on one narration line. */
@@ -231,9 +267,11 @@ export function narrate(event: CoreEvent, ctx: NarratorContext): NarrationLine |
     }
     case 'unitDispatched': {
       const attempt = num(event.attempt) ?? 0;
+      const discipline = disciplineLine((event as Record<string, unknown>)['baseSkill'], ctx.handedGenOf?.(ord) ?? null);
+      const tail = discipline === null ? '' : ` — ${discipline}`;
       return attempt > 0
-        ? line(`${phase} re-dispatched (attempt ${attempt + 1})`, 'work')
-        : line(`Worker started ${phase}`, 'work');
+        ? line(`${phase} re-dispatched (attempt ${attempt + 1})${tail}`, 'work')
+        : line(`Worker started ${phase}${tail}`, 'work');
     }
     case 'unitExecuting':
       return line(`${phase} is running`, 'work');
