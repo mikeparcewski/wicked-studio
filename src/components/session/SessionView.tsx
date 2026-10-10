@@ -40,7 +40,7 @@ import { addAboutChip } from '../../store/composerChips.js';
 import { usePlanDrafts } from '../../store/planDrafts.js';
 import { wordOf } from '../../board/planDraft.js';
 import { undoDecision } from '../../board/undoQueue.js';
-import { openSheet } from '../../store/sheets.js';
+import { openSheet, stopRun, useSheets } from '../../store/sheets.js';
 import type { DecisionView } from '../../api/decisions.js';
 import { turnKey, useDecisionsStore } from '../../store/decisions.js';
 import { DecisionLine } from '../decisions/DecisionLine.js';
@@ -480,6 +480,10 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
     id: v.session.id, workdir: typeof v.session.workdir === 'string' ? v.session.workdir : null,
   })).filter((r) => r.workdir !== null), [mine]);
   const missing = ready && mine.length === 0 && (conversation === 'closed' || conversation === 'none');
+  // studio#631 (2): a chat's thread has its own Stop — the same 10 s-undo stop ⌘K offers ("Stop this
+  // session"), on every run of the chat still going. Hidden when nothing in it is running.
+  const liveRuns = useMemo(() => mine.filter((v) => !['completed', 'cancelled', 'failed'].includes(v.session.status)).map((v) => v.session.id), [mine]);
+  const stopping = useSheets((s) => liveRuns.length > 0 && liveRuns.every((id) => s.stopping[id] !== undefined));
   // S8: an artifact open as a pane sits beside the thread; the thread and composer make room.
   // Leaving the session (or switching to another) folds them back: a remembered pane from
   // another session must not narrow this one.
@@ -504,6 +508,18 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
         {/* S16a-4e: a chat off the ask path promotes into Build from its own session (the retired chat page's door). */}
         {ref.kind === 'chat' && !askPathOn && conversation === 'live' && messages.some((m) => m.kind === 'user') && (
           <button type="button" data-testid="session-chat-promote" title="Open the Build composer prefilled with this conversation as context — editable before launch" onClick={() => { setRetryPrefill(chatPromotePrefill(ref.chatId, messages, mine[0] !== undefined && typeof mine[0].session.project_id === 'string' ? mine[0].session.project_id : null)); navigate('/runs/new'); }} className="wk-prop-btn wk-prop-btn--ghost">Continue in Build</button>
+        )}
+        {ref.kind === 'chat' && liveRuns.length > 0 && (
+          <button
+            type="button"
+            data-testid="session-chat-stop"
+            disabled={stopping}
+            title={stopping ? 'Stopping — Undo is on the notice' : 'Stop this conversation’s work — 10 s to undo; what it did so far is kept'}
+            onClick={() => { stopRun(liveRuns, `“${title}”`); }}
+            className="wk-prop-btn wk-prop-btn--ghost"
+          >
+            {stopping ? 'Stopping…' : 'Stop'}
+          </button>
         )}
         <button type="button" data-testid="session-sheet-open" aria-label="Look underneath this session" title="Look underneath (⌘K for everything else)" onClick={() => openSheet({ kind: 'session', sessionId })} className="wk-sheet-open">⋯</button>
       </header>

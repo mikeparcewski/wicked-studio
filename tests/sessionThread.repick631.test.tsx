@@ -67,9 +67,29 @@ const texts = (testid: string): string[] => screen.queryAllByTestId(testid).map(
 
 describe('studio#631 — the failover line, live, on a first turn with no reply', () => {
   it('a live path.repicked frame says the takeover in the thread', async () => {
+    // As the app's runs poller does (useRuns → learnRuns): the chat's run is known as its ask run.
+    useAskThreadStore.getState().learnRuns([ASK_RUN]);
     render(<SessionPage sessionId="chat-631" runs={[ASK_RUN]} runsLoaded needRows={[]} navigate={() => {}} onAsk={() => {}} />);
     await waitFor(() => expect(texts('ask-line').length).toBeGreaterThan(0));
     act(() => { useTeamPlanStore.getState().ingest({ type: 'teamEvent', event: REPICKED } as never); });
     await waitFor(() => expect(texts('ask-line')).toContain('codex takes over — claude#1 stopped answering'));
+  });
+});
+
+describe('studio#631 (2) — a chat thread has a Stop', () => {
+  it('Stop queues the 10 s-undo stop of the chat\'s live runs; a finished chat shows none', async () => {
+    const { fireEvent } = await import('@testing-library/react');
+    const { unmount } = render(<SessionPage sessionId="chat-631" runs={[ASK_RUN]} runsLoaded needRows={[]} navigate={() => {}} onAsk={() => {}} />);
+    const stop = await screen.findByTestId('session-chat-stop');
+    fireEvent.click(stop);
+    expect(useSheets.getState().stopping[RUN]).toBeDefined();
+    await waitFor(() => expect(screen.getByTestId('session-chat-stop').textContent).toBe('Stopping…'));
+    unmount();
+    const { undoDecision, useUndoQueue } = await import('../src/board/undoQueue.js');
+    for (const p of useUndoQueue.getState().pending) undoDecision(p.id);
+    const done = makeView({ ...(ASK_RUN.session as object), status: 'completed' } as never, ASK_RUN.units);
+    render(<SessionPage sessionId="chat-631" runs={[done]} runsLoaded needRows={[]} navigate={() => {}} onAsk={() => {}} />);
+    await screen.findByTestId('session');
+    expect(screen.queryByTestId('session-chat-stop')).toBeNull();
   });
 });
