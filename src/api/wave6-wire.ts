@@ -22,6 +22,8 @@ import { api } from './client.js';
 import type { Project as CrewProject } from './types.js';
 import type { CoreEvent } from './types.js';
 import type { QeAuthorTestsWorkflowId, TestingAuthorBody, WorkflowPlanPhase, WorkflowPlan, TestingAuthorRun, TestingAuthorResponse, TestSetFile, TestSet, TestingReconBody, CampaignsListResponse, RunDiff, GateEvaluatedEvent, RepoChecksEvaluatedEvent, UnitDistributedEvent, BenchedSeat, WorkerToolCallDeniedEvent, AcpFallbackKind, AcpFallbackEvent, RunBaseResolvedEvent, RosterSeat, RosterSeatCouncilBench, SeatAuth, ChatSeatOutcome, ChatRefusalSource, ChatSeatRefusal, ChatSingleSeatDegradation, ChatOpenResponse, ChatMessageResponse, ChatSeatRefusedFrame, ChatDetailResponse, InteractiveDocsListing, InteractiveSeamKind, InteractiveDocIndexRow, InteractiveDocsUnreachable, IntentAmendment, RefusedWorkflow } from 'wicked-crew-api-types';
+// Type-only (erased): studio's open-typed spelling of the grounding record, shared with the per-project list.
+import type { DocGrounding } from './interactive.js';
 export type { QeAuthorTestsWorkflowId, TestingAuthorBody, WorkflowPlanPhase, WorkflowPlan, TestingAuthorRun, TestingAuthorResponse, TestSetFile, TestSet, TestingReconBody, CampaignsListResponse, RunDiff, GateEvaluatedEvent, RepoChecksEvaluatedEvent, UnitDistributedEvent, BenchedSeat, WorkerToolCallDeniedEvent, AcpFallbackKind, AcpFallbackEvent, RunBaseResolvedEvent, RosterSeat, RosterSeatCouncilBench, SeatAuth, ChatSeatOutcome, ChatRefusalSource, ChatSeatRefusal, ChatSingleSeatDegradation, ChatOpenResponse, ChatMessageResponse, ChatSeatRefusedFrame, ChatDetailResponse, InteractiveDocsListing, InteractiveSeamKind, InteractiveDocIndexRow, InteractiveDocsUnreachable, IntentAmendment, RefusedWorkflow };
 
 // ── The governed test-authoring launch (wave 6; api-types 0.36.0) ──────────────────────────────
@@ -50,6 +52,25 @@ export interface InteractiveDocsIndexRow {
   head: number;
   versions: number;
   updated_at: string | null;
+  /** crew#896 (crew#900, api-types 0.100.1): the manifest style and the grounding record, as the
+   *  per-project list carries them. Absent on an older daemon, or when the row has none. */
+  style?: string;
+  grounding?: DocGrounding;
+}
+
+/** A grounding record off the wire, or `undefined` when it is missing or not the declared shape —
+ *  the chip renders only what the daemon actually said. */
+function groundingOf(v: unknown): DocGrounding | undefined {
+  if (typeof v !== 'object' || v === null) return undefined;
+  const g = v as Record<string, unknown>;
+  const refs = g['repo_refs'];
+  if (!Array.isArray(refs) || !refs.every((x) => typeof x === 'string')) return undefined;
+  if (typeof g['source'] !== 'string' || typeof g['member_count'] !== 'number') return undefined;
+  const skipped = Array.isArray(g['skipped'])
+    ? g['skipped'].filter((x): x is { ref: string; reason: string } => typeof x === 'object' && x !== null
+      && typeof (x as Record<string, unknown>)['ref'] === 'string' && typeof (x as Record<string, unknown>)['reason'] === 'string')
+    : [];
+  return { repo_refs: refs as string[], source: g['source'] as string, skipped, member_count: g['member_count'] };
 }
 
 /** Narrow the daemon-wide listing off the wire bag — rows without a project or a name are dropped;
@@ -65,6 +86,8 @@ export function docsIndexOf(body: unknown): InteractiveDocsIndexRow[] | null {
     const pid = str(b['project_id']) ?? str(b['projectId']);
     const name = str(b['name']);
     if (pid === null || name === null) continue;
+    const style = str(b['style']);
+    const grounding = groundingOf(b['grounding']);
     out.push({
       project_id: pid,
       name,
@@ -72,6 +95,8 @@ export function docsIndexOf(body: unknown): InteractiveDocsIndexRow[] | null {
       head: typeof b['head'] === 'number' ? b['head'] : 0,
       versions: typeof b['versions'] === 'number' ? b['versions'] : 0,
       updated_at: str(b['updated_at']) ?? str(b['updatedAt']),
+      ...(style !== null ? { style } : {}),
+      ...(grounding !== undefined ? { grounding } : {}),
     });
   }
   return out;
