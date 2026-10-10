@@ -12,8 +12,8 @@
   "studioVersion": "0.7.3",
   "counts": {
     "files": 178,
-    "occurrences": 2042,
-    "static": 1809,
+    "occurrences": 2048,
+    "static": 1815,
     "dynamic": 48,
     "computed": 6
   },
@@ -550,13 +550,43 @@
       ]
     },
     {
+      "testId": "builder-save-blocker",
+      "files": [
+        "src/components/WorkflowViewer.tsx"
+      ]
+    },
+    {
       "testId": "builder-step-catalog",
       "files": [
         "src/components/WorkflowViewer.tsx"
       ]
     },
     {
+      "testId": "builder-step-executes-code",
+      "files": [
+        "src/components/WorkflowViewer.tsx"
+      ]
+    },
+    {
+      "testId": "builder-step-gate",
+      "files": [
+        "src/components/WorkflowViewer.tsx"
+      ]
+    },
+    {
+      "testId": "builder-step-kind",
+      "files": [
+        "src/components/WorkflowViewer.tsx"
+      ]
+    },
+    {
       "testId": "builder-step-role",
+      "files": [
+        "src/components/WorkflowViewer.tsx"
+      ]
+    },
+    {
+      "testId": "builder-step-verified-evidence",
       "files": [
         "src/components/WorkflowViewer.tsx"
       ]
@@ -10887,6 +10917,12 @@
       "testId": "worker-root-invalid",
       "files": [
         "src/components/SystemSettings.tsx"
+      ]
+    },
+    {
+      "testId": "workflow-edit",
+      "files": [
+        "src/components/WorkflowViewer.tsx"
       ]
     },
     {
