@@ -65,6 +65,7 @@ const PANELS = [
   { id: 'desk',      api: 'GET /runs · WS /ws',            line: 'The Desk — the one shell: what needs you first (gates, questions, stalled seats), then what is in flight. Launch from a brief or a chat right here.' },
   { id: 'session',   api: 'GET /runs/:id/events · WS /ws', line: 'Every run or chat is one thread: the live record, gate rows you answer in place, the composer to steer. Old /runs/:id links land here.' },
   { id: 'everything', api: 'GET /runs · GET /projects',     line: 'Sessions, everything made, helpers, handed-over work and projects in one place, scoped by project — what’s streaming, what’s held at a gate, what landed.' },
+  { id: 'product',    api: 'GET /projects/:id/requirements', line: 'What you are building: one project’s requirements across all its repos. Choose some, and Draft epics starts a governed draft → review → approve run in its own session.' },
   { id: 'chats',     api: 'POST /chats',                   line: 'Chat with one or several warm seats: each answers in the thread, and every path, path:line and commit a reply cites is checked against the repo.' },
   { id: 'workflows',  api: 'GET /workflows',                 line: 'The WorkflowDef JSON that will drive a run — phases, gates, validation — inspected before you commit a brief to it.' },
   { id: 'steering',   api: 'GET /governance/rules · /proposals', line: 'The governance surface: the seven-type steering-rule corpus and the memory store, each with a proposals queue — agents propose, you promote. The skin surfaces the rules; it never grades.' },
@@ -200,8 +201,10 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
           Every panel below is a real route in the SPA, fed by a real route on the daemon —
           <b>nothing rendered here is privileged</b>. The governance vocabulary you’ll meet
           (deny-dominates gates, evaluator ≠ creator) is <a href="https://wc.wickedagile.com">crew’s</a>;
-          studio surfaces it — including when it did <b>not</b> hold: “evaluator ≠ creator not held”,
-          “floor only”, “approved by default, not verified” — and never grades anything. The board auto-cycles — click a panel to pin it.
+          studio surfaces it. Every gate and every delivery carries the run’s assurance receipt: what was
+          required, what ran, who built and checked it, and what was skipped. So a “Floor-only approval”
+          never reads like “Independently accepted”, and a run launched with reduced assurance says so
+          everywhere. Studio never grades anything. The board auto-cycles — click a panel to pin it.
         </p>
       </div>
 
@@ -894,6 +897,7 @@ npx serve dist          <span class="c"># any static server · SPA fallback to i
         { id: 'desk',      api: 'GET /runs · WS /ws',            line: 'The Desk — the one shell: what needs you first (gates, questions, stalled seats), then what is in flight. Launch from a brief or a chat right here.' },
         { id: 'session',   api: 'GET /runs/:id/events · WS /ws', line: 'Every run or chat is one thread: the live record, gate rows you answer in place, the composer to steer. Old /runs/:id links land here.' },
         { id: 'everything', api: 'GET /runs · GET /projects',     line: 'Sessions, everything made, helpers, handed-over work and projects in one place, scoped by project — what’s streaming, what’s held at a gate, what landed.' },
+        { id: 'product',   api: 'GET /projects/:id/requirements', line: 'What you are building: one project’s requirements across all its repos. Choose some, and Draft epics starts a governed draft → review → approve run in its own session.' },
         { id: 'chats',     api: 'POST /chats',                   line: 'Chat with one or several warm seats: each answers in the thread, and every path, path:line and commit a reply cites is checked against the repo.' },
         { id: 'workflows', api: 'GET /workflows',                 line: 'The WorkflowDef JSON that will drive a run — phases, gates, validation — inspected before you commit a brief to it.' },
         { id: 'steering',  api: 'GET /governance/rules · /proposals', line: 'The governance surface: the seven-type steering-rule corpus and the memory store, each with a proposals queue — agents propose, you promote. The skin surfaces the rules; it never grades.' },

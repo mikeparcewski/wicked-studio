@@ -22,12 +22,22 @@ reasoning in a scrollback you'll never read. wicked-studio flips that:
   work. Attention comes to *you* when a run hits a gate — you don't sit watching one terminal.
 - **Approve what matters.** Human-in-the-loop gates surface the real decisions (approve, approve
   with a steer, or reject) — with keyboard batch triage when several pile up.
-- **"Done" is proven, not claimed — and the gate says how.** Review goes to a seat other than the
-  creator's whenever your roster has an eligible one. A team run, or one whose distinct seat is
-  benched, refuses to start without it; an ordinary run on a roster that is simply too small goes ahead
-  and says "evaluator ≠ creator not held". A gate with no distinct judge says "floor only", and an
-  ungated phase says "approved by default, not verified". Every run leaves transcripts, diffs, and a downloadable evidence bundle;
-  studio shows you the gate outcomes, it never grades the work itself.
+- **"Done" is proven, not claimed — and the gate says how.** By default a run requires a distinct
+  evaluator and a judge: review goes to a seat other than the creator's. When no such seat exists, the
+  run stops at a gate that says why. You can then sign a second seat in, or relaunch with **reduced
+  assurance**, an explicit opt-in that the launch form and composer also offer on a one-seat roster.
+  A reduced run is labelled "Reduced assurance" on the session, every gate and the delivery. A team run
+  never grades on its creator's seat. A required judge that could not run holds its gate as "Waiting
+  for a judge seat"; it is not a rejection. Every gate row and the delivery carry the run's
+  **assurance receipt**:
+  - what the run required and what actually ran;
+  - who built, evaluated and judged the work, and whether those were separate seats;
+  - what was skipped and why;
+  - the tree and the attempt.
+
+  So "Floor-only approval" reads differently from "Independently accepted". Every run leaves
+  transcripts, diffs, and a downloadable evidence bundle. Studio shows you the gate outcomes; it never
+  grades the work itself.
 - **Understand the code first.** Onboard a repo and studio builds its graph — then blast-radius
   for any symbol, hotspots, the domain/requirements view, and a searchable map of what calls what.
 
@@ -44,6 +54,13 @@ reasoning in a scrollback you'll never read. wicked-studio flips that:
   evidence-bundle download for any run.
 - **Explore your codebase** — graph view with focus navigation, blast radius, hotspots, and the
   domain graph with coverage.
+- **Plan the product** — the **Product** view (rail → Product, `/product?project=<id>`) answers
+  "what are we building" where the Desk answers "what is executing". It lists a project's
+  requirements across every one of its repositories, grouped by repo and searchable; a repo that
+  could not be read is named with the reason. Choose up to 40 requirements and an optional steer,
+  and **Draft epics** launches a governed draft → review → approve run that opens in its session;
+  its plan and gate are answered there. Coverage and the domain model stay on the project page.
+  Publishing the drafted epics is not offered yet.
 - **Ask several seats at once** — a chat can hold more than one warm CLI seat; each answers in the
   thread, and the daemon checks every path, `path:line` and commit a reply cites against the repo.
 - **Govern the work** — author steering rules and policies, browse the decisions ledger, and review
