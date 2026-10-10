@@ -12,8 +12,48 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.7.0] — 2026-10-10
+
+Assurance (wicked-core#850): every gate row and the delivery carry the run's assurance receipt (studio#657). A creator-seat refusal offers the explicit "Run with reduced assurance" opt-in, which the launch form and the composer also offer on a one-seat launch, and a post-hoc hand-over that nothing re-verified is labelled unverified (studio#658). Also: the Product view (studio#655), Coverage and Domain on the project page (studio#653), the consent gate's install choices (studio#648), a gate that says whether the diff changed since your last decision (studio#644), the composer's helpers row (studio#645, #649, #652), and the waves 4–5 fixes since 0.6.8.
+
+### Added
+- Every gate row and the delivery carry the run's **assurance receipt**:
+  - what was required and what ran;
+  - who built and checked the work, and whether on separate seats;
+  - what was skipped, and the tree and attempt.
+
+  A floor-only approval reads differently from independently accepted work. A reduced-assurance run says so on the session, the gate and the delivery. A gate held for a missing judge reads "Waiting for a judge seat", with the sign-in move (core#850; studio#657).
+- The dead-seat gate's creator-seat refusal says why the run stopped and offers **Run with reduced assurance**. That opens the launch form with the brief and the opt-in ticked, and nothing starts until you launch. The launch form and the composer's `/workflow` row offer the same explicit opt-in, with its disclosure, on a one-seat launch. A ticked opt-in is never silently dropped. A post-hoc hand-over that nothing re-verified is labelled "Unverified delivery", and the delivery shows the QE acceptance check (core#850 EX-01, EX-03, EX-04; studio#658).
+- A **Product** view (rail → Product) lists a project's requirements across its repositories, and **Draft epics** starts a governed compose run that opens in its session (#157; studio#655).
+- The project page shows **Coverage** and **Domain** across the project's repositories, read from crew's project folds. Every repo is listed, with crew's reason when it could not be read (#158; studio#653).
+- The **consent gate** offers the engine's install choices (Install for workers / Also install into my CLIs / Decline). Each lists the files it would write, and names the operator's own files as such (core#820; studio#648).
+- Gate rows and the hand-over card say whether the diff changed since your last decision on the run, and which files differ (#244; studio#644).
+- The Desk and session composer show which helpers a send uses and let you leave some out. A `/workflow-*` launch and an Ask's first send carry only those seats (#631; studio#645).
+- The plan editor offers a lower-only worker pool on a step (#617; studio#628).
+- The launch composer says "Starting… Ns" and offers a run that started while its POST is still outstanding (#404). The discipline skill shows on the composer, System and the unit line, and a `base_skill_refused` launch renders its remedy (#275; studio#643).
+
+### Changed
+- The deliver consent line reads the unit's structured card and amendments (api-types 0.100.1) instead of re-parsing the description. The hand-over's Delivery details list its approved intent amendments (core#686; studio#642).
+- An `@helper` chip picks who answers without rewriting the question (#631; studio#649).
+- Roster reads fold onto `useRoster`. The Continue-in-Build headline redacts every absolute-path shape and reads as one line (#311; studio#638).
+- Internal: the document-thread store drops the bare-frame hold and the unused generation-silence budget. Project-less interactive frames file under Unfiled at once (#245; studio#637).
+- The run-lifecycle browser suite (LC-1…LC-5) runs again, on the session thread, in CI's journey shards (#312; studio#647).
+- README and site describe the one Desk shell, sessions, project scope and the evaluator≠creator honesty labels; wicked-web re-pinned (studio#656).
+- README and site describe the Product view and the assurance receipt and reduced-assurance opt-in; the site board gains the product panel (studio#661).
+- Dependencies: consolidated patch bumps (source-map-js 1.2.2, site sharp 0.35.5) (studio#629). The api-types pin is 0.102.0 (studio#658).
+
 ### Fixed
-- Ask thread: the run-block header now shows the plain title ("A conversation about \<repo>") instead of crew's raw "# Chat scope" heading (studio#585).
+- Ask thread: the run-block header now shows the plain title ("A conversation about \<repo>") instead of crew's raw "# Chat scope" heading (studio#585; studio#630).
+- The session composer says Send starts a separate Ask while a run here is live (#606; studio#628).
+- Session gate rows offer Send back only where the engine accepts it. Details never print the engine's ` ||| ` marker. A team dispute's Send back carries the unresolved findings (#627, #571, #547; studio#634).
+- A refused hand-over is answerable in the session thread. It leads with the remote's reason and says what Deliver again re-pushes: branch, repository and diffstat (#403; studio#641).
+- An Ask's PA failover is said in the thread even when the first helper never answered. A chat's thread has its own Stop, with 10 s to undo (#631; studio#652).
+- New document (Everything › Made) chooses its council again. Seats that will not answer are left out and named, the choice rides the create as `clisJson`, and Create waits for the roster (#302; studio#635).
+- The session artifact no longer offers Export on the v0 placeholder. The files already exported for the shown version are listed from the bridge, so downloads survive a reload (#236, #234; studio#636).
+- Everything › Made shows the grounding chip on documents listed from the daemon-wide index, not only on the per-project fallback (crew#896; studio#640).
+- The Test landing lists the single-repository tests it launched, and a cancelled run no longer counts against the pass rate. An all-cancelled campaign reads cancelled (#216; studio#646).
+- Paths print as `~/…` and `$TMPDIR` instead of the operator's home and temp directories in Gate Details and the Health rail (#650, #651; studio#654) and on the Skills page (#560; studio#632).
+- Site: no scroll snapping under prefers-reduced-motion; wicked-web re-pinned to dcf9b5e (#554; studio#633).
 
 ## [0.6.8] — 2026-10-09
 
@@ -1930,7 +1970,8 @@ The merged interactive layer: wicked-interactive's UI moved into this skin (DES-
   `git subtree split` (92 commits).
 - The SPA as a pure HTTP/WS client of the wicked-crew daemon: runs, gates, live CoreEvents.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.6.8...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/mikeparcewski/wicked-studio/compare/v0.6.8...v0.7.0
 [0.6.8]: https://github.com/mikeparcewski/wicked-studio/compare/v0.6.7...v0.6.8
 [0.6.7]: https://github.com/mikeparcewski/wicked-studio/compare/v0.6.6...v0.6.7
 [0.6.6]: https://github.com/mikeparcewski/wicked-studio/compare/v0.6.5...v0.6.6
