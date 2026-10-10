@@ -6,8 +6,7 @@ switcher and repo onboarding). Every scenario in Areas 1–5 is a **deterministi
 tool check** (vitest + jsdom mocks, no live daemon) — a governed agent run
 would only be appropriate if the scenario required a non-deterministic AI
 decision during the test itself, which none of these do. Area 6 collects the
-**functional browser** scenarios, which are specified here but **not
-implemented in this repository** (#312).
+**functional browser** scenarios, run as Desk journeys in CI (#312).
 
 Legend: **covered** = already in an existing test file; **new** = implemented
 in `tests/run-lifecycle.test.tsx` by this plan; **not implemented** = specified
@@ -112,28 +111,19 @@ other half (name present, path empty), which *is* reachable because typing a nam
 
 ---
 
-## Area 6 — Functional browser scenarios (SPECIFIED, NOT IMPLEMENTED)
+## Area 6 — Functional browser scenarios (revived, CI-wired — #312)
 
-These five were specified as a Playwright suite driving a real browser against a
-same-origin build and the W2 fixture. **None of them is implemented in this
-repository** — the suite was split out and is tracked in **#312**. They are
-listed so this plan stays honest about the difference between what is specified
-and what actually runs; nothing below should be read as coverage.
+The suite was written for the run page, which is gone; it was revived on the session thread as
+`e2e/desk_run_lifecycle_test.py`, listed in `DESK_ONLY` (`e2e/run_journeys.py`), so CI's journey
+shards run it on every PR.
 
-| ID | Scenario | Kind | Status |
+| ID | Scenario | Where | Status |
 |---|---|---|---|
-| LC-1 | Launch-form validation in a real browser: submit disabled until instructions AND a repo scope are set | functional (browser) | **not implemented (#312)** |
-| LC-2 | Gate answering: `awaitingHuman` frame → gate card → Approve → the gate POST | functional (browser) | **not implemented (#312)** — as originally written it asserted the gate card *detaches*, which is wrong: `ApprovalDock.tsx:43` keeps the card while the run's status is `awaiting_human`. Needs re-specification before anyone implements it. |
-| LC-3 | Archive chip ON + Unarchive happy path | functional (browser) | **not implemented (#312)** — never executed |
-| LC-4 | Archive chip toggled OFF | functional (browser) | **not implemented (#312)** — never executed |
-| LC-5 | Repo register form submit | functional (browser) | **not implemented (#312)** — never executed |
-
-Why they are not here: when the suite was executed against `main` it failed
-(LC-1 on a UI shape that has since moved behind a composer; LC-2 on the
-incorrect detach assertion above), and **no CI job runs `e2e/*.py`** — so
-landing it would have put a failing file in the tree that later reads as
-coverage. The code is preserved on `archive/run-lifecycle-e2e-258`; #312 carries
-the full diagnosis and what a revival needs.
+| LC-1 | Launch-form validation: Send disabled with no problem, enabled with a problem and a repository; Send POSTs `/runs` | `desk_run_lifecycle` | **runs in CI** |
+| LC-2 | Gate answering on `/s/run:<id>`: nothing sent in the undo window, then exactly one `{approve: true, ord}`, and the row's receipt. Re-specified: the old "card detaches" assertion was wrong for a status-driven surface, the proof is the wire | `desk_run_lifecycle` | **runs in CI** |
+| LC-3 | Archived lens lists the archived run; Unarchive re-reads the list | `desk_everything_archive` (steps 2–3; the Everything page replaced the Work board's chip) | **runs in CI** |
+| LC-4 | Leaving the Archived lens hides the archived row; live runs stay | `desk_everything_archive` (step 3, the Stopped lens) | **runs in CI** |
+| LC-5 | Repo register form: disabled until name and path; submit POSTs `/repos {name, rootPath}` and lands on `/repo-detail/<id>` | `desk_run_lifecycle` | **runs in CI** |
 
 ---
 
@@ -145,4 +135,4 @@ New scenarios (GA-6, AU-4, AU-5, RO-1, RO-2, RO-3, RO-6) are implemented in
 async assertions — no sleeps, no fixed waits. Each test asserts a concrete
 outcome on a real DOM node.
 
-The Area 6 scenarios (LC-1…LC-5) are **specified only** — see #312.
+The Area 6 scenarios (LC-1…LC-5) run in CI — see the table above (#312).
