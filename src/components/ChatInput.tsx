@@ -720,19 +720,21 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     // does not launch — the Send button is already disabled with the reason on
     // screen; this guards the Cmd+Enter path the same way. Nothing is guessed.
     if (targetRequired) return;
+    setPreflightBlocked(false);
+    setSubmitting(true);
+    setError(null);
     // wicked-core#850: a ticked opt-in is never dropped in silence — a launch that asked for reduced
-    // assurance waits for the daemon's answer, and one that cannot take it is refused, not run full.
+    // assurance waits for the daemon's answer (Send already busy, so it cannot launch twice), and one
+    // the daemon cannot take is refused, never run with full assurance instead.
     if (reducedAssurance) {
       const takes = daemonReduced ?? await api.getHealth().then(
         (h) => (h.capabilities as unknown as Record<string, unknown> | undefined)?.['reducedAssurance'] === true, () => false);
       if (!takes) {
+        setSubmitting(false);
         setError('This daemon does not take a reduced-assurance launch. Untick "Run with reduced assurance" to launch with full assurance, or sign a second seat in.');
         return;
       }
     }
-    setPreflightBlocked(false);
-    setSubmitting(true);
-    setError(null);
     setBaseSkillRefusal(null);
     setStartedRunId(null);
     openedEarly.current = null;

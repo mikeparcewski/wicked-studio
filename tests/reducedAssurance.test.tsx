@@ -166,6 +166,24 @@ describe('the launch form', () => {
     expect('reducedAssurance' in body).toBe(false);
   });
 
+  it('codex r2: a launch waiting on the capability is busy — a second Send does not launch twice', async () => {
+    let answer: (v: unknown) => void = () => undefined;
+    vi.spyOn(client.api, 'getHealth')
+      .mockReturnValueOnce(new Promise(() => undefined) as never)
+      .mockReturnValueOnce(new Promise((r) => { answer = r; }) as never);
+    roster(['claude']); prefill(true);
+    render(<ChatInput runId={null} runStatus={null} onLaunched={vi.fn()} />);
+    const user = userEvent.setup();
+    await waitFor(() => expect(screen.getByTestId('launch-submit')).toBeEnabled());
+    await user.click(screen.getByTestId('launch-submit'));
+    await user.click(screen.getByTestId('launch-submit'));
+    answer({ status: 'ok', version: 'test', capabilities: { reducedAssurance: true } });
+    await waitFor(() => expect(client.api.launchRun).toHaveBeenCalledTimes(1));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(client.api.launchRun).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(client.api.launchRun).mock.calls[0]![0].reducedAssurance).toBe(true);
+  });
+
   it('codex r1: a ticked opt-in is never dropped in silence — refused, shown, and untickable', async () => {
     health(false); roster(['claude']); prefill(true);
     render(<ChatInput runId={null} runStatus={null} onLaunched={vi.fn()} />);
