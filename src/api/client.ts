@@ -207,6 +207,11 @@ export const api = {
   getRunAcceptance: (id: string) =>
     apiFetch<import('./types.js').RunAcceptanceView>(`/runs/${encodeURIComponent(id)}/acceptance`),
 
+  /** Whether each enumerating step's inventory is complete (`GET /runs/:id/inventory`, crew#721).
+   * Rejects on a daemon without the route (404) — callers render nothing then. */
+  getRunInventory: (id: string) =>
+    apiFetch<import('./types.js').RunInventoryResponse>(`/runs/${encodeURIComponent(id)}/inventory`),
+
   /** Launch a run → the new run id. (`LaunchBodyWithDeliver` = `LaunchRunBody`
    *  with 0.18.0's widened `deliver: 'pr' | 'none'` — see api/types.ts.) */
   launchRun: (body: LaunchBodyWithDeliver) =>
