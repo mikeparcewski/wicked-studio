@@ -978,6 +978,7 @@ export function WorkflowViewer(): React.ReactElement {
   const selectedRef = useRef<string | null>(null);
   selectedRef.current = selected;
   const presetsRef = useRef<Map<string, Preset>>(new Map());
+  const catalogRef = useRef<CatalogEntry[]>([]);
 
   const load = useCallback(async (select?: string) => {
     setLoading(true);
@@ -1000,8 +1001,15 @@ export function WorkflowViewer(): React.ReactElement {
           setError(`Saved presets could not be read: ${e instanceof Error ? e.message : String(e)}`);
           return [...presetsRef.current.values()];
         }),
-        teamPlanApi.catalog().then((c) => c.entries).catch(() => [] as CatalogEntry[]),
+        // The same for the catalog the saved presets are read over: a failed read keeps the last
+        // good one and says so, rather than showing every inherited gate and role as a default.
+        teamPlanApi.catalog().then((c) => c.entries).catch((e: unknown) => {
+          if (e instanceof ApiError && e.status === 404) return [] as CatalogEntry[];
+          setError(`The phase catalog could not be read: ${e instanceof Error ? e.message : String(e)}`);
+          return catalogRef.current;
+        }),
       ]);
+      catalogRef.current = catalog;
       presetsRef.current = new Map(saved.map((p) => [p.name, p]));
       setPresets(presetsRef.current);
       const list = viewerListOf(wfs, saved, catalog);

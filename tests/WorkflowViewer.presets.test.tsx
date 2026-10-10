@@ -9,6 +9,7 @@ import { ApiError } from '../src/api/errors.js';
 
 const listWorkflows = vi.fn();
 const presets = vi.fn();
+const catalog = vi.fn();
 
 vi.mock('../src/api/client.js', () => ({
   api: { listWorkflows: () => listWorkflows(), saveScript: vi.fn() },
@@ -17,7 +18,7 @@ vi.mock('../src/api/client.js', () => ({
 vi.mock('../src/api/teamPlan.js', () => ({
   teamPlanApi: {
     presets: () => presets(),
-    catalog: () => Promise.resolve({ entries: [] }),
+    catalog: () => catalog(),
     putPreset: vi.fn(),
   },
 }));
@@ -28,6 +29,7 @@ beforeEach(() => {
   cleanup();
   listWorkflows.mockReset().mockResolvedValue({ workflows: [{ id: 'feature', phases: [] }] });
   presets.mockReset();
+  catalog.mockReset().mockResolvedValue({ entries: [] });
 });
 
 it('a saved preset is listed, and survives a Refresh whose preset read fails (named, not dropped)', async () => {
@@ -48,4 +50,22 @@ it('a daemon without the presets route (404) lists the catalog alone, with no er
   await screen.findAllByText('feature');
   expect(screen.queryByText(/Saved presets could not be read/)).toBeNull();
   expect(screen.queryByText('mine')).toBeNull();
+});
+
+it('a Refresh whose catalog read fails keeps the last good catalog: an inherited role is not shown as a default (codex r6)', async () => {
+  const TEST_ENTRY = {
+    id: 'test', kind: 'test', role: 'evaluator', gate: { human_confirm_if: 'verdict_not_pass' }, gate_type: null,
+    executes_code: false, executor: 'agent', validator_pin: null, pinned: false, evidence_floor: false, skill_ref: null, description: null,
+  };
+  const VERIFY = { ...MINE, steps: [{ catalog: 'test', id: 'verify' }] };
+  presets.mockResolvedValue({ presets: [VERIFY] });
+  catalog.mockResolvedValueOnce({ entries: [TEST_ENTRY] });
+  render(<WorkflowViewer />);
+  fireEvent.click(await screen.findByText('mine'));
+  expect(await screen.findByText('evaluator')).toBeTruthy();
+
+  catalog.mockRejectedValueOnce(new ApiError(503, 'unavailable'));
+  fireEvent.click(screen.getByText('Refresh'));
+  expect(await screen.findByText(/The phase catalog could not be read/)).toBeTruthy();
+  expect(screen.getByText('evaluator')).toBeTruthy();
 });
