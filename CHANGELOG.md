@@ -12,6 +12,14 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.7.1] — 2026-10-10
+
+The final-codebase zip and the credentials-missing state (wicked-crew#720).
+
+### Added
+- Every run with a final-codebase zip offers **Download code (.zip)** in its thread and its run record, whatever the delivery outcome: delivered, push refused, credentials missing, wrong account, lift conflict, or a run that failed after building. The link carries the zip's size and sha256 (studio#668).
+- A deliver phase refused for want of GitHub or Azure DevOps credentials says so, names what to set, and says that approving the deliver gate retries it (studio#668).
+
 ## [0.7.0] — 2026-10-10
 
 Assurance (wicked-core#850): every gate row and the delivery carry the run's assurance receipt (studio#657). A creator-seat refusal offers the explicit "Run with reduced assurance" opt-in, which the launch form and the composer also offer on a one-seat launch, and a post-hoc hand-over that nothing re-verified is labelled unverified (studio#658). Also: the Product view (studio#655), Coverage and Domain on the project page (studio#653), the consent gate's install choices (studio#648), a gate that says whether the diff changed since your last decision (studio#644), the composer's helpers row (studio#645, #649, #652), and the waves 4–5 fixes since 0.6.8.
@@ -1970,7 +1978,8 @@ The merged interactive layer: wicked-interactive's UI moved into this skin (DES-
   `git subtree split` (92 commits).
 - The SPA as a pure HTTP/WS client of the wicked-crew daemon: runs, gates, live CoreEvents.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.1...HEAD
+[0.7.1]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/mikeparcewski/wicked-studio/compare/v0.6.8...v0.7.0
 [0.6.8]: https://github.com/mikeparcewski/wicked-studio/compare/v0.6.7...v0.6.8
 [0.6.7]: https://github.com/mikeparcewski/wicked-studio/compare/v0.6.6...v0.6.7
