@@ -233,7 +233,7 @@ with sync_playwright() as p:
     page.get_by_test_id("desk-rail-additional").wait_for(state="visible", timeout=5000)
     dests = page.evaluate("""() => [...document.querySelectorAll(
       '[data-testid="session-rail"] [data-nav-dest]')].map(e => e.dataset.navDest)""")
-    expected = ["watch", "section:skills", "section:mcp", "section:steering", "health",
+    expected = ["watch", "section:product", "section:skills", "section:mcp", "section:steering", "health",
                 "settings:/system", "section:repos", "settings:/workflows", "section:testing", "settings:/theme"]
     page.locator('[data-testid="session-rail"] [data-nav-dest="settings:/theme"]').click()
     page.wait_for_function("() => window.location.pathname === '/theme'", timeout=5000)

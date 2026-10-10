@@ -14,6 +14,7 @@ import { RepoGraphModal } from './components/RepoGraphModal.js';
 import { RightPanel } from './components/RightPanel.js';
 import { RunRawView } from './components/RunRawView.js';
 import { SkillsPage } from './components/SkillsPage.js';
+import { ProductPage } from './components/product/ProductPage.js';
 import { McpToolsPage } from './components/McpToolsPage.js';
 import { SteeringPage } from './components/SteeringPage.js';
 import { MemoriesPanel } from './components/MemoriesPanel.js';
@@ -581,6 +582,15 @@ export function App(): React.ReactElement {
             // S16a-4f: `?project=` (the moved `/p/:pid/campaigns`) preselects the launch panel's project.
             projectId={new URLSearchParams(search).get('project')}
           />
+        </div>
+      );
+    }
+    // `/product[?project=]` — the Product view (studio#157): a project's requirements across its
+    // repositories, and "Draft epics" as a governed run (crew#371/#372).
+    if (panel === 'product') {
+      return (
+        <div className="flex-1 overflow-y-auto">
+          <ProductPage navigate={navigate} search={search} />
         </div>
       );
     }

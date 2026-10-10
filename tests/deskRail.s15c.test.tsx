@@ -30,18 +30,20 @@ function rail(pathname = '/'): ReturnType<typeof render> {
 }
 
 describe('the rail, top to bottom', () => {
-  it('Desk · Watchtower · sessions · Skills · MCP tools · Steering · Health · Additional settings — and no bell', () => {
+  it('Desk · Watchtower · sessions · Product · Skills · MCP tools · Steering · Health · Additional settings — and no bell', () => {
     rail();
     const nav = screen.getByTestId('session-rail');
     const order = [...nav.querySelectorAll('[data-testid]')]
       .map((e) => e.getAttribute('data-testid') ?? '')
-      .filter((id) => ['desk-rail-home', 'desk-rail-watch', 'desk-rail-start', 'desk-rail-skills', 'desk-rail-mcp', 'desk-rail-steering', 'rail-health-section', 'desk-rail-more'].includes(id));
-    expect(order).toEqual(['desk-rail-home', 'desk-rail-watch', 'desk-rail-start', 'desk-rail-skills', 'desk-rail-mcp', 'desk-rail-steering', 'rail-health-section', 'desk-rail-more']);
+      .filter((id) => ['desk-rail-home', 'desk-rail-watch', 'desk-rail-start', 'desk-rail-product', 'desk-rail-skills', 'desk-rail-mcp', 'desk-rail-steering', 'rail-health-section', 'desk-rail-more'].includes(id));
+    expect(order).toEqual(['desk-rail-home', 'desk-rail-watch', 'desk-rail-start', 'desk-rail-product', 'desk-rail-skills', 'desk-rail-mcp', 'desk-rail-steering', 'rail-health-section', 'desk-rail-more']);
     expect(nav.querySelector('[data-nav-dest="notifications"]')).toBeNull();
     expect(nav.textContent).not.toContain('Rules');
     expect(nav.textContent).not.toContain('Everything else');
     expect(screen.getByTestId('desk-rail-steering')).toHaveAttribute('href', '/rules');
     expect(screen.getByTestId('desk-rail-steering')).toHaveTextContent('Steering');
+    expect(screen.getByTestId('desk-rail-product')).toHaveAttribute('href', '/product');
+    expect(screen.getByTestId('desk-rail-product')).toHaveTextContent('Product');
     expect(screen.getByTestId('desk-rail-skills')).toHaveAttribute('href', '/skills');
     expect(screen.getByTestId('desk-rail-mcp')).toHaveAttribute('href', '/mcp');
     expect(screen.getByTestId('desk-rail-more')).toHaveTextContent('Additional settings');
@@ -50,8 +52,8 @@ describe('the rail, top to bottom', () => {
   it('the rail entries carry the skin contract\'s nav-dest marks', () => {
     rail();
     const dests = [...screen.getByTestId('session-rail').querySelectorAll('[data-nav-dest]')].map((e) => e.getAttribute('data-nav-dest'));
-    expect(dests).toEqual(['watch', 'section:skills', 'section:mcp', 'section:steering', 'health']);
-    expect(DESK_RAIL_LINKS.map((l) => l.dest)).toEqual(['section:skills', 'section:mcp', 'section:steering']);
+    expect(dests).toEqual(['watch', 'section:product', 'section:skills', 'section:mcp', 'section:steering', 'health']);
+    expect(DESK_RAIL_LINKS.map((l) => l.dest)).toEqual(['section:product', 'section:skills', 'section:mcp', 'section:steering']);
   });
 
   it('the current entry is marked', () => {

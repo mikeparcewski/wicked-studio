@@ -50,14 +50,19 @@ import { announceNavigateAway, inAppEntryState, isInAppEntry, replacedEntryState
 // worktree files/diff as REAL routes — `/runs/:id/events`, `/runs/:id/files` — so the palette
 // verb that opens them is one history entry and browser Back returns to where you were. The run
 // id rides in `artifactId` (NOT `runId`: no run-selected machinery, no legacy shell redirect).
-export type Panel = 'home' | 'runs' | 'run-events' | 'run-files' | 'workflows' | 'skills' | 'mcp' | 'steering' | 'testing' | 'repos' | 'system' | 'theme' | 'repo-detail' | 'project-detail' | 'session' | 'editors' | 'watch' | 'rules' | 'everything' | 'not-found';
+export type Panel = 'home' | 'runs' | 'run-events' | 'run-files' | 'workflows' | 'skills' | 'mcp' | 'steering' | 'testing' | 'repos' | 'system' | 'theme' | 'repo-detail' | 'project-detail' | 'session' | 'editors' | 'watch' | 'rules' | 'everything' | 'product' | 'not-found';
 
 /** Every panel, exhaustively (the compile-time check below fails when the union grows without it). */
-export const ALL_PANELS = ['home', 'runs', 'run-events', 'run-files', 'workflows', 'skills', 'mcp', 'steering', 'testing', 'repos', 'system', 'theme', 'repo-detail', 'project-detail', 'session', 'editors', 'watch', 'rules', 'everything', 'not-found'] as const satisfies readonly Panel[];
+export const ALL_PANELS = ['home', 'runs', 'run-events', 'run-files', 'workflows', 'skills', 'mcp', 'steering', 'testing', 'repos', 'system', 'theme', 'repo-detail', 'project-detail', 'session', 'editors', 'watch', 'rules', 'everything', 'product', 'not-found'] as const satisfies readonly Panel[];
 type MissingPanel = Exclude<Panel, (typeof ALL_PANELS)[number]>;
 export const PANELS_EXHAUSTIVE: MissingPanel extends never ? true : MissingPanel = true;
 
 const PANELS: Panel[] = ['runs', 'workflows', 'skills', 'mcp', 'repos', 'system', 'theme', 'repo-detail', 'watch'];
+/** studio#157: the Product view — `/product[?project=<id>]` (the project rides the query, like Testing's). */
+const PRODUCT_PATH = '/product';
+export function productPath(projectId?: string | null): string {
+  return projectId ? `${PRODUCT_PATH}?project=${encodeURIComponent(projectId)}` : PRODUCT_PATH;
+}
 
 /** The list and dashboard addresses that MOVED onto `/everything` (S15c) — see `useMovedRoutes`. */
 export const MOVED_LISTS: ReadonlySet<string> = new Set(['projects', 'chats', 'work', 'execute', 'vibe', 'demo', 'make', 'runs']);
@@ -330,6 +335,9 @@ function parse(pathname: string): Route {
   // honestly that it is gone.
   if (first === 'chat' && second) {
     return restEmpty(3) ? route({ panel: 'session', artifactId: safeDecode(second) }) : route({ panel: 'not-found' });
+  }
+  if (first === 'product') {
+    return second === '' && restEmpty(2) ? route({ panel: 'product' }) : route({ panel: 'not-found' });
   }
   if (first === 'projects' && second) {
     return route({ panel: 'project-detail', projectId: safeDecode(second) });
