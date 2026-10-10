@@ -42,11 +42,11 @@ test.describe('mobile (390×844)', () => {
   test('the projects card, seam panel, and four-plane map render on a phone', async ({ page }) => {
     await page.goto('/');
 
-    // One project, two skins: the toggle still works with touch targets.
+    // One project, one feed: the lens toggle still works with touch targets.
     const card = page.locator('[data-proj]');
     await bringIntoView(card);
     await expect(card).toBeVisible();
-    await card.getByRole('tab', { name: /as a document/ }).click();
+    await card.getByRole('tab', { name: /centred on the document/ }).click();
     await expect(card).toHaveAttribute('data-skin', 'interactive');
 
     // The seam panel keeps both modes reachable.

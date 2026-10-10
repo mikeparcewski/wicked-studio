@@ -2,16 +2,19 @@ import { test, expect } from '@playwright/test';
 import { bringIntoView } from './utils';
 
 /**
- * The run board [data-board] — the SPA's real panels as an auto-cycling
+ * The Desk and its surfaces [data-board] — the SPA's real routes as an auto-cycling
  * switcher. Clicking a panel pins it (stage swaps name + API route + line);
  * the status button resumes the cycle.
  */
-test.describe('the run board [data-board]', () => {
-  test('seven real panels render; clicking one pins the stage to it', async ({ page }) => {
+test.describe('the Desk and its surfaces [data-board]', () => {
+  test('eight real surfaces render; clicking one pins the stage to it', async ({ page }) => {
     await page.goto('/');
     const board = page.locator('[data-board]');
     await bringIntoView(board);
-    await expect(board.locator('[data-board-item]')).toHaveCount(7);
+    await expect(board.locator('[data-board-item]')).toHaveCount(8);
+    // The one shell is first; the retired run board / work queue are not surfaces any more.
+    await expect(board.locator('[data-board-item]').first()).toContainText('desk');
+    await expect(board.getByRole('tab', { name: 'runs' })).toHaveCount(0);
 
     // Pin the workflows panel: the stage swaps to its name + real route.
     await board.getByRole('tab', { name: 'workflows' }).click();

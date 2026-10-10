@@ -3,7 +3,7 @@
  * index.astro — the wicked-studio landing page (ws.wickedagile.com).
  *
  * POSITIONING (four-plane era): wicked-studio is the CODER'S FRONT DOOR of the
- * wicked platform's EXPERIENCE plane — the run board for governed agent
+ * wicked platform's EXPERIENCE plane — the Desk for governed agent
  * delivery. A Vite/React SPA that is a PURE HTTP/WS client of the wicked-crew
  * daemon: launch and steer governed runs, answer human gates, watch live
  * CoreEvent streams, drive terminals — everything the daemon exposes on
@@ -27,13 +27,12 @@
  *    live daemon.
  *  - The Project model is SHIPPED in the control plane (/api/v1/projects,
  *    nine routes; a project's activity feed merges crew core events with
- *    wicked.interactive.* bus events carrying the same project_id) — AND the
- *    studio's DEDICATED project browser is SHIPPED IN THIS SKIN: project-shell
- *    routing in App.tsx, /projects + /p/:id routes, ProjectsPage /
- *    ProjectDetailPage / ProjectDashboard / ProjectShell, verified end-to-end
- *    by the 0.4.0 functional campaign (21/21 scenarios,
- *    estate-review/STUDIO-CAMPAIGN.md). Say "shipped", present tense —
- *    never "landing next".
+ *    wicked.interactive.* bus events carrying the same project_id). In studio
+ *    a project is a SCOPE on the one Desk shell, not its own shell: the
+ *    project shell, per-project dashboard and classic skins retired (S18d);
+ *    "See everything" (`/everything?project=`) scopes to it, `/p/:id` opens
+ *    its scoped Sessions list, `/projects/:id` is its edit/archive page. Never
+ *    describe a project dashboard or a four-mode shell.
  *  - Governance vocabulary (deny-dominates, evaluator ≠ creator, gates) is
  *    crew's — studio SURFACES it, it does not own it. The skin never grades
  *    anything.
@@ -60,12 +59,13 @@ const description =
   'Where product work happens: brainstorm it, build it under a check no agent can approve on its own, then produce the doc, deck or demo. A browser client of the wicked-crew daemon, which drives the coding CLIs you already pay for — on your own machine.';
 const repo = 'https://github.com/mikeparcewski/wicked-studio';
 
-// The run board: the SPA's real panels (src/hooks/useRoute.ts), each fed by a
-// real /api/v1 route (src/api/client.ts). The board auto-cycles; click to pin.
+// The SPA's real surfaces (src/App.tsx — the Desk is the one shell since the classic skins
+// retired), each fed by a real /api/v1 route (src/api/client.ts). The board auto-cycles; click to pin.
 const PANELS = [
-  { id: 'runs',       api: 'GET /runs · WS /ws',            line: 'The run board itself: launch from a brief, watch the phase ladder and unit list move, read live output, answer the steering timeline.' },
-  { id: 'work',       api: 'GET /runs/:id/events',           line: 'Every work unit across every run in one queue — what’s streaming, what’s held at a gate, what landed.' },
-  { id: 'chats',      api: 'POST /chats',                    line: 'Group chat with your whole roster: fan one question out, watch each seat answer side by side.' },
+  { id: 'desk',      api: 'GET /runs · WS /ws',            line: 'The Desk — the one shell: what needs you first (gates, questions, stalled seats), then what is in flight. Launch from a brief or a chat right here.' },
+  { id: 'session',   api: 'GET /runs/:id/events · WS /ws', line: 'Every run or chat is one thread: the live record, gate rows you answer in place, the composer to steer. Old /runs/:id links land here.' },
+  { id: 'everything', api: 'GET /runs · GET /projects',     line: 'Sessions, everything made, helpers, handed-over work and projects in one place, scoped by project — what’s streaming, what’s held at a gate, what landed.' },
+  { id: 'chats',     api: 'POST /chats',                   line: 'Chat with one or several warm seats: each answers in the thread, and every path, path:line and commit a reply cites is checked against the repo.' },
   { id: 'workflows',  api: 'GET /workflows',                 line: 'The WorkflowDef JSON that will drive a run — phases, gates, validation — inspected before you commit a brief to it.' },
   { id: 'steering',   api: 'GET /governance/rules · /proposals', line: 'The governance surface: the seven-type steering-rule corpus and the memory store, each with a proposals queue — agents propose, you promote. The skin surfaces the rules; it never grades.' },
   { id: 'testing',    api: 'POST /testing/evals/run',        line: 'Run the seven steering types against your own dev-behavior corpora — each verdict lands caught, gap, or false-positive, so a rule earns its keep before it governs a run.' },
@@ -190,17 +190,18 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
     </div>
   </section>
 
-  <!-- ── The run board — every daemon surface, one skin ──────────────────── -->
+  <!-- ── The Desk and its surfaces — every daemon surface, one shell ──────── -->
   <section class="board" aria-labelledby="board-h">
     <div class="wrap">
       <div class="sec-head sec-head--wide">
-        <div class="kicker">The run board · the SPA’s real panels</div>
-        <h2 id="board-h">If the daemon exposes it, the board shows it.</h2>
+        <div class="kicker">The Desk and its surfaces · the SPA’s real routes</div>
+        <h2 id="board-h">If the daemon exposes it, studio shows it.</h2>
         <p class="sec-sub">
           Every panel below is a real route in the SPA, fed by a real route on the daemon —
           <b>nothing rendered here is privileged</b>. The governance vocabulary you’ll meet
           (deny-dominates gates, evaluator ≠ creator) is <a href="https://wc.wickedagile.com">crew’s</a>;
-          the skin surfaces it and never grades anything. The board auto-cycles — click a panel to pin it.
+          studio surfaces it — including when it did <b>not</b> hold: “evaluator ≠ creator not held”,
+          “floor only”, “approved by default, not verified” — and never grades anything. The board auto-cycles — click a panel to pin it.
         </p>
       </div>
 
@@ -215,7 +216,7 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
         </div>
         <div class="board-stage" data-board-stage>
           <div class="board-stage-bar">
-            <span class="bs-name" data-bs-name>runs</span>
+            <span class="bs-name" data-bs-name>desk</span>
             <code class="bs-api" data-bs-api>{PANELS[0].api}</code>
           </div>
           <p class="bs-line" data-bs-line>{PANELS[0].line}</p>
@@ -291,26 +292,26 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
         <p class="sec-sub">
           A project groups runs, chats and docs, and its activity feed <b>merges</b> crew’s durable
           core events with the document engine’s bus events carrying the same <code>project_id</code>.
-          A governed run and the deck you write about it land in the <b>same room</b> — flip the view
-          below and watch the same project re-render.
+          A governed run and the deck you write about it land in the <b>same room</b> — flip the lens
+          below to centre the same feed on the runs or on the document.
         </p>
       </div>
 
       <div class="proj-card" data-proj data-skin="studio">
         <div class="proj-bar">
           <span class="proj-id">project · <b>payments-refresh</b></span>
-          <div class="proj-skins" role="tablist" aria-label="Which view renders this project">
-            <button type="button" role="tab" class="proj-skin is-active" data-proj-skin="studio" aria-selected="true">as a run board</button>
-            <button type="button" role="tab" class="proj-skin" data-proj-skin="interactive" aria-selected="false">as a document</button>
+          <div class="proj-skins" role="tablist" aria-label="Which lens centres this project's feed">
+            <button type="button" role="tab" class="proj-skin is-active" data-proj-skin="studio" aria-selected="true">centred on the runs</button>
+            <button type="button" role="tab" class="proj-skin" data-proj-skin="interactive" aria-selected="false">centred on the document</button>
           </div>
         </div>
 
-        <!-- The RUN-BOARD rendering: the merged activity feed as a run board log. -->
-        <ol class="proj-feed proj-feed--studio" aria-label="The project as the run board renders it">
+        <!-- The RUNS lens: the merged activity feed centred on the runs. -->
+        <ol class="proj-feed proj-feed--studio" aria-label="The project feed centred on the runs">
           <li><span class="pf-src pf-src--crew">crew</span><code>run r-7c19</code><span class="pf-note">feature workflow · build → adversarial-review → test — held once, steered, landed</span></li>
           <li><span class="pf-src pf-src--crew">crew</span><code>gate decision</code><span class="pf-note">schema-drift DENY → approved with steer · on the decisions ledger</span></li>
           <li><span class="pf-src pf-src--int">interactive</span><code>doc payments-deck</code><span class="pf-note">the document engine’s deck, in this same feed — created, drafted, delivered</span></li>
-          <li><span class="pf-src pf-src--crew">crew</span><code>chat c-2214</code><span class="pf-note">roster fan-out: “what breaks if we shard the ledger?” — three seats answered</span></li>
+          <li><span class="pf-src pf-src--crew">crew</span><code>chat c-2214</code><span class="pf-note">three seats on one chat: “what breaks if we shard the ledger?” — each answered, citations checked</span></li>
         </ol>
 
         <!-- The DOCUMENT rendering: the same project centred on the document engine's work. -->
@@ -323,15 +324,15 @@ const studioVersion = __WICKED_STUDIO_VERSION__;
 
         <div class="proj-foot">
           <code class="proj-call">GET /api/v1/projects/payments-refresh/activity</code>
-          <span class="proj-same" data-proj-same>same project · same feed · rendered as the <b data-proj-skin-label>run board</b> view</span>
+          <span class="proj-same" data-proj-same>same project · same feed · centred on the <b data-proj-skin-label>runs</b></span>
         </div>
       </div>
 
       <p class="honest-note">
         <b>Where this stands:</b> the Project model is <b>shipped in the control plane</b> — nine
-        routes, the merged feed, durable gate prompts across member runs — and the studio’s
-        <b>dedicated project browser is shipped in this skin</b>: project pages, the per-project
-        dashboard, and the four-mode shell, all riding that daemon.
+        routes, the merged feed, durable gate prompts across member runs. In studio a project is a
+        <b>scope, not a separate shell</b>: “See everything” filters to it, its address opens its
+        scoped Sessions list, and its page edits or archives it — all riding that daemon.
       </p>
     </div>
   </section>
@@ -890,9 +891,10 @@ npx serve dist          <span class="c"># any static server · SPA fallback to i
       if (!items.length || !stage || !nameEl || !apiEl || !lineEl) return;
 
       var PANELS = [
-        { id: 'runs',      api: 'GET /runs · WS /ws',            line: 'The run board itself: launch from a brief, watch the phase ladder and unit list move, read live output, answer the steering timeline.' },
-        { id: 'work',      api: 'GET /runs/:id/events',           line: 'Every work unit across every run in one queue — what’s streaming, what’s held at a gate, what landed.' },
-        { id: 'chats',     api: 'POST /chats',                    line: 'Group chat with your whole roster: fan one question out, watch each seat answer side by side.' },
+        { id: 'desk',      api: 'GET /runs · WS /ws',            line: 'The Desk — the one shell: what needs you first (gates, questions, stalled seats), then what is in flight. Launch from a brief or a chat right here.' },
+        { id: 'session',   api: 'GET /runs/:id/events · WS /ws', line: 'Every run or chat is one thread: the live record, gate rows you answer in place, the composer to steer. Old /runs/:id links land here.' },
+        { id: 'everything', api: 'GET /runs · GET /projects',     line: 'Sessions, everything made, helpers, handed-over work and projects in one place, scoped by project — what’s streaming, what’s held at a gate, what landed.' },
+        { id: 'chats',     api: 'POST /chats',                   line: 'Chat with one or several warm seats: each answers in the thread, and every path, path:line and commit a reply cites is checked against the repo.' },
         { id: 'workflows', api: 'GET /workflows',                 line: 'The WorkflowDef JSON that will drive a run — phases, gates, validation — inspected before you commit a brief to it.' },
         { id: 'steering',  api: 'GET /governance/rules · /proposals', line: 'The governance surface: the seven-type steering-rule corpus and the memory store, each with a proposals queue — agents propose, you promote. The skin surfaces the rules; it never grades.' },
         { id: 'testing',   api: 'POST /testing/evals/run',        line: 'Run the seven steering types against your own dev-behavior corpora — each verdict lands caught, gap, or false-positive, so a rule earns its keep before it governs a run.' },
@@ -957,7 +959,7 @@ npx serve dist          <span class="c"># any static server · SPA fallback to i
     })();
   </script>
 
-  <!-- ── One project, two skins: flip which door renders the same room ───── -->
+  <!-- ── One project, one feed: flip which lens centres the same room ─────── -->
   <script is:inline>
     (function () {
       var card = document.querySelector('[data-proj]');
@@ -974,7 +976,7 @@ npx serve dist          <span class="c"># any static server · SPA fallback to i
             b.classList.toggle('is-active', active);
             b.setAttribute('aria-selected', active ? 'true' : 'false');
           });
-          if (label) label.textContent = skin === 'studio' ? 'run board' : 'document';
+          if (label) label.textContent = skin === 'studio' ? 'runs' : 'document';
         });
       });
     })();
