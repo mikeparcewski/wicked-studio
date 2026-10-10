@@ -6,6 +6,8 @@ import { usePostHocDeliverStore } from '../store/postHocDeliver.js';
 import { setRetryPrefill } from '../store/retryPrefill.js';
 import { useIsSystemWorkflow } from '../store/workflowCache.js';
 import { DeliverLift } from './DeliverLift.js';
+import { deliveryReceiptOf } from '../board/assuranceModel.js';
+import { AssuranceReceipt } from './session/AssuranceReceipt.js';
 import { deliverLift, textCarriesFailure } from './deliverLiftModel.js';
 import {
   DELIVERY_COLOR,
@@ -324,6 +326,8 @@ export function RunDelivery({ view, navigate }: Props): React.ReactElement {
   // wins over denial.reason — appended after " — " in the seeded problem statement. The 0.7.38
   // daemon serves no PR-review-thread route, so the run's own event log is the only source.
   const reviseContext = useMemo(() => reviseContextOf(events), [events]);
+  // core#850: the delivery's assurance receipt (the lift's own, else the gates' aggregate).
+  const receipt = useMemo(() => deliveryReceiptOf(view, events), [view, events]);
   // A rejected deliver unit's `denial_reason` (rendered VERBATIM below) carries the engine's refusal
   // the lift view also holds as `failure` — FRAMED (`Worker FAILED on unit N: …`) and excerpted
   // differently from `stepFailed.detail` (actor.rs: 300/500 vs 150/250 head+tail) — so the lift block
@@ -535,6 +539,7 @@ export function RunDelivery({ view, navigate }: Props): React.ReactElement {
         * card then explains it (the remedy included); absent entirely on a daemon that never sent a
         * deliver-ord frame. */}
       {lift !== null && <DeliverLift view={lift} omitFailure={liftOmitsFailure} />}
+      {receipt !== null && <AssuranceReceipt receipt={receipt} testId="run-delivery-assurance" />}
     </div>
   );
 }

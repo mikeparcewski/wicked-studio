@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.6.8",
   "counts": {
-    "files": 175,
-    "occurrences": 1991,
-    "static": 1777,
+    "files": 176,
+    "occurrences": 2008,
+    "static": 1790,
     "dynamic": 37,
     "computed": 6
   },
@@ -499,6 +499,42 @@
       "testId": "assumptions",
       "files": [
         "src/components/AssumptionsPanel.tsx"
+      ]
+    },
+    {
+      "testId": "assurance-kind",
+      "files": [
+        "src/components/session/AssuranceReceipt.tsx"
+      ]
+    },
+    {
+      "testId": "assurance-receipt",
+      "files": [
+        "src/components/session/AssuranceReceipt.tsx"
+      ]
+    },
+    {
+      "testId": "assurance-reduced",
+      "files": [
+        "src/components/session/AssuranceReceipt.tsx"
+      ]
+    },
+    {
+      "testId": "assurance-skipped",
+      "files": [
+        "src/components/session/AssuranceReceipt.tsx"
+      ]
+    },
+    {
+      "testId": "assurance-where",
+      "files": [
+        "src/components/session/AssuranceReceipt.tsx"
+      ]
+    },
+    {
+      "testId": "assurance-who",
+      "files": [
+        "src/components/session/AssuranceReceipt.tsx"
       ]
     },
     {
@@ -6308,6 +6344,12 @@
       ]
     },
     {
+      "testId": "run-delivery-assurance",
+      "files": [
+        "src/components/RunDelivery.tsx"
+      ]
+    },
+    {
       "testId": "run-delivery-badge",
       "files": [
         "src/components/RunDelivery.tsx"
@@ -6695,6 +6737,12 @@
       ]
     },
     {
+      "testId": "session-gate-assurance",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
       "testId": "session-gate-choice",
       "files": [
         "src/components/session/GateRow.tsx"
@@ -6773,6 +6821,18 @@
       ]
     },
     {
+      "testId": "session-gate-judge-signin",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-judge-wait",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
       "testId": "session-gate-note",
       "files": [
         "src/components/session/GateRow.tsx"
@@ -6786,6 +6846,12 @@
     },
     {
       "testId": "session-gate-raw-prompt",
+      "files": [
+        "src/components/session/GateRow.tsx"
+      ]
+    },
+    {
+      "testId": "session-gate-reduced",
       "files": [
         "src/components/session/GateRow.tsx"
       ]
@@ -6936,6 +7002,12 @@
     },
     {
       "testId": "session-proposal-acceptance",
+      "files": [
+        "src/components/session/ProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "session-proposal-assurance",
       "files": [
         "src/components/session/ProposalCard.tsx"
       ]
@@ -7144,6 +7216,12 @@
       "testId": "session-run-questions",
       "files": [
         "src/components/session/ThreadQuestions.tsx"
+      ]
+    },
+    {
+      "testId": "session-run-reduced",
+      "files": [
+        "src/components/session/AssuranceReceipt.tsx"
       ]
     },
     {
@@ -10982,7 +11060,8 @@
         "src/components/SkillsPage.tsx",
         "src/components/Tech.tsx",
         "src/components/WhatWhere.tsx",
-        "src/components/dashboardKit.tsx"
+        "src/components/dashboardKit.tsx",
+        "src/components/session/AssuranceReceipt.tsx"
       ]
     },
     {

@@ -921,6 +921,13 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
 .wk-session-gate-overflow > .wk-session-gate-choices { margin-top: 6px; }
 .wk-session-gate-prompt-summary::before, .wk-session-gate-detail-summary::before { content: '▸'; font-size: var(--text-sm); line-height: 1; color: var(--ink-dim); }
 .wk-session-gate-prompt-detail[open] > .wk-session-gate-prompt-summary::before, .wk-session-gate-detail[open] > .wk-session-gate-detail-summary::before { content: '▾'; }
+/* core#850: the assurance receipt — compact, neutral; the kind word carries the only tone. */
+.wk-assurance { margin: 0 0 var(--space-2); font-size: var(--text-xs); color: var(--ink-muted); overflow-wrap: anywhere; }
+.wk-assurance-lead, .wk-assurance-line { margin: 0; }
+.wk-assurance-kind { font-weight: var(--weight-semi); color: var(--ink-high); }
+.wk-assurance-kind--same-seat, .wk-assurance-kind--floor-only, .wk-assurance-kind--unchecked { color: var(--status-warn); }
+.wk-assurance-dim { color: var(--ink-muted); }
+.wk-assurance-reduced { display: inline-block; margin-left: 6px; padding: 0 6px; border: 1px solid var(--status-warn); border-radius: var(--radius-full); font-size: var(--text-2xs); font-weight: var(--weight-semi); color: var(--status-warn); }
 .wk-session-gate-detail-item { margin: 4px 0 0 14px; max-height: 180px; overflow: auto; font-size: var(--text-xs); color: var(--ink-muted); white-space: pre-wrap; overflow-wrap: anywhere; }
 .wk-session-gate-detail-summary { font-size: var(--text-sm); font-weight: var(--weight-semi); color: var(--ink-high); }
 .wk-session-gate-note { display: block; box-sizing: border-box; width: 100%; min-height: 84px; margin-top: 6px; padding: 6px 10px; resize: vertical; font: inherit; font-size: var(--text-sm); line-height: 1.45; color: var(--ink-high); background: var(--surface-card); border: 1px solid var(--border); border-radius: var(--radius-md); }
