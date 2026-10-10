@@ -1,3 +1,4 @@
+import { planRefusalWords } from '../board/planRefusal.js';
 import { create } from 'zustand';
 import { isFiller } from './narration.js';
 import type { CoreEvent } from '../api/types.js';
@@ -113,8 +114,12 @@ function summarize(event: CoreEvent): string {
         : event.type;
     case 'cliUsage':
       return typeof event.costUsd === 'number' ? `usage $${event.costUsd.toFixed(2)}` : 'usage reported (no cost)';
-    case 'error':
-      return typeof event.message === 'string' ? `error: ${event.message}` : 'error';
+    case 'error': {
+      if (typeof event.message !== 'string') return 'error';
+      // studio#665: a run a plan refusal failed mid-run names its cause (and the rule) in words.
+      const refusal = planRefusalWords(event.message);
+      return refusal !== null ? `error: the run stopped because ${refusal} — ${event.message}` : `error: ${event.message}`;
+    }
     default:
       return event.type;
   }

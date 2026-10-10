@@ -1,0 +1,27 @@
+// studio#665 (wicked-core#854 / #846): the plan-refusal tokens in the operator's words, keyed on the
+// engine's stable token wherever the text carries it (a plan.refused reason, a launch error, the
+// error frame of a run the refusal failed mid-run).
+
+import { describe, expect, it } from 'vitest';
+import { planRefusalWords, refusingRule } from '../src/board/planRefusal.js';
+
+describe('planRefusalWords', () => {
+  it('security_review_on_non_code_plan: with the rule when one asked, without when the plan authored it', () => {
+    expect(planRefusalWords('security_review_on_non_code_plan: step security_review … (rule TST-1002 requires it) …')).toBe(
+      'a security review was asked for on a run that writes no code (rule TST-1002 requires it) — its code-evidence check could never pass',
+    );
+    expect(planRefusalWords('security_review_on_non_code_plan: step s … (the plan authored it) …')).toBe(
+      'a security review was asked for on a run that writes no code — its code-evidence check could never pass',
+    );
+  });
+  it('finds the token inside a run error frame too (a mid-run raise fails the run)', () => {
+    const msg = 'run r1: the revised plan was refused: security_review_on_non_code_plan: step security_review … (rule TST-1003 requires it)';
+    expect(planRefusalWords(msg)).toMatch(/\(rule TST-1003 requires it\)/);
+    expect(refusingRule(msg)).toBe('TST-1003');
+  });
+  it('writes_nothing_on_code, and null for a token it does not word', () => {
+    expect(planRefusalWords('writes_nothing_on_code: step build …')).toBe('a step marked “writes nothing” is on a phase that changes code');
+    expect(planRefusalWords('pool_raised: step build raises its pool')).toBeNull();
+    expect(planRefusalWords('no repo bound')).toBeNull();
+  });
+});

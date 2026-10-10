@@ -78,6 +78,14 @@ export interface PreviewStepView {
   /** Drawn as "added by floor" — only ever true on a scored (non-pending) preview. */
   byFloor: boolean;
   floorReason: string | null;
+  /** (studio#665, wicked-core#854) The step changes no file in the run's tree (`writes_nothing`):
+   *  capture-learnings' `capture`, steering-author's `propose`. Drawn as "writes nothing". */
+  writesNothing: boolean;
+}
+
+/** A plan step's `writes_nothing` fact (wicked-core#854; typed in api-types after crew#928). */
+export function writesNothing(s: object): boolean {
+  return (s as { writes_nothing?: unknown }).writes_nothing === true;
 }
 
 export type LaunchPreviewView =
@@ -125,7 +133,7 @@ export function launchPreviewView(p: PlanPreviewResponse): LaunchPreviewView {
   if (p.graph === 'pending_pa_scope') {
     const steps = p.steps
       .filter((s) => s.id !== PA_SCOPE_STEP)
-      .map((s) => ({ id: s.id, catalog: s.catalog, byFloor: false, floorReason: null }));
+      .map((s) => ({ id: s.id, catalog: s.catalog, byFloor: false, floorReason: null, writesNothing: writesNothing(s) }));
     return {
       kind: 'pending-scope',
       steps,
@@ -152,7 +160,7 @@ export function launchPreviewView(p: PlanPreviewResponse): LaunchPreviewView {
 
 function stepView(s: TeamPlanStep): PreviewStepView {
   const byFloor = s.added_by === 'floor';
-  return { id: s.id, catalog: s.catalog, byFloor, floorReason: byFloor ? (s.floor_reason ?? null) : null };
+  return { id: s.id, catalog: s.catalog, byFloor, floorReason: byFloor ? (s.floor_reason ?? null) : null, writesNothing: writesNothing(s) };
 }
 
 /**

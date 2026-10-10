@@ -80,6 +80,19 @@ describe('the launch preview', () => {
     expect(v.pauseText).toMatch(/approve the plan/);
   });
 
+  it('a writes-nothing step is marked (studio#665, wicked-core#854); the rest are not', () => {
+    const capture = { catalog: 'produce', id: 'capture', added_by: 'plan', writes_nothing: true } as unknown as (typeof scored.steps)[number];
+    const v = launchPreviewView({ ...scored, steps: [...scored.steps, capture] });
+    expect(v.steps.map((s) => [s.id, s.writesNothing])).toEqual([
+      ['test_plan', false],
+      ['build', false],
+      ['review', false],
+      ['capture', true],
+    ]);
+    const p = launchPreviewView({ ...pending, steps: [...pending.steps, capture] });
+    expect(p.steps.find((s) => s.id === 'capture')?.writesNothing).toBe(true);
+  });
+
   it('high risk names the band in the pause reason', () => {
     const v = launchPreviewView({ ...scored, band: '70-100', high_risk: true, pause_reason: 'high_risk' });
     expect(v.pauseText).toMatch(/high risk \(band 70-100\)/);
