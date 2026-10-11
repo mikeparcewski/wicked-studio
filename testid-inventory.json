@@ -11,10 +11,10 @@
   "version": 1,
   "studioVersion": "0.7.4",
   "counts": {
-    "files": 193,
-    "occurrences": 2119,
-    "static": 1850,
-    "dynamic": 54,
+    "files": 194,
+    "occurrences": 2133,
+    "static": 1857,
+    "dynamic": 61,
     "computed": 17
   },
   "static": [
@@ -3470,9 +3470,33 @@
       ]
     },
     {
+      "testId": "learn-error",
+      "files": [
+        "src/components/learn/LearnPage.tsx"
+      ]
+    },
+    {
       "testId": "learn-input",
       "files": [
         "src/components/BrandLearn.tsx"
+      ]
+    },
+    {
+      "testId": "learn-loading",
+      "files": [
+        "src/components/learn/LearnPage.tsx"
+      ]
+    },
+    {
+      "testId": "learn-new",
+      "files": [
+        "src/components/learn/LearnPage.tsx"
+      ]
+    },
+    {
+      "testId": "learn-page",
+      "files": [
+        "src/components/learn/LearnPage.tsx"
       ]
     },
     {
@@ -3488,6 +3512,12 @@
       ]
     },
     {
+      "testId": "learn-repo",
+      "files": [
+        "src/components/learn/LearnPage.tsx"
+      ]
+    },
+    {
       "testId": "learn-status",
       "files": [
         "src/components/BrandLearn.tsx"
@@ -3497,6 +3527,18 @@
       "testId": "learn-submit",
       "files": [
         "src/components/BrandLearn.tsx"
+      ]
+    },
+    {
+      "testId": "learn-topics",
+      "files": [
+        "src/components/learn/LearnPage.tsx"
+      ]
+    },
+    {
+      "testId": "learn-write-error",
+      "files": [
+        "src/components/learn/LearnPage.tsx"
       ]
     },
     {
@@ -11389,9 +11431,51 @@
       ]
     },
     {
+      "pattern": "learn-auto-*",
+      "files": [
+        "src/components/learn/LearnPage.tsx"
+      ]
+    },
+    {
+      "pattern": "learn-custom-*",
+      "files": [
+        "src/components/learn/LearnPage.tsx"
+      ]
+    },
+    {
+      "pattern": "learn-every-*",
+      "files": [
+        "src/components/learn/LearnPage.tsx"
+      ]
+    },
+    {
+      "pattern": "learn-fresh-*",
+      "files": [
+        "src/components/learn/LearnPage.tsx"
+      ]
+    },
+    {
+      "pattern": "learn-menu-*",
+      "files": [
+        "src/components/learn/LearnPage.tsx"
+      ]
+    },
+    {
+      "pattern": "learn-next-*",
+      "files": [
+        "src/components/learn/LearnPage.tsx"
+      ]
+    },
+    {
       "pattern": "learn-source-*",
       "files": [
         "src/components/BrandLearn.tsx"
+      ]
+    },
+    {
+      "pattern": "learn-topic-*",
+      "files": [
+        "src/components/learn/LearnPage.tsx"
       ]
     },
     {
