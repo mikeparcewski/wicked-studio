@@ -12,8 +12,8 @@
   "studioVersion": "0.7.7",
   "counts": {
     "files": 198,
-    "occurrences": 2220,
-    "static": 1934,
+    "occurrences": 2224,
+    "static": 1937,
     "dynamic": 60,
     "computed": 19
   },
@@ -6471,6 +6471,12 @@
       ]
     },
     {
+      "testId": "repo-card-path",
+      "files": [
+        "src/components/RepositoriesPanel.tsx"
+      ]
+    },
+    {
       "testId": "repo-card-runs",
       "files": [
         "src/components/RepositoriesPanel.tsx"
@@ -6508,6 +6514,12 @@
     },
     {
       "testId": "repo-detail-page",
+      "files": [
+        "src/components/RepoDetailPage.tsx"
+      ]
+    },
+    {
+      "testId": "repo-detail-path",
       "files": [
         "src/components/RepoDetailPage.tsx"
       ]
@@ -7049,6 +7061,12 @@
     },
     {
       "testId": "run-delivery-reason",
+      "files": [
+        "src/components/RunDelivery.tsx"
+      ]
+    },
+    {
+      "testId": "run-delivery-worktree",
       "files": [
         "src/components/RunDelivery.tsx"
       ]
@@ -11482,13 +11500,13 @@
       ]
     },
     {
-      "testId": "watch-coverage-reasons",
+      "testId": "watch-coverage-error",
       "files": [
         "src/components/WatchLines.tsx"
       ]
     },
     {
-      "testId": "watch-coverage-toggle",
+      "testId": "watch-coverage-reasons",
       "files": [
         "src/components/WatchLines.tsx"
       ]
