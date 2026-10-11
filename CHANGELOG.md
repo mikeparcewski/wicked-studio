@@ -12,6 +12,23 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.7.5] — 2026-10-11
+
+studio works on a phone, on shared UI primitives; a tidier left nav and a Health page; the Learn page; editor plugins in Settings; Council size; the moved addresses are retired (X1).
+
+### Added
+- The Learn page (`/learn`): learned topics per repository, with freshness and refresh schedule controls (#696).
+- Settings → Developer → Editor plugins: lists the editor plugins (built in and installed) with what each can do and a button to open it in the editor test page, and adds **Create an editor plugin** (seeds `/workflow-editor-plugin` in the Desk composer). The editor test page lists the installed editors when none is named; the conformance host is off ⌘K (#691).
+- Settings → Reviews → Council size (1–5, default 3), saved as the daemon's `councilSize` (#694).
+
+### Changed
+- studio works on a phone: below 768 px the rail is a drawer behind a menu button. The shared UI primitives and tokens the section updates build on (#692, closes #680).
+- The left nav is tidier: Health is a link to a new `/health` page with a status dot and word; "Additional settings" is a real button with links only; a Workspace group sits under a separator; project headers have "New work in" and "Open" quick buttons; "+ Start something" is gone (#693).
+- Helpers no longer show a "(judge)" suffix in their names; text fields get a proper inset and readable typed text (#698).
+- Filter bars on Steering, Testing, Skills and Repositories use the shared field and chip styles, and empty filters are hidden (#695).
+- The slash-launch strip is one tidy row: the workflow is named once, the Repository and "Ask me" controls are labelled, "Deliver when done" is a switch, and a missing repository shows as validation on its control. The /runs/new form uses the same gate wording (#697).
+- **X1 — the moved addresses are retired.** `/work`, `/projects`, `/chats`, `/execute`, `/vibe`, `/demo`, `/make`, the bare `/runs`, `/runs/:id[/timeline]`, every `/p/:id/…` project-shell address and `/chat/…` no longer redirect; they show the not-found page, which keeps the typed address. Every link studio builds points at the current address (#690).
+
 ## [0.7.4] — 2026-10-10
 
 An archived run opens to its record (studio#675), and the workflow builder saves presets (X-MIG M11 studio B).
@@ -2007,7 +2024,8 @@ The merged interactive layer: wicked-interactive's UI moved into this skin (DES-
   `git subtree split` (92 commits).
 - The SPA as a pure HTTP/WS client of the wicked-crew daemon: runs, gates, live CoreEvents.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.4...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.5...HEAD
+[0.7.5]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.4...v0.7.5
 [0.7.4]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.3...v0.7.4
 [0.7.3]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.2...v0.7.3
 [0.7.2]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.1...v0.7.2
