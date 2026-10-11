@@ -4,6 +4,12 @@ import {
   type AggregateRead, type ProjectRequirementsResponse, type RequirementSummary,
 } from '../../api/product.js';
 import { sessionPath } from '../../board/sessionModel.js';
+import { readErrorKind } from '../../api/errors.js';
+import { PageFrame, SectionTitle } from '../ui/PageFrame.js';
+import { StateBanner, Skeleton, EmptyState } from '../ui/StateBanner.js';
+import { Switch } from '../ui/Switch.js';
+import { TechDetails } from '../ui/TechDetails.js';
+import { requirementReadWords } from './ProjectAggregates.js';
 import { productPath } from '../../hooks/useRoute.js';
 import { useProjectsStore } from '../../store/projects.js';
 
@@ -25,16 +31,6 @@ export const COMPOSE_MAX = 40;
 const PAGE = 50;
 const INSTRUCTIONS_MAX = 500;
 
-const CSS = {
-  page: { maxWidth: '960px', padding: '24px 32px', display: 'flex', flexDirection: 'column', gap: '16px' },
-  head: { fontSize: 'var(--text-2xs)', fontWeight: 'var(--weight-bold)', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--ink-muted)', margin: '0 0 8px' },
-  line: { fontSize: 'var(--text-xs)', color: 'var(--ink-muted)', margin: 0 },
-  bad: { fontSize: 'var(--text-xs)', color: 'var(--status-fail)', margin: 0 },
-  list: { display: 'flex', flexDirection: 'column', gap: '2px', background: 'var(--surface-card)', border: '1px solid var(--surface-raised)', borderRadius: 'var(--radius-lg)', padding: '4px', listStyle: 'none', margin: 0 },
-  row: { display: 'flex', alignItems: 'baseline', gap: '10px', padding: '6px 8px', fontSize: 'var(--text-xs)', color: 'var(--ink-high)' },
-  dim: { color: 'var(--ink-dim)' },
-} as const satisfies Record<string, React.CSSProperties>;
-
 const selKey = (repoId: string, key: string): string => `${repoId}\u0000${key}`;
 
 export function ProductPage({ navigate, search }: { navigate: (path: string, opts?: { replace?: boolean }) => void; search: string }): React.ReactElement {
@@ -44,43 +40,39 @@ export function ProductPage({ navigate, search }: { navigate: (path: string, opt
   useEffect(() => { if (useProjectsStore.getState().projects.length === 0) void useProjectsStore.getState().load(); }, []);
   const choices = useMemo(() => projects.filter((p) => p.id !== 'default' && p.status !== 'archived'), [projects]);
 
+  const error = useProjectsStore((s) => s.error);
   return (
-    <div data-testid="product-page" style={CSS.page}>
-      <div>
-        <h1 style={{ fontSize: 'var(--text-lg)', fontWeight: 600, margin: '0 0 4px', color: 'var(--ink-high)' }}>Product</h1>
-        <p style={CSS.line}>What a project is building: its requirements across its repositories, drafted into epics, features and stories by a governed run.</p>
-      </div>
-      <label style={{ ...CSS.line, display: 'flex', alignItems: 'center', gap: '8px' }}>
-        Project
-        <select
-          data-testid="product-project"
-          className="wk-field"
-          value={projectId ?? ''}
-          onChange={(e) => navigate(productPath(e.target.value === '' ? null : e.target.value), { replace: true })}
-        >
-          <option value="">{loading && choices.length === 0 ? 'Loading projects…' : 'Choose a project'}</option>
-          {choices.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-          {projectId !== null && !choices.some((p) => p.id === projectId) && <option value={projectId}>{projectId}</option>}
-        </select>
-      </label>
-      {projectId === null
-        ? <p data-testid="product-no-project" style={CSS.line}>{!loading && choices.length === 0 ? 'No project yet. A project groups the repositories a product is built from; create one on See everything › Projects.' : 'Choose the project whose requirements to work with.'}</p>
-        : <ProjectProduct key={projectId} projectId={projectId} navigate={navigate} />}
-    </div>
+    <PageFrame data-testid="product-page" title="Product" intro="Choose a project to turn its requirements into a draft plan.">
+      {error !== null && projectId === null && <StateBanner kind={readErrorKind(error)} what="projects" error={error} onRetry={() => void useProjectsStore.getState().load()} />}
+      <section className="wk-card wk-pg-proj-stack">
+        <label className="wk-pg-proj-field">Project
+          <select data-testid="product-project" className="wk-field" value={projectId ?? ''}
+            onChange={(e) => navigate(productPath(e.target.value === '' ? null : e.target.value), { replace: true })}>
+            <option value="">{loading && choices.length === 0 ? 'Loading projects…' : 'Choose a project'}</option>
+            {choices.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            {projectId !== null && !choices.some((p) => p.id === projectId) && <option value={projectId}>{loading ? 'Loading projects…' : 'This project'}</option>}
+          </select>
+        </label>
+        {projectId === null && (loading ? <Skeleton rows={1} variant="line" /> : error === null && <EmptyState data-testid="product-no-project" title={choices.length === 0 ? 'No projects yet' : 'Choose the project to work with'} body={choices.length === 0 ? 'Create a project to group its repositories and requirements.' : 'Its requirements and draft tools will appear here.'} />)}
+      </section>
+      {projectId !== null && <ProjectProduct key={projectId} projectId={projectId} navigate={navigate} projectsError={error} />}
+    </PageFrame>
   );
 }
 
-function ProjectProduct({ projectId, navigate }: { projectId: string; navigate: (path: string) => void }): React.ReactElement {
+function ProjectProduct({ projectId, navigate, projectsError }: { projectId: string; navigate: (path: string) => void; projectsError: string | null }): React.ReactElement {
   const [draftQ, setDraftQ] = useState('');
   const [q, setQ] = useState('');
   const [offset, setOffset] = useState(0);
   const [got, setGot] = useState<{ at: string; read: AggregateRead<ProjectRequirementsResponse> } | null>(null);
+  const [attempt, setAttempt] = useState(0);
+  const retry = (): void => { setGot(null); setAttempt((n) => n + 1); };
   const at = `${q}\u0000${offset}`;
   useEffect(() => {
     let cancelled = false;
     void getProjectRequirements(projectId, { q, offset, limit: PAGE }).then((read) => { if (!cancelled) setGot({ at, read }); });
     return () => { cancelled = true; };
-  }, [projectId, q, offset, at]);
+  }, [projectId, q, offset, at, attempt]);
   const read = got !== null && got.at === at ? got.read : null;
 
   const [chosen, setChosen] = useState<ReadonlyMap<string, { repoId: string; key: string; title: string }>>(new Map());
@@ -121,9 +113,7 @@ function ProjectProduct({ projectId, navigate }: { projectId: string; navigate: 
   };
 
   const projectHref = `/projects/${encodeURIComponent(projectId)}`;
-  if (read !== null && read.state === 'absent') {
-    return <p data-testid="product-absent" style={CSS.line}>This daemon does not serve project requirements (it predates crew#371). Upgrade wicked-crew to use the Product view.</p>;
-  }
+
   const body = read?.state === 'ok' ? read.body : null;
   const total = body?.totals.total ?? 0;
   const matching = q === '' ? 'requirements' : `matching “${q}”`;
@@ -134,100 +124,70 @@ function ProjectProduct({ projectId, navigate }: { projectId: string; navigate: 
       ? `Past the last of ${total} ${matching} — the list shrank; go back a page`
       : `${body.offset + 1}–${Math.min(body.offset + body.limit, total)} of ${total} ${matching}`} · ${body.totals.ok} of ${body.totals.repos} ${body.totals.repos === 1 ? 'repository' : 'repositories'} read`;
 
+  const noRepo = body !== null && (body.rows.length === 0 || body.totals.repos === 0);
+  const unavailable = read === null || read.state !== 'ok';
+  const searchReason = noRepo ? 'Attach a repository to this project first.' : unavailable ? 'Wait until requirements can be read.' : null;
+  const draftReason = searchReason ?? (busy ? 'Starting your draft…' : chosen.size === 0 ? 'Choose at least one requirement to draft from.' : null);
+  const rowErrors = body?.rows.filter((r) => r.state === 'error').map(rowWhy).join('\n') || null;
+  const errors = [projectsError, read?.state === 'failed' ? read.why : null, refusal, rowErrors].filter((e): e is string => e !== null);
+  const error = errors.find((e) => readErrorKind(e) === 'offline') ?? errors[0];
+  const attachHref = `/repos/new?project=${encodeURIComponent(projectId)}`;
   return (
     <>
-      <p style={CSS.line}>
-        Coverage and the domain model for this project are on{' '}
-        <a href={projectHref} onClick={(e) => { e.preventDefault(); navigate(projectHref); }} className="wk-since-toggle" data-testid="product-project-link">its project page</a>.
-      </p>
-
-      <section data-testid="product-requirements" aria-labelledby="product-requirements-head" data-state={read?.state ?? 'loading'}>
-        <h2 id="product-requirements-head" style={CSS.head}>Requirements</h2>
-        <form
-          onSubmit={(e) => { e.preventDefault(); setOffset(0); setQ(draftQ.trim()); }}
-          style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}
-        >
-          <input data-testid="product-search" type="search" className="wk-field" aria-label="Search requirements" placeholder="Search requirements" value={draftQ} onChange={(e) => setDraftQ(e.target.value)} style={{ padding: '0 8px', minWidth: '280px' }} />
-          <button type="submit" className="wk-prop-btn wk-prop-btn--ghost">Search</button>
-        </form>
-        {/* One status region, mounted throughout, so a screen reader hears each search / page result
-            (codex r2 on #157). */}
-        <p data-testid="product-status" role="status" className="sr-only">
-          {read === null ? 'Reading requirements…'
-            : read.state === 'failed' ? 'The requirements could not be read.'
-            : body === null || body.rows.length === 0 ? 'No repository in this project yet.'
-            : totalsLine}
-        </p>
-        {read === null ? (
-          <p data-testid="product-loading" style={CSS.line}>Reading the project's requirements…</p>
-        ) : read.state === 'failed' ? (
-          <p data-testid="product-error" role="alert" style={CSS.bad}>The project's requirements could not be read — {read.why}</p>
-        ) : body !== null && body.rows.length === 0 ? (
-          <p data-testid="product-empty" style={CSS.line}>No repository in this project yet, so there are no requirements. Attach one on <a href={projectHref} onClick={(e) => { e.preventDefault(); navigate(projectHref); }} className="wk-since-toggle">the project page</a>.</p>
-        ) : body !== null && (
-          <>
-            <p data-testid="product-totals" style={{ ...CSS.line, marginBottom: '8px' }}>{totalsLine}</p>
-            {body.rows.map((row) => (
-              row.state !== 'ok' ? (
-                <p key={row.repo.id} data-testid="product-repo-unread" data-repo={row.repo.id} data-state={row.state} style={{ ...CSS.line, marginBottom: '6px' }}>
-                  <b>{row.repo.name ?? row.repo.id}</b> — {rowWhy(row)}
-                </p>
-              ) : row.items.length > 0 ? (
-                <div key={row.repo.id} data-testid="product-repo" data-repo={row.repo.id} style={{ marginBottom: '8px' }}>
-                  <p style={{ ...CSS.line, margin: '0 0 4px' }}><b>{row.repo.name ?? row.repo.id}</b> · {row.total} of {row.corpus}</p>
-                  <ul style={CSS.list}>
-                    {row.items.map((r) => {
-                      const k = selKey(row.repo.id, r.key);
-                      const on = chosen.has(k);
-                      return (
-                        <li key={r.key} data-testid="product-requirement" data-repo={row.repo.id} data-key={r.key} style={CSS.row}>
-                          <input type="checkbox" checked={on} disabled={!on && full} onChange={() => toggle(row.repo.id, r)} aria-label={`Choose ${r.reqId} ${r.title}`} data-testid="product-requirement-pick" />
-                          <span style={{ fontFamily: 'var(--font-mono)', ...CSS.dim }}>{r.reqId}</span>
-                          <span>{r.title}</span>
-                          <span style={CSS.dim}>{r.domain}{r.risk ? ' · risk' : ''}</span>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </div>
-              ) : null
-            ))}
-            {/* Previous stays while the window is past the start, even when the corpus shrank under it. */}
-            {(total > body.limit || body.offset > 0) && (
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <button type="button" data-testid="product-prev" disabled={body.offset === 0} onClick={() => setOffset(Math.max(0, body.offset - body.limit))} className="wk-prop-btn wk-prop-btn--ghost">Previous</button>
-                <button type="button" data-testid="product-next" disabled={body.offset + body.limit >= total} onClick={() => setOffset(body.offset + body.limit)} className="wk-prop-btn wk-prop-btn--ghost">Next</button>
+      {error !== undefined && <StateBanner data-testid={refusal !== null ? 'product-compose-error' : 'product-error'} kind={readErrorKind(error)} what={refusal !== null ? 'the draft' : 'requirements'} error={errors.join('\n')} onRetry={() => { retry(); setRefusal(null); if (projectsError !== null) void useProjectsStore.getState().load(); }} />}
+      <p className="wk-pg-proj-note">See coverage and domains on <a href={projectHref} onClick={(e) => { e.preventDefault(); navigate(projectHref); }} className="wk-link" data-testid="product-project-link">its project page</a>.</p>
+      {read?.state === 'absent' ? <EmptyState data-testid="product-absent" title="Product requirements aren’t available yet" body="Update Studio’s service to use this view." /> : <>
+        {noRepo && <div className="wk-pg-proj-actions"><a className="wk-btn wk-btn--primary" href={attachHref} onClick={(e) => { e.preventDefault(); navigate(attachHref); }}>Attach a repository</a></div>}
+        <section data-testid="product-requirements" aria-label="Requirements" data-state={read?.state ?? 'loading'} className="wk-card wk-pg-proj-stack">
+          <SectionTitle>Requirements</SectionTitle>
+          <form onSubmit={(e) => { e.preventDefault(); if (searchReason !== null) return; setOffset(0); setQ(draftQ.trim()); }} className="wk-pg-proj-search">
+            <label className="wk-pg-proj-field">Search requirements<input data-testid="product-search" type="search" className="wk-field" placeholder="Search requirements" value={draftQ} onChange={(e) => setDraftQ(e.target.value)} disabled={searchReason !== null} aria-describedby={searchReason !== null ? 'product-search-note' : undefined} /></label>
+            <button type="submit" className="wk-btn wk-btn--secondary" disabled={searchReason !== null} aria-describedby={searchReason !== null ? 'product-search-note' : undefined}>Search</button>
+          </form>
+          {searchReason !== null && <p id="product-search-note" className="wk-field-note">{searchReason}</p>}
+          <p data-testid="product-status" role="status" className="sr-only">{read === null ? 'Reading requirements…' : read.state === 'failed' ? 'The requirements could not be read.' : noRepo ? 'No repository in this project yet.' : totalsLine}</p>
+          {read === null ? <Skeleton data-testid="product-loading" /> : noRepo ? <EmptyState data-testid="product-empty" title="No repository in this project yet" body="Attach a repository to see its requirements." /> : body !== null && <>
+            <p data-testid="product-totals" className="wk-pg-proj-note">{totalsLine}</p>
+            {total === 0 && rowErrors === null && <EmptyState title={q === '' ? 'No requirements yet' : 'No matching requirements'} body={q === '' ? 'Index the attached repositories to build their requirements maps.' : 'Try another search.'} />}
+            {body.rows.map((row) => row.state !== 'ok' ? (
+              <div key={row.repo.id} data-testid="product-repo-unread" data-repo={row.repo.id} data-state={row.state}>
+                <p className="wk-pg-proj-note">{requirementReadWords(row)}</p><TechDetails text={rowWhy(row)} />
               </div>
-            )}
-          </>
-        )}
-      </section>
-
-      <section data-testid="product-compose" aria-labelledby="product-compose-head">
-        <h2 id="product-compose-head" style={CSS.head}>Draft epics</h2>
-        <p data-testid="product-chosen" style={{ ...CSS.line, marginBottom: '8px' }}>
-          {chosen.size === 0
-            ? `Choose the requirements to draft from (at most ${COMPOSE_MAX}).`
-            : `${chosen.size} ${chosen.size === 1 ? 'requirement' : 'requirements'} chosen${full ? ` — the most one draft takes` : ''}: ${[...chosen.values()].map((c) => c.title).join(' · ')}`}
-          {chosen.size > 0 && <> {' '}<button type="button" data-testid="product-clear" onClick={() => setChosen(new Map())} className="wk-since-toggle">Clear</button></>}
-        </p>
-        <textarea
-          data-testid="product-instructions"
-          className="wk-field"
-          aria-label="Instructions for the draft"
-          rows={2}
-          maxLength={INSTRUCTIONS_MAX}
-          value={instructions}
-          onChange={(e) => setInstructions(e.target.value)}
-          placeholder="Optional: how to group them (e.g. one epic per domain, stories small enough for a day)"
-          style={{ width: '100%', marginBottom: '8px', padding: '6px 8px' }}
-        />
-        {refusal !== null && <p data-testid="product-compose-error" role="alert" style={{ ...CSS.bad, marginBottom: '8px' }}>The draft was not started — {refusal}</p>}
-        <button type="button" data-testid="product-draft" disabled={busy || chosen.size === 0} onClick={() => void draft()} className="wk-prop-btn wk-prop-btn--primary">
-          {busy ? 'Starting the draft…' : 'Draft epics'}
-        </button>
-        <p style={{ ...CSS.line, marginTop: '6px' }}>Starts a governed run: a draft, an independent review, then your approval. It opens in its session.</p>
-      </section>
+            ) : row.items.length > 0 ? (
+              <div key={row.repo.id} data-testid="product-repo" data-repo={row.repo.id}>
+                <p className="wk-pg-proj-note">{row.repo.name ?? 'Unnamed repository'} · {row.total} of {row.corpus}</p>
+                <ul className="wk-pg-proj-list">
+                  {row.items.map((r) => {
+                    const k = selKey(row.repo.id, r.key); const on = chosen.has(k);
+                    return <li key={r.key} data-testid="product-requirement" data-repo={row.repo.id} data-key={r.key} className="wk-list-row wk-pg-proj-pick-row">
+                      <Switch label={r.title} checked={on} disabled={!on && full ? `A draft takes at most ${COMPOSE_MAX} requirements.` : null} onChange={() => toggle(row.repo.id, r)} data-testid="product-requirement-pick" />
+                      <p className="wk-list-row-meta">{r.reqId} · {r.domain}{r.risk ? ' · At risk' : ''}</p>
+                    </li>;
+                  })}
+                </ul>
+              </div>
+            ) : null)}
+            {full && <p className="wk-field-note">A draft takes at most {COMPOSE_MAX} requirements. Clear a choice to add another.</p>}
+            {(total > body.limit || body.offset > 0) && <>
+              <div className="wk-pg-proj-actions">
+                <button type="button" data-testid="product-prev" disabled={body.offset === 0} onClick={() => setOffset(Math.max(0, body.offset - body.limit))} className="wk-btn wk-btn--secondary">Previous</button>
+                <button type="button" data-testid="product-next" disabled={body.offset + body.limit >= total} onClick={() => setOffset(body.offset + body.limit)} className="wk-btn wk-btn--secondary">Next</button>
+              </div>
+              {(body.offset === 0 || body.offset + body.limit >= total) && <p className="wk-field-note">{body.offset === 0 ? 'You’re on the first page.' : 'You’re on the last page.'}</p>}
+            </>}
+          </>}
+        </section>
+        <section data-testid="product-compose" aria-label="Draft epics" className="wk-card wk-pg-proj-stack">
+          <SectionTitle>Draft epics</SectionTitle>
+          <p data-testid="product-chosen" className="wk-pg-proj-note">{chosen.size === 0 ? `Choose the requirements to draft from (at most ${COMPOSE_MAX}).` : `${chosen.size} ${chosen.size === 1 ? 'requirement' : 'requirements'} chosen${full ? ' — the most one draft takes' : ''}: ${[...chosen.values()].map((c) => c.title).join(' · ')}`}
+            {chosen.size > 0 && <> <button type="button" data-testid="product-clear" onClick={() => setChosen(new Map())} className="wk-btn wk-btn--quiet">Clear</button></>}
+          </p>
+          <label className="wk-pg-proj-field">Instructions for the draft<textarea data-testid="product-instructions" className="wk-field" rows={2} maxLength={INSTRUCTIONS_MAX} value={instructions} onChange={(e) => setInstructions(e.target.value)} placeholder="Optional: describe how to group the requirements" disabled={searchReason !== null} aria-describedby={searchReason !== null ? 'product-draft-note' : undefined} /></label>
+          <div className="wk-pg-proj-actions"><button type="button" data-testid="product-draft" disabled={draftReason !== null} aria-describedby={draftReason !== null ? 'product-draft-note' : undefined} onClick={() => void draft()} className={`wk-btn ${noRepo ? 'wk-btn--secondary' : 'wk-btn--primary'}`}>{busy ? 'Starting the draft…' : 'Draft epics'}</button></div>
+          {draftReason !== null && <p id="product-draft-note" className="wk-field-note">{draftReason}</p>}
+          <p className="wk-pg-proj-note">Your draft opens in a session for review and approval.</p>
+        </section>
+      </>}
     </>
   );
 }

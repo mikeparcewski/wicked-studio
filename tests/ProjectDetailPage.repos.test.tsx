@@ -19,7 +19,11 @@ const attachProjectMember = vi.fn();
 const detachProjectMember = vi.fn();
 
 vi.mock('../src/api/client.js', () => ({
+  apiFetch: (path: string) => Promise.resolve(path.includes('/coverage')
+    ? { totals: { repos: 0, ok: 0, behavior_bearing: 0, resolved: 0, coverage: null }, rows: [] }
+    : { totals: { repos: 0, ok: 0, domains: 0, requirements: 0, entities: 0 }, rows: [], merged: [] }),
   api: {
+    getRun: (id: string) => Promise.resolve({ run: { session: { id, problem: `Session ${id}`, status: 'completed' }, units: [] } }),
     getProject: (...a: unknown[]) => getProject(...a),
     getProjectActivity: (...a: unknown[]) => getProjectActivity(...a),
     listRepos: (...a: unknown[]) => listRepos(...a),
@@ -99,7 +103,7 @@ describe('ProjectDetailPage — Repositories section (studio#207)', () => {
     expect(rows.map((r) => r.getAttribute('data-repo'))).toEqual(['studio-api', 'studio-web']);
     // The run member is a Member, not a repository — and the generic list no longer double-lists repos.
     expect(within(section).queryByText('r-1')).toBeNull();
-    expect(screen.getByText('Members (1)')).toBeInTheDocument();
+    expect(screen.getByText((_, el) => el?.classList.contains('wk-statline') === true && el.textContent === '1 session')).toBeInTheDocument();
     // F-2R2-004: a project WITH repo members warms the one session cache on mount (the rows'
     // engine findings live on the registry record) — exactly once; the picker's gesture then
     // finds it warm and fetches nothing more.
@@ -109,7 +113,7 @@ describe('ProjectDetailPage — Repositories section (studio#207)', () => {
   it('the empty state names the consequence (a project-scoped test cannot launch)', async () => {
     getProject.mockResolvedValue(detail('proj-1', []));
     const section = await renderPage();
-    expect(within(section).getByTestId('project-repos-empty')).toHaveTextContent('project-scoped test cannot launch');
+    expect(within(section).getByTestId('project-repos-empty')).toHaveTextContent('before running this project’s tests');
     expect(within(section).queryByTestId('project-repo-row')).toBeNull();
   });
 
@@ -153,7 +157,7 @@ describe('ProjectDetailPage — Repositories section (studio#207)', () => {
     expect(within(section).getByTestId('project-repo-option')).toHaveAttribute('data-repo', 'studio-web');
 
     fireEvent.change(search, { target: { value: 'nope' } });
-    expect(within(section).getByTestId('project-repo-options-empty')).toHaveTextContent('no registered repo matches');
+    expect(within(section).getByTestId('project-repo-options-empty')).toHaveTextContent('No registered repository matches');
   });
 
   it('a failed attach surfaces the error and adds no row', async () => {
@@ -219,18 +223,18 @@ describe('ProjectDetailPage — Repositories section (studio#207)', () => {
     attachProjectMember.mockResolvedValue({ member: member('proj-1', 'crew') });
     detachProjectMember.mockResolvedValue({ ok: true });
     const section = await renderPage();
-    expect(screen.getByText('Members (1)')).toBeInTheDocument();
+    expect(screen.getByText((_, el) => el?.classList.contains('wk-statline') === true && el.textContent === '1 session')).toBeInTheDocument();
 
     fireEvent.focus(within(section).getByTestId('project-repo-search'));
     fireEvent.click((await within(section).findAllByTestId('project-repo-option')).find((o) => o.getAttribute('data-repo') === 'crew')!);
     await waitFor(() => expect(within(section).getAllByTestId('project-repo-row')).toHaveLength(2));
-    expect(screen.getByText('Members (1)')).toBeInTheDocument(); // the run member survived the attach
+    expect(screen.getByText((_, el) => el?.classList.contains('wk-statline') === true && el.textContent === '1 session')).toBeInTheDocument(); // the run member survived the attach
 
     const row = within(section).getAllByTestId('project-repo-row').find((r) => r.getAttribute('data-repo') === 'studio-api')!;
     fireEvent.click(within(row).getByTestId('project-repo-detach'));
     fireEvent.click(within(row).getByTestId('project-repo-detach-confirm'));
     await waitFor(() => expect(within(section).getAllByTestId('project-repo-row')).toHaveLength(1));
-    expect(screen.getByText('Members (1)')).toBeInTheDocument(); // and the detach
+    expect(screen.getByText((_, el) => el?.classList.contains('wk-statline') === true && el.textContent === '1 session')).toBeInTheDocument(); // and the detach
   });
 
   it('a membership change made elsewhere mid-attach survives: a run member detached through the Members list stays gone', async () => {
@@ -239,7 +243,7 @@ describe('ProjectDetailPage — Repositories section (studio#207)', () => {
     attachProjectMember.mockReturnValue(attach.promise);
     detachProjectMember.mockResolvedValue({ ok: true });
     const section = await renderPage();
-    expect(screen.getByText('Members (1)')).toBeInTheDocument();
+    expect(screen.getByText((_, el) => el?.classList.contains('wk-statline') === true && el.textContent === '1 session')).toBeInTheDocument();
 
     fireEvent.focus(within(section).getByTestId('project-repo-search'));
     fireEvent.click((await within(section).findAllByTestId('project-repo-option')).find((o) => o.getAttribute('data-repo') === 'crew')!);
@@ -247,16 +251,17 @@ describe('ProjectDetailPage — Repositories section (studio#207)', () => {
 
     // While the attach is in flight, the generic Members list detaches the run member —
     // a membership change the section's mutation lock does not (and should not) cover.
-    const runRow = screen.getByText('r-1').parentElement!;
+    const runRow = (await screen.findByText('Session r-1')).closest('.wk-list-row')! as HTMLElement;
     fireEvent.mouseEnter(runRow);
-    fireEvent.click(within(runRow).getByRole('button', { name: 'Detach' }));
+    fireEvent.click(within(runRow).getByRole('button', { name: 'More actions for Session r-1' }));
+    fireEvent.click(within(runRow).getByRole('menuitem', { name: 'Remove from project' }));
     await waitFor(() => expect(detachProjectMember).toHaveBeenCalledWith('proj-1', 'proj-1:crew.run:r-1'));
-    expect(screen.getByText('Members (0)')).toBeInTheDocument();
+    expect(screen.getByText('No sessions yet')).toBeInTheDocument();
 
     // The attach applies to the membership held NOW: the repo joins, the run member does not come back.
     await settle(() => attach.resolve({ member: member('proj-1', 'crew') }));
     expect(within(section).getAllByTestId('project-repo-row').map((r) => r.getAttribute('data-repo'))).toEqual(['studio-api', 'crew']);
-    expect(screen.getByText('Members (0)')).toBeInTheDocument();
+    expect(screen.getByText('No sessions yet')).toBeInTheDocument();
   });
 
   it('an attach that resolves after navigating to another project never touches that project\'s membership', async () => {
@@ -278,14 +283,14 @@ describe('ProjectDetailPage — Repositories section (studio#207)', () => {
     await waitFor(() => expect(getProject).toHaveBeenCalledWith('proj-2'));
     const second = await screen.findByTestId('project-repos');
     await waitFor(() => expect(within(second).getAllByTestId('project-repo-row').map((r) => r.getAttribute('data-repo'))).toEqual(['studio-web']));
-    expect(screen.getByText('Members (1)')).toBeInTheDocument();
+    expect(screen.getByText((_, el) => el?.classList.contains('wk-statline') === true && el.textContent === '1 session')).toBeInTheDocument();
 
     // proj-1's attach lands with proj-2 on screen: dropped, and proj-2 keeps exactly its own members.
     await settle(() => attach.resolve({ member: member('proj-1', 'crew') }));
     const section = screen.getByTestId('project-repos');
     expect(section).toHaveAttribute('data-count', '1');
     expect(within(section).getByTestId('project-repo-row')).toHaveAttribute('data-repo', 'studio-web');
-    expect(screen.getByText('Members (1)')).toBeInTheDocument();
+    expect(screen.getByText((_, el) => el?.classList.contains('wk-statline') === true && el.textContent === '1 session')).toBeInTheDocument();
     expect(screen.queryByTestId('project-repo-error')).toBeNull();
   });
 
@@ -309,7 +314,7 @@ describe('ProjectDetailPage — Repositories section (studio#207)', () => {
     getProjectActivity.mockResolvedValue({ entries: [], nextCursor: null, projectId: 'default' });
     render(<ProjectDetailPage projectId="default" navigate={() => {}} />);
     await waitFor(() => expect(getProject).toHaveBeenCalledWith('default'));
-    await screen.findByText('Members (1)');
+    await screen.findByText((_, el) => el?.classList.contains('wk-statline') === true && el.textContent === '1 session');
 
     expect(screen.queryByTestId('project-repos')).toBeNull();
     expect(screen.queryByTestId('project-repo-search')).toBeNull();

@@ -698,6 +698,13 @@
     "composer-launch-workflow": "composer-chip",
     "everything-retry": "everything-failed",
     "runs-row-open": "runs-row-menu",
-    "runs-row-look": "runs-row-menu"
+    "runs-row-look": "runs-row-menu",
+    "stat-active": "repos-kpis",
+    "stat-failed": "repos-kpis",
+    "stat-gaps": "repos-kpis",
+    "stat-ready": "repos-kpis",
+    "stat-repo-runs": "repos-kpis",
+    "stat-repos": "repos-kpis",
+    "repo-graph-retry": "repo-graph"
   }
 }

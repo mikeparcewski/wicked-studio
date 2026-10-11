@@ -1,14 +1,19 @@
 import { repoGraphState, repoGraphWords } from '../board/repoGraphState.js';
 import { useEffect, useState, useRef } from 'react';
 import { api } from '../api/client.js';
-import { RepoFindings } from './RepoFindings.js';
+import { RepoFindings, findingNeedsReonboard } from './RepoFindings.js';
 import { CommitCadence } from './CommitCadence.js';
 import { HotspotsView } from './HotspotsView.js';
 import { LanguageBar } from './LanguageBar.js';
 import { RequirementsModal } from './RequirementsModal.js';
 import type { CodeGraphData, GitCommit, GitContributor, RepoEntry, SessionView } from '../api/types.js';
-import { RunLink } from './RunLink.js';
-import { useDisplayPath } from '../hooks/useHomePath.js';
+import { statusWord } from '../board/statusWords.js';
+import { relTime } from '../board/relTime.js';
+import { plainRunTitle } from '../board/deskWords.js';
+import { useMembershipStore } from '../store/membership.js';
+import { useDisplayText } from '../hooks/useHomePath.js';
+import { readErrorKind } from '../api/errors.js';
+import { EmptyState, PageFrame, SectionTitle, Skeleton, StateBanner, StatLine, TechDetails } from './ui/index.js';
 
 interface Props {
   repoId: string;
@@ -50,7 +55,7 @@ export function dedupeContributors(rows: readonly GitContributor[]): GitContribu
 }
 
 export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: Props): React.ReactElement {
-  const showPath = useDisplayPath();
+  const showPath = useDisplayText();
   const [requirementsOpen, setRequirementsOpen] = useState(false);
   const [repo, setRepo] = useState<RepoEntry | null>(null);
   const [runs, setRuns] = useState<SessionView[]>([]);
@@ -63,10 +68,11 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
   const [commits, setCommits] = useState<GitCommit[] | null>(null);
   const [contributors, setContributors] = useState<GitContributor[] | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<unknown>(null);
+  const [reload, setReload] = useState(0);
   const [expanded, setExpanded] = useState(false);
   const [onboarding, setOnboarding] = useState(false);
-  const [onboardError, setOnboardError] = useState<string | null>(null);
+  const [onboardError, setOnboardError] = useState<unknown>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -83,7 +89,7 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
       ).catch(() => [] as SessionView[]),
       api.getRepoGraph(repoId)
         .then(({ graph: g }) => ({ g, failed: null as string | null }))
-        .catch((e: unknown) => ({ g: null, failed: e instanceof Error && e.message !== '' ? e.message : 'the daemon did not answer' })),
+        .catch((e: unknown) => ({ g: null, failed: e instanceof Error && e.message !== '' ? e.message : 'Studio’s service did not answer' })),
     ]).then(([r, rs, gr]) => {
       if (cancelled) return;
       setRepo(r);
@@ -92,13 +98,13 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
       setGraphFailed(gr.failed);
     }).catch((err: unknown) => {
       if (cancelled) return;
-      setError(err instanceof Error ? err.message : 'Failed to load repo');
+      setError(err);
     }).finally(() => { if (!cancelled) setLoading(false); });
     // Git sections are decoupled — they don't block the page skeleton
     api.getRepoGitHistory(repoId).then(({ commits: c }) => { if (!cancelled) setCommits(c); }).catch(() => {});
     api.getRepoContributors(repoId).then(({ contributors: c }) => { if (!cancelled) setContributors(dedupeContributors(c)); }).catch(() => {});
     return () => { cancelled = true; };
-  }, [repoId]);
+  }, [repoId, reload]);
 
   /** "Try again" on a failed graph read: re-reads the graph alone, for the repo it was pressed on. */
   function retryGraph(): void {
@@ -106,34 +112,49 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
     api.getRepoGraph(forRepo)
       .then(({ graph: g }) => { if (repoRef.current === forRepo) { setGraph(g); setGraphFailed(null); } })
       .catch((e: unknown) => {
-        if (repoRef.current === forRepo) setGraphFailed(e instanceof Error && e.message !== '' ? e.message : 'the daemon did not answer');
+        if (repoRef.current === forRepo) setGraphFailed(e instanceof Error && e.message !== '' ? e.message : 'Studio’s service did not answer');
       });
   }
 
   if (loading) {
     return (
-      <div className="p-8 font-mono text-sm" style={{ color: 'var(--ink-dim)' }}>Loading…</div>
+      <div className="wk-pg-crumbed">
+        <Crumb navigate={navigate} />
+        <div className="wk-page"><Skeleton variant="card" rows={4} data-testid="repo-detail-loading" /></div>
+      </div>
     );
   }
 
-  if (error) {
+  if (error !== null) {
     return (
-      <div className="p-8 font-mono text-sm" style={{ color: 'var(--status-fail)' }}>{error}</div>
+      <div className="wk-pg-crumbed">
+        <Crumb navigate={navigate} />
+        <PageFrame title="Repository" data-testid="repo-detail-page">
+          <StateBanner data-testid="repo-detail-error" kind={readErrorKind(error)} what="this repository" error={error instanceof Error ? error.message : String(error)} onRetry={() => setReload((n) => n + 1)} />
+        </PageFrame>
+      </div>
     );
   }
 
   if (!repo) {
     return (
-      <div className="p-8 font-mono text-sm" style={{ color: 'var(--status-fail)' }}>Repo not found.</div>
+      <div className="wk-pg-crumbed">
+        <Crumb navigate={navigate} />
+        <PageFrame title="Repository not found" data-testid="repo-detail-page">
+          <EmptyState
+            title="Repo not found."
+            body="It may have been removed, or the address is mistyped."
+            action={<a className="wk-btn wk-btn--secondary" href="/repos" onClick={(e) => { e.preventDefault(); navigate('/repos'); }}>All repositories</a>}
+          />
+        </PageFrame>
+      </div>
     );
   }
 
   const active    = runs.filter(v => !TERMINAL_STATUSES.has(v.session.status));
   const completed = runs.filter(v => v.session.status === 'completed');
-  // Treat cancelled as failed — consistent with WorkPage and other surfaces.
   const failed    = runs.filter(v => v.session.status === 'failed' || v.session.status === 'cancelled');
 
-  // Hotspots: top 5 nodes by incoming edge count (inDeg), excluding node_modules
   const hotspots = graph
     ? [...graph.nodes]
         .filter(n => n.file && !n.file.startsWith('node_modules/'))
@@ -141,9 +162,6 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
         .slice(0, 5)
     : [];
 
-  // Language mix (DES-FEEDBACK-001 §3.3): files indexed per language, derived
-  // from the code graph's per-node `lang` — the one language signal this wire
-  // carries (`RepoEntry` has none). No graph ⇒ `null` ⇒ the honest empty state.
   const langBreakdown: Record<string, number> | null = (() => {
     if (!graph) return null;
     const filesByLang = new Map<string, Set<string>>();
@@ -163,17 +181,14 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
 
   const displayedRuns = expanded ? runs : runs.slice(0, 10);
 
-  // studio#461: never built, built with nothing to rank, or not read — each says its own sentence.
   const graphState = repoGraphState(graphFailed !== null ? { kind: 'failed', message: graphFailed } : { kind: 'ok', graph }, hotspots.length);
   const graphWords = repoGraphWords(graphState);
-  const graphRetry = graphState.kind === 'failed' ? (
-    <button type="button" data-testid="repo-graph-retry" onClick={retryGraph} className="ml-2 text-xs font-mono hover:underline" style={{ color: 'var(--accent)' }}>Try again</button>
-  ) : null;
+  // A failed graph read is said ONCE, in the page banner with its Retry (audit row 43); the
+  // graph-fed panels then say only that their content waits on it.
+  const graphFailedHere = graphState.kind === 'failed';
+  const waitWord = 'Shown once the code map loads.';
 
   const graphStats = graph?.stats;
-  // crew#505 / F-RC1-100 (api-types 0.38.0 `CodeGraphData.totals`): the whole graph, beside the
-  // served slice — "150 of 5,470 shown", never the slice presented as the repo. Absent on an older
-  // daemon ⇒ only the slice is known, and only the slice is shown.
   const graphTotals = graph?.totals;
 
   async function startOnboarding(): Promise<void> {
@@ -183,333 +198,225 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
       const { runId } = await api.rerunOnboarding(repoId);
       onSelectRun(runId);
     } catch (e: unknown) {
-      setOnboardError(e instanceof Error ? e.message : String(e));
+      setOnboardError(e);
     } finally {
       setOnboarding(false);
     }
   }
 
+  const hasFindings = (repo.findings?.length ?? 0) > 0;
+  // The finding row carries Re-run onboarding when a finding asks for it; the header keeps it otherwise.
+  const findingOffersOnboard = (repo.findings ?? []).some(findingNeedsReonboard);
+  const gitLink = repo.git_url && /^https?:\/\//i.test(repo.git_url) ? repo.git_url : null;
+
   return (
-    <div className="flex flex-col gap-6 p-8" style={{ color: 'var(--ink-high)' }}>
-      {/* Header */}
-      <div className="flex flex-col gap-3">
-        <button
-          type="button"
-          onClick={() => navigate('/repos')}
-          className="text-xs font-mono self-start transition-opacity hover:opacity-70"
-          style={{ color: 'var(--ink-dim)' }}
-        >
-          ← Repositories
-        </button>
-        <div className="flex items-start gap-4 flex-wrap">
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-3 flex-wrap">
-              <h1 className="text-2xl font-semibold font-mono">{repo.name}</h1>
+    <div className="wk-pg-crumbed">
+      <Crumb navigate={navigate} />
+      <PageFrame
+        data-testid="repo-detail-page"
+        title={repo.name}
+        intro={`Branch ${repo.default_branch} · ${showPath(repo.root_path)}`}
+        actions={(
+          <>
+            <button type="button" className="wk-btn wk-btn--primary" data-testid="repo-open-graph" onClick={() => onOpenGraph()}>
+              Open graph
+            </button>
+            <button type="button" className="wk-btn wk-btn--secondary" data-testid="repo-open-requirements" onClick={() => setRequirementsOpen(true)}>
+              Requirements
+            </button>
+            {!findingOffersOnboard && (
               <button
                 type="button"
+                data-testid="repo-run-onboarding"
                 onClick={() => void startOnboarding()}
                 disabled={onboarding}
-                className="px-3 py-1 rounded-lg text-xs font-semibold font-mono transition-opacity disabled:opacity-50"
-                style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
+                title="Rebuild this repository’s code map as a tracked run (usually a few minutes)"
+                className="wk-btn wk-btn--secondary"
               >
-                {onboarding ? 'Starting…' : '↺ Run Onboarding'}
+                {onboarding ? 'Starting…' : 'Re-run onboarding'}
               </button>
-              {/* §7.8 (slice AC, EC43): named actions preview what they do and write. */}
-              <span
-                data-testid="action-preview"
-                className="text-[10px] font-mono"
-                style={{ color: 'var(--ink-dim)' }}
-              >
-                re-indexes this repo as a governed run (index → annotate, two units) —
-                rewrites its code graph and cluster annotations; typically minutes
-              </span>
-              <button
-                type="button"
-                onClick={() => onOpenGraph()}
-                className="px-3 py-1 rounded-lg text-xs font-semibold font-mono transition-opacity hover:opacity-80"
-                style={{ background: 'var(--accent-subtle)', color: 'var(--accent)', border: '1px solid var(--accent-subtle)' }}
-              >
-                Open Graph →
-              </button>
-              <button
-                type="button"
-                onClick={() => setRequirementsOpen(true)}
-                className="px-3 py-1 rounded-lg text-xs font-semibold font-mono transition-opacity hover:opacity-80"
-                style={{ background: 'var(--status-run-dim)', color: 'var(--status-run)', border: '1px solid var(--status-run-dim)' }}
-              >
-                Open Requirements →
-              </button>
-            </div>
-            {onboardError && (
-              <p className="text-[11px] font-mono mt-1" style={{ color: 'var(--status-fail)' }}>{onboardError}</p>
             )}
-            <p className="text-xs font-mono mt-1 break-all" style={{ color: 'var(--ink-dim)' }}>
-              {showPath(repo.root_path)}
-            </p>
-            {/* studio#251: the engine's checkout findings (wicked-core#406) — an ignored in-tree
-                graph, a graph-less repo — with "Re-run onboarding" wired to THIS page's onboarding
-                trigger. Silent when the record carries none (or predates the field). */}
-            {(repo.findings?.length ?? 0) > 0 && (
-              <div className="mt-2">
-                <RepoFindings
-                  findings={repo.findings}
-                  onRerunOnboarding={() => void startOnboarding()}
-                  rerunning={onboarding}
-                />
-              </div>
-            )}
-            {repo.git_url && (
-              /^https?:\/\//i.test(repo.git_url) ? (
-                <a
-                  href={repo.git_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-[11px] font-mono mt-0.5 block truncate hover:underline"
-                  style={{ color: 'var(--accent)' }}
-                  title={repo.git_url}
-                >
-                  {repo.git_url}
-                </a>
-              ) : (
-                <span
-                  className="text-[11px] font-mono mt-0.5 block truncate"
-                  style={{ color: 'var(--accent)' }}
-                  title={repo.git_url}
-                >
-                  {repo.git_url}
-                </span>
-              )
-            )}
-          </div>
-          <span
-            className="shrink-0 mt-1 rounded px-2 py-0.5 text-[11px] font-mono"
-            style={{
-              background: 'var(--accent-subtle)',
-              color: 'var(--accent)',
-              border: '1px solid var(--accent-subtle)',
-            }}
-          >
-            {repo.default_branch}
-          </span>
-        </div>
-      </div>
+          </>
+        )}
+      >
+        {/* §7.8 (slice AC, EC43): the named action previews what it does and writes. */}
+        <p data-testid="action-preview" className="wk-field-note wk-pg-repo-preview">
+          Onboarding rebuilds this repository’s code map as a tracked run you can watch; it usually takes a few minutes.
+          {gitLink !== null && (
+            <> {' '}<a className="wk-link" href={gitLink} target="_blank" rel="noopener noreferrer">View on the web</a></>
+          )}
+        </p>
 
-      {/* Stats bar */}
-      <div className="grid grid-cols-4 gap-4">
-        {[
-          { label: 'Total Runs', value: runs.length,      accent: undefined },
-          { label: 'Active',     value: active.length,    accent: active.length > 0 ? 'var(--status-run)' : undefined },
-          { label: 'Completed',  value: completed.length, accent: completed.length > 0 ? 'var(--status-run)' : undefined },
-          { label: 'Failed',     value: failed.length,    accent: failed.length > 0 ? 'var(--status-fail)' : undefined },
-        ].map(s => (
-          <div
-            key={s.label}
-            className="rounded-2xl px-6 py-4"
-            style={{ background: 'var(--surface-card)', border: '1px solid var(--surface-raised)' }}
-          >
-            <p
-              className="text-[10px] font-semibold uppercase tracking-widest font-mono"
-              style={{ color: 'var(--ink-dim)' }}
-            >
-              {s.label}
-            </p>
-            <p className="text-3xl font-semibold mt-1" style={{ color: s.accent ?? 'var(--ink-high)' }}>
-              {s.value}
-            </p>
+        {onboardError !== null && (
+          <div data-testid="repo-onboard-error">
+            <p className="wk-field-note wk-field-note--bad">Couldn’t start onboarding. Try again in a moment.</p>
+            <TechDetails text={onboardError instanceof Error ? onboardError.message : String(onboardError)} />
           </div>
-        ))}
-      </div>
+        )}
 
-      {/* Language composition (§3.3) — what this repo is actually built of. */}
-      <Section title="Languages">
-        <LanguageBar breakdown={langBreakdown} {...(graphState.kind !== 'ready' ? { emptyText: graphWords.languages } : {})} />
-      </Section>
+        {/* studio#251: the engine's checkout findings, in plain words, with "Re-run onboarding" wired to
+            THIS page's onboarding trigger. Silent when the record carries none (or predates the field). */}
+        {hasFindings && (
+          <RepoFindings
+            findings={repo.findings}
+            onRerunOnboarding={() => void startOnboarding()}
+            rerunning={onboarding}
+          />
+        )}
 
-      {/* Active Now */}
-      {active.length > 0 && (
-        <Section title="Active Now">
-          <div className="flex flex-col gap-1">
-            {active.map(v => (
-              <RunLink key={v.session.id} view={v} selectedRunId={null} onSelect={onSelectRun} />
-            ))}
-          </div>
+        {graphFailedHere && (
+          <StateBanner data-testid="repo-graph" kind={readErrorKind(graphFailed)} what="the code map" error={graphFailed} onRetry={retryGraph} />
+        )}
+
+        <StatLine
+          data-testid="repo-detail-stats"
+          items={[
+            { label: runs.length === 1 ? 'run' : 'runs', value: runs.length },
+            { label: 'working now', value: active.length },
+            { label: 'finished', value: completed.length },
+            { label: 'failed or cancelled', value: failed.length },
+          ]}
+        />
+
+        {/* Language composition (§3.3) — what this repo is actually built of. */}
+        <Section title="Languages">
+          <LanguageBar breakdown={langBreakdown} {...(graphState.kind !== 'ready' ? { emptyText: graphFailedHere ? waitWord : graphWords.languages } : {})} />
         </Section>
-      )}
 
-      {/* Two-column body — single col on narrow viewports, two col at md+ */}
-      <div className="grid gap-6 grid-cols-1 md:grid-cols-2">
-        {/* Left column */}
-        <div className="flex flex-col gap-6">
-          {/* Work & Chats history */}
-          {runs.length > 0 && (
-            <Section title="Work & Chats">
-              <div className="flex flex-col gap-1">
-                {displayedRuns.map(v => (
-                  <RunLink key={v.session.id} view={v} selectedRunId={null} onSelect={onSelectRun} />
-                ))}
-              </div>
-              {runs.length > 10 && (
-                <button
-                  type="button"
-                  onClick={() => setExpanded(e => !e)}
-                  className="mt-3 text-xs font-mono hover:underline"
-                  style={{ color: 'var(--ink-dim)' }}
-                >
-                  {expanded ? '↑ show less' : `↓ show all ${runs.length} runs`}
-                </button>
+        {active.length > 0 && (
+          <Section title="Working now">
+            <div className="flex flex-col gap-1">
+              {active.map(v => (
+                <RunRow key={v.session.id} view={v} onSelect={onSelectRun} />
+              ))}
+            </div>
+          </Section>
+        )}
+
+        <div className="wk-pg-repo-columns">
+          <div className="wk-pg-repo-column">
+            {runs.length > 0 && (
+              <Section title="Work and chats">
+                <div className="flex flex-col gap-1">
+                  {displayedRuns.map(v => (
+                    <RunRow key={v.session.id} view={v} onSelect={onSelectRun} />
+                  ))}
+                </div>
+                {runs.length > 10 && (
+                  <button type="button" onClick={() => setExpanded(e => !e)} className="wk-link wk-pg-repo-more">
+                    {expanded ? 'Show fewer' : `Show all ${runs.length} runs`}
+                  </button>
+                )}
+              </Section>
+            )}
+
+            {/* Code hotspots — the inline excerpt (§3.4): the REAL HotspotsView, top 5. */}
+            <Section title="Code hotspots">
+              {hotspots.length === 0 ? (
+                <p data-testid="repo-hotspots-empty" data-state={graphState.kind} className="wk-pg-repo-empty">
+                  {graphFailedHere ? waitWord : graphWords.hotspots}
+                </p>
+              ) : (
+                <div data-testid="hotspots-excerpt" data-count={hotspots.length}>
+                  <div className="wk-pg-repo-hotspots">
+                    <HotspotsView nodes={hotspots} onSelect={(node) => onOpenGraph(node.name || node.id)} />
+                  </div>
+                  <button type="button" data-testid="hotspots-view-all" onClick={() => onOpenGraph()} className="wk-link wk-pg-repo-more">
+                    View all hotspots
+                  </button>
+                </div>
               )}
             </Section>
-          )}
+          </div>
 
-          {/* Code Hotspots — the inline excerpt (§3.4): the REAL HotspotsView,
-              top 5, surfaced here rather than only behind the modal. The full
-              view (and the CytoGraph) stay behind [Graph ›] / "View all →". */}
-          <Section title="Code Hotspots">
-            {hotspots.length === 0 ? (
-              <p data-testid="repo-hotspots-empty" data-state={graphState.kind} className="text-sm font-mono italic" style={{ color: 'var(--ink-dim)' }}>
-                {graphWords.hotspots}{graphRetry}
-              </p>
-            ) : (
-              <div data-testid="hotspots-excerpt" data-count={hotspots.length}>
-                <div
-                  className="rounded-lg overflow-hidden"
-                  style={{ border: '1px solid var(--surface-raised)' }}
-                >
-                  <HotspotsView
-                    nodes={hotspots}
-                    onSelect={(node) => onOpenGraph(node.name || node.id)}
-                  />
-                </div>
-                <button
-                  type="button"
-                  data-testid="hotspots-view-all"
-                  onClick={() => onOpenGraph()}
-                  className="mt-2 self-start text-xs font-mono hover:underline"
-                  style={{ color: 'var(--accent)' }}
-                >
-                  View all →
-                </button>
-              </div>
-            )}
-          </Section>
-        </div>
-
-        {/* Right column */}
-        <div className="flex flex-col gap-6">
-          {/* Graph Stats / "Git History" */}
-          <Section title="Code Graph">
-            {graphStats && graphState.kind !== 'indexed-empty' && graphState.kind !== 'failed' ? (
-              <div className="flex flex-col gap-3">
-                {[
-                  { label: 'Symbols', value: graphStats.nodeCount, total: graphTotals?.nodes },
-                  { label: 'Edges', value: graphStats.edgeCount, total: graphTotals?.edges },
-                  { label: 'Files indexed', value: graphStats.fileCount, total: graphTotals?.files },
-                ].map(s => (
-                  <div key={s.label} className="flex items-center justify-between">
-                    <span className="text-xs font-mono" style={{ color: 'var(--ink-muted)' }}>{s.label}</span>
-                    <span className="text-sm font-semibold font-mono" style={{ color: 'var(--ink-high)' }} data-testid={`graph-stat-${s.label.toLowerCase().replace(/\s+/g, '-')}`}>
-                      {typeof s.total === 'number' && s.total !== s.value
-                        ? `${s.value.toLocaleString()} of ${s.total.toLocaleString()} shown`
-                        : s.value.toLocaleString()}
-                    </span>
-                  </div>
-                ))}
-                <button
-                  type="button"
-                  onClick={() => onOpenGraph()}
-                  className="mt-2 self-start text-xs font-mono hover:underline"
-                  style={{ color: 'var(--accent)' }}
-                >
-                  Browse full graph →
-                </button>
-              </div>
-            ) : graphWords.graph !== '' ? (
-              <p data-testid="repo-graph-empty" data-state={graphState.kind} className="text-sm font-mono italic" style={{ color: 'var(--ink-dim)' }}>
-                {graphWords.graph}
-              </p>
-            ) : null}
-          </Section>
-
-          {/* Commit cadence (§3.1) — active or stagnant, at the wire's honest
-              resolution (last 20 commits, git relative dates). */}
-          <Section title="Commits (30d)">
-            <CommitCadence commits={commits} />
-          </Section>
-
-          {/* Git History */}
-          <Section title="Git History">
-            {commits === null ? (
-              <SkeletonRows count={6} widths={['w-14', 'w-16', 'flex-1', 'w-12']} />
-            ) : commits.length === 0 ? (
-              <p className="text-sm font-mono italic" style={{ color: 'var(--ink-dim)' }}>
-                No commits yet.
-              </p>
-            ) : (
-              <div className="flex flex-col gap-2">
-                {commits.map((c) => (
-                  <div key={c.sha} className="flex items-start gap-2 min-w-0">
-                    {repo.git_url && /^https:\/\//i.test(repo.git_url) ? (
-                      <a
-                        href={`${repo.git_url.replace(/\.git$/, '')}/commit/${c.sha}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="shrink-0 text-[10px] font-mono hover:underline"
-                        style={{ color: 'var(--accent)', marginTop: '1px' }}
-                      >
-                        {c.shortSha}
-                      </a>
-                    ) : (
-                      <span className="shrink-0 text-[10px] font-mono" style={{ color: 'var(--accent)', marginTop: '1px' }}>
-                        {c.shortSha}
-                      </span>
-                    )}
-                    <span className="shrink-0 text-[9px] font-mono truncate max-w-[80px]" style={{ color: 'var(--ink-muted)' }} title={c.author}>
-                      {c.author}
-                    </span>
-                    <span className="flex-1 text-[10px] font-mono truncate" style={{ color: 'var(--ink-body)' }} title={c.message}>
-                      {c.message.length > 72 ? `${c.message.slice(0, 72)}…` : c.message}
-                    </span>
-                    <span className="shrink-0 text-[9px] font-mono" style={{ color: 'var(--ink-dim)' }}>
-                      {c.date}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </Section>
-
-          {/* Contributors */}
-          <Section title="Contributors">
-            {contributors === null ? (
-              <SkeletonContributors count={4} />
-            ) : contributors.length === 0 ? (
-              <p className="text-sm font-mono italic" style={{ color: 'var(--ink-dim)' }}>
-                No contributors found.
-              </p>
-            ) : (
-              <div className="flex flex-col gap-2">
-                {contributors.map((c, i) => {
-                  const initials = c.name.split(' ').map(w => w[0] ?? '').join('').slice(0, 2).toUpperCase();
-                  return (
-                    <div key={`${c.email}-${c.name}-${i}`} className="flex items-center gap-2">
-                      <span
-                        className="shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-bold font-mono"
-                        style={{ background: 'var(--accent-subtle)', color: 'var(--accent)' }}
-                      >
-                        {initials}
-                      </span>
-                      <span className="flex-1 text-xs font-mono truncate" style={{ color: 'var(--ink-body)' }}>{c.name}</span>
-                      <span className="shrink-0 text-[10px] font-mono" style={{ color: 'var(--ink-dim)' }}>
-                        {c.commits} commit{c.commits !== 1 ? 's' : ''}
+          <div className="wk-pg-repo-column">
+            <Section title="Code map">
+              {graphStats && graphState.kind !== 'indexed-empty' && graphState.kind !== 'failed' ? (
+                <div className="wk-pg-repo-kv">
+                  {[
+                    { label: 'Symbols', value: graphStats.nodeCount, total: graphTotals?.nodes },
+                    { label: 'Edges', value: graphStats.edgeCount, total: graphTotals?.edges },
+                    { label: 'Files indexed', value: graphStats.fileCount, total: graphTotals?.files },
+                  ].map(s => (
+                    <div key={s.label} className="wk-pg-repo-kv-row">
+                      <span className="wk-pg-repo-kv-key">{s.label}</span>
+                      <span className="wk-num wk-pg-repo-kv-value" data-testid={`graph-stat-${s.label.toLowerCase().replace(/\s+/g, '-')}`}>
+                        {typeof s.total === 'number' && s.total !== s.value
+                          ? `${s.value.toLocaleString()} of ${s.total.toLocaleString()} shown`
+                          : s.value.toLocaleString()}
                       </span>
                     </div>
-                  );
-                })}
-              </div>
-            )}
-          </Section>
+                  ))}
+                  <button type="button" onClick={() => onOpenGraph()} className="wk-link wk-pg-repo-more">
+                    Browse the full graph
+                  </button>
+                </div>
+              ) : graphFailedHere ? (
+                <p data-testid="repo-graph-empty" data-state={graphState.kind} className="wk-pg-repo-empty">{waitWord}</p>
+              ) : graphWords.graph !== '' ? (
+                <p data-testid="repo-graph-empty" data-state={graphState.kind} className="wk-pg-repo-empty">
+                  {graphWords.graph}
+                </p>
+              ) : null}
+            </Section>
+
+            {/* Commit cadence (§3.1) — at the wire's honest resolution (last 20 commits). */}
+            <Section title="Commits in the last 30 days">
+              <CommitCadence commits={commits} />
+            </Section>
+
+            <Section title="Recent commits">
+              {commits === null ? (
+                <Skeleton rows={6} />
+              ) : commits.length === 0 ? (
+                <p className="wk-pg-repo-empty">No commits yet.</p>
+              ) : (
+                <ul className="wk-pg-repo-commits">
+                  {commits.map((c) => (
+                    <li key={c.sha} className="wk-pg-repo-commit">
+                      {repo.git_url && /^https:\/\//i.test(repo.git_url) ? (
+                        <a
+                          href={`${repo.git_url.replace(/\.git$/, '')}/commit/${c.sha}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="wk-link wk-pg-repo-sha"
+                        >
+                          {c.shortSha}
+                        </a>
+                      ) : (
+                        <span className="wk-pg-repo-sha">{c.shortSha}</span>
+                      )}
+                      <span className="wk-pg-repo-commit-msg" title={c.message}>{c.message}</span>
+                      <span className="wk-pg-repo-commit-meta">{c.author} · {c.date}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Section>
+
+            <Section title="Contributors">
+              {contributors === null ? (
+                <Skeleton rows={4} />
+              ) : contributors.length === 0 ? (
+                <p className="wk-pg-repo-empty">No contributors found.</p>
+              ) : (
+                <ul className="wk-pg-repo-people">
+                  {contributors.map((c, i) => {
+                    const initials = c.name.split(' ').map(w => w[0] ?? '').join('').slice(0, 2).toUpperCase();
+                    return (
+                      <li key={`${c.email}-${c.name}-${i}`} className="wk-pg-repo-person">
+                        <span aria-hidden className="wk-pg-repo-avatar">{initials}</span>
+                        <span className="wk-pg-repo-person-name">{c.name}</span>
+                        <span className="wk-pg-repo-commit-meta">{c.commits} commit{c.commits !== 1 ? 's' : ''}</span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </Section>
+          </div>
         </div>
-      </div>
+      </PageFrame>
       {requirementsOpen && repo && (
         <RequirementsModal
           repoId={repoId}
@@ -525,60 +432,39 @@ export function RepoDetailPage({ repoId, onSelectRun, navigate, onOpenGraph }: P
   );
 }
 
-const SKELETON_BG = 'var(--surface-raised)';
-
-function SkeletonBlock({ className }: { className: string }): React.ReactElement {
+/** One run on this repository: its title, one status word, and when (UI-CONTRACT §4.6 list row). */
+function RunRow({ view, onSelect }: { view: SessionView; onSelect: (id: string) => void }): React.ReactElement {
+  const { session } = view;
+  const attachedAt = useMembershipStore((st) => st.attachedAtByRun[session.id]);
+  const at = typeof session.created_at === 'number' && Number.isFinite(session.created_at) ? session.created_at * 1000 : attachedAt;
+  const status = statusWord(view);
   return (
-    <span
-      className={`inline-block rounded animate-pulse ${className}`}
-      style={{ background: SKELETON_BG }}
-    />
+    <button type="button" data-testid="run-link" data-run-id={session.id} className="wk-list-row wk-pg-repo-run" onClick={() => onSelect(session.id)}>
+      <span className="wk-list-row-status"><span className="wk-status-dot" data-status={status.tone} aria-hidden /></span>
+      <span className="wk-pg-repo-run-text">
+        <span className="wk-list-row-title">{plainRunTitle(session.problem || 'Untitled run')}</span>
+        <span className="wk-list-row-meta">
+          {status.word}{at !== undefined ? <> · <span title={new Date(at).toLocaleString()}>{relTime(at)}</span></> : null}
+        </span>
+      </span>
+    </button>
   );
 }
 
-/** Generic skeleton row list — pass tailwind width classes for each column. */
-function SkeletonRows({ count, widths }: { count: number; widths: string[] }): React.ReactElement {
+/** The way back to the list, above the page frame. */
+function Crumb({ navigate }: { navigate: (path: string) => void }): React.ReactElement {
   return (
-    <div className="flex flex-col gap-2.5">
-      {Array.from({ length: count }, (_, i) => (
-        <div key={i} className="flex items-center gap-2 min-w-0" style={{ opacity: Math.max(0.15, 1 - i * 0.12) }}>
-          {widths.map((w, j) => (
-            <SkeletonBlock key={j} className={`h-2.5 ${w}`} />
-          ))}
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function SkeletonContributors({ count }: { count: number }): React.ReactElement {
-  return (
-    <div className="flex flex-col gap-2.5">
-      {Array.from({ length: count }, (_, i) => (
-        <div key={i} className="flex items-center gap-2" style={{ opacity: Math.max(0.15, 1 - i * 0.18) }}>
-          {/* avatar circle */}
-          <span
-            className="shrink-0 w-6 h-6 rounded-full animate-pulse"
-            style={{ background: SKELETON_BG }}
-          />
-          <SkeletonBlock className="h-2.5 w-28" />
-          <SkeletonBlock className="h-2 w-14 ml-auto" />
-        </div>
-      ))}
-    </div>
+    <nav aria-label="Breadcrumb" className="wk-pg-crumb">
+      <a className="wk-link" href="/repos" onClick={(e) => { e.preventDefault(); navigate('/repos'); }}>← Repositories</a>
+    </nav>
   );
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }): React.ReactElement {
   return (
-    <div className="rounded-2xl p-6" style={{ background: 'var(--surface-card)', border: '1px solid var(--surface-raised)' }}>
-      <h2
-        className="text-[10px] font-semibold uppercase tracking-widest mb-4 font-mono"
-        style={{ color: 'var(--ink-dim)' }}
-      >
-        {title}
-      </h2>
+    <section className="wk-card">
+      <SectionTitle>{title}</SectionTitle>
       {children}
-    </div>
+    </section>
   );
 }

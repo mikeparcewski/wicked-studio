@@ -108,12 +108,16 @@ with sync_playwright() as p:
           row.get_attribute("data-code") == "in_tree_code_graph_ignored"
           and row.get_attribute("data-severity") == "error"
           and row.get_attribute("data-reonboard") == "true"
-          and "re-run onboarding" in (row.inner_text() or "")
+          and "re-run onboarding" in (row.inner_text() or "").lower()
           and card.first.locator(TID("repo-card-findings")).get_attribute("data-count") == "1",
           code=row.get_attribute("data-code"), severity=row.get_attribute("data-severity"))
     page.screenshot(path=str(VSHOTS / "wave2-repo-findings.png"))
     row.locator(TID("repo-card-findings-reonboard")).click()
-    page.wait_for_timeout(500)
+    # Poll for the POST rather than a fixed sleep (a slow CI runner missed a 500 ms window).
+    for _ in range(50):
+        if onboard_posts:
+            break
+        page.wait_for_timeout(100)
     # The host's EXISTING onboard trigger follows the started run (as the card's own
     # Onboard button does); what must NOT happen is the click falling through to the
     # card's role=link and opening the repo detail instead.
@@ -126,7 +130,9 @@ with sync_playwright() as p:
     detail_row.wait_for(timeout=15000)
     check("repo_detail_finding_row",
           detail_row.get_attribute("data-code") == "in_tree_code_graph_ignored"
-          and REPO_FINDING_NO_LIVE["message"][:40] in (detail_row.inner_text() or "")
+          # Plain words in the default layer; the engine's own message sits in Technical details (UX-003).
+          and "no code map yet" in (detail_row.inner_text() or "").lower()
+          and REPO_FINDING_NO_LIVE["message"][:40] in (detail_row.locator(TID("repo-findings-detail")).text_content() or "")
           and detail_row.locator(TID("repo-findings-reonboard")).count() == 1)
 
     # Silent when the record carries no findings (the switch off = the standing shape).

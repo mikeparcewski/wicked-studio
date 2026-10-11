@@ -14,6 +14,9 @@ const getProjectActivity = vi.fn();
 const updateProject = vi.fn();
 
 vi.mock('../src/api/client.js', () => ({
+  apiFetch: (path: string) => Promise.resolve(path.includes('/coverage')
+    ? { totals: { repos: 0, ok: 0, behavior_bearing: 0, resolved: 0, coverage: null }, rows: [] }
+    : { totals: { repos: 0, ok: 0, domains: 0, requirements: 0, entities: 0 }, rows: [], merged: [] }),
   api: {
     getProject: (...a: unknown[]) => getProject(...a),
     getProjectActivity: (...a: unknown[]) => getProjectActivity(...a),
@@ -51,7 +54,7 @@ async function renderLoaded(projectId: string, navigate = vi.fn()): Promise<void
   render(<ProjectDetailPage projectId={projectId} navigate={navigate} />);
   await waitFor(() => expect(getProject).toHaveBeenCalledWith(projectId));
   // wait for the page to finish loading
-  await waitFor(() => expect(screen.queryByText('Loading…')).toBeNull());
+  await screen.findByRole('heading', { level: 1, name: `Project ${projectId}` });
 }
 
 describe('ProjectDetailPage — Edit', () => {

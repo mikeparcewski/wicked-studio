@@ -1,1 +1,100 @@
 /* Section CSS: pages (design/UI-CONTRACT.md §6). Only that section edits this file. */
+
+/* == S6 g0 repos == */
+.wk-pg-repo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); gap: var(--space-4); }
+.wk-pg-repo-card { display: flex; flex-direction: column; gap: var(--space-2); cursor: pointer; border: 1px solid var(--border-subtle); transition: border-color var(--dur-fast) var(--ease-out); }
+.wk-pg-repo-card:hover { border-color: var(--border-strong); }
+.wk-pg-repo-card:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-shadow: var(--focus-ring); }
+.wk-pg-repo-card-head { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+.wk-pg-repo-card-name { margin: 0; flex: 1 1 auto; min-width: 0; font-size: var(--text-md); font-weight: var(--weight-semi); color: var(--ink-high); overflow-wrap: anywhere; }
+.wk-pg-repo-card-path { margin: 0; color: var(--ink-dim); font-size: var(--text-xs); overflow-wrap: anywhere; }
+.wk-pg-repo-card-meta { margin: 0; color: var(--ink-dim); font-size: var(--text-xs); }
+.wk-pg-repo-needs { align-self: flex-start; font-size: var(--text-sm); font-weight: var(--weight-semi); }
+.wk-pg-repo-line { margin: 0; display: flex; align-items: baseline; gap: var(--space-2); font-size: var(--text-sm); color: var(--ink-body); }
+.wk-pg-repo-dot { flex: 0 0 auto; width: 8px; height: 8px; border-radius: var(--radius-full); background: var(--ink-dim); transform: translateY(-1px); }
+.wk-pg-repo-line--run .wk-pg-repo-dot { background: var(--status-run); }
+.wk-pg-repo-line--fail .wk-pg-repo-dot { background: var(--status-fail); }
+.wk-pg-repo-line--gate .wk-pg-repo-dot { background: var(--status-gate); }
+.wk-pg-repo-card-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: auto; padding-top: var(--space-2); cursor: default; }
+.wk-pg-repo-card-error { cursor: default; }
+.wk-pg-repo-filters { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); }
+.wk-pg-repo-search { width: 240px; max-width: 100%; }
+.wk-pg-repo-chips { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.wk-pg-repo-range { margin-left: auto; display: inline-flex; align-items: center; gap: var(--space-2); }
+.wk-pg-repo-range-label { color: var(--ink-muted); font-size: var(--text-sm); white-space: nowrap; }
+.wk-pg-repo-range .wk-field { width: auto; }
+.wk-pg-repo-none { margin: 0; color: var(--ink-muted); }
+.wk-pg-repo-register { display: flex; flex-direction: column; gap: var(--space-3); max-width: 640px; }
+.wk-pg-repo-field { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
+.wk-pg-repo-label { font-size: var(--text-sm); font-weight: var(--weight-medium); color: var(--ink-high); }
+.wk-pg-repo-submit { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); }
+.wk-pg-repo-submit .wk-field-note { margin: 0; }
+/* findings (RepoFindings): one plain sentence per finding; the engine's text under Technical details */
+.wk-pg-repo-findings { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; cursor: default; }
+.wk-pg-repo-finding { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
+.wk-pg-repo-findings:not(.wk-pg-repo-findings--compact) .wk-pg-repo-finding { padding: var(--space-2) var(--space-3); border-radius: var(--radius-md); background: var(--surface-raised); border-left: 3px solid var(--status-warn); }
+.wk-pg-repo-findings:not(.wk-pg-repo-findings--compact) .wk-pg-repo-finding--error { border-left-color: var(--status-fail); }
+.wk-pg-repo-finding-line { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); }
+.wk-pg-repo-finding-text { margin: 0; flex: 1 1 220px; min-width: 0; font-size: var(--text-sm); color: var(--ink-body); }
+/* repo detail */
+.wk-pg-repo-run { width: 100%; text-align: left; background: none; border: none; cursor: pointer; font: inherit; color: inherit; grid-template-columns: auto minmax(0, 1fr); }
+.wk-pg-repo-run:focus-visible { outline: 2px solid transparent; box-shadow: var(--focus-ring); }
+.wk-pg-repo-run-text { display: flex; flex-direction: column; min-width: 0; }
+.wk-pg-crumbed { min-width: 0; }
+.wk-pg-crumb { padding: var(--space-4) var(--space-6) 0; font-size: var(--text-sm); }
+.wk-pg-crumbed > .wk-page { padding-top: var(--space-2); }
+.wk-pg-repo-preview { margin: 0; }
+.wk-pg-repo-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-6); align-items: start; }
+.wk-pg-repo-column { display: flex; flex-direction: column; gap: var(--space-6); min-width: 0; }
+.wk-pg-repo-empty { margin: 0; color: var(--ink-muted); font-size: var(--text-sm); }
+.wk-pg-repo-more { margin-top: var(--space-3); font-size: var(--text-sm); }
+.wk-pg-repo-hotspots { border: 1px solid var(--border-subtle); border-radius: var(--radius-md); overflow: hidden; }
+.wk-pg-repo-kv { display: flex; flex-direction: column; gap: var(--space-2); }
+.wk-pg-repo-kv-row { display: flex; justify-content: space-between; gap: var(--space-3); font-size: var(--text-sm); }
+.wk-pg-repo-kv-key { color: var(--ink-muted); }
+.wk-pg-repo-kv-value { color: var(--ink-high); font-weight: var(--weight-semi); }
+.wk-pg-repo-commits, .wk-pg-repo-people { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+.wk-pg-repo-commit { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0 var(--space-2); font-size: var(--text-sm); }
+.wk-pg-repo-sha { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--ink-muted); padding-top: 1px; }
+.wk-pg-repo-commit-msg { color: var(--ink-body); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.wk-pg-repo-commit-meta { grid-column: 2; color: var(--ink-dim); font-size: var(--text-xs); }
+.wk-pg-repo-person { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-sm); min-width: 0; }
+.wk-pg-repo-person .wk-pg-repo-commit-meta { margin-left: auto; flex: 0 0 auto; }
+.wk-pg-repo-person-name { color: var(--ink-body); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wk-pg-repo-avatar { flex: 0 0 auto; width: 24px; height: 24px; border-radius: var(--radius-full); display: inline-flex; align-items: center; justify-content: center; font-size: var(--text-2xs); font-weight: var(--weight-semi); background: var(--accent-subtle); color: var(--accent); }
+@media (max-width: 767px) {
+  .wk-pg-crumb { padding: var(--space-3) var(--space-4) 0; }
+  .wk-pg-repo-columns { grid-template-columns: minmax(0, 1fr); }
+  .wk-pg-repo-search { width: 100%; }
+  .wk-pg-repo-range { margin-left: 0; }
+}
+.wk-pg-repo-facts { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2) var(--space-4); }
+.wk-pg-repo-facts .wk-statline { margin: 0; }
+/* == end S6 g0 == */
+
+/* == S6 g1 projects+product == */
+.wk-pg-proj-stack { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
+.wk-pg-proj-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); min-width: 0; }
+.wk-pg-proj-field { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; color: var(--ink-body); font-size: var(--text-sm); }
+.wk-pg-proj-field .wk-field { width: 100%; min-width: 0; box-sizing: border-box; }
+.wk-pg-proj-note { margin: 0; color: var(--ink-muted); overflow-wrap: anywhere; }
+.wk-pg-proj-list { list-style: none; padding: 0; margin: 0; min-width: 0; }
+.wk-pg-proj-row { grid-template-columns: minmax(0, 1fr) auto; }
+.wk-pg-proj-row .wk-list-row-meta { display: block; overflow-wrap: anywhere; }
+.wk-pg-proj-search { display: flex; flex-wrap: wrap; align-items: end; gap: var(--space-2); min-width: 0; }
+.wk-pg-proj-search .wk-pg-proj-field { flex: 1; }
+.wk-pg-proj-pick-row { grid-template-columns: minmax(0, 1fr); }
+.wk-pg-proj-pick-row .wk-switch { width: 100%; text-align: left; }
+.wk-pg-proj-pick-row .wk-switch-label { min-width: 0; overflow-wrap: anywhere; }
+.wk-pg-proj-pick-row .wk-list-row-meta { margin: 0; overflow-wrap: anywhere; }
+@media (max-width: 767px) {
+  .wk-pg-proj-row { grid-template-columns: minmax(0, 1fr); }
+  .wk-pg-proj-row .wk-list-row-actions { flex-wrap: wrap; }
+  .wk-pg-proj-actions .wk-btn { white-space: normal; overflow-wrap: anywhere; }
+  .wk-pg-proj-search { flex-direction: column; align-items: stretch; }
+  .wk-pg-proj-search .wk-pg-proj-field { flex: auto; }
+}
+.wk-pg-proj-path { color: var(--ink-high); overflow-wrap: anywhere; }
+.wk-pg-proj-meta { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.wk-pg-proj-meta .wk-list-row-meta { margin: 0; }
+/* == end S6 g1 == */

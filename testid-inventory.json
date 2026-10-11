@@ -12,8 +12,8 @@
   "studioVersion": "0.7.5",
   "counts": {
     "files": 197,
-    "occurrences": 2160,
-    "static": 1880,
+    "occurrences": 2188,
+    "static": 1900,
     "dynamic": 61,
     "computed": 19
   },
@@ -5661,6 +5661,12 @@
       ]
     },
     {
+      "testId": "project-coverage-loading",
+      "files": [
+        "src/components/product/ProjectAggregates.tsx"
+      ]
+    },
+    {
       "testId": "project-coverage-row",
       "files": [
         "src/components/product/ProjectAggregates.tsx"
@@ -5734,6 +5740,12 @@
     },
     {
       "testId": "project-domain-error",
+      "files": [
+        "src/components/product/ProjectAggregates.tsx"
+      ]
+    },
+    {
+      "testId": "project-domain-loading",
       "files": [
         "src/components/product/ProjectAggregates.tsx"
       ]
@@ -6381,6 +6393,12 @@
       ]
     },
     {
+      "testId": "repo-card-error",
+      "files": [
+        "src/components/RepositoriesPanel.tsx"
+      ]
+    },
+    {
       "testId": "repo-card-findings",
       "files": [
         "src/components/RepositoriesPanel.tsx"
@@ -6399,9 +6417,39 @@
       ]
     },
     {
+      "testId": "repo-checkout-path",
+      "files": [
+        "src/components/RepositoriesPanel.tsx"
+      ]
+    },
+    {
       "testId": "repo-chip",
       "files": [
         "src/components/ChatInput.tsx"
+      ]
+    },
+    {
+      "testId": "repo-detail-error",
+      "files": [
+        "src/components/RepoDetailPage.tsx"
+      ]
+    },
+    {
+      "testId": "repo-detail-loading",
+      "files": [
+        "src/components/RepoDetailPage.tsx"
+      ]
+    },
+    {
+      "testId": "repo-detail-page",
+      "files": [
+        "src/components/RepoDetailPage.tsx"
+      ]
+    },
+    {
+      "testId": "repo-detail-stats",
+      "files": [
+        "src/components/RepoDetailPage.tsx"
       ]
     },
     {
@@ -6411,13 +6459,19 @@
       ]
     },
     {
-      "testId": "repo-graph-empty",
+      "testId": "repo-git-url",
+      "files": [
+        "src/components/RepositoriesPanel.tsx"
+      ]
+    },
+    {
+      "testId": "repo-graph",
       "files": [
         "src/components/RepoDetailPage.tsx"
       ]
     },
     {
-      "testId": "repo-graph-retry",
+      "testId": "repo-graph-empty",
       "files": [
         "src/components/RepoDetailPage.tsx"
       ]
@@ -6435,6 +6489,12 @@
       ]
     },
     {
+      "testId": "repo-name",
+      "files": [
+        "src/components/RepositoriesPanel.tsx"
+      ]
+    },
+    {
       "testId": "repo-needs-you",
       "files": [
         "src/components/RepositoriesPanel.tsx"
@@ -6447,13 +6507,73 @@
       ]
     },
     {
+      "testId": "repo-onboard-error",
+      "files": [
+        "src/components/RepoDetailPage.tsx"
+      ]
+    },
+    {
+      "testId": "repo-open-graph",
+      "files": [
+        "src/components/RepoDetailPage.tsx"
+      ]
+    },
+    {
+      "testId": "repo-open-requirements",
+      "files": [
+        "src/components/RepoDetailPage.tsx"
+      ]
+    },
+    {
+      "testId": "repo-path",
+      "files": [
+        "src/components/RepositoriesPanel.tsx"
+      ]
+    },
+    {
       "testId": "repo-project-row",
       "files": [
         "src/components/RepositoriesPanel.tsx"
       ]
     },
     {
+      "testId": "repo-register",
+      "files": [
+        "src/components/RepositoriesPanel.tsx"
+      ]
+    },
+    {
+      "testId": "repo-register-error",
+      "files": [
+        "src/components/RepositoriesPanel.tsx"
+      ]
+    },
+    {
+      "testId": "repo-register-submit",
+      "files": [
+        "src/components/RepositoriesPanel.tsx"
+      ]
+    },
+    {
+      "testId": "repo-register-why",
+      "files": [
+        "src/components/RepositoriesPanel.tsx"
+      ]
+    },
+    {
       "testId": "repo-reindex",
+      "files": [
+        "src/components/RepositoriesPanel.tsx"
+      ]
+    },
+    {
+      "testId": "repo-run-onboarding",
+      "files": [
+        "src/components/RepoDetailPage.tsx"
+      ]
+    },
+    {
+      "testId": "repo-source",
       "files": [
         "src/components/RepositoriesPanel.tsx"
       ]
@@ -6483,7 +6603,25 @@
       ]
     },
     {
+      "testId": "repos-error",
+      "files": [
+        "src/components/RepositoriesPanel.tsx"
+      ]
+    },
+    {
       "testId": "repos-filter",
+      "files": [
+        "src/components/RepositoriesPanel.tsx"
+      ]
+    },
+    {
+      "testId": "repos-filter-chip",
+      "files": [
+        "src/components/RepositoriesPanel.tsx"
+      ]
+    },
+    {
+      "testId": "repos-filter-search",
       "files": [
         "src/components/RepositoriesPanel.tsx"
       ]
@@ -6501,7 +6639,25 @@
       ]
     },
     {
+      "testId": "repos-loading",
+      "files": [
+        "src/components/RepositoriesPanel.tsx"
+      ]
+    },
+    {
       "testId": "repos-page",
+      "files": [
+        "src/components/RepositoriesPanel.tsx"
+      ]
+    },
+    {
+      "testId": "repos-range",
+      "files": [
+        "src/components/RepositoriesPanel.tsx"
+      ]
+    },
+    {
+      "testId": "repos-runs-link",
       "files": [
         "src/components/RepositoriesPanel.tsx"
       ]
@@ -6858,6 +7014,7 @@
     {
       "testId": "run-link",
       "files": [
+        "src/components/RepoDetailPage.tsx",
         "src/components/RunLink.tsx"
       ]
     },
@@ -9137,12 +9294,6 @@
       ]
     },
     {
-      "testId": "stat-active",
-      "files": [
-        "src/components/RepositoriesPanel.tsx"
-      ]
-    },
-    {
       "testId": "stat-campaign-failed",
       "files": [
         "src/components/CampaignsPage.tsx"
@@ -9191,39 +9342,9 @@
       ]
     },
     {
-      "testId": "stat-failed",
-      "files": [
-        "src/components/RepositoriesPanel.tsx"
-      ]
-    },
-    {
-      "testId": "stat-gaps",
-      "files": [
-        "src/components/RepositoriesPanel.tsx"
-      ]
-    },
-    {
       "testId": "stat-line",
       "files": [
         "src/components/ui/StatLine.tsx"
-      ]
-    },
-    {
-      "testId": "stat-ready",
-      "files": [
-        "src/components/RepositoriesPanel.tsx"
-      ]
-    },
-    {
-      "testId": "stat-repo-runs",
-      "files": [
-        "src/components/RepositoriesPanel.tsx"
-      ]
-    },
-    {
-      "testId": "stat-repos",
-      "files": [
-        "src/components/RepositoriesPanel.tsx"
       ]
     },
     {
@@ -11366,6 +11487,7 @@
     {
       "pattern": "*-detail",
       "files": [
+        "src/components/RepoFindings.tsx",
         "src/components/ui/StateBanner.tsx"
       ]
     },

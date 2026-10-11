@@ -95,13 +95,13 @@ describe('ProjectRepositories — a mutation releases only the lock it holds (Co
     await openPickerAndAttach(section, 'studio-api');
     expect(attachProjectMember).toHaveBeenNthCalledWith(2, 'proj-b', { kind: 'crew.repo', ref: 'studio-api', attachedBy: 'studio' });
     expect(optionFor(section, 'studio-api')).toBeDisabled();
-    expect(optionFor(section, 'studio-api')).toHaveTextContent('… studio-api');
+    expect(optionFor(section, 'studio-api')).toHaveTextContent('Attaching… studio-api');
 
     // A's request lands now. Before the fix its `finally` matched B's request on the repo id
     // and released B's lock; B's request is still out, so the controls must stay locked.
     await settle(() => first.resolve({ member: member('proj-a', 'studio-api') }));
     expect(optionFor(section, 'studio-api')).toBeDisabled();
-    expect(optionFor(section, 'studio-api')).toHaveTextContent('… studio-api');
+    expect(optionFor(section, 'studio-api')).toHaveTextContent('Attaching… studio-api');
     expect(onMembersChange).not.toHaveBeenCalled(); // A's result is not B's to apply
 
     // B's own request lands: applied once, lock released.
@@ -109,7 +109,7 @@ describe('ProjectRepositories — a mutation releases only the lock it holds (Co
     expect(onMembersChange).toHaveBeenCalledTimes(1);
     expect(onMembersChange.mock.calls[0]![0]([])).toEqual([member('proj-b', 'studio-api')]);
     expect(optionFor(section, 'studio-api')).toBeEnabled();
-    expect(optionFor(section, 'studio-api')).toHaveTextContent('+ studio-api');
+    expect(optionFor(section, 'studio-api')).toHaveTextContent('Attach studio-api');
   });
 
   it('a navigation round trip (A → B → A) makes the request begun before it stale — same project id, different attempt', async () => {

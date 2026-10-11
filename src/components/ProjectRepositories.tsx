@@ -1,9 +1,15 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import type { ProjectMember, RepoEntry } from '../api/types.js';
 import { fetchReposCached, getCachedRepos } from '../store/repoCache.js';
 import { RepoFindings, repoFindings } from './RepoFindings.js';
-import { useDisplayPath } from '../hooks/useHomePath.js';
+import { readErrorKind } from '../api/errors.js';
+import { relTime } from '../board/relTime.js';
+import { SectionTitle } from './ui/PageFrame.js';
+import { StatLine } from './ui/StatLine.js';
+import { EmptyState, Skeleton, StateBanner } from './ui/StateBanner.js';
+import { TechDetails } from './ui/TechDetails.js';
+import type { ProjectIssueHandler } from './product/ProjectAggregates.js';
 
 /**
  * The project's repositories — the one UI path that attaches a `crew.repo`
@@ -42,62 +48,6 @@ const REPO_KIND = 'crew.repo';
 /** Picker rows before the list asks the operator to narrow instead of growing. */
 const MAX_OPTIONS = 8;
 
-const CSS = {
-  sectionHead: {
-    fontSize: 'var(--text-2xs)', fontWeight: 'var(--weight-bold)',
-    letterSpacing: '0.08em', textTransform: 'uppercase',
-    color: 'var(--ink-muted)', margin: '0 0 8px',
-  },
-  list: {
-    display: 'flex', flexDirection: 'column', gap: '2px',
-    background: 'var(--surface-card)', border: '1px solid var(--surface-raised)',
-    borderRadius: 'var(--radius-lg)', padding: '4px',
-  },
-  row: {
-    display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0,
-    padding: '8px 10px', borderRadius: 'var(--radius-md)',
-  },
-  repoName: {
-    fontSize: 'var(--text-xs)', fontFamily: 'var(--font-mono)', color: 'var(--ink-body)',
-    whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-  },
-  repoPath: {
-    flex: 1, minWidth: 0, fontSize: 'var(--text-2xs)', fontFamily: 'var(--font-mono)',
-    color: 'var(--ink-dim)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-  },
-  rowMeta: {
-    fontSize: 'var(--text-2xs)', fontFamily: 'var(--font-mono)', color: 'var(--ink-dim)',
-    whiteSpace: 'nowrap', flexShrink: 0,
-  },
-  ghostBtn: {
-    background: 'transparent', border: '1px solid var(--surface-raised)',
-    borderRadius: 'var(--radius-md)', color: 'var(--ink-muted)', cursor: 'pointer',
-    fontSize: 'var(--text-2xs)', fontFamily: 'var(--font-sans)', padding: '2px 10px',
-    flexShrink: 0,
-  },
-  dangerBtn: {
-    background: 'transparent', border: '1px solid var(--status-fail)',
-    borderRadius: 'var(--radius-md)', color: 'var(--status-fail)', cursor: 'pointer',
-    fontSize: 'var(--text-2xs)', fontFamily: 'var(--font-sans)', padding: '2px 10px',
-    flexShrink: 0,
-  },
-  empty: { fontSize: 'var(--text-xs)', color: 'var(--ink-dim)', margin: 0 },
-  search: {
-    width: '100%', maxWidth: '360px', boxSizing: 'border-box',
-    background: 'var(--surface-base)', border: '1px solid var(--surface-raised)',
-    borderRadius: 'var(--radius-sm)', color: 'var(--ink-body)', caretColor: 'var(--accent)',
-    fontSize: 'var(--text-xs)', fontFamily: 'var(--font-mono)', padding: '4px 8px',
-    outline: 'none',
-  },
-  option: {
-    borderRadius: 'var(--radius-full)', padding: '2px 10px', cursor: 'pointer',
-    border: '1px dashed var(--surface-raised)', background: 'transparent',
-    color: 'var(--ink-muted)', fontSize: 'var(--text-2xs)', fontFamily: 'var(--font-mono)',
-  },
-  hint: { fontSize: 'var(--text-2xs)', fontFamily: 'var(--font-mono)', color: 'var(--ink-dim)', margin: 0 },
-  error: { fontSize: 'var(--text-2xs)', fontFamily: 'var(--font-mono)', color: 'var(--status-fail)', margin: 0 },
-} as const satisfies Record<string, React.CSSProperties>;
-
 /** A member ref names a registered repo by id; a legacy ref may carry the name instead
  *  (the dashboard's header chips resolve the same two ways). */
 function repoOf(ref: string, repos: RepoEntry[] | null): RepoEntry | undefined {
@@ -121,6 +71,7 @@ export type MembersUpdate = (current: ProjectMember[]) => ProjectMember[];
 
 interface Props {
   projectId: string;
+  onIssue?: ProjectIssueHandler;
   /**
    * The parent's membership state — every member (ProjectDetailPage) or already
    * just the `crew.repo` subset (ProjectDashboard). This section filters to
@@ -139,8 +90,7 @@ interface Props {
   onMembersChange: (update: MembersUpdate) => void;
 }
 
-export function ProjectRepositories({ projectId, members, onMembersChange }: Props): React.ReactElement | null {
-  const showPath = useDisplayPath();
+export function ProjectRepositories({ projectId, members, onMembersChange, onIssue }: Props): React.ReactElement | null {
   const [repos, setRepos] = useState<RepoEntry[] | null>(getCachedRepos);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -212,6 +162,18 @@ export function ProjectRepositories({ projectId, members, onMembersChange }: Pro
     [members],
   );
 
+  const retryRegistry = useCallback(() => {
+    setError(null);
+    setRegistryError(null);
+    setReonboardNote((notes) => Object.fromEntries(Object.entries(notes).filter(([, note]) => !note.failed)));
+    void fetchReposCached().then(setRepos).catch((e: unknown) => setRegistryError(e instanceof Error ? e.message : String(e)));
+  }, []);
+  const issueError = error ?? registryError ?? Object.values(reonboardNote).find((n) => n.failed)?.text ?? null;
+  useEffect(() => {
+    onIssue?.('repositories', issueError === null ? null : { what: 'repositories', error: issueError, retry: retryRegistry });
+    return () => onIssue?.('repositories', null);
+  }, [issueError, onIssue, retryRegistry]);
+
   // F-2R2-004: the rows can only show the engine's findings (and their "Re-run onboarding")
   // once the registry is known — warm the ONE session cache when this project has members and
   // the cache is cold. A failed read stays silent here: the picker's gesture retries and
@@ -222,7 +184,7 @@ export function ProjectRepositories({ projectId, members, onMembersChange }: Pro
     Promise.resolve()
       .then(() => fetchReposCached())
       .then((rs) => { if (!cancelled) setRepos(rs); })
-      .catch(() => { /* the picker's gesture retries and reports */ });
+      .catch((e: unknown) => { if (!cancelled) setRegistryError(e instanceof Error ? e.message : String(e)); });
     return () => { cancelled = true; };
   }, [repos, repoMembers.length, projectId]);
 
@@ -330,147 +292,73 @@ export function ProjectRepositories({ projectId, members, onMembersChange }: Pro
     }
   }
 
-  const shownError = error ?? registryError;
+  const shownError = issueError;
 
   const shown = options.slice(0, MAX_OPTIONS);
   const overflow = options.length - shown.length;
 
   return (
-    <section data-testid="project-repos" data-count={repoMembers.length}>
-      <p style={CSS.sectionHead}>Repositories ({repoMembers.length})</p>
-
-      {repoMembers.length === 0 ? (
-        <p style={CSS.empty} data-testid="project-repos-empty">
-          No repository attached — a project-scoped test cannot launch until one is.
-        </p>
-      ) : (
-        <div style={CSS.list}>
+    <section data-testid="project-repos" data-count={repoMembers.length} className="wk-card wk-pg-proj-stack">
+      <SectionTitle>Repositories</SectionTitle>
+      <StatLine items={[{ label: 'repositories', value: registryError === null ? repoMembers.length : null }]} />
+      {repoMembers.length === 0 ? <EmptyState data-testid="project-repos-empty" title="No repository attached" body="Attach a repository before running this project’s tests." /> : (
+        <div>
           {repoMembers.map((m) => {
             const repo = repoOf(m.member_ref, repos);
-            const label = repo?.name ?? m.member_ref;
+            const label = repo?.name ?? 'Repository';
             const isConfirming = confirming === m.id;
             const note = repo !== undefined ? reonboardNote[repo.id] : undefined;
-            return (
-              <div key={m.id} style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-              <div data-testid="project-repo-row" data-repo={m.member_ref} style={CSS.row}>
-                <span aria-hidden style={{ color: 'var(--ink-dim)' }}>⬡</span>
-                <span style={CSS.repoName} title={m.member_ref}>{label}</span>
-                <span style={CSS.repoPath} title={repo?.root_path && showPath(repo.root_path)}>{repo?.root_path ? showPath(repo.root_path) : ''}</span>
-                {isConfirming ? (
-                  <>
-                    <span style={CSS.rowMeta}>detach {label}?</span>
-                    <button
-                      type="button"
-                      data-testid="project-repo-detach-confirm"
-                      data-repo={m.member_ref}
-                      disabled={busy}
-                      onClick={() => void detach(m)}
-                      style={{ ...CSS.dangerBtn, opacity: detaching === m.id ? 0.5 : 1 }}
-                    >
-                      {detaching === m.id ? 'Detaching…' : 'Detach'}
-                    </button>
-                    <button
-                      type="button"
-                      data-testid="project-repo-detach-cancel"
-                      disabled={busy}
-                      onClick={() => setConfirming(null)}
-                      style={CSS.ghostBtn}
-                    >
-                      Cancel
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <span style={CSS.rowMeta}>
-                      {m.attached_by} · {new Date(m.attached_at).toLocaleDateString()}
-                    </span>
-                    <button
-                      type="button"
-                      data-testid="project-repo-detach"
-                      data-repo={m.member_ref}
-                      title="Detach this repository from the project (asks first)"
-                      disabled={busy}
-                      onClick={() => setConfirming(m.id)}
-                      style={{ ...CSS.ghostBtn, opacity: busy ? 0.5 : 1 }}
-                    >
-                      Detach
-                    </button>
-                  </>
-                )}
-              </div>
-              {/* studio#251: the engine's checkout findings for this member (wicked-core#406) —
-                  known once the registry cache is warm (the picker's gesture), silent otherwise
-                  and silent for a clean checkout. */}
-              {repo !== undefined && (repoFindings(repo).length > 0 || note !== undefined) && (
-                <div style={{ padding: '0 10px 6px 30px', minWidth: 0 }}>
-                  <RepoFindings
-                    compact
-                    findings={repo.findings}
-                    onRerunOnboarding={() => void rerunOnboarding(repo)}
-                    rerunning={reonboarding === repo.id}
-                    disabled={busy}
-                    testId="project-repo-findings"
-                  />
-                  {note !== undefined && (
-                    <p data-testid="project-repo-reonboard-note" data-failed={note.failed} style={note.failed ? CSS.error : CSS.hint}>
-                      {note.text}
-                    </p>
-                  )}
+            const findings = repo !== undefined ? repoFindings(repo) : [];
+            return <div key={m.id} className="wk-pg-proj-stack">
+              <div data-testid="project-repo-row" data-repo={m.member_ref} className="wk-list-row wk-pg-proj-row">
+                <div>
+                  {repos === null && registryError === null ? <Skeleton rows={1} variant="line" /> : <span className="wk-list-row-title">{label}</span>}
+                  <p className="wk-list-row-meta" title={new Date(m.attached_at).toLocaleString()}>Attached {relTime(m.attached_at)}</p>
+                  {repo?.root_path && <TechDetails text={repo.root_path} />}
                 </div>
-              )}
+                <div className="wk-list-row-actions wk-pg-proj-actions">
+                  {isConfirming ? <>
+                    <span className="wk-list-row-meta">Detach {label}?</span>
+                    <button type="button" data-testid="project-repo-detach-confirm" data-repo={m.member_ref} disabled={busy} onClick={() => void detach(m)} className="wk-btn wk-btn--danger">{detaching === m.id ? 'Detaching…' : 'Detach'}</button>
+                    <button type="button" data-testid="project-repo-detach-cancel" disabled={busy} onClick={() => setConfirming(null)} className="wk-btn wk-btn--quiet">Cancel</button>
+                  </> : <button type="button" data-testid="project-repo-detach" data-repo={m.member_ref} disabled={busy} onClick={() => setConfirming(m.id)} className="wk-btn wk-btn--quiet">Detach</button>}
+                </div>
               </div>
-            );
+              {/* studio#251: the engine's checkout findings for this member — the ONE findings
+                  component (plain sentence + Re-run onboarding; the engine's text in Technical details). */}
+              {repo !== undefined && findings.length > 0 && (
+                <RepoFindings
+                  findings={repo.findings}
+                  onRerunOnboarding={() => void rerunOnboarding(repo)}
+                  rerunning={reonboarding === repo.id}
+                  disabled={busy}
+                  testId="project-repo-findings"
+                />
+              )}
+              {note && <div data-testid="project-repo-reonboard-note" data-failed={note.failed}>
+                <p className="wk-pg-proj-note">{note.failed ? 'Onboarding couldn’t be started.' : 'Onboarding started. The code map updates when it finishes.'}</p>
+                <TechDetails text={note.text} />
+              </div>}
+            </div>;
           })}
         </div>
       )}
-
-      {/* ── Attach: the registered-repo picker (the launch panel's search idiom) ── */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '8px' }}>
-        <input
-          data-testid="project-repo-search"
-          value={query}
-          onFocus={openPicker}
+      <label className="wk-pg-proj-field">Attach a registered repository
+        <input data-testid="project-repo-search" className="wk-field" value={query} onFocus={openPicker}
           onChange={(e) => { setQuery(e.target.value); if (!pickerOpen) openPicker(); }}
-          onKeyDown={(e) => { if (e.key === 'Escape') { setPickerOpen(false); setQuery(''); } }}
-          placeholder="attach a registered repo…"
-          aria-label="Attach a registered repository"
-          style={CSS.search}
-        />
-        {pickerOpen && repos !== null && (
-          shown.length === 0 ? (
-            <p style={CSS.hint} data-testid="project-repo-options-empty">
-              {repos.length === 0
-                ? 'no repos registered yet — register one under Repositories first'
-                : query.trim() === ''
-                  ? 'every registered repo is already attached'
-                  : 'no registered repo matches'}
-            </p>
-          ) : (
-            <div data-testid="project-repo-options" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '4px' }}>
-              {shown.map((r) => (
-                <button
-                  key={r.id}
-                  type="button"
-                  data-testid="project-repo-option"
-                  data-repo={r.id}
-                  title={showPath(r.root_path)}
-                  disabled={busy}
-                  onClick={() => void attach(r)}
-                  style={{ ...CSS.option, opacity: attaching === r.id ? 0.5 : 1 }}
-                >
-                  {attaching === r.id ? '… ' : '+ '}{r.name}
-                </button>
-              ))}
-              {overflow > 0 && (
-                <span style={CSS.hint}>+{overflow} more — type to narrow</span>
-              )}
-            </div>
-          )
-        )}
-        {shownError !== null && (
-          <p data-testid="project-repo-error" style={CSS.error}>{shownError}</p>
-        )}
-      </div>
+          onKeyDown={(e) => { if (e.key === 'Escape') { setPickerOpen(false); setQuery(''); } }} placeholder="Search repositories to attach" />
+      </label>
+      {pickerOpen && repos === null && registryError === null && <Skeleton rows={2} />}
+      {pickerOpen && repos !== null && (shown.length === 0 ? <p className="wk-field-note" data-testid="project-repo-options-empty">
+        {repos.length === 0 ? 'No repositories registered yet. Register a repository first.' : query.trim() === '' ? 'Every registered repository is already attached.' : 'No registered repository matches.'}
+      </p> : <div data-testid="project-repo-options" className="wk-pg-proj-actions">
+        {shown.map((r) => <button key={r.id} type="button" data-testid="project-repo-option" data-repo={r.id} disabled={busy} onClick={() => void attach(r)} className="wk-btn wk-btn--secondary">{attaching === r.id ? 'Attaching…' : 'Attach'} {r.name}</button>)}
+        {overflow > 0 && <span className="wk-field-note">{overflow} more — type to narrow</span>}
+      </div>)}
+      {busy && <p className="wk-field-note">Wait for the current repository change to finish.</p>}
+      {shownError !== null && (onIssue === undefined
+        ? <StateBanner data-testid="project-repo-error" kind={readErrorKind(shownError)} what="repositories" error={shownError} onRetry={retryRegistry} />
+        : <TechDetails data-testid="project-repo-error" text={shownError} />)}
     </section>
   );
 }

@@ -66,32 +66,28 @@ describe('the fold (repoStats)', () => {
 });
 
 describe('the /repos surface', () => {
-  it('the KPI tiles count a graph-less repo as an INDEX GAP, not as ready — and name the kind', async () => {
+  it('the stat line counts a graph-less repo as WITHOUT a code map, not as ready', async () => {
     await panel();
-    const band = screen.getByTestId('repos-kpis');
-    const value = (tid: string): string | null =>
-      band.querySelector(`[data-testid="${tid}"]`)?.getAttribute('data-value') ?? null;
-    expect(value('stat-ready')).toBe('2');   // billing + studio-api (in-tree beside a LIVE graph = ready) — four onboards completed
-    expect(value('stat-gaps')).toBe('2');    // wicked-studio (no live graph) + orphan (no graph root); studio-api is NOT a gap
-    expect(screen.getByTestId('stat-gaps').textContent).toContain('2 graph missing');
-    expect(screen.getByTestId('stat-gaps').textContent).not.toContain('every graph ready');
-    expect(screen.getByTestId('stat-gaps').getAttribute('title')).toContain('checkout findings');
+    const line = screen.getByTestId('repos-kpis').textContent ?? '';
+    expect(line).toContain('2 with a code map');     // billing + studio-api (in-tree beside a LIVE graph = ready)
+    expect(line).toContain('2 without a code map');  // wicked-studio (no live graph) + orphan (no graph root)
   });
 
-  it('the card says "graph missing — re-run onboarding", never "graph ready", for the in-tree repo', async () => {
+  it('the card says "No code map yet" with Re-run onboarding, never "ready", for the in-tree repo', async () => {
     await panel();
     const cards = screen.getAllByTestId('repo-card');
     const studio = cards.find((c) => c.getAttribute('data-repo-id') === 'wicked-studio')!;
     const state = within(studio).getByTestId('repo-graph-state');
     expect(state).toHaveAttribute('data-state', 'missing');
-    expect(state.textContent).toContain('graph missing — re-run onboarding');
-    expect(state.textContent).not.toContain('graph ready');
-    expect(state.getAttribute('title')).toContain('checkout findings');
+    expect(state.textContent).toContain('No code map yet');
+    expect(state.textContent).not.toContain('ready');
+    // The gap is said once: the finding row under it carries only its action.
+    expect(within(studio).getByTestId('repo-card-findings-row').querySelector('.wk-pg-repo-finding-text')).toBeNull();
     // The finding row with its action still rides the card (studio#253).
     expect(within(studio).getByTestId('repo-card-findings-reonboard')).toBeInTheDocument();
 
     const orphan = cards.find((c) => c.getAttribute('data-repo-id') === 'orphan')!;
-    expect(within(orphan).getByTestId('repo-graph-state').textContent).toContain('graph missing — no graph root resolves');
+    expect(within(orphan).getByTestId('repo-graph-state').textContent).toContain('No code map: Studio’s service has nowhere to keep one');
 
     const billing = cards.find((c) => c.getAttribute('data-repo-id') === 'billing')!;
     expect(within(billing).getByTestId('repo-graph-state')).toHaveAttribute('data-state', 'ready');
@@ -100,18 +96,19 @@ describe('the /repos surface', () => {
     // no re-onboard action, no gap.
     const api = cards.find((c) => c.getAttribute('data-repo-id') === 'studio-api')!;
     expect(within(api).getByTestId('repo-graph-state')).toHaveAttribute('data-state', 'ready');
-    expect(within(api).getByTestId('repo-graph-state').textContent).toContain('graph ready — onboard completed');
+    expect(within(api).getByTestId('repo-graph-state').textContent).toContain('Code map ready');
     expect(within(api).getByTestId('repo-card-findings')).toHaveAttribute('data-count', '1');
     expect(within(api).queryByTestId('repo-card-findings-reonboard')).toBeNull();
   });
 
-  it('the gaps tile doors into the Graph missing chip, which filters to the graph-less repos', async () => {
+  it('the No code map chip filters to the graph-less repos', async () => {
     await panel();
-    fireEvent.click(screen.getByTestId('stat-gaps'));
+    const chip = (id: string) => screen.getAllByTestId('repos-filter-chip').find((c) => c.getAttribute('data-chip') === id)!;
+    fireEvent.click(chip('graph-missing'));
     expect(screen.getByTestId('repos-filter').getAttribute('data-filter')).toBe('graph-missing');
     expect(screen.getAllByTestId('repo-card').map((c) => c.getAttribute('data-repo-id')).sort()).toEqual(['orphan', 'wicked-studio']);
     // …and the Ready chip holds the two with a live graph, the live-in-tree repo included.
-    fireEvent.click(screen.getByTestId('stat-ready'));
+    fireEvent.click(chip('ready'));
     expect(screen.getByTestId('repos-filter').getAttribute('data-filter')).toBe('ready');
     expect(screen.getAllByTestId('repo-card').map((c) => c.getAttribute('data-repo-id')).sort()).toEqual(['billing', 'studio-api']);
   });

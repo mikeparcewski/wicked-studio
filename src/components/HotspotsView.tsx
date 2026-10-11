@@ -63,7 +63,7 @@ export function HotspotsView({ nodes, selectedId, onSelect }: Props): React.Reac
 
               <div className="relative flex items-center gap-2">
                 <span
-                  className="text-[10px] tabular-nums w-5 text-right shrink-0 font-mono"
+                  className="text-xs tabular-nums w-5 text-right shrink-0"
                   style={{ color: 'var(--ink-dim)' }}
                 >
                   {i + 1}
@@ -71,21 +71,21 @@ export function HotspotsView({ nodes, selectedId, onSelect }: Props): React.Reac
                 <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: color }} />
                 <span className="flex-1 min-w-0 flex flex-col">
                   <span
-                    className="font-mono text-[11px] truncate font-medium"
+                    className="font-mono text-xs truncate font-medium"
                     style={{ color: 'var(--ink-high)' }}
                     title={n.name || n.id}
                   >
                     {displayName}
                   </span>
                   {filePart && (
-                    <span className="text-[9px] truncate font-mono" style={{ color: 'var(--ink-dim)' }}>
+                    <span className="text-[11px] truncate font-mono" style={{ color: 'var(--ink-dim)' }}>
                       {n.kind && <span style={{ color: 'var(--ink-muted)', marginRight: '4px' }}>{n.kind}</span>}
                       {filePart}
                     </span>
                   )}
                 </span>
                 <span
-                  className="shrink-0 text-[11px] font-semibold tabular-nums ml-2 font-mono"
+                  className="shrink-0 text-xs font-semibold tabular-nums ml-2"
                   style={{ color: isSelected ? 'var(--status-run)' : 'var(--ink-muted)' }}
                 >
                   {n.inDeg}

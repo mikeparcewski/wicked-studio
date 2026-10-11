@@ -34,7 +34,7 @@ describe('LanguageBar (§3.3)', () => {
     expect(segments[0]?.getAttribute('style')).toContain('60%');
     // Labels carry the display name + rounded percent, and name the unit.
     expect(bar.textContent).toContain('TypeScript 60%');
-    expect(bar.textContent).toContain('by files indexed');
+    expect(bar.textContent).toContain('by number of files');
   });
 
   it('renders the honest not-indexed state when the graph is absent or empty', () => {
@@ -108,7 +108,7 @@ describe('CommitCadence (§3.1)', () => {
     expect(rects).toHaveLength(3); // day 0, day 2 (×2), day 21
     expect(rects.every((r) => r.getAttribute('fill') === 'var(--accent)')).toBe(true);
     expect(el.textContent).toContain('last 5 commits');
-    expect(el.textContent).toContain('1 older than 30d');
+    expect(el.textContent).toContain('1 older than 30 days');
   });
 
   it('renders honest states: loading, no commits, nothing in-window', () => {

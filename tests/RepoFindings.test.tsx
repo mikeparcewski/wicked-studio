@@ -63,13 +63,13 @@ describe('the finding rule (module functions)', () => {
     expect(findingSeverity(live)).toBe('warning');
     expect(findingSeverity(noLive)).toBe('error');
     expect(findingSeverity(root)).toBe('error');
-    expect(findingLabel(live)).toBe('in-tree graph ignored');
-    expect(findingLabel(noLive)).toBe('in-tree graph ignored · no live graph');
-    expect(findingLabel(root)).toBe('no graph root');
+    expect(findingLabel(live)).toBe('An old code map saved inside this checkout is ignored; the current one is used.');
+    expect(findingLabel(noLive)).toBe('This repository has no code map yet. Re-run onboarding to build it.');
+    expect(findingLabel(root)).toBe('Studio’s service has nowhere to keep code maps, so this repository can’t be mapped.');
     // Forward-additive: an unknown code renders as a warning under its own name.
     const unknown = { code: 'some_new_code', message: 'x', path: null };
     expect(findingSeverity(unknown)).toBe('warning');
-    expect(findingLabel(unknown)).toBe('some new code');
+    expect(findingLabel(unknown)).toBe('Some new code.');
   });
 
   it('CONTRACT: the re-onboard rule keys on the sentence wicked-core pins in its own tests', () => {
@@ -120,7 +120,7 @@ describe('the finding rule (module functions)', () => {
     render(<RepoFindings findings={REPO_INTREE_NO_LIVE.findings} />);
     const row = screen.getByTestId('repo-findings-row');
     expect(row).toHaveAttribute('data-reonboard', 'true');
-    expect(row.textContent).toContain('re-run onboarding');
+    expect(row.textContent).toContain('Re-run onboarding to build it');
     expect(screen.queryByTestId('repo-findings-reonboard')).toBeNull();
   });
 });
@@ -148,7 +148,9 @@ describe('the repo card (RepositoriesPanel)', () => {
     const live = within(card(cards, 'studio-api')).getByTestId('repo-card-findings-row');
     expect(live).toHaveAttribute('data-code', 'in_tree_code_graph_ignored');
     expect(live).toHaveAttribute('data-severity', 'warning');
-    expect(live.textContent).toContain('the live graph is /w2/state/repo-graphs/studio-api-9c1e/estate.db');
+    // Plain words on the card; the engine's message (with its paths) lives on the detail page's Technical details.
+    expect(live.textContent).toContain('An old code map saved inside this checkout is ignored');
+    expect(live.textContent).not.toContain('/w2/state');
     expect(within(live).queryByTestId('repo-card-findings-reonboard')).toBeNull();
 
     const noLive = within(card(cards, 'wicked-studio')).getByTestId('repo-card-findings-row');
@@ -158,7 +160,7 @@ describe('the repo card (RepositoriesPanel)', () => {
     const root = within(card(cards, 'orphan')).getByTestId('repo-card-findings-row');
     expect(root).toHaveAttribute('data-code', 'code_graph_root_unresolvable');
     expect(root).toHaveAttribute('data-severity', 'error');
-    expect(root.textContent).toContain('no repo-graph root resolves for this daemon');
+    expect(root.textContent).not.toContain('daemon'); // the card's graph line states this gap
     expect(within(root).queryByTestId('repo-card-findings-reonboard')).toBeNull();
   });
 
@@ -183,7 +185,10 @@ describe('the repo detail header (RepoDetailPage)', () => {
     expect(block).toHaveAttribute('data-count', '1');
     const row = within(block).getByTestId('repo-findings-row');
     expect(row).toHaveAttribute('data-reonboard', 'true');
-    expect(row.textContent).toContain('re-run onboarding (POST /repos/wicked-studio/onboard)');
+    // The default layer is plain words; the API path is only inside Technical details (UX-003, audit row 43).
+    expect(row.querySelector('.wk-pg-repo-finding-text')!.textContent).toBe('This repository has no code map yet. Re-run onboarding to build it.');
+    expect(row.querySelector('.wk-pg-repo-finding-text')!.textContent).not.toMatch(/POST \/|core#|\.codegraph/);
+    expect(within(block).getByTestId('repo-findings-detail').textContent).toContain('re-run onboarding (POST /repos/wicked-studio/onboard)');
     fireEvent.click(within(block).getByTestId('repo-findings-reonboard'));
     await waitFor(() => expect(rerunOnboarding).toHaveBeenCalledWith('wicked-studio'));
     await waitFor(() => expect(onSelectRun).toHaveBeenCalledWith('run-reonboard'));
@@ -191,7 +196,7 @@ describe('the repo detail header (RepoDetailPage)', () => {
 
   it('a clean record shows no findings block — and no empty spacer under the root path', async () => {
     const { container } = render(<RepoDetailPage repoId="billing" onSelectRun={() => undefined} navigate={() => undefined} onOpenGraph={() => undefined} />);
-    await screen.findByText('billing');
+    await screen.findByRole('heading', { name: 'billing' });
     expect(screen.queryByTestId('repo-findings')).toBeNull();
     expect(container.querySelector('.mt-2:empty')).toBeNull();
   });

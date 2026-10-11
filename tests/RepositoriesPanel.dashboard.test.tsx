@@ -81,37 +81,31 @@ beforeEach(() => {
 });
 afterEach(() => cleanup());
 
-describe('the KPI band — performance / pipeline / risk', () => {
-  it('renders the six tiles above the fleet with live values', async () => {
+describe('the stat line (UI-CONTRACT §4.6: KPI tiles retired)', () => {
+  it('states the fleet facts in one sentence-case line above the fleet; zeros hidden', async () => {
     await panel();
-    const band = screen.getByTestId('repos-kpis');
-    const value = (tid: string): string | null =>
-      band.querySelector(`[data-testid="${tid}"]`)?.getAttribute('data-value') ?? null;
-    expect(value('stat-repos')).toBe('3');
-    expect(value('stat-repo-runs')).toBe('6');   // every repo-linked run sits in the last-30 window
-    expect(value('stat-active')).toBe('1');      // r-a1 moving
-    expect(value('stat-ready')).toBe('1');       // studio-api's onboard completed
-    expect(value('stat-failed')).toBe('2');      // r-a2 + o-billing failed in the window
-    expect(value('stat-gaps')).toBe('2');        // billing (onboard failed) + fresh (never)
+    const line = screen.getByTestId('repos-kpis');
+    // 3 repos · 1 with a code map (studio-api) · 1 working now (r-a1's repo) · 2 failed in the window
+    // (r-a2 + o-billing) · 2 without a code map (billing onboard failed + fresh never).
+    expect(line.textContent).toBe('3 repositories · 1 with a code map · 1 working now · 2 failed (last 30) · 2 without a code map');
+    expect(line.className).toContain('wk-statline');
     const list = screen.getByTestId('repos-list');
-    expect(band.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(line.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // No uppercase micro-labels, no "_" placeholder, no mono on the page body.
+    expect(screen.getByTestId('repos-page').textContent).not.toMatch(/PERFORMANCE|PIPELINE|RISK|_/);
+    expect(screen.getByTestId('repos-page').querySelector('.font-mono')).toBeNull();
   });
 
-  it('6 runs against a 30-run window has NO prior bucket — the delta reads "—", never 0%', async () => {
-    await panel();
-    expect(screen.getByTestId('stat-repo-runs').getAttribute('data-delta')).toBe('none');
-    expect(within(screen.getByTestId('stat-repo-runs')).getByTestId('stat-delta')).toHaveTextContent('—');
-    expect(screen.getByTestId('stat-repo-runs').textContent).toContain('no prior window');
-  });
-
-  it('the index-gaps tile names both gap kinds and doors into the fleet filter', async () => {
-    await panel();
-    const gaps = screen.getByTestId('stat-gaps');
-    expect(gaps.textContent).toContain('1 onboard failed · 1 never onboarded');
-    fireEvent.click(gaps);
-    // An onboard failure outranks "never" — the door lands on Failing.
-    expect(screen.getByTestId('repos-filter').getAttribute('data-filter')).toBe('failing');
-    expect(screen.getAllByTestId('repo-card').map((c) => c.getAttribute('data-repo-id'))).toEqual(['billing', 'studio-api']);
+  it('a failed read shows ONE banner with Retry and no counts (never 0)', async () => {
+    listRepos.mockImplementationOnce(() => Promise.reject(new TypeError('Failed to fetch')));
+    render(<RepositoriesPanel navigate={() => {}} />);
+    const banner = await screen.findByTestId('repos-error');
+    expect(banner).toHaveAttribute('data-kind', 'offline');
+    expect(banner.querySelector('.wk-state-banner-text')!.textContent).not.toContain('Failed to fetch');
+    expect(screen.queryByTestId('repos-kpis')).toBeNull();
+    fireEvent.click(screen.getByTestId('repos-error-retry'));
+    await screen.findByTestId('repos-list');
+    expect(listRepos).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -123,12 +117,12 @@ describe('the fleet grid — graph honesty, needs-you first, cards are doors', (
     expect(cards.map((c) => c.getAttribute('data-repo-id'))).toEqual(['billing', 'studio-api', 'fresh']);
     const state = (card: HTMLElement) => within(card).getByTestId('repo-graph-state');
     expect(state(cards[0]!).getAttribute('data-state')).toBe('failed');
-    expect(state(cards[0]!).textContent).toContain('onboard FAILED');
+    expect(state(cards[0]!).textContent).toContain('Onboarding failed');
     expect(state(cards[1]!).getAttribute('data-state')).toBe('ready');
-    expect(state(cards[1]!).textContent).toContain('graph ready — onboard completed');
+    expect(state(cards[1]!).textContent).toContain('Code map ready · onboarded');
     // The honest never state SAYS it is a no-record claim, not a fact about disk.
     expect(state(cards[2]!).getAttribute('data-state')).toBe('never');
-    expect(state(cards[2]!).textContent).toContain('never onboarded — no onboard run on record');
+    expect(state(cards[2]!).textContent).toContain('Not onboarded yet');
   });
 
   it('a card is a door: clicking it opens the repo detail', async () => {
@@ -149,11 +143,11 @@ describe('the fleet grid — graph honesty, needs-you first, cards are doors', (
     expect(navigate).not.toHaveBeenCalledWith('/repo-detail/billing'); // no card navigation leaked
   });
 
-  it('shows the windowed run counts with the ✓/✕ split', async () => {
+  it('shows the windowed run counts with the finished/failed split in words', async () => {
     await panel();
     const api = screen.getAllByTestId('repo-card').find((c) => c.getAttribute('data-repo-id') === 'studio-api')!;
-    expect(within(api).getByTestId('repo-card-runs').textContent).toContain('3 runs · last 30');
-    expect(within(api).getByTestId('repo-card-split').textContent).toBe('✓1 · ✕1');
+    expect(within(api).getByTestId('repo-card-runs').textContent).toBe('3 runs (last 30)');
+    expect(within(api).getByTestId('repo-card-split').textContent).toBe(' · 1 finished, 1 failed');
   });
 });
 
@@ -183,7 +177,7 @@ describe('Re-index is a PREFILL — never a hidden relaunch', () => {
   });
 });
 
-describe('the FilterStrip drives the fleet; the register flow is untouched', () => {
+describe('the filters drive the fleet; the register flow is untouched', () => {
   it('chips narrow the cards; search matches name and path; clear-filters restores', async () => {
     await panel();
     const chip = (id: string) => screen.getAllByTestId('repos-filter-chip')
@@ -200,7 +194,8 @@ describe('the FilterStrip drives the fleet; the register flow is untouched', () 
 
   it('keeps the add affordance and fires exactly GET /repos + GET /runs — the graph fan-out stays retired', async () => {
     await panel();
-    expect(screen.getByText('+ Add Repository')).toBeInTheDocument();
+    expect(screen.getByTestId('repos-add')).toHaveTextContent('Add repository');
+    expect(screen.getByTestId('repos-add').className).toContain('wk-btn--primary');
     expect(listRepos).toHaveBeenCalledTimes(1);
     expect(listRuns).toHaveBeenCalledTimes(1);
     expect(getRepoGraph).not.toHaveBeenCalled();
@@ -210,7 +205,7 @@ describe('the FilterStrip drives the fleet; the register flow is untouched', () 
     await panel();
     const grid = screen.getByTestId('repos-list') as HTMLElement;
     expect(grid.style.maxWidth).toBe('');
-    expect(grid.style.gridTemplateColumns).toContain('auto-fill');
+    expect(grid.className).toContain('wk-pg-repo-grid'); // repeat(auto-fill, …) in styles/sections/pages.css
   });
 
   it('with no repos at all, the empty state carries the creation CTA — clicking opens the form, posts nothing', async () => {
@@ -218,9 +213,9 @@ describe('the FilterStrip drives the fleet; the register flow is untouched', () 
     listRuns.mockImplementationOnce(() => Promise.resolve({ runs: [] }));
     render(<RepositoriesPanel navigate={() => {}} />);
     const empty = await screen.findByTestId('repos-empty');
-    expect(empty.textContent).toContain('No repositories');
+    expect(empty.textContent).toContain('No repositories yet');
     // The CTA is the section's creation verb, INSIDE the empty state.
-    const cta = within(empty).getByRole('button', { name: '+ Add Repository' });
+    const cta = within(empty).getByRole('button', { name: 'Add repository' });
     fireEvent.click(cta);
     // The register form opens (the slice-B flow) — nothing was posted.
     expect(screen.getByTestId('repo-project-row')).toBeInTheDocument();
@@ -242,20 +237,20 @@ describe('the captured-learnings state (studio#294 b) — a captured repo reads 
     const api = card('studio-api');
     expect(api).toHaveAttribute('data-captured', 'captured');
     expect(within(api).getByTestId('repo-capture-state')).toHaveAttribute('data-state', 'captured');
-    expect(within(api).getByTestId('repo-capture-state').textContent).toContain('learnings captured · 2h ago');
+    expect(within(api).getByTestId('repo-capture-state').textContent).toContain('Learnings captured 2h ago');
     expect(within(api).getByTestId('repo-capture-learnings').textContent).toBe('Capture learnings again');
     // The graph line is untouched: a capture is not an onboard.
     expect(within(api).getByTestId('repo-graph-state')).toHaveAttribute('data-state', 'ready');
     // A never-captured repo is told the verb exists.
     const fresh = card('fresh');
     expect(fresh).toHaveAttribute('data-captured', 'never');
-    expect(within(fresh).getByTestId('repo-capture-state').textContent).toContain('no learnings captured yet — Capture learnings');
+    expect(within(fresh).getByTestId('repo-capture-state').textContent).toContain('No learnings captured yet');
     expect(within(fresh).getByTestId('repo-capture-learnings').textContent).toBe('Capture learnings');
     // The added reading changes NOTHING the existing folds say — the ordering and the KPI tiles hold
     // (the capture run is one more windowed run, nothing else).
     expect(screen.getAllByTestId('repo-card').map((c) => c.getAttribute('data-repo-id'))).toEqual(['billing', 'studio-api', 'fresh']);
-    expect(screen.getByTestId('stat-ready').getAttribute('data-value')).toBe('1');
-    expect(screen.getByTestId('stat-gaps').getAttribute('data-value')).toBe('2');
+    expect(screen.getByTestId('repos-kpis').textContent).toContain('1 with a code map');
+    expect(screen.getByTestId('repos-kpis').textContent).toContain('2 without a code map');
   });
 
   it('an in-flight capture reads "capturing learnings now"; a failed one says FAILED — never "captured"', async () => {
@@ -270,9 +265,9 @@ describe('the captured-learnings state (studio#294 b) — a captured repo reads 
     await panel();
     const card = (id: string) => screen.getAllByTestId('repo-card').find((c) => c.getAttribute('data-repo-id') === id)!;
     expect(within(card('fresh')).getByTestId('repo-capture-state')).toHaveAttribute('data-state', 'capturing');
-    expect(within(card('fresh')).getByTestId('repo-capture-state').textContent).toContain('capturing learnings now');
+    expect(within(card('fresh')).getByTestId('repo-capture-state').textContent).toContain('Capturing learnings now');
     expect(within(card('billing')).getByTestId('repo-capture-state')).toHaveAttribute('data-state', 'failed');
-    expect(within(card('billing')).getByTestId('repo-capture-state').textContent).toContain('learnings capture FAILED');
-    expect(within(card('billing')).getByTestId('repo-capture-state').textContent).not.toContain('learnings captured');
+    expect(within(card('billing')).getByTestId('repo-capture-state').textContent).toContain('Capturing learnings failed');
+    expect(within(card('billing')).getByTestId('repo-capture-state').textContent).not.toContain('Learnings captured');
   });
 });

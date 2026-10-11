@@ -6,22 +6,19 @@ import { gateOpenPath } from '../board/gateActions.js';
 import {
   graphReady, matchesRepoChip, repoFleetModels, type OnboardState, type RepoChip, type RepoFleetModel,
 } from '../board/repoStats.js';
-import {
-  attachSeries, deltaWord, healthColor, healthOf, statusCounts, windowBuckets, windowDelta,
-} from '../board/windowStats.js';
-import { rangeWord, useTimeRange } from '../hooks/useTimeRange.js';
+import { healthOf, windowBuckets, windowDelta } from '../board/windowStats.js';
+import { rangeWord, TIME_RANGE_OPTIONS, useTimeRange, type TimeRange } from '../hooks/useTimeRange.js';
 import { useMembershipStore } from '../store/membership.js';
 import { useProvenanceStore } from '../store/provenance.js';
 import { setRetryPrefill } from '../store/retryPrefill.js';
-import {
-  DashboardGrid, FilterStrip, KpiBand, KpiGroup, Sparkline, StatTile, type FilterChip,
-} from './dashboardKit.js';
+import { readErrorKind } from '../api/errors.js';
+import { EmptyState, PageFrame, Segmented, Skeleton, StateBanner, StatLine, TechDetails } from './ui/index.js';
 import { NewProjectModal } from './NewProjectModal.js';
 import { ago } from './AgeStamp.js';
 import { ProjectSwitcher } from './ProjectSwitcher.js';
 import { RepoFindings } from './RepoFindings.js';
 import { useNeedsSources } from '../store/needsSources.js';
-import { useDisplayPath } from '../hooks/useHomePath.js';
+import { useDisplayText } from '../hooks/useHomePath.js';
 
 type SourceMode = 'local' | 'remote';
 
@@ -40,10 +37,9 @@ interface Props {
 }
 
 /**
- * The /repos landing as a COMMAND SURFACE (lane B, the 0.4.6 treatment): the
- * fleet view of what the agents work ON. A KPI band organized around the
- * command-center questions (performance / pipeline / risk), then one card per
- * registered repo behind a first-class FilterStrip — needs-you floats first
+ * The /repos landing (UI-CONTRACT S6): the fleet view of what the agents work ON, in the
+ * shared PageFrame. One StatLine of facts (the retired KPI band's numbers, zeros hidden),
+ * then one card per registered repo behind the filters — needs-you floats first
  * and jumps STRAIGHT to the waiting run's gate; Re-index is a PREFILL into
  * the governed-run composer (the Retry-as-prefill idiom — never a hidden
  * relaunch); the header keeps the section's creation verb (+ Add Repository,
@@ -68,22 +64,10 @@ function relativeTime(tsSeconds: number): string {
   return `registered ${new Date(tsMs).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}`;
 }
 
-const inputCss: React.CSSProperties = {
-  background: 'var(--surface-rail)',
-  border: '1px solid var(--surface-raised)',
-  color: 'var(--ink-high)',
-  borderRadius: '6px',
-  padding: '6px 10px',
-  fontSize: '12px',
-  fontFamily: 'var(--wk-font-mono, monospace)',
-  outline: 'none',
-  width: '100%',
-};
-
-const CARD_STAT: React.CSSProperties = {
-  fontSize: 'var(--text-2xs)', fontFamily: 'var(--font-mono)', color: 'var(--ink-muted)',
-  whiteSpace: 'nowrap',
-};
+/** A failure's raw text, for Technical details only. */
+function errorText(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
+}
 
 /** The card's graph state — the engine's checkout findings OUTRANK the run verdict (F-2R2-003). */
 function graphState(m: RepoFleetModel): OnboardState | 'missing' {
@@ -92,29 +76,29 @@ function graphState(m: RepoFleetModel): OnboardState | 'missing' {
   return m.onboard.state;
 }
 
-/** The graph-state line's words — one honest sentence per state. */
+/** The graph-state line's words — one plain sentence per state (no internals). */
 function graphStateWord(m: RepoFleetModel, attachedAt: Record<string, number>, now: number): string {
   const { run } = m.onboard;
   const state = graphState(m);
   const clock = run === null ? undefined : attachedAt[run.session.id];
-  const when = clock === undefined ? '' : ` · ${ago(clock, now)} ago`;
+  const when = clock === undefined ? '' : ` ${ago(clock, now)} ago`;
   if (state === 'missing') {
     return m.graphGap?.kind === 'no-graph-root'
-      ? 'graph missing — no graph root resolves for this daemon'
-      : `graph missing — re-run onboarding${m.onboard.state === 'ready' ? ' (the onboard that completed predates the live graph)' : ''}`;
+      ? 'No code map: Studio’s service has nowhere to keep one'
+      : 'No code map yet';
   }
-  if (state === 'ready') return `graph ready — onboard completed${when}`;
-  if (state === 'onboarding') return 'onboarding now — index + annotate in flight';
-  if (state === 'failed') return `onboard FAILED${when} — the graph may be stale or absent`;
-  return 'never onboarded — no onboard run on record';
+  if (state === 'ready') return `Code map ready${when === '' ? '' : ` · onboarded${when}`}`;
+  if (state === 'onboarding') return 'Onboarding now — mapping the code…';
+  if (state === 'failed') return `Onboarding failed${when}`;
+  return 'Not onboarded yet';
 }
 
-const GRAPH_STATE_COLOR: Record<string, string> = {
-  ready: 'var(--ink-dim)',
-  onboarding: 'var(--status-run)',
-  failed: 'var(--status-fail)',
-  never: 'var(--status-gate)',
-  missing: 'var(--status-fail)',
+const GRAPH_TONE: Record<string, 'quiet' | 'run' | 'fail' | 'gate'> = {
+  ready: 'quiet',
+  onboarding: 'run',
+  failed: 'fail',
+  never: 'gate',
+  missing: 'fail',
 };
 
 /**
@@ -126,34 +110,26 @@ const GRAPH_STATE_COLOR: Record<string, string> = {
 function captureStateWord(m: RepoFleetModel, attachedAt: Record<string, number>, now: number): string {
   const { state, run } = m.capture;
   const clock = run === null ? undefined : attachedAt[run.session.id];
-  const when = clock === undefined ? '' : ` · ${ago(clock, now)} ago`;
-  if (state === 'captured') return `learnings captured${when} — durable memory holds this repo's history`;
-  if (state === 'capturing') return 'capturing learnings now — a governed run is mining this repo';
-  if (state === 'failed') return `learnings capture FAILED${when} — memory may hold nothing from this repo`;
-  return 'no learnings captured yet — Capture learnings mines this repo\'s history into memory';
+  const when = clock === undefined ? '' : ` ${ago(clock, now)} ago`;
+  if (state === 'captured') return `Learnings captured${when}`;
+  if (state === 'capturing') return 'Capturing learnings now…';
+  if (state === 'failed') return `Capturing learnings failed${when}`;
+  return 'No learnings captured yet';
 }
 
-const CAPTURE_STATE_COLOR: Record<string, string> = {
-  captured: 'var(--ink-dim)',
-  capturing: 'var(--status-run)',
-  failed: 'var(--status-fail)',
-  never: 'var(--ink-muted)',
+const CAPTURE_TONE: Record<string, 'quiet' | 'run' | 'fail'> = {
+  captured: 'quiet',
+  capturing: 'run',
+  failed: 'fail',
+  never: 'quiet',
 };
 
-/** The hover text the captured-learnings reading shares: what the story is derived from. */
-const CAPTURE_STATE_TITLE =
-  'Derived from the repo\'s newest capture-learnings run (the repos wire carries no "learnings captured" field): completed = captured, in flight = capturing, failed = the capture failed, none on record = never captured';
-
-/** The hover text every graph-state reading shares: what the story is derived from. */
-const GRAPH_STATE_TITLE =
-  'Derived from the repo\'s newest onboarding run AND the engine\'s checkout findings (RepoEntry.findings): a finding that says no live graph has been indexed outranks a completed onboard — the repos wire carries no index-freshness field';
-
 export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, ambientProject = null }: Props): React.ReactElement {
-  const showPath = useDisplayPath();
+  const showPath = useDisplayText();
   const [repos, setRepos] = useState<RepoEntry[]>([]);
   const [runs, setRuns] = useState<SessionView[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<unknown>(null);
   const [search, setSearch] = useState('');
   const [chip, setChip] = useState<RepoChip>('all');
   const { range, setRange } = useTimeRange('30d');
@@ -174,7 +150,7 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
   const [newPath, setNewPath] = useState('');
   const [newGitUrl, setNewGitUrl] = useState('');
   const [checkoutPath, setCheckoutPath] = useState('');
-  const [registerError, setRegisterError] = useState<string | null>(null);
+  const [registerError, setRegisterError] = useState<unknown>(null);
   const [registering, setRegistering] = useState(false);
   const nameEditedRef = useRef(false);
 
@@ -211,8 +187,9 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
       });
   }
 
-  useEffect(() => {
+  function load(): void {
     setLoading(true);
+    setError(null);
     Promise.all([api.listRepos(), api.listRuns()])
       .then(([{ repos: rs }, { runs: rv }]) => {
         // The needs-you queue's repo-graph input rides this read (a deposit, zero requests).
@@ -220,9 +197,11 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
         setRepos(rs);
         setRuns(rv);
       })
-      .catch((err) => setError(err instanceof Error ? err.message : String(err)))
+      .catch((err: unknown) => setError(err))
       .finally(() => setLoading(false));
-  }, []);
+  }
+  // One read on mount; Retry calls load().
+  useEffect(load, []);
 
   function deriveName(value: string): void {
     if (nameEditedRef.current) return;
@@ -357,7 +336,7 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
 
       navigate('/repo-detail/' + encodeURIComponent(repo.id));
     } catch (err) {
-      setRegisterError(err instanceof Error ? err.message : String(err));
+      setRegisterError(err);
     } finally {
       setRegistering(false);
     }
@@ -375,18 +354,10 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
   );
   const buckets = useMemo(() => windowBuckets(repoRuns, range), [repoRuns, range]);
   const windowIds = useMemo(() => new Set(buckets.current.map((v) => v.session.id)), [buckets]);
-  const liveCounts = useMemo(() => statusCounts(repoRuns), [repoRuns]);
-  const runsDelta = useMemo(() => windowDelta(buckets, (rs) => rs.length), [buckets]);
   const failedDelta = useMemo(
     () => windowDelta(buckets, (rs) => rs.filter((v) => v.session.status === 'failed').length),
     [buckets],
   );
-  const runSpark = useMemo(
-    () => attachSeries(buckets.current.map((v) => v.session.id), attachedAt, 14, now),
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- `now` re-derives with the data, not a timer
-    [buckets, attachedAt],
-  );
-
   // ── The fleet models — one fold per card, shared by grid, chips and tiles ──
   const fleet = useMemo(
     () => repoFleetModels(repos, repoRuns, attachedAt, windowIds),
@@ -399,11 +370,6 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
   const gapMissingN = fleet.filter((m) => graphState(m) === 'missing').length;
   const gapFailedN = fleet.filter((m) => m.onboard.state === 'failed' && graphState(m) !== 'missing').length;
   const gapNeverN = fleet.filter((m) => m.onboard.state === 'never' && graphState(m) !== 'missing').length;
-  const gapWords = [
-    gapMissingN > 0 ? `${gapMissingN} graph missing` : null,
-    gapFailedN > 0 ? `${gapFailedN} onboard failed` : null,
-    gapNeverN > 0 ? `${gapNeverN} never onboarded` : null,
-  ].filter((w): w is string => w !== null);
 
   /** The gate jump: the run's session thread AT the gate (filed or not). */
   const gateJump = (id: string): string => gateOpenPath(projectIdByRun[id] ?? '', id);
@@ -427,135 +393,66 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
     return counts;
   }, [searched]);
 
-  const chips: FilterChip[] = [
+  const allChips: { id: RepoChip; label: string; count: number }[] = [
     { id: 'all', label: 'All', count: chipCounts.all },
     { id: 'needs-you', label: 'Needs you', count: chipCounts['needs-you'] },
     { id: 'active', label: 'Active', count: chipCounts.active },
     { id: 'failing', label: 'Failing', count: chipCounts.failing },
-    { id: 'ready', label: 'Ready', count: chipCounts.ready },
-    { id: 'never', label: 'Never onboarded', count: chipCounts.never },
-    // F-2R2-003: the engine's own "no live graph" — a chip only while some repo carries it.
-    ...(chipCounts['graph-missing'] > 0
-      ? [{ id: 'graph-missing', label: 'Graph missing', count: chipCounts['graph-missing'] } satisfies FilterChip]
-      : []),
+    { id: 'ready', label: 'Code map ready', count: chipCounts.ready },
+    { id: 'never', label: 'Not onboarded', count: chipCounts.never },
+    // F-2R2-003: the engine's own "no live graph".
+    { id: 'graph-missing', label: 'No code map', count: chipCounts['graph-missing'] },
   ];
+  // UI-CONTRACT §4.5: a filter chip hides when its (settled) count is 0 and it is not the active filter.
+  const chips = allChips.filter((c) => c.id === 'all' || c.id === chip || c.count > 0);
+
+  const statItems = [
+    { label: repos.length === 1 ? 'repository' : 'repositories', value: repos.length },
+    { label: 'with a code map', value: readyN },
+    { label: 'working now', value: activeRepoN },
+    { label: `failed (${rangeWord(range)})`, value: failedDelta.current },
+    { label: 'without a code map', value: gapMissingN + gapFailedN + gapNeverN },
+  ];
+
+  const toggleRegister = (): void => {
+    if (showRegister) { setShowRegister(false); navigate('/repos'); }
+    else { setShowRegister(true); navigate('/repos/new'); }
+  };
+
+  const missingReason = !newName.trim()
+    ? (sourceMode === 'remote' ? 'Enter the repository URL and a name to continue.' : 'Enter the repository folder and a name to continue.')
+    : sourceMode === 'remote' ? 'Enter the repository URL to continue.' : 'Enter the repository folder to continue.';
 
   return (
     <div className="h-full overflow-y-auto">
-      {/* FULL WIDTH — the fleet flows with the viewport; no max-width column. */}
-      <div
+      <PageFrame
         data-testid="repos-page"
-        className="flex flex-col"
-        style={{ color: 'var(--ink-high)', padding: '0 var(--space-8) var(--space-8)', gap: 'var(--space-4)' }}
-      >
-        {/* ── Header: the section name + its creation verb ── */}
-        <div className="pt-8 flex items-center justify-between gap-4">
-          <div className="flex items-baseline gap-4 min-w-0">
-            <h1 className="text-2xl font-semibold font-mono" style={{ margin: 0 }}>Repositories</h1>
-            <p style={{ margin: 0, fontSize: 'var(--text-2xs)', color: 'var(--ink-dim)', fontFamily: 'var(--font-sans)' }}>
-              the fleet the agents work on — graphs · runs · gates
-            </p>
-          </div>
+        title="Repositories"
+        intro="The code your helpers work on. Studio maps each repository so work can find its way around it."
+        actions={(
           <button
             type="button"
             data-testid="repos-add"
-            onClick={() => {
-              if (showRegister) { setShowRegister(false); navigate('/repos'); }
-              else { setShowRegister(true); navigate('/repos/new'); }
-            }}
-            className="shrink-0 rounded-lg px-4 py-2 text-sm font-semibold font-mono"
-            style={{
-              background: showRegister ? 'var(--surface-raised)' : 'var(--accent)',
-              color: showRegister ? 'var(--ink-high)' : 'var(--accent-fg)',
-              border: 'none', cursor: 'pointer',
-            }}
+            onClick={toggleRegister}
+            className={showRegister ? 'wk-btn wk-btn--quiet' : 'wk-btn wk-btn--primary'}
           >
-            {showRegister ? 'Cancel' : '+ Add Repository'}
+            {showRegister ? 'Cancel' : 'Add repository'}
           </button>
-        </div>
-
-        {/* ── The KPI band — the command-center model: three questions ── */}
-        {!loading && !error && (
-          <KpiBand testId="repos-kpis">
-            <KpiGroup label="Performance" grow={2}>
-              <StatTile
-                testId="stat-repos"
-                label="Repositories"
-                value={repos.length}
-                context={repos.length === 0 ? 'none registered' : `newest ${relativeTime(Math.max(...repos.map((r) => r.registered_at)))}`}
-                title="Every registered repo — click to clear filters"
-                onOpen={() => { setChip('all'); setSearch(''); }}
-              />
-              <StatTile
-                testId="stat-repo-runs"
-                label="Repo runs"
-                value={buckets.current.length}
-                delta={runsDelta}
-                context={deltaWord(range, runsDelta)}
-                spark={runSpark}
-                title="Runs touching a repo in the window — open See everything › Sessions"
-                href={everythingPath({ tab: 'sessions' })}
-                onOpen={() => navigate(everythingPath({ tab: 'sessions' }))}
-              />
-            </KpiGroup>
-            <KpiGroup label="Pipeline" grow={2}>
-              <StatTile
-                testId="stat-active"
-                label="Active now"
-                value={liveCounts.active}
-                context={activeRepoN > 0 ? `across ${activeRepoN} repo${activeRepoN === 1 ? '' : 's'}` : 'right now'}
-                title="Runs moving on a repo — filter the fleet to them"
-                onOpen={() => setChip('active')}
-              />
-              <StatTile
-                testId="stat-ready"
-                label="Graphs ready"
-                value={readyN}
-                context={`of ${repos.length} repo${repos.length === 1 ? '' : 's'} — live graph built`}
-                title="Repos whose newest onboard completed AND whose live graph the engine's checkout findings do not dispute — filter to them"
-                onOpen={() => setChip('ready')}
-              />
-            </KpiGroup>
-            <KpiGroup label="Risk" grow={2}>
-              <StatTile
-                testId="stat-failed"
-                label="Failed"
-                value={failedDelta.current}
-                valueColor={failedDelta.current > 0 ? 'var(--status-fail)' : undefined}
-                delta={failedDelta}
-                deltaSense="bad-up"
-                context={deltaWord(range, failedDelta)}
-                title="Failed repo-linked runs in the window — filter the fleet"
-                onOpen={() => setChip('failing')}
-              />
-              <StatTile
-                testId="stat-gaps"
-                label="Index gaps"
-                value={gapMissingN + gapFailedN + gapNeverN}
-                valueColor={gapMissingN + gapFailedN > 0 ? 'var(--status-fail)' : undefined}
-                context={gapWords.length === 0 ? 'every graph ready' : gapWords.join(' · ')}
-                title="Repos without a live graph — a failed or never-run onboard, OR a completed onboard whose live graph the engine's checkout findings say was never built (in-tree graph ignored — re-run onboarding). The repos wire carries no index-freshness field; the findings are the engine's own word."
-                onOpen={() => setChip(gapMissingN > 0 ? 'graph-missing' : gapFailedN > 0 ? 'failing' : 'never')}
-              />
-            </KpiGroup>
-          </KpiBand>
+        )}
+      >
+        {!loading && error !== null && (
+          <StateBanner data-testid="repos-error" kind={readErrorKind(error)} what="repositories" error={errorText(error)} onRetry={load} retrying={loading} />
         )}
 
-        {/* ── Registration form (the slice-B flow, untouched) ── */}
+
+        {/* ── Registration form (/repos/new; the slice-B flow) ── */}
         {showRegister && (
-          <div
-            className="flex flex-col gap-3 rounded-2xl p-5"
-            style={{ background: 'var(--surface-card)', border: '1px solid var(--surface-raised)' }}
-          >
+          <section className="wk-card wk-pg-repo-register" data-testid="repo-register" aria-labelledby="repo-register-title">
+            <h2 id="repo-register-title" className="wk-section-title">Add a repository</h2>
             {/* §5.2: the project field is the FIRST field — Unfiled by default;
                 a selected project binds the repo at creation via membership. */}
-            <div className="flex items-center gap-2" data-testid="repo-project-row">
-              <span
-                className="text-[10px] font-mono uppercase tracking-widest"
-                style={{ color: 'var(--ink-dim)' }}
-              >
-                Project
-              </span>
+            <div className="wk-pg-repo-field" data-testid="repo-project-row">
+              <span className="wk-pg-repo-label">Project</span>
               <ProjectSwitcher
                 current={
                   projects.find((p) => p.id === selectedProjectId)
@@ -573,103 +470,117 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
               />
             </div>
 
-            {/* Source mode toggle — two mutually exclusive options; aria-pressed is correct for a binary toggle */}
-            <div role="group" aria-label="Repository source" className="flex gap-1">
-              {(['local', 'remote'] as SourceMode[]).map((m) => (
-                <button
-                  key={m}
-                  type="button"
-                  aria-pressed={sourceMode === m}
-                  onClick={() => setSourceMode(m)}
-                  className="rounded-md px-3 py-1 text-[11px] font-mono font-medium transition-colors"
-                  style={
-                    sourceMode === m
-                      ? { background: 'var(--surface-raised)', color: 'var(--ink-high)' }
-                      : { color: 'var(--ink-dim)' }
-                  }
-                >
-                  {m === 'local' ? 'Local path' : 'Remote URL'}
-                </button>
-              ))}
+            <div className="wk-pg-repo-field">
+              <span className="wk-pg-repo-label" id="repo-source-label">Where is it?</span>
+              <Segmented
+                label="Repository source"
+                value={sourceMode}
+                options={[{ value: 'local', label: 'On this computer' }, { value: 'remote', label: 'From a URL' }]}
+                onChange={setSourceMode}
+                data-testid="repo-source"
+              />
             </div>
 
-            <input
-              style={inputCss}
-              placeholder="Repo name"
-              value={newName}
-              onChange={(e) => {
-                setNewName(e.target.value);
-                nameEditedRef.current = Boolean(e.target.value.trim());
-              }}
-            />
-
             {sourceMode === 'local' ? (
-              <input
-                style={inputCss}
-                placeholder="Absolute path to git repo"
-                value={newPath}
-                onChange={(e) => {
-                  setNewPath(e.target.value);
-                  deriveName(e.target.value);
-                }}
-              />
-            ) : (
-              <>
+              <label className="wk-pg-repo-field">
+                <span className="wk-pg-repo-label">Folder</span>
                 <input
-                  style={inputCss}
-                  placeholder="https://github.com/org/repo or git@github.com:org/repo"
-                  value={newGitUrl}
+                  className="wk-field"
+                  data-testid="repo-path"
+                  placeholder="The repository’s folder, e.g. ~/code/my-app"
+                  value={newPath}
                   onChange={(e) => {
-                    setNewGitUrl(e.target.value);
+                    setNewPath(e.target.value);
                     deriveName(e.target.value);
                   }}
                 />
-                <div className="flex flex-col gap-1">
-                  <label className="text-[10px] font-mono" style={{ color: 'var(--ink-dim)' }}>
-                    Clone to (optional)
-                  </label>
+              </label>
+            ) : (
+              <>
+                <label className="wk-pg-repo-field">
+                  <span className="wk-pg-repo-label">Repository URL</span>
                   <input
-                    style={inputCss}
+                    className="wk-field"
+                    data-testid="repo-git-url"
+                    placeholder="https://github.com/org/repo"
+                    value={newGitUrl}
+                    onChange={(e) => {
+                      setNewGitUrl(e.target.value);
+                      deriveName(e.target.value);
+                    }}
+                  />
+                </label>
+                <label className="wk-pg-repo-field">
+                  <span className="wk-pg-repo-label">Clone to (optional)</span>
+                  <input
+                    className="wk-field"
+                    data-testid="repo-checkout-path"
                     placeholder={`~/.wicked/repos/${newName || '<name>'}`}
                     value={checkoutPath}
                     onChange={(e) => setCheckoutPath(e.target.value)}
                   />
-                </div>
+                </label>
               </>
             )}
 
+            <label className="wk-pg-repo-field">
+              <span className="wk-pg-repo-label">Name</span>
+              <input
+                className="wk-field"
+                data-testid="repo-name"
+                placeholder="A short name, e.g. my-app"
+                value={newName}
+                onChange={(e) => {
+                  setNewName(e.target.value);
+                  nameEditedRef.current = Boolean(e.target.value.trim());
+                }}
+              />
+            </label>
+
             {/* §7.8 (slice AC, EC43): the named action previews what it does,
-                what it writes, and roughly how long it takes. */}
-            <p data-testid="action-preview" className="text-[10px] font-mono" style={{ color: 'var(--ink-dim)' }}>
-              {/* The onboarding workflow is TWO tool units — index, then annotate (crew's
-                  BUILTIN_WORKFLOWS; the third `domain` phase was removed in FINDING-068 —
-                  domain extraction is a separate downstream workflow). Don't re-add it here. */}
+                what it writes, and roughly how long it takes. The onboarding workflow is TWO tool
+                units — index, then annotate (FINDING-068); don't re-add a third here. */}
+            <p data-testid="action-preview" className="wk-field-note">
               {sourceMode === 'remote'
-                ? `Clones to ${checkoutPath.trim() || `~/.wicked/repos/${newName || '<name>'}`}, then indexes the repository and annotates its code map so runs can navigate it — a tracked run you can watch; typically minutes.`
-                : 'Indexes the repository and annotates its code map so runs can navigate it — a tracked run you can watch; typically minutes.'}
+                ? `Studio clones it to ${checkoutPath.trim() || `~/.wicked/repos/${newName || '<name>'}`}, then maps the code so work can find its way around. It runs as a tracked step you can watch and usually takes a few minutes.`
+                : 'Studio maps the code so work can find its way around. It runs as a tracked step you can watch and usually takes a few minutes.'}
             </p>
 
-            {registerError && (
-              <p className="text-[11px] font-mono" style={{ color: 'var(--status-fail)' }}>
-                {registerError}
-              </p>
+            {registerError !== null && (
+              <StateBanner data-testid="repo-register-error" kind={readErrorKind(registerError)} what="the repository" error={errorText(registerError)} />
             )}
 
-            <button
-              type="button"
-              onClick={() => void registerRepo()}
-              disabled={registering || !canSubmit}
-              className="self-start rounded-lg px-4 py-1.5 text-[11px] font-semibold font-mono disabled:opacity-50"
-              style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
+            <div className="wk-pg-repo-submit">
+              <button
+                type="button"
+                data-testid="repo-register-submit"
+                onClick={() => void registerRepo()}
+                disabled={registering || !canSubmit}
+                aria-describedby={!canSubmit ? 'repo-register-why' : undefined}
+                className="wk-btn wk-btn--primary"
+              >
+                {registering
+                  ? sourceMode === 'remote' ? 'Cloning…' : 'Registering…'
+                  : sourceMode === 'remote' ? 'Clone and onboard' : 'Register and onboard'}
+              </button>
+              {!canSubmit && !registering && (
+                <p id="repo-register-why" data-testid="repo-register-why" className="wk-field-note">{missingReason}</p>
+              )}
+            </div>
+          </section>
+        )}
+
+        {!loading && error === null && repos.length > 0 && (
+          <div className="wk-pg-repo-facts">
+            <StatLine data-testid="repos-kpis" items={statItems} />
+            <a
+              className="wk-link"
+              data-testid="repos-runs-link"
+              href={everythingPath({ tab: 'sessions' })}
+              onClick={(e) => { e.preventDefault(); navigate(everythingPath({ tab: 'sessions' })); }}
             >
-              {registering
-                ? sourceMode === 'remote'
-                  ? 'Cloning…'
-                  : 'Registering…'
-                : sourceMode === 'remote'
-                  ? 'Clone & onboard'
-                  : 'Register & onboard'}
-            </button>
+              See all sessions
+            </a>
           </div>
         )}
 
@@ -677,75 +588,80 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
           <NewProjectModal navigate={navigate} onClose={() => setShowNewProject(false)} />
         )}
 
-        {/* ── Filters — first-class at the top of the fleet ── */}
-        {!loading && !error && repos.length > 0 && (
-          <FilterStrip
-            testId="repos-filter"
-            query={search}
-            onQuery={setSearch}
-            placeholder="Search repos…"
-            chips={chips}
-            active={chip}
-            onChip={(id) => setChip(id as RepoChip)}
-            range={range}
-            onRange={setRange}
-          />
+        {/* ── Filters ── */}
+        {!loading && error === null && repos.length > 0 && (
+          <div data-testid="repos-filter" data-filter={chip} role="group" aria-label="Filters" className="wk-pg-repo-filters">
+            <input
+              type="search"
+              className="wk-field wk-pg-repo-search"
+              data-testid="repos-filter-search"
+              aria-label="Search repositories"
+              placeholder="Search repositories"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+            <div className="wk-pg-repo-chips">
+              {chips.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  className="wk-chip"
+                  data-testid="repos-filter-chip"
+                  data-chip={c.id}
+                  aria-pressed={chip === c.id}
+                  onClick={() => setChip(c.id as RepoChip)}
+                >
+                  {c.label} <span className="wk-num">{c.count}</span>
+                </button>
+              ))}
+            </div>
+            <label className="wk-pg-repo-range">
+              <span className="wk-pg-repo-range-label">Runs from</span>
+              <select className="wk-field" data-testid="repos-range" value={range} onChange={(e) => setRange(e.target.value as TimeRange)}>
+                {TIME_RANGE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.value === 'all' ? 'all time' : `the ${o.label}`}</option>)}
+              </select>
+            </label>
+          </div>
         )}
 
         {/* ── Content area ── */}
         {loading ? (
-          <p className="text-xs font-mono" style={{ color: 'var(--ink-dim)' }}>
-            Loading repositories…
-          </p>
-        ) : error ? (
-          <p className="text-xs font-mono" style={{ color: 'var(--status-fail)' }}>{error}</p>
-        ) : repos.length === 0 ? (
-          /* Empty state — carries the section's creation verb */
-          <div data-testid="repos-empty" className="flex flex-col items-center justify-center py-24 text-center">
-            <div
-              className="rounded-2xl p-10 flex flex-col items-center gap-4"
-              style={{ background: 'var(--surface-card)', border: '1px solid var(--surface-raised)', maxWidth: 420 }}
-            >
-              <p className="text-2xl font-mono font-bold" style={{ color: 'var(--ink-dim)' }}>
-                No repositories
-              </p>
-              <p className="text-sm font-mono" style={{ color: 'var(--ink-muted)' }}>
-                Register a local git repo or clone a remote one. wicked-crew will index it
-                into a code graph and annotate its clusters as a governed onboarding run.
-              </p>
-              <button
-                type="button"
-                onClick={() => setShowRegister(true)}
-                className="rounded-lg px-5 py-2 text-xs font-semibold font-mono mt-2"
-                style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
-              >
-                + Add Repository
-              </button>
-            </div>
+          <Skeleton variant="card" rows={3} data-testid="repos-loading" />
+        ) : error !== null ? null : repos.length === 0 ? (
+          <div data-testid="repos-empty">
+            <EmptyState
+              title="No repositories yet"
+              body="Add a repository on this computer or from a URL, and Studio maps its code for your helpers."
+              action={!showRegister ? (
+                <button type="button" className="wk-btn wk-btn--primary" onClick={toggleRegister}>Add repository</button>
+              ) : undefined}
+            />
           </div>
         ) : visible.length === 0 ? (
-          <p data-testid="repos-empty-filter" className="text-xs font-mono" style={{ color: 'var(--ink-dim)' }}>
-            No repos match —{' '}
+          <p data-testid="repos-empty-filter" className="wk-pg-repo-none">
+            No repositories match these filters.{' '}
             <button
               type="button"
               data-testid="repos-clear-filters"
+              className="wk-link"
               onClick={() => { setChip('all'); setSearch(''); }}
-              style={{ background: 'none', border: 'none', padding: 0, font: 'inherit', color: 'var(--ink-muted)', textDecoration: 'underline', cursor: 'pointer' }}
             >
-              clear filters
+              Clear filters
             </button>
           </p>
         ) : (
-          /* ── The fleet grid — one mini-dashboard card per repo ── */
-          <DashboardGrid testId="repos-list" min={360}>
+          /* ── The fleet grid — one card per repo ── */
+          <div data-testid="repos-list" className="wk-pg-repo-grid">
             {visible.map((m) => {
               const { repo, counts, waiting } = m;
               const health = healthOf(counts.done, counts.terminal);
               const isRerunning = rerunning[repo.id] ?? false;
+              const isCapturing = capturing[repo.id] ?? false;
               const runErr = rerunError[repo.id];
               const firstGate = waiting[0]?.session.id;
-              const spark = attachSeries(m.windowed.map((v) => v.session.id), attachedAt, 14, now);
               const activeCount = m.windowed.filter((v) => !['completed', 'cancelled', 'failed', 'awaiting_human'].includes(v.session.status)).length;
+              const state = graphState(m);
+              const open = (): void => navigate('/repo-detail/' + encodeURIComponent(repo.id));
               return (
                 <div
                   key={repo.id}
@@ -756,212 +672,130 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
                   data-gates={waiting.length}
                   data-runs={counts.total}
                   role="link"
+                  aria-label={`Open ${repo.name}`}
                   tabIndex={0}
-                  onClick={() => navigate('/repo-detail/' + encodeURIComponent(repo.id))}
+                  onClick={open}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      navigate('/repo-detail/' + encodeURIComponent(repo.id));
-                    }
+                    if (e.target !== e.currentTarget) return;
+                    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
                   }}
-                  className="transition-colors hover:bg-surface-raised"
-                  style={{
-                    display: 'flex', flexDirection: 'column', gap: '8px', minWidth: 0,
-                    background: 'var(--surface-card)', border: '1px solid var(--surface-raised)',
-                    borderRadius: 'var(--radius-lg)', padding: 'var(--space-4)', cursor: 'pointer',
-                  }}
+                  className="wk-card wk-pg-repo-card"
                 >
-                  {/* Card header — name, then the attention badges */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
-                    <span
-                      className="text-sm font-bold font-mono truncate"
-                      style={{ color: 'var(--ink-high)', minWidth: 0 }}
-                    >
-                      {repo.name}
-                    </span>
-                    <span style={{ flex: 1 }} />
-                    {/* Attention routing beats navigation: the gate jump,
-                        STRAIGHT to the waiting run's approval dock. */}
-                    {waiting.length > 0 && firstGate !== undefined && (
-                      <button
-                        type="button"
-                        data-testid="repo-needs-you"
-                        data-run-id={firstGate}
-                        title="A run on this repo is waiting on you — jump to its gate"
-                        onClick={(e) => { e.stopPropagation(); navigate(gateJump(firstGate)); }}
-                        style={{
-                          flexShrink: 0, cursor: 'pointer',
-                          background: 'var(--status-gate-dim)', border: '1px solid var(--status-gate-dim)',
-                          borderRadius: 'var(--radius-full)', padding: '2px 10px',
-                          fontSize: 'var(--text-2xs)', fontFamily: 'var(--font-mono)',
-                          fontWeight: 'var(--weight-bold)', color: 'var(--status-gate)',
-                        }}
-                      >
-                        needs you · {waiting.length} →
-                      </button>
-                    )}
-                    {activeCount > 0 && (
-                      <span
-                        className="rounded-full px-2 py-0.5 text-[10px] font-mono font-semibold shrink-0"
-                        style={{ background: 'var(--status-run-dim)', color: 'var(--status-run)' }}
-                      >
-                        {activeCount} active
-                      </span>
-                    )}
-                    <span
-                      className="rounded-full px-2 py-0.5 text-[10px] font-mono shrink-0"
-                      style={{ background: 'var(--accent-subtle)', color: 'var(--accent)' }}
-                    >
-                      {repo.default_branch}
-                    </span>
+                  <div className="wk-pg-repo-card-head">
+                    <h3 className="wk-pg-repo-card-name">{repo.name}</h3>
+                    <span className="wk-tag" title="Default branch">{repo.default_branch}</span>
                   </div>
+                  <p className="wk-pg-repo-card-path" title={showPath(repo.root_path)}>{showPath(repo.root_path)}</p>
 
-                  <p
-                    className="text-[11px] font-mono truncate"
-                    style={{ color: 'var(--ink-dim)', margin: 0 }}
-                    title={showPath(repo.root_path)}
-                  >
-                    {showPath(repo.root_path)}
-                  </p>
+                  {/* Attention routing beats navigation: the gate jump, straight to the waiting run. */}
+                  {waiting.length > 0 && firstGate !== undefined && (
+                    <button
+                      type="button"
+                      data-testid="repo-needs-you"
+                      data-run-id={firstGate}
+                      className="wk-link wk-pg-repo-needs"
+                      onClick={(e) => { e.stopPropagation(); navigate(gateJump(firstGate)); }}
+                    >
+                      {waiting.length === 1 ? '1 thing waits on you' : `${waiting.length} things wait on you`} →
+                    </button>
+                  )}
 
-                  {/* The graph state — the run history, corrected by the engine's findings (F-2R2-003) */}
+                  {/* The graph state — the run history, corrected by the engine's findings (F-2R2-003). */}
                   <p
                     data-testid="repo-graph-state"
-                    data-state={graphState(m)}
-                    className="text-[11px] font-mono truncate"
-                    style={{ color: GRAPH_STATE_COLOR[graphState(m)] ?? 'var(--ink-dim)', margin: 0 }}
-                    title={GRAPH_STATE_TITLE}
+                    data-state={state}
+                    className={`wk-pg-repo-line wk-pg-repo-line--${GRAPH_TONE[state] ?? 'quiet'}`}
                   >
+                    <span aria-hidden className="wk-pg-repo-dot" />
                     {graphStateWord(m, attachedAt, now)}
                   </p>
 
-                  {/* The captured-learnings state (studio#294 b) — the newest capture-learnings run's
-                      verdict, so a captured repo reads differently from one never captured. */}
-                  <p
-                    data-testid="repo-capture-state"
-                    data-state={m.capture.state}
-                    className="text-[11px] font-mono truncate"
-                    style={{ color: CAPTURE_STATE_COLOR[m.capture.state] ?? 'var(--ink-dim)', margin: 0 }}
-                    title={CAPTURE_STATE_TITLE}
-                  >
-                    {captureStateWord(m, attachedAt, now)}
-                  </p>
-
-                  {/* studio#251: the engine's checkout findings (wicked-core#406), compact —
-                      "Re-run onboarding" rides the card's EXISTING onboard wire. Silent when none. */}
+                  {/* studio#251: the engine's checkout findings, compact; "Re-run onboarding" rides the
+                      card's EXISTING onboard wire. A gap the graph line already states is not said twice. */}
                   <RepoFindings
                     compact
+                    gapStated
                     findings={repo.findings}
                     onRerunOnboarding={() => void rerunOnboarding(repo.id)}
                     rerunning={isRerunning}
-                    disabled={capturing[repo.id] ?? false}
+                    disabled={isCapturing}
                     testId="repo-card-findings"
                   />
 
-                  {/* Stats row — the window's counts, the honest clocks */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-                    <span style={CARD_STAT} data-testid="repo-card-runs">
-                      {counts.total} run{counts.total === 1 ? '' : 's'} · {rangeWord(range)}
-                    </span>
+                  {/* The captured-learnings state (studio#294 b). */}
+                  <p
+                    data-testid="repo-capture-state"
+                    data-state={m.capture.state}
+                    className={`wk-pg-repo-line wk-pg-repo-line--${CAPTURE_TONE[m.capture.state] ?? 'quiet'}`}
+                  >
+                    <span aria-hidden className="wk-pg-repo-dot" />
+                    {captureStateWord(m, attachedAt, now)}
+                  </p>
+
+                  <p className="wk-pg-repo-card-meta">
+                    <span data-testid="repo-card-runs">{counts.total} {counts.total === 1 ? 'run' : 'runs'} ({rangeWord(range)})</span>
+                    {activeCount > 0 && <span> · {activeCount} working</span>}
                     {counts.terminal > 0 && (
-                      <span
-                        style={{ ...CARD_STAT, color: healthColor(health) ?? CARD_STAT.color }}
-                        data-testid="repo-card-split"
-                        data-health={health}
-                        title={`${counts.done} succeeded, ${counts.failed} failed of ${counts.terminal} finished in this window`}
-                      >
-                        ✓{counts.done} · ✕{counts.failed}
-                      </span>
+                      <span data-testid="repo-card-split" data-health={health}> · {counts.done} finished{counts.failed > 0 ? `, ${counts.failed} failed` : ''}</span>
                     )}
-                    <span style={{ ...CARD_STAT, marginLeft: 'auto' }} title="last activity (run attach clocks; falls back to the registration date)">
-                      {m.lastAt !== null ? `${ago(m.lastAt, now)} ago` : relativeTime(repo.registered_at)}
-                    </span>
-                  </div>
+                    <span> · {m.lastAt !== null ? `active ${ago(m.lastAt, now)} ago` : relativeTime(repo.registered_at)}</span>
+                  </p>
 
-                  <Sparkline counts={spark} height={18} />
-
-                  {/* Error (if a launch failed) */}
                   {runErr && (
-                    <p className="text-[11px] font-mono" style={{ color: 'var(--status-fail)', margin: 0 }}>
-                      {runErr}
-                    </p>
+                    <div data-testid="repo-card-error" className="wk-pg-repo-card-error" onClick={(e) => e.stopPropagation()} role="presentation">
+                      <p className="wk-field-note wk-field-note--bad">Couldn’t start that. Try again in a moment.</p>
+                      <TechDetails text={runErr} />
+                    </div>
                   )}
 
-                  {/* Footer row — stop click propagation so buttons don't also navigate */}
+                  {/* Footer — stop click propagation so buttons don't also navigate */}
                   <div
-                    className="flex items-center justify-between mt-auto"
+                    className="wk-pg-repo-card-actions"
                     onClick={(e) => e.stopPropagation()}
                     onKeyDown={(e) => e.stopPropagation()}
                     role="presentation"
                   >
-                    <button
-                      type="button"
-                      onClick={() => navigate('/repo-detail/' + encodeURIComponent(repo.id))}
-                      className="text-xs font-mono hover:underline"
-                      style={{ color: 'var(--accent)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
-                    >
-                      View →
-                    </button>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    {/* Capture learnings — a REAL governed run (launchRun), not a prefill:
-                        mine this repo's history/graph into durable memory. */}
+                    {/* Capture learnings — a REAL governed run (launchRun), not a prefill. */}
                     <button
                       type="button"
                       data-testid="repo-capture-learnings"
                       data-repo-id={repo.id}
-                      disabled={(capturing[repo.id] ?? false) || isRerunning}
-                      title={`Launch a governed run that mines this repo's history into durable memory + knowledge — a tracked run you can watch${ambientProject !== null ? ', filed under the current project' : ''}`}
+                      disabled={isCapturing || isRerunning}
+                      title={`Start a tracked run that saves what this repository’s history teaches${ambientProject !== null ? ', filed under this project' : ''}`}
                       onClick={() => void captureLearnings(repo.id, repo.name)}
-                      className="rounded-md px-3 py-1 text-[11px] font-mono disabled:opacity-50"
-                      style={{
-                        background: 'transparent',
-                        color: 'var(--ink-muted)',
-                        border: '1px solid var(--surface-raised)',
-                        cursor: 'pointer',
-                      }}
+                      className="wk-btn wk-btn--secondary wk-btn--sm"
                     >
-                      {(capturing[repo.id] ?? false) ? 'Starting…' : m.capture.state === 'captured' ? 'Capture learnings again' : 'Capture learnings'}
+                      {isCapturing ? 'Starting…' : m.capture.state === 'captured' ? 'Capture learnings again' : 'Capture learnings'}
                     </button>
                     {m.onboard.run !== null ? (
                       <button
                         type="button"
                         data-testid="repo-reindex"
                         data-repo-id={repo.id}
-                        title="Reopen the composer prefilled with this repo's onboard setup — nothing auto-launches"
+                        title="Open the composer with this repository’s onboarding filled in; nothing starts until you send it"
                         onClick={() => reindexAsPrefill(m)}
-                        className="rounded-md px-3 py-1 text-[11px] font-mono"
-                        style={{
-                          background: 'transparent',
-                          color: 'var(--ink-muted)',
-                          border: '1px solid var(--surface-raised)',
-                          cursor: 'pointer',
-                        }}
+                        className="wk-btn wk-btn--secondary wk-btn--sm"
                       >
-                        Re-index
+                        Re-index…
                       </button>
                     ) : (
                       <button
                         type="button"
                         data-testid="repo-onboard"
-                        disabled={isRerunning || (capturing[repo.id] ?? false)}
+                        disabled={isRerunning || isCapturing}
                         onClick={() => void rerunOnboarding(repo.id)}
-                        className="rounded-md px-3 py-1 text-[11px] font-mono disabled:opacity-50"
-                        style={{
-                          background: 'var(--surface-raised)',
-                          color: 'var(--ink-muted)',
-                          border: '1px solid var(--surface-raised)',
-                        }}
+                        className="wk-btn wk-btn--secondary wk-btn--sm"
                       >
                         {isRerunning ? 'Starting…' : 'Onboard'}
                       </button>
                     )}
-                    </div>
                   </div>
                 </div>
               );
             })}
-          </DashboardGrid>
+          </div>
         )}
-      </div>
+      </PageFrame>
     </div>
   );
 }

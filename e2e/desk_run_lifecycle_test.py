@@ -199,12 +199,12 @@ with sync_playwright() as p:
 
     page.route("**/api/v1/repos", route_register)
     page.goto(f"{origin}/repos/new", wait_until="networkidle")
-    register = page.get_by_role("button", name="Register & onboard")
+    register = page.get_by_role("button", name="Register and onboard")
     register.wait_for(state="visible", timeout=15000)
     check("lc5-register-disabled-empty", register.is_disabled())
-    page.get_by_placeholder("Repo name").fill("my-repo")
+    page.get_by_test_id("repo-name").fill("my-repo")
     check("lc5-register-disabled-no-path", register.is_disabled())
-    page.get_by_placeholder("Absolute path to git repo").fill("/tmp/my-repo")
+    page.get_by_test_id("repo-path").fill("/tmp/my-repo")
     check("lc5-register-enabled", register.is_enabled())
     register.click()
     try:

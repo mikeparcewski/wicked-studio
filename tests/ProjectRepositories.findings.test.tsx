@@ -60,7 +60,10 @@ describe('ProjectRepositories — the rows carry the engine\'s findings (F-2R2-0
 
     fireEvent.click(within(findings).getByTestId('project-repo-findings-reonboard'));
     await waitFor(() => expect(rerunOnboarding).toHaveBeenCalledWith('wicked-studio'));
-    expect((await screen.findByTestId('project-repo-reonboard-note')).textContent).toContain('onboarding run run-reonboard started');
+    const note = await screen.findByTestId('project-repo-reonboard-note');
+    expect(note).toHaveTextContent('Onboarding started.');
+    expect(within(note).getByTestId('tech-details')).not.toHaveAttribute('open');
+    expect(within(note).getByTestId('tech-details')).toHaveTextContent('run-reonboard');
   });
 
   it('a project with NO repo members fetches nothing on mount (the picker gesture still owns that read)', async () => {
@@ -70,11 +73,12 @@ describe('ProjectRepositories — the rows carry the engine\'s findings (F-2R2-0
     expect(screen.getByTestId('project-repos-empty')).toBeInTheDocument();
   });
 
-  it('a failed registry read on mount stays silent — the picker gesture retries and reports it', async () => {
+  it('a failed registry read on mount is reported — the picker gesture retries it', async () => {
     listRepos.mockRejectedValueOnce(new Error('offline'));
     render(<ProjectRepositories projectId="proj-1" members={[member('wicked-studio')]} onMembersChange={() => {}} />);
     await waitFor(() => expect(listRepos).toHaveBeenCalledTimes(1));
     expect(screen.queryByTestId('project-repo-findings')).toBeNull();
+    expect(await screen.findByTestId('project-repo-error')).toBeInTheDocument();
     fireEvent.focus(screen.getByTestId('project-repo-search'));
     await waitFor(() => expect(listRepos).toHaveBeenCalledTimes(2));
     await screen.findByTestId('project-repo-findings');

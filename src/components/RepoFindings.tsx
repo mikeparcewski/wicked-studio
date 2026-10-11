@@ -1,5 +1,5 @@
 import type { RepoEntry, RepoFinding } from '../api/types.js';
-import { useDisplayPath, useDisplayText } from '../hooks/useHomePath.js';
+import { TechDetails } from './ui/TechDetails.js';
 
 /**
  * The engine's per-repo findings (`RepoEntry.findings[]`, wicked-core#406 via crew#517 —
@@ -49,15 +49,20 @@ export function findingSeverity(finding: RepoFinding): RepoFindingSeverity {
   return 'warning';
 }
 
-/** The short operator label in front of the engine's message. */
+/** The finding in plain words (UI-CONTRACT §1.5: no file names, API paths or issue numbers in the
+ *  default layer; the engine's own message stays reachable inside Technical details). */
 export function findingLabel(finding: RepoFinding): string {
   switch (finding.code) {
     case REPO_FINDING_IN_TREE_IGNORED:
-      return findingNeedsReonboard(finding) ? 'in-tree graph ignored · no live graph' : 'in-tree graph ignored';
+      return findingNeedsReonboard(finding)
+        ? 'This repository has no code map yet. Re-run onboarding to build it.'
+        : 'An old code map saved inside this checkout is ignored; the current one is used.';
     case REPO_FINDING_ROOT_UNRESOLVABLE:
-      return 'no graph root';
-    default:
-      return finding.code.replace(/_/g, ' ');
+      return 'Studio’s service has nowhere to keep code maps, so this repository can’t be mapped.';
+    default: {
+      const words = finding.code.replace(/_/g, ' ');
+      return `${words.charAt(0).toUpperCase()}${words.slice(1)}.`;
+    }
   }
 }
 
@@ -65,11 +70,6 @@ export function findingLabel(finding: RepoFinding): string {
 export function repoFindings(repo: Pick<RepoEntry, 'findings'> | null | undefined): RepoFinding[] {
   return repo?.findings ?? [];
 }
-
-const SEVERITY_COLOR: Record<RepoFindingSeverity, string> = {
-  warning: 'var(--status-gate)',
-  error: 'var(--status-fail)',
-};
 
 interface Props {
   /** `RepoEntry.findings` as the wire carries it — `undefined` on an older daemon. */
@@ -82,17 +82,18 @@ interface Props {
   /** The host's shared mutation lock (another repo's re-run, an attach/detach): disables the
    *  button without claiming this repo is starting. */
   disabled?: boolean | undefined;
-  /** Card dress: one-line rows, the message truncated with the full text on hover. */
+  /** Card dress: no Technical details (the host's detail page carries them). */
   compact?: boolean | undefined;
+  /** The host already states an error-level gap in its own words (the repo card's graph line):
+   *  such a row then renders only its action, so the gap is said once. */
+  gapStated?: boolean | undefined;
   /** Test id root; per-finding rows are `<testId>-row`. */
   testId?: string | undefined;
 }
 
 export function RepoFindings({
-  findings, onRerunOnboarding, rerunning = false, disabled = false, compact = false, testId = 'repo-findings',
+  findings, onRerunOnboarding, rerunning = false, disabled = false, compact = false, gapStated = false, testId = 'repo-findings',
 }: Props): React.ReactElement | null {
-  const showPath = useDisplayPath();
-  const showText = useDisplayText();
   if (findings === undefined || findings.length === 0) return null;
   return (
     <div
@@ -102,12 +103,12 @@ export function RepoFindings({
       onClick={(e) => e.stopPropagation()}
       onKeyDown={(e) => e.stopPropagation()}
       role="presentation"
-      style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: 0 }}
+      className={compact ? 'wk-pg-repo-findings wk-pg-repo-findings--compact' : 'wk-pg-repo-findings'}
     >
       {findings.map((f, i) => {
         const severity = findingSeverity(f);
         const reonboard = findingNeedsReonboard(f);
-        const color = SEVERITY_COLOR[severity];
+        const raw = [f.message, ...(f.path !== null ? [f.path] : [])]; // TechDetails sanitizes paths
         return (
           <div
             key={`${f.code}-${i}`}
@@ -115,52 +116,24 @@ export function RepoFindings({
             data-code={f.code}
             data-severity={severity}
             data-reonboard={reonboard}
-            title={compact ? `${showText(f.message)}${f.path !== null ? `\n${showPath(f.path)}` : ''}` : (f.path === null ? undefined : showPath(f.path))}
-            style={{
-              display: 'flex', alignItems: compact ? 'center' : 'flex-start', gap: '8px', minWidth: 0,
-              padding: compact ? '2px 0' : '6px 10px',
-              borderLeft: compact ? undefined : `2px solid ${color}`,
-              background: compact ? 'transparent' : 'var(--surface-raised)',
-              borderRadius: compact ? undefined : 'var(--radius-md)',
-            }}
+            className={`wk-pg-repo-finding wk-pg-repo-finding--${severity}`}
           >
-            <span
-              style={{
-                flexShrink: 0, borderRadius: 'var(--radius-full)', padding: '1px 8px',
-                fontSize: 'var(--text-2xs)', fontFamily: 'var(--font-mono)', fontWeight: 'var(--weight-bold)',
-                color, border: `1px solid ${color}`, whiteSpace: 'nowrap',
-              }}
-            >
-              {findingLabel(f)}
-            </span>
-            <span
-              className={compact ? 'truncate' : undefined}
-              style={{
-                flex: 1, minWidth: 0, fontSize: 'var(--text-2xs)', fontFamily: 'var(--font-mono)',
-                color: 'var(--ink-muted)', margin: 0,
-                whiteSpace: compact ? 'nowrap' : 'normal', overflowWrap: compact ? undefined : 'anywhere',
-              }}
-            >
-              {showText(f.message)}
-            </span>
-            {reonboard && onRerunOnboarding !== undefined && (
-              <button
-                type="button"
-                data-testid={`${testId}-reonboard`}
-                disabled={rerunning || disabled}
-                title="Re-index this repo as a governed onboarding run (index → annotate) — builds the live graph under the daemon state home"
-                onClick={(e) => { e.stopPropagation(); onRerunOnboarding(); }}
-                className="disabled:opacity-50"
-                style={{
-                  flexShrink: 0, cursor: rerunning || disabled ? 'default' : 'pointer',
-                  background: 'var(--accent)', color: 'var(--accent-fg)', border: 'none',
-                  borderRadius: 'var(--radius-md)', padding: '2px 10px',
-                  fontSize: 'var(--text-2xs)', fontFamily: 'var(--font-mono)', fontWeight: 'var(--weight-semi)',
-                }}
-              >
-                {rerunning ? 'Starting…' : 'Re-run onboarding'}
-              </button>
-            )}
+            <div className="wk-pg-repo-finding-line">
+              {!(gapStated && severity === 'error') && <p className="wk-pg-repo-finding-text">{findingLabel(f)}</p>}
+              {reonboard && onRerunOnboarding !== undefined && (
+                <button
+                  type="button"
+                  data-testid={`${testId}-reonboard`}
+                  disabled={rerunning || disabled}
+                  title="Rebuild this repository’s code map as a tracked run"
+                  onClick={(e) => { e.stopPropagation(); onRerunOnboarding(); }}
+                  className="wk-btn wk-btn--secondary wk-btn--sm"
+                >
+                  {rerunning ? 'Starting…' : 'Re-run onboarding'}
+                </button>
+              )}
+            </div>
+            {!compact && <TechDetails data-testid={`${testId}-detail`} text={raw} />}
           </div>
         );
       })}

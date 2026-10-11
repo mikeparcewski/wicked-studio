@@ -87,9 +87,10 @@ with sync_playwright() as p:
     rows = page.get_by_test_id("project-coverage-row").evaluate_all("els => els.map(e => ({ repo: e.dataset.repo, state: e.dataset.state, text: e.innerText }))")
     page.get_by_test_id("project-coverage").scroll_into_view_if_needed()
     page.screenshot(path=str(SHOTS / "desk-product-coverage.png"))
-    check("coverage", totals.startswith("Resolved 12 of 40 behavior-bearing nodes (30.0%)")
+    # Plain words in the default layer; crew's reason sits in the row's Technical details (UI-CONTRACT §1.5).
+    check("coverage", totals.startswith("12 of 40 parts of the code traced to a requirement (30.0%)")
           and [r["state"] for r in rows] == ["ok", "absent"]
-          and "35.0%" in rows[0]["text"] and "the code graph is not indexed yet" in rows[1]["text"],
+          and "35.0%" in rows[0]["text"] and "No requirements map yet for shop-web" in rows[1]["text"],
           totals=totals, rows=rows)
 
     # ── 2. Domain: merged domains, then each repo's own ─────────────────────────────────────────
@@ -99,7 +100,7 @@ with sync_playwright() as p:
     page.get_by_test_id("project-domain").scroll_into_view_if_needed()
     page.screenshot(path=str(SHOTS / "desk-product-domain.png"))
     check("domain", merged == ["billing", "auth"] and [r["state"] for r in drows] == ["ok", "absent"]
-          and "billing · auth" in drows[0]["text"] and "no requirements_graph.json" in drows[1]["text"], merged=merged, rows=drows)
+          and "billing · auth" in drows[0]["text"] and "No requirements map yet for shop-web" in drows[1]["text"], merged=merged, rows=drows)
 
     # ── 3. a repo row is a door to the repo ─────────────────────────────────────────────────────
     page.locator('[data-testid="project-coverage-row"][data-repo="r-api"] a').click()
@@ -154,7 +155,7 @@ with sync_playwright() as p:
     page.get_by_test_id("product-instructions").fill("one epic per domain")
     chosen = page.get_by_test_id("product-chosen").inner_text()
     page.screenshot(path=str(SHOTS / "desk-product-view.png"))
-    check("product-list", rail_current == "page" and reqs == ["k1", "k2", "k3"] and "no requirements artifact yet" in unread
+    check("product-list", rail_current == "page" and reqs == ["k1", "k2", "k3"] and "No requirements map yet for shop-web" in unread
           and chosen.startswith("2 requirements chosen"), rail_current=rail_current, reqs=reqs, unread=unread, chosen=chosen)
     page.get_by_test_id("product-draft").click()
     page.wait_for_function("() => window.location.pathname.startsWith('/s/')", timeout=8000)

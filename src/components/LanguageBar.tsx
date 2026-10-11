@@ -57,7 +57,7 @@ export function LanguageBar({ breakdown, emptyText }: Props): React.ReactElement
   if (breakdown === null || total === 0) {
     return (
       <div data-testid="language-bar" data-state="empty">
-        <p className="text-sm font-mono italic" style={{ color: 'var(--ink-dim)', margin: 0 }}>
+        <p className="wk-pg-repo-empty">
           {emptyText ?? 'Language mix not indexed yet — run onboarding to build the code graph.'}
         </p>
       </div>
@@ -103,8 +103,8 @@ export function LanguageBar({ breakdown, emptyText }: Props): React.ReactElement
             {langMeta(lang).label} {Math.round((files / total) * 100)}%
           </span>
         ))}
-        <span style={{ fontSize: 'var(--text-2xs)', color: 'var(--ink-dim)', fontFamily: 'var(--font-mono)' }}>
-          by files indexed
+        <span style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-dim)' }}>
+          by number of files
         </span>
       </div>
     </div>

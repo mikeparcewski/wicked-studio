@@ -74,8 +74,10 @@ with sync_playwright() as p:
     set_fixture(origin, repo_graph="fail")
     text = open_repo()
     page.screenshot(path=str(SHOTS / "desk-repo-page-failed.png"))
-    check("failed-read-is-said", "Couldn’t read the code graph" in text and "run onboarding" not in text.lower()
-          and page.get_by_test_id("repo-graph-retry").count() == 1, text=text)
+    # Said ONCE, in the page banner with its Retry (audit row 43); the panels only say they wait on it.
+    banner = page.get_by_test_id("repo-graph").inner_text() if page.get_by_test_id("repo-graph").count() == 1 else ""
+    check("failed-read-is-said", "Couldn’t load the code map" in banner and "run onboarding" not in text.lower()
+          and "Couldn’t" not in text and page.get_by_test_id("repo-graph-retry").count() == 1, text=text, banner=banner)
     set_fixture(origin, repo_graph=None)
     page.get_by_test_id("repo-graph-retry").click()
     try:

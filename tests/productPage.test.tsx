@@ -60,8 +60,8 @@ describe('the Product view (studio#157)', () => {
     expect(await screen.findByTestId('product-totals')).toHaveTextContent('1–2 of 2 requirements · 1 of 2 repositories read');
     expect(apiFetch).toHaveBeenCalledWith('/projects/shop/requirements?limit=50');
     const repo = screen.getByTestId('product-repo');
-    expect(within(repo).getAllByTestId('product-requirement').map((r) => r.textContent)).toEqual(['REQ-1Requirement 1billing · risk', 'REQ-2Requirement 2billing']);
-    expect(screen.getByTestId('product-repo-unread')).toHaveTextContent('shop-web — not generated yet — no requirements artifact yet');
+    expect(within(repo).getAllByTestId('product-requirement').map((r) => r.textContent)).toEqual(['Requirement 1REQ-1 · billing · At risk', 'Requirement 2REQ-2 · billing']);
+    expect(screen.getByTestId('product-repo-unread')).toHaveTextContent('No requirements map yet for shop-web.');
     await userEvent.click(screen.getByTestId('product-project-link'));
     expect(navigate).toHaveBeenCalledWith('/projects/shop');
   });
@@ -154,7 +154,7 @@ describe('the Product view (studio#157)', () => {
   it('an older daemon (route absent) says the Product view needs a newer crew; a refusal says why', async () => {
     apiFetch.mockRejectedValueOnce(new ApiError(404, 'Not Found'));
     render(<ProductPage navigate={vi.fn()} search="?project=shop" />);
-    expect(await screen.findByTestId('product-absent')).toHaveTextContent('Upgrade wicked-crew');
+    expect(await screen.findByTestId('product-absent')).toHaveTextContent('Update Studio’s service');
     cleanup();
     apiFetch.mockRejectedValueOnce(new ApiError(404, 'project shop not found'));
     render(<ProductPage navigate={vi.fn()} search="?project=shop" />);

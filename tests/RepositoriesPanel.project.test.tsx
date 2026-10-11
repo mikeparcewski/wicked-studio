@@ -45,9 +45,9 @@ beforeEach(() => {
 });
 
 async function fillAndRegister(user: ReturnType<typeof userEvent.setup>): Promise<void> {
-  await user.type(screen.getByPlaceholderText('Repo name'), 'my-repo');
-  await user.type(screen.getByPlaceholderText('Absolute path to git repo'), '/tmp/my-repo');
-  await user.click(screen.getByRole('button', { name: 'Register & onboard' }));
+  await user.type(screen.getByTestId('repo-name'), 'my-repo');
+  await user.type(screen.getByTestId('repo-path'), '/tmp/my-repo');
+  await user.click(screen.getByRole('button', { name: 'Register and onboard' }));
   await waitFor(() => expect(client.api.registerRepo).toHaveBeenCalledTimes(1));
 }
 
@@ -122,7 +122,7 @@ describe('RepositoriesPanel capture-learnings launch — ambient project filing 
       workflow: 'capture-learnings',
       projectId: 'q3-review-deck',
     });
-    expect(screen.getByTestId('repo-capture-learnings').getAttribute('title')).toContain('filed under the current project');
+    expect(screen.getByTestId('repo-capture-learnings').getAttribute('title')).toContain('filed under this project');
   });
 
   it('from the flat /repos page (no ambient project) the body carries NO projectId — Unfiled honestly, byte-identical to before', async () => {
