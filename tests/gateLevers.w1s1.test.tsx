@@ -68,7 +68,8 @@ afterEach(() => {
 describe('studio#315 — Send with no seat that can take the work', () => {
   it('every selected seat benched or not council-eligible: Send is disabled and says why; Cmd+Enter posts nothing', async () => {
     vi.spyOn(client.api, 'getRoster').mockResolvedValue({
-      roster: [INELIGIBLE('claude', 'signed out'), BENCHED('opencode', 'quota exhausted'), INELIGIBLE('pi', '401 on the last ballot')],
+      // copilot, not opencode: opencode is opt-in (off by default) since the 2026-10-11 ruling.
+      roster: [INELIGIBLE('claude', 'signed out'), BENCHED('copilot', 'quota exhausted'), INELIGIBLE('pi', '401 on the last ballot')],
     });
     const launch = vi.spyOn(client.api, 'launchRun').mockResolvedValue({ runId: 'x' } as never);
     const user = userEvent.setup();
@@ -76,7 +77,7 @@ describe('studio#315 — Send with no seat that can take the work', () => {
     const reason = await screen.findByTestId('launch-no-seat');
     expect(reason).toHaveTextContent('no selected seat can take this run');
     expect(reason).toHaveTextContent('claude: not council-eligible — signed out');
-    expect(reason).toHaveTextContent('opencode: benched — quota exhausted');
+    expect(reason).toHaveTextContent('copilot: benched — quota exhausted');
     // The "the other seats carry the run" sentence would be false here.
     expect(screen.queryByTestId('ineligible-warning')).toBeNull();
     const box = screen.getByTestId('launch-problem');
