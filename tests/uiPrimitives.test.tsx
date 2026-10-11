@@ -69,6 +69,13 @@ describe('Tabs (§4.4)', () => {
     expect(sel.map((t) => t.id)).toEqual(['s-tab-t8']);
     expect(screen.getAllByRole('tab')).toHaveLength(5);
   });
+  it('tabTestId stamps every tab button (with data-tab); absent by default', () => {
+    render(<Tabs tabs={tabs.slice(0, 3)} active="t0" onChange={() => {}} aria-label="x" idBase="x" tabTestId="sheet-tab" />);
+    expect(screen.getAllByTestId('sheet-tab').map((b) => b.dataset['tab'])).toEqual(['t0', 't1', 't2']);
+    cleanup();
+    render(<Tabs tabs={tabs.slice(0, 3)} active="t0" onChange={() => {}} aria-label="x" idBase="x" />);
+    expect(screen.queryAllByTestId('sheet-tab')).toHaveLength(0);
+  });
   it('few tabs: no More', () => {
     render(<Tabs tabs={tabs.slice(0, 3)} active="t0" onChange={() => {}} aria-label="x" idBase="x" />);
     expect(screen.queryByTestId('tabs-more-button')).toBeNull();
