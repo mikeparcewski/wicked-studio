@@ -339,8 +339,11 @@ select.wk-field {
   border: 1px solid var(--border-input);
   border-radius: var(--radius-md);
   color: var(--ink-high);
-  font-size: var(--text-xs);
 }
+/* Default inset and typed-text size (UI-CONTRACT ASK 06:26Z, w9-s6 gate: text touched the border at 11 px). In
+   :where() so every per-use padding or size (utilities, the composer launch strip) still wins. */
+:where(.wk-field) { padding: 4px var(--control-px); font-size: var(--text-sm); }
+:where(textarea.wk-field) { padding-block: var(--space-2); }
 .wk-field:focus-visible { outline: 2px solid transparent; outline-offset: 2px; border-color: var(--accent); box-shadow: var(--focus-ring); }
 select:not([multiple]):not([size]) {
   appearance: none;
