@@ -142,6 +142,29 @@ with sync_playwright() as p:
     went["watch"] = page.evaluate("() => window.location.pathname")
     check("navigates", all(v["current"] == "page" for k, v in went.items() if k != "watch") and went["watch"] == "/watch", **went)
 
+    # ── 3b. the group icons: a project's four-boxes icon opens its DASHBOARD (/projects/:id, not the
+    #        Product flow); "Not in a project" carries the open icon to See everything › Projects.
+    page.get_by_test_id("desk-rail-home").click()
+    page.wait_for_function("() => window.location.pathname === '/'", timeout=5000)
+    view = page.locator('[data-testid="rail-group"]:not([data-project-id=""]) [data-testid="rail-group-view"]').first
+    view.wait_for(state="visible", timeout=5000)
+    pid = view.evaluate("e => e.closest('[data-testid=\"rail-group\"]').dataset.projectId")
+    view.click()
+    page.wait_for_function("() => window.location.pathname.startsWith('/projects/')", timeout=5000)
+    dash = page.evaluate("() => window.location.pathname")
+    set_fixture(origin, project_dto=True)  # adds r-unfiled, so the rail has a "Not in a project" group
+    page.goto(f"{origin}/", wait_until="networkidle")
+    unfiled = page.get_by_test_id("rail-group-view-unfiled")
+    unfiled.wait_for(state="visible", timeout=5000)
+    label = unfiled.get_attribute("aria-label")
+    unfiled.click()
+    page.wait_for_function("() => window.location.pathname === '/everything'", timeout=5000)
+    where = page.evaluate("() => window.location.pathname + window.location.search")
+    page.get_by_test_id("projects-unfiled").wait_for(state="visible", timeout=8000)
+    check("group-icons", dash == f"/projects/{pid}" and label == "Open work not in a project" and where == "/everything?tab=projects",
+          dash=dash, pid=pid, label=label, where=where)
+    set_fixture(origin, project_dto=False)
+
     # ── 4. the rail-polish evidence shots (studio#421 r1): the rail and the /health page at two
     #       viewports and both themes — the visible foot separator and the framed settings button.
     def shots(subject: str) -> None:

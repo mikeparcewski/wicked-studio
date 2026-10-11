@@ -12,8 +12,8 @@
   "studioVersion": "0.7.6",
   "counts": {
     "files": 197,
-    "occurrences": 2221,
-    "static": 1935,
+    "occurrences": 2222,
+    "static": 1936,
     "dynamic": 60,
     "computed": 19
   },
@@ -6310,6 +6310,12 @@
     },
     {
       "testId": "rail-group-view",
+      "files": [
+        "src/components/desk/SessionRail.tsx"
+      ]
+    },
+    {
+      "testId": "rail-group-view-unfiled",
       "files": [
         "src/components/desk/SessionRail.tsx"
       ]

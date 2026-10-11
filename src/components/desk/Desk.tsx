@@ -16,7 +16,7 @@ import { useCapabilities } from '../../store/capabilities.js';
 import { useHandover } from '../../hooks/useHandover.js';
 import { useHistoryScroll } from '../../hooks/useHistoryState.js';
 import { useDisplayText } from '../../hooks/useHomePath.js';
-import { productPath, type Navigate } from '../../hooks/useRoute.js';
+import { projectDetailPath, type Navigate } from '../../hooks/useRoute.js';
 import { useRoster } from '../../hooks/useRoster.js';
 import { SignInPanel } from '../SignInPanel.js';
 import type { RosterSeat } from '../../api/types.js';
@@ -286,7 +286,7 @@ export function Desk({ runs, runsLoaded, runsError = null, onRetryRuns, needRows
                         aria-label={`Open ${card.name}`}
                         title={`Open ${card.name}`}
                         className="wk-rail-icon-btn"
-                        onClick={() => navigate(productPath(card.projectId))}
+                        onClick={() => navigate(projectDetailPath(card.projectId!))}
                       >
                         <LayoutGrid size={14} aria-hidden />
                       </button>

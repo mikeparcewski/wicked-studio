@@ -7,7 +7,8 @@ import { needCount } from '../../board/needsQueue.js';
 import type { NeedRow } from '../../board/needsYou.js';
 import { MoveToProject, MoveProjectStatus, useMovableBoardModel } from './MoveToProject.js';
 import { useCapabilities } from '../../store/capabilities.js';
-import { productPath, type Navigate } from '../../hooks/useRoute.js';
+import { projectDetailPath, type Navigate } from '../../hooks/useRoute.js';
+import { everythingPath } from '../../board/everythingModel.js';
 import { useAppearanceStore } from '../../theming/appearance.js';
 import { anyModalOpen, useLayerStore } from '../../store/layers.js';
 import { seedNewChat } from '../../board/chatMoves.js';
@@ -27,8 +28,9 @@ export const SESSION_RAIL_PX = 236;
  *    the Desk is the notification surface, and Watchtower is the full feed.
  *  - Sessions grouped by project (the board model's order), each with a state dot and the count
  *    of needs-you items that name it. A project group carries two quick icons (new session →
- *    `/` + the project's `@` chip, open project → `/product?project=<id>`); the
- *    unfiled group ("Not in a project") carries none. A session is a chat and its runs when the
+ *    `/` + the project's `@` chip, open project → its dashboard `/projects/:id`); the
+ *    unfiled group ("Not in a project") carries only the open icon, to See everything › Projects
+ *    where its "Not in a project" card lives. A session is a chat and its runs when the
  *    daemon stamps `chat_id` (C1), else one run; each opens `/s/:id` (S6a).
  *  - the "Workspace" group label, then Skills · MCP tools · Steering and the HEALTH LINK with its
  *    answered dot — what in-flight work is, one click away (`DESK_RAIL_LINKS`). The foot's top
@@ -136,7 +138,21 @@ export function SessionRail({ runs, needRows, navigate, pathname }: {
                     aria-label={`Open ${g.name}`}
                     title={`Open ${g.name}`}
                     className="wk-rail-icon-btn"
-                    onClick={() => { setMore(false); navigate(productPath(g.projectId)); }}
+                    onClick={() => { setMore(false); navigate(projectDetailPath(g.projectId!)); }}
+                  >
+                    <LayoutGrid size={14} aria-hidden />
+                  </button>
+                </span>
+              )}
+              {g.projectId === null && (
+                <span className="wk-rail-group-icons">
+                  <button
+                    type="button"
+                    data-testid="rail-group-view-unfiled"
+                    aria-label="Open work not in a project"
+                    title="Open work not in a project"
+                    className="wk-rail-icon-btn"
+                    onClick={() => { setMore(false); navigate(everythingPath({ tab: 'projects' })); }}
                   >
                     <LayoutGrid size={14} aria-hidden />
                   </button>
