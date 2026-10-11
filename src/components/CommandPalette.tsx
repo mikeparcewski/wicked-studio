@@ -21,7 +21,7 @@ import { statusWord } from '../board/statusWords.js';
 import { NewProjectModal } from './NewProjectModal.js';
 import { Modal } from './Modal.js';
 import { ProjectSwitcher } from './ProjectSwitcher.js';
-import { humanTitle, INTENT_MAX, runTitle, runWhenWord, WHEN_TITLE } from './runIdentity.js';
+import { humanTitle, runTitle, runWhenWord, WHEN_TITLE } from './runIdentity.js';
 import { Terminal } from './Terminal.js';
 import { addAboutChip } from '../store/composerChips.js';
 import { everythingPath } from '../board/everythingModel.js';
@@ -199,6 +199,9 @@ function highlightSnippet(text: string, positions: number[]): React.ReactNode {
 }
 
 /** Accent-highlight the fuzzy-matched characters (§1.5 — the row's only accent). */
+/** The palette has the width for a longer title than a rail row (UX gate S1: WRAP). */
+const PALETTE_INTENT = 80;
+
 /** A run title's " · ab12cd · #2" tail (runTitle): searchable, not shown. */
 const RUN_ID_SUFFIX = / · [0-9a-z]{4,12} · #\d+$/u;
 
@@ -374,14 +377,14 @@ export function CommandPalette({
         // highlight, never a misplaced one. The fragment length comes from the
         // ACTUAL clause humanTitle displays (a literal prefix of the problem),
         // not the raw INTENT_MAX budget the clause may stop short of.
-        const shownIntent = humanTitle(v.session.problem, INTENT_MAX);
+        const shownIntent = humanTitle(v.session.problem, PALETTE_INTENT);
         const intentLen = shownIntent.endsWith('…') ? shownIntent.length - 1 : shownIntent.length;
         const w = runWhenWord(attachedAtByRun[id], Date.now(), v.session.created_at);
         hits.push({
           en: {
             id: `s-run-${id}`,
             group: 'search-runs',
-            label: runTitle(v.session),
+            label: runTitle(v.session, PALETTE_INTENT),
             context: projectNameByRun[id] ?? statusWord(v).word,
             href: runPath(id),
             rank: i,
@@ -496,7 +499,7 @@ export function CommandPalette({
         group: 'runs',
         // §7.5 (slice Y2, EC40): the synthesized title IS the matched label
         // here — typing a short-id now finds its run.
-        label: runTitle(v.session),
+        label: runTitle(v.session, PALETTE_INTENT),
         context: gated ? 'Waiting on you' : statusWord(v).word,
         href: gated ? `${runPath(id)}${GATE_HASH}` : runPath(id),
         rank: gated ? 0 : ACTIVE.has(v.session.status) ? 1 : 2,
@@ -954,7 +957,7 @@ export function CommandPalette({
 
             {/* hint row */}
             <p
-              className="px-4 py-2 shrink-0"
+              className="wk-palette-hint px-4 py-2 shrink-0"
               style={{
                 fontSize: 'var(--text-2xs)',
                 color: 'var(--ink-dim)',

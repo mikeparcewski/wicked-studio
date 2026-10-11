@@ -261,7 +261,7 @@ export function Desk({ runs, runsLoaded, runsError = null, onRetryRuns, needRows
               ? <p className="wk-desk-quiet">Nothing has been started yet.</p>
               : readState === 'checking'
                 ? <div data-testid="desk-projects-loading" aria-busy="true"><Skeleton rows={2} variant="card" /></div>
-                : <p data-testid="desk-projects-unread" className="wk-desk-quiet">Your projects show once your work loads.</p>)}
+                : <p data-testid="desk-projects-unread" className="wk-desk-quiet">Your projects can’t be shown until your work loads. Retry above reads it again.</p>)}
             {cards.slice(0, CARDS_MAX).map((card) => (
               <section key={card.projectId ?? 'unfiled'} data-testid="desk-project" data-project-id={card.projectId ?? ''} className="wk-desk-card">
                 <p className="wk-desk-card-title">

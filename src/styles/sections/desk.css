@@ -85,7 +85,7 @@
 /* ── The ⌘K palette (rows 34, 78; UX gate S1) ── */
 .wk-palette-close { display: none; }
 @media (max-width: 767px) {
-  .wk-palette-esc { display: none; }
+  .wk-palette-esc, .wk-palette-hint { display: none; }
   .wk-palette-close { display: inline-flex; }
   .wk-palette-row { min-height: var(--tap-min); display: flex !important; flex-direction: column; justify-content: center; }
   .wk-palette-line { flex-wrap: wrap; row-gap: 2px; }
