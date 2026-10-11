@@ -254,10 +254,10 @@ function TopicItem({ row, repoRef, busy, write }: {
           data-testid={`learn-every-${topic.slug}`}
         />
       </div>
-      <p className="wk-list-row-meta" data-testid={`learn-next-${topic.slug}`}>
+      <p className="wk-learn-next" data-testid={`learn-next-${topic.slug}`}>
         {on && schedule !== null
           ? `Next refresh ${dueIn(Date.parse(schedule.nextDueAt), now)}${last !== null ? ` · ${last}` : ''}`
-          : 'Refreshes only when you start one.'}
+          : 'Not on a schedule. Turn on automatic refresh to keep it current.'}
       </p>
     </li>
   );

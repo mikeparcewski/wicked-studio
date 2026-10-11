@@ -102,7 +102,7 @@ describe('LearnPage', () => {
     topics.mockResolvedValue({ repoRef: 'r1', topics: [topic({ kind: 'event' })] });
     save.mockResolvedValue(schedule());
     render(<LearnPage navigate={() => undefined} />);
-    expect((await screen.findByTestId('learn-next-sqlite-wal')).textContent).toBe('Refreshes only when you start one.');
+    expect((await screen.findByTestId('learn-next-sqlite-wal')).textContent).toBe('Not on a schedule. Turn on automatic refresh to keep it current.');
     fireEvent.click(screen.getByRole('switch', { name: 'Refresh automatically' }));
     await waitFor(() => expect(save).toHaveBeenCalledWith(expect.objectContaining({ enabled: true, everyHours: 168 })));
   });

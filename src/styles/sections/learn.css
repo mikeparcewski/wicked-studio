@@ -9,3 +9,10 @@
   .wk-learn-item-head { grid-template-columns: minmax(0, 1fr) auto; }
   .wk-learn-item-head .wk-tag { grid-column: 1 / -1; grid-row: 2; justify-self: start; }
 }
+.wk-learn-repo .wk-field { width: 100%; padding-inline: var(--control-px); }
+.wk-learn-next { margin: 0; color: var(--ink-muted); font-size: var(--text-xs); }
+@media (max-width: 767px) {
+  .wk-learn-repo { max-width: none; }
+  .wk-learn-repo .wk-field { min-height: var(--tap-min); }
+  .wk-learn-item .wk-btn--icon { width: var(--tap-min); min-width: var(--tap-min); height: var(--tap-min); }
+}
