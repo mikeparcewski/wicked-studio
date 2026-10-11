@@ -11,7 +11,9 @@ import { diffstatOf, type DeliverRefusal } from '../gateMoveModel.js';
 import { secondsLeft, undoDecision, useUndoQueue } from '../../board/undoQueue.js';
 import { useRunEvents } from '../../hooks/useRunEvents.js';
 import { getCachedRoster, subscribeRoster } from '../../store/rosterCache.js';
-import type { OpenGate } from '../../store/gates.js';
+import { choicesOf, type OpenGate } from '../../store/gates.js';
+import type { CoreEvent, WorkUnit } from '../../api/types.js';
+import { steerScopeTarget } from '../gateVerdictModel.js';
 import { useRerunFromHere } from '../../hooks/useRerunFromHere.js';
 import type { RerunOffer } from '../rerunModel.js';
 import { GateDepthDetails, RuleOfferBlock, useFullVerdict, useSeatTrust, type SeatTrust } from './GateDepth.js';
@@ -74,6 +76,44 @@ export function GateRow({ view, gate, chatId, navigate }: {
   return <RunGateRow view={view} gate={gate} {...(navigate !== undefined ? { navigate } : {})} />;
 }
 
+/**
+ * Crew's `GET /runs/:id/gate` caches only the prompt (no `choices`, `recommended` or `gateKind`), so a
+ * gate this client did not see live — a reload, a late join — lost what the engine offered: a team
+ * dispute read back as Approve / Reject only, without its Send back (rig run ac5d1033). The run's own
+ * log has the `awaitingHuman` frame that opened the gate; what the cached gate lacks is read from the
+ * newest one for the same step. Pure.
+ */
+export function gateWithLogChoices(gate: OpenGate, events: readonly CoreEvent[]): OpenGate {
+  if (gate.choices !== undefined && gate.gateKind !== undefined) return gate;
+  for (let i = events.length - 1; i >= 0; i -= 1) {
+    const e = events[i] as unknown as Record<string, unknown>;
+    if (e['type'] !== 'awaitingHuman' || e['ord'] !== gate.ord) continue;
+    const choices = gate.choices !== undefined ? undefined : choicesOf(e);
+    const rec = e['recommended'];
+    const kind = e['gateKind'];
+    return {
+      ...gate,
+      ...(choices !== undefined ? { choices } : {}),
+      ...(gate.recommended === undefined && typeof rec === 'number' ? { recommended: rec } : {}),
+      ...(gate.gateKind === undefined && typeof kind === 'string' ? { gateKind: kind } : {}),
+    };
+  }
+  return gate;
+}
+
+/**
+ * Crew's approve-with-note reaches the NEXT unit, or with `amendScope: 'creator'` the next creator at
+ * or after the gate (api/wave6-wire.ts). On a review gate the builder is BEHIND the cursor, so no
+ * approve reaches it — only Send back does. The steer arm there says where the note really goes.
+ */
+export function steerReachesBuilder(units: readonly WorkUnit[], ord: number | undefined): boolean {
+  if (typeof ord !== 'number') return true;
+  if (steerScopeTarget(units, ord) !== null) return true;
+  const cursor = units.find((u) => u.ord === ord);
+  if (cursor === undefined || cursor.role === 'creator') return true;
+  return !units.some((u) => u.ord < ord && u.role === 'creator');
+}
+
 const NO_UNITS: readonly never[] = [];
 const NO_EVENTS: readonly never[] = [];
 
@@ -111,12 +151,17 @@ function RunGateRow({ view, gate, navigate }: { view: RunView; gate: OpenGate | 
   const fullVerdict = useFullVerdict(runId, view.units, events, gate);
   const model = useMemo<GateRowModel | null>(() => {
     if (gate === undefined || events === null) return null;
-    const result = sessionGateChoices({ runId, gate, units: view.units, events, pool, roster, rerun: rerunOffer, fullVerdict });
+    const result = sessionGateChoices({ runId, gate: gateWithLogChoices(gate, events), units: view.units, events, pool, roster, rerun: rerunOffer, fullVerdict });
     if (result === null) return null;
-    // The existing denied-step handler sends approve:true, which re-runs the step.
+    const toBuilder = steerReachesBuilder(view.units, gate.ord);
+    // Label each arm by its effect: the denied-step approve re-runs the step; a steer on a review gate
+    // reaches the next step, not the builder (Send back is the way to the builder).
     const effectLabel = (choice: GateRowChoice): GateRowChoice => choice.key === 'approve'
       && /^Re-run the step from the start\b/.test(choice.title)
-      ? { ...choice, label: 'Approve and re-run this step' } : choice;
+      ? { ...choice, label: 'Approve and re-run this step' }
+      : choice.key === 'steer' && choice.label === 'Approve and steer' && !toBuilder
+        ? { ...choice, label: 'Approve with a note for the next step', title: 'Approve, and your note goes to the next step — not to the builder. To have the builder change something, Send back.' }
+        : choice;
     return { ...result, choices: result.choices.map(effectLabel), overflow: result.overflow.map(effectLabel) };
   }, [runId, gate, view.units, events, pool, roster, rerunOffer, fullVerdict]);
   // S16a-1b: the creator seat's record on Approve and the standing-order offer (review gates).
@@ -289,6 +334,15 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
   // studio#650: the engine's prompt, detail lines and reviewer note quote home and temp paths.
   const showText = useDisplayText();
   const pending = useUndoQueue((s) => s.pending.find((p) => p.runIds.length === 1 && p.runIds[0] === runId) ?? null);
+  // An answer waits out its Undo window in this page; closing the tab inside it drops it (by design:
+  // nothing unseen lands). The browser asks before the page goes, so the drop is never silent.
+  const holding = pending !== null;
+  useEffect(() => {
+    if (!holding) return;
+    const warn = (e: BeforeUnloadEvent): void => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [holding]);
   const now = useTicker(pending !== null);
 
   const [noteOpen, setNoteOpen] = useState<string | null>(null);
