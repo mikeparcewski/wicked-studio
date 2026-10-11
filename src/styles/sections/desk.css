@@ -144,7 +144,8 @@
   .wk-gate-strip .wk-desk-toast-body { flex-wrap: wrap; row-gap: 0; min-height: var(--tap-min); }
   .wk-gate-strip .wk-desk-toast-work { flex-basis: 100%; padding-left: 16px; }
   .wk-gate-strip .wk-desk-toast-open { display: none; }
-  .wk-gate-strip .wk-desk-toast-x { width: var(--tap-min); height: var(--tap-min); }
+  .wk-gate-strip .wk-gate-strip-card { position: relative; padding-right: calc(var(--tap-min) + 4px); }
+  .wk-gate-strip .wk-desk-toast-x { position: absolute; top: 0; right: 0; width: var(--tap-min); height: var(--tap-min); }
   .wk-gate-strip .wk-desk-toast .wk-desk-toast-more { flex-basis: 100%; padding-left: 16px; }
 }
 
