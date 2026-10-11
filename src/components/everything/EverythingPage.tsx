@@ -208,7 +208,7 @@ function SessionsTab({ runs, runsLoaded, runsError, onRetryRuns, needRows, q, na
     <div data-testid="everything-sessions" data-count={total} data-filter={q.filter} data-project={q.project ?? ''}>
       {q.filter !== 'archived' && <RunsReadBanner read={read} runsError={runsError} onRetryRuns={onRetryRuns} />}
       {projectHeader !== null && <ProjectEntry row={projectHeader} countsKnown={known} navigate={navigate} header onStatusChanged={(changed) => setArchivedProjects((old) => changed.status === 'archived' ? [changed, ...old.filter((p) => p.id !== changed.id)] : old.filter((p) => p.id !== changed.id))} />}
-      <div className="wk-everything-bar">
+      {read !== 'failed' && <div className="wk-everything-bar">
         <div role="group" aria-label="Show" className="wk-everything-chips">
           {SESSION_FILTERS.map((f) => (
             <button
@@ -264,7 +264,7 @@ function SessionsTab({ runs, runsLoaded, runsError, onRetryRuns, needRows, q, na
             </p>
           )}
         </div>
-      </div>
+      </div>}
       {q.view === 'runs' && (
         <RunsTable
           runs={runs} runChatId={runChatId} projects={projects} q={q}
@@ -386,6 +386,11 @@ function deliveryWord(view: SessionView, isSystemWorkflow: ReturnType<typeof use
   if (!canDeliver(view, isSystemWorkflow)) return null;
   const { claim } = resolveDelivery(deliveryOf(view));
   return claim === 'none' || claim === 'in-flight' ? null : DELIVERY_LABEL[claim] || null;
+}
+
+/** A workflow's name for the table; a generated plan id ("wf-e08e99b9-…") is an internal handle, never shown. */
+function workflowWord(workflow: string): string {
+  return /^wf-[0-9a-f]{6,}/i.test(workflow) ? '—' : workflow;
 }
 
 /** A row's tone when no run view is at hand (a chat with no run yet): the session state's. */
@@ -539,7 +544,7 @@ function RunsTable({ runs, runChatId, projects, q, runsLoaded, runsError, onRetr
                 <span className="wk-runs-cell wk-runs-cell--title">{title}</span>
                 <span className="wk-runs-cell">{r.project}</span>
                 <span className="wk-runs-cell">{r.repo ?? '—'}</span>
-                <span className="wk-runs-cell">{r.workflow}</span>
+                <span className="wk-runs-cell">{workflowWord(r.workflow)}</span>
                 <span className="wk-runs-cell" title={r.created > 0 ? absTime(r.created) : undefined}>{r.created > 0 ? relTime(r.created, now) : '—'}</span>
                 <span className="wk-runs-cell" title={r.updated > 0 ? absTime(r.updated) : undefined}>{r.updated > 0 ? relTime(r.updated, now) : '—'}</span>
               </a>

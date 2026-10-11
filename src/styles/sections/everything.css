@@ -31,7 +31,7 @@
 .wk-everything-frow-line > a { min-width: 0; }
 .wk-everything-actrow { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2) 0; }
 .wk-everything-grow { flex: 1 1 auto; min-width: 0; }
-.wk-everything-srow .wk-desk-need-line, .wk-everything-actrow .wk-desk-need-line { font-size: var(--text-xs); color: var(--ink-dim); }
+.wk-everything-srow .wk-desk-need-line, .wk-everything-actrow .wk-desk-need-line { font-size: var(--text-xs); color: var(--ink-muted); }
 
 /* Projects: the button, the lens and the find field in one left-aligned row. */
 .wk-projects-bar { margin-bottom: var(--space-2); }
@@ -88,3 +88,5 @@
 /* The table never clips a row's "⋯" menu; its head keeps the rounded top. */
 .wk-runs-table { overflow: visible; }
 .wk-runs-head { border-radius: var(--radius-md) var(--radius-md) 0 0; }
+/* Every run uses the page's width; it is a table, not prose. */
+.wk-everything-panel:has(.wk-runs-table) { max-width: none; }
