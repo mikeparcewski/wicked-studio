@@ -326,7 +326,7 @@ export function Desk({ runs, runsLoaded, runsError = null, onRetryRuns, needRows
           inputRef={box}
           navigate={navigate}
           ariaLabel="Ask or tell studio what to do"
-          placeholder="Ask anything across your projects, or tell one what to do"
+          placeholder="Ask or tell studio what to do"
           variant="desk"
           hint
           footer={<CaptureDrop runs={runs} opens="up" />}

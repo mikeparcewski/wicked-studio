@@ -16,6 +16,9 @@
 
 /* ── Needs rows: the moves sit in one slot; one focus ring (row 83). ── */
 .wk-desk-need .wk-need-acts { align-items: center; flex-wrap: wrap; }
+/* Available moves read as available on dark cards too (UX gate S1: CONTRAST). */
+.wk-desk-need .wk-need-act:not(:disabled) { border-color: var(--border-strong); }
+[data-theme="wicked-dark"] .wk-desk-need .wk-need-act:not(:disabled), [data-theme="dark"] .wk-desk-need .wk-need-act:not(:disabled) { color: var(--ink-high); }
 /* A group with several answers (Approve all / Reject all / with reason / Show each) puts them on
    their own line, so the group's title and line are never squeezed to a few words. */
 .wk-desk-need--acts-below > .wk-desk-need-body { flex: 1 1 calc(100% - 24px); }
@@ -55,6 +58,9 @@
   .wk-desk-need--wrap > .wk-need-answer { padding-left: 18px; }
   .wk-desk-need-title { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
   .wk-desk-orders .wk-orders { flex-wrap: wrap; white-space: normal; }
+  .wk-desk-orders { column-gap: var(--space-4); }
+  .wk-desk-orders .wk-orders-act { min-height: var(--tap-min); }
+  .wk-watchtower-row .wk-tech-details-summary { min-height: var(--tap-min); display: flex; align-items: center; }
   .wk-desk-bottom { padding: 8px var(--space-4) 12px; }
   /* Toasts: one compact card docked bottom, above the composer, never a stack over the page. */
   [data-testid="gate-notification-layer"] { left: var(--space-4); right: var(--space-4) !important; align-items: stretch !important; }
@@ -72,3 +78,14 @@
 /* studio#660: the Watchtower pill's card is a preview with no controls of its own; when it opens
    itself over the page it must never swallow the first click on the gate it announces. */
 .wk-watch-card { pointer-events: none; }
+.wk-watchtower-body { padding-bottom: calc(var(--fab-clear) + 120px); }
+
+/* ── The ⌘K palette (rows 34, 78; UX gate S1) ── */
+.wk-palette-close { display: none; }
+@media (max-width: 767px) {
+  .wk-palette-esc { display: none; }
+  .wk-palette-close { display: inline-flex; }
+  .wk-palette-row { min-height: var(--tap-min); display: flex !important; flex-direction: column; justify-content: center; }
+  .wk-palette-line { flex-wrap: wrap; row-gap: 2px; }
+  .wk-palette-title { flex-basis: 100%; white-space: normal !important; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+}

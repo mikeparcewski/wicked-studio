@@ -93,7 +93,7 @@ with sync_playwright() as p:
         check("row-consequence-first",
               line == "5 memory-only · 6 change enforcement", line=line)
         act = row.get_by_test_id("need-accept-act")
-        check("row-accept-label", act.inner_text().strip() == "Accept 5 memory-only", label=act.inner_text())
+        check("row-accept-label", act.inner_text().strip() == "Accept 5 memories", label=act.inner_text())
 
         # The list: at most 4 at a time, enforcement first, and it pages.
         row.get_by_test_id("need-group-toggle").click()

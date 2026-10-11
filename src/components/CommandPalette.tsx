@@ -199,6 +199,9 @@ function highlightSnippet(text: string, positions: number[]): React.ReactNode {
 }
 
 /** Accent-highlight the fuzzy-matched characters (§1.5 — the row's only accent). */
+/** A run title's " · ab12cd · #2" tail (runTitle): searchable, not shown. */
+const RUN_ID_SUFFIX = / · [0-9a-z]{4,12} · #\d+$/u;
+
 function highlight(label: string, positions: number[]): React.ReactNode {
   if (positions.length === 0) return label;
   const set = new Set(positions);
@@ -764,12 +767,14 @@ export function CommandPalette({
                   color: 'var(--ink-high)',
                 }}
               />
-              <span
-                className="font-mono"
-                style={{ fontSize: 'var(--text-2xs)', color: 'var(--ink-dim)' }}
+              <kbd
+                className="font-mono wk-palette-esc"
+                style={{ fontSize: 'var(--text-2xs)', color: 'var(--ink-muted)' }}
               >
                 esc
-              </span>
+              </kbd>
+              {/* Phone: a visible way out (UX gate S1: AFF); desktop keeps the esc keycap. */}
+              <button type="button" data-testid="palette-close" aria-label="Close" title="Close" onClick={onClose} className="wk-btn wk-btn--icon wk-btn--quiet wk-palette-close">✕</button>
             </div>
 
             {/* §5.2/EC24: the corpus label is a first-class UI element, ALWAYS
@@ -840,7 +845,8 @@ export function CommandPalette({
                     activate(row);
                   },
                   onMouseEnter: () => setSel(i),
-                  className: 'block w-full px-4 py-1.5 text-left',
+                  className: 'wk-palette-row block w-full px-4 py-1.5 text-left',
+                  ...(row.en.group === 'runs' || row.en.group === 'search-runs' ? { title: row.en.label } : {}),
                   style: {
                     background: i === selIx ? 'var(--accent-subtle)' : 'transparent',
                     outline: i === selIx ? '2px solid var(--accent)' : 'none',
@@ -849,7 +855,7 @@ export function CommandPalette({
                 } as const;
                 const body = (
                   <>
-                    <span className="flex w-full min-w-0 items-baseline gap-3">
+                    <span className="wk-palette-line flex w-full min-w-0 items-baseline gap-3">
                       {/* §5.2 hit anatomy: a status dot for runs, a glyph for
                           gates/decisions/repos/prompts — before the label. */}
                       {row.en.dot !== undefined && (
@@ -869,7 +875,7 @@ export function CommandPalette({
                       )}
                       <span
                         {...(row.en.when !== undefined ? { 'data-testid': 'run-title' } : {})}
-                        className="min-w-0 flex-1 truncate"
+                        className="wk-palette-title min-w-0 flex-1 truncate"
                         style={{
                           fontSize: 'var(--text-sm)',
                           fontFamily: 'var(--font-sans)',
@@ -877,22 +883,28 @@ export function CommandPalette({
                         }}
                       >
                         {row.en.group === 'verbs' ? '> ' : ''}
-                        {highlight(row.en.label, row.m.positions)}
+                        {/* A run's short id and attempt stay searchable (the matched label) but the row
+                            shows the title in words (UX gate S1: JARGON); the id is the row's tooltip. */}
+                        {(() => {
+                          const shown = row.en.when !== undefined || row.en.group === 'runs' || row.en.group === 'search-runs'
+                            ? row.en.label.replace(RUN_ID_SUFFIX, '') : row.en.label;
+                          return highlight(shown, row.m.positions.filter((p) => p < shown.length));
+                        })()}
                       </span>
                       {/* §7.5 (slice Y2): run rows carry the attach clock. */}
                       {row.en.when !== undefined && (
                         <span
                           data-testid="run-when"
                           title={WHEN_TITLE}
-                          className="shrink-0"
-                          style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-dim)' }}
+                          className="shrink-0 wk-palette-meta"
+                          style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-muted)' }}
                         >
                           {row.en.when}
                         </span>
                       )}
                       <span
-                        className="shrink-0"
-                        style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-dim)' }}
+                        className="shrink-0 wk-palette-meta"
+                        style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-muted)' }}
                       >
                         {row.en.context}
                       </span>

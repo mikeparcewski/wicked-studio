@@ -125,7 +125,8 @@ export function NeedsYouQueue({ queue, runs, navigate, now }: {
       ? `Undo accepting ${s.count}`
       : s.phase === 'sending'
         ? `Accepting ${s.done}/${s.total}…`
-        : deskVerb(a.label);
+        // Plain words for the move (UX gate S1): what it accepts, not the triage class's name.
+        : `Accept ${a.ids.length} ${a.ids.length === 1 ? 'memory' : 'memories'}`;
     return (
       <button
         type="button"
