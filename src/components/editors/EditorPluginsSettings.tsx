@@ -18,7 +18,7 @@ export const CREATE_EDITOR_COMMAND = '/workflow-editor-plugin ';
 
 const PERMISSION_WORDS: Record<string, string> = {
   'artifact.read': 'read what it opens',
-  'artifact.write': 'change it, as versions you can undo',
+  'artifact.write': 'change it (you can undo)',
   'selection.chip': 'point at parts in your message',
   'composer.draft': 'suggest what to ask',
   'checks.read': 'see the checks',
@@ -46,12 +46,13 @@ export function kindsInWords(kinds: readonly string[]): string {
   return `${words.slice(0, -1).join(', ')} and ${words[words.length - 1]}`;
 }
 
-/** "Can read what it opens and go full screen." — every permission, never an id. */
-export function permissionsInWords(permissions: readonly { id: string }[]): string {
-  const words = permissions.map((p) => PERMISSION_WORDS[p.id] ?? p.id);
-  if (words.length === 0) return 'Asks for nothing.';
-  const list = words.length === 1 ? words[0]! : `${words.slice(0, -1).join(', ')} and ${words[words.length - 1]}`;
-  return `Can ${list}.`;
+/** Every permission in plain words, never an id: what it can do, and its internet access on its own line. */
+export function permissionsInWords(permissions: readonly { id: string }[]): { can: string; internet: string | null } {
+  const can = permissions.filter((p) => p.id !== 'network.media').map((p) => PERMISSION_WORDS[p.id] ?? p.id);
+  return {
+    can: can.length === 0 ? 'Asks for nothing.' : `Can: ${can.join(' · ')}`,
+    internet: permissions.some((p) => p.id === 'network.media') ? 'Also loads images and fonts from the internet.' : null,
+  };
 }
 
 /** The editor test page for one editor. */
@@ -83,13 +84,9 @@ export function useEditorList(): { load: Load; retry: () => void; retrying: bool
   return { load, retry, retrying };
 }
 
-/** `.wk-link` is the contract's link class (UI-CONTRACT §4.1, added by the primitives PR); until it lands
- *  the same look is given here with tokens: accent ink, underlined. */
-const linkStyle: React.CSSProperties = { fontSize: 'var(--text-sm)', color: 'var(--accent)', textDecoration: 'underline', textUnderlineOffset: 3 };
-
 const tagStyle: React.CSSProperties = {
   fontSize: 'var(--text-xs)',
-  color: 'var(--ink-muted)',
+  color: 'var(--ink-body)',
   background: 'var(--surface-raised)',
   borderRadius: 'var(--radius-sm)',
   padding: '1px 6px',
@@ -97,41 +94,32 @@ const tagStyle: React.CSSProperties = {
 
 function EditorRow({ e, navigate, compact }: { e: EditorView; navigate: (p: string) => void; compact: boolean }): React.ReactElement {
   const href = devHostHref(e);
+  const words = permissionsInWords(e.permissions);
   return (
-    <li
-      data-testid="editor-plugin-row"
-      data-editor={e.id}
-      className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2 py-3 border-b last:border-b-0"
-      style={{ borderColor: 'var(--border-subtle)' }}
-    >
-      <div className="min-w-0 flex-1">
-        <p className="flex flex-wrap items-center gap-2" style={{ fontSize: 'var(--text-sm)', color: 'var(--ink-high)', fontWeight: 500 }}>
-          <span>{e.title}</span>
-          <span data-testid="editor-plugin-source" style={tagStyle}>{e.first_party ? 'Built in' : 'Installed'}</span>
-          {!e.enabled && <span data-testid="editor-plugin-off" style={tagStyle}>Off</span>}
-        </p>
-        <p style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-dim)', marginTop: 2 }}>
-          Version {e.version} · opens {kindsInWords(e.kinds)}
-        </p>
-        {!compact && (
-          <p data-testid="editor-plugin-permissions" style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-muted)', marginTop: 2 }}>
-            {permissionsInWords(e.permissions)}
-          </p>
-        )}
-      </div>
-      {e.enabled ? (
-        <a
-          href={href}
-          data-testid="editor-plugin-open"
-          className="wk-link"
-          style={linkStyle}
-          onClick={(ev) => { ev.preventDefault(); navigate(href); }}
-        >
-          Try it in the test page
-        </a>
-      ) : (
-        <span style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-dim)' }}>Turned off, so it opens nowhere.</span>
+    <li data-testid="editor-plugin-row" data-editor={e.id} className="py-3 border-b last:border-b-0" style={{ borderColor: 'var(--border-subtle)' }}>
+      <p className="flex flex-wrap items-center gap-2" style={{ fontSize: 'var(--text-md)', color: 'var(--ink-high)', fontWeight: 600 }}>
+        <span>{e.title}</span>
+        <span data-testid="editor-plugin-source" style={tagStyle}>{e.first_party ? 'Built in' : 'Installed'}</span>
+        {!e.enabled && <span data-testid="editor-plugin-off" style={tagStyle}>Off</span>}
+      </p>
+      <p style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-body)', marginTop: 2 }}>
+        Version {e.version} · opens {kindsInWords(e.kinds)}
+      </p>
+      {!compact && (
+        <div data-testid="editor-plugin-permissions" style={{ fontSize: 'var(--text-sm)', color: 'var(--ink-body)', marginTop: 4 }}>
+          <p>{words.can}</p>
+          {words.internet !== null && <p data-testid="editor-plugin-internet">{words.internet}</p>}
+        </div>
       )}
+      <p style={{ marginTop: 6 }}>
+        {e.enabled ? (
+          <a href={href} data-testid="editor-plugin-open" className="wk-btn wk-btn--secondary wk-btn--sm" aria-label={`Open ${e.title} in the editor test page`} onClick={(ev) => { ev.preventDefault(); navigate(href); }}>
+            {compact ? 'Open' : 'Open in the test page'}
+          </a>
+        ) : (
+          <span style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-body)' }}>Turned off, so it opens nowhere.</span>
+        )}
+      </p>
     </li>
   );
 }
@@ -158,7 +146,7 @@ export function EditorPluginList({ navigate, compact = false }: { navigate: (p: 
         <button type="button" className="wk-btn wk-btn--secondary wk-btn--sm" data-testid="editor-plugins-retry" onClick={retry} disabled={retrying}>
           {retrying ? 'Retrying…' : 'Retry'}
         </button>
-        <details className="w-full" style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-dim)' }}>
+        <details className="w-full" style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-body)' }}>
           <summary>Technical details</summary>
           <pre style={{ fontFamily: 'var(--font-mono)', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{load.error}</pre>
         </details>
@@ -167,14 +155,14 @@ export function EditorPluginList({ navigate, compact = false }: { navigate: (p: 
   }
   if (load.state === 'unsupported') {
     return (
-      <p data-testid="editor-plugins-unsupported" className="py-3" style={{ fontSize: 'var(--text-sm)', color: 'var(--ink-muted)' }}>
+      <p data-testid="editor-plugins-unsupported" className="py-3" style={{ fontSize: 'var(--text-sm)', color: 'var(--ink-body)' }}>
         This version of studio’s service has no editor plugins to list. Update it to see them here.
       </p>
     );
   }
   if (load.editors.length === 0) {
     return (
-      <p data-testid="editor-plugins-empty" className="py-3" style={{ fontSize: 'var(--text-sm)', color: 'var(--ink-muted)' }}>
+      <p data-testid="editor-plugins-empty" className="py-3" style={{ fontSize: 'var(--text-sm)', color: 'var(--ink-body)' }}>
         No editor plugins yet. Create one, and it shows here once it is installed.
       </p>
     );
@@ -204,9 +192,10 @@ export function DeveloperSettings({ navigate }: { navigate: (p: string) => void 
       <h2 id="developer-settings-title" style={{ fontSize: 'var(--text-md)', fontWeight: 600, color: 'var(--ink-high)' }}>Developer</h2>
       <div data-testid="editor-plugins-settings" className="mt-3">
         <h3 style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--ink-high)' }}>Editor plugins</h3>
-        <p className="mt-1" style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-muted)' }}>
-          Editors open what studio makes, such as pages and documents, inside a sandbox with no internet. Built-in ones
-          ship with studio. The ones you build are installed when their run finishes, after they pass studio’s checks.
+        <p className="mt-1" style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-body)' }}>
+          Editors open what studio makes, such as pages and documents, in a sandbox: each can do only what its row
+          lists. Built-in ones ship with studio. When a create run finishes and its editor passes studio’s checks, you
+          approve the install in that run, and the editor appears here.
         </p>
         <div className="mt-3 flex flex-wrap items-center gap-3">
           <button
@@ -219,15 +208,14 @@ export function DeveloperSettings({ navigate }: { navigate: (p: string) => void 
           </button>
           <a
             href="/editors/dev"
-            className="wk-link"
+            className="wk-btn wk-btn--secondary"
             data-testid="editor-plugins-devhost"
-            style={linkStyle}
             onClick={(ev) => { ev.preventDefault(); navigate('/editors/dev'); }}
           >
             Open the editor test page
           </a>
         </div>
-        <p className="mt-1" style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-dim)' }}>
+        <p className="mt-1" style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-body)' }}>
           The test page opens an installed editor in the real sandbox over a sample page, so you can try one you are building.
         </p>
         <div className="mt-2">

@@ -45,8 +45,9 @@ describe('words, never ids', () => {
     expect(kindsInWords(['page'])).toBe('pages');
     expect(kindsInWords(['page', 'document', 'demo-video'])).toBe('pages, documents and demo videos');
     expect(kindsInWords(['json-tree'])).toBe('json tree');
-    expect(permissionsInWords([{ id: 'artifact.read' }, { id: 'ui.fullscreen' }])).toBe('Can read what it opens and go full screen.');
-    expect(permissionsInWords([])).toBe('Asks for nothing.');
+    expect(permissionsInWords([{ id: 'artifact.read' }, { id: 'ui.fullscreen' }])).toEqual({ can: 'Can: read what it opens · go full screen', internet: null });
+    expect(permissionsInWords([{ id: 'artifact.read' }, { id: 'network.media' }])).toEqual({ can: 'Can: read what it opens', internet: 'Also loads images and fonts from the internet.' });
+    expect(permissionsInWords([]).can).toBe('Asks for nothing.');
   });
 
   it('the test page link carries the editor, its version, its pinned hash and its title', () => {

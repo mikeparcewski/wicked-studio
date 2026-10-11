@@ -12,8 +12,8 @@
   "studioVersion": "0.7.4",
   "counts": {
     "files": 179,
-    "occurrences": 2068,
-    "static": 1835,
+    "occurrences": 2069,
+    "static": 1836,
     "dynamic": 48,
     "computed": 6
   },
@@ -2081,6 +2081,12 @@
       "testId": "editor-notes",
       "files": [
         "src/components/editors/EditorHostPage.tsx"
+      ]
+    },
+    {
+      "testId": "editor-plugin-internet",
+      "files": [
+        "src/components/editors/EditorPluginsSettings.tsx"
       ]
     },
     {
