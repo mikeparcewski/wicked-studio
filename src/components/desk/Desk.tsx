@@ -267,7 +267,7 @@ export function Desk({ runs, runsLoaded, runsError = null, onRetryRuns, needRows
             {cards.slice(0, CARDS_MAX).map((card) => (
               <section key={card.projectId ?? 'unfiled'} data-testid="desk-project" data-project-id={card.projectId ?? ''} className="wk-desk-card">
                 <p className="wk-desk-card-title">
-                  <span>{card.name}</span>
+                  <span className="wk-desk-card-name" title={card.name}>{card.name}</span>
                   {card.projectId !== null && card.projectId !== '' && (
                     <span className="wk-desk-card-icons">
                       <button
@@ -298,10 +298,10 @@ export function Desk({ runs, runsLoaded, runsError = null, onRetryRuns, needRows
                 </p>
                 {card.shown.map((s) => (
                   <div key={s.id} className="wk-desk-session-row" data-move-row={s.id}>
-                    <a href={s.path} onClick={go(s.path)} data-testid="desk-session" data-session-id={s.id} data-run-id={s.runId} data-state={s.state} className="wk-desk-session">
+                    <a href={s.path} onClick={go(s.path)} title={`${s.fullTitle ?? s.title} — ${s.line}`} data-testid="desk-session" data-session-id={s.id} data-run-id={s.runId} data-state={s.state} className="wk-desk-session">
                       <span aria-hidden className={`wk-desk-dot wk-desk-dot--${s.state}`} />
                       <span className="wk-desk-need-body">
-                        <span className="wk-desk-session-title">{s.title}</span>
+                        <span className="wk-desk-session-title">{s.fullTitle ?? s.title}</span>
                         <span className={`wk-desk-need-line${s.state === 'waiting' ? ' wk-desk-underline' : ''}`}>{s.line}</span>
                       </span>
                     </a>

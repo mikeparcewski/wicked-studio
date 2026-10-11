@@ -120,6 +120,11 @@ export function plainRunTitle(problem: string): string {
   return onboardTitle(problem) ?? askTitle(problem) ?? humanTitle(problem);
 }
 
+/** The same title, uncut (for a hover/focus title when the rail or a card clamps it). */
+export function fullRunTitle(problem: string): string {
+  return onboardTitle(problem) ?? askTitle(problem) ?? humanTitle(problem, 240);
+}
+
 // ── studio#540: an ask run's title ──────────────────────────────────────────────────────────
 
 /** Is this run's `problem` crew's chat-scope statement — the run is a chat's ask path? Crew sets an

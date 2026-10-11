@@ -117,7 +117,7 @@ export function SessionRail({ runs, needRows, navigate, pathname }: {
         {groups.map((g) => (
           <div key={g.projectId ?? 'unfiled'} data-testid="rail-group" data-project-id={g.projectId ?? ''}>
             <div className="wk-rail-group-row">
-              <p className="wk-rail-group">{g.name}</p>
+              <p className="wk-rail-group" title={g.name}>{g.name}</p>
               {g.projectId !== null && g.projectId !== '' && (
                 <span className="wk-rail-group-icons">
                   <button
@@ -154,13 +154,13 @@ export function SessionRail({ runs, needRows, navigate, pathname }: {
                   data-run-ids={s.runIds.join(' ')}
                   data-state={s.state}
                   data-badge={s.badge}
-                  title={s.line}
-                  aria-label={`${s.title} — ${s.line}${s.badge > 0 ? `, ${s.badge} need you` : ''}`}
+                  title={`${s.fullTitle ?? s.title} — ${s.line}`}
+                  aria-label={`${s.fullTitle ?? s.title} — ${s.line}${s.badge > 0 ? `, ${s.badge} need you` : ''}`}
                   aria-current={pathname === s.path ? 'page' : undefined}
                   className="wk-rail-session"
                 >
                   <span aria-hidden className={`wk-desk-dot wk-desk-dot--${s.state}`} />
-                  <span className="wk-rail-session-title">{s.title}</span>
+                  <span className="wk-rail-session-title">{s.fullTitle ?? s.title}</span>
                   {s.badge > 0 && <span className="wk-rail-badge" aria-label={`${s.badge} need you`}>{s.badge}</span>}
                 </a>
                 <MoveToProject session={s} projectId={g.projectId} runs={runs} />

@@ -106,3 +106,6 @@
   .wk-desk-head > .wk-desk-date { grid-row: 2; margin-bottom: var(--space-1); }
   .wk-desk-head .wk-desk-orders { grid-column: 1 / -1; grid-row: 3; margin: 0 0 var(--space-2); row-gap: 0; }
 }
+
+/* Long project names wrap to two lines in a card header instead of pushing its icons out. */
+.wk-desk-card-name { min-width: 0; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
