@@ -88,7 +88,7 @@ describe('seat sign-in semantics on the page (F-2R2-009)', () => {
     // The daemon SAYS a council would not seat it — its reason, its words, the amber "!".
     expect(byKey('codex')).toHaveAttribute('data-standing', 'ineligible');
     expect(byKey('codex').textContent).toContain('!');
-    expect(byKey('codex').textContent).toContain('not picked for checks');
+    expect(byKey('codex').textContent).toContain('not picked for checks — signed out');
     expect(byKey('codex').getAttribute('title')).toContain('signed out');
     // Signed out but declared eligible: said so.
     expect(byKey('pi').textContent).toContain('signed out — still picked for checks');

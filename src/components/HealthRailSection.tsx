@@ -145,7 +145,8 @@ export function seatStandingWord(seat: RosterSeat): SeatStanding {
   // The daemon SAYS a council would not seat it — its reason, its words (crew#533).
   if (eligible === false) {
     // studio#724: plain words; the service's own reason ("not enabled for council") is the hover only.
-    return { kind: 'ineligible', detail: 'not picked for checks', title: reason !== '' ? `Studio's service: ${reason.replace(/council/gi, 'checks')}` : 'Studio\'s service does not pick this helper for checks', auth };
+    const plain = reason.replace(/\bcouncils?\b/gi, 'checks').replace(/\bseats?\b/gi, 'helper');
+    return { kind: 'ineligible', detail: `not picked for checks${plain !== '' ? ` — ${plain}` : ''}`, title: plain !== '' ? `Studio's service: ${plain}` : 'Studio\'s service does not pick this helper for checks', auth };
   }
   if (auth === 'not_required') {
     return { kind: 'no-sign-in-needed', detail: `no sign-in needed${tier !== '' ? ` (${tier})` : ''}`, title: tier !== '' ? `answers on its provider free tier: ${tier}` : null, auth };
