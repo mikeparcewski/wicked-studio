@@ -20,6 +20,11 @@ export function isOptInKey(key: string): boolean {
   return OPT_IN_SEAT_KEYS.includes(key.split('#')[0] ?? key);
 }
 
+/** Whether a seat is in a DEFAULT pick: every seat but an opt-in one the operator has not picked. */
+export function defaultOn(key: string, picked: readonly string[] = useComposerSeats.getState().picked): boolean {
+  return !isOptInKey(key) || picked.includes(key);
+}
+
 /** Whether `key` is OFF for a send: dropped, or an opt-in seat the operator has not picked. */
 export function seatOff(key: string, dropped: readonly string[], picked: readonly string[]): boolean {
   return isOptInKey(key) ? !picked.includes(key) : dropped.includes(key);

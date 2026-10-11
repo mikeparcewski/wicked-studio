@@ -322,6 +322,7 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
                           data-key={s.key}
                           data-autofocus={i === 0 ? 'true' : undefined}
                           aria-pressed={on}
+                          aria-describedby={isOptInKey(s.key) ? 'launch-wizard-optin-note' : undefined}
                           className={`wk-composer-chip wk-composer-seat${on ? '' : ' wk-composer-seat--off'}`}
                           onClick={() => toggleSeat(s.key)}
                         >
@@ -332,7 +333,7 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
                   </div>
                   <span className="wk-field-note">Who plans, builds and checks the work. Different helpers check each other’s work.</span>
                   {eligible.some((s) => isOptInKey(s.key)) && (
-                    <span className="wk-field-note" data-testid="launch-wizard-optin-note">
+                    <span id="launch-wizard-optin-note" className="wk-field-note" data-testid="launch-wizard-optin-note">
                       {eligible.filter((s) => isOptInKey(s.key)).map(seatLabel).join(', ')}: {OPT_IN_NOTE}
                     </span>
                   )}
