@@ -111,7 +111,7 @@ EVERYTHING = """(h) => {
     return !!hit && (hit === el || el.contains(hit));
   };
   const list = document.querySelector('[data-testid="desk-rail-additional"]');
-  const start = document.querySelector('[data-testid="desk-rail-start"]');
+  const health = document.querySelector('[data-testid="desk-rail-health"]');
   const sessions = [...document.querySelectorAll('[data-testid="rail-session"]')];
   const unreachable = [];
   for (const a of list.querySelectorAll('a[data-nav-dest]')) {
@@ -121,7 +121,7 @@ EVERYTHING = """(h) => {
   list.scrollTop = 0;
   return {
     list: box(list), listInView: box(list).bottom <= h + 0.5 && box(list).top >= -0.5,
-    startShown: !!start && shown(start),
+    healthShown: !!health && shown(health),
     sessionsShown: sessions.filter(shown).length, sessions: sessions.length,
     unreachable,
   };
@@ -183,7 +183,7 @@ with sync_playwright() as p:
     page.wait_for_timeout(200)
     page.screenshot(path=str(SHOTS / "desk-look-everything.png"))
     ev = page.evaluate(EVERYTHING, H)
-    check("everything-else-fits", ev["listInView"] and ev["startShown"] and ev["sessions"] >= 6
+    check("everything-else-fits", ev["listInView"] and ev["healthShown"] and ev["sessions"] >= 6
           and ev["sessionsShown"] >= 6 and not ev["unreachable"], **ev)
     # The overlay contract: Escape from inside closes it and returns focus to "Additional settings";
     # an Escape a higher layer owns (the shortcut overlay) closes only that layer (Copilot r1).

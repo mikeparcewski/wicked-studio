@@ -18,10 +18,24 @@ export type { QueuedStandingMessage, StandingOrdersState, ParsedStandingOrder };
 
 export type { StandingOrder, StandingOrderRule };
 
+/**
+ * Normalise a wire answer: a proxy shell or a partial body (no `orders`/`outbox`) must read as
+ * "none yet", never crash the panel that destructures them.
+ */
+function normaliseState(s: StandingOrdersState): StandingOrdersState {
+  return {
+    ...s,
+    away: s.away === true,
+    awaySince: s.awaySince ?? null,
+    orders: Array.isArray(s.orders) ? s.orders : [],
+    outbox: Array.isArray(s.outbox) ? s.outbox : [],
+  };
+}
+
 export const standingOrdersApi = {
-  get: () => apiFetch<StandingOrdersState>('/standing-orders'),
+  get: () => apiFetch<StandingOrdersState>('/standing-orders').then(normaliseState),
   setAway: (away: boolean) =>
-    apiFetch<StandingOrdersState>('/standing-orders/away', { method: 'PUT', body: JSON.stringify({ away }) }),
+    apiFetch<StandingOrdersState>('/standing-orders/away', { method: 'PUT', body: JSON.stringify({ away }) }).then(normaliseState),
   parse: (text: string) =>
     apiFetch<ParsedStandingOrder>('/standing-orders/parse', { method: 'POST', body: JSON.stringify({ text }) }),
   create: (text: string, rule: StandingOrderRule) =>

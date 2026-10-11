@@ -75,10 +75,9 @@ with sync_playwright() as p:
 
     def open_health() -> None:
         page.goto(f"{origin}/", wait_until="networkidle")
-        toggle = page.get_by_test_id("rail-health-toggle")
-        toggle.wait_for(state="visible", timeout=15000)
-        if toggle.get_attribute("aria-expanded") != "true":
-            toggle.click()
+        link = page.get_by_test_id("desk-rail-health")
+        link.wait_for(state="visible", timeout=15000)
+        link.click()
         page.get_by_test_id("rail-seat-week-window").wait_for(state="visible", timeout=15000)
 
     def move(seat: str):
@@ -89,7 +88,7 @@ with sync_playwright() as p:
         open_health()
         page.wait_for_function("""() => document.querySelector('[data-testid="rail-seat-week-window"]')
             ?.getAttribute('data-state') === 'ok'""", timeout=10000)
-        kinds = page.evaluate("""() => Object.fromEntries([...document.querySelectorAll('[data-testid="rail-seat"]')]
+        kinds = page.evaluate("""() => Object.fromEntries([...document.querySelectorAll('[data-testid="rail-week-seat"]')]
             .map(el => [el.dataset.seat, [...el.querySelectorAll('[data-testid="rail-seat-move"]')].map(m => m.dataset.kind)]))""")
         check("one-move-per-seat", kinds == {"claude": ["no-change"], "codex": ["route-away"], "agy": ["no-change"],
                                              "pi": ["sign-in"]}, kinds=kinds)
@@ -145,7 +144,9 @@ with sync_playwright() as p:
         page.wait_for_function("""() => document.querySelector('[data-testid="rail-seat-week-window"]')
             ?.getAttribute('data-state') === 'absent'""", timeout=10000)
         cap = (page.get_by_test_id("rail-seat-week-window").text_content() or "").strip()
-        check("absent-named", "not reported by this daemon" in cap
+        check("absent-named", "Not available yet" in cap
+              and "does not report the week" in (page.get_by_test_id("health-upgrade-note").text_content() or "")
+              and "this week:" not in cap
               and page.get_by_test_id("rail-seat-move").count() == 0
               and page.get_by_test_id("rail-seat-row").count() == 4, caption=cap)
 

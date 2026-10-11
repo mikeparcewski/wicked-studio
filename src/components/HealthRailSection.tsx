@@ -1,51 +1,49 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import { getDiagnostics, isDiagnosticsUnsupported } from '../api/diagnostics.js';
+import { HEALTH_RECHECKED } from '../hooks/useRailHealthDot.js';
 import type { SeatRecord } from '../api/seatRecord.js';
 import type { DiagnosticsGovernance, DiagnosticsGovernanceFinding, RosterSeat } from '../api/types.js';
 import { coachSeat, recordsByCli, seatWeekLine, type CoachMove } from '../board/seatCoaching.js';
 import { useSeatWeek, type MoveState, type SeatWeekRead } from '../hooks/useSeatWeek.js';
 import { useConnectionStore } from '../store/connection.js';
 import { setCachedRoster, subscribeRoster } from '../store/rosterCache.js';
-import { SignInPanel } from './SignInPanel.js';
 import { signInLapsed } from '../board/deskModel.js';
 import { useDisplayPath, useDisplayText } from '../hooks/useHomePath.js';
 
 /**
- * The rail-foot health section (DES-FEEDBACK-003 §6.2, slice O): the operator —
- * "move health down to where settings was and behaving the same (just with it's
- * health registry)". The dress is the slice-A SettingsRailSection VERBATIM
- * (collapsed by default, chevron rotates 90°, header `--ink-muted` closed /
- * `--ink-high` open) in the rail-bottom slot Settings vacated when it became a
- * primary heading (§2.1/§8.1) — with `♥ Health` in place of `⚙ Settings`.
- *
- * Expanded contents are THE HEALTH REGISTRY: the two chrome check rows
- * (WebSocket / API server — CheckRow + the `getHealth()` fetch moved verbatim
- * from the retired AppChrome popover, §8.2) plus one row per council seat off
+ * The health registry (DES-FEEDBACK-003 §6.2, slice O): the two chrome check rows
+ * (WebSocket / API server — CheckRow + the `getHealth()` fetch moved verbatim from
+ * the retired AppChrome popover, §8.2) plus one row per council seat off
  * `GET /roster` (`display_name`, `health: SeatHealth`, `signed_in` —
- * routes.ts:308, crew#274).
+ * routes.ts:308, crew#274) and the week + governance groups.
  *
- * Fetch discipline (EC30): `GET /health` and `GET /roster` fire ON EXPAND — a
- * gesture, like the popover this replaces; never on mount, never on a timer.
- * Collapsing keeps the answers (the summary dot reads them); re-expanding
- * refetches (staleness by gesture, §6.3).
+ * The `/health` page (`HealthPage`) mounts this engine active for its whole life:
+ * the page IS the fetch gesture (EC30), carded. The rail's own Health LINK reads a
+ * lighter dot (`useRailHealthDot` — the mount read alone, EC30-strict); this
+ * registry is what does the full week + governance reads the page shows.
+ *
+ * Fetch discipline (EC30): `GET /health`, `GET /roster` and the week read fire
+ * when the registry turns active — never on a timer. Re-activating refetches
+ * (staleness by gesture, §6.3). `reprobeNow` re-runs a still-active registry's
+ * probes without a collapse (the "check again" rows).
  *
  * `health` is OPTIONAL on the wire (additive, absent on a daemon predating
- * crew#274): an absent `health` renders a dim `·` glyph and no message — never
- * a fabricated "active".
+ * crew#274): an absent `health` renders a dim `·` glyph and "no answer yet"
+ * detail — never a fabricated "active".
  *
- * GOVERNANCE (studio#246, crew#495 / F-022): the same expand also reads
- * `GET /diagnostics` and renders its `governance` block as a third registry
- * group — the store the engine's emit seam writes to (path + which rule chose
- * it), the record counts (`null` = "engine cannot count", never 0), the folded
- * dead-letter outbox (count, by type / by reason, the timestamp range,
- * `truncated`, the pre-fix HOME outbox) and every finding as a severity-styled
- * row whose message carries the `wicked-crew governance replay …` recipe.
- * Null-safe by construction: a daemon predating the block (no `governance`
- * key, or no `/diagnostics` at all) renders one honest "not reported" row; a
- * daemon reporting `store: null` is NOT shown as governed — that is the
- * `governance.store` error row. The header heart/dot fold the findings in:
- * an error finding (or a null store) reads unhealthy, a warning degraded.
+ * GOVERNANCE (studio#246, crew#495 / F-022): the same read also pulls
+ * `GET /diagnostics` and renders its `governance` block as a registry group —
+ * the store (path + which rule chose it), the record counts (`null` =
+ * "engine cannot count", never 0), the folded dead-letter outbox (count, by
+ * type / by reason, the timestamp range, `truncated`, the pre-fix HOME outbox)
+ * and every finding as a severity-styled row. Null-safe by construction: a
+ * daemon predating the block renders one honest plain-words row ("Not available
+ * from this version of crew…"), a daemon
+ * reporting `store: null` is NOT shown as governed. The engine still derives the
+ * heart verdicts from these findings (an error finding or a null store reads
+ * unhealthy, a warning degraded); the rail link's dot reads its own overlap
+ * (`useRailHealthDot`), and the page renders the rows alone.
  */
 
 interface HealthInfo {
@@ -55,7 +53,7 @@ interface HealthInfo {
 }
 
 /** Moved verbatim from the retired AppChrome popover (§6.2/§8.2). */
-function CheckRow({ label, ok, detail, since, testId, state, action }: {
+export function CheckRow({ label, ok, detail, since, testId, state, action }: {
   label: string; ok: boolean | null; detail: string;
   /** studio#280 item 2: the clock the probe SETTLED at — a timestamped "checked HH:MM:SS" so an
    *  answer is never mistaken for a probe still running (its own span: the detail stays verbatim). */
@@ -68,12 +66,12 @@ function CheckRow({ label, ok, detail, since, testId, state, action }: {
   const icon = ok === null ? '·' : ok ? '✓' : '✗';
   const color = ok === null ? 'var(--ink-dim)' : ok ? 'var(--status-run)' : 'var(--status-fail)';
   return (
-    <div data-testid={testId} data-state={state} style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: '5px' }}>
+    <div data-testid={testId} data-state={state} className="wk-health-row" style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: '5px' }}>
       <span style={{ width: '12px', fontSize: 'var(--text-xs)', color, fontFamily: 'var(--font-mono)', flexShrink: 0 }}>{icon}</span>
       <span style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-body)', fontFamily: 'var(--font-mono)', flex: 1 }}>{label}</span>
-      <span style={{ fontSize: 'var(--text-2xs)', color: 'var(--ink-dim)', fontFamily: 'var(--font-mono)' }}>{detail}</span>
+      <span style={{ fontSize: 'var(--text-2xs)', color: 'var(--ink-body)', fontFamily: 'var(--font-mono)' }}>{detail}</span>
       {since !== undefined && (
-        <span data-testid="rail-probe-checked" data-at={since} title="when this probe last answered" style={{ fontSize: 'var(--text-2xs)', color: 'var(--ink-dim)', fontFamily: 'var(--font-mono)', opacity: 0.8 }}>
+        <span data-testid="rail-probe-checked" data-at={since} title="when this probe last answered" style={{ fontSize: 'var(--text-2xs)', color: 'var(--ink-muted)', fontFamily: 'var(--font-mono)' }}>
           checked {clockWord(since)}
         </span>
       )}
@@ -98,7 +96,7 @@ function clockWord(at: number): string {
 
 /**
  * studio#280 item 2: how long a probe may read "checking…" before the row says it has NOT
- * answered. RC1 saw all three rows stuck on "checking…" 2.5 s after the expand while the daemon's
+ * answered. RC1 saw all three rows stuck on "checking…" 2.5 s after the mount while the daemon's
  * /health answered in < 50 ms — a request that never settles must not look like one in flight.
  */
 export const PROBE_DEADLINE_MS = 4000;
@@ -109,7 +107,7 @@ export function probeOverdueWord(deadlineMs: number): string {
   return `no answer after ${span} — still waiting`;
 }
 
-const EXCERPT_CH = 40;
+const MONO_2XS = { fontSize: 'var(--text-2xs)', fontFamily: 'var(--font-mono)' } as const;
 
 /**
  * What a signed-out seat MEANS (acceptance finding F-2R2-009): the roster's `signed_in` is the
@@ -159,8 +157,19 @@ export function seatStandingWord(seat: RosterSeat): SeatStanding {
   return { kind: 'unknown', detail: null, title: null, auth };
 }
 
+/**
+ * A seat-level failure that is NOT a sign-in problem (r4, image-review row 5): a quota / usage-limit
+ * message on the wire means the seat's provider budget is spent — Sign in is withheld, and the row
+ * says the limit is reached, naming the return time when the daemon's message carries one.
+ */
+export function usageLimitWord(message: string): string | null {
+  if (!/quota|usage limit|rate limit|too many requests|\b429\b/i.test(message)) return null;
+  const when = message.match(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?/);
+  return when !== null ? `access returns ${when[0]}` : 'usage limit reached';
+}
+
 /** One registry row (§6.2's anatomy): glyph, name, the honest detail. */
-function SeatRow({ seat, onSignIn }: { seat: RosterSeat; onSignIn?: (seat: RosterSeat) => void }): React.ReactElement {
+export function SeatRow({ seat, onSignIn }: { seat: RosterSeat; onSignIn?: (seat: RosterSeat) => void }): React.ReactElement {
   const h = seat.health;
   const standing = seatStandingWord(seat);
   const hedged = standing.kind === 'signed-out' || standing.kind === 'ineligible';
@@ -173,10 +182,18 @@ function SeatRow({ seat, onSignIn }: { seat: RosterSeat; onSignIn?: (seat: Roste
     ? 'var(--ink-dim)'
     : h.status === 'active' ? (hedged ? 'var(--status-gate)' : 'var(--status-run)') : 'var(--status-fail)';
   const message = h?.status === 'inactive' && h.message !== undefined ? h.message : null;
+  // r4 (rows 4-6): the page wraps the WHOLE message — every word, no truncating excerpt — with the
+  // action on its own line below. A seat that has not answered stays "no answer yet", never blank.
   const detail = message !== null
-    ? message.length > EXCERPT_CH ? `${message.slice(0, EXCERPT_CH)}…` : message
-    : [h?.status, standing.detail].filter((s): s is string => s != null).join(' · ');
-  const detailColor = message !== null ? 'var(--status-fail)' : hedged ? 'var(--status-gate)' : 'var(--ink-dim)';
+    ? message
+    : h === undefined
+      ? standing.detail ?? 'no answer yet'
+      : [h.status, standing.detail].filter((s): s is string => s != null).join(' · ');
+  const detailColor = message !== null ? 'var(--status-fail)' : hedged ? 'var(--status-gate)' : 'var(--ink-body)';
+  // A quota / usage-limit failure is not a sign-in problem: no Sign in action, and the sentence
+  // names the return time when the wire carries one.
+  const quota = message !== null ? usageLimitWord(message) : null;
+  const offerSignIn = onSignIn !== undefined && signInLapsed(seat) && quota === null;
   return (
     <div
       data-testid="rail-seat-row"
@@ -184,46 +201,59 @@ function SeatRow({ seat, onSignIn }: { seat: RosterSeat; onSignIn?: (seat: Roste
       data-health={h?.status ?? 'unknown'}
       data-signed-in={seat.signed_in === true ? 'true' : seat.signed_in === false ? 'false' : 'unknown'}
       data-standing={standing.kind}
+      {...(quota !== null ? { 'data-quota': quota } : {})}
       {...(standing.auth !== null ? { 'data-auth': standing.auth } : {})}
       title={message ?? standing.title ?? undefined}
-      style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: '5px' }}
+      style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-1)', marginBottom: '5px', minWidth: 0 }}
     >
-      <span style={{ width: '12px', fontSize: 'var(--text-xs)', color, fontFamily: 'var(--font-mono)', flexShrink: 0 }}>{glyph}</span>
-      <span style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-body)', fontFamily: 'var(--font-mono)', flexShrink: 0 }}>
-        {seat.display_name}
-      </span>
-      <span
-        className="truncate"
-        style={{ marginLeft: 'auto', fontSize: 'var(--text-2xs)', color: detailColor, fontFamily: 'var(--font-mono)' }}
-      >
-        {detail}
-      </span>
+      <div className="wk-health-row" style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--space-2)', minWidth: 0 }}>
+        <span style={{ width: '12px', fontSize: 'var(--text-xs)', color, fontFamily: 'var(--font-mono)', flexShrink: 0 }}>{glyph}</span>
+        <span style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-body)', fontFamily: 'var(--font-mono)', flexShrink: 0 }}>
+          {seat.display_name}
+        </span>
+        {message === null && (
+          <span style={{ marginLeft: 'auto', fontSize: 'var(--text-2xs)', color: detailColor, fontFamily: 'var(--font-mono)', textAlign: 'right' }}>
+            {detail}
+          </span>
+        )}
+      </div>
+      {message !== null && quota === null && (
+        <p data-testid="rail-seat-error" style={{ ...MONO_2XS, margin: 0, paddingLeft: '20px', color: detailColor, overflowWrap: 'anywhere' }}>
+          {detail}
+        </p>
+      )}
+      {quota !== null && (
+        <p data-testid="rail-seat-quota" style={{ ...MONO_2XS, margin: 0, paddingLeft: '20px', color: 'var(--status-fail)', overflowWrap: 'anywhere' }}>
+          {quota.charAt(0).toUpperCase() + quota.slice(1)}
+        </p>
+      )}
       {/* Amendment 5, decision 5: wherever a seat is signed out, Sign in is one click away — not only
-          when the week's record happens to show an auth bench. */}
-      {onSignIn !== undefined && signInLapsed(seat) && (
-        <button
-          type="button"
-          data-testid="rail-seat-signin"
-          data-seat={seat.key}
-          onClick={() => onSignIn(seat)}
-          aria-label={`Sign in ${seat.display_name || seat.key}`}
-          style={{ ...MONO_2XS, flexShrink: 0, padding: '0 6px', borderRadius: 'var(--radius-md)', border: '1px solid var(--status-gate-dim)', background: 'var(--status-gate-dim)', color: 'var(--status-gate)', cursor: 'pointer' }}
-        >
-          Sign in
-        </button>
+          when the week's record happens to show an auth bench. It rides its own line under the outseat
+          name (r4 row 4), withheld for a quota / usage-limit failure (r4 row 5). */}
+      {offerSignIn && (
+        <div style={{ paddingLeft: '20px' }}>
+          <button
+            type="button"
+            data-testid="rail-seat-signin"
+            data-seat={seat.key}
+            onClick={() => onSignIn(seat)}
+            aria-label={`Sign in ${seat.display_name || seat.key}`}
+            style={{ ...MONO_2XS, padding: '0 6px', borderRadius: 'var(--radius-md)', border: '1px solid var(--status-gate-dim)', background: 'var(--status-gate-dim)', color: 'var(--status-gate)', cursor: 'pointer' }}
+          >
+            Sign in
+          </button>
+        </div>
       )}
     </div>
   );
 }
-
-const MONO_2XS = { fontSize: 'var(--text-2xs)', fontFamily: 'var(--font-mono)' } as const;
 
 /**
  * The seat's weekly 1:1 (Wave B, idea 9) under its registry row: the week's record on one line, then
  * the ONE coaching move — its consequence first, then the button that takes it. "No change needed"
  * has no button. The move's result replaces the button once it lands.
  */
-function SeatWeek({ seat, record, move, state, onMove }: {
+export function SeatWeek({ seat, record, move, state, onMove }: {
   seat: RosterSeat;
   record: SeatRecord | undefined;
   move: CoachMove;
@@ -232,12 +262,12 @@ function SeatWeek({ seat, record, move, state, onMove }: {
 }): React.ReactElement {
   return (
     <div data-testid="rail-seat-week" data-seat={seat.key} style={{ paddingLeft: '20px', marginBottom: '6px', minWidth: 0 }}>
-      <div data-testid="rail-seat-week-line" style={{ ...MONO_2XS, color: 'var(--ink-muted)', overflowWrap: 'anywhere' }}>
+      <div data-testid="rail-seat-week-line" style={{ ...MONO_2XS, color: 'var(--ink-body)', overflowWrap: 'anywhere' }}>
         {seatWeekLine(record)}
       </div>
       <div data-testid="rail-seat-move" data-kind={move.kind} data-seat={seat.key} style={{ marginTop: '2px' }}>
         {move.consequence === null ? (
-          <div title={move.why} style={{ ...MONO_2XS, color: 'var(--ink-dim)' }}>
+          <div title={move.why} style={{ ...MONO_2XS, color: 'var(--ink-muted)' }}>
             {move.label}
           </div>
         ) : (
@@ -272,20 +302,21 @@ function SeatWeek({ seat, record, move, state, onMove }: {
   );
 }
 
-/** The window caption under the seats header: what the week covers, or why there is no week. */
-function weekCaption(week: SeatWeekRead): { text: string; color: string } | null {
-  if (week.kind === 'loading') return { text: 'this week: checking…', color: 'var(--ink-dim)' };
-  if (week.kind === 'absent') return { text: 'this week: not reported by this daemon — upgrade wicked-crew', color: 'var(--ink-dim)' };
-  if (week.kind === 'error') return { text: `this week: unavailable — ${week.message}`, color: 'var(--status-fail)' };
+/** The window caption under the seats header: what the week covers, or why there is no week. The
+ *  heading ("This week") already names the block — the caption never repeats it (r4 row 8). */
+export function weekCaption(week: SeatWeekRead): { text: string; color: string } | null {
+  if (week.kind === 'loading') return { text: 'checking…', color: 'var(--ink-body)' };
+  if (week.kind === 'absent') return { text: 'Not available yet', color: 'var(--ink-body)' };
+  if (week.kind === 'error') return { text: `unavailable — ${week.message}`, color: 'var(--status-fail)' };
   const r = week.record;
   const to = new Date(r.until).toISOString().slice(0, 10);
   return {
     text: `last ${r.days} days to ${to} · ${r.runsRead} run${r.runsRead === 1 ? '' : 's'} read${r.truncated ? ' (capped: oldest skipped)' : ''}`,
-    color: 'var(--ink-dim)',
+    color: 'var(--ink-body)',
   };
 }
 
-/** What the expand learned about governance (studio#246). */
+/** What the mount read learned about governance (studio#246). */
 type GovernanceRead =
   | { kind: 'loading' }
   | { kind: 'absent'; why: 'no-route' | 'no-block' }
@@ -300,11 +331,11 @@ const FINDING_COLOR: Record<DiagnosticsGovernanceFinding['severity'], string> = 
 };
 
 /** Sub-rows under a check row: `label · value`, dim mono. */
-function DetailLine({ label, value, color, testId }: { label: string; value: string; color?: string; testId?: string }): React.ReactElement {
+export function DetailLine({ label, value, color, testId }: { label: string; value: string; color?: string; testId?: string }): React.ReactElement {
   return (
     <div data-testid={testId} style={{ display: 'flex', gap: 'var(--space-2)', paddingLeft: '20px', marginBottom: '3px', minWidth: 0 }}>
-      <span style={{ fontSize: 'var(--text-2xs)', color: 'var(--ink-dim)', fontFamily: 'var(--font-mono)', flexShrink: 0 }}>{label}</span>
-      <span className="truncate" title={value} style={{ fontSize: 'var(--text-2xs)', color: color ?? 'var(--ink-muted)', fontFamily: 'var(--font-mono)', minWidth: 0 }}>{value}</span>
+      <span style={{ fontSize: 'var(--text-2xs)', color: 'var(--ink-muted)', fontFamily: 'var(--font-mono)', flexShrink: 0 }}>{label}</span>
+      <span className="truncate" title={value} style={{ fontSize: 'var(--text-2xs)', color: color ?? 'var(--ink-body)', fontFamily: 'var(--font-mono)', minWidth: 0 }}>{value}</span>
     </div>
   );
 }
@@ -319,11 +350,11 @@ function stamp(ms: number): string {
 }
 
 /** The governance registry group — one CheckRow per question, the findings as banners. */
-function GovernanceRows({ read, overdue = 0, onReprobe }: {
+export function GovernanceRows({ read, overdue = 0, onReprobe }: {
   read: GovernanceRead;
   /** the probe deadline (ms) once passed, 0 while inside it */
   overdue?: number;
-  /** the expand's re-probe, offered on an overdue row */
+  /** the mount read's re-probe, offered on an overdue row */
   onReprobe?: () => void;
 }): React.ReactElement {
   const showPath = useDisplayPath();
@@ -332,7 +363,7 @@ function GovernanceRows({ read, overdue = 0, onReprobe }: {
   if (read.kind === 'loading') {
     return (
       <CheckRow
-        label="governance" ok={null} detail={overdue ? probeOverdueWord(overdue) : 'checking…'} testId="rail-governance-probe" state={overdue ? 'overdue' : 'checking'}
+        label="" ok={null} detail={overdue ? probeOverdueWord(overdue) : 'checking…'} testId="rail-governance-probe" state={overdue ? 'overdue' : 'checking'}
         {...(overdue && onReprobe !== undefined ? { action: { label: 'check again', testId: 'rail-governance-recheck', onClick: onReprobe } } : {})}
       />
     );
@@ -340,16 +371,17 @@ function GovernanceRows({ read, overdue = 0, onReprobe }: {
   if (read.kind === 'error') {
     return (
       <div data-testid="rail-governance" data-state="error">
-        <CheckRow label="governance" ok={false} detail="unreachable" />
+        <CheckRow label="" ok={false} detail="unreachable" />
         <DetailLine testId="rail-governance-error" label="why" value={showText(read.message)} color="var(--status-fail)" />
       </div>
     );
   }
   if (read.kind === 'absent') {
+    // r4 (rows 7-8): one plain-words sentence — no route names, no repeated "governance" row label
+    // under the Governance heading. The absent ANSWER is the row; `data-why` keeps the distinction.
     return (
       <div data-testid="rail-governance" data-state="absent" data-why={read.why}>
-        <CheckRow label="governance" ok={null} detail="not reported by this daemon" />
-        <DetailLine label="why" value={read.why === 'no-route' ? 'no /diagnostics route — upgrade wicked-crew' : 'no governance block on /diagnostics — upgrade wicked-crew to see where governance events land'} />
+        <p className="wk-health-absent">Not available yet</p>
       </div>
     );
   }
@@ -421,60 +453,81 @@ function GovernanceRows({ read, overdue = 0, onReprobe }: {
   );
 }
 
-interface Props {
-  /** Controlled by the rail so the chrome dot can expand this section (§6.2). */
-  open: boolean;
-  onToggle: () => void;
-  /** The collapsed / icon nav: the header is the heart icon alone (aria-label "Health") and
-   *  the registry opens as a flyout beside the rail. Same state, same fetches, same rows. */
-  compact?: boolean;
-  /** studio#280 item 2: how long a probe may read "checking…" (tests shorten it). */
-  probeDeadlineMs?: number;
+/** The whole registry's live answer — the engine behind the /health page. */
+export interface HealthRegistry {
+  wsStatus: 'connecting' | 'connected' | 'disconnected';
+  health: HealthInfo | null;
+  healthError: string | null;
+  healthCheckedAt: number | null;
+  overdue: boolean;
+  healthFresh: boolean;
+  rosterFresh: boolean;
+  roster: RosterSeat[] | null;
+  rosterError: boolean;
+  governance: GovernanceRead;
+  week: SeatWeekRead;
+  moves: Record<string, MoveState>;
+  apply: (seat: string, move: CoachMove) => Promise<void>;
+  markOpened: (seat: string) => void;
+  signIn: RosterSeat | null;
+  setSignIn: (seat: RosterSeat | null) => void;
+  /** A roster re-read landed anywhere (the sign-in panel) refreshes the registry rows. */
+  acceptRoster: (r: RosterSeat[]) => void;
+  weekRecords: Map<string, SeatRecord> | null;
+  sick: boolean;
+  degraded: boolean;
+  heartState: 'healthy' | 'degraded' | 'unhealthy';
+  heartColor: string;
+  reprobeNow: () => void;
+  probeDeadlineMs: number;
 }
 
-export function HealthRailSection({ open, onToggle, compact = false, probeDeadlineMs = PROBE_DEADLINE_MS }: Props): React.ReactElement {
+/**
+ * The health registry engine behind the `/health` page (`active` = mounted). All probe
+ * effects, the generation guard (a completion from an earlier activation must not overwrite
+ * a later one) and the derived heart verdicts live here once.
+ */
+export function useHealthRegistry(
+  active: boolean,
+  probeDeadlineMs = PROBE_DEADLINE_MS,
+): HealthRegistry {
   const wsStatus = useConnectionStore((s) => s.status);
   const [health, setHealth] = useState<HealthInfo | null>(null);
   /** The rejected probe's own sentence (`null` = not rejected) — the row shows WHY, never a bare "unreachable". */
   const [healthError, setHealthError] = useState<string | null>(null);
   /** When the /health probe last SETTLED (answer or rejection); `null` until it has. */
   const [healthCheckedAt, setHealthCheckedAt] = useState<number | null>(null);
-  /** studio#280 item 2: the current expand's probes have outlived the deadline without settling. */
+  /** studio#280 item 2: the current activation's probes have outlived the deadline without settling. */
   const [overdue, setOverdue] = useState(false);
-  /** Whether the shown /health and /roster answers belong to THIS expand (false = kept from an
+  /** Whether the shown /health and /roster answers belong to THIS activation (false = kept from an
    *  earlier one): a kept answer past the deadline is said to be stale, never passed off as fresh. */
   const [healthFresh, setHealthFresh] = useState(false);
   const [rosterFresh, setRosterFresh] = useState(false);
-  /** Bumped by "check again" — re-runs the expand's probes without a collapse. */
+  /** Bumped by "check again" — re-runs the probes without a collapse. */
   const [reprobe, setReprobe] = useState(0);
   const [roster, setRoster] = useState<RosterSeat[] | null>(null);
   const [rosterError, setRosterError] = useState(false);
   const [governance, setGovernance] = useState<GovernanceRead>({ kind: 'loading' });
-  // Wave B, idea 9: the seats' week, read on the same expand gesture.
-  const { week, moves, apply, markOpened } = useSeatWeek(open);
+  // Wave B, idea 9: the seats' week, read on the same activation gesture.
+  const { week, moves, apply, markOpened } = useSeatWeek(active);
   const [signIn, setSignIn] = useState<RosterSeat | null>(null);
   // Amendment 5: a roster re-read anywhere (the sign-in panel's "check again" on the Desk or in
-  // Helpers) refreshes this registry too — the rows clear without another expand.
+  // Helpers) refreshes this registry too — the rows clear without another activation.
   useEffect(() => subscribeRoster((r) => { setRoster(r); setRosterError(false); }), []);
   const weekRecords = week.kind === 'ok' ? recordsByCli(week.record) : null;
-  /** The expand generation a probe belongs to — a completion from an earlier expand (or an
+  /** The activation generation a probe belongs to — a completion from an earlier activation (or an
    *  earlier "check again") must not overwrite a later one: the findings drive the heart and the
    *  dot, and a slow /health answer landing over a fresh one would read as settled when it is not. */
   const probeGen = useRef(0);
-  const ref = useRef<HTMLDivElement>(null);
-  // Unmount retires every in-flight probe: its completion must not reach a setter (codex on the
-  // #280 PR). Unmount only — a collapse keeps the generation so an answer still landing can feed
-  // the summary dot, exactly as before.
+  // Unmount retires every in-flight probe: its completion must not reach a setter.
   useEffect(() => () => { probeGen.current++; }, []);
 
-  // EC30: the expand IS the fetch gesture — one GET /health + one GET /roster
-  // per expansion (the retired popover's exact `[open]` effect, moved); the
-  // answers survive a collapse so the summary dot can keep reading them.
-  // studio#280 item 2: every probe SETTLES visibly — an answer stamps its clock, a rejection
-  // shows its sentence, and a probe past `probeDeadlineMs` says it has not answered (with a
-  // re-probe) instead of reading "checking…" forever.
+  // EC30: activation IS the fetch gesture — one GET /health + one GET /roster per activation.
+  // The page mounts active for its whole life; studio#280 item 2: every probe SETTLES visibly —
+  // an answer stamps its clock, a rejection shows its sentence, a probe past `probeDeadlineMs`
+  // says it has not answered (with a re-probe) instead of reading "checking…" forever.
   useEffect(() => {
-    if (!open) return;
+    if (!active) return;
     const gen = ++probeGen.current;
     const live = (): boolean => probeGen.current === gen;
     setHealthError(null);
@@ -500,8 +553,8 @@ export function HealthRailSection({ open, onToggle, compact = false, probeDeadli
     // studio#246: the same gesture reads the governance block. Absence is a
     // named state (older daemon), never an invented healthy store.
     setGovernance({ kind: 'loading' });
-    // Only the CURRENT expand's answer lands (Copilot on #253): a slow earlier read
-    // resolving after a re-expand would otherwise paint stale governance health.
+    // Only the CURRENT activation's answer lands: a slow earlier read resolving after a re-activation
+    // would otherwise paint stale governance health.
     Promise.resolve()
       .then(() => getDiagnostics())
       .then((d) => {
@@ -513,19 +566,15 @@ export function HealthRailSection({ open, onToggle, compact = false, probeDeadli
         setGovernance(isDiagnosticsUnsupported(e) ? { kind: 'absent', why: 'no-route' } : { kind: 'error', message: e instanceof Error ? e.message : String(e) });
       })
       .finally(settled);
-    // Opened from the chrome dot: bring the foot into view (§6.2).
-    ref.current?.scrollIntoView({ block: 'nearest' });
     return () => clearTimeout(deadline);
-  }, [open, reprobe, probeDeadlineMs]);
+  }, [active, reprobe, probeDeadlineMs]);
 
-  /** "check again": re-runs this expand's probes without a collapse — offered on every overdue row. */
-  const reprobeNow = (): void => setReprobe((n) => n + 1);
+  /** "check again": re-runs these probes — offered on every overdue row. */
+  const reprobeNow = (): void => { setReprobe((n) => n + 1); window.dispatchEvent(new Event(HEALTH_RECHECKED)); };
 
   const wsDown = wsStatus === 'disconnected';
-  const pillLabel = wsStatus === 'connected' ? 'Connected' : wsStatus === 'connecting' ? 'Connecting' : 'Disconnected';
-  // The passive header summary (§6.2): fail-red if any seat is inactive or the
-  // socket is down — the rail's foot says "look inside" without being opened.
-  // studio#246: a null store or an error finding (dead letters, no store) is a
+  // The derived heart verdict (§6.2): fail-red if any seat is inactive or the
+  // socket is down; a null store or an error finding (dead letters, no store) is a
   // health failure — the board must not read "Governed" over it.
   const govErrors =
     governance.kind === 'ok' &&
@@ -534,14 +583,13 @@ export function HealthRailSection({ open, onToggle, compact = false, probeDeadli
     governance.kind === 'error' ||
     (governance.kind === 'ok' && governance.governance.findings.some((f) => f.severity === 'warning'));
   const sick = wsDown || govErrors || (roster ?? []).some((s) => s.health?.status === 'inactive');
-  // The ♥ glyph is colored by health (nav-ui-tweaks): red when unhealthy (a
-  // seat down or the socket gone), amber when degraded (socket still connecting,
-  // a probe errored, or the API server not reporting ok), green otherwise. It
-  // reads the same signals the section already computes — no new data source.
-  // F-2R2-009 (review): the sign-in HEURISTIC is said per row (the amber `!`), never folded into the
-  // heart — on a default roster most seats read `signed_in:false`, and a healthy daemon must not
-  // wear a permanently degraded heart over a guess. Only a daemon-declared `council_eligible: false`
-  // (crew#533, api-types 0.35.0) degrades it, because that IS the daemon's own word.
+  // The ♥ glyph is colored by health: red when unhealthy (a seat down or the socket gone), amber
+  // when degraded (socket still connecting, a probe errored, or the API server not reporting ok),
+  // green otherwise. It reads the same signals the registry already computes — no new data source.
+  // F-2R2-009 (review): the sign-in HEURISTIC is said per row (the amber `!`), never folded into
+  // the heart — on a default roster most seats read `signed_in:false`, and a healthy daemon must
+  // not wear a permanently degraded heart over a guess. Only a daemon-declared `council_eligible:
+  // false` (crew#533, api-types 0.35.0) degrades it, because that IS the daemon's own word.
   const ineligible = (roster ?? []).some((s) => (s as Record<string, unknown>)['council_eligible'] === false && s.health?.status !== 'inactive');
   const degraded =
     wsStatus === 'connecting' || healthError !== null || rosterError || govWarnings || ineligible || (health !== null && health.status !== 'ok');
@@ -552,168 +600,132 @@ export function HealthRailSection({ open, onToggle, compact = false, probeDeadli
       ? 'var(--status-gate)'
       : 'var(--status-run)';
 
+  return {
+    wsStatus,
+    health,
+    healthError,
+    healthCheckedAt,
+    overdue,
+    healthFresh,
+    rosterFresh,
+    roster,
+    rosterError,
+    governance,
+    week,
+    moves,
+    apply,
+    markOpened,
+    signIn,
+    setSignIn,
+    acceptRoster: (r) => { setRoster(r); setRosterError(false); },
+    weekRecords,
+    sick,
+    degraded,
+    heartState,
+    heartColor,
+    reprobeNow,
+    probeDeadlineMs,
+  };
+}
+
+/** The connection rows (WebSocket + API server) on the /health page's Connection card. */
+export function ConnectionRegistry({ registry }: { registry: HealthRegistry }): React.ReactElement {
+  const { wsStatus, health, healthError, healthCheckedAt, overdue, healthFresh, probeDeadlineMs, reprobeNow } = registry;
+  const pillLabel = wsStatus === 'connected' ? 'Connected' : wsStatus === 'connecting' ? 'Connecting' : 'Disconnected';
   return (
-    <div
-      ref={ref}
-      data-testid="rail-health-section"
-      data-open={open}
-      data-compact={compact || undefined}
-      className={compact ? 'shrink-0 relative flex flex-col items-center pb-2 pt-1' : 'shrink-0 px-2 pb-2 pt-1 flex flex-col max-h-[45vh]'}
-      style={{ borderTop: '1px solid var(--surface-raised)' }}
-    >
-      <button
-        type="button"
-        data-testid="rail-health-toggle"
-        data-nav-dest="health"
-        aria-expanded={open}
-        aria-label={compact ? 'Health' : undefined}
-        title={compact ? 'Health' : undefined}
-        onClick={onToggle}
-        className={compact
-          ? 'w-9 h-9 relative flex items-center justify-center rounded-md transition-colors'
-          : 'w-full flex items-center gap-2 px-1 py-1.5 text-left transition-colors'}
-        style={{
-          background: 'transparent',
-          color: open ? 'var(--ink-high)' : 'var(--ink-muted)',
-          fontSize: 'var(--text-xs)',
-          fontFamily: 'var(--font-sans)',
-          fontWeight: 'var(--weight-semi)',
-        }}
-      >
-        {!compact && <span
-          aria-hidden
-          data-testid="rail-health-chevron"
-          className="inline-block leading-none"
-          style={{
-            transition: 'transform var(--dur-fast)',
-            transform: open ? 'rotate(90deg)' : 'rotate(0deg)',
-          }}
-        >
-          ›
-        </span>}
-        <span
-          aria-hidden
-          data-testid="rail-health-heart"
-          data-health={heartState}
-          style={{ color: heartColor }}
-        >
-          ♥
-        </span>
-        {!compact && <span>Health</span>}
-        {sick && (
-          <span
-            data-testid="rail-health-summary-dot"
-            aria-label="a health check needs attention"
-            className={compact ? 'w-2 h-2 rounded-full absolute top-1 right-1' : 'w-2 h-2 rounded-full shrink-0 ml-auto'}
-            style={{ background: 'var(--status-fail)' }}
-          />
-        )}
-      </button>
-      {open && (
-        <div
-          data-testid={compact ? 'rail-health-flyout' : undefined}
-          className={compact
-            ? 'fixed z-50 flex flex-col p-2 overflow-y-auto rounded-lg'
-            : 'flex flex-col pt-0.5 px-1 overflow-y-auto min-h-0 flex-1'}
-          style={compact
-            ? {
-                left: '64px', bottom: '40px', width: '300px', maxHeight: '60vh',
-                background: 'var(--surface-overlay)', border: '1px solid var(--surface-raised)',
-                boxShadow: 'var(--shadow-overlay)',
-              }
-            : undefined}
-        >
-          <CheckRow label="WebSocket" ok={wsStatus === 'connected'} detail={pillLabel} />
-          {healthError !== null ? (
-            <CheckRow label="API server" ok={false} detail={`unreachable — ${healthError}`} since={healthCheckedAt ?? undefined} testId="rail-api-server" state="error" />
-          ) : health ? (
-            // A kept answer past this expand's deadline is STALE: its clock says when, the state says so,
-            // and the re-probe rides the row — never the old answer passed off as this expand's.
-            <CheckRow
-              label="API server" ok={health.status === 'ok'} detail={`${health.status} · ${health.version}`} since={healthCheckedAt ?? undefined}
-              testId="rail-api-server" state={overdue && !healthFresh ? 'stale' : 'answered'}
-              {...(overdue && !healthFresh ? { action: { label: 'check again', testId: 'rail-health-recheck', onClick: reprobeNow } } : {})}
-            />
-          ) : overdue ? (
-            <CheckRow
-              label="API server" ok={null} detail={probeOverdueWord(probeDeadlineMs)} testId="rail-api-server" state="overdue"
-              action={{ label: 'check again', testId: 'rail-health-recheck', onClick: reprobeNow }}
-            />
-          ) : (
-            <CheckRow label="API server" ok={null} detail="checking…" testId="rail-api-server" state="checking" />
-          )}
-          <p
-            aria-hidden
-            className="select-none"
-            style={{ margin: '2px 0 5px', fontSize: 'var(--text-2xs)', color: 'var(--ink-dim)', fontFamily: 'var(--font-mono)' }}
-          >
-            ── seats ─────────────
-          </p>
-          {rosterError ? (
-            <CheckRow label="seats" ok={false} detail="unreachable" />
-          ) : roster === null ? (
-            <CheckRow
-              label="seats" ok={null} detail={overdue ? probeOverdueWord(probeDeadlineMs) : 'checking…'} testId="rail-seats-probe" state={overdue ? 'overdue' : 'checking'}
-              {...(overdue ? { action: { label: 'check again', testId: 'rail-seats-recheck', onClick: reprobeNow } } : {})}
-            />
-          ) : (
-            <>
-              {overdue && !rosterFresh && (
-                <CheckRow
-                  label="seats" ok={null} detail={`${probeOverdueWord(probeDeadlineMs)} · showing the last answer`} testId="rail-seats-probe" state="stale"
-                  action={{ label: 'check again', testId: 'rail-seats-recheck', onClick: reprobeNow }}
-                />
-              )}
-              {(() => {
-                const cap = weekCaption(week);
-                return cap === null ? null : (
-                  <p data-testid="rail-seat-week-window" data-state={week.kind} style={{ ...MONO_2XS, margin: '0 0 4px', color: cap.color, overflowWrap: 'anywhere' }}>
-                    {cap.text}
-                  </p>
-                );
-              })()}
-              {roster.map((seat) => {
-                const record = weekRecords?.get(seat.key);
-                const move = week.kind === 'ok' ? coachSeat(record, seat, week.record) : null;
-                return (
-                  <div key={seat.key} data-testid="rail-seat" data-seat={seat.key}>
-                    <SeatRow seat={seat} onSignIn={setSignIn} />
-                    {move !== null && (
-                      <SeatWeek
-                        seat={seat}
-                        record={record}
-                        move={move}
-                        state={moves[seat.key]}
-                        onMove={() => {
-                          if (move.kind === 'sign-in') {
-                            setSignIn(seat);
-                            markOpened(seat.key);
-                          } else {
-                            void apply(seat.key, move);
-                          }
-                        }}
-                      />
-                    )}
-                  </div>
-                );
-              })}
-            </>
-          )}
-          <p
-            aria-hidden
-            className="select-none"
-            style={{ margin: '2px 0 5px', fontSize: 'var(--text-2xs)', color: 'var(--ink-dim)', fontFamily: 'var(--font-mono)' }}
-          >
-            ── governance ────────
-          </p>
-          <GovernanceRows read={governance} overdue={overdue ? probeDeadlineMs : 0} onReprobe={reprobeNow} />
+    <>
+      <CheckRow label="WebSocket" ok={wsStatus === 'connected'} detail={pillLabel} />
+      {healthError !== null ? (
+        <CheckRow label="API server" ok={false} detail={`unreachable — ${healthError}`} since={healthCheckedAt ?? undefined} testId="rail-api-server" state="error" />
+      ) : health ? (
+        // A kept answer past this activation's deadline is STALE: its clock says when, the state
+        // says so, and the re-probe rides the row — never the old answer passed off as this one's.
+        <CheckRow
+          label="API server" ok={health.status === 'ok'} detail={`${health.status} · ${health.version}`} since={healthCheckedAt ?? undefined}
+          testId="rail-api-server" state={overdue && !healthFresh ? 'stale' : 'answered'}
+          {...(overdue && !healthFresh ? { action: { label: 'check again', testId: 'rail-health-recheck', onClick: reprobeNow } } : {})}
+        />
+      ) : overdue ? (
+        <CheckRow
+          label="API server" ok={null} detail={probeOverdueWord(probeDeadlineMs)} testId="rail-api-server" state="overdue"
+          action={{ label: 'check again', testId: 'rail-health-recheck', onClick: reprobeNow }}
+        />
+      ) : (
+        <CheckRow label="API server" ok={null} detail="checking…" testId="rail-api-server" state="checking" />
+      )}
+    </>
+  );
+}
+
+/** The seats registry (studio#421 r3): one row per council seat. The week's own card is
+ *  `WeekRegistry`, below — a card per section (Connection · Seats · This week · Governance). */
+export function SeatsRegistry({ registry }: { registry: HealthRegistry }): React.ReactElement {
+  const { roster, rosterError, overdue, rosterFresh, probeDeadlineMs, reprobeNow } = registry;
+  if (rosterError) return <CheckRow label="seats" ok={false} detail="unreachable" />;
+  if (roster === null) {
+    return (
+      <CheckRow
+        label="seats" ok={null} detail={overdue ? probeOverdueWord(probeDeadlineMs) : 'checking…'} testId="rail-seats-probe" state={overdue ? 'overdue' : 'checking'}
+        {...(overdue ? { action: { label: 'check again', testId: 'rail-seats-recheck', onClick: reprobeNow } } : {})}
+      />
+    );
+  }
+  return (
+    <>
+      {overdue && !rosterFresh && (
+        <CheckRow
+          label="seats" ok={null} detail={`${probeOverdueWord(probeDeadlineMs)} · showing the last answer`} testId="rail-seats-probe" state="stale"
+          action={{ label: 'check again', testId: 'rail-seats-recheck', onClick: reprobeNow }}
+        />
+      )}
+      {roster.map((seat) => (
+        <div key={seat.key} data-testid="rail-seat" data-seat={seat.key}>
+          <SeatRow seat={seat} onSignIn={registry.setSignIn} />
         </div>
+      ))}
+    </>
+  );
+}
+
+/** The week's own card: the window caption and each seat's weekly 1:1 move (studio#421 r3). Split
+ *  out of SeatsRegistry so /health reads Connection · Seats · This week · Governance. */
+export function WeekRegistry({ registry }: { registry: HealthRegistry }): React.ReactElement {
+  const { roster, week, weekRecords, moves } = registry;
+  if (roster === null) return <></>;
+  const cap = weekCaption(week);
+  return (
+    <>
+      {cap !== null && (
+        <p data-testid="rail-seat-week-window" data-state={week.kind} style={{ ...MONO_2XS, margin: '0 0 4px', color: cap.color, overflowWrap: 'anywhere' }}>
+          {cap.text}
+        </p>
       )}
-      {/* Amendment 5, decision 5: the one plain-words sign-in panel — the command, Copy, check again.
-          A re-read that finds the seat back refreshes this registry's rows too. */}
-      {signIn !== null && (
-        <SignInPanel seat={signIn} onClose={() => setSignIn(null)} onChecked={(r) => { setRoster(r); setRosterError(false); }} />
-      )}
-    </div>
+      {roster.map((seat) => {
+        const record = weekRecords?.get(seat.key);
+        const move = week.kind === 'ok' ? coachSeat(record, seat, week.record) : null;
+        return (
+          <div key={seat.key} data-testid="rail-week-seat" data-seat={seat.key} aria-label={move !== null ? `${seat.display_name || seat.key} this week` : undefined} role={move !== null ? 'group' : undefined}>
+            {/* Its own card now, so each record names its seat (codex review r1). */}
+            {move !== null && <p data-testid="rail-week-seat-name" className="wk-health-week-seat">{seat.display_name || seat.key}</p>}
+            {move !== null && (
+              <SeatWeek
+                seat={seat}
+                record={record}
+                move={move}
+                state={moves[seat.key]}
+                onMove={() => {
+                  if (move.kind === 'sign-in') {
+                    registry.setSignIn(seat);
+                    registry.markOpened(seat.key);
+                  } else {
+                    void registry.apply(seat.key, move);
+                  }
+                }}
+              />
+            )}
+          </div>
+        );
+      })}
+    </>
   );
 }

@@ -1,16 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
-import { useState } from 'react';
 import type { RosterSeat } from '../src/api/types.js';
 import { useConnectionStore } from '../src/store/connection.js';
 
 /**
- * F-2R2-009 — the Health rail's seat rows say what a signed-out seat MEANS, honestly. Pre-fix
+ * F-2R2-009 — the `/health` page's seat rows say what a signed-out seat MEANS, honestly. Pre-fix
  * every unsigned seat wore a green ✓ with "active · signed out", as if nothing followed. The
  * roster wire (api-types 0.33.0) carries no field that says whether a council would seat it —
  * and the rig saw opencode answer a chat on a provider free tier while `signed_in:false` — so
  * the row states the observation and HEDGES the consequence ("councils may bench this seat"),
- * puts the free-tier possibility on hover, and never folds the heuristic into the heart. When a
+ * puts the free-tier possibility on hover, and never folds the heuristic into the rail heart
+ * (that verdict lives on the link's dot — `useRailHealthDot`, pinned in railPolish.test). When a
  * daemon sends crew#533's `auth` / `council_eligible` (0.35.0) the row believes those instead.
  */
 
@@ -20,11 +20,18 @@ const getRoster = vi.fn(() => Promise.resolve({ roster: rosterAnswer }));
 const apiFetch = vi.fn(() => Promise.resolve({}));
 
 vi.mock('../src/api/client.js', () => ({
-  api: { getHealth: () => getHealth(), getRoster: () => getRoster(), listRepos: () => Promise.resolve({ repos: [] }) },
+  api: {
+    getHealth: () => getHealth(),
+    getRoster: () => getRoster(),
+    getSeatRecord: () => Promise.resolve({ days: 7, since: 0, until: 0, runsRead: 0, truncated: false, seats: [] }),
+    upsertConformanceRule: () => Promise.resolve({}),
+    listRepos: () => Promise.resolve({ repos: [] }),
+  },
   apiFetch: (...a: unknown[]) => apiFetch(...(a as [])),
 }));
 
-const { HealthRailSection, SIGNED_OUT_DETAIL, SIGNED_OUT_TITLE, seatStandingWord } = await import('../src/components/HealthRailSection.js');
+const { SIGNED_OUT_DETAIL, SIGNED_OUT_TITLE, seatStandingWord } = await import('../src/components/HealthRailSection.js');
+const { HealthPage } = await import('../src/components/HealthPage.js');
 const { clearCachedRoster } = await import('../src/store/rosterCache.js');
 
 const SINCE = '2026-09-11T05:00:00Z';
@@ -35,11 +42,6 @@ const SEATS: RosterSeat[] = [
   { key: 'agy', display_name: 'Antigravity', binary: 'agy', enabled_for_council: true, health: { status: 'active', since: SINCE }, signed_in: null },
 ];
 
-function Harness(): React.ReactElement {
-  const [open, setOpen] = useState(true);
-  return <HealthRailSection open={open} onToggle={() => setOpen((v) => !v)} />;
-}
-
 beforeEach(() => {
   rosterAnswer = SEATS;
   clearCachedRoster();
@@ -47,9 +49,9 @@ beforeEach(() => {
 });
 afterEach(() => cleanup());
 
-describe('seat sign-in semantics on the rail (F-2R2-009)', () => {
+describe('seat sign-in semantics on the page (F-2R2-009)', () => {
   it('an active, signed-out seat wears the amber "!" and HEDGES the consequence — never a green ✓, never an engine rule the wire does not carry', async () => {
-    render(<Harness />);
+    render(<HealthPage />);
     const rows = await screen.findAllByTestId('rail-seat-row');
     const opencode = rows.find((r) => r.getAttribute('data-seat') === 'opencode')!;
     expect(opencode).toHaveAttribute('data-signed-in', 'false');
@@ -75,7 +77,7 @@ describe('seat sign-in semantics on the rail (F-2R2-009)', () => {
       { key: 'pi', display_name: 'pi', binary: 'pi', enabled_for_council: true, health: { status: 'active', since: SINCE }, signed_in: false,
         auth: 'signed_out', council_eligible: true } as RosterSeat,
     ];
-    render(<Harness />);
+    render(<HealthPage />);
     const rows = await screen.findAllByTestId('rail-seat-row');
     const byKey = (k: string): HTMLElement => rows.find((r) => r.getAttribute('data-seat') === k)!;
     // A free-tier seat: the daemon says no sign-in is needed — a green ✓, the tier named.
@@ -89,13 +91,11 @@ describe('seat sign-in semantics on the rail (F-2R2-009)', () => {
     expect(byKey('codex').textContent).toContain('not council-eligible — signed out — a council would bench it');
     // Signed out but declared eligible: said so.
     expect(byKey('pi').textContent).toContain('signed out — still council-eligible');
-    // Only the daemon's own ineligibility degrades the heart.
-    expect(screen.getByTestId('rail-health-heart')).toHaveAttribute('data-health', 'degraded');
     expect(seatStandingWord({ key: 'x', display_name: 'x', binary: 'x', enabled_for_council: true }).kind).toBe('unknown');
   });
 
-  it('a signed-in seat is unchanged; an inactive seat keeps its error excerpt; unknown sign-in stays quiet', async () => {
-    render(<Harness />);
+  it('a signed-in seat is unchanged; an inactive seat keeps its FULL error text; unknown sign-in stays quiet', async () => {
+    render(<HealthPage />);
     const rows = await screen.findAllByTestId('rail-seat-row');
     const claude = rows.find((r) => r.getAttribute('data-seat') === 'claude')!;
     expect(claude).toHaveAttribute('data-signed-in', 'true');
@@ -103,26 +103,12 @@ describe('seat sign-in semantics on the rail (F-2R2-009)', () => {
     expect(claude.textContent).toContain('active · signed in');
     const codex = rows.find((r) => r.getAttribute('data-seat') === 'codex')!;
     expect(codex.textContent).toContain('✗');
-    expect(codex.textContent).toContain('quota exceeded');
+    expect(codex.textContent).toContain('Usage limit reached');
+    expect(codex.textContent).not.toContain('quota exceeded');
+    expect(codex.textContent).not.toContain('Sign in');
     expect(codex).toHaveAttribute('title', 'quota exceeded');
     const agy = rows.find((r) => r.getAttribute('data-seat') === 'agy')!;
     expect(agy).toHaveAttribute('data-signed-in', 'unknown');
     expect(agy.textContent).toBe('✓Antigravityactive');
-  });
-
-  it('the heart is NOT folded on the sign-in heuristic: healthy over signed-out seats alone, unhealthy over an inactive one', async () => {
-    render(<Harness />);
-    await screen.findAllByTestId('rail-seat-row');
-    // codex is inactive here — unhealthy wins.
-    expect(screen.getByTestId('rail-health-heart')).toHaveAttribute('data-health', 'unhealthy');
-    cleanup();
-    rosterAnswer = SEATS.filter((s) => s.key !== 'codex');
-    clearCachedRoster();
-    render(<Harness />);
-    await screen.findAllByTestId('rail-seat-row');
-    // Two of three seats read signed_in:false (the rig's default roster shape) — a healthy daemon
-    // must not wear a permanently degraded heart over a heuristic; the rows carry the amber "!".
-    expect(screen.getByTestId('rail-health-heart')).toHaveAttribute('data-health', 'healthy');
-    expect(screen.queryByTestId('rail-health-summary-dot')).toBeNull();
   });
 });

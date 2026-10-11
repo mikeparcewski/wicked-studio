@@ -105,15 +105,25 @@ with sync_playwright() as p:
         "document.addEventListener('DOMContentLoaded', () => { const s = document.createElement('style'); "
         f"s.textContent = {json.dumps(HIDE_GATE_TOASTS)}; document.head.appendChild(s); }});")
 
-    # ── 1. Standing orders from the rail, at 700 px (studio#514) ───────────────────────────────
+    # ── 1. Standing orders from the Desk sheet's Hold tab, at 700 px (studio#514) ───────────────
+    # studio#421 r3 (change 17): the orders/freeze controls moved OUT of the rail's menu and into the
+    # Desk's "⋯ › Hold" sheet. The invariant the old rail scenario proved still holds wherever the
+    # panel is mounted: its Manage overlay opens wholly in-viewport with a typeable input.
     set_fixture(origin, wave1=True, home_runs=True, reset_home_runs=True, standing_orders=True, reset_standing=True, home_paths=True)
     page.goto(f"{origin}/", wait_until="networkidle")
     page.get_by_test_id("desk").wait_for(state="visible", timeout=15000)
-    if page.get_by_test_id("desk-rail-controls").count() == 0:
+    # The rail menu is navigation-only: no standing-orders control in it any more.
+    if page.get_by_test_id("desk-rail-more").count():
         page.get_by_test_id("desk-rail-more").click()
-    rail = page.get_by_test_id("desk-rail-controls")
-    rail.wait_for(state="visible", timeout=5000)
-    toggle = rail.get_by_test_id("standing-orders-toggle")
+        page.get_by_test_id("desk-rail-additional").wait_for(state="visible", timeout=5000)
+        check("rail-menu-has-no-orders-control",
+              page.get_by_test_id("desk-rail-additional").locator('[data-testid="standing-orders-toggle"], [data-testid="delivery-freeze-open"]').count() == 0)
+        page.keyboard.press("Escape")
+    page.get_by_test_id("desk-sheet-open").click()
+    page.locator('[data-testid="sheet-tab"][data-tab="hold"]').click()
+    hold = page.get_by_test_id("sheet-hold")
+    hold.wait_for(state="visible", timeout=8000)
+    toggle = hold.get_by_test_id("standing-orders-toggle")
     # The orders chip renders once `GET /standing-orders` answers (CI is slower than a laptop): wait
     # for it, and measure the toggle through the locator that is about to be clicked.
     toggle.wait_for(state="visible", timeout=10000)
@@ -126,20 +136,21 @@ with sync_playwright() as p:
     ov = page.evaluate(RECT, '[data-testid="standing-orders-manage"]')
     inp = page.evaluate(RECT, '[data-testid="standing-orders-manage"] [data-testid="standing-order-input"]')
     placement = overlay.get_attribute("data-placement")
-    page.screenshot(path=str(SHOTS / "desk-fit-standing-orders-rail.png"))
-    # The toggle is in the lower half of the stage (the defect's precondition), the overlay is above it
-    # and wholly inside the viewport, and its input is visible and typeable.
+    page.screenshot(path=str(SHOTS / "desk-fit-standing-orders-sheet.png"))
+    # Wherever the panel sits, the overlay is wholly inside the viewport and its input is typeable.
     try:
         page.get_by_test_id("standing-order-input").fill("Auto-approve intake on alpha", timeout=5000)
         typed = True
     except Exception as e:  # noqa: BLE001
         typed = f"{type(e).__name__}: {str(e)[:120]}"
-    check("rail-overlay-in-viewport",
-          toggle_rect is not None and toggle_rect["top"] > H / 2 and inside(ov) and inside(inp)
-          and placement == "above" and ov["bottom"] <= toggle_rect["top"] and typed is True,
+    check("sheet-overlay-in-viewport",
+          toggle_rect is not None and inside(ov) and inside(inp) and placement in ("above", "below") and typed is True,
           toggle=toggle_rect, overlay=ov, input=inp, placement=placement, typed=typed)
     page.keyboard.press("Escape")
     page.get_by_test_id("standing-orders-manage").wait_for(state="hidden", timeout=5000)
+    # Close the sheet so the header scenario below reads the Desk without the drawer over it.
+    page.get_by_test_id("sheet-close").click()
+    page.get_by_test_id("sheet").wait_for(state="hidden", timeout=5000)
 
     # The Desk header's own Manage still opens below (the room is there).
     heads = page.locator('[data-testid="standing-orders-toggle"]')

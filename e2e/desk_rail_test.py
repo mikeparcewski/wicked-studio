@@ -5,16 +5,19 @@ S15c) at 1440x700 on the Desk.
 
 Against the in-process fixture (wave-1 + wave-2b corpus):
 
-  1. ORDER: top to bottom — Desk · Watchtower · the sessions list · Skills · MCP tools · Steering ·
-     Health · "Additional settings"; no Notifications entry (no bell, no "notifications" nav-dest);
+  1. ORDER: top to bottom — Desk · Watchtower · the sessions list · Product · Skills · MCP tools ·
+     Steering · Health · "Additional settings"; no Notifications entry (no bell, no "notifications" nav-dest);
      no "Rules", no "Everything else".
   2. MENU: "Additional settings" lists exactly Configuration, Repositories, Workflows, Evals, Theme —
      in that order — plus the orders/away and freeze controls; nothing that redirects.
   3. NAVIGATES: Steering opens /rules and is marked current; Skills opens /skills; MCP tools opens /mcp;
      Watchtower opens /watch; Configuration opens /system (and Configuration links to Testing campaigns).
-  4. 0 page errors.
+  4. HEALTH: the rail's Health link opens /health and is marked current there.
+  5. 0 page errors.
 
-Captures: e2e/shots/desk-rail.png, desk-rail-additional.png. Env: FEEDBACK_PORT (default 4366).
+Captures: e2e/shots/desk-rail.png, desk-rail-additional.png, and the rail-polish evidence set
+rail-polish-{rail,health}-{1440x700,390x844}-{light,dark}.png (dark = no data-theme). Env:
+FEEDBACK_PORT (default 4366).
 """
 
 import json
@@ -46,8 +49,8 @@ def check(step: str, ok: bool, **detail) -> None:
 
 RAIL = """() => {
   const rail = document.querySelector('[data-testid="session-rail"]');
-  const ids = ['desk-rail-home', 'desk-rail-watch', 'rail-group', 'desk-rail-start', 'desk-rail-product', 'desk-rail-skills', 'desk-rail-mcp',
-               'desk-rail-steering', 'rail-health-section', 'desk-rail-more'];
+  const ids = ['desk-rail-home', 'desk-rail-watch', 'rail-group', 'desk-rail-product', 'desk-rail-skills', 'desk-rail-mcp',
+               'desk-rail-steering', 'desk-rail-health', 'desk-rail-more'];
   const seen = [];
   for (const el of rail.querySelectorAll('[data-testid]')) {
     const id = el.dataset.testid;
@@ -60,6 +63,8 @@ RAIL = """() => {
     bell: !!rail.querySelector('[data-nav-dest="notifications"], [aria-label^="Notifications"], [aria-label$="notifications"]'),
     steering: rail.querySelector('[data-testid="desk-rail-steering"]')?.getAttribute('href') ?? null,
     more: rail.querySelector('[data-testid="desk-rail-more"]')?.innerText ?? null,
+    footLabel: rail.querySelector('[data-testid="rail-foot-label"]')?.innerText ?? null,
+    healthState: rail.querySelector('[data-testid="rail-health-state"]')?.innerText ?? null,
   };
 }"""
 
@@ -69,8 +74,7 @@ MENU = """() => {
   return {
     labels: links.map(a => a.innerText.trim()),
     hrefs: links.map(a => a.getAttribute('href')),
-    controls: !!m.querySelector('[data-testid="desk-rail-controls"]'),
-    orders: !!m.querySelector('[data-testid="standing-orders-away"], [data-testid^="standing-orders"]'),
+    controls: !!m.querySelector('[data-testid="desk-rail-controls"], [data-testid^="standing-orders"], [data-testid^="delivery-freeze"]'),
   };
 }"""
 
@@ -99,12 +103,13 @@ with sync_playwright() as p:
     # ── 1. the order ─────────────────────────────────────────────────────────────
     r = page.evaluate(RAIL)
     check("order",
-          r["order"] == ['desk-rail-home', 'desk-rail-watch', 'rail-group', 'desk-rail-start', 'desk-rail-product', 'desk-rail-skills', 'desk-rail-mcp',
-                         'desk-rail-steering', 'rail-health-section', 'desk-rail-more']
+          r["order"] == ['desk-rail-home', 'desk-rail-watch', 'rail-group', 'desk-rail-product', 'desk-rail-skills', 'desk-rail-mcp',
+                         'desk-rail-steering', 'desk-rail-health', 'desk-rail-more']
           and r["dests"] == ["watch", "section:product", "section:skills", "section:mcp", "section:steering", "health"]
           and not r["bell"] and "Rules" not in r["text"] and "Everything else" not in r["text"]
           and "Steering" in r["text"] and "Skills" in r["text"] and "MCP tools" in r["text"]
-          and r["steering"] == "/rules" and (r["more"] or "").startswith("Additional settings"),
+          and r["steering"] == "/rules" and (r["more"] or "").startswith("Additional settings")
+          and r["footLabel"] == "Workspace",
           **{k: v for k, v in r.items() if k != "text"})
 
     # ── 2. the menu ──────────────────────────────────────────────────────────────
@@ -116,7 +121,9 @@ with sync_playwright() as p:
     check("menu",
           m["labels"] == ["Configuration", "Repositories", "Workflows", "Evals", "Theme"]
           and m["hrefs"] == ["/system", "/repos", "/workflows", "/testing/evals", "/theme"]
-          and m["controls"], **m)
+          # studio#421 r3 (change 17): the menu is navigation-only — the orders/freeze controls are
+          # the Desk's "⋯ › Hold" sheet.
+          and not m["controls"], **m)
     page.locator('[data-testid="desk-rail-additional"] a[href="/system"]').click()
     page.wait_for_function("() => window.location.pathname === '/system'", timeout=5000)
     page.get_by_test_id("settings-testing-link").wait_for(state="visible", timeout=5000)
@@ -134,6 +141,38 @@ with sync_playwright() as p:
     page.wait_for_function("() => window.location.pathname === '/watch'", timeout=5000)
     went["watch"] = page.evaluate("() => window.location.pathname")
     check("navigates", all(v["current"] == "page" for k, v in went.items() if k != "watch") and went["watch"] == "/watch", **went)
+
+    # ── 4. the rail-polish evidence shots (studio#421 r1): the rail and the /health page at two
+    #       viewports and both themes — the visible foot separator and the framed settings button.
+    def shots(subject: str) -> None:
+        for width, height in ((1440, 700), (390, 844)):
+            page.set_viewport_size({"width": width, "height": height})
+            for label, attr in (("light", "light"), ("dark", None)):
+                page.evaluate(
+                    "(t) => t ? document.documentElement.setAttribute('data-theme', t)"
+                    " : document.documentElement.removeAttribute('data-theme')", attr)
+                page.wait_for_timeout(150)
+                page.screenshot(path=str(SHOTS / f"rail-polish-{subject}-{width}x{height}-{label}.png"))
+        page.set_viewport_size({"width": W, "height": H})
+        page.evaluate("() => document.documentElement.removeAttribute('data-theme')")
+
+    page.get_by_test_id("desk-rail-home").click()
+    page.wait_for_function("() => window.location.pathname === '/'", timeout=5000)
+    page.get_by_test_id("desk-rail-product").wait_for(state="visible", timeout=5000)
+    shots("rail")
+
+    # r3: the same matrix with the (now navigation-only) Additional settings popover OPEN.
+    page.get_by_test_id("desk-rail-more").click()
+    page.get_by_test_id("desk-rail-additional").wait_for(state="visible", timeout=5000)
+    shots("rail-menu")
+    page.keyboard.press("Escape")
+
+    page.get_by_test_id("desk-rail-health").click()
+    page.wait_for_function("() => window.location.pathname === '/health'", timeout=5000)
+    page.get_by_test_id("health-page").wait_for(state="visible", timeout=5000)
+    check("health", page.get_by_test_id("desk-rail-health").get_attribute("aria-current") == "page",
+          current=page.get_by_test_id("desk-rail-health").get_attribute("aria-current"))
+    shots("health")
 
     check("no-errors", not errors, errors=errors[:5])
     browser.close()

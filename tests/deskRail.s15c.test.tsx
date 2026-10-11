@@ -3,10 +3,11 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 
 /**
  * THE DESK RAIL after Amendment 5 (DES-STUDIO-REBUILD-001, Amendment 5 as revised; S15c):
- * top to bottom — Desk · Watchtower · the sessions list · Skills · MCP tools · Steering · Health ·
- * "Additional settings" (a disclosure holding Configuration, Repositories, Workflows, Evals, Theme,
- * in that order, plus the orders/away and freeze controls). No Notifications entry: the Desk is the
- * notification surface. Nothing that redirects appears in the menu.
+ * top to bottom — Desk · Watchtower · the sessions list · the "Workspace" foot (Product · Skills ·
+ * MCP tools · Steering · Health) · "Additional settings" (a disclosure holding Configuration,
+ * Repositories, Workflows, Evals, Theme, in that order). No Notifications entry: the Desk is the
+ * notification surface. Nothing that redirects appears in the menu — and (studio#421 r3 change 17)
+ * the menu is NAVIGATION ONLY: the orders/away and freeze controls are the Desk sheet's.
  */
 
 vi.mock('../src/hooks/useBoardModel.js', () => ({
@@ -16,9 +17,6 @@ vi.mock('../src/api/client.js', () => ({
   api: new Proxy({}, { get: () => () => Promise.resolve({}) }),
   apiFetch: () => Promise.resolve({}),
 }));
-// The two controls under "Additional settings" have their own tests; here they are presence only.
-vi.mock('../src/components/StandingOrdersPanel.js', () => ({ StandingOrdersPanel: () => <div data-testid="standing-orders" /> }));
-vi.mock('../src/components/DeliveryFreezeSwitch.js', () => ({ DeliveryFreezeSwitch: () => <div data-testid="delivery-freeze" /> }));
 
 const { SessionRail } = await import('../src/components/desk/SessionRail.js');
 const { ADDITIONAL_SETTINGS, DESK_RAIL_LINKS } = await import('../src/board/deskModel.js');
@@ -35,8 +33,8 @@ describe('the rail, top to bottom', () => {
     const nav = screen.getByTestId('session-rail');
     const order = [...nav.querySelectorAll('[data-testid]')]
       .map((e) => e.getAttribute('data-testid') ?? '')
-      .filter((id) => ['desk-rail-home', 'desk-rail-watch', 'desk-rail-start', 'desk-rail-product', 'desk-rail-skills', 'desk-rail-mcp', 'desk-rail-steering', 'rail-health-section', 'desk-rail-more'].includes(id));
-    expect(order).toEqual(['desk-rail-home', 'desk-rail-watch', 'desk-rail-start', 'desk-rail-product', 'desk-rail-skills', 'desk-rail-mcp', 'desk-rail-steering', 'rail-health-section', 'desk-rail-more']);
+      .filter((id) => ['desk-rail-home', 'desk-rail-watch', 'desk-rail-product', 'desk-rail-skills', 'desk-rail-mcp', 'desk-rail-steering', 'desk-rail-health', 'desk-rail-more'].includes(id));
+    expect(order).toEqual(['desk-rail-home', 'desk-rail-watch', 'desk-rail-product', 'desk-rail-skills', 'desk-rail-mcp', 'desk-rail-steering', 'desk-rail-health', 'desk-rail-more']);
     expect(nav.querySelector('[data-nav-dest="notifications"]')).toBeNull();
     expect(nav.textContent).not.toContain('Rules');
     expect(nav.textContent).not.toContain('Everything else');
@@ -64,7 +62,7 @@ describe('the rail, top to bottom', () => {
 });
 
 describe('"Additional settings"', () => {
-  it('lists exactly Configuration, Repositories, Workflows, Evals, Theme — in that order — plus the controls', () => {
+  it('lists exactly Configuration, Repositories, Workflows, Evals, Theme — in that order — and nothing else', () => {
     rail();
     expect(screen.queryByTestId('desk-rail-additional')).toBeNull();
     fireEvent.click(screen.getByTestId('desk-rail-more'));
@@ -73,7 +71,10 @@ describe('"Additional settings"', () => {
     expect(links.map((a) => a.textContent)).toEqual(['Configuration', 'Repositories', 'Workflows', 'Evals', 'Theme']);
     expect(links.map((a) => a.getAttribute('href'))).toEqual(['/system', '/repos', '/workflows', '/testing/evals', '/theme']);
     expect(links.map((a) => a.getAttribute('data-nav-dest'))).toEqual(['settings:/system', 'section:repos', 'settings:/workflows', 'section:testing', 'settings:/theme']);
-    expect(within(menu).getByTestId('desk-rail-controls')).toBeInTheDocument();
+    // studio#421 r3 (change 17): NAVIGATION ONLY — the orders/away and freeze controls are gone.
+    expect(within(menu).queryByTestId('desk-rail-controls')).toBeNull();
+    expect(within(menu).queryByTestId('standing-orders')).toBeNull();
+    expect(within(menu).queryByTestId('delivery-freeze')).toBeNull();
     expect(ADDITIONAL_SETTINGS.map((d) => d.label)).toEqual(['Configuration', 'Repositories', 'Workflows', 'Evals', 'Theme']);
   });
 

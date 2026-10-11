@@ -21,10 +21,10 @@ vi.mock('../src/api/client.js', () => ({
   apiFetch: () => Promise.resolve({}),
 }));
 
-const { HealthRailSection } = await import('../src/components/HealthRailSection.js');
+const { HealthPage } = await import('../src/components/HealthPage.js');
 
 const openSignIn = async (): Promise<void> => {
-  render(<HealthRailSection open onToggle={() => undefined} />);
+  render(<HealthPage />);
   const moves = await screen.findAllByTestId('rail-seat-move');
   fireEvent.click(within(moves.find((m) => m.getAttribute('data-seat') === 'pi')!).getByTestId('rail-seat-move-button'));
   await screen.findByTestId('signin-line');
