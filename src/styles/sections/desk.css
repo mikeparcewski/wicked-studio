@@ -72,6 +72,7 @@
   .wk-watchtower-head { padding: var(--space-4); }
   .wk-watchtower-body { padding: var(--space-3) var(--space-4) var(--space-6); }
   .wk-watchtower-row { flex-wrap: wrap; }
+  .wk-watchtower-row .wk-desk-need-line { white-space: normal; }
   .wk-watchtower-row > .wk-desk-need-body { flex: 1 1 calc(100% - 24px); }
   .wk-watchtower-row > a { margin-left: 18px; }
 }
@@ -89,4 +90,19 @@
   .wk-palette-row { min-height: var(--tap-min); display: flex !important; flex-direction: column; justify-content: center; }
   .wk-palette-line { flex-wrap: wrap; row-gap: 2px; }
   .wk-palette-title { flex-basis: 100%; white-space: normal !important; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+}
+
+/* ── The Desk header as a grid (UI-CONTRACT §3 "header layout at 390 px"): title · utilities · ⋯ on
+   desktop with the date under the title; on phone title · ⋯, then the date, then the utilities. ── */
+.wk-desk-head { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; column-gap: var(--space-3); align-items: baseline; }
+.wk-desk-head > .wk-desk-head-row { display: contents; }
+.wk-desk-head .wk-desk-hello { grid-column: 1; grid-row: 1; }
+.wk-desk-head .wk-desk-orders { grid-column: 2; grid-row: 1; }
+.wk-desk-head .wk-sheet-open { grid-column: 3; grid-row: 1; }
+.wk-desk-head > .wk-desk-date { grid-column: 1 / -1; grid-row: 2; }
+@media (max-width: 767px) {
+  .wk-desk-head { grid-template-columns: minmax(0, 1fr) auto; }
+  .wk-desk-head .wk-sheet-open { grid-column: 2; grid-row: 1; }
+  .wk-desk-head > .wk-desk-date { grid-row: 2; margin-bottom: var(--space-1); }
+  .wk-desk-head .wk-desk-orders { grid-column: 1 / -1; grid-row: 3; margin: 0 0 var(--space-2); row-gap: 0; }
 }
