@@ -4,7 +4,7 @@ import { isRouteAbsent } from '../api/errors.js';
 import type { SeatRecordResponse } from '../api/seatRecord.js';
 import type { CoachMove } from '../board/seatCoaching.js';
 
-/** What the Health panel's expand learned about the seats' week. */
+/** What the Health page's seat read learned about the seats' week. */
 export type SeatWeekRead =
   | { kind: 'loading' }
   | { kind: 'absent' }
@@ -20,12 +20,12 @@ export type MoveState =
 const message = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 
 /**
- * The weekly 1:1 read (Wave B, idea 9): `GET /roster/record?days=7` on the Health panel's expand
- * gesture, beside `/health` and `/roster` (EC30: never on mount, never on a timer). A daemon without
- * the route is a named state, never an invented empty week. Only the current expand's answer lands.
+ * The weekly 1:1 read (Wave B, idea 9): `GET /roster/record?days=7` on the Health page's mount,
+ * beside `/health` and `/roster` (EC30: one read per mount, never a timer). A daemon without
+ * the route is a named state, never an invented empty week. Only the current read's answer lands.
  *
  * `apply` takes a seat's route-away move through `POST /governance/rules` and says what landed.
- * The sign-in move opens a terminal in the component; `markOpened` records it.
+ * The sign-in move opens the sign-in panel; `markOpened` records it.
  */
 export function useSeatWeek(open: boolean, days = 7): {
   week: SeatWeekRead;

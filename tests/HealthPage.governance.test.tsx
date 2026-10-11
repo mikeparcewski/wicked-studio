@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
-import { useState } from 'react';
+import { cleanup, render, screen, within } from '@testing-library/react';
 import { ApiError } from '../src/api/errors.js';
 import type { DiagnosticsGovernance } from '../src/api/types.js';
 import { useConnectionStore } from '../src/store/connection.js';
@@ -9,13 +8,17 @@ import {
 } from './fixtures/wave2.js';
 
 /**
- * studio#246 — the Health rail renders `GET /diagnostics`.governance (crew#495 / F-022,
+ * studio#246 — the Health registry renders `GET /diagnostics`.governance (crew#495 / F-022,
  * api-types 0.31.0+): the store + which rule chose it, the record counts (an honest
  * "engine cannot count" for null), the dead-letter fold (count, by type / by reason,
  * the timestamp range, truncated, the legacy HOME outbox) and every finding as a
  * severity-styled row carrying the replay recipe. Null-safe: a daemon without the
- * block (or without the route) says "not reported"; a null store is never "Governed"
- * — it turns the heart red, as does an error finding; a warning finding degrades.
+ * block (or without the route) reads one plain-words sentence ("Not available from
+ * this version of crew. Upgrade crew to see it."); a null store is never "Governed".
+ *
+ * Mounted through `/health` (studio#421): the same `GovernanceRows` the retired rail-foot
+ * flyout held, now one card on the page. The registry heart/dot verdicts that rode these rows
+ * live on the rail link (`useRailHealthDot`), pinned in railPolish.test.
  */
 
 let diagnosticsAnswer: () => Promise<unknown> = () => Promise.resolve({});
@@ -25,17 +28,14 @@ vi.mock('../src/api/client.js', () => ({
   api: {
     getHealth: () => Promise.resolve({ status: 'ok', version: '0.7.0', ping: 'pong' }),
     getRoster: () => Promise.resolve({ roster: [] }),
+    getSeatRecord: () => Promise.resolve({ days: 7, since: 0, until: 0, runsRead: 0, truncated: false, seats: [] }),
+    upsertConformanceRule: () => Promise.resolve({}),
     listRepos: () => Promise.resolve({ repos: [] }),
   },
   apiFetch: (path: string) => apiFetch(path),
 }));
 
-const { HealthRailSection } = await import('../src/components/HealthRailSection.js');
-
-function Harness(): React.ReactElement {
-  const [open, setOpen] = useState(true);
-  return <HealthRailSection open={open} onToggle={() => setOpen((v) => !v)} />;
-}
+const { HealthPage } = await import('../src/components/HealthPage.js');
 
 function withGovernance(g: DiagnosticsGovernance): void {
   diagnosticsAnswer = () => Promise.resolve({ components: {}, daemon: {}, stores: [], recentErrors: [], acp: { byCli: {} }, governance: g });
@@ -47,45 +47,10 @@ beforeEach(() => {
 });
 afterEach(() => cleanup());
 
-describe('the fetch rides the expand gesture (EC30)', () => {
-  it('fires ONE GET /diagnostics on expand, none before', async () => {
-    withGovernance(GOVERNANCE_HEALTHY);
-    const { rerender } = render(<HealthRailSection open={false} onToggle={() => undefined} />);
-    expect(apiFetch).not.toHaveBeenCalled();
-    rerender(<HealthRailSection open onToggle={() => undefined} />);
-    await screen.findByTestId('rail-governance');
-    expect(apiFetch).toHaveBeenCalledTimes(1);
-    expect(apiFetch).toHaveBeenCalledWith('/diagnostics');
-  });
-});
-
-describe('only the CURRENT expand\'s answer lands', () => {
-  it('a slow read from an earlier expand cannot overwrite a later expand\'s governance block', async () => {
-    let releaseFirst: (v: unknown) => void = () => undefined;
-    let releaseSecond: (v: unknown) => void = () => undefined;
-    const answers = [
-      new Promise((resolve) => { releaseFirst = resolve; }),
-      new Promise((resolve) => { releaseSecond = resolve; }),
-    ];
-    diagnosticsAnswer = () => answers.shift()!;
-    const { rerender } = render(<HealthRailSection open onToggle={() => undefined} />);
-    rerender(<HealthRailSection open={false} onToggle={() => undefined} />);
-    rerender(<HealthRailSection open onToggle={() => undefined} />);
-    await waitFor(() => expect(apiFetch).toHaveBeenCalledTimes(2));
-    releaseSecond({ governance: GOVERNANCE_HEALTHY });
-    const gov = await screen.findByTestId('rail-governance');
-    expect(gov).toHaveAttribute('data-state', 'ok');
-    releaseFirst({ governance: GOVERNANCE_DEADLETTERS }); // the stale first read lands late
-    await new Promise((r) => setTimeout(r, 30));
-    expect(screen.getByTestId('rail-governance')).toHaveAttribute('data-state', 'ok');
-    expect(screen.getByTestId('rail-health-heart')).toHaveAttribute('data-health', 'healthy');
-  });
-});
-
 describe('the healthy store', () => {
-  it('names the store path + source, the record counts, zero dead letters, no findings; heart stays green', async () => {
+  it('names the store path + source, the record counts, zero dead letters, no findings', async () => {
     withGovernance(GOVERNANCE_HEALTHY);
-    render(<Harness />);
+    render(<HealthPage />);
     const gov = await screen.findByTestId('rail-governance');
     expect(gov).toHaveAttribute('data-state', 'ok');
     expect(gov).toHaveAttribute('data-store', 'core-db-sidecar');
@@ -98,15 +63,13 @@ describe('the healthy store', () => {
     expect(within(gov).getByTestId('rail-governance-outbox').textContent).toContain('/w2/state/core.db.governance/emit-outbox.ndjson');
     expect(within(gov).queryByTestId('rail-governance-by-type')).toBeNull();
     expect(within(gov).queryByTestId('rail-governance-finding')).toBeNull();
-    expect(screen.getByTestId('rail-health-heart')).toHaveAttribute('data-health', 'healthy');
-    expect(screen.queryByTestId('rail-health-summary-dot')).toBeNull();
   });
 });
 
 describe('the F-022 signal — dead letters', () => {
   it('renders the count as a floor, the by-type / by-reason tallies, the range, the outbox, and the error finding with its replay recipe', async () => {
     withGovernance(GOVERNANCE_DEADLETTERS);
-    render(<Harness />);
+    render(<HealthPage />);
     const gov = await screen.findByTestId('rail-governance');
     expect(gov).toHaveAttribute('data-state', 'error');
     expect(gov).toHaveAttribute('data-deadletters', '128');
@@ -122,16 +85,13 @@ describe('the F-022 signal — dead letters', () => {
     expect(finding).toHaveAttribute('data-kind', 'governance.deadletter');
     expect(finding).toHaveAttribute('data-severity', 'error');
     expect(finding.textContent).toContain('wicked-crew governance replay /w2/state/core.db.governance/emit-outbox.ndjson --governance-db');
-    // An error finding is a health failure: red heart + the collapsed-header dot.
-    expect(screen.getByTestId('rail-health-heart')).toHaveAttribute('data-health', 'unhealthy');
-    expect(screen.getByTestId('rail-health-summary-dot')).toBeInTheDocument();
   });
 });
 
 describe('a boot that resolved NO store', () => {
-  it('is never shown as governed: the store row fails, records read "engine cannot count", the governance.store error renders, heart red', async () => {
+  it('is never shown as governed: the store row fails, records read "engine cannot count", the governance.store error renders', async () => {
     withGovernance(GOVERNANCE_NO_STORE);
-    render(<Harness />);
+    render(<HealthPage />);
     const gov = await screen.findByTestId('rail-governance');
     expect(gov).toHaveAttribute('data-state', 'error');
     expect(gov).toHaveAttribute('data-store', 'none');
@@ -139,23 +99,22 @@ describe('a boot that resolved NO store', () => {
     expect(gov.textContent).toContain('engine cannot count');
     expect(gov.textContent).not.toMatch(/\b0 records\b/);
     expect(within(gov).getByTestId('rail-governance-finding')).toHaveAttribute('data-kind', 'governance.store');
-    expect(screen.getByTestId('rail-health-heart')).toHaveAttribute('data-health', 'unhealthy');
   });
 });
 
 describe('records — the two counts state themselves independently', () => {
   it('an uncountable total beside a counted sinceBoot shows both facts', async () => {
     withGovernance({ ...GOVERNANCE_HEALTHY, records: { total: null, sinceBoot: 5 } });
-    render(<Harness />);
+    render(<HealthPage />);
     const gov = await screen.findByTestId('rail-governance');
     expect(gov.textContent).toContain('total: engine cannot count · 5 since boot');
   });
 });
 
 describe('the pre-fix HOME outbox', () => {
-  it('renders the legacy outbox path + bytes and the warning finding; heart degrades to amber, no fail dot', async () => {
+  it('renders the legacy outbox path + bytes and the warning finding', async () => {
     withGovernance(GOVERNANCE_LEGACY_OUTBOX);
-    render(<Harness />);
+    render(<HealthPage />);
     const gov = await screen.findByTestId('rail-governance');
     expect(gov).toHaveAttribute('data-state', 'warning');
     expect(within(gov).getByTestId('rail-governance-legacy').textContent).toContain('/w2/home/.something-wicked/wicked-apps/emit-outbox.ndjson · 48213 bytes');
@@ -165,8 +124,6 @@ describe('the pre-fix HOME outbox', () => {
     // `sinceBoot: null` beside a counted total reads as the total alone — never an invented 0.
     expect(gov.textContent).toContain('12 records');
     expect(gov.textContent).not.toContain('since boot');
-    expect(screen.getByTestId('rail-health-heart')).toHaveAttribute('data-health', 'degraded');
-    expect(screen.queryByTestId('rail-health-summary-dot')).toBeNull();
   });
 });
 
@@ -176,7 +133,7 @@ describe('studio#651: finding text', () => {
       ...GOVERNANCE_LEGACY_OUTBOX,
       findings: [{ ...GOVERNANCE_LEGACY_OUTBOX.findings[0]!, message: 'a pre-fix dead-letter outbox exists at /Users/reel-operator/.something-wicked/wicked-apps/emit-outbox.ndjson (its state home is /Users/reel-operator/Projects/wicked/.wicked-crew)' }],
     });
-    render(<Harness />);
+    render(<HealthPage />);
     const gov = await screen.findByTestId('rail-governance');
     const finding = within(gov).getByTestId('rail-governance-finding');
     expect(finding).toHaveTextContent('exists at ~/.something-wicked/wicked-apps/emit-outbox.ndjson (its state home is ~/Projects/wicked/.wicked-crew)');
@@ -188,7 +145,7 @@ describe('studio#651: finding text', () => {
       ...GOVERNANCE_DEADLETTERS,
       deadletters: { ...GOVERNANCE_DEADLETTERS.deadletters!, byReason: { 'EACCES: permission denied, open /Users/reel-operator/.wicked-crew/governance.db': 3 } },
     });
-    render(<Harness />);
+    render(<HealthPage />);
     const gov = await screen.findByTestId('rail-governance');
     const line = within(gov).getByTestId('rail-governance-by-reason');
     expect(line).toHaveTextContent('open ~/.wicked-crew/governance.db');
@@ -197,30 +154,30 @@ describe('studio#651: finding text', () => {
 });
 
 describe('older daemons — null-safe by construction', () => {
-  it('a /diagnostics WITHOUT a governance block says "not reported" and does not degrade', async () => {
+  it('a /diagnostics WITHOUT a governance block says the plain-words sentence and does not degrade', async () => {
     diagnosticsAnswer = () => Promise.resolve({ components: {}, daemon: {}, stores: [], recentErrors: [], acp: { byCli: {} } });
-    render(<Harness />);
+    render(<HealthPage />);
     const gov = await screen.findByTestId('rail-governance');
     expect(gov).toHaveAttribute('data-state', 'absent');
     expect(gov).toHaveAttribute('data-why', 'no-block');
-    expect(gov.textContent).toContain('not reported by this daemon');
-    expect(screen.getByTestId('rail-health-heart')).toHaveAttribute('data-health', 'healthy');
+    expect(gov.textContent).toContain('Not available yet');
+    expect(screen.getByTestId('health-upgrade-note')).toHaveTextContent('governance');
   });
 
-  it('a daemon with NO /diagnostics route (unknown-route 404) says so too', async () => {
+  it('a daemon with NO /diagnostics route (unknown-route 404) says the same plain words — the route name stays off the page', async () => {
     diagnosticsAnswer = () => Promise.reject(new ApiError(404, 'not found'));
-    render(<Harness />);
+    render(<HealthPage />);
     const gov = await screen.findByTestId('rail-governance');
     expect(gov).toHaveAttribute('data-why', 'no-route');
-    expect(gov.textContent).toContain('no /diagnostics route');
-    expect(screen.getByTestId('rail-health-heart')).toHaveAttribute('data-health', 'healthy');
+    expect(gov.textContent).toContain('Not available yet');
+    expect(screen.getByTestId('health-upgrade-note')).toHaveTextContent('governance');
+    expect(gov.textContent).not.toContain('/diagnostics');
   });
 
-  it('a diagnostics read that FAILS (5xx) renders the unreachable row WITH its reason and degrades — never a guessed store', async () => {
+  it('a diagnostics read that FAILS (5xx) renders the unreachable row WITH its reason — never a guessed store', async () => {
     diagnosticsAnswer = () => Promise.reject(new ApiError(500, 'governance fold crashed: ENOSPC'));
-    render(<Harness />);
-    await waitFor(() => expect(screen.getByTestId('rail-health-heart')).toHaveAttribute('data-health', 'degraded'));
-    const gov = screen.getByTestId('rail-governance');
+    render(<HealthPage />);
+    const gov = await screen.findByTestId('rail-governance');
     expect(gov).toHaveAttribute('data-state', 'error');
     expect(gov.textContent).toContain('unreachable');
     // The daemon's own sentence rides the row (the translated ApiError message) — not dropped.

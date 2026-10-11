@@ -259,10 +259,9 @@ with sync_playwright() as p:
     # ── 6. #467: the sign-in panel's line ──────────────────────────────────────────
     set_fixture(origin, seat_week=True)
     page.goto(f"{origin}/", wait_until="networkidle")
-    toggle = page.get_by_test_id("rail-health-toggle")
-    toggle.wait_for(state="visible", timeout=15000)
-    if toggle.get_attribute("aria-expanded") != "true":
-        toggle.click()
+    link = page.get_by_test_id("desk-rail-health")
+    link.wait_for(state="visible", timeout=15000)
+    link.click()
     pi_move = page.locator('[data-testid="rail-seat-move"][data-seat="pi"] [data-testid="rail-seat-move-button"]')
     pi_move.wait_for(state="visible", timeout=15000)
     pi_move.click()

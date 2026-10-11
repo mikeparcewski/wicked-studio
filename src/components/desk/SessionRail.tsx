@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { ChevronDown, LayoutGrid, Plus } from 'lucide-react';
 import { useDeliveredNow } from '../../store/postHocDeliver.js';
 import type { SessionView } from '../../api/types.js';
 import { ADDITIONAL_SETTINGS, DESK_RAIL_LINKS, needsByRun, needTextByRun, railGroups } from '../../board/deskModel.js';
@@ -6,31 +7,38 @@ import { needCount } from '../../board/needsQueue.js';
 import type { NeedRow } from '../../board/needsYou.js';
 import { useBoardModel } from '../../hooks/useBoardModel.js';
 import { useCapabilities } from '../../store/capabilities.js';
-import type { Navigate } from '../../hooks/useRoute.js';
+import { productPath, type Navigate } from '../../hooks/useRoute.js';
 import { useAppearanceStore } from '../../theming/appearance.js';
 import { anyModalOpen, useLayerStore } from '../../store/layers.js';
-import { HealthRailSection } from '../HealthRailSection.js';
+import { seedNewChat } from '../../board/chatMoves.js';
+import { useRailHealthDot } from '../../hooks/useRailHealthDot.js';
 import { WatchPill } from './WatchPill.js';
-import { StandingOrdersPanel } from '../StandingOrdersPanel.js';
-import { DeliveryFreezeSwitch } from '../DeliveryFreezeSwitch.js';
 
 /** Width of the desk shell's session rail (px) — fixed, so nothing moves when a pane opens. */
 export const SESSION_RAIL_PX = 236;
 
 /**
  * THE SESSION RAIL (skin `desk`, DES-STUDIO-REBUILD-001 §4.2, slice S4; Amendment 5 as revised,
- * S15c) — 236 px, on every route. Top to bottom:
+ * S15c; studio#421 rail polish) — 236 px, on every route. Top to bottom:
  *
  *  - Desk, with the needs-you count as its badge (the fold's `needCount`, the Desk sentence's
  *    number — one source, so they never disagree).
  *  - Watchtower — the quiet pill (rule 10), where the bell was. There is no Notifications entry:
  *    the Desk is the notification surface, and Watchtower is the full feed.
  *  - Sessions grouped by project (the board model's order), each with a state dot and the count
- *    of needs-you items that name it. A session is a chat and its runs when the daemon stamps
- *    `chat_id` (C1, `capabilities.runChatId`), else one run; each opens `/s/:id` (S6a).
- *  - Skills · MCP tools · Steering — they change what in-flight work does, so they are one click
- *    away (`DESK_RAIL_LINKS`). Health. Then "Additional settings" — Configuration, Repositories,
- *    Workflows, Evals, Theme (`ADDITIONAL_SETTINGS`) and the orders/away and freeze controls.
+ *    of needs-you items that name it. A project group carries two quick icons (new session →
+ *    `/` + the project's `@` chip, open project → `/product?project=<id>`); the
+ *    unfiled group ("Not in a project") carries none. A session is a chat and its runs when the
+ *    daemon stamps `chat_id` (C1), else one run; each opens `/s/:id` (S6a).
+ *  - the "Workspace" group label, then Skills · MCP tools · Steering and the HEALTH LINK with its
+ *    answered dot — what in-flight work is, one click away (`DESK_RAIL_LINKS`). The foot's top
+ *    border separates the Product/support links above it from the run levers below, and carries a
+ *    group label ("Workspace", studio#421 r3 change 18) styled like the project groups. Health is a
+ *    link to `/health` (`desk-rail-health`); when it is not healthy the link names the state in
+ *    muted text ("Health · degraded" / "Health · needs attention", change 16) and its dot is the
+ *    rail-level heartbeat (`useRailHealthDot`). Then "Additional settings" — Configuration,
+ *    Repositories, Workflows, Evals, Theme (`ADDITIONAL_SETTINGS`) — NAVIGATION ONLY (change 17:
+ *    the orders/away and delivery-freeze controls are the Desk's, not the rail's).
  *
  * Render only: the groups are `railGroups` (board/deskModel.ts) over `useBoardModel` + the fold.
  */
@@ -48,8 +56,8 @@ export function SessionRail({ runs, needRows, navigate, pathname }: {
     () => railGroups(items, unfiled, needsByRun(needRows), undefined, needTextByRun(needRows), runChatId, deliveredNow),
     [items, unfiled, needRows, runChatId, deliveredNow],
   );
+  const dot = useRailHealthDot();
   const [more, setMore] = useState(false);
-  const [healthOpen, setHealthOpen] = useState(false);
   const moreRef = useRef<HTMLDivElement | null>(null);
   const moreTrigger = useRef<HTMLButtonElement | null>(null);
   const go = (path: string) => (e: React.MouseEvent): void => { e.preventDefault(); setMore(false); navigate(path); };
@@ -73,10 +81,6 @@ export function SessionRail({ runs, needRows, navigate, pathname }: {
     document.addEventListener('keydown', onKey);
     return () => { document.removeEventListener('pointerdown', onDown); document.removeEventListener('keydown', onKey); };
   }, [more]);
-  const startSomething = (): void => {
-    navigate('/');
-    requestAnimationFrame(() => document.querySelector<HTMLTextAreaElement>('[data-testid="desk-composer-input"]')?.focus());
-  };
   const current = (path: string): 'page' | undefined => (pathname === path || pathname.startsWith(`${path}/`) ? 'page' : undefined);
   const siteName = useAppearanceStore((s) => s.appearance.site_name?.trim() || null);
   // studio#512 (S18b): Theme › Logo takes the dot's place — the classic chrome's §3.1 slot, 32 px, contain-fit.
@@ -111,7 +115,33 @@ export function SessionRail({ runs, needRows, navigate, pathname }: {
       <div className="wk-rail-groups">
         {groups.map((g) => (
           <div key={g.projectId ?? 'unfiled'} data-testid="rail-group" data-project-id={g.projectId ?? ''}>
-            <p className="wk-rail-group">{g.name}</p>
+            <div className="wk-rail-group-row">
+              <p className="wk-rail-group">{g.name}</p>
+              {g.projectId !== null && g.projectId !== '' && (
+                <span className="wk-rail-group-icons">
+                  <button
+                    type="button"
+                    data-testid="rail-group-new"
+                    aria-label={`New work in ${g.name}`}
+                    title={`New work in ${g.name}`}
+                    className="wk-rail-icon-btn"
+                    onClick={() => { navigate('/'); seedNewChat(g.projectId, g.name); }}
+                  >
+                    <Plus size={14} aria-hidden />
+                  </button>
+                  <button
+                    type="button"
+                    data-testid="rail-group-view"
+                    aria-label={`Open ${g.name}`}
+                    title={`Open ${g.name}`}
+                    className="wk-rail-icon-btn"
+                    onClick={() => { setMore(false); navigate(productPath(g.projectId)); }}
+                  >
+                    <LayoutGrid size={14} aria-hidden />
+                  </button>
+                </span>
+              )}
+            </div>
             {g.sessions.map((s) => (
               <a
                 key={s.id}
@@ -135,16 +165,34 @@ export function SessionRail({ runs, needRows, navigate, pathname }: {
             ))}
           </div>
         ))}
-        <button type="button" data-testid="desk-rail-start" onClick={startSomething} className="wk-rail-start">+ Start something</button>
       </div>
 
       <div className="wk-rail-foot">
+        {/* studio#421 r3 (change 18): the foot's group label, under the separator, styled like the
+            project groups — the Product/support links below are the "Workspace". */}
+        <p className="wk-rail-group" data-testid="rail-foot-label">Workspace</p>
         {DESK_RAIL_LINKS.map((l) => (
           <a key={l.dest} href={l.path} onClick={go(l.path)} data-testid={l.testId} data-nav-dest={l.dest} aria-current={current(l.path)} className="wk-rail-link">
             {l.label}
           </a>
         ))}
-        <HealthRailSection open={healthOpen} onToggle={() => setHealthOpen((v) => !v)} />
+        <a
+          href="/health"
+          onClick={(e) => { e.preventDefault(); setMore(false); navigate('/health'); }}
+          data-testid="desk-rail-health"
+          data-nav-dest="health"
+          aria-current={pathname === '/health' ? 'page' : undefined}
+          aria-label={dot.heartState === 'healthy' ? undefined : `Health, ${dot.heartState === 'unhealthy' ? 'a check is failing' : 'a check needs attention'}`}
+          className="wk-rail-link wk-rail-health"
+        >
+          {/* studio#421 r4 (image-review row 1): the label + state word are one flex item so the link's
+              gap never separates them — the dot's `margin-left:auto` (components.css) parks it at the
+              right edge. Change 16: when not healthy the state word rides inside the same wrapper. */}
+          <span>Health{dot.heartState !== 'healthy' && (
+            <span data-testid="rail-health-state" className="wk-rail-health-state"> · {dot.heartState === 'degraded' ? 'degraded' : 'needs attention'}</span>
+          )}</span>
+          <span aria-hidden data-testid="rail-health-heart" data-health={dot.heartState} className="wk-rail-health-dot" style={{ background: dot.heartColor }} />
+        </a>
         <div ref={moreRef}>
           <button
             ref={moreTrigger}
@@ -153,24 +201,22 @@ export function SessionRail({ runs, needRows, navigate, pathname }: {
             aria-expanded={more}
             aria-controls={more ? 'desk-rail-additional' : undefined}
             onClick={() => setMore((v) => !v)}
-            className="wk-rail-link"
+            className="wk-rail-link wk-rail-more"
             style={{ width: '100%' }}
           >
-            {more ? 'Additional settings ▸' : 'Additional settings ▾'}
+            <span>Additional settings</span>
+            <ChevronDown size={14} aria-hidden className="wk-rail-chevron" />
           </button>
           {more && (
             <div id="desk-rail-additional" data-testid="desk-rail-additional" className="wk-rail-everything">
+              {/* studio#421 r3 (change 17): NAVIGATION ONLY. The orders/away and delivery-freeze
+                  controls live on the Desk (standing orders in the header, the freeze in the Desk's
+                  "⋯" sheet) — the rail menu never carries a control that changes behaviour. */}
               {ADDITIONAL_SETTINGS.map((d) => (
                 <a key={d.dest} href={d.path} data-nav-dest={d.dest} onClick={go(d.path)} className="wk-rail-link">
                   {d.label}
                 </a>
               ))}
-              {/* COVERAGE.md finding 2: the two switches that change what studio does while you
-                  are away — never lost at the flip. On, the Desk says so too (DeskStateRows). */}
-              <div data-testid="desk-rail-controls" aria-label="Standing orders and deliveries" role="group" className="wk-rail-controls">
-                <StandingOrdersPanel />
-                <DeliveryFreezeSwitch placement="inline" />
-              </div>
             </div>
           )}
         </div>

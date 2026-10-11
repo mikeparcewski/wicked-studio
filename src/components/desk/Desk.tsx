@@ -16,7 +16,7 @@ import { useCapabilities } from '../../store/capabilities.js';
 import { useHandover } from '../../hooks/useHandover.js';
 import { useHistoryScroll } from '../../hooks/useHistoryState.js';
 import { useDisplayText } from '../../hooks/useHomePath.js';
-import type { Navigate } from '../../hooks/useRoute.js';
+import { productPath, type Navigate } from '../../hooks/useRoute.js';
 import { useRoster } from '../../hooks/useRoster.js';
 import { SignInPanel } from '../SignInPanel.js';
 import type { RosterSeat } from '../../api/types.js';
@@ -28,6 +28,8 @@ import { DeskStateRows, useDeskStates } from './DeskStateRows.js';
 import { DeskRuleLine } from './DeskRuleLine.js';
 import { openSheet } from '../../store/sheets.js';
 import { NewProjectModal } from '../NewProjectModal.js';
+import { LayoutGrid, Plus } from 'lucide-react';
+import { seedNewChat } from '../../board/chatMoves.js';
 
 /** The daemon's governance self-report, read once per mount (and again after a replay changed it).
  *  A daemon without `/diagnostics` (or predating `governance`) yields null: no chore, never a guess. */
@@ -211,6 +213,30 @@ export function Desk({ runs, runsLoaded, runsError = null, onRetryRuns, needRows
               <section key={card.projectId ?? 'unfiled'} data-testid="desk-project" data-project-id={card.projectId ?? ''} className="wk-desk-card">
                 <p className="wk-desk-card-title">
                   <span>{card.name}</span>
+                  {card.projectId !== null && card.projectId !== '' && (
+                    <span className="wk-desk-card-icons">
+                      <button
+                        type="button"
+                        data-testid="desk-project-new"
+                        aria-label={`New work in ${card.name}`}
+                        title={`New work in ${card.name}`}
+                        className="wk-rail-icon-btn"
+                        onClick={() => seedNewChat(card.projectId, card.name)}
+                      >
+                        <Plus size={14} aria-hidden />
+                      </button>
+                      <button
+                        type="button"
+                        data-testid="desk-project-view"
+                        aria-label={`Open ${card.name}`}
+                        title={`Open ${card.name}`}
+                        className="wk-rail-icon-btn"
+                        onClick={() => navigate(productPath(card.projectId))}
+                      >
+                        <LayoutGrid size={14} aria-hidden />
+                      </button>
+                    </span>
+                  )}
                   {card.quiet.length > 0 && (
                     <span className="wk-desk-card-aside" title={card.quiet.join(', ')}>{card.quiet.length} more</span>
                   )}

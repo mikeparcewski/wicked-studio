@@ -21,7 +21,8 @@ The DOM ACs, verbatim mapping:
      group — store via flag + path, "0 records", dead letters 128+ with the by-type
      / by-reason tallies, and the governance.deadletter ERROR row whose text carries
      the `wicked-crew governance replay …` recipe; the heart reads unhealthy. With
-     the route ABSENT (older daemon) the group reads "not reported by this daemon"
+     the route ABSENT (older daemon) the group reads the plain-words "Not available
+   from this version of crew. Upgrade crew to see it."
      (the heart's governance contribution is pinned in the unit suite — this roster's
      inactive codex seat colours it on its own).
   3. NEW CHAT (#248 → S16a-4e): /chat/new lands on the Desk composer (nothing POSTed); /p/<pid>/chat
@@ -136,10 +137,10 @@ with sync_playwright() as p:
           page.locator(TID("repo-card-findings")).count() == 0)
     set_fixture(ORIGIN, repo_findings=True)
 
-    # ── 3. #246 — the Health rail renders diagnostics.governance ────────────────────
+    # ── 3. #246 — the /health page renders diagnostics.governance ────────────────────
     page.goto(f"{ORIGIN}/")
-    page.locator(TID("rail-health-toggle")).wait_for(timeout=15000)
-    page.locator(TID("rail-health-toggle")).click()
+    page.locator(TID("desk-rail-health")).wait_for(timeout=15000)
+    page.locator(TID("desk-rail-health")).click()
     gov = page.locator(TID("rail-governance"))
     gov.wait_for(timeout=10000)
     gov_text = gov.inner_text()
@@ -158,24 +159,24 @@ with sync_playwright() as p:
           and "wicked-crew governance replay" in finding.inner_text(),
           state=gov.get_attribute("data-state"), deadletters=gov.get_attribute("data-deadletters"))
     check("governance_heart_unhealthy",
-          page.locator(TID("rail-health-heart")).get_attribute("data-health") == "unhealthy"
-          and page.locator(TID("rail-health-summary-dot")).count() == 1)  # (codex is inactive on this roster too)
+          page.locator(TID("rail-health-heart")).get_attribute("data-health") == "unhealthy")  # (codex is inactive on this roster too)
     page.screenshot(path=str(VSHOTS / "wave2-governance.png"))
 
-    # An older daemon: no /diagnostics route at all → "not reported", heart healthy.
+    # An older daemon: no /diagnostics route at all → the plain-words sentence, heart healthy.
     set_fixture(ORIGIN, governance=None)
     page.goto(f"{ORIGIN}/")
-    page.locator(TID("rail-health-toggle")).wait_for(timeout=15000)
-    page.locator(TID("rail-health-toggle")).click()
+    page.locator(TID("desk-rail-health")).wait_for(timeout=15000)
+    page.locator(TID("desk-rail-health")).click()
     gov = page.locator(TID("rail-governance"))
     gov.wait_for(timeout=10000)
-    # (The heart's colour is not asserted here: the shared W2 roster carries an
-    # inactive codex seat, which reads unhealthy on its own — the governance
-    # contribution to the heart is pinned in HealthRailSection.governance.test.)
+    # (The rail heart's colour is not asserted here: the shared W2 roster carries an
+    # inactive codex seat, which reads unhealthy on its own — the governance rows are
+    # pinned in HealthPage.governance.test, the link's dot in railPolish.test.)
     check("governance_absent_is_named",
           gov.get_attribute("data-state") == "absent"
           and gov.get_attribute("data-why") == "no-route"
-          and "not reported by this daemon" in gov.inner_text(),
+          and "Not available yet" in gov.inner_text()
+          and "governance" in (page.get_by_test_id("health-upgrade-note").text_content() or ""),
           state=gov.get_attribute("data-state"), why=gov.get_attribute("data-why"))
     set_fixture(ORIGIN, governance="deadletters")
 

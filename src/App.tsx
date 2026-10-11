@@ -29,6 +29,7 @@ import { UndoToasts } from './components/UndoToasts.js';
 import { ConnectionStatus } from './components/ConnectionStatus.js';
 import { SystemSettings } from './components/SystemSettings.js';
 import { ThemePage } from './components/ThemePage.js';
+import { HealthPage } from './components/HealthPage.js';
 import { Desk } from './components/desk/Desk.js';
 import { SessionRail } from './components/desk/SessionRail.js';
 import { RailDrawer } from './components/ui/RailDrawer.js';
@@ -581,6 +582,12 @@ export function App(): React.ReactElement {
           />
         </div>
       );
+    }
+    // `/health` — the studio's own checks (studio#421): the socket + API server, every council
+    // seat and its weekly 1:1, and where governance evidence lands. The page owns its scroller
+    // (`.wk-desk-scroll`) — no clipping wrapper, like the Desk and Everything.
+    if (panel === 'health') {
+      return <HealthPage />;
     }
     // `/product[?project=]` — the Product view (studio#157): a project's requirements across its
     // repositories, and "Draft epics" as a governed run (crew#371/#372).

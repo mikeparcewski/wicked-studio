@@ -22,6 +22,7 @@ import { useProvenanceStore } from '../../store/provenance.js';
 import { closeSheet, setSheetTab, useSheets } from '../../store/sheets.js';
 import { useIsSystemWorkflow } from '../../store/workflowCache.js';
 import { DeliveryFreezeSwitch } from '../DeliveryFreezeSwitch.js';
+import { StandingOrdersPanel } from '../StandingOrdersPanel.js';
 import { FileViewer } from '../FileViewer.js';
 import { seatStandingWord } from '../HealthRailSection.js';
 import { SignInPanel } from '../SignInPanel.js';
@@ -554,7 +555,13 @@ function DeskSheet({ tab, runs, navigate, needCount }: { tab: string; runs: Sess
       {tab === 'hold' && (
         <div data-testid="sheet-hold" className="wk-sheet-section">
           <p className="wk-sheet-hint">Holds every hand-over: nothing is pushed until you let it go. It asks you first.</p>
-          <DeliveryFreezeSwitch placement="inline" />
+          {/* studio#421 r3 (change 17): the two controls that change what studio does while you are
+              away live on the Desk, not in the rail's navigation-only "Additional settings" menu.
+              Successor of the retired rail `desk-rail-controls` group. */}
+          <div data-testid="desk-sheet-controls" aria-label="Standing orders and deliveries" role="group" className="wk-rail-controls">
+            <StandingOrdersPanel />
+            <DeliveryFreezeSwitch placement="inline" />
+          </div>
         </div>
       )}
     </Sheet>

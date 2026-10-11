@@ -5,10 +5,10 @@ import { useConnectionStore } from '../src/store/connection.js';
 import { ROSTER, WEEK } from './fixtures/seatWeek.js';
 
 /**
- * Wave B, idea 9 — the weekly 1:1 per agent on the Health panel's seat rows: each seat's week off
- * `GET /roster/record`, and ONE move whose consequence sits above its button. The route-away move
- * calls the real rule route (`POST /governance/rules` via `api.upsertConformanceRule`); the sign-in
- * move opens the sign-in panel with the seat's own line.
+ * Wave B, idea 9 — the weekly 1:1 per agent on the `/health` page's seat rows (studio#421): each
+ * seat's week off `GET /roster/record`, and ONE move whose consequence sits above its button. The
+ * route-away move calls the real rule route (`POST /governance/rules` via `api.upsertConformanceRule`);
+ * the sign-in move opens the plain-words sign-in panel with the seat's own line.
  */
 
 let recordAnswer: () => Promise<unknown> = () => Promise.resolve(WEEK);
@@ -28,7 +28,7 @@ vi.mock('../src/components/Terminal.js', () => ({
   Terminal: ({ initialInput }: { initialInput?: string }) => <pre data-testid="fake-terminal">{initialInput}</pre>,
 }));
 
-const { HealthRailSection } = await import('../src/components/HealthRailSection.js');
+const { HealthPage } = await import('../src/components/HealthPage.js');
 
 beforeEach(() => {
   getSeatRecord.mockClear();
@@ -43,11 +43,9 @@ const moveOf = async (seat: string): Promise<HTMLElement> => {
   return moves.find((m) => m.getAttribute('data-seat') === seat)!;
 };
 
-describe('the week rides the expand gesture', () => {
-  it('reads GET /roster/record for 7 days on expand, never before', async () => {
-    const { rerender } = render(<HealthRailSection open={false} onToggle={() => undefined} />);
-    expect(getSeatRecord).not.toHaveBeenCalled();
-    rerender(<HealthRailSection open onToggle={() => undefined} />);
+describe('the week rides the mount read', () => {
+  it('reads GET /roster/record for 7 days on mount', async () => {
+    render(<HealthPage />);
     await screen.findAllByTestId('rail-seat-week');
     expect(getSeatRecord).toHaveBeenCalledWith(7);
     expect(screen.getByTestId('rail-seat-week-window')).toHaveTextContent('last 7 days to 2026-09-27 · 9 runs read');
@@ -56,10 +54,10 @@ describe('the week rides the expand gesture', () => {
 
 describe('each seat gets exactly one move from its own record', () => {
   it('five seats, five weeks, one move each', async () => {
-    render(<HealthRailSection open onToggle={() => undefined} />);
+    render(<HealthPage />);
     await screen.findAllByTestId('rail-seat-week');
     const kinds = ROSTER.map((s) => {
-      const box = screen.getAllByTestId('rail-seat').find((el) => el.getAttribute('data-seat') === s.key)!;
+      const box = screen.getAllByTestId('rail-week-seat').find((el) => el.getAttribute('data-seat') === s.key)!;
       expect(within(box).getAllByTestId('rail-seat-move')).toHaveLength(1);
       return within(box).getByTestId('rail-seat-move').getAttribute('data-kind');
     });
@@ -69,7 +67,7 @@ describe('each seat gets exactly one move from its own record', () => {
   });
 
   it('the consequence is shown above the button, before it is taken', async () => {
-    render(<HealthRailSection open onToggle={() => undefined} />);
+    render(<HealthPage />);
     const codex = await moveOf('codex');
     const consequence = within(codex).getByTestId('rail-seat-move-consequence');
     const button = within(codex).getByTestId('rail-seat-move-button');
@@ -82,7 +80,7 @@ describe('each seat gets exactly one move from its own record', () => {
 
 describe('the move calls the real route', () => {
   it('route-away posts the operations rule and says what landed', async () => {
-    render(<HealthRailSection open onToggle={() => undefined} />);
+    render(<HealthPage />);
     fireEvent.click(within(await moveOf('codex')).getByTestId('rail-seat-move-button'));
     await waitFor(() => expect(upsertConformanceRule).toHaveBeenCalledTimes(1));
     expect(upsertConformanceRule.mock.calls[0]![0]).toMatchObject({
@@ -96,7 +94,7 @@ describe('the move calls the real route', () => {
 
   it('a refused rule says why, in place', async () => {
     upsertConformanceRule.mockImplementationOnce(() => Promise.reject(new ApiError(400, 'rule refused: bad id')));
-    render(<HealthRailSection open onToggle={() => undefined} />);
+    render(<HealthPage />);
     fireEvent.click(within(await moveOf('opencode')).getByTestId('rail-seat-move-button'));
     const result = await within(await moveOf('opencode')).findByTestId('rail-seat-move-result');
     expect(result).toHaveAttribute('data-status', 'error');
@@ -104,7 +102,7 @@ describe('the move calls the real route', () => {
   });
 
   it('sign-in opens the plain-words panel with the seat\'s own line (Amendment 5) — never a terminal', async () => {
-    render(<HealthRailSection open onToggle={() => undefined} />);
+    render(<HealthPage />);
     fireEvent.click(within(await moveOf('pi')).getByTestId('rail-seat-move-button'));
     expect(await screen.findByTestId('signin-line')).toHaveTextContent('pi login');
     expect(screen.getByRole('dialog')).toHaveTextContent('Sign in — Pi');
@@ -115,12 +113,16 @@ describe('the move calls the real route', () => {
 });
 
 describe('a daemon without the route', () => {
-  it('names the absence and offers no moves', async () => {
+  it('names the absence in plain words and offers no moves', async () => {
     recordAnswer = () => Promise.reject(new ApiError(404, 'Not Found', { error: 'Not Found' }));
-    render(<HealthRailSection open onToggle={() => undefined} />);
+    render(<HealthPage />);
     const cap = await screen.findByTestId('rail-seat-week-window');
     await waitFor(() => expect(cap).toHaveAttribute('data-state', 'absent'));
-    expect(cap).toHaveTextContent('not reported by this daemon');
+    // r4: one plain-words sentence — no daemon jargon, and the "This week" heading is never
+    // repeated as a "this week:" prefix under itself.
+    expect(cap).toHaveTextContent('Not available yet');
+    expect(screen.getByTestId('health-upgrade-note')).toHaveTextContent('This version of crew does not report the week');
+    expect(cap.textContent).not.toContain('this week:');
     expect(screen.queryAllByTestId('rail-seat-move')).toHaveLength(0);
     expect(screen.getAllByTestId('rail-seat-row')).toHaveLength(5);
   });
