@@ -7,6 +7,7 @@ import type { SessionView } from '../api/types.js';
 import {
   campaignStatusWord, campaignCounts, campaignDeliveryRollup, deliveryRollupWord,
 } from '../board/campaignStats.js';
+import { sessionPath } from '../board/sessionModel.js';
 import { useAcceptanceStore } from '../store/acceptance.js';
 import { useCampaignsStore } from '../store/campaigns.js';
 import { deliveryOf, isPrUrl, resolveDelivery, DELIVERY_LABEL } from './delivery.js';
@@ -392,7 +393,7 @@ export function CampaignScoreboard({ campaignId, runs, navigate }: Props): React
                       <button
                         type="button"
                         data-testid="campaign-run-link"
-                        onClick={() => navigate(`/runs/${encodeURIComponent(row.runId!)}`)}
+                        onClick={() => navigate(sessionPath(`run:${row.runId!}`))}
                         style={{ color: 'var(--ink-high)', textAlign: 'left' }}
                         title={row.runId}
                       >

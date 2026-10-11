@@ -5,14 +5,11 @@ import { announceNavigateAway, inAppEntryState, isInAppEntry, replacedEntryState
 
 // `everything` is "See everything" (`/everything`, DES-STUDIO-REBUILD-001 §5.4, slices S15c/S17a): five
 // tabs — Sessions, Everything made, Helpers, Handed over, Projects — selected by `?tab=`; the Sessions tab keeps
-// `?filter=` (the old `/work` words) and takes `?project=` for one project's sessions. The list and
-// dashboard addresses it replaced are MOVES onto it (`hooks/useMovedRoutes.ts`): `/projects`,
-// `/chats`, `/work`, `/execute`, `/vibe`, `/demo`, the retired `/make`, the bare `/runs` listing and
-// `/p/:id/chronicle` all parse to `everything` (so the page renders on the pre-redirect tick) and are
-// replaced with the real address. `/p/:id` (the project dashboard) parses to `everything` scoped to
-// the project while `useMovedRoutes` replaces the address with the scoped Sessions tab.
-// A project with no session stays on its (empty) Sessions tab. The run page (`/runs/:id`) and the
-// project shell (`/p/:id/:mode`) are NOT moved yet — see useMovedRoutes.ts for why and when.
+// `?filter=` and takes `?project=` for one project's sessions. X1 (operator ruling 2026-10-09: "we
+// should just remove these"): the addresses that once MOVED onto it or onto a session — `/projects`,
+// `/chats`, `/work`, `/execute`, `/vibe`, `/demo`, `/make`, the bare `/runs`, `/runs/:id[/timeline]`,
+// every `/p/:id/…` project-shell address and `/chat/…` — no longer redirect: each is a dead address
+// ({@link RETIRED_ADDRESSES}) and parses to `not-found`.
 // `steering` is the unified governed-knowledge surface (`/steering/{policies,memories}`) — one
 // home with two sub-sections, each carrying BOTH "manage existing" and "proposals (review)":
 // Policies (the seven-type rule corpus — the seven pages collapsed into a `?type=` FILTER on one
@@ -33,9 +30,8 @@ import { announceNavigateAway, inAppEntryState, isInAppEntry, replacedEntryState
 // `not-found` is the honest dead-address state (usability review #4): an address
 // that matches NO page renders a not-found view that PRESERVES the typed URL and
 // offers the way out — it never silently normalizes onto a nearby default. Only
-// the RETIRED addresses (wiki/rules/policies, coverage/domain, the flat
-// campaigns, the list pages that moved onto `/everything`) keep their redirects:
-// those are moves with a known destination, not typos.
+// the steering, settings and testing normalizers (wiki/policies/proposals,
+// coverage/domain, the flat campaigns) still redirect.
 // The standalone `proposals` review queue RETIRED into Steering (DES-MEM-FACETED-001, unified
 // surface): policy proposals live under `/steering/policies`, memory proposals under
 // `/steering/memories`. Its old `/proposals` address (and `?type=memory` deep link) fold into
@@ -64,8 +60,21 @@ export function productPath(projectId?: string | null): string {
   return projectId ? `${PRODUCT_PATH}?project=${encodeURIComponent(projectId)}` : PRODUCT_PATH;
 }
 
-/** The list and dashboard addresses that MOVED onto `/everything` (S15c) — see `useMovedRoutes`. */
-export const MOVED_LISTS: ReadonlySet<string> = new Set(['projects', 'chats', 'work', 'execute', 'vibe', 'demo', 'make', 'runs']);
+/**
+ * X1: the RETIRED addresses — the S15c / S16a moves, removed by operator ruling (2026-10-09). Each
+ * parses to `not-found`; `tests/notFoundRoute.test.tsx` pins the parse and `tests/linksResolve.test.ts`
+ * fails when a link studio builds lands on any of them (or on any other dead address). One example
+ * per shape (`:id` segments are filled with a sample id).
+ */
+export const RETIRED_ADDRESSES: readonly string[] = [
+  '/projects', '/chats', '/work', '/execute', '/vibe', '/demo', '/make', '/runs',
+  '/runs/:id', '/runs/:id/timeline',
+  '/p/:id', '/p/:id/chronicle',
+  '/p/:id/build', '/p/:id/build/new', '/p/:id/build/:id',
+  '/p/:id/document', '/p/:id/document/:id', '/p/:id/video', '/p/:id/video/:id',
+  '/p/:id/chat', '/p/:id/chat/:id', '/p/:id/campaigns',
+  '/chat/new', '/chat/:id',
+];
 
 export interface Route {
   panel: Panel;
@@ -79,7 +88,7 @@ export interface Route {
   showRegisterRepo: boolean;
   /** True when the launch form is in chat mode (vs. work mode). */
   chatMode: boolean;
-  /** Non-null on the legacy `/projects/:id` panel AND on every `/p/*` route. */
+  /** Non-null only on `/projects/:id` (the project management page). */
   projectId: string | null;
   /** The addressed thing: a session id (`/s/:id`), a run (`/runs/:id/events|files`), an editor. */
   artifactId: string | null;
@@ -130,28 +139,9 @@ function safeDecode(s: string): string {
   try { return decodeURIComponent(s); } catch { return s; }
 }
 
-/**
- * `/p/:projectId` — since S17a a MOVE: `useMovedRoutes` replaces it with the project's scoped
- * Sessions tab on "See everything". The project dashboard it addressed no longer renders.
- */
-export function projectPath(projectId: string): string {
-  return `/p/${encodeURIComponent(projectId)}`;
-}
-
 /** Where `/projects/:id` lands — the project management page (Edit + Archive/Restore). */
 export function projectDetailPath(projectId: string): string {
   return `/projects/${encodeURIComponent(projectId)}`;
-}
-
-/**
- * A run's evidence-timeline address (DES-UX-002 §5.2, slice BE): `/runs/:id/
- * timeline` — the §5.2 alias of `/runs/:id`, whose default layout the timeline
- * already is (slice BB, terminal runs). The parser resolves both spellings to
- * the run detail; entry points (the home board's ACTIVE card, §5.3) use this
- * one so the intent is legible in the URL.
- */
-export function runTimelinePath(runId: string): string {
-  return `/runs/${encodeURIComponent(runId)}/timeline`;
 }
 
 /** A run's raw event JSON (`GET /runs/:id/events`) as a route — see `run-events`. */
@@ -181,52 +171,9 @@ function parse(pathname: string): Route {
   const [, first = '', second = '', third = '', fourth = ''] = segs;
   /** Nothing but empty segments from index `from` on — the whole address is the shape, not a prefix of it. */
   const restEmpty = (from: number): boolean => segs.slice(from).every((x) => x === '');
-  // `/` is the orchestrator board (DES-MERGE-001 §1.5, slice 5). The flat run list it
-  // replaced keeps its own route, `/runs` — the power-user escape hatch, not a redirect.
+  // `/` is the Desk (DES-MERGE-001 §1.5, slice 5).
   if (first === '') {
     return route({ panel: 'home' });
-  }
-  // The project+mode parse runs AHEAD of the panel parse (DES-MERGE-001 §1.5); the
-  // `Panel` union below is untouched and still owns every side panel.
-  if (first === 'p' && second) {
-    // `/p/:projectId/chronicle` MOVED (S15c): the chronicle is the project's Sessions tab on "See
-    // everything" — parsed to it so the tab renders on the pre-redirect tick; `useMovedRoutes`
-    // replaces the address. A bare `/p/:projectId` (the project dashboard) parses the same way;
-    // its new address is the scoped Sessions tab.
-    if ((third === 'chronicle' && restEmpty(4)) || (third === '' && restEmpty(3))) {
-      return route({ panel: 'everything', projectId: safeDecode(second) });
-    }
-    // S16a-4f: `/p/:projectId/campaigns` MOVED — Testing, scoped to the project by `?project=` (the
-    // launch panel's preselect). Parsed to the Campaigns landing so it renders on the pre-redirect
-    // tick; `useMovedRoutes` replaces the address. A deeper path is a typo.
-    if (third === 'campaigns') {
-      return restEmpty(4) ? route({ panel: 'testing', testingPage: 'campaigns' }) : route({ panel: 'not-found' });
-    }
-    // S16a-4c: `/p/:pid/document[/:doc]` and `/p/:pid/video[/:run]` MOVED — a made thing opens in its
-    // session (or on the project's Made list). Parsed to "See everything" so the page renders on the
-    // pre-redirect tick; `useMovedRoutes` replaces the address (the named ones once the runs are read).
-    // S16a-4e: the shell's Chat mode MOVED — `/p/:pid/chat[/new]` starts a chat in the Desk composer
-    // (the project's @ chip), `/p/:pid/chat/:run` is the run's session.
-    if (third === 'chat') {
-      if (!restEmpty(5)) return route({ panel: 'not-found' });
-      return fourth === '' || fourth === 'new' ? route({ panel: 'home' }) : route({ panel: 'session', artifactId: `run:${safeDecode(fourth)}` });
-    }
-    if (third === 'document' || third === 'video') {
-      return restEmpty(5) ? route({ panel: 'everything', projectId: safeDecode(second) }) : route({ panel: 'not-found' });
-    }
-    // S16a-4f: the shell's Build mode MOVED with the rest of the shell — `/p/:pid/build` is the
-    // project's Sessions, `/p/:pid/build/new` the Desk composer with the project's @ chip (nothing
-    // sent), and (S16a-2d) `/p/:pid/build/:run` the run's session. Each parses to where it lands so
-    // nothing headless renders on the pre-redirect tick; `useMovedRoutes` replaces the address.
-    if (third === 'build') {
-      if (!restEmpty(5)) return route({ panel: 'not-found' });
-      if (fourth === '') return route({ panel: 'everything', projectId: safeDecode(second) });
-      if (fourth === 'new') return route({ panel: 'home' });
-      return route({ panel: 'session', artifactId: `run:${safeDecode(fourth)}` });
-    }
-    // A segment that names no move (`/p/:id/bogus`) is a dead address — not-found, never a silent
-    // swap onto the project (usability review #4).
-    return route({ panel: 'not-found' });
   }
   // `/steering/{policies,memories}` — the unified governed-knowledge surface: one page per
   // sub-section, each managing existing items AND reviewing proposals. Bare `/steering` and a
@@ -292,12 +239,8 @@ function parse(pathname: string): Route {
       campaignId: second ? safeDecode(second) : null,
     });
   }
-  // "See everything" (S15c) and the addresses that MOVED onto it — `/projects`, `/chats`, `/work`,
-  // `/execute`, `/vibe`, `/demo`, the twice-retired `/make` and the bare `/runs` listing — all parse
-  // to the page so it renders on the pre-redirect tick; `useMovedRoutes` replaces the address with
-  // the real one (carrying `?filter=` and the tab). Deeper spellings are dead addresses.
+  // "See everything" (S15c). Deeper spellings are dead addresses.
   if (first === 'everything') return restEmpty(2) ? route({ panel: 'everything' }) : route({ panel: 'not-found' });
-  if (MOVED_LISTS.has(first) && restEmpty(2)) return route({ panel: 'everything' });
   // `/s/:sessionId` (DES-STUDIO-REBUILD-001 §5.4, slice S6a): a session — a chat and the runs
   // launched from it, or one run (`run:<id>`). A real route under every skin (a route is not a skin
   // concern). The id rides in `artifactId`, never `runId`: no run-selected machinery fires here.
@@ -323,19 +266,6 @@ function parse(pathname: string): Route {
   if (first === 'repos' && second === 'new') {
     return route({ panel: 'repos', showRegisterRepo: true });
   }
-  // S16a-4e: a chat IS its session — `/chat/new` starts one in the Desk composer (parsed to home so
-  // the Desk renders on the pre-redirect tick), `/chat/:id` is the session `/s/:id`.
-  if (first === 'chat' && second === 'new' && restEmpty(3)) {
-    return route({ panel: 'home' });
-  }
-  // `/chat/:id` — a live chat SESSION's real URL (J4/C6: an opened chat is
-  // findable again). The id is the pool session's chatId, carried in
-  // `artifactId` (it is NOT a run — `runId` stays null so no run-selected
-  // machinery fires against it). the retired chat page rejoins the warm session, or says
-  // honestly that it is gone.
-  if (first === 'chat' && second) {
-    return restEmpty(3) ? route({ panel: 'session', artifactId: safeDecode(second) }) : route({ panel: 'not-found' });
-  }
   if (first === 'product') {
     return second === '' && restEmpty(2) ? route({ panel: 'product' }) : route({ panel: 'not-found' });
   }
@@ -345,19 +275,12 @@ function parse(pathname: string): Route {
   if ((PANELS as string[]).includes(first) && first !== 'runs') {
     return route({ panel: first as Panel });
   }
-  // `/runs[...]` — the run detail / launch form. ONLY `/runs` reaches these arms: a garbage
-  // top-level address is a dead address, not a run list. (The bare listing moved onto
-  // "See everything" above.)
+  // `/runs/new` (the launch form) and a run's raw `/runs/:id/events|files`. Everything else under
+  // `/runs` — the bare listing, `/runs/:id`, `/runs/:id/timeline` — is retired (X1): not-found.
   if (first === 'runs') {
     if (second === 'new') return route({ panel: 'runs', showLaunch: true });
     if (second && third === 'events') return route({ panel: 'run-events', artifactId: safeDecode(second) });
     if (second && third === 'files') return route({ panel: 'run-files', artifactId: safeDecode(second) });
-    // S16a-2d (§5.4): `/runs/:id` and `/runs/:id/timeline` MOVED to the run's session thread — parsed
-    // straight to it (no headless tick); `useMovedRoutes` replaces the address. Any other third
-    // segment is a typo now, not the run page.
-    if (second && ((third === '' && restEmpty(3)) || (third === 'timeline' && restEmpty(4)))) {
-      return route({ panel: 'session', artifactId: `run:${safeDecode(second)}` });
-    }
     return route({ panel: 'not-found' });
   }
   return route({ panel: 'not-found' });

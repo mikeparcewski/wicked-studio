@@ -51,7 +51,7 @@ import { DocDeleteConfirm } from '../DocDelete.js';
  *    row is a link.
  *  - Plain words, the Desk's palette, no KPI tile.
  */
-export function EverythingPage({ runs, runsLoaded, runsError = null, onRetryRuns, needRows, navigate, search, routeProjectId = null }: {
+export function EverythingPage({ runs, runsLoaded, runsError = null, onRetryRuns, needRows, navigate, search }: {
   runs: SessionView[];
   runsLoaded: boolean;
   runsError?: string | null;
@@ -60,11 +60,9 @@ export function EverythingPage({ runs, runsLoaded, runsError = null, onRetryRuns
   navigate: Navigate;
   /** The current `location.search` — the tab, filter, scope and kind. */
   search: string;
-  /** The project a moved `/p/:id[/chronicle]` address names, for the tick before the address is replaced. */
-  routeProjectId?: string | null;
 }): React.ReactElement {
   const q = readEverythingQuery(search);
-  const project = q.project ?? routeProjectId;
+  const project = q.project;
   const go = (path: string) => (e: React.MouseEvent): void => { e.preventDefault(); navigate(path); };
   const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const pick = (tab: EverythingTab): void => { navigate(everythingPath({ ...q, tab, project: tab === 'projects' ? null : project, filter: tab === 'projects' || q.tab === 'projects' ? 'all' : q.filter })); };

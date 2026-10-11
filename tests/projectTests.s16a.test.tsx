@@ -51,11 +51,9 @@ afterEach(() => {
   window.history.replaceState(null, '', '/');
 });
 
-describe('S16a-4f — /p/:projectId/campaigns MOVED onto Testing (?project=)', () => {
-  it('parses to the Testing landing — no project shell (useMovedRoutes replaces it)', () => {
-    expect(routeAt('/p/proj-1/campaigns')).toMatchObject({
-      panel: 'testing', testingPage: 'campaigns', runId: null, artifactId: null, showLaunch: false,
-    });
+describe('a project\'s tests live on Testing (?project=); the shell address is retired (X1)', () => {
+  it('/p/:projectId/campaigns is a dead address; the Testing landing is the real one', () => {
+    expect(routeAt('/p/proj-1/campaigns').panel).toBe('not-found');
     expect(routeAt('/p/proj-1/campaigns/x').panel).toBe('not-found');
     expect(routeAt('/testing/campaigns')).toMatchObject({ panel: 'testing', projectId: null });
   });

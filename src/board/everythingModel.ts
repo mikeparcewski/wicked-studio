@@ -16,8 +16,7 @@ import { sessionIdOf, type SessionState } from './sessionModel.js';
  * documents, pages, decks and videos across every project — what `/vibe` and `/demo` showed),
  * Helpers (the roster and each seat's sign-in), Handed over (the runs whose work left this machine
  * as a pull request or a pushed branch), and Projects (the project register). The tab, the Sessions filter, the project scope and the
- * Made kind all ride the query string, so every view is an address: deep-linkable, Back-correct, and
- * the target of the §5.4 moves (`hooks/useMovedRoutes.ts`).
+ * Made kind all ride the query string, so every view is an address: deep-linkable, Back-correct.
  */
 
 export const EVERYTHING_TABS = ['sessions', 'made', 'helpers', 'handed', 'projects'] as const;
@@ -295,8 +294,7 @@ export function readEverythingQuery(search: string): EverythingQuery {
 
 /**
  * The one spelling of a "See everything" address. Only what the caller names is written: `/everything`
- * is the Sessions tab; `everythingPath({ tab: 'sessions' })` says so in the address (the moves carry
- * the tab they land on); defaults (`filter: 'all'`, `kind: 'all'`) are never written.
+ * is the Sessions tab; `everythingPath({ tab: 'sessions' })` says so in the address; defaults (`filter: 'all'`, `kind: 'all'`) are never written.
  */
 export function everythingPath(q: Partial<EverythingQuery> = {}): string {
   const p = new URLSearchParams();

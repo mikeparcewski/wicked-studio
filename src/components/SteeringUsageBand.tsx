@@ -5,10 +5,15 @@ import { policiesPath, STEERING_TYPE_LABELS } from '../api/steering.js';
 import type { SteeringRule } from '../api/steering.js';
 import { testingPath } from '../api/testing.js';
 import type { GovernanceClaim, SessionView } from '../api/types.js';
+import { everythingPath } from '../board/everythingModel.js';
 import { governedRuns, ruleUsage, usageWindows, USAGE_WINDOW_DAYS } from '../board/steeringUsage.js';
 import { useEvalReportStore } from '../store/evalReport.js';
 import { KpiBand, StatTile } from './dashboardKit.js';
 import type { ScoreboardState } from './SteeringHealth.js';
+
+
+/** Where every "the runs" tile opens: See everything › Sessions. */
+const SESSIONS_PATH = everythingPath({ tab: 'sessions' });
 
 /**
  * The STEERING USAGE band — when/how steering was used and how well it works, on the
@@ -16,11 +21,11 @@ import type { ScoreboardState } from './SteeringHealth.js';
  *
  *  1. GATE EVALUATIONS — claims recorded this window, delta + daily sparkline
  *     (`GET /governance/claims`; the claim record IS the gateEvaluated/gateDecided fold,
- *     durably timestamped) → /work, where the evaluated runs live.
- *  2. DENIALS ISSUED — same window, bad-up delta → /work.
+ *     durably timestamped) → See everything › Sessions, where the evaluated runs live.
+ *  2. DENIALS ISSUED — same window, bad-up delta → Sessions.
  *  3. RUNS GOVERNED — % of live runs with ≥1 recorded evaluation (claim scopes name their
- *     run; joined against the one runs list) → /work.
- *  4. ALLOW / DENY — the current window's decision split → /work.
+ *     run; joined against the one runs list) → Sessions.
+ *  4. ALLOW / DENY — the current window's decision split → Sessions.
  *  5. UNUSED RULES — active rules the enforcement record never cites (per_rule evidence:
  *     denial_claims + governs_evidence == 0) → the type page holding the most, grid
  *     FILTERED to those ids (`?usage=unused`). Context names the top-fired rule.
@@ -101,8 +106,8 @@ export function SteeringUsageBand({ runs, rules, scoreboard, navigate, now }: {
         spark={windows?.spark}
         context={windows !== null ? deltaContext(windows.evaluations.previous) : claimsAbsentWord}
         title="Recorded governance claims (gate evaluations) in the window — click for the runs they governed"
-        onOpen={() => navigate('/work')}
-        href="/work"
+        onOpen={() => navigate(SESSIONS_PATH)}
+        href={SESSIONS_PATH}
       />
       <StatTile
         testId="steering-usage-denials"
@@ -113,8 +118,8 @@ export function SteeringUsageBand({ runs, rules, scoreboard, navigate, now }: {
         valueColor={windows !== null && windows.denials.current > 0 ? 'var(--status-fail)' : undefined}
         context={windows !== null ? deltaContext(windows.denials.previous) : claimsAbsentWord}
         title="Gate evaluations that decided deny — click for the runs surface"
-        onOpen={() => navigate('/work')}
-        href="/work"
+        onOpen={() => navigate(SESSIONS_PATH)}
+        href={SESSIONS_PATH}
       />
       <StatTile
         testId="steering-usage-governed"
@@ -128,8 +133,8 @@ export function SteeringUsageBand({ runs, rules, scoreboard, navigate, now }: {
             : claimsAbsentWord
         }
         title="Share of live runs with at least one recorded gate evaluation"
-        onOpen={() => navigate('/work')}
-        href="/work"
+        onOpen={() => navigate(SESSIONS_PATH)}
+        href={SESSIONS_PATH}
       />
       <StatTile
         testId="steering-usage-split"
@@ -141,8 +146,8 @@ export function SteeringUsageBand({ runs, rules, scoreboard, navigate, now }: {
             : claimsAbsentWord
         }
         title="This window's decision split — click for the runs surface"
-        onOpen={() => navigate('/work')}
-        href="/work"
+        onOpen={() => navigate(SESSIONS_PATH)}
+        href={SESSIONS_PATH}
       />
       <StatTile
         testId="steering-usage-rules"

@@ -46,7 +46,6 @@ import { usePlacePanel } from './hooks/usePlacePanel.js';
 import { altChord, setShortcutsPaletteOpen, useGlobalShortcuts } from './hooks/useGlobalShortcuts.js';
 import { useTypeToComposer } from './hooks/useTypeToComposer.js';
 import { useRetiredSettingsRedirect, useSteeringRedirect, useTestingRedirect } from './hooks/useLegacyRedirect.js';
-import { useMovedRoutes } from './hooks/useMovedRoutes.js';
 import { EverythingPage } from './components/everything/EverythingPage.js';
 import { useRoute } from './hooks/useRoute.js';
 import { useRuns } from './hooks/useRuns.js';
@@ -107,7 +106,6 @@ const DESK_COMPOSER_PX = 96;
 export function App(): React.ReactElement {
   const { panel, runId, repoId, projectId, artifactId, showLaunch, showRegisterRepo, campaignId, steeringSection, testingPage, ruleId, artifactKey, navigate, search, pathname } = useRoute();
   const { runs, refresh, loaded: runsLoaded, error: runsError } = useRuns();
-  const movedRunChatId = useCapabilities((s) => s.runChatId);
   const ingestGate = useGateStore((s) => s.ingest);
   const ingestCampaign = useCampaignsStore((s) => s.ingest);
   const ingestAnnotation = useAnnotationStore((s) => s.ingest);
@@ -190,8 +188,6 @@ export function App(): React.ReactElement {
     void useDecisionsStore.getState().load();
   }, []);
 
-  // Pre-merge bookmarks (`/runs/:id`, `/projects/:id`) redirect into the shell (§1.5).
-
   // Bare `/steering`, a legacy `/steering/:type`, the retired governance panels
   // (`/wiki`/`/rules`/`/policies`) and the retired standalone `/proposals` queue normalize onto
   // the unified surface's two sub-sections (`/steering/policies[?type=]` or `/steering/memories`).
@@ -205,11 +201,9 @@ export function App(): React.ReactElement {
   // (the nav-reorg's renamed section home; Campaigns moved into the project shell).
   useTestingRedirect(panel, testingPage, pathname, navigate);
 
-  // S15c (§5.4): the list and dashboard addresses that moved onto "See everything" — `/projects`,
-  // `/chats`, `/work`, `/execute`, `/vibe`, `/demo`, `/make`, the bare `/runs`, `/p/:id/chronicle` —
-  // are replaced with the live address; `/p/:id` goes to the project's newest session once the
-  // runs are read. Not skin-scoped: an address is not a skin concern.
-  useMovedRoutes({ panel, projectId, pathname, search, runs, runsLoaded, runsError, runChatId: movedRunChatId, navigate });
+  // X1 (operator ruling 2026-10-09): the S15c / S16a moved addresses (`/work`, `/projects`,
+  // `/runs/:id`, `/p/:id/…`, `/chat/…`, …) no longer redirect — each parses to `not-found`, which
+  // keeps the typed URL and offers the way out. Studio never generates one (tests/linksResolve).
 
   // FINDING-013: /ws has no late-join replay, so a page reloaded against a run shows an empty Burn
   // panel even though usage was durably recorded. When the selected run has no frames yet (a reload
@@ -412,13 +406,10 @@ export function App(): React.ReactElement {
         </div>
       );
     }
-    // "See everything" (`/everything`, S15c) — and the tick a moved address (`/projects`, `/work`,
-    // `/chats`, `/execute`, `/vibe`, `/demo`, the bare `/runs`, `/p/:id[/chronicle]`) spends here
-    // before `useMovedRoutes` replaces it. `/p/:id` renders the project's Sessions tab while the
-    // newest session is found; with none, that tab is where it stays.
+    // "See everything" (`/everything`, S15c): the tab, filter, project and kind ride the query.
     if (panel === 'everything') {
       // Like the Desk: the page owns its scroller (`.wk-desk-scroll`) — no clipping wrapper (main_scroll).
-      return <EverythingPage runs={runs} runsLoaded={runsLoaded} runsError={runsError} onRetryRuns={refresh} needRows={needRows} navigate={navigate} search={search} routeProjectId={projectId} />;
+      return <EverythingPage runs={runs} runsLoaded={runsLoaded} runsError={runsError} onRetryRuns={refresh} needRows={needRows} navigate={navigate} search={search} />;
     }
     // Wave 1 ("raw in one step"): a run's raw event JSON / worktree files as routes — the
     // palette's `>events <run>` / `>files <run>` verbs land here, and Back returns.

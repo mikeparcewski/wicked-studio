@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import type { Project, RepoEntry, SessionView } from '../api/types.js';
+import { everythingPath } from '../board/everythingModel.js';
 import { gateOpenPath } from '../board/gateActions.js';
 import {
   graphReady, matchesRepoChip, repoFleetModels, type OnboardState, type RepoChip, type RepoFleetModel,
@@ -404,12 +405,8 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
     gapNeverN > 0 ? `${gapNeverN} never onboarded` : null,
   ].filter((w): w is string => w !== null);
 
-  /** The gate jump: the run's thread AT the gate when its project is known;
-   *  the flat run detail (where the approval dock lives) when unfiled. */
-  const gateJump = (id: string): string => {
-    const pid = projectIdByRun[id];
-    return pid !== undefined ? gateOpenPath(pid, id) : `/runs/${encodeURIComponent(id)}`;
-  };
+  /** The gate jump: the run's session thread AT the gate (filed or not). */
+  const gateJump = (id: string): string => gateOpenPath(projectIdByRun[id] ?? '', id);
 
   // ── Filtering ────────────────────────────────────────────────────────────────
   const q = search.trim().toLowerCase();
@@ -496,9 +493,9 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
                 delta={runsDelta}
                 context={deltaWord(range, runsDelta)}
                 spark={runSpark}
-                title="Runs touching a repo in the window — open the Work list"
-                href="/work"
-                onOpen={() => navigate('/work')}
+                title="Runs touching a repo in the window — open See everything › Sessions"
+                href={everythingPath({ tab: 'sessions' })}
+                onOpen={() => navigate(everythingPath({ tab: 'sessions' }))}
               />
             </KpiGroup>
             <KpiGroup label="Pipeline" grow={2}>

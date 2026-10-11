@@ -20,7 +20,6 @@ import { useRoster } from '../hooks/useRoster.js';
 import { setCachedWorkflows } from '../store/workflowCache.js';
 import { runShortId } from './runIdentity.js';
 import { AnswerInThread, useGateCleared } from './AnswerInThread.js';
-import { sessionPath } from '../board/sessionModel.js';
 
 /**
  * The testing LAUNCH panel — "New test" runs the GOVERNED `qe-author-tests` workflow (wave 6:
@@ -349,7 +348,7 @@ export function TestingLaunchPanel({ intent, navigate, onClose, onLaunched, init
       type="button"
       data-testid="testing-launch-fanout-run"
       data-run-id={id}
-      onClick={() => navigate(`/runs/${encodeURIComponent(id)}`)}
+      onClick={() => navigate(sessionPath(`run:${id}`))}
       className="font-mono text-[10px] underline"
       style={{ color: 'var(--accent)' }}
     >
