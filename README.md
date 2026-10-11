@@ -58,7 +58,8 @@ reasoning in a scrollback you'll never read. wicked-studio flips that:
 - **Steer runs live** — the Desk (the one shell) puts what needs you first; every run or chat
   opens as a **session** (`/s/:id`): one thread with the live record, gate rows you answer in place
   (approve / steer / reject), elicitation prompts, pre-gate guidance notes, and lifecycle controls
-  (cancel, inject a message, retry). Old `/runs/:id` links redirect to the session.
+  (cancel, inject a message, retry). The pre-session addresses (`/runs/:id`, `/work`, `/p/:id/…`,
+  `/chat/…`) were retired and show the not-found page.
 - **See the evidence** — per-step transcripts, a worktree file + diff viewer, and one-click
   evidence-bundle download for any run.
 - **Explore your codebase** — graph view with focus navigation, blast radius, hotspots, and the

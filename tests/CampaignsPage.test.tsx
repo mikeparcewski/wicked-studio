@@ -234,7 +234,7 @@ describe('the KPI band — folds from the wire fixtures, ≤6 tiles under the th
     page(navigate, [view('run-g', 'awaiting_human')]);
     await screen.findByTestId('campaigns-kpis');
     fireEvent.click(screen.getByTestId('stat-campaign-gates'));
-    expect(navigate).toHaveBeenCalledWith('/runs/run-g');
+    expect(navigate).toHaveBeenCalledWith('/s/run%3Arun-g');
   });
 });
 
@@ -287,7 +287,7 @@ describe('the cards — scoreboard stats condensed, needs-you FIRST', () => {
     const badge = within(card).getByTestId('campaign-needs-you');
     expect(badge.dataset.runId).toBe('run-w');
     fireEvent.click(badge);
-    expect(navigate).toHaveBeenCalledWith('/runs/run-w');
+    expect(navigate).toHaveBeenCalledWith('/s/run%3Arun-w');
   });
 });
 
@@ -317,7 +317,7 @@ describe('the delivery rollup on the card (#27) — wire facts, gated links, str
     const stranded = within(card).getByTestId('campaign-card-stranded');
     expect(stranded.textContent).toContain('stranded · 1');
     fireEvent.click(stranded);
-    expect(navigate).toHaveBeenCalledWith('/runs/r-str');
+    expect(navigate).toHaveBeenCalledWith('/s/run%3Ar-str');
   });
 
   it('a pre-0.19 campaign renders NO rollup line — absence, never a fabricated "0 of N"', async () => {
@@ -405,7 +405,7 @@ describe('ad-hoc groups (#27) — grouped runs render together on this dashboard
     const links = within(card).getAllByTestId('campaign-card-run');
     expect(links).toHaveLength(2);
     fireEvent.click(links[1]!);
-    expect(navigate).toHaveBeenCalledWith('/runs/g-2');
+    expect(navigate).toHaveBeenCalledWith('/s/run%3Ag-2');
   });
 
   it('groups and campaigns share ONE grid and ONE search', async () => {

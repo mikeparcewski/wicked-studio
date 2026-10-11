@@ -6,7 +6,7 @@ import { UNFILED_MOUNT } from '../api/interactive.js';
 import { fetchReposCached, getCachedRepos } from '../store/repoCache.js';
 import { fuzzyMatch, type FuzzyResult } from '../palette/fuzzy.js';
 import { runTargetHits } from '../palette/runTargets.js';
-import { projectPath, type Navigate } from '../hooks/useRoute.js';
+import type { Navigate } from '../hooks/useRoute.js';
 import type { ShortcutEntry } from '../hooks/useGlobalShortcuts.js';
 import { useMembershipStore } from '../store/membership.js';
 import { useLiveChatsStore } from '../store/liveChats.js';
@@ -510,7 +510,7 @@ export function CommandPalette({
         group: 'projects',
         label: p.name,
         context: 'project',
-        href: projectPath(p.id),
+        href: everythingPath({ tab: 'sessions', project: p.id }),
         rank: i,
       }),
     );

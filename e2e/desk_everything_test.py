@@ -1,18 +1,16 @@
 #!/usr/bin/env python3
 """
-desk_everything_test.py — "SEE EVERYTHING" and the §5.4 moves (DES-STUDIO-REBUILD-001 §5.4, slice
-S15c) at 1440x700 on the Desk.
+desk_everything_test.py — "SEE EVERYTHING" (DES-STUDIO-REBUILD-001 §5.4, slice S15c) and the
+retired §5.4 moves (X1, operator ruling 2026-10-09) at 1440x700 on the Desk.
 
 Against the in-process fixture (wave-1 + wave-2b corpus: alpha/beta/gamma with runs, one failed):
 
   1. THE PAGE: /everything renders five tabs — Sessions, Everything made, Helpers, Handed over, Projects — the
      tab is the address (?tab=), and the Sessions tab lists every session grouped by project.
-  2. THE MOVES (replace, never push): /projects → /everything; /work?filter=failed →
-     /everything?tab=sessions&filter=failed with the Blocked filter pressed and only blocked sessions
-     shown; /chats and /execute → the Sessions tab; /vibe → made, documents; /demo → made, videos;
-     /p/beta/chronicle → the Sessions tab scoped to beta; /runs (bare) → the Sessions tab.
-     None leaves a history entry: Back from the landing returns to where the operator came from.
-  3. /p/:id → the project's scoped Sessions tab, including a project with nothing started.
+  2. THE RETIRED MOVES: /projects, /work?filter=failed, /chats, /execute, /runs, /vibe, /demo,
+     /p/beta/chronicle and /p/alpha each show the not-found page with the typed address kept (no
+     redirect); /everything?tab=sessions&filter=failed presses Blocked and shows only blocked sessions.
+  3. ?project= scopes the Sessions tab, including a project with nothing started.
   4. HELPERS: the roster, one row per seat; the signed-out seat offers "Sign in →" which opens the
      sign-in panel (desk_signin proves the panel).
   5. The Desk's "See everything →" opens /everything. 0 page errors.
@@ -106,55 +104,34 @@ with sync_playwright() as p:
     page.get_by_test_id("everything-handed").wait_for(state="visible", timeout=5000)
     check("tabs-are-addresses", address(page) == "/everything?tab=handed", address=address(page))
 
-    # ── 2. the moves ──────────────────────────────────────────────────────────────
-    MOVES = [
-        ("/projects", "/everything", "sessions", None, None),
-        ("/work?filter=failed", "/everything?tab=sessions&filter=failed", "sessions", "failed", None),
-        ("/chats", "/everything?tab=sessions", "sessions", None, None),
-        ("/execute", "/everything?tab=sessions", "sessions", None, None),
-        ("/runs", "/everything?tab=sessions", "sessions", None, None),
-        ("/vibe", "/everything?tab=made&kind=documents", "made", None, "documents"),
-        ("/demo", "/everything?tab=made&kind=videos", "made", None, "videos"),
-        ("/p/beta/chronicle", "/everything?tab=sessions&project=beta", "sessions", None, None),
-    ]
+    # ── 2. the retired moves are dead addresses: not-found, the typed address kept ──
+    RETIRED = ["/projects", "/work?filter=failed", "/chats", "/execute", "/runs", "/vibe", "/demo",
+               "/p/beta/chronicle", "/p/alpha"]
     results = []
-    for old, new, tab, filt, kind in MOVES:
-        # Arrive from the Desk so Back has somewhere honest to go.
-        page.goto(f"{origin}/", wait_until="networkidle")
-        page.get_by_test_id("desk").wait_for(state="visible", timeout=15000)
-        page.evaluate("u => history.pushState({}, '', u)", old)
-        page.evaluate("() => dispatchEvent(new PopStateEvent('popstate'))")
+    for old in RETIRED:
+        page.goto(f"{origin}{old}", wait_until="networkidle")
         try:
-            page.wait_for_function("to => location.pathname + location.search === to", arg=new, timeout=5000)
+            page.get_by_test_id("not-found").wait_for(state="visible", timeout=10000)
         except Exception:
             results.append({"old": old, "ok": False, "landed": address(page)})
             continue
-        page.wait_for_timeout(250)
-        st = page.evaluate(PAGE)
-        ok = (st["present"] and st["selected"] == tab and not st["notFound"]
-              and (filt is None or (st["pressed"] == filt and st["states"] and all(x == "blocked" for x in st["states"])))
-              and (kind is None or st["kind"] == kind)
-              and (old != "/p/beta/chronicle" or st["project"] == "beta" and st["groups"] == ["beta"]))
-        # Replaced, not pushed: Back leaves the page for where the operator came from (the Desk).
-        page.go_back()
-        page.wait_for_timeout(300)
-        back = page.evaluate("() => location.pathname")
-        results.append({"old": old, "ok": ok and back == "/", "landed": address(page) if not ok else new, "back": back,
-                        "pressed": st["pressed"], "states": st["states"][:4], "kind": st["kind"], "project": st["project"]})
+        shown = page.get_by_test_id("not-found-path").inner_text().strip()
+        results.append({"old": old, "ok": address(page) == old and shown == old.split("?")[0], "landed": address(page), "shown": shown})
     page.screenshot(path=str(SHOTS / "desk-everything-moved.png"))
-    check("moves", all(r["ok"] for r in results), results=results)
+    check("retired-moves", all(r["ok"] for r in results), results=results)
+    page.goto(f"{origin}/everything?tab=sessions&filter=failed", wait_until="networkidle")
+    page.get_by_test_id("everything").wait_for(state="visible", timeout=10000)
+    page.wait_for_timeout(250)
+    st = page.evaluate(PAGE)
+    check("filter-is-an-address", st["selected"] == "sessions" and st["pressed"] == "failed" and st["states"]
+          and all(x == "blocked" for x in st["states"]), pressed=st["pressed"], states=st["states"][:4])
 
-    # ── 3. /p/:id → the project's scoped Sessions tab ────────────────────────────
-    page.goto(f"{origin}/p/alpha", wait_until="networkidle")
-    page.wait_for_function("() => new URLSearchParams(location.search).get('project') === 'alpha'", timeout=10000)
+    # ── 3. ?project= → the project's scoped Sessions tab ─────────────────────────
+    page.goto(f"{origin}/everything?tab=sessions&project=alpha", wait_until="networkidle")
     page.get_by_test_id("everything-project-header").wait_for(state="visible", timeout=10000)
     check("project-to-sessions-tab", address(page) == "/everything?tab=sessions&project=alpha", landed=address(page))
-    page.goto(f"{origin}/p/gamma", wait_until="networkidle")
-    page.wait_for_function("() => new URLSearchParams(location.search).get('project') === 'gamma'", timeout=10000)
-    check("project-to-sessions-tab-other", address(page) == "/everything?tab=sessions&project=gamma", landed=address(page))
-    page.goto(f"{origin}/p/nothing-here", wait_until="networkidle")
+    page.goto(f"{origin}/everything?tab=sessions&project=nothing-here", wait_until="networkidle")
     page.get_by_test_id("everything").wait_for(state="visible", timeout=10000)
-    page.wait_for_function("() => new URLSearchParams(location.search).get('project') === 'nothing-here'", timeout=10000)
     empty = page.get_by_test_id("everything-empty").inner_text()
     check("project-without-sessions", "Nothing has been started in this project yet" in empty, text=empty, address=address(page))
 

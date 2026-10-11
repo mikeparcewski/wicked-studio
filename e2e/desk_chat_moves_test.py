@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
 """
 desk_chat_moves_test.py — S16a-4e: a chat IS its session, and a new chat starts in the Desk
-composer. At 1440x700 on the Desk, against the in-process fixture.
+composer. X1 (operator ruling 2026-10-09): the old chat addresses no longer redirect. At 1440x700
+on the Desk, against the in-process fixture.
 
-  1. NEW: /chat/new lands on `/` with the Desk composer focused; nothing is POSTed.
-  2. PROJECT: /p/upload-endpoint/chat lands on `/` with the project's `@` chip; nothing is POSTed.
+  1. RETIRED: /chat/new, /p/upload-endpoint/chat, /chat/<id> and /p/upload-endpoint/chat/r-pay-2
+     each show the not-found page with the typed address kept; nothing is POSTed.
   3. FIRST SEND: the Desk send opens exactly ONE chat (POST /chats) and one message.
-  4. CHAT ADDRESS: /chat/<id>?q=1#t lands on /s/<id>?q=1#t (history replaced: Back never re-enters
-     /chat/<id>); a reply from the session composer posts to THAT chat — one POST
-     /chats/<id>/messages, no second POST /chats.
-  5. CHAT RUN: /p/upload-endpoint/chat/r-pay-2 lands on /s/run%3Ar-pay-2.
+  4. CHAT ADDRESS: /s/<id>?q=1#t is the chat's session; a reply from the session composer posts to
+     THAT chat — one POST /chats/<id>/messages, no second POST /chats.
   6. 0 page errors.
 
 The needs-you stalled-chat row's link (`/s/<chat>`) is pinned in tests/needsYou.test.ts: the
@@ -74,34 +73,22 @@ with sync_playwright() as p:
         f"s.textContent = {json.dumps(HIDE_GATE_TOASTS)}; document.head.appendChild(s); }});")
     set_fixture(origin, repo=True, chat_scope=True, chat_transcripts=True, sessions=True)
 
-    # ── 1. /chat/new → the Desk composer, focused ─────────────────────────────────────
-    page.goto(f"{origin}/chat/new", wait_until="networkidle")
-    try:
-        page.wait_for_function("() => location.pathname === '/'", timeout=15000)
-        page.wait_for_function(FOCUSED, timeout=10000)
-    except Exception as e:  # noqa: BLE001
-        page.screenshot(path=str(SHOTS / "desk-chat-moves-new-miss.png"))
-        fail("new-chat-desk", str(e))
-    page.wait_for_timeout(500)
-    page.screenshot(path=str(SHOTS / "desk-chat-moves-new.png"))
-    check("new-chat-desk", chat_posts(posts) == {"opens": [], "sends": []}, posts=posts)
-
-    # ── 2. /p/<pid>/chat → the Desk composer with the project's chip ──────────────────
-    page.goto(f"{origin}/p/{PID}/chat", wait_until="networkidle")
-    try:
-        page.wait_for_function("() => location.pathname === '/'", timeout=15000)
-        page.locator(CHIP).first.wait_for(timeout=10000)
-    except Exception as e:  # noqa: BLE001
-        page.screenshot(path=str(SHOTS / "desk-chat-moves-chip-miss.png"))
-        fail("project-chat-chip", str(e))
-    chip = page.locator(CHIP).first
-    page.screenshot(path=str(SHOTS / "desk-chat-moves-chip.png"))
-    check("project-chat-chip", chip.get_attribute("data-key") == f"project:{PID}"
-          and chat_posts(posts) == {"opens": [], "sends": []}, key=chip.get_attribute("data-key"), posts=posts)
+    # ── 1. the retired chat addresses are dead: not-found, the typed address kept ─────
+    for step, path in (("retired-chat-new", "/chat/new"), ("retired-project-chat", f"/p/{PID}/chat"),
+                       ("retired-chat-id", "/chat/chat-pay"), ("retired-chat-run", f"/p/{PID}/chat/r-pay-2")):
+        page.goto(f"{origin}{path}", wait_until="networkidle")
+        try:
+            page.get_by_test_id("not-found").wait_for(timeout=15000)
+        except Exception as e:  # noqa: BLE001
+            page.screenshot(path=str(SHOTS / f"desk-chat-moves-{step}-miss.png"))
+            fail(step, f"{e} at {page.url}")
+        check(step, urllib.parse.urlparse(page.url).path == path
+              and page.get_by_test_id("not-found-path").inner_text().strip() == path
+              and chat_posts(posts) == {"opens": [], "sends": []}, url=page.url, posts=posts)
+    page.screenshot(path=str(SHOTS / "desk-chat-moves-retired.png"))
 
     # ── 3. the first send opens one chat ───────────────────────────────────────────────
-    page.goto(f"{origin}/chat/new", wait_until="networkidle")
-    page.wait_for_function("() => location.pathname === '/'", timeout=15000)
+    page.goto(f"{origin}/", wait_until="networkidle")
     composer = page.get_by_test_id("desk-composer-input")
     composer.wait_for(timeout=15000)
     composer.fill("summarize the last 10 commits as release notes")
@@ -117,22 +104,12 @@ with sync_playwright() as p:
     check("first-send", chat_id not in ("", "new") and len(first["opens"]) == 1 and len(first["sends"]) == 1,
           chat=chat_id, **first)
 
-    # ── 4. /chat/<id> → its session; a reply goes to that chat ──────────────────────────
-    page.goto(f"{origin}/everything?tab=sessions", wait_until="networkidle")
+    # ── 4. /s/<id> is the chat's session; a reply goes to that chat ────────────────────
     posts.clear()
-    page.goto(f"{origin}/chat/{urllib.parse.quote(chat_id)}?q=1#t", wait_until="networkidle")
-    try:
-        page.wait_for_function(f"() => location.pathname === {json.dumps('/s/' + urllib.parse.quote(chat_id))}", timeout=15000)
-    except Exception as e:  # noqa: BLE001
-        page.screenshot(path=str(SHOTS / "desk-chat-moves-session-miss.png"))
-        fail("chat-is-its-session", f"{e} at {page.url}")
+    page.goto(f"{origin}/s/{urllib.parse.quote(chat_id)}?q=1#t", wait_until="networkidle")
     landed = urllib.parse.urlparse(page.url)
-    page.go_back(wait_until="networkidle")
-    page.wait_for_timeout(400)
-    back = urllib.parse.urlparse(page.url).path
-    check("chat-is-its-session", landed.query == "q=1" and landed.fragment == "t" and back == "/everything",
-          landed=landed.geturl(), back=back)
-    page.go_forward(wait_until="networkidle")
+    check("chat-is-its-session", landed.path == "/s/" + urllib.parse.quote(chat_id) and landed.query == "q=1"
+          and landed.fragment == "t" and page.get_by_test_id("not-found").count() == 0, landed=landed.geturl())
     reply = page.get_by_test_id("session-composer-input")
     try:
         reply.wait_for(timeout=15000)
@@ -147,14 +124,6 @@ with sync_playwright() as p:
     want_send = f"/api/v1/chats/{urllib.parse.quote(chat_id)}/messages"
     check("reply-goes-to-the-chat", got["opens"] == [] and len(got["sends"]) == 1
           and urllib.parse.urlparse(got["sends"][0]).path == want_send, want=want_send, **got)
-
-    # ── 5. the shell's chat-run address → the run's session ────────────────────────────
-    page.goto(f"{origin}/p/{PID}/chat/r-pay-2", wait_until="networkidle")
-    try:
-        page.wait_for_function("() => location.pathname === '/s/run%3Ar-pay-2'", timeout=15000)
-    except Exception as e:  # noqa: BLE001
-        fail("chat-run-session", f"{e} at {page.url}")
-    check("chat-run-session", page.get_by_test_id("not-found").count() == 0, url=page.url)
 
     check("no-errors", not errors, errors=errors[:5])
     browser.close()

@@ -112,9 +112,9 @@ with sync_playwright() as p:
     old.wait_for(state="detached")
     check("archived-lens", any(x.get("status") == "active" for x in patches), patches=patches)
 
-    page.goto(f"{origin}/p/legacy-spike", wait_until="networkidle")
+    page.goto(f"{origin}/everything?tab=sessions&project=legacy-spike", wait_until="networkidle")
     page.get_by_test_id("everything-project-header").wait_for(timeout=10000)
-    check("p-id-move", address(page) == "/everything?tab=sessions&project=legacy-spike"
+    check("project-sessions", address(page) == "/everything?tab=sessions&project=legacy-spike"
           and page.locator('[data-testid="everything-group"][data-project-id="legacy-spike"]').count() == 1,
           landed=address(page))
     check("page-errors", not errors, errors=errors)

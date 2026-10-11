@@ -7,6 +7,7 @@ import {
   unattributedTestSets,
   type CampaignCardModel, type CampaignChip,
 } from '../board/campaignStats.js';
+import { everythingPath } from '../board/everythingModel.js';
 import { recentActivity } from '../board/homeActivity.js';
 import { api } from '../api/client.js';
 import { sessionPath } from '../board/sessionModel.js';
@@ -186,7 +187,7 @@ function CampaignCard({ m, narration, navigate }: {
                 : 'A sibling run is waiting on you'}
             onClick={(e) => {
               e.stopPropagation();
-              if (firstWaiting !== null) navigate(`/runs/${encodeURIComponent(firstWaiting)}`);
+              if (firstWaiting !== null) navigate(sessionPath(`run:${firstWaiting}`));
               else if (isCampaign) navigate(campaignPath(m.id));
             }}
             style={{
@@ -258,7 +259,7 @@ function CampaignCard({ m, narration, navigate }: {
               title={`Finished, but the work is stranded in its worktree — no PR: ${m.rollup.stranded.map((s) => s.label).join(', ')}. Open the run to lift it.`}
               onClick={(e) => {
                 e.stopPropagation();
-                navigate(`/runs/${encodeURIComponent(m.rollup.stranded[0]!.runId)}`);
+                navigate(sessionPath(`run:${m.rollup.stranded[0]!.runId}`));
               }}
               style={{
                 cursor: 'pointer', flexShrink: 0,
@@ -347,7 +348,7 @@ function CampaignCard({ m, narration, navigate }: {
                     data-run-id={t.run_id}
                     data-plan={t.plan}
                     title="The PLAN the author phase wrote — open the run; its Files view reads the run branch"
-                    onClick={(e) => { e.stopPropagation(); navigate(`/runs/${encodeURIComponent(t.run_id)}`); }}
+                    onClick={(e) => { e.stopPropagation(); navigate(sessionPath(`run:${t.run_id}`)); }}
                     style={{
                       ...CARD_STAT, color: S.muted, textDecoration: 'underline', cursor: 'pointer',
                       background: 'transparent', border: 'none', padding: 0,
@@ -402,7 +403,7 @@ function CampaignCard({ m, narration, navigate }: {
                 type="button"
                 data-testid="campaign-card-run"
                 data-run-id={r.runId}
-                onClick={(e) => { e.stopPropagation(); navigate(`/runs/${encodeURIComponent(r.runId)}`); }}
+                onClick={(e) => { e.stopPropagation(); navigate(sessionPath(`run:${r.runId}`)); }}
                 style={{ ...CARD_STAT, color: S.muted, textDecoration: 'underline', cursor: 'pointer' }}
               >
                 {runShortId(r.runId)}
@@ -523,6 +524,10 @@ export function CampaignsPage({ runs, navigate, projectId = null, launchIntent =
     [buckets],
   );
   const firstWaiting = memberRuns.find((v) => v.session.status === 'awaiting_human')?.session.id ?? null;
+  const waitingHref = firstWaiting !== null ? sessionPath(`run:${firstWaiting}`) : null;
+  const sessionsHref = everythingPath({ tab: 'sessions' });
+  const activeSessionsHref = everythingPath({ tab: 'sessions', filter: 'active' });
+  const failedSessionsHref = everythingPath({ tab: 'sessions', filter: 'failed' });
   const passHealth = passRateHealth(totals.landed, totals.terminal);
 
   // ── The card models (needs-you first; campaigns and groups, one sorted set) ──
@@ -720,9 +725,9 @@ export function CampaignsPage({ runs, navigate, projectId = null, launchIntent =
             value={buckets.current.length}
             delta={runsDelta}
             context={deltaWord(range, runsDelta)}
-            title="Test-member runs in the window — open the Work list"
-            href="/work"
-            onOpen={() => navigate('/work')}
+            title="Test-member runs in the window — open the sessions list"
+            href={sessionsHref}
+            onOpen={() => navigate(sessionsHref)}
           />
         </KpiGroup>
         <KpiGroup label="Pipeline" grow={2}>
@@ -731,9 +736,9 @@ export function CampaignsPage({ runs, navigate, projectId = null, launchIntent =
             label="Running"
             value={totals.running}
             context="right now"
-            title="Test runs moving under their own power — open the Work list"
-            href="/work?filter=active"
-            onOpen={() => navigate('/work?filter=active')}
+            title="Test runs moving under their own power — open the sessions list"
+            href={activeSessionsHref}
+            onOpen={() => navigate(activeSessionsHref)}
           />
           <StatTile
             testId="stat-campaign-gates"
@@ -744,9 +749,9 @@ export function CampaignsPage({ runs, navigate, projectId = null, launchIntent =
             title={firstWaiting !== null
               ? 'A sibling run is waiting on you — jump to its approval dock'
               : 'Runs waiting on a human — filter the grid to them'}
-            {...(firstWaiting !== null ? { href: `/runs/${encodeURIComponent(firstWaiting)}` } : {})}
+            {...(waitingHref !== null ? { href: waitingHref } : {})}
             onOpen={() => {
-              if (firstWaiting !== null) navigate(`/runs/${encodeURIComponent(firstWaiting)}`);
+              if (waitingHref !== null) navigate(waitingHref);
               else setChip('needs-you');
             }}
           />
@@ -760,9 +765,9 @@ export function CampaignsPage({ runs, navigate, projectId = null, launchIntent =
             delta={failedDelta}
             deltaSense="bad-up"
             context={deltaWord(range, failedDelta)}
-            title="Failed test runs in the window — open them on the Work list"
-            href="/work?filter=failed"
-            onOpen={() => navigate('/work?filter=failed')}
+            title="Failed test runs in the window — open them on the sessions list"
+            href={failedSessionsHref}
+            onOpen={() => navigate(failedSessionsHref)}
           />
           <StatTile
             testId="stat-campaign-pass-rate"

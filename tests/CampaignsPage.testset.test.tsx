@@ -114,7 +114,7 @@ describe('the card — the produced set off the top-level test_sets (F-7R2-014)'
     const navigate = vi.fn();
     const card = await landing(w6Listing(), RUNS, navigate);
     fireEvent.click(within(card).getByTestId('campaign-card-testset-plan'));
-    expect(navigate).toHaveBeenCalledWith(`/runs/${W6_RUN}`);
+    expect(navigate).toHaveBeenCalledWith(`/s/run%3A${W6_RUN}`);
   });
 
   it("joins by LABEL too: a set tagged with the group's qe-tests-<repo> label lands on the card even when its run is not on the member list", async () => {

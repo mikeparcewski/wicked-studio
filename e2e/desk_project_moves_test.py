@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
 desk_project_moves_test.py — S16a-4f: the project shell's Build view and its project Tests view
-moved onto the Desk. At 1440x700 on the Desk, against the in-process fixture.
+live on the Desk. X1 (operator ruling 2026-10-09): the shell addresses no longer redirect. At
+1440x700 on the Desk, against the in-process fixture.
 
-  1. BUILD: /p/<pid>/build lands on /everything?tab=sessions&project=<pid> with the project header;
-     Back never re-enters /p/<pid>/build.
-  2. NEW BUILD: /p/<pid>/build/new lands on `/` with the Desk composer and the project's `@` chip;
-     nothing is POSTed (no run, no chat).
-  3. TESTS: /p/<pid>/campaigns lands on /testing/campaigns?project=<pid>; "New test" opens the launch
-     panel with the project preselected.
+  1. RETIRED: /p/<pid>, /p/<pid>/build, /p/<pid>/build/new and /p/<pid>/campaigns each show the
+     not-found page with the typed address kept; nothing is POSTed (no run, no chat).
+  2. SESSIONS: /everything?tab=sessions&project=<pid> shows the project header.
+  3. TESTS: /testing/campaigns?project=<pid>; "New test" opens the launch panel with the project
+     preselected.
   4. NO SHELL LINKS: no anchor on the Desk, a session or Everything (sessions, made, projects) has
      an href under /p/<pid>/.
   5. 0 page errors.
@@ -53,7 +53,7 @@ SHOTS.mkdir(parents=True, exist_ok=True)
 errors: list[str] = []
 CHIP = '[data-testid="composer"][data-composer="desk"] [data-testid="composer-chip"][data-kind="project"]'
 SHELL_LINKS = """() => [...document.querySelectorAll('a[href]')].map(a => a.getAttribute('href'))
-  .filter(h => /^\\/p\\/[^/]+\\/./.test(h))"""
+  .filter(h => /^\\/p\\//.test(h))"""
 
 with sync_playwright() as p:
     browser = p.chromium.launch()
@@ -66,42 +66,35 @@ with sync_playwright() as p:
         f"s.textContent = {json.dumps(HIDE_GATE_TOASTS)}; document.head.appendChild(s); }});")
     set_fixture(origin, sessions=True, governed_testing=True)
 
-    # ── 1. /p/<pid>/build → the project's Sessions ──────────────────────────────────
-    page.goto(f"{origin}/watch", wait_until="networkidle")
-    page.goto(f"{origin}/p/{PID}/build", wait_until="networkidle")
+    # ── 1. the retired shell addresses are dead: not-found, the typed address kept ─────
+    for step, path in (("retired-project", f"/p/{PID}"), ("retired-build", f"/p/{PID}/build"),
+                       ("retired-build-new", f"/p/{PID}/build/new"), ("retired-campaigns", f"/p/{PID}/campaigns")):
+        posts.clear()
+        page.goto(f"{origin}{path}", wait_until="networkidle")
+        try:
+            page.get_by_test_id("not-found").wait_for(timeout=15000)
+        except Exception as e:  # noqa: BLE001
+            page.screenshot(path=str(SHOTS / f"desk-project-moves-{step}-miss.png"))
+            fail(step, f"{e} at {page.url}")
+        sent = [u for u in posts if urllib.parse.urlparse(u).path in ("/api/v1/runs", "/api/v1/chats") or u.endswith("/messages")]
+        check(step, urllib.parse.urlparse(page.url).path == path
+              and page.get_by_test_id("not-found-path").inner_text().strip() == path and sent == [],
+              url=page.url, sent=sent)
+    page.screenshot(path=str(SHOTS / "desk-project-moves-retired.png"))
+
+    # ── 2. the project's Sessions live on See everything ─────────────────────────────
+    page.goto(f"{origin}/everything?tab=sessions&project={PID}", wait_until="networkidle")
     try:
-        page.wait_for_function("() => location.pathname === '/everything'", timeout=15000)
         page.get_by_test_id("everything-project-header").wait_for(timeout=10000)
     except Exception as e:  # noqa: BLE001
         page.screenshot(path=str(SHOTS / "desk-project-moves-build-miss.png"))
-        fail("build-is-sessions", f"{e} at {page.url}")
-    q = urllib.parse.parse_qs(urllib.parse.urlparse(page.url).query)
+        fail("project-sessions", f"{e} at {page.url}")
     page.screenshot(path=str(SHOTS / "desk-project-moves-build.png"))
-    page.go_back(wait_until="networkidle")
-    page.wait_for_timeout(300)
-    back = urllib.parse.urlparse(page.url).path
-    check("build-is-sessions", q.get("tab") == ["sessions"] and q.get("project") == [PID] and back == "/watch",
-          query=q, back=back)
+    check("project-sessions", True)
 
-    # ── 2. /p/<pid>/build/new → the Desk composer with the chip, nothing sent ──────────
-    posts.clear()
-    page.goto(f"{origin}/p/{PID}/build/new", wait_until="networkidle")
+    # ── 3. /testing/campaigns?project=<pid> → the project preselected ─────────────────
+    page.goto(f"{origin}/testing/campaigns?project={urllib.parse.quote(PID)}", wait_until="networkidle")
     try:
-        page.wait_for_function("() => location.pathname === '/'", timeout=15000)
-        page.locator(CHIP).first.wait_for(timeout=10000)
-    except Exception as e:  # noqa: BLE001
-        page.screenshot(path=str(SHOTS / "desk-project-moves-new-miss.png"))
-        fail("new-build-desk-chip", f"{e} at {page.url}")
-    page.wait_for_timeout(800)
-    page.screenshot(path=str(SHOTS / "desk-project-moves-new.png"))
-    sent = [u for u in posts if urllib.parse.urlparse(u).path in ("/api/v1/runs", "/api/v1/chats") or u.endswith("/messages")]
-    check("new-build-desk-chip", page.locator(CHIP).first.get_attribute("data-key") == f"project:{PID}" and sent == [],
-          key=page.locator(CHIP).first.get_attribute("data-key"), sent=sent)
-
-    # ── 3. /p/<pid>/campaigns → Testing, the project preselected ──────────────────────
-    page.goto(f"{origin}/p/{PID}/campaigns", wait_until="networkidle")
-    try:
-        page.wait_for_function("() => location.pathname === '/testing/campaigns'", timeout=15000)
         page.get_by_test_id("testing-campaign-open").wait_for(timeout=15000)
     except Exception as e:  # noqa: BLE001
         page.screenshot(path=str(SHOTS / "desk-project-moves-tests-miss.png"))

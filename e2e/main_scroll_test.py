@@ -52,7 +52,8 @@ CORPUS = {"home_runs": True, "trust_rules": True, "project_dto": True, "reset_ho
           "gate_move": True, "repo": True, "appearance": {**DEFAULT_APPEARANCE}}
 
 # Every top-level page the rail and the palette reach, plus a run paused at a tall gate card.
-PAGES = ["/work", "/execute", "/vibe", "/demo", "/projects", "/chats", "/repos", "/skills",
+PAGES = ["/everything?tab=sessions", "/everything?tab=made&kind=documents", "/everything?tab=made&kind=videos",
+         "/everything?tab=projects", "/repos", "/skills",
          "/steering/dashboard", "/testing/evals", "/testing/campaigns", "/system", "/theme", "/workflows",
          "/runs/new", "/s/run%3Ar-review"]
 

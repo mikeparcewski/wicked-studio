@@ -89,12 +89,11 @@ with sync_playwright() as p:
         "document.addEventListener('DOMContentLoaded', () => { const s = document.createElement('style'); "
         f"s.textContent = {json.dumps(HIDE_GATE_TOASTS)}; document.head.appendChild(s); }});")
 
-    # S16a-4e: a new chat starts in the Desk composer (`/chat/new` lands there); the send opens the
+    # S16a-4e: a new chat starts in the Desk composer (`/`); the send opens the
     # chat, and the chat IS its session (/s/<chat>), whose thread wears the daemon's verdicts. The
     # fixture keeps the daemon's stored transcript (`chat_transcripts`), as GET /chats/:id answers.
     set_fixture(origin, repo=True, chat_scope=True, chat_transcripts=True)
-    page.goto(f"{origin}/chat/new", wait_until="networkidle")
-    page.wait_for_function("() => location.pathname === '/'", timeout=15000)
+    page.goto(f"{origin}/", wait_until="networkidle")
     composer = page.get_by_test_id("desk-composer-input")
     composer.wait_for(timeout=15000)
     composer.fill("summarize the last 10 commits as release notes")

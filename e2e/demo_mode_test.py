@@ -32,6 +32,7 @@ import json
 import time
 import os
 import sys
+import urllib.parse
 import urllib.request
 
 from uxfix_fixture import (DEFAULT_APPEARANCE, HIDE_GATE_TOASTS, REPO, ensure_build,
@@ -105,17 +106,16 @@ with sync_playwright() as p:
         check(f"stage-{stage}", demo_stage(rid) == stage, stage=demo_stage(rid))
 
     def section_start() -> None:
-        # S15c: `/demo` moved onto "See everything › Everything made › Videos" (§5.4).
-        page.goto(f"{origin}/demo", wait_until="networkidle")
-        page.wait_for_function("() => location.pathname === '/everything' && new URLSearchParams(location.search).get('kind') === 'videos'", timeout=10000)
+        # S15c: the videos list is "See everything › Everything made › Videos" (§5.4; X1 retired `/demo`).
+        page.goto(f"{origin}/everything?tab=made&kind=videos", wait_until="networkidle")
         page.get_by_test_id("everything-made").wait_for(state="visible", timeout=10000)
         page.wait_for_function("() => document.querySelector('[data-testid=\"everything-made\"]')?.dataset.index !== 'untried'", timeout=10000)
         check("demo-page-empty-says-how", "No videos yet" in page.get_by_test_id("everything-empty").inner_text())
-        # S16a-4c: the project's Video mode (its start form) MOVED onto the project's Made › Videos list;
-        # a demo is started from the Desk composer now ("New Demo" seeds it). The launch the start form
-        # sent — POST /projects/:id/demo with the brief — is sent here directly.
-        page.goto(f"{origin}/p/{PROJECT}/video", wait_until="networkidle")
-        page.wait_for_function("() => location.pathname === '/everything' && new URLSearchParams(location.search).get('kind') === 'videos'", timeout=10000)
+        # S16a-4c: the project's videos are its Made › Videos list; a demo is started from the Desk
+        # composer now ("New Demo" seeds it). The launch the retired start form sent — POST
+        # /projects/:id/demo with the brief — is sent here directly.
+        page.goto(f"{origin}/everything?tab=made&kind=videos&project={urllib.parse.quote(PROJECT)}", wait_until="networkidle")
+        page.get_by_test_id("everything-made").wait_for(state="visible", timeout=10000)
         check("video-mode-lands-on-the-videos-list", f"project={PROJECT}" in page.url, url=page.url)
         rid = api("POST", f"/projects/{PROJECT}/demo", {"url": APP, "audience": AUDIENCE, "show": SHOW})["runId"]
         sent = [x for x in posts(origin) if x["route"] == "launch"]
@@ -127,8 +127,10 @@ with sync_playwright() as p:
     def section_plan() -> None:
         rid = state["rid"]
         wait_stage(rid, "plan_gate")
-        # The old bookmark of the demo's page lands on its session, the demo video at full size.
-        page.goto(f"{origin}/p/{PROJECT}/video/{rid}", wait_until="networkidle")
+        # The demo's own address: its session with the demo video grown to full size.
+        sid = urllib.parse.quote(f"run:{rid}", safe="")
+        key = urllib.parse.quote(f"{rid}:run/demo-video", safe="")
+        page.goto(f"{origin}/s/{sid}/a/{key}?size=full", wait_until="networkidle")
         page.wait_for_function("() => location.pathname.startsWith('/s/') && location.pathname.includes('/a/')", timeout=15000)
         art = page.locator('[data-testid="artifact"][data-kind="demo-video"]')
         art.wait_for(state="visible", timeout=15000)
@@ -167,7 +169,7 @@ with sync_playwright() as p:
     def section_watch() -> None:
         rid = state["rid"]
         # The Made › Videos list lists the run; its row opens the session with the video at full size.
-        page.goto(f"{origin}/demo", wait_until="networkidle")
+        page.goto(f"{origin}/everything?tab=made&kind=videos", wait_until="networkidle")
         rows = page.locator('[data-testid="everything-made-row"][data-kind="videos"]')
         rows.first.wait_for(state="visible")
         check("demo-page-lists-the-run", rows.count() == 1 and rows.first.get_attribute("data-run-id") == rid

@@ -2487,8 +2487,8 @@ WAVE1_RUNS[3]["units"][0]["status"] = "done"
 WAVE1_MEMBERS = {"alpha": ["a1"], "beta": ["b1"], "gamma": ["r1", "c1"]}
 WAVE1_ATTACHED_AT = {"a1": NOW0 - 2 * MIN, "b1": NOW0 - 3 * MIN,
                      "r1": NOW0 - 4 * MIN, "c1": NOW0 - 50 * MIN}
-# S15c (/p/:id → the project's NEWEST session): the DTO carries `created_at` (unix seconds), as the
-# daemon's does, so the newest is decided by its clock — a1 (2 min) over g1 (3 min) and d1 (5 h).
+# The DTO carries `created_at` (unix seconds), as the daemon's does, so a project's newest session
+# is decided by its clock — a1 (2 min) over g1 (3 min) and d1 (5 h).
 for _r in WAVE1_RUNS:
     _r["session"]["created_at"] = WAVE1_ATTACHED_AT[_r["session"]["id"]] // 1000
 # r1's durable tail — real event_to_json shapes with RecordedEvent's ts + seq.

@@ -225,7 +225,7 @@ describe('the governed launch — the wire, the link, the waiting line (F-7R2-01
     const link = within(p).getByTestId('testing-launch-fanout-run');
     expect(link).toHaveAttribute('data-run-id', 'r-gt-1');
     await user.click(link);
-    expect(navigate).toHaveBeenCalledWith('/runs/r-gt-1');
+    expect(navigate).toHaveBeenCalledWith('/s/run%3Ar-gt-1');
     expect(within(p).getByTestId('testing-launch-launched-workflow')).toHaveTextContent('qe-author-tests');
     expect(within(p).getByTestId('testing-launch-route')).toHaveTextContent('via POST /testing/author');
     expect(within(p).getByTestId('testing-launch-launched')).toHaveAttribute('data-route', 'testing-author');

@@ -4,10 +4,9 @@ import { testingPath } from '../api/testing.js';
 import type { Navigate } from './useRoute.js';
 
 /*
- * S16a-2d: the run page's legacy filing (`/runs/:id` → `/p/<project>/build/:id` after a membership
- * scan, and the dead bare-`/runs` → `/work` branch) is gone — `/runs/:id` MOVED to the run's session
- * thread (`useMovedRoutes`), and the bare `/runs` parses to "See everything" (S15c). The steering,
- * retired-settings and testing redirects below stay.
+ * X1 (operator ruling 2026-10-09): the S15c / S16a moved addresses (`/runs/:id`, `/work`, `/p/…`, …)
+ * no longer redirect — they parse to `not-found` (`RETIRED_ADDRESSES` in useRoute.ts). The steering,
+ * retired-settings and testing normalizers below stay.
  */
 
 /**

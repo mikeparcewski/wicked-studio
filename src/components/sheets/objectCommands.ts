@@ -1,5 +1,6 @@
 import { executingOrd } from '../../api/run-state.js';
 import type { SessionView } from '../../api/types.js';
+import { everythingPath } from '../../board/everythingModel.js';
 import { OBJECT_ACTIONS, type ObjectRef } from '../../board/objectActions.js';
 import { parseSessionId, runChatIdOf, sessionPath } from '../../board/sessionModel.js';
 import { GATE_HASH } from '../../board/gateActions.js';
@@ -86,7 +87,7 @@ export function objectCommands(ref: ObjectRef, ctx: { runs: readonly SessionView
   }
   const rows = actions.map((a): ObjectCommand => {
     if (a.tab !== undefined) return tabRow(a.id, a.label, a.tab);
-    if (a.id === 'everything') return { id: a.id, label: a.label, run: go('/projects'), disabled: null };
+    if (a.id === 'everything') return { id: a.id, label: a.label, run: go(everythingPath()), disabled: null };
     if (a.id === 'settings') return { id: a.id, label: a.label, run: go('/system'), disabled: null };
     return { id: a.id, label: a.label, run: () => openSheet(ref), disabled: null };
   });

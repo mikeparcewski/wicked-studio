@@ -70,8 +70,8 @@ with sync_playwright() as p:
                 extra_frames=[], reset_gate_posts=True)
 
     # ── 1. promote from the chat ──────────────────────────────────────────────────
-    # S16a-4e: /chat/chat-pay is the chat's session (/s/chat-pay); "Continue in Build" is its door.
-    page.goto(f"{origin}/chat/chat-pay", wait_until="domcontentloaded")
+    # S16a-4e: a chat is its session (/s/chat-pay); "Continue in Build" is its door.
+    page.goto(f"{origin}/s/chat-pay", wait_until="domcontentloaded")
     try:
         page.wait_for_function("() => location.pathname === '/s/chat-pay'", timeout=10000)
         page.get_by_test_id("session-chat-promote").wait_for(state="visible", timeout=15000)

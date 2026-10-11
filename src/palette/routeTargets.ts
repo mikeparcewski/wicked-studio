@@ -32,21 +32,10 @@ export const ROUTE_SHAPES: readonly RouteShape[] = [
   { id: 'session-artifact', example: '/s/run:r1/a/r1%3Ap1%2Fd1', is: (r) => r.panel === 'session' && r.artifactKey !== null },
   { id: 'watch', example: '/watch', is: (r) => r.panel === 'watch' },
   { id: 'rules', example: '/rules', is: (r) => r.panel === 'rules' },
-  // "See everything" (S15c/S17a): one page, five tabs in `?tab=`; the list pages that moved onto it
-  // (`/work`, `/chats`, `/projects`, `/execute`, `/vibe`, `/demo`, `/p/:id/chronicle`) are redirects
-  // (hooks/useMovedRoutes.ts), not shapes — a redirect is not a destination.
-  { id: 'everything', example: '/everything', is: (r) => r.panel === 'everything' && r.projectId === null },
-  // S16a-4e: `/chat/:id`, `/chat/new` and the shell's `/p/:pid/chat[/…]` MOVED (a chat is its session; a
-  // new one starts in the Desk composer) — redirects, not shapes.
+  // "See everything" (S15c/S17a): one page, five tabs in `?tab=` (a project's sessions ride
+  // `?project=`). The retired addresses (`RETIRED_ADDRESSES` in hooks/useRoute.ts) are not shapes.
+  { id: 'everything', example: '/everything', is: (r) => r.panel === 'everything' },
   { id: 'project-detail', example: '/projects/p1', is: (r) => r.panel === 'project-detail' && r.projectId !== null },
-  // `/p/:id` moves directly to the project's scoped Sessions tab (S17a).
-  { id: 'project', example: '/p/p1', is: (r) => r.panel === 'everything' && r.projectId !== null },
-  // S16a-2d: `/p/:pid/build/:run`, `/runs/:id` and `/runs/:id/timeline` are MOVES to the run's
-  // session (hooks/useMovedRoutes.ts) — redirects, not shapes; they parse as `session`.
-  // S16a-4c: `/p/:pid/document[/:doc]` and `/p/:pid/video[/:run]` MOVED (a made thing opens in its
-  // session, or on the project's Made list) — redirects, not shapes.
-  // S16a-4f: `/p/:pid/build[/new]` and `/p/:pid/campaigns` MOVED (the project's Sessions, the Desk
-  // composer, Testing with `?project=`) — redirects, not shapes.
   { id: 'steering-dashboard', example: '/steering/dashboard', is: (r) => r.panel === 'steering' && r.steeringSection === 'dashboard' },
   { id: 'steering-policies', example: '/steering/policies', is: (r) => r.panel === 'steering' && r.steeringSection === 'policies' },
   { id: 'steering-memories', example: '/steering/memories', is: (r) => r.panel === 'steering' && r.steeringSection === 'memories' },
@@ -82,7 +71,6 @@ const DESTINATIONS: ReadonlyArray<{ shape: string; label: string; href: string }
   { shape: 'everything', label: 'Helpers — the CLIs and their sign-in', href: everythingPath({ tab: 'helpers' }) },
   { shape: 'everything', label: 'Handed over — pull requests and pushes', href: everythingPath({ tab: 'handed' }) },
   { shape: 'everything', label: 'Projects — all your projects', href: everythingPath({ tab: 'projects' }) },
-  { shape: 'home', label: 'Start a chat', href: '/chat/new' },
   { shape: 'steering-dashboard', label: 'Steering dashboard — proposals to review', href: '/steering/dashboard' },
   { shape: 'steering-policies', label: 'Steering — all rules and policies', href: '/steering/policies' },
   { shape: 'steering-memories', label: 'Steering — memories', href: '/steering/memories' },
@@ -116,7 +104,7 @@ export interface RouteTargetData {
   runs: readonly SessionView[];
   /** Run → its project (the membership mirror). */
   projectIdByRun: Readonly<Record<string, string | undefined>>;
-  /** Live chats this tab knows (`/chat/:id`). */
+  /** Live chats this tab knows (each opens as its session, `/s/:id`). */
   chats: ReadonlyArray<{ id: string; title: string }>;
   campaigns: ReadonlyArray<{ id: string; label: string }>;
   /** `capabilities.runChatId`: a run's session is its chat's. */
@@ -146,7 +134,7 @@ export function routeTargets(d: RouteTargetData): RouteTarget[] {
       { shape: 'project-detail', label: `${p.name} · details`, href: projectDetailPath(p.id) },
       { shape: 'everything', label: `${p.name} · documents`, href: everythingPath({ tab: 'made', kind: 'documents', project: p.id }) },
       { shape: 'everything', label: `${p.name} · demos`, href: everythingPath({ tab: 'made', kind: 'videos', project: p.id }) },
-      { shape: 'project', label: `${p.name} · sessions`, href: everythingPath({ tab: 'sessions', project: p.id }) },
+      { shape: 'everything', label: `${p.name} · sessions`, href: everythingPath({ tab: 'sessions', project: p.id }) },
       { shape: 'testing-campaigns', label: `${p.name} · campaigns`, href: projectTestsPath(p.id) },
     );
   }
@@ -158,8 +146,8 @@ export function routeTargets(d: RouteTargetData): RouteTarget[] {
 }
 
 /**
- * The shapes the palette reaches through its OTHER groups (a project row `/p/:id`, a repo row
- * `/repo-detail/:id`) — so "Go to" does not repeat them. A run row opens its session (S16a-2d), a
- * shape GO TO already carries.
+ * The shapes the palette reaches through its OTHER groups (a repo row `/repo-detail/:id`) — so
+ * "Go to" does not repeat them. A run row opens its session (S16a-2d) and a project row its
+ * sessions on See everything, shapes GO TO already carries.
  */
-export const REACHED_BY_OTHER_GROUPS: readonly string[] = ['project', 'repo-detail'];
+export const REACHED_BY_OTHER_GROUPS: readonly string[] = ['repo-detail'];

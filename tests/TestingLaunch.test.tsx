@@ -317,7 +317,7 @@ describe('fan-out honesty — runIds is the source of truth', () => {
     const links = within(fanout).getAllByTestId('testing-launch-fanout-run');
     expect(links.map((l) => l.dataset.runId)).toEqual(['run-a', 'run-b', 'run-c']);
     await user.click(links[1]!);
-    expect(navigate).toHaveBeenCalledWith('/runs/run-b');
+    expect(navigate).toHaveBeenCalledWith('/s/run%3Arun-b');
   });
   // T2 (`launchedRunIds`, the fold itself) is pinned in testingLaunch.wire.test.ts.
 });
