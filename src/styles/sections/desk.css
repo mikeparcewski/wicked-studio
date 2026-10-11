@@ -64,9 +64,6 @@
   .wk-watchtower-row .wk-tech-details-summary { min-height: var(--tap-min); display: flex; align-items: center; }
   .wk-desk-bottom { padding: 8px var(--space-4) 12px; }
   /* Toasts: one compact card docked bottom, above the composer, never a stack over the page. */
-  [data-testid="gate-notification-layer"] { left: var(--space-4); right: var(--space-4) !important; align-items: stretch !important; }
-  .wk-desk-toast { width: auto; padding: 8px 10px; }
-  .wk-desk-toast-open { display: none; }
   /* Row moves size to their words on phone (still 44 px tall), so a group's answers share a line. */
   .wk-desk-need .wk-need-act { min-width: 0; padding: 0 var(--space-3); }
   .wk-watchtower-head { padding: var(--space-4); }
@@ -127,3 +124,37 @@
 /* /health › Governance: plain lines (reel UX gate ch56). */
 .wk-health-plain { margin: 2px 0 6px; font-size: var(--text-sm); color: var(--ink-body); }
 .wk-health-finding { margin: 2px 0 6px; padding: 4px 8px; border-left: 2px solid var(--border); background: var(--surface-raised); border-radius: var(--radius-sm); font-size: var(--text-sm); color: var(--ink-body); overflow-wrap: anywhere; }
+
+/* ── studio#722: the gate notice is a one-line strip in the main column's flow (App), above the page:
+   it pushes the page down and never covers a composer, a card's buttons or a thread. ── */
+[data-testid="gate-notification-layer"].wk-gate-strip { padding: 0; flex-shrink: 0; border-bottom: 1px solid var(--border-subtle); background: var(--surface-rail); }
+.wk-gate-strip .wk-gate-strip-card {
+  width: auto; display: flex; align-items: center; gap: var(--space-3); padding: 6px 12px 6px 16px; min-height: 40px;
+  border: none; border-radius: 0; box-shadow: inset 3px 0 0 var(--status-gate); background: transparent;
+}
+.wk-gate-strip .wk-gate-strip-card:hover { border-color: transparent; background: var(--surface-card); }
+.wk-gate-strip .wk-desk-toast-body { flex-direction: row; align-items: center; gap: var(--space-3); flex: 1 1 auto; min-width: 0; padding-right: 0; }
+.wk-gate-strip .wk-desk-toast-head { flex-shrink: 0; }
+.wk-gate-strip .wk-desk-toast-work { flex: 1 1 auto; min-width: 0; }
+.wk-gate-strip .wk-desk-toast-open { flex-shrink: 0; }
+.wk-gate-strip .wk-desk-toast .wk-desk-toast-more { order: 2; border-top: none; margin: 0 !important; padding: 0; flex-shrink: 0; white-space: nowrap; }
+.wk-gate-strip .wk-desk-toast-x { position: static; order: 3; flex-shrink: 0; width: 28px; height: 28px; }
+@media (max-width: 767px) {
+  .wk-gate-strip .wk-gate-strip-card { flex-wrap: wrap; row-gap: 2px; padding: 6px 8px 6px 14px; }
+  .wk-gate-strip .wk-desk-toast-body { flex-wrap: wrap; row-gap: 0; min-height: var(--tap-min); }
+  .wk-gate-strip .wk-desk-toast-work { flex-basis: 100%; padding-left: 16px; }
+  .wk-gate-strip .wk-desk-toast-open { display: none; }
+  .wk-gate-strip .wk-desk-toast-x { width: var(--tap-min); height: var(--tap-min); }
+  .wk-gate-strip .wk-desk-toast .wk-desk-toast-more { flex-basis: 100%; padding-left: 16px; }
+}
+
+/* studio#723: the Move-to-project picker is a menu list (quiet rows, not input-looking boxes),
+   viewport-placed by MoveToProject (fixed + max-height), above the drawer and the rail footer. */
+.wk-desk-move-picker[style*="fixed"] { z-index: 90; }
+.wk-desk-move-picker .wk-desk-move-item { width: 100%; border: none; justify-content: flex-start; padding: 6px 8px; }
+.wk-desk-move-picker .wk-desk-move-item:hover:not(:disabled), .wk-desk-move-picker .wk-desk-move-item:focus-visible { background: var(--accent-wash); color: var(--ink-high); }
+
+/* studio#723: the New project modal stacks every label above a full-width field. */
+.wk-newproj { max-width: min(520px, calc(100vw - 32px)); width: 100%; box-sizing: border-box; }
+.wk-newproj .wk-field-label { display: flex; flex-direction: column; align-items: stretch; gap: 4px; }
+.wk-newproj .wk-field-label > .wk-field { width: 100%; max-width: 100%; min-width: 0; box-sizing: border-box; }

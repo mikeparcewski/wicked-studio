@@ -127,7 +127,12 @@ with sync_playwright() as p:
             .some((r) => (r.dataset.key || '').endsWith(':r1'))""", timeout=15000)
     except Exception:  # noqa: BLE001 — reported below
         pass
-    page.wait_for_timeout(400)
+    # studio#723: the headline waits until the count holds still — wait for its marked number.
+    try:
+        page.wait_for_function("""() => { const h = document.querySelector('[data-testid="desk-headline"]');
+            return !!h && h.dataset.count !== '0'; }""", timeout=8000)
+    except Exception:  # noqa: BLE001 — reported below
+        pass
     page.screenshot(path=str(SHOTS / "desk-calm-stall.png"))
     rows = page.evaluate(ROWS)
     h = headline(page)

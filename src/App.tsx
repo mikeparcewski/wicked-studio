@@ -646,12 +646,19 @@ export function App(): React.ReactElement {
           jump to the main content instead of a page's top-right Refresh. */}
       <SkipLink />
       {/* UI-CONTRACT §3 (studio#680): the rail as before on desktop; a drawer behind a top bar on a phone. */}
-      <RailDrawer pathname={pathname} badge={<PhoneNeedsBadge needRows={needRows} runsKnown={runsLoaded} />}>
-        <SessionRail runs={runs} needRows={needRows} navigate={navigate} pathname={pathname} />
+      <RailDrawer pathname={pathname} badge={<PhoneNeedsBadge needRows={needRows} runsKnown={runsLoaded} runsFailed={runsError !== null} />}>
+        <SessionRail runs={runs} needRows={needRows} navigate={navigate} pathname={pathname} runsKnown={runsLoaded} runsFailed={runsError !== null} />
       </RailDrawer>
 
-      <div id="main" tabIndex={-1} className="flex flex-1 overflow-hidden" style={{ outline: 'none' }}>
-        {renderCenter()}
+      {/* studio#722: the gate notice is a strip IN the main column's flow, above the page — it pushes
+          the page down instead of covering its composer, cards or thread. */}
+      <div id="main" tabIndex={-1} className="flex flex-1 flex-col overflow-hidden min-w-0" style={{ outline: 'none' }}>
+        {panel !== 'home' && (
+          <GateNotifications onSelect={selectRun} runId={runId} projectId={projectId} runs={runs} />
+        )}
+        <div className="flex flex-1 overflow-hidden min-h-0">
+          {renderCenter()}
+        </div>
       </div>
 
       {/* Right panel only when a run is selected */}
@@ -709,16 +716,6 @@ export function App(): React.ReactElement {
         object={paletteObject}
       />
 
-
-      {/* Gate toasts — renders above everything; scoped to the current run. NOT on the
-          orchestrator board: there every waiting gate is already an answerable chip on
-          its project's card, sorted to the front (§1.4, slice 7), and the unscoped stack
-          would both duplicate those chips and physically cover the cards holding them.
-          Slice AA (§7.1): inside a project shell only THAT project's gates paint cards —
-          a foreign gate announces in the runs bar + bell instead (B4). */}
-      {panel !== 'home' && (
-        <GateNotifications onSelect={selectRun} runId={runId} projectId={projectId} runs={runs} />
-      )}
 
       {/* The shortcut overlay (DES-UX-001 §7.7, EC42) — every route: this
           root renders on all of them, and the overlay's corpus is the registry

@@ -152,6 +152,19 @@ describe('move work into a project', () => {
     expect(trigger).toHaveFocus();
   });
 
+  it('studio#723: the picker is a viewport-placed menu (fixed, height-capped) of quiet rows, not bordered boxes', async () => {
+    surfaces([run()]);
+    const trigger = await screen.findByRole('button', { name: 'Move Write the guide to a project' });
+    fireEvent.click(trigger);
+    const picker = screen.getByTestId('session-move-picker');
+    expect(picker.style.position).toBe('fixed');
+    expect(picker.style.maxHeight).not.toBe('');
+    for (const b of within(picker).getAllByRole('button').filter((x) => x.textContent !== 'Cancel')) {
+      expect(b).toHaveClass('wk-desk-move-item');
+      expect(b).not.toHaveClass('wk-btn--secondary');
+    }
+  });
+
   it('desk-new-project is a small secondary .wk-btn with a Plus icon, opening the existing modal', async () => {
     surfaces([], true);
     const button = screen.getByTestId('desk-new-project');
