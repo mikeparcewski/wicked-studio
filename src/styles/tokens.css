@@ -39,6 +39,8 @@
   --ink-muted: var(--_ink-soft);     /* quiet-band project names, sublabels */
   --ink-body:  var(--_ink-strong);   /* default prose, narration */
   --ink-high:  var(--_ink-max);      /* NEEDS YOU names, gate text, primary actions */
+  /* Placeholder text: the soft ink (4.5:1 on raised in both themes, UX audit row 32), never fainter. */
+  --ink-placeholder: var(--ink-muted);
 
   /* ── Lines and focus — hairlines tinted like the ink, three strengths. Elevation is a border
      plus a shadow, never a heavy fill. */
@@ -168,6 +170,13 @@
   --control-h:    30px;
   --control-h-sm: 24px;   /* the WCAG 2.5.8 floor: no target is smaller */
   --control-px:   12px;
+  /* Phone tap target (WCAG 2.5.5 / UI-CONTRACT §2): every control under the phone breakpoint. */
+  --tap-min:      44px;
+
+  /* ── Shell (UI-CONTRACT §3): the rail's width and the phone top bar's height. The ONE breakpoint is
+     max-width 767px (media queries cannot read custom properties). ── */
+  --rail-w:     236px;
+  --topbar-h:   52px;
 
   /* ── The floating Ask bubble (AskLauncher.tsx: ASK_BUBBLE_PX / ASK_GUTTER_PX) — a surface
      that ends under it reserves this much room, so the bubble never covers an action. ── */
