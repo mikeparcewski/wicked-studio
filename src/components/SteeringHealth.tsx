@@ -1,3 +1,4 @@
+import { Skeleton, StateBanner } from './ui/index.js';
 import { STEERING_TYPE_LABELS, type SteeringType } from '../api/steering.js';
 import { scoreboardVerdict, VERDICT_COPY, type WikiScoreboard, type WikiVerdict } from '../api/wiki.js';
 
@@ -36,16 +37,10 @@ function Stat({ testid, label, value, sub }: {
   sub?: string | undefined;
 }): React.ReactElement {
   return (
-    <div
-      data-testid={testid}
-      className="flex flex-col gap-0.5 rounded p-3 min-w-[10rem]"
-      style={{ background: 'var(--surface-rail)', border: '1px solid var(--surface-raised)' }}
-    >
-      <span className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--ink-dim)' }}>{label}</span>
-      <span className="text-lg font-semibold font-mono" style={{ color: 'var(--ink-high)' }}>{value}</span>
-      {sub !== undefined && (
-        <span className="text-[10px]" style={{ color: 'var(--ink-dim)' }}>{sub}</span>
-      )}
+    <div data-testid={testid} className="wk-steer-stat">
+      <span className="wk-steer-stat-label">{label}</span>
+      <span className="wk-steer-stat-value">{value}</span>
+      {sub !== undefined && <span className="wk-steer-stat-sub">{sub}</span>}
     </div>
   );
 }
@@ -63,7 +58,7 @@ export function SteeringHealth({ state, type, typeRuleCount }: {
   typeRuleCount: number;
 }): React.ReactElement | null {
   if (state.kind === 'loading') {
-    return <p data-testid="steering-health-loading" className="text-xs" style={{ color: 'var(--ink-dim)' }}>Measuring steering health…</p>;
+    return <div data-testid="steering-health-loading"><Skeleton rows={1} variant="line" /></div>;
   }
   if (state.kind === 'unsupported') {
     // The honest adoption state: the daemon is fine, its engine just predates the scoreboard —
@@ -74,16 +69,15 @@ export function SteeringHealth({ state, type, typeRuleCount }: {
         className="rounded px-3 py-2 text-xs"
         style={{ background: 'var(--surface-rail)', border: '1px solid var(--surface-raised)', color: 'var(--ink-muted)' }}
       >
-        This daemon&rsquo;s engine predates the governance scoreboard — population and connection cannot
-        be measured here yet. The rules browser below still reads the live store.
+        Studio&rsquo;s service can&rsquo;t measure rule health yet. The rules below are live.
       </p>
     );
   }
   if (state.kind === 'failed') {
     return (
-      <p data-testid="steering-health-error" className="rounded px-2 py-1 text-xs" style={{ background: 'var(--status-fail-dim)', color: 'var(--status-fail)' }}>
-        {state.message}
-      </p>
+      <div data-testid="steering-health-error">
+        <StateBanner kind="partial" what="rule health" error={state.message} />
+      </div>
     );
   }
   const sb = state.scoreboard;
@@ -133,51 +127,46 @@ export function SteeringStoreHealth({ state }: { state: ScoreboardState }): Reac
         <span
           data-testid="steering-verdict"
           data-verdict={verdict}
-          title={`${VERDICT_COPY[verdict]} (derived in studio from the raw AW-23 signals in the diagnostics below)`}
-          className="inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold"
-          style={{ color: VERDICT_COLOR[verdict], border: `1px solid ${VERDICT_COLOR[verdict]}` }}
+          className="wk-tag"
+          style={{ color: VERDICT_COLOR[verdict] }}
         >
-          {verdict}
+          {verdict.charAt(0).toUpperCase() + verdict.slice(1)}
         </span>
-        <span className="text-[11px]" style={{ color: 'var(--ink-muted)' }}>{VERDICT_COPY[verdict]}</span>
+        <span className="wk-test-facts-meta">{VERDICT_COPY[verdict]}</span>
       </div>
       <details data-testid="steering-diagnostics">
-        <summary
-          className="cursor-pointer text-[11px]"
-          style={{ color: 'var(--ink-dim)' }}
-          data-testid="steering-diagnostics-toggle"
-        >
-          Store-wide diagnostics
+        <summary className="wk-steer-diag-summary" data-testid="steering-diagnostics-toggle">
+          How this is measured
         </summary>
-        <div className="mt-2 flex flex-wrap gap-2">
+        <div className="wk-steer-diag">
           <Stat
             testid="steering-stat-rules"
-            label="Rules (store-wide)"
+            label="All rules"
             value={`${sb.rules_active} active`}
             sub={`${sb.rules_total} total · ${sb.rules_retired} retired`}
           />
           <Stat
             testid="steering-stat-typed"
-            label="Typed"
+            label="Statements typed"
             value={sb.typing.available ? pct(sb.typing.percent) : 'not measured'}
             sub={
               sb.typing.available
                 ? `${sb.typing.statements_typed} of ${sb.typing.statements_total} statements across ${sb.typing.docs_scanned} docs`
                 // Quick win #4: plain words, no CLI flags.
-                : 'Typing coverage needs a docs root — re-run ingest with one to measure it.'
+                : 'Not measured: the rules were loaded without their source documents.'
             }
           />
           <Stat
             testid="steering-stat-resolving"
-            label="Refs resolving"
+            label="Code links that resolve"
             value={sb.connection.rules_with_ref === 0 ? 'no refs' : pct(sb.connection.percent)}
-            sub={`${sb.connection.refs_resolving} of ${sb.connection.rules_with_ref} symbol refs · ${sb.connection.rules_linked} rules linked to code`}
+            sub={`${sb.connection.refs_resolving} of ${sb.connection.rules_with_ref} links · ${sb.connection.rules_linked} rules linked to code`}
           />
           <Stat
             testid="steering-stat-denials"
             label="Denials citing rules"
             value={String(sb.evidence.denial_claims)}
-            sub={`${sb.evidence.rules_evidenced} rules evidenced · ${sb.evidence.governs_evidence_total} governs-evidence total`}
+            sub={`${sb.evidence.rules_evidenced} rules have been used`}
           />
         </div>
       </details>

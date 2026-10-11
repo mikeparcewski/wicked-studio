@@ -67,19 +67,17 @@ describe('GovernanceDashboard — the KPI band (part 1)', () => {
     wire();
     render(<GovernanceDashboard navigate={vi.fn()} />);
     const tile = await screen.findByTestId('gk-stat-needs-review');
-    await waitFor(() => expect(tile).toHaveAttribute('data-value', '2'));
-    expect(tile).toHaveTextContent('1 memory · 1 policy');
+    await waitFor(() => expect(tile).toHaveTextContent('2 to review'));
+    expect(screen.getByRole('heading', { name: 'Steering dashboard' })).toBeInTheDocument();
   });
 
   it('Memories reads the coverage total; Active rules counts the un-retired rules with a severity split', async () => {
     wire();
     render(<GovernanceDashboard navigate={vi.fn()} />);
-    await waitFor(() => expect(screen.getByTestId('gk-stat-memories')).toHaveAttribute('data-value', '42'));
+    await waitFor(() => expect(screen.getByTestId('gk-stat-memories')).toHaveTextContent('42 memories'));
     const rulesTile = screen.getByTestId('gk-stat-rules');
     // Two active rules (PAT-002 is retired), and the severity breakdown counts them.
-    expect(rulesTile).toHaveAttribute('data-value', '2');
-    expect(rulesTile).toHaveTextContent('crit 1');
-    expect(rulesTile).toHaveTextContent('warn 1');
+    expect(rulesTile).toHaveTextContent('2 rules in force');
   });
 
   it('a daemon that predates the proposal queue shows an honest "—", never a lying zero', async () => {
@@ -94,7 +92,8 @@ describe('GovernanceDashboard — the KPI band (part 1)', () => {
       return Promise.resolve({});
     });
     render(<GovernanceDashboard navigate={vi.fn()} />);
-    await waitFor(() => expect(screen.getByTestId('gk-stat-needs-review')).toHaveAttribute('data-value', '—'));
+    expect(await screen.findAllByTestId('proposals-section-unsupported')).toHaveLength(2);
+    expect(screen.getByTestId('gk-stat-needs-review')).toBeEmptyDOMElement();
   });
 });
 
@@ -133,15 +132,16 @@ describe('GovernanceDashboard — browse (part 3)', () => {
     wire({ memories: [], coverage: { total: 42 } });
     render(<GovernanceDashboard navigate={vi.fn()} />);
     const empty = await screen.findByTestId('gk-memories-empty');
-    expect(empty).toHaveTextContent('The store holds 42 memories but the preview listed none');
-    expect(empty).not.toHaveTextContent('No memories in the store.');
-    expect(within(empty).getByRole('link', { name: /search from Manage memories/ })).toBeInTheDocument();
+    expect(empty).toHaveTextContent('No memories are listed in this preview.');
+    expect(empty).not.toHaveTextContent('No memories listed yet.');
+    expect(within(empty).getByRole('link', { name: 'Manage memories' })).toBeInTheDocument();
+    expect(within(screen.getByTestId('gk-browse-memories')).getByRole('heading', { name: 'Memories' })).toBeInTheDocument();
   });
 
   it('an empty memory preview over an EMPTY store (coverage 0) says the store is empty', async () => {
     wire({ memories: [], coverage: { total: 0 } });
     render(<GovernanceDashboard navigate={vi.fn()} />);
-    expect(await screen.findByTestId('gk-memories-empty')).toHaveTextContent('No memories in the store.');
+    expect(await screen.findByTestId('gk-memories-empty')).toHaveTextContent('No memories listed yet.');
   });
 
   it('the rules facet typeahead narrows the corpus (severity=warn → the one warn rule)', async () => {

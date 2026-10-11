@@ -79,9 +79,9 @@ describe('the Test landing lists the single-repo tests it launched', () => {
     render(<CampaignsPage runs={[view('solo-1', 'completed')]} navigate={navigate} />);
     const row = await screen.findByTestId('testing-solo-run');
     expect(getAuditByAction).toHaveBeenCalledWith('run.launched', 1000);
-    expect(screen.getByTestId('stat-campaigns')).toHaveAttribute('data-value', '2'); // the fan + the solo test
+    expect(screen.getByTestId('campaigns-kpis')).toHaveAttribute('data-tests', '2'); // the fan + the solo test
     expect(row.dataset.runId).toBe('solo-1');
-    expect(row.textContent).toContain('completed');
+    expect(row.textContent).toContain('Finished');
     fireEvent.click(row);
     expect(navigate).toHaveBeenCalledWith(expect.stringContaining('solo-1'));
     // The stale all-cancelled fan no longer drags the pass rate to 0 %: 1 landed of 1 finished.
@@ -105,7 +105,7 @@ describe('the Test landing lists the single-repo tests it launched', () => {
     getAuditByAction.mockResolvedValue({ entries: [launched('live-1', { recon: true })] });
     render(<CampaignsPage runs={[view('live-1', 'executing')]} navigate={() => {}} />);
     await screen.findByTestId('testing-solo-run');
-    expect(screen.getByTestId('stat-campaigns').textContent).toContain('1 active now');
+    expect(screen.getByTestId('campaigns-kpis')).toHaveAttribute('data-active-now', '1');
   });
 
   it('a daemon without the audit route shows no solo list and nothing breaks', async () => {

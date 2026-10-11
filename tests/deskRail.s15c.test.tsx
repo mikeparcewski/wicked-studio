@@ -50,8 +50,8 @@ describe('the rail, top to bottom', () => {
   it('the rail entries carry the skin contract\'s nav-dest marks', () => {
     rail();
     const dests = [...screen.getByTestId('session-rail').querySelectorAll('[data-nav-dest]')].map((e) => e.getAttribute('data-nav-dest'));
-    expect(dests).toEqual(['watch', 'section:product', 'section:skills', 'section:mcp', 'section:steering', 'health']);
-    expect(DESK_RAIL_LINKS.map((l) => l.dest)).toEqual(['section:product', 'section:skills', 'section:mcp', 'section:steering']);
+    expect(dests).toEqual(['watch', 'section:product', 'section:skills', 'section:mcp', 'section:steering', 'section:testing', 'health']);
+    expect(DESK_RAIL_LINKS.map((l) => l.dest)).toEqual(['section:product', 'section:skills', 'section:mcp', 'section:steering', 'section:testing']);
   });
 
   it('the current entry is marked', () => {

@@ -4,7 +4,7 @@ import type { SessionView } from '../api/types.js';
 import {
   campaignCards, campaignTotals, deliveryRollupWord, matchesCampaignChip, memberRunIdSet, soloMatchesChip, soloTestRunIds, soloTotals,
   passRateHealth, passRateWord, progressWord, testSetCountsWord, testSetPrHref, testSetTotals, testSetsWord,
-  unattributedTestSets,
+  unattributedTestSets, cardTitleWord, workflowWord,
   type CampaignCardModel, type CampaignChip,
 } from '../board/campaignStats.js';
 import { everythingPath } from '../board/everythingModel.js';
@@ -12,17 +12,19 @@ import { recentActivity } from '../board/homeActivity.js';
 import { api } from '../api/client.js';
 import { sessionPath } from '../board/sessionModel.js';
 import { outcomeOf } from '../board/metrics.js';
-import { healthColor, windowBuckets, windowDelta, deltaWord } from '../board/windowStats.js';
+import { windowBuckets, windowDelta } from '../board/windowStats.js';
 import type { Navigate } from '../hooks/useRoute.js';
 import { rangeWord, useTimeRange } from '../hooks/useTimeRange.js';
 import { useCampaignsStore } from '../store/campaigns.js';
 import { useRunEventStore } from '../store/events.js';
 import { useRuntimeStore } from '../store/runtime.js';
 import {
-  DashboardGrid, FilterStrip, KpiBand, KpiGroup, StatTile, type FilterChip,
+  DashboardGrid, FilterStrip, type FilterChip,
 } from './dashboardKit.js';
 import { TONE_COLOR, TONE_GLYPH, type NarrationLine } from './narrator.js';
-import { humanTitle, runShortId } from './runIdentity.js';
+import { humanTitle } from './runIdentity.js';
+import { statusWord } from '../board/statusWords.js';
+import { EmptyState, PageFrame, Skeleton, StatLine } from './ui/index.js';
 import { AuthorPanel } from './SteeringAuthorPanel.js';
 import { TestingLaunchPanel } from './TestingLaunchPanel.js';
 
@@ -52,47 +54,36 @@ import { TestingLaunchPanel } from './TestingLaunchPanel.js';
  *    per-surface wording forks; absence stays absent).
  */
 
-const S = {
-  card:   'var(--surface-card)',
-  border: 'var(--surface-raised)',
-  ink:    'var(--ink-high)',
-  muted:  'var(--ink-muted)',
-  faint:  'var(--ink-dim)',
-  accent: 'var(--accent)',
-};
 
 type PanelKind = 'recon' | 'campaign' | 'author' | null;
-
-const CARD_STAT: React.CSSProperties = {
-  fontSize: 'var(--text-2xs)', fontFamily: 'var(--font-mono)', color: 'var(--ink-muted)',
-  whiteSpace: 'nowrap',
-};
 
 /** Most per-sibling PR links a card renders inline; the rest fold into a "+n" word. */
 const CARD_PR_CAP = 4;
 /** Produced test sets shown per card, newest first; older ones are counted, never hidden silently. */
 const CARD_SET_CAP = 3;
 
-/** The scoreboard's segmented status bar, condensed onto the card — real counts, no series. */
-function StatusBar({ m }: { m: CampaignCardModel }): React.ReactElement | null {
-  const rest = Math.max(0, m.total - m.landed - m.failed - m.awaitingHuman - m.running);
+/**
+ * The scoreboard's segmented status bar, condensed onto the card — real counts, no series. Only
+ * landed / failed / waiting / running fill it; everything not yet finished is EMPTY track
+ * (studio#685 row 8: "0 of 2 landed" over a full bar read as complete).
+ */
+function StatusBar({ m }: { m: CampaignCardModel }): React.ReactElement {
   const seg = [
-    { n: m.landed, color: 'var(--status-done)' },
-    { n: m.failed, color: 'var(--status-fail)' },
-    { n: m.awaitingHuman, color: 'var(--status-gate)' },
-    { n: m.running, color: 'var(--status-run)' },
-    { n: rest, color: 'var(--ink-dim)' },
+    { n: m.landed, tone: 'done' },
+    { n: m.failed, tone: 'fail' },
+    { n: m.awaitingHuman, tone: 'gate' },
+    { n: m.running, tone: 'run' },
   ];
   const total = Math.max(1, m.total);
-  if (seg.every((s) => s.n === 0)) return null;
   return (
     <div
       data-testid="campaign-card-bar"
-      aria-hidden
-      style={{ display: 'flex', height: '5px', borderRadius: '3px', overflow: 'hidden', background: 'var(--surface-raised)' }}
+      role="img"
+      aria-label={`${m.landed} landed, ${m.failed} failed of ${m.total}`}
+      className="wk-test-bar"
     >
-      {seg.filter((s) => s.n > 0).map((s, i) => (
-        <div key={i} style={{ width: `${(s.n / total) * 100}%`, background: s.color }} />
+      {seg.filter((s) => s.n > 0).map((s) => (
+        <span key={s.tone} data-tone={s.tone} className={`wk-test-bar-seg wk-test-bar-seg--${s.tone}`} style={{ width: `${(Math.min(s.n, total) / total) * 100}%` }} />
       ))}
     </div>
   );
@@ -105,25 +96,9 @@ function StatusBar({ m }: { m: CampaignCardModel }): React.ReactElement | null {
  */
 function CardNarration({ line, runId }: { line: NarrationLine; runId: string }): React.ReactElement {
   return (
-    <div
-      data-testid="campaign-card-narration"
-      data-run-id={runId}
-      data-tone={line.tone}
-      style={{
-        display: 'flex', alignItems: 'baseline', gap: '6px', minWidth: 0,
-        fontSize: 'var(--text-2xs)', fontFamily: 'var(--font-mono)',
-      }}
-    >
-      <span aria-hidden style={{ color: TONE_COLOR[line.tone], flexShrink: 0 }}>
-        {TONE_GLYPH[line.tone]}
-      </span>
-      <span style={{
-        color: TONE_COLOR[line.tone], overflow: 'hidden', textOverflow: 'ellipsis',
-        whiteSpace: 'nowrap', minWidth: 0,
-      }}>
-        {line.text}
-      </span>
-      <span style={{ color: 'var(--ink-dim)', flexShrink: 0 }}>{runShortId(runId)}</span>
+    <div data-testid="campaign-card-narration" data-run-id={runId} data-tone={line.tone} className="wk-test-card-line wk-test-card-narration">
+      <span aria-hidden style={{ color: TONE_COLOR[line.tone], flexShrink: 0 }}>{TONE_GLYPH[line.tone]}</span>
+      <span className="wk-test-card-clip" style={{ color: TONE_COLOR[line.tone] }}>{line.text}</span>
     </div>
   );
 }
@@ -135,7 +110,6 @@ function CampaignCard({ m, narration, navigate }: {
   narration: { runId: string; line: NarrationLine } | null;
   navigate: (path: string) => void;
 }): React.ReactElement {
-  const health = passRateHealth(m.landed, m.landed + m.failed);
   // The gate jump: STRAIGHT to the waiting run's page, where the approval dock is pinned —
   // when the live list still holds one; otherwise the campaign's own surface.
   const firstWaiting = m.waiting[0]?.session.id ?? null;
@@ -144,6 +118,11 @@ function CampaignCard({ m, narration, navigate }: {
   const open = (): void => {
     if (isCampaign) navigate(campaignPath(m.id));
   };
+  // Generated one-off workflow ids (`wf-…`) are handles, not names: only named workflows show.
+  const workflows = m.workflowIds.flatMap((w) => {
+    const word = workflowWord(w);
+    return word === null ? [] : [{ id: w, word }];
+  });
 
   return (
     <div
@@ -155,82 +134,45 @@ function CampaignCard({ m, narration, navigate }: {
       {...(isCampaign ? { role: 'link', tabIndex: 0 } : {})}
       onClick={open}
       onKeyDown={(e) => { if (e.key === 'Enter') open(); }}
-      className={isCampaign ? 'transition-colors hover:bg-surface-raised' : undefined}
-      style={{
-        display: 'flex', flexDirection: 'column', gap: '8px', minWidth: 0,
-        background: S.card, border: `1px solid ${S.border}`,
-        borderRadius: 'var(--radius-lg)', padding: 'var(--space-4)',
-        cursor: isCampaign ? 'pointer' : 'default',
-      }}
+      className={`wk-card wk-test-card${isCampaign ? ' wk-test-card--door' : ''}`}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
-        <span style={{
-          fontSize: 'var(--text-sm)', fontWeight: 'var(--weight-semi)', color: S.ink,
-          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0,
-        }}>
-          {m.title}
-        </span>
-        {!isCampaign && (
-          <span style={{ ...CARD_STAT, color: S.faint, flexShrink: 0 }} title="An ad-hoc label group — runs launched under one groupLabel; no scheduler, no DAG.">
-            group
-          </span>
-        )}
+      <div className="wk-test-card-head">
+        <span className="wk-test-card-title" title={m.title}>{cardTitleWord(m)}</span>
         {m.awaitingHuman > 0 && (
           <button
             type="button"
             data-testid="campaign-needs-you"
             {...(firstWaiting !== null ? { 'data-run-id': firstWaiting } : {})}
-            title={firstWaiting !== null
-              ? 'A sibling run is waiting on you — jump to its approval dock'
-              : isCampaign
-                ? 'A sibling run is waiting on you — open the scoreboard'
-                : 'A sibling run is waiting on you'}
+            title={firstWaiting !== null ? 'Open the run that is waiting on you' : 'Open this test'}
             onClick={(e) => {
               e.stopPropagation();
               if (firstWaiting !== null) navigate(sessionPath(`run:${firstWaiting}`));
               else if (isCampaign) navigate(campaignPath(m.id));
             }}
-            style={{
-              marginLeft: 'auto', flexShrink: 0, cursor: 'pointer',
-              background: 'var(--status-gate-dim)', border: '1px solid var(--status-gate-dim)',
-              borderRadius: 'var(--radius-full)', padding: '2px 10px',
-              fontSize: 'var(--text-2xs)', fontFamily: 'var(--font-mono)',
-              fontWeight: 'var(--weight-bold)', color: 'var(--status-gate)',
-            }}
+            className="wk-btn wk-btn--secondary wk-btn--sm wk-test-card-needs"
           >
-            needs you · {m.awaitingHuman} →
+            {m.awaitingHuman} need{m.awaitingHuman === 1 ? 's' : ''} you
           </button>
         )}
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+      <div className="wk-test-card-line">
         {/* §3.3 denominator honesty — a campaign's DAG is declared; a group's grows ("so far"). */}
-        <span style={{ ...CARD_STAT, color: S.ink }} data-testid="campaign-card-progress">
-          {progressWord(m)}
-        </span>
-        {m.landed + m.failed > 0 && (
-          <span
-            style={{ ...CARD_STAT, color: healthColor(health) ?? CARD_STAT.color }}
-            data-testid="campaign-card-split"
-            data-health={health}
-            title={`${m.landed} landed, ${m.failed} failed of ${m.total}`}
-          >
-            ✓{m.landed} · ✕{m.failed}
+        <span data-testid="campaign-card-progress" className="wk-test-card-strong">{progressWord(m)}</span>
+        {m.failed > 0 && (
+          <span data-testid="campaign-card-split" data-health={passRateHealth(m.landed, m.landed + m.failed)} className="wk-test-card-fail">
+            {m.failed} failed
           </span>
         )}
-        {m.running > 0 && (
-          <span style={{ ...CARD_STAT, color: 'var(--status-run)' }}>{m.running} running</span>
-        )}
+        {m.running > 0 && <span className="wk-test-card-run">{m.running} running</span>}
       </div>
 
       <StatusBar m={m} />
 
       {/* ── The delivery rollup — wire facts only; absent on a pre-0.19 daemon ── */}
       {rollupWord !== null && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-          <span data-testid="campaign-card-delivery" style={{ ...CARD_STAT, color: S.ink }}>
-            {rollupWord}
-          </span>
+        <div className="wk-test-card-line">
+          <span data-testid="campaign-card-delivery">{rollupWord}</span>
           {m.rollup.prs.slice(0, CARD_PR_CAP).map((pr) => (
             <a
               key={pr.runId + pr.href}
@@ -239,66 +181,42 @@ function CampaignCard({ m, narration, navigate }: {
               href={pr.href}
               target="_blank"
               rel="noreferrer"
-              title={`${runShortId(pr.runId)} — ${pr.href}`}
               onClick={(e) => e.stopPropagation()}
-              style={{ ...CARD_STAT, color: S.accent, textDecoration: 'underline' }}
+              className="wk-link"
             >
-              #{pr.href.split('/').pop()}
+              PR #{pr.href.split('/').pop()}
             </a>
           ))}
           {m.rollup.prs.length > CARD_PR_CAP && (
-            <span style={CARD_STAT} title="More PRs — open the scoreboard for the full ladder">
-              +{m.rollup.prs.length - CARD_PR_CAP} more
-            </span>
+            <span title="Open the test for every pull request">+{m.rollup.prs.length - CARD_PR_CAP} more</span>
           )}
           {m.rollup.stranded.length > 0 && (
             <button
               type="button"
               data-testid="campaign-card-stranded"
               data-run-id={m.rollup.stranded[0]!.runId}
-              title={`Finished, but the work is stranded in its worktree — no PR: ${m.rollup.stranded.map((s) => s.label).join(', ')}. Open the run to lift it.`}
+              title="Finished, but the work has no pull request yet. Open the run to deliver it."
               onClick={(e) => {
                 e.stopPropagation();
                 navigate(sessionPath(`run:${m.rollup.stranded[0]!.runId}`));
               }}
-              style={{
-                cursor: 'pointer', flexShrink: 0,
-                background: 'transparent', border: '1px solid var(--status-gate)',
-                borderRadius: 'var(--radius-full)', padding: '1px 8px',
-                fontSize: 'var(--text-2xs)', fontFamily: 'var(--font-mono)',
-                color: 'var(--status-gate)',
-              }}
+              className="wk-btn wk-btn--secondary wk-btn--sm"
             >
-              stranded · {m.rollup.stranded.length}
+              {m.rollup.stranded.length} not delivered
             </button>
           )}
         </div>
       )}
 
-      {/* ── The produced test sets (wave 6, F-7R2-014; api-types 0.36.0) — the top-level
-             `CampaignsListResponse.test_sets`, joined onto this card by run_id / label in the fold, with
-             the counts the VERIFY phase re-derived, the PLAN and the delivered PR. The workflow chip reads
-             the live runs' `workflow_id`, so the card says "qe-author-tests" from launch, before any set
-             registers. A pre-0.36 daemon serves no sets: nothing below renders (absence, never 0). ── */}
-      {(m.workflowIds.length > 0 || m.testSets.length > 0) && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-          {m.workflowIds.length > 0 && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-              {m.workflowIds.map((w) => (
-                <span
-                  key={w}
-                  data-testid="campaign-card-workflow"
-                  data-workflow={w}
-                  title={w === 'qe-author-tests'
-                    ? 'The governed test-authoring workflow: recon → author → verify → review → deliver'
-                    : `Workflow ${w}`}
-                  style={{
-                    ...CARD_STAT, color: w === 'qe-author-tests' ? S.accent : S.muted,
-                    border: `1px solid ${S.border}`, borderRadius: 'var(--radius-full)', padding: '1px 8px',
-                  }}
-                >
-                  {w}
-                </span>
+      {/* ── The produced test sets (wave 6, F-7R2-014; api-types 0.36.0) — joined onto this card by
+             run_id / label in the fold, with the counts the verify phase re-derived, the plan and the
+             delivered PR. A pre-0.36 daemon serves no sets: nothing below renders (absence, never 0). ── */}
+      {(workflows.length > 0 || m.testSets.length > 0) && (
+        <div className="wk-test-card-sets">
+          {workflows.length > 0 && (
+            <div className="wk-test-card-line">
+              {workflows.map((w) => (
+                <span key={w.id} data-testid="campaign-card-workflow" data-workflow={w.id} className="wk-tag">{w.word}</span>
               ))}
             </div>
           )}
@@ -316,27 +234,20 @@ function CampaignCard({ m, narration, navigate }: {
                 data-passed={t.passed}
                 data-failed={t.failed}
                 data-not-executed={t.not_executed}
-                title={t.files.length > 0
-                  ? t.files.map((f) => `${f.path} — ${f.status}`).join('\n')
-                  : 'no file list on the registration'}
-                style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}
+                title={t.files.length > 0 ? t.files.map((f) => `${f.path} — ${f.status}`).join('\n') : undefined}
+                className="wk-test-card-line"
               >
                 <span
                   data-testid="campaign-card-testset-verified"
-                  title={t.verified
-                    ? 'The verify phase PASSED: every produced test executed and green, the repository checks green, the PLAN present'
-                    : `NOT verified — verify phase: ${t.verify_status ?? 'never planned'}; run ${t.run_status}`}
-                  style={{
-                    ...CARD_STAT, color: t.verified ? 'var(--status-done)' : 'var(--status-gate)',
-                    border: `1px solid ${S.border}`, borderRadius: 'var(--radius-full)', padding: '1px 8px', flexShrink: 0,
-                  }}
+                  title={t.verified ? 'Every produced test ran and passed, and the repository checks passed' : 'The checks did not confirm this set yet'}
+                  className={`wk-tag ${t.verified ? 'wk-tag--ok' : 'wk-tag--gate'}`}
                 >
-                  {t.verified ? 'verified' : 'not verified'}
+                  {t.verified ? 'Verified' : 'Not verified'}
                 </span>
-                <span style={{ ...CARD_STAT, color: t.failed > 0 ? 'var(--status-fail)' : S.ink, whiteSpace: 'normal' }}>
+                <span className={t.failed > 0 ? 'wk-test-card-fail' : undefined}>
                   {testSetCountsWord(t)}
                   {t.not_executed > 0 && (
-                    <span data-testid="campaign-card-testset-unverified" style={{ color: 'var(--status-gate)' }}>
+                    <span data-testid="campaign-card-testset-unverified" className="wk-test-card-gate">
                       {' '}· {t.not_executed} not executed
                     </span>
                   )}
@@ -347,14 +258,11 @@ function CampaignCard({ m, narration, navigate }: {
                     data-testid="campaign-card-testset-plan"
                     data-run-id={t.run_id}
                     data-plan={t.plan}
-                    title="The PLAN the author phase wrote — open the run; its Files view reads the run branch"
+                    title={`The test plan (${t.plan}). Open the run to read it.`}
                     onClick={(e) => { e.stopPropagation(); navigate(sessionPath(`run:${t.run_id}`)); }}
-                    style={{
-                      ...CARD_STAT, color: S.muted, textDecoration: 'underline', cursor: 'pointer',
-                      background: 'transparent', border: 'none', padding: 0,
-                    }}
+                    className="wk-link"
                   >
-                    plan: {t.plan}
+                    Plan
                   </button>
                 )}
                 {pr !== null && (
@@ -364,9 +272,8 @@ function CampaignCard({ m, narration, navigate }: {
                     href={pr}
                     target="_blank"
                     rel="noreferrer"
-                    title={`${runShortId(t.run_id)} — ${pr}`}
                     onClick={(e) => e.stopPropagation()}
-                    style={{ ...CARD_STAT, color: S.accent, textDecoration: 'underline' }}
+                    className="wk-link"
                   >
                     PR #{pr.split('/').pop()}
                   </a>
@@ -375,11 +282,7 @@ function CampaignCard({ m, narration, navigate }: {
             );
           })}
           {m.testSets.length > CARD_SET_CAP && (
-            <span
-              data-testid="campaign-card-testset-more"
-              style={{ ...CARD_STAT, color: S.faint }}
-              title="Older sets registered under this test — the daemon serves every one; the card shows the newest three"
-            >
+            <span data-testid="campaign-card-testset-more" className="wk-test-card-meta">
               +{m.testSets.length - CARD_SET_CAP} older set{m.testSets.length - CARD_SET_CAP === 1 ? '' : 's'}
             </span>
           )}
@@ -389,28 +292,25 @@ function CampaignCard({ m, narration, navigate }: {
       {/* ── Live narration — the freshest member-run frame, narrator-spoken ── */}
       {narration !== null && <CardNarration line={narration.line} runId={narration.runId} />}
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-        <span style={CARD_STAT}>
+      <div className="wk-test-card-line wk-test-card-meta">
+        <span>
           {isCampaign
-            ? `${m.total} node${m.total === 1 ? '' : 's'}${m.attached > 0 ? ` · +${m.attached} attached` : ''}`
+            ? `${m.total} step${m.total === 1 ? '' : 's'}${m.attached > 0 ? ` · +${m.attached} attached` : ''}`
             : `${m.total} run${m.total === 1 ? '' : 's'}`}
         </span>
-        {!isCampaign && m.group !== null && (
-          <span style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-            {m.group.runs.map((r) => (
-              <button
-                key={r.runId}
-                type="button"
-                data-testid="campaign-card-run"
-                data-run-id={r.runId}
-                onClick={(e) => { e.stopPropagation(); navigate(sessionPath(`run:${r.runId}`)); }}
-                style={{ ...CARD_STAT, color: S.muted, textDecoration: 'underline', cursor: 'pointer' }}
-              >
-                {runShortId(r.runId)}
-              </button>
-            ))}
-          </span>
-        )}
+        {!isCampaign && m.group !== null && m.group.runs.map((r, i) => (
+          <button
+            key={r.runId}
+            type="button"
+            data-testid="campaign-card-run"
+            data-run-id={r.runId}
+            title={`Open run ${i + 1}`}
+            onClick={(e) => { e.stopPropagation(); navigate(sessionPath(`run:${r.runId}`)); }}
+            className="wk-link"
+          >
+            Run {i + 1}
+          </button>
+        ))}
       </div>
     </div>
   );
@@ -518,17 +418,11 @@ export function CampaignsPage({ runs, navigate, projectId = null, launchIntent =
   }, [campaigns, groups, runsById, soloRuns]);
   // The registered sets' rollup — `null` on a pre-0.36 daemon, so the tile says nothing about sets.
   const setTotals = useMemo(() => (testSets === null ? null : testSetTotals(testSets)), [testSets]);
-  const runsDelta = useMemo(() => windowDelta(buckets, (rs) => rs.length), [buckets]);
   const failedDelta = useMemo(
     () => windowDelta(buckets, (rs) => rs.filter((v) => outcomeOf(v.session.status) === 'fail').length),
     [buckets],
   );
   const firstWaiting = memberRuns.find((v) => v.session.status === 'awaiting_human')?.session.id ?? null;
-  const waitingHref = firstWaiting !== null ? sessionPath(`run:${firstWaiting}`) : null;
-  const sessionsHref = everythingPath({ tab: 'sessions' });
-  const activeSessionsHref = everythingPath({ tab: 'sessions', filter: 'active' });
-  const failedSessionsHref = everythingPath({ tab: 'sessions', filter: 'failed' });
-  const passHealth = passRateHealth(totals.landed, totals.terminal);
 
   // ── The card models (needs-you first; campaigns and groups, one sorted set) ──
   const cards = useMemo(
@@ -598,59 +492,45 @@ export function CampaignsPage({ runs, navigate, projectId = null, launchIntent =
   ];
 
   // ── The creation verbs + panels (the Harness, folded in) ────────────────────
-  const header = (
+  const actions = (
     <>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-        <p data-testid="campaigns-header-copy" style={{ flex: 1, minWidth: 0, fontSize: '13px', color: S.muted, margin: 0 }}>
-          Test your codebases — <strong style={{ color: S.ink, fontWeight: 600 }}>New test</strong> runs the governed{' '}
-          <span className="font-mono" style={{ color: S.ink }}>qe-author-tests</span> workflow: recon → author → verify
-          (runs what it wrote) → review (a distinct judge) → deliver (the engine opens the PR). You approve the plan at
-          the intake gate; the produced set lands below with its counts. Works with or without a project.
-        </p>
-        <button
-          type="button"
-          data-testid="testing-recon-open"
-          aria-expanded={panel === 'recon'}
-          onClick={() => openPanel('recon')}
-          style={{
-            background: 'transparent', color: S.muted, border: `1px solid ${S.border}`,
-            borderRadius: '7px', padding: '8px 14px', fontSize: '12px', fontWeight: 600,
-            cursor: 'pointer', flexShrink: 0,
-          }}
-        >
-          Run recon
-        </button>
-        <button
-          type="button"
-          data-testid="testing-author-open"
-          aria-expanded={panel === 'author'}
-          onClick={() => openPanel('author')}
-          // F-075 (2): this verb authors TESTING STEERING RULES (the AuthorPanel), not tests — the
-          // label says so, so a customer who wants tests does not get a policy-authoring run.
-          title="Draft testing steering rules with chat — policy for how tests are written and judged, not a test run"
-          style={{
-            background: 'transparent', color: S.muted, border: `1px solid ${S.border}`,
-            borderRadius: '7px', padding: '8px 14px', fontSize: '12px', fontWeight: 600,
-            cursor: 'pointer', flexShrink: 0,
-          }}
-        >
-          Add testing rules
-        </button>
-        <button
-          type="button"
-          data-testid="testing-campaign-open"
-          aria-expanded={panel === 'campaign'}
-          onClick={() => openPanel('campaign')}
-          style={{
-            background: S.accent, color: 'var(--accent-fg)', border: 'none', borderRadius: '7px',
-            padding: '8px 14px', fontSize: '12px', fontWeight: 700, cursor: 'pointer',
-            flexShrink: 0,
-          }}
-        >
-          New test
-        </button>
-      </div>
-
+      <button
+        type="button"
+        data-testid="testing-recon-open"
+        aria-expanded={panel === 'recon'}
+        onClick={() => openPanel('recon')}
+        title="Look over a repository and suggest what to test, without writing anything"
+        className="wk-btn wk-btn--secondary"
+      >
+        Run recon
+      </button>
+      <button
+        type="button"
+        data-testid="testing-author-open"
+        aria-expanded={panel === 'author'}
+        onClick={() => openPanel('author')}
+        // F-075 (2): this verb authors TESTING STEERING RULES (the AuthorPanel), not tests — the
+        // label says so, so a customer who wants tests does not get a policy-authoring run.
+        title="Draft rules for how tests are written and judged (not a test run)"
+        className="wk-btn wk-btn--secondary"
+      >
+        Add testing rules
+      </button>
+      <button
+        type="button"
+        data-testid="testing-campaign-open"
+        aria-expanded={panel === 'campaign'}
+        onClick={() => openPanel('campaign')}
+        className="wk-btn wk-btn--primary"
+      >
+        New test
+      </button>
+    </>
+  );
+  // studio#685 row 50: one plain sentence, not the workflow diagram.
+  const intro = 'New test plans tests for a repository, waits for you to approve the plan, runs what it wrote and opens a pull request.';
+  const panels = (
+    <>
       {/* Keyed by intent AND arrival: a new `?new=` arrival, or switching the verb (recon ⇄ test),
           is a NEW launch instance — a launched/errored panel never carries over into the next ask. */}
       {(panel === 'recon' || panel === 'campaign') && (
@@ -668,11 +548,20 @@ export function CampaignsPage({ runs, navigate, projectId = null, launchIntent =
       {panel === 'author' && <AuthorPanel type="testing" onClose={() => setPanel(null)} onAuthored={() => {}} />}
     </>
   );
+  const frame = (children: React.ReactNode): React.ReactElement => (
+    <div data-testid="campaigns-page" className="wk-test-page">
+      <PageFrame title="Testing" intro={intro} actions={actions} data-testid="campaigns-frame">
+        {panels}
+        {children}
+      </PageFrame>
+    </div>
+  );
 
   if (support === 'unknown') {
+    // While probing: the frame's title and a skeleton ALONE — no verbs before the probe answers.
     return (
-      <div data-testid="campaigns-probing" style={{ padding: '24px', color: 'var(--ink-muted)' }}>
-        Checking this daemon for tests…
+      <div data-testid="campaigns-probing" className="wk-test-page">
+        <PageFrame title="Testing" intro={intro}><Skeleton rows={3} variant="card" /></PageFrame>
       </div>
     );
   }
@@ -680,107 +569,102 @@ export function CampaignsPage({ runs, navigate, projectId = null, launchIntent =
     // The listing needs `GET /campaigns`; the creation verbs stay usable — a daemon this old
     // also predates `POST /testing/recon`, so `launchTestingRun` falls back to the shipping
     // `POST /runs` wire for ≤ 1-repo scopes. The folded-in Harness must not regress here.
-    return (
-      <div data-testid="campaigns-page" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
-        {header}
-        <div data-testid="campaigns-unsupported" style={{ color: 'var(--ink-muted)', maxWidth: '640px' }}>
-          This daemon has no test surface — `GET /campaigns` is not served, which means the
-          connected wicked-crew predates test grouping. Launches still work; upgrade the
-          daemon to group a multi-run test&rsquo;s sibling runs here.
-        </div>
-      </div>
+    return frame(
+      <div data-testid="campaigns-unsupported">
+        <EmptyState
+          title="This version of Studio’s service can’t list tests."
+          body="New test still works. Update Studio to see each test's runs grouped here."
+        />
+      </div>,
     );
   }
 
-  return (
-    // FULL WIDTH — the landing flows with the viewport; no max-width constraint (lane B).
-    <div data-testid="campaigns-page" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
-      {header}
+  // Settled-zero filter chips are hidden unless active (UI-CONTRACT §4.5); "All" always shows.
+  const shownChips = chips.filter((c) => c.id === 'all' || c.id === chip || (c.count ?? 0) > 0);
+  const passWord = passRateWord(totals.landed, totals.terminal);
 
-      {/* ── The KPI band — the command-center model: three questions, ≤6 tiles ── */}
-      <KpiBand testId="campaigns-kpis">
-        <KpiGroup label="Performance" grow={2}>
-          <StatTile
-            testId="stat-campaigns"
-            label="Tests"
-            value={totals.campaigns + totals.groups + soloRuns.length}
-            // The sets word leads (it is what the operator came for); "active now" follows. The
-            // "N ad-hoc group" word is gone — every 0.36 New test IS a label group, so it only crowded
-            // the line (#266 F-1 / F-8). The tile's `title` says what the value counts.
-            context={[...(setsWord !== null ? [setsWord] : []), `${totals.activeNow} active now`].join(' · ')}
-            contextTitle={[...(setsWordFull !== null ? [setsWordFull] : []), `${totals.activeNow} active now`].join(' · ')}
-            data={{
-              'data-test-sets': setTotals === null ? 'absent' : setTotals.sets,
-              'data-test-sets-unattributed': unattributed.length,
-              'data-test-sets-malformed': malformedTestSets,
-            }}
-            title={unattributed.length > 0
-              ? `Every test on this daemon — each repository's label group and every multi-repo run — click to clear filters. ${unattributed.length} registered set${unattributed.length === 1 ? '' : 's'} belong${unattributed.length === 1 ? 's' : ''} to no test shown here (the producing run is gone from the wire): ${unattributed.map((t) => t.plan ?? t.id).join(', ')}`
-              : "Every test on this daemon — each repository's label group and every multi-repo run — click to clear filters"}
-            onOpen={() => { setChip('all'); setQuery(''); }}
-          />
-          <StatTile
-            testId="stat-campaign-runs"
-            label="Test runs"
-            value={buckets.current.length}
-            delta={runsDelta}
-            context={deltaWord(range, runsDelta)}
-            title="Test-member runs in the window — open the sessions list"
-            href={sessionsHref}
-            onOpen={() => navigate(sessionsHref)}
-          />
-        </KpiGroup>
-        <KpiGroup label="Pipeline" grow={2}>
-          <StatTile
-            testId="stat-campaign-running"
-            label="Running"
-            value={totals.running}
-            context="right now"
-            title="Test runs moving under their own power — open the sessions list"
-            href={activeSessionsHref}
-            onOpen={() => navigate(activeSessionsHref)}
-          />
-          <StatTile
-            testId="stat-campaign-gates"
-            label="Needs you"
-            value={totals.awaitingHuman}
-            valueColor={totals.awaitingHuman > 0 ? 'var(--status-gate)' : undefined}
-            context={totals.awaitingHuman > 0 ? `${chipCounts['needs-you']} test${chipCounts['needs-you'] === 1 ? '' : 's'} waiting` : 'nothing waiting'}
-            title={firstWaiting !== null
-              ? 'A sibling run is waiting on you — jump to its approval dock'
-              : 'Runs waiting on a human — filter the grid to them'}
-            {...(waitingHref !== null ? { href: waitingHref } : {})}
-            onOpen={() => {
-              if (waitingHref !== null) navigate(waitingHref);
-              else setChip('needs-you');
-            }}
-          />
-        </KpiGroup>
-        <KpiGroup label="Risk" grow={2}>
-          <StatTile
-            testId="stat-campaign-failed"
-            label="Failed"
-            value={failedDelta.current}
-            valueColor={failedDelta.current > 0 ? 'var(--status-fail)' : undefined}
-            delta={failedDelta}
-            deltaSense="bad-up"
-            context={deltaWord(range, failedDelta)}
-            title="Failed test runs in the window — open them on the sessions list"
-            href={failedSessionsHref}
-            onOpen={() => navigate(failedSessionsHref)}
-          />
-          <StatTile
-            testId="stat-campaign-pass-rate"
-            label="Pass rate"
-            value={passRateWord(totals.landed, totals.terminal)}
-            valueColor={healthColor(passHealth)}
-            context={(totals.terminal > 0 ? `${totals.landed} landed of ${totals.terminal} finished` : 'no finished runs yet')
-              + (totals.cancelled > 0 ? ` · ${totals.cancelled} cancelled` : '')}
-            title="Landed over finished, across every test — filter to the failing ones"
-            onOpen={() => setChip('failing')}
-          />
-        </KpiGroup>
-      </KpiBand>
+  return frame(
+    <>
+      {/* ── The facts line (KPI tiles retired, UI-CONTRACT §4.6): one sentence-case line ── */}
+      <div data-testid="campaigns-kpis" className="wk-test-facts"
+        data-tests={totals.campaigns + totals.groups + soloRuns.length}
+        data-test-sets={setTotals === null ? 'absent' : setTotals.sets}
+        data-test-sets-unattributed={unattributed.length}
+        data-test-sets-malformed={malformedTestSets}
+        data-active-now={totals.activeNow}
+        data-runs={buckets.current.length}
+        data-running={totals.running}
+        data-gates={totals.awaitingHuman}
+        data-failed={failedDelta.current}
+      >
+        <StatLine
+          showZero={false}
+          items={[
+            { label: totals.campaigns + totals.groups + soloRuns.length === 1 ? 'test' : 'tests', value: totals.campaigns + totals.groups + soloRuns.length },
+            { label: `${buckets.current.length === 1 ? 'run' : 'runs'} in the ${rangeWord(range)}`, value: buckets.current.length },
+            { label: 'running now', value: totals.running },
+            { label: totals.awaitingHuman === 1 ? 'needs you' : 'need you', value: totals.awaitingHuman },
+            { label: 'failed', value: failedDelta.current },
+          ]}
+        />
+        <p data-testid="stat-campaign-pass-rate" data-value={passWord} className="wk-test-facts-meta">
+          {totals.terminal > 0
+            ? `Runs: ${passWord} passed · ${totals.landed} landed of ${totals.terminal} finished`
+            : 'Runs: no finished runs yet'}
+          {totals.cancelled > 0 ? ` · ${totals.cancelled} cancelled` : ''}
+
+        </p>
+        {setsWord !== null && (
+          <p className="wk-test-facts-meta">
+            <span
+              data-testid="campaigns-sets-word"
+              title={(setsWordFull ?? '') + (unattributed.length > 0 ? ` — not shown on any card: ${unattributed.map((t) => t.plan ?? t.id).join(', ')}` : '')}
+            >Test sets: {setsWord}</span>
+          </p>
+        )}
+        <p className="wk-steer-usage-doors">
+          {buckets.current.length > 0 && (
+            <a
+              data-testid="campaigns-all-runs"
+              href={everythingPath({ tab: 'sessions' })}
+              onClick={(e) => { e.preventDefault(); navigate(everythingPath({ tab: 'sessions' })); }}
+              className="wk-link"
+            >
+              See all runs
+            </a>
+          )}
+          {totals.running > 0 && (
+            <a
+              data-testid="campaigns-running-runs"
+              href={everythingPath({ tab: 'sessions', filter: 'active' })}
+              onClick={(e) => { e.preventDefault(); navigate(everythingPath({ tab: 'sessions', filter: 'active' })); }}
+              className="wk-link"
+            >
+              See running
+            </a>
+          )}
+          {failedDelta.current > 0 && (
+            <a
+              data-testid="campaigns-failed-runs"
+              href={everythingPath({ tab: 'sessions', filter: 'failed' })}
+              onClick={(e) => { e.preventDefault(); navigate(everythingPath({ tab: 'sessions', filter: 'failed' })); }}
+              className="wk-link"
+            >
+              See failed runs
+            </a>
+          )}
+          {firstWaiting !== null && (
+            <a
+              data-testid="campaigns-first-waiting"
+              href={sessionPath(`run:${firstWaiting}`)}
+              onClick={(e) => { e.preventDefault(); navigate(sessionPath(`run:${firstWaiting}`)); }}
+              className="wk-link"
+            >
+              Open the run waiting on you
+            </a>
+          )}
+        </p>
+      </div>
 
       {/* ── Filters — first-class, never hidden ── */}
       <FilterStrip
@@ -788,7 +672,7 @@ export function CampaignsPage({ runs, navigate, projectId = null, launchIntent =
         query={query}
         onQuery={setQuery}
         placeholder="Search tests…"
-        chips={chips}
+        chips={shownChips}
         active={chip}
         onChip={(id) => setChip(id as CampaignChip)}
         range={range}
@@ -800,85 +684,56 @@ export function CampaignsPage({ runs, navigate, projectId = null, launchIntent =
             data-testid="campaigns-show-older"
             onClick={() => setRange('all')}
             title={`${hiddenByWindow} test${hiddenByWindow === 1 ? '' : 's'} with no run in the ${rangeWord(range)} window`}
-            style={{
-              borderRadius: 'var(--radius-full)', padding: '3px 10px',
-              fontSize: 'var(--text-2xs)', fontFamily: 'var(--font-mono)', cursor: 'pointer',
-              border: '1px dashed var(--surface-raised)', background: 'transparent',
-              color: 'var(--ink-dim)',
-            }}
+            className="wk-btn wk-btn--quiet wk-btn--sm"
           >
-            +{hiddenByWindow} older · show all
+            Show {hiddenByWindow} older
           </button>
         )}
       </FilterStrip>
 
       {/* studio#216: single-repo tests — each run New test / Run recon launched on ONE repository. */}
       {visibleSolo.length > 0 && (
-        <section data-testid="testing-solo-runs" style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-          <h3 style={{ fontSize: 'var(--text-xs)', fontWeight: 600, color: S.muted, margin: 0 }}>
-            Single-repository tests · {visibleSolo.length}
-          </h3>
-          {visibleSolo.map((v) => (
-            <a
-              key={v.session.id}
-              data-testid="testing-solo-run"
-              data-run-id={v.session.id}
-              data-status={v.session.status}
-              href={sessionPath(`run:${v.session.id}`)}
-              onClick={(e) => { e.preventDefault(); navigate(sessionPath(`run:${v.session.id}`)); }}
-              style={{
-                display: 'flex', gap: '10px', alignItems: 'baseline', minWidth: 0, textDecoration: 'none',
-                background: S.card, border: `1px solid ${S.border}`, borderRadius: 'var(--radius-md)', padding: '8px 12px',
-              }}
-            >
-              <span style={{ ...CARD_STAT, color: v.session.status === 'failed' ? 'var(--status-fail)' : v.session.status === 'completed' ? 'var(--status-done)' : S.faint, flexShrink: 0 }}>
-                {v.session.status.replace(/_/g, ' ')}
-              </span>
-              <span style={{ fontSize: 'var(--text-sm)', color: S.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
-                {humanTitle(v.session.problem || v.session.id)}
-              </span>
-              <span style={{ ...CARD_STAT, color: S.faint, marginLeft: 'auto', flexShrink: 0 }}>{v.session.repo_ref ?? 'no repository'}</span>
-            </a>
-          ))}
+        <section data-testid="testing-solo-runs" className="wk-test-solo">
+          <h2 className="wk-section-title">Single-repository tests</h2>
+          {visibleSolo.map((v) => {
+            const st = statusWord(v);
+            return (
+              <a
+                key={v.session.id}
+                data-testid="testing-solo-run"
+                data-run-id={v.session.id}
+                data-status={v.session.status}
+                href={sessionPath(`run:${v.session.id}`)}
+                onClick={(e) => { e.preventDefault(); navigate(sessionPath(`run:${v.session.id}`)); }}
+                className="wk-list-row wk-test-solo-row"
+              >
+                <span className={`wk-tag${st.tone === 'ok' || st.tone === 'fail' || st.tone === 'gate' ? ` wk-tag--${st.tone}` : ''}`}>{st.word}</span>
+                <span className="wk-list-row-title">{humanTitle(v.session.problem || 'Untitled test')}</span>
+                <span className="wk-list-row-meta">{v.session.repo_ref != null ? (v.session.repo_ref.split(/[\\/]/).filter(Boolean).pop() ?? v.session.repo_ref) : 'No repository'}</span>
+              </a>
+            );
+          })}
         </section>
       )}
 
       {cards.length === 0 && soloRuns.length === 0 ? (
-        // The honest empty state, with the way in: a campaign appears with its first run.
-        <div data-testid="campaigns-empty" style={{
-          textAlign: 'center', padding: '48px 24px',
-          background: S.card, border: `1px solid ${S.border}`, borderRadius: '12px',
-        }}>
-          <p style={{ fontSize: '14px', color: S.muted, margin: 0, marginBottom: '4px' }}>
-            No tests yet
-          </p>
-          <p style={{ fontSize: '12px', color: S.faint, margin: 0 }}>
-            A test appears here the moment New test launches it (one card per launch, its runs inside) and
-            fills in with the produced set — produced, executed / passed / failed, the PLAN and the PR — when
-            the run finishes.
-          </p>
-          <button
-            type="button"
-            data-testid="campaigns-empty-cta"
-            onClick={() => setPanel('campaign')}
-            style={{
-              marginTop: '12px', padding: '6px 14px', borderRadius: 'var(--radius-md)',
-              background: S.accent, color: 'var(--accent-fg)', fontSize: 'var(--text-sm)',
-              fontWeight: 600, border: 'none', cursor: 'pointer',
-            }}
-          >
-            New test
-          </button>
+        // The honest empty state, with the way in: a test appears with its first run.
+        <div data-testid="campaigns-empty">
+          <EmptyState
+            title="No tests yet"
+            body="A test shows up here as soon as you start one, and fills in with its results when it finishes."
+            action={(
+              <button type="button" data-testid="campaigns-empty-cta" onClick={() => setPanel('campaign')} className="wk-btn wk-btn--primary">
+                New test
+              </button>
+            )}
+          />
         </div>
       ) : visible.length === 0 && visibleSolo.length > 0 ? null : visible.length === 0 ? (
-        <p data-testid="campaigns-empty-filter" style={{ fontSize: '13px', color: S.faint, margin: 0 }}>
-          No tests match —{' '}
-          <button
-            type="button"
-            onClick={() => { setChip('all'); setQuery(''); setRange('all'); }}
-            style={{ background: 'none', border: 'none', padding: 0, font: 'inherit', color: S.muted, textDecoration: 'underline', cursor: 'pointer' }}
-          >
-            clear filters
+        <p data-testid="campaigns-empty-filter" className="wk-test-facts-meta">
+          No tests match these filters.{' '}
+          <button type="button" onClick={() => { setChip('all'); setQuery(''); setRange('all'); }} className="wk-link">
+            Clear filters
           </button>
         </p>
       ) : (
@@ -893,6 +748,6 @@ export function CampaignsPage({ runs, navigate, projectId = null, launchIntent =
           ))}
         </DashboardGrid>
       )}
-    </div>
+    </>,
   );
 }

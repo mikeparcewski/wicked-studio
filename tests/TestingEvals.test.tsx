@@ -112,7 +112,7 @@ describe('Evals — the run', () => {
 
     // The report header names its corpus (provenance, qe finding).
     expect(screen.getByTestId('testing-evals-provenance')).toHaveTextContent(
-      'corpus: evals:dev-behaviors · 3 samples',
+      'Corpus: evals:dev-behaviors · 3 samples',
     );
 
     const rows = screen.getAllByTestId('testing-evals-row');
@@ -207,7 +207,9 @@ describe('Evals — the run', () => {
     page();
 
     await user.click(screen.getByTestId('testing-evals-run'));
-    expect(await screen.findByTestId('testing-evals-degraded')).toHaveTextContent(/no embedder/);
+    expect(await screen.findByTestId('testing-evals-degraded')).toHaveTextContent(
+      'Facet match only: these runs matched rules on their tags alone, because this setup has no embedding model. Verdicts are real; the nearest-rule hints are weaker.',
+    );
     // The report still renders — degraded is a caveat, not a refusal.
     expect(screen.getByTestId('testing-evals-summary')).toHaveTextContent('3 samples');
   });
@@ -253,7 +255,10 @@ describe('Evals — the run', () => {
     page();
 
     await user.click(screen.getByTestId('testing-evals-run'));
-    expect(await screen.findByTestId('testing-evals-error')).toHaveTextContent(/corpsu/);
+    const error = await screen.findByTestId('testing-evals-error');
+    expect(error).toHaveTextContent('Couldn’t load the eval results.');
+    expect(within(error).getByTestId('state-banner-detail')).toHaveTextContent(/corpsu/);
+    expect(within(error).getByTestId('state-banner-detail')).not.toHaveAttribute('open');
     expect(screen.queryByTestId('testing-evals-unsupported')).toBeNull();
   });
 });
@@ -282,7 +287,7 @@ describe('Evals — corpus import', () => {
 
     await user.type(screen.getByTestId('testing-corpus-name'), 'dev-behaviors');
     await user.upload(
-      screen.getByTestId('testing-corpus-file'),
+      screen.getByTestId('testing-corpus-file-input'),
       new File([JSON.stringify(SAMPLES)], 'dev-behaviors.json', { type: 'application/json' }),
     );
 
@@ -303,10 +308,10 @@ describe('Evals — corpus import', () => {
 
     await user.type(screen.getByTestId('testing-corpus-name'), 'x');
     await user.upload(
-      screen.getByTestId('testing-corpus-file'),
+      screen.getByTestId('testing-corpus-file-input'),
       new File([JSON.stringify(SAMPLES)], 'x.json', { type: 'application/json' }),
     );
-    expect(await screen.findByTestId('testing-corpus-summary')).toHaveTextContent(/facet-only/);
+    expect(await screen.findByTestId('testing-corpus-summary')).toHaveTextContent('Facet match only');
   });
 
   it('501 on import folds into the same honest core-ts callout', async () => {
@@ -317,7 +322,7 @@ describe('Evals — corpus import', () => {
     page();
 
     await user.upload(
-      screen.getByTestId('testing-corpus-file'),
+      screen.getByTestId('testing-corpus-file-input'),
       new File([JSON.stringify(SAMPLES)], 'x.json', { type: 'application/json' }),
     );
     expect(await screen.findByTestId('testing-corpus-unsupported')).toHaveTextContent(/requires core-ts 0\.7\.5/);
@@ -335,10 +340,13 @@ describe('Evals — corpus import', () => {
     page();
 
     await user.upload(
-      screen.getByTestId('testing-corpus-file'),
+      screen.getByTestId('testing-corpus-file-input'),
       new File(['{"not":"a corpus"}'], 'nope.json', { type: 'application/json' }),
     );
-    expect(await screen.findByTestId('testing-corpus-error')).toHaveTextContent(/not an eval corpus/);
+    const error = await screen.findByTestId('testing-corpus-error');
+    expect(error).toHaveTextContent('That file isn’t an eval corpus.');
+    expect(within(error).getByTestId('tech-details')).toHaveTextContent(/not an eval corpus/);
+    expect(within(error).getByTestId('tech-details')).not.toHaveAttribute('open');
     expect(posted).toBe(false);
   });
 });

@@ -43,8 +43,8 @@ export function SteeringAddMenu({ onAddRow, onOpenAssistant, onAddMcpPolicy }: {
       className="w-full flex flex-col items-start gap-0.5 px-3 py-1.5 text-left transition-colors hover:bg-surface-raised"
       style={{ background: 'transparent' }}
     >
-      <span className="text-[11px] font-semibold" style={{ color: 'var(--ink-high)' }}>{label}</span>
-      <span className="text-[10px]" style={{ color: 'var(--ink-dim)' }}>{sublabel}</span>
+      <span className="text-sm font-semibold" style={{ color: 'var(--ink-high)' }}>{label}</span>
+      <span className="text-xs" style={{ color: 'var(--ink-muted)' }}>{sublabel}</span>
     </button>
   );
 
@@ -57,25 +57,24 @@ export function SteeringAddMenu({ onAddRow, onOpenAssistant, onAddMcpPolicy }: {
         aria-haspopup="menu"
         aria-expanded={menuOpen}
         onClick={() => setMenuOpen((v) => !v)}
-        className="rounded px-2.5 py-1 text-[11px] font-semibold"
-        style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
+        className="wk-btn wk-btn--primary wk-btn--sm"
       >
-        Add ▾
+        Add a rule ▾
       </button>
       {menuOpen && (
         <div
           data-testid="steering-add-menu-list"
           role="menu"
-          className="absolute left-0 top-8 z-30 w-64 py-1"
+          className="absolute left-0 top-9 z-30 w-72 max-w-[calc(100vw-2rem)] py-1"
           style={{
             background: 'var(--surface-raised)',
             boxShadow: 'var(--shadow-raised)',
             borderRadius: 'var(--radius-md)',
           }}
         >
-          {item('steering-add-open', 'Add row', 'An editable draft row in the grid — manual id, saved on commit', onAddRow)}
+          {item('steering-add-open', 'Add row', 'A new row in the table; saved when you finish typing', onAddRow)}
           {onAddMcpPolicy !== undefined && item('steering-add-mcp', 'Add MCP policy', 'Pick a server or tool, say when it applies, choose the effect', onAddMcpPolicy)}
-          {item('steering-assist-open', 'Open assistant', 'Chat, analyze docs, or import rule files directly', onOpenAssistant)}
+          {item('steering-assist-open', 'Open assistant', 'Describe rules in chat, or import rule files', onOpenAssistant)}
         </div>
       )}
     </div>

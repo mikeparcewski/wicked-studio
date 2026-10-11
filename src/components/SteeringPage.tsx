@@ -28,6 +28,9 @@ import type { SessionView } from '../api/types.js';
 import { ruleUsage } from '../board/steeringUsage.js';
 import { isMcpRule, MCP_POLICY_TEMPLATE, nextMcpPolicyId } from '../api/mcp.js';
 import { AssistDock, useAssistDockOpen, type AssistNote, type AssistVerbs } from './AssistDock.js';
+import { usePhone } from '../hooks/usePhone.js';
+import { readErrorKind } from '../api/errors.js';
+import { Skeleton, StateBanner, TechDetails } from './ui/index.js';
 import { SteeringAddMenu } from './SteeringAddMenu.js';
 import { SteeringUsageBand } from './SteeringUsageBand.js';
 import { SteeringGrid } from './SteeringGrid.js';
@@ -59,6 +62,17 @@ import { SteeringTypeFilter } from './SteeringTypeFilter.js';
  * stays read-only (AW-11).
  */
 
+/** One skipped import entry, in plain words (the engine's text names invariants like INV-S3). */
+export function plainSkip(index: number, raw: string): string {
+  const why = /applies_to/i.test(raw) ? 'it doesn’t say where it applies'
+    : /\bid\b[^.]*blank/i.test(raw) ? 'it has no id'
+    : /\bid\b.*(exists|duplicate)|duplicate/i.test(raw) ? 'a rule with that id already exists'
+    : /statement/i.test(raw) ? 'it has no statement'
+    : /type/i.test(raw) ? 'its type isn’t one of the seven'
+    : 'Studio’s service refused it';
+  return `Rule ${index + 1} skipped: ${why}.`;
+}
+
 export function SteeringPage({ type, navigate, search = '', runs = [] }: {
   /** The active type FILTER read from `?type=` — `null` is the `All` view (every rule). */
   type: SteeringType | null;
@@ -75,6 +89,7 @@ export function SteeringPage({ type, navigate, search = '', runs = [] }: {
   const [rules, setRules] = useState<SteeringRule[]>([]);
   const [rulesLoading, setRulesLoading] = useState(true);
   const [rulesError, setRulesError] = useState<string | null>(null);
+  const [rulesErrorRaw, setRulesErrorRaw] = useState<unknown>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   /** The rule the edit modal is open for, or null. */
   const [editing, setEditing] = useState<SteeringRule | null>(null);
@@ -87,7 +102,37 @@ export function SteeringPage({ type, navigate, search = '', runs = [] }: {
   const [commitError, setCommitError] = useState<string | null>(null);
   /** Bumped by the Add ▾ menu — the grid opens its draft row on change. */
   const [addTick, setAddTick] = useState(0);
-  const [dockOpen, setDockOpen] = useAssistDockOpen('steering');
+  const [deskDockOpen, setDeskDockOpen] = useAssistDockOpen('steering');
+  // At phone width the assistant is a sheet over the page, closed until asked for (UI-CONTRACT §3:
+  // beside the page it left the rules ~40 px wide); the desktop open/closed preference is untouched.
+  const phone = usePhone();
+  const [phoneDockOpen, setPhoneDockOpen] = useState(false);
+  const dockOpen = phone ? phoneDockOpen : deskDockOpen;
+  const setDockOpen = phone ? setPhoneDockOpen : setDeskDockOpen;
+  const sheetRef = useRef<HTMLDivElement | null>(null);
+  const mainRef = useRef<HTMLDivElement | null>(null);
+  // While the phone sheet is open the page behind it is inert: Tab stays inside the sheet.
+  useEffect(() => {
+    const main = mainRef.current;
+    if (main === null) return;
+    if (phone && phoneDockOpen) main.setAttribute('inert', '');
+    else main.removeAttribute('inert');
+    return () => { main.removeAttribute('inert'); };
+  }, [phone, phoneDockOpen]);
+  const sheetOpener = useRef<HTMLButtonElement | null>(null);
+  // The phone sheet is a dialog: focus moves into it on open and back to its opener on close.
+  const sheetWasOpen = useRef(false);
+  useEffect(() => {
+    if (!phone) return;
+    if (phoneDockOpen) {
+      sheetWasOpen.current = true;
+      const first = sheetRef.current?.querySelector<HTMLElement>('textarea, input, button, [href], [tabindex]:not([tabindex="-1"])');
+      first?.focus();
+    } else if (sheetWasOpen.current) {
+      sheetWasOpen.current = false;
+      sheetOpener.current?.focus();
+    }
+  }, [phone, phoneDockOpen]);
 
   /** The type a new/authored rule defaults to — the active filter, or architecture in the `All`
    *  view (the engine's serde default; the draft's type cell stays editable). */
@@ -102,6 +147,7 @@ export function SteeringPage({ type, navigate, search = '', runs = [] }: {
       return rs as SteeringRule[];
     } catch (e) {
       setRulesError(e instanceof Error ? e.message : String(e));
+      setRulesErrorRaw(e);
       return [];
     } finally {
       setRulesLoading(false);
@@ -250,7 +296,8 @@ export function SteeringPage({ type, navigate, search = '', runs = [] }: {
         const ok = outcomes.filter((o) => o.ok).length;
         const notes: AssistNote[] = [
           { tone: ok === outcomes.length ? 'work' : 'gate', text: `${doc.name}: ${ok} of ${outcomes.length} entr${outcomes.length === 1 ? 'y' : 'ies'} imported.` },
-          ...outcomes.map((o): AssistNote => ({ tone: o.ok ? 'work' : 'fail', text: o.text })),
+          // studio#689 row 49: a skipped entry says why in plain words, not the engine's invariant log.
+          ...outcomes.map((o, i): AssistNote => ({ tone: o.ok ? 'work' : 'fail', text: o.ok ? o.text : plainSkip(i, o.text) })),
         ];
         return notes;
       } catch (e) {
@@ -292,6 +339,25 @@ export function SteeringPage({ type, navigate, search = '', runs = [] }: {
   const gridIds =
     mcpIds === null ? unusedIds : unusedIds === null ? mcpIds : mcpIds.filter((id) => unusedIds.includes(id));
 
+  const renderDock = (fill: boolean): React.ReactElement => (
+    <AssistDock
+      context={{
+        surface: 'steering',
+        title: 'Assistant',
+        contextLabel: `Steering · ${type === null ? 'All rules' : STEERING_TYPE_LABELS[type]}`,
+        placeholder: `Describe the ${STEERING_TYPE_LABELS[pageType]} rules you want…`,
+        hint: `Describe the ${STEERING_TYPE_LABELS[pageType]} rules you want, or drop .md or .json rule files to import them. `
+          + 'A helper drafts the rules; nothing is saved until you approve them.',
+      }}
+      verbs={dockVerbs}
+      importable={(name) => /\.(md|markdown|json)$/i.test(name)}
+      open={dockOpen}
+      onOpenChange={setDockOpen}
+      typeTarget="page"
+      {...(fill ? { fill: true } : {})}
+    />
+  );
+
   /** Where the `Show all` link in the usage-filter note points — the current filter, usage cleared. */
   const clearUsageHref = policiesPath(type);
 
@@ -299,29 +365,37 @@ export function SteeringPage({ type, navigate, search = '', runs = [] }: {
     <div
       data-testid="steering-page"
       data-steering-type={type ?? 'all'}
-      className="flex h-full min-h-0 min-w-0 flex-1 overflow-hidden"
+      className="wk-steer-page flex h-full min-h-0 min-w-0 flex-1 overflow-hidden"
     >
       {/* The page column — scrolls on its own; the GRID additionally scrolls horizontally
           inside its container, so grid + dock coexist at 1440×700 with zero page-level
           horizontal scroll. */}
-      <div className="flex min-w-0 flex-1 flex-col gap-4 overflow-y-auto p-6">
-        <div className="flex items-start gap-2">
-          <div>
-            <h2 className="text-sm font-semibold" style={{ color: 'var(--ink-high)' }}>Steering · Policies</h2>
-            <p className="mt-1 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
-              The governance surface — the seven-type steering-rule corpus. Filter by type and manage
-              rules inline. Agent-proposed policies are reviewed in the governed-knowledge dashboard.
+      <div ref={mainRef} className="wk-steer-main flex min-w-0 flex-1 flex-col gap-4 overflow-y-auto">
+        <header className="wk-page-head wk-steer-head">
+          <div className="wk-page-head-text">
+            <h1 className="wk-page-title">Manage rules</h1>
+            <p className="wk-page-intro">
+              Every steering rule helpers follow, by type. Edit a rule in place; proposed rules wait on the{' '}
+              <a
+                href="/steering/dashboard"
+                onClick={(e) => { e.preventDefault(); navigate('/steering/dashboard'); }}
+                className="wk-link"
+              >
+                Steering dashboard
+              </a>.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => void loadRules()}
-            className="ml-auto text-[10px] hover:underline"
-            style={{ color: 'var(--ink-dim)' }}
-          >
-            Refresh
-          </button>
-        </div>
+          <div className="wk-page-actions">
+            {phone && !dockOpen && (
+              <button ref={sheetOpener} type="button" data-testid="steering-dock-open" onClick={() => setDockOpen(true)} className="wk-btn wk-btn--secondary wk-btn--sm">
+                Assistant
+              </button>
+            )}
+            <button type="button" onClick={() => void loadRules()} className="wk-btn wk-btn--quiet wk-btn--sm">
+              Refresh
+            </button>
+          </div>
+        </header>
 
         {/* The type FILTER — `All` + the seven types, the collapse of the old seven cards/pages. */}
         {rulesError === null && (
@@ -329,11 +403,11 @@ export function SteeringPage({ type, navigate, search = '', runs = [] }: {
         )}
 
         {rulesLoading && rules.length === 0 ? (
-          <p data-testid="steering-rules-loading" className="text-xs" style={{ color: 'var(--ink-dim)' }}>Loading rules…</p>
+          <div data-testid="steering-rules-loading"><Skeleton rows={4} /></div>
         ) : rulesError !== null ? (
-          <p data-testid="steering-rules-error" className="rounded px-2 py-1 text-xs" style={{ background: 'var(--status-fail-dim)', color: 'var(--status-fail)' }}>
-            {rulesError}
-          </p>
+          <div data-testid="steering-rules-error">
+            <StateBanner kind={readErrorKind(rulesErrorRaw)} what="the rules" error={rulesError} onRetry={() => void loadRules()} retrying={rulesLoading} />
+          </div>
         ) : (
           <>
             {/* Health: store-wide (verdict + usage band) in the `All` view — the one place the
@@ -399,8 +473,7 @@ export function SteeringPage({ type, navigate, search = '', runs = [] }: {
                   </>
                 ) : (
                   <>
-                    This daemon does not serve the governance scoreboard, so &ldquo;unused&rdquo; cannot be
-                    computed — showing all rules.{' '}
+                    Studio&rsquo;s service can&rsquo;t say which rules are unused yet, so all rules are shown.{' '}
                   </>
                 )}
                 <a
@@ -431,7 +504,8 @@ export function SteeringPage({ type, navigate, search = '', runs = [] }: {
                 className="rounded px-3 py-2 text-[11px]"
                 style={{ background: 'var(--status-fail-dim)', color: 'var(--status-fail)' }}
               >
-                {commitError} — the cell reverted to the server&rsquo;s value.
+                Couldn&rsquo;t save that change, so the cell went back to its saved value.
+                <TechDetails text={commitError} />
               </p>
             )}
 
@@ -441,9 +515,8 @@ export function SteeringPage({ type, navigate, search = '', runs = [] }: {
                 className="rounded px-3 py-2 text-[11px]"
                 style={{ background: 'var(--surface-rail)', border: '1px solid var(--surface-raised)', color: 'var(--ink-muted)' }}
               >
-                Retired <span className="font-mono">{retiredNote.id}</span> — withdrawn from recall and
-                enforcement; the record stays listed. Your reason, for the doc PR if this rule came from
-                one: <em>&ldquo;{retiredNote.reason}&rdquo;</em>
+                Retired {retiredNote.id}. Helpers no longer follow it; it stays listed. Your reason:{' '}
+                <em>&ldquo;{retiredNote.reason}&rdquo;</em>
               </p>
             )}
 
@@ -466,23 +539,24 @@ export function SteeringPage({ type, navigate, search = '', runs = [] }: {
         )}
       </div>
 
-      {/* The assist dock — v1 of the app-wide right panel (DES-ASSIST-DOCK). */}
-      <AssistDock
-        context={{
-          surface: 'steering',
-          title: 'Assistant',
-          contextLabel: `Steering · ${type === null ? 'Policies' : STEERING_TYPE_LABELS[type]}`,
-          placeholder: `Describe the ${STEERING_TYPE_LABELS[pageType]} rules to author…`,
-          hint: 'A message launches a governed authoring run: it reads what you attach, drafts '
-            + `${STEERING_TYPE_LABELS[pageType]} steering rules, and stops at a propose gate — nothing `
-            + 'is written until you approve it in the run\'s thread. Drop .md/.json rule files to import them directly.',
-        }}
-        verbs={dockVerbs}
-        importable={(name) => /\.(md|markdown|json)$/i.test(name)}
-        open={dockOpen}
-        onOpenChange={setDockOpen}
-        typeTarget="page"
-      />
+      {/* The assist dock — v1 of the app-wide right panel (DES-ASSIST-DOCK). On a phone it is a
+          sheet over the page, opened from the header's Assistant button. */}
+      {phone ? (
+        // Always mounted (hidden when closed) so a draft, attachments and the authoring thread
+        // survive closing the sheet — the desktop dock keeps its state the same way.
+        <div
+          ref={sheetRef}
+          data-testid="steering-dock-sheet"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Assistant"
+          hidden={!dockOpen}
+          className="wk-steer-dock-sheet"
+          onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); setDockOpen(false); } }}
+        >
+          {renderDock(true)}
+        </div>
+      ) : renderDock(false)}
 
       {selected !== null && (
         <SteeringRuleDrawer

@@ -208,7 +208,9 @@ describe('SteeringPage — import (through the dock, the wire unchanged)', () =>
 
     const notes = await screen.findAllByTestId('assist-note');
     const fails = notes.filter((n) => n.getAttribute('data-tone') === 'fail');
-    expect(fails.some((n) => (n.textContent ?? '').includes('INV-C1'))).toBe(true);
+    // studio#689 row 49: the reason in plain words, not the engine's invariant code.
+    expect(fails.some((n) => (n.textContent ?? '').includes('Rule 2 skipped: it has no id.'))).toBe(true);
+    expect(fails.some((n) => (n.textContent ?? '').includes('INV-C1'))).toBe(false);
   });
 
   it('parses a .json file into per-rule entries', async () => {

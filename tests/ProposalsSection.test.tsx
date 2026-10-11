@@ -70,7 +70,7 @@ describe('ProposalsSection — a fixed-kind review queue', () => {
     expect(polCards[0]).toHaveAttribute('data-proposal-id', 'p-pol');
     // The heading carries the visible count.
     expect(screen.getByTestId('proposals-section')).toHaveAttribute('data-kind', 'policy');
-    expect(screen.getByText('Policy proposals').textContent).toContain('(1)');
+    expect(screen.getByRole('heading', { name: 'Policy proposals (1)' })).toBeInTheDocument();
     unmount();
 
     wire([MEM, POL]);
@@ -98,7 +98,7 @@ describe('ProposalsSection — a fixed-kind review queue', () => {
     await user.click(within(card).getByTestId('proposal-approve'));
 
     await waitFor(() => expect(calls).toContain('/proposals/p-pol/approve'));
-    expect(await screen.findByTestId('proposals-section-note')).toHaveTextContent('Approved p-pol.');
+    expect(await screen.findByTestId('proposals-section-note')).toHaveTextContent('Approved: Never log secrets');
     // Reloaded (GET twice — mount + after-decision).
     expect(calls.filter((c) => c === '/proposals?state=pending')).toHaveLength(2);
     await waitFor(() => expect(screen.queryByTestId('proposal-card')).toBeNull());
@@ -113,7 +113,7 @@ describe('ProposalsSection — a fixed-kind review queue', () => {
     await user.click(within(card).getByTestId('proposal-reject'));
 
     await waitFor(() => expect(calls).toContain('/proposals/p-mem/reject'));
-    expect(await screen.findByTestId('proposals-section-note')).toHaveTextContent('Rejected p-mem.');
+    expect(await screen.findByTestId('proposals-section-note')).toHaveTextContent('Rejected: Remember the gh account flip');
   });
 
   it('a failed decision keeps the row and notes the failure', async () => {
@@ -128,14 +128,14 @@ describe('ProposalsSection — a fixed-kind review queue', () => {
     const card = await screen.findByTestId('proposal-card');
     await user.click(within(card).getByTestId('proposal-approve'));
 
-    expect(await screen.findByTestId('proposals-section-note')).toHaveTextContent(/Could not approve p-mem/);
+    expect(await screen.findByTestId('proposals-section-note')).toHaveTextContent('Could not approve this proposal.');
     expect(screen.getByTestId('proposal-card')).toBeInTheDocument();
   });
 
   it('renders the honest unsupported state on a daemon that predates the routes', async () => {
     apiFetch.mockRejectedValue(new ApiError(404, 'Not Found'));
     render(<ProposalsSection kind="policy" heading="Policy proposals" />);
-    expect(await screen.findByTestId('proposals-section-unsupported')).toHaveTextContent(/predates the proposal queue/);
+    expect(await screen.findByTestId('proposals-section-unsupported')).toHaveTextContent("Studio's service does not support proposal review yet.");
   });
 
   it('surfaces a real error as an error card', async () => {

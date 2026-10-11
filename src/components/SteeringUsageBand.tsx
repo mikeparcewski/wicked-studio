@@ -8,7 +8,7 @@ import type { GovernanceClaim, SessionView } from '../api/types.js';
 import { everythingPath } from '../board/everythingModel.js';
 import { governedRuns, ruleUsage, usageWindows, USAGE_WINDOW_DAYS } from '../board/steeringUsage.js';
 import { useEvalReportStore } from '../store/evalReport.js';
-import { KpiBand, StatTile } from './dashboardKit.js';
+import { StatLine } from './ui/index.js';
 import type { ScoreboardState } from './SteeringHealth.js';
 
 
@@ -81,117 +81,106 @@ export function SteeringUsageBand({ runs, rules, scoreboard, navigate, now }: {
   const usage =
     scoreboard.kind === 'loaded' ? ruleUsage(rules, scoreboard.scoreboard.evidence.per_rule) : null;
 
-  const windowWord = `last ${USAGE_WINDOW_DAYS}d`;
-  const claimsAbsentWord =
+  const deltaOf = (d: { current: number; previous: number | null } | undefined): string =>
+    d === undefined || d.previous === null ? 'none' : String(d.current - d.previous);
+  const claimsNote =
     claims.kind === 'unsupported'
-      ? 'claims not served by this daemon'
+      ? 'Studio’s service doesn’t report gate checks yet.'
       : claims.kind === 'failed'
-        ? 'claims read failed'
-        : 'loading…';
-  const deltaContext = (previous: number | null): string =>
-    previous === null ? `${windowWord} — no proven prior window` : `${windowWord} vs previous ${USAGE_WINDOW_DAYS}d`;
+        ? 'Couldn’t read the gate checks.'
+        : null;
+  const usageNote =
+    usage !== null || claims.kind === 'loading'
+      ? null
+      : scoreboard.kind === 'unsupported'
+        ? 'Rule usage isn’t reported by Studio’s service yet.'
+        : scoreboard.kind === 'failed'
+          ? 'Couldn’t read rule usage.'
+          : null;
 
   const unusedHome =
     usage !== null && usage.unusedIds.length > 0
       ? `${policiesPath(usage.unusedHomeType ?? 'architecture')}&usage=unused`
       : null;
+  const evalPath = testingPath('evals');
+  const delta = windows !== null && windows.evaluations.previous !== null
+    ? windows.evaluations.current - windows.evaluations.previous
+    : null;
 
+  // KPI tiles are retired (UI-CONTRACT §4.6; studio#689 row 45: truncated tile captions): one
+  // sentence-case line of facts, a meta line, and two doors. Unknown numbers are hidden, never 0.
   return (
-    <KpiBand testId="steering-usage">
-      <StatTile
-        testId="steering-usage-evals"
-        label="Gate evaluations"
-        value={windows !== null ? windows.evaluations.current : '—'}
-        delta={windows?.evaluations}
-        spark={windows?.spark}
-        context={windows !== null ? deltaContext(windows.evaluations.previous) : claimsAbsentWord}
-        title="Recorded governance claims (gate evaluations) in the window — click for the runs they governed"
-        onOpen={() => navigate(SESSIONS_PATH)}
-        href={SESSIONS_PATH}
+    <section
+      data-testid="steering-usage"
+      className="wk-steer-usage"
+      data-evals={windows !== null ? windows.evaluations.current : '—'}
+      data-evals-delta={deltaOf(windows?.evaluations)}
+      data-denials={windows !== null ? windows.denials.current : '—'}
+      data-denials-delta={deltaOf(windows?.denials)}
+      data-split={windows !== null ? `${windows.allow} / ${windows.deny}` : '—'}
+      data-governed={governed !== null && governed.pct !== null ? `${governed.pct}%` : '—'}
+      data-unused={usage !== null ? usage.unusedIds.length : '—'}
+      data-eval={latestEval !== null ? `${latestEval.report.summary.caught}/${latestEval.report.summary.total}` : '—'}
+    >
+      <StatLine
+        showZero
+        items={[
+          { label: `gate check${windows?.evaluations.current === 1 ? '' : 's'} in the last ${USAGE_WINDOW_DAYS} days`, value: windows !== null ? windows.evaluations.current : null },
+          { label: 'denied', value: windows !== null ? windows.denials.current : null },
+          { label: `rule${usage?.unusedIds.length === 1 ? '' : 's'} never used`, value: usage !== null ? usage.unusedIds.length : null },
+        ]}
       />
-      <StatTile
-        testId="steering-usage-denials"
-        label="Denials issued"
-        value={windows !== null ? windows.denials.current : '—'}
-        delta={windows?.denials}
-        deltaSense="bad-up"
-        valueColor={windows !== null && windows.denials.current > 0 ? 'var(--status-fail)' : undefined}
-        context={windows !== null ? deltaContext(windows.denials.previous) : claimsAbsentWord}
-        title="Gate evaluations that decided deny — click for the runs surface"
-        onOpen={() => navigate(SESSIONS_PATH)}
-        href={SESSIONS_PATH}
-      />
-      <StatTile
-        testId="steering-usage-governed"
-        label="Runs governed"
-        value={governed !== null && governed.pct !== null ? `${governed.pct}%` : '—'}
-        context={
-          governed !== null
-            ? governed.total === 0
-              ? 'no runs on this daemon yet'
-              : `${governed.governed} of ${governed.total} runs saw ≥1 gate evaluation`
-            : claimsAbsentWord
-        }
-        title="Share of live runs with at least one recorded gate evaluation"
-        onOpen={() => navigate(SESSIONS_PATH)}
-        href={SESSIONS_PATH}
-      />
-      <StatTile
-        testId="steering-usage-split"
-        label="Allow / deny"
-        value={windows !== null ? `${windows.allow} / ${windows.deny}` : '—'}
-        context={
-          windows !== null
-            ? `${windowWord} · ${windows.conditions} with conditions`
-            : claimsAbsentWord
-        }
-        title="This window's decision split — click for the runs surface"
-        onOpen={() => navigate(SESSIONS_PATH)}
-        href={SESSIONS_PATH}
-      />
-      <StatTile
-        testId="steering-usage-rules"
-        label="Unused rules"
-        value={usage !== null ? usage.unusedIds.length : '—'}
-        valueColor={usage !== null && usage.unusedIds.length > 0 ? 'var(--status-gate)' : undefined}
-        context={
-          usage === null
-            ? scoreboard.kind === 'unsupported'
-              ? 'scoreboard not served by this daemon'
-              : scoreboard.kind === 'failed'
-                ? 'scoreboard read failed'
-                : 'loading…'
-            : usage.topFired !== null
-              ? `top fired: ${usage.topFired.ruleId} ×${usage.topFired.total} · ${usage.firedCount} rules evidenced`
-              : 'no rule has fired yet — nothing in the enforcement record'
-        }
-        title={
-          unusedHome !== null
-            ? `Active rules with zero enforcement evidence — open ${STEERING_TYPE_LABELS[usage?.unusedHomeType ?? 'architecture']} filtered to them`
-            : 'Active rules with zero enforcement evidence (no denial claims, no governs evidence)'
-        }
-        {...(unusedHome !== null ? { onOpen: () => navigate(unusedHome), href: unusedHome } : {})}
-      />
-      <StatTile
-        testId="steering-usage-eval"
-        label="Latest eval"
-        value={
-          latestEval !== null
-            ? `${latestEval.report.summary.caught}/${latestEval.report.summary.total}`
-            : '—'
-        }
-        valueColor={
-          latestEval !== null && latestEval.report.summary.gaps > 0 ? 'var(--status-gate)' : undefined
-        }
-        context={
-          latestEval !== null
-            ? `caught · ${latestEval.report.summary.gaps} gaps · ${latestEval.report.summary.false_positives} false pos — this session`
-            : 'no eval run this session — run one on Testing › Evals'
-        }
-        title="The steering-rule eval verdict (caught vs gap) — the success lens; session-local because the daemon keeps no eval history"
-        onOpen={() => navigate(testingPath('evals'))}
-        href={testingPath('evals')}
-      />
-    </KpiBand>
+      <p className="wk-test-facts-meta">
+        {windows !== null && (
+          <span data-testid="steering-usage-delta">
+            {delta === null ? 'Nothing to compare with yet' : `${delta >= 0 ? '+' : ''}${delta} vs the ${USAGE_WINDOW_DAYS} days before`}
+            {' · '}{windows.allow} allowed, {windows.deny} denied{windows.conditions > 0 ? `, ${windows.conditions} with conditions` : ''}
+          </span>
+        )}
+        {governed !== null && governed.total > 0 && governed.pct !== null && (
+          <span data-testid="steering-usage-governed">
+            {windows !== null ? ' · ' : ''}{governed.pct}% of runs checked ({governed.governed} of {governed.total})
+          </span>
+        )}
+        {usage !== null && usage.topFired !== null && (
+          <span data-testid="steering-usage-top"> · most used: {usage.topFired.ruleId} ({usage.topFired.total}×)</span>
+        )}
+        {claimsNote !== null && <span data-testid="steering-usage-claims-note">{claimsNote}</span>}
+        {usageNote !== null && <span data-testid="steering-usage-rules-note">{claimsNote !== null ? ' ' : ''}{usageNote}</span>}
+      </p>
+      <p className="wk-steer-usage-doors">
+        {unusedHome !== null && (
+          <a
+            data-testid="steering-usage-rules"
+            href={unusedHome}
+            onClick={(e) => { e.preventDefault(); navigate(unusedHome); }}
+            className="wk-link"
+            title={`Open ${STEERING_TYPE_LABELS[usage?.unusedHomeType ?? 'architecture']} rules, filtered to the unused ones`}
+          >
+            Show unused rules
+          </a>
+        )}
+        {windows !== null && windows.evaluations.current > 0 && (
+          <a
+            data-testid="steering-usage-runs"
+            href={SESSIONS_PATH}
+            onClick={(e) => { e.preventDefault(); navigate(SESSIONS_PATH); }}
+            className="wk-link"
+          >
+            See the runs
+          </a>
+        )}
+        <a
+          data-testid="steering-usage-eval"
+          href={evalPath}
+          onClick={(e) => { e.preventDefault(); navigate(evalPath); }}
+          className="wk-link"
+        >
+          {latestEval !== null
+            ? `Latest eval: ${latestEval.report.summary.caught} of ${latestEval.report.summary.total} caught, ${latestEval.report.summary.gaps} gap${latestEval.report.summary.gaps === 1 ? '' : 's'}`
+            : 'Run an eval'}
+        </a>
+      </p>
+    </section>
   );
 }

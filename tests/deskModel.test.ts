@@ -196,14 +196,14 @@ describe('chores for whoever runs studio', () => {
 });
 
 describe('the rail destinations', () => {
-  it('the rail: Product · Skills · MCP tools · Steering; Additional settings: Configuration, Repositories, Workflows, Evals, Theme (Amendment 5)', () => {
-    expect(DESK_RAIL_LINKS.map((l) => [l.label, l.path])).toEqual([['Product', '/product'], ['Skills', '/skills'], ['MCP tools', '/mcp'], ['Steering', '/rules']]);
+  it('the rail: Product · Skills · MCP tools · Steering · Testing; Additional settings: Configuration, Repositories, Workflows, Evals, Theme (Amendment 5; Testing joined per studio#685 row 51)', () => {
+    expect(DESK_RAIL_LINKS.map((l) => [l.label, l.path])).toEqual([['Product', '/product'], ['Skills', '/skills'], ['MCP tools', '/mcp'], ['Steering', '/rules'], ['Testing', '/testing/campaigns']]);
     expect(ADDITIONAL_SETTINGS.map((d) => [d.label, d.path])).toEqual([
       ['Configuration', '/system'], ['Repositories', '/repos'], ['Workflows', '/workflows'], ['Evals', '/testing/evals'], ['Theme', '/theme'],
     ]);
-    // Nothing that redirects, and no Testing campaigns (⌘K and Configuration reach it).
+    // Nothing that redirects.
     for (const d of [...DESK_RAIL_LINKS, ...ADDITIONAL_SETTINGS]) {
-      expect(['/projects', '/chats', '/work', '/execute', '/vibe', '/demo', '/testing/campaigns']).not.toContain(d.path);
+      expect(['/projects', '/chats', '/work', '/execute', '/vibe', '/demo']).not.toContain(d.path);
     }
   });
 });

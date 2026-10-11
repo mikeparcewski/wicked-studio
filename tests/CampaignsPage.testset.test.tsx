@@ -4,6 +4,7 @@ import type { SessionView } from '../src/api/types.js';
 import type { CampaignsListing } from '../src/api/campaigns.js';
 import { makeView } from './factories.js';
 import { W6_LABEL, W6_PR, W6_RUN, W6_TEST_SET, W6_TEST_SET_UNVERIFIED, w6Campaign, w6Group, w6Listing } from './fixtures/wave6.js';
+import { cardTitleWord } from '../src/board/campaignStats.js';
 
 /**
  * The Test landing after a completed New test (wave 6 — F-7R2-014, api-types 0.36.0): the daemon
@@ -87,7 +88,7 @@ describe('the card — the produced set off the top-level test_sets (F-7R2-014)'
   it('a label GROUP (how 0.36.0 files an authoring run) shows the set joined by run_id: the verified chip, the four counts, the PLAN, the PR', async () => {
     const card = await landing(w6Listing());
     expect(card).toHaveAttribute('data-kind', 'group');
-    expect(card).toHaveTextContent(W6_LABEL);
+    expect(card).toHaveTextContent(cardTitleWord({ kind: 'group', title: W6_LABEL }));
     expect(within(card).getByTestId('campaign-card-workflow')).toHaveAttribute('data-workflow', 'qe-author-tests');
     const set = within(card).getByTestId('campaign-card-testset');
     expect(set).toHaveAttribute('data-run-id', W6_RUN);
@@ -98,11 +99,11 @@ describe('the card — the produced set off the top-level test_sets (F-7R2-014)'
     expect(set).toHaveAttribute('data-passed', '11');
     expect(set).toHaveAttribute('data-failed', '0');
     expect(set).toHaveAttribute('data-not-executed', '0');
-    expect(within(set).getByTestId('campaign-card-testset-verified')).toHaveTextContent(/^verified$/);
+    expect(within(set).getByTestId('campaign-card-testset-verified')).toHaveTextContent(/^Verified$/);
     expect(set).toHaveTextContent('11 produced · 11 executed · 11 passed · 0 failed');
     expect(set).toHaveAttribute('title', 'tests/run-lifecycle.test.tsx — passed\ne2e/run_lifecycle_test.py — passed');
     expect(within(set).queryByTestId('campaign-card-testset-unverified')).toBeNull();
-    expect(within(set).getByTestId('campaign-card-testset-plan')).toHaveTextContent('plan: tests/PLAN-run-lifecycle.md');
+    expect(within(set).getByTestId('campaign-card-testset-plan')).toHaveAttribute('data-plan', 'tests/PLAN-run-lifecycle.md');
     const pr = within(set).getByTestId('campaign-card-testset-pr');
     expect(pr).toHaveAttribute('href', W6_PR);
     expect(pr).toHaveTextContent('PR #999');
@@ -133,19 +134,19 @@ describe('the card — the produced set off the top-level test_sets (F-7R2-014)'
     const stray = { ...W6_TEST_SET, id: 'testset-r-stray', run_id: 'r-stray', label: 'qe-tests-elsewhere', plan: 'tests/PLAN-stray.md' };
     const card = await landing(w6Listing([stray, W6_TEST_SET]));
     expect(within(card).getAllByTestId('campaign-card-testset').map((e) => e.getAttribute('data-run-id'))).toEqual([W6_RUN]);
-    const tile = screen.getByTestId('stat-campaigns');
-    expect(tile).toHaveAttribute('data-test-sets', '2');
-    expect(tile).toHaveAttribute('data-test-sets-unattributed', '1');
-    expect(within(tile).getByTestId('stat-context')).toHaveTextContent('2 sets · 22/22 passed · 1 unattributed');
-    expect(within(tile).getByTestId('stat-context')).toHaveAttribute('title', expect.stringContaining('2 test sets · 22/22 passed · 1 unattributed'));
-    expect(tile).toHaveAttribute('title', expect.stringContaining('tests/PLAN-stray.md'));
+    const facts = screen.getByTestId('campaigns-kpis');
+    expect(facts).toHaveAttribute('data-test-sets', '2');
+    expect(facts).toHaveAttribute('data-test-sets-unattributed', '1');
+    const word = screen.getByTestId('campaigns-sets-word');
+    expect(word).toHaveTextContent('2 sets · 22/22 passed · 1 unattributed');
+    expect(word).toHaveAttribute('title', expect.stringContaining('2 test sets · 22/22 passed · 1 unattributed'));
+    expect(word).toHaveAttribute('title', expect.stringContaining('tests/PLAN-stray.md'));
   });
 
   it('rows the daemon served without a run_id are said as "N malformed" on the tile — never read as "nothing registered" (#266 F-2)', async () => {
     await landing(w6Listing([W6_TEST_SET], [], [w6Group()], 2));
-    const tile = screen.getByTestId('stat-campaigns');
-    expect(tile).toHaveAttribute('data-test-sets-malformed', '2');
-    expect(within(tile).getByTestId('stat-context')).toHaveTextContent('1 set · 11/11 passed · 2 malformed');
+    expect(screen.getByTestId('campaigns-kpis')).toHaveAttribute('data-test-sets-malformed', '2');
+    expect(screen.getByTestId('campaigns-sets-word')).toHaveTextContent('1 set · 11/11 passed · 2 malformed');
   });
 
   it("a set the verify phase did NOT fully run says how many were never executed and is NOT verified — shown, never hidden (F-7R2-015's lesson)", async () => {
@@ -153,7 +154,7 @@ describe('the card — the produced set off the top-level test_sets (F-7R2-014)'
     const set = within(card).getByTestId('campaign-card-testset');
     expect(set).toHaveAttribute('data-verified', 'false');
     expect(set).toHaveAttribute('data-not-executed', '5');
-    expect(within(set).getByTestId('campaign-card-testset-verified')).toHaveTextContent('not verified');
+    expect(within(set).getByTestId('campaign-card-testset-verified')).toHaveTextContent('Not verified');
     expect(within(set).getByTestId('campaign-card-testset-unverified')).toHaveTextContent('5 not executed');
     expect(set).toHaveTextContent('11 produced · 6 executed · 6 passed · 0 failed · 5 not executed');
     expect(within(set).queryByTestId('campaign-card-testset-pr')).toBeNull();
@@ -183,10 +184,9 @@ describe('the card — the produced set off the top-level test_sets (F-7R2-014)'
   it('a 0.36 daemon with nothing registered yet (test_sets: []) renders no counts on the card — and the tile says its REAL zero (#266 F-3)', async () => {
     const card = await landing(w6Listing([]));
     expect(within(card).queryByTestId('campaign-card-testset')).toBeNull();
-    const tile = screen.getByTestId('stat-campaigns');
-    expect(tile).toHaveAttribute('data-test-sets', '0');
-    expect(within(tile).getByTestId('stat-context')).toHaveTextContent(/^no sets registered yet · 0 active now$/);
-    expect(within(tile).getByTestId('stat-context')).toHaveAttribute('title', 'no test sets registered yet · 0 active now');
+    expect(screen.getByTestId('campaigns-kpis')).toHaveAttribute('data-test-sets', '0');
+    expect(screen.getByTestId('campaigns-sets-word')).toHaveTextContent('no sets registered yet');
+    expect(screen.getByTestId('campaigns-sets-word')).toHaveAttribute('title', 'no test sets registered yet');
   });
 
   it('with no live run known and no set, neither chip nor counts render — absence stays absent', async () => {
@@ -199,28 +199,28 @@ describe('the card — the produced set off the top-level test_sets (F-7R2-014)'
     expect(within(card).queryByTestId('campaign-card-workflow')).toBeNull();
   });
 
-  it("the Tests tile's context leads with the short sets word (it must clear the tile's ellipsis glyph at 1440px — #266 F-1/R2-1), carries the UNABRIDGED line as its title, and says nothing about sets on a pre-0.36 daemon", async () => {
+  it('the facts line carries the short sets word with the UNABRIDGED line as its title, and says nothing about sets on a pre-0.36 daemon', async () => {
     await landing(w6Listing());
-    const tile = screen.getByTestId('stat-campaigns');
-    expect(tile).toHaveAttribute('data-value', '1');
-    expect(tile).toHaveAttribute('data-test-sets', '1');
-    const ctx = within(tile).getByTestId('stat-context');
-    expect(ctx.textContent).toBe('1 set · 11/11 passed · 0 active now');
-    expect(ctx).toHaveAttribute('title', '1 test set · 11/11 passed · 0 active now');
-    expect(ctx.textContent).not.toContain('ad-hoc');
+    const facts = screen.getByTestId('campaigns-kpis');
+    expect(facts).toHaveAttribute('data-tests', '1');
+    expect(facts).toHaveAttribute('data-test-sets', '1');
+    const word = screen.getByTestId('campaigns-sets-word');
+    expect(word.textContent).toBe('Test sets: 1 set · 11/11 passed');
+    expect(word).toHaveAttribute('title', '1 test set · 11/11 passed');
+    expect(facts.textContent).not.toContain('ad-hoc');
     cleanup();
     reset();
     await landing(w6Listing(null));
-    const older = screen.getByTestId('stat-campaigns');
-    expect(older).toHaveAttribute('data-value', '1');
-    expect(older).toHaveAttribute('data-test-sets', 'absent');
-    expect(within(older).getByTestId('stat-context').textContent).toBe('0 active now');
-    expect(within(older).getByTestId('stat-context')).toHaveAttribute('title', '0 active now');
+    expect(screen.getByTestId('campaigns-kpis')).toHaveAttribute('data-test-sets', 'absent');
+    expect(screen.queryByTestId('campaigns-sets-word')).toBeNull();
   });
 
   it('the header copy names the governed workflow and the "Add testing rules" verb says what it authors', async () => {
     await landing(w6Listing());
-    expect(screen.getByTestId('campaigns-header-copy')).toHaveTextContent('New test runs the governed qe-author-tests workflow: recon → author → verify (runs what it wrote) → review (a distinct judge) → deliver (the engine opens the PR)');
+    // studio#685 row 50: one plain intro sentence, not the workflow diagram.
+    const intro = screen.getByTestId('campaigns-frame').querySelector('.wk-page-intro');
+    expect(intro).toHaveTextContent('New test plans tests for a repository, waits for you to approve the plan');
+    expect(intro?.textContent).not.toContain('→');
     const author = screen.getByTestId('testing-author-open');
     expect(author).toHaveTextContent('Add testing rules');
     expect(author).toHaveAttribute('title', expect.stringContaining('not a test run'));

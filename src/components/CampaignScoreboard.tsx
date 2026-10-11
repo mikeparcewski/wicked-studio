@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { getCampaign, type Campaign, type CampaignNodeStatus } from '../api/campaigns.js';
 import { testingPath } from '../api/testing.js';
 import { downloadRunEvidence } from '../api/client.js';
-import { apiStatus } from '../api/errors.js';
+import { apiStatus, readErrorKind } from '../api/errors.js';
 import type { SessionView } from '../api/types.js';
 import {
   campaignStatusWord, campaignCounts, campaignDeliveryRollup, deliveryRollupWord,
@@ -11,7 +11,8 @@ import { sessionPath } from '../board/sessionModel.js';
 import { useAcceptanceStore } from '../store/acceptance.js';
 import { useCampaignsStore } from '../store/campaigns.js';
 import { deliveryOf, isPrUrl, resolveDelivery, DELIVERY_LABEL } from './delivery.js';
-import { runShortId, STATUS_STYLE } from './runIdentity.js';
+import { humanTitle, STATUS_STYLE } from './runIdentity.js';
+import { EmptyState, Skeleton, StateBanner } from './ui/index.js';
 
 /**
  * The campaign scoreboard (TH-14, extends wicked-studio#27) — READ-ONLY: one surface that
@@ -73,8 +74,6 @@ const HEAD: React.CSSProperties = {
   color: 'var(--ink-dim)',
   fontSize: 'var(--text-xs)',
   fontWeight: 500,
-  textTransform: 'uppercase',
-  letterSpacing: '0.04em',
 };
 
 function Chip({ label, color, testid, title, extra }: {
@@ -154,7 +153,8 @@ interface Props {
 export function CampaignScoreboard({ campaignId, runs, navigate }: Props): React.ReactElement {
   const [campaign, setCampaign] = useState<Campaign | null>(null);
   const [notFound, setNotFound] = useState(false);
-  const [failed, setFailed] = useState<string | null>(null);
+  const [failed, setFailed] = useState<{ error: unknown } | null>(null);
+  const [retryKey, setRetryKey] = useState(0);
   const live = useCampaignsStore((s) => s.live[campaignId]);
   const verdicts = useAcceptanceStore((s) => s.byRun);
   const loadVerdict = useAcceptanceStore((s) => s.load);
@@ -174,12 +174,12 @@ export function CampaignScoreboard({ campaignId, runs, navigate }: Props): React
       .catch((e: unknown) => {
         if (cancelled) return;
         if (apiStatus(e) === 404) setNotFound(true);
-        else setFailed(e instanceof Error ? e.message : String(e));
+        else setFailed({ error: e });
       });
     return () => {
       cancelled = true;
     };
-  }, [campaignId, live]);
+  }, [campaignId, live, retryKey]);
 
   const runsById = useMemo(() => {
     const m = new Map<string, SessionView>();
@@ -187,35 +187,42 @@ export function CampaignScoreboard({ campaignId, runs, navigate }: Props): React
     return m;
   }, [runs]);
 
+  const allTests = (
+    <a
+      href={testingPath('campaigns')}
+      onClick={(e) => { e.preventDefault(); navigate(testingPath('campaigns')); }}
+      className="wk-link"
+    >
+      All tests
+    </a>
+  );
   if (notFound) {
     return (
-      <div data-testid="campaign-notfound" style={{ padding: '32px', color: 'var(--ink-muted)' }}>
-        <p style={{ marginBottom: '12px' }}>
-          No test is filed under <b style={{ color: 'var(--ink-high)' }}>{campaignId}</b> on
-          this daemon — a test appears with its first run, so this label either never
-          launched one or lives on another daemon.
-        </p>
-        <button
-          type="button"
-          onClick={() => navigate(testingPath('campaigns'))}
-          style={{ color: 'var(--status-run)', textDecoration: 'underline' }}
-        >
-          All tests
-        </button>
+      <div data-testid="campaign-notfound" className="wk-page">
+        <EmptyState
+          title="This test isn’t here."
+          body="A test appears with its first run, so this one may never have started."
+          action={allTests}
+        />
       </div>
     );
   }
   if (failed !== null) {
     return (
-      <div data-testid="campaign-load-failed" style={{ padding: '32px', color: 'var(--ink-muted)' }}>
-        {failed}
+      <div data-testid="campaign-load-failed" className="wk-page">
+        <StateBanner
+          kind={readErrorKind(failed.error)}
+          what="this test"
+          error={failed.error instanceof Error ? failed.error.message : String(failed.error)}
+          onRetry={() => setRetryKey((k) => k + 1)}
+        />
       </div>
     );
   }
   if (campaign === null) {
     return (
-      <div data-testid="campaign-loading" style={{ padding: '32px', color: 'var(--ink-muted)' }}>
-        Loading test {campaignId}…
+      <div data-testid="campaign-loading" className="wk-page">
+        <Skeleton rows={4} />
       </div>
     );
   }
@@ -235,8 +242,8 @@ export function CampaignScoreboard({ campaignId, runs, navigate }: Props): React
     { n: counts.failed, color: 'var(--status-fail)' },
     { n: counts.awaitingHuman, color: 'var(--status-gate)' },
     { n: counts.running, color: 'var(--status-run)' },
-    { n: counts.cancelled + counts.queued, color: 'var(--ink-dim)' },
   ];
+  // Not-yet-finished work is EMPTY track (studio#685 row 8), never a grey fill that reads as done.
   const segTotal = Math.max(1, counts.nodes, seg.reduce((a, s) => a + s.n, 0));
 
   // ── The ladder: one row per DAG node, then the attached provenance rows ──────
@@ -253,7 +260,7 @@ export function CampaignScoreboard({ campaignId, runs, navigate }: Props): React
       kind: 'attached',
       label: a.runId,
       runId: a.runId,
-      problem: runsById.get(a.runId)?.session.problem ?? a.runId,
+      problem: runsById.get(a.runId)?.session.problem ?? 'Attached run',
       snapshotStatus: a.status,
       delivery: { delivery: a.delivery, ...(a.deliverUrl !== undefined ? { deliverUrl: a.deliverUrl } : {}) },
     })),
@@ -274,55 +281,53 @@ export function CampaignScoreboard({ campaignId, runs, navigate }: Props): React
   const statusWord = campaignStatusWord(liveStatus === null ? campaign : { ...campaign, status: liveStatus });
 
   return (
-    <div data-testid="campaign-scoreboard" style={{ padding: '24px', maxWidth: '1100px' }}>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: '12px', flexWrap: 'wrap' }}>
-        <h1 style={{ fontSize: 'var(--text-xl)', color: 'var(--ink-high)', fontWeight: 600 }}>
-          {campaign.def.name !== '' ? campaign.def.name : campaign.id}
+    <div data-testid="campaign-scoreboard" className="wk-page wk-test-board">
+      <p className="wk-test-board-back">{allTests}</p>
+      <div className="wk-test-board-head">
+        <h1 className="wk-page-title" title={campaign.def.name !== '' ? campaign.def.name : campaign.id}>
+          {humanTitle(campaign.def.name !== '' ? campaign.def.name : campaign.id)}
         </h1>
-        <span style={{ color: 'var(--ink-dim)', fontSize: 'var(--text-sm)' }}>{campaign.id}</span>
-        <Chip
-          testid="campaign-live-status"
-          label={statusWord}
-          color={CAMPAIGN_STATUS_COLOR[statusWord] ?? 'var(--ink-dim)'}
-          extra={{ 'data-status-source': liveStatus !== null ? 'frame' : 'snapshot' }}
-        />
+        <span
+          data-testid="campaign-live-status"
+          data-status-source={liveStatus !== null ? 'frame' : 'snapshot'}
+          className="wk-tag"
+          style={{ color: CAMPAIGN_STATUS_COLOR[statusWord] ?? 'var(--ink-dim)' }}
+        >
+          {statusWord.replace(/_/g, ' ')}
+        </span>
       </div>
 
-      <div style={{ marginTop: '10px', display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
-        <span data-testid="campaign-progress" style={{ color: 'var(--ink-high)', fontSize: 'var(--text-sm)' }}>
+      <div className="wk-test-card-line wk-test-board-facts">
+        <span data-testid="campaign-progress" className="wk-test-card-strong">
           {progress}
           {counts.attached > 0 && (
-            <span style={{ color: 'var(--ink-dim)' }}> (+{counts.attached} attached)</span>
+            <span className="wk-test-card-meta"> (+{counts.attached} attached)</span>
           )}
         </span>
         {rollupWord !== null && (
-          <span data-testid="campaign-delivery-rollup" style={{ color: 'var(--ink-muted)', fontSize: 'var(--text-sm)' }}>
-            {rollup.delivered} of {rollup.total} siblings delivered
+          <span data-testid="campaign-delivery-rollup">
+            {rollup.delivered} of {rollup.total} delivered
           </span>
         )}
         {rollup.stranded.length > 0 && (
-          <Chip
-            testid="campaign-stranded-chip"
-            label={`stranded · ${rollup.stranded.length}`}
-            color="var(--status-gate)"
-            title={`Finished, but the work is stranded in its worktree — no PR: ${rollup.stranded.map((s) => s.label).join(', ')}`}
-          />
+          <span
+            data-testid="campaign-stranded-chip"
+            className="wk-tag wk-tag--gate"
+            title="Finished, but the work has no pull request yet. Open the run to deliver it."
+          >
+            {rollup.stranded.length} not delivered
+          </span>
         )}
       </div>
 
-      <div
-        aria-hidden
-        style={{ marginTop: '8px', display: 'flex', height: '6px', borderRadius: '3px', overflow: 'hidden', background: 'var(--surface-raised)', maxWidth: '520px' }}
-      >
+      <div role="img" aria-label={progress} className="wk-test-bar wk-test-board-bar">
         {seg.filter((s) => s.n > 0).map((s, i) => (
-          <div key={i} style={{ width: `${(s.n / segTotal) * 100}%`, background: s.color }} />
+          <span key={i} className="wk-test-bar-seg" style={{ width: `${(s.n / segTotal) * 100}%`, background: s.color }} />
         ))}
       </div>
 
-      <div style={{ marginTop: '20px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-        <h2 style={{ fontSize: 'var(--text-sm)', color: 'var(--ink-muted)', fontWeight: 500 }}>
-          Sibling runs
-        </h2>
+      <div className="wk-test-board-runs-head">
+        <h2 className="wk-section-title">Runs</h2>
         {!verdictsRequested ? (
           // Verdicts are a per-run read the list wire deliberately does not carry — loaded
           // behind ONE explicit gesture (zero fetches on render, exactly N on click).
@@ -337,7 +342,7 @@ export function CampaignScoreboard({ campaignId, runs, navigate }: Props): React
                 }
               }
             }}
-            style={{ color: 'var(--status-run)', fontSize: 'var(--text-xs)', textDecoration: 'underline' }}
+            className="wk-btn wk-btn--secondary wk-btn--sm"
           >
             Load verdicts
           </button>
@@ -388,34 +393,31 @@ export function CampaignScoreboard({ campaignId, runs, navigate }: Props): React
                   {...(row.runId !== null ? { 'data-run-id': row.runId } : {})}
                   style={{ borderBottom: '1px solid var(--surface-raised)' }}
                 >
-                  <td style={CELL}>
+                  <td style={CELL} className="wk-test-board-run">
                     {row.runId !== null ? (
-                      <button
-                        type="button"
+                      <a
                         data-testid="campaign-run-link"
-                        onClick={() => navigate(sessionPath(`run:${row.runId!}`))}
-                        style={{ color: 'var(--ink-high)', textAlign: 'left' }}
-                        title={row.runId}
+                        href={sessionPath(`run:${row.runId}`)}
+                        onClick={(e) => { e.preventDefault(); navigate(sessionPath(`run:${row.runId!}`)); }}
+                        className="wk-link wk-test-board-run-title"
                       >
-                        <span style={{ color: 'var(--ink-dim)', fontFamily: 'var(--font-mono)', marginRight: '8px' }}>
-                          {row.kind === 'node' ? row.label : runShortId(row.runId)}
-                        </span>
-                        {row.problem}
-                      </button>
+                        {humanTitle(row.problem, 90)}
+                      </a>
                     ) : (
-                      <span style={{ color: 'var(--ink-muted)' }}>
-                        <span style={{ color: 'var(--ink-dim)', fontFamily: 'var(--font-mono)', marginRight: '8px' }}>
-                          {row.label}
-                        </span>
-                        {row.problem}
-                      </span>
+                      <span className="wk-test-board-run-title">{humanTitle(row.problem, 90)}</span>
+                    )}
+                    {humanTitle(row.problem, 90) !== row.problem.trim() && (
+                      <details data-testid="campaign-run-brief" className="wk-test-board-brief">
+                        <summary className="wk-link">Show brief</summary>
+                        <p>{row.problem}</p>
+                      </details>
                     )}
                     {row.kind === 'attached' && (
                       <span
-                        style={{ marginLeft: '8px', color: 'var(--ink-dim)', fontSize: 'var(--text-xs)' }}
-                        title="Filed onto this test at launch — not a DAG node; the test never schedules, gates or cancels it."
+                        className="wk-tag"
+                        title="Added to this test at launch; the test doesn't schedule or stop it."
                       >
-                        attached
+                        Attached
                       </span>
                     )}
                   </td>
@@ -461,7 +463,7 @@ export function CampaignScoreboard({ campaignId, runs, navigate }: Props): React
                         href={(href ?? snapshotHref)!}
                         target="_blank"
                         rel="noreferrer"
-                        style={{ color: 'var(--status-run)', textDecoration: 'underline' }}
+                        className="wk-link"
                       >
                         {DELIVERY_LABEL['pr-open']}
                       </a>
@@ -481,9 +483,9 @@ export function CampaignScoreboard({ campaignId, runs, navigate }: Props): React
                         type="button"
                         data-testid="campaign-evidence-link"
                         onClick={() => void downloadRunEvidence(row.runId!)}
-                        style={{ color: 'var(--status-run)', fontSize: 'var(--text-xs)', textDecoration: 'underline' }}
+                        className="wk-link"
                       >
-                        download
+                        Download
                       </button>
                     ) : (
                       <span style={{ color: 'var(--ink-dim)' }}>—</span>

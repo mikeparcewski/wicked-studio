@@ -12,8 +12,8 @@
   "studioVersion": "0.7.5",
   "counts": {
     "files": 197,
-    "occurrences": 2209,
-    "static": 1921,
+    "occurrences": 2215,
+    "static": 1929,
     "dynamic": 60,
     "computed": 19
   },
@@ -808,6 +808,12 @@
       ]
     },
     {
+      "testId": "campaign-run-brief",
+      "files": [
+        "src/components/CampaignScoreboard.tsx"
+      ]
+    },
+    {
       "testId": "campaign-run-delivery",
       "files": [
         "src/components/CampaignScoreboard.tsx"
@@ -838,6 +844,12 @@
       ]
     },
     {
+      "testId": "campaigns-all-runs",
+      "files": [
+        "src/components/CampaignsPage.tsx"
+      ]
+    },
+    {
       "testId": "campaigns-empty",
       "files": [
         "src/components/CampaignsPage.tsx"
@@ -856,19 +868,31 @@
       ]
     },
     {
+      "testId": "campaigns-failed-runs",
+      "files": [
+        "src/components/CampaignsPage.tsx"
+      ]
+    },
+    {
       "testId": "campaigns-filter",
       "files": [
         "src/components/CampaignsPage.tsx"
       ]
     },
     {
-      "testId": "campaigns-grid",
+      "testId": "campaigns-first-waiting",
       "files": [
         "src/components/CampaignsPage.tsx"
       ]
     },
     {
-      "testId": "campaigns-header-copy",
+      "testId": "campaigns-frame",
+      "files": [
+        "src/components/CampaignsPage.tsx"
+      ]
+    },
+    {
+      "testId": "campaigns-grid",
       "files": [
         "src/components/CampaignsPage.tsx"
       ]
@@ -887,6 +911,18 @@
     },
     {
       "testId": "campaigns-probing",
+      "files": [
+        "src/components/CampaignsPage.tsx"
+      ]
+    },
+    {
+      "testId": "campaigns-running-runs",
+      "files": [
+        "src/components/CampaignsPage.tsx"
+      ]
+    },
+    {
+      "testId": "campaigns-sets-word",
       "files": [
         "src/components/CampaignsPage.tsx"
       ]
@@ -1801,6 +1837,12 @@
       ]
     },
     {
+      "testId": "desk-rail-testing",
+      "files": [
+        "src/board/deskModel.ts"
+      ]
+    },
+    {
       "testId": "desk-rail-watch",
       "files": [
         "src/components/desk/SessionRail.tsx"
@@ -2277,6 +2319,18 @@
     },
     {
       "testId": "eval-history-loading",
+      "files": [
+        "src/components/EvalHistory.tsx"
+      ]
+    },
+    {
+      "testId": "eval-history-member",
+      "files": [
+        "src/components/EvalHistory.tsx"
+      ]
+    },
+    {
+      "testId": "eval-history-members",
       "files": [
         "src/components/EvalHistory.tsx"
       ]
@@ -6039,12 +6093,6 @@
       ]
     },
     {
-      "testId": "proposal-facets-chips",
-      "files": [
-        "src/components/ProposalsList.tsx"
-      ]
-    },
-    {
       "testId": "proposal-kind-chip",
       "files": [
         "src/components/ProposalChips.tsx"
@@ -6082,12 +6130,6 @@
     },
     {
       "testId": "proposal-provenance",
-      "files": [
-        "src/components/ProposalsList.tsx"
-      ]
-    },
-    {
-      "testId": "proposal-provenance-chips",
       "files": [
         "src/components/ProposalsList.tsx"
       ]
@@ -6879,6 +6921,12 @@
       ]
     },
     {
+      "testId": "rules-manage",
+      "files": [
+        "src/components/rules/RulesPage.tsx"
+      ]
+    },
+    {
       "testId": "rules-missing",
       "files": [
         "src/components/rules/RulesPage.tsx"
@@ -6891,12 +6939,6 @@
       ]
     },
     {
-      "testId": "rules-retry",
-      "files": [
-        "src/components/rules/RulesPage.tsx"
-      ]
-    },
-    {
       "testId": "rules-row",
       "files": [
         "src/components/rules/RulesPage.tsx"
@@ -6904,6 +6946,12 @@
     },
     {
       "testId": "rules-row-line",
+      "files": [
+        "src/components/rules/RulesPage.tsx"
+      ]
+    },
+    {
+      "testId": "rules-row-more",
       "files": [
         "src/components/rules/RulesPage.tsx"
       ]
@@ -9391,37 +9439,7 @@
       ]
     },
     {
-      "testId": "stat-campaign-failed",
-      "files": [
-        "src/components/CampaignsPage.tsx"
-      ]
-    },
-    {
-      "testId": "stat-campaign-gates",
-      "files": [
-        "src/components/CampaignsPage.tsx"
-      ]
-    },
-    {
       "testId": "stat-campaign-pass-rate",
-      "files": [
-        "src/components/CampaignsPage.tsx"
-      ]
-    },
-    {
-      "testId": "stat-campaign-running",
-      "files": [
-        "src/components/CampaignsPage.tsx"
-      ]
-    },
-    {
-      "testId": "stat-campaign-runs",
-      "files": [
-        "src/components/CampaignsPage.tsx"
-      ]
-    },
-    {
-      "testId": "stat-campaigns",
       "files": [
         "src/components/CampaignsPage.tsx"
       ]
@@ -9580,6 +9598,18 @@
       "testId": "steering-diagnostics-toggle",
       "files": [
         "src/components/SteeringHealth.tsx"
+      ]
+    },
+    {
+      "testId": "steering-dock-open",
+      "files": [
+        "src/components/SteeringPage.tsx"
+      ]
+    },
+    {
+      "testId": "steering-dock-sheet",
+      "files": [
+        "src/components/SteeringPage.tsx"
       ]
     },
     {
@@ -10323,19 +10353,19 @@
       ]
     },
     {
-      "testId": "steering-usage-denials",
+      "testId": "steering-usage-claims-note",
+      "files": [
+        "src/components/SteeringUsageBand.tsx"
+      ]
+    },
+    {
+      "testId": "steering-usage-delta",
       "files": [
         "src/components/SteeringUsageBand.tsx"
       ]
     },
     {
       "testId": "steering-usage-eval",
-      "files": [
-        "src/components/SteeringUsageBand.tsx"
-      ]
-    },
-    {
-      "testId": "steering-usage-evals",
       "files": [
         "src/components/SteeringUsageBand.tsx"
       ]
@@ -10365,7 +10395,19 @@
       ]
     },
     {
-      "testId": "steering-usage-split",
+      "testId": "steering-usage-rules-note",
+      "files": [
+        "src/components/SteeringUsageBand.tsx"
+      ]
+    },
+    {
+      "testId": "steering-usage-runs",
+      "files": [
+        "src/components/SteeringUsageBand.tsx"
+      ]
+    },
+    {
+      "testId": "steering-usage-top",
       "files": [
         "src/components/SteeringUsageBand.tsx"
       ]
@@ -10601,6 +10643,12 @@
     },
     {
       "testId": "testing-evals-error",
+      "files": [
+        "src/components/TestingPage.tsx"
+      ]
+    },
+    {
+      "testId": "testing-evals-frame",
       "files": [
         "src/components/TestingPage.tsx"
       ]
@@ -12094,7 +12142,6 @@
         "src/components/McpToolsPage.tsx",
         "src/components/McpUsage.tsx",
         "src/components/ProposalChips.tsx",
-        "src/components/ProposalsList.tsx",
         "src/components/SteeringAddMenu.tsx",
         "src/components/SteeringGrid.tsx",
         "src/components/SteeringHealth.tsx",

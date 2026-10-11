@@ -109,8 +109,8 @@ describe('T30 — every rendered word on the Test surfaces says Test (#203)', ()
     getCampaign.mockRejectedValue(new ApiError(404, 'Unknown campaign'));
     render(<CampaignScoreboard campaignId="suite-1" runs={[]} navigate={() => {}} />);
     const notFound = await screen.findByTestId('campaign-notfound');
-    expect(notFound).toHaveTextContent('No test is filed under suite-1');
-    expect(within(notFound).getByRole('button')).toHaveTextContent('All tests');
+    expect(notFound).toHaveTextContent('This test isn’t here.');
+    expect(within(notFound).getByRole('link')).toHaveTextContent('All tests');
     expectTestVocabulary(notFound);
   });
 
@@ -119,7 +119,7 @@ describe('T30 — every rendered word on the Test surfaces says Test (#203)', ()
     getCampaign.mockReturnValue(d.promise);
     render(<CampaignScoreboard campaignId="suite-1" runs={[]} navigate={() => {}} />);
     const loading = screen.getByTestId('campaign-loading');
-    expect(loading).toHaveTextContent('Loading test suite-1');
+    expect(within(loading).getByRole('status')).toHaveAttribute('aria-label', 'Loading');
     expectTestVocabulary(loading);
     await act(async () => {
       d.resolve(makeCampaign('suite-1', [{ id: 'n-api', status: 'completed', runId: 'r1' }]));
@@ -135,7 +135,7 @@ describe('T30 — every rendered word on the Test surfaces says Test (#203)', ()
     ));
     render(<CampaignScoreboard campaignId="suite-1" runs={[]} navigate={() => {}} />);
     const board = await screen.findByTestId('campaign-scoreboard');
-    expect(within(board).getByTitle(/^Filed onto this test at launch/)).toBeInTheDocument();
+    expect(within(board).getByTitle(/^Added to this test at launch/)).toBeInTheDocument();
     expectTestVocabulary(board);
   });
 
@@ -172,7 +172,7 @@ describe('T30 — every rendered word on the Test surfaces says Test (#203)', ()
     listCampaigns.mockReturnValue(d.promise);
     render(<CampaignsPage runs={[]} navigate={() => {}} />);
     const probing = screen.getByTestId('campaigns-probing');
-    expect(probing).toHaveTextContent('Checking this daemon for tests');
+    expect(within(probing).getByRole('status')).toBeInTheDocument();
     expectTestVocabulary(probing);
     // Settle the store's in-flight refresh so the next test's refresh is its own.
     await act(async () => {
@@ -185,7 +185,7 @@ describe('T30 — every rendered word on the Test surfaces says Test (#203)', ()
     listCampaigns.mockRejectedValue(new ApiError(404, 'Not Found'));
     render(<CampaignsPage runs={[]} navigate={() => {}} />);
     const page = await screen.findByTestId('campaigns-page');
-    expect(screen.getByTestId('campaigns-unsupported')).toHaveTextContent('This daemon has no test surface');
+    expect(await screen.findByTestId('campaigns-unsupported')).toHaveTextContent('can’t list tests');
     expectTestVocabulary(page);
   });
 

@@ -353,7 +353,7 @@ describe('SteeringPage — health header (TYPE-scoped, usability review #5)', ()
     const details = within(health).getByTestId('steering-diagnostics');
     expect(details).not.toHaveAttribute('open');
     expect(within(health).getByTestId('steering-stat-typed')).toHaveTextContent('90%');
-    expect(within(health).getByTestId('steering-stat-rules')).toHaveTextContent('Rules (store-wide)');
+    expect(within(health).getByTestId('steering-stat-rules')).toHaveTextContent('All rules');
   });
 
   it('a 501 renders the honest "engine predates the scoreboard" state, never an error card', async () => {
@@ -361,7 +361,7 @@ describe('SteeringPage — health header (TYPE-scoped, usability review #5)', ()
     wire({ scoreboard: () => Promise.reject(new ApiError(501, 'engine predates governanceScoreboard')) });
     page();
 
-    expect(await screen.findByTestId('steering-health-unsupported')).toHaveTextContent(/predates the governance scoreboard/);
+    expect(await screen.findByTestId('steering-health-unsupported')).toHaveTextContent(/can’t measure rule health yet/);
     expect(screen.queryByTestId('steering-health-error')).toBeNull();
     // The rules browser still works off the shipping wire.
     expect(await screen.findByTestId('steering-grid-row')).toBeInTheDocument();
@@ -683,4 +683,12 @@ describe('SteeringPage — ?rule deep link opens the drawer (qe finding: eval ga
     expect(navigate).not.toHaveBeenCalled();
   });
 
+});
+
+describe('plainSkip (studio#689 row 49)', () => {
+  it('says why an import entry was skipped in plain words, never the invariant log', async () => {
+    const { plainSkip } = await import('../src/components/SteeringPage.js');
+    expect(plainSkip(1, 'rejected entry 2 – INV-S3: steering rule "POL-301" carries an effect but no non-blank applies_to entry')).toBe('Rule 2 skipped: it doesn’t say where it applies.');
+    expect(plainSkip(0, 'something odd')).toBe('Rule 1 skipped: Studio’s service refused it.');
+  });
 });

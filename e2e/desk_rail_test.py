@@ -50,7 +50,7 @@ def check(step: str, ok: bool, **detail) -> None:
 RAIL = """() => {
   const rail = document.querySelector('[data-testid="session-rail"]');
   const ids = ['desk-rail-home', 'desk-rail-watch', 'rail-group', 'desk-rail-product', 'desk-rail-skills', 'desk-rail-mcp',
-               'desk-rail-steering', 'desk-rail-health', 'desk-rail-more'];
+               'desk-rail-steering', 'desk-rail-testing', 'desk-rail-health', 'desk-rail-more'];
   const seen = [];
   for (const el of rail.querySelectorAll('[data-testid]')) {
     const id = el.dataset.testid;
@@ -104,8 +104,8 @@ with sync_playwright() as p:
     r = page.evaluate(RAIL)
     check("order",
           r["order"] == ['desk-rail-home', 'desk-rail-watch', 'rail-group', 'desk-rail-product', 'desk-rail-skills', 'desk-rail-mcp',
-                         'desk-rail-steering', 'desk-rail-health', 'desk-rail-more']
-          and r["dests"] == ["watch", "section:product", "section:skills", "section:mcp", "section:steering", "health"]
+                         'desk-rail-steering', 'desk-rail-testing', 'desk-rail-health', 'desk-rail-more']
+          and r["dests"] == ["watch", "section:product", "section:skills", "section:mcp", "section:steering", "section:testing", "health"]
           and not r["bell"] and "Rules" not in r["text"] and "Everything else" not in r["text"]
           and "Steering" in r["text"] and "Skills" in r["text"] and "MCP tools" in r["text"]
           and r["steering"] == "/rules" and (r["more"] or "").startswith("Additional settings")
@@ -132,7 +132,7 @@ with sync_playwright() as p:
 
     # ── 3. the rail entries navigate and mark the current one ────────────────────
     went = {}
-    for tid, path in (("desk-rail-product", "/product"), ("desk-rail-steering", "/rules"), ("desk-rail-skills", "/skills"), ("desk-rail-mcp", "/mcp")):
+    for tid, path in (("desk-rail-product", "/product"), ("desk-rail-steering", "/rules"), ("desk-rail-skills", "/skills"), ("desk-rail-mcp", "/mcp"), ("desk-rail-testing", "/testing/campaigns")):
         page.get_by_test_id(tid).click()
         page.wait_for_function(f"() => window.location.pathname === '{path}'", timeout=5000)
         went[tid] = {"path": page.evaluate("() => window.location.pathname"),
