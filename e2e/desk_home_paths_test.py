@@ -163,6 +163,9 @@ with sync_playwright() as p:
                     pass
         if any(page.locator(sel).count() for sel in OPENERS):
             page.wait_for_timeout(600)
+        # Technical details hold paths closed by default (UI-CONTRACT §4.3): open every disclosure so its
+        # body is scanned too — a home path must be ~ there as well.
+        page.evaluate("() => document.querySelectorAll('details').forEach((d) => { d.open = true; })")
         scan = page.evaluate(SCAN, FAKE_HOME)
         tilde_on[href] = scan["tilde"]
         if scan["text"] is not None or scan["titles"]:
@@ -172,13 +175,14 @@ with sync_playwright() as p:
 
     # ── 2. the formatter ran: ~/ on /system and /skills, with technical details off ──
     page.goto(f"{origin}/system", wait_until="networkidle")
+    # The path now sits inside Technical details (closed, UI-CONTRACT §4.3): read the disclosure body.
     page.get_by_test_id("settings-path").wait_for(state="visible", timeout=10000)
-    settings_line = page.get_by_test_id("settings-path").inner_text()
-    tech = page.evaluate("() => { const e = document.querySelector('[data-testid=\"tech-details-toggle\"]'); return e ? e.checked : 'absent'; }")
+    settings_line = (page.locator('[data-testid="settings-path"] pre').text_content() or "").strip()
+    tech = page.evaluate("() => { const e = document.querySelector('[data-testid=\"tech-details-toggle\"]'); return e ? e.getAttribute('aria-checked') === 'true' : 'absent'; }")
     page.screenshot(path=str(SHOTS / "desk-home-paths-system.png"))
     page.goto(f"{origin}/skills", wait_until="networkidle")
     page.get_by_test_id("skills-root").wait_for(state="visible", timeout=10000)
-    skills_root = page.get_by_test_id("skills-root").inner_text()
+    skills_root = (page.locator('[data-testid="skills-root"] pre').text_content() or "").strip()
     page.screenshot(path=str(SHOTS / "desk-home-paths-skills.png"))
     check("formatter-ran",
           settings_line.startswith("~/") and skills_root.startswith("root ~/") and tilde_on.get("/system") and tilde_on.get("/skills")

@@ -28,7 +28,7 @@ describe('SystemSettings — deliver identity', () => {
     render(<SystemSettings />);
     const input = await screen.findByLabelText('Deliver identity (GitHub login)');
     await waitFor(() => expect(input).toHaveValue('release-bot'));
-    expect(input).toHaveAttribute('placeholder', 'not pinned');
+    expect(input).toHaveAttribute('placeholder', 'GitHub username');
   });
 
   it('saves through PUT /settings', async () => {
@@ -81,7 +81,7 @@ describe('SystemSettings — deliver identity', () => {
     render(<SystemSettings />);
     await screen.findByLabelText('Deliver identity (GitHub login)');
     const text = document.body.textContent ?? '';
-    expect(text).toContain("the credential git would use for the remote's host");
-    expect(text).toContain('A login, never a token');
+    expect(text).toContain('The GitHub account used to push finished work');
+    expect(text).toContain("Leave blank to use the service's account");
   });
 });

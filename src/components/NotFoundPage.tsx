@@ -1,4 +1,5 @@
 import type { Navigate } from '../hooks/useRoute.js';
+import { PageFrame } from './ui/PageFrame.js';
 
 /**
  * The honest dead-address view (usability review #4). Before this, an unknown
@@ -24,20 +25,14 @@ export function NotFoundPage({ pathname, navigate }: {
   navigate: Navigate;
 }): React.ReactElement {
   return (
-    <div data-testid="not-found" className="flex max-w-xl flex-col gap-3 p-8">
-      <h2 className="text-sm font-semibold" style={{ color: 'var(--ink-high)', margin: 0 }}>
-        Page not found
-      </h2>
-      <p className="text-xs" style={{ color: 'var(--ink-muted)', margin: 0 }}>
+    <PageFrame data-testid="not-found" title="Page not found" intro="The address may be mistyped, or the page may have moved.">
+      <p className="wk-pg-set-path">
         Nothing lives at{' '}
-        <code
+        <span
           data-testid="not-found-path"
-          className="rounded px-1 py-0.5 font-mono text-[11px]"
-          style={{ background: 'var(--surface-raised)', color: 'var(--ink-high)' }}
         >
           {pathname}
-        </code>
-        . The address may be mistyped, or the page it named may have moved.
+        </span>.
       </p>
       <nav aria-label="Places to go instead" className="flex flex-wrap items-center gap-2">
         {LINKS.map((l) => (
@@ -50,18 +45,12 @@ export function NotFoundPage({ pathname, navigate }: {
               e.preventDefault();
               navigate(l.path);
             }}
-            className="rounded px-2.5 py-1 text-[11px] font-semibold"
-            style={{
-              color: 'var(--ink-high)',
-              border: '1px solid var(--surface-raised)',
-              background: 'var(--surface-rail)',
-              textDecoration: 'none',
-            }}
+            className={l.path === '/' ? 'wk-btn wk-btn--primary' : 'wk-btn wk-btn--secondary'}
           >
             {l.label}
           </a>
         ))}
       </nav>
-    </div>
+    </PageFrame>
   );
 }

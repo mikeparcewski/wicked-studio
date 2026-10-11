@@ -59,13 +59,13 @@ describe('System — seat rows read `auth`', () => {
 
     expect(screen.getByTestId('seat-signin-claude')).toHaveTextContent('✓ signed in');
     expect(screen.getByTestId('seat-signin-codex')).toHaveTextContent('sign in needed');
-    expect(screen.getByTestId('seat-signin-agy')).toHaveTextContent('sign-in failed: No API key found');
+    expect(screen.getByTestId('seat-signin-agy')).toHaveTextContent('sign-in failed');
     expect(screen.getByTestId('seat-signin-agy').dataset.authSource).toBe('seat-stderr');
     // #1: the status word stays terse; the free tier moves to its own small line below.
     expect(screen.getByTestId('seat-signin-pi')).toHaveTextContent('no sign-in needed');
     expect(screen.getByTestId('seat-signin-pi')).not.toHaveTextContent('gemini free');
     expect(screen.getByTestId('seat-freetier-pi')).toHaveTextContent('gemini free');
-    expect(screen.getByTestId('seat-signin-opencode')).toHaveTextContent('auth unknown');
+    expect(screen.getByTestId('seat-signin-opencode')).toHaveTextContent('Sign-in unknown');
     expect(screen.queryByTestId('seat-signin-localonly')).toBeNull();
 
     // Buttons: signed-in and not-required seats get none; signed-out/unknown seats with a login flow do.
@@ -87,8 +87,8 @@ describe('System — seat rows read `auth`', () => {
 
     spy.mockResolvedValue({ settings: { graphNodeLimit: 150 } });
     render(<SystemSettings />);
-    await waitFor(() => expect(screen.getByText("the daemon's settings file")).toBeInTheDocument());
-    expect(screen.getByText(/does not report the path — crew 0\.7\.36 does/)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId("settings-path")).toHaveTextContent("Studio's service does not report its settings file location."));
+    expect(screen.getByTestId("settings-path").tagName).toBe("DETAILS");
     expect(screen.queryByText(/wicked-core\/settings\.json/)).toBeNull(); // the hard-coded literal is gone
   });
 });

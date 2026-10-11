@@ -3,6 +3,9 @@ import { resetSkill, type SkillMutationResult, type SkillRow } from '../api/skil
 import { useModalEscape } from './Modal.js';
 import { SkillFindings } from './SkillFindings.js';
 import type { SkillsWriter } from './skillsWriter.js';
+import { SectionTitle } from './ui/PageFrame.js';
+import { StateBanner } from './ui/StateBanner.js';
+import { readErrorKind } from '../api/errors.js';
 
 /**
  * The typed-confirmation modal for RESET — the one destructive skill verb (the SteeringRetireModal
@@ -18,7 +21,7 @@ import type { SkillsWriter } from './skillsWriter.js';
  */
 
 const BODY =
-  'Restores every file this skill owns from the baseline and discards your local edits — the override becomes a shipped skill again. Enablement is manifest state and is NOT touched: a disabled skill stays disabled. Nothing reaches workers until the next Publish.';
+  'Restore the original files and discard your edits. The skill keeps its current on or off setting. Publish when you are ready to share the restored files with your helpers.';
 
 export function SkillConfirmModal({ skill, writer, onClose, onDone }: {
   skill: SkillRow;
@@ -60,18 +63,18 @@ export function SkillConfirmModal({ skill, writer, onClose, onDone }: {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'var(--scrim)' }}>
+    <div className="wk-pg-skills-scrim" >
       <div
         data-testid="skills-confirm-modal"
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="flex w-[28rem] max-w-[92vw] flex-col gap-3 rounded-xl p-4 shadow-2xl"
-        style={{ background: 'var(--surface-card)', border: '1px solid var(--status-gate)' }}
+        className="wk-card wk-pg-skills-modal"
+
       >
-        <h3 className="text-sm font-semibold" style={{ color: 'var(--status-gate)' }}>{title}</h3>
-        <p className="text-[11px]" style={{ color: 'var(--ink-muted)' }}>{BODY}</p>
-        <label className="flex flex-col gap-1 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
+        <SectionTitle>{title}</SectionTitle>
+        <p className="" style={{ color: 'var(--ink-muted)' }}>{BODY}</p>
+        <label className="flex flex-col gap-1" style={{ color: 'var(--ink-muted)' }}>
           Type the skill name to confirm
           <input
             data-testid="skills-confirm-input"
@@ -80,23 +83,22 @@ export function SkillConfirmModal({ skill, writer, onClose, onDone }: {
             onChange={(e) => setTyped(e.target.value)}
             placeholder={skill.name}
             spellCheck={false}
-            className="rounded px-2 py-1 font-mono text-[11px] focus:outline-none"
-            style={{ background: 'var(--surface-base)', border: '1px solid var(--surface-raised)', color: 'var(--ink-high)' }}
+            className="wk-field"
+
           />
         </label>
         {error !== null && (
-          <p data-testid="skills-confirm-error" className="rounded px-2 py-1 text-[10px]" style={{ background: 'var(--status-fail-dim)', color: 'var(--status-fail)' }}>
-            {error}
-          </p>
+          <StateBanner data-testid="skills-confirm-error" kind={readErrorKind(error)} what="the reset" error={error} onRetry={() => void confirm()} />
         )}
         {blocked !== null && <SkillFindings verb="Reset skill" result={blocked} testId="skills-confirm-findings" />}
+        {!armed && <p className="wk-field-note">{busy ? 'Wait for the reset to finish.' : 'Type the skill name exactly to enable Reset.'}</p>}
         <div className="flex items-center justify-end gap-2">
           <button
             data-testid="skills-confirm-cancel"
             type="button"
             onClick={onClose}
-            className="rounded px-3 py-1 text-[11px]"
-            style={{ color: 'var(--ink-muted)', border: '1px solid var(--surface-raised)' }}
+            className="wk-btn wk-btn--quiet"
+
           >
             Cancel
           </button>
@@ -105,8 +107,8 @@ export function SkillConfirmModal({ skill, writer, onClose, onDone }: {
             type="button"
             disabled={!armed}
             onClick={() => void confirm()}
-            className="rounded px-3 py-1 text-[11px] font-semibold disabled:opacity-40"
-            style={{ background: 'var(--status-gate)', color: 'var(--surface-base)' }}
+            className="wk-btn wk-btn--danger"
+
           >
             {busy ? 'Resetting…' : 'Reset skill'}
           </button>

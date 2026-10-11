@@ -1,3 +1,7 @@
+import { SectionTitle } from './ui/PageFrame.js';
+import { StateBanner, Skeleton } from './ui/StateBanner.js';
+import { TechDetails } from './ui/TechDetails.js';
+import { readErrorKind } from '../api/errors.js';
 import { useEffect, useRef, useState } from 'react';
 import { getLearnedTheme, requestThemeLearn } from '../api/interactive.js';
 import { interactiveRootOf } from '../hooks/useBoardModel.js';
@@ -48,6 +52,7 @@ export function BrandLearn(): React.ReactElement {
   const [projectId, setProjectId] = useState('');
   const [phase, setPhase] = useState<Phase>('idle');
   const [status, setStatus] = useState<string | null>(null);
+  const [errorSource, setErrorSource] = useState<unknown>(null);
   const [mapping, setMapping] = useState<BrandTokenOverrides | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -74,8 +79,9 @@ export function BrandLearn(): React.ReactElement {
     const ctl = new AbortController();
     abortRef.current = ctl;
     setMapping(null);
+    setErrorSource(null);
     setPhase('preparing');
-    setStatus(`Preparing the scratch document in “${effectiveProject}”…`);
+    setStatus('Preparing a document for learning your brand…');
     try {
       // studio#518: the signal rides the preparation too — a Cancel while the project's document
       // list is in flight stops the create that would follow (and the drafting run it launches).
@@ -142,6 +148,7 @@ export function BrandLearn(): React.ReactElement {
     } catch (e: unknown) {
       if (ctl.signal.aborted) return;
       setPhase('error');
+      setErrorSource(e);
       setStatus(errorText(e)); // sync refusals (unknown doc, 403, the typed 503) verbatim
     }
   }
@@ -156,7 +163,7 @@ export function BrandLearn(): React.ReactElement {
       accent_l: mapping.accent_l,
     });
     setPhase('applied');
-    setStatus('Applied — persisted as the per-install appearance, exactly like the wheel above.');
+    setStatus('Applied — your workspace appearance is saved.');
   }
 
   function onDiscard(): void {
@@ -173,34 +180,20 @@ export function BrandLearn(): React.ReactElement {
   return (
     <section
       data-testid="brand-learn"
-      className="rounded-xl px-5 py-4 mb-6"
-      style={{ background: 'var(--surface-card)', border: '1px solid var(--surface-raised)' }}
+      className="wk-card wk-pg-set-stack"
     >
-      <h2
-        className="text-xs font-semibold uppercase tracking-wide pb-2 font-mono"
-        style={{ color: 'var(--ink-dim)' }}
-      >
-        Learn from a brand
-      </h2>
-      <p className="text-xs mt-0.5 mb-3" style={{ color: 'var(--ink-muted)' }}>
-        Point at a brand — a live website, a local PDF, or an image — and the interactive
-        bridge learns its look for a scratch document in the chosen project; the learned
-        palette is read back and mapped onto the studio accent, kept readable and distinct
-        from the fixed status colors. Nothing applies until you confirm. A learned theme
-        carries colors and fonts only — no logo, so the logo stays your manual choice above.
-      </p>
-
+      <SectionTitle>Learn from a brand</SectionTitle>
+      <p className="wk-field-note">Learn colors from a website, PDF, or image, then preview and apply them to your workspace; choose a logo separately above.</p>
       <div className="flex items-center gap-4 flex-wrap mb-2">
         {LEARN_KINDS.map((k) => (
-          <label key={k} className="flex items-center gap-1.5 text-xs cursor-pointer"
-            style={{ color: kind === k ? 'var(--ink-body)' : 'var(--ink-muted)' }}>
+          <label key={k} className="flex items-center gap-1.5 text-xs cursor-pointer">
             <input
               type="radio"
               name="brand-learn-kind"
+              className="wk-radio"
               data-testid={`learn-source-${k}`}
               checked={kind === k}
               onChange={() => setKind(k)}
-              style={{ accentColor: 'var(--accent)' }}
             />
             {LEARN_LABEL[k].noun}
           </label>
@@ -211,8 +204,7 @@ export function BrandLearn(): React.ReactElement {
             aria-label="Project"
             value={effectiveProject}
             onChange={(e) => setProjectId(e.target.value)}
-            className="text-xs rounded px-1.5 py-1 ml-auto"
-            style={{ background: 'var(--surface-rail)', border: '1px solid var(--surface-raised)', color: 'var(--ink-muted)' }}
+            className="wk-field"
           >
             {selectable.map((p) => (
               <option key={p.id} value={p.id}>{p.name}</option>
@@ -221,7 +213,7 @@ export function BrandLearn(): React.ReactElement {
         )}
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 flex-wrap">
         <input
           type="text"
           data-testid="learn-input"
@@ -230,39 +222,31 @@ export function BrandLearn(): React.ReactElement {
           value={source}
           onChange={(e) => setSource(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter') void onLearn(); }}
-          className="flex-1 min-w-0 rounded px-2 py-1 text-xs font-mono focus:outline-none"
-          style={{ background: 'var(--surface-rail)', border: '1px solid var(--surface-raised)', color: 'var(--ink-high)' }}
+          className="wk-field flex-1 min-w-0"
         />
         <button
           type="button"
           data-testid="learn-submit"
-          disabled={busy}
+          disabled={busy || !learnReady(kind, source.trim()) || effectiveProject === ''}
           onClick={() => void onLearn()}
-          className="px-3 py-1 rounded-lg text-xs font-medium disabled:opacity-50"
-          style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
+          className={mapping === null ? "wk-btn wk-btn--primary" : "wk-btn wk-btn--secondary"}
         >
           Learn
         </button>
       </div>
 
-      {status !== null && (
-        <p
-          data-testid="learn-status"
-          className="text-xs mt-2 font-mono"
-          style={{ color: phase === 'error' ? 'var(--status-fail)' : 'var(--ink-body)' }}
-        >
-          {status}
-        </p>
-      )}
-
+      {(busy || !learnReady(kind, source.trim()) || effectiveProject === '') && <p className="wk-field-note">{busy ? 'Wait for learning to finish, or cancel it below.' : effectiveProject === '' ? 'Create a project before learning a brand.' : 'Enter a website address or file location to learn from.'}</p>}
+      {status !== null && (phase === 'error'
+        ? <StateBanner data-testid="learn-status" kind={readErrorKind(errorSource ?? status)} what="brand colors" error={status} onRetry={() => void onLearn()} />
+        : <p data-testid="learn-status" className="wk-field-note" role="status">{status}</p>)}
+      {busy && <Skeleton rows={2} />}
       {busy && (
         <div className="mt-2">
           <button
             type="button"
             data-testid="learn-cancel"
             onClick={onDiscard}
-            className="px-2.5 py-1 rounded-lg text-xs font-medium"
-            style={{ background: 'transparent', color: 'var(--ink-muted)', border: '1px solid var(--surface-raised)' }}
+            className="wk-btn wk-btn--quiet"
           >
             Cancel
           </button>
@@ -275,36 +259,24 @@ export function BrandLearn(): React.ReactElement {
             <div className="flex items-center gap-3 flex-wrap">
               <span
                 data-testid="learn-preview-chip"
-                className="text-xs px-2.5 py-1 rounded-full font-medium"
-                style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
+                className="wk-tag"
               >
                 learned accent {mapping.accent_h}° {mapping.accent_s}% {mapping.accent_l}%
               </span>
-              <span className="text-xs" style={{ color: 'var(--ink-dim)' }}>
-                The whole page is wearing it now — this chip included.
+              <span className="text-xs">
+                Your workspace is previewing these colors.
               </span>
             </div>
           )}
-          {mapping.adjustments.length > 0 && (
-            <ul data-testid="mapper-adjustments" className="mt-2 flex flex-col gap-1">
-              {mapping.adjustments.map((a, i) => (
-                <li key={i} className="text-xs font-mono" style={{ color: 'var(--ink-muted)' }}>
-                  <span style={{ color: a.constraint === 'unsatisfiable' ? 'var(--status-fail)' : 'var(--ink-dim)' }}>
-                    {a.constraint}
-                  </span>{' '}
-                  {a.original} → {a.adjusted} — <span style={{ color: 'var(--ink-body)' }}>{a.reason}</span>
-                </li>
-              ))}
-            </ul>
-          )}
+          {mapping.adjustments.length > 0 && <div data-testid="mapper-adjustments"><p className="wk-field-note">The colors were adjusted to keep text readable and status colors distinct.</p><TechDetails text={mapping.adjustments.map((a) => `${a.constraint}: ${a.original} → ${a.adjusted} — ${a.reason}`)} /></div>}
+          {!applicable && <p className="wk-field-note">{phase === 'applied' ? 'These colors have already been applied.' : 'These colors cannot be applied until they meet the readability checks.'}</p>}
           <div className="flex items-center gap-2 mt-3">
             <button
               type="button"
               data-testid="learn-apply"
               disabled={!applicable}
               onClick={onApply}
-              className="px-3 py-1 rounded-lg text-xs font-medium disabled:opacity-50"
-              style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
+              className="wk-btn wk-btn--primary"
             >
               Apply
             </button>
@@ -312,8 +284,7 @@ export function BrandLearn(): React.ReactElement {
               type="button"
               data-testid="learn-discard"
               onClick={onDiscard}
-              className="px-3 py-1 rounded-lg text-xs font-medium"
-              style={{ background: 'transparent', color: 'var(--ink-muted)', border: '1px solid var(--surface-raised)' }}
+              className="wk-btn wk-btn--secondary"
             >
               Discard
             </button>

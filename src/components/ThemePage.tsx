@@ -1,5 +1,6 @@
 import { AppearanceSettings } from './AppearanceSettings.js';
 import { BrandLearn } from './BrandLearn.js';
+import { PageFrame } from './ui/PageFrame.js';
 
 /**
  * The dedicated Theme page (/theme) — a first-class home for the appearance
@@ -17,15 +18,11 @@ import { BrandLearn } from './BrandLearn.js';
  */
 export function ThemePage(): React.ReactElement {
   return (
-    <div className="max-w-2xl mx-auto">
-      <div className="mb-6">
-        <h1 className="wk-page-title">Theme</h1>
-        <p className="text-sm mt-1" style={{ color: 'var(--ink-muted)' }}>
-          Appearance, accent, and brand identity — persisted per-install.
-        </p>
-      </div>
+    <PageFrame title="Theme" intro="Choose the colors and branding for your workspace.">
+      <div className="wk-pg-set-content">
       <AppearanceSettings />
       <BrandLearn />
-    </div>
+      </div>
+    </PageFrame>
   );
 }

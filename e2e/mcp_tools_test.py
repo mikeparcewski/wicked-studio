@@ -34,6 +34,7 @@ Env: FEEDBACK_PORT (default 4512). Prints a JSON report; exit 0/1.
 """
 
 import json
+import re
 import os
 import sys
 import urllib.parse
@@ -302,7 +303,10 @@ with sync_playwright() as p:
     check("preview-lists-tools-and-decisions",
           [t["subject"] for t in prev] == ["mcp:jira/wt_echo", "mcp:jira/wt_note", "mcp:jira/wt_plain"]
           and note is not None and note["cls"] == "destructive"
-          and all(c == "creator:ask" for c in note["cells"][:6]) and all(c.endswith(":deny") for c in note["cells"][6:]),
+          # Role-keyed, not index-keyed: retired helpers (agy) are left out of the matrix (UX audit row 58).
+          and all(c == "creator:ask" for c in note["cells"] if c.startswith("creator:"))
+          and all(c.endswith(":deny") for c in note["cells"] if not c.startswith("creator:"))
+          and any(c.startswith("creator:") for c in note["cells"]),
           preview=prev)
     check("nothing-registered-before-save", not any(x["method"] == "POST" and x["path"] == "/mcp/servers" for x in mcp["posts"]))
     page.screenshot(path=str(SHOTS / f"mcp-tools-preview-desk.png"))
@@ -319,14 +323,16 @@ with sync_playwright() as p:
     check("posture-before-approval", True)
 
     # ── 3. approve first use ─────────────────────────────────────────────────────
-    page.get_by_test_id("mcp-server-approve").click()
+    page.get_by_test_id("mcp-server-row").get_by_role("button", name=re.compile("^More actions for")).first.click()
+    page.get_by_role("menuitem", name="Approve first use").click()
     try:
         page.wait_for_function("() => document.querySelector('[data-testid=\"mcp-server-posture\"]')?.textContent === '1 read run · 2 write ask'", timeout=5000)
     except Exception:
         fail("first-use-approved", page.get_by_test_id("mcp-server-row").inner_text())
     check("first-use-approved", mcp["approved"] == {"mcp:jira"})
     plain = page.locator('[data-testid="mcp-tool-row"][data-subject="mcp:jira/wt_plain"]')
-    plain.get_by_test_id("mcp-tool-policies").click()
+    plain.get_by_role("button", name=re.compile("^More actions for")).click()
+    page.get_by_role("menuitem", name="Policies").click()
 
     def cell(role: str, seat: str) -> dict:
         return page.evaluate(f"""() => {{ const c = document.querySelector(
@@ -338,7 +344,8 @@ with sync_playwright() as p:
           creator=c1, evaluator=c2)
 
     # ── 4. approve the tool ──────────────────────────────────────────────────────
-    plain.get_by_test_id("mcp-tool-approve").click()
+    plain.get_by_role("button", name=re.compile("^More actions for")).click()
+    page.get_by_role("menuitem", name="Approve tool").click()
     try:
         page.wait_for_function("() => document.querySelector('[data-testid=\"mcp-server-posture\"]')?.textContent === '1 read run · 1 write run · 1 write ask'", timeout=5000)
     except Exception:
@@ -369,8 +376,8 @@ with sync_playwright() as p:
           sent == {"name": "tracker", "kind": "rest", "url": "https://api.example.com/v1", "openapiUrl": "https://api.example.com/openapi.json",
                    "auth": {"ref": "env:TRACKER_TOKEN", "header": "Authorization"}}
           and rest_prev == [["mcp:tracker/getIssue", "read"], ["mcp:tracker/createIssue", "write"], ["mcp:tracker/deleteIssue", "destructive"]]
-          and "PUT /files" in page.get_by_test_id("mcp-add-skipped").inner_text()
-          and page.get_by_test_id("mcp-add-panel").locator("h3").inner_text() == "Wrap a REST API",
+          and "PUT /files" in (page.get_by_test_id("mcp-add-skipped").text_content() or "")
+          and page.get_by_test_id("mcp-add-panel").get_by_role("heading").first.inner_text() == "Wrap a REST API",
           sent=sent, preview=rest_prev)
     ov = no_overflow(page)
     check("rest-no-horizontal-overflow", ov["docW"] <= ov["winW"], **ov)
@@ -408,7 +415,7 @@ with sync_playwright() as p:
     except Exception:
         fail("server-row-usage", page.locator("body").inner_text()[:2000])
     check("server-row-usage", True)
-    page.locator('[data-testid="mcp-view-tab"][data-view="usage"]').click()
+    page.get_by_role("tab", name="Usage").click()
     try:
         page.get_by_test_id("mcp-usage-tools").wait_for(state="visible", timeout=5000)
     except Exception:

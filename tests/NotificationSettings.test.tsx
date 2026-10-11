@@ -43,6 +43,7 @@ afterEach(() => {
 describe('EC25 — the permission gesture', () => {
   it('renders (default Off) without touching requestPermission', () => {
     render(<NotificationSettings />);
+    expect(screen.getByRole('radiogroup', { name: 'Notifications' })).toBeInTheDocument();
     expect(screen.getByTestId('notif-off')).toBeChecked();
     expect(screen.getByTestId('notif-desktop')).not.toBeChecked();
     expect(FakeNotification.requestPermission).not.toHaveBeenCalled();
@@ -61,7 +62,7 @@ describe('EC25 — the permission gesture', () => {
     expect(FakeNotification.requestPermission).toHaveBeenCalledTimes(1);
     expect(useNotifPrefsStore.getState().prefs.desktop).toBe(true);
     expect(screen.getByTestId('notif-desktop')).toBeChecked();
-    expect(screen.getByTestId('notif-permission').textContent).toContain('granted');
+    expect(screen.getByTestId('notif-permission').textContent).toContain('allowed');
 
     // The pref rides the settings wire under the studio key (debounced).
     await act(async () => {
@@ -96,7 +97,8 @@ describe('EC25 — the permission gesture', () => {
 describe('the chime checkbox', () => {
   it('is disabled while desktop is Off, and toggles the pref when on', async () => {
     render(<NotificationSettings />);
-    expect(screen.getByTestId('notif-chime')).toBeDisabled();
+    expect(screen.getByRole('switch', { name: 'Also play a chime' })).toBeDisabled();
+    expect(screen.getByText('Choose Desktop notifications before enabling a chime.')).toBeInTheDocument();
 
     act(() => {
       useNotifPrefsStore.setState({ prefs: { desktop: true, chime: false } });

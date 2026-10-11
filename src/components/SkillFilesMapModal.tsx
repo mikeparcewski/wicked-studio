@@ -3,6 +3,9 @@ import { addSkill, parseFilesMap, replaceSkill, type SkillMutationResult } from 
 import { useModalEscape } from './Modal.js';
 import { SkillFindings } from './SkillFindings.js';
 import type { SkillsWriter } from './skillsWriter.js';
+import { SectionTitle } from './ui/PageFrame.js';
+import { StateBanner } from './ui/StateBanner.js';
+import { readErrorKind } from '../api/errors.js';
 
 /**
  * The files-map modal behind two verbs: ADD a user-added skill (`POST /skills`) and REPLACE a
@@ -84,25 +87,25 @@ export function SkillFilesMapModal({ mode, name, writer, onClose, onDone }: {
   const verb = mode === 'add' ? 'Add skill' : 'Replace files';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'var(--scrim)' }}>
+    <div className="wk-pg-skills-scrim" >
       <div
         data-testid="skills-files-modal"
         data-mode={mode}
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="flex w-[36rem] max-w-[92vw] flex-col gap-3 rounded-xl p-4 shadow-2xl"
-        style={{ background: 'var(--surface-card)', border: '1px solid var(--surface-raised)' }}
+        className="wk-card wk-pg-skills-modal"
+
       >
-        <h3 className="text-sm font-semibold" style={{ color: 'var(--ink-high)' }}>{title}</h3>
-        <p className="text-[11px]" style={{ color: 'var(--ink-muted)' }}>
+        <SectionTitle>{title}</SectionTitle>
+        <p className="" style={{ color: 'var(--ink-muted)' }}>
           {mode === 'add'
-            ? 'A user-added skill: a new dir under the effective root, carried in the snapshot once enabled and published. Paste its files as a JSON map of relative path → content; SKILL.md is required.'
-            : 'Replaces every file this skill owns with the map below — files not in the map are removed (a nested child skill keeps its own). Paste a JSON map of relative path → content; SKILL.md is required.'}
-          {' '}The daemon runs its guards (name uniqueness across the whole catalog, frontmatter name = path-derived name, core protection) before anything is written.
+            ? 'Paste the new skill’s files as a JSON map of relative paths to contents, including SKILL.md.'
+            : 'Replace this skill’s files with the JSON map below, including SKILL.md. Files missing from the map are removed.'}
+          {' '}Your changes are checked before saving. Publish to share them with your helpers.
         </p>
         {mode === 'add' && (
-          <label className="flex flex-col gap-1 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
+          <label className="flex flex-col gap-1" style={{ color: 'var(--ink-muted)' }}>
             Skill name
             <input
               data-testid="skills-files-name"
@@ -112,12 +115,12 @@ export function SkillFilesMapModal({ mode, name, writer, onClose, onDone }: {
               placeholder="my-team-skill"
               spellCheck={false}
               aria-invalid={nameIssue !== null}
-              className="rounded px-2 py-1 font-mono text-[11px] focus:outline-none"
-              style={{ background: 'var(--surface-base)', border: `1px solid ${nameIssue === null ? 'var(--surface-raised)' : 'var(--status-fail)'}`, color: 'var(--ink-high)' }}
+              className="wk-field"
+
             />
           </label>
         )}
-        <label className="flex flex-col gap-1 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
+        <label className="flex flex-col gap-1" style={{ color: 'var(--ink-muted)' }}>
           Files map (JSON)
           <textarea
             data-testid="skills-files-map"
@@ -126,25 +129,23 @@ export function SkillFilesMapModal({ mode, name, writer, onClose, onDone }: {
             placeholder={PLACEHOLDER}
             spellCheck={false}
             aria-invalid={parsed !== null && parsed.issue !== null}
-            className="min-h-[12rem] resize-y rounded px-2 py-1 font-mono text-[11px] focus:outline-none"
-            style={{ background: 'var(--surface-base)', border: '1px solid var(--surface-raised)', color: 'var(--ink-high)' }}
+            className="wk-field wk-pg-skills-code"
+
           />
         </label>
         {issue !== null && (
-          <p data-testid="skills-files-issue" className="text-[10px]" style={{ color: 'var(--status-fail)' }}>{issue}</p>
+          <p data-testid="skills-files-issue" className="" style={{ color: 'var(--status-fail)' }}>{issue}</p>
         )}
         {error !== null && (
-          <p data-testid="skills-files-error" className="rounded px-2 py-1 text-[10px]" style={{ background: 'var(--status-fail-dim)', color: 'var(--status-fail)' }}>
-            {error}
-          </p>
+          <StateBanner data-testid="skills-files-error" kind={readErrorKind(error)} what="the skill files" error={error} onRetry={() => void submit()} />
         )}
         {blocked !== null && <SkillFindings verb={verb} result={blocked} testId="skills-files-findings" />}
         {conflict && (
           <p
             data-testid="skills-files-conflict"
             role="alert"
-            className="rounded px-2 py-1 text-[10px]"
-            style={{ background: 'var(--surface-rail)', border: '1px solid var(--status-gate)', color: 'var(--ink-muted)' }}
+            className="rounded px-2 py-1"
+            style={{ color: 'var(--ink-muted)' }}
           >
             <span className="font-semibold" style={{ color: 'var(--status-gate)' }}>The skills catalog changed under this page — nothing was written.</span>
             {' '}
@@ -153,13 +154,14 @@ export function SkillFilesMapModal({ mode, name, writer, onClose, onDone }: {
               : `Your ${mode === 'add' ? 'name and files map are' : 'files map is'} kept and the catalog was reloaded — ${verb} again to write against the current revision.`}
           </p>
         )}
+        {!armed && <p className="wk-field-note">{busy ? 'Wait for the files to finish saving.' : issue ?? 'Enter a skill name and a valid files map to continue.'}</p>}
         <div className="flex items-center justify-end gap-2">
           <button
             data-testid="skills-files-cancel"
             type="button"
             onClick={onClose}
-            className="rounded px-3 py-1 text-[11px]"
-            style={{ color: 'var(--ink-muted)', border: '1px solid var(--surface-raised)' }}
+            className="wk-btn wk-btn--quiet"
+
           >
             Cancel
           </button>
@@ -168,8 +170,8 @@ export function SkillFilesMapModal({ mode, name, writer, onClose, onDone }: {
             type="button"
             disabled={!armed}
             onClick={() => void submit()}
-            className="rounded px-3 py-1 text-[11px] font-semibold disabled:opacity-40"
-            style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
+            className="wk-btn wk-btn--primary"
+
           >
             {busy ? (conflict ? 'Reloading…' : 'Writing…') : verb}
           </button>

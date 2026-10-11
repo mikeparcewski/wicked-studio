@@ -58,12 +58,12 @@ describe('SystemSettings — Runs (#123)', () => {
     await settleMount();
 
     const section = screen.getByTestId('runs-settings');
-    expect(section).toHaveTextContent('Runs');
+    expect(section).toHaveTextContent('Work');
     expect(section).toHaveTextContent('Open a PR when a build run finishes');
     // Honest about what it does: pushes a branch, opens a PR, merge stays human.
-    expect(section.textContent).toMatch(/pushes the run's branch/i);
-    expect(section.textContent).toMatch(/opens a pull request/i);
-    expect(section.textContent).toMatch(/Merging stays human/i);
+    expect(section.textContent).toMatch(/Push the finished branch/i);
+    expect(section.textContent).toMatch(/open a pull request/i);
+    expect(section.textContent).toMatch(/you decide when to merge/i);
 
     // Default ON — the fresh-install state, with nothing ever persisted.
     expect(screen.getByTestId('deliver-pr-toggle')).toBeChecked();

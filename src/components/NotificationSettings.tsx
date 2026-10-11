@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { SectionTitle } from './ui/PageFrame.js';
+import { Switch } from './ui/Switch.js';
 import { useNotifPrefsStore } from '../store/notifPrefs.js';
 
 /**
@@ -14,9 +16,7 @@ import { useNotifPrefsStore } from '../store/notifPrefs.js';
  * wire — the appearance pattern verbatim (`useNotifPrefsStore`).
  *
  * Tokens (§8.3): the existing settings dress — labels `--text-sm --font-sans
- * --ink-body`; the permission state line `--text-xs --font-mono`, in
- * `--status-run` when granted, `--status-fail` when denied. No other visual
- * surface: the feature's output is the OS's, not ours.
+ * --ink-body`; permission messages use the shared field-note style.
  */
 
 type PermState = NotificationPermission | 'unsupported';
@@ -24,15 +24,6 @@ type PermState = NotificationPermission | 'unsupported';
 function permissionNow(): PermState {
   return typeof Notification === 'undefined' ? 'unsupported' : Notification.permission;
 }
-
-const CSS = {
-  row: { display: 'flex', alignItems: 'flex-start', gap: '8px', padding: '6px 0' },
-  label: {
-    fontSize: 'var(--text-sm)', fontFamily: 'var(--font-sans)',
-    color: 'var(--ink-body)', cursor: 'pointer',
-  },
-  status: { fontSize: 'var(--text-xs)', fontFamily: 'var(--font-mono)', margin: '8px 0 0' },
-} as const satisfies Record<string, React.CSSProperties>;
 
 export function NotificationSettings(): React.ReactElement {
   const prefs = useNotifPrefsStore((s) => s.prefs);
@@ -69,22 +60,20 @@ export function NotificationSettings(): React.ReactElement {
     }
   }
 
-  const statusLine = ((): { text: string; color: string; state: string } | null => {
+  const statusLine = ((): { text: string; state: string } | null => {
     if (permission === 'unsupported') {
-      return { text: 'this browser does not support desktop notifications', color: 'var(--ink-dim)', state: 'unsupported' };
+      return { text: 'This browser does not support desktop notifications.', state: 'unsupported' };
     }
     if (permission === 'denied') {
       return {
-        text: 'permission blocked in browser settings — the studio cannot re-ask',
-        color: 'var(--status-fail)',
+        text: 'Notifications are blocked in browser settings. Allow them there to receive desktop notifications.',
         state: 'denied',
       };
     }
-    if (permission === 'granted') return { text: 'permission granted ✓', color: 'var(--status-run)', state: 'granted' };
+    if (permission === 'granted') return { text: 'Desktop notifications are allowed.', state: 'granted' };
     if (dismissed) {
       return {
-        text: 'the browser did not grant it — pick Desktop again to be asked',
-        color: 'var(--status-gate)',
+        text: 'The browser did not grant permission. Pick Desktop again to be asked.',
         state: 'dismissed',
       };
     }
@@ -94,8 +83,7 @@ export function NotificationSettings(): React.ReactElement {
       // notifications will not fire here until re-enabled, so say so with the
       // next step instead of silently rendering an On radio that does nothing.
       return {
-        text: 'permission not granted in this browser — click the desktop option to grant it',
-        color: 'var(--status-gate)',
+        text: 'This browser needs permission. Choose Desktop to allow notifications.',
         state: 'ungranted',
       };
     }
@@ -103,73 +91,34 @@ export function NotificationSettings(): React.ReactElement {
   })();
 
   return (
-    <section
-      data-testid="notif-settings"
-      className="rounded-xl px-5 mb-6 pb-4"
-      style={{ background: 'var(--surface-card)', border: '1px solid var(--surface-raised)' }}
-    >
-      <h2
-        className="text-xs font-semibold uppercase tracking-wide pt-4 pb-2 font-mono"
-        style={{ color: 'var(--ink-dim)' }}
-      >
-        Notifications
-      </h2>
-
-      <div style={CSS.row}>
-        <input
-          type="radio"
-          id="notif-off"
-          name="notif-mode"
-          data-testid="notif-off"
-          checked={!prefs.desktop}
-          onChange={() => { setDismissed(false); update({ desktop: false }); }}
-          // A failed Desktop request leaves Off already checked, so a click on it fires no change
-          // event — the click itself is the operator stepping back, and clears the dismissed line.
-          onClick={() => setDismissed(false)}
-          style={{ accentColor: 'var(--accent)', marginTop: '2px' }}
-        />
-        <label htmlFor="notif-off" style={CSS.label}>Off — in-app toasts only</label>
+    <section data-testid="notif-settings" className="wk-card wk-pg-set-stack">
+      <SectionTitle>Notifications</SectionTitle>
+      <p className="wk-field-note">Desktop notifications let you know when your work needs attention while this tab is hidden; in-app notices are always available.</p>
+      <div role="radiogroup" aria-label="Notifications" className="wk-pg-set-radios">
+        {([['off', 'Off'], ['desktop', 'Desktop notifications']] as const).map(([mode, label]) => (
+          <label key={mode} className="wk-pg-set-radio">
+            <input
+              type="radio"
+              className="wk-radio"
+              name="notif-mode"
+              data-testid={mode === 'off' ? 'notif-off' : 'notif-desktop'}
+              checked={prefs.desktop ? mode === 'desktop' : mode === 'off'}
+              disabled={mode === 'desktop' && permission === 'unsupported'}
+              // onClick, not onChange: choosing the already-checked Off still clears a dismissed line.
+              onChange={() => undefined}
+              onClick={() => {
+                if (mode === 'desktop') void chooseDesktop();
+                else { setDismissed(false); update({ desktop: false }); }
+              }}
+            />
+            {label}
+          </label>
+        ))}
       </div>
-
-      <div style={CSS.row}>
-        <input
-          type="radio"
-          id="notif-desktop"
-          name="notif-mode"
-          data-testid="notif-desktop"
-          checked={prefs.desktop}
-          disabled={permission === 'unsupported'}
-          onChange={() => { void chooseDesktop(); }}
-          style={{ accentColor: 'var(--accent)', marginTop: '2px' }}
-        />
-        <label htmlFor="notif-desktop" style={CSS.label}>
-          Desktop notification when a gate needs you and this tab is hidden
-        </label>
-      </div>
-
-      <div style={{ ...CSS.row, paddingLeft: '24px' }}>
-        <input
-          type="checkbox"
-          id="notif-chime"
-          data-testid="notif-chime"
-          checked={prefs.chime}
-          disabled={!prefs.desktop}
-          onChange={(e) => update({ chime: e.target.checked })}
-          style={{ accentColor: 'var(--accent)', marginTop: '2px' }}
-        />
-        <label
-          htmlFor="notif-chime"
-          style={{ ...CSS.label, color: prefs.desktop ? 'var(--ink-body)' : 'var(--ink-dim)' }}
-        >
-          Also play a chime
-        </label>
-      </div>
-
-      {statusLine !== null && (
-        <p data-testid="notif-permission" data-state={statusLine.state} style={{ ...CSS.status, color: statusLine.color }}>
-          {statusLine.text}
-        </p>
-      )}
+      <Switch label="Also play a chime" data-testid="notif-chime" checked={prefs.chime}
+        disabled={!prefs.desktop ? 'Choose Desktop notifications before enabling a chime.' : null}
+        onChange={(chime) => update({ chime })} />
+      {statusLine !== null && <p data-testid="notif-permission" data-state={statusLine.state} className="wk-field-note" role="status">{statusLine.text}</p>}
     </section>
   );
 }

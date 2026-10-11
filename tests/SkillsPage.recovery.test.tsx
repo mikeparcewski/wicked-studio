@@ -80,7 +80,8 @@ afterEach(() => cleanup());
 async function renderUnavailable(extra: Record<string, Handler> = {}): Promise<HTMLElement> {
   wire({ 'GET /skills': unavailable503, 'GET /diagnostics': () => Promise.resolve(DIAG_CONFIG_ERROR), ...extra });
   render(<SkillsPage navigate={() => {}} />);
-  return await screen.findByTestId('skills-unavailable');
+  await screen.findByTestId('skills-unavailable');
+  return await screen.findByTestId('skills-recovery');
 }
 
 describe('the 503 card — the engine\'s finding and the remedy controls (F-A45-001)', () => {
@@ -122,7 +123,7 @@ describe('the 503 card — the engine\'s finding and the remedy controls (F-A45-
     });
     const finding = await within(card).findByTestId('skills-recovery-finding');
     expect(finding).toHaveTextContent('(the installed plugin at ~/.claude/plugins/cache/wicked-garden/wicked-garden/12.38.1) is older');
-    expect(card).toHaveTextContent('skills root ~/.wicked-crew/state/skills is not seeded');
+    expect(screen.getByTestId('skills-unavailable')).toHaveTextContent('skills root ~/.wicked-crew/state/skills is not seeded');
     expect(card.textContent).not.toContain('/Users/');
     expect(card.textContent).not.toContain('reel-operator');
   });
@@ -130,7 +131,7 @@ describe('the 503 card — the engine\'s finding and the remedy controls (F-A45-
   it('a daemon without diagnostics: the controls still stand, with the honest "no engine word" line', async () => {
     wire({ 'GET /skills': unavailable503 });
     render(<SkillsPage navigate={() => {}} />);
-    const card = await screen.findByTestId('skills-unavailable');
+    const card = await screen.findByTestId('skills-recovery');
     await within(card).findByTestId('skills-recovery-no-diagnostics');
     expect(within(card).getByTestId('skills-recover-publish')).toBeEnabled();
   });
@@ -147,7 +148,7 @@ describe('Publish — the remedy the finding names', () => {
     await within(card).findByTestId('skills-recovery-state');
     fireEvent.click(within(card).getByTestId('skills-recover-publish'));
     // The pending line rides the click; its "learning the revision" prefix drops the moment analyze answers.
-    expect(await screen.findByTestId('skills-recovery-busy')).toHaveTextContent('POST /skills/publish…');
+    expect(await screen.findByTestId('skills-recovery-busy')).toHaveTextContent('Restoring skills…');
     await screen.findByTestId('skills-kpis');
     expect(calls('POST', '/skills/analyze')).toBe(1);
     expect(bodyOf('POST', '/skills/publish')).toEqual({ expectedRevision: REV });
@@ -177,7 +178,7 @@ describe('Publish — the remedy the finding names', () => {
     });
     await within(card).findByTestId('skills-recovery-state');
     fireEvent.click(within(card).getByTestId('skills-recover-publish'));
-    const err = await within(card).findByTestId('skills-recovery-error');
+    const err = await screen.findByTestId('skills-recovery-error');
     expect(err).toHaveTextContent("the catalog's revision could not be learned — POST /skills/analyze answered 503 too (manifest.json is not a regular file), so the manifest itself is unreadable; recovery needs the daemon host (reseed the skills root), not this page");
     expect(calls('POST', '/skills/publish')).toBe(0);
   });
@@ -194,7 +195,7 @@ describe('Publish — the remedy the finding names', () => {
     });
     await within(card).findByTestId('skills-recovery-state');
     fireEvent.click(within(card).getByTestId('skills-recover-publish'));
-    const err = await within(card).findByTestId('skills-recovery-error');
+    const err = await screen.findByTestId('skills-recovery-error');
     expect(err).toHaveTextContent('the catalog changed under this page');
     expect(err).toHaveTextContent(`revision ${REV + 5} adopted from the refusal; try again`);
     fireEvent.click(within(card).getByTestId('skills-recover-publish'));
@@ -214,7 +215,7 @@ describe('Publish — the remedy the finding names', () => {
     });
     await within(card).findByTestId('skills-recovery-state');
     fireEvent.click(within(card).getByTestId('skills-recover-publish'));
-    expect(await within(card).findByTestId('skills-recovery-error')).toHaveTextContent('the revision will be re-read; try again');
+    expect(await screen.findByTestId('skills-recovery-error')).toHaveTextContent('the revision will be re-read; try again');
     fireEvent.click(within(card).getByTestId('skills-recover-publish'));
     await within(card).findByTestId('skills-recovery-findings');
     expect(calls('POST', '/skills/analyze')).toBe(2);
@@ -231,7 +232,9 @@ describe('Refresh baseline — staged, not published (F-A45-002)', () => {
     const diagBefore = calls('GET', '/diagnostics');
     fireEvent.click(within(card).getByTestId('skills-recover-refresh'));
     const staged = await within(card).findByTestId('skills-recovery-staged');
-    expect(staged).toHaveTextContent('garden 12.33.0 staged (bbbbbbbbbbbb: 2 taken · 1 kept · 0 added · 1 removed · 0 conflicts) — publish to activate. The catalog stays unavailable until then; nothing was re-read.');
+    expect(staged).toHaveTextContent('Skills refreshed — publish to activate.');
+    expect(staged).toHaveTextContent('garden 12.33.0 staged');
+    expect(staged).toHaveTextContent('0 conflicts');
     expect(bodyOf('POST', '/skills/refresh-baseline')).toEqual({ expectedRevision: REV });
     expect(calls('GET', '/skills')).toBe(1);
     await waitFor(() => expect(calls('GET', '/diagnostics')).toBe(diagBefore + 1));

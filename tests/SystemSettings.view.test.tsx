@@ -44,10 +44,10 @@ describe('SystemSettings — Show technical details (S3)', () => {
   it('is a labelled switch, off by default, with a plain description', async () => {
     render(<SystemSettings />);
     await settleMount();
-    const toggle = screen.getByTestId('tech-details-toggle') as HTMLInputElement;
-    expect(toggle.checked).toBe(false);
+    const toggle = screen.getByRole('switch', { name: 'Show technical details' });
+    expect(toggle).toHaveAttribute('aria-checked', 'false');
     expect(toggle).toHaveAccessibleName('Show technical details');
-    expect(screen.getByTestId('view-settings')).toHaveTextContent(/ids, versions and helper names in small grey type/i);
+    expect(screen.getByTestId('view-settings')).toHaveTextContent(/full file locations in technical details/i);
   });
 
   it('turning it on saves `studio.view` = { technical_details: true } through PUT /settings', async () => {
@@ -56,7 +56,7 @@ describe('SystemSettings — Show technical details (S3)', () => {
     await flipAndSettle();
     expect(client.api.putViewSettings).toHaveBeenCalledTimes(1);
     expect(client.api.putViewSettings).toHaveBeenCalledWith({ technical_details: true });
-    expect((screen.getByTestId('tech-details-toggle') as HTMLInputElement).checked).toBe(true);
+    expect(screen.getByTestId('tech-details-toggle')).toHaveAttribute('aria-checked', 'true');
     expect(screen.queryByTestId('tech-details-unsaved')).toBeNull();
   });
 
@@ -65,6 +65,6 @@ describe('SystemSettings — Show technical details (S3)', () => {
     render(<SystemSettings />);
     await settleMount();
     await flipAndSettle();
-    expect(screen.getByTestId('tech-details-unsaved')).toHaveTextContent(/not stored by this daemon/i);
+    expect(screen.getByTestId('tech-details-unsaved')).toHaveTextContent(/not stored by Studio's service/i);
   });
 });

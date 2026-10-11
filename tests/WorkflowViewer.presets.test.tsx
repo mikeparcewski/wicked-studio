@@ -62,12 +62,12 @@ it('a Refresh whose catalog read fails keeps the last good catalog: an inherited
   catalog.mockResolvedValueOnce({ entries: [TEST_ENTRY] });
   render(<WorkflowViewer />);
   fireEvent.click(await screen.findByText('mine'));
-  expect(await screen.findByText('evaluator')).toBeTruthy();
+  expect(await screen.findByText('checks the work')).toBeTruthy();
 
   catalog.mockRejectedValueOnce(new ApiError(503, 'unavailable'));
   fireEvent.click(screen.getByText('Refresh'));
   expect(await screen.findByText(/The phase catalog could not be read/)).toBeTruthy();
-  expect(screen.getByText('evaluator')).toBeTruthy();
+  expect(screen.getByText('checks the work')).toBeTruthy();
 });
 
 const TEST_ENTRY = {
@@ -81,19 +81,22 @@ it("Edit whose own catalog read fails shows the inherited gate from the viewer's
   catalog.mockResolvedValueOnce({ entries: [TEST_ENTRY] }).mockRejectedValueOnce(new ApiError(503, 'unavailable'));
   render(<WorkflowViewer />);
   fireEvent.click(await screen.findByText('mine'));
-  fireEvent.click(screen.getByTestId('workflow-edit'));
+  fireEvent.click(screen.getByRole('button', { name: 'More actions for mine' }));
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Edit' }));
   expect(await screen.findByText(/The phase catalog could not be read/)).toBeTruthy();
   expect(screen.getByTestId('builder-step-gate').dataset.gate).toBe('human_if');
-  expect((screen.getByTestId('builder-step-verified-evidence') as HTMLInputElement).checked).toBe(true);
+  expect(screen.getByTestId('builder-step-verified-evidence')).toHaveAttribute('aria-checked', 'true');
 });
 
 it('removing the step a dependency names keeps the dependency listed, with the reset to the engine (codex r7)', async () => {
   presets.mockResolvedValue({ presets: [{ ...MINE, steps: [{ catalog: 'produce', id: 'a' }, { catalog: 'review', id: 'b', depends_on: ['a'] }] }] });
   render(<WorkflowViewer />);
   fireEvent.click(await screen.findByText('mine'));
-  fireEvent.click(screen.getByTestId('workflow-edit'));
+  fireEvent.click(screen.getByRole('button', { name: 'More actions for mine' }));
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Edit' }));
   await screen.findAllByTestId('builder-step-catalog');
-  fireEvent.click(screen.getAllByText('✕')[0]!);
+  fireEvent.click(screen.getByRole('button', { name: 'More actions for step 1' }));
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Remove step' }));
   const deps = await screen.findByTestId('builder-step-deps');
   expect(deps.querySelector('[data-dangling="true"]')?.textContent).toContain('a');
   expect(screen.getByTestId('builder-step-deps-engine')).toBeTruthy();

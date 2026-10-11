@@ -12,9 +12,9 @@
   "studioVersion": "0.7.5",
   "counts": {
     "files": 197,
-    "occurrences": 2216,
-    "static": 1922,
-    "dynamic": 61,
+    "occurrences": 2209,
+    "static": 1921,
+    "dynamic": 60,
     "computed": 19
   },
   "static": [
@@ -3716,7 +3716,7 @@
       ]
     },
     {
-      "testId": "logo-file-input",
+      "testId": "logo-file",
       "files": [
         "src/components/AppearanceSettings.tsx"
       ]
@@ -3729,12 +3729,6 @@
     },
     {
       "testId": "logo-thumb",
-      "files": [
-        "src/components/AppearanceSettings.tsx"
-      ]
-    },
-    {
-      "testId": "logo-upload",
       "files": [
         "src/components/AppearanceSettings.tsx"
       ]
@@ -8929,6 +8923,18 @@
       ]
     },
     {
+      "testId": "skills-filter-chip",
+      "files": [
+        "src/components/SkillsGrid.tsx"
+      ]
+    },
+    {
+      "testId": "skills-filter-search",
+      "files": [
+        "src/components/SkillsGrid.tsx"
+      ]
+    },
+    {
       "testId": "skills-finding",
       "files": [
         "src/components/SkillFindings.tsx"
@@ -9004,36 +9010,6 @@
       "testId": "skills-kind-chip",
       "files": [
         "src/components/SkillChips.tsx"
-      ]
-    },
-    {
-      "testId": "skills-kpi-core",
-      "files": [
-        "src/components/SkillsPage.tsx"
-      ]
-    },
-    {
-      "testId": "skills-kpi-enabled",
-      "files": [
-        "src/components/SkillsPage.tsx"
-      ]
-    },
-    {
-      "testId": "skills-kpi-overridden",
-      "files": [
-        "src/components/SkillsPage.tsx"
-      ]
-    },
-    {
-      "testId": "skills-kpi-portable",
-      "files": [
-        "src/components/SkillsPage.tsx"
-      ]
-    },
-    {
-      "testId": "skills-kpi-total",
-      "files": [
-        "src/components/SkillsPage.tsx"
       ]
     },
     {
@@ -9146,6 +9122,12 @@
     },
     {
       "testId": "skills-recovery-state",
+      "files": [
+        "src/components/SkillsPage.tsx"
+      ]
+    },
+    {
+      "testId": "skills-refresh",
       "files": [
         "src/components/SkillsPage.tsx"
       ]
@@ -10948,6 +10930,12 @@
       ]
     },
     {
+      "testId": "theme-picker",
+      "files": [
+        "src/components/AppearanceSettings.tsx"
+      ]
+    },
+    {
       "testId": "thread",
       "files": [
         "src/components/NarratorFeed.tsx"
@@ -11567,6 +11555,12 @@
       ]
     },
     {
+      "testId": "workflow-builder-note",
+      "files": [
+        "src/components/WorkflowViewer.tsx"
+      ]
+    },
+    {
       "testId": "workflow-edit",
       "files": [
         "src/components/WorkflowViewer.tsx"
@@ -11944,12 +11938,6 @@
       "pattern": "skills-tab-*",
       "files": [
         "src/components/SkillDrawer.tsx"
-      ]
-    },
-    {
-      "pattern": "theme-*",
-      "files": [
-        "src/components/AppearanceSettings.tsx"
       ]
     },
     {

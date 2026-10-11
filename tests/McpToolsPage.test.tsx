@@ -54,6 +54,15 @@ function wire(over: { servers?: () => Promise<unknown> } = {}): void {
 
 const navigate = vi.fn();
 
+function menuAction(hook: HTMLElement): void {
+  const labels: Record<string,string> = {
+    'mcp-tool-policies':'Policies', 'mcp-tool-approve':'Approve tool', 'mcp-tool-revoke':'Revoke',
+    'mcp-server-approve':'Approve first use', 'mcp-server-revoke':'Revoke server', 'mcp-server-remove':'Remove…',
+  };
+  fireEvent.click(within(hook).getByRole('button'));
+  fireEvent.click(within(hook).getByRole('menuitem', {name:labels[hook.dataset.testid!]!}));
+}
+
 beforeEach(() => {
   cleanup();
   apiFetch.mockReset();
@@ -88,7 +97,7 @@ describe('MCP tools: servers and the posture summary', () => {
     const row = await openServer();
     const plain = within(row).getAllByTestId('mcp-tool-row').find((r) => r.dataset['subject'] === 'mcp:fx/wt_plain');
     if (plain === undefined) throw new Error('no wt_plain row');
-    fireEvent.click(within(plain).getByTestId('mcp-tool-policies'));
+    menuAction(within(plain).getByTestId('mcp-tool-policies'));
     const matrix = within(plain).getByTestId('mcp-policy-matrix');
     expect(matrix.dataset['mode']).toBe('balanced');
     const cell = (role: string, seat: string): HTMLElement => {
@@ -106,7 +115,7 @@ describe('MCP tools: servers and the posture summary', () => {
     expect(within(cell('evaluator', 'codex')).getByTestId('mcp-cell-rule').tagName).toBe('SPAN');
 
     // The mode switch re-reads the same preview for Auto: an approved server's write runs.
-    fireEvent.click(screen.getAllByTestId('mcp-mode-option').find((b) => b.dataset['mode'] === 'autonomous') as HTMLElement);
+    fireEvent.click(screen.getByRole('radio', {name:'Auto'}));
     expect(within(plain).getByTestId('mcp-policy-matrix').dataset['mode']).toBe('autonomous');
     expect(cell('creator', 'claude').dataset['decision']).toBe('allow');
   });
@@ -117,19 +126,19 @@ describe('MCP tools: Approve and Revoke are audited policy edits crew makes', ()
     wire();
     render(<McpToolsPage navigate={navigate} search="" />);
     const row = await openServer();
-    fireEvent.click(await within(row).findByTestId('mcp-server-approve'));
+    menuAction(await within(row).findByTestId('mcp-server-approve'));
     await waitFor(() => expect(screen.getByTestId('mcp-note').textContent).toBe('Approved the first use of fx.'));
     expect(calls.filter((c) => c.method === 'POST' && c.path === '/mcp/approvals').map((c) => c.body)).toEqual([{ subject: 'mcp:fx' }]);
     await waitFor(() => expect(screen.getByTestId('mcp-server-posture').textContent).toBe('1 read run · 2 write ask'));
 
     const plainRow = (): HTMLElement => screen.getAllByTestId('mcp-tool-row').find((r) => r.dataset['subject'] === 'mcp:fx/wt_plain') as HTMLElement;
-    fireEvent.click(within(plainRow()).getByTestId('mcp-tool-approve'));
-    await waitFor(() => expect(screen.getByTestId('mcp-note').textContent).toBe('Approved mcp:fx/wt_plain.'));
+    menuAction(within(plainRow()).getByTestId('mcp-tool-approve'));
+    await waitFor(() => expect(screen.getByTestId('mcp-note').textContent).toBe('Approved wt_plain.'));
     await waitFor(() => expect(screen.getByTestId('mcp-server-posture').textContent).toBe('1 read run · 1 write run · 1 write ask'));
     expect(within(plainRow()).getByTestId('mcp-tool-approval').textContent).toMatch(/writes \(tool\)/);
 
-    fireEvent.click(within(plainRow()).getByTestId('mcp-tool-revoke'));
-    await waitFor(() => expect(screen.getByTestId('mcp-note').textContent).toBe('Revoked mcp:fx/wt_plain.'));
+    menuAction(within(plainRow()).getByTestId('mcp-tool-revoke'));
+    await waitFor(() => expect(screen.getByTestId('mcp-note').textContent).toBe('Revoked wt_plain.'));
     expect(calls.some((c) => c.method === 'DELETE' && c.path === '/mcp/approvals/mcp%3Afx%2Fwt_plain')).toBe(true);
     await waitFor(() => expect(screen.getByTestId('mcp-server-posture').textContent).toBe('1 read run · 2 write ask'));
   });
@@ -141,7 +150,7 @@ describe('MCP tools: Approve and Revoke are audited policy edits crew makes', ()
       p === '/mcp/approvals' && i?.method === 'POST' ? Promise.reject(new ApiError(503, 'the mcp-defaults rule MCP-FIRST-USE is not in the policy store')) : base(p, i));
     render(<McpToolsPage navigate={navigate} search="" />);
     const row = await openServer();
-    fireEvent.click(await within(row).findByTestId('mcp-server-approve'));
+    menuAction(await within(row).findByTestId('mcp-server-approve'));
     await waitFor(() => expect(screen.getByTestId('mcp-note').dataset['ok']).toBe('false'));
     expect(screen.getByTestId('mcp-note').textContent).toMatch(/Approved the first use of fx failed: .*MCP-FIRST-USE/);
   });
@@ -158,14 +167,14 @@ describe('MCP tools: Approve and Revoke are audited policy edits crew makes', ()
     });
     render(<McpToolsPage navigate={navigate} search="" />);
     const row = await openServer();
-    fireEvent.click(await within(row).findByTestId('mcp-server-approve'));
+    menuAction(await within(row).findByTestId('mcp-server-approve'));
     await waitFor(() => expect(screen.getByTestId('mcp-note').textContent).toBe('Approved the first use of fx.'));
     // The approval answered but the reload has not: no control may act on the pre-action state.
     const plainRow = (): HTMLElement => screen.getAllByTestId('mcp-tool-row').find((r) => r.dataset['subject'] === 'mcp:fx/wt_plain') as HTMLElement;
-    expect((within(plainRow()).getByTestId('mcp-tool-approve') as HTMLButtonElement).disabled).toBe(true);
-    expect((within(screen.getByTestId('mcp-server-row')).getByTestId('mcp-server-remove') as HTMLButtonElement).disabled).toBe(true);
+    expect(within(plainRow()).getByTestId('mcp-tool-approve')).toHaveAttribute('data-disabled','true');
+    expect(within(screen.getByTestId('mcp-server-row')).getByTestId('mcp-server-remove')).toHaveAttribute('data-disabled','true');
     release();
-    await waitFor(() => expect((within(plainRow()).getByTestId('mcp-tool-approve') as HTMLButtonElement).disabled).toBe(false));
+    await waitFor(() => expect(within(plainRow()).getByTestId('mcp-tool-approve')).toHaveAttribute('data-disabled','false'));
   });
 
   it('an older, slower load never overwrites a newer one', async () => {
@@ -189,13 +198,13 @@ describe('MCP tools: Approve and Revoke are audited policy edits crew makes', ()
     fireEvent.click(within(panel).getByTestId('mcp-add-preview'));
     const result = await within(panel).findByTestId('mcp-add-preview-result');
     const row = await openServer();
-    fireEvent.click(await within(row).findByTestId('mcp-server-approve')); // load #2 starts and hangs
+    menuAction(await within(row).findByTestId('mcp-server-approve')); // load #2 starts and hangs
     await waitFor(() => expect(gets).toBe(2));
     fireEvent.click(within(result).getByTestId('mcp-add-save')); // load #3 answers with jira
     await waitFor(() => expect(screen.getAllByTestId('mcp-server-row').map((r) => r.dataset['server'])).toEqual(['fx', 'jira']));
     releaseStale();
     const fxRow = (): HTMLElement => screen.getAllByTestId('mcp-server-row').find((r) => r.dataset['server'] === 'fx') as HTMLElement;
-    await waitFor(() => expect((within(fxRow()).getByTestId('mcp-server-remove') as HTMLButtonElement).disabled).toBe(false));
+    await waitFor(() => expect(within(fxRow()).getByTestId('mcp-server-remove')).toHaveAttribute('data-disabled','false'));
     expect(screen.getAllByTestId('mcp-server-row').map((r) => r.dataset['server'])).toEqual(['fx', 'jira']);
   });
 });
@@ -405,7 +414,7 @@ describe('MCP tools: add an existing server', () => {
 
     // Retyping the name or the value takes the consent back.
     fireEvent.change(within(panel).getByTestId('mcp-add-auth-value'), { target: { value: 'another-secret-value' } });
-    expect((within(panel).getByTestId('mcp-add-replace-secret-ok') as HTMLInputElement).checked).toBe(false);
+    expect(within(panel).getByTestId('mcp-add-replace-secret-ok')).toHaveAttribute('aria-checked', 'false');
     expect((within(panel).getByTestId('mcp-add-preview') as HTMLButtonElement).disabled).toBe(true);
   });
 
@@ -584,7 +593,7 @@ describe('MCP tools: remove, discovery, and an older daemon', () => {
     wire();
     render(<McpToolsPage navigate={navigate} search="" />);
     const row = await screen.findByTestId('mcp-server-row');
-    fireEvent.click(within(row).getByTestId('mcp-server-remove'));
+    menuAction(within(row).getByTestId('mcp-server-remove'));
     expect(within(row).getByTestId('mcp-server-remove-consequence').textContent).toBe('Removes 3 tools and withdraws their approvals; calls are refused from the next call.');
     expect(calls.some((c) => c.method === 'DELETE')).toBe(false);
     fireEvent.click(within(row).getByTestId('mcp-server-remove-confirm'));
@@ -595,13 +604,13 @@ describe('MCP tools: remove, discovery, and an older daemon', () => {
     wire({ servers: () => Promise.resolve(serversResponse({ discovered: [{ name: 'gh', cli: 'claude', origin: 'worker', source: '<worker home>/claude/.claude.json', managed: false }] })) });
     render(<McpToolsPage navigate={navigate} search="" />);
     const band = await screen.findByTestId('mcp-discovered');
-    expect(within(band).getByTestId('mcp-discovered-server').textContent).toBe('gh · claude · worker home');
+    expect(within(band).getByTestId('mcp-discovered-server').textContent).toBe('gh · Claude · helper settings');
   });
 
   it('a daemon without the MCP routes renders the named unsupported state', async () => {
     wire({ servers: () => Promise.reject(new ApiError(404, 'not found')) });
     render(<McpToolsPage navigate={navigate} search="" />);
-    expect((await screen.findByTestId('mcp-unsupported')).textContent).toMatch(/no MCP tools registry yet/);
+    expect((await screen.findByTestId('mcp-unsupported')).textContent).toMatch(/MCP tools are unavailable in this version/);
   });
 
   it('a daemon with the registry but not the policy preview still lists servers and says what is missing', async () => {

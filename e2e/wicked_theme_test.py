@@ -99,7 +99,7 @@ with sync_playwright() as p:
 
     # 2. wicked-light writes the harbor accent; computed --accent is #224A5E
     try:
-        page.get_by_test_id("theme-wicked-light").click(timeout=10000)
+        page.locator('[data-testid="theme-picker"] [data-value="wicked-light"]').click(timeout=10000)
     except Exception as e:  # noqa: BLE001
         fail("wicked_light_harbor", f"no Wicked light theme button on /theme: {e}")
     page.wait_for_function("() => document.documentElement.getAttribute('data-theme') === 'wicked-light'", timeout=5000)
@@ -123,7 +123,7 @@ with sync_playwright() as p:
           state=s2)
 
     # 5. wicked-dark
-    page.get_by_test_id("theme-wicked-dark").click()
+    page.locator('[data-testid="theme-picker"] [data-value="wicked-dark"]').click()
     page.wait_for_function("() => document.documentElement.getAttribute('data-theme') === 'wicked-dark'", timeout=5000)
     s4 = page.evaluate(STATE)
     check("wicked_dark", s4["theme"] == "wicked-dark" and s4["h"] == "210" and s4["bodyFont"] == "Archivo", state=s4)
