@@ -541,7 +541,7 @@ function RunsTable({ runs, runChatId, projects, q, runsLoaded, runsError, onRetr
             const cells = (
               <a href={path} onClick={go(path)} className="wk-runs-cells">
                 <span className="wk-runs-cell wk-runs-cell--state"><span aria-hidden className={`wk-everything-dot wk-everything-dot--${word.tone}`} />{word.word}</span>
-                <span className="wk-runs-cell wk-runs-cell--title">{title}</span>
+                <span className="wk-runs-cell wk-runs-cell--title" title={title}>{title}</span>
                 <span className="wk-runs-cell">{r.project}</span>
                 <span className="wk-runs-cell">{r.repo ?? '—'}</span>
                 <span className="wk-runs-cell">{workflowWord(r.workflow)}</span>
@@ -837,8 +837,9 @@ function HelpersTab(): React.ReactElement {
   // Amendment 5, decision 5: Sign in opens the one plain-words panel; the row clears when the
   // re-read finds the seat back (useRoster follows the deposit).
   const [signIn, setSignIn] = useState<RosterSeat | null>(null);
-  // studio#687 row 38: the CLIs only (no non-CLI entries); a reviewer-only seat is listed, labelled.
-  const seats = roster === null ? null : displaySeats(roster);
+  // studio#687 row 38: the CLIs only (no non-CLI entries). A reviewer-only seat that shares its name
+  // with a helper folds into that helper's row ("Also reviews work"), so no name is listed twice.
+  const seats = roster === null ? null : foldReviewers(displaySeats(roster));
   return (
     <div data-testid="everything-helpers" data-count={seats?.length ?? ''}>
       <p className="wk-everything-note">The AI helpers Studio can give work to, and whether each is signed in.</p>
@@ -847,7 +848,7 @@ function HelpersTab(): React.ReactElement {
       {seats !== null && seats.length === 0 && <EmptyState data-testid="everything-empty" title="No helper is set up yet." body="Add one in Settings." />}
       {seats !== null && seats.length > 0 && (
         <ul className="wk-everything-list">
-          {seats.map((seat) => <HelperRow key={seat.key} seat={seat} onSignIn={() => setSignIn(seat)} />)}
+          {seats.map(({ seat, alsoReviews }) => <HelperRow key={seat.key} seat={seat} alsoReviews={alsoReviews} onSignIn={() => setSignIn(seat)} />)}
         </ul>
       )}
     </div>
@@ -883,11 +884,24 @@ function helperLine(seat: RosterSeat): { words: string[]; tone: StatusTone; sign
   return { words, tone, signIn, detail: null, title: tier !== '' ? `Free tier: ${tier}` : null };
 }
 
-function HelperRow({ seat, onSignIn }: { seat: RosterSeat; onSignIn: () => void }): React.ReactElement {
+/** One row per helper name: a reviewer-only seat named like a helper rides that helper's row. */
+function foldReviewers(seats: readonly RosterSeat[]): { seat: RosterSeat; alsoReviews: boolean }[] {
+  const out: { seat: RosterSeat; alsoReviews: boolean }[] = [];
+  const reviewers = seats.filter(isReviewerOnly);
+  for (const seat of seats) {
+    if (isReviewerOnly(seat)) continue;
+    out.push({ seat, alsoReviews: reviewers.some((r) => seatLabel(r) === seatLabel(seat)) });
+  }
+  for (const r of reviewers) if (!out.some((o) => seatLabel(o.seat) === seatLabel(r))) out.push({ seat: r, alsoReviews: false });
+  return out;
+}
+
+function HelperRow({ seat, alsoReviews, onSignIn }: { seat: RosterSeat; alsoReviews: boolean; onSignIn: () => void }): React.ReactElement {
   const standing = seatStandingWord(seat);
   const showText = useDisplayText();
   const state = seat.health === undefined ? 'unknown' : seat.health.status;
-  const line = helperLine(seat);
+  const base = helperLine(seat);
+  const line = alsoReviews ? { ...base, words: [...base.words, 'Also reviews work'] } : base;
   return (
     <li data-testid="everything-helper" data-seat={seat.key} data-standing={standing.kind} data-health={state} className="wk-desk-session wk-everything-row wk-everything-actrow">
       <span aria-hidden className={`wk-everything-dot wk-everything-dot--${line.tone}`} />
