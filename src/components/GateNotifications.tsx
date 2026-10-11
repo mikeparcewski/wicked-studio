@@ -158,19 +158,19 @@ export function GateNotifications({ onSelect, runId, projectId = null, runs = []
             )}
             <span className="wk-desk-toast-open">Open →</span>
           </button>
+          {/* UX audit row 60: one card; the rest are a count inside it, never a second stacked box. */}
+          {visible.length > cards.length && (
+            <p
+              data-testid="gate-toast-overflow"
+              className="wk-toast-line wk-desk-toast-more"
+              // Inert by design: the count is a pointer to the Desk, not a control.
+              style={{ pointerEvents: 'none', margin: 0 }}
+            >
+              {`+${visible.length - cards.length} more waiting on the Desk`}
+            </p>
+          )}
         </div>
       ))}
-      {visible.length > cards.length && (
-        <p
-          data-testid="gate-toast-overflow"
-          className="wk-toast wk-toast-line wk-desk-toast-more"
-          // Inert by design: the overflow line is a pointer, not a control —
-          // the runs bar's gate count is the actionable record.
-          style={{ pointerEvents: 'none', margin: 0 }}
-        >
-          {`+${visible.length - cards.length} more waiting on the Desk`}
-        </p>
-      )}
     </div>
   );
 }

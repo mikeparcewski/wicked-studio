@@ -9,10 +9,10 @@ order answers a matching open gate and writes crew's `gate.decided` line with th
 
   0. Two orders are already in force: one made at a gate ("make it a rule", idea 8: band 0-19
      unit reviews on alpha) and one trust receipt (idea 13: plan approval of bugfix runs at band
-     0-19). Home's header carries ONE orders line ("2 orders active · while away: will approve
+     0-19). Home's header carries ONE orders line ("2 instructions active · while away: will approve
      band 0-19 (LOW) unit reviews on alpha; … · Manage · Mark me away") — never a banner row.
      Manage opens an overlay that previews what the Away switch will do BEFORE it is flipped
-     ("2 orders active: …; deliver gates always wait") above crew's invariant (no order answers a
+     ("2 instructions active: …; deliver gates always wait") above crew's invariant (no order answers a
      deliver gate or a high-risk plan approval; messages are queued, never sent), and lists both
      orders, each saying its origin.
   1. Manage → type "Auto-approve intake on project alpha" → "Read it back" → the rule is SAID
@@ -118,9 +118,9 @@ with sync_playwright() as p:
     check("read-under-this-skin", line["shell"] == "desk", shell=line["shell"])
     check("one-line-in-the-header",
           line["inHeader"] and line["variant"] == "line" and line["height"] <= 32
-          and line["count"] == "2 orders active"
+          and line["count"] == "2 instructions active"
           and line["summary"].startswith("while away: will approve band 0-19 (LOW) unit reviews on alpha;")
-          and "No order answers a deliver gate" in (line["title"] or ""), **line)
+          and "No standing instruction answers a deliver gate" in (line["title"] or ""), **line)
     page.get_by_test_id("standing-orders-toggle").click()
     try:
         page.get_by_test_id("standing-orders-manage").wait_for(state="visible", timeout=3000)
@@ -128,14 +128,14 @@ with sync_playwright() as p:
         fail("manage-overlay", "Manage did not open")
     preview = page.get_by_test_id("standing-orders-preview").inner_text()
     check("away-preview-before-flip",
-          preview.startswith("While you are away: 2 orders active: will approve band 0-19 (LOW) unit reviews on alpha;")
+          preview.startswith("While you are away: 2 instructions active: will approve band 0-19 (LOW) unit reviews on alpha;")
           and "will approve the plan of runs from the bugfix preset scoring band 0-19 (LOW) on alpha" in preview
           and preview.endswith("deliver gates always wait")
           and page.get_by_test_id("standing-orders-away").get_attribute("aria-pressed") == "false",
           preview=preview)
     invariant = page.get_by_test_id("standing-orders-invariant").inner_text()
     check("invariant-visible",
-          "No order answers a deliver gate or a high-risk plan approval" in invariant
+          "No standing instruction answers a deliver gate or a high-risk plan approval" in invariant
           and "queued, never sent" in invariant, invariant=invariant)
     origins = page.evaluate("""() => [...document.querySelectorAll('[data-testid="standing-order-row"]')]
         .map(r => [r.dataset.origin, r.querySelector('[data-testid="standing-order-origin"]').innerText])""")
@@ -168,7 +168,7 @@ with sync_playwright() as p:
     check("order-listed", ORDER in mine.inner_text() and mine.get_attribute("data-origin") == "words")
     preview = page.get_by_test_id("standing-orders-preview").inner_text()
     check("preview-counts-the-new-order",
-          preview.startswith("While you are away: 3 orders active:") and "will approve the intake gate on alpha" in preview,
+          preview.startswith("While you are away: 3 instructions active:") and "will approve the intake gate on alpha" in preview,
           preview=preview)
 
     # ── 3. the invariant, said ────────────────────────────────────────────────
@@ -222,7 +222,7 @@ with sync_playwright() as p:
     rows = page.evaluate("""() => [...document.querySelectorAll(
         '[data-testid="handover-overlay-group"][data-group="orders"] [data-testid="handover-item"]')]
         .map(r => ({ text: r.innerText, href: r.querySelector('[data-testid="handover-item-open"]')?.getAttribute('href') }))""")
-    named = [r for r in rows if f'Standing order "{ORDER}" approved a gate for you' in r["text"]]
+    named = [r for r in rows if f'Standing instruction "{ORDER}" approved a gate for you' in r["text"]]
     check("handover-names-the-order", len(named) == 1 and "g1" in (named[0]["href"] or ""), rows=rows)
     title = group.inner_text()
     check("handover-says-what-orders-did", "what your standing orders did" in title.lower(), title=title)

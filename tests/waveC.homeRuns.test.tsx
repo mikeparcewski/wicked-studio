@@ -93,7 +93,7 @@ describe('idea 10 — just the top one', () => {
     expect(screen.getByTestId('needs-you-queue')).toHaveAttribute('data-count', '5');
 
     await userEvent.click(screen.getByTestId('home-focus-toggle'));
-    expect(screen.getByTestId('home-focus-toggle')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByTestId('home-focus-toggle')).toHaveAttribute('aria-checked', 'true');
     const rows = screen.getAllByTestId('need-row');
     expect(rows).toHaveLength(1);
     expect(rows[0]).toHaveAttribute('data-key', 'gate:old');

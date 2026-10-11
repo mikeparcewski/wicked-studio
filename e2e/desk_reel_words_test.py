@@ -148,12 +148,21 @@ with sync_playwright() as p:
     except Exception as e:  # noqa: BLE001
         page.screenshot(path=str(SHOTS / "desk-reel-words-no-toast.png"))
         fail("441-toast-shown", str(e))
-    toasts = page.evaluate(TOASTS)
+    # One card at a time plus "+N" (UI-CONTRACT §3, UX audit row 60): read each announcement in turn,
+    # dismissing the painted card to let the next one take its place (the gate itself stays).
+    page.screenshot(path=str(SHOTS / "desk-reel-words-toast.png"))
+    toasts = []
+    for _ in range(4):
+        shown = page.evaluate(TOASTS)
+        if not shown:
+            break
+        toasts.extend(t for t in shown if t["run"] not in {x["run"] for x in toasts})
+        page.locator('[data-testid="gate-notification"] [data-testid="toast-dismiss"]').first.click()
+        page.wait_for_timeout(250)
     mine = [t for t in toasts if t["run"] == PLAN][0]
     bad = [t["text"] for t in toasts if re.search(r"Run awaiting human|before unit|band|manual mode|Review →|\|\|\||/var/|pa-scope|gh resolves", t["text"])
            or UUIDISH.search(t["text"])]
     hand_toast = [t for t in toasts if t["run"] == DELIVER]
-    page.screenshot(path=str(SHOTS / "desk-reel-words-toast.png"))
     check("441-desk-toast", all(t["variant"] == "desk" for t in toasts) and not bad
           and mine["q"] == "Approve the plan (7 steps)"
           and mine["work"] == "Add a short \"Rules for booking\" section to PROPOSAL.md"

@@ -146,7 +146,7 @@ with sync_playwright() as p:
             return !!r && r.textContent.includes('Send back'); }""", timeout=10000)
         act = row.first.get_by_test_id("need-act")
         verb = (act.text_content() or "").strip()
-        check("home-row-names-the-move", verb == "Send back… ›" and act.get_attribute("data-act") == "open", verb=verb)
+        check("home-row-names-the-move", verb == "Send back…" and act.get_attribute("data-act") == "open", verb=verb)
         page.screenshot(path=str(SHOTS / f"gate-move-desk-home.png"))
         act.click()
         # S15e: the row opens the session thread at the gate (`/s/run%3Ar-review#gate`), where the

@@ -21,7 +21,7 @@ const GROUP_WORDS: Record<NeedGroupKey, { one: string; many: string; line: strin
   approval: {
     one: 'approval',
     many: 'approvals',
-    line: 'Yes/no gates waiting on you — expand to open each',
+    line: 'Yes/no questions waiting on you',
   },
   proposal: {
     one: 'proposal to review',

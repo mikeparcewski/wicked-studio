@@ -21,7 +21,7 @@ const PLAN_APPROVAL = 'plan_approval';
 
 /** What stays with the person whatever the orders say (crew's invariant, in words). */
 export const ORDER_INVARIANT =
-  'No order answers a deliver gate or a high-risk plan approval. A message an order writes is queued, never sent.';
+  'No standing instruction answers a deliver gate or a high-risk plan approval. A message one writes is queued, never sent.';
 
 /** "0-19" → "band 0-19 (LOW)"; a band topping out at 40 or above keeps its bare name. */
 export function bandWords(band: string): string {
@@ -91,28 +91,28 @@ export const ORIGIN_LABEL: Record<OrderOrigin, string> = {
 
 /**
  * What the Away switch will do, from the orders in force — shown BEFORE it is flipped:
- * "3 orders active: will approve band 0-19 (LOW) unit reviews on Northwind; will hold the deliver
+ * "3 instructions active: will approve band 0-19 (LOW) unit reviews on Northwind; will hold the deliver
  * gate on every project; deliver gates always wait". Every order is active while away (an
  * `always` order is active now too). With none, it says every gate waits.
  */
 export function awayPreview(orders: readonly StandingOrder[], projectName: ProjectName): string {
-  if (orders.length === 0) return 'No orders: every gate waits for you while you are away';
+  if (orders.length === 0) return 'No standing instructions: every question waits for you while you are away';
   const n = orders.length;
   const clauses = orders.map((o) => willWords(o.rule, projectName));
   const queued = orders.some((o) => o.rule.action === 'notify') ? '; messages are queued, never sent' : '';
-  return `${n} ${n === 1 ? 'order' : 'orders'} active: ${clauses.join('; ')}${queued}; deliver gates always wait`;
+  return `${n} ${n === 1 ? 'instruction' : 'instructions'} active: ${clauses.join('; ')}${queued}; deliver gates always wait`;
 }
 
 /**
  * The ONE-LINE form of the Away preview (Home's orders line): the count, then what going away does —
- * "3 orders active" + "will approve band 0-19 (LOW) unit reviews on Northwind; will hold …". The
+ * "3 instructions active" + "will approve band 0-19 (LOW) unit reviews on Northwind; will hold …". The
  * full preview and crew's invariant stay reachable (the line's tooltip, and Manage).
  */
 export function awayLine(orders: readonly StandingOrder[], projectName: ProjectName): { count: string; will: string } {
   const n = orders.length;
-  if (n === 0) return { count: 'No orders', will: 'every gate waits for you' };
+  if (n === 0) return { count: 'No standing instructions', will: 'every question waits for you' };
   return {
-    count: `${n} ${n === 1 ? 'order' : 'orders'} active`,
+    count: `${n} ${n === 1 ? 'instruction' : 'instructions'} active`,
     will: orders.map((o) => willWords(o.rule, projectName)).join('; '),
   };
 }
@@ -128,7 +128,7 @@ export function standingOrderActionText(e: AuditEntry): string | undefined {
   const o = orderOf(e);
   if (o === undefined) return undefined;
   const d = (e.detail ?? {}) as Record<string, unknown>;
-  const named = `Standing order "${o.text}"`;
+  const named = `Standing instruction "${o.text}"`;
   switch (e.action) {
     case 'gate.decided':
       return d['approve'] === true ? `${named} approved a gate for you` : `${named} answered a gate for you`;

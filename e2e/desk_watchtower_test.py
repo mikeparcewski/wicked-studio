@@ -5,8 +5,8 @@ desk_watchtower_test.py — S14 (DES-STUDIO-REBUILD-001 §5.4, §11 S14): the Wa
 
 Against the in-process fixture (wave-1 corpus, b1 waiting at a gate, `watch_feed` on):
 
-  1. ONE COUNT: the Desk's "N things need you", the rail pill's count and the Watchtower's
-     sentence are the same number.
+  1. ONE COUNT: the Desk's "N things need you" and the rail pill's count are the same number; the
+     Watchtower's sentence counts the open items its own feed shows (UX audit row 55).
   2. THE FEED: /watch lists TR's rows newest first — the open claim finding with "Jump in", the
      fixed older one, finished runs — and never the gate-attached finding (that is a line on the
      gate card). The kind chips filter it (Problems → the problem rows only).
@@ -86,8 +86,12 @@ with sync_playwright() as p:
     page.get_by_test_id("watch-pill").click()
     page.get_by_test_id("watchtower").wait_for(state="visible", timeout=8000)
     sentence_count = int(page.get_by_test_id("watchtower-sentence").get_attribute("data-count") or "-3")
-    check("one-count", desk == pill == sentence_count and desk >= 1 and page.url.endswith("/watch"),
-          desk=desk, pill=pill, watchtower=sentence_count, url=page.url)
+    page.locator('[data-testid="watchtower-row"]').first.wait_for(state="visible", timeout=8000)
+    open_rows = page.locator('[data-testid="watchtower-row"][data-state="open"]').count()
+    # UX audit row 55: the Watchtower's header counts what its feed shows (open items); the Desk and
+    # the pill keep the one needs-you count.
+    check("one-count", desk == pill and desk >= 1 and sentence_count == open_rows and page.url.endswith("/watch"),
+          desk=desk, pill=pill, watchtower=sentence_count, open_rows=open_rows, url=page.url)
 
     # ── 2. the feed ────────────────────────────────────────────────────────────────
     page.locator('[data-testid="watchtower-row"][data-row-id="w-claim-b1"]').wait_for(state="visible", timeout=8000)

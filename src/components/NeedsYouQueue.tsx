@@ -216,7 +216,7 @@ export function NeedsYouQueue({ queue, runs, navigate, now }: {
         data-kbd-selected={selected ? 'true' : undefined}
         data-reveal={revealed.has(row.key) ? 'true' : undefined}
         tabIndex={-1}
-        className={`wk-desk-need wk-desk-need--wrap${testId === 'need-member' ? ' wk-desk-need--member' : ''}${selected ? ' wk-desk-need--selected' : ''}${revealed.has(row.key) ? ' wk-need-row--reveal' : ''}`}
+        className={`wk-desk-need wk-desk-need--wrap${testId === 'need-member' ? ' wk-desk-need--member' : ''}${isGroup && row.action.kind === 'batch-approve' ? ' wk-desk-need--acts-below' : ''}${selected ? ' wk-desk-need--selected' : ''}${revealed.has(row.key) ? ' wk-need-row--reveal' : ''}`}
       >
         <span aria-hidden data-urgent={urgent ? 'true' : undefined} className={`wk-desk-dot${dot}`} style={urgent || waiting ? undefined : { background: TONE_COLOR[row.tone] }} />
         <span className="wk-desk-need-body">

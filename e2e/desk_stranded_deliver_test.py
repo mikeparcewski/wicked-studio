@@ -149,7 +149,7 @@ with sync_playwright() as p:
     href = act.get_attribute("href")
     verb = act.inner_text().strip()
     page.screenshot(path=str(SHOTS / "desk-stranded-deliver-row.png"))
-    check("desk-row", verb == "Deliver ›" and href == f"/s/run%3A{STRAND}#deliver"
+    check("desk-row", verb == "Deliver" and href == f"/s/run%3A{STRAND}#deliver"
           and "unknown" not in age.lower() and age != "",
           verb=verb, href=href, age=age)
 

@@ -90,7 +90,7 @@ describe('idea 3 — collapse clones: never-indexed repos fold into one batch ro
     render(<NeedsQueueSurface rows={rows} runs={[]} navigate={() => {}} now={NOW} />);
     expect(screen.getAllByTestId('need-row')).toHaveLength(1);
     const act = screen.getByTestId('need-batch-act');
-    expect(act).toHaveTextContent('Index all 9 repos ›');
+    expect(act).toHaveTextContent(/^Index all 9 repos$/);
     expect(screen.getByTestId('need-line')).toHaveTextContent('Launches 9 onboarding runs');
     await userEvent.click(act);
     await waitFor(() => expect(screen.getByTestId('need-batch-act')).toHaveAttribute('data-batch-phase', 'done'));

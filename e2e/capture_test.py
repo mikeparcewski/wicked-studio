@@ -179,7 +179,7 @@ with sync_playwright() as p:
         line = row.get_by_test_id("need-line").inner_text()
         check("group-consequence-first", line == "4 memory-only · 1 changes enforcement", line=line)
         act = row.get_by_test_id("need-accept-act")
-        check("group-accept-label", act.inner_text().strip() == "Accept 4 memory-only ›", label=act.inner_text())
+        check("group-accept-label", act.inner_text().strip() == "Accept 4 memory-only", label=act.inner_text())
         page.wait_for_function(
             """() => document.querySelector('[data-testid="capture-status"]')?.dataset.waiting === '5'""", timeout=15000)
         chip = page.get_by_test_id("capture-status-line")

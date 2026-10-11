@@ -16,6 +16,10 @@
 
 /* ── Needs rows: the moves sit in one slot; one focus ring (row 83). ── */
 .wk-desk-need .wk-need-acts { align-items: center; flex-wrap: wrap; }
+/* A group with several answers (Approve all / Reject all / with reason / Show each) puts them on
+   their own line, so the group's title and line are never squeezed to a few words. */
+.wk-desk-need--acts-below > .wk-desk-need-body { flex: 1 1 calc(100% - 24px); }
+.wk-desk-need--acts-below > .wk-need-acts { flex-basis: 100%; justify-content: flex-start; padding-left: 18px; }
 .wk-desk-need--selected:has(:focus-visible) { outline: none; }
 .wk-desk-need-title:focus-visible { border-radius: var(--radius-sm); }
 /* Two lines before the cut, so identical-looking titles keep the words that differ (row 20). */
@@ -26,7 +30,7 @@
 .wk-orders-pop { display: flex; flex-direction: column; gap: var(--space-2); font-size: var(--text-xs); color: var(--ink-body); }
 .wk-orders-pop p { margin: 0; line-height: 1.45; }
 .wk-orders-pop-form { display: flex; gap: var(--space-2); align-items: center; }
-.wk-orders-pop-form .wk-field { flex: 1; min-width: 0; }
+.wk-orders-pop-form .wk-field { flex: 1; min-width: 0; padding: 4px 10px; min-height: var(--control-h); }
 .wk-orders-pop-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
 .wk-orders-pop-row { display: flex; gap: var(--space-2); align-items: center; min-width: 0; }
 .wk-orders-pop-rule { color: var(--ink-muted); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -35,7 +39,7 @@
 
 /* ── Gate toasts (row 60): one card at a time, clear of the Ask bubble; "+N" says the rest. ── */
 .wk-desk-toast { width: min(18rem, calc(100vw - 32px)); }
-.wk-desk-toast-more { padding: 4px 10px; font-size: var(--text-xs); color: var(--ink-body); }
+.wk-desk-toast .wk-desk-toast-more { box-shadow: none; background: none; padding: 6px 0 0; margin-top: 6px !important; border-top: 1px solid var(--border-subtle); font-size: var(--text-xs); color: var(--ink-muted); }
 
 /* ── Watchtower (row 55) ── */
 .wk-watchtower-row .wk-tech-details, .wk-watchtower-row details { margin-top: 4px; }

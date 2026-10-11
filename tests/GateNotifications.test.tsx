@@ -41,10 +41,11 @@ afterEach(() => {
 // The pre-slice-AA scope contract (studio#10) — carried forward verbatim: the
 // runId prop still means "only this run's toast".
 describe('GateNotifications runId scope (studio#10)', () => {
-  it('shows all gates when no runId is provided', () => {
+  it('announces every gate when no runId is provided: one card, the rest as "+N" (UI-CONTRACT §3)', () => {
     seed(gate('run-1'), gate('run-2'));
     render(<GateNotifications onSelect={() => {}} />);
-    expect(screen.getAllByTestId('gate-toast')).toHaveLength(2);
+    expect(screen.getAllByTestId('gate-toast')).toHaveLength(1);
+    expect(screen.getByTestId('gate-toast-overflow').textContent).toContain('+1 more waiting');
   });
 
   it('shows only the matching gate when runId is provided', () => {
@@ -73,15 +74,19 @@ describe('GateNotifications — dismiss (§7.1)', () => {
     render(<GateNotifications onSelect={() => {}} />);
 
     const cards = screen.getAllByTestId('gate-notification');
-    expect(cards).toHaveLength(2);
-    for (const card of cards) {
-      expect(card.querySelector('[data-testid="toast-dismiss"]')).not.toBeNull();
-    }
-
+    expect(cards).toHaveLength(1);
     const first = cards[0]!;
+    expect(first.querySelector('[data-testid="toast-dismiss"]')).not.toBeNull();
+    const firstRun = first.getAttribute('data-run-id');
+
     await userEvent.click(first.querySelector('[data-testid="toast-dismiss"]')!);
 
-    expect(screen.getAllByTestId('gate-notification')).toHaveLength(1);
+    // The next announcement takes the one card; the overflow line is gone.
+    const next = screen.getAllByTestId('gate-notification');
+    expect(next).toHaveLength(1);
+    expect(next[0]!.getAttribute('data-run-id')).not.toBe(firstRun);
+    expect(next[0]!.querySelector('[data-testid="toast-dismiss"]')).not.toBeNull();
+    expect(screen.queryByTestId('gate-toast-overflow')).toBeNull();
     // §9: the toast lifecycle changes, never the gate — the record survives.
     expect(Object.keys(useGateStore.getState().gates)).toHaveLength(2);
   });
@@ -178,7 +183,10 @@ describe('GateNotifications — cross-project context (B4)', () => {
       />,
     );
     const shown = screen.getAllByTestId('gate-notification').map((c) => c.getAttribute('data-run-id'));
-    expect(shown.sort()).toEqual(['r-mine', 'r-unknown']);
+    expect(shown).toHaveLength(1);
+    expect(['r-mine', 'r-unknown']).toContain(shown[0]);
+    // The foreign gate is not even counted in the "+N" line: 2 announced, 1 painted.
+    expect(screen.getByTestId('gate-toast-overflow').textContent).toContain('+1 more waiting');
   });
 
   it('falls back to the membership mirror when the DTO makes no claim', () => {

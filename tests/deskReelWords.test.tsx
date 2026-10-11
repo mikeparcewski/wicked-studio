@@ -91,7 +91,7 @@ describe('studio#441: desk-skin gate toasts speak the Desk’s words', () => {
     const gates = Object.fromEntries(['a', 'b', 'c', 'd'].map((id) => [id, gate({ runId: id })]));
     useGateStore.setState({ gates });
     render(<GateNotifications onSelect={() => {}} />);
-    expect(screen.getByTestId('gate-toast-overflow').textContent).toBe('+1 more waiting on the Desk');
+    expect(screen.getByTestId('gate-toast-overflow').textContent).toBe('+3 more waiting on the Desk');
   });
 });
 

@@ -132,6 +132,9 @@ describe('the page', () => {
     expect(plainWatchLine(`${boundary}x`)).toEqual({ line: 'Question', detail: `${boundary}x` });
     const long = 'x'.repeat(61);
     expect(plainWatchLine(long)).toEqual({ line: long, detail: null });
+    // A short line whose tail is internal tokens still keeps them behind the disclosure.
+    const tokens = 'The reviewer could not join on claude: team plan monitors=1.';
+    expect(plainWatchLine(tokens)).toEqual({ line: 'The reviewer could not join on claude', detail: tokens });
   });
 
   it('says time plainly', () => {

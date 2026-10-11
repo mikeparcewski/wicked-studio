@@ -24,7 +24,10 @@ const STATE_WORD: Record<WatchRow['state'], string> = { open: 'Open', fixed: 'Fi
 /** Keep long engine explanations behind a disclosure, with their lead in the feed. */
 export function plainWatchLine(sentence: string): { line: string; detail: string | null } {
   const colon = sentence.indexOf(': ');
-  if (colon !== -1 && sentence.length > 60) {
+  // Long engine prose, or a tail carrying internal tokens ("monitors=1", "run_unit", a path), goes
+  // behind the disclosure; a short plain sentence stays whole.
+  const internal = colon !== -1 && /[=_/\\]/.test(sentence.slice(colon + 2));
+  if (colon !== -1 && (sentence.length > 60 || internal)) {
     return { line: sentence.slice(0, colon).trim().replace(/[\p{P}\s]+$/u, ''), detail: sentence };
   }
   return { line: sentence, detail: null };

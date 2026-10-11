@@ -89,7 +89,7 @@ describe('the row: one click accepts exactly the harmless set, the rest remain',
     listProposals.mockResolvedValue(POLS);
     render(<NeedsQueueSurface rows={needsYouRows(inputs(MIXED))} runs={[]} navigate={() => {}} now={NOW} />);
     const acceptBtn = screen.getByTestId('need-accept-act');
-    expect(acceptBtn).toHaveTextContent('Accept 5 memory-only ›');
+    expect(acceptBtn).toHaveTextContent(/^Accept 5 memory-only$/);
     await userEvent.click(acceptBtn);
     // The preview names exactly the five, and nothing is posted yet.
     const preview = screen.getByTestId('need-accept-preview');
