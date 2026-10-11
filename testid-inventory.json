@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.7.4",
   "counts": {
-    "files": 194,
-    "occurrences": 2133,
-    "static": 1857,
+    "files": 195,
+    "occurrences": 2144,
+    "static": 1868,
     "dynamic": 61,
     "computed": 17
   },
@@ -1674,6 +1674,18 @@
       ]
     },
     {
+      "testId": "desk-project-new",
+      "files": [
+        "src/components/desk/Desk.tsx"
+      ]
+    },
+    {
+      "testId": "desk-project-view",
+      "files": [
+        "src/components/desk/Desk.tsx"
+      ]
+    },
+    {
       "testId": "desk-projects-loading",
       "files": [
         "src/components/desk/Desk.tsx"
@@ -1705,7 +1717,7 @@
       ]
     },
     {
-      "testId": "desk-rail-controls",
+      "testId": "desk-rail-health",
       "files": [
         "src/components/desk/SessionRail.tsx"
       ]
@@ -1750,12 +1762,6 @@
       "testId": "desk-rail-skills",
       "files": [
         "src/board/deskModel.ts"
-      ]
-    },
-    {
-      "testId": "desk-rail-start",
-      "files": [
-        "src/components/desk/SessionRail.tsx"
       ]
     },
     {
@@ -1805,6 +1811,12 @@
       "testId": "desk-session",
       "files": [
         "src/components/desk/Desk.tsx"
+      ]
+    },
+    {
+      "testId": "desk-sheet-controls",
+      "files": [
+        "src/components/sheets/ObjectSheet.tsx"
       ]
     },
     {
@@ -3119,6 +3131,42 @@
       "testId": "handover-since",
       "files": [
         "src/components/HandoverPanel.tsx"
+      ]
+    },
+    {
+      "testId": "health-card-connection",
+      "files": [
+        "src/components/HealthPage.tsx"
+      ]
+    },
+    {
+      "testId": "health-card-governance",
+      "files": [
+        "src/components/HealthPage.tsx"
+      ]
+    },
+    {
+      "testId": "health-card-seats",
+      "files": [
+        "src/components/HealthPage.tsx"
+      ]
+    },
+    {
+      "testId": "health-card-week",
+      "files": [
+        "src/components/HealthPage.tsx"
+      ]
+    },
+    {
+      "testId": "health-page",
+      "files": [
+        "src/components/HealthPage.tsx"
+      ]
+    },
+    {
+      "testId": "health-upgrade-note",
+      "files": [
+        "src/components/HealthPage.tsx"
       ]
     },
     {
@@ -6009,6 +6057,12 @@
       ]
     },
     {
+      "testId": "rail-foot-label",
+      "files": [
+        "src/components/desk/SessionRail.tsx"
+      ]
+    },
+    {
       "testId": "rail-governance",
       "files": [
         "src/components/HealthRailSection.tsx"
@@ -6081,21 +6135,21 @@
       ]
     },
     {
-      "testId": "rail-health-chevron",
+      "testId": "rail-group-new",
       "files": [
-        "src/components/HealthRailSection.tsx"
+        "src/components/desk/SessionRail.tsx"
       ]
     },
     {
-      "testId": "rail-health-flyout",
+      "testId": "rail-group-view",
       "files": [
-        "src/components/HealthRailSection.tsx"
+        "src/components/desk/SessionRail.tsx"
       ]
     },
     {
       "testId": "rail-health-heart",
       "files": [
-        "src/components/HealthRailSection.tsx"
+        "src/components/desk/SessionRail.tsx"
       ]
     },
     {
@@ -6105,21 +6159,9 @@
       ]
     },
     {
-      "testId": "rail-health-section",
+      "testId": "rail-health-state",
       "files": [
-        "src/components/HealthRailSection.tsx"
-      ]
-    },
-    {
-      "testId": "rail-health-summary-dot",
-      "files": [
-        "src/components/HealthRailSection.tsx"
-      ]
-    },
-    {
-      "testId": "rail-health-toggle",
-      "files": [
-        "src/components/HealthRailSection.tsx"
+        "src/components/desk/SessionRail.tsx"
       ]
     },
     {
@@ -6130,6 +6172,12 @@
     },
     {
       "testId": "rail-seat",
+      "files": [
+        "src/components/HealthRailSection.tsx"
+      ]
+    },
+    {
+      "testId": "rail-seat-error",
       "files": [
         "src/components/HealthRailSection.tsx"
       ]
@@ -6154,6 +6202,12 @@
     },
     {
       "testId": "rail-seat-move-result",
+      "files": [
+        "src/components/HealthRailSection.tsx"
+      ]
+    },
+    {
+      "testId": "rail-seat-quota",
       "files": [
         "src/components/HealthRailSection.tsx"
       ]
@@ -6204,6 +6258,18 @@
       "testId": "rail-session",
       "files": [
         "src/components/desk/SessionRail.tsx"
+      ]
+    },
+    {
+      "testId": "rail-week-seat",
+      "files": [
+        "src/components/HealthRailSection.tsx"
+      ]
+    },
+    {
+      "testId": "rail-week-seat-name",
+      "files": [
+        "src/components/HealthRailSection.tsx"
       ]
     },
     {
