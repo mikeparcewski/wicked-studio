@@ -703,7 +703,9 @@ export function WeekRegistry({ registry }: { registry: HealthRegistry }): React.
         const record = weekRecords?.get(seat.key);
         const move = week.kind === 'ok' ? coachSeat(record, seat, week.record) : null;
         return (
-          <div key={seat.key} data-testid="rail-week-seat" data-seat={seat.key}>
+          <div key={seat.key} data-testid="rail-week-seat" data-seat={seat.key} aria-label={move !== null ? `${seat.display_name || seat.key} this week` : undefined} role={move !== null ? 'group' : undefined}>
+            {/* Its own card now, so each record names its seat (codex review r1). */}
+            {move !== null && <p data-testid="rail-week-seat-name" className="wk-health-week-seat">{seat.display_name || seat.key}</p>}
             {move !== null && (
               <SeatWeek
                 seat={seat}

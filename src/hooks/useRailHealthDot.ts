@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import { getDiagnostics } from '../api/diagnostics.js';
 import type { DiagnosticsGovernance, RosterSeat } from '../api/types.js';
@@ -25,12 +25,26 @@ export function useRailHealthDot(): { heartState: 'healthy' | 'degraded' | 'unhe
   const [roster, setRoster] = useState<RosterSeat[] | null>(() => getCachedRoster());
   const [rosterError, setRosterError] = useState(false);
   const [gov, setGov] = useState<{ kind: 'absent' | 'error' } | { kind: 'ok'; governance: DiagnosticsGovernance }>({ kind: 'absent' });
+  // The dot is re-read when it could have changed (codex review r1): each time the socket
+  // (re)connects and each time the window regains focus — never a polling loop.
+  const [epoch, setEpoch] = useState(0);
+  const lastWs = useRef(wsStatus);
+  useEffect(() => {
+    // A RE-connect only: the mount read already covers the first answer.
+    if (wsStatus === 'connected' && lastWs.current !== 'connected') setEpoch((n) => n + 1);
+    lastWs.current = wsStatus;
+  }, [wsStatus]);
+  useEffect(() => {
+    const onFocus = (): void => setEpoch((n) => n + 1);
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, []);
 
   useEffect(() => {
     let live = true;
     void Promise.resolve()
       .then(() => api.getHealth())
-      .then((h: { status?: string }) => { if (live) setHealth(h); }, () => { if (live) setHealthError(true); });
+      .then((h: { status?: string }) => { if (live) { setHealth(h); setHealthError(false); } }, () => { if (live) setHealthError(true); });
     void Promise.resolve()
       .then(() => api.getRoster())
       .then(({ roster: seats }: { roster: RosterSeat[] }) => {
@@ -42,9 +56,9 @@ export function useRailHealthDot(): { heartState: 'healthy' | 'degraded' | 'unhe
         if (!live) return;
         setGov(d.governance === undefined ? { kind: 'absent' } : { kind: 'ok', governance: d.governance });
       }, () => { if (live) setGov({ kind: 'error' }); });
-    const un = subscribeRoster((r) => { if (live) setRoster(r); });
+    const un = subscribeRoster((r) => { if (live) { setRoster(r); setRosterError(false); } });
     return () => { live = false; un(); };
-  }, []);
+  }, [epoch]);
 
   const seats = roster ?? [];
   const govDirty = gov.kind === 'ok' && (gov.governance.store === null || gov.governance.findings.some((f) => f.severity === 'error'));

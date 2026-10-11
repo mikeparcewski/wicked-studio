@@ -103,7 +103,9 @@ describe('seat sign-in semantics on the page (F-2R2-009)', () => {
     expect(claude.textContent).toContain('active · signed in');
     const codex = rows.find((r) => r.getAttribute('data-seat') === 'codex')!;
     expect(codex.textContent).toContain('✗');
-    expect(codex.textContent).toContain('quota exceeded');
+    expect(codex.textContent).toContain('Usage limit reached');
+    expect(codex.textContent).not.toContain('quota exceeded');
+    expect(codex.textContent).not.toContain('Sign in');
     expect(codex).toHaveAttribute('title', 'quota exceeded');
     const agy = rows.find((r) => r.getAttribute('data-seat') === 'agy')!;
     expect(agy).toHaveAttribute('data-signed-in', 'unknown');
