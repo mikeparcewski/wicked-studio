@@ -120,9 +120,9 @@ describe('the pre-fix HOME outbox', () => {
     expect(gov).toHaveAttribute('data-state', 'warning');
     expect(within(gov).getByTestId('rail-governance-legacy').textContent).toContain('(47 KB)');
     expect(within(gov).getByTestId('rail-governance-detail').textContent).toContain('/w2/home/.something-wicked/wicked-apps/emit-outbox.ndjson · 48213 bytes');
-    const finding = within(gov).getByTestId('rail-governance-finding');
-    expect(finding).toHaveAttribute('data-kind', 'governance.legacy-outbox');
-    expect(finding).toHaveAttribute('data-severity', 'warning');
+    // The legacy-outbox finding is said once: the plain line above; its raw text is in the details.
+    expect(within(gov).queryByTestId('rail-governance-finding')).toBeNull();
+    expect(within(gov).getByTestId('rail-governance-detail').textContent).toContain('governance.legacy-outbox');
     // `sinceBoot: null` beside a counted total reads as the total alone — never an invented 0.
     expect(gov.textContent).toContain('12 records');
     expect(gov.textContent).not.toContain('since the service started');
@@ -137,8 +137,7 @@ describe('studio#651: finding text', () => {
     });
     render(<HealthPage />);
     const gov = await screen.findByTestId('rail-governance');
-    const finding = within(gov).getByTestId('rail-governance-finding');
-    expect(finding).toHaveTextContent('Warning: a pre-fix dead-letter outbox exists.');
+    expect(within(gov).getByTestId('rail-governance-legacy')).toHaveTextContent('An older holding file');
     const detail = within(gov).getByTestId('rail-governance-detail');
     expect(detail).toHaveTextContent('exists at ~/.something-wicked/wicked-apps/emit-outbox.ndjson (its state home is ~/Projects/wicked/.wicked-crew)');
     expect(gov.textContent).not.toContain('reel-operator');
@@ -190,6 +189,13 @@ describe('older daemons — null-safe by construction', () => {
 });
 
 describe('no paths or raw log lines in the default layer (reel UX gate ch56)', () => {
+  it('a finding keeps its words through "(s)" — only a spaced aside or a path ends the plain line', async () => {
+    withGovernance(GOVERNANCE_DEADLETTERS);
+    render(<HealthPage />);
+    const finding = await screen.findByTestId('rail-governance-finding');
+    expect(finding.textContent).toMatch(/^Problem: \d+ governance event\(s\) dead-lettered/);
+  });
+
   /** The card's words with every Technical details disclosure removed. */
   function visibleText(el: HTMLElement): string {
     const c = el.cloneNode(true) as HTMLElement;
@@ -201,6 +207,9 @@ describe('no paths or raw log lines in the default layer (reel UX gate ch56)', (
       withGovernance(g);
       render(<HealthPage />);
       const gov = await screen.findByTestId('rail-governance');
+      // One closed disclosure holds the internals; nothing raw is open by default.
+      expect(gov.querySelectorAll('details')).toHaveLength(1);
+      expect(gov.querySelectorAll('details[open]')).toHaveLength(0);
       const text = visibleText(gov);
       expect(text).not.toMatch(/\/[\w.-]+\/[\w./-]+/);
       expect(text).not.toMatch(/governance\.[a-z-]+/);

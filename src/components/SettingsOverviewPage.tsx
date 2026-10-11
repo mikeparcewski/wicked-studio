@@ -14,7 +14,7 @@ export function SettingsOverviewPage({ navigate }: { navigate: Navigate }): Reac
         <ul className="wk-settings-list">
           {ADDITIONAL_SETTINGS.map((d) => (
             <li key={d.dest} data-testid="settings-overview-row" data-dest={d.dest} className="wk-card wk-settings-row">
-              <a href={d.path} onClick={(e) => { e.preventDefault(); navigate(d.path); }} className="wk-link wk-settings-link">{d.label}</a>
+              <a href={d.path} onClick={(e) => { if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return; e.preventDefault(); navigate(d.path); }} className="wk-link wk-settings-link">{d.label}</a>
               <p data-testid="settings-overview-sentence" className="wk-settings-about">{d.about}</p>
             </li>
           ))}

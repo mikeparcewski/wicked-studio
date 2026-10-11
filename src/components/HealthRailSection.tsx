@@ -423,7 +423,8 @@ export function GovernanceRows({ read, overdue = 0, onReprobe }: {
       {dl.legacyOutbox !== null && (
         <p data-testid="rail-governance-legacy" className="wk-health-plain">An older holding file from before an upgrade still has evidence in it ({kb(dl.legacyOutbox.bytes)}).</p>
       )}
-      {g.findings.map((f, i) => (
+      {/* The legacy-outbox finding IS the line above when that file is known: said once. */}
+      {g.findings.filter((f) => !(f.kind === 'governance.legacy-outbox' && dl.legacyOutbox !== null)).map((f, i) => (
         <p
           key={`${f.kind}-${i}`}
           data-testid="rail-governance-finding"
@@ -451,7 +452,7 @@ function kb(bytes: number): string {
  *  `key=value` token; the whole message is in Technical details. */
 export function plainFinding(message: string): string {
   const first = message.split(/(?<=[.!?])\s/u)[0] ?? message;
-  const cut = /\s+(?:at|in|under|from|to|with|via|run|open)?\s*(?:~|\$TMPDIR|\/|[A-Z][A-Z0-9]*_[A-Z0-9_]+|[\w.-]+\/[\w./-]+|`)|\s*\(|\s*:\s|\s+—\s|\s+[\w.-]+=/u.exec(first);
+  const cut = /\s+(?:at|in|under|from|to|with|via|run|open)?\s*(?:~|\$TMPDIR|\/|[A-Z][A-Z0-9]*_[A-Z0-9_]+|[\w.-]+\/[\w./-]+|`)|\s+\(|\s*:\s|\s+—\s|\s+[\w.-]+=/u.exec(first);
   const line = (cut !== null && cut.index > 0 ? first.slice(0, cut.index) : first).trim().replace(/[\s,;:—-]+$/u, '');
   const text = line === '' ? 'See Technical details.' : line;
   return /[.!?]$/u.test(text) ? text : `${text}.`;
