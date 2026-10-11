@@ -54,9 +54,9 @@ describe('the Helpers tab of an ask session', () => {
     render(<ObjectSheet runs={[VIEW]} navigate={() => {}} needCount={0} />);
     await waitFor(() => expect(screen.queryAllByTestId('sheet-helper-role').length).toBe(3));
     expect(texts()).toStrictEqual([
-      'claude primary helper · picked at random',
-      'pi reviewer · also answered a question the primary helper asked',
-      'codex helped — answered a question the primary helper asked',
+      'Claude primary helper · picked at random',
+      'Pi reviewer · also answered a question the primary helper asked',
+      'Codex helped — answered a question the primary helper asked',
     ]);
     // Every named seat opens its helper sheet, the run row's too.
     expect(screen.getAllByTestId('sheet-helper-open').map((b) => b.getAttribute('data-cli'))).toStrictEqual(['claude', 'pi', 'codex', 'claude']);
@@ -67,7 +67,7 @@ describe('the Helpers tab of an ask session', () => {
     path = { runId: RUN, pa: 'claude', selection: 'chosen', reviewer: null, helpers: ['claude'], stepId: 'answer-1' };
     render(<ObjectSheet runs={[VIEW]} navigate={() => {}} needCount={0} />);
     await waitFor(() => expect(screen.queryAllByTestId('sheet-helper-role').length).toBe(2));
-    expect(texts()[0]).toBe('claude primary helper · your pick · also answered a question the primary helper asked');
+    expect(texts()[0]).toBe('Claude primary helper · your pick · also answered a question the primary helper asked');
     expect(texts()[1]).toBe('No reviewer attached.');
     expect(screen.queryByTestId('sheet-helper-signin')).toBeNull();
     cleanup();

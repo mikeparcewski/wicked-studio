@@ -60,7 +60,7 @@ describe('seat sign-in semantics on the page (F-2R2-009)', () => {
     expect(opencode.textContent).toContain('!');
     expect(opencode.textContent).not.toContain('✓');
     expect(opencode.textContent).toContain(`active · ${SIGNED_OUT_DETAIL}`);
-    expect(SIGNED_OUT_DETAIL).toBe('signed out — councils may bench this seat');
+    expect(SIGNED_OUT_DETAIL).toBe('signed out — it may be skipped for checks');
     expect(opencode.textContent).not.toMatch(/councils bench this seat|will be benched/);
     expect(opencode).toHaveAttribute('title', SIGNED_OUT_TITLE);
     // The hover text names the possibility the wire cannot confirm, as a possibility.
@@ -88,9 +88,10 @@ describe('seat sign-in semantics on the page (F-2R2-009)', () => {
     // The daemon SAYS a council would not seat it — its reason, its words, the amber "!".
     expect(byKey('codex')).toHaveAttribute('data-standing', 'ineligible');
     expect(byKey('codex').textContent).toContain('!');
-    expect(byKey('codex').textContent).toContain('not council-eligible — signed out — a council would bench it');
+    expect(byKey('codex').textContent).toContain('not picked for checks');
+    expect(byKey('codex').getAttribute('title')).toContain('signed out');
     // Signed out but declared eligible: said so.
-    expect(byKey('pi').textContent).toContain('signed out — still council-eligible');
+    expect(byKey('pi').textContent).toContain('signed out — still picked for checks');
     expect(seatStandingWord({ key: 'x', display_name: 'x', binary: 'x', enabled_for_council: true }).kind).toBe('unknown');
   });
 

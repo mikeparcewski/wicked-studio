@@ -23,7 +23,7 @@ import { PlanGateSummary } from '../PlanGateSummary.js';
 import { useSeatTrust } from './GateDepth.js';
 import { DriftLine } from './GateRow.js';
 import { useDiffDrift } from '../../store/gateDiffSeen.js';
-import { deliveryAssuranceOf, deliveryReceiptOf } from '../../board/assuranceModel.js';
+import { deliveryAssuranceOf, deliveryReceiptOf, sessionQe } from '../../board/assuranceModel.js';
 import { usePostHocDeliverStore } from '../../store/postHocDeliver.js';
 import { AssuranceReceipt, DeliveryAssuranceLines } from './AssuranceReceipt.js';
 
@@ -67,7 +67,7 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
   // studio#558: the session page's one run-event read (shared with GateRow / OrphanedRow).
   const eventsRaw = useRunEvents(runId).events ?? undefined;
   // studio#577: the acceptance line, with the run's own evidence when crew's gate has no verdict.
-  const accept = deliverAcceptance(acceptance, ownEvidenceOf(eventsRaw ?? []));
+  const accept = deliverAcceptance(acceptance, ownEvidenceOf(eventsRaw ?? []), sessionQe(view, eventsRaw ?? null)?.status === 'required');
   // core#850: the delivery's assurance receipt — what the run required, what its gates ran and
   // skipped, who built and checked it, the tree delivered.
   // EX-03 / EX-04: crew's record of the hand-over (unverified post-hoc, the QE check).
@@ -99,6 +99,8 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
   const seat = useSeatTrust(view, openKind === 'deliver' ? gate : undefined, { isPlanGate: openKind === 'plan', isDeliverGate: openKind === 'deliver', isEscalation: false });
   const deliverFailure = openKind === 'deliver' ? deliverFailureOf(eventsRaw ?? [], gate?.ord) : null;
   const card = proposalCard({ view, gate, chain, action, ui, lastKind: lastKinds.get(runId) ?? (handedOver ? 'deliver' : null), ask, deliverFailure: deliverFailure === null ? null : showText(deliverFailure) });
+  // Crew refuses this delivery (QE acceptance required, not passed): Deliver is not offered as if it works.
+  const deliverRefused = card?.kind === 'deliver' && accept?.blocksDeliver === true;
   const asked = card !== null && gate !== undefined ? card.kind : null;
   useEffect(() => { if (asked !== null) lastKinds.set(runId, asked); }, [runId, asked]);
   // The one "Are you sure?" takes focus when it opens; Cancel gives it back to Deliver (Copilot).
@@ -278,7 +280,7 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
             <>
               {draft !== null && <p data-testid="session-proposal-draft" className="wk-prop-why"><b>{draftLine(draft, planWords)}</b> Approving sends your changes with it; nothing has been sent yet.</p>}
               <div className="wk-prop-btns">
-                <button ref={goRef} type="button" data-testid="session-proposal-go" data-draft={draft !== null ? 'true' : 'false'} onClick={go} className="wk-prop-btn wk-prop-btn--primary">
+                <button ref={goRef} type="button" data-testid="session-proposal-go" data-draft={draft !== null ? 'true' : 'false'} onClick={go} disabled={deliverRefused} {...(deliverRefused ? { 'aria-describedby': `${runId}-go-why` } : {})} className="wk-prop-btn wk-prop-btn--primary">
                   {draft !== null ? 'Approve with these changes' : card.act}
                   {card.kind === 'deliver' && seat.record !== null && <span data-testid="session-proposal-track-record" className="wk-session-gate-record">{seat.record}</span>}
                 </button>
@@ -286,6 +288,7 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
                 <button type="button" data-testid="session-proposal-not-now" onClick={notNow} className="wk-prop-btn wk-prop-btn--ghost">Not now</button>
                 {card.end !== undefined && <button type="button" data-testid="session-proposal-end" onClick={end} className="wk-prop-btn wk-prop-btn--ghost">{card.end}</button>}
               </div>
+              {deliverRefused && <p id={`${runId}-go-why`} data-testid="session-proposal-go-why" className="wk-field-note">Delivery is refused until QE acceptance passes.</p>}
             </>
           )}
         </>

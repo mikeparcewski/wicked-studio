@@ -255,12 +255,13 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
       {/* Work section */}
       <section data-testid="runs-settings" className="wk-card">
         <SectionTitle>Work</SectionTitle>
-        <SettingRow label="Discipline skill" description="The shared guidance helpers follow at each step.">
+        {/* studio#724: plain words; the skill's identifier is Technical details. */}
+        <SettingRow label="Helper guidance" description="The shared guidance helpers follow at each step.">
           <div data-testid="system-base-skill" data-present={baseSkill == null ? '' : String(baseSkill.present)}>
-            {baseSkill === undefined ? "Discipline skill: not reported by Studio's service"
-              : baseSkill === null ? 'Discipline skill: off'
-              : baseSkill.present ? `Discipline skill: ${baseSkill.name}`
-              : `Discipline skill: ${baseSkill.name} is missing — ${baseSkill.policy === 'require' ? 'work cannot start without it' : 'work can continue without it'}`}
+            {baseSkill === undefined ? "Not reported by Studio's service"
+              : baseSkill === null ? 'Off'
+              : baseSkill.present ? 'On — every helper is given it'
+              : `Missing — ${baseSkill.policy === 'require' ? 'work cannot start without it' : 'work can continue without it'}`}
             {baseSkill != null && !baseSkill.present && <p data-testid="system-base-skill-fix" className="wk-field-note">
               {baseSkill.inCatalog ? 'Publish the skills again to make it available.' : 'Add the skill and publish it.'}
             </p>}

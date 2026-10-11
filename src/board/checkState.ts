@@ -180,8 +180,21 @@ const NO_VERDICT_RECORDED = /\((?:missing|unattributed) ⇒ deny\)\s*$/;
  * rests on: the run's own evidence (`own`, off its events), quietly. A FAILED verdict, or a ledger
  * that could not be read, keeps crew's words and the bad tone: that is evidence.
  */
-export function deliverAcceptance(summary: RunAcceptanceSummary | null | undefined, own: OwnEvidence | null = null): { text: string; tone: AcceptanceTone } | null {
+export function deliverAcceptance(
+  summary: RunAcceptanceSummary | null | undefined,
+  own: OwnEvidence | null = null,
+  /** The run's QE acceptance decision is `required` (crew 0.9.0 / core#850: delivery is then refused
+   *  unless acceptance PASSED). */
+  qeRequired = false,
+): { text: string; tone: AcceptanceTone; blocksDeliver?: true } | null {
   if (summary === null || summary === undefined || typeof summary.line !== 'string' || summary.line === '') return null;
+  // A run that requires QE acceptance and has not passed it: crew refuses the delivery, so the card
+  // says so plainly instead of offering a Deliver that will be refused (reel 7d8c9c98, studio 0.7.10).
+  if (qeRequired && summary.required && !summary.satisfied) {
+    return NO_VERDICT_RECORDED.test(summary.line)
+      ? { text: 'QE acceptance hasn’t passed yet — fix and re-run, or skip with a reason. Delivery is refused until it passes.', tone: 'bad', blocksDeliver: true }
+      : { text: 'QE acceptance failed — fix and re-run, or skip with a reason.', tone: 'bad', blocksDeliver: true };
+  }
   if (summary.required && !summary.satisfied && NO_VERDICT_RECORDED.test(summary.line)) {
     const words = ownEvidenceWords(own);
     return {
