@@ -1555,7 +1555,12 @@ button.wk-walk-chapter-btn:hover .wk-walk-chapter-title { text-decoration: under
   .wk-rail-scrim { position: fixed; inset: 0; z-index: 80; background: var(--scrim); }
   .wk-rail-drawer { position: fixed; top: 0; bottom: 0; left: 0; z-index: 81; display: flex; transform: translateX(-100%); visibility: hidden; transition: transform var(--dur-base) var(--ease-out), visibility 0s linear var(--dur-base); box-shadow: var(--shadow-overlay); }
   .wk-rail-drawer--open { transform: none; visibility: visible; transition: transform var(--dur-base) var(--ease-out); }
-  .wk-rail-drawer .wk-rail { width: min(300px, 86vw) !important; height: 100dvh; }
+  .wk-rail-drawer .wk-rail { width: min(300px, 86vw) !important; height: 100dvh; overflow-y: auto; overscroll-behavior: contain; }
+  /* One scroll for the whole drawer: the 44 px footer links never squeeze the session list. */
+  .wk-rail-drawer .wk-rail-groups { flex: 0 0 auto; overflow: visible; }
+  /* Phone tap targets (UI-CONTRACT §2 --tap-min) on the shared controls. */
+  .wk-btn, .wk-need-act, button.wk-chip, a.wk-chip, .wk-segmented-option, .wk-tab, .wk-switch { min-height: var(--tap-min); }
+  .wk-btn--icon { width: var(--tap-min); min-width: var(--tap-min); }
   .wk-rail-drawer .wk-rail a, .wk-rail-drawer .wk-rail button { min-height: var(--tap-min); }
   .wk-rail-drawer .wk-rail-icon-btn { min-width: var(--tap-min); }
   /* Single column, phone padding, nothing clipped (UX audit row 1). */
@@ -1565,7 +1570,7 @@ button.wk-walk-chapter-btn:hover .wk-walk-chapter-title { text-decoration: under
   .wk-desk-hello { font-size: var(--text-xl); overflow-wrap: anywhere; }
   .wk-desk-sentence { font-size: var(--text-md); }
   .wk-desk-head-row { flex-wrap: wrap; row-gap: var(--space-2); }
-  .wk-desk-orders { flex-basis: 100%; flex-wrap: wrap; margin-left: 0; }
+  .wk-desk-orders { flex-basis: 100%; flex-wrap: wrap; margin-left: 0; order: 1; }
   .wk-page { padding: var(--space-4); }
   .wk-page-head { flex-direction: column; }
 }
