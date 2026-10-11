@@ -28,13 +28,13 @@ function rail(pathname = '/'): ReturnType<typeof render> {
 }
 
 describe('the rail, top to bottom', () => {
-  it('Desk · Watchtower · sessions · Product · Skills · MCP tools · Steering · Health · Additional settings — and no bell', () => {
+  it('Desk · Watchtower · sessions · Product · Skills · MCP tools · Steering · Additional settings · Health — and no bell', () => {
     rail();
     const nav = screen.getByTestId('session-rail');
     const order = [...nav.querySelectorAll('[data-testid]')]
       .map((e) => e.getAttribute('data-testid') ?? '')
       .filter((id) => ['desk-rail-home', 'desk-rail-watch', 'desk-rail-product', 'desk-rail-skills', 'desk-rail-mcp', 'desk-rail-steering', 'desk-rail-health', 'desk-rail-more'].includes(id));
-    expect(order).toEqual(['desk-rail-home', 'desk-rail-watch', 'desk-rail-product', 'desk-rail-skills', 'desk-rail-mcp', 'desk-rail-steering', 'desk-rail-health', 'desk-rail-more']);
+    expect(order).toEqual(['desk-rail-home', 'desk-rail-watch', 'desk-rail-product', 'desk-rail-skills', 'desk-rail-mcp', 'desk-rail-steering', 'desk-rail-more', 'desk-rail-health']);
     expect(nav.querySelector('[data-nav-dest="notifications"]')).toBeNull();
     expect(nav.textContent).not.toContain('Rules');
     expect(nav.textContent).not.toContain('Everything else');
@@ -50,7 +50,7 @@ describe('the rail, top to bottom', () => {
   it('the rail entries carry the skin contract\'s nav-dest marks', () => {
     rail();
     const dests = [...screen.getByTestId('session-rail').querySelectorAll('[data-nav-dest]')].map((e) => e.getAttribute('data-nav-dest'));
-    expect(dests).toEqual(['watch', 'section:product', 'section:skills', 'section:mcp', 'section:steering', 'section:testing', 'health']);
+    expect(dests).toEqual(['watch', 'section:product', 'section:skills', 'section:mcp', 'section:steering', 'section:testing', 'settings', 'health']);
     expect(DESK_RAIL_LINKS.map((l) => l.dest)).toEqual(['section:product', 'section:skills', 'section:mcp', 'section:steering', 'section:testing']);
   });
 
@@ -62,26 +62,17 @@ describe('the rail, top to bottom', () => {
 });
 
 describe('"Additional settings"', () => {
-  it('lists exactly Configuration, Repositories, Workflows, Evals, Theme — in that order — and nothing else', () => {
+  it('is a link to the /settings page, which lists exactly Configuration, Repositories, Workflows, Evals, Theme — in that order', () => {
     rail();
+    expect(screen.getByTestId('desk-rail-more')).toHaveAttribute('href', '/settings');
     expect(screen.queryByTestId('desk-rail-additional')).toBeNull();
-    fireEvent.click(screen.getByTestId('desk-rail-more'));
-    const menu = screen.getByTestId('desk-rail-additional');
-    const links = within(menu).getAllByRole('link');
-    expect(links.map((a) => a.textContent)).toEqual(['Configuration', 'Repositories', 'Workflows', 'Evals', 'Theme']);
-    expect(links.map((a) => a.getAttribute('href'))).toEqual(['/system', '/repos', '/workflows', '/testing/evals', '/theme']);
-    expect(links.map((a) => a.getAttribute('data-nav-dest'))).toEqual(['settings:/system', 'section:repos', 'settings:/workflows', 'section:testing', 'settings:/theme']);
-    // studio#421 r3 (change 17): NAVIGATION ONLY — the orders/away and freeze controls are gone.
-    expect(within(menu).queryByTestId('desk-rail-controls')).toBeNull();
-    expect(within(menu).queryByTestId('standing-orders')).toBeNull();
-    expect(within(menu).queryByTestId('delivery-freeze')).toBeNull();
     expect(ADDITIONAL_SETTINGS.map((d) => d.label)).toEqual(['Configuration', 'Repositories', 'Workflows', 'Evals', 'Theme']);
+    expect(ADDITIONAL_SETTINGS.map((d) => d.path)).toEqual(['/system', '/repos', '/workflows', '/testing/evals', '/theme']);
+    expect(ADDITIONAL_SETTINGS.map((d) => d.dest)).toEqual(['settings:/system', 'section:repos', 'settings:/workflows', 'section:testing', 'settings:/theme']);
   });
 
-  it('nothing that redirects is in the menu; Testing campaigns is not either (⌘K and Configuration reach it)', () => {
-    rail();
-    fireEvent.click(screen.getByTestId('desk-rail-more'));
-    const hrefs = within(screen.getByTestId('desk-rail-additional')).getAllByRole('link').map((a) => a.getAttribute('href'));
+  it('nothing that redirects is listed; Testing campaigns is not either (⌘K and Configuration reach it)', () => {
+    const hrefs = ADDITIONAL_SETTINGS.map((d) => d.path);
     for (const old of ['/projects', '/chats', '/work', '/execute', '/vibe', '/demo', '/testing/campaigns']) expect(hrefs).not.toContain(old);
   });
 });

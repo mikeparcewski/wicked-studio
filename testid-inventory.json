@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.7.7",
   "counts": {
-    "files": 197,
-    "occurrences": 2222,
-    "static": 1936,
+    "files": 198,
+    "occurrences": 2220,
+    "static": 1934,
     "dynamic": 60,
     "computed": 19
   },
@@ -1761,12 +1761,6 @@
       "testId": "desk-projects-unread",
       "files": [
         "src/components/desk/Desk.tsx"
-      ]
-    },
-    {
-      "testId": "desk-rail-additional",
-      "files": [
-        "src/components/desk/SessionRail.tsx"
       ]
     },
     {
@@ -6237,13 +6231,7 @@
       ]
     },
     {
-      "testId": "rail-governance-by-reason",
-      "files": [
-        "src/components/HealthRailSection.tsx"
-      ]
-    },
-    {
-      "testId": "rail-governance-by-type",
+      "testId": "rail-governance-detail",
       "files": [
         "src/components/HealthRailSection.tsx"
       ]
@@ -6267,31 +6255,13 @@
       ]
     },
     {
-      "testId": "rail-governance-outbox",
-      "files": [
-        "src/components/HealthRailSection.tsx"
-      ]
-    },
-    {
       "testId": "rail-governance-probe",
       "files": [
         "src/components/HealthRailSection.tsx"
       ]
     },
     {
-      "testId": "rail-governance-range",
-      "files": [
-        "src/components/HealthRailSection.tsx"
-      ]
-    },
-    {
       "testId": "rail-governance-recheck",
-      "files": [
-        "src/components/HealthRailSection.tsx"
-      ]
-    },
-    {
-      "testId": "rail-governance-store-path",
       "files": [
         "src/components/HealthRailSection.tsx"
       ]
@@ -8172,6 +8142,24 @@
       "testId": "settings-council-size",
       "files": [
         "src/components/SystemSettings.tsx"
+      ]
+    },
+    {
+      "testId": "settings-overview",
+      "files": [
+        "src/components/SettingsOverviewPage.tsx"
+      ]
+    },
+    {
+      "testId": "settings-overview-row",
+      "files": [
+        "src/components/SettingsOverviewPage.tsx"
+      ]
+    },
+    {
+      "testId": "settings-overview-sentence",
+      "files": [
+        "src/components/SettingsOverviewPage.tsx"
       ]
     },
     {

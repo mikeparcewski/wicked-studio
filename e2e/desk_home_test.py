@@ -226,16 +226,16 @@ with sync_playwright() as p:
     page.keyboard.press("Control+Shift+A")
     page.wait_for_function("() => !document.querySelector('[data-testid=\"ask-panel\"]')", timeout=5000)
 
-    # ── 7. the rail (Amendment 5, as revised): Desk · Watchtower · sessions · Skills · MCP tools ·
-    #       Steering · Health · "Additional settings" (Configuration, Repositories, Workflows, Evals,
-    #       Theme); no Notifications entry; the rest of the routes are ⌘K's (desk_cmdk_routes).
-    page.get_by_test_id("desk-rail-more").click()
-    page.get_by_test_id("desk-rail-additional").wait_for(state="visible", timeout=5000)
+    # ── 7. the rail: Desk · Watchtower · sessions · Product · Skills · MCP tools · Steering · Testing ·
+    #       "Additional settings" (a link to /settings, which lists Configuration, Repositories,
+    #       Workflows, Evals, Theme) · Health; no Notifications entry.
     dests = page.evaluate("""() => [...document.querySelectorAll(
       '[data-testid="session-rail"] [data-nav-dest]')].map(e => e.dataset.navDest)""")
-    expected = ["watch", "section:product", "section:skills", "section:mcp", "section:steering", "section:testing", "health",
-                "settings:/system", "section:repos", "settings:/workflows", "section:testing", "settings:/theme"]
-    page.locator('[data-testid="session-rail"] [data-nav-dest="settings:/theme"]').click()
+    # Operator 2026-10-11: "Additional settings" is a page (/settings) and Health sits below it, last.
+    expected = ["watch", "section:product", "section:skills", "section:mcp", "section:steering", "section:testing", "settings", "health"]
+    page.get_by_test_id("desk-rail-more").click()
+    page.wait_for_function("() => window.location.pathname === '/settings'", timeout=5000)
+    page.locator('[data-testid="settings-overview-row"][data-dest="settings:/theme"] a').click()
     page.wait_for_function("() => window.location.pathname === '/theme'", timeout=5000)
     check("every-destination", dests == expected, dests=dests, expected=expected)
 

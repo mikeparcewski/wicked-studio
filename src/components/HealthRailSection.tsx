@@ -10,7 +10,6 @@ import { useSeatWeek, type MoveState, type SeatWeekRead } from '../hooks/useSeat
 import { useConnectionStore } from '../store/connection.js';
 import { setCachedRoster, subscribeRoster } from '../store/rosterCache.js';
 import { signInLapsed } from '../board/deskModel.js';
-import { useDisplayPath, useDisplayText } from '../hooks/useHomePath.js';
 
 /**
  * The health registry (DES-FEEDBACK-003 §6.2, slice O): the two chrome check rows
@@ -362,9 +361,6 @@ export function GovernanceRows({ read, overdue = 0, onReprobe }: {
   /** the mount read's re-probe, offered on an overdue row */
   onReprobe?: () => void;
 }): React.ReactElement {
-  const showPath = useDisplayPath();
-  // studio#651: a finding's sentence (and the unreachable reason) quotes home paths mid-sentence.
-  const showText = useDisplayText();
   if (read.kind === 'loading') {
     return (
       <CheckRow
@@ -376,8 +372,8 @@ export function GovernanceRows({ read, overdue = 0, onReprobe }: {
   if (read.kind === 'error') {
     return (
       <div data-testid="rail-governance" data-state="error">
-        <CheckRow label="" ok={false} detail="unreachable" />
-        <DetailLine testId="rail-governance-error" label="why" value={showText(read.message)} color="var(--status-fail)" />
+        <CheckRow label="Governance" ok={false} detail="couldn't be read" />
+        <TechDetails data-testid="rail-governance-error" text={read.message} />
       </div>
     );
   }
@@ -394,47 +390,38 @@ export function GovernanceRows({ read, overdue = 0, onReprobe }: {
   const dl = g.deadletters;
   const errors = g.findings.filter((f) => f.severity === 'error').length;
   const state = g.store === null || errors > 0 ? 'error' : g.findings.length > 0 ? 'warning' : 'ok';
-  // `total` and `sinceBoot` are independently nullable — each field states itself.
+  // Reel UX gate ch56 (P1): plain words in the card; every store / outbox path, the tallies and the
+  // raw finding lines ("info · governance.legacy-outbox — …") live behind ONE Technical details,
+  // where TechDetails shows home paths as ~/… . `total` and `sinceBoot` are independently nullable.
   const records = [
-    g.records.total === null ? 'total: engine cannot count' : `${g.records.total} record${g.records.total === 1 ? '' : 's'}`,
-    g.records.sinceBoot === null ? null : `${g.records.sinceBoot} since boot`,
+    g.records.total === null ? 'not counted' : `${g.records.total} record${g.records.total === 1 ? '' : 's'}`,
+    g.records.sinceBoot === null ? null : `${g.records.sinceBoot} since the service started`,
   ].filter((x): x is string => x !== null).join(' · ');
   const range =
     dl.oldestTs !== null && dl.newestTs !== null ? `${stamp(dl.oldestTs)} → ${stamp(dl.newestTs)}` : null;
+  const tech = [
+    g.store === null ? 'store: none resolved — emits dead-letter' : `store: ${g.store.path} (via ${g.store.source})`,
+    g.records.total === null ? 'records total: engine cannot count' : null,
+    dl.count > 0 ? `dead letters by type: ${tally(dl.byType)}` : null,
+    dl.count > 0 ? `dead letters by reason: ${tally(dl.byReason)}` : null,
+    dl.count > 0 ? `when: ${(range ?? 'no timestamps') + (dl.untimestamped > 0 ? ` · ${dl.untimestamped} untimestamped` : '') + (dl.truncated ? ' · fold truncated at its size cap — count is a floor' : '')}` : null,
+    dl.path !== null ? `outbox: ${dl.path}` : null,
+    dl.legacyOutbox !== null ? `legacy outbox: ${dl.legacyOutbox.path} · ${dl.legacyOutbox.bytes} bytes` : null,
+    ...g.findings.map((f) => `${f.severity} · ${f.kind} — ${f.message}`),
+  ].filter((x): x is string => x !== null);
   return (
     <div data-testid="rail-governance" data-state={state} data-deadletters={dl.count} data-store={g.store === null ? 'none' : g.store.source}>
-      {g.store === null ? (
-        <CheckRow label="store" ok={false} detail="none resolved — emits dead-letter" />
-      ) : (
-        <>
-          <CheckRow label="store" ok detail={`via ${g.store.source}`} />
-          <DetailLine testId="rail-governance-store-path" label="path" value={showPath(g.store.path)} />
-        </>
-      )}
-      <CheckRow label="records" ok={g.records.total === null && g.records.sinceBoot === null ? null : true} detail={records} />
+      {g.store === null
+        ? <CheckRow label="Evidence store" ok={false} detail="none found: evidence waits in a holding file" />
+        : <CheckRow label="Evidence store" ok detail="found" />}
+      <CheckRow label="Records" ok={g.records.total === null && g.records.sinceBoot === null ? null : true} detail={records} />
       <CheckRow
-        label="dead letters"
+        label="Undelivered evidence"
         ok={dl.count === 0}
-        detail={dl.count === 0 ? 'none' : `${dl.count}${dl.truncated ? '+' : ''}`}
+        detail={dl.count === 0 ? 'none' : `${dl.count}${dl.truncated ? '+' : ''} waiting to be replayed`}
       />
-      {dl.count > 0 && (
-        <>
-          <DetailLine testId="rail-governance-by-type" label="by type" value={tally(dl.byType)} />
-          <DetailLine testId="rail-governance-by-reason" label="by reason" value={showText(tally(dl.byReason))} />
-          <DetailLine
-            testId="rail-governance-range"
-            label="when"
-            value={
-              (range ?? 'no timestamps') +
-              (dl.untimestamped > 0 ? ` · ${dl.untimestamped} untimestamped` : '') +
-              (dl.truncated ? ' · fold truncated at its size cap — count is a floor' : '')
-            }
-          />
-        </>
-      )}
-      {dl.path !== null && <DetailLine testId="rail-governance-outbox" label="outbox" value={showPath(dl.path)} />}
       {dl.legacyOutbox !== null && (
-        <DetailLine testId="rail-governance-legacy" label="legacy outbox" value={`${showPath(dl.legacyOutbox.path)} · ${dl.legacyOutbox.bytes} bytes`} color="var(--status-gate)" />
+        <p data-testid="rail-governance-legacy" className="wk-health-plain">An older holding file from before an upgrade still has evidence in it ({kb(dl.legacyOutbox.bytes)}).</p>
       )}
       {g.findings.map((f, i) => (
         <p
@@ -442,20 +429,32 @@ export function GovernanceRows({ read, overdue = 0, onReprobe }: {
           data-testid="rail-governance-finding"
           data-kind={f.kind}
           data-severity={f.severity}
-          style={{
-            margin: '2px 0 5px', padding: '4px 8px', borderLeft: `2px solid ${FINDING_COLOR[f.severity]}`,
-            background: 'var(--surface-raised)', borderRadius: 'var(--radius-sm)',
-            fontSize: 'var(--text-2xs)', fontFamily: 'var(--font-mono)', color: 'var(--ink-body)',
-            overflowWrap: 'anywhere', whiteSpace: 'pre-wrap',
-          }}
+          className="wk-health-finding"
+          style={{ borderLeftColor: FINDING_COLOR[f.severity] }}
         >
-          <span style={{ color: FINDING_COLOR[f.severity], fontWeight: 'var(--weight-bold)' }}>{f.severity} · {f.kind}</span>
-          {' — '}
-          {showText(f.message)}
+          <span style={{ color: FINDING_COLOR[f.severity], fontWeight: 'var(--weight-semi)' }}>{SEVERITY_WORD[f.severity] ?? 'Note'}:</span>{' '}
+          {plainFinding(f.message)}
         </p>
       ))}
+      <TechDetails data-testid="rail-governance-detail" text={tech} />
     </div>
   );
+}
+
+const SEVERITY_WORD: Record<string, string> = { info: 'Note', warning: 'Warning', error: 'Problem' };
+
+function kb(bytes: number): string {
+  return bytes < 1024 ? `${bytes} bytes` : `${Math.round(bytes / 1024)} KB`;
+}
+
+/** A finding's message in the default layer: its first sentence, cut before any path, command or
+ *  `key=value` token; the whole message is in Technical details. */
+export function plainFinding(message: string): string {
+  const first = message.split(/(?<=[.!?])\s/u)[0] ?? message;
+  const cut = /\s+(?:at|in|under|from|to|with|via|run|open)?\s*(?:~|\$TMPDIR|\/|[A-Z][A-Z0-9]*_[A-Z0-9_]+|[\w.-]+\/[\w./-]+|`)|\s*\(|\s*:\s|\s+—\s|\s+[\w.-]+=/u.exec(first);
+  const line = (cut !== null && cut.index > 0 ? first.slice(0, cut.index) : first).trim().replace(/[\s,;:—-]+$/u, '');
+  const text = line === '' ? 'See Technical details.' : line;
+  return /[.!?]$/u.test(text) ? text : `${text}.`;
 }
 
 /** The whole registry's live answer — the engine behind the /health page. */

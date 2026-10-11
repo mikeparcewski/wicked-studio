@@ -177,38 +177,26 @@ with sync_playwright() as p:
     page.wait_for_function("() => document.querySelectorAll('[data-testid=\"rail-session\"]').length >= 6",
                            timeout=10000)
 
-    # ── 3. "Additional settings" at 1440x900 ──────────────────────────────────────────
+    # ── 3. "Additional settings" is a PAGE (operator 2026-10-11): the rail link opens /settings, every
+    #       settings page is a reachable link there, Health (now last in the rail) stays in view.
+    rail = page.evaluate("""(h) => {
+      const shown = (el) => { const b = el.getBoundingClientRect(); return b.height > 0 && b.bottom <= h + 0.5 && b.top >= -0.5; };
+      const health = document.querySelector('[data-testid="desk-rail-health"]');
+      const sessions = [...document.querySelectorAll('[data-testid="rail-session"]')];
+      return { healthShown: !!health && shown(health), sessionsShown: sessions.filter(shown).length, sessions: sessions.length };
+    }""", H)
     page.get_by_test_id("desk-rail-more").click()
-    page.get_by_test_id("desk-rail-additional").wait_for(state="visible", timeout=5000)
-    page.wait_for_timeout(200)
+    page.wait_for_function("() => window.location.pathname === '/settings'", timeout=5000)
+    page.get_by_test_id("settings-overview").wait_for(state="visible", timeout=5000)
     page.screenshot(path=str(SHOTS / "desk-look-everything.png"))
-    ev = page.evaluate(EVERYTHING, H)
-    check("everything-else-fits", ev["listInView"] and ev["healthShown"] and ev["sessions"] >= 6
-          and ev["sessionsShown"] >= 6 and not ev["unreachable"], **ev)
-    # The overlay contract: Escape from inside closes it and returns focus to "Additional settings";
-    # an Escape a higher layer owns (the shortcut overlay) closes only that layer (Copilot r1).
-    page.locator('[data-testid="desk-rail-additional"] [data-nav-dest="settings:/system"]').focus()
-    page.keyboard.press("Escape")
-    page.wait_for_timeout(150)
-    esc = page.evaluate("""() => ({open: !!document.querySelector('[data-testid="desk-rail-additional"]'),
-      focus: document.activeElement?.dataset?.testid ?? null})""")
-    page.get_by_test_id("desk-rail-more").click()
-    page.get_by_test_id("desk-rail-additional").wait_for(state="visible", timeout=5000)
-    page.evaluate("() => document.activeElement && document.activeElement.blur()")
-    page.keyboard.press("Alt+/")
-    page.get_by_test_id("shortcut-overlay").wait_for(state="visible", timeout=5000)
-    page.keyboard.press("Escape")
-    page.wait_for_timeout(200)
-    layered = page.evaluate("""() => ({overlay: !!document.querySelector('[data-testid="shortcut-overlay"]'),
-      open: !!document.querySelector('[data-testid="desk-rail-additional"]')})""")
-    check("everything-else-escape", not esc["open"] and esc["focus"] == "desk-rail-more"
-          and not layered["overlay"] and layered["open"], esc=esc, layered=layered)
-    last = page.locator('[data-testid="desk-rail-additional"] [data-nav-dest="settings:/theme"]')
-    last.scroll_into_view_if_needed()
-    last.click()
+    rows = page.evaluate("""() => [...document.querySelectorAll('[data-testid="settings-overview-row"]')].map(r => ({
+      dest: r.dataset.dest, href: r.querySelector('a')?.getAttribute('href'), about: r.querySelector('[data-testid="settings-overview-sentence"]')?.innerText ?? '' }))""")
+    check("everything-else-fits", rail["healthShown"] and rail["sessions"] >= 6 and rail["sessionsShown"] >= 6
+          and [r["dest"] for r in rows] == ["settings:/system", "section:repos", "settings:/workflows", "section:testing", "settings:/theme"]
+          and all(r["href"] and len(r["about"]) > 10 for r in rows), rail=rail, rows=rows)
+    page.locator('[data-testid="settings-overview-row"][data-dest="settings:/theme"] a').click()
     page.wait_for_function("() => window.location.pathname === '/theme'", timeout=5000)
-    closed = page.evaluate("() => !document.querySelector('[data-testid=\"desk-rail-additional\"]')")
-    check("everything-else-navigates", closed, closed=closed)
+    check("everything-else-navigates", page.evaluate("() => window.location.pathname") == "/theme")
 
     hs = page.evaluate("() => document.documentElement.scrollWidth > document.documentElement.clientWidth")
     check("no-errors-no-hscroll", not errors and not hs, errors=errors)

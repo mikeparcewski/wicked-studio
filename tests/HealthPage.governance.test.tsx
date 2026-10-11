@@ -56,12 +56,11 @@ describe('the healthy store', () => {
     expect(gov).toHaveAttribute('data-store', 'core-db-sidecar');
     expect(gov).toHaveAttribute('data-deadletters', '0');
     expect(gov.textContent).toContain('via core-db-sidecar');
-    expect(within(gov).getByTestId('rail-governance-store-path').textContent).toContain('/w2/state/core.db.governance/governance.db');
-    expect(gov.textContent).toContain('412 records · 37 since boot');
-    // The outbox is part of the account even when it is empty — the operator can see where
-    // a dead letter WOULD land.
-    expect(within(gov).getByTestId('rail-governance-outbox').textContent).toContain('/w2/state/core.db.governance/emit-outbox.ndjson');
-    expect(within(gov).queryByTestId('rail-governance-by-type')).toBeNull();
+    expect(within(gov).getByTestId('rail-governance-detail').textContent).toContain('/w2/state/core.db.governance/governance.db');
+    expect(gov.textContent).toContain('412 records · 37 since the service started');
+    // The outbox is part of the account even when it is empty (behind Technical details).
+    expect(within(gov).getByTestId('rail-governance-detail').textContent).toContain('outbox: /w2/state/core.db.governance/emit-outbox.ndjson');
+    expect(within(gov).getByTestId('rail-governance-detail').textContent).not.toContain('by type');
     expect(within(gov).queryByTestId('rail-governance-finding')).toBeNull();
   });
 });
@@ -74,17 +73,18 @@ describe('the F-022 signal — dead letters', () => {
     expect(gov).toHaveAttribute('data-state', 'error');
     expect(gov).toHaveAttribute('data-deadletters', '128');
     expect(gov.textContent).toContain('128+');
-    expect(within(gov).getByTestId('rail-governance-by-type').textContent).toContain('wicked.crew.governance.conformance_recorded ×96');
-    expect(within(gov).getByTestId('rail-governance-by-reason').textContent).toContain('no shared store (WICKED_ESTATE_DB unset) ×128');
-    const when = within(gov).getByTestId('rail-governance-range').textContent ?? '';
+    expect(within(gov).getByTestId('rail-governance-detail').textContent).toContain('wicked.crew.governance.conformance_recorded ×96');
+    expect(within(gov).getByTestId('rail-governance-detail').textContent).toContain('no shared store (WICKED_ESTATE_DB unset) ×128');
+    const when = within(gov).getByTestId('rail-governance-detail').textContent ?? '';
     expect(when).toContain('2026-09-10 16:00:00Z → 2026-09-10 18:00:00Z');
     expect(when).toContain('8 untimestamped');
     expect(when).toContain('count is a floor');
-    expect(within(gov).getByTestId('rail-governance-outbox').textContent).toContain('/w2/state/core.db.governance/emit-outbox.ndjson');
+    expect(within(gov).getByTestId('rail-governance-detail').textContent).toContain('/w2/state/core.db.governance/emit-outbox.ndjson');
     const finding = within(gov).getByTestId('rail-governance-finding');
     expect(finding).toHaveAttribute('data-kind', 'governance.deadletter');
     expect(finding).toHaveAttribute('data-severity', 'error');
-    expect(finding.textContent).toContain('wicked-crew governance replay /w2/state/core.db.governance/emit-outbox.ndjson --governance-db');
+    expect(within(gov).getByTestId('rail-governance-detail').textContent).toContain('wicked-crew governance replay /w2/state/core.db.governance/emit-outbox.ndjson --governance-db');
+    expect(finding.textContent).toMatch(/^Problem: /);
   });
 });
 
@@ -107,7 +107,8 @@ describe('records — the two counts state themselves independently', () => {
     withGovernance({ ...GOVERNANCE_HEALTHY, records: { total: null, sinceBoot: 5 } });
     render(<HealthPage />);
     const gov = await screen.findByTestId('rail-governance');
-    expect(gov.textContent).toContain('total: engine cannot count · 5 since boot');
+    expect(gov.textContent).toContain('not counted · 5 since the service started');
+    expect(within(gov).getByTestId('rail-governance-detail').textContent).toContain('records total: engine cannot count');
   });
 });
 
@@ -117,13 +118,14 @@ describe('the pre-fix HOME outbox', () => {
     render(<HealthPage />);
     const gov = await screen.findByTestId('rail-governance');
     expect(gov).toHaveAttribute('data-state', 'warning');
-    expect(within(gov).getByTestId('rail-governance-legacy').textContent).toContain('/w2/home/.something-wicked/wicked-apps/emit-outbox.ndjson · 48213 bytes');
+    expect(within(gov).getByTestId('rail-governance-legacy').textContent).toContain('(47 KB)');
+    expect(within(gov).getByTestId('rail-governance-detail').textContent).toContain('/w2/home/.something-wicked/wicked-apps/emit-outbox.ndjson · 48213 bytes');
     const finding = within(gov).getByTestId('rail-governance-finding');
     expect(finding).toHaveAttribute('data-kind', 'governance.legacy-outbox');
     expect(finding).toHaveAttribute('data-severity', 'warning');
     // `sinceBoot: null` beside a counted total reads as the total alone — never an invented 0.
     expect(gov.textContent).toContain('12 records');
-    expect(gov.textContent).not.toContain('since boot');
+    expect(gov.textContent).not.toContain('since the service started');
   });
 });
 
@@ -136,8 +138,10 @@ describe('studio#651: finding text', () => {
     render(<HealthPage />);
     const gov = await screen.findByTestId('rail-governance');
     const finding = within(gov).getByTestId('rail-governance-finding');
-    expect(finding).toHaveTextContent('exists at ~/.something-wicked/wicked-apps/emit-outbox.ndjson (its state home is ~/Projects/wicked/.wicked-crew)');
-    expect(finding.textContent).not.toContain('reel-operator');
+    expect(finding).toHaveTextContent('Warning: a pre-fix dead-letter outbox exists.');
+    const detail = within(gov).getByTestId('rail-governance-detail');
+    expect(detail).toHaveTextContent('exists at ~/.something-wicked/wicked-apps/emit-outbox.ndjson (its state home is ~/Projects/wicked/.wicked-crew)');
+    expect(gov.textContent).not.toContain('reel-operator');
   });
 
   it('the dead-letter "by reason" tally reads ~/… too (codex r1)', async () => {
@@ -147,9 +151,9 @@ describe('studio#651: finding text', () => {
     });
     render(<HealthPage />);
     const gov = await screen.findByTestId('rail-governance');
-    const line = within(gov).getByTestId('rail-governance-by-reason');
+    const line = within(gov).getByTestId('rail-governance-detail');
     expect(line).toHaveTextContent('open ~/.wicked-crew/governance.db');
-    expect(line.textContent).not.toContain('reel-operator');
+    expect(gov.textContent).not.toContain('reel-operator');
   });
 });
 
@@ -179,8 +183,8 @@ describe('older daemons — null-safe by construction', () => {
     render(<HealthPage />);
     const gov = await screen.findByTestId('rail-governance');
     expect(gov).toHaveAttribute('data-state', 'error');
-    expect(gov.textContent).toContain('unreachable');
-    // The daemon's own sentence rides the row (the translated ApiError message) — not dropped.
+    expect(gov.textContent).toContain("couldn't be read");
+    // The daemon's own sentence is behind Technical details — not dropped.
     expect(within(gov).getByTestId('rail-governance-error').textContent).toContain('governance fold crashed: ENOSPC');
   });
 });
