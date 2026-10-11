@@ -20,7 +20,6 @@ import {
   runClassLicensed,
   type DeliveryClaim,
 } from './delivery.js';
-import { compactPath } from './WhatWhere.js';
 import { useDisplayPath, useDisplayText } from '../hooks/useHomePath.js';
 
 const EMPTY_EVENTS: CoreEvent[] = [];
@@ -79,10 +78,10 @@ interface Props {
  * HOST visible — that is what tells the operator which forge holds the branch (Copilot on #397); only
  * a filesystem path is compacted to its tail. The full value is always the title.
  */
-function remoteLabel(remote: string): string {
+function isHostedRemote(remote: string): boolean {
   const hosted = /^[A-Za-z][A-Za-z0-9+.-]*:\/\/[^/]/.test(remote) && !/^file:/i.test(remote);
   const scp = /^(?:[^@/\\]+@)?[A-Za-z0-9._-]+:/.test(remote) && !/^[A-Za-z]:[\\/]/.test(remote);
-  return hosted || scp ? remote : compactPath(remote);
+  return hosted || scp;
 }
 
 /** Extract a GitHub PR number from a PR URL (`/pull/123`). `null` if not parseable. */
@@ -489,16 +488,25 @@ export function RunDelivery({ view, navigate }: Props): React.ReactElement {
       {claim === 'pushed' && (
         <>
           {pushed !== undefined && (
-            <p
-              data-testid="run-delivery-pushed"
-              className="font-mono break-all"
-              style={{ color: 'var(--ink-muted)' }}
-              {...(pushedRemote !== null ? { title: pushedRemote } : {})}
-            >
-              {pushedRemote !== null
-                ? `${pushed.branch} is on ${remoteLabel(pushedRemote)}`
-                : `${pushed.branch} is on the origin`}
-            </p>
+            // studio 0.7.8: a hosted remote names its host; a filesystem remote is a path, so it is said
+            // in words and the path is Technical details (never the line or its tooltip).
+            pushedRemote !== null && !isHostedRemote(pushedRemote) ? (
+              <div data-testid="run-delivery-pushed" style={{ color: 'var(--ink-muted)' }}>
+                <p className="break-all"><span className="font-mono">{pushed.branch}</span> is on a remote on this machine</p>
+                <TechDetails summary="Where it is" text={pushedRemote} />
+              </div>
+            ) : (
+              <p
+                data-testid="run-delivery-pushed"
+                className="font-mono break-all"
+                style={{ color: 'var(--ink-muted)' }}
+                {...(pushedRemote !== null ? { title: pushedRemote } : {})}
+              >
+                {pushedRemote !== null
+                  ? `${pushed.branch} is on ${pushedRemote}`
+                  : `${pushed.branch} is on the origin`}
+              </p>
+            )
           )}
           <p className="font-mono" style={{ color: 'var(--ink-dim)' }}>
             if a forge serves that remote, open the pull/merge request there — merge stays yours

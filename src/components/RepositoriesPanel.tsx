@@ -684,7 +684,10 @@ export function RepositoriesPanel({ onSelectRun, autoShowRegister, navigate, amb
                     <span className="wk-tag" title="Default branch">{repo.default_branch}</span>
                   </div>
                   {/* Reel ch59 (studio 0.7.8): the card names the repo; where its checkout lives is detail. */}
-                  <TechDetails data-testid="repo-card-path" summary="Where it is" text={repo.root_path} />
+                  {/* Opening the detail must not open the repo (the card itself is a door). */}
+                  <div onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+                    <TechDetails data-testid="repo-card-path" summary="Where it is" text={repo.root_path} />
+                  </div>
 
                   {/* Attention routing beats navigation: the gate jump, straight to the waiting run. */}
                   {waiting.length > 0 && firstGate !== undefined && (

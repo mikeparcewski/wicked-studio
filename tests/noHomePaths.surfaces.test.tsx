@@ -2,7 +2,7 @@
 // renders in the DEFAULT layer of the repo and session surfaces. Paths and engine reasons may live
 // only inside Technical details (a <details>), sanitized. Fails if a surface puts one back.
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { RepoEntry } from '../src/api/types.js';
 import { makeView } from './factories.js';
 
@@ -51,6 +51,14 @@ describe('no home path on the primary layer (repo + session surfaces)', () => {
     expect(where.tagName).toBe('DETAILS');
     expect(where.textContent).toContain('~/wicked-rig/repos/billing');
     expect(where.textContent).not.toContain('/Users/');
+  });
+
+  it('opening "Where it is" on a repo card reads it in place — it does not open the repo', async () => {
+    const navigate = vi.fn();
+    render(<RepositoriesPanel navigate={navigate} />);
+    const where = await screen.findByTestId('repo-card-path');
+    fireEvent.click(where.querySelector('summary')!);
+    expect(navigate).not.toHaveBeenCalled();
   });
 
   it('a stranded run says where its work is in words; the worktree path is behind details', () => {
