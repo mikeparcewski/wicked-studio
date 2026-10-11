@@ -12,6 +12,17 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.7.8] — 2026-10-11
+
+A launch wizard, a Settings page, and plain words where paths and jargon used to lead.
+
+### Added
+- Starting a job opens a launch wizard (what, where, options, review) from the composer's `/` menu, ⌘K New job, Learn and Settings; the inline launch strip is gone. Capture's controls use the shared button and field styles (#719).
+
+### Changed
+- The rail's Workspace links are a smaller tier. "Additional settings" opens a Settings page. Health is last. `/health` Governance speaks plain words, with paths and log lines behind Technical details (#717).
+- Session cards say in plain words how many checks didn't run. Repository cards and delivery notes no longer show file paths up front; they are under "Where it is" (#718).
+
 ## [0.7.7] — 2026-10-11
 
 The learn walkthrough asks follow-ups, and the rail's project icon opens the project.
@@ -2052,7 +2063,8 @@ The merged interactive layer: wicked-interactive's UI moved into this skin (DES-
   `git subtree split` (92 commits).
 - The SPA as a pure HTTP/WS client of the wicked-crew daemon: runs, gates, live CoreEvents.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.7...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.8...HEAD
+[0.7.8]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.7...v0.7.8
 [0.7.7]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.6...v0.7.7
 [0.7.6]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.5...v0.7.6
 [0.7.5]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.4...v0.7.5
