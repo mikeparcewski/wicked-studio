@@ -521,6 +521,7 @@ function eventAtMs(e: CoreEvent): number | null {
  * left out, never printed as its raw type; a frame with no clock gets the age pill that says so.
  */
 /** Engine wording a person should not have to read: seats, councils, units, the discipline skill. */
+const DETAIL_TYPES = new Set(['stepFailed', 'failureTriaged', 'gateEscalated', 'workerStallEscalated', 'deliverLiftEvaluated', 'evaluatorToolCallDenied', 'workerToolCallDenied', 'error']);
 const ENGINE_WORDS = /\bseats?\b|council|\bunits?\b|discipline|verdict|NOT PASS|failing over|\bjudge\b/i;
 
 /**
@@ -542,7 +543,8 @@ export function activityLine(e: CoreEvent, ctx: Parameters<typeof narrate>[1]): 
     return { line: { ...line, text: prompt !== '' ? `Waiting on you — ${plainGateQuestion(prompt, kind)}` : 'Waiting on you' }, detail: prompt !== '' ? prompt : null };
   }
   const cut = line.text.indexOf(' — ');
-  if (cut > 0 && ENGINE_WORDS.test(line.text.slice(cut + 3))) {
+  // A failure's or refusal's tail is the engine's own report: always Technical details.
+  if (cut > 0 && (DETAIL_TYPES.has(String(e.type)) || ENGINE_WORDS.test(line.text.slice(cut + 3)))) {
     return { line: { ...line, text: line.text.slice(0, cut) }, detail: line.text.slice(cut + 3) };
   }
   return { line, detail: null };
@@ -552,7 +554,14 @@ function ActivityTail({ view }: { view: SessionView }): React.ReactElement {
   const ev = useRunRawEvents(view.session.id);
   // studio#618: a narrated line can quote a home path (a deliver gate's push target): `~/…` here.
   const showText = useDisplayText();
-  const ctx = useMemo(() => narratorCtxOf(view), [view]);
+  // studio#724: each step by its plain name ("Security check"), never its key ("security_review").
+  const ctx = useMemo(() => {
+    const base = narratorCtxOf(view);
+    return { ...base, phaseOf: (ord: number | null | undefined) => {
+      const unit = typeof ord === 'number' ? view.units.find((u) => u.ord === ord) : undefined;
+      return unit !== undefined ? unitStepName(unit) : base.phaseOf(ord);
+    } };
+  }, [view]);
   if (ev.state === 'loading') return <p className="wk-session-grey">Reading the activity…</p>;
   if (ev.state === 'error') return <><p role="alert" className="wk-composer-note wk-composer-note--bad">Could not read the activity.</p><TechDetails text={ev.message} /></>;
   const lines = ev.events
