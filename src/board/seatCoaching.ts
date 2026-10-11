@@ -129,7 +129,8 @@ export function coachSeat(record: SeatRecord | undefined, seat: RosterSeat, wind
       kind: 'route-away',
       label: `Route ${words} away from ${name}`,
       why: `${evidence} this week`,
-      consequence: `Adds a recall-only operations rule "Route ${words} work away from ${name}"; helpers read it, nothing is blocked.`,
+      // studio#724: plain words for what the rule does (the stored statement is unchanged).
+      consequence: `Adds a standing instruction helpers read: hand ${words} work to a helper other than ${name}. Nothing is blocked.`,
       phase,
       rule,
     };

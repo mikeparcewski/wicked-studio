@@ -72,7 +72,7 @@ describe('each seat gets exactly one move from its own record', () => {
     const consequence = within(codex).getByTestId('rail-seat-move-consequence');
     const button = within(codex).getByTestId('rail-seat-move-button');
     expect(consequence).toHaveTextContent('3 stalls this week.');
-    expect(consequence).toHaveTextContent('Adds a recall-only operations rule "Route review work away from Codex"');
+    expect(consequence).toHaveTextContent('Adds a standing instruction helpers read: hand review work to a helper other than Codex.');
     expect(consequence.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(button).toHaveTextContent(/^Route review away from Codex$/);
   });

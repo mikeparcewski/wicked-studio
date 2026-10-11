@@ -100,8 +100,8 @@ with sync_playwright() as p:
         consequence = (codex.get_by_test_id("rail-seat-move-consequence").text_content() or "").strip()
         label = (codex.get_by_test_id("rail-seat-move-button").text_content() or "").strip()
         check("move-named", label == "Route review away from codex", label=label)
-        check("consequence-first", consequence == ('3 stalls this week. Adds a recall-only operations rule '
-                                                   '"Route review work away from codex"; helpers read it, nothing is blocked.')
+        check("consequence-first", consequence == ('3 stalls this week. Adds a standing instruction helpers read: '
+                                                   'hand review work to a helper other than codex. Nothing is blocked.')
               and page.evaluate("""() => { const m = document.querySelector('[data-testid="rail-seat-move"][data-seat="codex"]');
                   const c = m.querySelector('[data-testid="rail-seat-move-consequence"]').getBoundingClientRect();
                   const b = m.querySelector('[data-testid="rail-seat-move-button"]').getBoundingClientRect();

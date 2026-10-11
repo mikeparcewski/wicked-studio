@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { seatLabel } from '../board/seatNames.js';
+import { seatLabel, seatRoleWord } from '../board/seatNames.js';
 import { api } from '../api/client.js';
 import { getDiagnostics, isDiagnosticsUnsupported } from '../api/diagnostics.js';
 import { HEALTH_RECHECKED } from '../hooks/useRailHealthDot.js';
@@ -213,6 +213,8 @@ export function SeatRow({ seat, onSignIn }: { seat: RosterSeat; onSignIn?: (seat
         <span style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-body)', flexShrink: 0 }}>
           {seatLabel(seat)}
         </span>
+        {/* UI-CONTRACT §5: a reviewer-only helper, where it must be shown, says so (one name, no "(judge)"). */}
+        {seatRoleWord(seat) !== null && <span data-testid="rail-seat-role" className="wk-tag">{seatRoleWord(seat)}</span>}
         {message === null && (
           <span style={{ marginLeft: 'auto', fontSize: 'var(--text-2xs)', color: detailColor, fontFamily: 'var(--font-mono)', textAlign: 'right' }}>
             {detail}

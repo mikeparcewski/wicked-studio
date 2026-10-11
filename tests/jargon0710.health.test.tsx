@@ -15,6 +15,8 @@ describe('Health in plain words', () => {
     const row = screen.getByTestId('rail-seat-row');
     expect(row.textContent).toContain('Claude Code');
     expect(row.textContent).not.toMatch(JARGON);
+    // A reviewer-only helper is told apart from the helper of the same name (UI-CONTRACT §5).
+    expect(screen.getByTestId('rail-seat-role')).toHaveTextContent('Reviewer only');
   });
   it('every standing word is plain', () => {
     for (const s of [seat({ council_eligible: false, council_ineligible_reason: 'not enabled for council' }), seat({ signed_in: false, council_eligible: true }), seat({ signed_in: false })]) {
