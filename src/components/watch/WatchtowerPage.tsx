@@ -28,6 +28,11 @@ export function plainWatchLine(sentence: string): { line: string; detail: string
   // Long engine prose, or a tail carrying internal tokens ("monitors=1", "run_unit", a path), goes
   // behind the disclosure; a short plain sentence stays whole.
   const internal = colon !== -1 && /[=_/\\]/.test(sentence.slice(colon + 2));
+  // An env-style token or a relative file path ("WICKED_X=…", "src/a.ts:10") ends the plain line too.
+  const token = /\s+(?:in|at|on|from)?\s*(?:[A-Z][A-Z0-9]*_[A-Z0-9_]+=?\S*|[\w.-]+\/[\w./-]+(?::\d+)?)/u.exec(sentence);
+  if (colon === -1 && token !== null && token.index > 0) {
+    return { line: sentence.slice(0, token.index).trim().replace(/[\p{P}\s]+$/u, ''), detail: sentence };
+  }
   // A path in the sentence ("… in /var/…") ends the plain line there; the whole sentence is the detail.
   const path = /\s+(?:in|at|on|under|from)?\s*(?:~|\$TMPDIR|\/)[\w.~$-]*\/[^\s]*/u.exec(sentence);
   if (path !== null && path.index > 0) {
@@ -46,16 +51,18 @@ export function plainWatchLine(sentence: string): { line: string; detail: string
 
 /** Adjacent rows about the same work that say the same thing in the same state fold into the newest
  *  one, with a count (UX gate S1: "Nothing checked this step" six times for one session). Pure. */
-export function foldAlike(rows: readonly WatchRow[]): { row: WatchRow; alike: number }[] {
-  const out: { row: WatchRow; alike: number }[] = [];
+export function foldAlike(rows: readonly WatchRow[]): { row: WatchRow; alike: number; details: string[] }[] {
+  const out: { row: WatchRow; alike: number; details: string[] }[] = [];
   for (const r of rows) {
     const prev = out[out.length - 1];
     if (prev !== undefined && r.runId !== null && prev.row.runId === r.runId && prev.row.state === r.state
-      && plainWatchLine(prev.row.sentence).line === plainWatchLine(r.sentence).line) {
+      && prev.row.kind === r.kind && plainWatchLine(prev.row.sentence).line === plainWatchLine(r.sentence).line) {
       prev.alike += 1 + r.rolledUp;
+      // The folded rows' own words stay one click away, in the kept row's Technical details.
+      if (!prev.details.includes(r.sentence)) prev.details.push(r.sentence);
       continue;
     }
-    out.push({ row: r, alike: 0 });
+    out.push({ row: r, alike: 0, details: [r.sentence] });
   }
   return out;
 }
@@ -159,10 +166,11 @@ export function WatchtowerPage({ runs, navigate, now }: {
           </p>
         )}
         <ol className="wk-watchtower-feed">
-          {foldAlike(rows).map(({ row: r, alike }) => {
+          {foldAlike(rows).map(({ row: r, alike, details }) => {
             const jump = jumpPath(r);
             const open = jump ?? runPath(r);
-            const { line, detail } = plainWatchLine(r.sentence);
+            const { line, detail: own } = plainWatchLine(r.sentence);
+            const detail = details.length > 1 ? details.join('\n') : own;
             return (
               <li key={r.id} data-testid="watchtower-row" data-row-id={r.id} data-kind={r.kind} data-state={r.state} data-source={r.source} className="wk-watchtower-row">
                 <span aria-hidden className={`wk-desk-dot wk-desk-dot--${r.state === 'open' ? (r.kind === 'problem' || r.kind === 'decision' ? 'waiting' : 'working') : 'done'}`} />

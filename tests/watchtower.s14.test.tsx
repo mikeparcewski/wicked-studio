@@ -172,5 +172,7 @@ describe('foldAlike (UX gate S1)', () => {
     ] as unknown as Parameters<typeof foldAlike>[0];
     const out = foldAlike(rows);
     expect(out.map((x) => [x.row.id, x.alike])).toEqual([['a', 1], ['c', 0]]);
+    expect(out[0]!.details).toHaveLength(2);
+    expect(plainWatchLine('A reviewer raised a problem in src/a.ts:10').line).toBe('A reviewer raised a problem');
   });
 });

@@ -167,7 +167,7 @@ describe('GateNotifications — layout safety (EC38)', () => {
 });
 
 describe('GateNotifications — cross-project context (B4)', () => {
-  it('inside a project shell, a KNOWN-foreign gate paints no card; own + unplaceable gates do', () => {
+  it('inside a project shell, a KNOWN-foreign gate paints no card; own + unplaceable gates do', async () => {
     seed(gate('r-mine'), gate('r-foreign'), gate('r-unknown'));
     render(
       <GateNotifications
@@ -187,6 +187,12 @@ describe('GateNotifications — cross-project context (B4)', () => {
     expect(['r-mine', 'r-unknown']).toContain(shown[0]);
     // The foreign gate is not even counted in the "+N" line: 2 announced, 1 painted.
     expect(screen.getByTestId('gate-toast-overflow').textContent).toContain('+1 more waiting');
+    // Dismissing it paints the OTHER permitted gate, never the foreign one.
+    await userEvent.click(screen.getByTestId('toast-dismiss'));
+    const next = screen.getAllByTestId('gate-notification').map((c) => c.getAttribute('data-run-id'));
+    expect(next).toHaveLength(1);
+    expect(['r-mine', 'r-unknown'].filter((x) => x !== shown[0])).toEqual(next);
+    expect(screen.queryByTestId('gate-toast-overflow')).toBeNull();
   });
 
   it('falls back to the membership mirror when the DTO makes no claim', () => {

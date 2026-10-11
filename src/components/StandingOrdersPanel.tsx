@@ -30,7 +30,8 @@ export function StandingOrdersPanel(): React.ReactElement | null {
     // Plain words only (UX audit row 10): the page's own banner says when studio's service is down.
     return so.error === null ? null : (
       <p data-testid="standing-orders-error" role="status" className="wk-orders-error">
-        Standing instructions couldn’t load.
+        Standing instructions couldn’t load.{' '}
+        <button type="button" data-testid="standing-orders-retry" onClick={so.retry} className="wk-orders-act">Retry</button>
       </p>
     );
   }

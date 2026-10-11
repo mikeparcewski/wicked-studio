@@ -777,7 +777,7 @@ export function CommandPalette({
                 esc
               </kbd>
               {/* Phone: a visible way out (UX gate S1: AFF); desktop keeps the esc keycap. */}
-              <button type="button" data-testid="palette-close" aria-label="Close" title="Close" onClick={onClose} className="wk-btn wk-btn--icon wk-btn--quiet wk-palette-close">✕</button>
+              <button type="button" data-testid="palette-close" aria-label="Close" title="Close" onClick={close} className="wk-btn wk-btn--icon wk-btn--quiet wk-palette-close">✕</button>
             </div>
 
             {/* §5.2/EC24: the corpus label is a first-class UI element, ALWAYS
