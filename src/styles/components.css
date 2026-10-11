@@ -1567,6 +1567,8 @@ button.wk-walk-chapter-btn:hover .wk-walk-chapter-title { text-decoration: under
   /* Phone tap targets (UI-CONTRACT §2 --tap-min) on the shared controls. */
   .wk-btn, .wk-need-act, button.wk-chip, a.wk-chip, .wk-segmented-option, .wk-tab, .wk-switch { min-height: var(--tap-min); }
   .wk-btn--icon { width: var(--tap-min); min-width: var(--tap-min); }
+  /* A one-glyph segment ("1"…"5") is 44 px wide too, not only tall (UI-CONTRACT ASK, w9-council). */
+  .wk-segmented-option { min-width: var(--tap-min); }
   .wk-rail-drawer .wk-rail a, .wk-rail-drawer .wk-rail button { min-height: var(--tap-min); }
   .wk-rail-drawer .wk-rail-icon-btn { min-width: var(--tap-min); }
   /* Single column, phone padding, nothing clipped (UX audit row 1). */

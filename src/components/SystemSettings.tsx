@@ -466,7 +466,7 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
           Reviews
         </h2>
 
-        <div className="flex items-start justify-between gap-6 py-4">
+        <div className="flex flex-col gap-3 py-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium" style={{ color: 'var(--ink-high)' }}>Council size</p>
             <p className="wk-field-note">How many helpers review each decision; they are picked at random.</p>
