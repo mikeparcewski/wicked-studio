@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { coachRuleId, coachSeat, recordsByCli, seatWeekLine } from '../src/board/seatCoaching.js';
+import { coachRuleId, coachSeat, phaseWords, recordsByCli, seatWeekLine } from '../src/board/seatCoaching.js';
 import { ROSTER, WEEK } from './fixtures/seatWeek.js';
 
 /** Wave B, idea 9: seats with different records get different moves, exactly one each. */
@@ -18,7 +18,7 @@ describe('one coaching move per seat, from its week', () => {
     expect(m.phase).toBe('review');
     expect(m.label).toBe('Route review away from Codex');
     expect(m.why).toBe('3 stalls this week');
-    expect(m.consequence).toBe('Adds a recall-only operations rule "Route review work away from Codex"; seats read it, nothing is blocked.');
+    expect(m.consequence).toBe('Adds a recall-only operations rule "Route review work away from Codex"; helpers read it, nothing is blocked.');
     expect(m.rule).toMatchObject({
       id: 'seat-coach:codex:review',
       rule_type: 'policy',
@@ -31,7 +31,7 @@ describe('one coaching move per seat, from its week', () => {
 
   it('a seat sent back often is routed on its rework, not its stalls', () => {
     const m = moveFor('opencode');
-    expect(m.kind === 'route-away' && m.why).toBe('2 of 4 units sent back or retried this week');
+    expect(m.kind === 'route-away' && m.why).toBe('2 of 4 steps sent back or retried this week');
     expect(m.kind === 'route-away' && m.rule.id).toBe(coachRuleId('opencode', 'build'));
   });
 
@@ -48,12 +48,20 @@ describe('one coaching move per seat, from its week', () => {
 
   it('a clean week and an empty week both say no change, with the reason', () => {
     expect(moveFor('claude')).toMatchObject({ kind: 'no-change', why: '5/5 first pass, 0 stalls, 0 rework', consequence: null });
-    expect(moveFor('copilot')).toMatchObject({ kind: 'no-change', why: 'no units in the last 7 days' });
+    expect(moveFor('copilot')).toMatchObject({ kind: 'no-change', why: 'no steps in the last 7 days' });
   });
 
   it('the week line states cost only where it was recorded', () => {
-    expect(seatWeekLine(byKey.get('codex'))).toBe('5 units · 3/4 first pass · 1 rework · 3 stalls · $0.84');
+    expect(seatWeekLine(byKey.get('codex'))).toBe('5 steps · 3/4 first pass · 1 rework · 3 stalls · $0.84');
     expect(seatWeekLine(byKey.get('opencode'))).toContain('cost not recorded');
-    expect(seatWeekLine(undefined)).toBe('no units this week');
+    expect(seatWeekLine(undefined)).toBe('no steps this week');
+  });
+});
+
+describe('phaseWords (studio#702)', () => {
+  it('a step address reads as its step; a phase name passes through', () => {
+    expect(phaseWords('wf-e5d4fa94-1a2b:unit-8:a6')).toBe('step 8');
+    expect(phaseWords('review')).toBe('review');
+    expect(phaseWords('wf-x:odd')).toBe('one step');
   });
 });

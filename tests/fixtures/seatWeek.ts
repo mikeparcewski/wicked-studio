@@ -35,7 +35,7 @@ export const WEEK: SeatRecordResponse = {
       units: 4, gated: 4, firstPass: 2, rework: 2, stalls: 0,
       byPhase: { build: { units: 4, gated: 4, firstPass: 2, rework: 2, stalls: 0 } },
     }),
-    // copilot: absent from the record → no units this week.
+    // copilot: absent from the record → no steps this week.
   ],
 };
 

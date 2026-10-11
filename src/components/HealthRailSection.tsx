@@ -4,7 +4,8 @@ import { getDiagnostics, isDiagnosticsUnsupported } from '../api/diagnostics.js'
 import { HEALTH_RECHECKED } from '../hooks/useRailHealthDot.js';
 import type { SeatRecord } from '../api/seatRecord.js';
 import type { DiagnosticsGovernance, DiagnosticsGovernanceFinding, RosterSeat } from '../api/types.js';
-import { coachSeat, recordsByCli, seatWeekLine, type CoachMove } from '../board/seatCoaching.js';
+import { coachSeat, phaseWords, recordsByCli, seatWeekLine, type CoachMove } from '../board/seatCoaching.js';
+import { TechDetails } from './ui/index.js';
 import { useSeatWeek, type MoveState, type SeatWeekRead } from '../hooks/useSeatWeek.js';
 import { useConnectionStore } from '../store/connection.js';
 import { setCachedRoster, subscribeRoster } from '../store/rosterCache.js';
@@ -272,9 +273,13 @@ export function SeatWeek({ seat, record, move, state, onMove }: {
           </div>
         ) : (
           <>
-            <p data-testid="rail-seat-move-consequence" title={move.kind === 'route-away' ? move.rule.statement : undefined} style={{ ...MONO_2XS, margin: '0 0 3px', color: 'var(--ink-body)', overflowWrap: 'anywhere' }}>
+            <p data-testid="rail-seat-move-consequence" style={{ ...MONO_2XS, margin: '0 0 3px', color: 'var(--ink-body)', overflowWrap: 'anywhere' }}>
               <span style={{ color: 'var(--status-gate)' }}>{move.why}.</span> {move.consequence}
             </p>
+            {/* studio#702: the raw phase key (a step address) only behind Technical details. */}
+            {move.kind === 'route-away' && move.phase !== phaseWords(move.phase) && (
+              <TechDetails data-testid="rail-seat-move-detail" text={`phase key: ${move.phase}`} />
+            )}
             {state?.status === 'done' || state?.status === 'error' ? (
               <p
                 data-testid="rail-seat-move-result"
@@ -292,7 +297,7 @@ export function SeatWeek({ seat, record, move, state, onMove }: {
                 className="rounded px-1.5 py-0.5"
                 style={{ ...MONO_2XS, color: 'var(--ink-high)', background: 'var(--surface-raised)', border: '1px solid var(--surface-raised)', cursor: state?.status === 'busy' ? 'wait' : 'pointer' }}
               >
-                {move.label} ›
+                {move.label}
               </button>
             )}
           </>
