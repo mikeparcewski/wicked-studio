@@ -134,4 +134,40 @@ describe('launch wizard', () => {
     act(() => { openLaunchWizard({ workflowId: 'mcp-server', composerKey: 'chat-b' }); });
     expect(useLaunchWizard.getState().draft).toMatchObject({ composerKey: 'chat-b', intent: '' });
   });
+
+  it('operator ruling 2026-10-11: opencode is UNTICKED in the wizard with "opt-in: known to stall", and is sent only once ticked', async () => {
+    const withOpencode = [...ROSTER, seat('opencode')];
+    setCachedRoster(withOpencode);
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+      const path = new URL(url, 'http://x').pathname.replace(/^\/api\/v1/, '');
+      if (init?.method === 'POST') {
+        posts.push({ path, body: JSON.parse(String(init.body ?? '{}')) as Record<string, unknown> });
+        return Promise.resolve(new Response(JSON.stringify({ runId: 'r-new' }), { status: 200, headers: { 'content-type': 'application/json' } }));
+      }
+      const body = path === '/roster' ? { roster: withOpencode } : path === '/repos' ? { repos: [REPO] } : path === '/workflows' ? { workflows: WF } : path === '/projects' ? { projects: [] } : {};
+      return Promise.resolve(new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } }));
+    }));
+    render(<Harness />);
+    act(() => { openLaunchWizard({ workflowId: 'mcp-server' }); });
+    fireEvent.change(await screen.findByTestId('launch-wizard-intent'), { target: { value: 'build it' } });
+    next();
+    await waitFor(() => expect((screen.getByTestId('launch-wizard-repo') as HTMLSelectElement).value).toBe('repo-1'));
+    next();
+    const chips = screen.getAllByTestId('launch-wizard-seat');
+    const oc = chips.find((c) => c.dataset.key === 'opencode')!;
+    expect(oc.getAttribute('aria-pressed')).toBe('false');
+    expect(chips.filter((c) => c.dataset.key !== 'opencode').every((c) => c.getAttribute('aria-pressed') === 'true')).toBe(true);
+    const note = screen.getByTestId('launch-wizard-optin-note');
+    expect(note).toHaveTextContent('opt-in: known to stall');
+    expect(oc.getAttribute('aria-describedby')).toBe(note.id);
+    next();
+    fireEvent.click(screen.getByTestId('launch-wizard-launch'));
+    await waitFor(() => expect(posts.some((p) => p.path === '/runs')).toBe(true));
+    const sent = JSON.parse(String(posts.find((p) => p.path === '/runs')!.body.clisJson)) as Array<{ key: string }>;
+    expect(sent.map((x) => x.key)).not.toContain('opencode');
+    // An explicit tick is the operator's choice: it is sent.
+    expect(oc.getAttribute('aria-pressed')).toBe('false');
+    act(() => { useComposerSeats.getState().toggle('opencode'); });
+    expect(useComposerSeats.getState().picked).toContain('opencode');
+  });
 });
