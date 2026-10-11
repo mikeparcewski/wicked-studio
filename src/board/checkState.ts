@@ -186,14 +186,17 @@ export function deliverAcceptance(
   /** The run's QE acceptance decision is `required` (crew 0.9.0 / core#850: delivery is then refused
    *  unless acceptance PASSED). */
   qeRequired = false,
-): { text: string; tone: AcceptanceTone; blocksDeliver?: true } | null {
+): { text: string; tone: AcceptanceTone; blocksDeliver?: true; detail?: string } | null {
   if (summary === null || summary === undefined || typeof summary.line !== 'string' || summary.line === '') return null;
   // A run that requires QE acceptance and has not passed it: crew refuses the delivery, so the card
   // says so plainly instead of offering a Deliver that will be refused (reel 7d8c9c98, studio 0.7.10).
   if (qeRequired && summary.required && !summary.satisfied) {
-    return NO_VERDICT_RECORDED.test(summary.line)
-      ? { text: 'QE acceptance hasn’t passed yet — fix and re-run, or skip with a reason. Delivery is refused until it passes.', tone: 'bad', blocksDeliver: true }
-      : { text: 'QE acceptance failed — fix and re-run, or skip with a reason.', tone: 'bad', blocksDeliver: true };
+    // "failed" only for a recorded failure; anything else (no verdict, an unreadable ledger, an unsealed
+    // walkthrough) is "hasn't passed". Crew's own line stays readable behind Technical details.
+    const failed = (summary.walkthrough?.failed ?? 0) > 0;
+    return failed
+      ? { text: 'QE acceptance failed — fix and re-run, or skip with a reason.', tone: 'bad', blocksDeliver: true, detail: summary.line }
+      : { text: 'QE acceptance hasn’t passed yet — fix and re-run, or skip with a reason. Delivery is refused until it passes.', tone: 'bad', blocksDeliver: true, detail: summary.line };
   }
   if (summary.required && !summary.satisfied && NO_VERDICT_RECORDED.test(summary.line)) {
     const words = ownEvidenceWords(own);

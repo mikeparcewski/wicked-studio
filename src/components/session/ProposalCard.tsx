@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { TechDetails } from '../ui/TechDetails.js';
 import type { SessionView } from '../../api/types.js';
 import type { RunDiff } from '../../api/wave6-wire.js';
 import type { ChainModel } from '../../board/chainModel.js';
@@ -134,6 +135,7 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
   const planWords = draft !== null && planGate.view !== null ? planStepWords(planGate.view.planSteps) : undefined;
 
   const answer = (): void => {
+    if (deliverRefused) return; // crew refuses it: never send a delivery that cannot land
     if (sending.current || gate === undefined) return; // double clicks are ignored
     sending.current = true;
     setUi((u) => ({ ...u, confirming: null }));
@@ -156,6 +158,7 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
       .finally(() => { sending.current = false; });
   };
   const go = (): void => {
+    if (deliverRefused) return;
     if (card.kind === 'deliver' && card.state !== 'confirm') { setUi((u) => ({ ...u, confirming: instance })); return; }
     answer();
   };
@@ -203,6 +206,9 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
           {/* WT-U2: what the acceptance gate says before the hand-over — crew's line, studio's tone. */}
           {card.kind === 'deliver' && accept !== null && (
             <p data-testid="session-proposal-acceptance" data-tone={accept.tone} className={`wk-prop-why wk-prop-accept wk-prop-accept--${accept.tone}`}>{accept.text}</p>
+          )}
+          {card.kind === 'deliver' && accept !== null && accept.detail !== undefined && (
+            <TechDetails data-testid="session-proposal-acceptance-detail" summary="What QE acceptance recorded" text={accept.detail} />
           )}
           {/* A re-opened deliver gate after a failed hand-over: what checked the work, never "accepted". */}
           {card.kind === 'deliver' && deliveryReceipt !== null && <AssuranceReceipt receipt={deliveryReceipt} passed={deliverFailure === null ? true : null} testId="session-proposal-assurance" />}
@@ -272,7 +278,7 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
             <div data-testid="session-proposal-confirm" role="alertdialog" aria-label={`Are you sure? ${card.confirm.q}`} className="wk-prop-confirm">
               <p className="wk-prop-why"><b>Are you sure? {card.confirm.q}</b> {card.confirm.w}</p>
               <div className="wk-prop-btns">
-                <button ref={yesRef} type="button" data-testid="session-proposal-confirm-yes" onClick={answer} className="wk-prop-btn wk-prop-btn--danger">{card.confirm.a}</button>
+                <button ref={yesRef} type="button" data-testid="session-proposal-confirm-yes" onClick={answer} disabled={deliverRefused} className="wk-prop-btn wk-prop-btn--danger">{card.confirm.a}</button>
                 <button type="button" data-testid="session-proposal-confirm-cancel" onClick={() => setUi((u) => ({ ...u, confirming: null }))} className="wk-prop-btn wk-prop-btn--ghost">Cancel</button>
               </div>
             </div>

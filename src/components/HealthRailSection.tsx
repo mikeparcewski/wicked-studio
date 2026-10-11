@@ -221,6 +221,8 @@ export function SeatRow({ seat, onSignIn }: { seat: RosterSeat; onSignIn?: (seat
           </span>
         )}
       </div>
+      {/* Why it is not picked, reachable by keyboard and touch (not only a hover title). */}
+      {standing.kind === 'ineligible' && <div style={{ paddingLeft: '20px' }}><TechDetails data-testid="rail-seat-why" summary="Why" text={standing.title} /></div>}
       {message !== null && quota === null && (
         <p data-testid="rail-seat-error" style={{ ...MONO_2XS, margin: 0, paddingLeft: '20px', color: detailColor, overflowWrap: 'anywhere' }}>
           {detail}
