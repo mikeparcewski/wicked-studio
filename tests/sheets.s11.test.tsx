@@ -104,6 +104,54 @@ describe('Stop waits 10 s with Undo', () => {
 });
 
 describe('the sheets', () => {
+  it('uses the session page title for an onboarding run', () => {
+    const run = makeView({ id: 'r1', problem: 'Onboard repository: wicked-crew' });
+    render(<ObjectSheet runs={[run]} navigate={() => {}} needCount={0} />);
+    act(() => openSheet({ kind: 'session', sessionId: 'run:r1' }, 'goal'));
+    expect(screen.getByTestId('sheet-title')).toHaveTextContent('Set up wicked-crew');
+  });
+
+  it.each(['\n\n---\n', ' --- '])('separates an Ask pack joined with %j from the goal', (join) => {
+    const pack = '[studio context pack — assembled today]\nWICKED_HOME=/Users/operator/secret';
+    const run = makeView({ id: 'r1', problem: `Explain this project${join}${pack}` });
+    render(<ObjectSheet runs={[run]} navigate={() => {}} needCount={0} />);
+    act(() => openSheet({ kind: 'session', sessionId: 'run:r1' }, 'goal'));
+    const disclosure = screen.getByTestId('sheet-goal-pack');
+    expect(disclosure).not.toHaveAttribute('open');
+    expect(disclosure.querySelector('summary')).toHaveTextContent('What studio sent with it');
+    expect(disclosure).toHaveTextContent('[studio context pack');
+    const visible = screen.getByTestId('sheet-goal').cloneNode(true) as HTMLElement;
+    visible.querySelectorAll('details').forEach((d) => d.remove());
+    expect(visible).toHaveTextContent('Explain this project');
+    expect(visible).not.toHaveTextContent('studio context pack');
+    expect(visible).not.toHaveTextContent('WICKED_HOME');
+  });
+
+  it('renders a long markdown goal as a heading and a closed full brief in prose', () => {
+    const problem = `## Summary\n\n${'Describe the requested behavior. '.repeat(16)}\n\n## Fix 1\n\n- Keep the answer buttons first.`;
+    render(<ObjectSheet runs={[makeView({ id: 'r1', problem })]} navigate={() => {}} needCount={0} />);
+    act(() => openSheet({ kind: 'session', sessionId: 'run:r1' }, 'goal'));
+    const full = screen.getByText('Show full brief').closest('details')!;
+    expect(full).not.toHaveAttribute('open');
+    expect(full.querySelector('pre')).toBeNull();
+    fireEvent.click(full.querySelector('summary')!);
+    expect(full).toHaveAttribute('open');
+    expect(screen.getByRole('heading', { name: 'Fix 1' })).toBeInTheDocument();
+    expect(full).toHaveTextContent('Keep the answer buttons first.');
+  });
+
+  it('Escape closes an open More menu first, then the sheet (one layer per press)', () => {
+    render(<ObjectSheet runs={[RUN]} navigate={() => {}} needCount={0} />);
+    act(() => openSheet({ kind: 'session', sessionId: 'run:r1' }));
+    fireEvent.click(screen.getByRole('button', { name: 'More tabs' }));
+    expect(screen.getAllByRole('menuitem').length).toBeGreaterThan(0);
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryAllByRole('menuitem')).toHaveLength(0);
+    expect(useSheets.getState().open).not.toBeNull();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(useSheets.getState().open).toBeNull();
+  });
+
   it('a helper’s terminal is read-only until you turn typing on', () => {
     render(<ObjectSheet runs={[RUN]} navigate={() => {}} needCount={0} />);
     act(() => openSheet({ kind: 'helper', runId: 'r1', cli: 'codex' }, 'terminal'));
@@ -118,9 +166,9 @@ describe('the sheets', () => {
     render(<ObjectSheet runs={[RUN]} navigate={() => {}} needCount={0} />);
     act(() => openSheet({ kind: 'step', runId: 'r1', ord: 0 }));
     expect(screen.getByTestId('sheet-title').textContent).toBe('Research');
-    expect(screen.getAllByTestId('sheet-tab').map((t) => t.getAttribute('data-tab'))).toStrictEqual(SHEET_TABS.step.map((t) => t.id));
+    expect(screen.getAllByRole('tab').map((t) => t.getAttribute('data-tab'))).toStrictEqual(SHEET_TABS.step.map((t) => t.id));
     expect(screen.getByTestId('sheet-primary').textContent).toBe('Message it');
-    fireEvent.click(screen.getAllByTestId('sheet-tab').find((t) => t.getAttribute('data-tab') === 'did')!);
+    fireEvent.click(screen.getAllByRole('tab').find((t) => t.getAttribute('data-tab') === 'did')!);
     expect(screen.getByTestId('sheet-body').getAttribute('data-tab')).toBe('did');
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(useSheets.getState().open).toBeNull();
@@ -129,8 +177,14 @@ describe('the sheets', () => {
   it('the session sheet carries the run’s sections as tabs', () => {
     render(<ObjectSheet runs={[RUN]} navigate={() => {}} needCount={0} />);
     act(() => openSheet({ kind: 'session', sessionId: 'run:r1' }));
-    const tabs = screen.getAllByTestId('sheet-tab').map((t) => t.getAttribute('data-tab'));
-    for (const id of ['goal', 'helpers', 'activity', 'signins', 'whatwhere', 'governance', 'steering']) expect(tabs).toContain(id);
+    const tabs = screen.getAllByRole('tab').map((t) => t.getAttribute('data-tab'));
+    expect(tabs).toEqual(['goal', 'steps', 'changes', 'helpers', 'activity']);
+    fireEvent.click(screen.getByRole('button', { name: 'More tabs' }));
+    const more = screen.getAllByRole('menuitem').map((t) => t.getAttribute('data-item'));
+    for (const id of ['signins', 'whatwhere', 'governance', 'steering']) expect(more).toContain(id);
+    fireEvent.click(screen.getAllByRole('menuitem').find((t) => t.getAttribute('data-item') === 'governance')!);
+    expect(screen.getByRole('tab', { selected: true }).getAttribute('data-tab')).toBe('governance');
+    expect(screen.getByTestId('sheet-body').getAttribute('aria-labelledby')).toBe(screen.getByRole('tab', { selected: true }).id);
     act(() => closeSheet());
   });
 });
@@ -189,20 +243,23 @@ describe('codex on S11, the sheet itself', () => {
   it('a session with no run here shows no run tabs; a tab that went away falls back to the first', () => {
     render(<ObjectSheet runs={[]} navigate={() => {}} needCount={0} />);
     act(() => useSheets.setState({ open: { ref: { kind: 'session', sessionId: 'run:gone' }, tab: 'governance' } }));
-    expect(screen.getAllByTestId('sheet-tab').map((t) => t.getAttribute('data-tab'))).toStrictEqual(['goal', 'helpers', 'activity', 'signins']);
+    expect(screen.getAllByRole('tab').map((t) => t.getAttribute('data-tab'))).toStrictEqual(['goal', 'helpers', 'activity', 'signins']);
     expect(screen.getByTestId('sheet-body').getAttribute('data-tab')).toBe('goal');
   });
 
-  it('tabs are one stop: arrows, Home and End move the selection, panels are linked', () => {
+  it('tabs are one stop: arrows, Home and End move focus; activation links the panel', () => {
     render(<ObjectSheet runs={[RUN]} navigate={() => {}} needCount={0} />);
     act(() => openSheet({ kind: 'desk' }));
-    const tabs = screen.getAllByTestId('sheet-tab');
+    const tabs = screen.getAllByRole('tab');
     expect(tabs.filter((t) => t.tabIndex === 0)).toHaveLength(1);
     fireEvent.keyDown(tabs[0]!, { key: 'ArrowRight' });
-    expect(useSheets.getState().open?.tab).toBe('computer');
+    expect(document.activeElement).toBe(tabs[1]);
+    expect(useSheets.getState().open?.tab).toBe('studio');
     fireEvent.keyDown(tabs[0]!, { key: 'End' });
+    expect(document.activeElement).toBe(tabs[4]);
+    fireEvent.click(tabs[4]!);
     expect(useSheets.getState().open?.tab).toBe('hold');
     const panel = screen.getByTestId('sheet-body');
-    expect(panel.getAttribute('aria-labelledby')).toBe(screen.getAllByTestId('sheet-tab').find((t) => t.getAttribute('data-tab') === 'hold')!.id);
+    expect(panel.getAttribute('aria-labelledby')).toBe(screen.getAllByRole('tab').find((t) => t.getAttribute('data-tab') === 'hold')!.id);
   });
 });

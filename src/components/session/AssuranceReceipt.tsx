@@ -2,6 +2,7 @@ import type { SessionView } from '../../api/types.js';
 import { QE_FORCE_DISCLOSURE, QE_FORCE_LABEL, QE_SKIP_DISCLOSURE, QE_SKIP_LABEL, REDUCED_ASSURANCE_LABEL, REDUCED_OPT_IN_DISCLOSURE, REDUCED_OPT_IN_LABEL, isReduced, qeWords, sessionQe, unverifiedDeliveryLine, type DeliveryAssuranceView, type QeDecision, receiptWords, sessionAssurance, type AssuranceReceipt as Receipt } from '../../board/assuranceModel.js';
 import { useRunEvents } from '../../hooks/useRunEvents.js';
 import { useDisplayText } from '../../hooks/useHomePath.js';
+import { TechDetails } from '../ui/index.js';
 
 /**
  * The assurance receipt, compact (wicked-core#850): one lead line — how the decision was assured
@@ -17,24 +18,36 @@ export function AssuranceReceipt({ receipt, passed = null, testId = 'assurance-r
   testId?: string;
 }): React.ReactElement {
   const w = receiptWords(receipt, passed);
+  const showText = useDisplayText();
+  const lead = w.kind === 'floor-only' ? 'Only automatic checks ran'
+    : w.kind === 'same-seat' ? 'The helper checked its own work'
+      : w.kind === 'unchecked' ? 'Nothing was verified'
+        : w.kind === 'partial' ? 'Some checks ran independently' : w.label;
   return (
     <div data-testid={testId} data-kind={w.kind} data-mode={receipt.mode} className="wk-assurance" role="group" aria-label="Assurance receipt">
       <p className="wk-assurance-lead">
-        <span data-testid="assurance-kind" className={`wk-assurance-kind wk-assurance-kind--${w.kind}`}>{w.label}</span>
+        <span className={`wk-assurance-kind wk-assurance-kind--${w.kind}`}>{lead}</span>
         {w.reduced && <ReducedAssuranceLabel />}
-        <span className="wk-assurance-dim"> · {w.required} · {w.ran}</span>
       </p>
+      {receipt.skipped.length > 0 && <p className="wk-assurance-line">{receipt.skipped.length} {receipt.skipped.length === 1 ? "check didn't" : "checks didn't"} run on this step.</p>}
       {receipt.qe !== undefined && <p className="wk-assurance-line"><QeAcceptanceLabel qe={receipt.qe} testId="assurance-qe" /></p>}
-      {w.who !== null && <p data-testid="assurance-who" className="wk-assurance-line">{w.who}</p>}
+      <details className="wk-tech-details">
+        <summary className="wk-tech-details-summary">Technical details</summary>
+        <div className="wk-session-verdict-details" data-tech="on">
+          <p><span data-testid="assurance-kind">{w.label}</span> · {showText(w.required)} · {showText(w.ran)}</p>
+      {w.who !== null && <p data-testid="assurance-who" className="wk-assurance-line">{showText(w.who)}</p>}
       {(w.skipped !== null || w.where !== null) && (
         <p className="wk-assurance-line">
           {w.skipped !== null && (
-            <span data-testid="assurance-skipped" {...(w.skippedDetail.length > 0 ? { title: w.skippedDetail.join('\n') } : {})}>{w.skipped}</span>
+            <span data-testid="assurance-skipped">{showText(w.skipped)}</span>
           )}
           {w.skipped !== null && w.where !== null && ' · '}
-          {w.where !== null && <span data-testid="assurance-where">{w.where}</span>}
+          {w.where !== null && <span data-testid="assurance-where">{showText(w.where)}</span>}
         </p>
       )}
+          {w.skippedDetail.length > 0 && <TechDetails summary="Why these checks did not run" text={w.skippedDetail} />}
+        </div>
+      </details>
     </div>
   );
 }
@@ -45,7 +58,7 @@ export function ReducedAssuranceLabel({ testId = 'assurance-reduced' }: { testId
     <span
       data-testid={testId}
       className="wk-assurance-reduced"
-      title="Launched with reduced assurance: the creator's seat may evaluate its own work and a missing judge does not hold a gate. Every receipt says so."
+      title="The helper may check its own work, and an unavailable check will not pause the run. Every receipt says so."
     >
       {REDUCED_ASSURANCE_LABEL}
     </span>

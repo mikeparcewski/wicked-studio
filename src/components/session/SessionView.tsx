@@ -51,7 +51,7 @@ import { collapseArtifacts, paneOpen, useArtifactSizes } from '../../store/artif
 import { RunArtifacts } from './RunArtifacts.js';
 import { OperatorMessage } from '../OperatorMessage.js';
 import { Markdown } from '../Markdown.js';
-import { CitationStrip, citationMarks } from '../citations.js';
+import { CitationStrip, citationLabel, citationMarks } from '../citations.js';
 import { applyCheckState } from '../../board/checkState.js';
 import { useRunAcceptance } from '../../hooks/useRunAcceptance.js';
 import { momentOfRecording, useRecordingsStore } from '../../store/recordings.js';
@@ -60,6 +60,12 @@ import { askAnswerOrds, askLines, askPathOf, askProposal, askShapeFooter, askThi
 import { useAskThreadStore } from '../../store/askThread.js';
 import { useTeamFold } from '../../hooks/useTeamFold.js';
 import { AskLineView, AskTyping } from './AskThread.js';
+import { Skeleton, StateBanner, TechDetails } from '../ui/index.js';
+import { readErrorKind } from '../../api/errors.js';
+import { splitToolFailures } from '../../board/askThread.js';
+import { useRoster } from '../../hooks/useRoster.js';
+import { isCliSeat, seatLabel } from '../../board/seatNames.js';
+import { chatStatusWord } from '../../board/statusWords.js';
 
 /** S16a-2c: the hash that lands a run's session on its sheet's Governance tab. */
 export const GOVERNANCE_HASH = '#governance';
@@ -114,9 +120,6 @@ const JUST_DECIDED_MS = 15_000;
 /** How long an open proposal with NO cached gate keeps the block away (the reconcile reads the gate back). */
 const OPEN_GRACE_MS = 60_000;
 
-const STATE_WORD: Record<SessionState, string> = {
-  waiting: 'Waiting on you', working: 'Being worked on', blocked: 'Stopped', done: 'Finished', quiet: 'Quiet',
-};
 
 function launchedMs(v: RunView): number {
   const c = (v.session as unknown as { created_at?: unknown }).created_at;
@@ -534,9 +537,14 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
       <header className="wk-session-head">
         <span aria-hidden className={`wk-desk-dot wk-desk-dot--${state}`} />
         <div className="wk-session-head-body">
-          <h1 data-testid="session-title" className="wk-session-title">{title}</h1>
+          {/* Audit row 62: until the session's reads settle, the title is a skeleton and no state word
+              is said — never the placeholder "A session · Quiet · Loading…". */}
+          {ready || mine.length > 0
+            ? <h1 data-testid="session-title" className="wk-session-title">{title}</h1>
+            : <div data-testid="session-title-loading" className="wk-session-title-skeleton"><Skeleton rows={1} variant="line" /></div>}
           <p data-testid="session-status" className="wk-session-status">
-            {STATE_WORD[state]}
+            {/* UI-CONTRACT §5: the one status vocabulary (never "Quiet" for a cancelled run). */}
+            {ready || mine.length > 0 ? (state === 'waiting' ? 'Waiting on you' : mine.length > 0 ? chatStatusWord(mine).word : null) : null}
             {mine.length > 1 && ` · ${mine.length} runs`}
             {badge > 0 && <> · <mark className="wk-desk-mark">{badge === 1 ? '1 needs you' : `${badge} need you`}</mark></>}
           </p>
@@ -591,35 +599,31 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
             <p data-testid="session-closed-line" className="wk-session-grey">{CLOSED_LINE}</p>
           )}
           {chatError !== null && (
-            <p data-testid="session-chat-error" className="wk-session-grey">
-              Could not read this conversation from the daemon ({chatError}).{' '}
-              <button type="button" data-testid="session-chat-retry" onClick={() => { setChat(null); setChatTry((n) => n + 1); }} className="wk-since-toggle">Try again</button>
-            </p>
+            <StateBanner data-testid="session-chat-error" kind={readErrorKind(chatError)} what="this conversation" error={chatError}
+              onRetry={() => { setChat(null); setChatTry((n) => n + 1); }} />
           )}
           {/* S16a-2d: a run address the index has not resolved (a just-launched run, landed on from the
               launch form or a moved /runs/:id) says so honestly — the run page's pending view. */}
           {missing && ref.kind === 'run' && (
             <p data-testid="session-run-pending" data-run-id={ref.runId} className="wk-session-grey">
-              Opening run {ref.runId} — not in the run index yet: a just-launched run appears within one live-update cycle; an id the daemon no longer serves will not.
+              {detailError !== null ? 'This run couldn’t be opened.' : 'This run isn’t on Studio’s service yet. A run that just started shows up here in a few seconds.'}
             </p>
           )}
           {missing && ref.kind === 'run' && detailError !== null && (
-            <p data-testid="session-run-detail-error" className="wk-session-grey">
-              Could not read this run from the daemon ({detailError}).{' '}
-              <button type="button" data-testid="session-run-detail-retry" onClick={() => setDetailTry((n) => n + 1)} className="wk-since-toggle">Try again</button>
-            </p>
+            <StateBanner data-testid="session-run-detail-error" kind={readErrorKind(detailError)} what="this run" error={detailError}
+              onRetry={() => setDetailTry((n) => n + 1)} />
           )}
           {missing && ref.kind !== 'run' && (
             <p data-testid="session-missing" className="wk-session-grey">
               {ref.kind === 'chat' && !runChatId
-                ? 'This daemon does not link runs to their chat, so this session has no runs to show.'
-                : 'Nothing in this session is on this daemon.'}
+                ? 'Studio’s service can’t link runs to this conversation, so there are no runs to show.'
+                : 'Nothing in this session is on Studio’s service any more.'}
             </p>
           )}
-          {!ready && <p className="wk-session-grey">Loading…</p>}
+          {!ready && <div data-testid="session-loading"><Skeleton rows={3} variant="card" /></div>}
           {/* §8 F13: an older daemon has no team path — every helper answers at once; said once, in grey. */}
           {ready && ref.kind === 'chat' && !askPathOn && conversation === 'live' && messages.length > 0 && (
-            <p data-testid="session-ask-older" className="wk-session-grey">Older daemon: every helper answers at once — no primary helper, reviewer or help requests in this conversation.</p>
+            <p data-testid="session-ask-older" className="wk-session-grey">Every helper answers at once in this conversation: this version of Studio’s service has no reviewer or help requests.</p>
           )}
           {entries.map((e) => (e.kind === 'line'
             ? <AskLineView key={e.key} line={e.line} onSignIn={() => openSheet({ kind: 'session', sessionId }, 'signins')} onRetry={askTeamRetry} />
@@ -637,10 +641,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
                     // S16a-4e (crew#561): a helper's reply on the session wears the daemon's verdicts where
                     // it cited — the marks and the strip the retired chat page's thread had — so a fabricated SHA is
                     // never read as a confirmed one here either. Mark, never edit.
-                    <div className={`wk-session-text${e.ok ? '' : ' wk-session-grey'}`}>
-                      <Markdown marks={citationMarks(e.citations)}>{e.text}</Markdown>
-                      {e.citations !== undefined && <CitationStrip citations={e.citations} />}
-                    </div>
+                    <HelperReply who={e.who} text={e.text} ok={e.ok} citations={e.citations} />
                   )}
                 {e.who !== 'you' && <SourceChips citations={e.citations} runs={readers} />}
                 {/* DC-S8: the rules the turn's seats were given — considered · set aside · cited (unchecked). */}
@@ -651,7 +652,7 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
                 {e.who === 'you' && ref.kind === 'chat' && e.turnId !== null && <TurnDecisions chatId={ref.chatId} turnId={e.turnId} navigate={navigate} />}
               </div>
             )
-            : <RunBlock key={e.key} view={e.view} badge={badges[e.view.session.id] ?? 0} sessionId={sessionId} navigate={navigate} />))}
+            : <RunBlock key={e.key} view={e.view} badge={badges[e.view.session.id] ?? 0} sessionId={sessionId} navigate={navigate} solo={mine.length === 1 ? title : null} />))}
           {/* S16a-4g: the chat's own question and gate (keyed by the chat id) at the thread's foot. */}
           {ref.kind === 'chat' && <ChatQuestions chatId={ref.chatId} />}
         </div>
@@ -682,6 +683,38 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
   );
 }
 
+/**
+ * A helper's reply in the thread. Studio#682 row 6: a reply that is only a failed tool call ("[tool
+ * call failed] grep: The user has specified a rule … [{"permission":…}]") is one plain line — who
+ * could not do what — with the raw text (rulesets, home and temp paths) behind Technical details.
+ */
+function HelperReply({ who, text, ok, citations }: { who: string; text: string; ok: boolean; citations: ChatCitations | undefined }): React.ReactElement {
+  const split = useMemo(() => splitToolFailures(text), [text]);
+  const failed = split.failures.length > 0 ? (
+    <div data-testid="session-tool-failure" className="wk-session-tool-failures">
+      {/* One line per distinct fact (two identical refusals read once). */}
+      {[...new Set(split.failures.map((f) => `${who} couldn’t ${f.verb}: ${f.why}.`))].map((line) => (
+        <p key={line} className="wk-session-grey wk-session-tool-failure">{line}</p>
+      ))}
+      <TechDetails data-testid="session-tool-failure-detail" text={split.failures.map((f) => f.raw)} />
+    </div>
+  ) : null;
+  return (
+    <div className={`wk-session-text${ok ? '' : ' wk-session-grey'}`}>
+      {split.text !== '' && <Markdown marks={citationMarks(citations)}>{split.text}</Markdown>}
+      {failed}
+      {/* The daemon's citation verdicts: one quiet count line; the flagged list opens under it (the
+          marks on the text above stay where they sit). */}
+      {citations !== undefined && citations.items.length > 0 && (
+        <details data-testid="seat-citations-details" className="wk-tech-details wk-session-citations">
+          <summary data-testid="seat-citations-toggle" className="wk-tech-details-summary">Citations: {citationLabel(citations)}</summary>
+          <CitationStrip citations={citations} />
+        </details>
+      )}
+    </div>
+  );
+}
+
 /** ASK-S2 (§4.7): the ask path's Continue in Build card, in the thread where the proposal landed —
  *  the run's own block stays hidden until the work is accepted (rule 3). */
 function AskProposalBlock({ view, ask, onBringBack }: { view: RunView; ask: AskProposal; onBringBack: () => void }): React.ReactElement {
@@ -703,10 +736,13 @@ function TurnDecisions({ chatId, turnId, navigate }: { chatId: string; turnId: s
   return <DecisionLine decisions={decisions} navigate={navigate} />;
 }
 
-export function RunBlock({ view, badge, sessionId, navigate }: {
+export function RunBlock({ view, badge, sessionId, navigate, solo = null }: {
   view: RunView;
   badge: number;
   sessionId: string;
+  /** Audit row 26: the session's title when this is its ONLY run — the header already says the
+   *  title, the state and what needs you, so the card does not say them again. */
+  solo?: string | null;
   /** S16a-1c: the record lines' links (the stop story's "All runs ›", rule links). */
   navigate?: Navigate;
 }): React.ReactElement {
@@ -761,34 +797,47 @@ export function RunBlock({ view, badge, sessionId, navigate }: {
     const mine = pinned !== null ? pinned === id : sessionId === `run:${id}`;
     return mine ? parseJump(searchNow) : null;
   }, [searchNow, id, sessionId]);
+  const runTitleText = plainRunTitle(view.session.problem || id);
+  const soloHead = solo !== null && solo === runTitleText;
   return (
     <section data-testid="session-run" data-run-id={id} data-state={state} {...(acceptance !== null ? { 'data-acceptance': 'read' } : {})} className="wk-session-run">
       <p className="wk-session-run-head">
-        <span aria-hidden className={`wk-desk-dot wk-desk-dot--${state}`} />
-        <span className="wk-session-run-title">{plainRunTitle(view.session.problem || id)}</span>
+        {/* Audit row 26: one status per surface. A session's only run does not repeat the page's title,
+            dot or "needs you": its head IS its status sentence. */}
+        {soloHead ? (
+          <span data-testid="session-status-sentence" role="status" className="wk-session-run-title wk-session-status-sentence">
+            {statusSentence(view, chain, gate, action)}
+            {view.session.archived_at != null && <span data-testid="session-run-archived" className="wk-session-grey"> · Archived</span>}
+          </span>
+        ) : (
+          <>
+            <span aria-hidden className={`wk-desk-dot wk-desk-dot--${state}`} />
+            <span className="wk-session-run-title">{runTitleText}</span>
+          </>
+        )}
         <RunAssuranceLabel view={view} />
-        <span className="wk-session-run-state">{badge > 0 ? 'Needs you' : STATE_WORD[state]}</span>
+        {badge > 0 && solo === null && <span className="wk-session-run-state">Needs you</span>}
         {/* S15d (Amendment 5 item 1): the run stays in the thread — its depth (every step and what it did,
             the changes, the evidence) is the look-underneath sheet of THIS run (its own `run:` session,
             not the chat's: a chat's sheet would show its newest run), never a page of its own. */}
         <button type="button" data-testid="session-run-look" aria-label="Look underneath this run: its steps, changes and evidence" title="Steps, changes, evidence" onClick={() => openSheet({ kind: 'session', sessionId: `run:${id}` }, 'steps')} className="wk-sheet-open wk-sheet-open--run">⋯</button>
       </p>
       {/* S6b: the run's ONE status sentence, then its proposal (the plan, the hand-over). */}
-      <p data-testid="session-status-sentence" role="status" className="wk-session-status-sentence">
-        {statusSentence(view, chain, gate, action)}
-        {view.session.archived_at != null && <span data-testid="session-run-archived" className="wk-session-grey"> · Archived</span>}
-        {/* S16a-1d: Retry a failed or cancelled run — the Desk row's prefill, the launch form; no POST. */}
-        {navigate !== undefined && (view.session.status === 'failed' || view.session.status === 'cancelled') && (
-          <>{' '}<button type="button" data-testid="session-run-retry" onClick={() => startRetry(view, navigate)} className="wk-since-toggle" title="Open the launch form prefilled with this run's intent and settings — nothing starts until you send">Retry ›</button></>
-        )}
-      </p>
+      {!soloHead && (
+        <p data-testid="session-status-sentence" role="status" className="wk-session-status-sentence">
+          {statusSentence(view, chain, gate, action)}
+          {view.session.archived_at != null && <span data-testid="session-run-archived" className="wk-session-grey"> · Archived</span>}
+        </p>
+      )}
       {/* S16a-1d: the run's technical handles, when Settings › Show technical details is on. */}
       <Tech data-testid="tech-session-run" parts={runTechParts({ id, base_commit: view.session.base_commit, clis: view.session.clis })} block />
       <OrphanedRow view={view} />
-      <FailedResumeRow view={view} />
       {/* S16a-1c: the run's record lines — why it stopped, the amended acceptance list, a short
           council, the Watchtower's lines (and "You jumped in" when the address carries ?jump=). */}
       <RunRecordLines view={view} jumped={jump !== null} {...(navigate === undefined ? {} : { navigate })} />
+      {/* Audit row 27: a stopped run's two ways on, as two buttons: Resume (this run, in place) and
+          Start over (S16a-1d: the launch form prefilled; nothing starts until you send). */}
+      <RecoveryRow view={view} {...(navigate === undefined ? {} : { navigate })} />
       {/* S15e: plan and deliver go through ProposalCard; every other gate kind is answered in the thread. */}
       {effectiveKind === 'plan' || effectiveKind === 'deliver'
         ? <ProposalCard view={view} chain={chain} acceptance={acceptance?.summary ?? null} />
@@ -840,20 +889,22 @@ function OrphanedRow({ view }: { view: RunView }): React.ReactElement | null {
       {ORPHANED_LINE}{' '}
       {sent === 'asked'
         ? <span data-testid="session-orphaned-asked">Resume asked — waiting for the step to start again.</span>
-        : <button type="button" data-testid="session-orphaned-resume" disabled={sent === 'sending'} onClick={resume} className="wk-since-toggle">{sent === 'sending' ? 'Resuming…' : 'Resume'}</button>}
-      {sent === 'failed' && <span data-testid="session-orphaned-error"> Resume failed: {error}</span>}
+        : <button type="button" data-testid="session-orphaned-resume" disabled={sent === 'sending'} onClick={resume} className="wk-btn wk-btn--secondary wk-btn--sm">{sent === 'sending' ? 'Resuming…' : 'Resume'}</button>}
+      {sent === 'failed' && <span data-testid="session-orphaned-error"> Resume didn’t go through.</span>}
+      {sent === 'failed' && error !== null && <TechDetails data-testid="session-orphaned-error-detail" text={error} />}
     </p>
   );
 }
 
 /**
- * studio#615: a FAILED run counts as needing you (the Desk's failed-run row), so its block says what
- * to do — "It stopped: Resume or start over" — and offers the in-place recovery the engine has:
- * Resume (`POST /runs/:id/resume`) continues THIS run from its cursor (the same worktree, the same
- * finished steps; a re-opened gate comes back to the thread). Retry stays the separate start-over
- * (a new launch). A refusal (crew's 409) is said in its own words, beside the arm.
+ * studio#615 + audit row 27: a stopped run's ways on, as two separate buttons.
+ *  - Resume (`POST /runs/:id/resume`, FAILED runs only) continues THIS run from its cursor — the same
+ *    worktree, the same finished steps; a re-opened gate comes back to the thread.
+ *  - Start over (S16a-1d, failed or cancelled) opens the launch form prefilled with this run's intent
+ *    and settings — nothing starts until you send.
+ * A refusal (crew's 409) is said in plain words; its own text is Technical details.
  */
-function FailedResumeRow({ view }: { view: RunView }): React.ReactElement | null {
+function RecoveryRow({ view, navigate }: { view: RunView; navigate?: Navigate }): React.ReactElement | null {
   const id = view.session.id;
   const status = view.session.status;
   const [sent, setSent] = useState<'idle' | 'sending' | 'asked' | 'failed'>('idle');
@@ -861,7 +912,9 @@ function FailedResumeRow({ view }: { view: RunView }): React.ReactElement | null
   // A receipt is for ONE failure: leaving the failed state (the resume took) clears it, so the same
   // run failing again offers Resume again (codex r1).
   useEffect(() => { setSent('idle'); setError(null); }, [id, status]);
-  if (status !== 'failed' || view.session.archived_at != null) return null;
+  const canResume = status === 'failed' && view.session.archived_at == null;
+  const canStartOver = navigate !== undefined && (status === 'failed' || status === 'cancelled');
+  if (!canResume && !canStartOver) return null;
   const resume = (): void => {
     setSent('sending');
     setError(null);
@@ -876,13 +929,18 @@ function FailedResumeRow({ view }: { view: RunView }): React.ReactElement | null
     );
   };
   return (
-    <p data-testid="session-failed-resume" role="status" className="wk-session-grey">
-      It stopped: Resume or start over.{' '}
-      {sent === 'asked'
-        ? <span data-testid="session-failed-resume-asked">Resume asked — the run picks up where it stopped.</span>
-        : <button type="button" data-testid="session-failed-resume-button" disabled={sent === 'sending'} onClick={resume} className="wk-since-toggle" title="Continue this run where it stopped — the same worktree and finished steps; nothing new is launched">{sent === 'sending' ? 'Resuming…' : 'Resume'}</button>}
-      {sent === 'failed' && <span data-testid="session-failed-resume-error"> Resume refused: {error}</span>}
-    </p>
+    <div data-testid="session-failed-resume" role="status" className="wk-session-recovery">
+      <div className="wk-session-recovery-actions">
+        {canResume && (sent === 'asked'
+          ? <span data-testid="session-failed-resume-asked" className="wk-session-grey">Resuming: the run picks up where it stopped.</span>
+          : <button type="button" data-testid="session-failed-resume-button" disabled={sent === 'sending'} onClick={resume} className="wk-btn wk-btn--secondary wk-btn--sm" title="Continue this run where it stopped: the same worktree and finished steps; nothing new is launched">{sent === 'sending' ? 'Resuming…' : 'Resume'}</button>)}
+        {canStartOver && navigate !== undefined && (
+          <button type="button" data-testid="session-run-retry" onClick={() => startRetry(view, navigate)} className="wk-btn wk-btn--quiet wk-btn--sm" title="Open the launch form prefilled with this run's intent and settings; nothing starts until you send">Start over</button>
+        )}
+      </div>
+      {sent === 'failed' && <p data-testid="session-failed-resume-error" className="wk-session-grey">Resume was refused.</p>}
+      {sent === 'failed' && error !== null && <TechDetails data-testid="session-failed-resume-error-detail" text={error} />}
+    </div>
   );
 }
 
@@ -902,21 +960,30 @@ function PlanStepLines({ runId }: { runId: string }): React.ReactElement | null 
       {(queued ?? []).map((q) => (
         <p key={`q${q.id}`} data-testid="session-step-queued" data-catalog={q.catalog} className="wk-session-grey">
           Adding {wordOf(q.catalog)} ·{' '}
-          <button type="button" data-testid="session-step-undo" onClick={() => undoDecision(q.id)} className="wk-since-toggle">Undo</button>
+          <button type="button" data-testid="session-step-undo" onClick={() => undoDecision(q.id)} className="wk-btn wk-btn--quiet wk-btn--sm">Undo</button>
         </p>
       ))}
     </div>
   );
 }
 
-/** S11: the helpers working on a run, each a way into its sheet (terminal, what it did, sign-in). */
+/**
+ * S11: the helpers working on a run, each a way into its sheet (terminal, what it did, sign-in).
+ * Audit row 26: only real helpers (CLI seats on the roster) are listed, each by its one name
+ * (`seatLabel`); a non-CLI tool a step ran on ("wicked-estate") is not a helper.
+ */
 function RunHelpers({ view }: { view: RunView }): React.ReactElement | null {
-  const clis = [...new Set(view.units.map((u) => u.assigned_cli).filter((c): c is string => typeof c === 'string' && c !== ''))];
-  if (clis.length === 0) return null;
+  const roster = useRoster();
+  const assigned = [...new Set(view.units.map((u) => u.assigned_cli).filter((c): c is string => typeof c === 'string' && c !== ''))];
+  if (roster === null) return null;
+  const helpers = assigned
+    .map((cli) => ({ cli, seat: roster.find((s) => s.key === cli) }))
+    .filter((h): h is { cli: string; seat: NonNullable<typeof h.seat> } => h.seat !== undefined && isCliSeat(h.seat));
+  if (helpers.length === 0) return null;
   return (
     <p data-testid="session-run-helpers" className="wk-session-grey">
       Helpers:{' '}
-      {clis.map((cli, i) => (
+      {helpers.map(({ cli, seat }, i) => (
         <span key={cli}>
           {i > 0 && ' · '}
           <button
@@ -925,9 +992,9 @@ function RunHelpers({ view }: { view: RunView }): React.ReactElement | null {
             data-cli={cli}
             data-object={`helper:${view.session.id}:${cli}`}
             onClick={() => openSheet({ kind: 'helper', runId: view.session.id, cli })}
-            className="wk-since-toggle"
+            className="wk-link wk-session-helper-link"
           >
-            {cli}
+            {seatLabel(seat)}
           </button>
         </span>
       ))}

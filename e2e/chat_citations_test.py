@@ -119,6 +119,9 @@ with sync_playwright() as p:
     # The daemon's verdicts, stamped with the turn the send opened (`t-1`).
     set_fixture(origin, chat_frames=[{**CITATIONS, "chat": chat_id, "cliKey": seat, "turn_id": "t-1"}])
     page.goto(f"{origin}/s/{chat_id}", wait_until="networkidle")
+    # S2 (studio#683): the verdict list folds under its one-line count; open it to read the strip.
+    page.locator(TID("seat-citations-toggle")).first.wait_for(timeout=15000)
+    page.locator(TID("seat-citations-toggle")).first.click()
     page.locator(TID("seat-citations")).wait_for(timeout=15000)
     page.wait_for_timeout(300)
     page.screenshot(path=str(SHOTS / "chat-citations-marked.png"))

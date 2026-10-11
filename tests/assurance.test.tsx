@@ -231,7 +231,7 @@ describe('the receipt renders', () => {
     const g: OpenGate = { runId: RUN, ord: 2, prompt: 'Unit 2 could not be judged — no eligible judge seat remained: no eligible judge seat. The work was not rejected. Sign a judge seat in (or reassign), then approve to re-run the phase, or reject to cancel the run', lifecycle: 'open', receivedAt: NOW, gateKind: 'escalation' };
     const navigate = vi.fn();
     render(<GateRow view={makeView({ id: RUN, status: 'awaiting_human' } as never, UNITS)} gate={g} navigate={navigate} />);
-    expect(screen.getByTestId('session-gate-judge-wait').textContent).toMatch(/^Waiting for a judge seat\./);
+    expect(screen.getByTestId('session-gate-judge-wait').textContent).toMatch(/^Waiting for an independent check\./);
     fireEvent.click(screen.getByTestId('session-gate-judge-signin'));
     expect(navigate).toHaveBeenCalledWith('/system');
     expect(screen.getByTestId('assurance-kind').textContent).toBe('Floor checks only');

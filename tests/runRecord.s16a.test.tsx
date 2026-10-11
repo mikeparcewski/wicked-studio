@@ -33,13 +33,13 @@ function seed(rejectNote: string | null, s: ReturnType<typeof story>): void {
 }
 
 describe('S16a-1c — the cancel / stop story in the thread', () => {
-  it('cancelled · rejected: "Run cancelled." and the operator’s own words, quoted', () => {
+  it('cancelled · rejected: the operator’s own words, quoted (the status sentence says Cancelled)', () => {
     seed('the scope is wrong', story({ rejectNote: 'the scope is wrong' }));
     render(<RunStory view={makeView({ id: RUN, status: 'cancelled' })} />);
     const line = screen.getByTestId('failure-banner');
     expect(line).toHaveAttribute('data-kind', 'cancelled');
     expect(line).toHaveAttribute('data-cause', 'rejected');
-    expect(line).toHaveTextContent('Run cancelled.');
+    expect(line).not.toHaveTextContent('Run cancelled.');
     expect(screen.getByTestId('failure-reject-note')).toHaveTextContent('You rejected it: “the scope is wrong”');
   });
 
@@ -48,7 +48,7 @@ describe('S16a-1c — the cancel / stop story in the thread', () => {
     render(<RunStory view={makeView({ id: RUN, status: 'cancelled' })} />);
     const line = screen.getByTestId('failure-banner');
     expect(line).toHaveAttribute('data-cause', 'engine-timeout');
-    expect(line).toHaveTextContent('Run cancelled — the engine stopped it: a worker turn hit its time ceiling.');
+    expect(line).toHaveTextContent('It was stopped automatically: a step ran past its time limit.');
     expect(screen.queryByTestId('failure-reject-note')).toBeNull();
   });
 
@@ -59,16 +59,21 @@ describe('S16a-1c — the cancel / stop story in the thread', () => {
     expect(screen.getByTestId('failure-send-back-note')).toHaveTextContent('Your last send-back to the creator (acted on — not a rejection): “add the regression test”');
   });
 
-  it('failed: "Run halted." with the refused unit’s plain headline and the engine’s detail', () => {
+  it('failed: the refused step’s plain headline, with the engine’s detail behind Technical details (#682 row 5)', () => {
     const view = makeView({ id: RUN, status: 'failed' }, [
       makeUnit({ id: `${RUN}:u2`, session_id: RUN, ord: 2, status: 'rejected', denial_reason: 'input governance denied a tool-call in unit-2 (claim boundary-deny:unit-2)' }),
     ]);
     render(<RunStory view={view} />);
     const line = screen.getByTestId('failure-banner');
     expect(line).toHaveAttribute('data-kind', 'failed');
-    expect(line).toHaveTextContent('Run halted.');
-    expect(screen.getByTestId('failure-plain')).toBeInTheDocument();
-    expect(screen.getByTestId('failure-engine-detail')).toHaveTextContent('engine detail:');
+    expect(line).not.toHaveTextContent('Run halted.');
+    const plain = screen.getByTestId('failure-plain').querySelector('.wk-session-run-story-line')!;
+    expect(plain).toHaveTextContent('tried to change files outside its workspace');
+    expect(plain).not.toHaveTextContent(/unit/i);
+    const detail = screen.getByTestId('failure-engine-detail');
+    expect(detail.tagName).toBe('DETAILS');
+    expect(detail).not.toHaveAttribute('open');
+    expect(detail).toHaveTextContent('boundary-deny:unit-2');
   });
 
   it('a run that did not stop says nothing — and reads no audit', () => {

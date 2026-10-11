@@ -35,6 +35,27 @@ SHOTS = REPO / "e2e" / "shots"
 report: dict = {"ok": False, "steps": {}}
 
 
+def sheet_tab_ids(page) -> list:
+    """Every tab of the open sheet: the tablist, then the ones behind "More" (UI-CONTRACT §4.4)."""
+    ids = page.locator('[data-testid="sheet"] [role="tab"]').evaluate_all("els => els.map(e => e.dataset.tab)")
+    more = page.get_by_test_id("sheet-tabs-more-button")
+    if more.count() > 0:
+        more.click()
+        ids += page.locator('[data-testid="sheet-tabs-more-list"] [data-item]').evaluate_all("els => els.map(e => e.dataset.item)")
+        more.click()
+    return ids
+
+
+def sheet_tab(page, tab: str) -> None:
+    """Open a sheet tab, through "More" when it is not in the visible tablist."""
+    loc = page.locator(f'[data-testid="sheet"] [role="tab"][data-tab="{tab}"]')
+    if loc.count() > 0:
+        loc.first.click()
+        return
+    page.get_by_test_id("sheet-tabs-more-button").click()
+    page.locator(f'[data-testid="sheet-tabs-more-list"] [data-item="{tab}"]').click()
+
+
 def fail(step: str, why) -> None:
     report["steps"][step] = {"ok": False, "error": why}
     print(json.dumps(report, indent=2))
@@ -73,7 +94,7 @@ with sync_playwright() as p:
     set_fixture(origin, wave1=True, sheets=True, reset_gate_posts=True)
 
     def tabs() -> list:
-        return page.get_by_test_id("sheet-tab").evaluate_all("els => els.map(e => e.dataset.tab)")
+        return sheet_tab_ids(page)
 
     # ── 1. the Desk's sheet ────────────────────────────────────────────────────────
     page.goto(f"{origin}/", wait_until="networkidle")
@@ -83,9 +104,9 @@ with sync_playwright() as p:
     desk_tabs = tabs()
     primary = page.get_by_test_id("sheet-primary").inner_text()
     for t in desk_tabs:
-        page.locator(f'[data-testid="sheet-tab"][data-tab="{t}"]').click()
+        sheet_tab(page, t)
         page.wait_for_timeout(150)
-    page.locator('[data-testid="sheet-tab"][data-tab="studio"]').click()
+    sheet_tab(page, "studio")
     page.wait_for_timeout(400)
     studio = page.get_by_test_id("sheet-body").inner_text()
     page.screenshot(path=str(SHOTS / "desk-sheets-desk.png"))
@@ -101,10 +122,10 @@ with sync_playwright() as p:
     page.get_by_test_id("session-sheet-open").click()
     page.get_by_test_id("sheet").wait_for(state="visible", timeout=5000)
     s_tabs = tabs()
-    page.locator('[data-testid="sheet-tab"][data-tab="governance"]').click()
+    sheet_tab(page, "governance")
     page.get_by_test_id("sheet-section").wait_for(state="visible", timeout=5000)
     section = page.get_by_test_id("sheet-section").get_attribute("data-section")
-    page.locator('[data-testid="sheet-tab"][data-tab="helpers"]').click()
+    sheet_tab(page, "helpers")
     helpers = page.get_by_test_id("sheet-helper-open").count()
     page.screenshot(path=str(SHOTS / "desk-sheets-session.png"))
     page.get_by_test_id("sheet-close").click()
@@ -119,7 +140,7 @@ with sync_playwright() as p:
     page.get_by_test_id("sheet").wait_for(state="visible", timeout=5000)
     title = page.get_by_test_id("sheet-title").inner_text()
     first_tab = page.get_by_test_id("sheet-body").get_attribute("data-tab")
-    page.locator('[data-testid="sheet-tab"][data-tab="did"]').click()
+    sheet_tab(page, "did")
     page.wait_for_timeout(600)
     did = page.get_by_test_id("sheet-body").inner_text()
     page.screenshot(path=str(SHOTS / "desk-sheets-step.png"))

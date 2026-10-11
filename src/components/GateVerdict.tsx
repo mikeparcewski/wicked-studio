@@ -1,4 +1,6 @@
 import { CopyButton } from './CopyButton.js';
+import { useDisplayText } from '../hooks/useHomePath.js';
+import { TechDetails } from './ui/index.js';
 import {
   checkOutcome,
   checkTails,
@@ -38,9 +40,17 @@ import {
  * Own testids (`gate-verdict-*`): the run page's `verdict-detail` card keeps its selector.
  */
 export function GateVerdict({ view, phase }: { view: GateVerdictView; phase: string }): React.ReactElement {
+  const showText = useDisplayText();
   const { outcome } = view;
   const word = outcome === 'fail' ? 'DENIED' : outcome === 'pass' ? 'PASS' : 'UNGATED';
   const vacuous = view.evaluatorPolicies.length === 0 && view.evaluatorPass === true;
+  const step = phase;
+  const headline = outcome === 'fail' ? `${step} was stopped by a check`
+    : outcome === 'ungated' && view.hasDeterministicFloor
+      ? `Repository checks ran for ${step} — no independent review ran`
+      : outcome === 'ungated' && view.evaluatorPolicies.length > 0 ? `${step} passed its automatic checks — no independent review ran`
+      : outcome === 'ungated' ? `No checks were set for ${step} — it passed by default, nothing was verified`
+        : `Checks passed for ${step}`;
 
   return (
     <div
@@ -50,8 +60,12 @@ export function GateVerdict({ view, phase }: { view: GateVerdictView; phase: str
       {...(view.attempt !== null ? { 'data-phase-attempt': view.attempt } : {})}
       {...(view.denial !== null && view.denial.source !== null ? { 'data-denial-source': view.denial.source } : {})}
       // wk-verdict: a wash with a status rule on the left; only the heading takes the tone.
-      className={`wk-verdict wk-verdict--${outcome} rounded-lg p-3 mb-3 flex flex-col gap-1 font-mono`}
+      className={`wk-session-verdict wk-verdict wk-verdict--${outcome}`}
     >
+      <p className="wk-verdict-head">{headline.charAt(0).toUpperCase() + headline.slice(1)}</p>
+      <details className="wk-tech-details">
+        <summary className="wk-tech-details-summary">Technical details</summary>
+        <div className="wk-session-verdict-details" data-tech="on">
       <p className="wk-verdict-head text-xs font-semibold">
         Evaluator verdict — {phase} · {word}
         {view.judgeCli !== null && (
@@ -82,7 +96,7 @@ export function GateVerdict({ view, phase }: { view: GateVerdictView; phase: str
 
       {view.criterion !== null && (
         <p className="text-[11px]" data-testid="gate-verdict-criterion" style={{ color: 'var(--ink-muted)' }}>
-          criterion: {view.criterion}
+          criterion: {showText(view.criterion)}
         </p>
       )}
 
@@ -90,7 +104,7 @@ export function GateVerdict({ view, phase }: { view: GateVerdictView; phase: str
         <p className="text-[11px]" data-testid="gate-verdict-judge" style={{ color: 'var(--ink-body)' }}>
           {view.agentVerdict !== null && <span className="font-semibold">judge: {view.agentVerdict}</span>}
           {view.agentVerdict !== null && view.agentReasoning !== null && ' — '}
-          {view.agentReasoning}
+          {view.agentReasoning !== null ? showText(view.agentReasoning) : null}
         </p>
       )}
 
@@ -109,7 +123,7 @@ export function GateVerdict({ view, phase }: { view: GateVerdictView; phase: str
           data-judge-distinct={view.judgeDistinct === null ? 'unknown' : String(view.judgeDistinct)}
           style={{ color: 'var(--status-gate)' }}
         >
-          judge skipped — {view.judgeSkipped}
+          judge skipped — {showText(view.judgeSkipped)}
           {view.judgeDistinct === false ? ' (judgeDistinct: false — evaluator ≠ creator was not held)' : ''}
         </p>
       )}
@@ -124,7 +138,7 @@ export function GateVerdict({ view, phase }: { view: GateVerdictView; phase: str
           style={{ overflowWrap: 'anywhere' }}
         >
           <span className="wk-verdict-label font-semibold">denied by {denialSourceLabel(view.denial.source)}: </span>
-          {splitBackticks(view.denial.reason).map((part, i) =>
+          {splitBackticks(showText(view.denial.reason)).map((part, i) =>
             i % 2 === 1 ? (
               <code key={i} className="px-1 rounded" style={{ background: 'var(--surface-rail)', color: 'var(--ink-high)' }}>
                 {part}
@@ -145,7 +159,7 @@ export function GateVerdict({ view, phase }: { view: GateVerdictView; phase: str
           {': '}
           {view.mutation.changed.length === 0
             ? 'no path listed'
-            : view.mutation.changed.map((c) => `${c.status} ${c.path}`).join(', ')}
+            : showText(view.mutation.changed.map((c) => `${c.status} ${c.path}`).join(', '))}
           {view.mutation.beforeTree !== '' && view.mutation.afterTree !== '' && (
             <span style={{ color: 'var(--ink-dim)' }}>
               {' '}(tree {view.mutation.beforeTree.slice(0, 10)} → {view.mutation.afterTree.slice(0, 10)})
@@ -171,7 +185,7 @@ export function GateVerdict({ view, phase }: { view: GateVerdictView; phase: str
           {' — discarded: '}
           {(() => {
             const paths = view.restore !== null ? view.restore.discarded : view.mutation.changed;
-            return paths.length === 0 ? 'no path listed' : paths.map((c) => `${c.status} ${c.path}`).join(', ');
+            return paths.length === 0 ? 'no path listed' : showText(paths.map((c) => `${c.status} ${c.path}`).join(', '));
           })()}
           {view.restore !== null && view.restore.tree !== '' && (
             <span style={{ color: 'var(--ink-dim)' }}> (tree {shortId(view.restore.tree)})</span>
@@ -203,7 +217,7 @@ export function GateVerdict({ view, phase }: { view: GateVerdictView; phase: str
       {view.mutation !== null && view.mutation.restored === false && (
         <p className="text-[11px]" data-testid="gate-verdict-restore-failed" style={{ color: 'var(--status-fail)', overflowWrap: 'anywhere' }}>
           the creator&apos;s tree was NOT restored
-          {view.mutation.restoreError !== null && `: ${view.mutation.restoreError}`}
+          {view.mutation.restoreError !== null && `: ${showText(view.mutation.restoreError)}`}
           {' — the manual remedy in the denial stands; approving retries against the tree as it is'}
         </p>
       )}
@@ -219,7 +233,7 @@ export function GateVerdict({ view, phase }: { view: GateVerdictView; phase: str
             <span className="font-semibold" style={{ color: view.floor.passed ? 'var(--status-done)' : 'var(--status-fail)' }}>
               repository checks — {view.floor.passed ? 'pass' : 'fail'}
             </span>
-            {view.floor.criterion !== '' && <span style={{ color: 'var(--ink-muted)' }}> · {view.floor.criterion}</span>}
+            {view.floor.criterion !== '' && <span style={{ color: 'var(--ink-muted)' }}> · {showText(view.floor.criterion)}</span>}
           </p>
           {view.floor.checks.length === 0 ? (
             <p style={{ color: 'var(--ink-muted)' }}>
@@ -240,24 +254,16 @@ export function GateVerdict({ view, phase }: { view: GateVerdictView; phase: str
                   >
                     <span className="font-semibold">{c.name}</span>
                     {' · '}
-                    <span style={{ color: o.ok ? 'var(--status-done)' : 'var(--status-fail)' }}>{o.word}</span>
+                    <span style={{ color: o.ok ? 'var(--status-done)' : 'var(--status-fail)' }}>{showText(o.word)}</span>
                     {' · '}
                     {formatDuration(c.durationMs)}
-                    {c.source !== '' && <span style={{ color: 'var(--ink-dim)' }}> · {c.source}</span>}
+                    {c.source !== '' && <span style={{ color: 'var(--ink-dim)' }}> · {showText(c.source)}</span>}
                   
                     {/* The evidence behind a red row (F-255-03): the stream tails the engine recorded, collapsed. */}
                     {checkTails(c).map((t) => (
-                      <details key={t.stream} data-testid="gate-verdict-check-tail" data-stream={t.stream} className="mt-0.5">
-                        <summary className="cursor-pointer" style={{ color: 'var(--ink-muted)' }}>
-                          {t.stream} tail — the check&apos;s own output, verbatim
-                        </summary>
-                        <pre
-                          className="mt-1 p-1.5 rounded overflow-auto text-[10px] leading-snug"
-                          style={{ maxHeight: '12rem', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', background: 'var(--surface-rail)', color: 'var(--ink-high)' }}
-                        >
-                          {t.text}
-                        </pre>
-                      </details>
+                      <div key={t.stream} data-testid="gate-verdict-check-tail" data-stream={t.stream}>
+                        <TechDetails summary={`${t.stream} tail — the check's own output, verbatim`} text={t.text} />
+                      </div>
                     ))}
                   </li>
                 );
@@ -305,7 +311,7 @@ export function GateVerdict({ view, phase }: { view: GateVerdictView; phase: str
         >
           {view.ungated
             ? <>
-                <span className="font-semibold">UNGATED — {view.ungatedReason ?? 'the engine convened no judge'}</span>
+                <span className="font-semibold">UNGATED — {showText(view.ungatedReason ?? 'the engine convened no judge')}</span>
                 {view.hasDeterministicFloor
                   ? ' · the repository checks above ran; no distinct judge reviewed the work, so evaluator ≠ creator is not held on this verdict'
                   : ' · no repository checks ran and no judge reviewed the work — approved by default, not verified'}
@@ -313,6 +319,8 @@ export function GateVerdict({ view, phase }: { view: GateVerdictView; phase: str
             : 'nothing gated this phase — it was approved by default, not verified'}
         </p>
       )}
+        </div>
+      </details>
     </div>
   );
 }

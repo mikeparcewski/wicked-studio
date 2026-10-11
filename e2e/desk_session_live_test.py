@@ -30,6 +30,27 @@ SHOTS = REPO / "e2e" / "shots"
 report: dict = {"ok": False, "steps": {}}
 
 
+def sheet_tab_ids(page) -> list:
+    """Every tab of the open sheet: the tablist, then the ones behind "More" (UI-CONTRACT §4.4)."""
+    ids = page.locator('[data-testid="sheet"] [role="tab"]').evaluate_all("els => els.map(e => e.dataset.tab)")
+    more = page.get_by_test_id("sheet-tabs-more-button")
+    if more.count() > 0:
+        more.click()
+        ids += page.locator('[data-testid="sheet-tabs-more-list"] [data-item]').evaluate_all("els => els.map(e => e.dataset.item)")
+        more.click()
+    return ids
+
+
+def sheet_tab(page, tab: str) -> None:
+    """Open a sheet tab, through "More" when it is not in the visible tablist."""
+    loc = page.locator(f'[data-testid="sheet"] [role="tab"][data-tab="{tab}"]')
+    if loc.count() > 0:
+        loc.first.click()
+        return
+    page.get_by_test_id("sheet-tabs-more-button").click()
+    page.locator(f'[data-testid="sheet-tabs-more-list"] [data-item="{tab}"]').click()
+
+
 def fail(step: str, why) -> None:
     report["steps"][step] = {"ok": False, "error": why}
     print(json.dumps(report, indent=2))
@@ -123,6 +144,7 @@ with sync_playwright() as p:
     page.locator('[data-testid="session-run"][data-run-id="r-pay-2"] [data-testid="session-run-look"]').click()
     page.get_by_test_id("sheet-body").wait_for(state="visible", timeout=5000)
     s0 = page.evaluate(SHEET)
+    s0["tabs"] = sheet_tab_ids(page)
     page.screenshot(path=str(SHOTS / "desk-session-live-steps.png"))
     page.locator('[data-testid="sheet-step-row"]').nth(1).get_by_test_id("sheet-step-open").click()
     try:

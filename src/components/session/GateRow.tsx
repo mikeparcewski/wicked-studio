@@ -11,7 +11,9 @@ import { diffstatOf, type DeliverRefusal } from '../gateMoveModel.js';
 import { secondsLeft, undoDecision, useUndoQueue } from '../../board/undoQueue.js';
 import { useRunEvents } from '../../hooks/useRunEvents.js';
 import { getCachedRoster, subscribeRoster } from '../../store/rosterCache.js';
-import type { OpenGate } from '../../store/gates.js';
+import { choicesOf, type OpenGate } from '../../store/gates.js';
+import type { CoreEvent, WorkUnit } from '../../api/types.js';
+import { steerScopeTarget } from '../gateVerdictModel.js';
 import { useRerunFromHere } from '../../hooks/useRerunFromHere.js';
 import type { RerunOffer } from '../rerunModel.js';
 import { GateDepthDetails, RuleOfferBlock, useFullVerdict, useSeatTrust, type SeatTrust } from './GateDepth.js';
@@ -74,6 +76,44 @@ export function GateRow({ view, gate, chatId, navigate }: {
   return <RunGateRow view={view} gate={gate} {...(navigate !== undefined ? { navigate } : {})} />;
 }
 
+/**
+ * Crew's `GET /runs/:id/gate` caches only the prompt (no `choices`, `recommended` or `gateKind`), so a
+ * gate this client did not see live — a reload, a late join — lost what the engine offered: a team
+ * dispute read back as Approve / Reject only, without its Send back (rig run ac5d1033). The run's own
+ * log has the `awaitingHuman` frame that opened the gate; what the cached gate lacks is read from the
+ * newest one for the same step. Pure.
+ */
+export function gateWithLogChoices(gate: OpenGate, events: readonly CoreEvent[]): OpenGate {
+  if (gate.choices !== undefined && gate.gateKind !== undefined) return gate;
+  for (let i = events.length - 1; i >= 0; i -= 1) {
+    const e = events[i] as unknown as Record<string, unknown>;
+    if (e['type'] !== 'awaitingHuman' || e['ord'] !== gate.ord) continue;
+    const choices = gate.choices !== undefined ? undefined : choicesOf(e);
+    const rec = e['recommended'];
+    const kind = e['gateKind'];
+    return {
+      ...gate,
+      ...(choices !== undefined ? { choices } : {}),
+      ...(gate.recommended === undefined && typeof rec === 'number' ? { recommended: rec } : {}),
+      ...(gate.gateKind === undefined && typeof kind === 'string' ? { gateKind: kind } : {}),
+    };
+  }
+  return gate;
+}
+
+/**
+ * Crew's approve-with-note reaches the NEXT unit, or with `amendScope: 'creator'` the next creator at
+ * or after the gate (api/wave6-wire.ts). On a review gate the builder is BEHIND the cursor, so no
+ * approve reaches it — only Send back does. The steer arm there says where the note really goes.
+ */
+export function steerReachesBuilder(units: readonly WorkUnit[], ord: number | undefined): boolean {
+  if (typeof ord !== 'number') return true;
+  if (steerScopeTarget(units, ord) !== null) return true;
+  const cursor = units.find((u) => u.ord === ord);
+  if (cursor === undefined || cursor.role === 'creator') return true;
+  return !units.some((u) => u.ord < ord && u.role === 'creator');
+}
+
 const NO_UNITS: readonly never[] = [];
 const NO_EVENTS: readonly never[] = [];
 
@@ -111,7 +151,18 @@ function RunGateRow({ view, gate, navigate }: { view: RunView; gate: OpenGate | 
   const fullVerdict = useFullVerdict(runId, view.units, events, gate);
   const model = useMemo<GateRowModel | null>(() => {
     if (gate === undefined || events === null) return null;
-    return sessionGateChoices({ runId, gate, units: view.units, events, pool, roster, rerun: rerunOffer, fullVerdict });
+    const result = sessionGateChoices({ runId, gate: gateWithLogChoices(gate, events), units: view.units, events, pool, roster, rerun: rerunOffer, fullVerdict });
+    if (result === null) return null;
+    const toBuilder = steerReachesBuilder(view.units, gate.ord);
+    // Label each arm by its effect: the denied-step approve re-runs the step; a steer on a review gate
+    // reaches the next step, not the builder (Send back is the way to the builder).
+    const effectLabel = (choice: GateRowChoice): GateRowChoice => choice.key === 'approve'
+      && /^Re-run the step from the start\b/.test(choice.title)
+      ? { ...choice, label: 'Approve and re-run this step' }
+      : choice.key === 'steer' && choice.label === 'Approve and steer' && !toBuilder
+        ? { ...choice, label: 'Approve with a note for the next step', title: 'Approve, and your note goes to the next step — not to the builder. To have the builder change something, Send back.' }
+        : choice;
+    return { ...result, choices: result.choices.map(effectLabel), overflow: result.overflow.map(effectLabel) };
   }, [runId, gate, view.units, events, pool, roster, rerunOffer, fullVerdict]);
   // S16a-1b: the creator seat's record on Approve and the standing-order offer (review gates).
   const seat = useSeatTrust(view, gate, {
@@ -188,8 +239,8 @@ export function CreatorSeatRefusal({ view, navigate }: { view: RunView; navigate
   return (
     <div data-testid="session-gate-creator-seat" role="status" className="wk-gate-consequence">
       <p className="wk-assurance-lead">
-        <b>Stopped: no second seat to review this.</b> This run requires a distinct evaluator, and the
-        only seat that could review the work is the one that built it. Sign a second seat in and Approve
+        <b>Stopped: no second helper to review this.</b> This run requires an independent check, and the
+        only helper that could review the work is the one that built it. Sign a second helper in and Approve
         to retry, or run it again with reduced assurance.
       </p>
       {can && navigate !== undefined
@@ -201,13 +252,13 @@ export function CreatorSeatRefusal({ view, navigate }: { view: RunView; navigate
               data-testid="session-gate-reduced-relaunch"
               title="Open the launch form with this run's brief and reduced assurance ticked; nothing starts until you launch, and this run stays at its gate."
               onClick={() => { setRetryPrefill({ ...retryPrefillOf(view), reducedAssurance: true }); navigate('/runs/new'); }}
-              className="wk-session-gate-send"
+              className="wk-btn wk-btn--secondary"
             >
               {REDUCED_OPT_IN_LABEL}…
             </button>
           </>
         )
-        : !can && <p data-testid="session-gate-creator-seat-nocap" className="wk-assurance-optin-why">This daemon does not take a reduced-assurance launch; sign a second seat in.</p>}
+        : !can && <p data-testid="session-gate-creator-seat-nocap" className="wk-assurance-optin-why">Studio's service does not support reduced assurance; sign a second helper in.</p>}
     </div>
   );
 }
@@ -220,13 +271,12 @@ export function CreatorSeatRefusal({ view, navigate }: { view: RunView; navigate
 export function JudgeWaitLine({ navigate }: { navigate?: Navigate }): React.ReactElement {
   return (
     <p data-testid="session-gate-judge-wait" role="status" className="wk-gate-consequence">
-      <b>Waiting for a judge seat.</b> This run requires a judge, and no seat distinct from the one that
-      built the work could judge it. The work was not rejected: sign a judge seat in, then Approve to
-      re-run the step with the judge.{' '}
+      <b>Waiting for an independent check.</b> No helper other than the one that built the work could
+      check it. Sign another helper in, then approve to re-run the step with that check.{' '}
       {navigate !== undefined
         ? (
-          <button type="button" data-testid="session-gate-judge-signin" onClick={() => navigate('/system')} className="wk-since-toggle">
-            Sign a judge seat in ›
+          <button type="button" data-testid="session-gate-judge-signin" onClick={() => navigate('/system')} className="wk-btn wk-btn--secondary">
+            Sign another helper in ›
           </button>
         )
         : <span data-testid="session-gate-judge-signin">Sign one in from Settings.</span>}
@@ -284,6 +334,15 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
   // studio#650: the engine's prompt, detail lines and reviewer note quote home and temp paths.
   const showText = useDisplayText();
   const pending = useUndoQueue((s) => s.pending.find((p) => p.runIds.length === 1 && p.runIds[0] === runId) ?? null);
+  // An answer waits out its Undo window in this page; closing the tab inside it drops it (by design:
+  // nothing unseen lands). The browser asks before the page goes, so the drop is never silent.
+  const holding = pending !== null;
+  useEffect(() => {
+    if (!holding) return;
+    const warn = (e: BeforeUnloadEvent): void => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [holding]);
   const now = useTicker(pending !== null);
 
   const [noteOpen, setNoteOpen] = useState<string | null>(null);
@@ -371,7 +430,7 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
           <button
             type="button"
             onClick={() => { undoDecision(pending.id); setChosen(null); }}
-            className="wk-session-gate-undo"
+            className="wk-btn wk-btn--quiet wk-session-gate-undo"
           >
             Undo
           </button>
@@ -403,7 +462,7 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
         <button
           type="button"
           data-testid="session-gate-events-retry"
-          className="wk-session-gate-send"
+          className="wk-btn wk-btn--secondary"
           onClick={retryEvents}
         >
           Retry
@@ -486,9 +545,9 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
 
   // studio#612: the floor fix's note is the fixing seat's whole task, not a steer.
   const notePlaceholder = noteChoice?.key === 'steer' && noteChoice.label === FLOOR_FIX_LABEL
-    ? 'What should the fixing seat change…'
+    ? 'What should the fixing helper change…'
     : noteChoice?.key === 'steer'
-    ? 'Steer the next creator phase…'
+    ? 'Steer the next step…'
     : noteChoice?.key === 'send-back'
       ? 'Explain what to fix…'
       : 'Add a note…';
@@ -510,16 +569,11 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
       }}
     >
       <p data-testid="session-gate-question" className="wk-session-gate-question">{question}</p>
-      {drift !== null && <DriftLine drift={drift} />}
-      {assurance}
-      {refusalLines !== null && (
-        <>
-          <p data-testid="session-gate-refusal" className="wk-session-gate-detail-item">{refusalLines.lead}</p>
-          <p data-testid="session-gate-deliver-consent" className="wk-gate-consequence">{refusalLines.consent}</p>
-        </>
-      )}
-      {/* S16a-1c (TR-W8): a watch finding attached to this gate, as one quiet line (nothing when absent). */}
-      {gate !== undefined && <WatchGateLine runId={runId} ord={typeof gate.ord === 'number' ? gate.ord : null} />}
+      {/* A refused hand-over says what Deliver again does BEFORE the choice that takes it. */}
+      {refusalLines !== null && <>
+        <p data-testid="session-gate-refusal" className="wk-session-gate-detail-item">{refusalLines.lead}</p>
+        <p data-testid="session-gate-deliver-consent" className="wk-gate-consequence">{refusalLines.consent}</p>
+      </>}
       {/* S16a-1b: the recommended move's consequence, above the choice that takes it. */}
       {model.consequence !== null && (
         <p data-testid="session-gate-consequence" className="wk-gate-consequence">{model.consequence}</p>
@@ -545,6 +599,8 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
             title={choice.title}
             className={[
               'wk-session-gate-choice',
+              'wk-btn',
+              i === model.recommended ? 'wk-btn--primary' : 'wk-btn--secondary',
               pick.focus === i ? 'wk-session-gate-choice--focus' : '',
               i === model.recommended ? 'wk-session-gate-choice--suggested' : '',
               choice.disabled === true ? 'wk-session-gate-choice--disabled' : '',
@@ -575,9 +631,14 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
           </button>
         ))}
       </div>
+      {drift !== null && <DriftLine drift={drift} />}
+      {assurance}
+      {/* S16a-1c (TR-W8): a watch finding attached to this gate, as one quiet line (nothing when absent). */}
+      {gate !== undefined && <WatchGateLine runId={runId} ord={typeof gate.ord === 'number' ? gate.ord : null} />}
       {/* core#820: what each install choice writes, before it is taken — the operator's own files said so. */}
       {[...model.choices, ...model.overflow].filter((c) => c.writes !== undefined).map((c) => (
-        <div key={`writes-${c.key}`} data-testid="session-gate-consent-writes" data-choice-key={c.key} className="wk-session-gate-detail-item">
+        <details key={`writes-${c.key}`} data-testid="session-gate-consent-writes" data-choice-key={c.key} className="wk-tech-details">
+          <summary className="wk-tech-details-summary">Files this choice writes</summary>
           <p><b>{c.label}</b>{c.isDefault === true ? ' (default)' : ''} writes {c.writes!.length === 0 ? 'nothing it could list' : `${c.writes!.length} file${c.writes!.length === 1 ? '' : 's'}`}:</p>
           <ul>
             {c.writes!.map((w, j) => (
@@ -586,7 +647,7 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
               </li>
             ))}
           </ul>
-        </div>
+        </details>
       ))}
       {model.overflow.length > 0 && (
         <details className="wk-session-gate-overflow">
@@ -601,6 +662,7 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
                 title={choice.title}
                 className={[
                   'wk-session-gate-choice',
+                  'wk-btn wk-btn--secondary',
                   choice.disabled === true ? 'wk-session-gate-choice--disabled' : '',
                 ].filter(Boolean).join(' ')}
                 disabled={action.busy || choice.disabled === true}
@@ -637,11 +699,11 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
               data-testid="session-gate-rerun-confirm"
               disabled={action.busy}
               onClick={() => { const c = allChoices.find((x) => x.key === 'rerun'); setConfirmRerun(false); if (c !== undefined) sendDirect({ ...c, key: 'rerun-confirmed' }); }}
-              className="wk-session-gate-send"
+              className="wk-btn wk-btn--primary"
             >
               Rerun from {rerunOffer.phase}
             </button>
-            <button type="button" onClick={() => setConfirmRerun(false)} className="wk-session-gate-cancel">Cancel</button>
+            <button type="button" onClick={() => setConfirmRerun(false)} className="wk-btn wk-btn--quiet">Cancel</button>
           </div>
         </div>
       )}
@@ -650,9 +712,9 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
           review, "Why it failed" (the failing criteria beside the creator's claims), the source line. */}
       {model.detailItems.length > 0 && (
         <details className="wk-session-gate-prompt-detail">
-          <summary className="wk-session-gate-prompt-summary">Details</summary>
+          <summary className="wk-session-gate-prompt-summary">Technical details</summary>
           {model.detailItems.map((item, idx) => (
-            <p key={idx} data-testid={idx === 0 ? 'session-gate-raw-prompt' : undefined} className="wk-session-gate-detail-item">{showText(item)}</p>
+            <p key={idx} data-testid={idx === 0 ? 'session-gate-raw-prompt' : undefined} className="wk-session-gate-detail-item wk-session-verdict-details">{showText(item)}</p>
           ))}
           {depth}
         </details>
@@ -676,19 +738,18 @@ function GateRowBody({ runId, gate, model, seat, rerunOffer, eventsUnavailable, 
             }}
           />
           <div className="wk-session-gate-note-actions">
-            <button type="button" data-testid="session-gate-send" onClick={sendNote} disabled={action.busy || !noteText.trim()} className="wk-session-gate-send">
+            <button type="button" data-testid="session-gate-send" onClick={sendNote} disabled={action.busy || !noteText.trim()} className="wk-btn wk-btn--primary">
               Send
             </button>
-            <button type="button" onClick={cancelNote} className="wk-session-gate-cancel">
+            <button type="button" onClick={cancelNote} className="wk-btn wk-btn--quiet">
               Cancel
             </button>
           </div>
         </details>
       )}
       {action.error !== null && (
-        <p data-testid="session-gate-error" role="alert" className="wk-session-gate-error">
-          {action.error}
-        </p>
+        // The refusal in its own words (a 409 names what moved); paths read `~` (studio#650).
+        <p data-testid="session-gate-error" role="alert" className="wk-session-gate-error">{showText(action.error)}</p>
       )}
     </div>
   );

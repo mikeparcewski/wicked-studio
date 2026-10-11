@@ -35,6 +35,27 @@ SHOTS = REPO / "e2e" / "shots"
 report: dict = {"ok": False, "steps": {}}
 
 
+def sheet_tab_ids(page) -> list:
+    """Every tab of the open sheet: the tablist, then the ones behind "More" (UI-CONTRACT §4.4)."""
+    ids = page.locator('[data-testid="sheet"] [role="tab"]').evaluate_all("els => els.map(e => e.dataset.tab)")
+    more = page.get_by_test_id("sheet-tabs-more-button")
+    if more.count() > 0:
+        more.click()
+        ids += page.locator('[data-testid="sheet-tabs-more-list"] [data-item]').evaluate_all("els => els.map(e => e.dataset.item)")
+        more.click()
+    return ids
+
+
+def sheet_tab(page, tab: str) -> None:
+    """Open a sheet tab, through "More" when it is not in the visible tablist."""
+    loc = page.locator(f'[data-testid="sheet"] [role="tab"][data-tab="{tab}"]')
+    if loc.count() > 0:
+        loc.first.click()
+        return
+    page.get_by_test_id("sheet-tabs-more-button").click()
+    page.locator(f'[data-testid="sheet-tabs-more-list"] [data-item="{tab}"]').click()
+
+
 def check(step: str, ok: bool, **detail) -> None:
     report["steps"][step] = {"ok": bool(ok), **detail}
     if not ok:
@@ -193,12 +214,12 @@ with sync_playwright() as p:
     page.get_by_test_id("session").wait_for(state="visible", timeout=15000)
     page.get_by_test_id("session-sheet-open").click()
     page.get_by_test_id("sheet").wait_for(state="visible", timeout=5000)
-    page.locator('[data-testid="sheet-tab"][data-tab="activity"]').click()
+    sheet_tab(page, "activity")
     page.get_by_test_id("sheet-activity-line").first.wait_for(state="visible", timeout=8000)
     lines = page.get_by_test_id("sheet-activity-line").evaluate_all(
         "els => els.map(e => ({ tone: e.dataset.tone, text: e.innerText }))")
     page.screenshot(path=str(SHOTS / "desk-ports-activity.png"))
-    page.locator('[data-testid="sheet-tab"][data-tab="whatwhere"]').click()
+    sheet_tab(page, "whatwhere")
     page.get_by_test_id("sheet-section").wait_for(state="visible", timeout=5000)
     page.locator('[data-testid="sheet-section"] [data-testid="lineage-retried-as"]').first.wait_for(state="visible", timeout=8000)
     retried = page.locator('[data-testid="sheet-section"] [data-testid="lineage-retried-as"]').all_inner_texts()
@@ -214,7 +235,7 @@ with sync_playwright() as p:
         page.wait_for_timeout(600)
         page.get_by_test_id("desk-sheet-open").click()
         page.get_by_test_id("sheet").wait_for(state="visible", timeout=5000)
-        page.locator('[data-testid="sheet-tab"][data-tab="studio"]').click()
+        sheet_tab(page, "studio")
         # The daemon's own lines need the fixture's diagnostics (desk_sheets proves them); the spend
         # line is the store's fold and is said either way.
         page.get_by_test_id("sheet-studio").wait_for(state="visible", timeout=8000)

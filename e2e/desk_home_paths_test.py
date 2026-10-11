@@ -45,6 +45,27 @@ SHOTS = REPO / "e2e" / "shots"
 report: dict = {"ok": False, "steps": {}}
 
 
+def sheet_tab_ids(page) -> list:
+    """Every tab of the open sheet: the tablist, then the ones behind "More" (UI-CONTRACT §4.4)."""
+    ids = page.locator('[data-testid="sheet"] [role="tab"]').evaluate_all("els => els.map(e => e.dataset.tab)")
+    more = page.get_by_test_id("sheet-tabs-more-button")
+    if more.count() > 0:
+        more.click()
+        ids += page.locator('[data-testid="sheet-tabs-more-list"] [data-item]').evaluate_all("els => els.map(e => e.dataset.item)")
+        more.click()
+    return ids
+
+
+def sheet_tab(page, tab: str) -> None:
+    """Open a sheet tab, through "More" when it is not in the visible tablist."""
+    loc = page.locator(f'[data-testid="sheet"] [role="tab"][data-tab="{tab}"]')
+    if loc.count() > 0:
+        loc.first.click()
+        return
+    page.get_by_test_id("sheet-tabs-more-button").click()
+    page.locator(f'[data-testid="sheet-tabs-more-list"] [data-item="{tab}"]').click()
+
+
 def fail(step: str, why) -> None:
     report["steps"][step] = {"ok": False, "error": why}
     print(json.dumps(report, indent=2))
@@ -242,12 +263,12 @@ with sync_playwright() as p:
     look = page.locator('[data-testid="session-run"][data-run-id="r-home-done"] [data-testid="session-run-look"]')
     look.wait_for(state="visible", timeout=15000)
     look.click()
+    present = sheet_tab_ids(page)
     for acc in ("whatwhere", "files", "data", "delivery"):
-        tab = page.locator(f'[data-testid="sheet-tab"][data-tab="{acc}"]')
-        if tab.count() == 0:
+        if acc not in present:
             continue
         sections.append(acc)
-        tab.first.click()
+        sheet_tab(page, acc)
         page.wait_for_timeout(400)
         got = scan_now(f"run-{acc}")
         if got["text"] is not None or got["titles"]:

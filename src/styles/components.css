@@ -218,7 +218,7 @@ button.wk-chip, a.wk-chip { min-height: var(--control-h-sm); cursor: pointer; fo
   color: var(--ink-body);
 }
 .wk-verdict--fail  { --verdict-tone: var(--status-fail); --verdict-wash: var(--status-fail-dim); }
-.wk-verdict--pass  { --verdict-tone: var(--status-done); --verdict-wash: transparent; }
+.wk-verdict--pass  { --verdict-tone: var(--ink-muted); --verdict-wash: var(--surface-raised); }
 .wk-verdict--ungated { --verdict-tone: var(--ink-muted); --verdict-wash: var(--surface-raised); }
 .wk-verdict-head { color: var(--verdict-tone, var(--ink-muted)); }
 .wk-verdict .wk-verdict-denial { color: var(--ink-body); }
@@ -926,7 +926,8 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
 .wk-session-run-story { margin: 0 0 6px; font-size: var(--text-xs); color: var(--ink-muted); }
 .wk-session-run-story-line { margin: 0; }
 .wk-session-run-story-note { margin: 2px 0 0; color: var(--ink-body); white-space: pre-wrap; overflow-wrap: anywhere; }
-.wk-session-run-story--failed .wk-session-run-story-line { color: var(--status-fail); }
+/* The failure headline reads in high ink (the run's dot carries the red); status-fail text on a dark card read under 4.5:1. */
+.wk-session-run-story--failed .wk-session-run-story-line { color: var(--ink-high); font-weight: var(--weight-semi); }
 .wk-prop { margin: 0 0 8px; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-base); }
 .wk-prop--fail { border-color: color-mix(in oklab, var(--status-fail) 45%, var(--border)); }
 .wk-prop-text { margin: 0; color: var(--ink-high); font-weight: var(--weight-semi); }
@@ -1211,7 +1212,7 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
 /* S16a-1d: a session sheet's secondary actions (Draft update, Archive with its confirm). */
 .wk-sheet-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; }
 .wk-sheet-x { border: 0; background: transparent; color: var(--ink-muted); font-size: var(--text-lg); cursor: pointer; line-height: 1; }
-.wk-sheet-tabs { display: flex; flex-wrap: wrap; gap: 4px; padding: 0 16px 8px; border-bottom: 1px solid var(--border-subtle); }
+.wk-sheet-tabs { min-width: 0; padding: 0 16px 8px; border-bottom: 1px solid var(--border-subtle); }
 .wk-sheet-tab { border: 0; background: transparent; padding: 4px 10px; border-radius: 999px; font-size: var(--text-xs); color: var(--ink-muted); cursor: pointer; }
 .wk-sheet-tab--on { background: var(--accent-subtle); color: var(--ink-high); }
 .wk-sheet-body { flex: 1; overflow-y: auto; padding: 12px 20px; display: flex; flex-direction: column; gap: 10px; }

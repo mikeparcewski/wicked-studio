@@ -14,6 +14,7 @@ import { creatorUnitBefore } from '../gateMoveModel.js';
 import { reviewedUnitFor } from '../gateVerdictModel.js';
 import { GateUnderReview } from '../GateUnderReview.js';
 import { VerdictDiff } from '../VerdictDiff.js';
+import { TechDetails } from '../ui/index.js';
 
 /**
  * S16a-1b: the gate card's depth in the session thread (ported from the run page's the retired gate card,
@@ -89,10 +90,10 @@ export function RuleOfferBlock({ seat, locked }: { seat: SeatTrust; locked: bool
       >
         {offer.previewText}
       </p>
-      <button type="button" data-testid="session-gate-rule-make" onClick={() => void trust.makeRule(offer)} disabled={locked || trust.busy} className="wk-session-gate-send">
+      <button type="button" data-testid="session-gate-rule-make" onClick={() => void trust.makeRule(offer)} disabled={locked || trust.busy} className="wk-btn wk-btn--secondary">
         Make it a rule
       </button>
-      {trust.error !== null && <p data-testid="session-gate-rule-error" role="alert" className="wk-session-gate-error">{trust.error}</p>}
+      {trust.error !== null && <><p data-testid="session-gate-rule-error" role="alert" className="wk-session-gate-error">The rule could not be saved.</p><TechDetails text={trust.error} /></>}
     </div>
   );
 }
@@ -119,7 +120,7 @@ export function GateDepthDetails({ view, gate, failing, reviewedOrd, source, und
         </div>
       )}
       {failing.length > 0 && <VerdictDiff runId={runId} units={units} reviewedOrd={reviewedOrd} items={failing} />}
-      {source !== null && <p data-testid="session-gate-source" className="wk-session-gate-detail-item">{source}</p>}
+      {source !== null && <TechDetails data-testid="session-gate-source" text={source} />}
     </>
   );
 }

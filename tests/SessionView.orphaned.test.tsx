@@ -65,7 +65,8 @@ describe('RunBlock — the orphaned row (studio#545)', () => {
     render(<RunBlock view={view()} badge={0} sessionId={`run:${RUN}`} />);
     fireEvent.click(await screen.findByTestId('session-orphaned-resume'));
     const err = await screen.findByTestId('session-orphaned-error');
-    expect(err.textContent).toContain('daemon away');
+    expect(err.textContent).not.toContain('daemon away'); // the default layer says it plainly…
+    expect(screen.getByTestId('session-orphaned-error-detail').textContent).toContain('daemon away'); // …the raw words are Technical details
     expect(screen.getByTestId('session-orphaned')).toBeDefined();
   });
 

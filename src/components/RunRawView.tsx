@@ -2,7 +2,9 @@ import type { SessionView } from '../api/types.js';
 import { useRunRawEvents } from '../hooks/useRunRawEvents.js';
 import { leaveRoute, type Navigate } from '../hooks/useRoute.js';
 import { FileViewer } from './FileViewer.js';
-import { runTitle } from './runIdentity.js';
+import { humanTitle, onboardTitle, runShortId } from './runIdentity.js';
+import { Tech } from './Tech.js';
+import { StateBanner } from './ui/StateBanner.js';
 
 /**
  * The raw routes (studio wave 1, "raw in one step"): `/runs/:id/events` shows the run's
@@ -16,7 +18,9 @@ export function RunRawView({ target, runId, run, navigate }: {
   run: SessionView | null;
   navigate: Navigate;
 }): React.ReactElement {
-  const title = run !== null ? runTitle(run.session) : runId;
+  // UI-CONTRACT ASK RunRawView (granted, copy only): the title in words; the run id and attempt are
+  // technical handles, shown only with Settings › Show technical details.
+  const title = run !== null ? humanTitle(onboardTitle(run.session.problem) ?? run.session.problem) : 'This run';
   return (
     <div className="flex flex-1 flex-col overflow-hidden" data-testid={`run-raw-${target}`} data-run-id={runId}>
       <header
@@ -33,7 +37,8 @@ export function RunRawView({ target, runId, run, navigate }: {
           ←
         </button>
         <p className="flex-1 truncate" style={{ margin: 0, fontSize: 'var(--text-sm)', color: 'var(--ink-high)' }} title={title}>
-          {target === 'events' ? 'Raw events' : 'Worktree / files'} · {title}
+          {target === 'events' ? 'Raw events' : 'Files'} · {title}
+          <Tech data-testid="tech-run-raw" parts={[runShortId(runId), run !== null ? `#${run.session.attempt + 1}` : null]} />
         </p>
       </header>
       {target === 'events' ? (
@@ -58,11 +63,7 @@ function RawEvents({ runId }: { runId: string }): React.ReactElement {
     return <p className="px-6 py-3" style={{ ...mono, color: 'var(--ink-dim)' }}>Loading events…</p>;
   }
   if (st.state === 'error') {
-    return (
-      <p role="alert" data-testid="raw-events-error" className="px-6 py-3" style={{ ...mono, color: 'var(--status-fail)' }}>
-        Could not read the event trail: {st.message}
-      </p>
-    );
+    return <div className="px-6 py-3"><StateBanner data-testid="raw-events-error" kind="error" what="the event trail" error={st.message} /></div>;
   }
   return (
     <pre

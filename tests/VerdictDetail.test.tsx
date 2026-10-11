@@ -16,7 +16,7 @@
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { VerdictDetail } from '../src/components/VerdictDetail.js';
+import { decidingEval, VerdictDetail } from '../src/components/VerdictDetail.js';
 import { useRunEventStore } from '../src/store/events.js';
 import { makeUnit } from './factories.js';
 
@@ -46,6 +46,43 @@ const DENY = {
 describe('VerdictDetail — the evaluator verdict card (slice R)', () => {
   beforeEach(() => {
     useRunEventStore.setState({ byRun: {} });
+  });
+
+  it('audit row 30: on a COMPLETED run the last evaluation stands — an earlier, recovered denial is not shown as the verdict', () => {
+    const pass = { ...DENY, combined: true, denialReason: null, agentVerdict: 'PASS', evaluatorPolicies: ['policy-a'] };
+    expect(decidingEval([DENY, pass] as never, true)?.denialReason).toBeNull();
+    expect(decidingEval([DENY, pass] as never)?.denialReason).not.toBeNull();
+  });
+
+  it('a default pass is neutral and visibly says nothing was verified', () => {
+    const pass = { ...DENY, combined: true, denialReason: null, hasDeterministicFloor: false, agentVerdict: null, agentReasoning: null };
+    useRunEventStore.setState({ byRun: { [RUN]: [pass] } });
+    render(<VerdictDetail runId={RUN} units={UNITS} />);
+    const card = screen.getByTestId('verdict-detail');
+    expect(card).toHaveClass('wk-verdict--ungated');
+    expect(card).not.toHaveClass('wk-verdict--fail');
+    expect(card.querySelector('.wk-verdict-head')).toHaveTextContent('No checks were set for Review — it passed by default, nothing was verified');
+    expect(card.querySelector('.wk-verdict-head')).not.toHaveClass('font-mono');
+    expect(card.querySelector('details')).not.toHaveAttribute('open');
+  });
+
+  it('an enforced pass gets a plain checks headline and neutral styling', () => {
+    const pass = { ...DENY, combined: true, denialReason: null, agentVerdict: 'PASS', evaluatorPolicies: ['policy-a'] };
+    useRunEventStore.setState({ byRun: { [RUN]: [pass] } });
+    render(<VerdictDetail runId={RUN} units={UNITS} />);
+    const card = screen.getByTestId('verdict-detail');
+    expect(card.querySelector('.wk-verdict-head')).toHaveTextContent('Checks passed for Review');
+    expect(card).not.toHaveClass('wk-verdict--fail');
+    expect(screen.getByTestId('verdict-criterion').closest('details')).not.toHaveAttribute('open');
+  });
+
+  it('a real denial uses failure styling and keeps the raw reason inside technical details', () => {
+    useRunEventStore.setState({ byRun: { [RUN]: [DENY] } });
+    render(<VerdictDetail runId={RUN} units={UNITS} />);
+    const card = screen.getByTestId('verdict-detail');
+    expect(card).toHaveClass('wk-verdict--fail');
+    expect(card.querySelector('.wk-verdict-head')).toHaveTextContent('Review was stopped by a check');
+    expect(screen.getByTestId('verdict-denial').closest('details')).not.toHaveAttribute('open');
   });
 
   it('states the deciding phase: criterion, agentVerdict + reasoning, denialReason', () => {
@@ -116,7 +153,7 @@ describe('VerdictDetail — the evaluator verdict card (slice R)', () => {
 
     const card = screen.getByTestId('verdict-detail');
     expect(card).toHaveAttribute('data-empty', 'true');
-    expect(card).toHaveTextContent('no evaluator record survives for this run');
+    expect(card).toHaveTextContent('No checks record survives for this run.');
     // Never fabricated from the one-line status:
     expect(card).not.toHaveTextContent('denied:');
     expect(card).not.toHaveAttribute('data-phase-ord');

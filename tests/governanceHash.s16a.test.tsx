@@ -30,13 +30,14 @@ describe('S16a-2c — #governance on a run session', () => {
 });
 
 describe('S16a-2d — a run address not in the index yet says so honestly', () => {
-  it('a just-launched run reads "Opening run …", never "Nothing in this session"', async () => {
+  it('a just-launched run says it shows up shortly (no run id), never "Nothing in this session"', async () => {
     window.history.replaceState(null, '', '/s/run%3Ar-new');
     const { useCapabilities } = await import('../src/store/capabilities.js');
     useCapabilities.setState({ loaded: true } as never);
     render(<SessionPage sessionId="run:r-new" runs={[]} runsLoaded needRows={[]} navigate={() => {}} onAsk={() => {}} />);
     const line = await screen.findByTestId('session-run-pending');
-    expect(line).toHaveTextContent('Opening run r-new');
+    expect(line).toHaveTextContent('A run that just started shows up here in a few seconds.');
+    expect(line).not.toHaveTextContent('r-new');
     expect(screen.queryByText(/Nothing in this session/)).toBeNull();
   });
 });

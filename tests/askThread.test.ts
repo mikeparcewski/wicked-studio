@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { TeamRow } from '../src/api/teamPlan.js';
-import { askLines, askPathOf, askShapeFooter, askShapeLabel, isAskTurnGate } from '../src/board/askThread.js';
+import { askLines, askPathOf, askShapeFooter, askShapeLabel, isAskTurnGate, splitToolFailures, toolFailureOf } from '../src/board/askThread.js';
 
 /**
  * DES-ASK-TEAM-CHAT-001 §4.8 (slice ASK-S1): the ask thread's quiet lines, folded from the run's
@@ -85,11 +85,10 @@ describe('askLines — the quiet lines, in row order, each expandable to its row
     const lines = askLines([started, proposed, scored, accepted, claimed, reviewing, completed, finding, folded]);
     expect(lines.map((l) => l.kind)).toStrictEqual(['who', 'reviewer', 'finding']);
     const who = lines[0]!;
-    expect(who.text).toBe('claude answers · picked at random');
+    expect(who.text).toBe('claude answers');
     expect(who.detail).toStrictEqual([
       'Picked claude at random from claude, codex.',
-      'Score 0 · band 0–19 · no creator step and no declared scope.',
-      'Shape: answer.',
+      'Steps: answer.',
     ]);
     expect(lines[1]!.text).toBe('codex is reviewing');
     expect(lines[2]!.text).toBe('reviewer · 1 finding: the answer cites line 2 but the template literal is on line 3');
@@ -137,7 +136,7 @@ describe('askLines — the quiet lines, in row order, each expandable to its row
     expect(a!.detail).toContain('no seat distinct from the PA');
     expect(a!.detail).toContain('Signed in: claude, codex.');
     const [b] = askLines([started, cannot]).filter((l) => l.kind === 'reviewer');
-    expect(b!.text).toBe("No reviewer — codex can't join: seat 'codex' has no ACP adapter configured");
+    expect(b!.text).toBe('No reviewer this time: codex couldn’t join');
     expect(b!.action).toBeUndefined();
     expect(b!.detail).toHaveLength(1);
     expect(b!.detail[0]).toMatch(/^codex · seat 'codex' has no ACP adapter configured · at /);
@@ -157,7 +156,7 @@ describe('askLines — the quiet lines, in row order, each expandable to its row
     const ended = row('path.ended', { status: 'cancelled' });
     const lines = askLines([started, accepted, timedOut, repicked, slow, refusedSeat, refusedRepo, ended]);
     expect(lines.map((l) => [l.kind, l.text])).toStrictEqual([
-      ['who', 'claude answers · picked at random'],
+      ['who', 'claude answers'],
       ['timeout', 'claude didn’t answer in 10 min'],
       ['repick', 'codex takes over — claude stopped answering'],
       ['reviewer', 'reviewer did not answer in time'],
@@ -260,17 +259,43 @@ describe('every quiet line expands to its row (codex #12)', () => {
 
 describe('askShapeFooter — the shape line names a reviewer only when one attached (studio#540)', () => {
   it('an attached reviewer reviews; a member whose join FAILED stays on record in the path but is not a reviewer (as GET /chats/:id says: its path.reviewer is null)', () => {
-    expect(askShapeFooter(askPathOf([started, proposed, accepted, claimed, reviewing]))).toBe('Shape: answer · claude answers · codex reviews');
+    expect(askShapeFooter(askPathOf([started, proposed, accepted, claimed, reviewing]))).toBe('claude answers · codex checks it');
     const refused = row('member.joined', { by: 'opencode', ord: 1, attempt: 0, member_id: 'm1', open_seq: 1, seat: 'opencode', role: 'monitor', status: 'failed', reason: 'team plan monitors=1', error: "'opencode' is the creator's own seat instance — a member must be distinct" });
     const path = askPathOf([started, proposed, accepted, claimed, refused]);
     expect(path.reviewer).toEqual({ seat: 'opencode', status: 'failed', error: "'opencode' is the creator's own seat instance — a member must be distinct" });
-    expect(askShapeFooter(path)).toBe('Shape: answer · claude answers');
+    expect(askShapeFooter(path)).toBe('claude answers');
     expect(askShapeFooter(path)).not.toMatch(/reviews/);
     // The refusal is still on record as its own line.
-    expect(askLines([started, proposed, accepted, claimed, refused]).find((l) => l.kind === 'reviewer')!.text).toBe("No reviewer — opencode can't join: 'opencode' is the creator's own seat instance — a member must be distinct");
+    expect(askLines([started, proposed, accepted, claimed, refused]).find((l) => l.kind === 'reviewer')!.text).toBe('No reviewer this time: opencode couldn’t join');
   });
   it('no shape yet → no line; a PA not yet picked → the steps alone', () => {
     expect(askShapeFooter(askPathOf([started]))).toBeNull();
-    expect(askShapeFooter({ ...askPathOf([started, proposed, accepted, claimed, reviewing]), pa: null })).toBe('Shape: answer · codex reviews');
+    expect(askShapeFooter({ ...askPathOf([started, proposed, accepted, claimed, reviewing]), pa: null })).toBe('codex checks it');
+  });
+});
+
+describe('toolFailureOf — a reply that is only a failed tool call reads as one plain line (#682 row 6)', () => {
+  it('names the tool by what it was for and the reason in a few words', () => {
+    const raw = '[tool call failed] grep: The user has specified a rule which prevents you from using this specific tool call. Here are some of the relevant rules [{"permission":"external_directory","pattern":"/Users/someone/x","action":"ask"}]';
+    expect(toolFailureOf(raw)).toStrictEqual({ tool: 'grep', verb: 'search', why: 'blocked by a permission rule' });
+    expect(toolFailureOf('[tool call failed] bash: exit 2')).toStrictEqual({ tool: 'bash', verb: 'run a command', why: 'the tool call failed' });
+    expect(toolFailureOf('[tool call failed] tool call: ```\nUser refused permission to run tool')).toStrictEqual({ tool: null, verb: 'use a tool', why: 'permission was refused' });
+  });
+  it('splits failure blocks out of a longer reply; the answer stays', () => {
+    const reply = 'Role taken: Neutral.\n\nSearching the codebase.\n[tool call failed] tool call: ```\nUser refused permission to run tool\n\nThe parser is in launchModel.ts.';
+    const out = splitToolFailures(reply);
+    expect(out.text).toBe('Role taken: Neutral.\n\nSearching the codebase.\n\nThe parser is in launchModel.ts.');
+    expect(out.failures).toStrictEqual([{ raw: '[tool call failed] tool call: ```\nUser refused permission to run tool', verb: 'use a tool', why: 'permission was refused' }]);
+    expect(splitToolFailures('plain answer')).toStrictEqual({ text: 'plain answer', failures: [] });
+    // A closed fence keeps its blank lines inside the failure; an unclosed one never swallows the answer.
+    const fenced = splitToolFailures('[tool call failed] bash: ```\nWICKED_HOME=/x\n\nmore stderr\n```\nThe answer.');
+    expect(fenced.text).toBe('The answer.');
+    expect(fenced.failures[0]!.raw).toContain('more stderr');
+    const unclosed = splitToolFailures('[tool call failed] tool call: ```\nUser refused permission to run tool\n\nHere is code:\n```ts\nconst a = 1;\n```');
+    expect(unclosed.text).toBe('Here is code:\n```ts\nconst a = 1;\n```');
+  });
+  it('any other reply is not a tool failure', () => {
+    expect(toolFailureOf('Here is the answer. [tool call failed] is a string I quote.')).toBeNull();
+    expect(toolFailureOf('')).toBeNull();
   });
 });

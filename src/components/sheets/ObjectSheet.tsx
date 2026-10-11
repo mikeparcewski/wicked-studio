@@ -10,7 +10,8 @@ import { useRuntimeStore } from '../../store/runtime.js';
 import { AgeStamp } from '../AgeStamp.js';
 import { getDiagnostics, type Diagnostics } from '../../api/diagnostics.js';
 import { objectAttr, OBJECT_ACTIONS, primaryAction, RUN_SECTION_TABS, SHEET_TABS, type ObjectRef } from '../../board/objectActions.js';
-import { parseSessionId, runChatIdOf, sessionPath } from '../../board/sessionModel.js';
+import { parseSessionId, runChatIdOf, sessionPath, sessionTitle } from '../../board/sessionModel.js';
+import { splitAskContext } from '../../board/askPack.js';
 import { unitStepName } from '../../board/chainModel.js';
 import { UnitConsidered } from '../decisions/ConsideredLine.js';
 import { useRunModel } from '../../hooks/useRunModel.js';
@@ -29,8 +30,9 @@ import { SignInPanel } from '../SignInPanel.js';
 import { signInLapsed } from '../../board/deskModel.js';
 import { LiveNarration } from '../LiveNarration.js';
 import { RunSectionBody, runSections, type AccordionId } from '../RightPanel.js';
-import { humanTitle } from '../runIdentity.js';
 import { Sheet } from './Sheet.js';
+import { Markdown } from '../Markdown.js';
+import { TechDetails } from '../ui/index.js';
 import { useDisplayText } from '../../hooks/useHomePath.js';
 import { useRunEvents } from '../../hooks/useRunEvents.js';
 import { VerdictDetail } from '../VerdictDetail.js';
@@ -46,6 +48,20 @@ const UNIT_WORD: Record<string, string> = {
 
 /** A step's plain name off its unit: the chain's word for its phase, else the stage. */
 const stepName = unitStepName;
+
+function sheetTitle(title: string): string {
+  const at = title.indexOf('[studio context pack');
+  const head = (at < 0 ? title : title.slice(0, at)).replace(/\s+---\s*$/, '').trim();
+  return head || 'This session';
+}
+
+function helperStanding(seat: RosterSeat): string {
+  const standing = seatStandingWord(seat);
+  return standing.kind === 'ineligible' ? 'unavailable for checks'
+    : standing.kind === 'signed-out' ? 'signed out'
+      : standing.kind === 'no-sign-in-needed' ? 'no sign-in needed'
+        : standing.kind === 'signed-in' ? 'signed in' : 'sign-in status unknown';
+}
 
 /** The runs a session holds, oldest first. */
 function sessionRuns(sessionId: string, runs: readonly SessionView[], runChatId: boolean): SessionView[] {
@@ -103,9 +119,9 @@ function MessageBox({ runId, target, can }: { runId: string; target: string; can
         onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); send(); } }}
         className="wk-desk-input"
       />
-      <button type="button" data-testid="sheet-message-send" disabled={can !== null || text.trim() === '' || state.kind === 'sending'} onClick={send} className="wk-prop-btn wk-prop-btn--ghost">Send</button>
+      <button type="button" data-testid="sheet-message-send" disabled={can !== null || text.trim() === '' || state.kind === 'sending'} onClick={send} className="wk-btn wk-btn--secondary">Send</button>
       {state.kind === 'sent' && <span data-testid="sheet-message-sent" role="status" className="wk-sheet-hint">Sent — it reads it at its next step.</span>}
-      {state.kind === 'error' && <span data-testid="sheet-message-error" role="alert" className="wk-composer-note wk-composer-note--bad">Not sent: {state.message}</span>}
+      {state.kind === 'error' && <><span data-testid="sheet-message-error" role="alert" className="wk-composer-note wk-composer-note--bad">The message could not be sent.</span><TechDetails text={state.message} /></>}
     </div>
   );
 }
@@ -113,15 +129,29 @@ function MessageBox({ runId, target, can }: { runId: string; target: string; can
 function UnitOutput({ runId, unit }: { runId: string; unit: SessionView['units'][number] }): React.ReactElement {
   const showText = useDisplayText();
   const [out, setOut] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     let cancelled = false;
+    setOut(null);
+    setError(null);
     const key = unit.id.startsWith(`${runId}:`) ? unit.id.slice(runId.length + 1) : `u${unit.ord}`;
     api.getUnitOutput(runId, key)
-      .then(({ output, outputUnavailable }) => { if (!cancelled) setOut(output ?? outputUnavailable ?? 'Nothing was captured for this step.'); })
-      .catch((e: unknown) => { if (!cancelled) setOut(`Could not read what it did (${e instanceof Error ? e.message : String(e)}).`); });
+      .then(({ output, outputUnavailable }) => {
+        if (cancelled) return;
+        // The service's reason for no output is technical detail; the default layer says it plainly.
+        if (output === null || output === undefined) { setOut(''); if (outputUnavailable) setError(outputUnavailable); return; }
+        setOut(output);
+      })
+      .catch((e: unknown) => { if (!cancelled) setError(e instanceof Error ? e.message : String(e)); });
     return () => { cancelled = true; };
   }, [runId, unit.id, unit.ord]);
-  return <pre data-testid="sheet-output" className="wk-sheet-pre">{showText(out ?? 'Reading…')}</pre>;
+  return <div data-testid="sheet-output">
+    {error !== null && out === '' ? <><p className="wk-session-grey">Nothing was captured for this step.</p><TechDetails text={error} /></>
+      : out === '' ? <p className="wk-session-grey">Nothing was captured for this step.</p>
+      : error !== null ? <><p role="alert" className="wk-sheet-line">Could not read what this step did.</p><TechDetails text={error} /></>
+      : out === null ? <p className="wk-session-grey">Reading…</p>
+        : <pre className="wk-sheet-pre">{showText(out)}</pre>}
+  </div>;
 }
 
 function StepSheet({ r, tab, runs, navigate }: { r: Extract<ObjectRef, { kind: 'step' }>; tab: string; runs: SessionView[]; navigate: Navigate }): React.ReactElement {
@@ -130,14 +160,14 @@ function StepSheet({ r, tab, runs, navigate }: { r: Extract<ObjectRef, { kind: '
   const live = view !== null ? executingOrd(view.session, view.units) : null;
   const events = useRunRawEvents(r.runId);
   const name = unit !== null ? stepName(unit) : `Step ${r.ord + 1}`;
-  const can = view === null ? 'This run is not on this daemon.'
+  const can = view === null ? "This run is not available from Studio's service."
     : !MESSAGEABLE.has(view.session.status) ? 'It is not working right now, so it cannot read a message.' : null;
   const [messaging, setMessaging] = useState(false);
   const p = primaryAction('step');
   return (
     <Sheet
       title={name}
-      sub={view !== null ? humanTitle(view.session.problem || view.session.id) : null}
+      sub={view !== null ? sheetTitle(view.session.problem ? sessionTitle([], [view]) : 'This session') : null}
       objectAttr={objectAttr(r)}
       tabs={SHEET_TABS.step}
       tab={tab}
@@ -158,23 +188,23 @@ function StepSheet({ r, tab, runs, navigate }: { r: Extract<ObjectRef, { kind: '
       {tab === 'events' && (
         <div data-testid="sheet-events" className="wk-sheet-section">
           {events.state === 'loading' && <p className="wk-session-grey">Reading the events…</p>}
-          {events.state === 'error' && <p role="alert" className="wk-composer-note wk-composer-note--bad">Could not read the events: {events.message}</p>}
+          {events.state === 'error' && <><p role="alert" className="wk-composer-note wk-composer-note--bad">Could not read the events.</p><TechDetails text={events.message} /></>}
           {events.state === 'ok' && (() => {
             const mine = events.events.filter((e) => (e as { ord?: unknown }).ord === r.ord);
             return mine.length === 0
               ? <p data-testid="sheet-events-empty" className="wk-session-grey">No events for this step yet.</p>
-              : <pre className="wk-sheet-pre">{JSON.stringify(mine.slice(-50), null, 2)}</pre>;
+              : <TechDetails summary="Recorded events" text={JSON.stringify(mine.slice(-50), null, 2)} />;
           })()}
         </div>
       )}
       {tab === 'did' && (unit !== null ? <UnitOutput runId={r.runId} unit={unit} /> : <p className="wk-session-grey">Nothing has run for this step yet.</p>)}
       {tab === 'changes' && (
         <div data-testid="sheet-changes" className="wk-sheet-section wk-sheet-fill">
-          <FileViewer runId={r.runId} defaultTab="diff" base="merge-base" onClose={() => setSheetTab('happening')} onUnsupported={() => setSheetTab('happening')} />
+          <FileViewer inline runId={r.runId} defaultTab="diff" base="merge-base" onClose={() => setSheetTab('happening')} onUnsupported={() => setSheetTab('happening')} />
         </div>
       )}
       <p className="wk-sheet-hint">
-        <a href={sessionPath(`run:${r.runId}`)} data-testid="sheet-record" onClick={(e) => { e.preventDefault(); closeSheet(); navigate(sessionPath(`run:${r.runId}`)); }}>Open its thread →</a>
+        <a className="wk-link" href={sessionPath(`run:${r.runId}`)} data-testid="sheet-record" onClick={(e) => { e.preventDefault(); closeSheet(); navigate(sessionPath(`run:${r.runId}`)); }}>Open its thread →</a>
       </p>
     </Sheet>
   );
@@ -184,15 +214,15 @@ function SeatFacts({ seat }: { seat: RosterSeat | undefined }): React.ReactEleme
   // Amendment 5, decision 5: a signed-out helper's sheet offers the one plain-words sign-in panel.
   const [signIn, setSignIn] = useState(false);
   if (seat === undefined) return <p className="wk-session-grey">This helper is not on the roster.</p>;
-  const standing = seatStandingWord(seat);
   const health = (seat.health as { status?: string; message?: string } | undefined) ?? undefined;
   return (
     <div data-testid="sheet-seat" data-seat={seat.key} className="wk-sheet-section">
-      <p className="wk-sheet-line"><b>{seat.display_name || seat.key}</b> — {standing.detail}</p>
-      {health?.message !== undefined && health.message !== '' && <p className="wk-session-grey">{health.message}</p>}
-      <p className="wk-session-grey">{seat.enabled_for_council ? 'Takes part in councils.' : 'Not in councils.'}</p>
+      <p className="wk-sheet-line"><b>{seat.display_name || seat.key}</b> — {helperStanding(seat)}</p>
+      {seatStandingWord(seat).kind === 'ineligible' && <TechDetails text={seatStandingWord(seat).detail ?? ''} />}
+      {health?.message !== undefined && health.message !== '' && <TechDetails text={health.message} />}
+      <p className="wk-session-grey">{seat.enabled_for_council ? 'Takes part in checks.' : 'Does not take part in checks.'}</p>
       {signInLapsed(seat) && (
-        <button type="button" data-testid="sheet-seat-signin" onClick={() => setSignIn(true)} className="wk-prop-btn wk-prop-btn--ghost">Sign in</button>
+        <button type="button" data-testid="sheet-seat-signin" onClick={() => setSignIn(true)} className="wk-btn wk-btn--secondary">Sign in</button>
       )}
       {signIn && <SignInPanel seat={seat} onClose={() => setSignIn(false)} />}
     </div>
@@ -212,7 +242,7 @@ function HelperSheet({ r, tab, runs }: { r: Extract<ObjectRef, { kind: 'helper' 
   return (
     <Sheet
       title={seat?.display_name || r.cli}
-      sub={view !== null ? `on “${humanTitle(view.session.problem || view.session.id)}”` : null}
+      sub={view !== null ? `on “${sheetTitle(view.session.problem ? sessionTitle([], [view]) : 'This session')}”` : null}
       objectAttr={objectAttr(r)}
       tabs={SHEET_TABS.helper}
       tab={tab}
@@ -224,7 +254,7 @@ function HelperSheet({ r, tab, runs }: { r: Extract<ObjectRef, { kind: 'helper' 
       {tab === 'terminal' && (
         <div data-testid="sheet-terminal" data-typing={typing ? 'on' : 'off'} className="wk-sheet-section">
           <p className="wk-sheet-hint">Read-only: typing into it is off unless you turn it on.</p>
-          <button type="button" role="switch" aria-checked={typing} data-testid="sheet-terminal-typing" onClick={() => setTyping((t) => !t)} className="wk-prop-btn wk-prop-btn--ghost">
+          <button type="button" role="switch" aria-checked={typing} data-testid="sheet-terminal-typing" onClick={() => setTyping((t) => !t)} className="wk-btn wk-btn--secondary">
             {typing ? 'Typing is on — turn it off' : 'Let me type into it'}
           </button>
           {liveUnit !== null
@@ -248,6 +278,25 @@ function HelperSheet({ r, tab, runs }: { r: Extract<ObjectRef, { kind: 'helper' 
   );
 }
 
+/** Match only the injected pack, including storage that flattened its separator. */
+function GoalBrief({ problem }: { problem: string }): React.ReactElement {
+  const split = splitAskContext(problem);
+  const flat = split.pack === null ? /\s+---\s+(?=\[studio context pack\b)/i.exec(problem) : null;
+  const typed = (flat === null ? split.typed : problem.slice(0, flat.index)).trim();
+  const pack = flat === null ? split.pack : problem.slice(flat.index + flat[0].length);
+  const first = typed.split('\n').find((line) => line.trim() !== '') ?? 'No brief was recorded.';
+  // A brief is "long" only when its first line is not the whole of it (one long paragraph shows once).
+  const long = first.trim() !== typed && (typed.length > 320 || typed.split('\n').length > 6);
+  return <>
+    <Markdown className="wk-sheet-brief">{long ? first : typed || first}</Markdown>
+    {long && <details className="wk-sheet-brief-full">
+      <summary className="wk-tech-details-summary">Show full brief</summary>
+      <Markdown className="wk-sheet-brief">{typed}</Markdown>
+    </details>}
+    {pack !== null && <TechDetails summary="What studio sent with it" text={pack} data-testid="sheet-goal-pack" />}
+  </>;
+}
+
 function SessionSheet({ r, tab: asked, runs, navigate }: { r: Extract<ObjectRef, { kind: 'session' }>; tab: string; runs: SessionView[]; navigate: Navigate }): React.ReactElement {
   const runChatId = useCapabilities((s) => s.runChatId);
   const mine = useMemo(() => sessionRuns(r.sessionId, runs, runChatId), [r.sessionId, runs, runChatId]);
@@ -258,35 +307,42 @@ function SessionSheet({ r, tab: asked, runs, navigate }: { r: Extract<ObjectRef,
   // The run's sections — and its steps, changes and evidence — only where the run has them (none
   // when no run of it is on this daemon).
   const runTab = new Set<string>(['steps', 'changes', 'evidence', ...RUN_SECTION_TABS.map((t) => t.id)]);
-  const tabs = SHEET_TABS.session.filter((t) => !runTab.has(t.id) || (newest !== null && (!RUN_SECTION_TABS.some((r) => r.id === t.id) || sections.some((x) => x.id === t.id))));
+  const availableTabs = SHEET_TABS.session.filter((t) => !runTab.has(t.id) || (newest !== null && (!RUN_SECTION_TABS.some((r) => r.id === t.id) || sections.some((x) => x.id === t.id))));
+  const firstTabs = ['goal', 'steps', 'changes', 'helpers', 'activity'];
+  const tabs = [...firstTabs.flatMap((id) => availableTabs.filter((t) => t.id === id)), ...availableTabs.filter((t) => !firstTabs.includes(t.id))];
   // A tab that went away under the open sheet (the run finished, Plan left) falls back to the first.
   const tab = tabs.some((t) => t.id === asked) ? asked : tabs[0]!.id;
-  const title = newest !== null ? humanTitle(mine[0]!.session.problem || mine[0]!.session.id) : 'This session';
+  const title = sessionTitle([], mine);
   // S16a-2c: "Open its thread" — the newest run's session (only closes when that thread is on screen).
   const record = newest !== null ? sessionPath(`run:${newest.session.id}`) : null;
   return (
     <Sheet
-      title={title}
+      title={sheetTitle(mine[0]?.session.problem ? title : 'This session')}
       sub={mine.length > 1 ? `${mine.length} runs` : null}
       objectAttr={objectAttr(r)}
       tabs={tabs}
       tab={tab}
       onTab={setSheetTab}
-      primary={{ label: primaryAction('session').label, onClick: () => { if (record !== null) { closeSheet(); navigate(record); } }, disabled: record === null ? 'Nothing in this session is on this daemon.' : null }}
+      primary={{ label: primaryAction('session').label, onClick: () => { if (record !== null) { closeSheet(); navigate(record); } }, disabled: record === null ? "Nothing in this session is available from Studio's service." : null }}
       onClose={closeSheet}
       {...(newest !== null ? { actions: <SheetRunActions key={newest.session.id} view={newest} /> } : {})}
     >
       {tab === 'goal' && (
         <ul data-testid="sheet-goal" className="wk-sheet-list">
-          {mine.length === 0 && <li className="wk-session-grey">Nothing in this session is on this daemon.</li>}
-          {mine.map((v) => <li key={v.session.id} className="wk-sheet-line">{v.session.problem || v.session.id}</li>)}
+          {mine.length === 0 && <li className="wk-session-grey">Nothing in this session is available from Studio's service.</li>}
+          {mine.map((v, i) => (
+            <li key={v.session.id} className="wk-sheet-line">
+              {mine.length > 1 && <p className="wk-section-title wk-sheet-goal-label">{i === 0 ? 'First request' : `Later run ${i + 1}`}</p>}
+              <GoalBrief problem={v.session.problem} />
+            </li>
+          ))}
         </ul>
       )}
-      {tab === 'steps' && (newest !== null ? <StepsList view={newest} /> : <p className="wk-session-grey">Nothing in this session is on this daemon.</p>)}
+      {tab === 'steps' && (newest !== null ? <StepsList view={newest} /> : <p className="wk-session-grey">Nothing in this session is available from Studio's service.</p>)}
       {tab === 'helpers' && <HelpersList runs={mine} sessionId={r.sessionId} onSignIn={() => setSheetTab('signins')} roster={roster} />}
       {tab === 'changes' && newest !== null && (
         <div data-testid="sheet-session-changes" className="wk-sheet-section wk-sheet-fill">
-          <FileViewer runId={newest.session.id} defaultTab="diff" base="merge-base" onClose={() => setSheetTab('steps')} onUnsupported={() => setSheetTab('steps')} />
+          <FileViewer inline runId={newest.session.id} defaultTab="diff" base="merge-base" onClose={() => setSheetTab('steps')} onUnsupported={() => setSheetTab('steps')} />
         </div>
       )}
       {tab === 'evidence' && newest !== null && <EvidenceTab runId={newest.session.id} />}
@@ -328,7 +384,7 @@ function FinishedVerdict({ view }: { view: SessionView }): React.ReactElement | 
   const events = useRunEvents(runId, terminal).events;
   if (!terminal || events === null) return null;
   const units = [...view.units].sort((a, b) => a.ord - b.ord);
-  return <div data-testid="sheet-verdict" className="wk-sheet-section"><VerdictDetail runId={runId} units={units} /></div>;
+  return <div data-testid="sheet-verdict" className="wk-sheet-section"><VerdictDetail runId={runId} units={units} completed={view.session.status === 'completed'} /></div>;
 }
 
 function StepsList({ view }: { view: SessionView }): React.ReactElement {
@@ -339,15 +395,17 @@ function StepsList({ view }: { view: SessionView }): React.ReactElement {
     <FinishedVerdict view={view} />
     <ul data-testid="sheet-steps" className="wk-sheet-list">
       {units.length === 0 && <li className="wk-session-grey">No step has been planned yet.</li>}
-      {units.map((u) => {
+      {units.map((u, i) => {
         const word = u.ord === live ? 'working' : UNIT_WORD[u.status] ?? u.status;
+        // A re-planned step repeats its name: say it ran again, so two rows are told apart.
+        const again = i > 0 && stepName(units[i - 1]!) === stepName(u);
         const ref: ObjectRef = { kind: 'step', runId: view.session.id, ord: u.ord };
         return (
           <li key={u.id} data-testid="sheet-step-row" data-ord={u.ord} data-status={u.status} className="wk-sheet-line" data-object={objectAttr(ref)}>
-            <button type="button" data-testid="sheet-step-open" aria-label={`What ${stepName(u)} did`} onClick={() => useSheets.setState({ open: { ref, tab: 'did' } })} className="wk-since-toggle">
-              {stepName(u)} — {word}{u.assigned_cli ? ` · ${u.assigned_cli}` : ''}
+            <button type="button" data-testid="sheet-step-open" aria-label={`What ${stepName(u)} did`} onClick={() => useSheets.setState({ open: { ref, tab: 'did' } })} className="wk-link">
+              {stepName(u)}{again ? ' (again)' : ''} — {word}{u.assigned_cli ? ` · ${u.assigned_cli}` : ''}
             </button>
-            {u.denial_reason ? <span data-testid="sheet-step-why" className="wk-session-grey"> — {u.denial_reason}</span> : null}
+            {u.denial_reason ? <TechDetails data-testid="sheet-step-why" text={u.denial_reason} /> : null}
           </li>
         );
       })}
@@ -366,9 +424,9 @@ function EvidenceTab({ runId }: { runId: string }): React.ReactElement {
   return (
     <div data-testid="sheet-evidence" className="wk-sheet-section">
       <p className="wk-sheet-line">Everything the run recorded — its events, verdicts and files — as one file you can keep or hand to a reviewer.</p>
-      <button type="button" data-testid="sheet-evidence-download" disabled={state === 'getting'} onClick={get} className="wk-prop-btn wk-prop-btn--ghost">{state === 'getting' ? 'Getting it…' : 'Download the evidence'}</button>
+      <button type="button" data-testid="sheet-evidence-download" disabled={state === 'getting'} onClick={get} className="wk-btn wk-btn--secondary">{state === 'getting' ? 'Getting it…' : 'Download the evidence'}</button>
       {state === 'got' && <p role="status" className="wk-sheet-hint">Downloaded.</p>}
-      {state === 'failed' && <p role="alert" className="wk-composer-note wk-composer-note--bad">Could not get the evidence from the daemon.</p>}
+      {state === 'failed' && <p role="alert" className="wk-composer-note wk-composer-note--bad">Could not get the evidence from Studio's service.</p>}
     </div>
   );
 }
@@ -420,9 +478,9 @@ function HelpersList({ runs, sessionId = null, onSignIn, roster = null }: { runs
         const ref: ObjectRef | null = x.cli !== null && x.runId !== undefined ? { kind: 'helper', runId: x.runId, cli: x.cli } : null;
         return (
           <li key={x.key} data-testid="sheet-helper-role" data-role={x.key.split(':')[0]} className="wk-sheet-line" {...(ref !== null ? { 'data-object': objectAttr(ref) } : {})}>
-            {x.cli !== null && ref !== null && <><button type="button" data-testid="sheet-helper-open" data-cli={x.cli} onClick={() => useSheets.setState({ open: { ref, tab: SHEET_TABS.helper[0]!.id } })} className="wk-since-toggle">{x.cli}</button>{' '}</>}
+            {x.cli !== null && ref !== null && <><button type="button" data-testid="sheet-helper-open" data-cli={x.cli} onClick={() => useSheets.setState({ open: { ref, tab: SHEET_TABS.helper[0]!.id } })} className="wk-btn wk-btn--secondary">{x.cli}</button>{' '}</>}
             {x.role}
-            {x.action === 'signin' && onSignIn !== undefined && <>{' '}<button type="button" data-testid="sheet-helper-signin" onClick={onSignIn} className="wk-since-toggle">Sign in</button></>}
+            {x.action === 'signin' && onSignIn !== undefined && <>{' '}<button type="button" data-testid="sheet-helper-signin" onClick={onSignIn} className="wk-btn wk-btn--secondary">Sign in</button></>}
           </li>
         );
       })}
@@ -433,8 +491,8 @@ function HelpersList({ runs, sessionId = null, onSignIn, roster = null }: { runs
         const ref: ObjectRef = { kind: 'helper', runId: v.session.id, cli };
         return (
           <li key={`${v.session.id}:${cli}`} className="wk-sheet-line" data-object={objectAttr(ref)}>
-            <button type="button" data-testid="sheet-helper-open" data-cli={cli} onClick={() => useSheets.setState({ open: { ref, tab: SHEET_TABS.helper[0]!.id } })} className="wk-since-toggle">{cli}</button>
-            {' '}— {working ? 'working' : TERMINAL.has(v.session.status) ? 'finished' : 'waiting'} on “{humanTitle(v.session.problem || v.session.id)}”
+            <button type="button" data-testid="sheet-helper-open" data-cli={cli} onClick={() => useSheets.setState({ open: { ref, tab: SHEET_TABS.helper[0]!.id } })} className="wk-btn wk-btn--secondary">{cli}</button>
+            {' '}— {working ? 'working' : TERMINAL.has(v.session.status) ? 'finished' : 'waiting'} on “{sheetTitle(v.session.problem ? sessionTitle([], [v]) : 'This session')}”
           </li>
         );
       })}
@@ -461,8 +519,11 @@ function ActivityTail({ view }: { view: SessionView }): React.ReactElement {
   const showText = useDisplayText();
   const ctx = useMemo(() => narratorCtxOf(view), [view]);
   if (ev.state === 'loading') return <p className="wk-session-grey">Reading the activity…</p>;
-  if (ev.state === 'error') return <p role="alert" className="wk-composer-note wk-composer-note--bad">Could not read the activity: {ev.message}</p>;
+  if (ev.state === 'error') return <><p role="alert" className="wk-composer-note wk-composer-note--bad">Could not read the activity.</p><TechDetails text={ev.message} /></>;
   const lines = ev.events
+    // How a step was routed (council polls, distributions, seat picks) is technical detail: the raw
+    // events keep it; the activity says what happened to the work.
+    .filter((e) => !/^(council|unitDistributed)/.test(String(e.type)))
     .map((e) => ({ line: narrate(e, ctx), at: eventAtMs(e) }))
     .filter((x): x is { line: NarrationLine; at: number | null } => x.line !== null)
     .slice(-30)
@@ -486,11 +547,12 @@ function SignIns({ roster }: { roster: RosterSeat[] | null }): React.ReactElemen
   if (roster === null) return <p className="wk-session-grey">Reading the roster…</p>;
   return (
     <ul data-testid="sheet-signins" className="wk-sheet-list">
-      {roster.length === 0 && <li className="wk-session-grey">No helper is set up on this daemon yet.</li>}
+      {roster.length === 0 && <li className="wk-session-grey">No helper is set up with Studio's service yet.</li>}
       {roster.map((s) => (
         <li key={s.key} data-testid="sheet-signin-row" data-seat={s.key} className="wk-sheet-line">
-          <b>{s.display_name || s.key}</b> — {seatStandingWord(s).detail}
-          {signInLapsed(s) && <> <button type="button" data-testid="sheet-signin-action" data-seat={s.key} onClick={() => setSignIn(s)} className="wk-since-toggle">Sign in</button></>}
+          <b>{s.display_name || s.key}</b> — {helperStanding(s)}
+          {seatStandingWord(s).kind === 'ineligible' && <TechDetails text={seatStandingWord(s).detail ?? ''} />}
+          {signInLapsed(s) && <> <button type="button" data-testid="sheet-signin-action" data-seat={s.key} onClick={() => setSignIn(s)} className="wk-btn wk-btn--secondary">Sign in</button></>}
         </li>
       ))}
       {signIn !== null && <SignInPanel seat={signIn} onClose={() => setSignIn(null)} />}
@@ -531,8 +593,8 @@ function DeskSheet({ tab, runs, navigate, needCount }: { tab: string; runs: Sess
     >
       {tab === 'studio' && (
         <div data-testid="sheet-studio" className="wk-sheet-section">
-          {diag === null && <p className="wk-session-grey">Asking the daemon…</p>}
-          {diag !== null && 'error' in diag && <p role="alert" className="wk-composer-note wk-composer-note--bad">The daemon could not say ({diag.error}).</p>}
+          {diag === null && <p className="wk-session-grey">Asking Studio's service…</p>}
+          {diag !== null && 'error' in diag && <><p role="alert" className="wk-composer-note wk-composer-note--bad">Studio's service could not report its status.</p><TechDetails text={diag.error} /></>}
           {diag !== null && 'd' in diag && (
             <>
               <p className="wk-sheet-line">wicked-crew {diag.d.components.crew}{diag.d.components.studioBundle ? ` · studio ${diag.d.components.studioBundle}` : ''}{diag.d.components.coreTs ? ` · engine ${diag.d.components.coreTs}` : ''}</p>
@@ -545,9 +607,9 @@ function DeskSheet({ tab, runs, navigate, needCount }: { tab: string; runs: Sess
       {tab === 'computer' && (
         <ul data-testid="sheet-computer" className="wk-sheet-list">
           {diag !== null && 'd' in diag && diag.d.stores.map((s) => <li key={s.name} className="wk-sheet-line">{s.name} — {fmtBytes(s.bytes)}</li>)}
-          {diag !== null && 'd' in diag && diag.d.stores.length === 0 && <li className="wk-session-grey">The daemon lists no stores.</li>}
-          {diag !== null && 'error' in diag && <li role="alert" className="wk-composer-note wk-composer-note--bad">The daemon could not say ({diag.error}).</li>}
-          {diag === null && <li className="wk-session-grey">Asking the daemon…</li>}
+          {diag !== null && 'd' in diag && diag.d.stores.length === 0 && <li className="wk-session-grey">Studio's service lists no stores.</li>}
+          {diag !== null && 'error' in diag && <li role="alert" className="wk-composer-note wk-composer-note--bad">Studio's service could not report its status.<TechDetails text={diag.error} /></li>}
+          {diag === null && <li className="wk-session-grey">Asking Studio's service…</li>}
         </ul>
       )}
       {tab === 'signins' && <SignIns roster={roster} />}

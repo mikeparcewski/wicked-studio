@@ -50,6 +50,27 @@ class SectionFailed(Exception):
     pass
 
 
+def sheet_tab_ids(page) -> list:
+    """Every tab of the open sheet: the tablist, then the ones behind "More" (UI-CONTRACT §4.4)."""
+    ids = page.locator('[data-testid="sheet"] [role="tab"]').evaluate_all("els => els.map(e => e.dataset.tab)")
+    more = page.get_by_test_id("sheet-tabs-more-button")
+    if more.count() > 0:
+        more.click()
+        ids += page.locator('[data-testid="sheet-tabs-more-list"] [data-item]').evaluate_all("els => els.map(e => e.dataset.item)")
+        more.click()
+    return ids
+
+
+def sheet_tab(page, tab: str) -> None:
+    """Open a sheet tab, through "More" when it is not in the visible tablist."""
+    loc = page.locator(f'[data-testid="sheet"] [role="tab"][data-tab="{tab}"]')
+    if loc.count() > 0:
+        loc.first.click()
+        return
+    page.get_by_test_id("sheet-tabs-more-button").click()
+    page.locator(f'[data-testid="sheet-tabs-more-list"] [data-item="{tab}"]').click()
+
+
 def fail(step: str, why: str) -> None:
     report["steps"][step] = {"ok": False, "error": why}
     print(json.dumps(report, indent=2))
@@ -253,7 +274,7 @@ with sync_playwright() as p:
         look = page.locator(f'[data-testid="session-run"][data-run-id="{rid}"] [data-testid="session-run-look"]')
         look.wait_for(state="visible", timeout=15000)
         look.click()
-        page.locator(f'[data-testid="sheet-tab"][data-tab="{tab}"]').click()
+        sheet_tab(page, tab)
 
     def section_mid_run_edits() -> None:
         # ── 3. mid-run edits ──────────────────────────────────────────────────────────────
@@ -323,7 +344,7 @@ with sync_playwright() as p:
         reset(origin)
         # S16a-2b: the run's sections are its session sheet's tabs.
         def tabs() -> list:
-            return page.get_by_test_id("sheet-tab").evaluate_all("els => els.map(e => e.dataset.tab)")
+            return sheet_tab_ids(page)
 
         open_sheet_tab("r-team-sys", "whatwhere")
         check("system-run-has-no-delivery", "delivery" not in tabs(), sections=tabs())

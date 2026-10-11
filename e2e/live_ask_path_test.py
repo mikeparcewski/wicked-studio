@@ -176,7 +176,7 @@ with sync_playwright() as p:
     check("one-voice",
           len(t["bubbles"]) == 1 and bubble["who"] == pa and len(bubble["text"]) > 0
           and t["pending"] == 0 and t["you"] == 1 and t["runs"] == 0 and t["older"] is None
-          and who is not None and who["text"] == f"{pa} answers · {pick_words}",
+          and who is not None and who["text"] == (f"{pa} answers · your pick" if selection == "chosen" else f"{pa} answers"),
           thread=t, bubble=bubble, path_started=started["payload"] if started else None)
     seat = joined[0]["payload"].get("seat") if joined else None
     status = joined[0]["payload"].get("status") if joined else None

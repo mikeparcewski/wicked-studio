@@ -119,7 +119,7 @@ export function ChainLine({ chain, runId, units = [], teamError = null, onRetry,
   jumpOrd?: number | null;
 }): React.ReactElement {
   return (
-    <div data-testid="chain" data-run-id={runId} data-source={chain.source} data-proposed={chain.proposed ? 'true' : 'false'} className="wk-chain">
+    <div data-testid="chain" data-run-id={runId} data-source={chain.source} data-proposed={chain.proposed ? 'true' : 'false'} className={`wk-chain${nothingChecked ? ' wk-chain--unchecked' : ''}`}>
       {chain.steps.length > 0 && (
         <ol data-testid="chain-line" aria-label={chain.proposed ? 'Proposed steps' : 'Steps'} className="wk-chain-line">
           {chain.steps.map((s, i) => {

@@ -45,7 +45,8 @@ describe('S16a-1d — Retry', () => {
     await userEvent.click(screen.getByTestId('session-run-retry'));
     expect(navigate).toHaveBeenCalledExactlyOnceWith('/runs/new');
     expect(peekRetryPrefill()).toMatchObject({ retryOf: RUN, problem: 'Fix the double charge' });
-    expect(calls.slice(before)).toEqual([]);
+    // Nothing is launched or written (a read, e.g. the helpers' roster, may land meanwhile).
+    expect(calls.slice(before).filter((c) => c.method !== 'GET')).toEqual([]);
   });
 
   it('a running or finished run offers no Retry', () => {

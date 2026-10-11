@@ -41,6 +41,27 @@ class SectionFailed(Exception):
     pass
 
 
+def sheet_tab_ids(page) -> list:
+    """Every tab of the open sheet: the tablist, then the ones behind "More" (UI-CONTRACT §4.4)."""
+    ids = page.locator('[data-testid="sheet"] [role="tab"]').evaluate_all("els => els.map(e => e.dataset.tab)")
+    more = page.get_by_test_id("sheet-tabs-more-button")
+    if more.count() > 0:
+        more.click()
+        ids += page.locator('[data-testid="sheet-tabs-more-list"] [data-item]').evaluate_all("els => els.map(e => e.dataset.item)")
+        more.click()
+    return ids
+
+
+def sheet_tab(page, tab: str) -> None:
+    """Open a sheet tab, through "More" when it is not in the visible tablist."""
+    loc = page.locator(f'[data-testid="sheet"] [role="tab"][data-tab="{tab}"]')
+    if loc.count() > 0:
+        loc.first.click()
+        return
+    page.get_by_test_id("sheet-tabs-more-button").click()
+    page.locator(f'[data-testid="sheet-tabs-more-list"] [data-item="{tab}"]').click()
+
+
 def fail(step: str, why: str) -> None:
     report["steps"][step] = {"ok": False, "error": why}
     print(json.dumps(report, indent=2))
@@ -171,7 +192,7 @@ with sync_playwright() as p:
     def desk_freeze_open() -> None:
         """The Desk keeps the switch under "Look underneath" › Hold deliveries."""
         page.get_by_test_id("desk-sheet-open").click()
-        page.locator('[data-testid="sheet-tab"][data-tab="hold"]').click()
+        sheet_tab(page, "hold")
         page.get_by_test_id("sheet-hold").wait_for(state="visible", timeout=8000)
 
     def section_freeze() -> None:

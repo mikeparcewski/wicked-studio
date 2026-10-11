@@ -264,7 +264,7 @@ with sync_playwright() as p:
     unread = page.evaluate("() => ({conv: document.querySelector('[data-testid=\"session\"]').dataset.conversation, "
                            "closed: !!document.querySelector('[data-testid=\"session-closed-line\"]'), "
                            "runs: document.querySelectorAll('[data-testid=\"session-run\"]').length})")
-    page.get_by_test_id("session-chat-retry").click()
+    page.get_by_test_id("session-chat-error-retry").click()
     page.wait_for_function("() => document.querySelectorAll('[data-testid=\"session-turn\"]').length > 0", timeout=10000)
     page.unroute("**/api/v1/chats/chat-pay")
     check("chat-read-failure", unread["conv"] == "unreadable" and not unread["closed"] and unread["runs"] == 2

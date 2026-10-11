@@ -94,7 +94,7 @@ describe('studio#675 — an archived run opened from the Archived list resolves'
       return Promise.resolve(new Response(JSON.stringify({}), { status: 404, headers: { 'content-type': 'application/json' } }));
     }));
     render(<SessionPage sessionId="run:r-arc" runs={[]} runsLoaded needRows={[]} navigate={() => {}} onAsk={() => {}} />);
-    const retry = await screen.findByTestId('session-run-detail-retry');
+    const retry = await screen.findByTestId('session-run-detail-error-retry');
     retry.click();
     await screen.findByTestId('session-run-archived');
     expect(screen.queryByTestId('session-run-detail-error')).toBeNull();
