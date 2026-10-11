@@ -12,8 +12,8 @@
   "studioVersion": "0.7.5",
   "counts": {
     "files": 197,
-    "occurrences": 2215,
-    "static": 1929,
+    "occurrences": 2221,
+    "static": 1935,
     "dynamic": 60,
     "computed": 19
   },
@@ -7384,12 +7384,6 @@
       ]
     },
     {
-      "testId": "session-chat-stop",
-      "files": [
-        "src/components/session/SessionView.tsx"
-      ]
-    },
-    {
       "testId": "session-closed-line",
       "files": [
         "src/components/session/SessionView.tsx"
@@ -8005,6 +7999,24 @@
       ]
     },
     {
+      "testId": "session-runs-error",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
+      "testId": "session-runs-slow",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
+      "testId": "session-runs-slow-retry",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
       "testId": "session-sheet-open",
       "files": [
         "src/components/session/SessionView.tsx"
@@ -8050,6 +8062,30 @@
     },
     {
       "testId": "session-step-undo",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
+      "testId": "session-stop",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
+      "testId": "session-stop-confirm",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
+      "testId": "session-stop-confirm-row",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
+      "testId": "session-stop-keep",
       "files": [
         "src/components/session/SessionView.tsx"
       ]
