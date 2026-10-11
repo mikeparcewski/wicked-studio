@@ -76,7 +76,9 @@ export function GateNotifications({ onSelect, runId, projectId = null, runs = []
         return pid === undefined || pid === projectId;
       });
 
-  // First-paint stamping (idempotent — safe under StrictMode double render).
+  // First-paint stamping (idempotent — safe under StrictMode double render). A burst of gates is
+  // ONE announcement: every member is stamped together, one card paints and the rest are its "+N",
+  // so a rig with many waiting gates never cycles toasts for minutes (the Desk holds them all).
   const now = Date.now();
   for (const g of open) {
     const key = toastKey(g);

@@ -32,6 +32,7 @@ import { LayoutGrid, Plus } from 'lucide-react';
 import { seedNewChat } from '../../board/chatMoves.js';
 import { readErrorKind } from '../../api/errors.js';
 import { useSettledNeeds } from '../../hooks/useNeedsRows.js';
+import { useNeedsSources } from '../../store/needsSources.js';
 import { Skeleton, StateBanner } from '../ui/index.js';
 
 /** The daemon's governance self-report, read once per mount (and again after a replay changed it).
@@ -83,6 +84,11 @@ export function Desk({ runs, runsLoaded, runsError = null, onRetryRuns, needRows
   // UI-CONTRACT §5 (studio#681 row 4): no number until every needs source has settled.
   const settled = useSettledNeeds(needRows, readState === 'known');
   const count = settled.count ?? 0;
+  const [rereading, setRereading] = useState(false);
+  const rereadSources = (): void => {
+    setRereading(true);
+    void useNeedsSources.getState().load(0).finally(() => setRereading(false));
+  };
   const displayText = useDisplayText();
   const { hello, date } = deskGreeting(now);
   const runChatId = useCapabilities((s) => s.runChatId);
@@ -224,16 +230,17 @@ export function Desk({ runs, runsLoaded, runsError = null, onRetryRuns, needRows
         )}
 
         {readState === 'known' && settled.phase === 'partial' && (
-          <StateBanner data-testid="desk-needs-partial" kind="partial" what={settled.missing.join(', ')} />
+          <StateBanner data-testid="desk-needs-partial" kind="partial" what={settled.missing.join(', ')} onRetry={rereadSources} retrying={rereading} />
         )}
         <div className="wk-desk-cols">
           <div className="wk-desk-main">
             {/* Rows already known (an elicitation, a memory proposal) show at once; only the fold's
                 calm copy waits for the first /runs answer (studio#459). */}
             {leadWithSignIn && chores_block}
-            {(runsLoaded || needRows.length > 0)
+            {/* The calm "Nothing needs you" waits for a complete read (row 4); rows already known show at once. */}
+            {needRows.length > 0 || (runsLoaded && settled.phase === 'complete')
               ? <NeedsQueueSurface rows={needRows} runs={runs} navigate={navigate} now={now} />
-              : readState === 'checking' && (
+              : (readState === 'checking' || (readState === 'known' && settled.phase === 'loading')) && (
                 // UX audit row 68: rows shaped like the list while the first read is in flight.
                 <section aria-label="Needs you" className="wk-desk-needs">
                   <p className="wk-desk-label">Needs you</p>

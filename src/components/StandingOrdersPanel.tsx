@@ -3,6 +3,7 @@ import { ORDER_INVARIANT, ORIGIN_LABEL, orderOrigin } from '../board/standingOrd
 import { useStandingOrders } from '../hooks/useStandingOrders.js';
 import { clockTime } from '../board/handover.js';
 import { AnchoredOverlay } from './AnchoredOverlay.js';
+import { TechDetails } from './ui/index.js';
 
 /**
  * STANDING ORDERS (Studio OS behaviour 10) — a skin over `useStandingOrders`. It lives in Home's
@@ -172,9 +173,10 @@ export function StandingOrdersPanel(): React.ReactElement | null {
             </>
           )}
           {d.step === 'failed' && (
-            <p data-testid="standing-order-parse-error" role="alert" className="wk-orders-pop-err">
-              {d.error}{d.answer !== undefined ? ` (the helper said: ${d.answer})` : ''}
-            </p>
+            <div data-testid="standing-order-parse-error" role="alert">
+              <p className="wk-orders-pop-err">Couldn’t read that as an instruction. Try saying it another way.</p>
+              <TechDetails text={[d.error, ...(d.answer !== undefined ? [`the helper said: ${d.answer}`] : [])]} />
+            </div>
           )}
 
           {outbox.length > 0 && (

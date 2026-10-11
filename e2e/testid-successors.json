@@ -707,6 +707,9 @@
     "stat-ready": "repos-kpis",
     "stat-repo-runs": "repos-kpis",
     "stat-repos": "repos-kpis",
-    "repo-graph-retry": "repo-graph"
+    "repo-graph-retry": "repo-graph",
+    "desk-runs-retry": "desk-runs-failed",
+    "tech-need-prompt": "need-line",
+    "watchtower-retry": "watchtower-error"
   }
 }

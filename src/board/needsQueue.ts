@@ -160,7 +160,7 @@ export function groupAlike(rows: readonly NeedRow[], now: number): NeedRow[] {
   const same = new Map<string, NeedRow[]>();
   for (const r of rows) {
     if (folded.has(r.key) || r.groupKey !== undefined || r.members !== undefined) continue;
-    const k = `${r.kind}\u0000${r.subject}\u0000${r.text}`;
+    const k = `${r.kind}\u0000${r.subject}\u0000${r.question ?? r.text}`;
     same.set(k, [...(same.get(k) ?? []), r]);
   }
   for (const members of same.values()) {
@@ -176,7 +176,7 @@ export function groupAlike(rows: readonly NeedRow[], now: number): NeedRow[] {
       stakes: ranked.reduce((n, m) => n + m.stakes, 0),
       members: ranked,
       subject: plainRunTitle(lead.subject),
-      text: sameGroupLine(ranked.length, lead.text),
+      text: sameGroupLine(ranked.length, lead.question ?? lead.text),
       tone: lead.tone,
       at: clocks.length > 0 ? Math.min(...clocks) : null,
       subjectPath: lead.subjectPath,

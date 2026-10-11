@@ -28,6 +28,11 @@ export function plainWatchLine(sentence: string): { line: string; detail: string
   // Long engine prose, or a tail carrying internal tokens ("monitors=1", "run_unit", a path), goes
   // behind the disclosure; a short plain sentence stays whole.
   const internal = colon !== -1 && /[=_/\\]/.test(sentence.slice(colon + 2));
+  // A path in the sentence ("… in /var/…") ends the plain line there; the whole sentence is the detail.
+  const path = /\s+(?:in|at|on|under|from)?\s*(?:~|\$TMPDIR|\/)[\w.~$-]*\/[^\s]*/u.exec(sentence);
+  if (path !== null && path.index > 0) {
+    return { line: sentence.slice(0, path.index).trim().replace(/[\p{P}\s]+$/u, ''), detail: sentence };
+  }
   // A parenthetical of internal tokens ("(quota_exhausted)") drops from the line, kept in the detail.
   const paren = /\s*\(([^()]*[=_/\\][^()]*)\)/u;
   if (colon === -1 && paren.test(sentence)) {
@@ -89,7 +94,10 @@ export function WatchtowerPage({ runs, navigate, now }: {
     <div data-testid="watchtower" data-registry={registry} className="wk-watchtower">
       <header className="wk-watchtower-head">
         <h1 className="wk-session-title">Watchtower</h1>
-        <p data-testid="watchtower-sentence" data-count={openCount} className="wk-session-status">{sentence}</p>
+        {/* No verdict over a feed that could not be read (the banner below says so). */}
+        {!(feedError !== null && all.length === 0) && (
+          <p data-testid="watchtower-sentence" data-count={openCount} className="wk-session-status">{sentence}</p>
+        )}
         {orphaned > 0 && (
           <p data-testid="watchtower-orphaned" data-count={orphaned} className="wk-session-grey">
             {orphaned === 1 ? '1 run was orphaned by a restart — nothing is working on it.' : `${orphaned} runs were orphaned by a restart — nothing is working on them.`}
