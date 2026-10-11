@@ -12,6 +12,17 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.7.10] — 2026-10-11
+
+Plain words, and a deliver card that never offers a refused delivery (reel UX gate findings).
+
+### Fixed
+- A run that needs QE acceptance and hasn't passed it no longer offers Deliver; it says what to do instead. Health, the session sheet and System speak of helpers and checks, not seats, judges and councils (#731, #724).
+- Gate notices are a strip above the page; the move menu fits the window; New project fields are stacked; the needs count no longer changes while it is still loading or while a read fails (#730, #722, #723).
+
+### Changed
+- Settings pages keep one name each across the rail, the settings overview, ⌘K and the page title (Configuration, Additional settings, Steering, Evals); notification choices use the shared segmented control; the Workflows page names workflows in plain words (#729, #725).
+
 ## [0.7.9] — 2026-10-11
 
 opencode is opt-in.
@@ -2070,7 +2081,8 @@ The merged interactive layer: wicked-interactive's UI moved into this skin (DES-
   `git subtree split` (92 commits).
 - The SPA as a pure HTTP/WS client of the wicked-crew daemon: runs, gates, live CoreEvents.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.9...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.10...HEAD
+[0.7.10]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.9...v0.7.10
 [0.7.9]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.8...v0.7.9
 [0.7.8]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.7...v0.7.8
 [0.7.7]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.6...v0.7.7
