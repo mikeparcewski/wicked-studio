@@ -44,6 +44,22 @@ export function plainWatchLine(sentence: string): { line: string; detail: string
   return { line: sentence, detail: null };
 }
 
+/** Adjacent rows about the same work that say the same thing in the same state fold into the newest
+ *  one, with a count (UX gate S1: "Nothing checked this step" six times for one session). Pure. */
+export function foldAlike(rows: readonly WatchRow[]): { row: WatchRow; alike: number }[] {
+  const out: { row: WatchRow; alike: number }[] = [];
+  for (const r of rows) {
+    const prev = out[out.length - 1];
+    if (prev !== undefined && r.runId !== null && prev.row.runId === r.runId && prev.row.state === r.state
+      && plainWatchLine(prev.row.sentence).line === plainWatchLine(r.sentence).line) {
+      prev.alike += 1 + r.rolledUp;
+      continue;
+    }
+    out.push({ row: r, alike: 0 });
+  }
+  return out;
+}
+
 /** "just now" / "4 min ago" / "3 h ago" / the date — never a raw timestamp. */
 export function ago(at: number, now: number): string {
   const s = Math.max(0, Math.round((now - at) / 1000));
@@ -143,7 +159,7 @@ export function WatchtowerPage({ runs, navigate, now }: {
           </p>
         )}
         <ol className="wk-watchtower-feed">
-          {rows.map((r) => {
+          {foldAlike(rows).map(({ row: r, alike }) => {
             const jump = jumpPath(r);
             const open = jump ?? runPath(r);
             const { line, detail } = plainWatchLine(r.sentence);
@@ -157,7 +173,7 @@ export function WatchtowerPage({ runs, navigate, now }: {
                     {workOf(r.runId) !== null && <> · <span data-testid="watchtower-row-work">{workOf(r.runId)}</span></>}
                     {' · '}{STATE_WORD[r.state]}
                     {r.stateLine !== null && r.stateLine !== STATE_WORD[r.state] && ` — ${r.stateLine}`}
-                    {r.rolledUp > 0 && ` · and ${r.rolledUp} more like it`}
+                    {r.rolledUp + alike > 0 && ` · and ${r.rolledUp + alike} more like it`}
                     {r.corroboratedBy.length > 0 && ' · also seen by the team'}
                   </span>
                   {detail !== null && <TechDetails data-testid="watchtower-row-detail" text={detail} />}

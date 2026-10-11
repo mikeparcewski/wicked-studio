@@ -177,7 +177,7 @@ with sync_playwright() as p:
         page.wait_for_function(
             f"""() => document.querySelector('{GROUP}')?.getAttribute('data-count') === '5'""", timeout=15000)
         line = row.get_by_test_id("need-line").inner_text()
-        check("group-consequence-first", line == "4 memory-only · 1 changes enforcement", line=line)
+        check("group-consequence-first", line == "4 memories · 1 rule change", line=line)
         act = row.get_by_test_id("need-accept-act")
         check("group-accept-label", act.inner_text().strip() == "Accept 4 memories", label=act.inner_text())
         page.wait_for_function(

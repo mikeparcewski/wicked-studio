@@ -60,7 +60,7 @@ describe('the model: what an accept does, read from kind_type', () => {
     const rows = groupAlike(needsYouRows(inputs(MIXED)), NOW);
     const group = rows.find((r) => r.groupKey === 'proposal')!;
     expect(group.subject).toBe('11 proposals to review');
-    expect(group.text).toBe('5 memory-only · 6 change enforcement');
+    expect(group.text).toBe('5 memories · 6 rule changes');
     expect(group.action).toMatchObject({ kind: 'accept-memory', label: 'Accept 5 memory-only ›' });
     expect([...(group.action as { ids: string[] }).ids].sort()).toEqual(MEMS.map((p) => p.id).sort());
   });
@@ -68,7 +68,7 @@ describe('the model: what an accept does, read from kind_type', () => {
   it('a group with no memory proposals offers no batch accept', () => {
     const group = groupAlike(needsYouRows(inputs(POLS)), NOW).find((r) => r.groupKey === 'proposal')!;
     expect(group.action.kind).toBe('open');
-    expect(group.text).toBe('6 change enforcement');
+    expect(group.text).toBe('6 rule changes');
   });
 
   it('enforcement-changing members list first, 4 per page', () => {

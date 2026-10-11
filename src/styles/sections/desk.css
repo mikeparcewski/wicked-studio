@@ -59,6 +59,7 @@
   .wk-desk-need-title { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
   .wk-desk-orders .wk-orders { flex-wrap: wrap; white-space: normal; }
   .wk-desk-orders { column-gap: var(--space-4); }
+  .wk-desk-orders .wk-orders, .wk-desk-focus-switch .wk-switch-label { font-size: var(--text-sm); }
   .wk-desk-orders .wk-orders-act { min-height: var(--tap-min); }
   .wk-watchtower-row .wk-tech-details-summary { min-height: var(--tap-min); display: flex; align-items: center; }
   .wk-desk-bottom { padding: 8px var(--space-4) 12px; }

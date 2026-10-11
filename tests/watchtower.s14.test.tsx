@@ -1,7 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { liveCount, selfOpens, SELF_OPEN_MS, WatchPill, watchSentence } from '../src/components/desk/WatchPill.js';
-import { ago, plainWatchLine, WatchtowerPage } from '../src/components/watch/WatchtowerPage.js';
+import { ago, foldAlike, plainWatchLine, WatchtowerPage } from '../src/components/watch/WatchtowerPage.js';
 import { absTime } from '../src/board/relTime.js';
 import { foldFeed, EMPTY_WATCH, useWatchStore } from '../src/store/watch.js';
 import { parseRoute } from '../src/hooks/useRoute.js';
@@ -159,5 +159,18 @@ describe('codex on S14', () => {
     vi.setSystemTime(NOW);
     render(<WatchPill needRows={[need('skewed', NOW + 5_000)]} runs={[]} navigate={() => {}} />);
     expect(screen.getByTestId('watch-pill-wrap').getAttribute('data-open')).toBe('false');
+  });
+});
+
+describe('foldAlike (UX gate S1)', () => {
+  const base = { source: 'watch', kind: 'problem', projectId: null, at: 1, state: 'open', stateLine: null, severity: null, attach: null, anchor: null, rolledUp: 0, corroboratedBy: [], foldedInto: null, place: null, ord: null } as const;
+  it('folds adjacent same-work same-line rows into the newest, counting the rest', () => {
+    const rows = [
+      { ...base, id: 'a', runId: 'r1', sentence: 'Nothing checked this step: no deterministic floor: no pinned validator' },
+      { ...base, id: 'b', runId: 'r1', sentence: 'Nothing checked this step: no judge configured for this phase at all' },
+      { ...base, id: 'c', runId: 'r2', sentence: 'Nothing checked this step: no deterministic floor: no pinned validator' },
+    ] as unknown as Parameters<typeof foldAlike>[0];
+    const out = foldAlike(rows);
+    expect(out.map((x) => [x.row.id, x.alike])).toEqual([['a', 1], ['c', 0]]);
   });
 });

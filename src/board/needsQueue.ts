@@ -55,9 +55,9 @@ function groupMove(key: NeedGroupKey, ranked: readonly NeedRow[]): { action: Nee
     const enforcing = of('enforcement').length;
     const unknown = of('unknown').length;
     const parts: string[] = [];
-    if (harmless.length > 0) parts.push(`${harmless.length} memory-only`);
-    if (enforcing > 0) parts.push(`${enforcing} change${enforcing === 1 ? 's' : ''} enforcement`);
-    if (unknown > 0) parts.push(`${unknown} of unknown kind`);
+    if (harmless.length > 0) parts.push(`${harmless.length} ${harmless.length === 1 ? 'memory' : 'memories'}`);
+    if (enforcing > 0) parts.push(`${enforcing} ${enforcing === 1 ? 'rule change' : 'rule changes'}`);
+    if (unknown > 0) parts.push(`${unknown} other`);
     return {
       action: harmless.length > 0
         ? { kind: 'accept-memory', ids: harmless.map((m) => m.proposal!.id), label: acceptMemoryLabel(harmless.length) }
