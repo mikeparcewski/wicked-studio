@@ -3,6 +3,9 @@ import { isDemoRun } from '../api/demo.js';
 import type { SessionView } from '../api/types.js';
 import { deliveryOf, resolveDelivery } from '../components/delivery.js';
 import { humanTitle } from '../components/runIdentity.js';
+
+/** Made / Handed rows clamp their title to two lines, so the clause is cut later than the rail's. */
+const ROW_TITLE_MAX = 140;
 import type { RailGroup } from './deskModel.js';
 import { endedAtMs } from './needsYou.js';
 import { sessionIdOf, type SessionState } from './sessionModel.js';
@@ -195,7 +198,7 @@ export function madeRows(
     out.push({
       key: `run:${v.session.id}`,
       kind: 'videos',
-      title: humanTitle(v.session.problem || v.session.id),
+      title: humanTitle(v.session.problem || v.session.id, ROW_TITLE_MAX),
       projectId: projectOf(v, projectIdByRun),
       updatedAt: ended ?? (launchedMs(v) || null),
       runId: v.session.id,
@@ -248,7 +251,7 @@ export function handedRows(
     out.push({
       runId: v.session.id,
       sessionId: sessionIdOf(v, runChatId),
-      title: humanTitle(v.session.problem || v.session.id),
+      title: humanTitle(v.session.problem || v.session.id, ROW_TITLE_MAX),
       projectId: projectOf(v, projectIdByRun),
       when: endedAtMs(v) ?? launchedMs(v),
       claim,

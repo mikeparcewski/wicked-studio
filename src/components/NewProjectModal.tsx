@@ -109,7 +109,7 @@ export function NewProjectModal({ navigate, onClose, deskMode = false }: Props):
         aria-modal="true"
         aria-labelledby={titleId}
         data-testid="new-project-modal"
-        className="flex flex-col gap-2 p-4"
+        className="wk-newproj flex flex-col gap-2 p-4"
         style={{
           width: 'min(360px, calc(100vw - 32px))',
           minHeight: 'calc(var(--space-16) * 4 + var(--space-6))',

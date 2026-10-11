@@ -54,7 +54,8 @@
   white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere;
 }
 .wk-runs-cell--title, .wk-runs-head > .wk-runs-col:nth-child(2) { flex: 2.5 1 0; }
-.wk-runs-filter::placeholder { color: var(--ink-placeholder); }
+/* Tailwind preflight's input::placeholder (gray-400) outranks the token's bare ::placeholder; class-scoped wins. */
+.wk-runs-filter::placeholder, .wk-projects-find::placeholder, .wk-newproj .wk-field::placeholder { color: var(--ink-placeholder); opacity: 1; }
 .wk-everything-acts { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-4); font-size: var(--text-xs); }
 .wk-everything-acts .wk-link { white-space: nowrap; }
 .wk-everything-madelist .wk-made-li { padding: 0 var(--space-1); }
@@ -66,6 +67,8 @@
   .wk-everything-bar > .wk-runs-filter, .wk-runs-controls > .wk-runs-filter { flex: 1 1 100%; max-width: none; min-height: var(--tap-min); }
   .wk-everything-aside .wk-link, .wk-everything-acts .wk-link, .wk-everything-scope .wk-link { display: inline-flex; align-items: center; min-height: var(--tap-min); }
   .wk-everything-aside { gap: var(--space-4); }
+  .wk-everything-chips .wk-chip, .wk-everything-viewswitch .wk-chip { min-width: var(--tap-min); justify-content: center; }
+  .wk-everything-madelist { margin-top: var(--space-2); }
   .wk-projects-find { width: 100%; height: var(--tap-min); }
   .wk-everything-tab { min-height: var(--tap-min); padding: 6px 7px; }
   /* Every run on a phone: one stacked row per run (the title, then its state and last update); the
