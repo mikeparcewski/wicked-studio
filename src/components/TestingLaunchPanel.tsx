@@ -20,6 +20,7 @@ import { useRoster } from '../hooks/useRoster.js';
 import { setCachedWorkflows } from '../store/workflowCache.js';
 import { runShortId } from './runIdentity.js';
 import { AnswerInThread, useGateCleared } from './AnswerInThread.js';
+import { sessionPath } from '../board/sessionModel.js';
 
 /**
  * The testing LAUNCH panel — "New test" runs the GOVERNED `qe-author-tests` workflow (wave 6:
