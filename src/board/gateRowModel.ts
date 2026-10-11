@@ -28,6 +28,7 @@ import {
   isRestoredRetry,
   isFloorFixGate,
   sendBackAccepted,
+  conversationStep,
   steerScopeTarget,
   type GateVerdictView,
 } from '../components/gateVerdictModel.js';
@@ -607,7 +608,11 @@ function baseGateChoices(input: SessionGateInput): BaseRowModel | null {
     choices.push({ key: 'approve', label: 'Approve', decision: { approve: true }, needsNote: false, title: 'Continue the run.' });
     choices.push({ key: 'steer', label: 'Approve and steer', decision: scopeTarget !== null ? { approve: true, amendScope: 'creator' } : { approve: true }, needsNote: true, title: 'Approve and add a note to steer the next phase.' });
     // studio#627: Send back only where the engine accepts it — a creator at or before this unit.
-    if (sendBackAccepted(units, gate.ord)) {
+    if (conversationStep(units, gate.ord) !== null) {
+      // learn's walkthrough (F-LEARN-2): the same send-back, read as a question — the step answers
+      // it with the conversation so far and this gate returns; Approve ends the loop.
+      choices.push({ key: 'send-back', label: 'Ask a follow-up', decision: { approve: false, action: 'request_changes' }, needsNote: true, title: 'Ask this step a question; it answers with the conversation so far and stops here again.' });
+    } else if (sendBackAccepted(units, gate.ord)) {
       choices.push({ key: 'send-back', label: 'Send back', decision: { approve: false, action: 'request_changes' }, needsNote: true, title: 'Return to the creator with your note.' });
     }
     choices.push({ key: 'stop', label: 'Stop', decision: { approve: false }, needsNote: false, title: 'Cancel the run; the work stops here.' });

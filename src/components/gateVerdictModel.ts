@@ -622,6 +622,24 @@ export function sendBackAccepted(units: readonly WorkUnit[] | undefined, ord: nu
 }
 
 /**
+ * The conversational step a send-back at this gate re-runs (DES-learn-workflow §3.1, engine
+ * `conversation_turn`): at a gate between steps (the cursor has not run), the step just before the
+ * cursor, when it ran, is not a Tool or a creator, and no creator precedes it (learn's walkthrough). There "send back" is a follow-up question to that
+ * step, not a return to a creator. `null` everywhere else.
+ */
+export function conversationStep(units: readonly WorkUnit[] | undefined, ord: number | undefined): WorkUnit | null {
+  if (units === undefined || typeof ord !== 'number') return null;
+  const cursor = units.find((u) => u.ord === ord);
+  if (cursor === undefined) return null;
+  // The gate sits BETWEEN steps: the cursor has not run, so the work under review is the step before it.
+  if (cursor.status !== 'pending' && cursor.status !== 'distributed') return null;
+  const prior = units.find((u) => u.ord === ord - 1);
+  if (prior === undefined || prior.status !== 'done' || (prior.tool_cmd ?? null) !== null || prior.role === 'creator') return null;
+  if (units.some((u) => u.ord < prior.ord && u.role === 'creator')) return null;
+  return prior;
+}
+
+/**
  * Whether this gate's failure is one NO seat can fix (studio#315, F-RC2-003): the unit's LAUNCH was
  * refused before any work ran — the engine's environment-refusal arm (`stepFailed.failureKind:
  * environmentRefused` on the gate's unit, or its prompt "Unit N (cli) refused its environment…"),
