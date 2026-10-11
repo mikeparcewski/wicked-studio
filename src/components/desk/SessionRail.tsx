@@ -5,7 +5,7 @@ import type { SessionView } from '../../api/types.js';
 import { ADDITIONAL_SETTINGS, DESK_RAIL_LINKS, needsByRun, needTextByRun, railGroups } from '../../board/deskModel.js';
 import { needCount } from '../../board/needsQueue.js';
 import type { NeedRow } from '../../board/needsYou.js';
-import { useBoardModel } from '../../hooks/useBoardModel.js';
+import { MoveToProject, MoveProjectStatus, useMovableBoardModel } from './MoveToProject.js';
 import { useCapabilities } from '../../store/capabilities.js';
 import { productPath, type Navigate } from '../../hooks/useRoute.js';
 import { useAppearanceStore } from '../../theming/appearance.js';
@@ -48,7 +48,7 @@ export function SessionRail({ runs, needRows, navigate, pathname }: {
   navigate: Navigate;
   pathname: string;
 }): React.ReactElement {
-  const { items, unfiled } = useBoardModel(runs);
+  const { items, unfiled } = useMovableBoardModel(runs);
   const count = needCount(needRows);
   const runChatId = useCapabilities((s) => s.runChatId);
   const deliveredNow = useDeliveredNow();
@@ -113,6 +113,7 @@ export function SessionRail({ runs, needRows, navigate, pathname }: {
       </div>
 
       <div className="wk-rail-groups">
+        <MoveProjectStatus />
         {groups.map((g) => (
           <div key={g.projectId ?? 'unfiled'} data-testid="rail-group" data-project-id={g.projectId ?? ''}>
             <div className="wk-rail-group-row">
@@ -143,25 +144,27 @@ export function SessionRail({ runs, needRows, navigate, pathname }: {
               )}
             </div>
             {g.sessions.map((s) => (
-              <a
-                key={s.id}
-                href={s.path}
-                onClick={go(s.path)}
-                data-testid="rail-session"
-                data-session-id={s.id}
-                data-run-id={s.runId}
-                data-run-ids={s.runIds.join(' ')}
-                data-state={s.state}
-                data-badge={s.badge}
-                title={s.line}
-                aria-label={`${s.title} — ${s.line}${s.badge > 0 ? `, ${s.badge} need you` : ''}`}
-                aria-current={pathname === s.path ? 'page' : undefined}
-                className="wk-rail-session"
-              >
-                <span aria-hidden className={`wk-desk-dot wk-desk-dot--${s.state}`} />
-                <span className="wk-rail-session-title">{s.title}</span>
-                {s.badge > 0 && <span className="wk-rail-badge" aria-label={`${s.badge} need you`}>{s.badge}</span>}
-              </a>
+              <div key={s.id} className="wk-rail-session-row" data-move-row={s.id}>
+                <a
+                  href={s.path}
+                  onClick={go(s.path)}
+                  data-testid="rail-session"
+                  data-session-id={s.id}
+                  data-run-id={s.runId}
+                  data-run-ids={s.runIds.join(' ')}
+                  data-state={s.state}
+                  data-badge={s.badge}
+                  title={s.line}
+                  aria-label={`${s.title} — ${s.line}${s.badge > 0 ? `, ${s.badge} need you` : ''}`}
+                  aria-current={pathname === s.path ? 'page' : undefined}
+                  className="wk-rail-session"
+                >
+                  <span aria-hidden className={`wk-desk-dot wk-desk-dot--${s.state}`} />
+                  <span className="wk-rail-session-title">{s.title}</span>
+                  {s.badge > 0 && <span className="wk-rail-badge" aria-label={`${s.badge} need you`}>{s.badge}</span>}
+                </a>
+                <MoveToProject session={s} projectId={g.projectId} runs={runs} />
+              </div>
             ))}
           </div>
         ))}
