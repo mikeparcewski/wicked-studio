@@ -1,3 +1,4 @@
+import { defaultOn } from '../store/composerSeats.js';
 import type { RosterSeat } from '../api/types.js';
 import { seatStandingWord } from '../components/HealthRailSection.js';
 
@@ -27,7 +28,8 @@ function storedDefault(): string[] | null {
 }
 
 export function defaultDocSeats(roster: readonly RosterSeat[], stored: string[] | null = storedDefault()): DocSeatDefault {
-  const wanted = stored !== null ? roster.filter((s) => stored.includes(s.key)) : roster.filter((s) => s.enabled_for_council);
+  // (operator ruling 2026-10-11) With no saved default, opt-in seats (opencode) sit out unless picked.
+  const wanted = stored !== null ? roster.filter((s) => stored.includes(s.key)) : roster.filter((s) => s.enabled_for_council && defaultOn(s.key));
   const selected = new Set<string>();
   const leftOut: LeftOutSeat[] = [];
   for (const seat of wanted) {

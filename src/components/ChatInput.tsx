@@ -1,3 +1,4 @@
+import { defaultOn } from '../store/composerSeats.js';
 import { commitGateDecision } from '../board/gateActions.js';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, ApiError } from '../api/client.js';
@@ -562,7 +563,9 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
             return;
           }
         } catch { /* ignore */ }
-        setSelectedClis(pickable(userSeats(seats).filter((s) => s.enabled_for_council).map((s) => s.key)));
+        // (operator ruling 2026-10-11) The DEFAULT pick leaves opt-in seats (opencode) out unless
+        // the operator picked them; a saved default (Settings) or a prefill is an explicit choice.
+        setSelectedClis(pickable(userSeats(seats).filter((s) => s.enabled_for_council && defaultOn(s.key)).map((s) => s.key)));
       })
       .catch(() => {
         /* roster load failure is non-fatal */
@@ -728,7 +731,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
 
   function resetCliSelection(): void {
     setSelectedClis(
-      new Set(userSeats(roster).filter((s) => s.enabled_for_council).map((s) => s.key)),
+      new Set(userSeats(roster).filter((s) => s.enabled_for_council && defaultOn(s.key)).map((s) => s.key)),
     );
   }
 
