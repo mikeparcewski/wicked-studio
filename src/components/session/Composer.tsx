@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { api } from '../../api/client.js';
 import type { LaunchBodyWithDeliver, RepoEntry, SessionView } from '../../api/types.js';
 import { chipText, messageWithAbout, projectChip, type AboutChip } from '../../board/aboutChips.js';
-import { composerSendRefusal, NO_REPO_REASON, readyLead, workflowLaunchState } from '../../board/launchModel.js';
+import { composerSendRefusal, gateSentence, gatePostureWord, NO_REPO_REASON, readyLead, workflowLaunchState } from '../../board/launchModel.js';
 import {
   COMPOSER_DEFAULT_GATE_POSTURE,
 } from '../composerDefaults.js';
@@ -29,7 +29,6 @@ import {
   addAboutChip, backspaceAboutChip, chipsOf, clearAboutChips, removeAboutChip, useComposerChips,
 } from '../../store/composerChips.js';
 import { humanTitle } from '../runIdentity.js';
-import { describeGate } from '../launchTarget.js';
 import type { ConfirmMode } from '../ContextPopover.js';
 import { useCapabilities } from '../../store/capabilities.js';
 import { useLaunchPreview } from '../../hooks/useLaunchPlan.js';
@@ -153,6 +152,8 @@ export function Composer({
   const [note, setNote] = useState<string | null>(null);
   const [repos, setRepos] = useState<RepoEntry[] | null>(getCachedRepos());
   const [repoRef, setRepoRef] = useState<string | null>(null);
+  // Per-composer ids for the launch strip's labels and validation line (two composers may share a page).
+  const stripId = useId();
   const [deliverOn, setDeliverOn] = useState(true);
   const [confirmMode, setConfirmMode] = useState<ConfirmMode>(COMPOSER_DEFAULT_GATE_POSTURE.mode);
   const [launching, setLaunching] = useState(false);
@@ -261,8 +262,8 @@ export function Composer({
   const repoLabel = targetRepo === null ? 'no repository' : ((repos ?? []).find((r) => r.id === targetRepo)?.name ?? targetRepo);
   const deliverShown = deliverVisible && deliverOn;
   const deliverWord = autoDeliver && deliverGate === true
-    ? 'auto — no gate before the push'
-    : 'after you approve the deliver gate';
+    ? 'delivers on its own, with no stop before the push'
+    : 'delivers once you approve it';
 
   const syncCaret = (el: HTMLTextAreaElement): void => setCaret(el.selectionStart ?? el.value.length);
   const focusEnd = (value: string): void => {
@@ -460,50 +461,65 @@ export function Composer({
           aria-label={`Launch ${chipText(wfChip)}`}
           className="wk-composer-launch"
         >
-          <span className="wk-composer-launch-wf">{chipText(wfChip)}</span>
-          <select
-            data-testid="launch-row-repo"
-            aria-label="Repository this run works in"
-            aria-invalid={launchState?.missing === 'repo'}
-            value={repoRef ?? ''}
-            onChange={(e) => setRepoRef(e.target.value === '' ? null : e.target.value)}
-            className="wk-composer-launch-repo"
-          >
-            <option value="">pick the repository…</option>
-            {(repos ?? []).map((r) => <option key={r.id} value={r.id}>{r.name ?? r.id}</option>)}
-          </select>
-          <select
-            data-testid="launch-row-gate"
-            aria-label="Gate posture"
-            value={confirmMode}
-            onChange={(e) => setConfirmMode(e.target.value as ConfirmMode)}
-            className="wk-composer-launch-gate"
-          >
-            <option value="before">{beforeOrd === 1 ? 'First gate' : `Before unit #${beforeOrd}`}</option>
-            <option value="all">Every unit</option>
-            <option value="none">{deliverShown && deliverGate === true ? 'No gates · auto-deliver' : 'No gates'}</option>
-          </select>
-          {deliverVisible && (
-            <label data-testid="launch-row-deliver" className="wk-composer-launch-deliver">
-              <input type="checkbox" data-testid="launch-row-deliver-toggle" checked={deliverOn} onChange={(e) => setDeliverOn(e.target.checked)} />
-              deliver when done
+          {/* One tidy launch strip (operator 2026-10-10, UX audit row 3): the workflow is named once —
+              by its chip above — and each control carries a visible label, spaced, never fused into text. */}
+          <div className="wk-composer-launch-controls">
+            <label className="wk-composer-launch-field">
+              <span id={`${stripId}-repo`} className="wk-composer-launch-label">Repository</span>
+              <select
+                data-testid="launch-row-repo"
+                aria-labelledby={`${stripId}-repo`}
+                aria-invalid={launchState?.missing === 'repo'}
+                aria-describedby={launchState?.missing === 'repo' ? `${stripId}-line` : undefined}
+                value={repoRef ?? ''}
+                onChange={(e) => setRepoRef(e.target.value === '' ? null : e.target.value)}
+                className="wk-field wk-composer-launch-repo"
+              >
+                <option value="">Choose a repository…</option>
+                {(repos ?? []).map((r) => <option key={r.id} value={r.id}>{r.name ?? r.id}</option>)}
+              </select>
             </label>
-          )}
-          {offerReduced && <ReducedAssuranceOptIn checked={reduced} onChange={setReduced} testId="launch-row-reduced-assurance" />}
-          <span data-testid="composer-launch-line" role="status" className="wk-composer-launch-line">
+            <label className="wk-composer-launch-field">
+              <span id={`${stripId}-gate`} className="wk-composer-launch-label">Ask me</span>
+              <select
+                data-testid="launch-row-gate"
+                aria-labelledby={`${stripId}-gate`}
+                value={confirmMode}
+                onChange={(e) => setConfirmMode(e.target.value as ConfirmMode)}
+                className="wk-field wk-composer-launch-gate"
+              >
+                <option value="before">{gatePostureWord('before', beforeOrd)}</option>
+                <option value="all">{gatePostureWord('all', beforeOrd)}</option>
+                <option value="none">{gatePostureWord('none', beforeOrd, deliverShown && deliverGate === true)}</option>
+              </select>
+            </label>
+            {deliverVisible && (
+              <label data-testid="launch-row-deliver" className="wk-composer-launch-deliver">
+                <input type="checkbox" role="switch" data-testid="launch-row-deliver-toggle" checked={deliverOn} onChange={(e) => setDeliverOn(e.target.checked)} className="wk-composer-switch-input" />
+                <span aria-hidden className="wk-composer-switch" />
+                Deliver when done
+              </label>
+            )}
+            {offerReduced && <ReducedAssuranceOptIn checked={reduced} onChange={setReduced} testId="launch-row-reduced-assurance" />}
+          </div>
+          <span
+            id={`${stripId}-line`}
+            data-testid="composer-launch-line"
+            role="status"
+            data-missing={launchState?.missing ?? undefined}
+            className={`wk-composer-launch-line${launchState?.missing === 'repo' ? ' wk-composer-launch-line--bad' : ''}`}
+          >
             {launching ? 'Launching…'
               : launchState?.missing === 'repo' ? NO_REPO_REASON
                 : (
                   <>
                     {readyLead(canSend, refusal)}
-                    <span data-testid="composer-launch-workflow" style={{ color: 'var(--ink-high)' }}>{chipText(wfChip)}</span>
-                    {' on '}
                     <span data-testid="composer-launch-target" style={{ color: targetRepo === null ? 'var(--status-gate)' : 'var(--ink-high)' }}>{repoLabel}</span>
-                    {' · gate: '}
-                    <span data-testid="composer-launch-gate-word">{describeGate(undefined, confirmMode, beforeOrd)}</span>
+                    {' · '}
+                    <span data-testid="composer-launch-gate-word">{gateSentence(confirmMode, beforeOrd)}</span>
                     {deliverShown && (
                       <>
-                        {' · deliver: '}
+                        {' · '}
                         <span data-testid="composer-launch-deliver-word">{deliverWord}</span>
                       </>
                     )}

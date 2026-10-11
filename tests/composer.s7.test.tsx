@@ -39,6 +39,8 @@ const TEAM_AT_PLAN_GATE = {
 };
 
 let posts: Array<{ path: string; body: Record<string, unknown> }> = [];
+/** The /repos answer (the launch-strip tests clear it to see the no-repository validation). */
+let repos: RepoEntry[] = [REPO];
 
 function stubWire(): void {
   posts = [];
@@ -53,7 +55,7 @@ function stubWire(): void {
     const body = path.endsWith('/team') ? TEAM_AT_PLAN_GATE
       : path === '/catalog' ? { entries: ['understand', 'build', 'test', 'review', 'deliver'].map((id) => ({ id })) }
         : path === '/roster' ? { roster: [SEAT] }
-          : path === '/repos' ? { repos: [REPO] }
+          : path === '/repos' ? { repos }
             : path === '/workflows' ? { workflows: WF } : {};
     return Promise.resolve(new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } }));
   }));
@@ -76,6 +78,7 @@ function type(text: string): void {
 const key = (k: string): void => { fireEvent.keyDown(screen.getByTestId('session-composer-input'), { key: k }); };
 
 beforeEach(() => {
+  repos = [REPO];
   stubWire();
   setCachedRoster([SEAT]);
   resetDecisionsForTest();
@@ -395,7 +398,7 @@ describe('S19a: a workflow is named in the composer and launched from it', () =>
     expect(screen.getByTestId('composer-chip').getAttribute('data-kind')).toBe('workflow');
     // The options row names the form's gate postures, not a static line.
     const gate = screen.getByTestId('launch-row-gate') as HTMLSelectElement;
-    expect([...gate.options].map((o) => o.textContent)).toStrictEqual(['First gate', 'Every unit', 'No gates']);
+    expect([...gate.options].map((o) => o.textContent)).toStrictEqual(['Before the first step', 'Before every step', 'Never: run straight through']);
     key('Backspace');
     expect(screen.queryByTestId('composer-chip')).toBeNull();
     expect(screen.queryByTestId('composer-launch-row')).toBeNull();
@@ -451,5 +454,54 @@ describe('S19b: no Detected banner, the hint, and the composer seed', () => {
     await waitFor(() => expect(document.activeElement).toBe(screen.getByTestId('desk-composer-input')));
     await screen.findByTestId('composer-menu');
     expect(screen.getAllByTestId('composer-menu-item').some((r) => r.getAttribute('data-group') === 'start-work')).toBe(true);
+  });
+});
+
+describe('the slash-launch strip (operator 2026-10-10, UX audit row 3): one name, labelled controls, validation on the control', () => {
+  async function pick(): Promise<HTMLElement> {
+    type('/workflow-');
+    await screen.findByTestId('composer-menu');
+    fireEvent.mouseDown(screen.getAllByTestId('composer-menu-item').filter((r) => r.getAttribute('data-cmd') === 'workflow-feature')[0]!);
+    return screen.getByTestId('composer-launch-row');
+  }
+
+  it('names the workflow exactly once in the composer — the chip — and never again in the strip', async () => {
+    const { container } = render(<Harness runs={[]} onSend={() => {}} />);
+    const row = await pick();
+    type('add a dark mode');
+    await waitFor(() => expect(screen.getByTestId('composer-launch-line').textContent).toMatch(/Ready to send/));
+    const composerText = (container.textContent ?? '').split('/workflow-feature').length - 1;
+    expect(composerText).toBe(1);
+    expect(screen.getByTestId('composer-chip').textContent).toContain('/workflow-feature');
+    expect(row.textContent).not.toContain('/workflow-feature');
+  });
+
+  it('every control carries a visible label; the gate options finish the sentence "Ask me"', async () => {
+    render(<Harness runs={[]} onSend={() => {}} />);
+    const row = await pick();
+    const labels = [...row.querySelectorAll('.wk-composer-launch-label')].map((l) => l.textContent);
+    expect(labels).toStrictEqual(['Repository', 'Ask me']);
+    expect(screen.getByTestId('launch-row-repo').closest('label')?.textContent).toContain('Repository');
+    const gate = screen.getByTestId('launch-row-gate') as HTMLSelectElement;
+    expect(gate.closest('label')?.textContent).toContain('Ask me');
+    expect([...gate.options].map((o) => o.textContent)).toStrictEqual(['Before the first step', 'Before every step', 'Never: run straight through']);
+    // The accessible names are the visible labels (codex review r1).
+    expect(screen.getByRole('combobox', { name: 'Ask me' })).toBe(gate);
+    expect(screen.getByRole('combobox', { name: 'Repository' })).toBe(screen.getByTestId('launch-row-repo'));
+  });
+
+  it('with no repository the message is tied to the repository control and sits outside the controls row', async () => {
+    repos = [];
+    stubWire();
+    render(<Harness runs={[]} onSend={() => {}} />);
+    const row = await pick();
+    type('add a dark mode');
+    const repo = screen.getByTestId('launch-row-repo');
+    await waitFor(() => expect(repo).toHaveAttribute('aria-invalid', 'true'));
+    const line = screen.getByTestId('composer-launch-line');
+    expect(repo.getAttribute('aria-describedby')).toBe(line.id);
+    expect(line.textContent).toBe('Pick the repository this works in');
+    expect(row.querySelector('.wk-composer-launch-controls')?.contains(line)).toBe(false);
+    expect(line.className).toContain('wk-composer-launch-line--bad');
   });
 });

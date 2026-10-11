@@ -92,6 +92,22 @@ export function launchNeedsRepo(codeShaped: boolean, noRepoAttached: boolean): b
 
 /** The launch-confirm line's lead — from the SAME `canSubmit` that disables Send, so the line and
  *  the button can never disagree ("Send enabled but Not ready to send", F-089 / F-E2E-035). */
+/**
+ * The gate-posture options in plain words (operator 2026-10-10 / UX audit row 3), shared by the
+ * composer's launch strip and the /runs/new form so the two read as one product. The control is
+ * labelled "Ask me", so each option finishes that sentence.
+ */
+export function gatePostureWord(mode: 'before' | 'all' | 'none', beforeOrd: number, autoDeliver = false): string {
+  if (mode === 'before') return beforeOrd === 1 ? 'Before the first step' : `Before step ${beforeOrd}`;
+  if (mode === 'all') return 'Before every step';
+  return autoDeliver ? 'Never (it delivers on its own)' : 'Never: run straight through';
+}
+
+/** The status line's gate words, in the same vocabulary as the options ("asks you before the first step"). */
+export function gateSentence(mode: 'before' | 'all' | 'none', beforeOrd: number): string {
+  return mode === 'none' ? 'never asks' : `asks you ${gatePostureWord(mode, beforeOrd).toLowerCase()}`;
+}
+
 export function readyLead(canSubmit: boolean, noSeatReason: string | null): string {
   return canSubmit
     ? 'Ready to send: '

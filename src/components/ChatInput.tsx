@@ -14,7 +14,7 @@ import { clearSteerPrefill, peekSteerPrefill } from '../store/steerPrefill.js';
 import { setCachedRoster } from '../store/rosterCache.js';
 import { seatStandingWord } from './HealthRailSection.js';
 import { noCarryingSeatReason } from './gateVerdictModel.js';
-import { baseSkillRefusalOf, describeBaseSkill, detectWorkflow, LAUNCH_PROBE_AFTER_SECS, launchNeedsRepo, launchSubmit, newLaunchId, readyLead } from '../board/launchModel.js';
+import { baseSkillRefusalOf, describeBaseSkill, detectWorkflow, gatePostureWord, LAUNCH_PROBE_AFTER_SECS, launchNeedsRepo, launchSubmit, newLaunchId, readyLead } from '../board/launchModel.js';
 import { isSystemWorkflowIn, setCachedWorkflows } from '../store/workflowCache.js';
 import { loadPresets, presetSystemFlag, usePlanCatalog } from '../store/planCatalog.js';
 import { menuToken, dropToken } from '../board/planDraft.js';
@@ -1530,11 +1530,11 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
           value={confirmMode}
           onChange={(e) => setConfirmMode(e.target.value as ConfirmMode)}
         >
-          <option value="before">{beforeOrd === 1 ? 'First gate' : `Before unit #${beforeOrd}`}</option>
-          <option value="all">Every unit</option>
-          {/* F-E2E-030: when this launch delivers, "No gates" is also the auto-deliver opt-out —
-              the option says so where it is chosen. */}
-          <option value="none">{deliverNotice?.state === 'on' && mode !== 'ask' && daemonDeliverGate === true ? 'No gates · auto-deliver' : 'No gates'}</option>
+          {/* The same plain words as the composer's launch strip (operator 2026-10-10). F-E2E-030: when
+              this launch delivers, "Never" is also the auto-deliver opt-out — the option says so. */}
+          <option value="before">{gatePostureWord('before', beforeOrd)}</option>
+          <option value="all">{gatePostureWord('all', beforeOrd)}</option>
+          <option value="none">{gatePostureWord('none', beforeOrd, deliverNotice?.state === 'on' && mode !== 'ask' && daemonDeliverGate === true)}</option>
         </select>
       </div>
 
