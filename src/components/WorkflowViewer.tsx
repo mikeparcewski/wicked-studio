@@ -4,7 +4,15 @@ import type { GateSpec, PhaseDef, PhaseExecutor, PresetStep, WorkflowDef } from 
 import { setCachedWorkflows } from '../store/workflowCache.js';
 import { invalidatePresets } from '../store/planCatalog.js';
 import { refusedWorkflowsOf, type RefusedWorkflow } from '../api/wave6-wire.js';
-import { ApiError } from '../api/errors.js';
+import { ApiError, readErrorKind } from '../api/errors.js';
+import { PageFrame, SectionTitle } from './ui/PageFrame.js';
+import { StateBanner, Skeleton, EmptyState } from './ui/StateBanner.js';
+import { TechDetails } from './ui/TechDetails.js';
+import { StatLine } from './ui/StatLine.js';
+import { OverflowMenu } from './ui/OverflowMenu.js';
+import { Switch } from './ui/Switch.js';
+import { Segmented } from './ui/Segmented.js';
+import { FilePick } from './ui/FilePick.js';
 import { teamPlanApi, type CatalogEntry, type Preset } from '../api/teamPlan.js';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -19,71 +27,17 @@ export function gateLabel(gate: GateSpec): string {
   return 'Human if not PASS';
 }
 
-const KIND_DOT_COLOR: Record<string, string> = {
-  recon: 'var(--accent)',
-  build: 'var(--status-run)',
-  review: 'var(--accent-dim)',
-  test: 'var(--status-gate)',
-};
-
-function kindDotColor(kind: PhaseDef['kind']): string {
-  return KIND_DOT_COLOR[kind] ?? 'var(--ink-dim)';
-}
-
-// ── Viewer-only phase card ─────────────────────────────────────────────────────
-
-function PhaseCard({ phase }: { phase: PhaseDef }): React.ReactElement {
-  const ex = phase.executor;
-  const dotColor = kindDotColor(phase.kind);
-  return (
-    <div
-      className="rounded px-3 py-2 text-[11px] flex flex-col gap-1"
-      style={{ border: '1px solid var(--surface-raised)', background: 'var(--surface-card)' }}
-    >
-      <div className="flex items-center gap-2 flex-wrap">
-        <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: dotColor }} title={phase.kind} />
-        <span className="font-semibold" style={{ color: 'var(--ink-high)' }}>{phase.id}</span>
-        <span className="text-[10px] font-mono" style={{ color: 'var(--ink-dim)' }}>{phase.kind}</span>
-        {phase.role !== 'neutral' && (
-          <span
-            className="rounded px-1.5 py-0.5 text-[10px] font-semibold font-mono"
-            style={{
-              background: 'var(--accent-subtle)',
-              color: phase.role === 'creator' ? 'var(--accent)' : 'var(--accent-dim)',
-            }}
-          >
-            {phase.role}
-          </span>
-        )}
-        {ex && ex.type === 'tool' && (
-          <span
-            className="rounded px-1.5 py-0.5 text-[10px] font-semibold font-mono"
-            style={{ background: 'var(--status-gate-dim)', color: 'var(--status-gate)' }}
-          >
-            tool: {ex.cmd.join(' ')}
-          </span>
-        )}
-      </div>
-      <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-[10px]" style={{ color: 'var(--ink-muted)' }}>
-        <span>
-          <span className="font-medium" style={{ color: 'var(--ink-muted)' }}>gate:</span>{' '}
-          {phase.gate_type ? `${phase.gate_type} / ` : ''}{gateLabel(phase.gate)}
-        </span>
-        {phase.depends_on.length > 0 && (
-          <span>
-            <span className="font-medium" style={{ color: 'var(--ink-muted)' }}>after:</span>{' '}
-            {phase.depends_on.join(', ')}
-          </span>
-        )}
-        {phase.skill_ref && (
-          <span>
-            <span className="font-medium" style={{ color: 'var(--ink-muted)' }}>skill:</span>{' '}
-            <span className="font-mono">{phase.skill_ref}</span>
-          </span>
-        )}
+function PhaseCard({ phase, index }: { phase: PhaseDef; index: number }): React.ReactElement {
+  return <div className="wk-card">
+    <div className="wk-list-row">
+      <div className="wk-list-row-title">Step {index + 1}: {phase.id.replace(/[-_]/g, ' ')}</div>
+      <div className="wk-list-row-meta">
+        {phase.role !== 'neutral' && <span className="wk-tag">{phase.role === 'creator' ? 'does the work' : 'checks the work'}</span>}
+        <p className="wk-field-note">{gateLabel(phase.gate)}</p>
       </div>
     </div>
-  );
+    <TechDetails text={JSON.stringify(phase, null, 2)} />
+  </div>;
 }
 
 // ── Builder types ──────────────────────────────────────────────────────────────
@@ -468,37 +422,6 @@ export function saveBlockerOf(name: string, builtinNames: ReadonlySet<string>): 
 
 // ── Phase editor ───────────────────────────────────────────────────────────────
 
-const inputStyle = { background: 'var(--surface-rail)', border: '1px solid var(--surface-raised)', color: 'var(--ink-high)' };
-
-function ToggleBtn({
-  active,
-  onClick,
-  disabled = false,
-  title,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  disabled?: boolean;
-  title?: string;
-  children: React.ReactNode;
-}): React.ReactElement {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      {...(title !== undefined ? { title } : {})}
-      className="rounded px-2.5 py-1 text-[11px] font-medium capitalize transition-colors disabled:opacity-40"
-      style={active
-        ? { background: 'var(--surface-card)', color: 'var(--ink-high)', border: '1px solid var(--surface-raised)' }
-        : { background: 'transparent', color: 'var(--ink-dim)', border: '1px solid transparent' }
-      }
-    >
-      {children}
-    </button>
-  );
-}
 
 const STAGE_KINDS: StageKind[] = ['recon', 'build', 'test', 'review'];
 
@@ -540,214 +463,52 @@ function PhaseEditor({
   const kind = phase.kind ?? entry?.kind ?? 'build';
 
   return (
-    <div
-      className="rounded p-3 flex flex-col gap-2"
-      style={{ border: '1px solid var(--surface-raised)', background: 'var(--surface-card)' }}
-    >
-      {/* header */}
-      <div className="flex items-center gap-2">
-        <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: kindDotColor(kind) }} />
-        <span className="text-[11px] font-semibold" style={{ color: 'var(--ink-muted)' }}>Phase {index + 1}</span>
-        <div className="ml-auto flex items-center gap-1">
-          <button
-            type="button"
-            onClick={onMoveUp}
-            disabled={index === 0}
-            className="px-1 text-[10px] disabled:opacity-30"
-            style={{ color: 'var(--ink-dim)' }}
-          >▲</button>
-          <button
-            type="button"
-            onClick={onMoveDown}
-            disabled={index === total - 1}
-            className="px-1 text-[10px] disabled:opacity-30"
-            style={{ color: 'var(--ink-dim)' }}
-          >▼</button>
-          <button
-            type="button"
-            onClick={onRemove}
-            className="px-1 text-[10px]"
-            style={{ color: 'var(--status-fail)' }}
-          >✕</button>
-        </div>
+    <section className="wk-card wk-pg-set-stack">
+      <div className="wk-pg-set-heading">
+        <SectionTitle>Step {index + 1}</SectionTitle>
+        <OverflowMenu label={`More actions for step ${index + 1}`} items={[
+          { id: 'up', label: 'Move up', onSelect: onMoveUp, disabled: index === 0 ? 'This is the first step.' : null },
+          { id: 'down', label: 'Move down', onSelect: onMoveDown, disabled: index === total - 1 ? 'This is the last step.' : null },
+          { id: 'remove', label: 'Remove step', onSelect: onRemove, danger: true },
+        ]} />
       </div>
-
-      {/* id + catalog entry */}
-      <div className="flex gap-2">
-        <input
-          className="flex-1 rounded px-2 py-1 text-xs focus:outline-none"
-          placeholder="phase-id (e.g. build)"
-          value={phase.id}
-          onChange={(e) => up('id', e.target.value)}
-          style={inputStyle}
-        />
-        <select
-          data-testid="builder-step-catalog"
-          className="rounded px-2 py-1 text-xs focus:outline-none"
-          value={phase.catalog}
-          onChange={(e) => onChange(withCatalog(phase, e.target.value))}
-          style={inputStyle}
-        >
-          {(entries.some((x) => x.id === phase.catalog) ? entries.map((x) => x.id) : [phase.catalog, ...entries.map((x) => x.id)]).map((id) => (
-            <option key={id} value={id}>{id}</option>
-          ))}
-        </select>
+      <label>Step name<input className="wk-field" placeholder="Step name, such as build" value={phase.id} onChange={(e) => up('id', e.target.value)} /></label>
+      <label>Step type<select data-testid="builder-step-catalog" className="wk-field" value={phase.catalog} onChange={(e) => onChange(withCatalog(phase, e.target.value))}>
+        {(entries.some((x) => x.id === phase.catalog) ? entries.map((x) => x.id) : [phase.catalog, ...entries.map((x) => x.id)]).map((id) => <option key={id} value={id}>{id}</option>)}
+      </select></label>
+      {toolEntry && <>
+        <Segmented label="Command source" value={phase.execMode} options={[
+          { value: 'inherit', label: "Entry's command" }, { value: 'command', label: 'Command' }, { value: 'script', label: 'Script' },
+        ]} onChange={(v) => up('execMode', v)} />
+        {phase.catalog === 'run' && <label>Stage<select data-testid="builder-step-kind" aria-label="stage" className="wk-field" value={kind} onChange={(e) => up('kind', e.target.value === entry?.kind ? null : e.target.value as StageKind)}>
+          {STAGE_KINDS.map((k) => <option key={k} value={k}>{k}</option>)}
+        </select></label>}
+        {phase.execMode === 'inherit' && <p className="wk-field-note">Uses the command provided by this step type.</p>}
+        {phase.execMode === 'command' && <label>Command<input className="wk-field font-mono" placeholder="Command to run, such as npm test" value={phase.cmd} onChange={(e) => up('cmd', e.target.value)} /></label>}
+        {phase.execMode === 'script' && <>
+          <Segmented label="Script language" value={phase.scriptLang} options={(['bash', 'sh', 'python'] as ScriptLang[]).map((value) => ({ value, label: value }))} onChange={(v) => up('scriptLang', v)} />
+          <label>Script<textarea className="wk-field font-mono" rows={6} placeholder={phase.scriptLang === 'python' ? '# python script\nprint("hello")' : '# bash script\necho "hello"'} value={phase.script} onChange={(e) => up('script', e.target.value)} /></label>
+          <TechDetails text={`Saved to ~/.wicked/scripts/${phase.id || 'script'}.${phase.scriptLang === 'python' ? 'py' : 'sh'}`} />
+        </>}
+      </>}
+      <div data-testid="builder-step-gate" data-gate={gate}>
+        <label>Approval<select className="wk-field" value={gate} onChange={(e) => up('gate', e.target.value === entryGate ? null : e.target.value as GateMode)}>
+          {([['auto', 'Auto'], ['human', 'Human'], ['human_always', 'Human (always)'], ['human_if', 'Human if fails'], ['consent', 'Consent before']] as [GateMode, string][]).map(([v, label]) => <option key={v} value={v} disabled={v === 'auto' && entryGate !== 'auto'}>{label}</option>)}
+        </select></label>
+        {entryGate !== 'auto' && <p className="wk-field-note">This step type requires approval; automatic approval is unavailable.</p>}
       </div>
-
-      {/* a Tool entry: the entry's own command, a typed command, or a script */}
-      {toolEntry && (
-      <div className="flex flex-col gap-1.5">
-        <div className="flex gap-1 items-center flex-wrap">
-          {(['inherit', 'command', 'script'] as ExecMode[]).map((m) => (
-            <ToggleBtn key={m} active={phase.execMode === m} onClick={() => up('execMode', m)}>
-              {m === 'inherit' ? "Entry's command" : m === 'command' ? 'Command' : 'Script'}
-            </ToggleBtn>
-          ))}
-          {phase.catalog === 'run' && (
-            <select
-              data-testid="builder-step-kind"
-              aria-label="stage"
-              className="rounded px-2 py-1 text-xs focus:outline-none"
-              value={kind}
-              onChange={(e) => up('kind', e.target.value === entry?.kind ? null : (e.target.value as StageKind))}
-              style={inputStyle}
-            >
-              {STAGE_KINDS.map((k) => <option key={k} value={k}>{k}</option>)}
-            </select>
-          )}
-        </div>
-
-        {phase.execMode === 'inherit' && (
-          <p className="text-[10px]" style={{ color: 'var(--ink-dim)' }}>
-            The step states no command; it runs the one its entry fixes (an entry with none is refused on save).
-          </p>
-        )}
-
-        {phase.execMode === 'command' && (
-          <input
-            className="rounded px-2 py-1 text-xs font-mono focus:outline-none"
-            placeholder='e.g. npm run build  or  ["bash", "-lc", "echo a b"]'
-            value={phase.cmd}
-            onChange={(e) => up('cmd', e.target.value)}
-            style={inputStyle}
-          />
-        )}
-
-        {phase.execMode === 'script' && (
-          <div className="flex flex-col gap-1">
-            <div className="flex gap-1 items-center">
-              <span className="text-[10px] font-mono" style={{ color: 'var(--ink-dim)' }}>Language:</span>
-              {(['bash', 'sh', 'python'] as ScriptLang[]).map((l) => (
-                <ToggleBtn key={l} active={phase.scriptLang === l} onClick={() => up('scriptLang', l)}>
-                  {l}
-                </ToggleBtn>
-              ))}
-            </div>
-            <textarea
-              className="rounded px-2 py-1.5 text-xs font-mono resize-y focus:outline-none"
-              rows={6}
-              placeholder={phase.scriptLang === 'python' ? '# python script\nprint("hello")' : '# bash script\necho "hello"'}
-              value={phase.script}
-              onChange={(e) => up('script', e.target.value)}
-              style={{ ...inputStyle, background: 'var(--surface-base)' }}
-            />
-            <p className="text-[10px] font-mono" style={{ color: 'var(--ink-dim)' }}>
-              Saved to{' '}
-              <span style={{ color: 'var(--ink-muted)' }}>
-                ~/.wicked/scripts/{phase.id || 'script'}.{phase.scriptLang === 'python' ? 'py' : 'sh'}
-              </span>
-            </p>
-          </div>
-        )}
-      </div>
-      )}
-
-      {/* gate + role */}
-      <div className="flex gap-2 flex-wrap">
-        <div className="flex flex-col gap-0.5" data-testid="builder-step-gate" data-gate={gate}>
-          <span className="text-[10px] font-mono" style={{ color: 'var(--ink-dim)' }}>Gate</span>
-          <div className="flex gap-1">
-            {([['auto', 'Auto'], ['human', 'Human'], ['human_always', 'Human (always)'], ['human_if', 'Human if fails'], ['consent', 'Consent before']] as [GateMode, string][]).map(([v, label]) => (
-              <ToggleBtn
-                key={v}
-                active={gate === v}
-                // A step may raise its entry's gate, never lower it to auto.
-                disabled={v === 'auto' && entryGate !== 'auto'}
-                {...(v === 'auto' && entryGate !== 'auto' ? { title: "the entry's gate cannot be lowered" } : {})}
-                onClick={() => up('gate', v === entryGate ? null : v)}
-              >
-                {label}
-              </ToggleBtn>
-            ))}
-          </div>
-        </div>
-        <div className="flex flex-col gap-0.5" data-testid="builder-step-role">
-          <span className="text-[10px] font-mono" style={{ color: 'var(--ink-dim)' }}>Role</span>
-          <span className="text-[11px] font-mono" style={{ color: 'var(--ink-muted)' }}>
-            {entry ? `${entry.role} · ${kind} (the catalog's)` : '—'}
-          </span>
-        </div>
-      </div>
-
-      {/* depends on */}
-      {(depChoices.length > 0 || phase.dependsOn !== null) && (
-        <div className="flex flex-col gap-0.5" data-testid="builder-step-deps">
-          <span className="text-[10px] font-mono" style={{ color: 'var(--ink-dim)' }}>
-            Depends on{phase.dependsOn === null ? ' — none stated: the engine wires its inputs' : ''}
-            {phase.dependsOn !== null && (
-              <button
-                type="button"
-                data-testid="builder-step-deps-engine"
-                onClick={() => up('dependsOn', null)}
-                className="ml-2 hover:underline"
-                style={{ color: 'var(--accent)' }}
-              >
-                let the engine wire them
-              </button>
-            )}
-          </span>
-          <div className="flex flex-wrap gap-1.5">
-            {depChoices.map((pid) => (
-              <label key={pid} {...(dangling.includes(pid) ? { 'data-dangling': 'true', title: 'not a step before this one' } : {})} className="flex items-center gap-1 text-[10px] cursor-pointer" style={{ color: 'var(--ink-muted)' }}>
-                <input
-                  type="checkbox"
-                  checked={phase.dependsOn?.includes(pid) === true}
-                  onChange={(e) => {
-                    const deps = phase.dependsOn ?? [];
-                    up('dependsOn', e.target.checked ? [...deps, pid] : deps.filter((d) => d !== pid));
-                  }}
-                />
-                <span className="font-mono">{pid}</span>
-              </label>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* flags: the entry's own is shown checked and cannot be cleared */}
-      <div className="flex gap-3 text-[10px]" style={{ color: 'var(--ink-muted)' }}>
-        <label className="flex items-center gap-1 cursor-pointer">
-          <input
-            type="checkbox"
-            data-testid="builder-step-executes-code"
-            checked={entryCode || phase.executesCode === true}
-            disabled={entryCode}
-            onChange={(e) => up('executesCode', e.target.checked ? true : null)}
-          />
-          executes code
-        </label>
-        <label className="flex items-center gap-1 cursor-pointer">
-          <input
-            type="checkbox"
-            data-testid="builder-step-verified-evidence"
-            checked={entryEvidence || phase.verifiedEvidence === true}
-            disabled={entryEvidence}
-            onChange={(e) => up('verifiedEvidence', e.target.checked ? true : null)}
-          />
-          verified evidence
-        </label>
-      </div>
-    </div>
+      <div data-testid="builder-step-role">{entry && <span className="wk-tag">{entry.role === 'creator' ? 'does the work' : entry.role === 'evaluator' ? 'checks the work' : 'supports the work'}</span>}</div>
+      {(depChoices.length > 0 || phase.dependsOn !== null) && <div data-testid="builder-step-deps" className="wk-pg-set-stack">
+        <p className="wk-field-note">{phase.dependsOn === null ? 'Previous steps are connected automatically.' : 'Choose the earlier steps this one needs.'}</p>
+        {phase.dependsOn !== null && <button type="button" data-testid="builder-step-deps-engine" className="wk-btn wk-btn--secondary" onClick={() => up('dependsOn', null)}>Connect steps automatically</button>}
+        {depChoices.map((pid) => <div key={pid} {...(dangling.includes(pid) ? { 'data-dangling': 'true' } : {})}>
+          <Switch label={pid} checked={phase.dependsOn?.includes(pid) === true} onChange={(checked) => { const deps = phase.dependsOn ?? []; up('dependsOn', checked ? [...deps, pid] : deps.filter((d) => d !== pid)); }} />
+          {dangling.includes(pid) && <p className="wk-field-note">This step is no longer before the current step.</p>}
+        </div>)}
+      </div>}
+      <Switch label="Executes code" data-testid="builder-step-executes-code" checked={entryCode || phase.executesCode === true} disabled={entryCode ? 'Required by this step type.' : null} onChange={(v) => up('executesCode', v ? true : null)} />
+      <Switch label="Verified evidence" data-testid="builder-step-verified-evidence" checked={entryEvidence || phase.verifiedEvidence === true} disabled={entryEvidence ? 'Required by this step type.' : null} onChange={(v) => up('verifiedEvidence', v ? true : null)} />
+    </section>
   );
 }
 
@@ -779,13 +540,14 @@ function WorkflowBuilder({
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [errorSource, setErrorSource] = useState<unknown>(null);
   /** The engine's phase catalog: every step is one of its entries (X-MIG M11). */
   const [entries, setEntries] = useState<CatalogEntry[]>(initialEntries);
   useEffect(() => {
     teamPlanApi
       .catalog()
       .then((c) => setEntries(c.entries))
-      .catch((e: unknown) => setError(`The phase catalog could not be read: ${e instanceof Error ? e.message : String(e)}`));
+      .catch((e: unknown) => { setErrorSource(e); setError(`The phase catalog could not be read: ${e instanceof Error ? e.message : String(e)}`); });
   }, []);
   const [showJson, setShowJson] = useState(false);
   const [previewJson, setPreviewJson] = useState('');
@@ -814,32 +576,34 @@ function WorkflowBuilder({
       const steps = await buildPresetSteps(phases);
       setPreviewJson(JSON.stringify({ name: workflowId, steps }, null, 2));
       setShowJson(true);
-    } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    } catch (e) { setErrorSource(e); setError(e instanceof Error ? e.message : String(e)); }
   }
 
   async function handleSave() {
     const name = workflowId.trim();
-    if (blocker !== null) { setError(blocker); return; }
-    if (phases.length === 0) { setError('At least one phase is required'); return; }
+    if (blocker !== null) { setErrorSource(null); setError(blocker); return; }
+    if (phases.length === 0) { setErrorSource(null); setError('At least one step is required'); return; }
     setSaving(true);
     setError(null);
+    setErrorSource(null);
     try {
       // X-MIG M11: the builder saves a PRESET (`PUT /presets/:name`); the engine composes its steps
       // over the catalog and refuses one that weakens its entry, in words (translateWireError).
       await teamPlanApi.putPreset(name, { steps: await buildPresetSteps(phases) });
       onSaved(name);
-    } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    } catch (e) { setErrorSource(e); setError(e instanceof Error ? e.message : String(e)); }
     finally { setSaving(false); }
   }
 
-  const fileRef = useRef<HTMLInputElement>(null);
-  function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
+  const [importFile, setImportFile] = useState<File | null>(null);
+  function handleUpload(file: File | null) {
+    setImportFile(file);
     if (!file) return;
     const reader = new FileReader();
     reader.onload = (ev) => {
       const parsed = parseBuilderImport(String(ev.target?.result ?? ''));
       if (parsed === null) {
+        setErrorSource(null);
         setError('Could not read that file: expected a preset ({name, steps}) or a workflow ({id, phases})');
         return;
       }
@@ -848,64 +612,37 @@ function WorkflowBuilder({
       setError(null);
     };
     reader.readAsText(file);
-    e.target.value = '';
   }
 
   return (
-    <div className="flex flex-col gap-3 min-w-0">
+    <div className="wk-pg-set-stack">
       {/* toolbar */}
       <div className="flex items-center gap-2 flex-wrap">
         <input
-          className="flex-1 rounded px-2 py-1 text-xs font-semibold focus:outline-none"
-          placeholder="preset name (e.g. my-deploy)"
+          className="wk-field"
+          aria-label="Workflow name"
+          placeholder="Workflow name, such as my-deploy"
           value={workflowId}
           onChange={(e) => setWorkflowId(e.target.value)}
-          style={inputStyle}
         />
-        <input ref={fileRef} type="file" accept=".json" className="hidden" onChange={handleUpload} />
-        <button
-          type="button"
-          onClick={() => fileRef.current?.click()}
-          className="rounded px-2 py-1 text-[11px]"
-          style={{ border: '1px solid var(--surface-raised)', color: 'var(--ink-muted)' }}
-        >
-          Upload JSON
-        </button>
+        <FilePick label="Upload JSON" accept=".json" file={importFile} onChange={handleUpload} />
         <button
           type="button"
           onClick={() => void handlePreview()}
-          className="rounded px-2 py-1 text-[11px]"
-          style={{ border: '1px solid var(--surface-raised)', color: 'var(--ink-muted)' }}
+          className="wk-btn wk-btn--secondary"
         >
           Preview JSON
         </button>
         <button
           type="button"
           onClick={onCancel}
-          className="text-[11px] px-1 hover:underline"
-          style={{ color: 'var(--ink-dim)' }}
+          className="wk-btn wk-btn--quiet"
         >
           Cancel
         </button>
       </div>
 
-      {/* json preview */}
-      {showJson && (
-        <div className="relative">
-          <pre
-            className="rounded text-[10px] p-3 overflow-auto max-h-48 font-mono"
-            style={{ background: 'var(--surface-base)', color: 'var(--status-run)' }}
-          >
-            {previewJson}
-          </pre>
-          <button
-            type="button"
-            onClick={() => setShowJson(false)}
-            className="absolute top-1 right-1 text-[10px]"
-            style={{ color: 'var(--ink-dim)' }}
-          >✕</button>
-        </div>
-      )}
+      {showJson && <TechDetails summary="JSON preview" text={previewJson} defaultOpen />}
 
       {/* phases */}
       <div className="flex flex-col gap-2">
@@ -928,23 +665,26 @@ function WorkflowBuilder({
       <button
         type="button"
         onClick={addPhase}
-        className="self-start rounded px-3 py-1 text-[11px] transition-colors"
-        style={{ border: '1px dashed var(--surface-raised)', color: 'var(--ink-muted)' }}
+        className="wk-btn wk-btn--secondary"
       >
-        + Add phase
+        + Add step
       </button>
 
-      {error && <p className="text-[11px]" style={{ color: 'var(--status-fail)' }}>{error}</p>}
-      {error === null && blocker !== null && workflowId.trim() !== '' && (
-        <p data-testid="builder-save-blocker" className="text-[11px]" style={{ color: 'var(--status-gate)' }}>{blocker}</p>
+      {/* A check on what you entered is a note on the form; a failed read or save is the page banner, and only the
+          catalog read offers Retry (retrying a read must not stand in for a failed save). */}
+      {error && errorSource === null && <p className="wk-field-note wk-field-note--bad" data-testid="workflow-builder-note">{error}</p>}
+      {error && errorSource !== null && <StateBanner kind={readErrorKind(errorSource)} what={error.startsWith('The phase catalog could not be read') ? 'the step catalog' : 'your workflow changes'} error={error}
+        {...(error.startsWith('The phase catalog could not be read') ? { onRetry: () => { setError(null); setErrorSource(null); void teamPlanApi.catalog().then((c) => setEntries(c.entries)).catch((e: unknown) => { setErrorSource(e); setError(`The phase catalog could not be read: ${e instanceof Error ? e.message : String(e)}`); }); } } : {})} />}
+      {blocker !== null && (
+        <p data-testid="builder-save-blocker" className="wk-field-note">{blocker}</p>
       )}
 
+      {saving && <p className="wk-field-note">Wait for this workflow to finish saving.</p>}
       <button
         type="button"
         onClick={() => void handleSave()}
-        disabled={saving || (blocker !== null && workflowId.trim() !== '')}
-        className="self-start rounded px-4 py-1.5 text-[11px] font-semibold disabled:opacity-50"
-        style={{ background: 'var(--status-run)', color: 'var(--surface-base)' }}
+        disabled={saving || blocker !== null}
+        className="wk-btn wk-btn--primary"
       >
         {saving ? 'Saving…' : 'Save preset'}
       </button>
@@ -984,6 +724,7 @@ export function WorkflowViewer(): React.ReactElement {
   const [selected, setSelected] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [errorSource, setErrorSource] = useState<unknown>(null);
   const [building, setBuilding] = useState(false);
   const [editTarget, setEditTarget] = useState<BuilderInitial | undefined>(undefined);
 
@@ -997,6 +738,7 @@ export function WorkflowViewer(): React.ReactElement {
   const load = useCallback(async (select?: string) => {
     setLoading(true);
     setError(null);
+    setErrorSource(null);
     try {
       const answer = await api.listWorkflows();
       const wfs = answer.workflows;
@@ -1012,6 +754,7 @@ export function WorkflowViewer(): React.ReactElement {
       const [saved, catalog] = await Promise.all([
         teamPlanApi.presets().then((r) => r.presets).catch((e: unknown) => {
           if (e instanceof ApiError && e.status === 404) return [] as Preset[];
+          setErrorSource((previous: unknown) => readErrorKind(previous) === 'offline' ? previous : e);
           setError(`Saved presets could not be read: ${e instanceof Error ? e.message : String(e)}`);
           return [...presetsRef.current.values()];
         }),
@@ -1019,6 +762,7 @@ export function WorkflowViewer(): React.ReactElement {
         // good one and says so, rather than showing every inherited gate and role as a default.
         teamPlanApi.catalog().then((c) => c.entries).catch((e: unknown) => {
           if (e instanceof ApiError && e.status === 404) return [] as CatalogEntry[];
+          setErrorSource((previous: unknown) => readErrorKind(previous) === 'offline' ? previous : e);
           setError(`The phase catalog could not be read: ${e instanceof Error ? e.message : String(e)}`);
           return catalogRef.current;
         }),
@@ -1030,7 +774,7 @@ export function WorkflowViewer(): React.ReactElement {
       setWorkflows(list);
       if (select !== undefined) setSelected(select);
       else if (list.length > 0 && !selectedRef.current) setSelected(list[0]?.id ?? null);
-    } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    } catch (e) { setErrorSource(e); setError(e instanceof Error ? e.message : String(e)); }
     finally { setLoading(false); }
   }, []);
 
@@ -1059,127 +803,49 @@ export function WorkflowViewer(): React.ReactElement {
   const current = workflows.find((w) => w.id === selected) ?? null;
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex items-center gap-2 flex-wrap">
-        <h2 className="text-sm font-semibold flex-1" style={{ color: 'var(--ink-high)' }}>Workflows</h2>
-        {!building && (
-          <>
-            <button
-              type="button"
-              onClick={() => openBuilder()}
-              className="rounded px-3 py-1 text-[11px] font-semibold"
-              style={{ background: 'var(--status-run)', color: 'var(--surface-base)' }}
-            >
-              New workflow
-            </button>
-            <button
-              type="button"
-              onClick={() => void load()}
-              className="text-[10px] hover:underline"
-              style={{ color: 'var(--ink-dim)' }}
-            >
-              Refresh
-            </button>
-          </>
-        )}
-      </div>
-
-      {loading && <p className="text-xs" style={{ color: 'var(--ink-dim)' }}>Loading workflows…</p>}
-      {refused.length > 0 && (
-        <div
-          data-testid="workflows-refused"
-          data-count={refused.length}
-          className="flex flex-col gap-1 rounded px-3 py-2"
-          style={{ background: 'var(--surface-rail)', border: '1px solid var(--status-gate)' }}
-        >
-          <p className="text-[11px] font-semibold" style={{ color: 'var(--status-gate)' }}>
-            {refused.length === 1 ? 'A drop-in definition cannot be launched' : `${refused.length} drop-in definitions cannot be launched`} — the engine refused {refused.length === 1 ? 'it' : 'them'} at boot.
-          </p>
-          {refused.map((w) => (
-            <p key={w.id} data-testid="workflows-refused-row" data-workflow={w.id} className="text-[10px]" style={{ color: 'var(--ink-muted)', overflowWrap: 'anywhere' }}>
-              <span className="font-mono font-semibold">{w.id}</span> — {w.reason}
-            </p>
-          ))}
-        </div>
-      )}
-      {error && (
-        <p className="rounded px-2 py-1 text-xs" style={{ background: 'var(--status-fail-dim)', color: 'var(--status-fail)' }}>
-          {error}
-        </p>
-      )}
-
-      <div className="flex gap-4">
-        {/* left: workflow list */}
-        {!building && (
-          <div className="flex flex-col gap-1.5 w-40 shrink-0">
-            {workflows.map((w) => (
-              <button
-                key={w.id}
-                type="button"
-                onClick={() => setSelected(w.id)}
-                className="w-full text-left rounded px-3 py-2 text-[11px] transition-colors"
-                style={w.id === selected
-                  ? { border: '1px solid var(--accent-dim)', background: 'var(--accent-subtle)', color: 'var(--accent)' }
-                  : { border: '1px solid var(--surface-raised)', background: 'var(--surface-card)', color: 'var(--ink-muted)' }
-                }
-              >
-                <div className="font-semibold">{w.id}</div>
-                <div className="text-[10px] font-mono" style={{ color: 'var(--ink-dim)' }}>{w.phases.length} phases</div>
-              </button>
-            ))}
-          </div>
-        )}
-
-        {/* right: builder or viewer */}
-        <div className="flex-1 min-w-0">
-          {building ? (
-            <WorkflowBuilder
-              {...(editTarget !== undefined ? { initial: editTarget } : {})}
-              builtinNames={builtinNames}
-              initialEntries={catalogRef.current}
-              onSaved={onSaved}
-              onCancel={() => setBuilding(false)}
-            />
-          ) : current ? (
-            <div className="flex flex-col gap-2">
-              <div className="flex items-center gap-2">
-                <span className="text-[11px] font-semibold uppercase tracking-wider font-mono" style={{ color: 'var(--ink-dim)' }}>
-                  {current.id}
-                </span>
-                <span className="text-[10px] font-mono" style={{ color: 'var(--ink-dim)' }}>
-                  — {current.phases.length} phases
-                </span>
-                <button
-                  type="button"
-                  data-testid="workflow-edit"
-                  // A built-in preset is read-only: its Edit opens a copy to save under a new name.
-                  onClick={() => openBuilder(current, builtinNames.has(current.id) ? `${current.id}-copy` : undefined)}
-                  className="ml-auto text-[10px] hover:underline"
-                  style={{ color: 'var(--accent)' }}
-                >
-                  Edit
-                </button>
-                <button
-                  type="button"
-                  onClick={() => openBuilder(current, `${current.id}-copy`)}
-                  className="text-[10px] hover:underline"
-                  style={{ color: 'var(--ink-dim)' }}
-                >
-                  Duplicate
-                </button>
+    <PageFrame title="Workflows" intro="Browse the steps for your work or create your own workflow."
+      actions={!building ? <>
+        <button type="button" className="wk-btn wk-btn--primary" onClick={() => openBuilder()} disabled={loading || error !== null}>New workflow</button>
+        <button type="button" className="wk-btn wk-btn--secondary" onClick={() => void load()}>Refresh</button>
+      </> : undefined}>
+      {!building && (loading || error !== null) && <p className="wk-field-note">{loading ? 'Wait for workflows to load before creating one.' : 'Refresh workflows before creating one.'}</p>}
+      {!building && error && <StateBanner kind={readErrorKind(errorSource ?? error)} what="workflows" error={error} onRetry={() => void load()} retrying={loading} />}
+      <p className="wk-field-note">The composer's / menu offers workflows for starting work, including saved workflows for the current project; setup and background workflows have their own entry points. It shows up to eight matches as you type.</p>
+      {loading && <Skeleton rows={4} />}
+      {!loading && error === null && refused.length > 0 && <section className="wk-card" data-testid="workflows-refused" data-count={refused.length}>
+        <SectionTitle>Unavailable workflows</SectionTitle>
+        <p>{refused.length === 1 ? 'A workflow cannot be launched.' : 'Some workflows cannot be launched.'}</p>
+        {refused.map((w) => <div key={w.id} data-testid="workflows-refused-row" data-workflow={w.id} className="wk-list-row">
+          <div className="wk-list-row-title">{w.id}</div>
+          <div className="wk-list-row-meta"><TechDetails text={w.reason} /></div>
+        </div>)}
+      </section>}
+      {!loading && !building && error === null && workflows.length === 0 && <EmptyState title="No workflows yet." body="Use New workflow to choose the steps for your work." />}
+      <div className={building ? 'wk-pg-set-stack' : 'wk-pg-set-workflows'}>
+        {!building && !loading && <section className="wk-card">
+          <SectionTitle>Available workflows</SectionTitle>
+          {workflows.map((w) => <div className="wk-list-row" key={w.id}>
+            <div className="wk-list-row-title"><button type="button" className="wk-chip" aria-pressed={w.id === selected} onClick={() => setSelected(w.id)}>{w.id}</button></div>
+            <div className="wk-list-row-meta">{error === null && <StatLine items={[{ label: 'steps', value: w.phases.length }]} />}</div>
+          </div>)}
+        </section>}
+        <div className="min-w-0">
+          {building ? <WorkflowBuilder {...(editTarget !== undefined ? { initial: editTarget } : {})} builtinNames={builtinNames} initialEntries={catalogRef.current} onSaved={onSaved} onCancel={() => setBuilding(false)} />
+            : !loading && current ? <section className="wk-pg-set-stack">
+              <div className="wk-pg-set-heading">
+                <SectionTitle>Steps in {current.id}</SectionTitle>
+                {error === null && <StatLine items={[{ label: 'steps', value: current.phases.length }]} />}
+                <div className="wk-list-row-actions" data-testid="workflow-edit">
+                  <OverflowMenu label={`More actions for ${current.id}`} items={[
+                    { id: 'edit', label: 'Edit', onSelect: () => openBuilder(current, builtinNames.has(current.id) ? `${current.id}-copy` : undefined) },
+                    { id: 'duplicate', label: 'Duplicate', onSelect: () => openBuilder(current, `${current.id}-copy`) },
+                  ]} />
+                </div>
               </div>
-              {current.phases.map((p) => <PhaseCard key={p.id} phase={p} />)}
-            </div>
-          ) : null}
+              {current.phases.map((p, i) => <PhaseCard key={p.id} phase={p} index={i} />)}
+            </section> : null}
         </div>
       </div>
-
-      {!building && (
-        <p className="text-[10px] font-mono" style={{ color: 'var(--ink-dim)' }}>
-          Presets are saved through the engine (<span className="font-mono">PUT /presets</span>) and launch by name.
-          Scripts saved to <span style={{ color: 'var(--ink-dim)' }}>~/.wicked/scripts/</span>.
-        </p>
-      )}
-    </div>
+    </PageFrame>
   );
 }

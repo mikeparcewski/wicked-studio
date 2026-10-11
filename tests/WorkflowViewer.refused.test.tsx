@@ -24,6 +24,11 @@ vi.mock('../src/api/client.js', () => ({
   apiFetch: vi.fn(),
 }));
 
+vi.mock('../src/api/teamPlan.js', () => ({ teamPlanApi: {
+  presets: vi.fn().mockResolvedValue({ presets: [] }),
+  catalog: vi.fn().mockResolvedValue({ entries: [] }),
+} }));
+
 const REASON =
   'gate evaluates nothing: write-a-note — the phase declares executes_code but pins no validator '
   + 'and has no human gate, so its gate would approve with nothing checked.';

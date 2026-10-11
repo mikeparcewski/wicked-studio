@@ -275,17 +275,13 @@ describe('SkillsPage — the catalog from the manifest', () => {
     render(<Harness />);
 
     expect(await screen.findByTestId('skills-kpis')).toBeInTheDocument();
-    expect(screen.getByTestId('skills-kpi-total').dataset.value).toBe('4');
-    expect(screen.getByTestId('skills-kpi-enabled').dataset.value).toBe('3');
-    expect(screen.getByTestId('skills-kpi-overridden').dataset.value).toBe('1');
-    expect(screen.getByTestId('skills-kpi-core').dataset.value).toBe('2');
-    expect(screen.getByTestId('skills-kpi-portable').dataset.value).toBe('3');
+    expect(screen.getByTestId('skills-kpis').textContent).toBe('4 skills · 3 enabled · 1 edited · 2 required · 3 portable');
     expect(screen.getByTestId('skills-root')).toHaveTextContent('root /state/skills');
     const source = screen.getByTestId('skills-source');
-    expect(source).toHaveTextContent('baseline 12.32.0 · claude-plugin-cache · bbbbbbbbbbbb · abcdef0123 · venv synced · captured 2026-09-08T00:00:00Z');
+    expect(screen.getByTestId('skills-root')).toHaveTextContent('baseline 12.32.0 · claude-plugin-cache · bbbbbbbbbbbb · abcdef0123 · venv synced · captured 2026-09-08T00:00:00Z');
     expect(source.dataset.venv).toBe('synced');
     const snapshot = screen.getByTestId('skills-snapshot');
-    expect(snapshot).toHaveTextContent('snapshot generation 3 is current · published 2026-09-08T00:00:00Z · pppppppppppp · 2 unpublished skills');
+    expect(screen.getByTestId('skills-root')).toHaveTextContent('snapshot generation 3 is current · published 2026-09-08T00:00:00Z · pppppppppppp · 2 unpublished skills');
     expect(snapshot.dataset.generation).toBe('3');
     expect(snapshot.dataset.unpublished).toBe('2');
     // No engine line: this daemon's /diagnostics is the bare 404 (predates the seam) — never an error.
@@ -302,7 +298,7 @@ describe('SkillsPage — the catalog from the manifest', () => {
     expect(within(extractor).getByTestId('skills-claude-only-badge').dataset.reach).toBe('not-portable');
     expect(within(extractor).getByTestId('skills-not-portable-badge')).toHaveTextContent('not portable');
     expect(within(extractor).queryByTestId('skills-needs-claude-badge')).toBeNull();
-    expect(screen.getByTestId('skills-kpi-portable')).toHaveTextContent('1 not portable · 0 need Claude harness');
+    expect(screen.getByTestId('skills-kpis')).toHaveTextContent('3 portable');
     expect(within(extractor).getByTestId('skills-upgrade-badge')).toBeInTheDocument();
     expect(within(extractor).getByTestId('skills-conflict-badge')).toBeInTheDocument();
     expect(within(extractor).getByTestId('skills-unpublished-badge')).toBeInTheDocument();
@@ -332,8 +328,8 @@ describe('SkillsPage — the catalog from the manifest', () => {
     wire({ 'GET /skills': () => Promise.resolve(catalog({ current: null })) });
     render(<Harness />);
     const snapshot = await screen.findByTestId('skills-snapshot');
-    expect(snapshot).toHaveTextContent(/never published/);
-    expect(snapshot).not.toHaveTextContent(/published 2026/);
+    expect(screen.getByTestId('skills-root')).toHaveTextContent(/never published/);
+    expect(screen.getByTestId('skills-root')).not.toHaveTextContent(/published 2026/);
     expect(snapshot.dataset.generation).toBe('none');
   });
 
@@ -348,8 +344,9 @@ describe('SkillsPage — the catalog from the manifest', () => {
     render(<Harness />);
     const engine = await screen.findByTestId('skills-engine');
     expect(engine.dataset.state).toBe('published');
-    expect(engine).toHaveTextContent('engine published — the engine is handed the verified snapshot · gen 3');
-    expect(engine).toHaveAttribute('title', `WICKED_SKILLS_SNAPSHOT=${SNAPSHOT_PATH}`);
+    expect(screen.getByTestId('skills-root')).toHaveTextContent('engine published — the engine is handed the verified snapshot · gen 3');
+    expect(screen.getByTestId('skills-root')).not.toHaveAttribute('open');
+    expect(screen.getByTestId('skills-root')).toHaveTextContent(`input ${SNAPSHOT_PATH}`);
     cleanup();
 
     // Every other state renders its own honest copy — and the ladder's findings under it.
@@ -366,10 +363,10 @@ describe('SkillsPage — the catalog from the manifest', () => {
       render(<Harness />);
       const line = await screen.findByTestId('skills-engine');
       expect(line.dataset.state).toBe(state);
-      expect(line).toHaveTextContent(copy);
+      expect(screen.getByTestId('skills-root')).toHaveTextContent(copy);
       const f = within(line).getByTestId('skills-engine-finding');
       expect(f.dataset.kind).toBe('skills.fallback');
-      expect(f).toHaveTextContent(`skills.fallback · warning · why ${state}`);
+      expect(screen.getByTestId('skills-root')).toHaveTextContent(`skills.fallback · warning · why ${state}`);
       cleanup();
     }
 
@@ -379,30 +376,30 @@ describe('SkillsPage — the catalog from the manifest', () => {
       'GET /diagnostics': () => Promise.resolve(diagnostics('fallback', [{ kind: 'skills.garden', severity: 'error', message: 'the installed plugin at /Users/reel-operator/.claude/plugins/cache/wicked-garden is older' }])),
     });
     render(<Harness />);
-    const homeLine = await screen.findByTestId('skills-engine-finding');
-    expect(homeLine).toHaveTextContent('the installed plugin at ~/.claude/plugins/cache/wicked-garden is older');
+    await screen.findByTestId('skills-engine-finding');
+    expect(screen.getByTestId('skills-root')).toHaveTextContent('the installed plugin at ~/.claude/plugins/cache/wicked-garden is older');
     expect(document.body.textContent).not.toContain('reel-operator');
   });
 
-  it('the KPI tiles are doors into the matching filter chip', async () => {
+  it('the count-bearing filter chips open their matching catalog cuts', async () => {
     wire({ 'GET /skills': () => Promise.resolve(catalog()) });
     render(<Harness />);
     await screen.findAllByTestId('skills-row');
 
-    fireEvent.click(screen.getByTestId('skills-kpi-overridden'));
+    fireEvent.click(screen.getAllByTestId('skills-filter-chip').find(c => c.dataset.chip === 'overridden')!);
     expect(screen.getByTestId('skills-filter').dataset.filter).toBe('overridden');
     expect(screen.getAllByTestId('skills-row').map((r) => r.dataset.skill)).toEqual([EXTRACTOR]);
 
-    fireEvent.click(screen.getByTestId('skills-kpi-core'));
+    fireEvent.click(screen.getAllByTestId('skills-filter-chip').find(c => c.dataset.chip === 'core')!);
     expect(screen.getAllByTestId('skills-row').map((r) => r.dataset.skill)).toEqual([EXTRACTOR, REPO_LEARN]);
 
-    fireEvent.click(screen.getByTestId('skills-kpi-portable'));
+    fireEvent.click(screen.getAllByTestId('skills-filter-chip').find(c => c.dataset.chip === 'portable')!);
     expect(screen.getAllByTestId('skills-row').map((r) => r.dataset.skill)).toEqual([MINE, A11Y, REPO_LEARN]);
 
-    fireEvent.click(screen.getByTestId('skills-kpi-enabled'));
+    fireEvent.click(screen.getAllByTestId('skills-filter-chip').find(c => c.dataset.chip === 'enabled')!);
     expect(screen.getAllByTestId('skills-row')).toHaveLength(3);
 
-    fireEvent.click(screen.getByTestId('skills-kpi-total'));
+    fireEvent.click(screen.getAllByTestId('skills-filter-chip').find(c => c.dataset.chip === 'all')!);
     expect(screen.getAllByTestId('skills-row')).toHaveLength(4);
   });
 });
@@ -412,7 +409,7 @@ describe('SkillsPage — the honest non-catalog states', () => {
     wire({});
     render(<Harness />);
     const state = await screen.findByTestId('skills-unsupported');
-    expect(state).toHaveTextContent(/predates the skills catalog/);
+    expect(state).toHaveTextContent(/Skills are unavailable in this version/);
     expect(screen.queryByTestId('skills-kpis')).toBeNull();
     expect(screen.queryByTestId('skills-grid')).toBeNull();
     expect(screen.queryByTestId('skills-error')).toBeNull();
@@ -427,7 +424,7 @@ describe('SkillsPage — the honest non-catalog states', () => {
     wire({ 'GET /skills': () => Promise.reject(new ApiError(501, 'skills store not implemented by this engine')) });
     render(<Harness />);
     const state = await screen.findByTestId('skills-unsupported');
-    expect(state).toHaveTextContent(/predates the skills catalog/);
+    expect(state).toHaveTextContent(/Skills are unavailable in this version/);
     expect(screen.queryByTestId('skills-unavailable')).toBeNull();
     expect(screen.queryByTestId('skills-error')).toBeNull();
     expect(screen.queryByTestId('skills-kpis')).toBeNull();
@@ -438,7 +435,7 @@ describe('SkillsPage — the honest non-catalog states', () => {
     wire({ 'GET /skills': () => Promise.reject(new ApiError(503, 'the skills root is not seeded: no installed wicked-garden plugin was found')) });
     render(<Harness />);
     const state = await screen.findByTestId('skills-unavailable');
-    expect(state).toHaveTextContent('The daemon has no skills catalog to serve.');
+    expect(state).toHaveTextContent('Studio can’t reach its service right now.');
     expect(state).toHaveTextContent('the skills root is not seeded: no installed wicked-garden plugin was found');
     // Not the "predates" state, not a raw error, no write verbs, no empty catalog.
     expect(screen.queryByTestId('skills-unsupported')).toBeNull();
@@ -507,7 +504,7 @@ describe('SkillsPage — the row switch (enable/disable through the guards, CAS)
     await waitFor(() => expect(within(row(A11Y)).getByTestId('skills-toggle')).toHaveAttribute('aria-checked', 'true'));
     expect(calls('POST', `/skills/${A11Y}/enable`)).toBe(1);
     expect(calls('GET', '/skills')).toBe(2);
-    expect(screen.getByTestId('skills-kpi-enabled').dataset.value).toBe('4');
+    expect(screen.getByTestId('skills-kpis')).toHaveTextContent('4 enabled');
     // A clear flip needs no banner — the switch is the answer.
     expect(screen.queryByTestId('skills-page-findings')).toBeNull();
     expect(navigate).not.toHaveBeenCalled();
@@ -571,7 +568,7 @@ describe('SkillsPage — the row switch (enable/disable through the guards, CAS)
 
     fireEvent.click(within(row(MINE)).getByTestId('skills-toggle'));
     const prompt = await screen.findByTestId('skills-conflict');
-    expect(prompt).toHaveTextContent('The skills catalog changed under this page.');
+    expect(prompt).toHaveTextContent('The skills catalog changed.');
     expect(prompt).toHaveTextContent('revision mismatch: expected 1, the manifest is at 2 — re-read GET /skills and retry');
     // Not an error banner, not a findings banner — a named state.
     expect(screen.queryByTestId('skills-page-error')).toBeNull();
@@ -885,8 +882,8 @@ describe('SkillsPage — the editor’s CAS: Save is conditioned on the revision
     // The refresh re-read the open file and found it changed under a dirty editor.
     const conflict = await within(drawer).findByTestId('skills-file-conflict');
     expect(calls('GET', `/skills/${REPO_LEARN}/files/SKILL.md`)).toBe(2);
-    expect(conflict).toHaveTextContent('This file changed on the daemon while you were editing.');
-    expect(conflict).toHaveTextContent(`SKILL.md is now ${d.content.length} B on the daemon (you started from ${SKILL_MD.length} B, catalog revision ${REV_1})`);
+    expect(conflict).toHaveTextContent('This file changed while you were editing.');
+    expect(conflict).toHaveTextContent(`SKILL.md: ${d.content.length} B on the service; started from ${SKILL_MD.length} B, catalog revision ${REV_1}`);
     // The draft is preserved and Save waits — the codex probe's silent `expectedRevision: r2` overwrite cannot happen.
     expect(within(drawer).getByTestId('skills-editor')).toHaveValue('mine');
     expect(within(drawer).getByTestId('skills-file-dirty')).toBeInTheDocument();
@@ -1038,14 +1035,14 @@ describe('SkillsPage — stale catalog and in-flight writes freeze every write a
     fail = true;
     fireEvent.click(screen.getByTestId('skills-reload'));
     const stale = await screen.findByTestId('skills-stale');
-    expect(stale).toHaveTextContent('The catalog could not be re-read.');
+    expect(stale).toHaveTextContent('Showing what we had');
     expect(stale).toHaveTextContent('store busy');
     // Not the first-load failure state: the catalog on screen stays.
     expect(screen.queryByTestId('skills-error')).toBeNull();
     expect(screen.getAllByTestId('skills-row')).toHaveLength(4);
     for (const r of screen.getAllByTestId('skills-row')) expect(within(r).getByTestId('skills-toggle')).toBeDisabled();
     expect(screen.getByTestId('skills-publish')).toBeDisabled();
-    expect(screen.getByTestId('skills-refresh')).toBeDisabled();
+    expect(screen.getByTestId('skills-refresh')).toHaveAttribute('data-disabled','true');
     expect(screen.getByTestId('skills-add-open')).toBeDisabled();
     expect(within(drawer).getByTestId('skills-save')).toBeDisabled();
     expect(within(drawer).getByTestId('skills-drawer-toggle')).toBeDisabled();
@@ -1080,7 +1077,7 @@ describe('SkillsPage — stale catalog and in-flight writes freeze every write a
     expect(screen.getByTestId('skills-publish')).toHaveTextContent('Publish…');
     for (const r of screen.getAllByTestId('skills-row')) expect(within(r).getByTestId('skills-toggle')).toBeDisabled();
     expect(screen.getByTestId('skills-add-open')).toBeDisabled();
-    expect(screen.getByTestId('skills-refresh')).toBeDisabled();
+    expect(screen.getByTestId('skills-refresh')).toHaveAttribute('data-disabled','true');
     expect(screen.getByTestId('skills-analyze')).toBeDisabled();
     expect(within(drawer).getByTestId('skills-save')).toBeDisabled();
     expect(within(drawer).getByTestId('skills-drawer-toggle')).toBeDisabled();
@@ -1150,7 +1147,7 @@ describe('SkillsPage — the Support tab (root support files)', () => {
 
     fireEvent.click(within(drawer).getByTestId('skills-tab-support'));
     expect(within(drawer).getByTestId('skills-tab-support')).toHaveAttribute('aria-selected', 'true');
-    expect(within(drawer).getByTestId('skills-support-note')).toHaveTextContent(/shared by every skill/);
+    expect(within(drawer).getByTestId('skills-support-note')).toHaveTextContent(/Shared files used by your skills/);
     const tree = within(drawer).getByTestId('skills-file-tree');
     expect(tree.dataset.tab).toBe('support');
     expect(within(tree).getAllByTestId('skills-file').map((f) => f.dataset.path)).toEqual(['.claude-plugin/plugin.json', 'scripts/_python.sh']);
@@ -1238,7 +1235,7 @@ describe('SkillsPage — the drawer verbs: switch, Reset, Replace', () => {
     fireEvent.click(within(drawer).getByTestId('skills-reset-open'));
     const modal = screen.getByTestId('skills-confirm-modal');
     expect(modal).toHaveTextContent(`Reset ${EXTRACTOR}`);
-    expect(modal).toHaveTextContent(/stays disabled/);
+    expect(modal).toHaveTextContent(/Type the skill name exactly to enable Reset/);
     const confirm = within(modal).getByTestId('skills-confirm');
     expect(confirm).toBeDisabled();
     fireEvent.change(within(modal).getByTestId('skills-confirm-input'), { target: { value: 'wrong-name' } });
@@ -1435,7 +1432,7 @@ describe('SkillsPage — the page verbs: Add, Refresh baseline, Analyze, Publish
     expect(await screen.findByTestId('skills-note')).toHaveTextContent('Added new-skill');
     await waitFor(() => expect(navigate).toHaveBeenCalledWith('/skills?skill=new-skill'));
     expect((await screen.findByTestId('skills-drawer')).dataset.skill).toBe('new-skill');
-    expect(screen.getByTestId('skills-kpi-total').dataset.value).toBe('5');
+    expect(screen.getByTestId('skills-kpis')).toHaveTextContent('5 skills');
   });
 
   it('Refresh baseline posts {expectedRevision}, renders the merge findings, reloads, and the note names the new baseline', async () => {
@@ -1460,7 +1457,8 @@ describe('SkillsPage — the page verbs: Add, Refresh baseline, Analyze, Publish
     });
     render(<Harness />);
     await screen.findAllByTestId('skills-row');
-    fireEvent.click(screen.getByTestId('skills-refresh'));
+    fireEvent.click(screen.getByRole('button', {name:'More actions for skills'}));
+    fireEvent.click(screen.getByRole('menuitem', {name:'Refresh baseline'}));
 
     const findings = await screen.findByTestId('skills-page-findings');
     expect(findings.dataset.verdict).toBe('warnings');
@@ -1468,7 +1466,7 @@ describe('SkillsPage — the page verbs: Add, Refresh baseline, Analyze, Publish
     expect(within(findings).getByTestId('skills-finding').dataset.kind).toBe('refresh-conflict');
     expect(bodies).toEqual([{ expectedRevision: REV_1 }]);
     expect(await screen.findByTestId('skills-note')).toHaveTextContent('Baseline refreshed — 12.33.0 (cccccccccccc): 2 taken · 2 kept · 0 added · 0 removed · 1 conflict. Your edits were kept; conflicts are flagged.');
-    expect(screen.getByTestId('skills-source')).toHaveTextContent('baseline 12.33.0');
+    expect(screen.getByTestId('skills-root')).toHaveTextContent('baseline 12.33.0');
     expect(calls('GET', '/skills')).toBe(2);
   });
 
@@ -1908,7 +1906,7 @@ describe('SkillsPage — review round 3 (closing sweep): unsafe map keys, a fail
     await waitFor(() => expect(screen.queryByTestId('skills-files-modal')).toBeNull());
     expect(await screen.findByTestId('skills-note')).toHaveTextContent('Added new-skill — publish to hand it to workers.');
     const stale = await screen.findByTestId('skills-stale');
-    expect(stale).toHaveTextContent('The catalog could not be re-read.');
+    expect(stale).toHaveTextContent('Showing what we had');
     expect(stale).toHaveTextContent('store busy');
     expect(calls('GET', '/skills')).toBe(2);
     // No navigation, no dead-address note, no drawer: the rows on screen are the pre-add catalog, marked stale.
@@ -1922,7 +1920,7 @@ describe('SkillsPage — review round 3 (closing sweep): unsafe map keys, a fail
     fail = false;
     fireEvent.click(within(stale).getByTestId('skills-stale-retry'));
     await waitFor(() => expect(screen.queryByTestId('skills-stale')).toBeNull());
-    expect(screen.getByTestId('skills-kpi-total').dataset.value).toBe('5');
+    expect(screen.getByTestId('skills-kpis')).toHaveTextContent('5 skills');
     expect(screen.getByTestId('skills-note')).toHaveTextContent('Added new-skill');
     expect(navigate).not.toHaveBeenCalled();
     fireEvent.click(row('new-skill'));
@@ -2069,23 +2067,21 @@ describe('SkillsPage — portability per KIND of reason (F-079, api-types 0.34.0
     expect(within(agentic).queryByTestId('skills-not-portable-badge')).toBeNull();
 
     // Five skills: three portable, one not portable (authoring), one that needs the harness.
-    const tile = screen.getByTestId('skills-kpi-portable');
-    expect(tile.dataset.value).toBe('3');
-    expect(tile).toHaveTextContent('1 not portable · 1 need Claude harness');
+    expect(screen.getByTestId('skills-kpis')).toHaveTextContent('3 portable');
 
     // The chips are doors into each kind; `claude-only` is gone.
     const chips = screen.getAllByTestId('skills-filter-chip');
-    const labels = chips.map((c) => c.textContent ?? '');
+    const labels = chips.map((c) => c.dataset.chip ?? '');
     expect(labels.some((l) => l.startsWith('not-portable'))).toBe(true);
     expect(labels.some((l) => l.startsWith('needs-claude'))).toBe(true);
     expect(labels.some((l) => l.startsWith('claude-only'))).toBe(false);
-    fireEvent.click(chips.find((c) => (c.textContent ?? '').startsWith('not-portable'))!);
+    fireEvent.click(chips.find((c) => c.dataset.chip === 'not-portable')!);
     expect(screen.getByTestId('skills-filter').dataset.filter).toBe('not-portable');
     expect(screen.getAllByTestId('skills-row').map((r) => r.dataset.skill)).toEqual([EXTRACTOR]);
-    fireEvent.click(screen.getAllByTestId('skills-filter-chip').find((c) => (c.textContent ?? '').startsWith('needs-claude'))!);
+    fireEvent.click(screen.getAllByTestId('skills-filter-chip').find((c) => c.dataset.chip === 'needs-claude')!);
     expect(screen.getAllByTestId('skills-row').map((r) => r.dataset.skill)).toEqual([AGENTIC]);
     // The Portable tile still opens the portable cut.
-    fireEvent.click(tile);
+    fireEvent.click(screen.getAllByTestId('skills-filter-chip').find(c => c.dataset.chip === 'portable')!);
     expect(screen.getAllByTestId('skills-row').map((r) => r.dataset.skill)).toEqual([MINE, A11Y, REPO_LEARN]);
   });
 
@@ -2105,7 +2101,7 @@ describe('SkillsPage — portability per KIND of reason (F-079, api-types 0.34.0
     expect(badge.title).toBe(GENERIC_NOT_PORTABLE_TITLE);
     expect(badge).toHaveAccessibleName(GENERIC_NOT_PORTABLE_TITLE);
     expect(within(row(EXTRACTOR)).getByTestId('skills-claude-only-badge').dataset.reach).toBe('not-portable');
-    expect(screen.getByTestId('skills-kpi-portable')).toHaveTextContent('1 not portable · 0 need Claude harness');
+    expect(screen.getByTestId('skills-kpis')).toHaveTextContent('3 portable');
   });
 
   it('the drawer carries a Portability line: every reason with its copy, and every file:line anchor as monospace text', async () => {
@@ -2116,13 +2112,14 @@ describe('SkillsPage — portability per KIND of reason (F-079, api-types 0.34.0
     const line = within(drawer).getByTestId('skills-drawer-portability');
     expect(line.dataset.reach).toBe('not-portable');
     expect(line.dataset.detailed).toBe('true');
-    expect(line).toHaveTextContent('Portability — not portable — cwd-script, plugin-root, relative-link (first at skills/domain/extractor/SKILL.md:41)');
+    expect(line).toHaveTextContent('Edit this skill to make it available to more helpers.');
+    expect(line).toHaveTextContent('cwd-script, plugin-root, relative-link (first at skills/domain/extractor/SKILL.md:41)');
     expect(within(line).getAllByTestId('skills-drawer-portability-reason').map((li) => li.dataset.reason)).toEqual(['cwd-script', 'plugin-root', 'relative-link']);
     expect(within(line).getAllByTestId('skills-drawer-portability-reason')[1]).toHaveTextContent('plugin-root — resolves ${CLAUDE_PLUGIN_ROOT}');
     const anchors = within(line).getAllByTestId('skills-drawer-portability-anchor');
-    expect(anchors.map((a) => a.textContent)).toEqual(['skills/domain/extractor/SKILL.md:41', 'skills/domain/extractor/refs/loop.md:7']);
+    expect(anchors.map((a) => a.querySelector('pre')?.textContent)).toEqual(['skills/domain/extractor/SKILL.md:41', 'skills/domain/extractor/refs/loop.md:7']);
     // Long anchors wrap at phone width rather than widening the drawer.
-    for (const a of anchors) expect(a.className).toContain('break-all');
+    for (const a of anchors) expect(a.querySelector('details')).not.toHaveAttribute('open');
     // The header badge in the drawer is the same per-reason badge as the row's.
     expect(within(drawer).getByTestId('skills-not-portable-badge')).toBeInTheDocument();
   });
@@ -2143,7 +2140,7 @@ describe('SkillsPage — portability per KIND of reason (F-079, api-types 0.34.0
     const drawer = await openDrawer(EXTRACTOR);
     const line = within(drawer).getByTestId('skills-drawer-portability');
     expect(line.dataset.detailed).toBe('false');
-    expect(line).toHaveTextContent(`Portability — ${GENERIC_NOT_PORTABLE_TITLE}`);
+    expect(line).toHaveTextContent(GENERIC_NOT_PORTABLE_TITLE);
     expect(within(line).queryAllByTestId('skills-drawer-portability-reason')).toEqual([]);
     expect(within(line).queryAllByTestId('skills-drawer-portability-anchor')).toEqual([]);
   });
@@ -2168,7 +2165,7 @@ describe('SkillsPage — a contradictory `portability` verdict is made visible, 
     expect(row(EXTRACTOR).dataset.contradiction).toBeUndefined();
     expect(row(MINE).dataset.contradiction).toBeUndefined();
     // Counted as portable — the KPI follows `portable` too.
-    expect(screen.getByTestId('skills-kpi-portable').dataset.value).toBe('3');
+    expect(screen.getByTestId('skills-kpis')).toHaveTextContent('3 portable');
 
     const drawer = await openDrawer(REPO_LEARN);
     const hint = within(drawer).getByTestId('skills-drawer-portability-hint');
@@ -2232,9 +2229,7 @@ describe('studio#388: a root behind the installed plugin, and unpublished suppor
     const row = await screen.findByTestId('skills-behind');
     expect(row.dataset.drift).toBe('behind');
     // Consequence, not mechanism: what is wrong with the RUNS, before the verb to fix it.
-    expect(row.textContent).toMatch(/^Workers are running skills older than the plugin installed on this host\./);
-    expect(row.textContent).toMatch(/fails inside the worker/);
-    expect(row.textContent).toMatch(/Refresh baseline picks up the install/);
+    expect(row).toHaveTextContent('Refresh the installed skills, then publish to share the update with your helpers.');
     // The version alone is not the evidence: this fixture's install declares 12.38.1 against a
     // 12.32.0 baseline, so no same-version note. The dogfood's case is the next assertion.
     expect(row.textContent).not.toMatch(/same version number/);
@@ -2252,7 +2247,9 @@ describe('studio#388: a root behind the installed plugin, and unpublished suppor
     wire({ 'GET /skills': () => Promise.resolve(catalog({ installed: installed({ source: { kind: 'checkout', path: '/garden', plugin_version: '12.32.0' } }) })) });
     render(<Harness />);
     const row = await screen.findByTestId('skills-behind');
-    expect(row.textContent).toMatch(/12\.32\.0 — the same version number, different files/);
+    expect(row).toHaveTextContent('Refresh the installed skills, then publish to share the update with your helpers.');
+    expect(within(row).getByTestId('skills-behind-detail')).toHaveTextContent('installed 12.32.0');
+    expect(within(row).getByTestId('skills-behind-detail')).toHaveTextContent('baseline 12.32.0');
   });
 
   it('a matching install shows no row at all', async () => {
@@ -2293,11 +2290,11 @@ describe('studio#388: a root behind the installed plugin, and unpublished suppor
     const row = await screen.findByTestId('skills-behind');
     expect(row.dataset.drift, 'the baseline itself is current here').toBe('match');
     expect(row.dataset.unpublishedSupport).toBe('1');
-    expect(row.textContent).toMatch(/^Workers are running support files older than the ones in this root\./);
+    expect(row).toHaveTextContent('Publish to share the updated support files with your helpers.');
     expect(within(row).getByTestId('skills-behind-support').textContent).toContain('scripts/mcp/shim.py');
     // The install is current here, so Refresh baseline is NOT the move and must not be the
     // primary verb — nor may the copy tell the operator to run it.
-    expect(row.textContent).toMatch(/Publish hands this root to workers\./);
+    expect(row.textContent).toMatch(/Publish to share the updated support files with your helpers\./);
     expect(row.textContent).not.toMatch(/Refresh baseline picks up the install/);
     // No markdown left as literal text (caught by looking at it, not by measuring it).
     expect(row.textContent).not.toContain('`');

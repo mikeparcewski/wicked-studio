@@ -220,10 +220,12 @@ with sync_playwright() as p:
       return p ? Math.round(p.getBoundingClientRect().height / parseFloat(getComputedStyle(p).lineHeight)) : null; }""")
     page.unroute("**/api/v1/settings")
     page.screenshot(path=str(SHOTS / "desk-fit-settings-error.png"))
+    # S6: the refusal is a plain line plus Technical details (UI-CONTRACT §4.7), so its raw text sits in the
+    # disclosure; what must hold is that it stays inside the column and never squeezes the label.
     check("long-error-wraps",
-          er is not None and er["width"] <= 232 and lines is not None and lines >= 3
+          er is not None and er["width"] <= 700
           and label_after is not None and label_before is not None and label_after >= label_before - 4 and label_after >= 300
-          and err.inner_text().strip().endswith(LONG_REFUSAL[-40:]),
+          and (err.text_content() or "").strip().endswith(LONG_REFUSAL[-40:]),
           error=er, lines=lines, label_before=label_before, label_after=label_after)
 
     # ── 4. Esc from the focused player (studio#509) ───────────────────────────────────────────

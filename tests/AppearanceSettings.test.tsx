@@ -6,7 +6,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
  * strip + the two independent resets + the theme instance picker, all writing
  * through the appearance store. jsdom resolves no custom properties and paints
  * no canvas — the computed/pixel halves live in e2e/vision_slice7_test.py;
- * these cases pin the DOM contract, the inline token references, and the
+ * these cases pin the DOM contract, the shared primitive classes, and the
  * store wiring.
  */
 
@@ -49,11 +49,9 @@ describe('AppearanceSettings (DES-VISION-001 §3.2)', () => {
 
   it('the preview strip speaks tokens: accent on segment + primary, status on the gate chip (EC12/EC15)', () => {
     render(<AppearanceSettings />);
-    expect(screen.getByTestId('preview-mode-active').style.background).toBe('var(--accent)');
-    expect(screen.getByTestId('preview-mode-active').style.color).toBe('var(--accent-fg)');
-    expect(screen.getByTestId('preview-primary').style.background).toBe('var(--accent)');
-    expect(screen.getByTestId('preview-gate-chip').style.background).toBe('var(--status-gate-dim)');
-    expect(screen.getByTestId('preview-gate-chip').style.color).toBe('var(--status-gate)');
+    expect(screen.getByTestId('preview-mode-active')).toHaveClass('wk-tag');
+    expect(screen.getByTestId('preview-primary')).toHaveClass('wk-btn', 'wk-btn--primary');
+    expect(screen.getByTestId('preview-gate-chip')).toHaveClass('wk-tag', 'wk-pg-set-gate');
   });
 
   it('a slider move applies to <html> immediately — the page is the preview (§3.4)', () => {
@@ -109,6 +107,8 @@ describe('AppearanceSettings (DES-VISION-001 §3.2)', () => {
   it('upload: a small file lands as a data URL; an oversized one is refused with a hint', async () => {
     render(<AppearanceSettings />);
     const input = screen.getByTestId('logo-file-input');
+    expect(screen.getByTestId('logo-upload')).toHaveClass('wk-btn', 'wk-btn--secondary');
+    expect(input).toHaveAttribute('accept', 'image/*');
 
     const big = new File([new Uint8Array(300 * 1024)], 'big.png', { type: 'image/png' });
     fireEvent.change(input, { target: { files: [big] } });
@@ -122,14 +122,16 @@ describe('AppearanceSettings (DES-VISION-001 §3.2)', () => {
     expect(screen.queryByTestId('logo-error')).toBeNull();
   });
 
-  it('theme picker: light sets data-theme, dark removes it; the active choice is pressed', () => {
+  it('theme picker: light sets data-theme, dark removes it; the active choice is checked', () => {
     render(<AppearanceSettings />);
-    expect(screen.getByTestId('theme-dark')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('radiogroup', { name: 'Theme' })).toHaveClass('wk-segmented');
+    expect(screen.getByTestId('theme-dark')).toHaveAttribute('role', 'radio');
+    expect(screen.getByTestId('theme-dark')).toHaveAttribute('aria-checked', 'true');
 
     fireEvent.click(screen.getByTestId('theme-light'));
     expect(root().getAttribute('data-theme')).toBe('light');
-    expect(screen.getByTestId('theme-light')).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByTestId('theme-dark')).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByTestId('theme-light')).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByTestId('theme-dark')).toHaveAttribute('aria-checked', 'false');
 
     fireEvent.click(screen.getByTestId('theme-dark'));
     expect(root().hasAttribute('data-theme')).toBe(false);
@@ -140,10 +142,10 @@ describe('AppearanceSettings (DES-VISION-001 §3.2)', () => {
     fireEvent.click(screen.getByTestId('theme-wicked-light'));
     expect(root().getAttribute('data-theme')).toBe('wicked-light');
     expect(root().style.getPropertyValue('--_accent-h')).toBe('200');
-    expect(screen.getByTestId('theme-wicked-light')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByTestId('theme-wicked-light')).toHaveAttribute('aria-checked', 'true');
 
     fireEvent.click(screen.getByTestId('theme-wicked-dark'));
     expect(root().getAttribute('data-theme')).toBe('wicked-dark');
-    expect(screen.getByTestId('theme-wicked-light')).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByTestId('theme-wicked-light')).toHaveAttribute('aria-checked', 'false');
   });
 });

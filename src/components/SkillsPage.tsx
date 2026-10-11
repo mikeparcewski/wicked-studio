@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { getDiagnostics } from '../api/diagnostics.js';
-import { apiRevision, apiWire } from '../api/errors.js';
+import { apiRevision, apiWire, readErrorKind } from '../api/errors.js';
 import {
   analyzeSkills,
   currentBaseline,
@@ -16,7 +16,6 @@ import {
   skillRows,
   skillsPath,
   SKILLS_ENGINE_STATE_COPY,
-  SKILLS_UNSUPPORTED_COPY,
   supportFiles,
   baselineDrift,
   unpublishedSupport,
@@ -28,13 +27,17 @@ import {
   type SkillRow,
   type SkillsCatalog,
 } from '../api/skills.js';
-import { KpiBand, KpiGroup, StatTile } from './dashboardKit.js';
+import { PageFrame, SectionTitle } from './ui/PageFrame.js';
+import { OverflowMenu } from './ui/OverflowMenu.js';
+import { StatLine } from './ui/StatLine.js';
+import { StateBanner, EmptyState, Skeleton } from './ui/StateBanner.js';
+import { TechDetails } from './ui/TechDetails.js';
+import { relTime } from '../board/relTime.js';
 import { SkillDrawer } from './SkillDrawer.js';
 import { SkillFilesMapModal } from './SkillFilesMapModal.js';
 import { SkillFindings } from './SkillFindings.js';
 import { SkillsGrid, SKILLS_FACETS_DEFAULT, type SkillsFacets } from './SkillsGrid.js';
 import type { SkillsWriter } from './skillsWriter.js';
-import { useDisplayPath, useDisplayText } from '../hooks/useHomePath.js';
 
 /**
  * The Skills surface (`/skills`, the skills keystone) — a FILE MANAGER over the daemon's one
@@ -82,8 +85,8 @@ type LoadState =
   | { kind: 'loading' }
   | { kind: 'loaded' }
   | { kind: 'unsupported' }
-  | { kind: 'unavailable'; message: string }
-  | { kind: 'failed'; message: string };
+  | { kind: 'unavailable'; message: string; errorKind: ReturnType<typeof readErrorKind> }
+  | { kind: 'failed'; message: string; errorKind: ReturnType<typeof readErrorKind> };
 
 type PageVerb = 'refresh' | 'analyze' | 'publish';
 
@@ -93,24 +96,13 @@ const PAGE_VERB_LABEL: Record<PageVerb, string> = {
   publish: 'Publish',
 };
 
-/** The engine line's color by `diagnostics.skills.state`. */
-const ENGINE_STATE_COLOR: Record<DiagnosticsSkills['state'], string> = {
-  published: 'var(--status-done)',
-  fallback: 'var(--status-gate)',
-  blocked: 'var(--status-fail)',
-  'config-error': 'var(--status-fail)',
-  disabled: 'var(--ink-dim)',
-};
-
 export function SkillsPage({ navigate, search = '' }: {
   navigate: (path: string) => void;
   /** The URL search string — `?skill=<name>` addresses one skill's drawer. */
   search?: string;
 }): React.ReactElement {
-  const showPath = useDisplayPath();
   // #560: the daemon's sentences (a finding, the 503 body, a recovery error) embed home paths
   // mid-sentence — the same `~/…` rule as the path fields, over free text.
-  const showText = useDisplayText();
   const [catalog, setCatalog] = useState<SkillsCatalog | null>(null);
   const [state, setState] = useState<LoadState>({ kind: 'loading' });
   const [facets, setFacets] = useState<SkillsFacets>(SKILLS_FACETS_DEFAULT);
@@ -151,7 +143,7 @@ export function SkillsPage({ navigate, search = '' }: {
     const measure = (): void => {
       const el = headerRef.current;
       if (el === null) return;
-      const next = Math.max(0, Math.round(el.getBoundingClientRect().bottom));
+      const next = Math.max(0, Math.round(el.getBoundingClientRect().bottom), Math.round(el.closest('.wk-page-head')?.getBoundingClientRect().bottom ?? 0));
       setDrawerTop((cur) => (cur === next ? cur : next));
     };
     measure();
@@ -196,10 +188,10 @@ export function SkillsPage({ navigate, search = '' }: {
       } else if (isSkillsUnsupported(e)) {
         setState({ kind: 'unsupported' });
       } else if (isSkillsUnavailable(e)) {
-        setState({ kind: 'unavailable', message: apiWire(e) ?? message });
+        setState({ kind: 'unavailable', message: apiWire(e) ?? message, errorKind: readErrorKind(e) });
         void loadEngine();
       } else {
-        setState({ kind: 'failed', message });
+        setState({ kind: 'failed', message, errorKind: readErrorKind(e) });
       }
       return null;
     }
@@ -467,396 +459,90 @@ export function SkillsPage({ navigate, search = '' }: {
    *  or a page verb is running — they all share the one revision. */
   const frozen = conflict !== null || stale !== null || inFlight > 0 || verbBusy !== null;
 
+  const disabledReason = frozen ? 'Wait for the current change, or reload the catalog to continue.' : null;
   const verbButton = (verb: PageVerb, testId: string, title: string, primary: boolean): React.ReactElement => (
-    <button
-      type="button"
-      data-testid={testId}
-      disabled={frozen || verbBusy !== null}
-      title={title}
-      onClick={() => void pageVerb(verb)}
-      className="rounded px-2 py-1 text-[11px] font-semibold disabled:opacity-40"
-      style={primary
-        ? { background: 'var(--accent)', color: 'var(--accent-fg)' }
-        : { color: 'var(--accent)', border: '1px solid var(--surface-raised)' }}
-    >
+    <button type="button" data-testid={testId} disabled={frozen} title={title}
+      onClick={() => void pageVerb(verb)} className={`wk-btn wk-btn--${primary ? 'primary' : 'secondary'}`}>
       {verbBusy === verb ? `${PAGE_VERB_LABEL[verb]}…` : PAGE_VERB_LABEL[verb]}
     </button>
   );
+  const error = recovery.error ?? pageError ?? stale ?? (state.kind === 'failed' || state.kind === 'unavailable' ? state.message : null);
+  const statsKnown = state.kind === 'loaded' && stale === null && pageError === null;
 
   return (
-    <div data-testid="skills-page" className="flex h-full min-h-0 min-w-0 flex-1 overflow-hidden">
-      <div className="flex min-w-0 flex-1 flex-col gap-4 overflow-y-auto p-6">
-        {/* The verbs wrap under the intro at phone width instead of squeezing it to a word per line.
-            studio#515: the drawer is pinned BELOW this header (measured), so the verbs — the catalog
-            re-read above all, meant for the moment a skill is open — stay reachable with the drawer up. */}
-        <div ref={headerRef} data-testid="skills-header" className="flex flex-wrap items-start gap-2">
-          <div className="min-w-0 flex-1 basis-[16rem]">
-            <h2 className="text-sm font-semibold" style={{ color: 'var(--ink-high)' }}>Skills</h2>
-            <p className="mt-1 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
-              The skills every governed worker runs — one effective plugin root the daemon publishes
-              as immutable snapshots. Edit any file in place, enable or disable, reset to the baseline;
-              the daemon guards every write, and nothing reaches a worker until you publish.
-            </p>
-            {catalog !== null && (
-              <p data-testid="skills-root" className="mt-1 font-mono text-[10px]" style={{ color: 'var(--ink-dim)' }} title="the resolved skills root on the daemon host (<state home>/skills — not configurable)">
-                root {showPath(catalog.root)}
-              </p>
-            )}
-            {baseline !== null && (
-              <p
-                data-testid="skills-source"
-                data-venv={baseline.venv}
-                className="mt-0.5 font-mono text-[10px]"
-                style={{ color: 'var(--ink-dim)' }}
-                title={`captured from ${showPath(baseline.source.path)}`}
-              >
-                baseline {baseline.plugin_version} · {baseline.source.kind} · {baseline.hash.slice(0, 12)}
-                {baseline.git_sha !== null && ` · ${baseline.git_sha.slice(0, 10)}`}
-                {` · venv ${baseline.venv}`}
-                {` · captured ${baseline.captured_at}`}
-              </p>
-            )}
-            {catalog !== null && (
-              <p
-                data-testid="skills-snapshot"
-                data-generation={current?.gen ?? 'none'}
-                data-unpublished={unpublished}
-                className="mt-0.5 font-mono text-[10px]"
-                style={{ color: unpublished > 0 ? 'var(--status-run)' : 'var(--ink-dim)' }}
-                title={current === null ? undefined : showPath(current.path)}
-              >
-                {current === null
-                  ? 'never published — no snapshot to hand to workers yet'
-                  : `snapshot generation ${current.gen} is current`}
-                {published !== null && ` · published ${published.at} · ${published.contentHash.slice(0, 12)}`}
-                {unpublished > 0 && ` · ${unpublished} unpublished ${unpublished === 1 ? 'skill' : 'skills'}`}
-              </p>
-            )}
-            {engine !== null && (
-              <p
-                data-testid="skills-engine"
-                data-state={engine.state}
-                className="mt-0.5 font-mono text-[10px]"
-                style={{ color: ENGINE_STATE_COLOR[engine.state] }}
-                title={engine.engineInput === null ? 'WICKED_SKILLS_SNAPSHOT is unset' : `WICKED_SKILLS_SNAPSHOT=${showPath(engine.engineInput)}`}
-              >
-                engine {SKILLS_ENGINE_STATE_COPY[engine.state]}
-                {engine.current !== null && ` · gen ${engine.current.gen}`}
-                {engine.findings.map((f, i) => (
-                  <span key={`${f.kind}-${i}`} data-testid="skills-engine-finding" data-kind={f.kind} data-severity={f.severity} className="block">
-                    {f.kind} · {f.severity} · {showText(f.message)}
-                  </span>
-                ))}
-              </p>
-            )}
-          </div>
-          <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
-            {state.kind === 'loaded' && (
-              <>
-                <button
-                  type="button"
-                  data-testid="skills-add-open"
-                  disabled={frozen}
-                  onClick={() => setAddOpen(true)}
-                  className="rounded px-2 py-1 text-[11px] font-semibold disabled:opacity-40"
-                  style={{ color: 'var(--accent)', border: '1px solid var(--surface-raised)' }}
-                >
-                  Add skill…
-                </button>
-                {verbButton('refresh', 'skills-refresh', 'Capture the installed plugin as a new baseline and merge it three-way per file: untouched skills take the new version, your edits are kept and conflicts flagged — never clobbered', false)}
-                {verbButton('analyze', 'skills-analyze', 'Dry-run the publish validation over the whole tree — the same findings, nothing written, the revision unchanged', false)}
-                {verbButton('publish', 'skills-publish', 'Validate the whole tree and write the immutable snapshot generation workers spawn with (enabled skills only); a publish with only warnings still writes it', true)}
-              </>
-            )}
-            <button
-              type="button"
-              data-testid="skills-reload"
-              title="Re-read the catalog (the drawer re-reads its open file against it)"
-              onClick={() => void load()}
-              className="text-[10px] hover:underline"
-              style={{ color: 'var(--ink-dim)' }}
-            >
-              Refresh
-            </button>
-          </div>
-        </div>
-
-        {state.kind === 'loading' ? (
-          <p data-testid="skills-loading" className="text-xs" style={{ color: 'var(--ink-dim)' }}>Loading skills…</p>
-        ) : state.kind === 'unsupported' ? (
-          <div
-            data-testid="skills-unsupported"
-            className="flex flex-col gap-2 rounded p-4"
-            style={{ background: 'var(--surface-rail)', border: '1px solid var(--surface-raised)' }}
-          >
-            <p className="text-xs font-semibold" style={{ color: 'var(--ink-high)' }}>Skills are not served by this daemon.</p>
-            <p className="text-[11px]" style={{ color: 'var(--ink-muted)' }}>{SKILLS_UNSUPPORTED_COPY}</p>
-          </div>
+    <div className="wk-pg-skills-scroll">
+      <PageFrame data-testid="skills-page" title="Skills" intro="Edit, turn off, or publish the skills your helpers can use."
+        actions={<div ref={headerRef} data-testid="skills-header" className="flex flex-wrap items-center gap-2">
+          {state.kind === 'loaded' && <>
+            <button type="button" data-testid="skills-add-open" disabled={frozen} onClick={() => setAddOpen(true)} className="wk-btn wk-btn--secondary">Add skill…</button>
+            {verbButton('analyze', 'skills-analyze', 'Check your changes before publishing', false)}
+            {verbButton('publish', 'skills-publish', 'Publish the skills your helpers can use', true)}
+          </>}
+          <button type="button" data-testid="skills-reload" onClick={() => void load()} className="wk-btn wk-btn--secondary">Refresh</button>
+          {state.kind === 'loaded' && <div data-testid="skills-refresh" data-disabled={frozen}><OverflowMenu label="More actions for skills" items={[{id:'refresh-baseline',label:'Refresh baseline',disabled:disabledReason,onSelect:() => void pageVerb('refresh')}]} /></div>}
+          {disabledReason !== null && <p className="wk-field-note">{disabledReason}</p>}
+        </div>}>
+        {error !== null && <StateBanner data-testid={recovery.error !== null ? 'skills-recovery-error' : pageError !== null ? 'skills-page-error' : stale !== null ? 'skills-stale' : state.kind === 'unavailable' ? 'skills-unavailable' : 'skills-error'}
+          kind={stale !== null ? 'stale' : state.kind === 'failed' || state.kind === 'unavailable' ? state.errorKind : readErrorKind(error)} what="skills" error={error} onRetry={() => { setPageError(null); void load(); }} />}
+        {catalog !== null && <div className="wk-pg-skills-status">
+          <p title={published?.at}>{unpublished > 0 || unpublishedSupportFiles.length > 0 ? 'Changes ready to publish' : current === null ? 'Ready to publish' : drift?.state === 'behind' ? 'Update available' : drift?.state === 'unknown' ? 'Update status unavailable' : 'Up to date'}{published !== null && ` · published ${relTime(Date.parse(published.at))}`}</p>
+          {/* One disclosure for every internal fact (UI-CONTRACT §4.3); the hidden spans keep the
+              machine-readable state hooks tests and journeys read. */}
+          <TechDetails data-testid="skills-root" text={[
+            `root ${catalog.root}`,
+            ...(baseline !== null ? [`baseline ${baseline.plugin_version} · ${baseline.source.kind} · ${baseline.hash.slice(0,12)}${baseline.git_sha !== null ? ` · ${baseline.git_sha.slice(0,10)}` : ''} · venv ${baseline.venv} · captured ${baseline.captured_at} · source ${baseline.source.path}`] : []),
+            current === null ? 'never published — no snapshot' : `snapshot generation ${current.gen} is current${published !== null ? ` · published ${published.at} · ${published.contentHash.slice(0,12)}` : ''}${unpublished > 0 ? ` · ${unpublished} unpublished ${unpublished === 1 ? 'skill' : 'skills'}` : ''} · ${current.path}`,
+            ...(engine !== null ? [`engine ${SKILLS_ENGINE_STATE_COPY[engine.state]}${engine.current !== null ? ` · gen ${engine.current.gen}` : ''} · input ${engine.engineInput ?? 'unset'}`, ...engine.findings.map((f) => `${f.kind} · ${f.severity} · ${f.message}`)] : []),
+          ]} />
+          {baseline !== null && <span hidden data-testid="skills-source" data-venv={baseline.venv} />}
+          <span hidden data-testid="skills-snapshot" data-generation={current?.gen ?? 'none'} data-unpublished={unpublished} />
+          {engine !== null && <span hidden data-testid="skills-engine" data-state={engine.state}>
+            {engine.findings.map((f, i) => <span key={i} data-testid="skills-engine-finding" data-kind={f.kind} data-severity={f.severity} />)}
+          </span>}
+        </div>}
+        {state.kind === 'loading' ? <Skeleton data-testid="skills-loading" /> : state.kind === 'unsupported' ? (
+          <EmptyState data-testid="skills-unsupported" title="Skills are unavailable in this version" body="Update Studio’s service to manage skills here." />
         ) : state.kind === 'unavailable' ? (
-          <div
-            data-testid="skills-unavailable"
-            role="alert"
-            className="flex flex-col gap-2 rounded p-4"
-            style={{ background: 'var(--surface-rail)', border: '1px solid var(--status-fail)' }}
-          >
-            <p className="text-xs font-semibold" style={{ color: 'var(--status-fail)' }}>The daemon has no skills catalog to serve.</p>
-            <p className="text-[11px]" style={{ color: 'var(--ink-muted)' }}>
-              The `/skills` routes are here but answered 503 — the root is not seeded (no installed wicked-garden plugin was found),
-              the published snapshot fails verification, or the daemon booted without the skills seam. Nothing is shown as an
-              empty catalog. The daemon says:
-            </p>
-            <p className="font-mono text-[11px]" style={{ color: 'var(--ink-high)' }}>{showText(state.message)}</p>
-
-            {/* F-A45-001: what the engine is being handed and WHY (diagnostics.skills), then the
-                remedy the finding names — Refresh baseline / Publish — with pending + result states. */}
-            <div data-testid="skills-recovery" className="mt-1 flex flex-col gap-2 rounded p-3" style={{ background: 'var(--surface-base)', border: '1px solid var(--surface-raised)' }}>
-              {engine === null ? (
-                <p data-testid="skills-recovery-no-diagnostics" className="text-[11px]" style={{ color: 'var(--ink-dim)' }}>
-                  The engine's word is not available (GET /diagnostics answered nothing, or predates the skills seam) — the
-                  controls below still act on the store.
-                </p>
-              ) : (
-                <>
-                  <p className="text-[11px]" data-testid="skills-recovery-state" data-state={engine.state} style={{ color: ENGINE_STATE_COLOR[engine.state] }}>
-                    engine: <span className="font-semibold">{engine.state}</span> — {SKILLS_ENGINE_STATE_COPY[engine.state]}
-                    {/* #546: the same home-path rule as the header's root line (#460) — `~/…` here, the
-                        full path under "Show technical details" (useDisplayPath). */}
-                    {engine.engineInput !== null && engine.engineInput !== '' && (
-                      <span className="font-mono" style={{ color: 'var(--ink-dim)' }}> · input {showPath(engine.engineInput)}</span>
-                    )}
-                  </p>
-                  {engine.findings.length === 0 ? (
-                    <p className="text-[11px]" style={{ color: 'var(--ink-dim)' }}>no finding recorded</p>
-                  ) : (
-                    engine.findings.map((f, i) => (
-                      <p key={`${f.kind}-${i}`} data-testid="skills-recovery-finding" data-kind={f.kind} data-severity={f.severity} className="text-[11px] font-mono" style={{ color: f.severity === 'error' ? 'var(--status-fail)' : 'var(--status-gate)', overflowWrap: 'anywhere' }}>
-                        {f.kind} · {f.severity} · {showText(f.message)}
-                      </p>
-                    ))
-                  )}
-                </>
-              )}
-
-              {/* F-A45-002: a refresh STAGES a baseline; the catalog answers 200 only after a publish. */}
-              {recovery.staged !== null && (
-                <p data-testid="skills-recovery-staged" className="text-[11px]" style={{ color: 'var(--status-done)' }}>
-                  garden {recovery.staged.plugin_version} staged ({recovery.staged.baseline.slice(0, 12)}: {recovery.staged.taken.length} taken · {recovery.staged.kept.length} kept · {recovery.staged.added.length} added · {recovery.staged.removed.length} removed · {recovery.staged.conflicts.length} {recovery.staged.conflicts.length === 1 ? 'conflict' : 'conflicts'}) —{' '}
-                  <span className="font-semibold">publish to activate</span>. The catalog stays unavailable until then; nothing was re-read.
-                </p>
-              )}
-
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  data-testid="skills-recover-refresh"
-                  disabled={recovery.busy !== null}
-                  onClick={() => void recover('refresh')}
-                  title="Capture the installed wicked-garden plugin as a new baseline (three-way per file, your edits kept) — then publish to activate it"
-                  className="rounded px-2 py-1 text-[11px] font-semibold disabled:opacity-40"
-                  style={{ color: 'var(--accent)', border: '1px solid var(--surface-raised)' }}
-                >
-                  {recovery.busy === 'refresh' ? 'Refreshing…' : 'Refresh baseline'}
-                </button>
-                <button
-                  type="button"
-                  data-testid="skills-recover-publish"
-                  disabled={recovery.busy !== null}
-                  onClick={() => void recover('publish')}
-                  title="Validate the whole tree and write a fresh snapshot generation — the remedy for a `current` that fails verification (re-publish)"
-                  className="rounded px-2 py-1 text-[11px] font-semibold disabled:opacity-40"
-                  style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
-                >
-                  {recovery.busy === 'publish' ? 'Publishing…' : 'Publish'}
-                </button>
-                {recovery.busy !== null && (
-                  <span data-testid="skills-recovery-busy" className="text-[10px]" style={{ color: 'var(--ink-dim)' }}>
-                    {revisionRef.current === null ? 'learning the catalog revision (POST /skills/analyze), then ' : ''}
-                    {recovery.busy === 'refresh' ? 'POST /skills/refresh-baseline…' : 'POST /skills/publish…'}
-                  </span>
-                )}
-              </div>
-
-              {recovery.error !== null && (
-                <p data-testid="skills-recovery-error" className="rounded px-2 py-1 text-[11px]" style={{ background: 'var(--status-fail-dim)', color: 'var(--status-fail)', overflowWrap: 'anywhere' }}>
-                  {showText(recovery.error)}
-                </p>
-              )}
-              {recovery.result !== null && (
-                <SkillFindings verb={recovery.result.verb} result={recovery.result.result} testId="skills-recovery-findings" />
-              )}
+          <section data-testid="skills-recovery" className="wk-card">
+            <SectionTitle>Restore skills</SectionTitle>
+            <p>Refresh the installed skills, then publish to make them available again.</p>
+            {engine === null ? <p data-testid="skills-recovery-no-diagnostics">Service details are unavailable. You can still try restoring skills.</p> : <>
+              <div data-testid="skills-recovery-state" data-state={engine.state}><TechDetails text={`engine: ${engine.state} — ${SKILLS_ENGINE_STATE_COPY[engine.state]} · input ${engine.engineInput ?? 'unset'}`} /></div>
+              {engine.findings.map((f,i) => <div key={i} data-testid="skills-recovery-finding" data-kind={f.kind} data-severity={f.severity}><TechDetails text={`${f.kind} · ${f.severity} · ${f.message}`} /></div>)}
+            </>}
+            {recovery.staged !== null && <div data-testid="skills-recovery-staged"><p>Skills refreshed — publish to activate.</p><TechDetails text={`garden ${recovery.staged.plugin_version} staged · ${recovery.staged.baseline.slice(0,12)} · ${recovery.staged.conflicts.length} conflicts`} /></div>}
+            <div className="flex flex-wrap gap-2">
+              <button type="button" data-testid="skills-recover-refresh" disabled={recovery.busy !== null} onClick={() => void recover('refresh')} className="wk-btn wk-btn--secondary">{recovery.busy === 'refresh' ? 'Refreshing…' : 'Refresh baseline'}</button>
+              <button type="button" data-testid="skills-recover-publish" disabled={recovery.busy !== null} onClick={() => void recover('publish')} className="wk-btn wk-btn--primary">{recovery.busy === 'publish' ? 'Publishing…' : 'Publish'}</button>
             </div>
-          </div>
-        ) : state.kind === 'failed' ? (
-          <p data-testid="skills-error" className="rounded px-2 py-1 text-xs" style={{ background: 'var(--status-fail-dim)', color: 'var(--status-fail)' }}>
-            {showText(state.message)}
-          </p>
-        ) : (
-          <>
-            {/* (studio#388) CONSEQUENCE FIRST, then the move. A published snapshot behind the
-                installed plugin, or unpublished support files, breaks a run INSIDE a worker — the
-                MCP S8 dogfood's first run died on `scripts/mcp/shim.py: not found under the plugin
-                root …/snapshots/000005` — and the page said nothing about either. This row does,
-                with Refresh baseline and Publish right here. */}
-            {(drift?.state === 'behind' || unpublishedSupportFiles.length > 0) && (
-              <div
-                data-testid="skills-behind"
-                data-drift={drift?.state ?? 'unknown'}
-                data-unpublished-support={unpublishedSupportFiles.length}
-                className="flex flex-col gap-2 rounded p-3"
-                style={{ background: 'var(--surface-rail)', border: '1px solid var(--status-gate)' }}
-              >
-                <p className="text-xs font-semibold" style={{ color: 'var(--status-gate)' }}>
-                  {drift?.state === 'behind'
-                    ? 'Workers are running skills older than the plugin installed on this host.'
-                    : 'Workers are running support files older than the ones in this root.'}
-                </p>
-                <p className="text-[11px]" style={{ color: 'var(--ink-muted)' }}>
-                  {drift?.state === 'behind'
-                    // The version number is deliberately NOT the evidence: the dogfood's install
-                    // carried the SAME version as the baseline, so naming it alone reads as a
-                    // contradiction ("it is not 12.32.0" beside "baseline 12.32.0"). Say when the
-                    // difference is in the files.
-                    ? `The baseline this root publishes from is not the installed wicked-garden ${drift.installed.source.plugin_version}${drift.installed.source.plugin_version === baseline?.plugin_version ? ' — the same version number, different files' : ''}, so neither is the snapshot workers spawn with. A run that needs a skill, script or schema only the install has fails inside the worker, naming the file and the snapshot it looked in. Refresh baseline picks up the install (your edits are kept, conflicts flagged), then Publish hands it to workers.`
-                    // The install is current here, so Refresh baseline is not the move — Publish is.
-                    : 'A publish carries the whole root, so files no skill owns — scripts, schemas, the plugin manifest — are part of what a worker runs. These differ from the published snapshot, and the per-skill badges cannot show them: they are judged over the files a SKILL owns. Publish hands this root to workers.'}
-                </p>
-                {drift?.state === 'behind' && (
-                  <p data-testid="skills-behind-detail" className="font-mono text-[10px]" style={{ color: 'var(--ink-dim)' }} title={showPath(drift.installed.source.path)}>
-                    installed {drift.installed.source.plugin_version} · {drift.installed.source.kind} · {(drift.installed.baseline ?? '').slice(0, 12)}
-                    {drift.installed.git_sha !== null && ` · ${drift.installed.git_sha.slice(0, 10)}`}
-                    {baseline !== null && ` · baseline ${baseline.plugin_version} · ${baseline.hash.slice(0, 12)}`}
-                  </p>
-                )}
-                {unpublishedSupportFiles.length > 0 && (
-                  <p data-testid="skills-behind-support" className="font-mono text-[10px]" style={{ color: 'var(--ink-dim)' }}>
-                    {unpublishedSupportFiles.length} unpublished support {unpublishedSupportFiles.length === 1 ? 'file' : 'files'}:{' '}
-                    {unpublishedSupportFiles.slice(0, 3).map(({ path }) => path).join(', ')}
-                    {unpublishedSupportFiles.length > 3 && `, +${unpublishedSupportFiles.length - 3} more`}
-                  </p>
-                )}
-                {/* The PRIMARY verb is the one this state actually needs: Refresh baseline when the
-                    install has moved, Publish when only the snapshot is behind this root. */}
-                <div className="flex flex-wrap items-center gap-2">
-                  {verbButton('refresh', 'skills-behind-refresh', 'Capture the installed plugin as a new baseline and merge it three-way per file — your edits are kept, conflicts flagged', drift?.state === 'behind')}
-                  {verbButton('publish', 'skills-behind-publish', 'Write the immutable snapshot generation workers spawn with (enabled skills only) — the whole root, support files included', drift?.state !== 'behind')}
-                </div>
-              </div>
-            )}
-            {/* A comparison the daemon could not make is STATED, never read as "current". */}
-            {drift?.state === 'unknown' && drift.reason !== null && (
-              <p data-testid="skills-drift-unknown" className="text-[11px]" style={{ color: 'var(--ink-dim)' }}>
-                Whether this root is behind the installed plugin could not be determined — {showText(drift.reason)}.
-              </p>
-            )}
-            <KpiBand testId="skills-kpis">
-              <KpiGroup label="Catalog" grow={2}>
-                <StatTile
-                  testId="skills-kpi-total"
-                  label="Skills"
-                  value={counts.total}
-                  context={baseline === null ? undefined : `baseline ${baseline.plugin_version}`}
-                  onOpen={() => setFacets({ ...facets, chip: 'all' })}
-                />
-                <StatTile
-                  testId="skills-kpi-enabled"
-                  label="Enabled"
-                  value={counts.enabled}
-                  context={`${counts.total - counts.enabled} disabled`}
-                  onOpen={() => setFacets({ ...facets, chip: 'enabled' })}
-                />
-              </KpiGroup>
-              <KpiGroup label="Provenance" grow={2}>
-                <StatTile
-                  testId="skills-kpi-overridden"
-                  label="Overridden"
-                  value={counts.overridden}
-                  context="edited from the baseline"
-                  valueColor={counts.overridden > 0 ? 'var(--status-gate)' : undefined}
-                  onOpen={() => setFacets({ ...facets, chip: 'overridden' })}
-                />
-                <StatTile
-                  testId="skills-kpi-core"
-                  label="Core"
-                  value={counts.core}
-                  context="in the workflow reference closure"
-                  onOpen={() => setFacets({ ...facets, chip: 'core' })}
-                />
-              </KpiGroup>
-              {/* Same width as the two-tile groups: the context line names both kinds of exclusion and
-                  must not ellipsize at desktop widths (it is the KPI split F-079 asked for). */}
-              <KpiGroup label="Reach" grow={2}>
-                <StatTile
-                  testId="skills-kpi-portable"
-                  label="Portable"
-                  value={counts.portable}
-                  context={`${counts.notPortable} not portable · ${counts.needsClaude} need Claude harness`}
-                  title={`${counts.portable} portable · ${counts.notPortable} not portable (an authoring reason — fixable in the skill text) · ${counts.needsClaude} need the Claude harness (by design)`}
-                  onOpen={() => setFacets({ ...facets, chip: 'portable' })}
-                />
-              </KpiGroup>
-            </KpiBand>
-
-            {stale !== null && (
-              <div
-                data-testid="skills-stale"
-                role="alert"
-                className="flex flex-wrap items-center gap-2 rounded px-3 py-2 text-[11px]"
-                style={{ background: 'var(--surface-rail)', border: '1px solid var(--status-gate)', color: 'var(--ink-muted)' }}
-              >
-                <span className="font-semibold" style={{ color: 'var(--status-gate)' }}>The catalog could not be re-read.</span>
-                <span>{showText(stale)} — what is shown may be behind the daemon; writes wait until a re-read succeeds.</span>
-                <span className="flex-1" />
-                <button
-                  data-testid="skills-stale-retry"
-                  type="button"
-                  onClick={() => void load()}
-                  className="rounded px-2 py-0.5 text-[10px] font-semibold"
-                  style={{ color: 'var(--status-gate)', border: '1px solid var(--status-gate)' }}
-                >
-                  Retry
-                </button>
-              </div>
-            )}
-            {note !== null && (
-              <p
-                data-testid="skills-note"
-                className="rounded px-3 py-2 text-[11px]"
-                style={{ background: 'var(--surface-rail)', border: '1px solid var(--surface-raised)', color: 'var(--ink-muted)' }}
-              >
-                {note}
-              </p>
-            )}
-            {pageError !== null && (
-              <p data-testid="skills-page-error" className="rounded px-3 py-2 text-[11px]" style={{ background: 'var(--status-fail-dim)', color: 'var(--status-fail)' }}>
-                {showText(pageError)}
-              </p>
-            )}
-            {pageResult !== null && (
-              <SkillFindings verb={pageResult.verb} result={pageResult.result} testId="skills-page-findings" />
-            )}
-            {linkedMissing && (
-              <p
-                data-testid="skills-deep-link-missing"
-                className="rounded px-3 py-2 text-[11px]"
-                style={{ background: 'var(--surface-rail)', border: '1px solid var(--surface-raised)', color: 'var(--ink-muted)' }}
-              >
-                No skill named <span className="font-mono">{linked}</span> in this catalog — showing every skill.
-              </p>
-            )}
-
-            <SkillsGrid
-              rows={rows}
-              facets={facets}
-              onFacets={setFacets}
-              selectedName={selected?.name ?? null}
-              busyName={busyName}
-              frozen={frozen}
-              onSelect={selectSkill}
-              onToggle={onRowToggle}
-            />
-          </>
-        )}
-      </div>
+            {recovery.busy !== null && <p data-testid="skills-recovery-busy" className="wk-field-note">Restoring skills…</p>}
+            {recovery.result !== null && <SkillFindings verb={recovery.result.verb} result={recovery.result.result} testId="skills-recovery-findings" />}
+          </section>
+        ) : state.kind === 'loaded' ? <>
+          {(drift?.state === 'behind' || unpublishedSupportFiles.length > 0) && <section data-testid="skills-behind" data-drift={drift?.state ?? 'unknown'} data-unpublished-support={unpublishedSupportFiles.length} className="wk-card">
+            <SectionTitle>Updates for your helpers</SectionTitle>
+            <p>{drift?.state === 'behind' ? 'Refresh the installed skills, then publish to share the update with your helpers.' : 'Publish to share the updated support files with your helpers.'}</p>
+            {drift?.state === 'behind' && <TechDetails data-testid="skills-behind-detail" text={`installed ${drift.installed.source.plugin_version} · ${drift.installed.source.kind} · ${drift.installed.source.path} · ${drift.installed.baseline ?? ''} · baseline ${baseline?.plugin_version ?? 'unknown'}`} />}
+            {unpublishedSupportFiles.length > 0 && <TechDetails data-testid="skills-behind-support" text={`${unpublishedSupportFiles.length} unpublished support files: ${unpublishedSupportFiles.map(f => f.path).join(', ')}`} />}
+            <div className="flex flex-wrap gap-2">{verbButton('refresh','skills-behind-refresh','Refresh the installed skills',drift?.state === 'behind')}{verbButton('publish','skills-behind-publish','Share updates with your helpers',drift?.state !== 'behind')}</div>
+            {disabledReason !== null && <p className="wk-field-note">{disabledReason}</p>}
+          </section>}
+          {drift?.state === 'unknown' && drift.reason !== null && <div data-testid="skills-drift-unknown"><p>The installed skills could not be compared.</p><TechDetails text={drift.reason} /></div>}
+          {/* The wrapper marks "counts settled" even when every count is 0 (StatLine then renders nothing). */}
+          {statsKnown && <div data-testid="skills-kpis"><StatLine items={[
+            { label: counts.total === 1 ? 'skill' : 'skills', value: counts.total },
+            { label: 'enabled', value: counts.enabled },
+            { label: 'edited', value: counts.overridden },
+            { label: 'required', value: counts.core },
+            { label: 'portable', value: counts.portable },
+          ]} /></div>}
+          {stale !== null && <button data-testid="skills-stale-retry" type="button" className="wk-btn wk-btn--secondary" onClick={() => void load()}>Reload catalog</button>}
+          {note !== null && <div data-testid="skills-note"><p>Changes saved — publish to share them with your helpers.</p><TechDetails text={note} /></div>}
+          {pageResult !== null && <SkillFindings verb={pageResult.verb} result={pageResult.result} testId="skills-page-findings" />}
+          {linkedMissing && <p data-testid="skills-deep-link-missing">No skill named {linked} in this catalog — showing every skill.</p>}
+          <SkillsGrid rows={rows} facets={facets} onFacets={setFacets} selectedName={selected?.name ?? null} busyName={busyName} frozen={frozen} countsKnown={statsKnown} onSelect={selectSkill} onToggle={onRowToggle} />
+        </> : null}
+      </PageFrame>
 
       {selected !== null && (
         <SkillDrawer
@@ -886,34 +572,11 @@ export function SkillsPage({ navigate, search = '' }: {
         />
       )}
 
-      {/* The revision-conflict prompt: above every layer (the drawer is z-40, modals z-50) so the
-          operator sees it wherever the stale write came from. Reload is the only way forward —
-          nothing else is written while it shows. Drafts in the drawer are kept. */}
-      {conflict !== null && (
-        <div
-          data-testid="skills-conflict"
-          role="alertdialog"
-          aria-label="The skills catalog changed"
-          className="fixed inset-x-0 top-3 z-[60] mx-auto flex w-[36rem] max-w-[92vw] flex-wrap items-center gap-2 rounded-lg px-4 py-3 text-[11px] shadow-2xl"
-          style={{ background: 'var(--surface-card)', border: '1px solid var(--status-gate)', color: 'var(--ink-muted)' }}
-        >
-          <span className="font-semibold" style={{ color: 'var(--status-gate)' }}>The skills catalog changed under this page.</span>
-          <span>
-            Nothing was written{conflict !== '' ? ` — ${showText(conflict)}` : ''}. Reload to pick up the current revision;
-            unsaved edits in the drawer are kept as drafts.
-          </span>
-          <span className="flex-1" />
-          <button
-            data-testid="skills-conflict-reload"
-            type="button"
-            onClick={() => void reloadAfterConflict()}
-            className="rounded px-3 py-1 text-[11px] font-semibold"
-            style={{ background: 'var(--status-gate)', color: 'var(--surface-base)' }}
-          >
-            Reload catalog
-          </button>
-        </div>
-      )}
+      {conflict !== null && <div data-testid="skills-conflict" role="alertdialog" aria-label="The skills catalog changed" className="wk-card wk-pg-skills-conflict">
+        <p>The skills catalog changed. Reload to continue; your unsaved edits are kept.</p>
+        <TechDetails text={conflict} />
+        <button data-testid="skills-conflict-reload" type="button" onClick={() => void reloadAfterConflict()} className="wk-btn wk-btn--primary">Reload catalog</button>
+      </div>}
     </div>
   );
 }

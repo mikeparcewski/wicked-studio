@@ -455,7 +455,7 @@ export function App(): React.ReactElement {
     }
     if (panel === 'workflows') {
       return (
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex-1 overflow-y-auto">
           <WorkflowViewer />
         </div>
       );
@@ -608,14 +608,14 @@ export function App(): React.ReactElement {
     }
     if (panel === 'system') {
       return (
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex-1 overflow-y-auto">
           <SystemSettings navigate={navigate} />
         </div>
       );
     }
     if (panel === 'theme') {
       return (
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex-1 overflow-y-auto">
           <ThemePage />
         </div>
       );

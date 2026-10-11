@@ -1,3 +1,4 @@
+import { Switch } from './ui/Switch.js';
 import {
   HARNESS_REASON,
   SKILL_KIND_LABELS,
@@ -33,8 +34,8 @@ export function KindChip({ kind }: { kind: SkillKind }): React.ReactElement {
     <span
       data-testid="skills-kind-chip"
       data-kind={kind}
-      className="inline-flex shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold font-mono"
-      style={{ background: 'var(--surface-raised)', color: KIND_COLOR[kind] }}
+      className="wk-tag"
+      style={{ color: KIND_COLOR[kind]  }}
     >
       {SKILL_KIND_LABELS[kind]}
     </span>
@@ -53,15 +54,15 @@ export function ProvenanceChip({ provenance }: { provenance: SkillProvenance }):
         : provenance === 'override'
           ? 'overridden — a shipped skill with edited or replaced files (reset restores the baseline)'
           : 'user-added — no baseline: added through the API, or upstream dropped it while your edits were kept'}
-      className="inline-flex shrink-0 rounded px-1.5 py-0.5 text-[9px] font-semibold font-mono uppercase"
-      style={{ color: PROVENANCE_COLOR[provenance], border: `1px solid ${PROVENANCE_COLOR[provenance]}` }}
+      className="inline-flex shrink-0 rounded px-1.5 py-0.5 font-semibold"
+      style={{ color: PROVENANCE_COLOR[provenance] }}
     >
       {SKILL_PROVENANCE_LABELS[provenance]}
     </span>
   );
 }
 
-const BADGE = 'inline-flex shrink-0 rounded px-1.5 py-0.5 text-[9px] font-semibold font-mono uppercase';
+const BADGE = 'wk-tag';
 
 /** Core-by-reference: in the registered-reference closure — a `skill_ref` of a workflow the daemon
  *  knows, or a skill one of those names in its SKILL.md — disabling or renaming it is BLOCKING at
@@ -72,7 +73,7 @@ export function CoreBadge(): React.ReactElement {
       data-testid="skills-core-badge"
       title="core — in the registered-reference closure (a workflow's skill_ref, or named by one of those skills); disabling or renaming it is blocked"
       className={BADGE}
-      style={{ background: 'var(--accent-subtle)', color: 'var(--accent)' }}
+      style={{ color: 'var(--accent)' }}
     >
       core
     </span>
@@ -133,9 +134,7 @@ export function PortabilityBadge({ portability, portable }: {
         className={BADGE}
         // Amber = actionable (the text is fixable); the ink stays `--ink-high` so the badge reads in
         // BOTH themes (the light theme keeps `--status-gate` pale — only its `-dim` fill is re-tuned).
-        style={needsClaude
-          ? { background: 'var(--surface-raised)', color: 'var(--ink-muted)' }
-          : { background: 'var(--status-gate-dim)', color: 'var(--ink-high)', border: '1px solid var(--status-gate)' }}
+        style={{ color: 'var(--ink-muted)' }}
       >
         {SKILL_REACH_LABELS[view.reach]}
       </span>
@@ -151,7 +150,7 @@ export function UpgradeBadge(): React.ReactElement {
       data-testid="skills-upgrade-badge"
       title="upgrade available — the refreshed baseline changed a file you override; your content is kept, the new side is readable from the drawer (Baseline side)"
       className={BADGE}
-      style={{ color: 'var(--status-run)', border: '1px solid var(--status-run)' }}
+      style={{ color: 'var(--status-run)' }}
     >
       upgrade
     </span>
@@ -166,7 +165,7 @@ export function ConflictBadge(): React.ReactElement {
       data-testid="skills-conflict-badge"
       title="refresh conflict — your edit was kept while upstream changed the same file, or upstream now ships a skill under this name at another dir; the baseline side is readable from the drawer, reset takes it"
       className={BADGE}
-      style={{ color: 'var(--status-gate)', border: '1px solid var(--status-gate)' }}
+      style={{ color: 'var(--status-gate)' }}
     >
       conflict
     </span>
@@ -181,7 +180,7 @@ export function UnpublishedBadge(): React.ReactElement {
       data-testid="skills-unpublished-badge"
       title="unpublished — the current snapshot carries an older version of a file this skill owns (or none); Publish to hand this content to workers"
       className={BADGE}
-      style={{ color: 'var(--status-run)', border: '1px solid var(--status-run)' }}
+      style={{ color: 'var(--status-run)' }}
     >
       unpublished
     </span>
@@ -211,31 +210,7 @@ export function EnabledToggle({ name, enabled, busy, onToggle, testId }: {
   onToggle: () => void;
   testId: string;
 }): React.ReactElement {
-  return (
-    <button
-      type="button"
-      role="switch"
-      data-testid={testId}
-      aria-checked={enabled}
-      aria-label={`${enabled ? 'Disable' : 'Enable'} ${name}`}
-      title={enabled
-        ? 'enabled — click to disable: the next publish leaves this skill out of the snapshot (its files stay)'
-        : 'disabled — click to enable: the next publish carries this skill in the snapshot'}
-      disabled={busy}
-      onClick={onToggle}
-      className="inline-flex h-4 w-7 shrink-0 items-center rounded-full transition-colors disabled:opacity-40 focus:outline-none focus-visible:ring-1"
-      style={{
-        background: enabled ? 'var(--accent)' : 'var(--surface-raised)',
-        border: '1px solid var(--surface-raised)',
-        justifyContent: enabled ? 'flex-end' : 'flex-start',
-        padding: '0 1px',
-      }}
-    >
-      <span
-        aria-hidden
-        className="block h-3 w-3 rounded-full"
-        style={{ background: enabled ? 'var(--accent-fg)' : 'var(--ink-dim)' }}
-      />
-    </button>
-  );
+  // The visible label is the state word; the group names the skill, so each switch is told apart.
+  return <div role="group" aria-label={name}><Switch data-testid={testId} label="Enabled" checked={enabled}
+    disabled={busy ? 'Wait for the current change or refresh to finish.' : null} onChange={onToggle} /></div>;
 }

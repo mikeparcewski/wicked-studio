@@ -6,7 +6,7 @@
 //      when the roster names a logout for a seat with a session to end; a 404 hides it.
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { SystemSettings } from '../src/components/SystemSettings.js';
 import * as client from '../src/api/client.js';
@@ -86,7 +86,8 @@ describe('System — seat cards: #1 opencode login + free-tier note', () => {
     await screen.findByText('OpenCode');
 
     // The action is offered (previously suppressed for not_required seats).
-    expect(screen.getByRole('button', { name: 'Sign in OpenCode' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'More actions for OpenCode' }));
+    expect(screen.getByRole('menuitem', { name: 'Sign in OpenCode' })).toBeInTheDocument();
     // The status word is terse; the free tier is NOT in it.
     expect(screen.getByTestId('seat-signin-opencode')).toHaveTextContent('no sign-in needed');
     expect(screen.getByTestId('seat-signin-opencode')).not.toHaveTextContent('OpenCode Zen');
@@ -99,7 +100,8 @@ describe('System — seat cards: #1 opencode login + free-tier note', () => {
     render(<SystemSettings />);
     await screen.findByText('OpenCode');
 
-    await user.click(screen.getByRole('button', { name: 'Sign in OpenCode' }));
+    await user.click(screen.getByRole('button', { name: 'More actions for OpenCode' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Sign in OpenCode' }));
     expect(screen.getByRole('dialog', { name: 'Sign in — OpenCode' })).toBeInTheDocument();
     expect(screen.getByTestId('signin-line')).toHaveTextContent('XDG_CONFIG_HOME=/w/opencode opencode auth login');
     expect(screen.getByTestId('copy-command')).toHaveAttribute('data-command', 'XDG_CONFIG_HOME=/w/opencode opencode auth login');
@@ -114,7 +116,8 @@ describe('System — seat cards: #2 Log out through the daemon route (crew#615)'
     await screen.findByText('Codex');
 
     expect(screen.getByRole('button', { name: 'Log out Codex' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Log out OpenCode' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'More actions for OpenCode' }));
+    expect(screen.getByRole('menuitem', { name: 'Log out OpenCode' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Log out Antigravity' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Sign in Codex' })).toBeNull();
   });
@@ -138,7 +141,7 @@ describe('System — seat cards: #2 Log out through the daemon route (crew#615)'
     expect(term).toHaveAttribute('data-initial-input', '');
     await waitFor(() => expect(term).toHaveAttribute('data-terminal-id', 't-42'));
     expect(logout).toHaveBeenCalledExactlyOnceWith('codex', { cols: 100, rows: 30 });
-    expect(screen.getByTestId('seat-logout-line')).toHaveTextContent('CODEX_HOME=/w/codex codex logout');
+    expect(screen.getByRole('dialog', { name: 'Log out — Codex' })).toHaveTextContent('CODEX_HOME=/w/codex codex logout');
   });
 
   it('a 404 (no logout for that seat) closes the panel and hides the button', async () => {
@@ -147,7 +150,8 @@ describe('System — seat cards: #2 Log out through the daemon route (crew#615)'
     render(<SystemSettings />);
     await screen.findByText('OpenCode');
 
-    await user.click(screen.getByRole('button', { name: 'Log out OpenCode' }));
+    await user.click(screen.getByRole('button', { name: 'More actions for OpenCode' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Log out OpenCode' }));
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Log out — OpenCode' })).toBeNull());
     expect(screen.queryByRole('button', { name: 'Log out OpenCode' })).toBeNull();
     expect(screen.getByRole('button', { name: 'Log out Codex' })).toBeInTheDocument();

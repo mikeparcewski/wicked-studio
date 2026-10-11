@@ -213,7 +213,7 @@ with sync_playwright() as p:
     page.wait_for_timeout(2500)  # a create (if any) would follow the list at once
     idle = page.get_by_test_id("learn-status").count() == 0
     page.screenshot(path=str(SHOTS / "desk-settings-honest-brand-cancel.png"))
-    check("brand-cancel-creates-nothing", "Preparing the scratch document" in status and held == 1 and posts == [] and idle,
+    check("brand-cancel-creates-nothing", "Preparing a document for learning your brand" in status and held == 1 and posts == [] and idle,
           status=status, held_lists=held, posts=posts, idle=idle)
     ctx.close()
 

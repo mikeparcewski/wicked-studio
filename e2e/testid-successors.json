@@ -710,6 +710,14 @@
     "repo-graph-retry": "repo-graph",
     "desk-runs-retry": "desk-runs-failed",
     "tech-need-prompt": "need-line",
-    "watchtower-retry": "watchtower-error"
+    "watchtower-retry": "watchtower-error",
+    "skills-kpi-core": "skills-kpis",
+    "skills-kpi-enabled": "skills-kpis",
+    "skills-kpi-overridden": "skills-kpis",
+    "skills-kpi-portable": "skills-kpis",
+    "skills-kpi-total": "skills-kpis",
+    "logo-upload": "logo-file",
+    "logo-file-input": "logo-file",
+    "theme-*": "theme-picker"
   }
 }

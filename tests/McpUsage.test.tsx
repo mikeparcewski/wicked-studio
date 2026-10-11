@@ -105,11 +105,11 @@ describe('MCP tools → Usage', () => {
     wire();
     render(<McpToolsPage navigate={navigate} search="?view=usage" />);
     await screen.findByTestId('mcp-usage-tools');
-    fireEvent.click(screen.getAllByTestId('mcp-usage-days').find((b) => b.dataset['days'] === '30') as HTMLElement);
+    fireEvent.click(screen.getByRole('radio', {name:'30 days'}));
     await waitFor(() => expect(calls).toContain('GET /mcp/usage?days=30'));
     fireEvent.change(await screen.findByTestId('mcp-usage-seat'), { target: { value: 'codex' } });
     await waitFor(() => expect(calls).toContain('GET /mcp/usage?days=30&seat=codex'));
-    fireEvent.click(screen.getAllByTestId('mcp-usage-decision').find((b) => b.dataset['decision'] === 'deny') as HTMLElement);
+    fireEvent.click(within(screen.getByRole('radiogroup', {name:'Decision'})).getByRole('radio', {name:'Denied'}));
     await waitFor(() => expect(calls).toContain('GET /mcp/usage?days=30&seat=codex&decision=deny'));
   });
 
@@ -117,7 +117,7 @@ describe('MCP tools → Usage', () => {
     wire({ usage: () => Promise.resolve(usage({ totals: { calls: 0, decisions: { allow: 0, ask: 0, deny: 0, guard_error: 0 }, ran: 0, errors: 0, errorRate: null, p50Ms: null, p95Ms: null, p99Ms: null }, tools: [], servers: [], chains: [] })) });
     render(<McpToolsPage navigate={navigate} search="?view=usage" />);
     expect((await screen.findByTestId('mcp-usage-empty')).textContent).toMatch(/No MCP calls were made in the last 7 days/);
-    expect(screen.getByTestId('mcp-usage-p95-value').textContent).toBe('—');
+    expect(screen.queryByTestId('mcp-usage-p95-value')).toBeNull(); // unknown is hidden, not 0
   });
 
   it('a daemon without the usage route renders the named unsupported state', async () => {
@@ -131,7 +131,7 @@ describe('MCP tools → Usage', () => {
     render(<McpToolsPage navigate={navigate} search="" />);
     await screen.findByTestId('mcp-server-row');
     expect(screen.queryByTestId('mcp-usage')).toBeNull();
-    fireEvent.click(screen.getAllByTestId('mcp-view-tab').find((t) => t.dataset['view'] === 'usage') as HTMLElement);
+    fireEvent.click(screen.getByRole('tab', {name:'Usage'}));
     expect(navigate).toHaveBeenCalledWith('/mcp?view=usage');
   });
 

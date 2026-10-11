@@ -75,6 +75,8 @@ describe('the skill drawer and the page header (studio#515)', () => {
     expect(drawer.style.top).toBe(`${HEADER_BOTTOM}px`);
     expect(drawer.className).not.toMatch(/\binset-y-0\b/);
     // The verbs are still in the header, with the drawer open.
+    fireEvent.click(screen.getByRole('button', {name:'More actions for skills'}));
+    expect(screen.getByRole('menuitem', {name:'Refresh baseline'})).toBeInTheDocument();
     for (const id of ['skills-reload', 'skills-publish', 'skills-analyze', 'skills-refresh']) {
       expect(screen.getByTestId('skills-header').contains(screen.getByTestId(id))).toBe(true);
     }

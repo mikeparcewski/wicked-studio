@@ -105,7 +105,7 @@ with sync_playwright() as p:
     check("settings-switch-off", not toggle.is_checked())
     toggle.click()
     page.wait_for_function(
-        "() => document.querySelector('[data-testid=\"tech-details-toggle\"]').checked", timeout=5000)
+        "() => document.querySelector('[data-testid=\"tech-details-toggle\"]').getAttribute('aria-checked') === 'true'", timeout=5000)
     page.wait_for_timeout(1200)  # the 400 ms debounce + the PUT
     stored = stored_view(origin)
     check("put-studio-view-on", stored == {"technical_details": True}

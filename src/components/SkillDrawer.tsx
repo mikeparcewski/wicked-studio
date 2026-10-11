@@ -18,6 +18,10 @@ import { SkillConfirmModal } from './SkillConfirmModal.js';
 import { SkillFilesMapModal } from './SkillFilesMapModal.js';
 import { SkillFindings } from './SkillFindings.js';
 import type { SkillsWriter } from './skillsWriter.js';
+import { TechDetails } from './ui/TechDetails.js';
+import { StateBanner, EmptyState, Skeleton } from './ui/StateBanner.js';
+import { readErrorKind } from '../api/errors.js';
+import { relTime } from '../board/relTime.js';
 
 /**
  * The skill DRAWER — opened from a catalog row (the SteeringRuleDrawer idiom, widened for an
@@ -462,6 +466,7 @@ export function SkillDrawer({ skill, support, writer, catalogEpoch, busy, leaveT
   // publisher's `file:line` anchors — the operator's path to the offending line. Nothing renders
   // for a portable skill.
   const reach = skillPortability(skill);
+  const drawerError = actionError ?? fileError ?? filesError ?? (baseline !== null && baseline !== 'loading' && 'error' in baseline ? baseline.error : null);
 
   return (
     <aside
@@ -471,11 +476,11 @@ export function SkillDrawer({ skill, support, writer, catalogEpoch, busy, leaveT
       aria-label={`Skill ${skill.name}`}
       // studio#515: pinned below the page header (`top`, measured by the page) so the header's verbs
       // stay reachable while a skill is open — never `inset-y-0` over them.
-      className="fixed bottom-0 right-0 z-40 flex w-[44rem] max-w-[95vw] flex-col gap-3 overflow-y-auto p-4 shadow-2xl"
-      style={{ top: `${top}px`, background: 'var(--surface-card)', borderLeft: '1px solid var(--surface-raised)' }}
+      className="wk-pg-skills-drawer"
+      style={{ top: `${top}px` }}
     >
       <div className="flex flex-wrap items-center gap-2">
-        <span className="font-mono text-sm font-semibold" style={{ color: 'var(--ink-high)' }}>{skill.name}</span>
+        <span className="font-semibold" style={{ color: 'var(--ink-high)' }}>{skill.name}</span>
         <KindChip kind={skill.kind} />
         <ProvenanceChip provenance={skill.provenance} />
         <SkillFlags skill={skill} />
@@ -483,17 +488,21 @@ export function SkillDrawer({ skill, support, writer, catalogEpoch, busy, leaveT
           data-testid="skills-drawer-close"
           type="button"
           aria-label="Close skill"
+          title="Close skill"
           onClick={requestClose}
-          className="ml-auto text-sm leading-none hover:opacity-70"
-          style={{ color: 'var(--ink-dim)' }}
+          className="wk-btn wk-btn--quiet wk-btn--icon"
+
         >
           ✕
         </button>
       </div>
 
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] font-mono" style={{ color: 'var(--ink-dim)' }}>
-        <span data-testid="skills-drawer-dir" title="plugin-relative directory (never renamed — sibling links depend on it)">{skill.dir}</span>
-        {skill.editedAt !== null && <span data-testid="skills-drawer-edited">edited {skill.editedAt}</span>}
+      {drawerError !== null && <StateBanner kind={readErrorKind(drawerError)} what="the skill" error={drawerError} {...(actionError === null ? { onRetry: () => { void loadSkillFiles(); if (file !== null) void openFile(file.scope, file.path); } } : {})} />}
+      {/* A failed write (Save, a verb) has no page Retry: re-reading would replace the unsaved draft; press the action again. */}
+
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1" style={{ color: 'var(--ink-dim)' }}>
+        <TechDetails data-testid="skills-drawer-dir" text={skill.dir} />
+        {skill.editedAt !== null && <span data-testid="skills-drawer-edited" title={skill.editedAt}>edited {relTime(Date.parse(skill.editedAt))}</span>}
         {skill.upstreamDir !== null && (
           <span data-testid="skills-drawer-upstream" style={{ color: 'var(--status-gate)' }} title="the last refresh found a name collision: upstream ships a skill under this name at another dir; Baseline side reads that directory">
             upstream ships this name at {skill.upstreamDir}
@@ -506,7 +515,7 @@ export function SkillDrawer({ skill, support, writer, catalogEpoch, busy, leaveT
             style={{ color: 'var(--status-gate)' }}
             title="the daemon's portability verdict disagrees with its portable flag; the badge and the counts follow `portable` (the admission key core reads) — worth reporting to wicked-crew"
           >
-            {reach.contradiction}
+            <TechDetails text={reach.contradiction} />
           </span>
         )}
       </div>
@@ -516,25 +525,20 @@ export function SkillDrawer({ skill, support, writer, catalogEpoch, busy, leaveT
           data-testid="skills-drawer-portability"
           data-reach={reach.reach}
           data-detailed={reach.detailed}
-          className="flex min-w-0 flex-col gap-1 rounded px-2 py-1.5 text-[11px]"
-          style={{
-            background: 'var(--surface-rail)',
-            border: `1px solid ${reach.reach === 'needs-claude' ? 'var(--surface-raised)' : 'var(--status-gate)'}`,
-            color: 'var(--ink-muted)',
-          }}
+          className="flex min-w-0 flex-col gap-1 rounded px-2 py-1.5"
+          style={{ color: 'var(--ink-muted)' }}
         >
           <span className="min-w-0 break-words">
             <span className="font-semibold" style={{ color: 'var(--ink-high)' }}>Portability</span>
             {' — '}
-            {portabilityTitle(reach)}
+            {reach.reach === 'needs-claude' ? 'Requires Claude to run.' : 'Edit this skill to make it available to more helpers.'}
+            <TechDetails text={portabilityTitle(reach)} />
           </span>
           {reach.detailed && (
             <ul className="flex min-w-0 flex-col gap-0.5" aria-label="Portability reasons">
               {reach.reasons.map((r) => (
                 <li key={r} data-testid="skills-drawer-portability-reason" data-reason={r} className="min-w-0 break-words">
-                  <span className="font-mono text-[10px] font-semibold" style={{ color: 'var(--ink-high)' }}>{r}</span>
-                  {' — '}
-                  {portabilityReasonCopy(r)}
+                  <TechDetails text={`${r} — ${portabilityReasonCopy(r)}`} />
                 </li>
               ))}
             </ul>
@@ -543,12 +547,12 @@ export function SkillDrawer({ skill, support, writer, catalogEpoch, busy, leaveT
             <ul
               data-testid="skills-drawer-portability-evidence"
               aria-label="Portability evidence (file:line)"
-              className="flex min-w-0 flex-col gap-0.5 font-mono text-[10px]"
+              className="flex min-w-0 flex-col gap-0.5"
               style={{ color: 'var(--ink-high)' }}
             >
               {reach.evidence.map((anchor, i) => (
                 // One anchor per HIT in file order — two hits on one line share a `file:line`, so the key is positional.
-                <li key={`${i}:${anchor}`} data-testid="skills-drawer-portability-anchor" className="min-w-0 whitespace-normal break-all">{anchor}</li>
+                <li key={`${i}:${anchor}`} data-testid="skills-drawer-portability-anchor" className="min-w-0"><TechDetails text={anchor} /></li>
               ))}
             </ul>
           )}
@@ -556,7 +560,7 @@ export function SkillDrawer({ skill, support, writer, catalogEpoch, busy, leaveT
       )}
 
       <div className="flex flex-wrap items-center gap-2">
-        <label className="inline-flex items-center gap-2 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
+        <div className="inline-flex items-center gap-2">
           <EnabledToggle
             testId="skills-drawer-toggle"
             name={skill.name}
@@ -564,8 +568,7 @@ export function SkillDrawer({ skill, support, writer, catalogEpoch, busy, leaveT
             busy={verbsDisabled}
             onToggle={flip}
           />
-          {skill.enabled ? 'enabled' : 'disabled'}
-        </label>
+        </div>
         <span className="flex-1" />
         <button
           data-testid="skills-reset-open"
@@ -573,8 +576,8 @@ export function SkillDrawer({ skill, support, writer, catalogEpoch, busy, leaveT
           disabled={verbsDisabled || !canReset}
           title={canReset ? 'Restore every file this skill owns from the baseline (typed confirmation)' : 'a user-added skill has no baseline to reset to'}
           onClick={() => setModal('reset')}
-          className="rounded px-2 py-1 text-[10px] font-semibold disabled:opacity-40"
-          style={{ color: 'var(--status-gate)', border: '1px solid var(--surface-raised)' }}
+          className="wk-btn wk-btn--secondary"
+
         >
           Reset…
         </button>
@@ -584,12 +587,14 @@ export function SkillDrawer({ skill, support, writer, catalogEpoch, busy, leaveT
           disabled={verbsDisabled}
           title="Replace every file this skill owns from a pasted files map"
           onClick={() => setModal('replace')}
-          className="rounded px-2 py-1 text-[10px] font-semibold disabled:opacity-40"
-          style={{ color: 'var(--accent)', border: '1px solid var(--surface-raised)' }}
+          className="wk-btn wk-btn--secondary"
+
         >
           Replace…
         </button>
       </div>
+
+      {(!canReset || verbsDisabled) && <p className="wk-field-note">{!canReset ? 'This added skill has no original version to restore.' : 'Wait for the current change to finish.'}</p>}
 
       {leavePrompt && (
         <div
@@ -597,17 +602,17 @@ export function SkillDrawer({ skill, support, writer, catalogEpoch, busy, leaveT
           data-leave-to={leaveTo ?? undefined}
           role="alertdialog"
           aria-label="Unsaved changes"
-          className="flex flex-wrap items-center gap-2 rounded px-3 py-2 text-[11px]"
-          style={{ background: 'var(--surface-rail)', border: '1px solid var(--status-gate)', color: 'var(--ink-muted)' }}
+          className="flex flex-wrap items-center gap-2 rounded px-3 py-2"
+          style={{ color: 'var(--ink-muted)' }}
         >
-          <span>Unsaved edits to <span className="font-mono">{file?.path}</span>.</span>
+          <span>Unsaved edits to <span className="">{file?.path}</span>.</span>
           <span className="flex-1" />
           <button
             data-testid="skills-keep-editing"
             type="button"
             onClick={keepEditing}
-            className="rounded px-2 py-0.5 text-[10px]"
-            style={{ color: 'var(--ink-muted)', border: '1px solid var(--surface-raised)' }}
+            className="wk-btn wk-btn--quiet"
+
           >
             Keep editing
           </button>
@@ -615,16 +620,16 @@ export function SkillDrawer({ skill, support, writer, catalogEpoch, busy, leaveT
             data-testid="skills-discard"
             type="button"
             onClick={discardAndLeave}
-            className="rounded px-2 py-0.5 text-[10px] font-semibold"
-            style={{ background: 'var(--status-gate)', color: 'var(--surface-base)' }}
+            className="wk-btn wk-btn--danger"
+
           >
-            {leaveTo !== null ? <>Discard and open <span className="font-mono">{leaveTo}</span></> : 'Discard and close'}
+            {leaveTo !== null ? <>Discard and open <span className="">{leaveTo}</span></> : 'Discard and close'}
           </button>
         </div>
       )}
 
       {/* The two trees' tabs — locked while the open file is dirty (save or discard first). */}
-      <div role="tablist" aria-label="File trees" className="flex items-center gap-1 text-[11px]">
+      <div role="tablist" aria-label="File trees" className="flex items-center gap-1">
         {(['skill', 'support'] as const).map((t) => (
           <button
             key={t}
@@ -635,23 +640,20 @@ export function SkillDrawer({ skill, support, writer, catalogEpoch, busy, leaveT
             disabled={treeLocked && tab !== t}
             title={treeLocked && tab !== t ? 'save or discard your edits first' : TAB_LABEL[t]}
             onClick={() => selectTab(t)}
-            className="rounded px-2 py-1 font-semibold disabled:opacity-40"
-            style={{
-              color: tab === t ? 'var(--ink-high)' : 'var(--ink-muted)',
-              background: tab === t ? 'var(--surface-raised)' : 'transparent',
-            }}
+            className="wk-tab"
           >
             {TAB_LABEL[t]}
           </button>
         ))}
         {tab === 'support' && (
-          <span data-testid="skills-support-note" className="ml-2 text-[10px]" style={{ color: 'var(--ink-dim)' }}>
-            shared by every skill — the guards flag each edit; a path outside the bundle closure is refused
+          <span data-testid="skills-support-note" className="ml-2" style={{ color: 'var(--ink-dim)' }}>
+            Shared files used by your skills.
           </span>
         )}
       </div>
 
-      <div className="flex min-h-0 flex-1 gap-3">
+      {treeLocked && <p className="wk-field-note">{dirty ? 'Save or discard your edits before choosing another file or tab.' : 'Wait for the file to finish loading.'}</p>}
+      <div className="wk-pg-skills-editor-layout flex min-h-0 flex-1 gap-3">
         {/* The file tree — flat, SKILL.md first; EVERY row locks while the open file has unsaved
             edits or is loading — the active one too, since re-opening it would reload the content
             over the draft. */}
@@ -660,14 +662,14 @@ export function SkillDrawer({ skill, support, writer, catalogEpoch, busy, leaveT
           data-tab={tab}
           aria-label={TAB_LABEL[tab]}
           className="flex w-48 shrink-0 flex-col gap-0.5 overflow-y-auto rounded p-1"
-          style={{ background: 'var(--surface-rail)', border: '1px solid var(--surface-raised)' }}
+
         >
           {files === null ? (
-            <p data-testid="skills-files-loading" className="px-2 py-1 text-[10px]" style={{ color: 'var(--ink-dim)' }}>Loading files…</p>
+            <Skeleton data-testid="skills-files-loading" />
           ) : tab === 'skill' && filesError !== null ? (
-            <p data-testid="skills-files-error" className="px-2 py-1 text-[10px]" style={{ color: 'var(--status-fail)' }}>{filesError}</p>
+            <TechDetails data-testid="skills-files-error" text={filesError} />
           ) : files.length === 0 ? (
-            <p data-testid="skills-files-empty" className="px-2 py-1 text-[10px]" style={{ color: 'var(--ink-dim)' }}>No files.</p>
+            <EmptyState data-testid="skills-files-empty" title="No files" />
           ) : (
             files.map((f) => {
               const active = file !== null && file.scope === tab && file.path === f.path;
@@ -685,11 +687,8 @@ export function SkillDrawer({ skill, support, writer, catalogEpoch, busy, leaveT
                     ? (dirty ? 'save or discard your edits first' : 'loading…')
                     : `${f.path}${f.size !== null ? ` · ${f.size} B` : ''}${conflict ? ' · refresh conflict: both sides changed (the effective side was kept)' : ''}`}
                   onClick={() => { setLastResult(null); void openFile(tab, f.path); }}
-                  className="flex items-center gap-1 truncate rounded px-2 py-1 text-left font-mono text-[10px] disabled:opacity-40 focus:outline-none focus-visible:ring-1"
-                  style={{
-                    background: active ? 'var(--accent-subtle)' : 'transparent',
-                    color: active ? 'var(--ink-high)' : 'var(--ink-muted)',
-                  }}
+                  className="wk-btn wk-btn--secondary wk-pg-skills-file"
+
                 >
                   <span className="truncate">{f.path}</span>
                   {conflict && <span aria-hidden className="shrink-0" style={{ color: 'var(--status-gate)' }}>⚑</span>}
@@ -703,14 +702,14 @@ export function SkillDrawer({ skill, support, writer, catalogEpoch, busy, leaveT
             the loading state — never "pick a file" over a tree that has nothing to pick yet. */}
         <div className="flex min-w-0 flex-1 flex-col gap-2">
           {(fileLoading || openOnList) && file === null ? (
-            <p data-testid="skills-file-loading" className="text-[11px]" style={{ color: 'var(--ink-dim)' }}>Loading file…</p>
+            <Skeleton data-testid="skills-file-loading" />
           ) : fileError !== null ? (
-            <p data-testid="skills-file-error" className="rounded px-2 py-1 text-[11px]" style={{ background: 'var(--status-fail-dim)', color: 'var(--status-fail)' }}>{fileError}</p>
+            <TechDetails data-testid="skills-file-error" text={fileError} />
           ) : file === null ? (
-            <p data-testid="skills-file-none" className="text-[11px]" style={{ color: 'var(--ink-dim)' }}>Pick a file to edit.</p>
+            <p data-testid="skills-file-none" className="" style={{ color: 'var(--ink-dim)' }}>Pick a file to edit.</p>
           ) : (
             <>
-              <div className="flex flex-wrap items-center gap-2 text-[10px] font-mono" style={{ color: 'var(--ink-dim)' }}>
+              <div className="flex flex-wrap items-center gap-2" style={{ color: 'var(--ink-dim)' }}>
                 <span data-testid="skills-file-path" data-scope={file.scope} style={{ color: 'var(--ink-muted)' }}>{file.path}</span>
                 <span data-testid="skills-file-size" title="the file's full size in bytes">{file.size} B</span>
                 {dirty && <span data-testid="skills-file-dirty" style={{ color: 'var(--status-gate)' }}>unsaved</span>}
@@ -726,50 +725,51 @@ export function SkillDrawer({ skill, support, writer, catalogEpoch, busy, leaveT
                       ? 'Read the shipped copy of this file (the baseline side) — the new side of a refresh conflict, or the upstream file a name collision held back'
                       : 'Hide the baseline side'}
                     onClick={() => void toggleBaseline()}
-                    className="rounded px-1.5 py-0.5 text-[10px] disabled:opacity-40"
-                    style={{ color: 'var(--accent)', border: '1px solid var(--surface-raised)' }}
+                    className="wk-btn wk-btn--secondary"
+
                   >
                     {baseline === null ? 'Baseline side' : 'Hide baseline'}
                   </button>
                 )}
               </div>
               {readOnlyReason !== null && (
-                <p data-testid="skills-file-readonly" className="text-[10px]" style={{ color: 'var(--status-gate)' }}>{readOnlyReason}</p>
+                <p data-testid="skills-file-readonly" className="" style={{ color: 'var(--status-gate)' }}>{readOnlyReason}</p>
               )}
               {staleRead !== null && (
-                <p data-testid="skills-file-stale-read" data-path={staleRead} role="status" className="text-[10px]" style={{ color: 'var(--status-gate)' }}>
-                  <span className="font-mono">{staleRead}</span> finished loading while you were typing — its content was not applied over your text. Save or discard your edits, then open it again.
+                <p data-testid="skills-file-stale-read" data-path={staleRead} role="status" className="" style={{ color: 'var(--status-gate)' }}>
+                  <span className="">{staleRead}</span> finished loading while you were typing — its content was not applied over your text. Save or discard your edits, then open it again.
                 </p>
               )}
               {intervening !== null && (
                 <div
                   data-testid="skills-file-conflict"
                   role="alert"
-                  className="flex flex-wrap items-center gap-2 rounded px-3 py-2 text-[11px]"
-                  style={{ background: 'var(--surface-rail)', border: '1px solid var(--status-gate)', color: 'var(--ink-muted)' }}
+                  className="flex flex-wrap items-center gap-2 rounded px-3 py-2"
+                  style={{ color: 'var(--ink-muted)' }}
                 >
-                  <span className="font-semibold" style={{ color: 'var(--status-gate)' }}>This file changed on the daemon while you were editing.</span>
+                  <span className="font-semibold">This file changed while you were editing.</span>
                   <span>
-                    <span className="font-mono">{file.path}</span> is now {intervening.size} B on the daemon (you started from {file.size} B, catalog revision {file.readAt ?? '?'}). Your draft is kept; Save waits until you pick a side.
+                    Your draft is kept. Choose which version to save.
+                    <TechDetails text={`${file.path}: ${intervening.size} B on the service; started from ${file.size} B, catalog revision ${file.readAt ?? '?'}`} />
                   </span>
                   <span className="flex-1" />
                   <button
                     data-testid="skills-file-conflict-take"
                     type="button"
                     onClick={takeIntervening}
-                    className="rounded px-2 py-0.5 text-[10px] font-semibold"
-                    style={{ background: 'var(--status-gate)', color: 'var(--surface-base)' }}
+                    className="wk-btn wk-btn--secondary"
+
                   >
-                    Load the daemon’s version (discard my edits)
+                    Load the saved version (discard my edits)
                   </button>
                   <button
                     data-testid="skills-file-conflict-keep"
                     type="button"
                     onClick={keepDraftOverIntervening}
-                    className="rounded px-2 py-0.5 text-[10px]"
-                    style={{ color: 'var(--ink-muted)', border: '1px solid var(--surface-raised)' }}
+                    className="wk-btn wk-btn--secondary"
+
                   >
-                    Keep my draft — it replaces the daemon’s version on Save
+                    Keep my draft — replace the saved version on Save
                   </button>
                 </div>
               )}
@@ -781,22 +781,22 @@ export function SkillDrawer({ skill, support, writer, catalogEpoch, busy, leaveT
                 aria-busy={fileLoading}
                 spellCheck={false}
                 onChange={(e) => setDraft(e.target.value)}
-                className="min-h-[18rem] flex-1 resize-y rounded p-2 font-mono text-[11px] focus:outline-none"
-                style={{ background: 'var(--surface-base)', border: '1px solid var(--surface-raised)', color: 'var(--ink-high)', lineHeight: 1.5 }}
+                className="wk-field wk-pg-skills-code"
+
               />
               {baseline !== null && (
                 <div
                   data-testid="skills-baseline-view"
-                  className="flex flex-col gap-1 rounded p-2 text-[10px]"
-                  style={{ background: 'var(--surface-rail)', border: '1px solid var(--surface-raised)', color: 'var(--ink-muted)' }}
+                  className="flex flex-col gap-1 rounded p-2"
+                  style={{ color: 'var(--ink-muted)' }}
                 >
                   {baseline === 'loading' ? (
                     <span data-testid="skills-baseline-loading">Loading the baseline side…</span>
                   ) : 'error' in baseline ? (
-                    <span data-testid="skills-baseline-error" style={{ color: 'var(--status-fail)' }}>{baseline.error}</span>
+                    <TechDetails data-testid="skills-baseline-error" text={baseline.error} />
                   ) : (
                     <>
-                      <span className="flex flex-wrap items-center gap-2 font-mono" style={{ color: 'var(--ink-dim)' }}>
+                      <span className="flex flex-wrap items-center gap-2" style={{ color: 'var(--ink-dim)' }}>
                         <span>baseline side ·</span>
                         <span data-testid="skills-baseline-path" style={{ color: 'var(--ink-muted)' }} title="the plugin-relative path the daemon actually read (an upstream skill's dir for a held-back collision)">{baseline.result.path}</span>
                         <span>{baseline.result.size} B</span>
@@ -810,13 +810,14 @@ export function SkillDrawer({ skill, support, writer, catalogEpoch, busy, leaveT
                         value={textOf(baseline.result)}
                         readOnly
                         spellCheck={false}
-                        className="min-h-[10rem] resize-y rounded p-2 font-mono text-[11px] focus:outline-none"
-                        style={{ background: 'var(--surface-base)', border: '1px solid var(--surface-raised)', color: 'var(--ink-muted)', lineHeight: 1.5 }}
+                        className="wk-field wk-pg-skills-code"
+
                       />
                     </>
                   )}
                 </div>
               )}
+              {!canSave && <p className="wk-field-note">{readOnlyReason ?? (intervening !== null ? 'Choose a version before saving.' : busy || saving || fileLoading ? 'Wait for the current change or file to finish loading.' : draft === blockedDraft && blockedDraft !== null ? 'Change the text to try saving again.' : 'Edit the file to enable Save.')}</p>}
               <div className="flex items-center gap-2">
                 <button
                   data-testid="skills-save"
@@ -828,8 +829,8 @@ export function SkillDrawer({ skill, support, writer, catalogEpoch, busy, leaveT
                     : 'Save this file (the daemon runs its guards first)'
                   }
                   onClick={() => void save()}
-                  className="rounded px-3 py-1 text-[11px] font-semibold disabled:opacity-40"
-                  style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
+                  className="wk-btn wk-btn--primary"
+
                 >
                   {saving ? 'Saving…' : 'Save'}
                 </button>
@@ -839,8 +840,8 @@ export function SkillDrawer({ skill, support, writer, catalogEpoch, busy, leaveT
                     type="button"
                     disabled={saving}
                     onClick={discardEdits}
-                    className="rounded px-2 py-1 text-[11px]"
-                    style={{ color: 'var(--ink-dim)', border: '1px solid var(--surface-raised)' }}
+                    className="wk-btn wk-btn--quiet"
+
                   >
                     Discard edits
                   </button>
@@ -849,11 +850,7 @@ export function SkillDrawer({ skill, support, writer, catalogEpoch, busy, leaveT
             </>
           )}
 
-          {actionError !== null && (
-            <p data-testid="skills-drawer-error" className="rounded px-2 py-1 text-[11px]" style={{ background: 'var(--status-fail-dim)', color: 'var(--status-fail)' }}>
-              {actionError}
-            </p>
-          )}
+          {actionError !== null && <TechDetails data-testid="skills-drawer-error" text={actionError} />}
           {lastResult !== null && (
             <SkillFindings verb={lastResult.verb} result={lastResult.result} testId="skills-findings" />
           )}

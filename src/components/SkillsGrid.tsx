@@ -1,5 +1,6 @@
 import { SKILL_KINDS, isSkillKind, skillPortability, type SkillRow } from '../api/skills.js';
-import { FilterStrip } from './dashboardKit.js';
+import { SectionTitle } from './ui/PageFrame.js';
+import { EmptyState } from './ui/StateBanner.js';
 import { EnabledToggle, KindChip, ProvenanceChip, SkillFlags } from './SkillChips.js';
 
 /**
@@ -44,16 +45,7 @@ export function filterSkills(rows: readonly SkillRow[], f: SkillsFacets): SkillR
   });
 }
 
-const TH: React.CSSProperties = {
-  color: 'var(--ink-dim)',
-  fontSize: '10px',
-  textTransform: 'uppercase',
-  letterSpacing: '0.06em',
-  fontWeight: 'var(--weight-semi)',
-  textAlign: 'left',
-};
-
-export function SkillsGrid({ rows, facets, onFacets, selectedName, busyName, frozen, onSelect, onToggle }: {
+export function SkillsGrid({ rows, facets, onFacets, selectedName, busyName, frozen, countsKnown = true, onSelect, onToggle }: {
   rows: readonly SkillRow[];
   facets: SkillsFacets;
   onFacets: (next: SkillsFacets) => void;
@@ -64,6 +56,7 @@ export function SkillsGrid({ rows, facets, onFacets, selectedName, busyName, fro
   /** Writes are frozen page-wide (a revision conflict, a stale catalog, a write or page verb in
    *  flight) — every switch waits. */
   frozen: boolean;
+  countsKnown?: boolean;
   onSelect: (name: string) => void;
   onToggle: (row: SkillRow) => void;
 }): React.ReactElement {
@@ -71,91 +64,51 @@ export function SkillsGrid({ rows, facets, onFacets, selectedName, busyName, fro
   const count = (chip: SkillChip): number => filterSkills(rows, { query: facets.query, chip }).length;
 
   return (
-    <div data-testid="skills-grid" className="flex min-w-0 flex-col gap-2">
-      <FilterStrip
-        testId="skills-filter"
-        query={facets.query}
-        onQuery={(q) => onFacets({ ...facets, query: q })}
-        placeholder="Search skill name or dir…"
-        chips={SKILL_CHIPS.map((c) => ({ id: c, label: c, count: count(c) }))}
-        active={facets.chip}
-        onChip={(id) => onFacets({ ...facets, chip: id as SkillChip })}
-      />
-
-      {shown.length === 0 ? (
-        <p data-testid="skills-grid-empty" className="text-xs" style={{ color: 'var(--ink-dim)' }}>
-          {rows.length === 0 ? 'The manifest lists no skills.' : 'No skills match these filters.'}
-        </p>
-      ) : (
-        <div className="overflow-x-auto rounded" style={{ border: '1px solid var(--surface-raised)' }}>
-          <table className="w-full border-collapse" style={{ minWidth: '40rem' }}>
-            <thead>
-              <tr style={{ background: 'var(--surface-rail)' }}>
-                <th className="px-2 py-1.5" style={TH}>Skill</th>
-                <th className="px-2 py-1.5" style={TH}>Kind</th>
-                <th className="px-2 py-1.5" style={TH}>Provenance</th>
-                <th className="px-2 py-1.5" style={TH}>Flags</th>
-                <th className="px-2 py-1.5" style={{ ...TH, textAlign: 'right' }}>Enabled</th>
-              </tr>
-            </thead>
-            <tbody>
-              {shown.map((r) => {
-                const selected = r.name === selectedName;
-                return (
-                  <tr
-                    key={r.name}
-                    data-testid="skills-row"
-                    data-skill={r.name}
-                    data-enabled={r.enabled}
-                    // A plain <table> row is not a selectable ARIA widget (`aria-selected` belongs to
-                    // option/gridcell/tab); `aria-current` is the global attribute for "the one the
-                    // drawer is open on", and `data-selected` is the styling/test hook.
-                    aria-current={selected ? 'true' : undefined}
-                    data-selected={selected}
-                    // A `portability` verdict that disagrees with `portable` (F-1) — observable here even
-                    // when no badge renders (a portable row carrying reasons); the drawer says it in words.
-                    data-contradiction={skillPortability(r).contradiction ?? undefined}
-                    onClick={() => onSelect(r.name)}
-                    className="cursor-pointer align-middle transition-colors"
-                    style={{
-                      borderTop: '1px solid var(--surface-raised)',
-                      background: selected ? 'var(--accent-subtle)' : 'transparent',
-                      opacity: r.enabled ? 1 : 0.6,
-                    }}
-                  >
-                    <td className="px-2 py-1.5">
-                      <button
-                        type="button"
-                        data-testid="skills-row-name"
-                        aria-label={`Open ${r.name}`}
-                        onClick={(e) => { e.stopPropagation(); onSelect(r.name); }}
-                        className="block max-w-[28rem] truncate text-left font-mono text-[11px] hover:underline focus:outline-none focus-visible:ring-1"
-                        style={{ color: 'var(--ink-high)', background: 'transparent' }}
-                        title={r.dir}
-                      >
-                        {r.name}
-                      </button>
-                      <span className="block truncate font-mono text-[10px]" style={{ color: 'var(--ink-dim)' }}>{r.dir}</span>
-                    </td>
-                    <td className="px-2 py-1.5"><KindChip kind={r.kind} /></td>
-                    <td className="px-2 py-1.5"><ProvenanceChip provenance={r.provenance} /></td>
-                    <td className="px-2 py-1.5"><SkillFlags skill={r} /></td>
-                    <td className="px-2 py-1.5 text-right" onClick={(e) => e.stopPropagation()}>
-                      <EnabledToggle
-                        testId="skills-toggle"
-                        name={r.name}
-                        enabled={r.enabled}
-                        busy={frozen || busyName === r.name}
-                        onToggle={() => onToggle(r)}
-                      />
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+    <section data-testid="skills-grid" className="wk-card wk-pg-skills-catalog">
+      <SectionTitle>Skill catalog</SectionTitle>
+      <div data-testid="skills-filter" data-filter={facets.chip} className="flex min-w-0 flex-col gap-2">
+        <label className="wk-pg-skills-search">
+          <span className="wk-field-label">Search skills</span>
+          <input data-testid="skills-filter-search" className="wk-field" value={facets.query}
+            placeholder="Search by skill name or folder" onChange={(e) => onFacets({ ...facets, query: e.target.value })} />
+        </label>
+        <div className="wk-pg-skills-filters" aria-label="Filter skills">
+          {SKILL_CHIPS.filter((c) => !countsKnown || count(c) > 0 || c === facets.chip).map((c) => (
+            <button key={c} type="button" data-testid="skills-filter-chip" data-chip={c}
+              aria-pressed={facets.chip === c} className={`wk-chip${facets.chip === c ? ' wk-chip--active' : ''}`}
+              data-active={facets.chip === c ? 'true' : 'false'}
+              onClick={() => onFacets({ ...facets, chip: c })}>
+              {c === 'all' ? 'All' : c === 'fork-worker' ? 'Worker' : c === 'needs-claude' ? 'Needs Claude' : c === 'not-portable' ? 'Not portable' : c.charAt(0).toUpperCase() + c.slice(1)} {countsKnown ? count(c) : null}
+            </button>
+          ))}
         </div>
+      </div>
+      {shown.length === 0 ? (
+        <EmptyState data-testid="skills-grid-empty" title={rows.length === 0 ? 'No skills yet' : 'No matching skills'}
+          body={rows.length === 0 ? 'Add a skill to make it available to your helpers.' : 'Try another search or filter.'} />
+      ) : (
+        <ul className="wk-pg-skills-list">
+          {shown.map((r) => (
+            <li key={r.name} data-testid="skills-row" data-skill={r.name} data-enabled={r.enabled}
+              aria-current={r.name === selectedName ? 'true' : undefined} data-selected={r.name === selectedName}
+              data-contradiction={skillPortability(r).contradiction ?? undefined}
+              className="wk-list-row wk-pg-skills-row" onClick={() => onSelect(r.name)}>
+              <div className="min-w-0">
+                <button type="button" data-testid="skills-row-name" aria-label={`Open ${r.name}`}
+                  className="wk-btn wk-btn--quiet wk-pg-skills-name"
+                  onClick={(e) => { e.stopPropagation(); onSelect(r.name); }}>{r.name}</button>
+                <div className="wk-list-row-meta flex flex-wrap gap-2">
+                  <KindChip kind={r.kind} /><ProvenanceChip provenance={r.provenance} /><SkillFlags skill={r} />
+                </div>
+              </div>
+              <div className="wk-list-row-actions" onClick={(e) => e.stopPropagation()}>
+                <EnabledToggle testId="skills-toggle" name={r.name} enabled={r.enabled}
+                  busy={frozen || busyName === r.name} onToggle={() => onToggle(r)} />
+              </div>
+            </li>
+          ))}
+        </ul>
       )}
-    </div>
+    </section>
   );
 }

@@ -123,12 +123,10 @@ describe('SystemSettings — CLI seats & sign-in', () => {
     render(<SystemSettings />);
     await screen.findByText('Claude Code');
 
-    const row = screen.getByText('Codex').closest('div');
-    const checkbox = row?.querySelector('input[type="checkbox"]') as HTMLInputElement;
-    expect(checkbox).toBeTruthy();
-    const before = checkbox.checked;
-
+    const toggle = screen.getByRole('switch', { name: 'Codex' });
+    const before = toggle.getAttribute('aria-checked');
     await user.click(screen.getByRole('button', { name: 'Sign in Codex' }));
-    expect(checkbox.checked).toBe(before);
+    expect(toggle).toHaveAttribute('aria-checked', before);
+
   });
 });

@@ -1,5 +1,6 @@
 import { useDisplayText } from '../hooks/useHomePath.js';
 import { portabilityReasonCopy, type SkillConflictFinding, type SkillGuardResult, type SkillVerdict } from '../api/skills.js';
+import { TechDetails } from './ui/TechDetails.js';
 
 /**
  * The guard envelope of ONE write / enable / publish / analyze (`{verdict, findings, revision}` —
@@ -52,17 +53,17 @@ export function SkillFindings({ verb, result, testId }: {
       data-verdict={result.verdict}
       data-revision={result.revision}
       role="status"
-      className="flex flex-col gap-1.5 rounded px-3 py-2 text-[11px]"
-      style={{ background: 'var(--surface-rail)', border: `1px solid ${color}` }}
+      className="wk-card flex flex-col gap-2"
+
     >
       <p className="flex flex-wrap items-baseline gap-2">
-        <span className="font-semibold" style={{ color }}>{verdictLine(verb, result)}</span>
+        <span className="font-semibold" style={{color}}>{verdictLine(verb, result)}</span>
         {result.findings.length > 0 && (
-          <span data-testid="skills-findings-tally" className="font-mono text-[10px]" style={{ color: 'var(--ink-dim)' }}>
+          <span data-testid="skills-findings-tally" className="" style={{ color: 'var(--ink-dim)' }}>
             {blocking} blocking · {warnings} {warnings === 1 ? 'warning' : 'warnings'}
           </span>
         )}
-        <span className="ml-auto font-mono text-[10px]" style={{ color: 'var(--ink-dim)' }} title="the catalog revision after this call">rev {result.revision}</span>
+        <TechDetails text={`Catalog revision ${result.revision}`} />
       </p>
       {result.findings.length > 0 && (
         <ul className="flex flex-col gap-1">
@@ -78,39 +79,37 @@ export function SkillFindings({ verb, result, testId }: {
                 style={{ color: 'var(--ink-muted)' }}
               >
                 <span className="inline-flex flex-wrap items-center gap-1.5">
-                  <span className="rounded px-1.5 text-[10px] font-mono" style={{ background: 'var(--surface-raised)', color: 'var(--ink-high)' }}>
-                    {f.kind}
-                  </span>
-                  <span className="text-[10px] font-mono uppercase" style={{ color: f.severity === 'blocking' ? 'var(--status-fail)' : 'var(--status-gate)' }}>
+                  <TechDetails text={`Check: ${f.kind}`} />
+                  <span className="" style={{ color: f.severity === 'blocking' ? 'var(--status-fail)' : 'var(--status-gate)'  }}>
                     {f.severity}
                   </span>
                   {f.skill !== null && (
-                    <span data-testid="skills-finding-skill" className="text-[10px] font-mono" style={{ color: 'var(--ink-dim)' }}>{f.skill}</span>
+                    <span data-testid="skills-finding-skill" className="" style={{ color: 'var(--ink-dim)' }}>{f.skill}</span>
                   )}
                   {f.againstSkill !== null && (
-                    <span data-testid="skills-finding-against" className="text-[10px] font-mono" style={{ color: 'var(--ink-dim)' }}>
+                    <span data-testid="skills-finding-against" className="" style={{ color: 'var(--ink-dim)' }}>
                       against {f.againstSkill}{f.againstIsCore ? ' (core)' : ''}
                     </span>
                   )}
                   {location !== null && (
-                    <code data-testid="skills-finding-location" className="text-[10px] font-mono" style={{ color: 'var(--ink-dim)' }}>{showText(location)}</code>
+                    <TechDetails data-testid="skills-finding-location" text={location} />
                   )}
                   {f.portabilityReason != null && (
                     <span
                       data-testid="skills-finding-reason"
                       data-reason={f.portabilityReason}
                       title={portabilityReasonCopy(f.portabilityReason)}
-                      className="rounded px-1.5 text-[10px] font-mono"
-                      style={{ background: 'var(--status-gate-dim)', color: 'var(--ink-high)', border: '1px solid var(--status-gate)' }}
+                      className="rounded px-1.5"
+                      style={{ color: 'var(--ink-high)' }}
                     >
-                      {f.portabilityReason}
+                      <TechDetails text={f.portabilityReason} />
                     </span>
                   )}
                 </span>
                 {f.evidence !== '' && (
-                  <code data-testid="skills-finding-evidence" className="break-all text-[10px] font-mono" style={{ color: 'var(--ink-high)' }}>{showText(f.evidence)}</code>
+                  <TechDetails data-testid="skills-finding-evidence" text={f.evidence} />
                 )}
-                <span>{showText(f.explanation)}</span>
+                <TechDetails text={showText(f.explanation)} />
               </li>
             );
           })}

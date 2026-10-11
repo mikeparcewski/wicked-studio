@@ -13,7 +13,6 @@ import {
   postureSummary,
   readMcpServerDeepLink,
   readMcpView,
-  ROLE_LABELS,
   serverSubject,
   serverUsageText,
   type McpApprovalsResponse,
@@ -32,6 +31,15 @@ import {
 } from '../api/mcp.js';
 import { policiesPath } from '../api/steering.js';
 import { McpUsage } from './McpUsage.js';
+import { PageFrame, SectionTitle } from './ui/PageFrame.js';
+import { Segmented } from './ui/Segmented.js';
+import { Switch } from './ui/Switch.js';
+import { TechDetails } from './ui/TechDetails.js';
+import { StateBanner, EmptyState, Skeleton } from './ui/StateBanner.js';
+import { readErrorKind } from '../api/errors.js';
+import { seatLabel } from '../board/seatNames.js';
+import { OverflowMenu } from './ui/OverflowMenu.js';
+import { Tabs } from './ui/Tabs.js';
 
 /**
  * MCP tools (DES-MCP-TOOLS-001 §7, slice S6): the operator's registry of upstream MCP servers and
@@ -58,12 +66,10 @@ const DECISION_STYLE: Record<McpDecision, { color: string; background: string }>
   deny: { color: 'var(--status-fail)', background: 'var(--status-fail-dim)' },
 };
 
-const BORDER = '1px solid var(--surface-raised)';
-
 type Load =
   | { kind: 'loading' }
   | { kind: 'unsupported' }
-  | { kind: 'failed'; message: string }
+  | { kind: 'failed'; message: string; errorKind: ReturnType<typeof readErrorKind> }
   | { kind: 'loaded'; servers: McpServersResponse; policies: McpPolicyPreviewResponse | null; approvals: McpApprovalsResponse | null; usage: McpUsageResponse | null };
 
 const msg = (e: unknown): string => (e instanceof Error ? e.message : String(e));
@@ -73,8 +79,8 @@ function Badge({ testid, text, style, title }: { testid?: string | undefined; te
     <span
       data-testid={testid}
       title={title}
-      className="inline-flex items-center rounded px-1.5 py-0.5 font-mono text-[10px]"
-      style={{ background: 'var(--surface-raised)', color: 'var(--ink-muted)', ...style }}
+      className="wk-tag"
+      style={style}
     >
       {text}
     </span>
@@ -87,15 +93,15 @@ function DecisionChip({ decision, ruleIds, navigate }: { decision: McpDecision; 
       <span
         data-testid="mcp-cell-decision"
         data-decision={decision}
-        className="rounded px-1.5 py-0.5 text-[10px] font-semibold"
+        className="wk-tag"
         style={DECISION_STYLE[decision]}
       >
         {DECISION_LABELS[decision]}
       </span>
       {ruleIds.map((id) => (
         id.startsWith('engine:') ? (
-          <span key={id} data-testid="mcp-cell-rule" data-rule={id} className="font-mono text-[9px]" style={{ color: 'var(--ink-dim)' }} title="an engine gate: it holds in every mode and cannot be retired">
-            {id}
+          <span key={id} data-testid="mcp-cell-rule" data-rule={id} className="" style={{ color: 'var(--ink-dim)' }} title="an engine gate: it holds in every mode and cannot be retired">
+            <TechDetails text={id} />
           </span>
         ) : (
           <a
@@ -104,11 +110,11 @@ function DecisionChip({ decision, ruleIds, navigate }: { decision: McpDecision; 
             data-rule={id}
             href={`${policiesPath()}?rule=${encodeURIComponent(id)}`}
             onClick={(e) => { e.preventDefault(); navigate(`${policiesPath()}?rule=${encodeURIComponent(id)}`); }}
-            className="font-mono text-[9px] underline"
-            style={{ color: 'var(--accent)' }}
+            className="wk-link"
+
             title="open this rule in Steering"
           >
-            {id}
+            View rule
           </a>
         )
       ))}
@@ -126,20 +132,20 @@ export function PolicyMatrix({ tool, roles, seats, mode, navigate }: {
 }): React.ReactElement {
   return (
     <div className="overflow-x-auto">
-      <table data-testid="mcp-policy-matrix" data-subject={tool.subject} data-mode={mode} className="border-collapse text-[10px]">
+      <table data-testid="mcp-policy-matrix" data-subject={tool.subject} data-mode={mode} className="border-collapse">
         <thead>
           <tr>
             <th className="px-2 py-1 text-left font-semibold" style={{ color: 'var(--ink-dim)' }}>{MODE_LABELS[mode]}</th>
-            {seats.map((s) => (
-              <th key={s} className="px-2 py-1 text-left font-mono font-semibold" style={{ color: 'var(--ink-muted)' }}>{s}</th>
+            {seats.filter(s => !/agy|antigravity/i.test(s)).map((s) => (
+              <th key={s} className="px-2 py-1 text-left font-semibold" style={{ color: 'var(--ink-muted)' }}>{seatLabel({key:s})}</th>
             ))}
           </tr>
         </thead>
         <tbody>
           {roles.map((r) => (
-            <tr key={r} data-testid="mcp-matrix-row" data-role={r} style={{ borderTop: BORDER }}>
-              <td className="px-2 py-1 font-semibold" style={{ color: 'var(--ink-muted)' }}>{ROLE_LABELS[r]}</td>
-              {seats.map((s) => {
+            <tr key={r} data-testid="mcp-matrix-row" data-role={r} >
+              <td className="px-2 py-1 font-semibold" style={{ color: 'var(--ink-muted)' }}>{r === 'creator' ? 'Build' : r === 'evaluator' ? 'Review' : 'Explore'}</td>
+              {seats.filter(s => !/agy|antigravity/i.test(s)).map((s) => {
                 const c = cellOf(tool, r, s, mode);
                 return (
                   <td key={s} data-testid="mcp-matrix-cell" data-role={r} data-seat={s} data-decision={c?.decision ?? 'none'} className="px-2 py-1 align-top">
@@ -179,11 +185,11 @@ function ToolRow({ server, tool, policy, roles, seats, mode, busy, onAct, naviga
   const approvedByTool = policy !== null && (policy.approval.firstUse === 'tool' || policy.approval.write === 'tool');
   const gone = tool.status === 'gone';
   return (
-    <li data-testid="mcp-tool-row" data-subject={tool.subject} data-class={tool.class} data-status={tool.status} className="flex flex-col gap-1.5 px-3 py-2" style={{ borderTop: BORDER }}>
+    <li data-testid="mcp-tool-row" data-subject={tool.subject} data-class={tool.class} data-status={tool.status} className="wk-list-row wk-pg-mcp-tool" >
       <div className="flex flex-wrap items-center gap-2">
-        <span className="font-mono text-[11px]" style={{ color: gone ? 'var(--ink-dim)' : 'var(--ink-high)' }}>{tool.name}</span>
-        <Badge testid="mcp-tool-class" text={tool.class} style={tool.class === 'read' ? undefined : { color: 'var(--status-warn)' }} title={tool.classOverride !== null ? `operator override (derived: ${tool.derivedClass})` : 'derived from its own annotations'} />
-        <span className="text-[10px]" style={{ color: 'var(--ink-dim)' }}>{annotationText(tool)}</span>
+        <span className="" style={{ color: gone ? 'var(--ink-dim)' : 'var(--ink-high)'  }}>{tool.name}</span>
+        <Badge testid="mcp-tool-class" text={tool.class} style={{ color: 'var(--status-warn)' }} title={tool.classOverride !== null ? `operator override (derived: ${tool.derivedClass})` : 'derived from its own annotations'} />
+        <TechDetails text={annotationText(tool)} />
         {tool.status !== 'registered' && (
           <Badge testid="mcp-tool-status" text={tool.status} style={{ color: 'var(--status-fail)' }} title={tool.status === 'gone' ? 'the server no longer lists it' : 'its schema changed since the save: denied until previewed and saved again'} />
         )}
@@ -196,62 +202,25 @@ function ToolRow({ server, tool, policy, roles, seats, mode, busy, onAct, naviga
         )}
         <span className="ml-auto flex flex-wrap items-center gap-2">
           {!gone && (
-            <label className="flex items-center gap-1 text-[10px]" style={{ color: 'var(--ink-muted)' }} title={tool.enabled ? 'Disable: calls to this tool are refused from the next call' : 'Enable: the tool is judged by policy again'}>
-              <input
-                data-testid="mcp-tool-enabled"
-                type="checkbox"
-                checked={tool.enabled}
-                disabled={busy}
-                onChange={(e) => onAct(`${e.target.checked ? 'Enabled' : 'Disabled'} ${tool.subject}`, () => mcpApi.setTool(tool.subject, { enabled: e.target.checked }))}
-              />
-              enabled
-            </label>
+            <Switch data-testid="mcp-tool-enabled" label="Tool enabled" checked={tool.enabled} disabled={busy ? 'Wait for the current change to finish.' : null}
+              onChange={(enabled) => onAct(`${enabled ? 'Enabled' : 'Disabled'} ${tool.name}`, () => mcpApi.setTool(tool.subject, {enabled}))} />
           )}
-          {policy !== null && canApprove(policy) && !approvedByTool && (
-            <button
-              type="button"
-              data-testid="mcp-tool-approve"
-              disabled={busy}
-              onClick={() => onAct(`Approved ${tool.subject}`, () => mcpApi.approve(tool.subject))}
-              className="rounded px-2 py-0.5 text-[10px] font-semibold disabled:opacity-40"
-              style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
-              title="An audited policy edit: this tool's first use and its writes stop asking in balanced mode. Deny rules and the evaluator gate still hold."
-            >
-              Approve tool
-            </button>
-          )}
-          {approvedByTool && (
-            <button
-              type="button"
-              data-testid="mcp-tool-revoke"
-              disabled={busy}
-              onClick={() => onAct(`Revoked ${tool.subject}`, () => mcpApi.revoke(tool.subject))}
-              className="rounded px-2 py-0.5 text-[10px] font-semibold disabled:opacity-40"
-              style={{ color: 'var(--status-fail)', border: BORDER }}
-              title="Its next call asks again"
-            >
-              Revoke
-            </button>
-          )}
-          {policy !== null && (
-            <button
-              type="button"
-              data-testid="mcp-tool-policies"
-              aria-expanded={showMatrix}
-              onClick={() => setShowMatrix((v) => !v)}
-              className="rounded px-2 py-0.5 text-[10px] font-semibold"
-              style={{ color: 'var(--accent)', border: BORDER }}
-            >
-              {showMatrix ? 'Hide policies' : 'Policies'}
-            </button>
-          )}
+          <span data-testid={approvedByTool ? 'mcp-tool-revoke' : policy !== null && canApprove(policy) ? 'mcp-tool-approve' : undefined} data-disabled={busy}>
+            <span data-testid={policy !== null ? 'mcp-tool-policies' : undefined}>
+              <OverflowMenu label={`More actions for ${tool.name}`} items={[
+                ...(policy !== null && canApprove(policy) && !approvedByTool ? [{id:'approve',label:'Approve tool',disabled:busy ? 'Wait for the current change to finish.' : null,onSelect:() => onAct(`Approved ${tool.name}`, () => mcpApi.approve(tool.subject))}] : []),
+                ...(approvedByTool ? [{id:'revoke',label:'Revoke',danger:true,disabled:busy ? 'Wait for the current change to finish.' : null,onSelect:() => onAct(`Revoked ${tool.name}`, () => mcpApi.revoke(tool.subject))}] : []),
+                ...(policy !== null ? [{id:'policies',label:showMatrix ? 'Hide policies' : 'Policies',onSelect:() => setShowMatrix(v => !v)}] : []),
+              ]} />
+            </span>
+          </span>
         </span>
       </div>
       {tool.description !== null && tool.description !== '' && (
-        <p className="text-[10px]" style={{ color: 'var(--ink-dim)' }}>{tool.description}</p>
+        <p className="" style={{ color: 'var(--ink-dim)' }}>{tool.description}</p>
       )}
       {showMatrix && policy !== null && <PolicyMatrix tool={policy} roles={roles} seats={seats} mode={mode} navigate={navigate} />}
-      {server.enabled === false && <p className="text-[10px]" style={{ color: 'var(--status-warn)' }}>The server is disabled: every call is denied.</p>}
+      {server.enabled === false && <p className="" style={{ color: 'var(--status-warn)' }}>The server is disabled: every call is denied.</p>}
     </li>
   );
 }
@@ -276,90 +245,56 @@ function ServerRow({ server, policies, usage, open, onToggle, mode, busy, onAct,
   const health = server.health;
   const live = server.tools.filter((t) => t.status !== 'gone');
   return (
-    <li data-testid="mcp-server-row" data-server={server.name} data-open={open} className="rounded" style={{ border: BORDER, background: 'var(--surface-card)' }}>
+    <li data-testid="mcp-server-row" data-server={server.name} data-open={open} className="wk-card wk-pg-mcp-server" >
       <div className="flex flex-wrap items-center gap-2 px-3 py-2">
-        <button type="button" data-testid="mcp-server-toggle" aria-expanded={open} onClick={onToggle} className="flex items-center gap-2 text-left">
-          <span aria-hidden style={{ color: 'var(--ink-dim)', transform: open ? 'rotate(90deg)' : 'none', display: 'inline-block' }}>›</span>
-          <span className="font-mono text-xs font-semibold" style={{ color: 'var(--ink-high)' }}>{server.name}</span>
+        <button type="button" data-testid="mcp-server-toggle" aria-expanded={open} onClick={onToggle} className="wk-btn wk-btn--secondary">
+          <span aria-hidden style={{ color: 'var(--ink-dim)' }}>›</span>
+          <span className="font-semibold" style={{ color: 'var(--ink-high)' }}>{server.name}</span>
         </button>
         <Badge text={server.kind} />
         <Badge
           testid="mcp-server-health"
           text={`health ${health.state} · ${ageOf(health.checkedAt)}`}
-          style={{ color: health.state === 'ok' ? 'var(--status-ok)' : health.state === 'failing' ? 'var(--status-fail)' : 'var(--ink-dim)' }}
-          title={health.lastError ?? undefined}
+          style={{ color: health.state === 'ok' ? 'var(--status-ok)' : health.state === 'failing' ? 'var(--status-fail)' : 'var(--ink-dim)'  }}
+          title="Latest service check"
         />
-        <Badge testid="mcp-server-auth" text={`auth ${server.authState}`} style={server.authState === 'missing' ? { color: 'var(--status-fail)' } : undefined} />
+        <Badge testid="mcp-server-auth" text={`auth ${server.authState}`} style={{ color: 'var(--status-fail)' }} />
         <Badge testid="mcp-server-tools" text={`${server.counts.enabled}/${server.counts.total} tools enabled`} />
         {!server.enabled && <Badge text="disabled" style={{ color: 'var(--status-fail)' }} />}
         {usage !== null && (() => {
           const u = usage.servers.find((x) => x.server === server.name);
           return <Badge testid="mcp-server-usage" text={serverUsageText(u, usage.days)} title={u === undefined ? undefined : `${u.decisions.allow} allowed · ${u.decisions.ask} asked · ${u.decisions.deny} denied · ${u.decisions.guard_error} guard errors`} />;
         })()}
-        <span data-testid="mcp-server-posture" data-allow={summary.allow} data-ask={summary.ask} data-deny={summary.deny} className="text-[10px]" style={{ color: 'var(--ink-muted)' }} title={`what a creator unit gets in ${MODE_LABELS[mode]} mode`}>
+        <span data-testid="mcp-server-posture" data-allow={summary.allow} data-ask={summary.ask} data-deny={summary.deny} className="" style={{ color: 'var(--ink-muted)' }} title={`what a creator unit gets in ${MODE_LABELS[mode]} mode`}>
           {policies === null ? 'posture unavailable' : summary.text}
         </span>
         <span className="ml-auto flex flex-wrap items-center gap-2">
-          {needsFirstUse && !serverApproved && (
-            <button
-              type="button"
-              data-testid="mcp-server-approve"
-              disabled={busy}
-              onClick={() => onAct(`Approved the first use of ${server.name}`, () => mcpApi.approve(serverSubject(server.name)))}
-              className="rounded px-2 py-0.5 text-[10px] font-semibold disabled:opacity-40"
-              style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}
-              title="An audited policy edit: the server's first use stops asking. Its write tools still ask in Gate by risk until each is approved."
-            >
-              Approve first use
-            </button>
-          )}
-          {serverApproved && (
-            <button
-              type="button"
-              data-testid="mcp-server-revoke"
-              disabled={busy}
-              onClick={() => onAct(`Revoked ${server.name}`, () => mcpApi.revoke(serverSubject(server.name)))}
-              className="rounded px-2 py-0.5 text-[10px] font-semibold disabled:opacity-40"
-              style={{ color: 'var(--status-fail)', border: BORDER }}
-              title="Every tool's next call asks for first use again"
-            >
-              Revoke server
-            </button>
-          )}
-          <button
-            type="button"
-            data-testid="mcp-server-test"
-            disabled={busy}
-            onClick={() => onAct(`Tested ${server.name}`, () => mcpApi.test(server.name))}
-            className="rounded px-2 py-0.5 text-[10px] font-semibold disabled:opacity-40"
-            style={{ color: 'var(--accent)', border: BORDER }}
-            title="Probe the server now and diff its tools against the saved ones; a changed tool is denied until saved again"
-          >
-            Test
-          </button>
+          <span data-testid={serverApproved ? 'mcp-server-revoke' : needsFirstUse ? 'mcp-server-approve' : undefined} data-disabled={busy}>
+            <span data-testid="mcp-server-test"><span data-testid="mcp-server-remove" data-disabled={busy}>
+              <OverflowMenu label={`More actions for ${server.name}`} items={[
+                ...(needsFirstUse && !serverApproved ? [{id:'approve',label:'Approve first use',disabled:busy ? 'Wait for the current change to finish.' : null,onSelect:() => onAct(`Approved the first use of ${server.name}`, () => mcpApi.approve(serverSubject(server.name)))}] : []),
+                ...(serverApproved ? [{id:'revoke',label:'Revoke server',danger:true,disabled:busy ? 'Wait for the current change to finish.' : null,onSelect:() => onAct(`Revoked ${server.name}`, () => mcpApi.revoke(serverSubject(server.name)))}] : []),
+                {id:'test',label:'Test',disabled:busy ? 'Wait for the current change to finish.' : null,onSelect:() => onAct(`Tested ${server.name}`, () => mcpApi.test(server.name))},
+                {id:'remove',label:'Remove…',danger:true,disabled:busy ? 'Wait for the current change to finish.' : null,onSelect:() => setConfirmRemove(true)},
+              ]} />
+            </span></span>
+          </span>
           {confirmRemove ? (
-            <span className="flex items-center gap-1 text-[10px]" style={{ color: 'var(--status-fail)' }}>
+            <span className="flex items-center gap-1" style={{ color: 'var(--status-fail)' }}>
               <span data-testid="mcp-server-remove-consequence">
                 Removes {live.length} tool{live.length === 1 ? '' : 's'} and withdraws their approvals; calls are refused from the next call.
               </span>
-              <button type="button" data-testid="mcp-server-remove-confirm" disabled={busy} onClick={() => { setConfirmRemove(false); onAct(`Removed ${server.name}`, () => mcpApi.remove(server.name)); }} className="rounded px-2 py-0.5 font-semibold" style={{ background: 'var(--status-fail)', color: 'var(--accent-fg)' }}>
+              <button type="button" data-testid="mcp-server-remove-confirm" disabled={busy} onClick={() => { setConfirmRemove(false); onAct(`Removed ${server.name}`, () => mcpApi.remove(server.name)); }} className="wk-btn wk-btn--danger" >
                 Remove
               </button>
-              <button type="button" onClick={() => setConfirmRemove(false)} className="px-1 hover:underline" style={{ color: 'var(--ink-dim)' }}>Keep</button>
+              <button type="button" onClick={() => setConfirmRemove(false)} className="wk-btn wk-btn--secondary" >Keep</button>
             </span>
-          ) : (
-            <button type="button" data-testid="mcp-server-remove" disabled={busy} onClick={() => setConfirmRemove(true)} className="rounded px-2 py-0.5 text-[10px] disabled:opacity-40" style={{ color: 'var(--ink-dim)', border: BORDER }}>
-              Remove…
-            </button>
-          )}
+          ) : null}
         </span>
       </div>
       {open && (
         <div className="flex flex-col pb-1">
-          <p className="px-3 pb-1 font-mono text-[10px]" style={{ color: 'var(--ink-dim)' }}>
-            {server.kind === 'mcp-stdio' ? `${server.command ?? ''} ${server.args.join(' ')}` : server.url}
-            {server.auth !== null && ` · secret ${server.auth.ref}`}
-          </p>
+          <TechDetails text={`${server.kind === 'mcp-stdio' ? `${server.command ?? ''} ${server.args.join(' ')}` : server.url}${server.auth !== null ? ` · secret ${server.auth.ref}` : ''}${health.lastError !== null ? ` · ${health.lastError}` : ''}`} />
           <ul>
             {server.tools.map((t) => (
               <ToolRow
@@ -526,53 +461,52 @@ function AddServerPanel({ onSaved, onClose, mode, navigate, saved }: {
     }
   };
 
-  const input = 'rounded px-2 py-1 font-mono text-[11px] focus:outline-none';
-  const inputStyle: React.CSSProperties = { background: 'var(--surface-base)', border: BORDER, color: 'var(--ink-high)' };
+  const input = 'wk-field';
   const pol = preview?.policies ?? null;
   return (
-    <section data-testid="mcp-add-panel" className="flex flex-col gap-2 rounded p-3" style={{ border: BORDER, background: 'var(--surface-rail)' }}>
+    <section data-testid="mcp-add-panel" className="wk-card wk-pg-mcp-form flex flex-col gap-2" >
       <div className="flex items-center gap-2">
-        <h3 className="text-xs font-semibold" style={{ color: 'var(--ink-high)' }}>{kind === 'rest' ? 'Wrap a REST API' : 'Add an existing MCP server'}</h3>
-        <button type="button" data-testid="mcp-add-cancel" onClick={onClose} className="ml-auto text-[10px] hover:underline" style={{ color: 'var(--ink-dim)' }}>Cancel</button>
+        <SectionTitle>{kind === 'rest' ? 'Wrap a REST API' : 'Add an existing MCP server'}</SectionTitle>
+        <button type="button" data-testid="mcp-add-cancel" onClick={onClose} className="wk-btn wk-btn--quiet" >Cancel</button>
       </div>
-      <p className="text-[10px]" style={{ color: 'var(--ink-muted)' }}>
-        Crew probes the server, lists its tools and shows what each unit would get under your policies. Nothing is registered until you save that exact preview.
+      <p className="" style={{ color: 'var(--ink-muted)' }}>
+        Preview the tools and their access settings, then save to register the server.
       </p>
       <div className="flex flex-wrap items-end gap-2">
-        <label className="flex flex-col gap-1 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
+        <label className="flex flex-col gap-1" style={{ color: 'var(--ink-muted)' }}>
           Name
-          <input data-testid="mcp-add-name" value={name} onChange={(e) => { setName(e.target.value); setReplaceOk(false); setPreview(null); }} placeholder="jira" spellCheck={false} className={`${input} w-32`} style={{ ...inputStyle, borderColor: name === '' || nameOk ? undefined : 'var(--status-fail)' }} />
+          <input data-testid="mcp-add-name" value={name} onChange={(e) => { setName(e.target.value); setReplaceOk(false); setPreview(null); }} placeholder="jira" spellCheck={false} className={`${input} w-32`}  />
         </label>
-        <label className="flex flex-col gap-1 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
+        <label className="flex flex-col gap-1" style={{ color: 'var(--ink-muted)' }}>
           Kind
-          <select data-testid="mcp-add-kind" value={kind} onChange={(e) => { setKind(e.target.value as McpUpstreamKind); setPreview(null); }} className={input} style={inputStyle}>
+          <select data-testid="mcp-add-kind" value={kind} onChange={(e) => { setKind(e.target.value as McpUpstreamKind); setPreview(null); }} className={input} >
             <option value="mcp-stdio">stdio command</option>
             <option value="mcp-http">http URL</option>
             <option value="rest">REST API (OpenAPI)</option>
           </select>
         </label>
-        <label className="flex min-w-[16rem] flex-1 flex-col gap-1 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
+        <label className="flex min-w-0 flex-1 flex-col gap-1" style={{ color: 'var(--ink-muted)' }}>
           {kind === 'mcp-stdio' ? 'Command (with its arguments)' : kind === 'rest' ? 'Base URL (every call is pinned to it)' : 'URL'}
-          <input data-testid="mcp-add-target" value={target} onChange={(e) => { setTarget(e.target.value); setPreview(null); }} placeholder={kind === 'mcp-stdio' ? 'npx -y @acme/jira-mcp' : kind === 'rest' ? 'https://api.example.com/v1' : 'https://mcp.example.com/mcp'} spellCheck={false} className={input} style={inputStyle} />
+          <input data-testid="mcp-add-target" value={target} onChange={(e) => { setTarget(e.target.value); setPreview(null); }} placeholder={kind === 'mcp-stdio' ? 'npx -y @acme/jira-mcp' : kind === 'rest' ? 'https://api.example.com/v1' : 'https://mcp.example.com/mcp'} spellCheck={false} className={input}  />
         </label>
         {kind === 'rest' && (
-          <label className="flex min-w-[16rem] flex-1 flex-col gap-1 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
+          <label className="flex min-w-0 flex-1 flex-col gap-1" style={{ color: 'var(--ink-muted)' }}>
             OpenAPI document URL
-            <input data-testid="mcp-add-openapi-url" value={openapiUrl} onChange={(e) => { setOpenapiUrl(e.target.value); setPreview(null); }} placeholder="https://api.example.com/openapi.json" spellCheck={false} className={input} style={inputStyle} />
+            <input data-testid="mcp-add-openapi-url" value={openapiUrl} onChange={(e) => { setOpenapiUrl(e.target.value); setPreview(null); }} placeholder="https://api.example.com/openapi.json" spellCheck={false} className={input}  />
           </label>
         )}
       </div>
       {kind === 'rest' && (
-        <p data-testid="mcp-add-rest-note" className="text-[10px]" style={{ color: 'var(--ink-dim)' }}>
+        <p data-testid="mcp-add-rest-note" className="" style={{ color: 'var(--ink-dim)' }}>
           Each operation becomes a tool: GET reads, POST writes, PUT, PATCH and DELETE are destructive. A call sends only the arguments its operation declares, and only to the base URL; a request or redirect that would leave it is refused and recorded.
         </p>
       )}
       <div className="flex flex-wrap items-end gap-2">
-        <label className="flex flex-col gap-1 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
+        <label className="flex flex-col gap-1" style={{ color: 'var(--ink-muted)' }}>
           Secret reference (optional)
-          <input data-testid="mcp-add-auth-ref" value={authRef} onChange={(e) => { setAuthRef(e.target.value); setPreview(null); }} placeholder="env:JIRA_TOKEN" spellCheck={false} className={`${input} w-48`} style={inputStyle} />
+          <input data-testid="mcp-add-auth-ref" value={authRef} onChange={(e) => { setAuthRef(e.target.value); setPreview(null); }} placeholder="env:JIRA_TOKEN" spellCheck={false} className={`${input} w-48`}  />
         </label>
-        <label className="flex flex-col gap-1 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
+        <label className="flex flex-col gap-1" style={{ color: 'var(--ink-muted)' }}>
           Secret value (optional)
           <input
             data-testid="mcp-add-auth-value"
@@ -583,30 +517,30 @@ function AddServerPanel({ onSaved, onClose, mode, navigate, saved }: {
             placeholder="paste it once"
             spellCheck={false}
             className={`${input} w-44`}
-            style={inputStyle}
+
           />
         </label>
-        <label className="flex flex-col gap-1 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
+        <label className="flex flex-col gap-1" style={{ color: 'var(--ink-muted)' }}>
           {kind === 'mcp-stdio' ? 'Injected as env var' : 'Injected as header'}
-          <input data-testid="mcp-add-auth-into" value={authEnv} onChange={(e) => { setAuthEnv(e.target.value); setPreview(null); }} placeholder={kind === 'mcp-stdio' ? 'JIRA_TOKEN' : 'Authorization'} spellCheck={false} className={`${input} w-40`} style={inputStyle} />
+          <input data-testid="mcp-add-auth-into" value={authEnv} onChange={(e) => { setAuthEnv(e.target.value); setPreview(null); }} placeholder={kind === 'mcp-stdio' ? 'JIRA_TOKEN' : 'Authorization'} spellCheck={false} className={`${input} w-40`}  />
         </label>
         {kind !== 'mcp-stdio' && (
-          <label className="flex flex-col gap-1 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
+          <label className="flex flex-col gap-1" style={{ color: 'var(--ink-muted)' }}>
             Behind scheme
-            <input data-testid="mcp-add-auth-prefix" value={authPrefix} onChange={(e) => { setAuthPrefix(e.target.value); setPreview(null); }} placeholder="Bearer" spellCheck={false} className={`${input} w-28`} style={inputStyle} />
+            <input data-testid="mcp-add-auth-prefix" value={authPrefix} onChange={(e) => { setAuthPrefix(e.target.value); setPreview(null); }} placeholder="Bearer" spellCheck={false} className={`${input} w-28`}  />
           </label>
         )}
         {kind !== 'mcp-stdio' && authEnv.trim() !== '' && (
           // The header as it will be sent, spacing included — a trailing space is invisible in
           // the box, and `Bearertoken` 401s exactly like no header at all.
-          <p data-testid="mcp-add-auth-shape" className="font-mono text-[10px]" style={{ color: 'var(--ink-dim)' }}>
+          <p data-testid="mcp-add-auth-shape" className="" style={{ color: 'var(--ink-dim)' }}>
             {authEnv.trim()}: {schemePrefix(authPrefix)}&lt;the secret&gt;
           </p>
         )}
-        <p className="max-w-[22rem] text-[10px]" style={{ color: 'var(--ink-dim)' }}>
+        <p className="max-w-[22rem]" style={{ color: 'var(--ink-dim)' }}>
           A pasted value is probed with, then written to the OS keychain when you SAVE — together with the server, so neither can land without the other. The registry keeps the reference only. The broker resolves it on each call, sends it {kind === 'mcp-stdio' ? 'in that env var' : 'in that header behind that scheme'}, and no worker ever sees the value.
         </p>
-        <button type="button" data-testid="mcp-add-preview" disabled={!ready || busy} onClick={() => void doPreview()} className="ml-auto rounded px-3 py-1 text-[11px] font-semibold disabled:opacity-40" style={{ color: 'var(--accent)', border: BORDER }}>
+        <button type="button" data-testid="mcp-add-preview" disabled={!ready || busy} onClick={() => void doPreview()} className="wk-btn wk-btn--secondary" >
           {busy && preview === null ? 'Probing…' : 'Preview'}
         </button>
       </div>
@@ -614,44 +548,45 @@ function AddServerPanel({ onSaved, onClose, mode, navigate, saved }: {
         // The consent line said "Previewing writes this secret over the one X uses now", which was
         // true of the pre-write ordering crew#719 removed. Saving is now the one write, and the
         // effect on a LIVE server is the same either way: its next call uses the new value.
-        <label data-testid="mcp-add-replace-secret" className="flex items-start gap-2 rounded px-2 py-1 text-[10px]" style={{ background: 'var(--status-gate-dim)', color: 'var(--status-gate)' }}>
-          <input type="checkbox" data-testid="mcp-add-replace-secret-ok" checked={replaceOk} onChange={(e) => setReplaceOk(e.target.checked)} />
+        <div data-testid="mcp-add-replace-secret" className="flex flex-wrap items-start gap-2" style={{ color: 'var(--status-gate)' }}>
+          <Switch data-testid="mcp-add-replace-secret-ok" label="Replace the saved secret" checked={replaceOk} onChange={setReplaceOk} />
           <span>
             {name} is already registered. Saving writes this secret over the one {name} uses now — its
             next call, and any run in flight, uses the new value. The old value cannot be recovered.
             Previewing only probes with it; nothing is written until you save.
           </span>
-        </label>
+        </div>
       )}
       {error !== null && (
-        <p data-testid="mcp-add-error" className="rounded px-2 py-1 text-[10px]" style={{ background: 'var(--status-fail-dim)', color: 'var(--status-fail)' }}>{error}</p>
+        <StateBanner data-testid="mcp-add-error" kind={readErrorKind(error)} what="the server preview" error={error} onRetry={() => void doPreview()} />
       )}
       {preview !== null && (
         <div data-testid="mcp-add-preview-result" data-preview-hash={preview.previewHash} className="flex flex-col gap-2">
-          <p className="text-[11px]" style={{ color: 'var(--ink-muted)' }}>
+          <p className="" style={{ color: 'var(--ink-muted)' }}>
             {preview.serverInfo !== null ? `${preview.serverInfo.name} ${preview.serverInfo.version} · ` : ''}
             {preview.tools.length} tool{preview.tools.length === 1 ? '' : 's'}
             {preview.diff !== null && ` · replaces the saved ${name}: ${preview.diff.added.length} added, ${preview.diff.changed.length} changed, ${preview.diff.removed.length} removed`}
           </p>
           {preview.skipped !== undefined && preview.skipped.length > 0 && (
-            <p data-testid="mcp-add-skipped" className="text-[10px]" style={{ color: 'var(--status-warn)' }}>
-              Not wrapped: {preview.skipped.join('; ')}
-            </p>
+            <div data-testid="mcp-add-skipped">
+              <p className="wk-field-note">{preview.skipped.length === 1 ? 'One tool' : `${preview.skipped.length} tools`} can’t be managed here and will be left out.</p>
+              <TechDetails text={preview.skipped} />
+            </div>
           )}
           <div className="flex items-center gap-2">
-            <button type="button" data-testid="mcp-add-save" disabled={busy} onClick={() => void doSave()} className="rounded px-3 py-1 text-[11px] font-semibold disabled:opacity-40" style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}>
+            <button type="button" data-testid="mcp-add-save" disabled={busy} onClick={() => void doSave()} className="wk-btn wk-btn--primary" >
               {busy ? 'Saving…' : `Save ${preview.tools.length} tool${preview.tools.length === 1 ? '' : 's'}`}
             </button>
-            <span className="text-[10px]" style={{ color: 'var(--ink-dim)' }}>
+            <span className="" style={{ color: 'var(--ink-dim)' }}>
               Registers exactly this preview (it expires {ageOf(preview.expiresAt) === 'just now' ? 'soon' : `at ${new Date(preview.expiresAt).toLocaleTimeString()}`}). The first use of the server asks until you approve it.
             </span>
           </div>
           {pol === null ? (
-            <p data-testid="mcp-add-no-matrix" className="text-[10px]" style={{ color: 'var(--status-warn)' }}>This daemon cannot preview decisions; each call is still judged by policy once saved.</p>
+            <p data-testid="mcp-add-no-matrix" className="wk-field-note">Policy previews are unavailable. Your access rules still apply after saving.</p>
           ) : (
             <>
               {pol.withdrawOnSave.length > 0 && (
-                <p data-testid="mcp-add-withdraw" className="text-[10px]" style={{ color: 'var(--status-warn)' }}>
+                <p data-testid="mcp-add-withdraw" className="" style={{ color: 'var(--status-warn)' }}>
                   Saving withdraws these approvals, because a tool&rsquo;s schema changed: {pol.withdrawOnSave.join(', ')}. Their next call asks again.
                 </p>
               )}
@@ -659,8 +594,8 @@ function AddServerPanel({ onSaved, onClose, mode, navigate, saved }: {
                 {pol.tools.map((t) => (
                   <li key={t.subject} data-testid="mcp-add-preview-tool" data-subject={t.subject} data-class={t.class} className="flex flex-col gap-1">
                     <span className="flex items-center gap-2">
-                      <span className="font-mono text-[11px]" style={{ color: 'var(--ink-high)' }}>{t.tool}</span>
-                      <Badge text={t.class} style={t.class === 'read' ? undefined : { color: 'var(--status-warn)' }} />
+                      <span className="" style={{ color: 'var(--ink-high)' }}>{t.tool}</span>
+                      <Badge text={t.class} style={{ color: 'var(--status-warn)' }} />
                     </span>
                     <PolicyMatrix tool={t} roles={pol.roles} seats={pol.seats} mode={mode} navigate={navigate} />
                   </li>
@@ -683,6 +618,7 @@ export function McpToolsPage({ navigate, search }: { navigate: (p: string) => vo
   const deepLinked = readMcpServerDeepLink(search);
   const view: McpView = readMcpView(search);
   const [usageFilter, setUsageFilter] = useState<McpUsageFilter>(DEFAULT_USAGE_FILTER);
+  const [usageRefresh, setUsageRefresh] = useState(0);
   const [openServers, setOpenServers] = useState<Set<string>>(() => new Set(deepLinked !== null ? [deepLinked] : []));
 
   // Only the latest load may land: an older, slower answer never overwrites a newer one.
@@ -702,7 +638,7 @@ export function McpToolsPage({ navigate, search }: { navigate: (p: string) => vo
       setState({ kind: 'loaded', servers, policies, approvals, usage });
     } catch (e) {
       if (seq !== loadSeq.current) return;
-      setState(isMcpUnsupported(e) ? { kind: 'unsupported' } : { kind: 'failed', message: msg(e) });
+      setState(isMcpUnsupported(e) ? { kind: 'unsupported' } : { kind: 'failed', message: msg(e), errorKind: readErrorKind(e) });
     }
   }, []);
 
@@ -728,86 +664,34 @@ export function McpToolsPage({ navigate, search }: { navigate: (p: string) => vo
   const pendingFirst = useMemo(() => new Set((pending ?? []).filter((p) => p.needs.includes('first-use')).map((p) => p.server)).size, [pending]);
 
   return (
-    <div data-testid="mcp-tools-page" className="flex h-full min-h-0 min-w-0 flex-1 overflow-hidden">
-      <div className="flex min-w-0 flex-1 flex-col gap-4 overflow-y-auto p-6">
-        <div className="flex flex-wrap items-start gap-2">
-          <div className="min-w-0 flex-1 basis-[16rem]">
-            <h2 className="text-sm font-semibold" style={{ color: 'var(--ink-high)' }}>MCP tools</h2>
-            <p className="mt-1 text-[11px]" style={{ color: 'var(--ink-muted)' }}>
-              The MCP servers your governed workers may call, through crew&rsquo;s broker on every seat. Each call is judged by
-              your Steering policies and recorded; the first use of a server always asks, then the run&rsquo;s mode decides.
-              Evaluator phases never call write tools, and secrets never leave the broker.
-            </p>
-          </div>
-          <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
-            {view === 'servers' && <div role="radiogroup" aria-label="Show decisions for run mode" data-testid="mcp-mode" className="flex gap-1">
-              {MODES.map((m) => (
-                <button
-                  key={m}
-                  type="button"
-                  role="radio"
-                  aria-checked={mode === m}
-                  data-testid="mcp-mode-option"
-                  data-mode={m}
-                  onClick={() => setMode(m)}
-                  className="rounded px-2 py-1 text-[11px] font-semibold"
-                  style={{ background: mode === m ? 'var(--surface-raised)' : 'transparent', color: mode === m ? 'var(--ink-high)' : 'var(--ink-muted)', border: BORDER }}
-                >
-                  {MODE_LABELS[m]}
-                </button>
-              ))}
-            </div>}
-            <a
-              data-testid="mcp-steering-link"
-              href={`${policiesPath()}?mcp=1`}
-              onClick={(e) => { e.preventDefault(); navigate(`${policiesPath()}?mcp=1`); }}
-              className="rounded px-2 py-1 text-[11px] font-semibold"
-              style={{ color: 'var(--accent)', border: BORDER }}
-            >
-              MCP policies
-            </a>
-            {view === 'servers' && loaded !== null && !adding && (
-              <button type="button" data-testid="mcp-add-open" onClick={() => setAdding(true)} className="rounded px-2 py-1 text-[11px] font-semibold" style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}>
-                Add existing server
-              </button>
-            )}
-          </div>
-        </div>
+    <div className="wk-pg-mcp-scroll">
+      <PageFrame data-testid="mcp-tools-page" title="MCP tools" intro="Choose the tools your helpers can use and when they need your approval."
+        actions={<>
+          <a className="wk-link" href={`${policiesPath()}?mcp=1`} onClick={(e) => { e.preventDefault(); navigate(`${policiesPath()}?mcp=1`); }} data-testid="mcp-steering-link">MCP policies</a>
+          {view === 'servers' && loaded !== null && !adding && <button type="button" data-testid="mcp-add-open" onClick={() => setAdding(true)} className="wk-btn wk-btn--primary">Add existing server</button>}
+          <button type="button" className="wk-btn wk-btn--secondary" onClick={() => { void load(); setUsageRefresh((n) => n + 1); }}>Refresh</button>
+        </>}>
+        {view === 'servers' && <div className="wk-pg-mcp-mode">
+          <p className="wk-field-label">When helpers use tools</p>
+          <div data-testid="mcp-mode-option"><Segmented data-testid="mcp-mode" label="When helpers use tools" value={mode} options={MODES.map(m => ({value:m,label:MODE_LABELS[m]}))} onChange={setMode} /></div>
+        </div>}
 
-        <div role="tablist" aria-label="MCP tools view" data-testid="mcp-view" className="flex gap-1" style={{ borderBottom: BORDER }}>
-          {(['servers', 'usage'] as const).map((v) => (
-            <button
-              key={v}
-              type="button"
-              role="tab"
-              aria-selected={view === v}
-              data-testid="mcp-view-tab"
-              data-view={v}
-              onClick={() => navigate(v === 'usage' ? mcpUsagePath() : mcpPath())}
-              className="-mb-px px-3 py-1.5 text-[11px] font-semibold"
-              style={{ color: view === v ? 'var(--ink-high)' : 'var(--ink-muted)', borderBottom: view === v ? '2px solid var(--accent)' : '2px solid transparent' }}
-            >
-              {v === 'servers' ? 'Servers' : 'Usage'}
-            </button>
-          ))}
-        </div>
+        <div data-testid="mcp-view-tab"><Tabs data-testid="mcp-view" aria-label="MCP tools view" idBase="mcp-tools" active={view} tabs={[{id:'servers',label:'Servers'},{id:'usage',label:'Usage'}]} onChange={v => navigate(v === 'usage' ? mcpUsagePath() : mcpPath())} /></div>
 
-        {view === 'usage' && <McpUsage navigate={navigate} filter={usageFilter} onFilter={setUsageFilter} />}
+        {view === 'usage' && <McpUsage navigate={navigate} filter={usageFilter} onFilter={setUsageFilter} refreshKey={usageRefresh} />}
 
-        {view === 'servers' && state.kind === 'loading' && <p data-testid="mcp-loading" className="text-xs" style={{ color: 'var(--ink-dim)' }}>Loading MCP servers…</p>}
+        {view === 'servers' && state.kind === 'loading' && <Skeleton data-testid="mcp-loading" />}
         {view === 'servers' && state.kind === 'unsupported' && (
-          <p data-testid="mcp-unsupported" className="rounded px-3 py-2 text-[11px]" style={{ background: 'var(--surface-rail)', border: BORDER, color: 'var(--ink-muted)' }}>
-            This wicked-crew daemon has no MCP tools registry yet. Upgrade wicked-crew to register servers here.
-          </p>
+          <EmptyState data-testid="mcp-unsupported" title="MCP tools are unavailable in this version" body="Update Studio’s service to register servers here." />
         )}
         {view === 'servers' && state.kind === 'failed' && (
-          <p data-testid="mcp-error" className="rounded px-3 py-2 text-[11px]" style={{ background: 'var(--status-fail-dim)', color: 'var(--status-fail)' }}>{state.message}</p>
+          <StateBanner data-testid="mcp-error" kind={state.errorKind} what="MCP tools" error={state.message} onRetry={() => void load()} />
         )}
 
-        {view === 'servers' && note !== null && (
-          <p data-testid="mcp-note" data-ok={note.ok} className="rounded px-3 py-2 text-[11px]" style={note.ok ? { background: 'var(--surface-rail)', border: BORDER, color: 'var(--ink-muted)' } : { background: 'var(--status-fail-dim)', color: 'var(--status-fail)' }}>
-            {note.text}
-          </p>
+        {view === 'servers' && note !== null && (note.ok || state.kind !== 'failed') && (
+          <div data-testid="mcp-note" data-ok={note.ok}>
+            {note.ok ? <p>{note.text}</p> : <StateBanner kind={readErrorKind(note.text)} what="the change" error={note.text} onRetry={() => { setNote(null); void load(); }} />}
+          </div>
         )}
 
         {view === 'servers' && loaded !== null && adding && (
@@ -828,22 +712,20 @@ export function McpToolsPage({ navigate, search }: { navigate: (p: string) => vo
         {view === 'servers' && loaded !== null && (
           <>
             {(pendingFirst > 0 || pendingWrites > 0) && (
-              <p data-testid="mcp-pending" data-first-use={pendingFirst} data-write={pendingWrites} className="rounded px-3 py-2 text-[11px]" style={{ background: 'var(--status-gate-dim)', color: 'var(--status-gate)' }}>
+              <p data-testid="mcp-pending" data-first-use={pendingFirst} data-write={pendingWrites} className="rounded px-3 py-2" style={{ color: 'var(--status-gate)' }}>
                 {pendingFirst > 0 && `${pendingFirst} server${pendingFirst === 1 ? '' : 's'} not yet approved for first use`}
                 {pendingFirst > 0 && pendingWrites > 0 && ' · '}
                 {pendingWrites > 0 && `${pendingWrites} write tool${pendingWrites === 1 ? '' : 's'} ask in Gate by risk`}
-                . A call that asks does not run; approve it here.
+                . A call that asks does not run until you approve it from that server’s or tool’s More actions menu.
               </p>
             )}
             {loaded.policies === null && loaded.servers.servers.length > 0 && (
-              <p data-testid="mcp-no-policies" className="text-[10px]" style={{ color: 'var(--status-warn)' }}>
-                This daemon cannot preview policy decisions or approvals; upgrade wicked-crew for the Policies matrix.
+              <p data-testid="mcp-no-policies" className="" style={{ color: 'var(--status-warn)' }}>
+                Policy previews are unavailable in this version of Studio’s service.
               </p>
             )}
             {loaded.servers.servers.length === 0 ? (
-              <p data-testid="mcp-empty" className="rounded px-3 py-2 text-[11px]" style={{ background: 'var(--surface-rail)', border: BORDER, color: 'var(--ink-muted)' }}>
-                No MCP servers registered. Add an existing server to let governed workers call its tools.
-              </p>
+              <EmptyState data-testid="mcp-empty" title="No MCP servers registered" body="Add an existing server so your helpers can use its tools." />
             ) : (
               <ul data-testid="mcp-servers" className="flex flex-col gap-2">
                 {loaded.servers.servers.map((s) => (
@@ -869,20 +751,20 @@ export function McpToolsPage({ navigate, search }: { navigate: (p: string) => vo
               </ul>
             )}
 
-            {loaded.servers.discovered.length > 0 && (
-              <section data-testid="mcp-discovered" className="flex flex-col gap-1">
-                <h3 className="text-[11px] font-semibold" style={{ color: 'var(--ink-muted)' }}>Discovered, not managed</h3>
-                <p className="text-[10px]" style={{ color: 'var(--ink-dim)' }}>
-                  Servers configured in a CLI&rsquo;s own home, by name only. A server in a worker home is flagged: governed workers load no ambient MCP, and a call to it is denied.
+            {loaded.servers.discovered.some(d => !/agy|antigravity/i.test(d.cli)) && (
+              <section data-testid="mcp-discovered" className="wk-card flex flex-col gap-1">
+                <SectionTitle>Discovered tools</SectionTitle>
+                <p className="" style={{ color: 'var(--ink-dim)' }}>
+                  Your helpers already have these servers configured. To manage their access here, add each one with “Add existing server”.
                 </p>
                 <ul className="flex flex-wrap gap-1.5">
-                  {loaded.servers.discovered.map((d) => (
+                  {loaded.servers.discovered.filter(d => !/agy|antigravity/i.test(d.cli)).map((d) => (
                     <li key={`${d.cli}-${d.origin}-${d.name}`}>
                       <Badge
                         testid="mcp-discovered-server"
-                        text={`${d.name} · ${d.cli}${d.origin === 'worker' ? ' · worker home' : ''}${d.managed ? ' · managed' : ''}`}
-                        style={d.origin === 'worker' ? { color: 'var(--status-fail)', background: 'var(--status-fail-dim)' } : undefined}
-                        title={d.source}
+                        text={`${d.name} · ${seatLabel({key:d.cli})}${d.origin === 'worker' ? ' · helper settings' : ''}${d.managed ? ' · managed' : ''}`}
+                        style={{ color: 'var(--status-fail)' }}
+                        title="Found in helper settings"
                       />
                     </li>
                   ))}
@@ -891,7 +773,7 @@ export function McpToolsPage({ navigate, search }: { navigate: (p: string) => vo
             )}
           </>
         )}
-      </div>
+      </PageFrame>
     </div>
   );
 }

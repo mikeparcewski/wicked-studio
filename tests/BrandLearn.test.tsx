@@ -129,7 +129,7 @@ describe('BrandLearn — the restored /theme extraction flow', () => {
   it('mentions the logo honesty in its copy — the learned shape carries none', () => {
     render(<BrandLearn />);
     expect(screen.getByTestId('brand-learn').textContent)
-      .toMatch(/no logo, so the logo stays your manual choice/);
+      .toMatch(/choose a logo separately above/);
   });
 
   it('Learn reuses the existing scratch doc and fires theme.requested at it', async () => {
@@ -242,7 +242,7 @@ describe('BrandLearn — the restored /theme extraction flow', () => {
     render(<BrandLearn />);
     fireEvent.change(screen.getByTestId('learn-input'), { target: { value: 'https://example.org/' } });
     await act(async () => { fireEvent.click(screen.getByTestId('learn-submit')); await vi.advanceTimersByTimeAsync(0); });
-    expect(screen.getByTestId('learn-status').textContent).toMatch(/Preparing the scratch document/);
+    expect(screen.getByTestId('learn-status').textContent).toMatch(/Preparing a document/);
     const signal = listDocs.mock.calls[0]?.[1] as { signal?: AbortSignal } | undefined;
     expect(signal?.signal).toBeInstanceOf(AbortSignal);
     await act(async () => { fireEvent.click(screen.getByTestId('learn-cancel')); });
@@ -284,7 +284,7 @@ describe('BrandLearn — the restored /theme extraction flow', () => {
     });
     const polls = getLearnedTheme.mock.calls.length;
     await act(async () => { await vi.advanceTimersByTimeAsync(1000); }); // next tick reads it
-    expect(screen.getByTestId('learn-status').textContent).toBe(refusal);
+    expect(screen.getByTestId('learn-status')).toHaveTextContent(refusal);
     expect(screen.queryByTestId('learn-apply')).toBeNull();
     expect(root().style.getPropertyValue('--_accent-h')).toBe(''); // no preview
     const after = getLearnedTheme.mock.calls.length;
@@ -318,7 +318,7 @@ describe('BrandLearn — the restored /theme extraction flow', () => {
     requestThemeLearn.mockRejectedValue(new Error('API 403: event type not emittable'));
     render(<BrandLearn />);
     await learnFrom();
-    expect(screen.getByTestId('learn-status').textContent).toBe('API 403: event type not emittable');
+    expect(screen.getByTestId('learn-status')).toHaveTextContent('API 403: event type not emittable');
     expect(getLearnedTheme).not.toHaveBeenCalled();
   });
 });
