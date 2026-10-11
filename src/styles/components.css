@@ -1145,8 +1145,8 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
   background: var(--surface-card); border: 1px solid var(--surface-raised); border-radius: 10px;
   box-shadow: var(--shadow-raised); padding: 4px; display: flex; flex-direction: column;
 }
-.wk-composer-menu-head { margin: 0; padding: 6px 8px; font-size: var(--text-2xs); color: var(--ink-dim); }
-.wk-composer-menu-group { margin: 0; padding: 4px 8px 2px; font-size: var(--text-2xs); color: var(--ink-dim); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
+.wk-composer-menu-head { margin: 0; padding: 6px 8px; font-size: var(--text-xs); color: var(--ink-muted); }
+.wk-composer-menu-group { margin: 0; padding: 6px 8px 2px; font-size: var(--text-xs); color: var(--ink-muted); font-weight: var(--weight-semi); }
 .wk-composer-menu-empty { margin: 0; padding: 8px; font-size: var(--text-xs); color: var(--ink-dim); }
 .wk-composer-menu-item {
   display: flex; align-items: center; gap: 8px; text-align: left; border: 0; background: transparent;

@@ -4,6 +4,9 @@ import { api, ApiError } from '../api/client.js';
 import type { BaseSkillPosture, BaseSkillRefusedResponse, DeliverTargetResponse, EntityMode, LaunchBodyWithDeliver, Project, RepoEntry, RosterSeat, WorkflowDef } from '../api/types.js';
 import { COMPOSER_DEFAULT_GATE_POSTURE } from './composerDefaults.js';
 import { isShortcutsPaletteOpen } from '../hooks/useGlobalShortcuts.js';
+import { useDisplayText } from '../hooks/useHomePath.js';
+import { seatLabel, userSeats } from '../board/seatNames.js';
+import { TechDetails } from './ui/TechDetails.js';
 import { useCampaignsStore } from '../store/campaigns.js';
 import { useComposerPrefsStore } from '../store/composerPrefs.js';
 import { useGateStore } from '../store/gates.js';
@@ -84,17 +87,20 @@ const SEVERAL_REPOS = '__several__';
 function ActivePill({
   label,
   onClear,
+  title,
   attrs,
 }: {
   label: string;
   onClear: () => void;
+  title?: string;
   /** Extra data-* attributes (the §7.8 repo chip's auto-attached marker). */
   attrs?: Record<string, string>;
 }): React.ReactElement {
   return (
     <span
       {...attrs}
-      className="flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-mono"
+      title={title}
+      className="flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px]"
       style={{
         background: 'var(--surface-raised)',
         color: 'var(--ink-muted)',
@@ -126,6 +132,7 @@ export function teamReceiptLine(text: string): string {
 }
 
 export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOverride, mode, injectTarget, onClearInjectTarget, navigate, lockedProjectId = null }: Props): React.ReactElement {
+  const shownText = useDisplayText();
   const clearGate = useGateStore((s) => s.clearGate);
   // D11: at a PLAN gate the bottom composer is a plain team message (inject), never a gate answer —
   // the daemon refuses amend text there; the gate card above answers the plan.
@@ -537,20 +544,25 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
         // Deposit for Chat's default chips (§6.1: cached, never fetched on mount).
         setCachedRoster(seats);
         setRoster(seats);
+        // UI contract §5: a seat the roster marks as not addressable (the judge seat, a non-CLI
+        // entry) is never in the selection — the picker does not show it, so it could not be
+        // turned off (codex r2 on S3). A key the roster does not list is kept (a retry's own seat).
+        const notAddressable = new Set(seats.filter((s) => userSeats([s]).length === 0).map((s) => s.key));
+        const pickable = (keys: readonly string[]): Set<string> => new Set(keys.filter((k) => !notAddressable.has(k)));
         // A retry prefill's roster wins over the stored/default selection —
         // §4.3: the composer opens matching the ORIGINAL run, editable after.
         if (prefill !== null) {
-          setSelectedClis(new Set(prefill.clis));
+          setSelectedClis(pickable(prefill.clis));
           return;
         }
         try {
           const stored = localStorage.getItem('wicked_default_clis');
           if (stored) {
-            setSelectedClis(new Set(JSON.parse(stored) as string[]));
+            setSelectedClis(pickable(JSON.parse(stored) as string[]));
             return;
           }
         } catch { /* ignore */ }
-        setSelectedClis(new Set(seats.filter((s) => s.enabled_for_council).map((s) => s.key)));
+        setSelectedClis(pickable(userSeats(seats).filter((s) => s.enabled_for_council).map((s) => s.key)));
       })
       .catch(() => {
         /* roster load failure is non-fatal */
@@ -716,7 +728,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
 
   function resetCliSelection(): void {
     setSelectedClis(
-      new Set(roster.filter((s) => s.enabled_for_council).map((s) => s.key)),
+      new Set(userSeats(roster).filter((s) => s.enabled_for_council).map((s) => s.key)),
     );
   }
 
@@ -1236,7 +1248,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
           // sentence ("Pushes the run branch to <owner/repo> on GitHub and opens a pull request
           // there…", "…a local path, so no pull request can be opened against it…"). A daemon
           // that cannot say gets the condition, never the promise.
-          const sentence = typeof deliverTargetView?.sentence === 'string' ? deliverTargetView.sentence.trim() : '';
+          const sentence = typeof deliverTargetView?.sentence === 'string' ? shownText(deliverTargetView.sentence.trim()) : '';
           const what =
             sentence !== ''
               ? `${sentence.charAt(0).toLowerCase()}${sentence.slice(1).replace(/\.$/, '')}`
@@ -1278,20 +1290,21 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
 
   // Determine whether CLIs differ from the defaults that loaded from the roster
   const defaultCliSet = new Set(
-    roster.filter((s) => s.enabled_for_council).map((s) => s.key),
+    userSeats(roster).filter((s) => s.enabled_for_council).map((s) => s.key),
   );
   const clisDirty =
     selectedClis.size !== defaultCliSet.size ||
     [...selectedClis].some((k) => !defaultCliSet.has(k));
 
   // Collect active non-default option pills
-  const activePills: Array<{ label: string; onClear: () => void; attrs?: Record<string, string> }> = [];
+  const activePills: Array<{ label: string; onClear: () => void; title?: string; attrs?: Record<string, string> }> = [];
 
   // The lineage claim leads the pills (§4.3): visible, and clearable — a retry
   // is a composer prefill the operator may edit down to a fresh launch.
   if (retryOf) {
     activePills.push({
-      label: `Retry of ${retryOf.slice(0, 8)}`,
+      label: 'Retry of an earlier run',
+      title: retryOf,
       onClear: () => setRetryOf(null),
     });
   }
@@ -1311,12 +1324,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
       },
     });
   }
-  if (confirmMode !== 'none') {
-    activePills.push({
-      label: confirmMode === 'all' ? 'Gate: every unit' : `Gate: before #${beforeOrd}`,
-      onClear: () => setConfirmMode('none'),
-    });
-  }
+  // The gate posture has its own always-visible "Ask me" select above — no second pill saying it again.
   if (entityMode === 'isolated') {
     activePills.push({
       label: 'Mode: isolated',
@@ -1350,8 +1358,9 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
     });
   }
   if (clisDirty && roster.length > 0) {
+    const names = roster.filter((seat) => selectedClis.has(seat.key)).map(seatLabel).join(', ');
     activePills.push({
-      label: `CLIs: ${[...selectedClis].join(', ')}`,
+      label: names !== '' ? `Helpers: ${names}` : 'No helpers picked',
       onClear: resetCliSelection,
     });
   }
@@ -1381,8 +1390,8 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
           Unfiled by default; pre-bound-and-locked from project context (§4.3). */}
       <div className="flex items-center gap-2 px-1 flex-wrap" data-testid="launch-project-row">
         <span
-          className="text-[11px] font-mono uppercase tracking-widest"
-          style={{ color: 'var(--ink-dim)' }}
+          className="wk-field-label"
+          style={{ margin: 0 }}
         >
           Project
         </span>
@@ -1399,9 +1408,10 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
 
         {/* ── D2: the repo, beside the project — attaching one is what makes a PR possible, so
             it is not buried in the launch options (which keep their tick list too). ── */}
+        <span className="wk-composer-form-pair">
         <span
-          className="text-[11px] font-mono uppercase tracking-widest"
-          style={{ color: 'var(--ink-dim)' }}
+          className="wk-field-label"
+          style={{ margin: 0 }}
         >
           Repo
         </span>
@@ -1409,13 +1419,8 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
           data-testid="launch-repo-picker"
           aria-label="Repository"
           title="The repository this run works in and opens its PR on"
-          className="rounded-lg px-2 py-1 text-[11px] font-mono"
-          style={{
-            background: 'var(--surface-card)',
-            border: '1px solid var(--surface-raised)',
-            color: 'var(--ink-high)',
-            maxWidth: '150px',
-          }}
+          className="wk-field wk-composer-form-select"
+          style={{ maxWidth: '150px' }}
           value={repoPickerValue}
           onChange={(e) => pickRepo(e.target.value)}
         >
@@ -1427,6 +1432,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
             <option key={r.id} value={r.id}>{repoSlugOf(r)}</option>
           ))}
         </select>
+        </span>
 
         {/* ── Ad-hoc grouping (wicked-studio#27, api-types 0.19.0): file this
             launch under an existing campaign, an existing group label, or a
@@ -1434,9 +1440,10 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
             The lists load lazily on first interaction (the ProjectSwitcher
             idiom); a daemon that predates campaigns simply lists none, and the
             typed-label path still works where the daemon accepts the field. ── */}
+        <span className="wk-composer-form-pair ml-auto">
         <span
-          className="text-[11px] font-mono uppercase tracking-widest ml-auto"
-          style={{ color: 'var(--ink-dim)' }}
+          className="wk-field-label"
+          style={{ margin: 0 }}
         >
           Group
         </span>
@@ -1444,13 +1451,8 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
           data-testid="group-attach"
           aria-label="File this run under a test or group"
           title="Attach this launch to a test or an ad-hoc group — provenance only, the run executes unchanged"
-          className="rounded-lg px-2 py-1 text-[11px] font-mono"
-          style={{
-            background: 'var(--surface-card)',
-            border: '1px solid var(--surface-raised)',
-            color: 'var(--ink-high)',
-            maxWidth: '160px',
-          }}
+          className="wk-field wk-composer-form-select"
+          style={{ maxWidth: '160px' }}
           value={groupChoice}
           onMouseDown={() => void refreshCampaigns()}
           onChange={(e) => setGroupChoice(e.target.value)}
@@ -1482,15 +1484,11 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
             onChange={(e) => setNewGroupLabel(e.target.value)}
             placeholder="group label…"
             maxLength={200}
-            className="rounded-lg px-2 py-1 text-[11px] font-mono"
-            style={{
-              background: 'var(--surface-card)',
-              border: '1px solid var(--surface-raised)',
-              color: 'var(--ink-high)',
-              width: '140px',
-            }}
+            className="wk-field wk-composer-form-select"
+            style={{ width: '140px' }}
           />
         )}
+        </span>
 
         {/* ── The phase picker's toggle (DES-TEAMING-002 T9). ── */}
         <button
@@ -1498,12 +1496,8 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
           data-testid="phase-picker-toggle"
           aria-expanded={pickerOpen}
           onClick={() => setPickerOpen((v) => !v)}
-          className="rounded-lg px-2 py-1 text-[11px] font-mono"
-          style={{
-            background: pickerOpen ? 'var(--accent-subtle)' : 'var(--surface-card)',
-            border: '1px solid var(--surface-raised)',
-            color: 'var(--ink-high)',
-          }}
+          className="wk-btn wk-btn--secondary wk-btn--sm"
+          style={pickerOpen ? { background: 'var(--accent-subtle)' } : undefined}
         >
           {selection.composing ? `Phases (${selection.picked.length})` : 'Phases'}
         </button>
@@ -1511,22 +1505,18 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
         {/* ── Gate posture at top level (§7.8, slice AC) — the + drawer keeps
             the full matrix; this is the always-visible control whose shipped
             default is COMPOSER_DEFAULT_GATE_POSTURE (never "none"). ── */}
+        <span className="wk-composer-form-pair">
         <span
-          className="text-[11px] font-mono uppercase tracking-widest"
-          style={{ color: 'var(--ink-dim)' }}
+          className="wk-field-label"
+          style={{ margin: 0 }}
         >
-          Gate
+          Ask me
         </span>
         <select
           data-testid="gate-posture"
           aria-label="Gate posture"
           title="When a human confirms this run's units — default: before the first gate-bearing unit"
-          className="rounded-lg px-2 py-1 text-[11px] font-mono"
-          style={{
-            background: 'var(--surface-card)',
-            border: '1px solid var(--surface-raised)',
-            color: 'var(--ink-high)',
-          }}
+          className="wk-field wk-composer-form-select"
           value={confirmMode}
           onChange={(e) => setConfirmMode(e.target.value as ConfirmMode)}
         >
@@ -1536,6 +1526,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
           <option value="all">{gatePostureWord('all', beforeOrd)}</option>
           <option value="none">{gatePostureWord('none', beforeOrd, deliverNotice?.state === 'on' && mode !== 'ask' && daemonDeliverGate === true)}</option>
         </select>
+        </span>
       </div>
 
       {/* D4: a launch that delivers (a repo attached, "Open a PR" on) adds its own deliver step,
@@ -1556,7 +1547,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
         <p
           data-testid="launch-no-seat"
           role="alert"
-          className="text-xs rounded-xl px-4 py-2 font-mono"
+          className="text-xs rounded-xl px-4 py-2"
           style={{ background: 'var(--status-fail-dim)', border: '1px solid var(--status-fail)', color: 'var(--status-fail)', margin: 0 }}
         >
           Send is off: no selected seat can take this run — {noSeatReason}. Sign a seat in from Settings or select another
@@ -1567,7 +1558,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
         <p
           data-testid="launch-plan-note"
           role="status"
-          className="text-xs rounded-xl px-4 py-2 font-mono"
+          className="text-xs rounded-xl px-4 py-2"
           style={{ background: 'var(--surface-rail)', border: '1px solid var(--status-gate)', color: 'var(--ink-high)', margin: 0 }}
         >
           {planNote}
@@ -1576,7 +1567,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
       {noSeatReason === null && ineligibleSelected.length > 0 && (
         <div
           data-testid="ineligible-warning"
-          className="flex items-center gap-2 text-xs rounded-xl px-4 py-2 font-mono"
+          className="flex items-center gap-2 text-xs rounded-xl px-4 py-2"
           style={{
             background: 'var(--status-gate-dim)',
             border: '1px solid var(--status-gate-dim)',
@@ -1584,7 +1575,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
           }}
         >
           <span className="flex-1">
-            ⚠ {ineligibleSelected.map((x) => `${x.seat.key}: ${x.standing.detail}`).join(' · ')} — a council benches
+            ⚠ {ineligibleSelected.map((x) => `${seatLabel(x.seat)}: ${x.standing.detail}`).join(' · ')} — a council benches
             {ineligibleSelected.length === 1 ? ' it' : ' them'}; the other seats carry the run.
           </span>
         </div>
@@ -1595,7 +1586,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
       {unsignedSelected.length > 0 && (
         <div
           data-testid="signin-warning"
-          className="flex items-center gap-2 text-xs rounded-xl px-4 py-2 font-mono"
+          className="flex items-center gap-2 text-xs rounded-xl px-4 py-2"
           // A warning, not a failure: the run still launches (and falls back), so it speaks warn-orange.
           style={{
             background: 'var(--status-warn-dim)',
@@ -1604,7 +1595,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
           }}
         >
           <span className="flex-1">
-            ⚠ {unsignedSelected.map((s) => s.key).join(', ')}{' '}
+            ⚠ {unsignedSelected.map(seatLabel).join(', ')}{' '}
             {unsignedSelected.length === 1 ? "isn't" : "aren't"} signed in — runs routed there
             will fall back or fail. Sign in in Settings.
           </span>
@@ -1640,7 +1631,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
       {preflightBlocked && noRepoAttached && (
         <div
           data-testid="preflight-block"
-          className="flex items-center gap-2 text-xs rounded-xl px-4 py-2 font-mono"
+          className="flex items-center gap-2 text-xs rounded-xl px-4 py-2"
           style={{
             background: 'var(--status-gate-dim)',
             border: '1px solid var(--status-gate-dim)',
@@ -1685,7 +1676,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
       {deliverToggleVisible && (
         <label
           data-testid="deliver-toggle-row"
-          className="flex items-center gap-2 text-xs px-1 font-mono cursor-pointer select-none"
+          className="flex items-center gap-2 text-xs px-1 cursor-pointer select-none"
           style={{ color: 'var(--ink-muted)' }}
         >
           <input
@@ -1712,7 +1703,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
           data-deliver-repo={targetRepoRef ?? ''}
           data-deliver-origin={deliverNotice.state === 'on' ? (deliverTargetView?.origin ?? 'unknown') : ''}
           data-deliver-gate={deliverNotice.state === 'on' ? deliverGateWord : ''}
-          className="text-xs px-1 font-mono"
+          className="text-xs px-1"
           style={{
             color:
               deliverNotice.state === 'on' || deliverNotice.state === 'off'
@@ -1731,12 +1722,12 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
       {launchKind === 'build' && attachedRefs.length > 1 && (
         <div
           data-testid="launch-target-row"
-          className="flex items-center gap-2 flex-wrap text-xs px-1 font-mono"
+          className="flex items-center gap-2 flex-wrap text-xs px-1"
           style={{ color: 'var(--ink-muted)' }}
         >
           <span
-            className="text-[11px] font-mono uppercase tracking-widest"
-            style={{ color: 'var(--ink-dim)' }}
+            className="wk-field-label"
+          style={{ margin: 0 }}
           >
             Target repo
           </span>
@@ -1747,12 +1738,8 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
             aria-invalid={targetRequired}
             required
             title="The one repository this run works in — its worktree, its branch and its PR all land here"
-            className="rounded-lg px-2 py-1 text-[11px] font-mono"
-            style={{
-              background: 'var(--surface-card)',
-              border: `1px solid ${targetRequired ? 'var(--status-gate)' : 'var(--surface-raised)'}`,
-              color: 'var(--ink-high)',
-            }}
+            className="wk-field wk-composer-form-select"
+            style={targetRequired ? { borderColor: 'var(--status-gate)' } : undefined}
             value={targetRepoRef ?? ''}
             onChange={(e) => setTargetChoice(e.target.value === '' ? null : e.target.value)}
           >
@@ -1786,7 +1773,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
           data-plan={selection.plan === null ? '' : selection.plan.steps.map((st) => st.id ?? st.catalog).join(' ')}
           data-target={targetRepoRef ?? ''}
           data-gate={describeGate(mode, confirmMode, beforeOrd)}
-          className="text-xs px-1 font-mono"
+          className="text-xs px-1"
           style={{ color: 'var(--ink-muted)' }}
         >
           {/* F-089 / F-E2E-035: ONE predicate — the same `canSubmit` that disables Send — so the
@@ -1827,15 +1814,23 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
 
       {/* studio#275: the discipline (base) skill every agent unit of this launch is told to follow —
           on every launch kind, read off `GET /health.baseSkill`; nothing on a daemon without it. */}
+      {/* UI contract §1.5: the skill's name and generation are internals — they sit in Technical
+          details; a MISSING skill is said in plain words, because it changes what a launch does. */}
       {describeBaseSkill(baseSkill) !== null && (
-        <p
-          data-testid="launch-base-skill"
-          data-present={String(baseSkill?.present === true)}
-          className="text-xs px-1 font-mono"
-          style={{ color: baseSkill?.present === true ? 'var(--ink-muted)' : 'var(--status-gate)' }}
-        >
-          {describeBaseSkill(baseSkill)}
-        </p>
+        <div data-testid="launch-base-skill-row" className="text-xs px-1" style={{ color: 'var(--ink-muted)' }}>
+          {baseSkill?.present !== true && (
+            <p data-testid="launch-base-skill-warning" style={{ color: 'var(--status-gate)', margin: '0 0 4px' }}>
+              {/refused/.test(describeBaseSkill(baseSkill) ?? '')
+                ? 'Launches will be refused: the skill every helper is told to follow is not published.'
+                : 'The skill every helper is told to follow is not published; runs go ahead without it.'}
+            </p>
+          )}
+          <TechDetails
+            summary="Technical details"
+            text={describeBaseSkill(baseSkill) ?? ''}
+            data-testid="launch-base-skill"
+          />
+        </div>
       )}
 
       {/* ── Guidance steer field (DES-UX-002 §3.3, slice BC) — rendered only
@@ -1896,7 +1891,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
               }}
             >
               <ContextPopover
-                roster={roster}
+                roster={userSeats(roster)}
                 selectedClis={selectedClis}
                 onToggleCli={toggleCli}
                 confirmMode={confirmMode}
@@ -1919,7 +1914,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
             aria-expanded={popoverOpen}
             aria-haspopup="dialog"
             onClick={() => setPopoverOpen((v) => !v)}
-            className="w-7 h-7 rounded-full flex items-center justify-center text-base font-light transition-all"
+            className="wk-composer-form-plus w-7 h-7 rounded-full flex items-center justify-center text-base font-light transition-all"
             style={
               popoverOpen
                 ? {
@@ -2000,7 +1995,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
       {activePills.length > 0 && (
         <div className="flex flex-wrap gap-1.5 px-1">
           {activePills.map((pill, i) => (
-            <ActivePill key={i} label={pill.label} onClear={pill.onClear} {...(pill.attrs ? { attrs: pill.attrs } : {})} />
+            <ActivePill key={i} label={pill.label} onClear={pill.onClear} {...(pill.title ? { title: pill.title } : {})} {...(pill.attrs ? { attrs: pill.attrs } : {})} />
           ))}
         </div>
       )}
@@ -2042,7 +2037,7 @@ export function ChatInput({ runId, runStatus, onLaunched, embedded, workflowOver
       {/* Error message */}
       {error && (
         <p
-          className="text-xs px-1 font-mono"
+          className="text-xs px-1"
           style={{ color: 'var(--status-fail)' }}
           data-testid="launch-error"
         >

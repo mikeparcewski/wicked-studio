@@ -12,8 +12,8 @@
   "studioVersion": "0.7.5",
   "counts": {
     "files": 197,
-    "occurrences": 2211,
-    "static": 1919,
+    "occurrences": 2216,
+    "static": 1922,
     "dynamic": 61,
     "computed": 19
   },
@@ -1152,6 +1152,12 @@
     },
     {
       "testId": "composer-launch-error",
+      "files": [
+        "src/components/session/Composer.tsx"
+      ]
+    },
+    {
+      "testId": "composer-launch-error-detail",
       "files": [
         "src/components/session/Composer.tsx"
       ]
@@ -3321,6 +3327,18 @@
     },
     {
       "testId": "launch-base-skill-remedy",
+      "files": [
+        "src/components/ChatInput.tsx"
+      ]
+    },
+    {
+      "testId": "launch-base-skill-row",
+      "files": [
+        "src/components/ChatInput.tsx"
+      ]
+    },
+    {
+      "testId": "launch-base-skill-warning",
       "files": [
         "src/components/ChatInput.tsx"
       ]

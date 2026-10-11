@@ -1,4 +1,5 @@
-import { useEffect, useLayoutEffect, useRef } from 'react';
+import { Fragment, useEffect, useLayoutEffect, useRef } from 'react';
+import { usePhone } from '../../hooks/usePhone.js';
 import { WORKFLOWS_EMPTY_LINE, WORKFLOWS_LOADING_LINE, type WorkflowRow } from '../../board/workflowCommand.js';
 import type { SlashItem } from '../../board/planDraft.js';
 
@@ -7,6 +8,7 @@ export interface AtItem {
   kind: 'project' | 'helper';
   id: string;
   label: string;
+  /** A per-row fact (a project's description); empty when the group header says it all. */
   line: string;
 }
 
@@ -23,7 +25,7 @@ export interface AtItem {
  */
 export function SlashMenu({
   menuKey, trigger, startCommands, defsLoading, anyWorkflows, wf, slash = [], ats = [], active, head, ariaLabel,
-  onPickWorkflow, onPickSlash, onPickAt,
+  helpersHead = 'Helpers · the message is about the one you pick', atLoading = false, onPickWorkflow, onPickSlash, onPickAt,
 }: {
   /** The box's key (`desk`, a session id, `launch`): the listbox and option ids carry it. */
   menuKey: string;
@@ -42,12 +44,18 @@ export function SlashMenu({
   head?: string;
   /** The listbox's accessible name; by default the composer's ("Add a step" / "Name a project or a helper"). */
   ariaLabel?: string;
+  /** The `@` menu's helpers group header (what a helper pick does here). */
+  helpersHead?: string;
+  /** The `@` lists (helpers, projects) are still being read: say so, never "Nothing matches." */
+  atLoading?: boolean;
   onPickWorkflow: (it: WorkflowRow) => void;
   onPickSlash?: (it: SlashItem) => void;
   onPickAt?: (it: AtItem) => void;
 }): React.ReactElement {
   const count = trigger === '/' ? wf.length + slash.length : ats.length;
   const headLine = head ?? (trigger === '/' ? (startCommands ? 'Start work, or add a step' : 'Add a step to this session') : 'Name a project or a helper');
+  // A phone has no arrow keys to name: the head says only what to pick (S3 UX gate r3).
+  const phone = usePhone();
   const menuRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     menuRef.current?.querySelector('[aria-selected="true"]')?.scrollIntoView?.({ block: 'nearest' });
@@ -87,10 +95,11 @@ export function SlashMenu({
   }, []);
   return (
     <div ref={menuRef} data-testid="composer-menu" id={`composer-menu-list-${menuKey}`} data-trigger={trigger} role="listbox" aria-label={ariaLabel ?? (trigger === '/' ? 'Add a step' : 'Name a project or a helper')} className="wk-composer-menu">
-      <p className="wk-composer-menu-head">{headLine} · ↑↓ Enter</p>
+      <p className="wk-composer-menu-head">{phone ? (trigger === '@' && head === undefined ? 'Tap a project or a helper' : headLine) : `${headLine} · ↑↓ Enter`}</p>
       {count === 0 && startCommands && defsLoading && <p data-testid="composer-menu-empty" className="wk-composer-menu-empty">{WORKFLOWS_LOADING_LINE}</p>}
       {count === 0 && startCommands && !defsLoading && !anyWorkflows && <p data-testid="composer-menu-empty" className="wk-composer-menu-empty">{WORKFLOWS_EMPTY_LINE}</p>}
-      {count === 0 && !(startCommands && (defsLoading || !anyWorkflows)) && <p data-testid="composer-menu-empty" className="wk-composer-menu-empty">Nothing matches.</p>}
+      {count === 0 && trigger === '@' && atLoading && <p data-testid="composer-menu-empty" className="wk-composer-menu-empty">Reading your helpers and projects…</p>}
+      {count === 0 && !(trigger === '@' && atLoading) && !(startCommands && (defsLoading || !anyWorkflows)) && <p data-testid="composer-menu-empty" className="wk-composer-menu-empty">Nothing matches.</p>}
       {trigger === '/' && wf.length > 0 && (
         <>
           <p data-testid="composer-menu-group" data-group="start-work" className="wk-composer-menu-group">Start work</p>
@@ -139,22 +148,30 @@ export function SlashMenu({
         </button>
       ))}
       {trigger === '@' && ats.map((it, i) => (
-        <button
-          key={`${it.kind}:${it.id}`}
-          type="button"
-          id={`composer-menu-option-${menuKey}-${i}`}
-          role="option"
-          aria-selected={i === active}
-          data-testid="composer-menu-item"
-          data-kind={it.kind}
-          data-id={it.id}
-          title={it.line}
-          onMouseDown={(e) => { e.preventDefault(); onPickAt?.(it); }}
-          className={`wk-composer-menu-item${i === active ? ' wk-composer-menu-item--on' : ''}`}
-        >
-          <span className="wk-composer-cmd"><span className="wk-composer-cmd-pfx">@</span><b>{it.label}</b></span>
-          <small className="wk-composer-cmd-desc">{it.line}</small>
-        </button>
+        <Fragment key={`${it.kind}:${it.id}`}>
+          {/* UX audit row 71: one group header per kind says what a pick does, instead of the same
+              line on every row. */}
+          {(i === 0 || ats[i - 1]?.kind !== it.kind) && (
+            <p data-testid="composer-menu-group" data-group={it.kind} className="wk-composer-menu-group">
+              {it.kind === 'project' ? 'Projects · the message goes there' : helpersHead}
+            </p>
+          )}
+          <button
+            type="button"
+            id={`composer-menu-option-${menuKey}-${i}`}
+            role="option"
+            aria-selected={i === active}
+            data-testid="composer-menu-item"
+            data-kind={it.kind}
+            data-id={it.id}
+            title={it.line !== '' ? it.line : undefined}
+            onMouseDown={(e) => { e.preventDefault(); onPickAt?.(it); }}
+            className={`wk-composer-menu-item${i === active ? ' wk-composer-menu-item--on' : ''}`}
+          >
+            <span className="wk-composer-cmd"><span className="wk-composer-cmd-pfx">@</span><b>{it.label}</b></span>
+            {it.line !== '' && <small className="wk-composer-cmd-desc">{it.line}</small>}
+          </button>
+        </Fragment>
       ))}
     </div>
   );

@@ -99,8 +99,8 @@ function NewRunView({
     : 'What do you need built?';
   const sub = chatMode
     ? 'Ask about your repos, get answers, run searches, analyse patterns — without kicking off a full build.'
-    // D1: the team model in one line — the PA scores and plans, you approve the plan, the team works it.
-    : 'Describe your goal. The PA scores and plans it, you approve the plan, and the team works it.';
+    // D1 in plain words (UI contract §5: no internal roles): you approve the plan before any work starts.
+    : 'Say what you need built; you approve the plan before any work starts.';
 
   return (
     <div className="flex flex-col h-full items-center justify-center">

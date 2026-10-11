@@ -55,9 +55,9 @@ describe('ChatInput — retry-as-prefill (§4.3)', () => {
     // Workflow / repo / gate posture surface as the editable pills.
     expect(screen.getByText('/workflow-feature')).toBeInTheDocument();
     expect(screen.getByText('Repo: studio-api')).toBeInTheDocument();
-    expect(screen.getByText('Gate: every unit')).toBeInTheDocument();
+    expect(screen.getByTestId('gate-posture')).toHaveValue('all');
     // The lineage claim is visible and clearable.
-    expect(screen.getByText('Retry of r-origin')).toBeInTheDocument();
+    expect(screen.getByText('Retry of an earlier run')).toBeInTheDocument();
     // Nothing auto-launched (§4.5: zero POST /runs until the operator sends).
     expect(client.api.launchRun).not.toHaveBeenCalled();
 
@@ -82,7 +82,7 @@ describe('ChatInput — retry-as-prefill (§4.3)', () => {
     depositPrefill();
     const user = userEvent.setup();
     render(<ChatInput runId={null} runStatus={null} onLaunched={vi.fn()} />);
-    await user.click(screen.getByLabelText('Clear Retry of r-origin'));
+    await user.click(screen.getByLabelText('Clear Retry of an earlier run'));
     await waitFor(() => expect(screen.getByTestId('launch-submit')).toBeEnabled());
     await user.click(screen.getByTestId('launch-submit'));
     await waitFor(() => expect(client.api.launchRun).toHaveBeenCalledTimes(1));
@@ -101,7 +101,7 @@ describe('ChatInput — retry-as-prefill (§4.3)', () => {
       </StrictMode>,
     );
     expect(screen.getByTestId('launch-problem')).toHaveValue('refactor the auth middleware');
-    expect(screen.getByText('Retry of r-origin')).toBeInTheDocument();
+    expect(screen.getByText('Retry of an earlier run')).toBeInTheDocument();
     // …and the deposit is still consumed once the mount commits.
     expect(takeRetryPrefill()).toBeNull();
   });
@@ -112,7 +112,7 @@ describe('ChatInput — retry-as-prefill (§4.3)', () => {
     first.unmount();
     render(<ChatInput runId={null} runStatus={null} onLaunched={vi.fn()} />);
     expect(screen.getByTestId('launch-problem')).toHaveValue('');
-    expect(screen.queryByText('Retry of r-origin')).not.toBeInTheDocument();
+    expect(screen.queryByText('Retry of an earlier run')).not.toBeInTheDocument();
   });
 
   it('a run-selected composer never consumes the deposit', () => {

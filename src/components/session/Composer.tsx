@@ -16,6 +16,7 @@ import {
 import { gateInstance } from '../../board/proposalCard.js';
 import { sessionPath } from '../../board/sessionModel.js';
 import { useRoster } from '../../hooks/useRoster.js';
+import { seatLabel, userSeats } from '../../board/seatNames.js';
 import { defaultSelection } from '../../board/chatOpen.js';
 import { chosenSeats, NO_SEAT_PICKED, useComposerSeats } from '../../store/composerSeats.js';
 import { loadCatalog, loadPresets, usePlanCatalog } from '../../store/planCatalog.js';
@@ -36,6 +37,8 @@ import { useLaunchPreview } from '../../hooks/useLaunchPlan.js';
 import { takeComposerSeed, useComposerSeed } from '../../store/composerSeed.js';
 import { SlashMenu, type AtItem } from './SlashMenu.js';
 import { ReducedAssuranceOptIn } from './AssuranceReceipt.js';
+import { TechDetails } from '../ui/TechDetails.js';
+import { usePhone } from '../../hooks/usePhone.js';
 
 /** Where a send goes besides the words: the project an `@project` chip named, and whether it opens a fresh session. */
 export interface ComposerSend {
@@ -102,6 +105,22 @@ function useDraftTarget(runs: readonly SessionView[]): { target: DraftTarget; ga
  *
  * Typing never answers a question and never reshapes the chain: only a picked `/` command does.
  */
+/** A phone's one-row placeholder: the first clause (before a comma or dash), at most ~18 characters
+ *  on a word boundary, with an ellipsis when anything was cut. */
+export function shortPlaceholder(text: string, max = 18): string {
+  const whole = text.trim();
+  let first = whole.split(/,|\s—\s|\s-\s/)[0]?.trim() ?? whole;
+  if (first.length > max) {
+    const words = first.split(/\s+/);
+    first = '';
+    for (const w of words) {
+      if ((first === '' ? w : `${first} ${w}`).length > max) break;
+      first = first === '' ? w : `${first} ${w}`;
+    }
+  }
+  return first.length < whole.length ? `${first}…` : whole;
+}
+
 export function Composer({
   composerKey, text, setText, onSend, runs = [], started = false, placeholder, ariaLabel, variant, className = '',
   inputRef, navigate, hint = false, footer = null,
@@ -146,6 +165,9 @@ export function Composer({
   const reducedCap = useCapabilities((s) => s.reducedAssurance);
   const askPathOn = useCapabilities((s) => s.askPath);
   const own = useRef<HTMLTextAreaElement | null>(null);
+  // A one-row box on a phone shows only the placeholder's first clause, ended by an ellipsis —
+  // never a sentence cut mid-word with no mark (UX audit row 32, the 390 px gate).
+  const phone = usePhone();
   const box = inputRef ?? own;
   const [caret, setCaret] = useState(0);
   const [cursor, setCursor] = useState(0);
@@ -155,6 +177,8 @@ export function Composer({
   const [repoRef, setRepoRef] = useState<string | null>(null);
   // Per-composer ids for the launch strip's labels and validation line (two composers may share a page).
   const stripId = useId();
+  // Once the user picks (or clears) the repository, no default is applied over their choice.
+  const repoTouched = useRef(false);
   const [deliverOn, setDeliverOn] = useState(true);
   const [confirmMode, setConfirmMode] = useState<ConfirmMode>(COMPOSER_DEFAULT_GATE_POSTURE.mode);
   const [launching, setLaunching] = useState(false);
@@ -179,10 +203,18 @@ export function Composer({
     if (wfChip === null || repos !== null) return;
     fetchReposCached().then(setRepos, () => setRepos([]));
   }, [wfChip, repos]);
+  // UX audit row 24: in a session whose work already names a repository, a workflow launched from
+  // here defaults to that repository (the newest run's), instead of asking for one again.
+  const sessionRepo = useMemo(
+    () => [...runs].reverse().map((v) => v.session.repo_ref).find((r): r is string => typeof r === 'string' && r !== '') ?? null,
+    [runs],
+  );
   useEffect(() => {
-    if (wfChip === null || repoRef !== null || repos === null) return;
+    if (wfChip === null || repoRef !== null || repos === null || repoTouched.current) return;
+    const known = sessionRepo === null ? undefined : repos.find((r) => r.id === sessionRepo || r.name === sessionRepo);
+    if (known !== undefined) { setRepoRef(known.id); return; }
     if (repos.length === 1 && repos[0] !== undefined) setRepoRef(repos[0].id);
-  }, [wfChip, repos, repoRef]);
+  }, [wfChip, repos, repoRef, sessionRepo]);
 
   // `/workflow-<key>` rows lead the `/` menu only as a FIRST token (a named work), and only while no
   // workflow is already named (a second pick replaces the chip).
@@ -198,16 +230,6 @@ export function Composer({
     () => (token?.trigger === '/' ? slashItems(token.query, target, catalog) : []),
     [token?.trigger, token?.query, target, catalog],
   );
-  const ats: AtItem[] = useMemo(() => {
-    if (token?.trigger !== '@') return [];
-    const q = token.query.toLowerCase();
-    const p: AtItem[] = projects.map((x) => ({ kind: 'project', id: x.id, label: x.name, line: 'a project · the message goes there' }));
-    const h: AtItem[] = (roster ?? []).map((s) => ({ kind: 'helper', id: s.key, label: s.display_name || s.key, line: 'a helper · the message is about it' }));
-    return [...p, ...h].filter((x) => x.label.toLowerCase().startsWith(q) || x.id.toLowerCase().startsWith(q)).slice(0, 8);
-  }, [token?.trigger, token?.query, projects, roster]);
-  const count = token?.trigger === '/' ? wf.length + slash.length : ats.length;
-  const active = count === 0 ? 0 : Math.min(cursor, count - 1);
-
   const refusal = composerSendRefusal(roster, project !== null);
   // studio#631: which seats THIS send uses — the launch form's rule (every eligible seat, minus the
   // ones you turned off), shown and editable here. A workflow launch convenes the council seats; an
@@ -220,14 +242,38 @@ export function Composer({
     // A handed-over Ask always opens SCOPED (the dock remounts per handoff, and its default scope is
     // the route's project or everything — only a manual `system` pick is unscoped), so the row reads
     // the scoped admission AskDock sends with (codex r1 on #631).
-    return wfChip !== null ? roster.filter((s) => s.enabled_for_council).map((s) => s.key) : defaultSelection(roster, true);
+    // studio#686 (UX audit row 12): only seats a user may address — never the judge seat or a
+    // non-CLI helper — so the helpers row and the `@` menu offer the same list under one name each.
+    const addressable = new Set(userSeats(roster).map((s) => s.key));
+    const keys = wfChip !== null ? roster.filter((s) => s.enabled_for_council).map((s) => s.key) : defaultSelection(roster, true);
+    return keys.filter((k) => addressable.has(k));
   }, [roster, wfChip]);
+  const ats: AtItem[] = useMemo(() => {
+    if (token?.trigger !== '@') return [];
+    const q = token.query.toLowerCase();
+    // A project row carries its own description (when it has one); the group header says what a pick does.
+    const p: AtItem[] = (projects ?? []).map((x) => ({ kind: 'project', id: x.id, label: x.name, line: (x.description ?? '').trim() }));
+    // The helpers this send can use (the helpers row's list, in roster order), named by `seatLabel`.
+    const h: AtItem[] = eligibleSeats.flatMap((key) => {
+      const seat = (roster ?? []).find((s) => s.key === key);
+      return seat === undefined ? [] : [{ kind: 'helper' as const, id: seat.key, label: seatLabel(seat), line: '' }];
+    });
+    return [...p, ...h].filter((x) => x.label.toLowerCase().startsWith(q) || x.id.toLowerCase().startsWith(q)).slice(0, 8);
+  }, [token?.trigger, token?.query, projects, roster, eligibleSeats]);
+  const count = token?.trigger === '/' ? wf.length + slash.length : ats.length;
+  const active = count === 0 ? 0 : Math.min(cursor, count - 1);
   // Shown while a send is being composed (words typed, or a workflow named) — an idle Desk keeps its
   // fold (the desk_home fit), and the row is there whenever there is something to send.
   // A send opens a chat before the first send, and after it whenever an `@project` chip starts a
   // fresh session there (`fresh: started` below) — both take the row's seats (codex r2 on #631).
   const opensChat = !started || project !== null;
-  const showSeats = eligibleSeats.length > 0 && (wfChip !== null || (opensChat && text.trim() !== ''));
+  // While the `@` menu is open it already lists these helpers: the row steps aside, so one list shows
+  // and the menu sits on the box (S3 UX gate, codex r2).
+  const atMenuOpen = menuOpen && token?.trigger === '@';
+  // Whether the seat rules apply to this send — independent of whether the row is on screen, so an
+  // open `@` menu never lets a send past the refusals below (codex r2 on S3).
+  const seatsApply = eligibleSeats.length > 0 && (wfChip !== null || (opensChat && text.trim() !== ''));
+  const showSeats = seatsApply && !atMenuOpen;
   const sendSeats = chosenSeats(eligibleSeats, dropped);
   // An `@helper` named to answer (ASK-S1) but turned off in the row would be silently dropped as the
   // chat's primary — refused instead, by name (codex r1 on #631).
@@ -235,7 +281,7 @@ export function Composer({
     ? chips.find((c) => c.kind === 'about' && c.key.startsWith('h:'))
     : undefined;
   const namedDropped = namedHelper !== undefined && dropped.includes(namedHelper.key.slice(2));
-  const seatRefusal = !showSeats ? null
+  const seatRefusal = !seatsApply ? null
     : sendSeats.length === 0 ? NO_SEAT_PICKED
       : namedDropped ? `${namedHelper?.label ?? 'The helper you named'} is named to answer but is left out of the helpers row — turn it on, or remove the chip.`
         : null;
@@ -319,8 +365,10 @@ export function Composer({
       ? { kind: 'project', key: `p:${item.id}`, label: item.label, projectId: item.id }
       : { kind: 'about', key: `h:${item.id}`, label: item.label };
     addAboutChip(composerKey, chip);
+    // UX audit row 72: the chip already says where the message goes ("in: <project>"), so the note
+    // speaks only when it adds something — a fresh session, or who answers.
     setNote(item.kind === 'project'
-      ? (started ? `Your next message starts a new session in ${item.label}.` : `This conversation will be in ${item.label}.`)
+      ? (started ? `Your next message starts a new session in ${item.label}.` : null)
       : (!started && useCapabilities.getState().askPath ? `${item.label} will answer this conversation.` : null));
   };
   const pickWorkflow = (item: WorkflowRow): void => {
@@ -339,12 +387,13 @@ export function Composer({
   };
 
   // studio#631: only the seats the helpers row has on — never the whole council behind the row's back.
-  const launchSeats = (roster ?? []).filter((s) => s.enabled_for_council && !dropped.includes(s.key));
+  // The same seats the helpers row shows (council-enabled, addressable), minus the dropped (codex r1).
+  const launchSeats = (roster ?? []).filter((s) => eligibleSeats.includes(s.key) && !dropped.includes(s.key));
   // EX-01: one seat builds and reviews — offer the opt-in (said first) on a daemon that takes it.
   const offerReduced = wfChip !== null && reducedCap && launchSeats.length === 1;
   // The opt-in is THIS launch's: naming another workflow, dropping the chip or launching clears it.
   const wfKey = wfChip?.workflowId ?? null;
-  useEffect(() => { setReduced(false); }, [wfKey]);
+  useEffect(() => { setReduced(false); repoTouched.current = false; }, [wfKey]);
 
   /** S19a: POST the launch a named workflow runs — the wire the launch form sends, from the composer. */
   const launchWorkflow = async (workflowId: string, intent: string): Promise<void> => {
@@ -436,6 +485,8 @@ export function Composer({
           wf={wf}
           slash={slash}
           ats={ats}
+          {...(!started && askPathOn ? { helpersHead: 'Helpers · the one you pick answers' } : {})}
+          atLoading={token.trigger === '@' && roster === null && (projects ?? []).length === 0}
           active={active}
           onPickWorkflow={pickWorkflow}
           onPickSlash={pickSlash}
@@ -473,7 +524,7 @@ export function Composer({
                 aria-invalid={launchState?.missing === 'repo'}
                 aria-describedby={launchState?.missing === 'repo' ? `${stripId}-line` : undefined}
                 value={repoRef ?? ''}
-                onChange={(e) => setRepoRef(e.target.value === '' ? null : e.target.value)}
+                onChange={(e) => { repoTouched.current = true; setRepoRef(e.target.value === '' ? null : e.target.value); }}
                 className="wk-field wk-composer-launch-repo"
               >
                 <option value="">Choose a repository…</option>
@@ -525,15 +576,22 @@ export function Composer({
                   </>
                 )}
           </span>
-          {launchError !== null && <span data-testid="composer-launch-error" role="alert" className="wk-composer-note wk-composer-note--bad">{launchError}</span>}
+          {/* §4.7: the daemon's own words live in Technical details; the default layer says it plainly. */}
+          {launchError !== null && (
+            <div data-testid="composer-launch-error" role="alert" className="wk-composer-note wk-composer-note--bad">
+              Couldn’t launch this. Your words and choices are kept, so you can try again.
+              <TechDetails text={launchError} data-testid="composer-launch-error-detail" />
+            </div>
+          )}
         </div>
       )}
       {showSeats && (
         <div data-testid="composer-seats" role="group" aria-label="Helpers this send uses" className="wk-composer-chips">
-          <span className="wk-composer-note">helpers:</span>
+          <span className="wk-composer-note">Helpers</span>
           {eligibleSeats.map((key) => {
             const on = !dropped.includes(key);
             const seat = (roster ?? []).find((s) => s.key === key);
+            const name = seat === undefined ? seatLabel({ key }) : seatLabel(seat);
             return (
               <button
                 key={key}
@@ -541,12 +599,11 @@ export function Composer({
                 data-testid="composer-seat"
                 data-key={key}
                 aria-pressed={on}
-                title={on ? `${seat?.display_name || key} takes part — click to leave it out` : `${seat?.display_name || key} is left out — click to include it`}
+                title={on ? `${name} takes part — click to leave it out` : `${name} is left out — click to include it`}
                 onClick={() => toggleSeat(key)}
-                className="wk-composer-chip"
-                style={on ? undefined : { opacity: 0.45, textDecoration: 'line-through' }}
+                className={`wk-composer-chip wk-composer-seat${on ? '' : ' wk-composer-seat--off'}`}
               >
-                {key}
+                {name}
               </button>
             );
           })}
@@ -584,7 +641,7 @@ export function Composer({
             if (e.key === 'Backspace' && text === '' && backspaceAboutChip(composerKey, text)) { e.preventDefault(); return; }
             if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
           }}
-          placeholder={placeholder}
+          placeholder={wfChip !== null ? 'Describe the work to launch' : phone ? shortPlaceholder(placeholder) : placeholder}
           className="wk-desk-input"
         />
         <button type="submit" data-testid={variant === 'desk' ? 'desk-composer-send' : 'session-composer-send'} aria-label={wfChip !== null ? 'Launch' : 'Send'} disabled={!canSend} className="wk-desk-send">↑</button>

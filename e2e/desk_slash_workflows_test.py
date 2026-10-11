@@ -168,8 +168,10 @@ with sync_playwright() as p:
     narrow.screenshot(path=str(SHOTS / "desk-slash-menu-390-light.png"))
     narrow.evaluate("() => { delete document.documentElement.dataset.theme; }")
     geo_390 = narrow.evaluate(_GEO_JS)
+    # UI contract §2: on a phone every target is at least --tap-min (44 px), so a row is exactly that
+    # tall, never taller (compact still means one line per row, no boilerplate).
     check("compact-menu-390",
-          geo_390.get("inView") and geo_390.get("maxRowH", 99) <= 32
+          geo_390.get("inView") and geo_390.get("maxRowH", 99) <= 44
           and geo_390.get("keyOnce") and geo_390.get("rowsHit") and not geo_390.get("hscroll"),
           geo=geo_390)
 

@@ -10,8 +10,41 @@
 .wk-composer-launch-gate { min-width: 200px; max-width: 100%; padding: 0 8px; }
 .wk-composer-launch-deliver { display: inline-flex; align-items: center; min-height: var(--control-h); }
 .wk-composer-launch-line { font-size: var(--text-xs); color: var(--ink-muted); }
-.wk-composer-launch-line--bad { color: var(--status-fail); }
+/* A required choice not made yet is waiting on you, not a failure (contract §2: red only for a real fail). */
+.wk-composer-launch-line--bad { color: var(--status-gate); }
 @media (max-width: 767px) {
   .wk-composer-launch-controls { flex-direction: column; align-items: stretch; }
   .wk-composer-launch-repo, .wk-composer-launch-gate { min-width: 0; width: 100%; }
 }
+
+
+/* UX audit row 23: ONE focus ring — the input box's (.wk-desk-composer:focus-within). The older
+   whole-block ring on .wk-composer (global.css, slice 4) framed the chips and launch strip too.
+   global.css's own rules follow its @imports, so this override carries the composer's data
+   attribute to win; drop it when global.css loses that rule (UI-CONTRACT ASK, w8-uxfix). */
+.wk-composer[data-composer]:focus,
+.wk-composer[data-composer]:focus-within { box-shadow: none; outline: none; }
+
+/* The helpers row and the chips sit on the input's inset (14 px, .wk-desk-composer), never flush. */
+.wk-composer > .wk-composer-chips { padding-inline: 14px 8px; }
+.wk-composer-seat { border: 1px solid transparent; cursor: pointer; padding: 2px 10px; font: inherit; font-size: var(--text-xs); }
+.wk-composer-seat:focus-visible { outline: 2px solid transparent; box-shadow: var(--focus-ring); }
+.wk-composer-seat--off { background: transparent; border-color: var(--border); color: var(--ink-muted); text-decoration: line-through; }
+
+/* Phone (UI contract §2 --tap-min): every composer and launch-form target is at least 44 px. */
+@media (max-width: 767px) {
+  .wk-composer > .wk-composer-chips { padding-inline: 8px; }
+  .wk-composer-seat { min-height: var(--tap-min); padding-inline: 14px; }
+  .wk-composer-chip-x { min-width: var(--tap-min); min-height: var(--tap-min); }
+  .wk-composer-menu-item { min-height: var(--tap-min); }
+  .wk-composer form > button[type='submit'] { width: var(--tap-min); height: var(--tap-min); }
+  select.wk-composer-launch-repo, select.wk-composer-launch-gate, .wk-composer-form-select.wk-field { min-height: var(--tap-min); }
+  [data-testid='phase-picker-toggle'] { min-height: var(--tap-min); }
+  button.wk-composer-form-plus { width: var(--tap-min); height: var(--tap-min); }
+}
+
+/* The launch form (/runs/new) option row (UX audit rows 25, 41): labels are the .wk-field-label
+   primitive; selects and inputs the shared .wk-field, sized for the row — no mono, no native chrome. */
+.wk-composer-form-select { height: var(--control-h-sm); padding: 0 8px; font-size: var(--text-xs); }
+/* A label and its control wrap together, never split across lines. */
+.wk-composer-form-pair { display: inline-flex; align-items: center; gap: 8px; }
