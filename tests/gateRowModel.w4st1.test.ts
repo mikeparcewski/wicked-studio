@@ -36,10 +36,13 @@ describe('studio#627 — Send back only where the engine accepts it', () => {
     expect(sendBackAccepted(undefined, 2)).toBe(true);
   });
 
-  it('an early unit\'s output gate offers Approve / Approve and steer / Stop, no Send back', () => {
+  it('an early unit\'s output gate offers no Send back to a creator — it asks that step a follow-up (F-LEARN-2)', () => {
+    // The engine (core conversation_turn) re-runs the reviewed step with the question, so the card
+    // offers "Ask a follow-up" on the same request_changes wire; there is still no return to a creator.
     const m = model(gate({ ord: 2 }));
     expect(m?.reason).toBe('def');
-    expect(m?.choices.map((c) => c.key)).toEqual(['approve', 'steer', 'stop']);
+    expect(m?.choices.map((c) => c.key)).toEqual(['approve', 'steer', 'send-back', 'stop']);
+    expect(m?.choices.find((c) => c.key === 'send-back')?.label).toBe('Ask a follow-up');
   });
 
   it('a gate after the creator keeps Send back', () => {
