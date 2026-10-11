@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { listEditors, type EditorView } from '../../api/editors.js';
 import { seedComposer } from '../../store/composerSeed.js';
+import { useDisplayText } from '../../hooks/useHomePath.js';
 
 /**
  * Settings → Developer → Editor plugins (operator ruling X3, 2026-10-10; DES-EDITOR-PLUGINS-001 §3.2).
@@ -127,6 +128,7 @@ function EditorRow({ e, navigate, compact }: { e: EditorView; navigate: (p: stri
 /** The list itself, with its loading, error, unsupported and empty states. */
 export function EditorPluginList({ navigate, compact = false }: { navigate: (p: string) => void; compact?: boolean }): React.ReactElement {
   const { load, retry, retrying } = useEditorList();
+  const showText = useDisplayText(); // raw error text: home and temp paths read ~ unless technical details are on
   if (load.state === 'loading') {
     return (
       <ul data-testid="editor-plugins-loading" aria-busy="true" aria-label="Loading editor plugins">
@@ -148,7 +150,7 @@ export function EditorPluginList({ navigate, compact = false }: { navigate: (p: 
         </button>
         <details className="w-full" style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-body)' }}>
           <summary>Technical details</summary>
-          <pre style={{ fontFamily: 'var(--font-mono)', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{load.error}</pre>
+          <pre style={{ fontFamily: 'var(--font-mono)', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{showText(load.error)}</pre>
         </details>
       </div>
     );

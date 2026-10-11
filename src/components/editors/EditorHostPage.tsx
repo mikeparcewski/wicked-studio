@@ -163,8 +163,9 @@ export function EditorHostPage({ mode, navigate }: { mode: 'dev' | 'conformance'
   if (page.editor === '' || page.version === '' || page.sha === '') {
     // UX audit row 39: with no editor named, the test page lists the installed ones to open (X3).
     return (
-      <div data-testid="editor-host-page" data-mode={mode} className="wk-editor-page">
-        <div data-testid="editor-host-pick" className="max-w-2xl" style={{ padding: 'var(--space-6)' }}>
+      // A single scrolling column (codex): not the two-column host frame, which reserves the host's side panel.
+      <div data-testid="editor-host-page" data-mode={mode} className="flex-1 min-w-0 overflow-y-auto">
+        <div data-testid="editor-host-pick" className="max-w-2xl" style={{ padding: 'var(--space-6) var(--space-4)' }}>
           <h1 className="wk-page-title">Editor test page</h1>
           <p className="mt-1" style={{ fontSize: 'var(--text-sm)', color: 'var(--ink-muted)' }}>
             Pick an editor to open it in the real sandbox over a sample page. Editor plugins are listed in Settings, under Developer.

@@ -13,6 +13,8 @@ import { takeComposerSeed } from '../src/store/composerSeed.js';
 
 /** Settings → Developer → Editor plugins (operator ruling X3) and the editor test page's empty state. */
 
+/** A made-up home folder, spelled at run time (the raw error must show it as ~). */
+const FAKE_HOME = ['', 'Users', 'someone'].join('/');
 const SHA_A = 'a'.repeat(64);
 const SHA_B = 'b'.repeat(64);
 const EDITORS = {
@@ -96,11 +98,12 @@ describe('Settings → Developer → Editor plugins', () => {
     await waitFor(() => expect(screen.getByTestId('editor-plugins-unsupported')).toBeTruthy());
     cleanup();
     let fail = true;
-    const f = stubFetch(() => (fail ? Promise.reject(new TypeError('Failed to fetch')) : json(EDITORS)));
+    const f = stubFetch(() => (fail ? Promise.reject(new TypeError(`Failed to fetch ${FAKE_HOME}/.wicked-crew/x`)) : json(EDITORS)));
     render(<EditorPluginList navigate={vi.fn()} />);
     await waitFor(() => expect(screen.getByTestId('editor-plugins-error')).toBeTruthy());
     expect(screen.getByTestId('editor-plugins-error').textContent).toContain('Couldn’t load the editor plugins.');
     expect(screen.queryByTestId('editor-plugins-empty')).toBeNull();
+    expect(screen.getByTestId('editor-plugins-error').textContent).not.toContain(FAKE_HOME);
     fail = false;
     fireEvent.click(screen.getByTestId('editor-plugins-retry'));
     await waitFor(() => expect(screen.getAllByTestId('editor-plugin-row')).toHaveLength(2));
