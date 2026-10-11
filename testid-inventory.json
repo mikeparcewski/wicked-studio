@@ -12,8 +12,8 @@
   "studioVersion": "0.7.5",
   "counts": {
     "files": 197,
-    "occurrences": 2188,
-    "static": 1900,
+    "occurrences": 2203,
+    "static": 1912,
     "dynamic": 61,
     "computed": 19
   },
@@ -6899,7 +6899,14 @@
     {
       "testId": "run-degraded",
       "files": [
-        "src/components/RunDegradedNote.tsx"
+        "src/components/RunDegradedNote.tsx",
+        "src/components/session/RunRecord.tsx"
+      ]
+    },
+    {
+      "testId": "run-degraded-detail",
+      "files": [
+        "src/components/session/RunRecord.tsx"
       ]
     },
     {
@@ -7209,6 +7216,18 @@
       ]
     },
     {
+      "testId": "seat-citations-details",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
+      "testId": "seat-citations-toggle",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
       "testId": "seat-logout-line",
       "files": [
         "src/components/SystemSettings.tsx"
@@ -7269,12 +7288,6 @@
       ]
     },
     {
-      "testId": "session-chat-retry",
-      "files": [
-        "src/components/session/SessionView.tsx"
-      ]
-    },
-    {
       "testId": "session-chat-stop",
       "files": [
         "src/components/session/SessionView.tsx"
@@ -7324,6 +7337,12 @@
     },
     {
       "testId": "session-failed-resume-error",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
+      "testId": "session-failed-resume-error-detail",
       "files": [
         "src/components/session/SessionView.tsx"
       ]
@@ -7569,6 +7588,12 @@
       ]
     },
     {
+      "testId": "session-loading",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
       "testId": "session-missing",
       "files": [
         "src/components/session/SessionView.tsx"
@@ -7600,6 +7625,12 @@
     },
     {
       "testId": "session-orphaned-error",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
+      "testId": "session-orphaned-error-detail",
       "files": [
         "src/components/session/SessionView.tsx"
       ]
@@ -7829,12 +7860,6 @@
       ]
     },
     {
-      "testId": "session-run-detail-retry",
-      "files": [
-        "src/components/session/SessionView.tsx"
-      ]
-    },
-    {
       "testId": "session-run-helper",
       "files": [
         "src/components/session/SessionView.tsx"
@@ -7977,6 +8002,24 @@
     },
     {
       "testId": "session-title",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
+      "testId": "session-title-loading",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
+      "testId": "session-tool-failure",
+      "files": [
+        "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
+      "testId": "session-tool-failure-detail",
       "files": [
         "src/components/session/SessionView.tsx"
       ]
@@ -8129,6 +8172,12 @@
     },
     {
       "testId": "sheet-goal",
+      "files": [
+        "src/components/sheets/ObjectSheet.tsx"
+      ]
+    },
+    {
+      "testId": "sheet-goal-pack",
       "files": [
         "src/components/sheets/ObjectSheet.tsx"
       ]
@@ -8315,6 +8364,12 @@
     },
     {
       "testId": "sheet-tab",
+      "files": [
+        "src/components/sheets/Sheet.tsx"
+      ]
+    },
+    {
+      "testId": "sheet-tabs",
       "files": [
         "src/components/sheets/Sheet.tsx"
       ]
@@ -10364,6 +10419,12 @@
       ]
     },
     {
+      "testId": "tech-run-raw",
+      "files": [
+        "src/components/RunRawView.tsx"
+      ]
+    },
+    {
       "testId": "tech-run-row",
       "files": [
         "src/components/RunLink.tsx"
@@ -11014,6 +11075,18 @@
     },
     {
       "testId": "viewer-error",
+      "files": [
+        "src/components/FileViewer.tsx"
+      ]
+    },
+    {
+      "testId": "viewer-error-detail",
+      "files": [
+        "src/components/FileViewer.tsx"
+      ]
+    },
+    {
+      "testId": "viewer-loading",
       "files": [
         "src/components/FileViewer.tsx"
       ]
