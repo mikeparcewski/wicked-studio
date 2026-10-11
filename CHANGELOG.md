@@ -12,6 +12,24 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.7.6] — 2026-10-11
+
+Every section passes the UI contract (S1–S6): plain words, honest counts, one status line, no engine internals on the default layer, and phone layouts. A running session can be stopped from its own page.
+
+### Fixed
+- A running session can be stopped from its own page (with a confirm). A session whose runs can't be read says so with Retry instead of loading forever (#710).
+- See everything never shows "0 runs" when it couldn't read your work. Rows say one status word and keep their actions in one menu; helpers are described in plain words; the page works on a phone (#701, S4).
+- Session page, sheets and run files/events no longer show engine internals in the default layer. Sheet tabs overflow into More. The diff viewer never hangs on a late or empty answer. Failed runs offer Resume and Start over. Ask threads say who answers and who checks it in plain words (#699, S2).
+
+### Changed
+- The Desk, the Watchtower and ⌘K adopt the UI contract: honest needs counts, one offline banner, one gate toast with a count, standing instructions in plain words, and phone layouts (#706, S1).
+- The composer and the launch form name each helper once and never offer the judge seat; a session's workflow launch defaults to the session's repository; one focus ring on the composer; the launch form's deliver notice shows home paths as `~`; `/runs/new` controls use the shared field styles (#700, S3).
+- Steering and Testing follow the UI contract: the Testing bar is honest at 0, the KPI tiles became facts lines, the rules and grid pages have one name each, proposals and memories have no raw ids, and on a phone the assistant is a sheet (#708, S5).
+- Repositories, repo detail, project and Product pages, then Skills, MCP tools, Workflows, Theme, System and the not-found page, use the current design language: plain words, one status line, labelled controls, no internals on the default layer, and phone layouts (#703, #707, S6).
+
+### Added
+- Any session in the rail or on the Desk can be moved into a project, or back to "Not in a project", from its move button. The Desk's "New project" is a real button (#705).
+
 ## [0.7.5] — 2026-10-11
 
 studio works on a phone, on shared UI primitives; a tidier left nav and a Health page; the Learn page; editor plugins in Settings; Council size; the moved addresses are retired (X1).
@@ -2024,7 +2042,8 @@ The merged interactive layer: wicked-interactive's UI moved into this skin (DES-
   `git subtree split` (92 commits).
 - The SPA as a pure HTTP/WS client of the wicked-crew daemon: runs, gates, live CoreEvents.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.5...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.6...HEAD
+[0.7.6]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.5...v0.7.6
 [0.7.5]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.4...v0.7.5
 [0.7.4]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.3...v0.7.4
 [0.7.3]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.2...v0.7.3
