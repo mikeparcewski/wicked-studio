@@ -16,6 +16,13 @@
 @import './themes/wicked-dark.css';
 @import './deck.css';
 @import './components.css';
+@import './sections/desk.css';
+@import './sections/session.css';
+@import './sections/composer.css';
+@import './sections/everything.css';
+@import './sections/steering-testing.css';
+@import './sections/pages.css';
+@import './sections/learn.css';
 
 @tailwind base;
 @tailwind components;

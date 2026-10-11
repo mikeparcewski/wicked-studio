@@ -30,6 +30,8 @@ import { SystemSettings } from './components/SystemSettings.js';
 import { ThemePage } from './components/ThemePage.js';
 import { Desk } from './components/desk/Desk.js';
 import { SessionRail } from './components/desk/SessionRail.js';
+import { RailDrawer } from './components/ui/RailDrawer.js';
+import { PhoneNeedsBadge } from './components/ui/PhoneNeedsBadge.js';
 import { SessionPage } from './components/session/SessionView.js';
 import type { ComposerSend } from './components/session/Composer.js';
 import { ObjectSheet } from './components/sheets/ObjectSheet.js';
@@ -633,7 +635,10 @@ export function App(): React.ReactElement {
       {/* The FIRST tabbable element (usability review #10): one Tab reaches a
           jump to the main content instead of a page's top-right Refresh. */}
       <SkipLink />
-      <SessionRail runs={runs} needRows={needRows} navigate={navigate} pathname={pathname} />
+      {/* UI-CONTRACT §3 (studio#680): the rail as before on desktop; a drawer behind a top bar on a phone. */}
+      <RailDrawer pathname={pathname} badge={<PhoneNeedsBadge needRows={needRows} runsKnown={runsLoaded} />}>
+        <SessionRail runs={runs} needRows={needRows} navigate={navigate} pathname={pathname} />
+      </RailDrawer>
 
       <div id="main" tabIndex={-1} className="flex flex-1 overflow-hidden" style={{ outline: 'none' }}>
         {renderCenter()}

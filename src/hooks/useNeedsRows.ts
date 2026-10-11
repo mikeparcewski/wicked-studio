@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { create } from 'zustand';
 import type { SessionView } from '../api/types.js';
 import { needsYouRows, type NeedRow } from '../board/needsYou.js';
@@ -12,7 +12,8 @@ import { useGateStore } from '../store/gates.js';
 import { useAskThreadStore } from '../store/askThread.js';
 import { useMembershipStore } from '../store/membership.js';
 import { useDecisionsStore } from '../store/decisions.js';
-import { useNeedsSources } from '../store/needsSources.js';
+import { useNeedsSources, type NeedsSource } from '../store/needsSources.js';
+import { needCount } from '../board/needsQueue.js';
 import { useNotificationStore } from '../store/notifications.js';
 import { useStallEscalationStore } from '../store/stallEscalations.js';
 import { orphanedRuns, useWatchStore } from '../store/watch.js';
@@ -150,4 +151,49 @@ export function useNeedsClock(): number {
     };
   }, []);
   return useClock((s) => s.now);
+}
+
+/** How long the Desk waits for a slow needs source before it counts without it (UI-CONTRACT §5). */
+export const NEEDS_SETTLE_MS = 15_000;
+const NEEDS_SOURCE_NAMES: Readonly<Record<NeedsSource, string>> = {
+  chats: 'conversations', proposals: 'proposals', repos: 'repositories', campaigns: 'test campaigns',
+};
+/** The last complete count, kept across refreshes so a re-read never flickers to a smaller number. */
+let lastComplete: number | null = null;
+/** Test seam. */
+export function resetSettledNeedsForTest(): void { lastComplete = null; }
+
+/**
+ * HONEST COUNTS (design/UI-CONTRACT.md §5; studio#681 row 4): the needs count is shown only once
+ * every source has settled — answered, failed, or {@link NEEDS_SETTLE_MS} passed — so the Desk never
+ * says "2 things need you" for seven seconds before it says 77.
+ *  - `loading`: runs not known yet, or a source still out inside the window — `count` null.
+ *  - `complete`: every source answered — the number.
+ *  - `partial`: a source failed or timed out — the number of what was read, with `missing` named
+ *    (the Desk says "At least N"; the rail badge "N+").
+ * After the first `complete`, a refresh keeps that number until the next `complete`.
+ */
+export function useSettledNeeds(needRows: readonly NeedRow[], runsKnown: boolean): { phase: 'loading' | 'complete' | 'partial'; count: number | null; missing: string[] } {
+  const s = useNeedsSources();
+  const [since] = useState(() => Date.now());
+  const [, tick] = useState(0);
+  useEffect(() => {
+    const t = setTimeout(() => tick((n) => n + 1), Math.max(0, since + NEEDS_SETTLE_MS - Date.now()) + 10);
+    return () => clearTimeout(t);
+  }, [since]);
+  const count = needCount(needRows as NeedRow[]);
+  if (!runsKnown) return { phase: 'loading', count: null, missing: [] };
+  const expired = Date.now() - since >= NEEDS_SETTLE_MS;
+  const sources = Object.keys(NEEDS_SOURCE_NAMES) as NeedsSource[];
+  const pending = sources.filter((k) => s.readAt[k] === undefined);
+  if (pending.length > 0 && !expired) {
+    return lastComplete === null ? { phase: 'loading', count: null, missing: [] } : { phase: 'complete', count: lastComplete, missing: [] };
+  }
+  const valueOf = (k: NeedsSource): unknown => (k === 'campaigns' ? true : s[k]);
+  const missing = sources.filter((k) => s.readAt[k] === undefined || valueOf(k) === null).map((k) => NEEDS_SOURCE_NAMES[k]);
+  if (missing.length === 0) {
+    lastComplete = count;
+    return { phase: 'complete', count, missing };
+  }
+  return { phase: 'partial', count, missing };
 }
