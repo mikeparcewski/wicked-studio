@@ -76,7 +76,7 @@
 
 .wk-btn--secondary {
   background: var(--surface-raised);
-  border-color: var(--border);
+  border-color: var(--border-strong);
   color: var(--ink-body);
 }
 .wk-btn--secondary:hover:not(:disabled) {
@@ -339,8 +339,11 @@ select.wk-field {
   border: 1px solid var(--border-input);
   border-radius: var(--radius-md);
   color: var(--ink-high);
-  font-size: var(--text-xs);
 }
+/* Default inset and typed-text size (UI-CONTRACT ASK 06:26Z, w9-s6 gate: text touched the border at 11 px). In
+   :where() so every per-use padding or size (utilities, the composer launch strip) still wins. */
+:where(.wk-field) { padding: 4px var(--control-px); font-size: var(--text-sm); }
+:where(textarea.wk-field) { padding-block: var(--space-2); }
 .wk-field:focus-visible { outline: 2px solid transparent; outline-offset: 2px; border-color: var(--accent); box-shadow: var(--focus-ring); }
 select:not([multiple]):not([size]) {
   appearance: none;
@@ -1440,7 +1443,8 @@ button.wk-walk-chapter-btn:hover .wk-walk-chapter-title { text-decoration: under
 
 /* ══ UI PRIMITIVES (design/UI-CONTRACT.md §4) — shared; only the primitives owner edits this block.
    Section CSS lives in styles/sections/<section>.css. ══ */
-::placeholder { color: var(--ink-placeholder); opacity: 1; }
+/* Higher specificity than Tailwind preflight's input::placeholder (gray-400, 2.13:1 on raised; ASK 07:08Z w9-s4). */
+html :is(input, textarea)::placeholder { color: var(--ink-placeholder); opacity: 1; }
 .wk-visually-hidden { position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 
 /* Link: a door, accent ink, underlined on hover/focus — never heading text, never a button look. */
@@ -1591,6 +1595,7 @@ button.wk-walk-chapter-btn:hover .wk-walk-chapter-title { text-decoration: under
   .wk-topbar-brand b { color: var(--ink-high); }
   .wk-topbar-brand .wk-desk-dot { background: var(--spark); box-shadow: 0 0 0 1.5px var(--accent); }
   .wk-topbar-badge { flex-shrink: 0; padding-right: var(--space-2); }
+  .wk-topbar-checking { color: var(--ink-muted); font-size: var(--text-xs); }
   .wk-rail-scrim { position: fixed; inset: 0; z-index: 80; background: var(--scrim); }
   .wk-rail-drawer { position: fixed; top: 0; bottom: 0; left: 0; z-index: 81; display: flex; transform: translateX(-100%); visibility: hidden; transition: transform var(--dur-base) var(--ease-out), visibility 0s linear var(--dur-base); box-shadow: var(--shadow-overlay); }
   .wk-rail-drawer--open { transform: none; visibility: visible; transition: transform var(--dur-base) var(--ease-out); }
@@ -1600,6 +1605,7 @@ button.wk-walk-chapter-btn:hover .wk-walk-chapter-title { text-decoration: under
   /* Phone tap targets (UI-CONTRACT §2 --tap-min) on the shared controls. */
   .wk-btn, .wk-need-act, button.wk-chip, a.wk-chip, .wk-segmented-option, .wk-tab, .wk-switch { min-height: var(--tap-min); }
   .wk-btn--icon { width: var(--tap-min); min-width: var(--tap-min); }
+  .wk-field, .wk-tech-details-summary { min-height: var(--tap-min); }
   /* A one-glyph segment ("1"…"5") is 44 px wide too, not only tall (UI-CONTRACT ASK, w9-council). */
   .wk-segmented-option { min-width: var(--tap-min); }
   .wk-rail-drawer .wk-rail a, .wk-rail-drawer .wk-rail button { min-height: var(--tap-min); }

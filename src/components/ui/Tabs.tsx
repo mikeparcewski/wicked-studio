@@ -10,9 +10,11 @@ export interface TabDef { id: string; label: string; count?: number }
  * activates it and swaps it into the last visible slot, so the active tab is always in the tablist. Manual activation (click/Enter);
  * arrows/Home/End move focus. Tab id `${idBase}-tab-${id}`, the panel is `${idBase}-panel`.
  */
-export function Tabs({ tabs, active, onChange, maxVisible, 'aria-label': ariaLabel, idBase, 'data-testid': testId = 'tabs' }: {
+export function Tabs({ tabs, active, onChange, maxVisible, 'aria-label': ariaLabel, idBase, 'data-testid': testId = 'tabs', tabTestId }: {
   tabs: readonly TabDef[]; active: string; onChange: (id: string) => void; maxVisible?: number;
   'aria-label': string; idBase: string; 'data-testid'?: string;
+  /** Optional `data-testid` on every tab button (with `data-tab` = its id), for callers whose selectors predate Tabs. */
+  tabTestId?: string;
 }): React.ReactElement {
   const phone = usePhone();
   const cap = Math.max(1, maxVisible ?? (phone ? 3 : 5));
@@ -33,7 +35,7 @@ export function Tabs({ tabs, active, onChange, maxVisible, 'aria-label': ariaLab
         {shown.map((t, i) => (
           <button key={t.id} ref={(el) => { refs.current[i] = el; }} id={`${idBase}-tab-${t.id}`} type="button" role="tab"
             aria-selected={t.id === active} aria-controls={`${idBase}-panel`} tabIndex={t.id === active ? 0 : -1}
-            data-tab={t.id} className="wk-tab" onClick={() => onChange(t.id)}
+            data-tab={t.id} {...(tabTestId !== undefined ? { 'data-testid': tabTestId } : {})} className="wk-tab" onClick={() => onChange(t.id)}
             onKeyDown={(e) => {
               if (e.key === 'ArrowRight') { e.preventDefault(); focusAt(i + 1); }
               if (e.key === 'ArrowLeft') { e.preventDefault(); focusAt(i - 1); }

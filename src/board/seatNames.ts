@@ -21,7 +21,9 @@ function titleCase(key: string): string {
 
 /** The one display name: the roster's `display_name`, else the key title-cased. */
 export function seatLabel(seat: SeatNameInput): string {
-  const d = (seat.display_name ?? '').trim();
+  // A role suffix ("Claude Code (judge)") is never part of a name: the role is said by seatRoleWord
+  // ("Reviewer only") where a read-only list needs it (UI-CONTRACT §5; ASK 06:04Z, audit row 38).
+  const d = (seat.display_name ?? '').replace(/\s*\((?:judge|reviewer|council)\)\s*$/i, '').trim();
   return d !== '' ? d : titleCase(seat.key);
 }
 

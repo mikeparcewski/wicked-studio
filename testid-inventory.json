@@ -12,10 +12,10 @@
   "studioVersion": "0.7.4",
   "counts": {
     "files": 195,
-    "occurrences": 2144,
+    "occurrences": 2145,
     "static": 1868,
     "dynamic": 61,
-    "computed": 17
+    "computed": 18
   },
   "static": [
     {
@@ -11653,6 +11653,12 @@
       "expression": "l.testId",
       "files": [
         "src/components/desk/SessionRail.tsx"
+      ]
+    },
+    {
+      "expression": "tabTestId",
+      "files": [
+        "src/components/ui/Tabs.tsx"
       ]
     },
     {
