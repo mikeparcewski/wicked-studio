@@ -15,7 +15,7 @@ import { TechDetails } from '../ui/TechDetails.js';
 import { useRoster } from '../../hooks/useRoster.js';
 import { useLaunchPreview } from '../../hooks/useLaunchPlan.js';
 import { useCapabilities } from '../../store/capabilities.js';
-import { useComposerSeats } from '../../store/composerSeats.js';
+import { isOptInKey, OPT_IN_NOTE, seatOff, useComposerSeats } from '../../store/composerSeats.js';
 import { clearAboutChips } from '../../store/composerChips.js';
 import { usePlanCatalog } from '../../store/planCatalog.js';
 import { useProjectsStore } from '../../store/projects.js';
@@ -79,6 +79,7 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
   const roster = useRoster();
   const projects = useProjectsStore((s) => s.projects) ?? [];
   const dropped = useComposerSeats((s) => s.dropped);
+  const picked = useComposerSeats((s) => s.picked);
   const toggleSeat = useComposerSeats((s) => s.toggle);
   const deliverGateCap = useCapabilities((s) => s.deliverGate);
   const reducedCap = useCapabilities((s) => s.reducedAssurance);
@@ -120,7 +121,7 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
 
   // Options: the helpers a workflow launch convenes (council-enabled, addressable), minus the dropped.
   const eligible = useMemo(() => userSeats(roster).filter((s) => s.enabled_for_council), [roster]);
-  const seats = eligible.filter((s) => !dropped.includes(s.key));
+  const seats = eligible.filter((s) => !seatOff(s.key, dropped, picked));
   const offerReduced = reducedCap && seats.length === 1;
   const beforeOrd = COMPOSER_DEFAULT_GATE_POSTURE.beforeOrd;
   const autoDeliver = draft.confirmMode === 'none';
@@ -312,7 +313,7 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
                   <legend className="wk-field-label">Helpers</legend>
                   <div className="wk-launch-wizard-seats">
                     {eligible.map((s, i) => {
-                      const on = !dropped.includes(s.key);
+                      const on = !seatOff(s.key, dropped, picked);
                       return (
                         <button
                           key={s.key}
@@ -330,6 +331,11 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
                     })}
                   </div>
                   <span className="wk-field-note">Who plans, builds and checks the work. Different helpers check each other’s work.</span>
+                  {eligible.some((s) => isOptInKey(s.key)) && (
+                    <span className="wk-field-note" data-testid="launch-wizard-optin-note">
+                      {eligible.filter((s) => isOptInKey(s.key)).map(seatLabel).join(', ')}: {OPT_IN_NOTE}
+                    </span>
+                  )}
                 </fieldset>
               )}
               <label className="wk-launch-wizard-field">

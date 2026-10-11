@@ -12,7 +12,7 @@ import { gateInstance } from '../../board/proposalCard.js';
 import { useRoster } from '../../hooks/useRoster.js';
 import { seatLabel, userSeats } from '../../board/seatNames.js';
 import { defaultSelection } from '../../board/chatOpen.js';
-import { chosenSeats, NO_SEAT_PICKED, useComposerSeats } from '../../store/composerSeats.js';
+import { chosenSeats, NO_SEAT_PICKED, seatOff, useComposerSeats } from '../../store/composerSeats.js';
 import { loadCatalog, loadPresets, usePlanCatalog } from '../../store/planCatalog.js';
 import { usePlanGate } from '../../store/planGates.js';
 import { addGateDraftStep, queueMidRunStep } from '../../store/planDrafts.js';
@@ -198,6 +198,7 @@ export function Composer({
   // Ask's first send opens a chat with the seats the daemon would admit to it. A reply into a started
   // chat keeps that chat's seats, so the row is not offered there.
   const dropped = useComposerSeats((s) => s.dropped);
+  const picked = useComposerSeats((s) => s.picked);
   const toggleSeat = useComposerSeats((s) => s.toggle);
   const eligibleSeats = useMemo(() => {
     if (roster === null) return [];
@@ -236,13 +237,13 @@ export function Composer({
   // open `@` menu never lets a send past the refusals below (codex r2 on S3).
   const seatsApply = eligibleSeats.length > 0 && (wfChip !== null || (opensChat && text.trim() !== ''));
   const showSeats = seatsApply && !atMenuOpen;
-  const sendSeats = chosenSeats(eligibleSeats, dropped);
+  const sendSeats = chosenSeats(eligibleSeats, dropped, picked);
   // An `@helper` named to answer (ASK-S1) but turned off in the row would be silently dropped as the
   // chat's primary — refused instead, by name (codex r1 on #631).
   const namedHelper = wfChip === null && opensChat && askPathOn
     ? chips.find((c) => c.kind === 'about' && c.key.startsWith('h:'))
     : undefined;
-  const namedDropped = namedHelper !== undefined && dropped.includes(namedHelper.key.slice(2));
+  const namedDropped = namedHelper !== undefined && seatOff(namedHelper.key.slice(2), dropped, picked);
   const seatRefusal = !seatsApply ? null
     : sendSeats.length === 0 ? NO_SEAT_PICKED
       : namedDropped ? `${namedHelper?.label ?? 'The helper you named'} is named to answer but is left out of the helpers row — turn it on, or remove the chip.`
@@ -393,7 +394,7 @@ export function Composer({
         <div data-testid="composer-seats" role="group" aria-label="Helpers this send uses" className="wk-composer-chips">
           <span className="wk-composer-note">Helpers</span>
           {eligibleSeats.map((key) => {
-            const on = !dropped.includes(key);
+            const on = !seatOff(key, dropped, picked);
             const seat = (roster ?? []).find((s) => s.key === key);
             const name = seat === undefined ? seatLabel({ key }) : seatLabel(seat);
             return (

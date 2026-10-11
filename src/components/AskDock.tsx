@@ -280,7 +280,7 @@ export function AskDock({ runs, pathname, onClose, navigate, sendText, onHandoff
           const choice = scopeChoiceRef.current;
           // studio#631: the composer's helpers row decides — the admitted seats minus the ones turned off.
           const eligible = defaultSelection(roster, askScopeIsScoped(choice));
-          const clis = chosenSeats(eligible, useComposerSeats.getState().dropped);
+          const clis = chosenSeats(eligible, useComposerSeats.getState().dropped, useComposerSeats.getState().picked);
           if (eligible.length > 0 && clis.length === 0) throw new Error(NO_SEAT_PICKED);
           id = crypto.randomUUID();
           const body: ChatOpenBody = { chatId: id, ...askScopeOpenFields(choice, ambientProjectId(packInputs.current.pathname)) };

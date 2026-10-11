@@ -12,8 +12,8 @@
   "studioVersion": "0.7.8",
   "counts": {
     "files": 199,
-    "occurrences": 2236,
-    "static": 1948,
+    "occurrences": 2237,
+    "static": 1949,
     "dynamic": 61,
     "computed": 19
   },
@@ -3615,6 +3615,12 @@
     },
     {
       "testId": "launch-wizard-next",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
+      "testId": "launch-wizard-optin-note",
       "files": [
         "src/components/launch/LaunchWizard.tsx"
       ]
