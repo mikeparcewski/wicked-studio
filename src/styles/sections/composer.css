@@ -1,1 +1,17 @@
 /* Section CSS: composer (design/UI-CONTRACT.md §6). Only that section edits this file. */
+
+/* The slash-launch strip (operator 2026-10-10, UX audit row 3): labelled, spaced controls on one or two
+   rows; the status line on its own row; on the phone breakpoint every control takes the full width. */
+.wk-composer-launch { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-card); }
+.wk-composer-launch-controls { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px 16px; }
+.wk-composer-launch-field { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.wk-composer-launch-label { font-size: var(--text-2xs); font-weight: var(--weight-semi); color: var(--ink-muted); }
+.wk-composer-launch-repo { min-width: 220px; max-width: 100%; padding: 0 8px; }
+.wk-composer-launch-gate { min-width: 200px; max-width: 100%; padding: 0 8px; }
+.wk-composer-launch-deliver { display: inline-flex; align-items: center; min-height: var(--control-h); }
+.wk-composer-launch-line { font-size: var(--text-xs); color: var(--ink-muted); }
+.wk-composer-launch-line--bad { color: var(--status-fail); }
+@media (max-width: 767px) {
+  .wk-composer-launch-controls { flex-direction: column; align-items: stretch; }
+  .wk-composer-launch-repo, .wk-composer-launch-gate { min-width: 0; width: 100%; }
+}

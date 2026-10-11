@@ -3,6 +3,7 @@ import { api } from '../../api/client.js';
 import type { LaunchBodyWithDeliver, RepoEntry, SessionView } from '../../api/types.js';
 import { chipText, messageWithAbout, projectChip, type AboutChip } from '../../board/aboutChips.js';
 import { composerSendRefusal, gateSentence, gatePostureWord, NO_REPO_REASON, readyLead, workflowLaunchState } from '../../board/launchModel.js';
+import { Switch } from '../ui/Switch.js';
 import {
   COMPOSER_DEFAULT_GATE_POSTURE,
 } from '../composerDefaults.js';
@@ -494,11 +495,9 @@ export function Composer({
               </select>
             </label>
             {deliverVisible && (
-              <label data-testid="launch-row-deliver" className="wk-composer-launch-deliver">
-                <input type="checkbox" role="switch" data-testid="launch-row-deliver-toggle" checked={deliverOn} onChange={(e) => setDeliverOn(e.target.checked)} className="wk-composer-switch-input" />
-                <span aria-hidden className="wk-composer-switch" />
-                Deliver when done
-              </label>
+              <div data-testid="launch-row-deliver" className="wk-composer-launch-deliver">
+                <Switch label="Deliver when done" checked={deliverOn} onChange={setDeliverOn} data-testid="launch-row-deliver-toggle" />
+              </div>
             )}
             {offerReduced && <ReducedAssuranceOptIn checked={reduced} onChange={setReduced} testId="launch-row-reduced-assurance" />}
           </div>

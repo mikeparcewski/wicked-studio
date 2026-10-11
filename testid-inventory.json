@@ -12,8 +12,8 @@
   "studioVersion": "0.7.4",
   "counts": {
     "files": 193,
-    "occurrences": 2119,
-    "static": 1850,
+    "occurrences": 2118,
+    "static": 1849,
     "dynamic": 54,
     "computed": 17
   },
@@ -1176,12 +1176,6 @@
     },
     {
       "testId": "composer-launch-target",
-      "files": [
-        "src/components/session/Composer.tsx"
-      ]
-    },
-    {
-      "testId": "composer-launch-workflow",
       "files": [
         "src/components/session/Composer.tsx"
       ]
