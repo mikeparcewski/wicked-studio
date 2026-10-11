@@ -2,12 +2,14 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../../api/client.js';
 import type { Project } from '../../api/types.js';
 import type { RosterSeat, SessionView } from '../../api/types.js';
-import { deskReadState, needsByRun, needTextByRun, railGroups, signInLapsed, type RailGroup } from '../../board/deskModel.js';
+import { deskReadState, needsByRun, needTextByRun, railGroups, sessionLine, signInLapsed, type RailGroup } from '../../board/deskModel.js';
+import { canDeliver, DELIVERY_LABEL, deliveryOf, resolveDelivery } from '../delivery.js';
+import { useIsSystemWorkflow } from '../../store/workflowCache.js';
 import {
   EVERYTHING_TABS, EVERYTHING_VIEWS, everythingPath, filterGroups, handedRows, MADE_KINDS, MADE_WORD, madeRows, readEverythingQuery, searchGroups,
   SESSION_FILTERS, TAB_LABEL, type EverythingQuery, type EverythingTab, type HandedRow, type MadeRow,
 } from '../../board/everythingModel.js';
-import type { NeedRow } from '../../board/needsYou.js';
+import { endedAtMs, finishedAtMs, type NeedRow } from '../../board/needsYou.js';
 import { sessionPath, type SessionState } from '../../board/sessionModel.js';
 import { filterRunRows, pageRunRows, runRows, sortRunRows, type RunSortKey, type SortDir } from '../../board/runsTableModel.js';
 import { openSheet } from '../../store/sheets.js';
@@ -24,10 +26,8 @@ import { useDisplayText } from '../../hooks/useHomePath.js';
 import { useMembershipStore } from '../../store/membership.js';
 import { useDeliveredNow } from '../../store/postHocDeliver.js';
 import { useProjectsStore } from '../../store/projects.js';
-import { ageWord } from '../DashboardTiles.js';
 import { seatStandingWord } from '../HealthRailSection.js';
 import { SignInPanel } from '../SignInPanel.js';
-import { FinishedRunRow } from '../FinishedRunRow.js';
 import { plainRunTitle } from '../../board/deskWords.js';
 import { runTechParts, Tech } from '../Tech.js';
 import { ProjectEntry, ProjectsTab } from './ProjectsTab.js';
@@ -37,6 +37,12 @@ import { madeOpenAddress } from '../../board/madeMoves.js';
 import { MadeOpen } from './MadeOpen.js';
 import { NewDocument } from './NewDocument.js';
 import { DocDeleteConfirm } from '../DocDelete.js';
+import { EmptyState, OverflowMenu, Skeleton, StateBanner, TechDetails } from '../ui/index.js';
+import { readErrorKind } from '../../api/errors.js';
+import { statusWord, chatStatusWord, type StatusTone } from '../../board/statusWords.js';
+import { absTime, relTime } from '../../board/relTime.js';
+import { displaySeats, isReviewerOnly, seatLabel } from '../../board/seatNames.js';
+import { FinishedRunMenu } from './FinishedRunMenu.js';
 
 /**
  * "SEE EVERYTHING" (`/everything`, DES-STUDIO-REBUILD-001 §5.4, slice S15c/S17a) — one page, five tabs,
@@ -84,8 +90,8 @@ export function EverythingPage({ runs, runsLoaded, runsError = null, onRetryRuns
     <div data-testid="everything" data-tab={q.tab} className="wk-desk wk-everything">
       <div className="wk-desk-scroll" data-place-scroll="everything">
         <header className="wk-everything-head">
-          <h1 className="wk-desk-hello">Everything</h1>
-          <p className="wk-desk-date">Every session, everything made, your helpers, and what was handed over.</p>
+          <h1 className="wk-page-title">Everything</h1>
+          <p className="wk-page-intro">Every session, everything made, your helpers, and what was handed over.</p>
           <div role="tablist" aria-label="Everything" className="wk-everything-tabs">
             {EVERYTHING_TABS.map((tab, i) => (
               <button
@@ -114,8 +120,8 @@ export function EverythingPage({ runs, runsLoaded, runsError = null, onRetryRuns
           )}
           {q.tab === 'made' && <MadeTab runs={runs} q={q} navigate={navigate} go={go} />}
           {q.tab === 'helpers' && <HelpersTab />}
-          {q.tab === 'handed' && <HandedTab runs={runs} runsLoaded={runsLoaded} go={go} />}
-          {q.tab === 'projects' && <ProjectsTab q={q} runs={runs} needRows={needRows} navigate={navigate} />}
+          {q.tab === 'handed' && <HandedTab runs={runs} runsLoaded={runsLoaded} runsError={runsError} onRetryRuns={onRetryRuns} go={go} />}
+          {q.tab === 'projects' && <ProjectsTab q={q} runs={runs} runsLoaded={runsLoaded} runsError={runsError} onRetryRuns={onRetryRuns} needRows={needRows} navigate={navigate} />}
         </section>
       </div>
     </div>
@@ -160,6 +166,8 @@ function SessionsTab({ runs, runsLoaded, runsError, onRetryRuns, needRows, q, na
   const inScope = q.project === null ? groups : groups.filter((g) => g.projectId === q.project);
   const total = inScope.reduce((n, g) => n + g.sessions.length, 0);
   const read = deskReadState(runsLoaded, runsError);
+  // studio#684 row 11: a count is said only once the runs read answered — a failed read never says "0 runs".
+  const known = read === 'known' || read === 'stale';
   // The view (`?view=`) rides every Sessions lens so a chip click inside "Every run" stays there.
   const lens = (over: Partial<EverythingQuery>): string => everythingPath({ tab: 'sessions', filter: q.filter, project: q.project, view: q.view, ...over });
   // The full count in the tab header ("124 runs · 97 sessions") — runs scoped the same way as the
@@ -168,6 +176,7 @@ function SessionsTab({ runs, runsLoaded, runsError, onRetryRuns, needRows, q, na
   const scopeName = q.project !== null ? nameOf(q.project) : null;
   const viewOf = (runId: string): SessionView | undefined => runs.find((v) => v.session.id === runId);
   const showText = useDisplayText();
+  const isSystemWorkflow = useIsSystemWorkflow();
   // The retired Work page's archive: a finished run can be put away from its row (FinishedRunRow),
   // and the Archived lens lists what was put away, with Unarchive — the same two calls it made.
   // After the write, the list is re-read (the Work page called onRefresh too) so the row leaves.
@@ -197,8 +206,9 @@ function SessionsTab({ runs, runsLoaded, runsError, onRetryRuns, needRows, q, na
 
   return (
     <div data-testid="everything-sessions" data-count={total} data-filter={q.filter} data-project={q.project ?? ''}>
-      {projectHeader !== null && <ProjectEntry row={projectHeader} navigate={navigate} header onStatusChanged={(changed) => setArchivedProjects((old) => changed.status === 'archived' ? [changed, ...old.filter((p) => p.id !== changed.id)] : old.filter((p) => p.id !== changed.id))} />}
-      <div className="wk-everything-bar">
+      {q.filter !== 'archived' && <RunsReadBanner read={read} runsError={runsError} onRetryRuns={onRetryRuns} />}
+      {projectHeader !== null && <ProjectEntry row={projectHeader} countsKnown={known} navigate={navigate} header onStatusChanged={(changed) => setArchivedProjects((old) => changed.status === 'archived' ? [changed, ...old.filter((p) => p.id !== changed.id)] : old.filter((p) => p.id !== changed.id))} />}
+      {read !== 'failed' && <div className="wk-everything-bar">
         <div role="group" aria-label="Show" className="wk-everything-chips">
           {SESSION_FILTERS.map((f) => (
             <button
@@ -218,7 +228,7 @@ function SessionsTab({ runs, runsLoaded, runsError, onRetryRuns, needRows, q, na
           <p data-testid="everything-scope" data-project-id={q.project ?? ''} className="wk-everything-scope">
             In <b>{scopeName}</b>
             {' · '}
-            <a href={lens({ project: null })} onClick={(e) => { e.preventDefault(); navigate(lens({ project: null }), { replace: true }); }} data-testid="everything-scope-clear">Every project</a>
+            <a href={lens({ project: null })} onClick={(e) => { e.preventDefault(); navigate(lens({ project: null }), { replace: true }); }} data-testid="everything-scope-clear" className="wk-link">Every project</a>
           </p>
         )}
         {q.view === 'grouped' && q.filter !== 'archived' && (
@@ -248,11 +258,13 @@ function SessionsTab({ runs, runsLoaded, runsError, onRetryRuns, needRows, q, na
               </button>
             ))}
           </div>
-          <p data-testid="everything-count" data-runs={runCount} data-sessions={total} className="wk-everything-count wk-session-grey">
-            {countWord(runCount, 'run')} · {countWord(total, 'session')}
-          </p>
+          {known && q.filter !== 'archived' && (
+            <p data-testid="everything-count" data-runs={runCount} data-sessions={total} className="wk-everything-count">
+              {countWord(runCount, 'run')} · {countWord(total, 'session')}
+            </p>
+          )}
         </div>
-      </div>
+      </div>}
       {q.view === 'runs' && (
         <RunsTable
           runs={runs} runChatId={runChatId} projects={projects} q={q}
@@ -262,29 +274,22 @@ function SessionsTab({ runs, runsLoaded, runsError, onRetryRuns, needRows, q, na
       )}
       {q.view === 'grouped' && (<>
       {q.filter === 'archived' && <ArchivedRuns key={q.project ?? ''} navigate={navigate} project={q.project} onChanged={onRetryRuns} />}
-      {q.filter !== 'archived' && read === 'checking' && <p data-testid="everything-checking" className="wk-session-grey">Reading your work…</p>}
-      {q.filter !== 'archived' && read === 'failed' && (
-        <p data-testid="everything-failed" role="alert" className="wk-session-grey">
-          Couldn’t read your work ({showText(runsError ?? '')}).
-          {onRetryRuns !== undefined && <> <button type="button" data-testid="everything-retry" onClick={onRetryRuns} className="wk-since-toggle">Try again</button></>}
-        </p>
+      {q.filter !== 'archived' && read === 'checking' && <Skeleton data-testid="everything-checking" rows={4} />}
+      {q.filter !== 'archived' && known && total === 0 && (
+        <EmptyState data-testid="everything-empty"
+          title={q.project !== null ? 'Nothing has been started in this project yet.' : 'Nothing has been started yet.'}
+          body="Start something from the Desk; every session shows up here." />
       )}
-      {q.filter !== 'archived' && read === 'stale' && <p className="wk-session-grey">The last read failed ({showText(runsError ?? '')}); this is the list as last read.</p>}
-      {q.filter !== 'archived' && (read === 'known' || read === 'stale') && total === 0 && (
-        <p data-testid="everything-empty" className="wk-session-grey">
-          {q.project !== null ? 'Nothing has been started in this project yet.' : 'Nothing has been started yet.'}
-        </p>
-      )}
-      {q.filter !== 'archived' && (read === 'known' || read === 'stale') && total > 0 && shown.length === 0 && searching && (
-        <p data-testid="everything-empty" className="wk-session-grey">
+      {q.filter !== 'archived' && known && total > 0 && shown.length === 0 && searching && (
+        <p data-testid="everything-empty" className="wk-everything-note">
           No sessions match “{query.trim()}”{scopeName !== null ? ` in ${scopeName}` : ''}.{' '}
-          <button type="button" data-testid="everything-search-clear" onClick={() => setQuery('')} className="wk-since-toggle">Clear the search</button>
+          <button type="button" data-testid="everything-search-clear" onClick={() => setQuery('')} className="wk-btn wk-btn--secondary wk-btn--sm">Clear the search</button>
         </p>
       )}
-      {q.filter !== 'archived' && (read === 'known' || read === 'stale') && total > 0 && shown.length === 0 && !searching && (
-        <p data-testid="everything-empty" className="wk-session-grey">
+      {q.filter !== 'archived' && known && total > 0 && shown.length === 0 && !searching && (
+        <p data-testid="everything-empty" className="wk-everything-note">
           No sessions match this filter{scopeName !== null ? ` in ${scopeName}` : ''}.{' '}
-          <button type="button" data-testid="everything-show-all" onClick={() => navigate(lens({ filter: 'all' }), { replace: true })} className="wk-since-toggle">Show all</button>
+          <button type="button" data-testid="everything-show-all" onClick={() => navigate(lens({ filter: 'all' }), { replace: true })} className="wk-btn wk-btn--secondary wk-btn--sm">Show all</button>
         </p>
       )}
       {q.filter !== 'archived' && shown.map((g) => (
@@ -293,60 +298,104 @@ function SessionsTab({ runs, runsLoaded, runsError, onRetryRuns, needRows, q, na
             <span>{g.name}</span>
             {g.projectId !== null && (
               <span className="wk-desk-card-aside wk-everything-aside">
-                <a href={projectDetailPath(g.projectId)} onClick={go(projectDetailPath(g.projectId))} data-testid="everything-group-details">details</a>
-                {' · '}
-                <a href={testsPath(g.projectId)} onClick={go(testsPath(g.projectId))} data-testid="everything-group-tests">tests</a>
+                <a href={projectDetailPath(g.projectId)} onClick={go(projectDetailPath(g.projectId))} data-testid="everything-group-details" className="wk-link">Details</a>
+                <a href={testsPath(g.projectId)} onClick={go(testsPath(g.projectId))} data-testid="everything-group-tests" className="wk-link">Tests</a>
               </span>
             )}
           </p>
           {g.sessions.map((s) => {
-            // A finished run keeps the Work page's row and its next-use moves — Reuse as preset,
-            // Draft update, archive (FinishedRunRow) — the behaviours the §5.4 move must not lose.
-            const finished = FINISHED.has(s.state) && s.runIds.length === 1 ? viewOf(s.runId) : undefined;
-            if (finished !== undefined) {
-              return (
-                <div key={s.id} data-testid="everything-session" data-session-id={s.id} data-run-id={s.runId} data-run-ids={s.runIds.join(' ')} data-state={s.state} data-finished="true" className="wk-everything-finished">
-                  <FinishedRunRow view={finished} selectedRunId={null} onSelect={() => navigate(s.path)} onArchive={archive} />
-                </div>
-              );
-            }
-            return (
-              <a
-                key={s.id}
-                href={s.path}
-                onClick={go(s.path)}
-                data-testid="everything-session"
-                data-session-id={s.id}
-                data-run-id={s.runId}
-                data-run-ids={s.runIds.join(' ')}
-                data-state={s.state}
-                className="wk-desk-session"
-              >
-                <span aria-hidden className={`wk-desk-dot wk-desk-dot--${s.state}`} />
+            // One dot and ONE status word per row (studio#687 rows 35, 36): the word is `statusWord`'s,
+            // the line a needs-you item's own words when the session has one.
+            const views = s.runIds.map(viewOf).filter((v): v is SessionView => v !== undefined);
+            // A live session (one run still working or waiting) says so, whatever its newest run did.
+            const word = s.state === 'waiting' ? { word: 'Waiting on you', tone: 'gate' as const }
+              : s.state === 'working' ? { word: 'Working', tone: 'run' as const }
+              : views.length > 0 ? chatStatusWord(views) : null;
+            const at = lastActivityMs(views);
+            // A needs-you item's words, or a delivery line ("handed over just now"), are kept; the state's
+            // generic sentence is replaced by the one status word.
+            const generic = s.line === sessionLine(s.state, 0, null);
+            const delivery = views.length === 1 && FINISHED.has(s.state) ? deliveryWord(views[0]!, isSystemWorkflow) : null;
+            const line = s.badge > 0 || !generic ? showText(s.line) : [word?.word ?? showText(s.line), delivery].filter(Boolean).join(' · ');
+            const link = (
+              <a href={s.path} onClick={go(s.path)} className="wk-desk-session wk-everything-srow">
+                <span aria-hidden className={`wk-everything-dot wk-everything-dot--${word?.tone ?? toneOfState(s.state)}`} />
                 <span className="wk-desk-need-body">
                   <span className="wk-desk-session-title">{showText(s.title)}</span>
-                  <span className={`wk-desk-need-line${s.state === 'waiting' ? ' wk-desk-underline' : ''}`}>{showText(s.line)}</span>
+                  <span className={`wk-desk-need-line${s.state === 'waiting' ? ' wk-desk-underline' : ''}`}>
+                    {line}
+                    {at !== null && <> · <time dateTime={new Date(at).toISOString()} title={absTime(at)}>{relTime(at)}</time></>}
+                  </span>
                   {/* The run's handles with "Show technical details" on — the same parts the run row showed. */}
                   <Tech data-testid="tech-session-row" parts={s.runIds.length === 1 && viewOf(s.runId) !== undefined ? runTechParts(viewOf(s.runId)!.session) : s.runIds} block />
                 </span>
               </a>
+            );
+            // A finished run keeps the Work page's next-use moves — Reuse as preset, Draft update,
+            // Archive — in ONE "⋯" menu on its row (FinishedRunMenu).
+            const finished = FINISHED.has(s.state) && s.runIds.length === 1 ? viewOf(s.runId) : undefined;
+            return (
+              <div key={s.id} data-testid="everything-session" data-session-id={s.id} data-run-id={s.runId} data-run-ids={s.runIds.join(' ')} data-state={s.state} data-word={word?.word ?? ''} {...(finished !== undefined ? { 'data-finished': 'true' } : {})} className="wk-everything-session">
+                {finished !== undefined
+                  ? <FinishedRunMenu view={finished} title={showText(s.title)} onArchive={archive}>{link}</FinishedRunMenu>
+                  : link}
+              </div>
             );
           })}
         </section>
       ))}
       {q.filter !== 'archived' && q.project === null && <LiveChats known={new Set(groups.flatMap((g) => g.sessions.map((s) => s.id)))} go={go} />}
       {q.filter !== 'archived' && archivedProjects.length > 0 && (
-        <p data-testid="everything-archived-projects" className="wk-session-grey">
+        <p data-testid="everything-archived-projects" className="wk-everything-note">
           Archived projects:{' '}
           {archivedProjects.map((p, i) => (
-            <span key={p.id}>{i > 0 ? ', ' : ''}<a href={projectDetailPath(p.id)} onClick={go(projectDetailPath(p.id))} data-testid="everything-archived-project" data-project-id={p.id}>{p.name}</a></span>
+            <span key={p.id}>{i > 0 ? ', ' : ''}<a href={projectDetailPath(p.id)} onClick={go(projectDetailPath(p.id))} data-testid="everything-archived-project" data-project-id={p.id} className="wk-link">{p.name}</a></span>
           ))}
-          {' '}— open one to restore it.
+          . Open one to restore it.
         </p>
       )}
       </>)}
     </div>
   );
+}
+
+/**
+ * The one state banner of the Sessions tab (UI-CONTRACT §4.7; studio#684 rows 10, 11): offline or
+ * error with Retry when the runs read failed, stale when an older list is shown. The raw error is only
+ * ever inside its technical details.
+ */
+function RunsReadBanner({ read, runsError, onRetryRuns }: { read: ReturnType<typeof deskReadState>; runsError: string | null; onRetryRuns: (() => void) | undefined }): React.ReactElement | null {
+  if (read === 'failed') return <StateBanner data-testid="everything-failed" kind={readErrorKind(runsError)} what="your work" error={runsError} {...(onRetryRuns !== undefined ? { onRetry: onRetryRuns } : {})} />;
+  if (read === 'stale') return <StateBanner data-testid="everything-stale" kind="stale" error={runsError} {...(onRetryRuns !== undefined ? { onRetry: onRetryRuns } : {})} />;
+  return null;
+}
+
+/** The session's newest clock (ms) — the Every-run table's "Updated": a run's end, else its launch; null when none is known. */
+function lastActivityMs(views: readonly SessionView[]): number | null {
+  let best = 0;
+  for (const v of views) {
+    const c = (v.session as unknown as { created_at?: unknown }).created_at;
+    const n = endedAtMs(v) ?? finishedAtMs(v) ?? (typeof c === 'number' && Number.isFinite(c) ? c * 1000 : 0);
+    if (n > best) best = n;
+  }
+  return best > 0 ? best : null;
+}
+
+/** What left this machine for a finished run, in the rail's words ("pull request open", "branch pushed"), or null. */
+function deliveryWord(view: SessionView, isSystemWorkflow: ReturnType<typeof useIsSystemWorkflow>): string | null {
+  if (!canDeliver(view, isSystemWorkflow)) return null;
+  const { claim } = resolveDelivery(deliveryOf(view));
+  return claim === 'none' || claim === 'in-flight' ? null : DELIVERY_LABEL[claim] || null;
+}
+
+/** A workflow's name for the table; a generated plan id ("wf-e08e99b9-…") is an internal handle, never shown. */
+function workflowWord(workflow: string): string {
+  return /^wf-[0-9a-f]{6,}/i.test(workflow) ? '—' : workflow;
+}
+
+/** A row's tone when no run view is at hand (a chat with no run yet): the session state's. */
+function toneOfState(state: SessionState): StatusTone {
+  return state === 'waiting' ? 'gate' : state === 'working' ? 'run' : state === 'blocked' ? 'fail' : state === 'done' ? 'ok' : 'quiet';
 }
 
 /** "N runs" / "1 run" — the count sentence's plural. */
@@ -355,11 +404,6 @@ function countWord(n: number, word: string): string {
 }
 
 // ── Every run (S17b): one row per RUN, sortable / filterable / paged ────────────────────────
-
-/** The plain state word a run row shows — the chip labels, per state. */
-const STATE_WORD: Readonly<Record<SessionState, string>> = {
-  working: 'Working', waiting: 'Waiting on you', blocked: 'Blocked', done: 'Done', quiet: 'Stopped',
-};
 
 const RUN_COLS: readonly { key: RunSortKey; label: string }[] = [
   { key: 'status', label: 'State' },
@@ -398,7 +442,6 @@ function RunsTable({ runs, runChatId, projects, q, runsLoaded, runsError, onRetr
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [text, setText] = useState('');
   const [page, setPage] = useState(1);
-  const [menuFor, setMenuFor] = useState<string | null>(null);
   // The Archived lens is its own read (`GET /runs?include=archived`), scoped to the project when one is set.
   const [archivedViews, setArchivedViews] = useState<SessionView[] | null>(null);
   const [archivedFailed, setArchivedFailed] = useState(false);
@@ -427,6 +470,7 @@ function RunsTable({ runs, runChatId, projects, q, runsLoaded, runsError, onRetr
   const sorted = useMemo(() => sortRunRows(filtered, sortKey, sortDir), [filtered, sortKey, sortDir]);
   const pageData = pageRunRows(sorted, page);
   const now = Date.now();
+  const archivedViewOf = (id: string): SessionView | undefined => archivedViews?.find((v) => v.session.id === id);
 
   const ready = archivedMode ? (archivedViews !== null && !archivedFailed) : (read === 'known' || read === 'stale');
   const onCol = (key: RunSortKey): void => {
@@ -443,16 +487,10 @@ function RunsTable({ runs, runChatId, projects, q, runsLoaded, runsError, onRetr
 
   return (
     <div data-testid="everything-runs" data-count={pageData.total} data-filter={q.filter}>
-      {!archivedMode && read === 'checking' && <p data-testid="everything-checking" className="wk-session-grey">Reading your work…</p>}
-      {!archivedMode && read === 'failed' && (
-        <p data-testid="everything-failed" role="alert" className="wk-session-grey">
-          Couldn’t read your work ({showText(runsError ?? '')}).
-          {onRetryRuns !== undefined && <> <button type="button" data-testid="everything-retry" onClick={onRetryRuns} className="wk-since-toggle">Try again</button></>}
-        </p>
-      )}
-      {!archivedMode && read === 'stale' && <p className="wk-session-grey">The last read failed ({showText(runsError ?? '')}); this is the list as last read.</p>}
-      {archivedMode && archivedViews === null && <p data-testid="everything-checking" className="wk-session-grey">Reading what was archived…</p>}
-      {archivedMode && archivedFailed && <p role="alert" className="wk-session-grey">Couldn’t read the archived runs.</p>}
+      {/* The failed / stale banner is the Sessions tab's one RunsReadBanner, above the bar. */}
+      {!archivedMode && read === 'checking' && <Skeleton data-testid="everything-checking" rows={5} />}
+      {archivedMode && archivedViews === null && <Skeleton data-testid="everything-checking" rows={3} />}
+      {archivedMode && archivedFailed && <StateBanner data-testid="everything-archived-failed" kind="error" what="the archived runs" />}
       {ready && (
         <div className="wk-runs-controls">
           <input
@@ -467,9 +505,8 @@ function RunsTable({ runs, runChatId, projects, q, runsLoaded, runsError, onRetr
         </div>
       )}
       {ready && pageData.total === 0 && (
-        <p data-testid="everything-empty" className="wk-session-grey">
-          {archivedMode ? 'Nothing is archived.' : text.trim() !== '' ? 'No runs match this filter.' : q.project !== null ? 'Nothing has been started in this project yet.' : 'Nothing has been started yet.'}
-        </p>
+        <EmptyState data-testid="everything-empty"
+          title={archivedMode ? 'Nothing is archived.' : text.trim() !== '' ? 'No runs match this filter.' : q.project !== null ? 'Nothing has been started in this project yet.' : 'Nothing has been started yet.'} />
       )}
       {ready && pageData.total > 0 && (
         <div role="table" aria-label="Every run" data-testid="everything-runs-table" className="wk-runs-table">
@@ -493,38 +530,36 @@ function RunsTable({ runs, runChatId, projects, q, runsLoaded, runsError, onRetr
           {pageData.slice.map((r) => {
             // studio#675: an archived run opens at its run address (its chat's session reads the live index).
             const path = sessionPath(archivedMode ? `run:${r.runId}` : r.sessionId);
-            const finished = !archivedMode && FINISHED.has(r.status) ? viewOf(r.runId) : undefined;
-            const open = menuFor === r.runId;
+            const view = archivedMode ? archivedViewOf(r.runId) : viewOf(r.runId);
+            const word = view !== undefined ? statusWord(view) : { word: 'Unknown' as const, tone: 'quiet' as const };
+            const finished = !archivedMode && FINISHED.has(r.status) ? view : undefined;
+            const title = showText(r.title);
+            const lead = [
+              { id: 'open', label: 'Open', onSelect: () => navigate(path) },
+              { id: 'steps', label: 'See the steps', onSelect: () => openSheet({ kind: 'session', sessionId: `run:${r.runId}` }, 'steps') },
+            ];
+            const cells = (
+              <a href={path} onClick={go(path)} className="wk-runs-cells">
+                <span className="wk-runs-cell wk-runs-cell--state"><span aria-hidden className={`wk-everything-dot wk-everything-dot--${word.tone}`} />{word.word}</span>
+                <span className="wk-runs-cell wk-runs-cell--title" title={title}>{title}</span>
+                <span className="wk-runs-cell">{r.project}</span>
+                <span className="wk-runs-cell">{r.repo ?? '—'}</span>
+                <span className="wk-runs-cell">{workflowWord(r.workflow)}</span>
+                <span className="wk-runs-cell" title={r.created > 0 ? absTime(r.created) : undefined}>{r.created > 0 ? relTime(r.created, now) : '—'}</span>
+                <span className="wk-runs-cell" title={r.updated > 0 ? absTime(r.updated) : undefined}>{r.updated > 0 ? relTime(r.updated, now) : '—'}</span>
+              </a>
+            );
             return (
-              <div key={r.runId} data-testid="runs-row" data-run-id={r.runId} data-session-id={r.sessionId} data-state={r.status} className="wk-runs-row">
-                <div className="wk-runs-line">
-                  <a href={path} onClick={go(path)} className="wk-runs-cells">
-                    <span className="wk-runs-cell wk-runs-cell--state"><span aria-hidden className={`wk-desk-dot wk-desk-dot--${r.status}`} />{STATE_WORD[r.status]}</span>
-                    <span className="wk-runs-cell wk-runs-cell--title">{showText(r.title)}</span>
-                    <span className="wk-runs-cell">{r.project}</span>
-                    <span className="wk-runs-cell">{r.repo ?? '—'}</span>
-                    <span className="wk-runs-cell">{r.workflow}</span>
-                    <span className="wk-runs-cell">{r.created > 0 ? `${ageWord(Math.max(0, now - r.created))} ago` : '—'}</span>
-                    <span className="wk-runs-cell">{r.updated > 0 ? `${ageWord(Math.max(0, now - r.updated))} ago` : '—'}</span>
-                  </a>
-                  {archivedMode && (
-                    <button type="button" data-testid="everything-unarchive" data-run-id={r.runId} onClick={() => unarchive(r.runId)} className="wk-since-toggle">Unarchive</button>
-                  )}
-                  <button
-                    type="button"
-                    data-testid="runs-row-menu"
-                    data-run-id={r.runId}
-                    aria-expanded={open}
-                    aria-label="Row actions"
-                    onClick={() => setMenuFor(open ? null : r.runId)}
-                    className="wk-sheet-open"
-                  >⋯</button>
-                </div>
-                {open && (
-                  <div className="wk-runs-menu">
-                    <button type="button" data-testid="runs-row-open" onClick={() => navigate(path)} className="wk-since-toggle">Open</button>
-                    <button type="button" data-testid="runs-row-look" onClick={() => openSheet({ kind: 'session', sessionId: `run:${r.runId}` }, 'steps')} className="wk-since-toggle">Look underneath</button>
-                    {finished !== undefined && <FinishedRunRow view={finished} selectedRunId={null} onSelect={() => navigate(path)} onArchive={archive} />}
+              <div key={r.runId} data-testid="runs-row" data-run-id={r.runId} data-session-id={r.sessionId} data-state={r.status} data-word={word.word} className="wk-runs-row">
+                {finished !== undefined ? (
+                  <FinishedRunMenu view={finished} title={title} lead={lead} onArchive={archive} lineClassName="wk-runs-line" data-testid="runs-row-menu">{cells}</FinishedRunMenu>
+                ) : (
+                  <div className="wk-runs-line">
+                    {cells}
+                    {archivedMode && (
+                      <button type="button" data-testid="everything-unarchive" data-run-id={r.runId} onClick={() => unarchive(r.runId)} className="wk-btn wk-btn--secondary wk-btn--sm">Unarchive</button>
+                    )}
+                    <OverflowMenu data-testid="runs-row-menu" label={`More actions for ${title}`} items={lead} />
                   </div>
                 )}
               </div>
@@ -534,9 +569,9 @@ function RunsTable({ runs, runChatId, projects, q, runsLoaded, runsError, onRetr
       )}
       {ready && pageData.total > 0 && pageData.pages > 1 && (
         <div data-testid="runs-pager" className="wk-runs-pager">
-          <button type="button" data-testid="runs-pager-prev" disabled={pageData.page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))} className="wk-since-toggle">Previous</button>
-          <span data-testid="runs-pager-at">page {pageData.page} of {pageData.pages}</span>
-          <button type="button" data-testid="runs-pager-next" disabled={pageData.page >= pageData.pages} onClick={() => setPage((p) => p + 1)} className="wk-since-toggle">Next</button>
+          <button type="button" data-testid="runs-pager-prev" disabled={pageData.page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))} className="wk-btn wk-btn--secondary wk-btn--sm">Previous</button>
+          <span data-testid="runs-pager-at">Page {pageData.page} of {pageData.pages}</span>
+          <button type="button" data-testid="runs-pager-next" disabled={pageData.page >= pageData.pages} onClick={() => setPage((p) => p + 1)} className="wk-btn wk-btn--secondary wk-btn--sm">Next</button>
         </div>
       )}
     </div>
@@ -584,9 +619,9 @@ function ArchivedRuns({ navigate, project, onChanged }: { navigate: Navigate; pr
   };
   return (
     <div data-testid="everything-archived" data-count={rows?.length ?? ''}>
-      {rows === null && <p data-testid="everything-checking" className="wk-session-grey">Reading what was archived…</p>}
-      {failed && <p role="alert" className="wk-session-grey">Couldn’t read the archived runs.</p>}
-      {rows !== null && !failed && rows.length === 0 && <p data-testid="everything-empty" className="wk-session-grey">Nothing is archived.</p>}
+      {rows === null && <Skeleton data-testid="everything-checking" rows={3} />}
+      {failed && <StateBanner data-testid="everything-archived-failed" kind="error" what="the archived runs" />}
+      {rows !== null && !failed && rows.length === 0 && <EmptyState data-testid="everything-empty" title="Nothing is archived." />}
       {rows !== null && rows.length > 0 && (
         <ul className="wk-everything-list">
           {rows.map((v) => {
@@ -594,13 +629,13 @@ function ArchivedRuns({ navigate, project, onChanged }: { navigate: Navigate; pr
             // GET /runs/:id. Its chat's session reads the live index, which leaves archived runs out.
             const path = sessionPath(`run:${v.session.id}`);
             return (
-              <li key={v.session.id} data-testid="everything-archived-run" data-run-id={v.session.id} className="wk-desk-session wk-everything-row" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <a href={path} onClick={(e) => { e.preventDefault(); navigate(path); }} className="wk-desk-need-body" style={{ flex: '1 1 auto', opacity: 0.7 }}>
+              <li key={v.session.id} data-testid="everything-archived-run" data-run-id={v.session.id} className="wk-desk-session wk-everything-row wk-everything-actrow">
+                <a href={path} onClick={(e) => { e.preventDefault(); navigate(path); }} className="wk-desk-need-body wk-everything-grow">
                   {/* studio#510: the same word the rail uses — an onboarding run names its repository. */}
                   <span className="wk-desk-session-title">{showText(plainRunTitle(v.session.problem || v.session.id))}</span>
                   {v.session.archive_note ? <span className="wk-desk-need-line">{showText(v.session.archive_note)}</span> : null}
                 </a>
-                <button type="button" data-testid="everything-unarchive" onClick={() => unarchive(v.session.id)} className="wk-since-toggle">Unarchive</button>
+                <button type="button" data-testid="everything-unarchive" onClick={() => unarchive(v.session.id)} className="wk-btn wk-btn--secondary wk-btn--sm">Unarchive</button>
               </li>
             );
           })}
@@ -653,16 +688,16 @@ function LiveChats({ known, go }: { known: ReadonlySet<string>; go: Go }): React
       {rows.map((c) => {
         // S16a-4e: a chat is its session.
         const path = sessionPath(c.chatId);
-        const idle = c.idleSecs === null ? null : c.idleSecs < 60 ? 'just now' : `${ageWord(c.idleSecs * 1000)} ago`;
+        const idle = c.idleSecs === null ? null : relTime(Date.now() - c.idleSecs * 1000);
         const seats = c.seats;
         return (
-          <div key={c.chatId} data-testid="everything-live-chat" data-chat-id={c.chatId} className="wk-desk-session" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span aria-hidden className="wk-desk-dot wk-desk-dot--working" />
-            <a href={path} onClick={go(path)} className="wk-desk-need-body" style={{ flex: '1 1 auto' }}>
+          <div key={c.chatId} data-testid="everything-live-chat" data-chat-id={c.chatId} className="wk-desk-session wk-everything-actrow">
+            <span aria-hidden className="wk-everything-dot wk-everything-dot--run" />
+            <a href={path} onClick={go(path)} className="wk-desk-need-body wk-everything-grow">
               <span className="wk-desk-session-title">{c.title !== undefined ? showTextOf(c.title) : `Chat with ${seats.length > 0 ? seats.join(', ') : 'no seat yet'}`}</span>
               <span className="wk-desk-need-line">{idle !== null ? `last activity ${idle}` : 'open'}</span>
             </a>
-            <button type="button" data-testid="everything-live-chat-end" onClick={() => end(c.chatId)} className="wk-since-toggle">End</button>
+            <button type="button" data-testid="everything-live-chat-end" onClick={() => end(c.chatId)} className="wk-btn wk-btn--quiet wk-btn--sm">End chat</button>
           </div>
         );
       })}
@@ -706,12 +741,13 @@ function MadeTab({ runs, q, navigate, go }: { runs: SessionView[]; q: Everything
   const opened = q.open !== null && q.open !== undefined ? rows.find((r) => r.doc !== undefined && r.doc.name === q.open && (q.project === null || r.projectId === q.project)) ?? null : null;
   const askable = projects.filter((p) => p.id !== 'default').map((p) => p.id);
   const loadAll = (): void => { void useDocsCache.getState().loadAll(askable); };
-  const censusLine = index === 'untried' || (index === 'present' && census === 'opened')
-    ? 'Reading what this daemon has made…'
-    : census === 'daemon' ? 'Everything this daemon has made, from its index.'
-    : census === 'fanout' ? 'Everything the projects listed, each asked in turn.'
-    : index === 'failed' ? 'Couldn’t read the daemon’s index — this is what the projects opened this session listed.'
-    : 'This daemon keeps no index — this is what the projects opened this session listed.';
+  // studio#687 row 75: plain words — no "daemon", no "index". The complete list says nothing about itself.
+  const reading = index === 'untried' || (index === 'present' && census === 'opened');
+  const censusLine = reading || census === 'daemon'
+    ? null
+    : census === 'fanout' ? 'What each project listed.'
+    : index === 'failed' ? 'Couldn’t read the full list. Showing what the projects you opened listed.'
+    : 'Showing what the projects you opened listed.';
   const offerLoad = (index === 'absent' || index === 'failed') && progress === null && askable.length > 0;
 
   return (
@@ -726,13 +762,13 @@ function MadeTab({ runs, q, navigate, go }: { runs: SessionView[]; q: Everything
           ))}
         </div>
         {!doorOpen && (
-          <button type="button" data-testid="made-new-document" onClick={() => navigate(withDoor(true), { replace: true })} className="wk-prop-btn wk-prop-btn--ghost">New document</button>
+          <button type="button" data-testid="made-new-document" onClick={() => navigate(withDoor(true), { replace: true })} className="wk-btn wk-btn--secondary wk-btn--sm">New document</button>
         )}
         {scopeName !== null && (
           <p data-testid="everything-scope" data-project-id={q.project ?? ''} className="wk-everything-scope">
             In <b>{scopeName}</b>
             {' · '}
-            <a href={lens(q.kind, null)} onClick={(e) => { e.preventDefault(); navigate(lens(q.kind, null), { replace: true }); }} data-testid="everything-scope-clear">Every project</a>
+            <a href={lens(q.kind, null)} onClick={(e) => { e.preventDefault(); navigate(lens(q.kind, null), { replace: true }); }} data-testid="everything-scope-clear" className="wk-link">Every project</a>
           </p>
         )}
       </div>
@@ -748,37 +784,43 @@ function MadeTab({ runs, q, navigate, go }: { runs: SessionView[]; q: Everything
       {deleting !== null && (
         <DocDeleteConfirm projectId={deleting.projectId} docId={deleting.name} subject="document" onClose={() => setDeleting(null)} onDeleted={() => setDeleting(null)} />
       )}
-      <p data-testid="everything-made-census" className="wk-session-grey">
-        {censusLine}
-        {offerLoad && <> <button type="button" data-testid="everything-made-load" onClick={loadAll} className="wk-since-toggle" title="One list per project, in turn — a project's bridge may take a minute to start">Ask every project</button></>}
-        {progress !== null && <>
-          {' '}Asking {progress.current ?? '…'} ({progress.done} of {progress.total})…{' '}
-          <button type="button" data-testid="everything-made-cancel" onClick={() => useDocsCache.getState().cancelFanout()} title="Stop after the project being asked answers — what landed stays listed" className="wk-since-toggle">Cancel</button>
-        </>}
-      </p>
-      {Object.entries(unavailable).map(([pid, why]) => (
-        <p key={pid} data-testid="everything-made-unavailable" data-project-id={pid} className="wk-session-grey">Couldn’t list {nameOf(pid)}: {showText(why)}</p>
-      ))}
-      {rows.length === 0 && index !== 'untried' && (
-        <p data-testid="everything-empty" className="wk-session-grey">
-          {q.kind === 'all' ? 'Nothing made yet' : `No ${q.kind} yet`}{scopeName !== null ? ` in ${scopeName}` : ''}.
+      {reading && rows.length === 0 && <Skeleton data-testid="everything-made-reading" rows={3} />}
+      {(censusLine !== null || offerLoad || progress !== null) && (
+        <p data-testid="everything-made-census" className="wk-everything-note">
+          {censusLine}
+          {offerLoad && <> <button type="button" data-testid="everything-made-load" onClick={loadAll} className="wk-btn wk-btn--secondary wk-btn--sm" title="One list per project, in turn. A project may take a minute to answer.">Ask every project</button></>}
+          {progress !== null && <>
+            {' '}Asking {progress.current ?? '…'} ({progress.done} of {progress.total})…{' '}
+            <button type="button" data-testid="everything-made-cancel" onClick={() => useDocsCache.getState().cancelFanout()} title="Stop after the project being asked answers. What landed stays listed." className="wk-btn wk-btn--quiet wk-btn--sm">Cancel</button>
+          </>}
         </p>
       )}
+      {Object.entries(unavailable).map(([pid, why]) => (
+        <div key={pid} data-testid="everything-made-unavailable" data-project-id={pid} className="wk-everything-note">
+          <p className="wk-everything-note">Couldn’t list what {nameOf(pid)} made.</p>
+          <TechDetails text={showText(why)} />
+        </div>
+      ))}
+      {rows.length === 0 && !reading && (
+        <EmptyState data-testid="everything-empty"
+          title={`${q.kind === 'all' ? 'Nothing made yet' : `No ${q.kind} yet`}${scopeName !== null ? ` in ${scopeName}` : ''}.`}
+          body="Documents, pages, decks and demo videos your sessions make show up here." />
+      )}
       {rows.length > 0 && (
-        <ul className="wk-everything-list">
+        <ul className="wk-everything-list wk-desk-card wk-everything-group wk-everything-madelist">
           {rows.map((r) => (
             <li key={r.key} className="wk-made-li">
               <a href={hrefOf(r)} onClick={go(hrefOf(r))} data-testid="everything-made-row" data-kind={r.kind} data-project-id={r.projectId ?? ''} {...(r.runId !== undefined ? { 'data-run-id': r.runId, 'data-status': r.runStatus ?? '' } : { 'data-name': r.doc!.name })} className="wk-desk-session wk-everything-row">
                 <span className="wk-desk-need-body">
                   <span className="wk-desk-session-title">{showText(r.title)}</span>
                   <span className="wk-desk-need-line">
-                    {MADE_WORD[r.kind]} · {nameOf(r.projectId)}{r.updatedAt !== null ? ` · ${ageWord(Math.max(0, now - r.updatedAt))} ago` : ''}
+                    {MADE_WORD[r.kind]} · {nameOf(r.projectId)}{r.updatedAt !== null ? <> · <time title={absTime(r.updatedAt)}>{relTime(r.updatedAt, now)}</time></> : ''}
                   </span>
                   {r.doc?.grounding !== undefined && <span className="wk-desk-need-line"><GroundingChip grounding={r.doc.grounding} /></span>}
                 </span>
               </a>
               {r.doc !== undefined && (
-                <button type="button" data-testid="made-row-delete" data-name={r.doc.name} aria-label={`Delete ${r.title}`} onClick={() => setDeleting({ projectId: r.projectId ?? 'default', name: r.doc!.name })} className="wk-since-toggle wk-made-delete">Delete…</button>
+                <button type="button" data-testid="made-row-delete" data-name={r.doc.name} aria-label={`Delete ${r.title}`} onClick={() => setDeleting({ projectId: r.projectId ?? 'default', name: r.doc!.name })} className="wk-btn wk-btn--quiet wk-btn--sm wk-made-delete">Delete…</button>
               )}
             </li>
           ))}
@@ -795,56 +837,103 @@ function HelpersTab(): React.ReactElement {
   // Amendment 5, decision 5: Sign in opens the one plain-words panel; the row clears when the
   // re-read finds the seat back (useRoster follows the deposit).
   const [signIn, setSignIn] = useState<RosterSeat | null>(null);
+  // studio#687 row 38: the CLIs only (no non-CLI entries). A reviewer-only seat that shares its name
+  // with a helper folds into that helper's row ("Also reviews work"), so no name is listed twice.
+  const seats = roster === null ? null : foldReviewers(displaySeats(roster));
   return (
-    <div data-testid="everything-helpers" data-count={roster?.length ?? ''}>
-      <p className="wk-session-grey">The AI helpers this daemon can give work to, and whether each is signed in.</p>
+    <div data-testid="everything-helpers" data-count={seats?.length ?? ''}>
+      <p className="wk-everything-note">The AI helpers Studio can give work to, and whether each is signed in.</p>
       {signIn !== null && <SignInPanel seat={signIn} onClose={() => setSignIn(null)} />}
-      {roster === null && <p data-testid="everything-checking" className="wk-session-grey">Reading the roster…</p>}
-      {roster !== null && roster.length === 0 && <p data-testid="everything-empty" className="wk-session-grey">No helper is set up on this daemon yet.</p>}
-      {roster !== null && roster.length > 0 && (
+      {seats === null && <Skeleton data-testid="everything-checking" rows={4} />}
+      {seats !== null && seats.length === 0 && <EmptyState data-testid="everything-empty" title="No helper is set up yet." body="Add one in Settings." />}
+      {seats !== null && seats.length > 0 && (
         <ul className="wk-everything-list">
-          {roster.map((seat) => <HelperRow key={seat.key} seat={seat} onSignIn={() => setSignIn(seat)} />)}
+          {seats.map(({ seat, alsoReviews }) => <HelperRow key={seat.key} seat={seat} alsoReviews={alsoReviews} onSignIn={() => setSignIn(seat)} />)}
         </ul>
       )}
     </div>
   );
 }
 
-function HelperRow({ seat, onSignIn }: { seat: RosterSeat; onSignIn: () => void }): React.ReactElement {
+/**
+ * One helper's line in plain words (studio#687 rows 38, 76): "Signed in", "Signed out" with a Sign in
+ * button, "No sign-in needed", "Reviewer only", "Not available" with the helper's own words behind
+ * technical details. Never "council", "seat" or "eligible".
+ */
+function helperLine(seat: RosterSeat): { words: string[]; tone: StatusTone; signIn: boolean; detail: string | null; title: string | null } {
+  const standing = seatStandingWord(seat);
+  const health = seat.health;
+  const words: string[] = [];
+  const signIn = signInLapsed(seat);
+  if (isReviewerOnly(seat)) words.push('Reviewer only');
+  if (health?.status === 'inactive') {
+    words.push(signIn ? 'Signed out' : 'Not available');
+    const raw = health.message !== undefined && health.message !== '' ? health.message : null;
+    return { words, tone: 'fail', signIn, detail: raw, title: null };
+  }
+  const tier = typeof (seat as Record<string, unknown>)['free_tier'] === 'string' ? String((seat as Record<string, unknown>)['free_tier']) : '';
+  // The sign-in state is always said (the intro promises it); a role or "not used for checks" rides beside it.
+  const auth = standing.auth;
+  const signedWord = auth === 'not_required' ? 'No sign-in needed'
+    : auth === 'signed_in' || seat.signed_in === true ? 'Signed in'
+    : auth === 'signed_out' || seat.signed_in === false ? 'Signed out'
+    : null;
+  words.unshift(signedWord ?? (health === undefined ? 'Status unknown' : 'Ready'));
+  if (standing.kind === 'ineligible' && !isReviewerOnly(seat)) words.push('Not used for checks');
+  const tone: StatusTone = health === undefined ? 'quiet' : signIn || standing.kind === 'signed-out' ? 'gate' : 'ok';
+  return { words, tone, signIn, detail: null, title: tier !== '' ? `Free tier: ${tier}` : null };
+}
+
+/** One row per helper name: a reviewer-only seat named like a helper rides that helper's row. */
+function foldReviewers(seats: readonly RosterSeat[]): { seat: RosterSeat; alsoReviews: boolean }[] {
+  const out: { seat: RosterSeat; alsoReviews: boolean }[] = [];
+  const reviewers = seats.filter(isReviewerOnly);
+  for (const seat of seats) {
+    if (isReviewerOnly(seat)) continue;
+    out.push({ seat, alsoReviews: reviewers.some((r) => seatLabel(r) === seatLabel(seat)) });
+  }
+  for (const r of reviewers) if (!out.some((o) => seatLabel(o.seat) === seatLabel(r))) out.push({ seat: r, alsoReviews: false });
+  return out;
+}
+
+function HelperRow({ seat, alsoReviews, onSignIn }: { seat: RosterSeat; alsoReviews: boolean; onSignIn: () => void }): React.ReactElement {
   const standing = seatStandingWord(seat);
   const showText = useDisplayText();
-  const health = seat.health;
-  // The daemon's own words for an inactive seat — through the home-path formatter, like every message.
-  const message = health?.status === 'inactive' && health.message !== undefined && health.message !== '' ? showText(health.message) : null;
-  const state = health === undefined ? 'unknown' : health.status;
+  const state = seat.health === undefined ? 'unknown' : seat.health.status;
+  const base = helperLine(seat);
+  const line = alsoReviews ? { ...base, words: [...base.words, 'Also reviews work'] } : base;
   return (
-    <li data-testid="everything-helper" data-seat={seat.key} data-standing={standing.kind} data-health={state} className="wk-desk-session wk-everything-row">
-      <span aria-hidden className={`wk-desk-dot wk-desk-dot--${state === 'active' ? (standing.kind === 'signed-out' || standing.kind === 'ineligible' ? 'waiting' : 'done') : state === 'inactive' ? 'blocked' : 'quiet'}`} />
-      <span className="wk-desk-need-body">
-        <span className="wk-desk-session-title">{seat.display_name || seat.key}</span>
-        <span className="wk-desk-need-line" title={standing.title ?? undefined}>
-          {message ?? [state === 'unknown' ? null : state, standing.detail].filter((s): s is string => s !== null).join(' · ')}
-          {signInLapsed(seat) && <> · <a href="/system" onClick={(e) => { e.preventDefault(); onSignIn(); }} data-testid="everything-helper-signin">Sign in →</a></>}
-        </span>
+    <li data-testid="everything-helper" data-seat={seat.key} data-standing={standing.kind} data-health={state} className="wk-desk-session wk-everything-row wk-everything-actrow">
+      <span aria-hidden className={`wk-everything-dot wk-everything-dot--${line.tone}`} />
+      <span className="wk-desk-need-body wk-everything-grow">
+        <span className="wk-desk-session-title">{seatLabel(seat)}</span>
+        <span className="wk-desk-need-line" title={line.title ?? undefined}>{line.words.join(' · ')}</span>
+        {line.detail !== null && <TechDetails data-testid="everything-helper-detail" text={showText(line.detail)} />}
       </span>
+      {line.signIn && <button type="button" onClick={onSignIn} data-testid="everything-helper-signin" className="wk-btn wk-btn--secondary wk-btn--sm">Sign in</button>}
     </li>
   );
 }
 
 // ── Handed over ──────────────────────────────────────────────────────────────────────────────
 
-function HandedTab({ runs, runsLoaded, go }: { runs: SessionView[]; runsLoaded: boolean; go: Go }): React.ReactElement {
+function HandedTab({ runs, runsLoaded, runsError, onRetryRuns, go }: { runs: SessionView[]; runsLoaded: boolean; runsError: string | null; onRetryRuns: (() => void) | undefined; go: Go }): React.ReactElement {
   const runChatId = useCapabilities((s) => s.runChatId);
   const deliveredNow = useDeliveredNow();
   const projectIdByRun = useMembershipStore((s) => s.projectIdByRun);
   const nameOf = useProjectName();
   const rows = useMemo(() => handedRows(runs, deliveredNow, runChatId, projectIdByRun), [runs, deliveredNow, runChatId, projectIdByRun]);
   const now = Date.now();
+  const read = deskReadState(runsLoaded, runsError);
   return (
     <div data-testid="everything-handed" data-count={rows.length}>
-      <p className="wk-session-grey">Work that left this machine: a pull request opened, or a branch pushed.</p>
-      {!runsLoaded && <p data-testid="everything-checking" className="wk-session-grey">Reading your work…</p>}
-      {runsLoaded && rows.length === 0 && <p data-testid="everything-empty" className="wk-session-grey">Nothing has been handed over yet.</p>}
+      <RunsReadBanner read={read} runsError={runsError} onRetryRuns={onRetryRuns} />
+      <p className="wk-everything-note">Work that left this machine: a pull request opened, or a branch pushed.</p>
+      {read === 'checking' && <Skeleton data-testid="everything-checking" rows={3} />}
+      {(read === 'known' || read === 'stale') && rows.length === 0 && (
+        <EmptyState data-testid="everything-empty" title="Nothing has been handed over yet."
+          body="When a session opens a pull request or pushes a branch, it shows up here." />
+      )}
       {rows.length > 0 && (
         <ul className="wk-everything-list">
           {rows.map((r) => <HandedRowView key={r.runId} r={r} name={nameOf(r.projectId)} now={now} go={go} />)}
@@ -856,18 +945,17 @@ function HandedTab({ runs, runsLoaded, go }: { runs: SessionView[]; runsLoaded: 
 
 function HandedRowView({ r, name, now, go }: { r: HandedRow; name: string; now: number; go: Go }): React.ReactElement {
   const showText = useDisplayText();
-  const when = r.when > 0 ? `${ageWord(Math.max(0, now - r.when))} ago` : null;
+  const when = r.when > 0 ? relTime(r.when, now) : null;
   const word = r.claim === 'pr-open' ? 'pull request open' : r.claim === 'pushed' ? `pushed${r.branch !== null ? ` to ${r.branch}` : ''}` : 'handed over';
   return (
     <li data-testid="everything-handed-row" data-run-id={r.runId} data-claim={r.claim} className="wk-desk-session wk-everything-row">
-      <span aria-hidden className="wk-desk-dot wk-desk-dot--done" />
+      <span aria-hidden className="wk-everything-dot wk-everything-dot--ok" />
       <span className="wk-desk-need-body">
         <span className="wk-desk-session-title">{showText(r.title)}</span>
-        <span className="wk-desk-need-line">
-          {word} · {name}{when !== null ? ` · ${when}` : ''}
-          {' · '}
-          <a href={sessionPath(r.sessionId)} onClick={go(sessionPath(r.sessionId))} data-testid="everything-handed-open">Open the session →</a>
-          {r.href !== null && <> · <a href={r.href} target="_blank" rel="noreferrer" data-testid="everything-handed-pr">Pull request ↗</a></>}
+        <span className="wk-desk-need-line">{word} · {name}{when !== null ? ` · ${when}` : ''}</span>
+        <span className="wk-everything-acts">
+          <a href={sessionPath(r.sessionId)} onClick={go(sessionPath(r.sessionId))} data-testid="everything-handed-open" className="wk-link">Open the session</a>
+          {r.href !== null && <a href={r.href} target="_blank" rel="noreferrer" data-testid="everything-handed-pr" className="wk-link">Pull request ↗</a>}
         </span>
       </span>
     </li>

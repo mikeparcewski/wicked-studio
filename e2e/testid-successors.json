@@ -695,6 +695,9 @@
     "steering-request-changes": "session-gate-row",
     "steering-retry": "session-gate-row",
     "tech-gate": "session-gate-row",
-    "composer-launch-workflow": "composer-chip"
+    "composer-launch-workflow": "composer-chip",
+    "everything-retry": "everything-failed",
+    "runs-row-open": "runs-row-menu",
+    "runs-row-look": "runs-row-menu"
   }
 }
