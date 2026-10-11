@@ -12,8 +12,8 @@
   "studioVersion": "0.7.4",
   "counts": {
     "files": 193,
-    "occurrences": 2118,
-    "static": 1849,
+    "occurrences": 2119,
+    "static": 1850,
     "dynamic": 54,
     "computed": 17
   },
@@ -7646,6 +7646,12 @@
       "testId": "session-turn",
       "files": [
         "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
+      "testId": "settings-council-size",
+      "files": [
+        "src/components/SystemSettings.tsx"
       ]
     },
     {

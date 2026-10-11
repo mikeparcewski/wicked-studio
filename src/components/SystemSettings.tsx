@@ -15,6 +15,7 @@ import { SignInPanel } from './SignInPanel.js';
 import { testingPath } from '../api/testing.js';
 import { useDisplayPath, useDisplayText } from '../hooks/useHomePath.js';
 import { homeDirsIn } from '../board/homePath.js';
+import { Segmented } from './ui/Segmented.js';
 
 const CLI_DEFAULTS_KEY = 'wicked_default_clis';
 
@@ -31,7 +32,8 @@ function isAbsolutePathLike(p: string): boolean {
  * (crew#549 `deliverIdentityLogin`, in api-types 0.67.0). Delete the extension the moment studio
  * bumps its pin — the same TODO shape `api/types.ts` uses for the delivery wire.
  */
-type LocalSettings = Settings & { deliverIdentityLogin?: string };
+// api-types 0.109.0 carries councilSize; extend the pinned settings type locally until then.
+type LocalSettings = Settings & { deliverIdentityLogin?: string; councilSize?: number };
 
 /**
  * Client-side mirror of the daemon's deliver-identity rule (crew#549): a GitHub login — letters,
@@ -78,7 +80,7 @@ interface SystemSettingsProps {
 export function SystemSettings({ navigate = (p) => { history.pushState(null, '', p); window.dispatchEvent(new PopStateEvent('popstate')); } }: SystemSettingsProps): React.ReactElement {
   const showPath = useDisplayPath();
   const showText = useDisplayText();
-  const [settings, setSettings] = useState<Settings | null>(null);
+  const [settings, setSettings] = useState<LocalSettings | null>(null);
   const [dirty, setDirty] = useState<Partial<LocalSettings>>({});
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -203,6 +205,10 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
   }
 
   const merged: LocalSettings = { graphNodeLimit: 150, ...settings, ...dirty };
+  const councilSizeOptions = ['1', '2', '3', '4', '5'];
+  if (settings?.councilSize !== undefined && !councilSizeOptions.includes(String(settings.councilSize))) {
+    councilSizeOptions.push(String(settings.councilSize));
+  }
   const hasDirty = Object.keys(dirty).length > 0;
   const workerRoot = merged.worker_config_root ?? '';
   const workerRootInvalid = workerRoot !== '' && !isAbsolutePathLike(workerRoot);
@@ -447,6 +453,34 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
             style={{ background: 'var(--surface-rail)', border: '1px solid var(--surface-raised)', color: 'var(--ink-high)' }}
           />
         </SettingRow>
+      </section>
+
+      <section
+        className="rounded-xl px-5 mb-6"
+        style={{ background: 'var(--surface-card)', border: '1px solid var(--surface-raised)' }}
+      >
+        <h2
+          className="text-xs font-semibold uppercase tracking-wide pt-4 pb-2 font-mono"
+          style={{ color: 'var(--ink-dim)' }}
+        >
+          Reviews
+        </h2>
+
+        <div className="flex flex-col gap-3 py-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium" style={{ color: 'var(--ink-high)' }}>Council size</p>
+            <p className="wk-field-note">How many helpers review each decision; they are picked at random.</p>
+          </div>
+          <div className="shrink-0">
+            <Segmented
+              label="Council size"
+              data-testid="settings-council-size"
+              value={String(merged.councilSize ?? 3)}
+              options={councilSizeOptions.map((value) => ({ value, label: value }))}
+              onChange={(value) => patch('councilSize', Number(value))}
+            />
+          </div>
+        </div>
       </section>
 
       <section
