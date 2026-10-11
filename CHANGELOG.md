@@ -12,6 +12,16 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.7.7] — 2026-10-11
+
+The learn walkthrough asks follow-ups, and the rail's project icon opens the project.
+
+### Added
+- The learn walkthrough's gate offers "Ask a follow-up", a multi-turn loop until you approve (#714, with wicked-core#899).
+
+### Fixed
+- The rail's and the Desk cards' project icon opens the project dashboard (`/projects/:id`), not the requirements flow; "Not in a project" gets an open icon to See everything › Projects (#715).
+
 ## [0.7.6] — 2026-10-11
 
 Every section passes the UI contract (S1–S6): plain words, honest counts, one status line, no engine internals on the default layer, and phone layouts. A running session can be stopped from its own page.
@@ -2042,7 +2052,8 @@ The merged interactive layer: wicked-interactive's UI moved into this skin (DES-
   `git subtree split` (92 commits).
 - The SPA as a pure HTTP/WS client of the wicked-crew daemon: runs, gates, live CoreEvents.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.6...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.7...HEAD
+[0.7.7]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.6...v0.7.7
 [0.7.6]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.5...v0.7.6
 [0.7.5]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.4...v0.7.5
 [0.7.4]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.3...v0.7.4
