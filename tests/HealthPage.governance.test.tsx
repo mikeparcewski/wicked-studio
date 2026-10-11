@@ -184,3 +184,24 @@ describe('older daemons — null-safe by construction', () => {
     expect(within(gov).getByTestId('rail-governance-error').textContent).toContain('governance fold crashed: ENOSPC');
   });
 });
+
+describe('no paths or raw log lines in the default layer (reel UX gate ch56)', () => {
+  /** The card's words with every Technical details disclosure removed. */
+  function visibleText(el: HTMLElement): string {
+    const c = el.cloneNode(true) as HTMLElement;
+    c.querySelectorAll('details').forEach((d) => d.remove());
+    return c.textContent ?? '';
+  }
+  for (const [name, g] of [['healthy', GOVERNANCE_HEALTHY], ['dead letters', GOVERNANCE_DEADLETTERS], ['legacy outbox', GOVERNANCE_LEGACY_OUTBOX], ['no store', GOVERNANCE_NO_STORE]] as const) {
+    it(`${name}: plain words; paths and the raw finding line only behind Technical details`, async () => {
+      withGovernance(g);
+      render(<HealthPage />);
+      const gov = await screen.findByTestId('rail-governance');
+      const text = visibleText(gov);
+      expect(text).not.toMatch(/\/[\w.-]+\/[\w./-]+/);
+      expect(text).not.toMatch(/governance\.[a-z-]+/);
+      expect(text).not.toMatch(/\b(info|warning|error) · /);
+      expect(text).not.toMatch(/ndjson|\.db\b/);
+    });
+  }
+});
