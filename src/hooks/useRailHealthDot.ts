@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api/client.js';
-import { getDiagnostics } from '../api/diagnostics.js';
+import { getDiagnostics, isDiagnosticsUnsupported } from '../api/diagnostics.js';
 import type { DiagnosticsGovernance, RosterSeat } from '../api/types.js';
 import { useConnectionStore } from '../store/connection.js';
 import { getCachedRoster, subscribeRoster } from '../store/rosterCache.js';
@@ -18,6 +18,9 @@ import { getCachedRoster, subscribeRoster } from '../store/rosterCache.js';
  * rejection is a DEGRADED dot, never a red one — only an answered-dirty store makes it red, the
  * section's own rule.
  */
+/** Fired by /health whenever it (re)reads its checks, so the rail's dot never disagrees with the page. */
+export const HEALTH_RECHECKED = 'wicked:health-rechecked';
+
 export function useRailHealthDot(): { heartState: 'healthy' | 'degraded' | 'unhealthy'; heartColor: string; sick: boolean } {
   const wsStatus = useConnectionStore((s) => s.status);
   const [health, setHealth] = useState<{ status?: string } | null>(null);
@@ -37,7 +40,8 @@ export function useRailHealthDot(): { heartState: 'healthy' | 'degraded' | 'unhe
   useEffect(() => {
     const onFocus = (): void => setEpoch((n) => n + 1);
     window.addEventListener('focus', onFocus);
-    return () => window.removeEventListener('focus', onFocus);
+    window.addEventListener(HEALTH_RECHECKED, onFocus);
+    return () => { window.removeEventListener('focus', onFocus); window.removeEventListener(HEALTH_RECHECKED, onFocus); };
   }, []);
 
   useEffect(() => {
@@ -55,7 +59,7 @@ export function useRailHealthDot(): { heartState: 'healthy' | 'degraded' | 'unhe
       .then((d: { governance?: DiagnosticsGovernance }) => {
         if (!live) return;
         setGov(d.governance === undefined ? { kind: 'absent' } : { kind: 'ok', governance: d.governance });
-      }, () => { if (live) setGov({ kind: 'error' }); });
+      }, (e: unknown) => { if (live) setGov(isDiagnosticsUnsupported(e) ? { kind: 'absent' } : { kind: 'error' }); });
     const un = subscribeRoster((r) => { if (live) { setRoster(r); setRosterError(false); } });
     return () => { live = false; un(); };
   }, [epoch]);

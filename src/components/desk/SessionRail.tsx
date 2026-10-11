@@ -181,7 +181,7 @@ export function SessionRail({ runs, needRows, navigate, pathname }: {
           onClick={(e) => { e.preventDefault(); setMore(false); navigate('/health'); }}
           data-testid="desk-rail-health"
           data-nav-dest="health"
-          aria-current={pathname === '/health' ? 'page' : undefined}
+          aria-current={current('/health')}
           aria-label={dot.heartState === 'healthy' ? undefined : `Health, ${dot.heartState === 'unhealthy' ? 'a check is failing' : 'a check needs attention'}`}
           className="wk-rail-link wk-rail-health"
         >

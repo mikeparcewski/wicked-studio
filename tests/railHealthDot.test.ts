@@ -9,9 +9,10 @@ vi.mock('../src/api/client.js', () => ({
     getRoster: () => Promise.resolve({ roster: [] }),
   },
 }));
-vi.mock('../src/api/diagnostics.js', () => ({ getDiagnostics: () => Promise.resolve({}) }));
+const getDiagnostics = vi.fn(() => Promise.resolve({}));
+vi.mock('../src/api/diagnostics.js', () => ({ getDiagnostics: () => getDiagnostics(), isDiagnosticsUnsupported: (e: unknown) => (e as { status?: number }).status === 404 }));
 
-import { useRailHealthDot } from '../src/hooks/useRailHealthDot.js';
+import { HEALTH_RECHECKED, useRailHealthDot } from '../src/hooks/useRailHealthDot.js';
 import { useConnectionStore } from '../src/store/connection.js';
 
 afterEach(() => { getHealth.mockReset(); getHealth.mockResolvedValue({ status: 'ok' }); });
@@ -36,6 +37,18 @@ describe('useRailHealthDot', () => {
     const before = getHealth.mock.calls.length;
     act(() => { useConnectionStore.setState({ status: 'disconnected' } as never); });
     act(() => { useConnectionStore.setState({ status: 'connected' } as never); });
+    await waitFor(() => expect(getHealth.mock.calls.length).toBeGreaterThan(before));
+  });
+
+  it('re-reads when /health rechecks, and an unsupported /diagnostics leaves an otherwise healthy dot healthy', async () => {
+    useConnectionStore.setState({ status: 'connected' } as never);
+    getHealth.mockResolvedValue({ status: 'ok' });
+    getDiagnostics.mockImplementation(() => Promise.reject(Object.assign(new Error('nf'), { status: 404 })));
+    const { result } = renderHook(() => useRailHealthDot());
+    await waitFor(() => expect(getHealth).toHaveBeenCalled());
+    await waitFor(() => expect(result.current.heartState).toBe('healthy'));
+    const before = getHealth.mock.calls.length;
+    act(() => { window.dispatchEvent(new Event(HEALTH_RECHECKED)); });
     await waitFor(() => expect(getHealth.mock.calls.length).toBeGreaterThan(before));
   });
 });

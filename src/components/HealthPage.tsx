@@ -1,3 +1,5 @@
+import { useEffect } from 'react';
+import { HEALTH_RECHECKED } from '../hooks/useRailHealthDot.js';
 import { ConnectionRegistry, GovernanceRows, SeatsRegistry, WeekRegistry, useHealthRegistry } from './HealthRailSection.js';
 import { SignInPanel } from './SignInPanel.js';
 
@@ -12,6 +14,8 @@ import { SignInPanel } from './SignInPanel.js';
  */
 export function HealthPage(): React.ReactElement {
   const registry = useHealthRegistry(true);
+  // Opening the page is a fresh read: the rail's dot re-reads with it (codex review r2).
+  useEffect(() => { window.dispatchEvent(new Event(HEALTH_RECHECKED)); }, []);
   const { governance, overdue, signIn, week } = registry;
   // Said once for the page (image review): the cards that this crew cannot fill say "Not available yet".
   const missing = [week.kind === 'absent' ? 'the week' : null, governance.kind === 'absent' ? 'governance' : null].filter((s): s is string => s !== null);

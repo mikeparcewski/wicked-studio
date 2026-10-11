@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api/client.js';
 import { getDiagnostics, isDiagnosticsUnsupported } from '../api/diagnostics.js';
+import { HEALTH_RECHECKED } from '../hooks/useRailHealthDot.js';
 import type { SeatRecord } from '../api/seatRecord.js';
 import type { DiagnosticsGovernance, DiagnosticsGovernanceFinding, RosterSeat } from '../api/types.js';
 import { coachSeat, recordsByCli, seatWeekLine, type CoachMove } from '../board/seatCoaching.js';
@@ -569,7 +570,7 @@ export function useHealthRegistry(
   }, [active, reprobe, probeDeadlineMs]);
 
   /** "check again": re-runs these probes — offered on every overdue row. */
-  const reprobeNow = (): void => setReprobe((n) => n + 1);
+  const reprobeNow = (): void => { setReprobe((n) => n + 1); window.dispatchEvent(new Event(HEALTH_RECHECKED)); };
 
   const wsDown = wsStatus === 'disconnected';
   // The derived heart verdict (§6.2): fail-red if any seat is inactive or the
