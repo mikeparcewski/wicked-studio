@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../../api/client.js';
 import { readErrorKind } from '../../api/errors.js';
 import type { RepoEntry } from '../../api/types.js';
@@ -38,17 +38,23 @@ export function LearnPage({ navigate }: { navigate: (p: string) => void }): Reac
   const [busy, setBusy] = useState<string | null>(null);
   const [writeError, setWriteError] = useState<string | null>(null);
 
+  // Each load is one generation; only the newest may commit (codex r1: a slow read of repo A must
+  // never land A's topics under repo B).
+  const generation = useRef(0);
   const load = useCallback(async (ref: string | null) => {
+    const gen = ++generation.current;
     setError(null);
     try {
       const [r, s] = await Promise.all([repos === null ? api.listRepos() : Promise.resolve({ repos }), learnApi.schedules()]);
+      const pick = ref ?? r.repos[0]?.id ?? null;
+      const t = pick === null ? [] : (await learnApi.topics(pick)).topics;
+      if (gen !== generation.current) return;
       setRepos(r.repos);
       setSchedules(s.schedules);
-      const pick = ref ?? r.repos[0]?.id ?? null;
       setRepoRef(pick);
-      setTopics(pick === null ? [] : (await learnApi.topics(pick)).topics);
+      setTopics(t);
     } catch (e) {
-      setError(e);
+      if (gen === generation.current) setError(e);
     }
   }, [repos]);
 
@@ -74,7 +80,10 @@ export function LearnPage({ navigate }: { navigate: (p: string) => void }): Reac
     [repoRef, topics, schedules],
   );
 
+  // One write at a time, page-wide (codex r1): a second control used mid-save would send a body
+  // built from the pre-save snapshot and could undo the first.
   const write = async (key: string, fn: () => Promise<unknown>): Promise<void> => {
+    if (busy !== null) return;
     setBusy(key);
     setWriteError(null);
     try {
@@ -192,7 +201,9 @@ function TopicItem({ row, repoRef, busy, write }: {
         repoRef,
         slug: topic.slug,
         topic: topic.title,
-        everyHours: EVERY_HOURS[next.every ?? every],
+        // Keep a schedule's own interval unless the user picked a new one (codex r1: an interval set
+        // elsewhere, e.g. 24 h, must survive an on/off toggle).
+        everyHours: next.every !== undefined ? EVERY_HOURS[next.every] : (schedule?.everyHours ?? EVERY_HOURS[every]),
         enabled: next.enabled ?? on,
       }),
     );
@@ -243,7 +254,7 @@ function TopicItem({ row, repoRef, busy, write }: {
           label="Refresh automatically"
           checked={on}
           onChange={(v) => void save({ enabled: v })}
-          disabled={busy === key ? 'Saving…' : null}
+          disabled={busy !== null ? 'Saving…' : null}
           data-testid={`learn-auto-${topic.slug}`}
         />
         <Segmented
@@ -254,6 +265,11 @@ function TopicItem({ row, repoRef, busy, write }: {
           data-testid={`learn-every-${topic.slug}`}
         />
       </div>
+      {schedule !== null && !Object.values(EVERY_HOURS).includes(schedule.everyHours) && (
+        <p className="wk-learn-next" data-testid={`learn-custom-${topic.slug}`}>
+          {`Set elsewhere to ${Math.round(schedule.everyHours / 24) === 1 ? 'every day' : `every ${Math.round(schedule.everyHours / 24)} days`}; picking an option replaces it.`}
+        </p>
+      )}
       <p className="wk-learn-next" data-testid={`learn-next-${topic.slug}`}>
         {on && schedule !== null
           ? `Next refresh ${dueIn(Date.parse(schedule.nextDueAt), now)}${last !== null ? ` · ${last}` : ''}`

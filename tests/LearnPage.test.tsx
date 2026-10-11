@@ -107,6 +107,39 @@ describe('LearnPage', () => {
     await waitFor(() => expect(save).toHaveBeenCalledWith(expect.objectContaining({ enabled: true, everyHours: 168 })));
   });
 
+  it('keeps an interval set elsewhere when only the switch changes (codex r1)', async () => {
+    listRepos.mockResolvedValue(repos);
+    schedules.mockResolvedValue({ schedules: [schedule({ everyHours: 24 })] });
+    topics.mockResolvedValue({ repoRef: 'r1', topics: [topic()] });
+    save.mockResolvedValue(schedule({ everyHours: 24, enabled: false }));
+    render(<LearnPage navigate={() => undefined} />);
+    expect((await screen.findByTestId('learn-custom-sqlite-wal')).textContent).toMatch(/Set elsewhere to every day;/);
+    fireEvent.click(screen.getByRole('switch', { name: 'Refresh automatically' }));
+    await waitFor(() => expect(save).toHaveBeenCalledWith(expect.objectContaining({ everyHours: 24, enabled: false })));
+  });
+
+  it('ignores a slow read for a repository the user already left (codex r1)', async () => {
+    const two = { repos: [...repos.repos, { id: 'r2', name: 'other', root_path: '/o', default_branch: 'main', registered_at: 0 }] };
+    listRepos.mockResolvedValue(two);
+    schedules.mockResolvedValue({ schedules: [] });
+    let releaseA: (v: unknown) => void = () => undefined;
+    topics.mockImplementation((r: string) =>
+      r === 'r1' ? new Promise((res) => { releaseA = res; }) : Promise.resolve({ repoRef: 'r2', topics: [topic({ slug: 'b-topic', title: 'B topic' })] }));
+    render(<LearnPage navigate={() => undefined} />);
+    await waitFor(() => expect(topics).toHaveBeenCalledWith('r1'));
+    // the select is not rendered until the first load commits; drive a second load directly
+    releaseA({ repoRef: 'r1', topics: [topic({ slug: 'a-topic', title: 'A topic' })] });
+    expect(await screen.findByText('A topic')).toBeTruthy();
+    topics.mockImplementation((r: string) =>
+      r === 'r1' ? new Promise((res) => { releaseA = res; }) : Promise.resolve({ repoRef: 'r2', topics: [topic({ slug: 'b-topic', title: 'B topic' })] }));
+    fireEvent.change(screen.getByTestId('learn-repo'), { target: { value: 'r1' } });
+    fireEvent.change(screen.getByTestId('learn-repo'), { target: { value: 'r2' } });
+    expect(await screen.findByText('B topic')).toBeTruthy();
+    releaseA({ repoRef: 'r1', topics: [topic({ slug: 'a-late', title: 'A late' })] });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.queryByText('A late')).toBeNull();
+  });
+
   it('says nothing is learned yet and seeds the composer with /workflow-learn', async () => {
     listRepos.mockResolvedValue(repos);
     schedules.mockResolvedValue({ schedules: [] });
