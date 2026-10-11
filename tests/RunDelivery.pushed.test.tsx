@@ -55,8 +55,9 @@ describe("N1 — delivery: 'pushed' reads as delivered, never stranded", () => {
     expect(card.textContent).toContain('the origin is not a GitHub host gh can resolve');
     expect(screen.getByTestId('run-delivery-pushed').textContent).toContain('wicked/r-push is on');
     expect(screen.getByTestId('run-delivery-pushed').textContent).toContain('remote.git');
-    // The full remote is always one hover away (Copilot on #397).
-    expect(screen.getByTestId('run-delivery-pushed').getAttribute('title')).toBe('/srv/proof/remote.git');
+    // studio 0.7.8: a filesystem remote is a path — said in words, the path behind Technical details.
+    expect(screen.getByTestId('run-delivery-pushed').getAttribute('title')).toBeNull();
+    expect(screen.getByTestId('run-delivery-pushed').querySelector('details')!.textContent).toContain('/srv/proof/remote.git');
     // The re-proof's false sentence and its impossible button are gone.
     expect(card.textContent).not.toContain('Stranded');
     expect(card.textContent).not.toContain('No PR is on record');

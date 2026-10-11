@@ -4,6 +4,7 @@
     "Empty until the S16 deletion slices: before then a removal fails. Add entries as \"<removed>\": \"<successor>\" in the PR that removes the testid."
   ],
   "successors": {
+    "watch-coverage-toggle": "watch-coverage-reasons",
     "session-chat-stop": "session-stop",
     "session-chat-retry": "*-retry",
     "session-run-detail-retry": "*-retry",

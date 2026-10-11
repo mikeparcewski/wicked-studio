@@ -3,6 +3,7 @@ import { api } from '../api/client.js';
 import { isRouteUnsupported } from '../api/errors.js';
 import type { WatchCoverage } from '../api/watch-wire.js';
 import { coverageSummary, gateLine, useWatchStore, type CoverageSummary } from '../store/watch.js';
+import { TechDetails } from './ui/TechDetails.js';
 
 /**
  * The watch registry's lines on surfaces that already exist (DES-TRIGGER-REGISTRY-001 §4.10, TR-W8).
@@ -31,8 +32,6 @@ export function WatchRunLines({ runId, jumped, onBack, isTerminal, endedMs }: {
 }): React.ReactElement | null {
   const [coverage, setCoverage] = useState<WatchCoverage[] | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
-  const [open, setOpen] = useState(false);
-  useEffect(() => { setOpen(false); }, [runId]);
   useEffect(() => {
     let cancelled = false;
     setCoverage(undefined);
@@ -46,7 +45,7 @@ export function WatchRunLines({ runId, jumped, onBack, isTerminal, endedMs }: {
     return () => { cancelled = true; };
   }, [runId]);
   const errorLine: string | null =
-    error !== null ? `Could not read what was checked on this run (${error})` : null;
+    error !== null ? 'Couldn’t read what was checked on this run.' : null;
   const summary: CoverageSummary | null =
     error === null ? coverageSummary(coverage, isTerminal, endedMs, entryLabel) : null;
   if (errorLine === null && summary === null && !jumped) return null;
@@ -61,26 +60,11 @@ export function WatchRunLines({ runId, jumped, onBack, isTerminal, endedMs }: {
         </p>
       )}
       {errorLine !== null && <p data-testid="watch-coverage" className="wk-watch-coverage">{errorLine}</p>}
+      {error !== null && <TechDetails data-testid="watch-coverage-error" text={error} />}
       {summary !== null && (
         <>
-          <p data-testid="watch-coverage" className="wk-watch-coverage">
-            {summary.line}
-            {summary.reasons.length > 0 && (
-              <button
-                type="button"
-                data-testid="watch-coverage-toggle"
-                aria-expanded={open}
-                aria-label="Why nothing was checked"
-                onClick={() => setOpen((o) => !o)}
-                className="wk-since-toggle"
-              >⋯</button>
-            )}
-          </p>
-          {open && (
-            <ul data-testid="watch-coverage-reasons" className="wk-watch-coverage-reasons">
-              {summary.reasons.map((r, i) => <li key={i}>{r}</li>)}
-            </ul>
-          )}
+          <p data-testid="watch-coverage" className="wk-watch-coverage">{summary.line}</p>
+          <TechDetails data-testid="watch-coverage-reasons" summary="Which checks didn’t run" text={summary.reasons} />
         </>
       )}
     </div>

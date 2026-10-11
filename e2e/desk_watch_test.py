@@ -8,7 +8,7 @@ Against the in-process fixture (wave-1 corpus, b1 waiting at a gate, `watch_feed
   S16a-1c: every step reads the run's session thread (/s/run%3A<id>), not the run page.
   1. GATE LINE: b1's gate row carries the registry's gate-attached finding as ONE quiet line; with
      the registry absent (404) the card carries no line at all.
-  2. COVERAGE: b1's thread says "Not checked on this run: scope drift (no declared scope)"; a run
+  2. COVERAGE: b1's thread says "1 check didn’t run on this run." (the reason behind Technical details); a run
      whose entries were all checked shows no line (never "all clear").
   3. JUMP IN: /s/run%3A<id>?jump=<ord>:1:<at> says "You jumped in from the Watchtower" and marks that
      unit's step in the chain (nothing when the run has no such unit).
@@ -106,7 +106,7 @@ with sync_playwright() as p:
     page.goto(f"{origin}/s/run%3Aa1", wait_until="networkidle")
     page.wait_for_timeout(1200)
     cov_a1 = page.get_by_test_id("watch-coverage").count()
-    check("coverage", cov == "Not checked on this run: scope drift (no declared scope)" and cov_a1 == 0 and absent_cov == 0,
+    check("coverage", cov == "1 check didn’t run on this run." and cov_a1 == 0 and absent_cov == 0,
           line=cov, a1_lines=cov_a1, absent=absent_cov)
 
     # ── 3. jump in ────────────────────────────────────────────────────────────────

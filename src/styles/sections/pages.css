@@ -177,3 +177,6 @@
 .wk-pg-set-radio { display: inline-flex; align-items: center; gap: var(--space-2); font-size: var(--text-sm); color: var(--ink-body); min-height: var(--control-h); cursor: pointer; }
 @media (max-width: 767px) { .wk-pg-set-radio { min-height: var(--tap-min); } }
 /* == end S6 g3 == */
+
+/* studio 0.7.8: the repo page's "Runs from" select is a 44 px target on a phone (S6 surface, taken by S2). */
+@media (max-width: 767px) { select.wk-field[data-testid="repos-range"] { min-height: var(--tap-min); } }

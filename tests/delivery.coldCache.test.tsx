@@ -101,7 +101,7 @@ describe('before the defs load, a run with no deliver phase gets no section at a
     render(<RightPanel view={noDeliverRun('r-old', 'interactive-draft')} />);
     fireEvent.click(await screen.findByRole('button', { name: /Delivery/ }));
     const body = await screen.findByTestId('run-delivery');
-    expect(body).toHaveTextContent('the work is in /w/tree');
+    expect(body).toHaveTextContent('The work is saved on this machine.');
     expect(body).not.toHaveTextContent('This run has no deliver phase.');
     expect(body).not.toHaveTextContent('deliver: pr');
   });
@@ -114,7 +114,7 @@ describe('before the defs load, a run with no deliver phase gets no section at a
     fireEvent.click(await screen.findByRole('button', { name: /Delivery/ }));
     const body = await screen.findByTestId('run-delivery');
 
-    expect(body).toHaveTextContent('the work is in /w/tree');
+    expect(body).toHaveTextContent('The work is saved on this machine.');
     // The two things that ARE claims stay withheld until a def proves the run ordinary.
     expect(body).not.toHaveTextContent('This run has no deliver phase.');
     expect(body).not.toHaveTextContent('deliver: pr');
@@ -124,14 +124,14 @@ describe('before the defs load, a run with no deliver phase gets no section at a
     const id = 'r-materialised';
     render(<RightPanel view={noDeliverRun(id, materialised(id))} />);
     fireEvent.click(await screen.findByRole('button', { name: /Delivery/ }));
-    expect(await screen.findByTestId('run-delivery')).toHaveTextContent('the work is in /w/tree');
+    expect(await screen.findByTestId('run-delivery')).toHaveTextContent('The work is saved on this machine.');
 
     // The catalog will NEVER carry this id, so the claim never becomes licensed —
     // unlike the `feature` run above, this one stays fact-only forever.
     resolveWorkflows({ workflows: LIVE_WORKFLOWS });
     await waitFor(() => expect(client.api.listWorkflows).toHaveBeenCalled());
     const body = screen.getByTestId('run-delivery');
-    expect(body).toHaveTextContent('the work is in /w/tree');
+    expect(body).toHaveTextContent('The work is saved on this machine.');
     expect(body).not.toHaveTextContent('This run has no deliver phase.');
     expect(body).not.toHaveTextContent('deliver: pr');
   });
@@ -161,7 +161,7 @@ describe('before the defs load, a run with no deliver phase gets no section at a
 
     fireEvent.click(await screen.findByRole('button', { name: /Delivery/ }));
     const body = await screen.findByTestId('run-delivery');
-    expect(body).toHaveTextContent('the work is in /w/tree');
+    expect(body).toHaveTextContent('The work is saved on this machine.');
     expect(body).not.toHaveTextContent('This run has no deliver phase.');
   });
 });
@@ -208,7 +208,7 @@ describe('once the defs land', () => {
     const body = await screen.findByTestId('run-delivery');
     expect(body).toHaveAttribute('data-state', 'none');
     expect(body).toHaveTextContent('This run has no deliver phase.');
-    expect(body).toHaveTextContent('the work is in /w/tree — launch with deliver: pr to open a PR from it');
+    expect(body).toHaveTextContent('The work is saved on this machine — launch with deliver: pr to open a PR from it.');
     expect(getUnitOutput).not.toHaveBeenCalled();
   });
 

@@ -421,23 +421,19 @@ export function coverageSummary(
   now = Date.now(),
 ): CoverageSummary | null {
   if (coverage === undefined) return null;
-  if (!isTerminal) {
-    const line = coverageLine(coverage, label);
-    return line === null ? null : { line, reasons: [] };
-  }
-  // A finished run that DID record evidence keeps today's per-entry line (nothing to summarise).
-  if ((coverage ?? []).some((c) => c.state === 'checked')) {
-    const line = coverageLine(coverage, label);
-    return line === null ? null : { line, reasons: [] };
-  }
   const notChecked = (coverage ?? []).filter(
     (c): c is { entry_id: string; state: 'not_checked'; reason: string } => c.state === 'not_checked',
   );
+  // The engine's reasons ("4 creator floors wait for it") are technical detail: the line says it in
+  // plain words and the reasons go behind Technical details (reel ch58, studio 0.7.8).
+  const reasons = notChecked.map((c) => `${label(c.entry_id)} (${c.reason})`);
+  const counted = (n: number): string => `${n} ${n === 1 ? 'check' : 'checks'} didn’t run on this run.`;
+  // A live run, or a finished run that DID record evidence: how many checks did not run.
+  if (!isTerminal || (coverage ?? []).some((c) => c.state === 'checked')) {
+    return notChecked.length === 0 ? null : { line: counted(notChecked.length), reasons };
+  }
   const ended = endedMs !== null ? `it ended ${_ago(endedMs, now)}` : 'it has ended';
-  return {
-    line: `No governance evidence was recorded for this run — ${ended}`,
-    reasons: notChecked.map((c) => `${label(c.entry_id)} (${c.reason})`),
-  };
+  return { line: `Nothing was checked on this run — ${ended}`, reasons };
 }
 
 // ── The store ─────────────────────────────────────────────────────────────────────────────

@@ -214,23 +214,23 @@ describe('coverageSummary (S17c)', () => {
       [NOT_CHECKED('scope-drift', 'no declared scope'), NOT_CHECKED('claim-vs-evidence', 'no evidence file')],
       true, NOW - 120_000, undefined, NOW,
     );
-    expect(result?.line).toBe('No governance evidence was recorded for this run — it ended 2 min ago');
+    expect(result?.line).toBe('Nothing was checked on this run — it ended 2 min ago');
     expect(result?.reasons).toStrictEqual(['scope-drift (no declared scope)', 'claim-vs-evidence (no evidence file)']);
   });
 
   it('A2: terminal + empty list → no-evidence line, empty reasons', () => {
     const result = coverageSummary([], true, NOW - 120_000, undefined, NOW);
-    expect(result?.line).toMatch(/^No governance evidence was recorded for this run/);
+    expect(result?.line).toMatch(/^Nothing was checked on this run/);
     expect(result?.reasons).toStrictEqual([]);
   });
 
-  it('A3: live run → delegates to coverageLine', () => {
+  it('A3: live run → how many checks did not run; the reasons are detail', () => {
     const result = coverageSummary(
       [NOT_CHECKED('scope-drift', 'no declared scope')],
       false, null, undefined, NOW,
     );
-    expect(result?.line).toMatch(/^Not checked on this run:/);
-    expect(result?.reasons).toStrictEqual([]);
+    expect(result?.line).toBe('1 check didn’t run on this run.');
+    expect(result?.reasons).toStrictEqual(['scope-drift (no declared scope)']);
   });
 
   it('A4: undefined (absent registry) → null', () => {
@@ -242,7 +242,7 @@ describe('coverageSummary (S17c)', () => {
       [NOT_CHECKED('scope-drift', 'no declared scope'), CHECKED('claim-vs-evidence')],
       true, NOW - 120_000, undefined, NOW,
     );
-    expect(result).toStrictEqual({ line: 'Not checked on this run: scope-drift (no declared scope)', reasons: [] });
+    expect(result).toStrictEqual({ line: '1 check didn’t run on this run.', reasons: ['scope-drift (no declared scope)'] });
     expect(coverageSummary([CHECKED('claim-vs-evidence')], true, NOW - 120_000, undefined, NOW)).toBeNull();
   });
 });
