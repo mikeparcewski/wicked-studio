@@ -106,7 +106,9 @@ export function Desk({ runs, runsLoaded, runsError = null, onRetryRuns, needRows
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   // UX audit row 21: several lapsed sign-ins are one row ("4 helpers need signing in"), opened on demand.
   const [choresOpen, setChoresOpen] = useState(false);
-  const choresFolded = chores.length > 2 && !choresOpen;
+  // A first run with no helper signed in leads with every sign-in row (amendment 5): never folded then.
+  const choresGrouped = chores.length > 2 && !leadWithSignIn;
+  const choresFolded = choresGrouped && !choresOpen;
   // S15a: the Command Deck's repair move for dead-lettered governance events, as a chore.
   const { governance, reread } = useGovernance();
   const dead = deadletterChore(governance);
@@ -141,7 +143,7 @@ export function Desk({ runs, runsLoaded, runsError = null, onRetryRuns, needRows
                     <ReplayMove replay={replay} />
                   </div>
                 )}
-                {chores.length > 2 && (
+                {choresGrouped && (
                   <div data-testid="desk-chore-group" data-count={chores.length} className="wk-desk-need wk-desk-need--wrap">
                     <span aria-hidden className="wk-desk-dot wk-desk-dot--blocked" />
                     <span className="wk-desk-need-body">
@@ -156,7 +158,7 @@ export function Desk({ runs, runsLoaded, runsError = null, onRetryRuns, needRows
                   </div>
                 )}
                 {!choresFolded && chores.map((c) => (
-                  <div key={c.key} data-testid="desk-chore" data-seat={c.seat} className={`wk-desk-need wk-desk-need--wrap${chores.length > 2 ? ' wk-desk-need--member' : ''}`}>
+                  <div key={c.key} data-testid="desk-chore" data-seat={c.seat} className={`wk-desk-need wk-desk-need--wrap${choresGrouped ? ' wk-desk-need--member' : ''}`}>
                     <span aria-hidden className="wk-desk-dot wk-desk-dot--blocked" />
                     <span className="wk-desk-need-body">
                       <span className="wk-desk-need-title">{c.title}</span>
