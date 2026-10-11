@@ -71,7 +71,7 @@ describe('ChatInput seat warning — one fold with the Health rail (F-A45-006)',
     });
     render(<ChatInput runId={null} runStatus={null} onLaunched={vi.fn()} />);
     const w = await screen.findByTestId('ineligible-warning');
-    expect(w).toHaveTextContent('pi: not council-eligible — pi-acp answered 401 Unauthorized on the last ballot — a council benches it; the other seats carry the run.');
+    expect(w).toHaveTextContent('pi: not picked for checks — pi-acp answered 401 Unauthorized on the last ballot');
     expect(screen.queryByTestId('signin-warning')).toBeNull();
   });
 

@@ -12,8 +12,8 @@
   "studioVersion": "0.7.9",
   "counts": {
     "files": 199,
-    "occurrences": 2239,
-    "static": 1949,
+    "occurrences": 2243,
+    "static": 1953,
     "dynamic": 61,
     "computed": 20
   },
@@ -6435,6 +6435,12 @@
       ]
     },
     {
+      "testId": "rail-seat-role",
+      "files": [
+        "src/components/HealthRailSection.tsx"
+      ]
+    },
+    {
       "testId": "rail-seat-row",
       "files": [
         "src/components/HealthRailSection.tsx"
@@ -6460,6 +6466,12 @@
     },
     {
       "testId": "rail-seat-week-window",
+      "files": [
+        "src/components/HealthRailSection.tsx"
+      ]
+    },
+    {
+      "testId": "rail-seat-why",
       "files": [
         "src/components/HealthRailSection.tsx"
       ]
@@ -7828,6 +7840,12 @@
       ]
     },
     {
+      "testId": "session-proposal-acceptance-detail",
+      "files": [
+        "src/components/session/ProposalCard.tsx"
+      ]
+    },
+    {
       "testId": "session-proposal-assurance",
       "files": [
         "src/components/session/ProposalCard.tsx"
@@ -7925,6 +7943,12 @@
     },
     {
       "testId": "session-proposal-go",
+      "files": [
+        "src/components/session/ProposalCard.tsx"
+      ]
+    },
+    {
+      "testId": "session-proposal-go-why",
       "files": [
         "src/components/session/ProposalCard.tsx"
       ]

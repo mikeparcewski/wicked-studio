@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
+import { plainGateQuestion } from '../../board/deskWords.js';
+import { seatLabel } from '../../board/seatNames.js';
 import { api, downloadRunEvidence } from '../../api/client.js';
 import { executingOrd } from '../../api/run-state.js';
 import type { ChatPathView, CoreEvent, RosterSeat, SessionView } from '../../api/types.js';
@@ -450,6 +452,11 @@ function useAskPath(sessionId: string | null): ChatPathView | null {
 
 function HelpersList({ runs, sessionId = null, onSignIn, roster = null }: { runs: readonly SessionView[]; sessionId?: string | null; onSignIn?: () => void; roster?: RosterSeat[] | null }): React.ReactElement {
   const rows = runs.flatMap((v) => helpersOf(v).map((cli) => ({ v, cli })));
+  // studio#724: each helper by its one name (the card's "Claude Code"), never the raw key.
+  const nameOf = (cli: string): string => {
+    const seat = roster?.find((s) => s.key === cli);
+    return seat !== undefined ? seatLabel(seat) : seatLabel({ key: cli });
+  };
   const path = useAskPath(sessionId);
   // The path's seats come first, by ROLE — what the wire records, nothing about what a seat is doing
   // right now (the path view carries identities, not liveness): the primary helper and how it was
@@ -478,7 +485,7 @@ function HelpersList({ runs, sessionId = null, onSignIn, roster = null }: { runs
         const ref: ObjectRef | null = x.cli !== null && x.runId !== undefined ? { kind: 'helper', runId: x.runId, cli: x.cli } : null;
         return (
           <li key={x.key} data-testid="sheet-helper-role" data-role={x.key.split(':')[0]} className="wk-sheet-line" {...(ref !== null ? { 'data-object': objectAttr(ref) } : {})}>
-            {x.cli !== null && ref !== null && <><button type="button" data-testid="sheet-helper-open" data-cli={x.cli} onClick={() => useSheets.setState({ open: { ref, tab: SHEET_TABS.helper[0]!.id } })} className="wk-btn wk-btn--secondary">{x.cli}</button>{' '}</>}
+            {x.cli !== null && ref !== null && <><button type="button" data-testid="sheet-helper-open" data-cli={x.cli} onClick={() => useSheets.setState({ open: { ref, tab: SHEET_TABS.helper[0]!.id } })} className="wk-btn wk-btn--secondary">{nameOf(x.cli)}</button>{' '}</>}
             {x.role}
             {x.action === 'signin' && onSignIn !== undefined && <>{' '}<button type="button" data-testid="sheet-helper-signin" onClick={onSignIn} className="wk-btn wk-btn--secondary">Sign in</button></>}
           </li>
@@ -491,7 +498,7 @@ function HelpersList({ runs, sessionId = null, onSignIn, roster = null }: { runs
         const ref: ObjectRef = { kind: 'helper', runId: v.session.id, cli };
         return (
           <li key={`${v.session.id}:${cli}`} className="wk-sheet-line" data-object={objectAttr(ref)}>
-            <button type="button" data-testid="sheet-helper-open" data-cli={cli} onClick={() => useSheets.setState({ open: { ref, tab: SHEET_TABS.helper[0]!.id } })} className="wk-btn wk-btn--secondary">{cli}</button>
+            <button type="button" data-testid="sheet-helper-open" data-cli={cli} onClick={() => useSheets.setState({ open: { ref, tab: SHEET_TABS.helper[0]!.id } })} className="wk-btn wk-btn--secondary">{nameOf(cli)}</button>
             {' '}— {working ? 'working' : TERMINAL.has(v.session.status) ? 'finished' : 'waiting'} on “{sheetTitle(v.session.problem ? sessionTitle([], [v]) : 'This session')}”
           </li>
         );
@@ -513,19 +520,56 @@ function eventAtMs(e: CoreEvent): number | null {
  * its age (the retired home page's Recent activity, per run). A frame the narrator does not speak is
  * left out, never printed as its raw type; a frame with no clock gets the age pill that says so.
  */
+/** Engine wording a person should not have to read: seats, councils, units, the discipline skill. */
+const DETAIL_TYPES = new Set(['stepFailed', 'failureTriaged', 'gateEscalated', 'workerStallEscalated', 'deliverLiftEvaluated', 'evaluatorToolCallDenied', 'workerToolCallDenied', 'error']);
+const ENGINE_WORDS = /\bseats?\b|council|\bunits?\b|discipline|verdict|NOT PASS|failing over|\bjudge\b/i;
+
+/**
+ * studio#724: one Activity line in plain words. The dispatch line drops its discipline-skill tail; a
+ * gate waiting on you says its question the way the thread does (`plainGateQuestion`); any line whose
+ * tail is engine wording keeps its plain head and moves the tail into Technical details.
+ */
+export function activityLine(e: CoreEvent, ctx: Parameters<typeof narrate>[1]): { line: NarrationLine | null; detail: string | null } {
+  if (e.type === 'unitDispatched') {
+    const rest = { ...(e as Record<string, unknown>) };
+    delete rest['baseSkill'];
+    return { line: narrate(rest as unknown as CoreEvent, ctx), detail: null };
+  }
+  const line = narrate(e, ctx);
+  if (line === null) return { line: null, detail: null };
+  if (e.type === 'awaitingHuman') {
+    const prompt = typeof (e as Record<string, unknown>)['prompt'] === 'string' ? (e as Record<string, unknown>)['prompt'] as string : '';
+    const kind = typeof (e as Record<string, unknown>)['gateKind'] === 'string' ? (e as Record<string, unknown>)['gateKind'] as string : undefined;
+    return { line: { ...line, text: prompt !== '' ? `Waiting on you — ${plainGateQuestion(prompt, kind)}` : 'Waiting on you' }, detail: prompt !== '' ? prompt : null };
+  }
+  const cut = line.text.indexOf(' — ');
+  // A failure's or refusal's tail is the engine's own report: always Technical details.
+  if (cut > 0 && (DETAIL_TYPES.has(String(e.type)) || ENGINE_WORDS.test(line.text.slice(cut + 3)))) {
+    return { line: { ...line, text: line.text.slice(0, cut) }, detail: line.text.slice(cut + 3) };
+  }
+  return { line, detail: null };
+}
+
 function ActivityTail({ view }: { view: SessionView }): React.ReactElement {
   const ev = useRunRawEvents(view.session.id);
   // studio#618: a narrated line can quote a home path (a deliver gate's push target): `~/…` here.
   const showText = useDisplayText();
-  const ctx = useMemo(() => narratorCtxOf(view), [view]);
+  // studio#724: each step by its plain name ("Security check"), never its key ("security_review").
+  const ctx = useMemo(() => {
+    const base = narratorCtxOf(view);
+    return { ...base, phaseOf: (ord: number | null | undefined) => {
+      const unit = typeof ord === 'number' ? view.units.find((u) => u.ord === ord) : undefined;
+      return unit !== undefined ? unitStepName(unit) : base.phaseOf(ord);
+    } };
+  }, [view]);
   if (ev.state === 'loading') return <p className="wk-session-grey">Reading the activity…</p>;
   if (ev.state === 'error') return <><p role="alert" className="wk-composer-note wk-composer-note--bad">Could not read the activity.</p><TechDetails text={ev.message} /></>;
   const lines = ev.events
     // How a step was routed (council polls, distributions, seat picks) is technical detail: the raw
     // events keep it; the activity says what happened to the work.
     .filter((e) => !/^(council|unitDistributed)/.test(String(e.type)))
-    .map((e) => ({ line: narrate(e, ctx), at: eventAtMs(e) }))
-    .filter((x): x is { line: NarrationLine; at: number | null } => x.line !== null)
+    .map((e) => ({ ...activityLine(e, ctx), at: eventAtMs(e) }))
+    .filter((x): x is { line: NarrationLine; detail: string | null; at: number | null } => x.line !== null)
     .slice(-30)
     .reverse();
   const now = Date.now();
@@ -535,6 +579,7 @@ function ActivityTail({ view }: { view: SessionView }): React.ReactElement {
       {lines.map((x, i) => (
         <li key={i} data-testid="sheet-activity-line" data-tone={x.line.tone} className="wk-sheet-line">
           <span aria-hidden>{TONE_GLYPH[x.line.tone]}</span> {showText(x.line.text)} · <AgeStamp at={x.at} now={now} />
+          {x.detail !== null && <TechDetails text={x.detail} />}
         </li>
       ))}
     </ul>

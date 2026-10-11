@@ -23,7 +23,7 @@ export function HealthPage(): React.ReactElement {
     <div data-testid="health-page" className="wk-desk-scroll wk-health-page">
       <header className="wk-everything-head">
         <h1 className="wk-desk-hello">Health</h1>
-        <p className="wk-desk-date">The studio's own checks: the socket and API server, every council seat, and where governance evidence lands.</p>
+        <p className="wk-desk-date">Studio's own checks: its connection and service, each helper, and where check results are saved.</p>
         {missing.length > 0 && (
           <p data-testid="health-upgrade-note" className="wk-health-note">
             This version of crew does not report {missing.join(' or ')} yet. Upgrade crew to see {missing.length > 1 ? 'them' : 'it'}.
@@ -34,8 +34,8 @@ export function HealthPage(): React.ReactElement {
         <h2 className="wk-health-card-title">Connection</h2>
         <ConnectionRegistry registry={registry} />
       </section>
-      <section data-testid="health-card-seats" className="wk-health-card" aria-label="Seats">
-        <h2 className="wk-health-card-title">Seats</h2>
+      <section data-testid="health-card-seats" className="wk-health-card" aria-label="Helpers">
+        <h2 className="wk-health-card-title">Helpers</h2>
         <SeatsRegistry registry={registry} />
       </section>
       <section data-testid="health-card-week" className="wk-health-card" aria-label="This week">

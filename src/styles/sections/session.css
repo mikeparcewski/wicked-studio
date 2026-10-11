@@ -59,3 +59,10 @@
 /* The session's Stop asks once before it acts; a slow runs read says so with Retry. */
 .wk-session-stop-confirm { display: inline-flex; align-items: center; gap: var(--space-2); }
 .wk-session-slow { display: flex; align-items: center; gap: var(--space-2); margin: 0 0 var(--space-3); }
+
+/* studio 0.7.10: on a phone the run head and the proposal buttons wrap instead of squeezing the
+   status ("Ready to deliver…") beside the assurance label, or crowding "Not now" / "Stop the run". */
+@media (max-width: 767px) {
+  .wk-session-run-head { flex-wrap: wrap; }
+  .wk-session-run .wk-prop-btns { flex-wrap: wrap; }
+}

@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { TechDetails } from '../ui/TechDetails.js';
 import type { SessionView } from '../../api/types.js';
 import type { RunDiff } from '../../api/wave6-wire.js';
 import type { ChainModel } from '../../board/chainModel.js';
@@ -23,7 +24,7 @@ import { PlanGateSummary } from '../PlanGateSummary.js';
 import { useSeatTrust } from './GateDepth.js';
 import { DriftLine } from './GateRow.js';
 import { useDiffDrift } from '../../store/gateDiffSeen.js';
-import { deliveryAssuranceOf, deliveryReceiptOf } from '../../board/assuranceModel.js';
+import { deliveryAssuranceOf, deliveryReceiptOf, sessionQe } from '../../board/assuranceModel.js';
 import { usePostHocDeliverStore } from '../../store/postHocDeliver.js';
 import { AssuranceReceipt, DeliveryAssuranceLines } from './AssuranceReceipt.js';
 
@@ -67,7 +68,7 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
   // studio#558: the session page's one run-event read (shared with GateRow / OrphanedRow).
   const eventsRaw = useRunEvents(runId).events ?? undefined;
   // studio#577: the acceptance line, with the run's own evidence when crew's gate has no verdict.
-  const accept = deliverAcceptance(acceptance, ownEvidenceOf(eventsRaw ?? []));
+  const accept = deliverAcceptance(acceptance, ownEvidenceOf(eventsRaw ?? []), sessionQe(view, eventsRaw ?? null)?.status === 'required');
   // core#850: the delivery's assurance receipt — what the run required, what its gates ran and
   // skipped, who built and checked it, the tree delivered.
   // EX-03 / EX-04: crew's record of the hand-over (unverified post-hoc, the QE check).
@@ -99,6 +100,8 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
   const seat = useSeatTrust(view, openKind === 'deliver' ? gate : undefined, { isPlanGate: openKind === 'plan', isDeliverGate: openKind === 'deliver', isEscalation: false });
   const deliverFailure = openKind === 'deliver' ? deliverFailureOf(eventsRaw ?? [], gate?.ord) : null;
   const card = proposalCard({ view, gate, chain, action, ui, lastKind: lastKinds.get(runId) ?? (handedOver ? 'deliver' : null), ask, deliverFailure: deliverFailure === null ? null : showText(deliverFailure) });
+  // Crew refuses this delivery (QE acceptance required, not passed): Deliver is not offered as if it works.
+  const deliverRefused = card?.kind === 'deliver' && accept?.blocksDeliver === true;
   const asked = card !== null && gate !== undefined ? card.kind : null;
   useEffect(() => { if (asked !== null) lastKinds.set(runId, asked); }, [runId, asked]);
   // The one "Are you sure?" takes focus when it opens; Cancel gives it back to Deliver (Copilot).
@@ -132,6 +135,7 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
   const planWords = draft !== null && planGate.view !== null ? planStepWords(planGate.view.planSteps) : undefined;
 
   const answer = (): void => {
+    if (deliverRefused) return; // crew refuses it: never send a delivery that cannot land
     if (sending.current || gate === undefined) return; // double clicks are ignored
     sending.current = true;
     setUi((u) => ({ ...u, confirming: null }));
@@ -154,6 +158,7 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
       .finally(() => { sending.current = false; });
   };
   const go = (): void => {
+    if (deliverRefused) return;
     if (card.kind === 'deliver' && card.state !== 'confirm') { setUi((u) => ({ ...u, confirming: instance })); return; }
     answer();
   };
@@ -201,6 +206,9 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
           {/* WT-U2: what the acceptance gate says before the hand-over — crew's line, studio's tone. */}
           {card.kind === 'deliver' && accept !== null && (
             <p data-testid="session-proposal-acceptance" data-tone={accept.tone} className={`wk-prop-why wk-prop-accept wk-prop-accept--${accept.tone}`}>{accept.text}</p>
+          )}
+          {card.kind === 'deliver' && accept !== null && accept.detail !== undefined && (
+            <TechDetails data-testid="session-proposal-acceptance-detail" summary="What QE acceptance recorded" text={accept.detail} />
           )}
           {/* A re-opened deliver gate after a failed hand-over: what checked the work, never "accepted". */}
           {card.kind === 'deliver' && deliveryReceipt !== null && <AssuranceReceipt receipt={deliveryReceipt} passed={deliverFailure === null ? true : null} testId="session-proposal-assurance" />}
@@ -270,7 +278,7 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
             <div data-testid="session-proposal-confirm" role="alertdialog" aria-label={`Are you sure? ${card.confirm.q}`} className="wk-prop-confirm">
               <p className="wk-prop-why"><b>Are you sure? {card.confirm.q}</b> {card.confirm.w}</p>
               <div className="wk-prop-btns">
-                <button ref={yesRef} type="button" data-testid="session-proposal-confirm-yes" onClick={answer} className="wk-prop-btn wk-prop-btn--danger">{card.confirm.a}</button>
+                <button ref={yesRef} type="button" data-testid="session-proposal-confirm-yes" onClick={answer} disabled={deliverRefused} className="wk-prop-btn wk-prop-btn--danger">{card.confirm.a}</button>
                 <button type="button" data-testid="session-proposal-confirm-cancel" onClick={() => setUi((u) => ({ ...u, confirming: null }))} className="wk-prop-btn wk-prop-btn--ghost">Cancel</button>
               </div>
             </div>
@@ -278,7 +286,7 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
             <>
               {draft !== null && <p data-testid="session-proposal-draft" className="wk-prop-why"><b>{draftLine(draft, planWords)}</b> Approving sends your changes with it; nothing has been sent yet.</p>}
               <div className="wk-prop-btns">
-                <button ref={goRef} type="button" data-testid="session-proposal-go" data-draft={draft !== null ? 'true' : 'false'} onClick={go} className="wk-prop-btn wk-prop-btn--primary">
+                <button ref={goRef} type="button" data-testid="session-proposal-go" data-draft={draft !== null ? 'true' : 'false'} onClick={go} disabled={deliverRefused} {...(deliverRefused ? { 'aria-describedby': `${runId}-go-why` } : {})} className="wk-prop-btn wk-prop-btn--primary">
                   {draft !== null ? 'Approve with these changes' : card.act}
                   {card.kind === 'deliver' && seat.record !== null && <span data-testid="session-proposal-track-record" className="wk-session-gate-record">{seat.record}</span>}
                 </button>
@@ -286,6 +294,7 @@ export function ProposalCard({ view, chain, acceptance = null, ask = null, onBri
                 <button type="button" data-testid="session-proposal-not-now" onClick={notNow} className="wk-prop-btn wk-prop-btn--ghost">Not now</button>
                 {card.end !== undefined && <button type="button" data-testid="session-proposal-end" onClick={end} className="wk-prop-btn wk-prop-btn--ghost">{card.end}</button>}
               </div>
+              {deliverRefused && <p id={`${runId}-go-why`} data-testid="session-proposal-go-why" className="wk-field-note">Delivery is refused until QE acceptance passes.</p>}
             </>
           )}
         </>

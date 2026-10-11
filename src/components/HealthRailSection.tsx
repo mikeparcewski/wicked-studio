@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { seatLabel, seatRoleWord } from '../board/seatNames.js';
 import { api } from '../api/client.js';
 import { getDiagnostics, isDiagnosticsUnsupported } from '../api/diagnostics.js';
 import { HEALTH_RECHECKED } from '../hooks/useRailHealthDot.js';
@@ -121,10 +122,10 @@ const MONO_2XS = { fontSize: 'var(--text-2xs)', fontFamily: 'var(--font-mono)' }
  * `council_eligible` and `council_ineligible_reason` — read off the seat when a daemon sends
  * them (`seatStandingWord`), so a daemon that SAYS what a council would do is believed.
  */
-export const SIGNED_OUT_DETAIL = 'signed out — councils may bench this seat';
+export const SIGNED_OUT_DETAIL = 'signed out — it may be skipped for checks';
 export const SIGNED_OUT_TITLE =
-  'The daemon\'s file/env check saw no sign-in for this seat. A seat that cannot authenticate fails at spawn '
-  + 'and a council benches it — but a provider free tier may still answer; the roster cannot tell yet. '
+  'Studio\'s service saw no sign-in for this helper. A helper that cannot sign in fails when it starts '
+  + 'and is skipped — but a provider free tier may still answer; Studio cannot tell yet. '
   + 'Sign in from Settings.';
 
 /** The roster's word on one seat's standing, read for what the WIRE says (never inferred). */
@@ -143,7 +144,9 @@ export function seatStandingWord(seat: RosterSeat): SeatStanding {
   const tier = typeof bag['free_tier'] === 'string' ? (bag['free_tier'] as string) : '';
   // The daemon SAYS a council would not seat it — its reason, its words (crew#533).
   if (eligible === false) {
-    return { kind: 'ineligible', detail: `not council-eligible — ${reason !== '' ? reason : 'the daemon says a council would not seat it'}`, title: reason !== '' ? reason : 'the daemon reports this seat as not council-eligible', auth };
+    // studio#724: plain words; the service's own reason ("not enabled for council") is the hover only.
+    const plain = reason.replace(/\bcouncils?\b/gi, 'checks').replace(/\bseats?\b/gi, 'helper');
+    return { kind: 'ineligible', detail: `not picked for checks${plain !== '' ? ` — ${plain}` : ''}`, title: plain !== '' ? `Studio's service: ${plain}` : 'Studio\'s service does not pick this helper for checks', auth };
   }
   if (auth === 'not_required') {
     return { kind: 'no-sign-in-needed', detail: `no sign-in needed${tier !== '' ? ` (${tier})` : ''}`, title: tier !== '' ? `answers on its provider free tier: ${tier}` : null, auth };
@@ -151,7 +154,7 @@ export function seatStandingWord(seat: RosterSeat): SeatStanding {
   if (auth === 'signed_in' || seat.signed_in === true) return { kind: 'signed-in', detail: 'signed in', title: null, auth };
   if (auth === 'signed_out' || seat.signed_in === false) {
     return eligible === true
-      ? { kind: 'signed-out', detail: 'signed out — still council-eligible', title: 'No sign-in observed, and the daemon still reports the seat as council-eligible.', auth }
+      ? { kind: 'signed-out', detail: 'signed out — still picked for checks', title: 'No sign-in observed, and Studio\'s service still picks this helper for checks.', auth }
       : { kind: 'signed-out', detail: SIGNED_OUT_DETAIL, title: SIGNED_OUT_TITLE, auth };
   }
   return { kind: 'unknown', detail: null, title: null, auth };
@@ -208,15 +211,19 @@ export function SeatRow({ seat, onSignIn }: { seat: RosterSeat; onSignIn?: (seat
     >
       <div className="wk-health-row" style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--space-2)', minWidth: 0 }}>
         <span style={{ width: '12px', fontSize: 'var(--text-xs)', color, fontFamily: 'var(--font-mono)', flexShrink: 0 }}>{glyph}</span>
-        <span style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-body)', fontFamily: 'var(--font-mono)', flexShrink: 0 }}>
-          {seat.display_name}
+        <span style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-body)', flexShrink: 0 }}>
+          {seatLabel(seat)}
         </span>
+        {/* UI-CONTRACT §5: a reviewer-only helper, where it must be shown, says so (one name, no "(judge)"). */}
+        {seatRoleWord(seat) !== null && <span data-testid="rail-seat-role" className="wk-tag">{seatRoleWord(seat)}</span>}
         {message === null && (
           <span style={{ marginLeft: 'auto', fontSize: 'var(--text-2xs)', color: detailColor, fontFamily: 'var(--font-mono)', textAlign: 'right' }}>
             {detail}
           </span>
         )}
       </div>
+      {/* Why it is not picked, reachable by keyboard and touch (not only a hover title). */}
+      {standing.kind === 'ineligible' && <div style={{ paddingLeft: '20px' }}><TechDetails data-testid="rail-seat-why" summary="Why" text={standing.title} /></div>}
       {message !== null && quota === null && (
         <p data-testid="rail-seat-error" style={{ ...MONO_2XS, margin: 0, paddingLeft: '20px', color: detailColor, overflowWrap: 'anywhere' }}>
           {detail}
@@ -666,11 +673,11 @@ export function ConnectionRegistry({ registry }: { registry: HealthRegistry }): 
  *  `WeekRegistry`, below — a card per section (Connection · Seats · This week · Governance). */
 export function SeatsRegistry({ registry }: { registry: HealthRegistry }): React.ReactElement {
   const { roster, rosterError, overdue, rosterFresh, probeDeadlineMs, reprobeNow } = registry;
-  if (rosterError) return <CheckRow label="seats" ok={false} detail="unreachable" />;
+  if (rosterError) return <CheckRow label="helpers" ok={false} detail="unreachable" />;
   if (roster === null) {
     return (
       <CheckRow
-        label="seats" ok={null} detail={overdue ? probeOverdueWord(probeDeadlineMs) : 'checking…'} testId="rail-seats-probe" state={overdue ? 'overdue' : 'checking'}
+        label="helpers" ok={null} detail={overdue ? probeOverdueWord(probeDeadlineMs) : 'checking…'} testId="rail-seats-probe" state={overdue ? 'overdue' : 'checking'}
         {...(overdue ? { action: { label: 'check again', testId: 'rail-seats-recheck', onClick: reprobeNow } } : {})}
       />
     );
@@ -679,7 +686,7 @@ export function SeatsRegistry({ registry }: { registry: HealthRegistry }): React
     <>
       {overdue && !rosterFresh && (
         <CheckRow
-          label="seats" ok={null} detail={`${probeOverdueWord(probeDeadlineMs)} · showing the last answer`} testId="rail-seats-probe" state="stale"
+          label="helpers" ok={null} detail={`${probeOverdueWord(probeDeadlineMs)} · showing the last answer`} testId="rail-seats-probe" state="stale"
           action={{ label: 'check again', testId: 'rail-seats-recheck', onClick: reprobeNow }}
         />
       )}

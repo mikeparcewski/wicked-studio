@@ -44,7 +44,7 @@ export function seatWeekLine(r: SeatRecord | undefined): string {
   if (r.gated > 0) parts.push(`${r.firstPass}/${r.gated} first pass`);
   parts.push(`${r.rework} rework`);
   parts.push(plural(r.stalls, 'stall'));
-  if (r.benched > 0) parts.push(`benched ${r.benched}`);
+  if (r.benched > 0) parts.push(`skipped ${r.benched}`);
   parts.push(costWord(r) ?? 'cost not recorded');
   return parts.join(' · ');
 }
@@ -95,7 +95,7 @@ export function coachSeat(record: SeatRecord | undefined, seat: RosterSeat, wind
     return {
       kind: 'sign-in',
       label: `Sign in to ${name}`,
-      why: `benched from ${plural(authBenches, 'run')} this week: not signed in`,
+      why: `skipped for ${plural(authBenches, 'run')} this week: not signed in`,
       consequence: `Shows the one command that signs ${name} in. Once it is signed in, the next run seats it again.`,
       line,
     };
@@ -129,7 +129,8 @@ export function coachSeat(record: SeatRecord | undefined, seat: RosterSeat, wind
       kind: 'route-away',
       label: `Route ${words} away from ${name}`,
       why: `${evidence} this week`,
-      consequence: `Adds a recall-only operations rule "Route ${words} work away from ${name}"; helpers read it, nothing is blocked.`,
+      // studio#724: plain words for what the rule does (the stored statement is unchanged).
+      consequence: `Adds a standing instruction helpers read: hand ${words} work to a helper other than ${name}. Nothing is blocked.`,
       phase,
       rule,
     };

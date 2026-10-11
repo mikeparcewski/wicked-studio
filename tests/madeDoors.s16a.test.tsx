@@ -83,7 +83,7 @@ describe('S16a-4d — the New document door', () => {
     ]);
     const line = screen.getByTestId('made-new-document-council');
     expect(line).toHaveTextContent('council: claude · pi');
-    expect(line).toHaveTextContent('left out: copilot (not council-eligible — quota_exhausted), codex (');
+    expect(line).toHaveTextContent('left out: copilot (not picked for checks — quota_exhausted), codex (');
     await userEvent.click(seats[1]!); // pi out
     expect(line).toHaveTextContent('council: claude');
     await userEvent.type(screen.getByTestId('made-new-document-brief'), 'Offsite plan');

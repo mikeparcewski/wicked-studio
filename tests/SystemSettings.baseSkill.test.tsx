@@ -30,7 +30,9 @@ describe('System — discipline skill row', () => {
   it('names the skill and the generation it is handed from', async () => {
     getDiagnostics.mockResolvedValue({ skills: { baseSkill: POSTURE } });
     render(<SystemSettings />);
-    await waitFor(() => expect(screen.getByTestId('system-base-skill')).toHaveTextContent('Discipline skill: wicked-garden-governed-worker'));
+    await waitFor(() => expect(screen.getByTestId('system-base-skill')).toHaveTextContent('On — every helper is given it'));
+    // studio#724: the skill's identifier is Technical details, not the line.
+    expect(screen.getByTestId('system-base-skill').querySelector('details')!.textContent).toContain('wicked-garden-governed-worker');
     expect(screen.getByTestId('system-base-skill').dataset.present).toBe('true');
     expect(screen.queryByTestId('system-base-skill-fix')).toBeNull();
   });
@@ -38,18 +40,18 @@ describe('System — discipline skill row', () => {
   it('a missing skill says what it does and the fix', async () => {
     getDiagnostics.mockResolvedValue({ skills: { baseSkill: { ...POSTURE, present: false, policy: 'warn', inCatalog: true } } });
     render(<SystemSettings />);
-    await waitFor(() => expect(screen.getByTestId('system-base-skill')).toHaveTextContent('is missing — work can continue without it'));
+    await waitFor(() => expect(screen.getByTestId('system-base-skill')).toHaveTextContent('Missing — work can continue without it'));
     expect(screen.getByTestId('system-base-skill-fix')).toHaveTextContent('Publish the skills again');
   });
 
   it('setting off reads off; no skills block or no diagnostics reads "not reported"', async () => {
     getDiagnostics.mockResolvedValue({ skills: { baseSkill: null } });
     render(<SystemSettings />);
-    await waitFor(() => expect(screen.getByTestId('system-base-skill')).toHaveTextContent('Discipline skill: off'));
+    await waitFor(() => expect(screen.getByTestId('system-base-skill')).toHaveTextContent('Off'));
     cleanup();
     getDiagnostics.mockRejectedValue(new Error('no route'));
     render(<SystemSettings />);
     await waitFor(() => expect(getDiagnostics).toHaveBeenCalledTimes(2));
-    expect(screen.getByTestId('system-base-skill')).toHaveTextContent("not reported by Studio's service");
+    expect(screen.getByTestId('system-base-skill')).toHaveTextContent("Not reported by Studio's service");
   });
 });

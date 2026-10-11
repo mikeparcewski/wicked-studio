@@ -18,7 +18,7 @@ describe('one coaching move per seat, from its week', () => {
     expect(m.phase).toBe('review');
     expect(m.label).toBe('Route review away from Codex');
     expect(m.why).toBe('3 stalls this week');
-    expect(m.consequence).toBe('Adds a recall-only operations rule "Route review work away from Codex"; helpers read it, nothing is blocked.');
+    expect(m.consequence).toBe('Adds a standing instruction helpers read: hand review work to a helper other than Codex. Nothing is blocked.');
     expect(m.rule).toMatchObject({
       id: 'seat-coach:codex:review',
       rule_type: 'policy',
@@ -37,7 +37,7 @@ describe('one coaching move per seat, from its week', () => {
 
   it('a seat benched for sign-in is offered its own sign-in line', () => {
     const m = moveFor('pi');
-    expect(m).toMatchObject({ kind: 'sign-in', label: 'Sign in to Pi', line: 'pi login', why: 'benched from 2 runs this week: not signed in' });
+    expect(m).toMatchObject({ kind: 'sign-in', label: 'Sign in to Pi', line: 'pi login', why: 'skipped for 2 runs this week: not signed in' });
   });
 
   it('a benched seat without a sign-in line is not offered one', () => {
