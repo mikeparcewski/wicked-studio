@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 
 /**
  * The new-project flow (DES-FEEDBACK-001 §1.3, slice A): the 360×280 overlay
@@ -70,7 +71,11 @@ describe('Desk project door', () => {
     fireEvent.change(screen.getByTestId('new-project-name'), { target: { value: 'api migration' } });
     fireEvent.change(await screen.findByTestId('new-project-repo'), { target: { value: 'repo-1' } });
     fireEvent.click(screen.getByTestId('new-project-create'));
-    fireEvent.click(await screen.findByTestId('new-project-attach-retry'));
+    const retry = await screen.findByTestId('new-project-attach-retry');
+    expect(screen.getByTestId('new-project-error').textContent).toBe("The project was created, but the repository couldn't be attached.");
+    expect(screen.getByTestId('new-project-error-detail')).toHaveTextContent('attach refused');
+    expect(retry).toHaveTextContent('Retry attaching the repository');
+    fireEvent.click(retry);
     await waitFor(() => expect(attachProjectMember).toHaveBeenCalledTimes(2));
     expect(createProject).toHaveBeenCalledTimes(1);
   });
@@ -80,7 +85,9 @@ describe('NewProjectModal', () => {
   it('renders the §1.3 anatomy: name, description, actions — no Start with (S16a-4f)', () => {
     render(<NewProjectModal navigate={() => {}} onClose={() => {}} />);
     const modal = screen.getByTestId('new-project-modal');
-    expect(modal.style.width).toBe('360px');
+    // jsdom serialises min() oddly; the 360 px cap and the phone fit are what matter.
+    expect(modal.style.width).toContain('360px');
+    expect(modal.style.width).toContain('calc(100vw - 32px)');
     expect(modal.style.borderRadius).toBe('var(--radius-xl)');
     expect(modal.style.boxShadow).toBe('var(--shadow-overlay)');
     expect(screen.getByTestId('new-project-name')).toBeInTheDocument();
@@ -88,6 +95,24 @@ describe('NewProjectModal', () => {
     expect(screen.queryAllByRole('radio')).toHaveLength(0);
     expect(screen.getByTestId('new-project-description')).toBeInTheDocument();
     expect(screen.getByTestId('new-project-create')).toBeDisabled();
+  });
+
+  it('uses the primary button style for Create project', () => {
+    render(<NewProjectModal navigate={() => {}} onClose={() => {}} />);
+    const create = screen.getByTestId('new-project-create');
+    expect(create).toHaveClass('wk-btn', 'wk-btn--primary');
+    expect(create).toHaveAttribute('type', 'submit');
+    expect(create).toHaveTextContent(/^Create project$/);
+  });
+
+  it('submits once when Enter is pressed in the name field', async () => {
+    const user = userEvent.setup();
+    const navigate = vi.fn();
+    render(<NewProjectModal navigate={navigate} onClose={() => {}} />);
+    await user.type(screen.getByTestId('new-project-name'), 'Team offsite{Enter}');
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/everything?tab=sessions&project=proj_1'));
+    expect(createProject).toHaveBeenCalledTimes(1);
+    expect(createProject).toHaveBeenCalledWith({ name: 'Team offsite' });
   });
 
   it('gates Create on the daemon\'s rule only — a blank name is refused, capitals and punctuation are not (studio#463)', () => {
@@ -126,14 +151,22 @@ describe('NewProjectModal', () => {
     expect(createProject).toHaveBeenCalledWith({ name: 'q3-deck', description: 'the deck' });
   });
 
-  it('surfaces the API error (409 name collision) instead of closing', async () => {
-    createProject.mockRejectedValue(new Error('API 409: name collides with an active project'));
+  it('shows a plain creation error with the raw API message only in technical details', async () => {
+    const raw = 'API 409: name collides with an active project';
+    createProject.mockRejectedValue(new Error(raw));
     const onClose = vi.fn();
     render(<NewProjectModal navigate={() => {}} onClose={onClose} />);
     fireEvent.change(screen.getByTestId('new-project-name'), { target: { value: 'api migration' } });
     fireEvent.click(screen.getByTestId('new-project-create'));
-    await screen.findByTestId('new-project-error');
-    expect(screen.getByTestId('new-project-error').textContent).toContain('409');
+    const error = await screen.findByTestId('new-project-error');
+    expect(error.textContent).toBe("Couldn't create the project.");
+    expect(error).not.toHaveTextContent(raw);
+    expect(error).toHaveClass('wk-field-note', 'wk-field-note--bad');
+    const detail = screen.getByTestId('new-project-error-detail');
+    expect(detail).toHaveTextContent(raw);
+    expect(detail.tagName).toBe('DETAILS');
+    expect(detail).not.toHaveAttribute('open');
+    expect(error.nextElementSibling).toBe(detail);
     expect(onClose).not.toHaveBeenCalled();
   });
 

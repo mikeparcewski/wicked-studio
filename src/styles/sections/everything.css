@@ -1,1 +1,87 @@
 /* Section CSS: everything (design/UI-CONTRACT.md §6). Only that section edits this file. */
+
+/* ── S4: /everything (studio#687, #684 row 11). New rules only; tokens only. ─────────────── */
+
+/* One row of tabs that never wraps; it scrolls sideways on a phone instead of stacking. */
+.wk-everything-tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+.wk-everything-tabs::-webkit-scrollbar { display: none; }
+.wk-everything-tab { white-space: nowrap; flex: 0 0 auto; }
+
+/* Bars read left to right; the view switch and count sit at the end, never mid-row. */
+.wk-everything-bar { justify-content: flex-start; gap: var(--space-2) var(--space-3); }
+.wk-everything-views { margin-left: 0; }
+.wk-everything-count { color: var(--ink-muted); }
+.wk-everything-aside { display: inline-flex; gap: var(--space-3); }
+.wk-everything-note { margin: 0; font-size: var(--text-sm); color: var(--ink-muted); }
+
+/* The one status dot per row, coloured by the statusWord tone. */
+.wk-everything-dot { display: inline-block; width: 8px; height: 8px; border-radius: var(--radius-full); flex-shrink: 0; background: var(--ink-dim); align-self: center; }
+.wk-everything-dot--run { background: var(--status-run); }
+.wk-everything-dot--gate { background: var(--status-gate); }
+.wk-everything-dot--ok { background: var(--status-ok); }
+.wk-everything-dot--fail { background: var(--status-fail); }
+.wk-everything-dot--quiet { background: transparent; border: 1px solid var(--ink-dim); }
+
+/* Session rows: one line link plus, for a finished run, one "⋯" menu. */
+.wk-everything-session { border-top: 1px solid var(--border-subtle); }
+.wk-everything-group > .wk-everything-session:first-of-type { border-top: none; }
+.wk-everything-srow { border-top: none; padding: var(--space-2) 0; align-items: center; flex: 1 1 auto; }
+.wk-everything-frow { display: flex; flex-direction: column; min-width: 0; }
+.wk-everything-frow-line { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+.wk-everything-frow-line > a { min-width: 0; }
+.wk-everything-actrow { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2) 0; }
+.wk-everything-grow { flex: 1 1 auto; min-width: 0; }
+.wk-everything-srow .wk-desk-need-line, .wk-everything-actrow .wk-desk-need-line { font-size: var(--text-xs); color: var(--ink-dim); }
+
+/* Projects: the button, the lens and the find field in one left-aligned row. */
+.wk-projects-bar { margin-bottom: var(--space-2); }
+.wk-projects-find { width: 16rem; max-width: 100%; }
+.wk-project-edit-field { display: flex; flex-direction: column; gap: var(--space-1); }
+.wk-project-actions { gap: var(--space-2); margin-top: var(--space-2); }
+.wk-everything-group .wk-statline { margin: var(--space-1) 0 0; }
+
+/* Sentence-case column heads (UI-CONTRACT §1 rule 4: no uppercase micro-labels). */
+.wk-runs-col { text-transform: none; letter-spacing: 0; font-size: var(--text-sm); }
+/* A row's meta line that carries links wraps instead of clipping them. */
+.wk-everything-wrapline { white-space: normal; overflow: visible; }
+/* A long project description is clamped to two lines (the whole text is its title and the project page). */
+.wk-project-desc { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+/* Cards in a list never touch. */
+.wk-projects-tab { display: flex; flex-direction: column; gap: var(--space-3); }
+.wk-everything-panel .wk-everything-group + .wk-everything-group { margin-top: var(--space-3); }
+/* Titles keep their distinguishing end: two lines, then an ellipsis. */
+.wk-everything-srow .wk-desk-session-title, .wk-everything-row .wk-desk-session-title, .wk-made-li .wk-desk-session-title {
+  white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere;
+}
+.wk-runs-cell--title, .wk-runs-head > .wk-runs-col:nth-child(2) { flex: 2.5 1 0; }
+.wk-runs-filter::placeholder { color: var(--ink-placeholder); }
+.wk-everything-acts { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-4); font-size: var(--text-xs); }
+.wk-everything-acts .wk-link { white-space: nowrap; }
+.wk-everything-madelist .wk-made-li { padding: 0 var(--space-1); }
+.wk-projects-find { height: var(--control-h); padding: 0 var(--control-px); }
+
+/* Phone (the one breakpoint): page padding 16, rows stack their actions under the text. */
+@media (max-width: 767px) {
+  .wk-everything .wk-desk-scroll { padding: var(--space-4) var(--space-4) var(--space-2); }
+  .wk-everything-bar > .wk-runs-filter, .wk-runs-controls > .wk-runs-filter { flex: 1 1 100%; max-width: none; min-height: var(--tap-min); }
+  .wk-everything-aside .wk-link, .wk-everything-acts .wk-link, .wk-everything-scope .wk-link { display: inline-flex; align-items: center; min-height: var(--tap-min); }
+  .wk-everything-aside { gap: var(--space-4); }
+  .wk-projects-find { width: 100%; height: var(--tap-min); }
+  .wk-everything-tab { min-height: var(--tap-min); padding: 6px 7px; }
+  /* Every run on a phone: one stacked row per run (the title, then its state and last update); the
+     project, repo, workflow and start time live on the run. The column head (sorting) is desktop only. */
+  .wk-runs-head { display: none; }
+  .wk-runs-cells { flex-wrap: wrap; padding: var(--space-2) 0; }
+  .wk-runs-cells > .wk-runs-cell:nth-child(n+3):nth-child(-n+6) { display: none; }
+  .wk-runs-cells > .wk-runs-cell { flex: 0 0 auto; padding: 2px var(--space-3); }
+  .wk-runs-cells > .wk-runs-cell--title { order: -1; flex: 1 1 100%; }
+  .wk-runs-cells > .wk-runs-cell:nth-child(7) { color: var(--ink-dim); font-size: var(--text-xs); align-self: center; }
+}
+
+/* A multi-line row keeps its dot beside the title, not mid-block. */
+.wk-everything-srow > .wk-everything-dot, .wk-everything-actrow > .wk-everything-dot { align-self: flex-start; margin-top: 0.45em; }
+/* The scoped project's card sits apart from the lenses under it. */
+[data-testid="everything-project-header"] { margin-bottom: var(--space-3); }
+/* The table never clips a row's "⋯" menu; its head keeps the rounded top. */
+.wk-runs-table { overflow: visible; }
+.wk-runs-head { border-radius: var(--radius-md) var(--radius-md) 0 0; }

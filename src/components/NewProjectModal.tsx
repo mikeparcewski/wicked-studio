@@ -5,6 +5,7 @@ import { everythingPath } from '../board/everythingModel.js';
 import { useNeedsSources } from '../store/needsSources.js';
 import { useProjectsStore } from '../store/projects.js';
 import { useModalEscape } from './Modal.js';
+import { TechDetails } from './ui/TechDetails.js';
 
 /**
  * The new-project flow (DES-FEEDBACK-001 §1.3, slice A): a minimal inline
@@ -32,6 +33,7 @@ export function NewProjectModal({ navigate, onClose, deskMode = false }: Props):
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [rawError, setRawError] = useState('');
   const [busy, setBusy] = useState(false);
   const repos = useNeedsSources((s) => s.repos);
   const [repoId, setRepoId] = useState('');
@@ -50,6 +52,7 @@ export function NewProjectModal({ navigate, onClose, deskMode = false }: Props):
     if (!nameValid || busy || createdId !== null) return;
     setBusy(true);
     setError(null);
+    setRawError('');
     try {
       const { project } = await api.createProject(
         description.trim() === '' ? { name: name.trim() } : { name: name.trim(), description: description.trim() },
@@ -63,7 +66,8 @@ export function NewProjectModal({ navigate, onClose, deskMode = false }: Props):
         try {
           await api.attachProjectMember(project.id, { kind: 'crew.repo', ref: repoId, attachedBy: 'studio' });
         } catch (e) {
-          setError(e instanceof Error ? e.message : String(e));
+          setError("The project was created, but the repository couldn't be attached.");
+          setRawError(e instanceof Error ? e.message : String(e));
           setBusy(false);
           return;
         }
@@ -72,7 +76,8 @@ export function NewProjectModal({ navigate, onClose, deskMode = false }: Props):
       // S16a-4f: a new project lands on its Sessions (the shell's modes moved onto the Desk).
       navigate(everythingPath({ tab: 'sessions', project: project.id }));
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError("Couldn't create the project.");
+      setRawError(e instanceof Error ? e.message : String(e));
       setBusy(false);
     }
   }
@@ -81,26 +86,17 @@ export function NewProjectModal({ navigate, onClose, deskMode = false }: Props):
     if (createdId === null || busy || repoId === '') return;
     setBusy(true);
     setError(null);
+    setRawError('');
     try {
       await api.attachProjectMember(createdId, { kind: 'crew.repo', ref: repoId, attachedBy: 'studio' });
       onClose();
       navigate(everythingPath({ tab: 'sessions', project: createdId }));
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError("The project was created, but the repository couldn't be attached.");
+      setRawError(e instanceof Error ? e.message : String(e));
       setBusy(false);
     }
   }
-
-  const labelStyle = {
-    fontSize: 'var(--text-2xs)', color: 'var(--ink-muted)',
-    fontFamily: 'var(--font-sans)', fontWeight: 'var(--weight-medium)',
-  } as const;
-  const fieldStyle = {
-    background: 'var(--surface-base)', border: '1px solid var(--surface-raised)',
-    borderRadius: 'var(--radius-sm)', color: 'var(--ink-body)',
-    fontSize: 'var(--text-xs)', fontFamily: 'var(--font-mono)',
-    caretColor: 'var(--accent)',
-  } as const;
 
   return (
     <div
@@ -115,7 +111,8 @@ export function NewProjectModal({ navigate, onClose, deskMode = false }: Props):
         data-testid="new-project-modal"
         className="flex flex-col gap-2 p-4"
         style={{
-          width: '360px', minHeight: '280px',
+          width: 'min(360px, calc(100vw - 32px))',
+          minHeight: 'calc(var(--space-16) * 4 + var(--space-6))',
           background: 'var(--surface-overlay)',
           border: '1px solid var(--surface-raised)',
           borderRadius: 'var(--radius-xl)',
@@ -126,103 +123,95 @@ export function NewProjectModal({ navigate, onClose, deskMode = false }: Props):
           <h2
             id={titleId}
             className="text-sm font-semibold"
-            style={{ color: 'var(--ink-high)', fontFamily: 'var(--font-sans)', margin: 0 }}
+            style={{ color: 'var(--ink-high)', fontFamily: 'var(--font-sans)' }}
           >
             New project
           </h2>
           <button
             type="button"
             aria-label="Close"
+            title="Close"
             data-testid="new-project-close"
             onClick={onClose}
-            className="text-base leading-none transition-opacity hover:opacity-70"
-            style={{ background: 'transparent', border: 'none', color: 'var(--ink-dim)', cursor: 'pointer' }}
+            className="wk-btn wk-btn--quiet wk-btn--icon"
           >
             ✕
           </button>
         </div>
 
-        <label className="flex flex-col gap-1">
-          <span style={labelStyle}>Name</span>
-          <input
-            type="text"
-            data-testid="new-project-name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            autoFocus
-            maxLength={PROJECT_NAME_MAX}
-            placeholder="Team offsite"
-            className="w-full px-2 py-1.5 outline-none"
-            style={fieldStyle}
-          />
-        </label>
-        {name !== '' && !nameValid && (
-          <p
-            data-testid="new-project-name-invalid"
-            className="text-[10px] font-mono"
-            style={{ color: 'var(--status-fail)', margin: 0 }}
-          >
-            {nameProblem}
-          </p>
-        )}
+        <form className="flex flex-col gap-2" onSubmit={(e) => { e.preventDefault(); void create(); }}>
+          <label className="wk-field-label">
+            Name
+            <input
+              type="text"
+              data-testid="new-project-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              autoFocus
+              maxLength={PROJECT_NAME_MAX}
+              placeholder="Team offsite"
+              className="wk-field"
+            />
+          </label>
+          {name !== '' && !nameValid && (
+            <p
+              data-testid="new-project-name-invalid"
+              className="wk-field-note wk-field-note--bad"
+            >
+              {nameProblem}
+            </p>
+          )}
 
-        {deskMode && (repos?.length ?? 0) > 0 && <label className="flex flex-col gap-1">
-          <span style={labelStyle}>Repository (optional)</span>
-          <select data-testid="new-project-repo" value={repoId} onChange={(e) => setRepoId(e.target.value)} style={fieldStyle}>
-            <option value="">No repository</option>
-            {repos?.map((repo) => <option key={repo.id} value={repo.id}>{repo.name}</option>)}
-          </select>
-        </label>}
+          {deskMode && (repos?.length ?? 0) > 0 && <label className="wk-field-label">
+            Repository (optional)
+            <select data-testid="new-project-repo" value={repoId} onChange={(e) => setRepoId(e.target.value)} className="wk-field">
+              <option value="">No repository</option>
+              {repos?.map((repo) => <option key={repo.id} value={repo.id}>{repo.name}</option>)}
+            </select>
+          </label>}
 
-        <label className="flex flex-col gap-1">
-          <span style={labelStyle}>Description (optional)</span>
-          <textarea
-            data-testid="new-project-description"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            rows={2}
-            className="w-full px-2 py-1.5 outline-none resize-none"
-            style={fieldStyle}
-          />
-        </label>
+          <label className="wk-field-label">
+            Description (optional)
+            <textarea
+              data-testid="new-project-description"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              rows={2}
+              className="wk-field"
+            />
+          </label>
 
-        {error !== null && (
-          <p
-            data-testid="new-project-error"
-            className="text-[10px] font-mono"
-            style={{ color: 'var(--status-fail)', margin: 0 }}
-          >
-            {error}
-          </p>
-        )}
+          {error !== null && (
+            <>
+              <p
+                data-testid="new-project-error"
+                className="wk-field-note wk-field-note--bad"
+              >
+                {error}
+              </p>
+              <TechDetails text={rawError} data-testid="new-project-error-detail" />
+            </>
+          )}
 
-        <div className="flex items-center justify-end gap-2 mt-auto pt-1">
-          <button
-            type="button"
-            data-testid="new-project-cancel"
-            onClick={onClose}
-            className="px-3 py-1.5 rounded text-xs transition-opacity hover:opacity-80"
-            style={{
-              background: 'transparent', border: '1px solid var(--surface-raised)',
-              color: 'var(--ink-muted)', fontFamily: 'var(--font-sans)', cursor: 'pointer',
-            }}
-          >
-            Cancel
-          </button>
-          {createdId !== null ? <button type="button" data-testid="new-project-attach-retry" disabled={busy} onClick={() => { void retryAttach(); }}>Retry attaching repository</button> : <button
-            type="button"
-            data-testid="new-project-create"
-            onClick={() => { void create(); }}
-            disabled={!nameValid || busy}
-            className="px-3 py-1.5 rounded text-xs font-semibold transition-opacity hover:opacity-90 disabled:opacity-40"
-            style={{
-              background: 'var(--accent)', border: 'none', color: 'var(--accent-fg)',
-              fontFamily: 'var(--font-sans)', cursor: nameValid && !busy ? 'pointer' : 'not-allowed',
-            }}
-          >
-            {busy ? 'Creating…' : 'Create project →'}
-          </button>}
-        </div>
+          <div className="flex items-center justify-end gap-2 mt-auto pt-1">
+            <button
+              type="button"
+              data-testid="new-project-cancel"
+              onClick={onClose}
+              className="wk-btn wk-btn--quiet"
+            >
+              Cancel
+            </button>
+            {createdId !== null ? <button type="button" className="wk-btn wk-btn--primary" data-testid="new-project-attach-retry" disabled={busy} onClick={() => { void retryAttach(); }}>Retry attaching the repository</button> : <button
+              type="submit"
+              data-testid="new-project-create"
+              disabled={!nameValid || busy}
+              className="wk-btn wk-btn--primary"
+            >
+              {busy ? 'Creating…' : 'Create project'}
+            </button>}
+          </div>
+        </form>
       </div>
     </div>
   );

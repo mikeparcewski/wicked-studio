@@ -24,7 +24,7 @@ export type EverythingTab = (typeof EVERYTHING_TABS)[number];
 
 export const TAB_LABEL: Readonly<Record<EverythingTab, string>> = {
   sessions: 'Sessions',
-  made: 'Everything made',
+  made: 'Made',
   helpers: 'Helpers',
   handed: 'Handed over',
   projects: 'Projects',
@@ -36,14 +36,16 @@ export function isEverythingTab(v: unknown): v is EverythingTab {
 
 // ── The Sessions filter: the old `/work?filter=` words, kept, plus `waiting` ─────────────────
 
-/** `all` · `active` (working or waiting) · `waiting` (on you) · `completed` · `failed` · `cancelled`. */
+/** `all` · `active` (working or waiting) · `waiting` (on you) · `completed` · `failed` · `cancelled`.
+ *  Labels speak the one status vocabulary (board/statusWords.ts; studio#687 row 36); `cancelled` holds
+ *  stopped and cancelled runs alike, so its label names both. */
 export const SESSION_FILTERS = [
   { id: 'all', label: 'All' },
   { id: 'active', label: 'Working' },
   { id: 'waiting', label: 'Waiting on you' },
-  { id: 'completed', label: 'Done' },
-  { id: 'failed', label: 'Blocked' },
-  { id: 'cancelled', label: 'Stopped' },
+  { id: 'completed', label: 'Finished' },
+  { id: 'failed', label: 'Failed' },
+  { id: 'cancelled', label: 'Stopped or cancelled' },
   // The old Work page's "show archived" toggle, as a lens: the archived runs (`GET /runs?archived`),
   // each with Unarchive — read only when picked.
   { id: 'archived', label: 'Archived' },

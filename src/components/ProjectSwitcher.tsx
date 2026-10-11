@@ -164,7 +164,7 @@ export function ProjectSwitcher({
               onChange={(e) => setFilter(e.target.value)}
               placeholder="filter projects…"
               autoFocus
-              className="w-full bg-transparent text-xs font-mono outline-none border-b px-1 py-0.5"
+              className="w-full bg-transparent text-xs outline-none border-b px-1 py-0.5"
               style={{ color: 'var(--ink-body)', borderColor: 'var(--ink-dim)', caretColor: 'var(--accent)' }}
             />
           </div>
@@ -177,7 +177,7 @@ export function ProjectSwitcher({
               aria-selected={current === null}
               data-testid="project-switcher-unfiled"
               onClick={() => pick(null)}
-              className="wk-switcher-row w-full text-left px-3 py-1.5 text-xs font-mono transition-colors hover:bg-surface-card"
+              className="wk-switcher-row w-full text-left px-3 py-1.5 text-xs transition-colors hover:bg-surface-card"
               style={{ color: current === null ? 'var(--ink-high)' : 'var(--ink-muted)' }}
             >
               Unfiled
@@ -194,7 +194,7 @@ export function ProjectSwitcher({
                 data-testid="project-switcher-option"
                 data-project-id={p.id}
                 onClick={() => pick(p.id)}
-                className="wk-switcher-row w-full text-left px-3 py-1.5 text-xs font-mono truncate transition-colors hover:bg-surface-card"
+                className="wk-switcher-row w-full text-left px-3 py-1.5 text-xs truncate transition-colors hover:bg-surface-card"
                 style={{ color: isCurrent ? 'var(--ink-high)' : 'var(--ink-muted)' }}
               >
                 {p.name}
@@ -211,7 +211,7 @@ export function ProjectSwitcher({
               type="button"
               data-testid="project-switcher-add"
               onClick={() => { setOpen(false); onNewProject(); }}
-              className="wk-switcher-row w-full text-left px-3 py-1.5 text-xs font-mono transition-opacity hover:opacity-80"
+              className="wk-switcher-row w-full text-left px-3 py-1.5 text-xs transition-opacity hover:opacity-80"
               style={{ color: 'var(--accent)', borderTop: '1px solid var(--surface-card)' }}
             >
               + New project
@@ -224,7 +224,7 @@ export function ProjectSwitcher({
               data-testid="switcher-dashboard-row"
               href={dashboard.href}
               onClick={(e) => { e.preventDefault(); setOpen(false); setFilter(''); dashboard.onGo(); }}
-              className="wk-switcher-row block w-full text-left px-3 py-1.5 text-xs font-mono transition-opacity hover:opacity-80"
+              className="wk-switcher-row block w-full text-left px-3 py-1.5 text-xs transition-opacity hover:opacity-80"
               style={{
                 color: 'var(--ink-muted)', textDecoration: 'none',
                 borderTop: '1px solid var(--surface-card)',

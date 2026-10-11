@@ -69,8 +69,34 @@ describe('S17a Projects surface', () => {
     const row = screen.getAllByTestId('projects-row')[0]!;
     expect(row.querySelector('h2')?.className).toContain('wk-project-title');
     expect(row.querySelector('[data-testid="projects-row-rename"]')?.className).toContain('wk-btn');
-    const counts = row.querySelector('[data-state="quiet"]')!.parentElement!.textContent!;
-    expect(counts.trim().endsWith('·')).toBe(false);
-    expect(counts).toContain('blocked: 0 · quiet: 0');
+    // studio#687 row 35: no "working: 0 · waiting: 0 …" dump — zero counts say nothing.
+    expect(row.querySelector('[data-testid="project-counts"]')).toBeNull();
+    expect(row.textContent).not.toMatch(/working: 0|quiet: 0|Latest activity/);
+  });
+
+  it('studio#687 row 37: Open, Rename and Archive are one button system', () => {
+    render(<EverythingPage runs={[]} runsLoaded needRows={[]} navigate={() => undefined} search="?tab=projects" />);
+    const row = screen.getAllByTestId('projects-row')[0]!;
+    for (const id of ['projects-row-open', 'projects-row-rename', 'projects-row-archive']) {
+      expect(row.querySelector(`[data-testid="${id}"]`)?.className).toContain('wk-btn--secondary');
+    }
+  });
+
+  it('the Archived lens says "Nothing is archived" only after its read answered (codex r1)', async () => {
+    let resolve: (v: { projects: Project[] }) => void = () => undefined;
+    listProjects.mockReset().mockReturnValue(new Promise((r) => { resolve = r; }));
+    render(<EverythingPage runs={[]} runsLoaded needRows={[]} navigate={() => undefined} search="?tab=projects&filter=archived" />);
+    expect(screen.queryByText('Nothing is archived.')).toBeNull();
+    expect(screen.getByTestId('projects-checking')).toBeInTheDocument();
+    resolve({ projects: [] });
+    expect(await screen.findByText('Nothing is archived.')).toBeInTheDocument();
+  });
+
+  it('studio#684 row 11: a failed runs read hides every count on Projects (never "Not in a project: 0")', () => {
+    render(<EverythingPage runs={[]} runsLoaded={false} runsError="Failed to fetch" needRows={[]} navigate={() => undefined} search="?tab=projects" />);
+    expect(screen.getByTestId('projects-failed').getAttribute('data-kind')).toBe('offline');
+    expect(screen.queryByTestId('projects-unfiled')).toBeNull();
+    expect(screen.queryByTestId('project-counts')).toBeNull();
+    expect(screen.getByTestId('projects-tab').textContent).not.toMatch(/Not in a project: 0|0 sessions/);
   });
 });

@@ -11,11 +11,11 @@
   "version": 1,
   "studioVersion": "0.7.5",
   "counts": {
-    "files": 196,
-    "occurrences": 2147,
-    "static": 1870,
+    "files": 197,
+    "occurrences": 2160,
+    "static": 1880,
     "dynamic": 61,
-    "computed": 18
+    "computed": 19
   },
   "static": [
     {
@@ -2276,6 +2276,12 @@
       ]
     },
     {
+      "testId": "everything-archived-failed",
+      "files": [
+        "src/components/everything/EverythingPage.tsx"
+      ]
+    },
+    {
       "testId": "everything-archived-project",
       "files": [
         "src/components/everything/EverythingPage.tsx"
@@ -2372,6 +2378,12 @@
       ]
     },
     {
+      "testId": "everything-helper-detail",
+      "files": [
+        "src/components/everything/EverythingPage.tsx"
+      ]
+    },
+    {
       "testId": "everything-helper-signin",
       "files": [
         "src/components/everything/EverythingPage.tsx"
@@ -2438,6 +2450,12 @@
       ]
     },
     {
+      "testId": "everything-made-reading",
+      "files": [
+        "src/components/everything/EverythingPage.tsx"
+      ]
+    },
+    {
       "testId": "everything-made-row",
       "files": [
         "src/components/everything/EverythingPage.tsx"
@@ -2474,9 +2492,9 @@
       ]
     },
     {
-      "testId": "everything-retry",
+      "testId": "everything-row-menu",
       "files": [
-        "src/components/everything/EverythingPage.tsx"
+        "src/components/everything/FinishedRunMenu.tsx"
       ]
     },
     {
@@ -2529,6 +2547,12 @@
     },
     {
       "testId": "everything-show-all",
+      "files": [
+        "src/components/everything/EverythingPage.tsx"
+      ]
+    },
+    {
+      "testId": "everything-stale",
       "files": [
         "src/components/everything/EverythingPage.tsx"
       ]
@@ -4792,6 +4816,12 @@
       ]
     },
     {
+      "testId": "new-project-error-detail",
+      "files": [
+        "src/components/NewProjectModal.tsx"
+      ]
+    },
+    {
       "testId": "new-project-modal",
       "files": [
         "src/components/NewProjectModal.tsx"
@@ -5607,6 +5637,12 @@
       ]
     },
     {
+      "testId": "project-counts",
+      "files": [
+        "src/components/everything/ProjectsTab.tsx"
+      ]
+    },
+    {
       "testId": "project-coverage",
       "files": [
         "src/components/product/ProjectAggregates.tsx"
@@ -5841,6 +5877,30 @@
       ]
     },
     {
+      "testId": "projects-archived-failed",
+      "files": [
+        "src/components/everything/ProjectsTab.tsx"
+      ]
+    },
+    {
+      "testId": "projects-checking",
+      "files": [
+        "src/components/everything/ProjectsTab.tsx"
+      ]
+    },
+    {
+      "testId": "projects-empty",
+      "files": [
+        "src/components/everything/ProjectsTab.tsx"
+      ]
+    },
+    {
+      "testId": "projects-failed",
+      "files": [
+        "src/components/everything/ProjectsTab.tsx"
+      ]
+    },
+    {
       "testId": "projects-filter",
       "files": [
         "src/components/everything/ProjectsTab.tsx"
@@ -5890,6 +5950,18 @@
     },
     {
       "testId": "projects-tab",
+      "files": [
+        "src/components/everything/ProjectsTab.tsx"
+      ]
+    },
+    {
+      "testId": "projects-unfiled",
+      "files": [
+        "src/components/everything/ProjectsTab.tsx"
+      ]
+    },
+    {
+      "testId": "projects-unfiled-open",
       "files": [
         "src/components/everything/ProjectsTab.tsx"
       ]
@@ -6755,7 +6827,8 @@
     {
       "testId": "run-finished-row",
       "files": [
-        "src/components/FinishedRunRow.tsx"
+        "src/components/FinishedRunRow.tsx",
+        "src/components/everything/FinishedRunMenu.tsx"
       ]
     },
     {
@@ -6858,7 +6931,8 @@
       "testId": "run-reuse-saved",
       "files": [
         "src/components/FinishedRunRow.tsx",
-        "src/components/HandoverPanel.tsx"
+        "src/components/HandoverPanel.tsx",
+        "src/components/everything/FinishedRunMenu.tsx"
       ]
     },
     {
@@ -6930,19 +7004,7 @@
       ]
     },
     {
-      "testId": "runs-row-look",
-      "files": [
-        "src/components/everything/EverythingPage.tsx"
-      ]
-    },
-    {
       "testId": "runs-row-menu",
-      "files": [
-        "src/components/everything/EverythingPage.tsx"
-      ]
-    },
-    {
-      "testId": "runs-row-open",
       "files": [
         "src/components/everything/EverythingPage.tsx"
       ]
@@ -11694,6 +11756,7 @@
         "src/components/Tech.tsx",
         "src/components/WhatWhere.tsx",
         "src/components/dashboardKit.tsx",
+        "src/components/everything/FinishedRunMenu.tsx",
         "src/components/session/AssuranceReceipt.tsx",
         "src/components/session/CodebaseDownload.tsx",
         "src/components/ui/Combobox.tsx",
@@ -11719,6 +11782,12 @@
       "expression": "testId = 'empty-state'",
       "files": [
         "src/components/ui/StateBanner.tsx"
+      ]
+    },
+    {
+      "expression": "testId = 'everything-row-menu'",
+      "files": [
+        "src/components/everything/FinishedRunMenu.tsx"
       ]
     },
     {

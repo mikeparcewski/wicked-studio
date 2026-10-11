@@ -88,7 +88,24 @@ describe('S17b Every-run table', () => {
   it('R3 a failed read shows the error and retry', () => {
     render(<EverythingPage runs={[]} runsLoaded={false} runsError="500 error" onRetryRuns={() => {}} needRows={[]} navigate={() => {}} search="?tab=sessions&view=runs" />);
     expect(screen.getByTestId('everything-failed')).toBeInTheDocument();
-    expect(screen.getByTestId('everything-retry')).toBeInTheDocument();
+    expect(screen.getByTestId('everything-failed-retry')).toBeInTheDocument();
+  });
+
+  it('studio#684 row 11: a failed read never says "0 runs · 0 sessions", and its raw error stays in the details', () => {
+    render(<EverythingPage runs={[]} runsLoaded={false} runsError="Failed to fetch" onRetryRuns={() => {}} needRows={[]} navigate={() => {}} search="?tab=sessions" />);
+    const banner = screen.getByTestId('everything-failed');
+    expect(banner.getAttribute('data-kind')).toBe('offline');
+    expect(screen.queryByTestId('everything-count')).toBeNull();
+    expect(screen.queryByText(/0 runs/)).toBeNull();
+    expect(banner.querySelector('.wk-state-banner-text')!.textContent).not.toContain('Failed to fetch');
+    expect(screen.getByTestId('everything-failed-detail').textContent).toContain('Failed to fetch');
+  });
+
+  it('studio#687 row 36: a run row says its state in the one status vocabulary', () => {
+    render(<EverythingPage runs={runs} runsLoaded needRows={[]} navigate={() => {}} search="?tab=sessions&view=runs" />);
+    const words = screen.getAllByTestId('runs-row').map((r) => r.getAttribute('data-word'));
+    expect(words.every((w) => ['Archived', 'Waiting on you', 'Working', 'Failed', 'Cancelled', 'Stopped', 'Finished', 'Unknown'].includes(w ?? ''))).toBe(true);
+    expect(screen.queryByText('Blocked', { selector: '.wk-runs-cell--state' })).toBeNull();
   });
 
   it('R4 a stale read still shows the table', () => {
@@ -150,10 +167,10 @@ describe('S17b Every-run table', () => {
   it('R14/R15 pager: 150 runs → 2 pages, next advances', () => {
     render(<EverythingPage runs={make150()} runsLoaded needRows={[]} navigate={() => {}} search="?tab=sessions&view=runs" />);
     expect(screen.getAllByTestId('runs-row')).toHaveLength(100);
-    expect(screen.getByTestId('runs-pager-at').textContent).toContain('page 1 of 2');
+    expect(screen.getByTestId('runs-pager-at').textContent).toContain('Page 1 of 2');
     fireEvent.click(screen.getByTestId('runs-pager-next'));
     expect(screen.getAllByTestId('runs-row')).toHaveLength(50);
-    expect(screen.getByTestId('runs-pager-at').textContent).toContain('page 2 of 2');
+    expect(screen.getByTestId('runs-pager-at').textContent).toContain('Page 2 of 2');
   });
 
   it('R16 grouped view renders the sessions panel, not the table', () => {
@@ -186,8 +203,8 @@ describe('S17b Every-run table', () => {
     const navigate = vi.fn();
     render(<EverythingPage runs={runs} runsLoaded needRows={[]} navigate={navigate} search="?tab=sessions&view=runs" />);
     const row = screen.getAllByTestId('runs-row').find((r) => r.getAttribute('data-run-id') === 'r-done')!;
-    fireEvent.click(within(row).getByTestId('runs-row-menu'));
-    fireEvent.click(within(row).getByTestId('runs-row-open'));
+    fireEvent.click(within(row).getByTestId('runs-row-menu-button'));
+    fireEvent.click(within(row).getByRole('menuitem', { name: 'Open' }));
     expect(navigate).toHaveBeenCalledWith('/s/run%3Ar-done');
   });
   it('an archived run with a chat links its run address in the table too (studio#675)', async () => {

@@ -117,10 +117,12 @@ with sync_playwright() as p:
         page.goto(f"{origin}/everything?tab=sessions", wait_until="networkidle")
         row = page.locator('[data-testid="run-finished-row"][data-run-id="r-reuse"]')
         row.wait_for(state="visible", timeout=15000)
-        check("next-use-moves", row.get_by_test_id("run-reuse-preset").count() == 1
-              and row.get_by_test_id("run-draft-update-row").count() == 1
-              and row.get_by_test_id("run-archive-row").count() == 1)
-        row.get_by_test_id("run-reuse-preset").click()
+        # studio#687 row 35: the next-use moves are ONE "⋯" menu on the row, not three text buttons.
+        row.get_by_test_id("everything-row-menu-button").click()
+        items = row.get_by_test_id("everything-row-menu-list").locator('[role="menuitem"]')
+        check("next-use-moves", [items.nth(i).get_attribute("data-item") for i in range(items.count())]
+              == ["reuse-preset", "draft-update", "archive"])
+        row.locator('[role="menuitem"][data-item="reuse-preset"]').click()
         panel = row.get_by_test_id("run-reuse-panel")
         panel.wait_for(state="visible", timeout=8000)
         # S15c: the row lives on "See everything › Sessions" under the page's header and lenses, so the
@@ -149,7 +151,8 @@ with sync_playwright() as p:
         saved = row.get_by_test_id("run-reuse-saved")
         saved.wait_for(state="visible", timeout=8000)
         check("saved-in-place", "Saved as preset “tidy-upload”" in (saved.text_content() or ""))
-        row.get_by_test_id("run-draft-update-row").click()
+        row.get_by_test_id("everything-row-menu-button").click()
+        row.locator('[role="menuitem"][data-item="draft-update"]').click()
         dialog = page.get_by_role("dialog")
         dialog.wait_for(state="visible", timeout=8000)
         check("draft-update-opens", "Draft update" in (dialog.text_content() or "")

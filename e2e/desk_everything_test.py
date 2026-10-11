@@ -11,7 +11,7 @@ Against the in-process fixture (wave-1 + wave-2b corpus: alpha/beta/gamma with r
      /p/beta/chronicle and /p/alpha each show the not-found page with the typed address kept (no
      redirect); /everything?tab=sessions&filter=failed presses Blocked and shows only blocked sessions.
   3. ?project= scopes the Sessions tab, including a project with nothing started.
-  4. HELPERS: the roster, one row per seat; the signed-out seat offers "Sign in →" which opens the
+  4. HELPERS: the roster, one row per seat; the signed-out seat offers "Sign in" which opens the
      sign-in panel (desk_signin proves the panel).
   5. The Desk's "See everything →" opens /everything. 0 page errors.
 
@@ -92,7 +92,7 @@ with sync_playwright() as p:
     page.wait_for_timeout(200)
     page.screenshot(path=str(SHOTS / "desk-everything-sessions.png"))
     s1 = page.evaluate(PAGE)
-    check("page", s1["present"] and s1["tabs"] == ["Sessions", "Everything made", "Helpers", "Handed over", "Projects"]
+    check("page", s1["present"] and s1["tabs"] == ["Sessions", "Made", "Helpers", "Handed over", "Projects"]
           and s1["selected"] == "sessions" and s1["count"] >= 5 and set(s1["groups"]) >= {"alpha", "beta", "gamma"},
           **s1)
     # A tab is a page (pushed): the address carries it.
