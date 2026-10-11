@@ -208,7 +208,9 @@ describe('project quick icons', () => {
       useComposerChips.getState().byComposer['desk']?.some((c) => c.kind === 'project' && c.projectId === 'kes'),
     ).toBe(true));
     fireEvent.click(screen.getByTestId('rail-group-view'));
-    expect(navigate).toHaveBeenCalledWith('/product?project=kes');
+    // The four-boxes icon opens the project DASHBOARD (/projects/:id), never the Product flow.
+    expect(navigate).toHaveBeenCalledWith('/projects/kes');
+    expect(navigate).not.toHaveBeenCalledWith('/product?project=kes');
   });
 
   it('a Desk project card carries the same quick icons onto its title row', async () => {
@@ -222,7 +224,24 @@ describe('project quick icons', () => {
       useComposerChips.getState().byComposer['desk']?.some((c) => c.kind === 'project' && c.projectId === 'kes'),
     ).toBe(true));
     fireEvent.click(within(card).getByTestId('desk-project-view'));
-    expect(navigate).toHaveBeenCalledWith('/product?project=kes');
+    // The four-boxes icon opens the project DASHBOARD (/projects/:id), never the Product flow.
+    expect(navigate).toHaveBeenCalledWith('/projects/kes');
+    expect(navigate).not.toHaveBeenCalledWith('/product?project=kes');
+  });
+});
+
+describe('Not in a project has an open icon too', () => {
+  it('the unfiled rail group opens the unfiled work on See everything › Projects', () => {
+    modelBag = { ...modelBag, unfiled: [makeView({ id: 'u1', problem: 'loose end', status: 'completed' })] };
+    const navigate = vi.fn();
+    render(<SessionRail runs={[]} needRows={[]} navigate={navigate} pathname="/" />);
+    const group = screen.getAllByTestId('rail-group').find((g) => g.getAttribute('data-project-id') === '')!;
+    const open = within(group).getByTestId('rail-group-view-unfiled');
+    expect(open).toHaveAccessibleName('Open work not in a project');
+    // Only the view icon: unfiled work has no project to seed a new session in.
+    expect(within(group).queryByTestId('rail-group-new')).toBeNull();
+    fireEvent.click(open);
+    expect(navigate).toHaveBeenCalledWith('/everything?tab=projects');
   });
 });
 
