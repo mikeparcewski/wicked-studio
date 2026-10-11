@@ -27,8 +27,9 @@ function sources(dir: string): string[] {
 /**
  * The in-app link targets written as literals in a LINK position: `href="/x"`, `href={'/x'}`,
  * `href: '/x'`, `navigate('/x')`, `go('/x')`, `goTo('/x')`, `path: '/x'` — single, double or
- * backtick quotes. A `${…}` in a template stands for one id segment. API paths (`apiFetch('/runs')`)
- * are not link positions and are never read.
+ * backtick quotes. A `${…}` right after a `/` stands for one id segment; anywhere else it stands
+ * for nothing (`/testing${tail}`). API paths (`apiFetch('/runs')`) are not link positions and are
+ * never read.
  */
 const LINK_AT = /(?:\bhref\s*[=:]\s*\{?|\b(?:navigate|go|goTo)\(\s*|\bpath\s*:\s*)(['"`])(\/(?!\/)[^'"`\s]*)\1/g;
 
@@ -38,7 +39,7 @@ function literalLinks(): { at: string; target: string }[] {
     const text = readFileSync(file, 'utf8');
     for (const m of text.matchAll(LINK_AT)) {
       const line = text.slice(0, m.index).split('\n').length;
-      out.push({ at: `${relative(SRC, file)}:${line}`, target: m[2]!.replace(/\$\{[^}]*\}/g, 'x1') });
+      out.push({ at: `${relative(SRC, file)}:${line}`, target: m[2]!.replace(/\/\$\{[^}]*\}/g, '/x1').replace(/\$\{[^}]*\}/g, '') });
     }
   }
   return out;
@@ -47,12 +48,12 @@ function literalLinks(): { at: string; target: string }[] {
 /** A retired shape as a matcher (`:id` = one segment). */
 const RETIRED = RETIRED_ADDRESSES.map((a) => ({ a, re: new RegExp(`^${a.replace(/:id/g, '[^/]+')}/*$`) }));
 
-/** Why an address is not a destination, or null when it is one. */
+/** Why an address is not a destination (naming the retired shape it hits), or null when it is one. */
 function dead(target: string): string | null {
   const path = target.split(/[?#]/)[0]!;
+  if (parseRoute(path).panel !== 'not-found') return null;
   const hit = RETIRED.find((r) => r.re.test(path));
-  if (hit !== undefined) return `retired (${hit.a})`;
-  return parseRoute(path).panel === 'not-found' ? 'not-found' : null;
+  return hit !== undefined ? `retired (${hit.a})` : 'not-found';
 }
 
 describe('X1 — every link studio generates resolves', () => {

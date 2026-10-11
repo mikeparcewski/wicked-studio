@@ -149,7 +149,7 @@ describe('corpus & prefixes (§1.3/§1.4)', () => {
     const r = rows();
     expect(r).toHaveLength(1);
     expect(r[0]?.textContent).toContain('q3-review-deck');
-    expect(r[0]?.getAttribute('href')).toBe('/p/q3-review-deck');
+    expect(r[0]?.getAttribute('href')).toBe('/everything?tab=sessions&project=q3-review-deck');
   });
 });
 
