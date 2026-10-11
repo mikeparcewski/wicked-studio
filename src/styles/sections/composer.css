@@ -80,3 +80,7 @@
 @media (max-width: 767px) {
   .wk-launch-wizard select.wk-field, .wk-launch-wizard .wk-composer-seat { min-height: var(--tap-min); }
 }
+/* studio#726: the wizard's help lines read at body size (13 px), not the 11 px meta size. */
+.wk-launch-wizard .wk-field-note { font-size: var(--text-sm); }
+/* studio#726: a selected helper chip has an accent edge, so a row with every chip on still reads selected. */
+.wk-composer-seat[aria-pressed='true'] { border-color: var(--accent); }

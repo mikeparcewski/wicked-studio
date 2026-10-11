@@ -35,21 +35,21 @@ beforeEach(() => {
 it('a saved preset is listed, and survives a Refresh whose preset read fails (named, not dropped)', async () => {
   presets.mockResolvedValueOnce({ presets: [MINE] });
   render(<WorkflowViewer />);
-  expect(await screen.findByText('mine')).toBeTruthy();
+  expect(await screen.findByText('Mine')).toBeTruthy();
 
   presets.mockRejectedValueOnce(new ApiError(500, 'store busy'));
   fireEvent.click(screen.getByText('Refresh'));
   expect(await screen.findByText(/Saved presets could not be read/)).toBeTruthy();
-  expect(screen.getByText('mine')).toBeTruthy();
+  expect(screen.getByText('Mine')).toBeTruthy();
 });
 
 it('a daemon without the presets route (404) lists the catalog alone, with no error', async () => {
   presets.mockRejectedValueOnce(new ApiError(404, 'not found'));
   render(<WorkflowViewer />);
   await waitFor(() => expect(presets).toHaveBeenCalled());
-  await screen.findAllByText('feature');
+  await screen.findAllByText('Feature');
   expect(screen.queryByText(/Saved presets could not be read/)).toBeNull();
-  expect(screen.queryByText('mine')).toBeNull();
+  expect(screen.queryByText('Mine')).toBeNull();
 });
 
 it('a Refresh whose catalog read fails keeps the last good catalog: an inherited role is not shown as a default (codex r6)', async () => {
@@ -61,7 +61,7 @@ it('a Refresh whose catalog read fails keeps the last good catalog: an inherited
   presets.mockResolvedValue({ presets: [VERIFY] });
   catalog.mockResolvedValueOnce({ entries: [TEST_ENTRY] });
   render(<WorkflowViewer />);
-  fireEvent.click(await screen.findByText('mine'));
+  fireEvent.click(await screen.findByText('Mine'));
   expect(await screen.findByText('checks the work')).toBeTruthy();
 
   catalog.mockRejectedValueOnce(new ApiError(503, 'unavailable'));
@@ -80,8 +80,8 @@ it("Edit whose own catalog read fails shows the inherited gate from the viewer's
   presets.mockResolvedValue({ presets: [{ ...MINE, steps: [{ catalog: 'test', id: 'verify' }] }] });
   catalog.mockResolvedValueOnce({ entries: [TEST_ENTRY] }).mockRejectedValueOnce(new ApiError(503, 'unavailable'));
   render(<WorkflowViewer />);
-  fireEvent.click(await screen.findByText('mine'));
-  fireEvent.click(screen.getByRole('button', { name: 'More actions for mine' }));
+  fireEvent.click(await screen.findByText('Mine'));
+  fireEvent.click(screen.getByRole('button', { name: 'More actions for Mine' }));
   fireEvent.click(screen.getByRole('menuitem', { name: 'Edit' }));
   expect(await screen.findByText(/The phase catalog could not be read/)).toBeTruthy();
   expect(screen.getByTestId('builder-step-gate').dataset.gate).toBe('human_if');
@@ -91,8 +91,8 @@ it("Edit whose own catalog read fails shows the inherited gate from the viewer's
 it('removing the step a dependency names keeps the dependency listed, with the reset to the engine (codex r7)', async () => {
   presets.mockResolvedValue({ presets: [{ ...MINE, steps: [{ catalog: 'produce', id: 'a' }, { catalog: 'review', id: 'b', depends_on: ['a'] }] }] });
   render(<WorkflowViewer />);
-  fireEvent.click(await screen.findByText('mine'));
-  fireEvent.click(screen.getByRole('button', { name: 'More actions for mine' }));
+  fireEvent.click(await screen.findByText('Mine'));
+  fireEvent.click(screen.getByRole('button', { name: 'More actions for Mine' }));
   fireEvent.click(screen.getByRole('menuitem', { name: 'Edit' }));
   await screen.findAllByTestId('builder-step-catalog');
   fireEvent.click(screen.getByRole('button', { name: 'More actions for step 1' }));

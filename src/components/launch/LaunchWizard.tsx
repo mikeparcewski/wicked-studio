@@ -22,21 +22,13 @@ import { useProjectsStore } from '../../store/projects.js';
 import { useProvenanceStore } from '../../store/provenance.js';
 import { fetchReposCached, getCachedRepos } from '../../store/repoCache.js';
 import { useWorkflowDefs } from '../../store/workflowCache.js';
+import { workflowLabel } from '../../board/workflowNames.js';
 import { useLaunchWizard, type LaunchDraft } from '../../store/launchWizard.js';
-
-const ACRONYMS = new Set(['mcp', 'qe', 'pr', 'api', 'ui', 'ux']);
-/** A job's name in plain words (the catalog has only keys): "mcp-server" -> "MCP server". */
-export function jobName(key: string): string {
-  const words = key.split(/[-_\s]+/).filter(Boolean).map((w) => (ACRONYMS.has(w.toLowerCase()) ? w.toUpperCase() : w.toLowerCase()));
-  if (words.length === 0) return key;
-  const [first, ...rest] = words;
-  return [first![0]!.toUpperCase() + first!.slice(1), ...rest].join(' ');
-}
 
 type Step = 'workflow' | 'what' | 'where' | 'options' | 'review';
 const STEP_TITLE: Record<Step, string> = {
   workflow: 'Choose the kind of job',
-  what: 'What do you want?',
+  what: 'The work',
   where: 'Where does it work?',
   options: 'How should it run?',
   review: 'Check and launch',
@@ -208,7 +200,7 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
     }
   };
 
-  const title = draft.workflowId !== null ? `New job: ${jobName(row?.key ?? draft.workflowId)}` : 'New job';
+  const title = draft.workflowId !== null ? `New job: ${workflowLabel(row?.key ?? draft.workflowId)}` : 'New job';
   return (
     <div className="wk-launch-wizard-scrim" data-testid="launch-wizard-scrim" onMouseDown={(e) => { if (e.target === e.currentTarget) close(); }}>
       <div
@@ -250,7 +242,7 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
                       setStep('what');
                     }}
                   >
-                    <span className="wk-launch-wizard-choice-name">{jobName(r.key)}</span>
+                    <span className="wk-launch-wizard-choice-name">{workflowLabel(r.key)}</span>
                     <span className="wk-launch-wizard-choice-line">{r.line}</span>
                   </button>
                 ))}
@@ -372,7 +364,7 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
 
           {step === 'review' && (
             <dl className="wk-launch-wizard-review" data-testid="launch-wizard-review">
-              <div><dt>Job</dt><dd>{jobName(row?.key ?? draft.workflowId ?? '')}</dd></div>
+              <div><dt>Job</dt><dd>{workflowLabel(row?.key ?? draft.workflowId ?? '')}</dd></div>
               <div><dt>What</dt><dd className="wk-launch-wizard-review-intent">{draft.intent.trim()}</dd></div>
               <div><dt>Where</dt><dd>{repoName ?? 'No repository'}{projectName !== null ? ` · in ${projectName}` : ''}</dd></div>
               {seats.length > 0 && <div><dt>Helpers</dt><dd>{seats.map(seatLabel).join(', ')}</dd></div>}
@@ -398,11 +390,11 @@ function WizardDialog({ draft, navigate }: { draft: LaunchDraft; navigate?: ((pa
               <button type="button" className="wk-btn wk-btn--secondary" data-testid="launch-wizard-back" onClick={goBack}>Back</button>
             )}
             {step === 'what' && (
-              <button type="button" className="wk-btn wk-btn--quiet" data-testid="launch-wizard-change" onClick={() => setStep('workflow')}>Change job</button>
+              <button type="button" className="wk-btn wk-btn--secondary" data-testid="launch-wizard-change" onClick={() => setStep('workflow')}>Change job</button>
             )}
             {step === 'review' ? (
               <button type="button" className="wk-btn wk-btn--primary" data-testid="launch-wizard-launch" disabled={launching || launchBlocker !== null} onClick={() => { void launch(); }}>
-                {launching ? 'Launching…' : 'Launch'}
+                {launching ? 'Launching…' : error !== null ? 'Try again' : 'Launch'}
               </button>
             ) : step !== 'workflow' && (
               <button type="button" className="wk-btn wk-btn--primary" data-testid="launch-wizard-next" disabled={blocker !== null} onClick={goNext}>Next</button>

@@ -13,6 +13,7 @@ import { OverflowMenu } from './ui/OverflowMenu.js';
 import { Switch } from './ui/Switch.js';
 import { Segmented } from './ui/Segmented.js';
 import { FilePick } from './ui/FilePick.js';
+import { workflowLabel } from '../board/workflowNames.js';
 import { teamPlanApi, type CatalogEntry, type Preset } from '../api/teamPlan.js';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -816,7 +817,7 @@ export function WorkflowViewer(): React.ReactElement {
         <SectionTitle>Unavailable workflows</SectionTitle>
         <p>{refused.length === 1 ? 'A workflow cannot be launched.' : 'Some workflows cannot be launched.'}</p>
         {refused.map((w) => <div key={w.id} data-testid="workflows-refused-row" data-workflow={w.id} className="wk-list-row">
-          <div className="wk-list-row-title">{w.id}</div>
+          <div className="wk-list-row-title">{workflowLabel(w.id)}</div>
           <div className="wk-list-row-meta"><TechDetails text={w.reason} /></div>
         </div>)}
       </section>}
@@ -825,18 +826,18 @@ export function WorkflowViewer(): React.ReactElement {
         {!building && !loading && <section className="wk-card">
           <SectionTitle>Available workflows</SectionTitle>
           {workflows.map((w) => <div className="wk-list-row" key={w.id}>
-            <div className="wk-list-row-title"><button type="button" className="wk-chip" aria-pressed={w.id === selected} onClick={() => setSelected(w.id)}>{w.id}</button></div>
-            <div className="wk-list-row-meta">{error === null && <StatLine items={[{ label: 'steps', value: w.phases.length }]} />}</div>
+            <div className="wk-list-row-title"><button type="button" className="wk-chip" aria-pressed={w.id === selected} onClick={() => setSelected(w.id)}>{workflowLabel(w.id)}</button></div>
+            <div className="wk-list-row-meta">{error === null && <StatLine items={[{ label: w.phases.length === 1 ? 'step' : 'steps', value: w.phases.length }]} />}</div>
           </div>)}
         </section>}
         <div className="min-w-0">
           {building ? <WorkflowBuilder {...(editTarget !== undefined ? { initial: editTarget } : {})} builtinNames={builtinNames} initialEntries={catalogRef.current} onSaved={onSaved} onCancel={() => setBuilding(false)} />
             : !loading && current ? <section className="wk-pg-set-stack">
               <div className="wk-pg-set-heading">
-                <SectionTitle>Steps in {current.id}</SectionTitle>
-                {error === null && <StatLine items={[{ label: 'steps', value: current.phases.length }]} />}
+                <SectionTitle>Steps in {workflowLabel(current.id)}</SectionTitle>
+                {error === null && <StatLine items={[{ label: current.phases.length === 1 ? 'step' : 'steps', value: current.phases.length }]} />}
                 <div className="wk-list-row-actions" data-testid="workflow-edit">
-                  <OverflowMenu label={`More actions for ${current.id}`} items={[
+                  <OverflowMenu label={`More actions for ${workflowLabel(current.id)}`} items={[
                     { id: 'edit', label: 'Edit', onSelect: () => openBuilder(current, builtinNames.has(current.id) ? `${current.id}-copy` : undefined) },
                     { id: 'duplicate', label: 'Duplicate', onSelect: () => openBuilder(current, `${current.id}-copy`) },
                   ]} />

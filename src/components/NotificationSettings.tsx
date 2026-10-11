@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { SectionTitle } from './ui/PageFrame.js';
 import { Switch } from './ui/Switch.js';
+import { Segmented } from './ui/Segmented.js';
 import { useNotifPrefsStore } from '../store/notifPrefs.js';
 
 /**
@@ -94,26 +95,21 @@ export function NotificationSettings(): React.ReactElement {
     <section data-testid="notif-settings" className="wk-card wk-pg-set-stack">
       <SectionTitle>Notifications</SectionTitle>
       <p className="wk-field-note">Desktop notifications let you know when your work needs attention while this tab is hidden; in-app notices are always available.</p>
-      <div role="radiogroup" aria-label="Notifications" className="wk-pg-set-radios">
-        {([['off', 'Off'], ['desktop', 'Desktop notifications']] as const).map(([mode, label]) => (
-          <label key={mode} className="wk-pg-set-radio">
-            <input
-              type="radio"
-              className="wk-radio"
-              name="notif-mode"
-              data-testid={mode === 'off' ? 'notif-off' : 'notif-desktop'}
-              checked={prefs.desktop ? mode === 'desktop' : mode === 'off'}
-              disabled={mode === 'desktop' && permission === 'unsupported'}
-              // onClick, not onChange: choosing the already-checked Off still clears a dismissed line.
-              onChange={() => undefined}
-              onClick={() => {
-                if (mode === 'desktop') void chooseDesktop();
-                else { setDismissed(false); update({ desktop: false }); }
-              }}
-            />
-            {label}
-          </label>
-        ))}
+      {/* studio#725: two choices shown at once = the Segmented primitive (UI contract §4.2), never bare
+          browser radios. Choosing Off again still clears a dismissed line (Segmented calls onChange). */}
+      <div style={{ display: 'flex' }}>
+      <Segmented
+        label="Notifications"
+        value={prefs.desktop ? 'desktop' : 'off'}
+        options={[
+          { value: 'off', label: 'Off', testId: 'notif-off' },
+          { value: 'desktop', label: 'Desktop notifications', testId: 'notif-desktop', disabled: permission === 'unsupported' },
+        ]}
+        onChange={(mode) => {
+          if (mode === 'desktop') void chooseDesktop();
+          else { setDismissed(false); update({ desktop: false }); }
+        }}
+      />
       </div>
       <Switch label="Also play a chime" data-testid="notif-chime" checked={prefs.chime}
         disabled={!prefs.desktop ? 'Choose Desktop notifications before enabling a chime.' : null}

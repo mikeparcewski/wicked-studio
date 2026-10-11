@@ -3,6 +3,7 @@ import { sessionIdOf, sessionPath } from '../board/sessionModel.js';
 import { humanTitle } from '../components/runIdentity.js';
 import { everythingPath } from '../board/everythingModel.js';
 import { projectDetailPath, runEventsPath, runFilesPath, type Route } from '../hooks/useRoute.js';
+import { PAGE_NAMES } from '../board/pageNames.js';
 import { projectTestsPath } from '../api/testing.js';
 
 /**
@@ -68,7 +69,7 @@ export const NOT_A_DESTINATION = 'not-found';
 const DESTINATIONS: ReadonlyArray<{ shape: string; label: string; href: string }> = [
   { shape: 'home', label: 'Desk — home', href: '/' },
   { shape: 'watch', label: 'Watchtower — the full feed', href: '/watch' },
-  { shape: 'rules', label: 'Steering — what helpers are told', href: '/rules' },
+  { shape: 'rules', label: `${PAGE_NAMES.steering} — what helpers are told`, href: '/rules' },
   { shape: 'everything', label: 'Everything — every session', href: everythingPath({ tab: 'sessions' }) },
   { shape: 'everything', label: 'Everything made — documents, pages, decks, videos', href: everythingPath({ tab: 'made' }) },
   { shape: 'everything', label: 'Helpers — the CLIs and their sign-in', href: everythingPath({ tab: 'helpers' }) },
@@ -77,8 +78,8 @@ const DESTINATIONS: ReadonlyArray<{ shape: string; label: string; href: string }
   { shape: 'steering-dashboard', label: 'Steering dashboard — proposals to review', href: '/steering/dashboard' },
   { shape: 'steering-policies', label: 'Steering — all rules and policies', href: '/steering/policies' },
   { shape: 'steering-memories', label: 'Steering — memories', href: '/steering/memories' },
-  { shape: 'testing-campaigns', label: 'Testing campaigns', href: '/testing/campaigns' },
-  { shape: 'testing-evals', label: 'Steering evals', href: '/testing/evals' },
+  { shape: 'testing-campaigns', label: `${PAGE_NAMES.testing} — campaigns`, href: '/testing/campaigns' },
+  { shape: 'testing-evals', label: `${PAGE_NAMES.evals} — check steering rules against samples`, href: '/testing/evals' },
   { shape: 'repos', label: 'Repositories', href: '/repos' },
   { shape: 'repos-new', label: 'Register a repository', href: '/repos/new' },
   { shape: 'runs-new', label: 'Start a run', href: '/runs/new' },
@@ -88,9 +89,9 @@ const DESTINATIONS: ReadonlyArray<{ shape: string; label: string; href: string }
   { shape: 'skills', label: 'Skills', href: '/skills' },
   { shape: 'mcp', label: 'MCP tools', href: '/mcp' },
   { shape: 'learn', label: 'Learn', href: '/learn' },
-  { shape: 'settings', label: 'Settings — every settings page', href: '/settings' },
-  { shape: 'system', label: 'Configuration — settings', href: '/system' },
-  { shape: 'theme', label: 'Theme and appearance', href: '/theme' },
+  { shape: 'settings', label: `${PAGE_NAMES.settings} — every settings page`, href: '/settings' },
+  { shape: 'system', label: `${PAGE_NAMES.system} — helpers, sign-ins, notifications`, href: '/system' },
+  { shape: 'theme', label: `${PAGE_NAMES.theme} — light or dark, logo, site name`, href: '/theme' },
   { shape: 'editors-dev', label: 'Editor test page — try an editor plugin', href: '/editors/dev' },
 ];
 
