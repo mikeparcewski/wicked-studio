@@ -179,4 +179,4 @@
 /* == end S6 g3 == */
 
 /* studio 0.7.8: the repo page's "Runs from" select is a 44 px target on a phone (S6 surface, taken by S2). */
-@media (max-width: 767px) { [data-testid="repos-range"] { min-height: var(--tap-min); } }
+@media (max-width: 767px) { select.wk-field[data-testid="repos-range"] { min-height: var(--tap-min); } }
