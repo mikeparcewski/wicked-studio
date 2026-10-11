@@ -133,7 +133,7 @@ describe('copy rules (§5)', () => {
   ];
   it('one name per helper; judge and non-CLI never addressable', () => {
     expect(userSeats(roster).map(seatLabel)).toEqual(['Claude Code', 'Pi']);
-    expect(displaySeats(roster).map(seatLabel)).toEqual(['Claude Code', 'Claude Code (judge)', 'Pi']);
+    expect(displaySeats(roster).map(seatLabel)).toEqual(['Claude Code', 'Claude Code', 'Pi']);
     expect(seatRoleWord(roster[1]!)).toBe('Reviewer only');
   });
   it('one status word per state, archived first', () => {
