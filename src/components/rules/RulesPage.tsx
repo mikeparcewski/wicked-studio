@@ -10,6 +10,7 @@ import { GROUP_LABELS, GROUP_ORDER, groupOf, orderRules, rulesSentence, type Rul
 import type { Navigate } from '../../hooks/useRoute.js';
 import { useProjectsStore } from '../../store/projects.js';
 import { SteeringRuleDrawer } from '../SteeringRuleDrawer.js';
+import { PAGE_NAMES } from '../../board/pageNames.js';
 import { SteeringRuleFormModal } from '../SteeringRuleForm.js';
 
 type Read = { kind: 'loading' } | { kind: 'ok'; rules: SteeringRule[] } | { kind: 'failed'; message: string; error: unknown };
@@ -116,7 +117,7 @@ export function RulesPage({ ruleId, runs, navigate }: {
     <div data-testid="rules-page" data-object="rules" className="wk-rules">
       <header className="wk-page-head wk-rules-head">
         <div className="wk-page-head-text">
-          <h1 className="wk-page-title">Rules</h1>
+          <h1 className="wk-page-title">{PAGE_NAMES.steering}</h1>
           <p className="wk-page-intro">What helpers are told to follow. Open a rule to see where it came from and where it applied.</p>
           {read.kind === 'ok' && <p data-testid="rules-sentence" data-count={live.length} className="wk-rules-count">{rulesSentence(rules)}</p>}
         </div>

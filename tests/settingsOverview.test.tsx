@@ -17,7 +17,7 @@ describe('/settings', () => {
     const navigate = vi.fn();
     render(<SettingsOverviewPage navigate={navigate} />);
     const page = screen.getByTestId('settings-overview');
-    expect(within(page).getByRole('heading', { level: 1 })).toHaveTextContent('Settings');
+    expect(within(page).getByRole('heading', { level: 1 })).toHaveTextContent('Additional settings');
     const rows = within(page).getAllByTestId('settings-overview-row');
     expect(rows.map((r) => r.getAttribute('data-dest'))).toEqual(ADDITIONAL_SETTINGS.map((d) => d.dest));
     for (const [i, d] of ADDITIONAL_SETTINGS.entries()) {

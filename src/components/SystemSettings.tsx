@@ -20,6 +20,7 @@ import { Terminal } from './Terminal.js';
 import { SignInPanel } from './SignInPanel.js';
 import { testingPath } from '../api/testing.js';
 import { homeDirsIn } from '../board/homePath.js';
+import { PAGE_NAMES } from '../board/pageNames.js';
 import { Segmented } from './ui/Segmented.js';
 
 const CLI_DEFAULTS_KEY = 'wicked_default_clis';
@@ -223,7 +224,7 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
   const deliverIdentityInvalid = deliverIdentity !== '' && !isGitHubLoginLike(deliverIdentity.trim());
 
   return (
-    <PageFrame title="System" intro="Choose how Studio displays your work and uses your helpers.">
+    <PageFrame title={PAGE_NAMES.system} intro="Choose how Studio displays your work and uses your helpers.">
       <div className="wk-pg-set-content">
       {error && <StateBanner kind={readErrorKind(errorSource ?? error)} what="system settings" error={error} onRetry={load} />}
       {settings === null && error === null && <Skeleton rows={3} variant="card" />}
@@ -239,7 +240,7 @@ export function SystemSettings({ navigate = (p) => { history.pushState(null, '',
       {/* Notification section: owned by NotificationSettings. */}
       <NotificationSettings />
       <p data-testid="settings-testing-link" className="wk-field-note">
-        <a className="wk-link" href={testingPath('campaigns')} onClick={(e) => { e.preventDefault(); navigate(testingPath('campaigns')); }}>Open Testing campaigns</a>
+        <a className="wk-link" href={testingPath('campaigns')} onClick={(e) => { e.preventDefault(); navigate(testingPath('campaigns')); }}>Open {PAGE_NAMES.testing}</a>
       </p>
 
       {/* View section */}

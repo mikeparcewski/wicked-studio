@@ -12,6 +12,7 @@ import { everythingPath } from '../../board/everythingModel.js';
 import { useAppearanceStore } from '../../theming/appearance.js';
 import { seedNewChat } from '../../board/chatMoves.js';
 import { useRailHealthDot } from '../../hooks/useRailHealthDot.js';
+import { PAGE_NAMES } from '../../board/pageNames.js';
 import { WatchPill } from './WatchPill.js';
 
 /** Width of the desk shell's session rail (px) — fixed, so nothing moves when a pane opens. */
@@ -173,7 +174,7 @@ export function SessionRail({ runs, needRows, navigate, pathname }: {
         {/* Operator 2026-10-11: "Additional settings" is a PAGE (/settings: one sentence per settings
             page, a link to each), not a dropdown. Health sits below it, last in the rail. */}
         <a href={SETTINGS_PATH} onClick={go(SETTINGS_PATH)} data-testid="desk-rail-more" data-nav-dest="settings" aria-current={current(SETTINGS_PATH)} className="wk-rail-link wk-rail-link--secondary">
-          Additional settings
+          {PAGE_NAMES.settings}
         </a>
         <a
           href="/health"

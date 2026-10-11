@@ -1,5 +1,6 @@
 import { ADDITIONAL_SETTINGS } from '../board/deskModel.js';
 import type { Navigate } from '../hooks/useRoute.js';
+import { PAGE_NAMES } from '../board/pageNames.js';
 import { PageFrame } from './ui/index.js';
 
 /**
@@ -10,7 +11,7 @@ import { PageFrame } from './ui/index.js';
 export function SettingsOverviewPage({ navigate }: { navigate: Navigate }): React.ReactElement {
   return (
     <div className="wk-desk-scroll">
-      <PageFrame data-testid="settings-overview" title="Settings" intro="Everything that changes how studio works, one page each.">
+      <PageFrame data-testid="settings-overview" title={PAGE_NAMES.settings} intro="Everything that changes how studio works, one page each.">
         <ul className="wk-settings-list">
           {ADDITIONAL_SETTINGS.map((d) => (
             <li key={d.dest} data-testid="settings-overview-row" data-dest={d.dest} className="wk-card wk-settings-row">

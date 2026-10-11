@@ -40,6 +40,17 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+describe('studio#725: the two choices are the Segmented primitive, never bare browser radios', () => {
+  it('renders one radiogroup of boxed options, Off selected', () => {
+    render(<NotificationSettings />);
+    const group = screen.getByRole('radiogroup', { name: 'Notifications' });
+    expect(group.className).toContain('wk-segmented');
+    expect(group.querySelector('input[type="radio"]')).toBeNull();
+    expect(screen.getByTestId('notif-off').getAttribute('role')).toBe('radio');
+    expect(screen.getByTestId('notif-off').getAttribute('aria-checked')).toBe('true');
+  });
+});
+
 describe('EC25 — the permission gesture', () => {
   it('renders (default Off) without touching requestPermission', () => {
     render(<NotificationSettings />);
@@ -108,5 +119,20 @@ describe('the chime checkbox', () => {
       screen.getByTestId('notif-chime').click();
     });
     expect(useNotifPrefsStore.getState().prefs.chime).toBe(true);
+  });
+});
+
+describe('codex r1 on studio#725: the Segmented primitive around a disabled option', () => {
+  it('arrows skip a disabled option, and an enabled one keeps the tab stop', async () => {
+    const { Segmented } = await import('../src/components/ui/Segmented.js');
+    const onChange = vi.fn();
+    render(<Segmented label="Mode" value="b" onChange={onChange}
+      options={[{ value: 'a', label: 'A', testId: 'seg-a' }, { value: 'b', label: 'B', testId: 'seg-b', disabled: true }, { value: 'c', label: 'C', testId: 'seg-c' }]} />);
+    expect(screen.getByTestId('seg-a').tabIndex).toBe(0);
+    expect(screen.getByTestId('seg-b').tabIndex).toBe(-1);
+    screen.getByTestId('seg-a').focus();
+    const { fireEvent } = await import('@testing-library/react');
+    fireEvent.keyDown(screen.getByTestId('seg-a'), { key: 'ArrowRight' });
+    expect(onChange).toHaveBeenLastCalledWith('c');
   });
 });

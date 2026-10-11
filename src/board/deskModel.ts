@@ -4,6 +4,7 @@ import { skillsPath } from '../api/skills.js';
 import { testingPath } from '../api/testing.js';
 import type { NeedRow } from './needsYou.js';
 import { DELIVERED_LINE, KEPT_LINE, fullRunTitle, keptLocally, plainRunTitle } from './deskWords.js';
+import { PAGE_NAMES } from './pageNames.js';
 import { sessionIdOf, sessionPath, summarize, type SessionState } from './sessionModel.js';
 
 /**
@@ -298,12 +299,12 @@ export function lapsedSeatChores(roster: readonly RosterSeat[] | null): DeskChor
  */
 export const DESK_RAIL_LINKS: readonly { dest: string; label: string; path: string; testId: string }[] = [
   // studio#157: Product — what we are building (requirements → drafted epics), above the run levers.
-  { dest: 'section:product', label: 'Product', path: '/product', testId: 'desk-rail-product' },
-  { dest: 'section:skills', label: 'Skills', path: skillsPath(), testId: 'desk-rail-skills' },
-  { dest: 'section:mcp', label: 'MCP tools', path: mcpPath(), testId: 'desk-rail-mcp' },
-  { dest: 'section:steering', label: 'Steering', path: '/rules', testId: 'desk-rail-steering' },
+  { dest: 'section:product', label: PAGE_NAMES.product, path: '/product', testId: 'desk-rail-product' },
+  { dest: 'section:skills', label: PAGE_NAMES.skills, path: skillsPath(), testId: 'desk-rail-skills' },
+  { dest: 'section:mcp', label: PAGE_NAMES.mcp, path: mcpPath(), testId: 'desk-rail-mcp' },
+  { dest: 'section:steering', label: PAGE_NAMES.steering, path: '/rules', testId: 'desk-rail-steering' },
   // studio#685 row 51 (UI-CONTRACT §3, S5): Testing sits in the Workspace group with the other levers.
-  { dest: 'section:testing', label: 'Testing', path: testingPath('campaigns'), testId: 'desk-rail-testing' },
+  { dest: 'section:testing', label: PAGE_NAMES.testing, path: testingPath('campaigns'), testId: 'desk-rail-testing' },
 ];
 
 /** The Settings overview page (`/settings`) — where the rail's "Additional settings" link lands. */
@@ -315,9 +316,9 @@ export const SETTINGS_PATH = '/settings';
  * only: the orders/away and delivery-freeze controls are the Desk's.
  */
 export const ADDITIONAL_SETTINGS: readonly { dest: string; label: string; path: string; about: string }[] = [
-  { dest: 'settings:/system', label: 'Configuration', path: '/system', about: 'How studio runs: helpers and their sign-ins, how many helpers review a decision, technical details, notifications and editor plugins.' },
-  { dest: 'section:repos', label: 'Repositories', path: '/repos', about: 'The code studio knows about: add a repository, and set one up so helpers can read it.' },
-  { dest: 'settings:/workflows', label: 'Workflows', path: '/workflows', about: 'The step-by-step recipes work follows, and the ones you can start from / in the composer.' },
-  { dest: 'section:testing', label: 'Evals', path: testingPath('evals'), about: 'Check your steering rules against sample work, and see which behaviours they catch or miss.' },
-  { dest: 'settings:/theme', label: 'Theme', path: '/theme', about: 'How studio looks: light or dark, your logo and the site name.' },
+  { dest: 'settings:/system', label: PAGE_NAMES.system, path: '/system', about: 'How studio runs: helpers and their sign-ins, how many helpers review a decision, technical details, notifications and editor plugins.' },
+  { dest: 'section:repos', label: PAGE_NAMES.repos, path: '/repos', about: 'The code studio knows about: add a repository, and set one up so helpers can read it.' },
+  { dest: 'settings:/workflows', label: PAGE_NAMES.workflows, path: '/workflows', about: 'The step-by-step recipes work follows, and the ones you can start from / in the composer.' },
+  { dest: 'section:testing', label: PAGE_NAMES.evals, path: testingPath('evals'), about: 'Check your steering rules against sample work, and see which behaviours they catch or miss.' },
+  { dest: 'settings:/theme', label: PAGE_NAMES.theme, path: '/theme', about: 'How studio looks: light or dark, your logo and the site name.' },
 ];
