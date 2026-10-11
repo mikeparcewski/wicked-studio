@@ -126,7 +126,10 @@ function launchedMs(v: RunView): number {
   return typeof c === 'number' && Number.isFinite(c) ? c * 1000 : 0;
 }
 
-export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, onAsk, artifactKey = null, artifactSize = 'pane', artifactVersion = null }: {
+export function SessionPage({ sessionId, runs, runsLoaded, runsError = null, onRetryRuns, needRows, navigate, onAsk, artifactKey = null, artifactSize = 'pane', artifactVersion = null }: {
+  /** The runs read's failure (App's `useRuns`): said with Retry, never an endless skeleton. */
+  runsError?: string | null;
+  onRetryRuns?: () => void;
   sessionId: string;
   /** S16a-4a: the artifact the address grows (`/s/:id/a/:key`) and its size (`?size=`). */
   artifactKey?: string | null;
@@ -524,6 +527,15 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
   // session"), on every run of the chat still going. Hidden when nothing in it is running.
   const liveRuns = useMemo(() => mine.filter((v) => !['completed', 'cancelled', 'failed'].includes(v.session.status)).map((v) => v.session.id), [mine]);
   const stopping = useSheets((s) => liveRuns.length > 0 && liveRuns.every((id) => s.stopping[id] !== undefined));
+  const [confirmStop, setConfirmStop] = useState(false);
+  useEffect(() => { setConfirmStop(false); }, [sessionId]);
+  // A runs read still pending after 15 s (host load) is said, with Retry — never a silent skeleton.
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    if (runsLoaded) { setSlow(false); return; }
+    const t = setTimeout(() => setSlow(true), 15_000);
+    return () => clearTimeout(t);
+  }, [runsLoaded, sessionId]);
   // S8: an artifact open as a pane sits beside the thread; the thread and composer make room.
   // Leaving the session (or switching to another) folds them back: a remembered pane from
   // another session must not narrow this one.
@@ -554,17 +566,26 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
         {ref.kind === 'chat' && !askPathOn && conversation === 'live' && messages.some((m) => m.kind === 'user') && (
           <button type="button" data-testid="session-chat-promote" title="Open the Build composer prefilled with this conversation as context — editable before launch" onClick={() => { setRetryPrefill(chatPromotePrefill(ref.chatId, messages, mine[0] !== undefined && typeof mine[0].session.project_id === 'string' ? mine[0].session.project_id : null)); navigate('/runs/new'); }} className="wk-prop-btn wk-prop-btn--ghost">Continue in Build</button>
         )}
-        {ref.kind === 'chat' && liveRuns.length > 0 && (
+        {/* studio#631 (2) + rig 863167a2: ANY session with live work has its Stop — a run's session as
+            well as a chat's — the same 10 s-undo stop ⌘K offers, behind one confirm step. */}
+        {liveRuns.length > 0 && !confirmStop && (
           <button
             type="button"
-            data-testid="session-chat-stop"
+            data-testid="session-stop"
             disabled={stopping}
-            title={stopping ? 'Stopping — Undo is on the notice' : 'Stop this conversation’s work — 10 s to undo; what it did so far is kept'}
-            onClick={() => { stopRun(liveRuns, `“${title}”`); }}
-            className="wk-prop-btn wk-prop-btn--ghost"
+            title={stopping ? 'Stopping — Undo is on the notice' : 'Stop this work — you confirm first, then 10 s to undo; what it did so far is kept'}
+            onClick={() => setConfirmStop(true)}
+            className="wk-btn wk-btn--secondary"
           >
             {stopping ? 'Stopping…' : 'Stop'}
           </button>
+        )}
+        {liveRuns.length > 0 && confirmStop && (
+          <span data-testid="session-stop-confirm-row" role="group" aria-label="Stop this work?" className="wk-session-stop-confirm">
+            <span className="wk-session-grey">Stop this work?</span>
+            <button type="button" data-testid="session-stop-confirm" autoFocus onClick={() => { setConfirmStop(false); stopRun(liveRuns, `“${title}”`); }} className="wk-btn wk-btn--danger wk-btn--sm">Stop</button>
+            <button type="button" data-testid="session-stop-keep" onClick={() => setConfirmStop(false)} className="wk-btn wk-btn--quiet wk-btn--sm">Keep going</button>
+          </span>
         )}
         <button type="button" data-testid="session-sheet-open" aria-label="Look underneath this session" title="Look underneath (⌘K for everything else)" onClick={() => openSheet({ kind: 'session', sessionId })} className="wk-sheet-open">⋯</button>
       </header>
@@ -620,7 +641,16 @@ export function SessionPage({ sessionId, runs, runsLoaded, needRows, navigate, o
                 : 'Nothing in this session is on Studio’s service any more.'}
             </p>
           )}
-          {!ready && <div data-testid="session-loading"><Skeleton rows={3} variant="card" /></div>}
+          {!runsLoaded && runsError !== null && (
+            <StateBanner data-testid="session-runs-error" kind={readErrorKind(runsError)} what="this session" error={runsError} {...(onRetryRuns !== undefined ? { onRetry: onRetryRuns } : {})} />
+          )}
+          {!runsLoaded && runsError === null && slow && (
+            <div data-testid="session-runs-slow" role="status" className="wk-session-slow">
+              <p className="wk-session-grey">This session is taking longer than usual to load.</p>
+              {onRetryRuns !== undefined && <button type="button" data-testid="session-runs-slow-retry" onClick={onRetryRuns} className="wk-btn wk-btn--secondary wk-btn--sm">Retry</button>}
+            </div>
+          )}
+          {!ready && !(runsError !== null && !runsLoaded) && <div data-testid="session-loading"><Skeleton rows={3} variant="card" /></div>}
           {/* §8 F13: an older daemon has no team path — every helper answers at once; said once, in grey. */}
           {ready && ref.kind === 'chat' && !askPathOn && conversation === 'live' && messages.length > 0 && (
             <p data-testid="session-ask-older" className="wk-session-grey">Every helper answers at once in this conversation: this version of Studio’s service has no reviewer or help requests.</p>

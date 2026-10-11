@@ -441,6 +441,8 @@ export function App(): React.ReactElement {
           artifactVersion={versionOf(search)}
           runs={runs}
           runsLoaded={runsLoaded}
+          runsError={runsError}
+          onRetryRuns={refresh}
           needRows={needRows}
           navigate={navigate}
           onAsk={handToAsk}

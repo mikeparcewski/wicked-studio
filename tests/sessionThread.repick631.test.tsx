@@ -78,16 +78,19 @@ describe('studio#631 (2) — a chat thread has a Stop', () => {
   it('Stop queues the 10 s-undo stop of the chat\'s live runs; a finished chat shows none', async () => {
     const { fireEvent } = await import('@testing-library/react');
     const { unmount } = render(<SessionPage sessionId="chat-631" runs={[ASK_RUN]} runsLoaded needRows={[]} navigate={() => {}} onAsk={() => {}} />);
-    const stop = await screen.findByTestId('session-chat-stop');
+    const stop = await screen.findByTestId('session-stop');
     fireEvent.click(stop);
+    // One confirm step (rig 863167a2 follow-up), then the same 10 s-undo stop.
+    expect(useSheets.getState().stopping[RUN]).toBeUndefined();
+    fireEvent.click(screen.getByTestId('session-stop-confirm'));
     expect(useSheets.getState().stopping[RUN]).toBeDefined();
-    await waitFor(() => expect(screen.getByTestId('session-chat-stop').textContent).toBe('Stopping…'));
+    await waitFor(() => expect(screen.getByTestId('session-stop').textContent).toBe('Stopping…'));
     unmount();
     const { undoDecision, useUndoQueue } = await import('../src/board/undoQueue.js');
     for (const p of useUndoQueue.getState().pending) undoDecision(p.id);
     const done = makeView({ ...(ASK_RUN.session as object), status: 'completed' } as never, ASK_RUN.units);
     render(<SessionPage sessionId="chat-631" runs={[done]} runsLoaded needRows={[]} navigate={() => {}} onAsk={() => {}} />);
     await screen.findByTestId('session');
-    expect(screen.queryByTestId('session-chat-stop')).toBeNull();
+    expect(screen.queryByTestId('session-stop')).toBeNull();
   });
 });
