@@ -29,7 +29,7 @@ export function OverflowMenu({ label, items, text, 'data-testid': testId = 'over
         <div id={`${id}-menu`} role="menu" aria-label={label} className="wk-menu" data-testid={`${testId}-list`}>
           {items.map((it, i) => (
             <button key={it.id} ref={(el) => { refs.current[i] = el; }} type="button" role="menuitem"
-              disabled={it.disabled != null} data-item={it.id}
+              aria-disabled={it.disabled != null} data-item={it.id}
               className={`wk-menu-item${it.danger === true ? ' wk-menu-item--danger' : ''}`}
               onKeyDown={(e) => {
                 if (e.key === 'ArrowDown') { e.preventDefault(); focusAt(i + 1); }
@@ -37,7 +37,7 @@ export function OverflowMenu({ label, items, text, 'data-testid': testId = 'over
                 if (e.key === 'Home') { e.preventDefault(); focusAt(0); }
                 if (e.key === 'End') { e.preventDefault(); focusAt(items.length - 1); }
               }}
-              onClick={() => { setOpen(false); btn.current?.focus(); it.onSelect(); }}
+              onClick={() => { if (it.disabled != null) return; setOpen(false); btn.current?.focus(); it.onSelect(); }}
             >
               <span>{it.label}</span>
               {it.disabled != null && <span className="wk-menu-item-note">{it.disabled}</span>}

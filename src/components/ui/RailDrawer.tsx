@@ -24,16 +24,19 @@ export function RailDrawer({ pathname, badge, children }: {
   const drawer = useRef<HTMLDivElement | null>(null);
   const toggle = useRef<HTMLButtonElement>(null);
   const shown = phone && open;
+  /** Where focus goes once the drawer has closed and the page is no longer inert. */
+  const focusAfter = useRef<'toggle' | 'main' | null>(null);
+  const closeTo = (to: 'toggle' | 'main'): void => { focusAfter.current = to; setOpen(false); };
 
   // Close on a route change and when the window leaves phone width.
   const lastPath = useRef(pathname);
   useEffect(() => {
     if (lastPath.current === pathname) return;
     lastPath.current = pathname;
-    if (open) { setOpen(false); document.getElementById('main')?.focus(); }
+    if (open) closeTo('main');
   }, [pathname, open]);
   useEffect(() => {
-    if (!phone && open) { setOpen(false); document.getElementById('main')?.focus(); }
+    if (!phone && open) closeTo('main');
   }, [phone, open]);
 
   // While open: the modal rung, inert page, no scroll, focus in, Escape out.
@@ -41,13 +44,14 @@ export function RailDrawer({ pathname, badge, children }: {
     if (!shown) return;
     const id = useLayerStore.getState().pushModal();
     const main = document.getElementById('main');
+    const tg = toggle.current;
     main?.setAttribute('inert', '');
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     const first = drawer.current?.querySelector<HTMLElement>(FOCUSABLE);
     first?.focus();
     const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape' && isTopModal(id)) { e.stopPropagation(); setOpen(false); toggle.current?.focus(); return; }
+      if (e.key === 'Escape' && isTopModal(id)) { e.stopPropagation(); closeTo('toggle'); return; }
       if (e.key !== 'Tab' || drawer.current === null) return;
       const els = [...drawer.current.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((el) => el.offsetParent !== null || el === document.activeElement);
       if (els.length === 0) return;
@@ -61,6 +65,9 @@ export function RailDrawer({ pathname, badge, children }: {
       useLayerStore.getState().popModal(id);
       main?.removeAttribute('inert');
       document.body.style.overflow = prevOverflow;
+      const to = focusAfter.current; focusAfter.current = null;
+      if (to === 'main') main?.focus();
+      else if (to === 'toggle') tg?.focus();
     };
   }, [shown]);
 
@@ -68,7 +75,7 @@ export function RailDrawer({ pathname, badge, children }: {
   return (
     <>
       <TopBar menuOpen={open} onMenu={() => setOpen((o) => !o)} badge={badge} toggleRef={toggle} />
-      {open && <div data-testid="rail-drawer-scrim" className="wk-rail-scrim" onClick={() => { setOpen(false); toggle.current?.focus(); }} aria-hidden />}
+      {open && <div data-testid="rail-drawer-scrim" className="wk-rail-scrim" onClick={() => closeTo('toggle')} aria-hidden />}
       <div
         id="rail-drawer" ref={drawer} data-testid="rail-drawer" data-open={open ? 'true' : 'false'}
         className={`wk-rail-drawer${open ? ' wk-rail-drawer--open' : ''}`}

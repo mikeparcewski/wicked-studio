@@ -7,7 +7,7 @@ export interface TabDef { id: string; label: string; count?: number }
 /**
  * Tabs that never wrap (design/UI-CONTRACT.md §4.4; audit row 28): up to `maxVisible` tabs in one row
  * (5 desktop, 3 phone), the rest behind a separate "More" menu button. Picking an overflow tab
- * activates it; while one is active the More button names it. Manual activation (click/Enter);
+ * activates it and swaps it into the last visible slot, so the active tab is always in the tablist. Manual activation (click/Enter);
  * arrows/Home/End move focus. Tab id `${idBase}-tab-${id}`, the panel is `${idBase}-panel`.
  */
 export function Tabs({ tabs, active, onChange, maxVisible, 'aria-label': ariaLabel, idBase, 'data-testid': testId = 'tabs' }: {
@@ -17,10 +17,14 @@ export function Tabs({ tabs, active, onChange, maxVisible, 'aria-label': ariaLab
   const phone = usePhone();
   const cap = Math.max(1, maxVisible ?? (phone ? 3 : 5));
   const fits = tabs.length <= cap;
-  const shown = fits ? tabs : tabs.slice(0, cap);
-  const rest = fits ? [] : tabs.slice(cap);
+  // The active tab is always IN the tablist (its id and aria-selected stay in the DOM): an active
+  // overflow tab takes the last visible slot, and the tab it displaced goes behind More.
+  const head = fits ? [...tabs] : tabs.slice(0, cap);
+  const activeIdx = tabs.findIndex((t) => t.id === active);
+  const swapped = !fits && activeIdx >= cap;
+  const shown = swapped ? [...head.slice(0, cap - 1), tabs[activeIdx]!] : head;
+  const rest = fits ? [] : tabs.filter((t) => !shown.includes(t));
   const refs = useRef<(HTMLButtonElement | null)[]>([]);
-  const overflowActive = rest.find((t) => t.id === active);
   const focusAt = (i: number): void => { const n = shown.length; refs.current[((i % n) + n) % n]?.focus(); };
   const word = (t: TabDef): string => (t.count !== undefined ? `${t.label} (${t.count})` : t.label);
   return (
@@ -28,7 +32,7 @@ export function Tabs({ tabs, active, onChange, maxVisible, 'aria-label': ariaLab
       <div role="tablist" aria-label={ariaLabel} className="wk-tabs-list">
         {shown.map((t, i) => (
           <button key={t.id} ref={(el) => { refs.current[i] = el; }} id={`${idBase}-tab-${t.id}`} type="button" role="tab"
-            aria-selected={t.id === active} aria-controls={`${idBase}-panel`} tabIndex={t.id === active || (overflowActive !== undefined && i === 0) ? 0 : -1}
+            aria-selected={t.id === active} aria-controls={`${idBase}-panel`} tabIndex={t.id === active ? 0 : -1}
             data-tab={t.id} className="wk-tab" onClick={() => onChange(t.id)}
             onKeyDown={(e) => {
               if (e.key === 'ArrowRight') { e.preventDefault(); focusAt(i + 1); }
@@ -40,8 +44,8 @@ export function Tabs({ tabs, active, onChange, maxVisible, 'aria-label': ariaLab
         ))}
       </div>
       {rest.length > 0 && (
-        <div className={`wk-tabs-more${overflowActive !== undefined ? ' wk-tabs-more--active' : ''}`} {...(overflowActive !== undefined ? { 'aria-current': 'true' } : {})}>
-          <OverflowMenu data-testid={`${testId}-more`} label="More tabs" text={overflowActive !== undefined ? word(overflowActive) : 'More'}
+        <div className="wk-tabs-more">
+          <OverflowMenu data-testid={`${testId}-more`} label="More tabs" text="More"
             items={rest.map((t) => ({ id: t.id, label: word(t), onSelect: () => onChange(t.id) }))} />
         </div>
       )}

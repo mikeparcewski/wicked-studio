@@ -1496,7 +1496,6 @@ button.wk-walk-chapter-btn:hover .wk-walk-chapter-title { text-decoration: under
 .wk-tab[aria-selected="true"] { color: var(--ink-high); border-bottom-color: var(--accent); font-weight: var(--weight-semi); }
 .wk-tab:focus-visible { outline: 2px solid transparent; outline-offset: -2px; box-shadow: var(--focus-ring); border-radius: var(--radius-sm); }
 .wk-tabs-more { flex-shrink: 0; }
-.wk-tabs-more--active .wk-btn { color: var(--ink-high); box-shadow: inset 0 -2px 0 var(--accent); border-radius: 0; }
 
 /* TechDetails: the one disclosure for internals. */
 .wk-tech-details { margin-top: var(--space-2); min-width: 0; }
@@ -1573,5 +1572,6 @@ button.wk-walk-chapter-btn:hover .wk-walk-chapter-title { text-decoration: under
   .wk-desk-orders { flex-basis: 100%; flex-wrap: wrap; margin-left: 0; order: 1; }
   .wk-page { padding: var(--space-4); }
   .wk-page-head { flex-direction: column; }
+  .wk-page-head-text { flex: 0 1 auto; }
 }
 @media (max-width: 767px) and (prefers-reduced-motion: reduce) { .wk-rail-drawer, .wk-rail-drawer--open { transition: none; } }

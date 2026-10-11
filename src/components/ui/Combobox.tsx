@@ -1,4 +1,4 @@
-import { useId, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 
 export interface ComboOption<T> { value: T; label: string; detail?: string }
 
@@ -18,6 +18,8 @@ export function Combobox<T>({ label, value, options, onChange, placeholder, disa
   const [open, setOpen] = useState(false);
   const [cursor, setCursor] = useState(0);
   const input = useRef<HTMLInputElement | null>(null);
+  const blurTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (blurTimer.current !== null) clearTimeout(blurTimer.current); }, []);
   const shown = useMemo(() => {
     const q = (query ?? '').trim().toLowerCase();
     return q === '' ? options : options.filter((o) => o.label.toLowerCase().includes(q) || (o.detail ?? '').toLowerCase().includes(q));
@@ -34,8 +36,8 @@ export function Combobox<T>({ label, value, options, onChange, placeholder, disa
         aria-invalid={invalid !== null} disabled={disabled !== null}
         className="wk-field wk-combo-input" placeholder={placeholder ?? 'Type to search'}
         value={query ?? chosen?.label ?? ''}
-        onFocus={() => setOpen(true)}
-        onBlur={() => { setTimeout(() => { setOpen(false); setQuery(null); }, 120); }}
+        onFocus={() => { if (blurTimer.current !== null) { clearTimeout(blurTimer.current); blurTimer.current = null; } setOpen(true); }}
+        onBlur={() => { blurTimer.current = setTimeout(() => { blurTimer.current = null; setOpen(false); setQuery(null); }, 120); }}
         onChange={(e) => { setQuery(e.target.value); setOpen(true); setCursor(0); }}
         onKeyDown={(e) => {
           if (e.key === 'ArrowDown') { e.preventDefault(); setOpen(true); setCursor((c) => Math.min(c + 1, shown.length - 1)); }

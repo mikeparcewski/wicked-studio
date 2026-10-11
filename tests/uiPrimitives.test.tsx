@@ -63,9 +63,11 @@ describe('Tabs (§4.4)', () => {
     fireEvent.click(screen.getByText('Tab 7'));
     expect(onChange).toHaveBeenCalledWith('t7');
   });
-  it('names the active overflow tab on the More button', () => {
+  it('an active overflow tab is swapped into the tablist, selected, with its id', () => {
     render(<Tabs tabs={tabs} active="t8" onChange={() => {}} aria-label="Session" idBase="s" />);
-    expect(screen.getByTestId('tabs-more-button').textContent).toContain('Tab 8');
+    const sel = screen.getAllByRole('tab').filter((t) => t.getAttribute('aria-selected') === 'true');
+    expect(sel.map((t) => t.id)).toEqual(['s-tab-t8']);
+    expect(screen.getAllByRole('tab')).toHaveLength(5);
   });
   it('few tabs: no More', () => {
     render(<Tabs tabs={tabs.slice(0, 3)} active="t0" onChange={() => {}} aria-label="x" idBase="x" />);
