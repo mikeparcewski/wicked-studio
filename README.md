@@ -165,6 +165,17 @@ uses `VITE_API_HOST` (host:port, no scheme) fixed at build time. The daemon's lo
 any `localhost` / `127.0.0.1` origin, so a standalone studio drives a local daemon out of the box.
 `e2e/studio_standalone_test.py` is the scripted proof of this mode.
 
+### Editor plugins
+
+Artifact editors are plugins: one self-contained HTML file per editor, run in a sandboxed frame with no network
+and talking to studio's plugin host over one MessagePort (`wicked.editor/1`, `src/editors/`). Settings →
+Developer → Editor plugins lists the editors the daemon serves (built in, or installed by a run). It links each
+one to the **editor test page** (`/editors/dev`), which opens it in the real host over a sample page. **Create an
+editor plugin** puts `/workflow-editor-plugin` in the Desk composer. That workflow scaffolds the editor with the
+`wicked-garden-editor-scaffold` skill, runs its conformance cases, and installs it after a consent gate. It also
+opens a pull request. `/editors/conformance` is the conformance host that `e2e/editor_conformance_test.py` drives
+in CI; it has no nav or ⌘K entry.
+
 ### How crew ships this UI
 
 The npm package publishes `dist/` only. wicked-crew declares `wicked-studio` as a devDependency and

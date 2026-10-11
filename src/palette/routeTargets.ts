@@ -85,8 +85,7 @@ const DESTINATIONS: ReadonlyArray<{ shape: string; label: string; href: string }
   { shape: 'mcp', label: 'MCP tools', href: '/mcp' },
   { shape: 'system', label: 'Configuration — settings', href: '/system' },
   { shape: 'theme', label: 'Theme and appearance', href: '/theme' },
-  { shape: 'editors-dev', label: 'Editor plugins (dev host)', href: '/editors/dev' },
-  { shape: 'editors-conformance', label: 'Editor plugins (conformance)', href: '/editors/conformance' },
+  { shape: 'editors-dev', label: 'Editor test page — try an editor plugin', href: '/editors/dev' },
 ];
 
 /** One "Go to" row. */
@@ -151,3 +150,7 @@ export function routeTargets(d: RouteTargetData): RouteTarget[] {
  * sessions on See everything, shapes GO TO already carries.
  */
 export const REACHED_BY_OTHER_GROUPS: readonly string[] = ['repo-detail'];
+
+/** Shapes with no ⌘K entry on purpose: `/editors/conformance` is the conformance host the CI harness
+ *  drives (e2e/editor_conformance_test.py); operators reach editors from Settings → Developer (X3). */
+export const NOT_IN_PALETTE: readonly string[] = ['editors-conformance'];

@@ -5,6 +5,7 @@ import { FakeDocAdapter } from '../../editors/fakeAdapter.js';
 import { bundleUrl, fetchGrants, type Chip } from '../../editors/model.js';
 import { PERMISSIONS, SIZES, type PermissionId, type Size } from '../../editors/protocol.js';
 import { readThemeTokens } from '../../editors/theme.js';
+import { EditorPluginList } from './EditorPluginsSettings.js';
 
 /**
  * THE EDITOR HOST PAGE (DES-EDITOR-PLUGINS-001 §10 step 2, §12.1; slice EP-P1): one editor plugin in
@@ -60,7 +61,7 @@ declare global {
   }
 }
 
-export function EditorHostPage({ mode }: { mode: 'dev' | 'conformance' }): React.ReactElement {
+export function EditorHostPage({ mode, navigate }: { mode: 'dev' | 'conformance'; navigate?: (path: string) => void }): React.ReactElement {
   // The page is its address: a different query (back/forward between two editors) is a different page.
   const search = window.location.search;
   const page = useMemo(() => readPage(search, mode), [search, mode]);
@@ -160,9 +161,18 @@ export function EditorHostPage({ mode }: { mode: 'dev' | 'conformance' }): React
   }, [adapter]);
 
   if (page.editor === '' || page.version === '' || page.sha === '') {
+    // UX audit row 39: with no editor named, the test page lists the installed ones to open (X3).
     return (
-      <div data-testid="editor-host-page" className="wk-editor-page">
-        <p className="wk-session-grey">Name an editor: <code>?editor=&lt;id&gt;&amp;version=&lt;v&gt;&amp;sha=&lt;sha256&gt;</code>.</p>
+      <div data-testid="editor-host-page" data-mode={mode} className="wk-editor-page">
+        <div data-testid="editor-host-pick" className="max-w-2xl" style={{ padding: 'var(--space-6)' }}>
+          <h1 className="wk-page-title">Editor test page</h1>
+          <p className="mt-1" style={{ fontSize: 'var(--text-sm)', color: 'var(--ink-muted)' }}>
+            Pick an editor to open it in the real sandbox over a sample page. Editor plugins are listed in Settings, under Developer.
+          </p>
+          <div className="mt-3">
+            <EditorPluginList navigate={navigate ?? ((p) => { history.pushState(null, '', p); window.dispatchEvent(new PopStateEvent('popstate')); })} compact />
+          </div>
+        </div>
       </div>
     );
   }
