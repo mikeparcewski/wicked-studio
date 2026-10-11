@@ -64,7 +64,7 @@ export function WatchRunLines({ runId, jumped, onBack, isTerminal, endedMs }: {
       {summary !== null && (
         <>
           <p data-testid="watch-coverage" className="wk-watch-coverage">{summary.line}</p>
-          <TechDetails data-testid="watch-coverage-reasons" text={summary.reasons} />
+          <TechDetails data-testid="watch-coverage-reasons" summary="Which checks didn’t run" text={summary.reasons} />
         </>
       )}
     </div>
