@@ -74,7 +74,7 @@ describe('each seat gets exactly one move from its own record', () => {
     expect(consequence).toHaveTextContent('3 stalls this week.');
     expect(consequence).toHaveTextContent('Adds a recall-only operations rule "Route review work away from Codex"');
     expect(consequence.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(button).toHaveTextContent('Route review away from Codex ›');
+    expect(button).toHaveTextContent(/^Route review away from Codex$/);
   });
 });
 

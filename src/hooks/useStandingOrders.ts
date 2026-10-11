@@ -26,6 +26,8 @@ export interface StandingOrders {
   preview: string | null;
   /** The same, in one line's worth: the count and the "will …" clauses. */
   line: { count: string; will: string } | null;
+  /** Read again after a failed read (the Desk's Retry). */
+  retry: () => void;
   setAway: (away: boolean) => Promise<void>;
   parse: (text: string) => Promise<void>;
   confirm: () => Promise<void>;
@@ -126,6 +128,7 @@ export function useStandingOrders(): StandingOrders {
     words,
     preview,
     line,
+    retry: () => { void refresh(); },
     setAway: (away) => act(() => standingOrdersApi.setAway(away)),
     parse,
     confirm,

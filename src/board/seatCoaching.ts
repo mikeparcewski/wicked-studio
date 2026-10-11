@@ -37,10 +37,10 @@ export function costWord(r: Pick<SeatRecord, 'costUsd'>): string | null {
   return r.costUsd < 0.01 && r.costUsd > 0 ? '<$0.01' : `$${r.costUsd.toFixed(2)}`;
 }
 
-/** The record as one line: "6 units · 4/5 first pass · 1 rework · 2 stalls · benched 1 · $1.24". */
+/** The record as one line: "6 steps · 4/5 first pass · 1 rework · 2 stalls · benched 1 · $1.24". */
 export function seatWeekLine(r: SeatRecord | undefined): string {
-  if (r === undefined || (r.units === 0 && r.benched === 0)) return 'no units this week';
-  const parts = [plural(r.units, 'unit')];
+  if (r === undefined || (r.units === 0 && r.benched === 0)) return 'no steps this week';
+  const parts = [plural(r.units, 'step')];
   if (r.gated > 0) parts.push(`${r.firstPass}/${r.gated} first pass`);
   parts.push(`${r.rework} rework`);
   parts.push(plural(r.stalls, 'stall'));
@@ -56,7 +56,19 @@ function worstPhase(r: SeatRecord): string {
     const trouble = p.stalls + p.rework + (p.gated - p.firstPass);
     if (best === null || trouble > best[1] || (trouble === best[1] && p.units > best[2])) best = [phase, trouble, p.units];
   }
-  return best?.[0] ?? 'unit';
+  return best?.[0] ?? 'step';
+}
+
+/**
+ * A phase key in plain words (studio#702; UI-CONTRACT §5 "step", never a raw address). The record's
+ * per-phase map may be keyed by a step address ("wf-e5d4fa94-…:unit-8:a6"); that reads "step 8".
+ * A real phase name ("review", "build") passes through. The raw key stays in the rule id.
+ */
+export function phaseWords(key: string): string {
+  const unit = /(?:^|:)unit-(\d+)(?::|$)/u.exec(key);
+  if (unit !== null) return `step ${unit[1]}`;
+  if (/^wf-|[:/]/u.test(key)) return 'one step';
+  return key.replace(/[_-]+/gu, ' ');
 }
 
 /** The fixed rule id for a seat and phase, so the move taken twice updates ONE rule. Outside the
@@ -74,7 +86,7 @@ export function coachSeat(record: SeatRecord | undefined, seat: RosterSeat, wind
   const name = seat.display_name || seat.key;
   const r = record;
   if (r === undefined || (r.units === 0 && r.benched === 0)) {
-    return { kind: 'no-change', label: 'No change needed', why: `no units in the last ${window.days} days`, consequence: null };
+    return { kind: 'no-change', label: 'No change needed', why: `no steps in the last ${window.days} days`, consequence: null };
   }
 
   const authBenches = Object.entries(r.benchReasons).filter(([reason]) => AUTH_REASON.test(reason)).reduce((n, [, c]) => n + c, 0);
@@ -93,12 +105,13 @@ export function coachSeat(record: SeatRecord | undefined, seat: RosterSeat, wind
   const firstPassLow = r.gated >= 3 && r.firstPass * 2 < r.gated;
   if (r.stalls >= STALLS_TO_ROUTE || reworkHeavy || firstPassLow) {
     const phase = worstPhase(r);
+    const words = phaseWords(phase);
     const evidence = r.stalls >= STALLS_TO_ROUTE
       ? plural(r.stalls, 'stall')
       : reworkHeavy
-        ? `${r.rework} of ${plural(r.units, 'unit')} sent back or retried`
+        ? `${r.rework} of ${plural(r.units, 'step')} sent back or retried`
         : `${r.firstPass} of ${r.gated} passed first time`;
-    const statement = `Route ${phase} work away from ${name} (${seat.key}): ${evidence} in the ${window.days} days to ${day(window.until)}.`;
+    const statement = `Route ${words} work away from ${name} (${seat.key}): ${evidence} in the ${window.days} days to ${day(window.until)}.`;
     const rule: SteeringRule = {
       id: coachRuleId(seat.key, phase),
       rule_type: 'policy',
@@ -114,15 +127,15 @@ export function coachSeat(record: SeatRecord | undefined, seat: RosterSeat, wind
     };
     return {
       kind: 'route-away',
-      label: `Route ${phase} away from ${name}`,
+      label: `Route ${words} away from ${name}`,
       why: `${evidence} this week`,
-      consequence: `Adds a recall-only operations rule "Route ${phase} work away from ${name}"; seats read it, nothing is blocked.`,
+      consequence: `Adds a recall-only operations rule "Route ${words} work away from ${name}"; helpers read it, nothing is blocked.`,
       phase,
       rule,
     };
   }
 
-  const pass = r.gated > 0 ? `${r.firstPass}/${r.gated} first pass` : plural(r.units, 'unit');
+  const pass = r.gated > 0 ? `${r.firstPass}/${r.gated} first pass` : plural(r.units, 'step');
   return {
     kind: 'no-change',
     label: 'No change needed',

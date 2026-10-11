@@ -79,10 +79,10 @@ with sync_playwright() as p:
     page.screenshot(path=str(SHOTS / "desk-run-state-runs-failed.png"))
     check("no-verdict-from-a-failed-read",
           "never indexed" not in desk and "Index all" not in desk and "Nothing has been started yet" not in desk
-          and "Nothing needs you" not in desk and page.get_by_test_id("desk-runs-retry").count() == 1,
+          and "Nothing needs you" not in desk and page.get_by_test_id("desk-runs-failed-retry").count() == 1,
           desk=desk[:500])
     set_fixture(origin, runs_fail=False)
-    page.get_by_test_id("desk-runs-retry").click()
+    page.get_by_test_id("desk-runs-failed-retry").click()
     page.get_by_test_id("desk-headline").wait_for(state="visible", timeout=15000)
     check("retry-reads-again", page.get_by_test_id("desk-runs-failed").count() == 0)
     set_fixture(origin, repo=False)

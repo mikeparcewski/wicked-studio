@@ -91,9 +91,9 @@ with sync_playwright() as p:
         check("row-count-11", row.get_attribute("data-count") == "11", count=row.get_attribute("data-count"))
         line = row.get_by_test_id("need-line").inner_text()
         check("row-consequence-first",
-              line == "5 memory-only · 6 change enforcement", line=line)
+              line == "5 memories · 6 rule changes", line=line)
         act = row.get_by_test_id("need-accept-act")
-        check("row-accept-label", act.inner_text().strip() == "Accept 5 memory-only ›", label=act.inner_text())
+        check("row-accept-label", act.inner_text().strip() == "Accept 5 memories", label=act.inner_text())
 
         # The list: at most 4 at a time, enforcement first, and it pages.
         row.get_by_test_id("need-group-toggle").click()
@@ -144,7 +144,7 @@ with sync_playwright() as p:
         row = page.locator(GROUP)
         check("enforcement-ones-remain", row.get_attribute("data-count") == "6", count=row.get_attribute("data-count"))
         line = row.get_by_test_id("need-line").inner_text()
-        check("remaining-line", line == "6 change enforcement", line=line)
+        check("remaining-line", line == "6 rule changes", line=line)
         page.screenshot(path=str(SHOTS / f"waveb-desk-after.png"))
 
     ok = True

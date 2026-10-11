@@ -2,6 +2,7 @@ import { plausibleClock } from './ageHonesty.js';
 import { needRunId } from './deskModel.js';
 import { rankNeeds, type NeedAction, type NeedGroupKey, type NeedRow } from './needsYou.js';
 import { batchOnboardConsequence, batchOnboardLabel } from './repairMoves.js';
+import { plainRunTitle } from './deskWords.js';
 import { acceptMemoryLabel, consequenceRank, PROPOSAL_PAGE, type ProposalConsequence } from './proposalTriage.js';
 
 /**
@@ -20,7 +21,7 @@ const GROUP_WORDS: Record<NeedGroupKey, { one: string; many: string; line: strin
   approval: {
     one: 'approval',
     many: 'approvals',
-    line: 'Yes/no gates waiting on you — expand to open each',
+    line: 'Yes/no questions waiting on you',
   },
   proposal: {
     one: 'proposal to review',
@@ -54,9 +55,9 @@ function groupMove(key: NeedGroupKey, ranked: readonly NeedRow[]): { action: Nee
     const enforcing = of('enforcement').length;
     const unknown = of('unknown').length;
     const parts: string[] = [];
-    if (harmless.length > 0) parts.push(`${harmless.length} memory-only`);
-    if (enforcing > 0) parts.push(`${enforcing} change${enforcing === 1 ? 's' : ''} enforcement`);
-    if (unknown > 0) parts.push(`${unknown} of unknown kind`);
+    if (harmless.length > 0) parts.push(`${harmless.length} ${harmless.length === 1 ? 'memory' : 'memories'}`);
+    if (enforcing > 0) parts.push(`${enforcing} ${enforcing === 1 ? 'rule change' : 'rule changes'}`);
+    if (unknown > 0) parts.push(`${unknown} other`);
     return {
       action: harmless.length > 0
         ? { kind: 'accept-memory', ids: harmless.map((m) => m.proposal!.id), label: acceptMemoryLabel(harmless.length) }
@@ -154,8 +155,41 @@ export function groupAlike(rows: readonly NeedRow[], now: number): NeedRow[] {
       action: move.action,
     });
   }
+  // UX audit row 21: true duplicates (the same kind, subject and line, e.g. two "repo-learn / search
+  // ladder · Run failed" rows) fold into ONE row with a count; "Show each" opens them, each with its verb.
+  const same = new Map<string, NeedRow[]>();
+  for (const r of rows) {
+    if (folded.has(r.key) || r.groupKey !== undefined || r.members !== undefined) continue;
+    const k = `${r.kind}\u0000${r.subject}\u0000${r.question ?? r.text}`;
+    same.set(k, [...(same.get(k) ?? []), r]);
+  }
+  for (const members of same.values()) {
+    if (members.length < 2) continue;
+    const ranked = rankNeeds([...members], now);
+    for (const m of ranked) folded.add(m.key);
+    const lead = ranked[0]!;
+    const clocks = ranked.map((m) => plausibleClock(m.at, now)).filter((t): t is number => t !== null);
+    out.push({
+      key: `group:same:${lead.key}`,
+      kind: lead.kind,
+      severity: Math.max(...ranked.map((m) => m.severity)),
+      stakes: ranked.reduce((n, m) => n + m.stakes, 0),
+      members: ranked,
+      subject: plainRunTitle(lead.subject),
+      text: sameGroupLine(ranked.length, lead.question ?? lead.text),
+      tone: lead.tone,
+      at: clocks.length > 0 ? Math.min(...clocks) : null,
+      subjectPath: lead.subjectPath,
+      action: lead.action,
+    });
+  }
   for (const r of rows) if (!folded.has(r.key)) out.push(r);
   return rankNeeds(out, now);
+}
+
+/** A folded duplicate's line: "2 alike: Run failed". */
+export function sameGroupLine(n: number, text: string): string {
+  return `${n} alike: ${text}`;
 }
 
 /** How many items a set of queue rows stands for (a group counts its members). */

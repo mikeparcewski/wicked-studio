@@ -115,7 +115,7 @@ with sync_playwright() as p:
         before = int(queue.get_attribute("data-count") or "0")
         rows_before = page.get_by_test_id("need-row").count()
         toggle = page.get_by_test_id("home-focus-toggle")
-        check("toggle-in-header", toggle.is_visible() and toggle.get_attribute("aria-pressed") == "false"
+        check("toggle-in-header", toggle.is_visible() and toggle.get_attribute("aria-checked") == "false"
               and page.evaluate("""() => !!document.querySelector('header [data-testid="home-focus-toggle"]')"""),
               before=before)
         toggle.click()

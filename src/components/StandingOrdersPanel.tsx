@@ -3,25 +3,20 @@ import { ORDER_INVARIANT, ORIGIN_LABEL, orderOrigin } from '../board/standingOrd
 import { useStandingOrders } from '../hooks/useStandingOrders.js';
 import { clockTime } from '../board/handover.js';
 import { AnchoredOverlay } from './AnchoredOverlay.js';
+import { TechDetails } from './ui/index.js';
 
 /**
  * STANDING ORDERS (Studio OS behaviour 10) — a skin over `useStandingOrders`. It lives in Home's
  * header and never takes a row of its own:
  *
- *   no orders  — a small chip: "Orders: none · Mark me away";
- *   orders     — ONE line: "3 orders active · while away: will approve … · Manage · Mark me away".
+ *   none       — "No standing instructions · Mark me away" (UX audit row 31: plain words, readable ink);
+ *   some       — ONE line: "3 orders active · while away: will approve … · Manage · Mark me away".
  *
  * The full Away preview and crew's invariant are the line's tooltip and the head of Manage — an
  * overlay holding the orders (every one, including those made at a gate or from the trust receipt,
  * each saying where it came from), the add flow (words → the rule said back → confirm) and the
  * outbox of queued messages. No behaviour lives here.
  */
-
-const chip = {
-  background: 'none', cursor: 'pointer', border: '1px solid var(--surface-raised)',
-  borderRadius: 'var(--radius-md)', padding: '2px 10px', fontSize: 'var(--text-2xs)',
-  fontFamily: 'var(--font-mono)', color: 'var(--ink-muted)',
-} as const;
 
 export function StandingOrdersPanel(): React.ReactElement | null {
   const so = useStandingOrders();
@@ -32,9 +27,11 @@ export function StandingOrdersPanel(): React.ReactElement | null {
   if (so.state === 'unavailable') return null;
   if (so.state === null) {
     // A read that failed is said, never shown as "no orders" (a 404 — no surface — renders nothing).
+    // Plain words only (UX audit row 10): the page's own banner says when studio's service is down.
     return so.error === null ? null : (
-      <p data-testid="standing-orders-error" role="alert" className="wk-orders-error">
-        Standing orders: this daemon could not say ({so.error}).
+      <p data-testid="standing-orders-error" role="status" className="wk-orders-error">
+        Standing instructions couldn’t load.{' '}
+        <button type="button" data-testid="standing-orders-retry" onClick={so.retry} className="wk-orders-act">Retry</button>
       </p>
     );
   }
@@ -54,7 +51,7 @@ export function StandingOrdersPanel(): React.ReactElement | null {
       className="wk-orders-act"
       data-on={away ? 'true' : undefined}
     >
-      {!away ? 'Mark me away' : orders.length > 0 ? 'Away — orders active' : 'Away — every gate waits'}
+      {!away ? 'Mark me away' : orders.length > 0 ? 'Away: instructions active' : 'Away: every question waits'}
     </button>
   );
   const manageButton = (label: string): React.ReactElement => (
@@ -66,7 +63,7 @@ export function StandingOrdersPanel(): React.ReactElement | null {
       aria-expanded={open}
       onClick={() => setOpen(!open)}
       className="wk-orders-act"
-      title="Manage standing orders"
+      title="Manage standing instructions"
     >
       {label}
     </button>
@@ -77,13 +74,13 @@ export function StandingOrdersPanel(): React.ReactElement | null {
       data-variant={none ? 'chip' : 'line'}
       data-away={away ? 'true' : 'false'}
       role="group"
-      aria-label="Standing orders"
+      aria-label="Standing instructions"
       className={none ? 'wk-orders wk-orders--chip' : 'wk-orders wk-orders--line'}
       title={`${full} · ${ORDER_INVARIANT}`}
     >
       {none ? (
         <>
-          {manageButton('Orders: none')}
+          {manageButton('No standing instructions')}
           <span aria-hidden className="wk-orders-sep">·</span>
           {awayButton}
         </>
@@ -104,110 +101,92 @@ export function StandingOrdersPanel(): React.ReactElement | null {
         </>
       )}
       {so.error !== null && !open && (
-        <span data-testid="standing-orders-error" role="alert" className="wk-orders-error" title={so.error}>
-          {so.error}
+        <span data-testid="standing-orders-error" role="status" className="wk-orders-error">
+          That didn’t save. Try again.
         </span>
       )}
       {open && (
-        <AnchoredOverlay anchor={manageEl.current} onClose={close} label="Standing orders" testId="standing-orders-manage" width={600}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2)' }}>
-          {/* The consequence first: what going away does, from the orders in force, and what never changes. */}
-          <p style={{ margin: 0, fontSize: 'var(--text-xs)', lineHeight: 1.45 }}>
-            <span data-testid="standing-orders-preview" style={{ color: 'var(--ink-body)' }}>{full}</span>
-          </p>
-          <p data-testid="standing-orders-invariant" style={{ margin: 0, fontSize: 'var(--text-xs)', lineHeight: 1.45, color: 'var(--ink-muted)' }}>
-            {ORDER_INVARIANT}
-          </p>
-          {so.error !== null && (
-            <p data-testid="standing-orders-error" role="alert" style={{ margin: 0, fontSize: 'var(--text-xs)', color: 'var(--status-fail)' }}>
-              {so.error}
-            </p>
+        <AnchoredOverlay anchor={manageEl.current} onClose={close} label="Standing instructions" testId="standing-orders-manage" width={560}>
+        <div className="wk-orders-pop">
+          {/* UX audit row 33: said once. With none, one sentence and an example; with some, what
+              going away does with them. What an instruction can never do is the field's note. */}
+          {none ? (
+            <p data-testid="standing-orders-preview">No standing instructions yet: while you’re away, every question waits for you.</p>
+          ) : (
+            <p data-testid="standing-orders-preview">{full}</p>
           )}
-          <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: '2px' }}>
-            {orders.length === 0 && (
-              <li style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-dim)' }}>No standing orders. Add one in plain words below.</li>
-            )}
-            {orders.map((o) => (
-              <li key={o.id} data-testid="standing-order-row" data-order-id={o.id} data-origin={orderOrigin(o)} style={{ display: 'flex', gap: '8px', alignItems: 'baseline', fontSize: 'var(--text-xs)', minWidth: 0 }}>
-                <span data-testid="standing-order-origin" style={{ ...chip, cursor: 'default', padding: '0 6px', flexShrink: 0 }}>
-                  {ORIGIN_LABEL[orderOrigin(o)]}
-                </span>
-                <span style={{ color: 'var(--ink-high)', fontWeight: 'var(--weight-semi)' }}>{o.text}</span>
-                <span style={{ color: 'var(--ink-muted)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {so.words(o.rule)}
-                </span>
-                <button type="button" data-testid="standing-order-remove" onClick={() => void so.remove(o.id)} style={chip}>
-                  Retire
-                </button>
-              </li>
-            ))}
-          </ul>
+          {so.error !== null && (
+            <p data-testid="standing-orders-error" role="alert" className="wk-orders-pop-err">That didn’t save. Try again.</p>
+          )}
+          {orders.length > 0 && (
+            <ul className="wk-orders-pop-list">
+              {orders.map((o) => (
+                <li key={o.id} data-testid="standing-order-row" data-order-id={o.id} data-origin={orderOrigin(o)} className="wk-orders-pop-row">
+                  <span data-testid="standing-order-origin" className="wk-tag">{ORIGIN_LABEL[orderOrigin(o)]}</span>
+                  <span style={{ color: 'var(--ink-high)', fontWeight: 'var(--weight-semi)' }}>{o.text}</span>
+                  <span className="wk-orders-pop-rule">{so.words(o.rule)}</span>
+                  <button type="button" data-testid="standing-order-remove" onClick={() => void so.remove(o.id)} className="wk-btn wk-btn--quiet wk-btn--sm">
+                    Retire
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
 
           {d.step === 'confirm' ? (
-            <div data-testid="standing-order-parsed" style={{ border: '1px dashed var(--surface-raised)', borderRadius: 'var(--radius-md)', padding: '6px 10px', fontSize: 'var(--text-xs)' }}>
-              <p style={{ margin: '0 0 4px', color: 'var(--ink-muted)' }}>
-                “{d.text}” reads as (parsed by {d.parsed.seat}):
-              </p>
-              <p data-testid="standing-order-words" style={{ margin: '0 0 6px', color: 'var(--ink-high)', fontWeight: 'var(--weight-semi)' }}>
-                {d.words}
-              </p>
+            <div data-testid="standing-order-parsed" className="wk-orders-pop-parsed">
+              <p style={{ color: 'var(--ink-muted)' }}>“{d.text}” reads as:</p>
+              <p data-testid="standing-order-words" style={{ color: 'var(--ink-high)', fontWeight: 'var(--weight-semi)' }}>{d.words}</p>
               {d.parsed.refused !== undefined && (
-                <p data-testid="standing-order-refused" role="alert" style={{ margin: '0 0 6px', color: 'var(--status-fail)' }}>
-                  Can’t keep this one: {d.parsed.refused}.
-                </p>
+                <p data-testid="standing-order-refused" role="alert" className="wk-orders-pop-err">Can’t keep this one: {d.parsed.refused}.</p>
               )}
-              <div style={{ display: 'flex', gap: '8px' }}>
+              <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
                 <button
                   type="button"
                   data-testid="standing-order-confirm"
                   disabled={d.parsed.refused !== undefined}
                   onClick={() => { void so.confirm(); setText(''); }}
-                  style={{ ...chip, color: 'var(--accent)', borderColor: 'var(--accent)' }}
+                  className="wk-btn wk-btn--primary wk-btn--sm"
                 >
-                  Keep this order
+                  Keep it
                 </button>
-                <button type="button" data-testid="standing-order-cancel" onClick={so.cancel} style={chip}>
+                <button type="button" data-testid="standing-order-cancel" onClick={so.cancel} className="wk-btn wk-btn--quiet wk-btn--sm">
                   Not that
                 </button>
               </div>
             </div>
           ) : (
-            <form
-              onSubmit={(e) => { e.preventDefault(); void so.parse(text); }}
-              style={{ display: 'flex', gap: '8px', alignItems: 'center' }}
-            >
-              <input
-                data-testid="standing-order-input"
-                aria-label="A standing order in plain words"
-                placeholder="e.g. auto-approve intake on project A while I'm away"
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-                style={{
-                  flex: 1, minWidth: 0, fontSize: 'var(--text-xs)', padding: '4px 8px',
-                  background: 'var(--surface-base)', color: 'var(--ink-high)',
-                  border: '1px solid var(--surface-raised)', borderRadius: 'var(--radius-md)',
-                }}
-              />
-              <button type="submit" data-testid="standing-order-parse" disabled={d.step === 'parsing' || text.trim() === ''} style={chip}>
-                {d.step === 'parsing' ? 'Reading…' : 'Read it back'}
-              </button>
-            </form>
+            <>
+              <form onSubmit={(e) => { e.preventDefault(); void so.parse(text); }} className="wk-orders-pop-form">
+                <input
+                  data-testid="standing-order-input"
+                  aria-label="A standing instruction in plain words"
+                  placeholder="e.g. approve intake steps while I’m away"
+                  value={text}
+                  onChange={(e) => setText(e.target.value)}
+                  className="wk-field"
+                />
+                <button type="submit" data-testid="standing-order-parse" disabled={d.step === 'parsing' || text.trim() === ''} className="wk-btn wk-btn--secondary wk-btn--sm">
+                  {d.step === 'parsing' ? 'Checking…' : 'Check wording'}
+                </button>
+              </form>
+              <p data-testid="standing-orders-invariant" className="wk-field-note">{ORDER_INVARIANT}</p>
+            </>
           )}
           {d.step === 'failed' && (
-            <p data-testid="standing-order-parse-error" role="alert" style={{ margin: 0, fontSize: 'var(--text-xs)', color: 'var(--status-fail)' }}>
-              {d.error}{d.answer !== undefined ? ` — the seat said: ${d.answer}` : ''}
-            </p>
+            <div data-testid="standing-order-parse-error" role="alert">
+              <p className="wk-orders-pop-err">Couldn’t read that as an instruction. Try saying it another way.</p>
+              <TechDetails text={[d.error, ...(d.answer !== undefined ? [`the helper said: ${d.answer}`] : [])]} />
+            </div>
           )}
 
           {outbox.length > 0 && (
             <div data-testid="standing-orders-outbox">
-              <p style={{ margin: '0 0 2px', fontSize: 'var(--text-2xs)', fontWeight: 'var(--weight-bold)', letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--ink-dim)' }}>
-                Queued, not sent
-              </p>
-              <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+              <p className="wk-section-title" style={{ fontSize: 'var(--text-xs)' }}>Queued, not sent</p>
+              <ul className="wk-orders-pop-list">
                 {outbox.map((m) => (
-                  <li key={m.id} data-testid="standing-order-queued" style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-muted)' }}>
-                    {m.text} <span style={{ color: 'var(--ink-dim)' }}>— “{m.orderText}”</span>
+                  <li key={m.id} data-testid="standing-order-queued" style={{ color: 'var(--ink-muted)' }}>
+                    {m.text} <span style={{ color: 'var(--ink-dim)' }}>(“{m.orderText}”)</span>
                   </li>
                 ))}
               </ul>

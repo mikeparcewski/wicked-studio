@@ -3,7 +3,7 @@ import { mcpPath } from '../api/mcp.js';
 import { skillsPath } from '../api/skills.js';
 import { testingPath } from '../api/testing.js';
 import type { NeedRow } from './needsYou.js';
-import { DELIVERED_LINE, KEPT_LINE, keptLocally } from './deskWords.js';
+import { DELIVERED_LINE, KEPT_LINE, fullRunTitle, keptLocally, plainRunTitle } from './deskWords.js';
 import { sessionIdOf, sessionPath, summarize, type SessionState } from './sessionModel.js';
 
 /**
@@ -108,6 +108,8 @@ export interface RailSession {
   /** Every run of the session, oldest launch first. */
   runIds: string[];
   title: string;
+  /** The title uncut, for the row's hover/focus title (the row clamps at two lines). */
+  fullTitle?: string;
   state: SessionState;
   /** Needs-you items that name any of its runs. */
   badge: number;
@@ -163,6 +165,10 @@ function toSessions(
       runId,
       runIds: sum.runIds,
       title: sum.title,
+      fullTitle: (() => {
+        const v = views.find((x) => plainRunTitle(x.session.problem || x.session.id) === sum.title);
+        return v === undefined ? sum.title : fullRunTitle(v.session.problem || v.session.id);
+      })(),
       state: sum.state,
       badge: sum.badge,
       line: deliveredJustNow && sum.badge === 0 && sum.state === 'done' ? DELIVERED_LINE : kept ? KEPT_LINE : sessionLine(sum.state, sum.badge, texts[runId] ?? null),

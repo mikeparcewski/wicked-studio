@@ -34,15 +34,15 @@ const entry = (action: string, detail: Record<string, unknown>, actorId = 'stand
 describe('standingOrderActionText — the handover names the order', () => {
   it('an order that approved a gate', () => {
     expect(standingOrderActionText(entry('gate.decided', { approve: true, ord: 1, standingOrder: order })))
-      .toBe('Standing order "Auto-approve intake on alpha" approved a gate for you');
+      .toBe('Standing instruction "Auto-approve intake on alpha" approved a gate for you');
   });
   it('an order that held a gate', () => {
     expect(standingOrderActionText(entry('standing-order.held', { standingOrder: order, phase: 'deliver' })))
-      .toBe('Standing order "Auto-approve intake on alpha" held the deliver gate for you');
+      .toBe('Standing instruction "Auto-approve intake on alpha" held the deliver gate for you');
   });
   it('an order that queued a message — never "sent"', () => {
     const t = standingOrderActionText(entry('standing-order.notified', { standingOrder: order, queued: true, text: 'HIGH finding' }));
-    expect(t).toBe('Standing order "Auto-approve intake on alpha" queued a message (not sent): HIGH finding');
+    expect(t).toBe('Standing instruction "Auto-approve intake on alpha" queued a message (not sent): HIGH finding');
   });
   it('anything else is not an order\'s action', () => {
     expect(standingOrderActionText(entry('gate.decided', { approve: true }, 'local'))).toBeUndefined();
@@ -60,7 +60,7 @@ describe('standingOrderActionText — the handover names the order', () => {
     expect(sections.map((s) => s.key)).toEqual(['decisions', 'broke', 'finished', 'orders', 'system']);
     const orders = sections.find((s) => s.key === 'orders')!;
     expect(orders.title).toBe('What your standing orders did');
-    expect(orders.items.map((i) => i.text)).toEqual(['Standing order "Auto-approve intake on alpha" approved a gate for you']);
+    expect(orders.items.map((i) => i.text)).toEqual(['Standing instruction "Auto-approve intake on alpha" approved a gate for you']);
     expect(sections.find((s) => s.key === 'system')!.items.map((i) => i.text)).toEqual(['The stall watchdog noticed a silent worker']);
   });
 
@@ -103,18 +103,18 @@ describe('band and preset orders, said in words (ideas 8 and 13 share the list)'
 describe('awayPreview — what the Away switch will do, before it is flipped', () => {
   it('lists every order in force and ends on the deliver gate', () => {
     expect(awayPreview([atGate, receipt, hold], northwind)).toBe(
-      '3 orders active: will approve band 0-19 (LOW) unit reviews on Northwind; '
+      '3 instructions active: will approve band 0-19 (LOW) unit reviews on Northwind; '
       + 'will approve the plan of runs from the bugfix preset scoring band 0-19 (LOW) on Northwind; '
       + 'will hold the deliver gate on every project; deliver gates always wait',
     );
   });
   it('a notify order says the message is queued, never sent', () => {
     expect(awayPreview([notify], northwind)).toBe(
-      '1 order active: will queue a message on a HIGH finding on every project; messages are queued, never sent; deliver gates always wait',
+      '1 instruction active: will queue a message on a HIGH finding on every project; messages are queued, never sent; deliver gates always wait',
     );
   });
   it('with no orders every gate waits', () => {
-    expect(awayPreview([], northwind)).toBe('No orders: every gate waits for you while you are away');
+    expect(awayPreview([], northwind)).toBe('No standing instructions: every question waits for you while you are away');
   });
   it('the invariant is stated in words', () => {
     expect(ORDER_INVARIANT).toMatch(/deliver gate/);

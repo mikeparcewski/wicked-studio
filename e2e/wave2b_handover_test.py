@@ -171,7 +171,7 @@ with sync_playwright() as p:
     chip = page.evaluate("""() => { const e = document.querySelector('[data-testid="standing-orders-panel"]');
         return { inHeader: !!e.closest('header'), variant: e.dataset.variant, text: e.innerText.replace(/\\s+/g, ' ').trim() }; }""")
     check("orders-none-is-a-header-chip",
-          chip["inHeader"] and chip["variant"] == "chip" and chip["text"].startswith("Orders: none")
+          chip["inHeader"] and chip["variant"] == "chip" and chip["text"].startswith("No standing instructions")
           and "Mark me away" in chip["text"], **chip)
 
     # ── 3. decisions due / broke → the queue's rows, highlighted ──────────────

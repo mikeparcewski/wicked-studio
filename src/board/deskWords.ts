@@ -120,6 +120,11 @@ export function plainRunTitle(problem: string): string {
   return onboardTitle(problem) ?? askTitle(problem) ?? humanTitle(problem);
 }
 
+/** The same title, uncut (for a hover/focus title when the rail or a card clamps it). */
+export function fullRunTitle(problem: string): string {
+  return onboardTitle(problem) ?? askTitle(problem) ?? humanTitle(problem, 240);
+}
+
 // ── studio#540: an ask run's title ──────────────────────────────────────────────────────────
 
 /** Is this run's `problem` crew's chat-scope statement — the run is a chat's ask path? Crew sets an
@@ -201,4 +206,16 @@ export function plainDeliverSentence(card: string | null | undefined, repo: stri
 export function repoNameOf(view: SessionView): string | null {
   const ref = (view.session as { repo_ref?: unknown }).repo_ref;
   return typeof ref === 'string' && /^[\w.-]+$/.test(ref) ? ref : null;
+}
+
+/** The Desk's headline when a needs source failed or timed out (UI-CONTRACT §5 `partial`): the
+ *  number is a floor, said so — "At least 3 things need you." */
+export function atLeastHeadline(count: number): string {
+  return count === 1 ? 'At least 1 thing needs you.' : `At least ${count} things need you.`;
+}
+
+/** A row verb as the Desk shows it (UI-CONTRACT §5: no trailing "›" on buttons). The models keep
+ *  their labels; only the rendered word drops the glyph. */
+export function deskVerb(label: string): string {
+  return label.replace(/\s*›\s*$/u, '');
 }

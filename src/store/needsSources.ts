@@ -4,6 +4,7 @@ import { listProposals, type Proposal } from '../api/proposals.js';
 import type { RepoEntry } from '../api/types.js';
 import type { LiveChatSnapshot } from '../board/chatStats.js';
 import { useCampaignsStore } from './campaigns.js';
+import { ApiError } from '../api/errors.js';
 
 /**
  * THE app-level source of the needs-you queue's REST inputs — the wires the queue folds that no
@@ -79,7 +80,12 @@ export const useNeedsSources = create<NeedsSourcesState>((set, get) => {
     const at = get().readAt[source];
     if (at !== undefined && Date.now() - at < maxAgeMs) return Promise.resolve();
     const p = readers[source]()
-      .catch(() => { /* absent wire — the last answer stands */ })
+      .catch((e: unknown) => {
+        // A daemon without this surface (404) has nothing on it that needs you: an answered empty
+        // read, so the honest count (useSettledNeeds) is complete, not partial. Any other failure:
+        // the last answer stands (null until one ever arrived = a partial count).
+        if (e instanceof ApiError && e.status === 404 && source !== 'campaigns' && get()[source] === null) set({ [source]: [] } as Partial<NeedsSourcesState>);
+      })
       .finally(() => {
         delete inflight[source];
         set((s) => ({ readAt: { ...s.readAt, [source]: Date.now() } }));

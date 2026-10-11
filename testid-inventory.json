@@ -12,8 +12,8 @@
   "studioVersion": "0.7.5",
   "counts": {
     "files": 197,
-    "occurrences": 2203,
-    "static": 1912,
+    "occurrences": 2211,
+    "static": 1919,
     "dynamic": 61,
     "computed": 19
   },
@@ -1619,6 +1619,18 @@
       ]
     },
     {
+      "testId": "desk-chore-group",
+      "files": [
+        "src/components/desk/Desk.tsx"
+      ]
+    },
+    {
+      "testId": "desk-chore-group-toggle",
+      "files": [
+        "src/components/desk/Desk.tsx"
+      ]
+    },
+    {
       "testId": "desk-chore-line",
       "files": [
         "src/components/desk/Desk.tsx"
@@ -1657,6 +1669,18 @@
     },
     {
       "testId": "desk-loading",
+      "files": [
+        "src/components/desk/Desk.tsx"
+      ]
+    },
+    {
+      "testId": "desk-needs-partial",
+      "files": [
+        "src/components/desk/Desk.tsx"
+      ]
+    },
+    {
+      "testId": "desk-needs-skeleton",
       "files": [
         "src/components/desk/Desk.tsx"
       ]
@@ -1795,12 +1819,6 @@
       ]
     },
     {
-      "testId": "desk-runs-retry",
-      "files": [
-        "src/components/desk/Desk.tsx"
-      ]
-    },
-    {
       "testId": "desk-see-everything",
       "files": [
         "src/board/objectActions.ts",
@@ -1847,6 +1865,12 @@
       "testId": "desk-state-line",
       "files": [
         "src/components/desk/DeskStateRows.tsx"
+      ]
+    },
+    {
+      "testId": "desk-unread",
+      "files": [
+        "src/components/desk/Desk.tsx"
       ]
     },
     {
@@ -5078,6 +5102,12 @@
       ]
     },
     {
+      "testId": "palette-close",
+      "files": [
+        "src/components/CommandPalette.tsx"
+      ]
+    },
+    {
       "testId": "palette-input",
       "files": [
         "src/components/CommandPalette.tsx"
@@ -6280,6 +6310,12 @@
     },
     {
       "testId": "rail-seat-move-consequence",
+      "files": [
+        "src/components/HealthRailSection.tsx"
+      ]
+    },
+    {
+      "testId": "rail-seat-move-detail",
       "files": [
         "src/components/HealthRailSection.tsx"
       ]
@@ -9337,6 +9373,12 @@
       ]
     },
     {
+      "testId": "standing-orders-retry",
+      "files": [
+        "src/components/StandingOrdersPanel.tsx"
+      ]
+    },
+    {
       "testId": "standing-orders-summary",
       "files": [
         "src/components/StandingOrdersPanel.tsx"
@@ -10380,12 +10422,6 @@
       "testId": "tech-details-unsaved",
       "files": [
         "src/components/SystemSettings.tsx"
-      ]
-    },
-    {
-      "testId": "tech-need-prompt",
-      "files": [
-        "src/components/NeedsYouQueue.tsx"
       ]
     },
     {
@@ -11471,13 +11507,19 @@
       ]
     },
     {
-      "testId": "watchtower-retry",
+      "testId": "watchtower-row",
       "files": [
         "src/components/watch/WatchtowerPage.tsx"
       ]
     },
     {
-      "testId": "watchtower-row",
+      "testId": "watchtower-row-detail",
+      "files": [
+        "src/components/watch/WatchtowerPage.tsx"
+      ]
+    },
+    {
+      "testId": "watchtower-row-work",
       "files": [
         "src/components/watch/WatchtowerPage.tsx"
       ]

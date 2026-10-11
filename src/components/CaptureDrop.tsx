@@ -188,7 +188,7 @@ export function CaptureDrop({ runs, pathname = '/', inline = false, opens = 'dow
         data-testid="capture-open"
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
-        className={inline ? 'wk-btn wk-btn--secondary wk-btn--sm' : 'wk-btn wk-btn--secondary'}
+        className="wk-btn wk-btn--secondary wk-btn--sm"
         style={inline ? { alignSelf: 'flex-start' } : undefined}
         title="Drop notes, a transcript or a whiteboard photo; the team files what they say as proposals"
       >

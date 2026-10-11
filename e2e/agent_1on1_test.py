@@ -94,14 +94,14 @@ with sync_playwright() as p:
                                              "pi": ["sign-in"]}, kinds=kinds)
         line = (page.locator('[data-testid="rail-seat-week"][data-seat="codex"] [data-testid="rail-seat-week-line"]')
                 .text_content() or "").strip()
-        check("week-line", line == "5 units · 3/4 first pass · 1 rework · 3 stalls · $0.84", line=line)
+        check("week-line", line == "5 steps · 3/4 first pass · 1 rework · 3 stalls · $0.84", line=line)
         codex = move("codex")
         codex.scroll_into_view_if_needed()
         consequence = (codex.get_by_test_id("rail-seat-move-consequence").text_content() or "").strip()
         label = (codex.get_by_test_id("rail-seat-move-button").text_content() or "").strip()
-        check("move-named", label == "Route review away from codex ›", label=label)
+        check("move-named", label == "Route review away from codex", label=label)
         check("consequence-first", consequence == ('3 stalls this week. Adds a recall-only operations rule '
-                                                   '"Route review work away from codex"; seats read it, nothing is blocked.')
+                                                   '"Route review work away from codex"; helpers read it, nothing is blocked.')
               and page.evaluate("""() => { const m = document.querySelector('[data-testid="rail-seat-move"][data-seat="codex"]');
                   const c = m.querySelector('[data-testid="rail-seat-move-consequence"]').getBoundingClientRect();
                   const b = m.querySelector('[data-testid="rail-seat-move-button"]').getBoundingClientRect();

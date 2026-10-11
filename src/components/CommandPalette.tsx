@@ -17,10 +17,11 @@ import { useProjectsStore } from '../store/projects.js';
 import { useGateStore } from '../store/gates.js';
 import { toggledTheme, useAppearanceStore } from '../theming/appearance.js';
 import { decideGate, GATE_HASH } from '../board/gateActions.js';
+import { statusWord } from '../board/statusWords.js';
 import { NewProjectModal } from './NewProjectModal.js';
 import { Modal } from './Modal.js';
 import { ProjectSwitcher } from './ProjectSwitcher.js';
-import { humanTitle, INTENT_MAX, runTitle, runWhenWord, WHEN_TITLE } from './runIdentity.js';
+import { humanTitle, runTitle, runWhenWord, WHEN_TITLE } from './runIdentity.js';
 import { Terminal } from './Terminal.js';
 import { addAboutChip } from '../store/composerChips.js';
 import { everythingPath } from '../board/everythingModel.js';
@@ -47,17 +48,17 @@ type Group =
   | 'search-runs' | 'search-gates' | 'search-decisions' | 'search-repos' | 'search-prompts';
 
 const GROUP_LABEL: Record<Group, string> = {
-  actions: 'ACTIONS FOR THIS',
-  runs: 'RUNS & GATES',
-  projects: 'PROJECTS',
-  repos: 'REPOSITORIES',
-  verbs: 'VERBS',
-  go: 'GO TO',
-  'search-runs': 'RUNS',
-  'search-gates': 'OPEN GATES',
-  'search-decisions': 'DECISIONS',
-  'search-repos': 'REPOSITORIES',
-  'search-prompts': 'PROMPTS: THIS PROJECT',
+  actions: 'Actions for this',
+  runs: 'Runs & gates',
+  projects: 'Projects',
+  repos: 'Repositories',
+  verbs: 'Verbs',
+  go: 'Go to',
+  'search-runs': 'Runs',
+  'search-gates': 'Open gates',
+  'search-decisions': 'Decisions',
+  'search-repos': 'Repositories',
+  'search-prompts': 'Prompts: this project',
 };
 
 interface Entry {
@@ -65,7 +66,7 @@ interface Entry {
   group: Group;
   /** Fuzzy-matched text. Verbs match on the name after the `>`. */
   label: string;
-  /** Mono dim context (project/status/branch). */
+  /** Dim context (project/status/branch). */
   context: string;
   /** Real-link target (href + onClick-preventDefault, deep-linkable). */
   href?: string;
@@ -76,7 +77,7 @@ interface Entry {
   /** Search hits: a status dot (token) or glyph before the label. */
   dot?: string;
   glyph?: string;
-  /** Search hits: the mono snippet line (§5.3) + its matched positions. */
+  /** Search hits: the snippet line (§5.3) + its matched positions. */
   snippet?: string;
   snippetPositions?: number[];
   /** Run rows only (§7.5, slice Y2): the attach-clock word — presence marks the
@@ -198,6 +199,12 @@ function highlightSnippet(text: string, positions: number[]): React.ReactNode {
 }
 
 /** Accent-highlight the fuzzy-matched characters (§1.5 — the row's only accent). */
+/** The palette has the width for a longer title than a rail row (UX gate S1: WRAP). */
+const PALETTE_INTENT = 80;
+
+/** A run title's " · ab12cd · #2" tail (runTitle): searchable, not shown. */
+const RUN_ID_SUFFIX = / · [0-9a-z]{4,12} · #\d+$/u;
+
 function highlight(label: string, positions: number[]): React.ReactNode {
   if (positions.length === 0) return label;
   const set = new Set(positions);
@@ -370,18 +377,19 @@ export function CommandPalette({
         // highlight, never a misplaced one. The fragment length comes from the
         // ACTUAL clause humanTitle displays (a literal prefix of the problem),
         // not the raw INTENT_MAX budget the clause may stop short of.
-        const shownIntent = humanTitle(v.session.problem, INTENT_MAX);
+        const shownIntent = humanTitle(v.session.problem, PALETTE_INTENT);
         const intentLen = shownIntent.endsWith('…') ? shownIntent.length - 1 : shownIntent.length;
+        const w = runWhenWord(attachedAtByRun[id], Date.now(), v.session.created_at);
         hits.push({
           en: {
             id: `s-run-${id}`,
             group: 'search-runs',
-            label: runTitle(v.session),
-            context: projectNameByRun[id] ?? v.session.status,
+            label: runTitle(v.session, PALETTE_INTENT),
+            context: projectNameByRun[id] ?? statusWord(v).word,
             href: runPath(id),
             rank: i,
             dot: SEARCH_DOT[v.session.status] ?? 'var(--ink-dim)',
-            when: runWhenWord(attachedAtByRun[id], Date.now(), v.session.created_at),
+            ...(w !== 'time unknown' ? { when: w } : {}),
           },
           m: m.positions.every((p) => p < intentLen) ? m : { score: m.score, positions: [] },
         });
@@ -485,16 +493,17 @@ export function CommandPalette({
     for (const v of runs) {
       const id = v.session.id;
       const gated = v.session.status === 'awaiting_human' || gates[id] !== undefined;
+      const w = runWhenWord(attachedAtByRun[id], Date.now(), v.session.created_at);
       entries.push({
         id: `run-${id}`,
         group: 'runs',
         // §7.5 (slice Y2, EC40): the synthesized title IS the matched label
         // here — typing a short-id now finds its run.
-        label: runTitle(v.session),
-        context: gated ? 'gate' : v.session.status,
+        label: runTitle(v.session, PALETTE_INTENT),
+        context: gated ? 'Waiting on you' : statusWord(v).word,
         href: gated ? `${runPath(id)}${GATE_HASH}` : runPath(id),
         rank: gated ? 0 : ACTIVE.has(v.session.status) ? 1 : 2,
-        when: runWhenWord(attachedAtByRun[id], Date.now()),
+        ...(w !== 'time unknown' ? { when: w } : {}),
       });
     }
 
@@ -752,7 +761,7 @@ export function CommandPalette({
                   setSel(0);
                 }}
                 onKeyDown={onKeyDown}
-                placeholder="type to search…  p: run: repo: go: > ?"
+                placeholder="Search sessions, projects, pages…"
                 aria-label="Command palette search"
                 className="flex-1 bg-transparent outline-none"
                 style={{
@@ -761,12 +770,14 @@ export function CommandPalette({
                   color: 'var(--ink-high)',
                 }}
               />
-              <span
-                className="font-mono"
-                style={{ fontSize: 'var(--text-2xs)', color: 'var(--ink-dim)' }}
+              <kbd
+                className="font-mono wk-palette-esc"
+                style={{ fontSize: 'var(--text-2xs)', color: 'var(--ink-muted)' }}
               >
                 esc
-              </span>
+              </kbd>
+              {/* Phone: a visible way out (UX gate S1: AFF); desktop keeps the esc keycap. */}
+              <button type="button" data-testid="palette-close" aria-label="Close" title="Close" onClick={close} className="wk-btn wk-btn--icon wk-btn--quiet wk-palette-close">✕</button>
             </div>
 
             {/* §5.2/EC24: the corpus label is a first-class UI element, ALWAYS
@@ -837,7 +848,8 @@ export function CommandPalette({
                     activate(row);
                   },
                   onMouseEnter: () => setSel(i),
-                  className: 'block w-full px-4 py-1.5 text-left',
+                  className: 'wk-palette-row block w-full px-4 py-1.5 text-left',
+                  ...(row.en.group === 'runs' || row.en.group === 'search-runs' ? { title: row.en.label } : {}),
                   style: {
                     background: i === selIx ? 'var(--accent-subtle)' : 'transparent',
                     outline: i === selIx ? '2px solid var(--accent)' : 'none',
@@ -846,7 +858,7 @@ export function CommandPalette({
                 } as const;
                 const body = (
                   <>
-                    <span className="flex w-full min-w-0 items-baseline gap-3">
+                    <span className="wk-palette-line flex w-full min-w-0 items-baseline gap-3">
                       {/* §5.2 hit anatomy: a status dot for runs, a glyph for
                           gates/decisions/repos/prompts — before the label. */}
                       {row.en.dot !== undefined && (
@@ -866,7 +878,7 @@ export function CommandPalette({
                       )}
                       <span
                         {...(row.en.when !== undefined ? { 'data-testid': 'run-title' } : {})}
-                        className="min-w-0 flex-1 truncate"
+                        className="wk-palette-title min-w-0 flex-1 truncate"
                         style={{
                           fontSize: 'var(--text-sm)',
                           fontFamily: 'var(--font-sans)',
@@ -874,33 +886,39 @@ export function CommandPalette({
                         }}
                       >
                         {row.en.group === 'verbs' ? '> ' : ''}
-                        {highlight(row.en.label, row.m.positions)}
+                        {/* A run's short id and attempt stay searchable (the matched label) but the row
+                            shows the title in words (UX gate S1: JARGON); the id is the row's tooltip. */}
+                        {(() => {
+                          const shown = row.en.when !== undefined || row.en.group === 'runs' || row.en.group === 'search-runs'
+                            ? row.en.label.replace(RUN_ID_SUFFIX, '') : row.en.label;
+                          return highlight(shown, row.m.positions.filter((p) => p < shown.length));
+                        })()}
                       </span>
                       {/* §7.5 (slice Y2): run rows carry the attach clock. */}
                       {row.en.when !== undefined && (
                         <span
                           data-testid="run-when"
                           title={WHEN_TITLE}
-                          className="shrink-0 font-mono"
-                          style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-dim)' }}
+                          className="shrink-0 wk-palette-meta"
+                          style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-muted)' }}
                         >
                           {row.en.when}
                         </span>
                       )}
                       <span
-                        className="shrink-0 font-mono"
-                        style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-dim)' }}
+                        className="shrink-0 wk-palette-meta"
+                        style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-muted)' }}
                       >
                         {row.en.context}
                       </span>
                     </span>
-                    {/* §5.3: the snippet line — muted mono, matches in --ink-high. */}
+                    {/* §5.3: the snippet line — muted, matches in --ink-high. */}
                     {row.en.snippet !== undefined && (
                       <span
                         data-testid="search-snippet"
                         className="block w-full truncate"
                         style={{
-                          fontSize: 'var(--text-xs)', fontFamily: 'var(--font-mono)',
+                          fontSize: 'var(--text-xs)', fontFamily: 'var(--font-sans)',
                           color: 'var(--ink-muted)',
                         }}
                       >
@@ -913,15 +931,14 @@ export function CommandPalette({
                   <div key={row.en.id}>
                     {first && (
                       <p
-                        className="px-4 pt-2 pb-1 uppercase"
+                        className="px-4 pt-2 pb-1"
                         style={{
                           fontSize: 'var(--text-2xs)',
                           fontWeight: 'var(--weight-medium)',
                           color: 'var(--ink-dim)',
-                          letterSpacing: '0.08em',
                         }}
                       >
-                        {row.en.group === 'actions' && object !== null ? `ACTIONS FOR ${object.title.toUpperCase()}` : GROUP_LABEL[row.en.group]}
+                        {row.en.group === 'actions' && object !== null ? `Actions for ${object.title}` : GROUP_LABEL[row.en.group]}
                       </p>
                     )}
                     {row.en.href !== undefined ? (
@@ -940,7 +957,7 @@ export function CommandPalette({
 
             {/* hint row */}
             <p
-              className="px-4 py-2 shrink-0 font-mono"
+              className="wk-palette-hint px-4 py-2 shrink-0"
               style={{
                 fontSize: 'var(--text-2xs)',
                 color: 'var(--ink-dim)',

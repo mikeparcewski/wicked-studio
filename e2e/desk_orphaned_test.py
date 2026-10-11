@@ -80,7 +80,7 @@ with sync_playwright() as p:
         fail("desk-counts-the-orphan", {"why": "no needs-you row with the orphan line", "desk_text": text})
     page.screenshot(path=str(SHOTS / "desk-orphaned-desk.png"))
     desk = page.evaluate("() => document.querySelector('[data-testid=\"desk\"]').innerText")
-    check("desk-counts-the-orphan", need.count() == 1 and "Resume ›" in desk, rows=need.count())
+    check("desk-counts-the-orphan", need.count() == 1 and "Resume" in desk, rows=need.count())
 
     # ── 2. The Watchtower says it ────────────────────────────────────────────────
     page.goto(f"{origin}/watch", wait_until="networkidle")

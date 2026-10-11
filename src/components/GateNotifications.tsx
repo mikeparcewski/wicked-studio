@@ -14,9 +14,9 @@ import { plainGateQuestion, plainRunTitle } from '../board/deskWords.js';
  */
 export const TOAST_DWELL_MS = 20_000;
 
-/** At most this many cards paint; the rest compress into one inert overflow
- *  line — an unbounded stack is exactly the B4 interception surface. */
-export const MAX_TOAST_CARDS = 3;
+/** At most this many cards paint (UI-CONTRACT §3: one toast plus a "+N" count, UX audit row 60);
+ *  the rest compress into one inert overflow line — a stack covers the page it announces. */
+export const MAX_TOAST_CARDS = 1;
 
 /**
  * The session-local announcement ledger, module-scoped so a route change
@@ -76,7 +76,9 @@ export function GateNotifications({ onSelect, runId, projectId = null, runs = []
         return pid === undefined || pid === projectId;
       });
 
-  // First-paint stamping (idempotent — safe under StrictMode double render).
+  // First-paint stamping (idempotent — safe under StrictMode double render). A burst of gates is
+  // ONE announcement: every member is stamped together, one card paints and the rest are its "+N",
+  // so a rig with many waiting gates never cycles toasts for minutes (the Desk holds them all).
   const now = Date.now();
   for (const g of open) {
     const key = toastKey(g);
@@ -158,19 +160,19 @@ export function GateNotifications({ onSelect, runId, projectId = null, runs = []
             )}
             <span className="wk-desk-toast-open">Open →</span>
           </button>
+          {/* UX audit row 60: one card; the rest are a count inside it, never a second stacked box. */}
+          {visible.length > cards.length && (
+            <p
+              data-testid="gate-toast-overflow"
+              className="wk-toast-line wk-desk-toast-more"
+              // Inert by design: the count is a pointer to the Desk, not a control.
+              style={{ pointerEvents: 'none', margin: 0 }}
+            >
+              {`+${visible.length - cards.length} more waiting on the Desk`}
+            </p>
+          )}
         </div>
       ))}
-      {visible.length > cards.length && (
-        <p
-          data-testid="gate-toast-overflow"
-          className="wk-toast wk-toast-line wk-desk-toast-more"
-          // Inert by design: the overflow line is a pointer, not a control —
-          // the runs bar's gate count is the actionable record.
-          style={{ pointerEvents: 'none', margin: 0 }}
-        >
-          {`+${visible.length - cards.length} more waiting on the Desk`}
-        </p>
-      )}
     </div>
   );
 }
