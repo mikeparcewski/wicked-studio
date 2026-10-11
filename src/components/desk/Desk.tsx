@@ -11,7 +11,7 @@ import {
 } from '../../board/deskModel.js';
 import { needCount } from '../../board/needsQueue.js';
 import type { NeedRow } from '../../board/needsYou.js';
-import { useBoardModel } from '../../hooks/useBoardModel.js';
+import { MoveToProject, MoveProjectStatus, useMovableBoardModel } from './MoveToProject.js';
 import { useCapabilities } from '../../store/capabilities.js';
 import { useHandover } from '../../hooks/useHandover.js';
 import { useHistoryScroll } from '../../hooks/useHistoryState.js';
@@ -73,7 +73,7 @@ export function Desk({ runs, runsLoaded, runsError = null, onRetryRuns, needRows
    *  project an `@project` chip named (S7). */
   onAsk: (text: string, opts: ComposerSend) => void;
 }): React.ReactElement {
-  const { items, unfiled, failedAt } = useBoardModel(runs);
+  const { items, unfiled, failedAt } = useMovableBoardModel(runs);
   const handover = useHandover(runs, failedAt);
   const roster = useRoster();
   const count = needCount(needRows);
@@ -202,7 +202,11 @@ export function Desk({ runs, runsLoaded, runsError = null, onRetryRuns, needRows
           </div>
 
           <aside className="wk-desk-side" aria-label="Your projects">
-            <p className="wk-desk-label">Your projects <button type="button" data-testid="desk-new-project" onClick={() => setNewProjectOpen(true)}>New project</button></p>
+            <div className="wk-desk-projects-head">
+              <p className="wk-desk-label">Your projects</p>
+              <button type="button" data-testid="desk-new-project" className="wk-btn wk-btn--secondary wk-btn--sm" onClick={() => setNewProjectOpen(true)}><Plus size={14} aria-hidden="true" />New project</button>
+            </div>
+            <MoveProjectStatus />
             {newProjectOpen && <NewProjectModal deskMode navigate={navigate} onClose={() => setNewProjectOpen(false)} />}
             {cards.length === 0 && (readState === 'known'
               ? <p className="wk-desk-quiet">Nothing has been started yet.</p>
@@ -242,13 +246,16 @@ export function Desk({ runs, runsLoaded, runsError = null, onRetryRuns, needRows
                   )}
                 </p>
                 {card.shown.map((s) => (
-                  <a key={s.id} href={s.path} onClick={go(s.path)} data-testid="desk-session" data-session-id={s.id} data-run-id={s.runId} data-state={s.state} className="wk-desk-session">
-                    <span aria-hidden className={`wk-desk-dot wk-desk-dot--${s.state}`} />
-                    <span className="wk-desk-need-body">
-                      <span className="wk-desk-session-title">{s.title}</span>
-                      <span className={`wk-desk-need-line${s.state === 'waiting' ? ' wk-desk-underline' : ''}`}>{s.line}</span>
-                    </span>
-                  </a>
+                  <div key={s.id} className="wk-desk-session-row" data-move-row={s.id}>
+                    <a href={s.path} onClick={go(s.path)} data-testid="desk-session" data-session-id={s.id} data-run-id={s.runId} data-state={s.state} className="wk-desk-session">
+                      <span aria-hidden className={`wk-desk-dot wk-desk-dot--${s.state}`} />
+                      <span className="wk-desk-need-body">
+                        <span className="wk-desk-session-title">{s.title}</span>
+                        <span className={`wk-desk-need-line${s.state === 'waiting' ? ' wk-desk-underline' : ''}`}>{s.line}</span>
+                      </span>
+                    </a>
+                    <MoveToProject session={s} projectId={card.projectId} runs={runs} />
+                  </div>
                 ))}
               </section>
             ))}

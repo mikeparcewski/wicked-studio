@@ -660,6 +660,27 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
 .wk-rail-session:hover, .wk-rail-session[aria-current="page"] { background: var(--surface-card); }
 /* Two lines before a cut (image review): the distinguishing words of a session title survive. */
 .wk-rail-session-title { flex: 1 1 auto; min-width: 0; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: break-word; line-height: 1.3; }
+/* Move to project (operator item 8): each session row is its link plus a move button. */
+.wk-rail-session-row, .wk-desk-session-row { display: flex; align-items: center; gap: 2px; min-width: 0; }
+.wk-rail-session-row > .wk-rail-session, .wk-desk-session-row > .wk-desk-session { flex: 1 1 auto; min-width: 0; }
+.wk-desk-move { position: relative; flex-shrink: 0; }
+.wk-desk-move-trigger { opacity: 0; padding-inline: var(--space-1); min-width: var(--control-h-sm); }
+:is(.wk-rail-session-row, .wk-desk-session-row):is(:hover, :focus-within) .wk-desk-move-trigger { opacity: 1; }
+.wk-desk-move-picker {
+  position: absolute; right: 0; top: 100%; z-index: 40;
+  display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-2);
+  width: min(220px, calc(100vw - var(--space-8))); max-height: 50dvh; overflow-y: auto;
+  background: var(--surface-overlay); color: var(--ink-body); border: 1px solid var(--border);
+  border-radius: var(--radius-md); box-shadow: var(--shadow-raised);
+}
+.wk-desk-move-picker .wk-btn { justify-content: flex-start; white-space: normal; text-align: left; }
+.wk-desk-move-here { margin: 0; padding: 4px 8px; font-size: var(--text-xs); color: var(--ink-muted); }
+.wk-desk-move-error { margin: 0; font-size: var(--text-sm); color: var(--status-fail); }
+.wk-desk-move-status { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+@media (max-width: 767px) {
+  .wk-desk-move-trigger { opacity: 1; min-width: var(--tap-min, 44px); min-height: var(--tap-min, 44px); }
+  .wk-desk-move-picker .wk-btn { min-height: var(--tap-min, 44px); }
+}
 .wk-rail-watch { margin: 0 10px 4px; position: relative; z-index: 30; }
 /* At the top of the rail (Amendment 5) the card opens DOWN from the pill, never above the window. */
 .wk-rail-watch .wk-watch-card { top: 0; bottom: auto; }
@@ -749,6 +770,8 @@ select:focus-visible { outline: 2px solid transparent; outline-offset: 2px; box-
 .wk-desk-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 340px); gap: 24px; margin-left: 20px; }
 .wk-desk-main { min-width: 0; display: flex; flex-direction: column; gap: 10px; }
 .wk-desk-label { margin: 0 0 6px; font-size: var(--text-sm); font-weight: var(--weight-semi); color: var(--ink-high); }
+.wk-desk-projects-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.wk-desk-projects-head .wk-desk-label { margin: 0; }
 .wk-desk-label-aside { font-weight: normal; color: var(--ink-muted); margin-left: 6px; }
 .wk-desk-needs { outline: none; min-width: 0; }
 .wk-desk-need {

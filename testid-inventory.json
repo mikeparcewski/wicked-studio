@@ -11,9 +11,9 @@
   "version": 1,
   "studioVersion": "0.7.4",
   "counts": {
-    "files": 195,
-    "occurrences": 2145,
-    "static": 1868,
+    "files": 196,
+    "occurrences": 2147,
+    "static": 1870,
     "dynamic": 61,
     "computed": 18
   },
@@ -7353,6 +7353,18 @@
       "testId": "session-missing",
       "files": [
         "src/components/session/SessionView.tsx"
+      ]
+    },
+    {
+      "testId": "session-move",
+      "files": [
+        "src/components/desk/MoveToProject.tsx"
+      ]
+    },
+    {
+      "testId": "session-move-picker",
+      "files": [
+        "src/components/desk/MoveToProject.tsx"
       ]
     },
     {
