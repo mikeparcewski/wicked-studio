@@ -687,6 +687,7 @@
     "steering-reject": "session-gate-choice",
     "steering-request-changes": "session-gate-row",
     "steering-retry": "session-gate-row",
-    "tech-gate": "session-gate-row"
+    "tech-gate": "session-gate-row",
+    "composer-launch-workflow": "composer-chip"
   }
 }

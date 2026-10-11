@@ -115,7 +115,7 @@ describe('ChatInput delivery (#123)', () => {
     expect(screen.getByTestId('launch-confirm-deliver').textContent).toMatch(/after you approve the deliver gate/i);
     expect(screen.getByTestId('launch-confirm-deliver').dataset.deliverGate).toBe('human');
     // The "No gates" option is labelled as the auto-deliver opt-out while this launch delivers.
-    expect(screen.getByRole('option', { name: /No gates · auto-deliver/ })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: /Never \(it delivers on its own\)/ })).toBeInTheDocument();
 
     await send(user, 'ship the archive control');
     await waitFor(() => expect(client.api.launchRun).toHaveBeenCalledTimes(1));
@@ -177,7 +177,7 @@ describe('ChatInput delivery (#123)', () => {
     expect(screen.getByTestId('launch-confirm-deliver').textContent).toMatch(/no gate on this daemon/i);
     // The opt-out label is not offered — there is nothing to opt out of.
     expect(screen.queryByRole('option', { name: /auto-deliver/ })).toBeNull();
-    expect(screen.getByRole('option', { name: /^No gates$/ })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: /^Never: run straight through$/ })).toBeInTheDocument();
 
     await user.selectOptions(screen.getByTestId('gate-posture'), 'none');
     await send(user, 'ship the archive control');
@@ -194,7 +194,7 @@ describe('ChatInput delivery (#123)', () => {
     const notice = screen.getByTestId('deliver-notice');
     await waitFor(() => expect(notice.dataset.deliverGate).toBe('human'));
     expect(screen.queryByRole('option', { name: /auto-deliver/ })).toBeNull();
-    expect(screen.getByRole('option', { name: /^No gates$/ })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: /^Never: run straight through$/ })).toBeInTheDocument();
     // Selecting it changes nothing: Ask gates every unit, the deliver gate included.
     await user.selectOptions(screen.getByTestId('gate-posture'), 'none');
     expect(notice.dataset.deliverGate).toBe('human');
