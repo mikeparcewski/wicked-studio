@@ -39,4 +39,11 @@ describe('useSettledNeeds', () => {
     rerender({ r: rows(17), failed: true });
     expect(result.current.count).toBe(43);
   });
+
+  it('wakes on its own once the count has held still (no re-render needed)', () => {
+    const { result } = renderHook(() => useSettledNeeds(rows(5), true));
+    expect(result.current.count).toBeNull();
+    act(() => { vi.advanceTimersByTime(NEEDS_QUIET_MS + 100); });
+    expect(result.current).toMatchObject({ phase: 'complete', count: 5 });
+  });
 });

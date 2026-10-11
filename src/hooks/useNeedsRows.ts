@@ -184,31 +184,41 @@ export function useSettledNeeds(needRows: readonly NeedRow[], runsKnown: boolean
   const [since] = useState(() => Date.now());
   const [, tick] = useState(0);
   const count = needCount(needRows as NeedRow[]);
-  useEffect(() => {
-    const t = setTimeout(() => tick((n) => n + 1), Math.max(0, since + NEEDS_SETTLE_MS - Date.now()) + 10);
-    return () => clearTimeout(t);
-  }, [since]);
-  // Wake when the current candidate has held still long enough to be said.
-  useEffect(() => {
-    const t = setTimeout(() => tick((n) => n + 1), NEEDS_QUIET_MS + 20);
-    return () => clearTimeout(t);
-  }, [count]);
+  const now = Date.now();
   const held = (): { phase: 'loading' | 'complete'; count: number | null; missing: string[] } =>
     lastComplete === null ? { phase: 'loading', count: null, missing: [] } : { phase: 'complete', count: lastComplete, missing: [] };
-  if (runsFailed) return held();
-  if (!runsKnown) return { phase: 'loading', count: null, missing: [] };
-  const expired = Date.now() - since >= NEEDS_SETTLE_MS;
+  // Decide first (no early return before the effects): what to say, and when to look again.
+  let out: { phase: 'loading' | 'complete' | 'partial'; count: number | null; missing: string[] };
+  let wakeAt: number | null = null;
   const sources = Object.keys(NEEDS_SOURCE_NAMES) as NeedsSource[];
+  const expired = now - since >= NEEDS_SETTLE_MS;
   const pending = sources.filter((k) => s.readAt[k] === undefined);
-  if (pending.length > 0 && !expired) return held();
-  const valueOf = (k: NeedsSource): unknown => (k === 'campaigns' ? true : s[k]);
-  const missing = sources.filter((k) => s.readAt[k] === undefined || valueOf(k) === null).map((k) => NEEDS_SOURCE_NAMES[k]);
-  if (missing.length === 0) {
-    const now = Date.now();
+  if (runsFailed) {
+    out = held();
+  } else if (!runsKnown) {
+    out = { phase: 'loading', count: null, missing: [] };
+  } else if (pending.length > 0 && !expired) {
+    out = held();
+    wakeAt = since + NEEDS_SETTLE_MS;
+  } else {
+    const valueOf = (k: NeedsSource): unknown => (k === 'campaigns' ? true : s[k]);
+    const missing = sources.filter((k) => s.readAt[k] === undefined || valueOf(k) === null).map((k) => NEEDS_SOURCE_NAMES[k]);
+    // Complete or partial alike, a number is said only once it has held still (codex r1 on studio#723).
     if (candidate === null || candidate.count !== count) candidate = { count, since: now };
-    if (now - candidate.since < NEEDS_QUIET_MS) return held();
-    lastComplete = count;
-    return { phase: 'complete', count, missing };
+    if (now - candidate.since < NEEDS_QUIET_MS) {
+      out = held();
+      wakeAt = candidate.since + NEEDS_QUIET_MS;
+    } else if (missing.length === 0) {
+      lastComplete = count;
+      out = { phase: 'complete', count, missing };
+    } else {
+      out = { phase: 'partial', count, missing };
+    }
   }
-  return { phase: 'partial', count, missing };
+  useEffect(() => {
+    if (wakeAt === null) return;
+    const t = setTimeout(() => tick((n) => n + 1), Math.max(0, wakeAt - Date.now()) + 20);
+    return () => clearTimeout(t);
+  }, [wakeAt]);
+  return out;
 }

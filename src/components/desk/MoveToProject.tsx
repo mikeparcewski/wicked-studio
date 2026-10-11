@@ -141,9 +141,17 @@ export function MoveToProject({ session, projectId, runs }: { session: RailSessi
     const below = vh - r.bottom - 8; const above = r.top - 8;
     const left = Math.max(8, Math.min(r.right - w, vw - w - 8));
     setPlace(below >= 220 || below >= above
-      ? { position: 'fixed', top: r.bottom + 4, left, width: w, maxHeight: Math.max(120, below) }
-      : { position: 'fixed', bottom: vh - r.top + 4, left, width: w, maxHeight: Math.max(120, above) });
+      ? { position: 'fixed', top: r.bottom + 4, bottom: 'auto', left, right: 'auto', width: w, maxHeight: Math.max(120, below) }
+      : { position: 'fixed', top: 'auto', bottom: vh - r.top + 4, left, right: 'auto', width: w, maxHeight: Math.max(120, above) });
   }, [open]);
+  // A fixed picker would detach from its row when the rail scrolls or the window resizes: close it.
+  useEffect(() => {
+    if (!open) return;
+    const onMove = (e: Event): void => { if (picker.current !== null && e.target instanceof Node && picker.current.contains(e.target)) return; close(); };
+    window.addEventListener('scroll', onMove, true);
+    window.addEventListener('resize', onMove);
+    return () => { window.removeEventListener('scroll', onMove, true); window.removeEventListener('resize', onMove); };
+  }, [open, close]);
   async function choose(target: string | null): Promise<void> {
     if (busy) return;
     setBusy(true); setError(null);
