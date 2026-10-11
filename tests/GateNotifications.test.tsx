@@ -221,3 +221,14 @@ describe('GateNotifications — cross-project context (B4)', () => {
     expect(screen.getByTestId('gate-notification')).toBeInTheDocument();
   });
 });
+
+describe('studio#722: the announcement never covers content', () => {
+  it('renders in the page flow (a strip above the page), never a fixed overlay', () => {
+    seed(gate('run-1'), gate('run-2'));
+    render(<GateNotifications onSelect={() => {}} />);
+    const layer = screen.getByTestId('gate-notification-layer');
+    expect(layer.className).toContain('wk-gate-strip');
+    expect(layer.className).not.toMatch(/\bfixed\b/);
+    expect(layer.getAttribute('style') ?? '').not.toMatch(/position|bottom/);
+  });
+});
