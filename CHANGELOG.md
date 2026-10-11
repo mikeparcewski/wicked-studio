@@ -12,6 +12,13 @@ npm publish dates. Every version listed here exists on
 
 ## [Unreleased]
 
+## [0.7.9] — 2026-10-11
+
+opencode is opt-in.
+
+### Changed
+- opencode is opt-in in the launch wizard and the helper rows: unticked with "opt-in: known to stall" until you pick it (#721, with wicked-core#907 and wicked-crew#980).
+
 ## [0.7.8] — 2026-10-11
 
 A launch wizard, a Settings page, and plain words where paths and jargon used to lead.
@@ -2063,7 +2070,8 @@ The merged interactive layer: wicked-interactive's UI moved into this skin (DES-
   `git subtree split` (92 commits).
 - The SPA as a pure HTTP/WS client of the wicked-crew daemon: runs, gates, live CoreEvents.
 
-[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.8...HEAD
+[Unreleased]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.9...HEAD
+[0.7.9]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.8...v0.7.9
 [0.7.8]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.7...v0.7.8
 [0.7.7]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.6...v0.7.7
 [0.7.6]: https://github.com/mikeparcewski/wicked-studio/compare/v0.7.5...v0.7.6
