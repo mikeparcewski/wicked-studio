@@ -296,28 +296,21 @@ export interface FilterStripProps {
 export function FilterStrip({
   testId, query, onQuery, placeholder = 'Search…', chips, active, onChip, range, onRange, children,
 }: FilterStripProps): React.ReactElement {
+  // UI-CONTRACT §4.5 (ASK 05:24Z, w9-s5): the shared field and chip primitives (sans, >= 11 px, one
+  // focus ring), and a chip whose count is 0 is hidden unless it is the active filter.
+  const shown = chips.filter((c) => c.count !== 0 || c.id === active);
   return (
-    <div
-      data-testid={testId}
-      data-filter={active}
-      role="group"
-      aria-label="Filters"
-      style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', width: '100%' }}
-    >
+    <div data-testid={testId} data-filter={active} role="group" aria-label="Filters" className="wk-filterstrip">
       <input
-        type="text"
+        type="search"
         data-testid={`${testId}-search`}
+        aria-label={placeholder.replace(/…$/, '')}
         placeholder={placeholder}
         value={query}
         onChange={(e) => onQuery(e.target.value)}
-        style={{
-          background: 'var(--surface-card)', border: '1px solid var(--surface-raised)',
-          borderRadius: 'var(--radius-md)', padding: '5px 10px',
-          fontSize: 'var(--text-xs)', fontFamily: 'var(--font-mono)',
-          color: 'var(--ink-high)', outline: 'none', width: '200px',
-        }}
+        className="wk-field wk-filterstrip-search"
       />
-      {chips.map((c) => (
+      {shown.map((c) => (
         <button
           key={c.id}
           type="button"
@@ -325,23 +318,14 @@ export function FilterStrip({
           data-chip={c.id}
           aria-pressed={active === c.id}
           onClick={() => onChip(c.id)}
-          style={{
-            borderRadius: 'var(--radius-full)', padding: '3px 10px',
-            fontSize: 'var(--text-2xs)', fontFamily: 'var(--font-mono)', cursor: 'pointer',
-            border: '1px solid',
-            borderColor: active === c.id ? 'var(--accent)' : 'var(--surface-raised)',
-            background: active === c.id ? 'var(--accent-subtle)' : 'transparent',
-            color: active === c.id ? 'var(--accent)' : 'var(--ink-muted)',
-          }}
+          className="wk-chip"
         >
           {c.label}
-          {c.count !== undefined && (
-            <span style={{ marginLeft: '5px', fontVariantNumeric: 'tabular-nums', opacity: 0.8 }}>{c.count}</span>
-          )}
+          {c.count !== undefined && <span className="wk-num wk-filterstrip-count">{c.count}</span>}
         </button>
       ))}
       {children}
-      <span style={{ flex: 1 }} />
+      <span className="wk-filterstrip-gap" />
       {range !== undefined && onRange !== undefined && (
         <TimeRangeSelector value={range} onChange={onRange} />
       )}

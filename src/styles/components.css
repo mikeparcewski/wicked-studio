@@ -1535,6 +1535,13 @@ button.wk-walk-chapter-btn:hover .wk-walk-chapter-title { text-decoration: under
 .wk-progress-fill--run { background: var(--accent); }
 .wk-progress-note { color: var(--ink-dim); font-size: var(--text-xs); flex-shrink: 0; }
 
+/* Filter strip (dashboardKit FilterStrip): search field + filter chips + optional window picker. */
+.wk-filterstrip { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; width: 100%; }
+.wk-filterstrip-search { width: 220px; max-width: 100%; padding: 4px 10px; }
+.wk-filterstrip-count { margin-left: 2px; color: var(--ink-muted); }
+.wk-filterstrip-gap { flex: 1; }
+@media (max-width: 767px) { .wk-filterstrip-search { width: 100%; } }
+
 /* ══ SHELL (UI-CONTRACT §3; studio#680): desktop unchanged; phone = top bar + drawer. ══ */
 .wk-rail-slot { display: contents; }
 .wk-topbar { display: none; }
