@@ -26,12 +26,13 @@ function sources(dir: string): string[] {
 
 /**
  * The in-app link targets written as literals in a LINK position: `href="/x"`, `href={'/x'}`,
- * `href: '/x'`, `navigate('/x')`, `go('/x')`, `goTo('/x')`, `path: '/x'` — single, double or
+ * `href: '/x'`, `navigate('/x')`, `go('/x')`, `goTo('/x')`, `location.assign|replace('/x')`,
+ * `location.href = '/x'`, `path: '/x'` (whitespace allowed around each) — single, double or
  * backtick quotes. A `${…}` right after a `/` stands for one id segment; anywhere else it stands
  * for nothing (`/testing${tail}`). API paths (`apiFetch('/runs')`) are not link positions and are
  * never read.
  */
-const LINK_AT = /(?:\bhref\s*[=:]\s*\{?|\b(?:navigate|go|goTo)\(\s*|\bpath\s*:\s*)(['"`])(\/(?!\/)[^'"`\s]*)\1/g;
+const LINK_AT = /(?:\bhref\s*[=:]\s*(?:\{\s*)?|\b(?:navigate|go|goTo|assign|replace)\s*\(\s*|\blocation\.href\s*=\s*|\bpath\s*:\s*)(['"`])(\/(?!\/)[^'"`\s]*)\1/g;
 
 function literalLinks(): { at: string; target: string }[] {
   const out: { at: string; target: string }[] = [];
