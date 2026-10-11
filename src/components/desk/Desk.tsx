@@ -9,7 +9,7 @@ import { StandingOrdersPanel } from '../StandingOrdersPanel.js';
 import {
   deskGreeting, deskProjects, deskReadState, lapsedSeatChores, needsByRun, needsHeadline, needTextByRun, noSignedInHelper, railGroups,
 } from '../../board/deskModel.js';
-import { needCount } from '../../board/needsQueue.js';
+import { atLeastHeadline } from '../../board/deskWords.js';
 import type { NeedRow } from '../../board/needsYou.js';
 import { MoveToProject, MoveProjectStatus, useMovableBoardModel } from './MoveToProject.js';
 import { useCapabilities } from '../../store/capabilities.js';
@@ -30,6 +30,9 @@ import { openSheet } from '../../store/sheets.js';
 import { NewProjectModal } from '../NewProjectModal.js';
 import { LayoutGrid, Plus } from 'lucide-react';
 import { seedNewChat } from '../../board/chatMoves.js';
+import { readErrorKind } from '../../api/errors.js';
+import { useSettledNeeds } from '../../hooks/useNeedsRows.js';
+import { Skeleton, StateBanner } from '../ui/index.js';
 
 /** The daemon's governance self-report, read once per mount (and again after a replay changed it).
  *  A daemon without `/diagnostics` (or predating `governance`) yields null: no chore, never a guess. */
@@ -76,8 +79,10 @@ export function Desk({ runs, runsLoaded, runsError = null, onRetryRuns, needRows
   const { items, unfiled, failedAt } = useMovableBoardModel(runs);
   const handover = useHandover(runs, failedAt);
   const roster = useRoster();
-  const count = needCount(needRows);
   const readState = deskReadState(runsLoaded, runsError);
+  // UI-CONTRACT §5 (studio#681 row 4): no number until every needs source has settled.
+  const settled = useSettledNeeds(needRows, readState === 'known');
+  const count = settled.count ?? 0;
   const displayText = useDisplayText();
   const { hello, date } = deskGreeting(now);
   const runChatId = useCapabilities((s) => s.runChatId);
@@ -93,6 +98,9 @@ export function Desk({ runs, runsLoaded, runsError = null, onRetryRuns, needRows
   const leadWithSignIn = noSignedInHelper(roster) && chores.length > 0;
   const [signIn, setSignIn] = useState<RosterSeat | null>(null);
   const [newProjectOpen, setNewProjectOpen] = useState(false);
+  // UX audit row 21: several lapsed sign-ins are one row ("4 helpers need signing in"), opened on demand.
+  const [choresOpen, setChoresOpen] = useState(false);
+  const choresFolded = chores.length > 2 && !choresOpen;
   // S15a: the Command Deck's repair move for dead-lettered governance events, as a chore.
   const { governance, reread } = useGovernance();
   const dead = deadletterChore(governance);
@@ -112,29 +120,45 @@ export function Desk({ runs, runsLoaded, runsError = null, onRetryRuns, needRows
                 <p className="wk-desk-label">For whoever runs studio{chores.length > 0 ? ` · ${chores.length}` : ''}</p>
                 {leadWithSignIn && (
                   <p data-testid="desk-signin-lead" className="wk-desk-sentence">
-                    No AI helper is signed in yet, so nothing can run. Each helper is a CLI on this computer — pick one
+                    No AI helper is signed in yet, so nothing can run. Each helper is a program on this computer: pick one
                     below and Sign in shows the one command to run.
                   </p>
                 )}
                 <DeskStateRows frozen={states.frozen} away={states.away} />
                 {(dead !== null || replaying) && (
-                  <div data-testid="desk-chore" data-chore="deadletters" className="wk-desk-need">
+                  <div data-testid="desk-chore" data-chore="deadletters" className="wk-desk-need wk-desk-need--wrap">
                     <span aria-hidden className="wk-desk-dot wk-desk-dot--blocked" />
                     <span className="wk-desk-need-body">
                       <span className="wk-desk-need-title">{dead?.title ?? 'Governance evidence'}</span>
-                      <span data-testid="desk-chore-line" className="wk-desk-need-line" title={dead?.line}>{dead?.line ?? 'Replayed — re-reading what the daemon says.'}</span>
+                      <span data-testid="desk-chore-line" className="wk-desk-need-line" title={dead?.line}>{dead?.line ?? 'Replayed. Checking again.'}</span>
                     </span>
                     <ReplayMove replay={replay} />
                   </div>
                 )}
-                {chores.map((c) => (
-                  <div key={c.key} data-testid="desk-chore" data-seat={c.seat} className="wk-desk-need">
+                {chores.length > 2 && (
+                  <div data-testid="desk-chore-group" data-count={chores.length} className="wk-desk-need wk-desk-need--wrap">
+                    <span aria-hidden className="wk-desk-dot wk-desk-dot--blocked" />
+                    <span className="wk-desk-need-body">
+                      <span className="wk-desk-need-title">{`${chores.length} helpers need signing in again`}</span>
+                      <span className="wk-desk-need-line">Nothing they would do can start until each one is signed in.</span>
+                    </span>
+                    <span className="wk-need-acts">
+                      <button type="button" data-testid="desk-chore-group-toggle" aria-expanded={choresOpen} onClick={() => setChoresOpen((v) => !v)} className="wk-need-act">
+                        {choresOpen ? 'Fold' : 'Show each'}
+                      </button>
+                    </span>
+                  </div>
+                )}
+                {!choresFolded && chores.map((c) => (
+                  <div key={c.key} data-testid="desk-chore" data-seat={c.seat} className={`wk-desk-need wk-desk-need--wrap${chores.length > 2 ? ' wk-desk-need--member' : ''}`}>
                     <span aria-hidden className="wk-desk-dot wk-desk-dot--blocked" />
                     <span className="wk-desk-need-body">
                       <span className="wk-desk-need-title">{c.title}</span>
                       <span className="wk-desk-need-line">{c.line}</span>
                     </span>
-                    <a href={c.action.path} data-testid="desk-chore-signin" onClick={(e) => { e.preventDefault(); setSignIn(c.rosterSeat); }} className="wk-need-act">{c.action.label}</a>
+                    <span className="wk-need-acts">
+                      <a href={c.action.path} data-testid="desk-chore-signin" onClick={(e) => { e.preventDefault(); setSignIn(c.rosterSeat); }} className="wk-need-act">{c.action.label}</a>
+                    </span>
                   </div>
                 ))}
               </section>
@@ -145,7 +169,19 @@ export function Desk({ runs, runsLoaded, runsError = null, onRetryRuns, needRows
   return (
     <div data-testid="desk" data-object="desk" className="wk-desk">
       {/* S15a: the Desk's scroller opts into place (peek/jump/Back put its scroll back, store/place.ts). */}
-      <div ref={scroller} className="wk-desk-scroll" data-place-scroll="desk">
+      <div ref={scroller} className="wk-desk-scroll" data-place-scroll="desk" data-stale={readState === 'stale' ? 'true' : undefined}>
+        {(readState === 'failed' || readState === 'stale') && runsError !== null && (
+          // studio#466 + UX audit row 10: ONE banner at the top of the page, in the flow (it pushes the
+          // greeting down). A first read that failed gives no verdict at all; a refresh that failed
+          // keeps the last list, said so. The browser's own words stay inside Technical details.
+          <StateBanner
+            data-testid="desk-runs-failed"
+            kind={readState === 'stale' ? 'stale' : readErrorKind(runsError)}
+            what="your work"
+            error={displayText(runsError)}
+            {...(onRetryRuns !== undefined ? { onRetry: onRetryRuns } : {})}
+          />
+        )}
         <header className="wk-desk-head">
           <div className="wk-desk-head-row">
             <h1 className="wk-desk-hello">{hello}</h1>
@@ -165,23 +201,18 @@ export function Desk({ runs, runsLoaded, runsError = null, onRetryRuns, needRows
           <span aria-hidden className="wk-desk-avatar"><span className="wk-desk-dot wk-desk-dot--waiting" /></span>
           <div>
             <p className="wk-desk-who">Studio</p>
-            {(readState === 'failed' || readState === 'stale') && runsError !== null && (
-              // studio#466: the read failed — say so, with the way to try again. A first read that
-              // failed gives no verdict at all; a refresh that failed keeps the last list, said so.
-              <p data-testid="desk-runs-failed" data-state={readState} role="alert" className="wk-desk-sentence">
-                {readState === 'failed'
-                  ? <>I couldn’t read your work from the daemon, so I can’t say what needs you ({displayText(runsError)}).</>
-                  : <>I couldn’t refresh your work from the daemon ({displayText(runsError)}); what follows is from the last read.</>}{' '}
-                {onRetryRuns !== undefined && <button type="button" data-testid="desk-runs-retry" onClick={onRetryRuns} className="wk-since-toggle">Try again</button>}
-              </p>
+            {readState === 'failed' && (
+              <p data-testid="desk-unread" className="wk-desk-sentence wk-desk-quiet">I can’t say what needs you until your work loads.</p>
             )}
-            {readState === 'known' ? (
-              <p data-testid="desk-headline" data-count={count} className="wk-desk-sentence">
-                {count > 0 ? <mark className="wk-desk-mark">{needsHeadline(count)}</mark> : needsHeadline(count)}
-                {count === 0 && ' We’ll tap you when something needs a decision.'}
+            {readState === 'known' && settled.phase !== 'loading' ? (
+              <p data-testid="desk-headline" data-count={count} data-phase={settled.phase} className="wk-desk-sentence">
+                {count > 0
+                  ? <mark className="wk-desk-mark">{settled.phase === 'partial' ? atLeastHeadline(count) : needsHeadline(count)}</mark>
+                  : settled.phase === 'partial' ? 'Nothing I could read needs you.' : needsHeadline(count)}
+                {count === 0 && settled.phase === 'complete' && ' We’ll tap you when something needs a decision.'}
               </p>
-            ) : readState === 'checking' ? (
-              // studio#459: an honest loading line while /runs is in flight — the all-clear waits.
+            ) : readState === 'checking' || readState === 'known' ? (
+              // studio#459 + row 4: an honest loading line while the needs sources answer — no number yet.
               <p data-testid="desk-loading" aria-busy="true" className="wk-desk-sentence wk-desk-quiet">Checking what needs you…</p>
             ) : null}
             {/* DC-S6 (B9): a rule remembered from your words since you last looked, said once. */}
@@ -192,12 +223,23 @@ export function Desk({ runs, runsLoaded, runsError = null, onRetryRuns, needRows
           <HandoverPanel handover={handover} navigate={navigate} now={now} runs={runs} />
         )}
 
+        {readState === 'known' && settled.phase === 'partial' && (
+          <StateBanner data-testid="desk-needs-partial" kind="partial" what={settled.missing.join(', ')} />
+        )}
         <div className="wk-desk-cols">
           <div className="wk-desk-main">
             {/* Rows already known (an elicitation, a memory proposal) show at once; only the fold's
                 calm copy waits for the first /runs answer (studio#459). */}
             {leadWithSignIn && chores_block}
-            {(runsLoaded || needRows.length > 0) && <NeedsQueueSurface rows={needRows} runs={runs} navigate={navigate} now={now} />}
+            {(runsLoaded || needRows.length > 0)
+              ? <NeedsQueueSurface rows={needRows} runs={runs} navigate={navigate} now={now} />
+              : readState === 'checking' && (
+                // UX audit row 68: rows shaped like the list while the first read is in flight.
+                <section aria-label="Needs you" className="wk-desk-needs">
+                  <p className="wk-desk-label">Needs you</p>
+                  <Skeleton data-testid="desk-needs-skeleton" rows={3} variant="row" />
+                </section>
+              )}
             {!leadWithSignIn && chores_block}
           </div>
 
@@ -211,8 +253,8 @@ export function Desk({ runs, runsLoaded, runsError = null, onRetryRuns, needRows
             {cards.length === 0 && (readState === 'known'
               ? <p className="wk-desk-quiet">Nothing has been started yet.</p>
               : readState === 'checking'
-                ? <p data-testid="desk-projects-loading" aria-busy="true" className="wk-desk-quiet">Checking…</p>
-                : <p data-testid="desk-projects-unread" className="wk-desk-quiet">Not read{readState === 'stale' ? ' again' : ' yet'}.</p>)}
+                ? <div data-testid="desk-projects-loading" aria-busy="true"><Skeleton rows={2} variant="card" /></div>
+                : <p data-testid="desk-projects-unread" className="wk-desk-quiet">Your projects show once your work loads.</p>)}
             {cards.slice(0, CARDS_MAX).map((card) => (
               <section key={card.projectId ?? 'unfiled'} data-testid="desk-project" data-project-id={card.projectId ?? ''} className="wk-desk-card">
                 <p className="wk-desk-card-title">
@@ -242,7 +284,7 @@ export function Desk({ runs, runsLoaded, runsError = null, onRetryRuns, needRows
                     </span>
                   )}
                   {card.quiet.length > 0 && (
-                    <span className="wk-desk-card-aside" title={card.quiet.join(', ')}>{card.quiet.length} more</span>
+                    <span className="wk-desk-card-aside" title={card.quiet.join(', ')}>{card.quiet.length === 1 ? '1 more session' : `${card.quiet.length} more sessions`}</span>
                   )}
                 </p>
                 {card.shown.map((s) => (

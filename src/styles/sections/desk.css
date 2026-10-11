@@ -1,1 +1,68 @@
 /* Section CSS: desk (design/UI-CONTRACT.md §6). Only that section edits this file. */
+
+/* ── The Desk header's utility controls (UX audit row 31): readable ink, one size, one hover. ── */
+.wk-desk-orders { align-items: center; gap: var(--space-3); }
+.wk-desk-orders .wk-orders { font-size: var(--text-xs); color: var(--ink-body); }
+.wk-desk-orders .wk-orders-act { color: var(--accent); font-weight: var(--weight-medium); text-underline-offset: 2px; }
+.wk-desk-orders .wk-orders-act:hover { text-decoration: underline; color: var(--accent-hover); }
+.wk-desk-focus-switch { display: inline-flex; }
+.wk-desk-focus-switch .wk-switch-label { font-size: var(--text-xs); color: var(--ink-body); }
+.wk-orders-error { color: var(--ink-muted); }
+
+/* ── Stale read (row 10): what follows is the last read, said by the banner and shown dimmed. ── */
+.wk-desk-scroll[data-stale="true"] .wk-desk-cols { opacity: 0.7; }
+.wk-desk-scroll > .wk-state-banner { margin-bottom: var(--space-3); }
+.wk-desk-scroll .wk-state-banner[data-testid="desk-needs-partial"] { margin: 0 0 var(--space-3) 20px; }
+
+/* ── Needs rows: the moves sit in one slot; one focus ring (row 83). ── */
+.wk-desk-need .wk-need-acts { align-items: center; flex-wrap: wrap; }
+.wk-desk-need--selected:has(:focus-visible) { outline: none; }
+.wk-desk-need-title:focus-visible { border-radius: var(--radius-sm); }
+/* Two lines before the cut, so identical-looking titles keep the words that differ (row 20). */
+.wk-desk-session-title { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.wk-desk-underline { text-decoration-skip-ink: none; text-underline-offset: 3px; }
+
+/* ── The Orders popover (row 33): one empty sentence, a field, a note. ── */
+.wk-orders-pop { display: flex; flex-direction: column; gap: var(--space-2); font-size: var(--text-xs); color: var(--ink-body); }
+.wk-orders-pop p { margin: 0; line-height: 1.45; }
+.wk-orders-pop-form { display: flex; gap: var(--space-2); align-items: center; }
+.wk-orders-pop-form .wk-field { flex: 1; min-width: 0; }
+.wk-orders-pop-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.wk-orders-pop-row { display: flex; gap: var(--space-2); align-items: center; min-width: 0; }
+.wk-orders-pop-rule { color: var(--ink-muted); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wk-orders-pop-parsed { border: 1px dashed var(--border); border-radius: var(--radius-md); padding: 6px 10px; display: flex; flex-direction: column; gap: 6px; }
+.wk-orders-pop-err { color: var(--status-fail); }
+
+/* ── Gate toasts (row 60): one card at a time, clear of the Ask bubble; "+N" says the rest. ── */
+.wk-desk-toast { width: min(18rem, calc(100vw - 32px)); }
+.wk-desk-toast-more { padding: 4px 10px; font-size: var(--text-xs); color: var(--ink-body); }
+
+/* ── Watchtower (row 55) ── */
+.wk-watchtower-row .wk-tech-details, .wk-watchtower-row details { margin-top: 4px; }
+
+/* ── Phone (one breakpoint, UI-CONTRACT §2) ── */
+@media (max-width: 767px) {
+  /* A row's moves take their own line under the title, so a two-button row never clips it. */
+  .wk-desk-need--wrap > .wk-desk-need-body { flex: 1 1 calc(100% - 24px); }
+  .wk-desk-need--wrap > .wk-need-acts,
+  .wk-desk-need--wrap > .wk-need-act,
+  .wk-desk-need--wrap > .wk-need-chosen,
+  .wk-desk-need--wrap > .wk-need-group-acts { flex-basis: 100%; justify-content: flex-start; padding-left: 18px; }
+  .wk-desk-need--wrap > .wk-need-answer { padding-left: 18px; }
+  .wk-desk-need-title { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .wk-desk-orders .wk-orders { flex-wrap: wrap; white-space: normal; }
+  .wk-desk-bottom { padding: 8px var(--space-4) 12px; }
+  /* Toasts: one compact card docked bottom, above the composer, never a stack over the page. */
+  [data-testid="gate-notification-layer"] { left: var(--space-4); right: var(--space-4) !important; align-items: stretch !important; }
+  .wk-desk-toast { width: auto; padding: 8px 10px; }
+  .wk-desk-toast-work { display: none; }
+  .wk-watchtower-head { padding: var(--space-4); }
+  .wk-watchtower-body { padding: var(--space-3) var(--space-4) var(--space-6); }
+  .wk-watchtower-row { flex-wrap: wrap; }
+  .wk-watchtower-row > .wk-desk-need-body { flex: 1 1 calc(100% - 24px); }
+  .wk-watchtower-row > a { margin-left: 18px; }
+}
+
+/* studio#660: the Watchtower pill's card is a preview with no controls of its own; when it opens
+   itself over the page it must never swallow the first click on the gate it announces. */
+.wk-watch-card { pointer-events: none; }

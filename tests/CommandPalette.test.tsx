@@ -109,7 +109,7 @@ describe('corpus & prefixes (§1.3/§1.4)', () => {
     // Gates lead the runs group; terminal runs trail it.
     const runRows = rows().filter((r) => r.dataset.group === 'runs');
     expect(runRows[0]?.textContent).toContain('migrate the auth tables');
-    expect(runRows[0]?.textContent).toContain('gate');
+    expect(runRows[0]?.textContent).toContain('Waiting on you');
     expect(runRows[2]?.textContent).toContain('smoke the login flow');
     // Projects are recency-ordered and the synthesized default never renders (F5).
     const projRows = rows().filter((r) => r.dataset.group === 'projects');

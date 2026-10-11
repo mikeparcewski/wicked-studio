@@ -14,9 +14,9 @@ import { plainGateQuestion, plainRunTitle } from '../board/deskWords.js';
  */
 export const TOAST_DWELL_MS = 20_000;
 
-/** At most this many cards paint; the rest compress into one inert overflow
- *  line — an unbounded stack is exactly the B4 interception surface. */
-export const MAX_TOAST_CARDS = 3;
+/** At most this many cards paint (UI-CONTRACT §3: one toast plus a "+N" count, UX audit row 60);
+ *  the rest compress into one inert overflow line — a stack covers the page it announces. */
+export const MAX_TOAST_CARDS = 1;
 
 /**
  * The session-local announcement ledger, module-scoped so a route change

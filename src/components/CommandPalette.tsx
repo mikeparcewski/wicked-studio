@@ -17,6 +17,7 @@ import { useProjectsStore } from '../store/projects.js';
 import { useGateStore } from '../store/gates.js';
 import { toggledTheme, useAppearanceStore } from '../theming/appearance.js';
 import { decideGate, GATE_HASH } from '../board/gateActions.js';
+import { statusWord } from '../board/statusWords.js';
 import { NewProjectModal } from './NewProjectModal.js';
 import { Modal } from './Modal.js';
 import { ProjectSwitcher } from './ProjectSwitcher.js';
@@ -47,17 +48,17 @@ type Group =
   | 'search-runs' | 'search-gates' | 'search-decisions' | 'search-repos' | 'search-prompts';
 
 const GROUP_LABEL: Record<Group, string> = {
-  actions: 'ACTIONS FOR THIS',
-  runs: 'RUNS & GATES',
-  projects: 'PROJECTS',
-  repos: 'REPOSITORIES',
-  verbs: 'VERBS',
-  go: 'GO TO',
-  'search-runs': 'RUNS',
-  'search-gates': 'OPEN GATES',
-  'search-decisions': 'DECISIONS',
-  'search-repos': 'REPOSITORIES',
-  'search-prompts': 'PROMPTS: THIS PROJECT',
+  actions: 'Actions for this',
+  runs: 'Runs & gates',
+  projects: 'Projects',
+  repos: 'Repositories',
+  verbs: 'Verbs',
+  go: 'Go to',
+  'search-runs': 'Runs',
+  'search-gates': 'Open gates',
+  'search-decisions': 'Decisions',
+  'search-repos': 'Repositories',
+  'search-prompts': 'Prompts: this project',
 };
 
 interface Entry {
@@ -65,7 +66,7 @@ interface Entry {
   group: Group;
   /** Fuzzy-matched text. Verbs match on the name after the `>`. */
   label: string;
-  /** Mono dim context (project/status/branch). */
+  /** Dim context (project/status/branch). */
   context: string;
   /** Real-link target (href + onClick-preventDefault, deep-linkable). */
   href?: string;
@@ -76,7 +77,7 @@ interface Entry {
   /** Search hits: a status dot (token) or glyph before the label. */
   dot?: string;
   glyph?: string;
-  /** Search hits: the mono snippet line (§5.3) + its matched positions. */
+  /** Search hits: the snippet line (§5.3) + its matched positions. */
   snippet?: string;
   snippetPositions?: number[];
   /** Run rows only (§7.5, slice Y2): the attach-clock word — presence marks the
@@ -372,16 +373,17 @@ export function CommandPalette({
         // not the raw INTENT_MAX budget the clause may stop short of.
         const shownIntent = humanTitle(v.session.problem, INTENT_MAX);
         const intentLen = shownIntent.endsWith('…') ? shownIntent.length - 1 : shownIntent.length;
+        const w = runWhenWord(attachedAtByRun[id], Date.now(), v.session.created_at);
         hits.push({
           en: {
             id: `s-run-${id}`,
             group: 'search-runs',
             label: runTitle(v.session),
-            context: projectNameByRun[id] ?? v.session.status,
+            context: projectNameByRun[id] ?? statusWord(v).word,
             href: runPath(id),
             rank: i,
             dot: SEARCH_DOT[v.session.status] ?? 'var(--ink-dim)',
-            when: runWhenWord(attachedAtByRun[id], Date.now(), v.session.created_at),
+            ...(w !== 'time unknown' ? { when: w } : {}),
           },
           m: m.positions.every((p) => p < intentLen) ? m : { score: m.score, positions: [] },
         });
@@ -485,16 +487,17 @@ export function CommandPalette({
     for (const v of runs) {
       const id = v.session.id;
       const gated = v.session.status === 'awaiting_human' || gates[id] !== undefined;
+      const w = runWhenWord(attachedAtByRun[id], Date.now(), v.session.created_at);
       entries.push({
         id: `run-${id}`,
         group: 'runs',
         // §7.5 (slice Y2, EC40): the synthesized title IS the matched label
         // here — typing a short-id now finds its run.
         label: runTitle(v.session),
-        context: gated ? 'gate' : v.session.status,
+        context: gated ? 'Waiting on you' : statusWord(v).word,
         href: gated ? `${runPath(id)}${GATE_HASH}` : runPath(id),
         rank: gated ? 0 : ACTIVE.has(v.session.status) ? 1 : 2,
-        when: runWhenWord(attachedAtByRun[id], Date.now()),
+        ...(w !== 'time unknown' ? { when: w } : {}),
       });
     }
 
@@ -752,7 +755,7 @@ export function CommandPalette({
                   setSel(0);
                 }}
                 onKeyDown={onKeyDown}
-                placeholder="type to search…  p: run: repo: go: > ?"
+                placeholder="Search sessions, projects, pages…"
                 aria-label="Command palette search"
                 className="flex-1 bg-transparent outline-none"
                 style={{
@@ -881,26 +884,26 @@ export function CommandPalette({
                         <span
                           data-testid="run-when"
                           title={WHEN_TITLE}
-                          className="shrink-0 font-mono"
+                          className="shrink-0"
                           style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-dim)' }}
                         >
                           {row.en.when}
                         </span>
                       )}
                       <span
-                        className="shrink-0 font-mono"
+                        className="shrink-0"
                         style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-dim)' }}
                       >
                         {row.en.context}
                       </span>
                     </span>
-                    {/* §5.3: the snippet line — muted mono, matches in --ink-high. */}
+                    {/* §5.3: the snippet line — muted, matches in --ink-high. */}
                     {row.en.snippet !== undefined && (
                       <span
                         data-testid="search-snippet"
                         className="block w-full truncate"
                         style={{
-                          fontSize: 'var(--text-xs)', fontFamily: 'var(--font-mono)',
+                          fontSize: 'var(--text-xs)', fontFamily: 'var(--font-sans)',
                           color: 'var(--ink-muted)',
                         }}
                       >
@@ -913,15 +916,14 @@ export function CommandPalette({
                   <div key={row.en.id}>
                     {first && (
                       <p
-                        className="px-4 pt-2 pb-1 uppercase"
+                        className="px-4 pt-2 pb-1"
                         style={{
                           fontSize: 'var(--text-2xs)',
                           fontWeight: 'var(--weight-medium)',
                           color: 'var(--ink-dim)',
-                          letterSpacing: '0.08em',
                         }}
                       >
-                        {row.en.group === 'actions' && object !== null ? `ACTIONS FOR ${object.title.toUpperCase()}` : GROUP_LABEL[row.en.group]}
+                        {row.en.group === 'actions' && object !== null ? `Actions for ${object.title}` : GROUP_LABEL[row.en.group]}
                       </p>
                     )}
                     {row.en.href !== undefined ? (
@@ -940,7 +942,7 @@ export function CommandPalette({
 
             {/* hint row */}
             <p
-              className="px-4 py-2 shrink-0 font-mono"
+              className="px-4 py-2 shrink-0"
               style={{
                 fontSize: 'var(--text-2xs)',
                 color: 'var(--ink-dim)',

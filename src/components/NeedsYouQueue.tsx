@@ -12,8 +12,8 @@ import { AgeStamp } from './AgeStamp.js';
 import { QuestionRow } from './desk/QuestionRow.js';
 import { ApprovalGroupActions } from './desk/ApprovalGroupActions.js';
 import { needRunId } from '../board/deskModel.js';
-import { plainRunTitle } from '../board/deskWords.js';
-import { Tech } from './Tech.js';
+import { deskVerb, plainRunTitle } from '../board/deskWords.js';
+import { Switch } from './ui/index.js';
 
 /**
  * THE NEEDS-YOU QUEUE (DES-HOME-COMMAND-CENTER §3) — the home page's spine.
@@ -49,7 +49,7 @@ const CSS = {
     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0,
   },
   age: {
-    fontSize: 'var(--text-2xs)', fontFamily: 'var(--font-mono)', color: 'var(--ink-dim)',
+    fontSize: 'var(--text-2xs)', fontFamily: 'var(--font-sans)', color: 'var(--ink-dim)',
     flexShrink: 0, minWidth: '3.5em', textAlign: 'right', fontVariantNumeric: 'tabular-nums',
   },
 } as const satisfies Record<string, React.CSSProperties>;
@@ -82,13 +82,13 @@ export function NeedsYouQueue({ queue, runs, navigate, now }: {
           data-act="open"
           className="wk-need-act"
         >
-          {a.label}
+          {deskVerb(a.label)}
         </a>
       );
     }
     return (
       <button type="button" data-testid="need-act" data-act={a.kind} onClick={() => queue.act(a, row.key)} className="wk-need-act">
-        {a.label}
+        {deskVerb(a.label)}
       </button>
     );
   };
@@ -100,7 +100,7 @@ export function NeedsYouQueue({ queue, runs, navigate, now }: {
       ? `Launching ${b.done}/${b.total}…`
       : b.phase === 'done'
         ? `Launched ${b.launched}${b.failures.length > 0 ? ` · ${b.failures.length} refused` : ''}`
-        : a.label;
+        : deskVerb(a.label);
     return (
       <button
         type="button"
@@ -125,7 +125,7 @@ export function NeedsYouQueue({ queue, runs, navigate, now }: {
       ? `Undo accepting ${s.count}`
       : s.phase === 'sending'
         ? `Accepting ${s.done}/${s.total}…`
-        : a.label;
+        : deskVerb(a.label);
     return (
       <button
         type="button"
@@ -183,12 +183,12 @@ export function NeedsYouQueue({ queue, runs, navigate, now }: {
         <span style={{ ...CSS.age, flex: 1 }}>{`Showing ${m.from}–${m.to} of ${m.total}`}</span>
         {m.page > 0 && (
           <button type="button" data-testid="need-page-prev" onClick={() => queue.setPage(row.key, m.page - 1)} className="wk-need-act">
-            ‹ Previous
+            Previous
           </button>
         )}
         {m.page < m.pages - 1 && (
           <button type="button" data-testid="need-page-next" onClick={() => queue.setPage(row.key, m.page + 1)} className="wk-need-act">
-            {`Next ${next} ›`}
+            {`Next ${next}`}
           </button>
         )}
       </div>
@@ -231,22 +231,22 @@ export function NeedsYouQueue({ queue, runs, navigate, now }: {
             <span aria-hidden> · </span>
             <AgeStamp at={row.at} now={at} testId="need-age" {...(isGroup ? {} : { href: row.subjectPath, onOpen: navigate })} />
           </span>
-          {row.question !== undefined && row.question !== row.text && (
-            <Tech data-testid="tech-need-prompt" parts={[row.text]} block />
-          )}
         </span>
-        {isGroup && row.action.kind === 'batch-onboard' && batchAct(row.action, row.text)}
-        {isGroup && row.action.kind === 'accept-memory' && acceptAct(row.action)}
-        {isGroup && row.action.kind === 'batch-approve' && <ApprovalGroupActions runIds={row.action.runIds} label={row.action.label} />}
+        {/* One slot for the row's moves (phone: its own line under the title, UX gate S1). */}
         {isGroup ? (
-          <button type="button" data-testid="need-group-toggle" aria-expanded={open} onClick={() => queue.toggle(row.key)} className="wk-need-act">
-            {open ? 'Fold' : 'Show each'}
-          </button>
+          <span className="wk-need-acts">
+            {row.action.kind === 'batch-onboard' && batchAct(row.action, row.text)}
+            {row.action.kind === 'accept-memory' && acceptAct(row.action)}
+            {row.action.kind === 'batch-approve' && <ApprovalGroupActions runIds={row.action.runIds} label={row.action.label} />}
+            <button type="button" data-testid="need-group-toggle" aria-expanded={open} onClick={() => queue.toggle(row.key)} className="wk-need-act">
+              {open ? 'Fold' : 'Show each'}
+            </button>
+          </span>
         ) : row.kind === 'gate' && row.action.kind === 'open' ? (
           // S5: a gate is answered in its row (deliver, retry and escalation gates open their card).
           deskGate(row, row.action)
         ) : (
-          act(row)
+          <span className="wk-need-acts">{act(row)}</span>
         )}
       </div>
     );
@@ -260,7 +260,7 @@ export function NeedsYouQueue({ queue, runs, navigate, now }: {
         runId={runId}
         units={units}
         openPath={a.path}
-        openLabel={a.label}
+        openLabel={deskVerb(a.label)}
         onOpen={(e) => { e.preventDefault(); queue.act(a, row.key); }}
       />
     );
@@ -286,7 +286,7 @@ export function NeedsYouQueue({ queue, runs, navigate, now }: {
         <p
           data-testid="need-focus-note"
           data-hidden={queue.focus.hidden}
-          style={{ ...CSS.row, margin: 0, borderBottom: 'none', paddingTop: 0, color: 'var(--ink-muted)', fontSize: 'var(--text-2xs)', fontFamily: 'var(--font-mono)' }}
+          style={{ ...CSS.row, margin: 0, borderBottom: 'none', paddingTop: 0, color: 'var(--ink-muted)', fontSize: 'var(--text-xs)' }}
         >
           <span style={{ flex: 1, minWidth: 0 }}>{focusLockNote(queue.focus.hidden)}</span>
           <button
@@ -393,24 +393,10 @@ export function NeedsQueueSurface({ rows, runs, navigate, now }: {
 export function FocusLockToggle({ items }: { items: number }): React.ReactElement | null {
   const on = useFocusLockStore((s) => s.on);
   if (!on && items < 2) return null;
+  // UX audit row 31: a real switch (role="switch", label beside it), not an empty radio circle.
   return (
-    <button
-      type="button"
-      data-testid="home-focus-toggle"
-      aria-pressed={on}
-      title={on
-        ? 'Show every Needs You item again'
-        : 'Hide every Needs You item except the highest-consequence one; the rest come back when it clears'}
-      onClick={() => useFocusLockStore.getState().setOn(!on)}
-      style={{
-        fontSize: 'var(--text-xs)', fontFamily: 'var(--font-mono)', flexShrink: 0, cursor: 'pointer',
-        padding: '2px 8px', borderRadius: 'var(--radius-md)',
-        border: `1px solid ${on ? 'var(--accent)' : 'var(--surface-raised)'}`,
-        background: on ? 'var(--surface-raised)' : 'none',
-        color: on ? 'var(--ink-high)' : 'var(--ink-muted)',
-      }}
-    >
-      {on ? '◉ Just the top one' : '○ Just the top one'}
-    </button>
+    <span className="wk-desk-focus-switch" title="Show only the most urgent item; the rest come back when it clears">
+      <Switch data-testid="home-focus-toggle" label="Just the top one" checked={on} onChange={(v) => useFocusLockStore.getState().setOn(v)} />
+    </span>
   );
 }

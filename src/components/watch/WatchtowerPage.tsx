@@ -1,10 +1,13 @@
 import { useMemo, useState } from 'react';
 import type { SessionView } from '../../api/types.js';
 import type { WatchKind } from '../../api/watch-wire.js';
+import { readErrorKind } from '../../api/errors.js';
+import { absTime, relTime } from '../../board/relTime.js';
 import { readWatch, useWatchFeed } from '../../hooks/useWatchFeed.js';
 import type { Navigate } from '../../hooks/useRoute.js';
 import { jumpPath, orphanedRuns, runPath, useWatchStore, type WatchRow } from '../../store/watch.js';
-import { liveCount, watchSentence } from '../desk/WatchPill.js';
+import { liveCount } from '../desk/WatchPill.js';
+import { StateBanner, TechDetails } from '../ui/index.js';
 
 /** The feed's kinds, in the words the page uses (TR §4.10's five). */
 const KINDS: ReadonlyArray<{ kind: WatchKind | null; label: string }> = [
@@ -18,6 +21,15 @@ const KINDS: ReadonlyArray<{ kind: WatchKind | null; label: string }> = [
 
 const STATE_WORD: Record<WatchRow['state'], string> = { open: 'Open', fixed: 'Fixed', dismissed: 'Dismissed', done: 'Done' };
 
+/** Keep long engine explanations behind a disclosure, with their lead in the feed. */
+export function plainWatchLine(sentence: string): { line: string; detail: string | null } {
+  const colon = sentence.indexOf(': ');
+  if (colon !== -1 && sentence.length > 60) {
+    return { line: sentence.slice(0, colon).trim().replace(/[\p{P}\s]+$/u, ''), detail: sentence };
+  }
+  return { line: sentence, detail: null };
+}
+
 /** "just now" / "4 min ago" / "3 h ago" / the date — never a raw timestamp. */
 export function ago(at: number, now: number): string {
   const s = Math.max(0, Math.round((now - at) / 1000));
@@ -29,7 +41,7 @@ export function ago(at: number, now: number): string {
 
 /**
  * THE WATCHTOWER (`/watch`, DES-STUDIO-REBUILD-001 §5.4, slice S14; TR's feed, TR-W8): the one
- * sentence the rail pill says (the needs-you count, never a second count), then the feed newest
+ * sentence counts open feed items, then the feed newest
  * first — TR's `useWatchFeed` over the registry's findings, the watchdog's quiet periods, team
  * findings and finished / delivered runs. Each row names its moment: "Jump in" lands on the run at
  * it, or the row opens its run when it names no unit.
@@ -38,7 +50,7 @@ export function ago(at: number, now: number): string {
  * still shows what studio folds itself; a failed read says it failed, with Try again, and is never
  * read as an empty feed.
  */
-export function WatchtowerPage({ count, runs, navigate, now }: {
+export function WatchtowerPage({ runs, navigate, now }: {
   count: number;
   runs: SessionView[];
   navigate: Navigate;
@@ -46,6 +58,10 @@ export function WatchtowerPage({ count, runs, navigate, now }: {
 }): React.ReactElement {
   const [kind, setKind] = useState<WatchKind | null>(null);
   const all = useWatchFeed({});
+  const openCount = all.filter((r) => r.state === 'open').length;
+  const live = liveCount(runs);
+  const work = live === 0 ? 'nothing is running' : live === 1 ? '1 thing is running' : `${live} things are running`;
+  const sentence = openCount === 0 ? `Nothing open — ${work}.` : `${openCount} open ${openCount === 1 ? 'item' : 'items'} — ${work}.`;
   const rows = useMemo(() => (kind === null ? all : all.filter((r) => r.kind === kind)), [all, kind]);
   const feedError = useWatchStore((s) => s.feedError);
   const registry = useWatchStore((s) => s.registry);
@@ -58,7 +74,7 @@ export function WatchtowerPage({ count, runs, navigate, now }: {
     <div data-testid="watchtower" data-registry={registry} className="wk-watchtower">
       <header className="wk-watchtower-head">
         <h1 className="wk-session-title">Watchtower</h1>
-        <p data-testid="watchtower-sentence" data-count={count} className="wk-session-status">{watchSentence(count, liveCount(runs))}</p>
+        <p data-testid="watchtower-sentence" data-count={openCount} className="wk-session-status">{sentence}</p>
         {orphaned > 0 && (
           <p data-testid="watchtower-orphaned" data-count={orphaned} className="wk-session-grey">
             {orphaned === 1 ? '1 run was orphaned by a restart — nothing is working on it.' : `${orphaned} runs were orphaned by a restart — nothing is working on them.`}
@@ -75,7 +91,7 @@ export function WatchtowerPage({ count, runs, navigate, now }: {
               data-kind={k.kind ?? 'all'}
               aria-pressed={kind === k.kind}
               onClick={() => setKind(k.kind)}
-              className={`wk-desk-chip${kind === k.kind ? ' wk-desk-chip--on' : ''}`}
+              className="wk-chip"
             >
               {k.label}
             </button>
@@ -83,27 +99,23 @@ export function WatchtowerPage({ count, runs, navigate, now }: {
         </div>
         {registry === 'absent' && (
           <p data-testid="watchtower-no-registry" className="wk-session-grey">
-            This daemon has no watch registry yet, so this shows what studio sees itself: runs gone quiet, team findings, finished and delivered work.
+            Studio's service doesn't keep a watch list yet, so this shows what studio sees itself: sessions gone quiet, team findings, finished and delivered work.
           </p>
         )}
         {feedError !== null && (
-          <p data-testid="watchtower-error" role="alert" className="wk-session-grey">
-            Could not read the Watchtower’s feed ({feedError}).{' '}
-            <button
-              type="button"
-              data-testid="watchtower-retry"
-              disabled={retrying}
-              onClick={() => { setRetrying(true); void readWatch().finally(() => setRetrying(false)); }}
-              className="wk-since-toggle"
-            >
-              {retrying ? 'Trying…' : 'Try again'}
-            </button>
-          </p>
+          <StateBanner
+            data-testid="watchtower-error"
+            kind={readErrorKind(feedError)}
+            what="the Watchtower feed"
+            error={feedError}
+            onRetry={() => { setRetrying(true); void readWatch().finally(() => setRetrying(false)); }}
+            retrying={retrying}
+          />
         )}
         {rows.length === 0 && feedError === null && (
           <p data-testid="watchtower-empty" className="wk-session-grey">
             {kind === null
-              ? 'Nothing to show yet. The Watchtower opens itself only for something that needs you.'
+              ? 'Nothing to show yet. Anything that needs you appears here.'
               : 'Nothing of this kind yet.'}
           </p>
         )}
@@ -111,20 +123,22 @@ export function WatchtowerPage({ count, runs, navigate, now }: {
           {rows.map((r) => {
             const jump = jumpPath(r);
             const open = jump ?? runPath(r);
+            const { line, detail } = plainWatchLine(r.sentence);
             return (
               <li key={r.id} data-testid="watchtower-row" data-row-id={r.id} data-kind={r.kind} data-state={r.state} data-source={r.source} className="wk-watchtower-row">
                 <span aria-hidden className={`wk-desk-dot wk-desk-dot--${r.state === 'open' ? (r.kind === 'problem' || r.kind === 'decision' ? 'waiting' : 'working') : 'done'}`} />
-                <span className="wk-desk-need-body">
-                  <span className="wk-watchtower-sentence">{r.sentence}</span>
+                <div className="wk-desk-need-body">
+                  <span className="wk-watchtower-sentence">{line}</span>
                   <span className="wk-desk-need-line">
-                    {ago(r.at, now)} · {STATE_WORD[r.state]}
+                    <span title={absTime(r.at)}>{relTime(r.at, now)}</span> · {STATE_WORD[r.state]}
                     {r.stateLine !== null && r.stateLine !== STATE_WORD[r.state] && ` — ${r.stateLine}`}
                     {r.rolledUp > 0 && ` · and ${r.rolledUp} more like it`}
                     {r.corroboratedBy.length > 0 && ' · also seen by the team'}
                   </span>
-                </span>
+                  {detail !== null && <TechDetails data-testid="watchtower-row-detail" text={detail} />}
+                </div>
                 {open !== null && (
-                  <a href={open} onClick={go(open)} data-testid={jump !== null ? 'watchtower-jump' : 'watchtower-open'} className="wk-need-act">
+                  <a href={open} onClick={go(open)} data-testid={jump !== null ? 'watchtower-jump' : 'watchtower-open'} className="wk-btn wk-btn--secondary wk-btn--sm">
                     {jump !== null ? 'Jump in' : 'Open'}
                   </a>
                 )}
