@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { listEditors, type EditorView } from '../../api/editors.js';
-import { seedComposer } from '../../store/composerSeed.js';
+import { openLaunchWizard } from '../../store/launchWizard.js';
 import { EmptyState, PageFrame, Skeleton, StateBanner } from '../ui/index.js';
 
 /**
@@ -8,14 +8,15 @@ import { EmptyState, PageFrame, Skeleton, StateBanner } from '../ui/index.js';
  *
  * The editors this studio's service has: the built-in ones that ship with studio and the ones a run of
  * the `editor-plugin` workflow installed. Each opens in the editor test page (`/editors/dev`), the real
- * sandboxed host over a sample page. "Create an editor plugin" puts `/workflow-editor-plugin` in the
+ * sandboxed host over a sample page. "Create an editor plugin" opens the launch wizard on the editor-plugin workflow (was: put `/workflow-editor-plugin` in the
  * Desk's message box; nothing is sent until you send it.
  *
  * The same list (compact) is the editor test page's empty state.
  */
 
 /** The workflow command the Create button seeds (the core preset `editor-plugin`). */
-export const CREATE_EDITOR_COMMAND = '/workflow-editor-plugin ';
+/** The editor-plugin workflow's id (the launch wizard opens on it). */
+export const CREATE_EDITOR_WORKFLOW_ID = 'editor-plugin';
 
 const PERMISSION_WORDS: Record<string, string> = {
   'artifact.read': 'read what it opens',
@@ -150,10 +151,9 @@ export function EditorTestPagePicker({ navigate }: { navigate: (p: string) => vo
   );
 }
 
-/** Put the create command in the Desk's message box, ready to send. */
-export function startCreateEditorPlugin(navigate: (p: string) => void): void {
-  navigate('/');
-  seedComposer('desk', CREATE_EDITOR_COMMAND);
+/** Open the launch wizard for the editor-plugin workflow (the one start point for a new job). */
+export function startCreateEditorPlugin(): void {
+  openLaunchWizard({ workflowId: CREATE_EDITOR_WORKFLOW_ID });
 }
 
 /** The Developer section of Settings. */
@@ -177,7 +177,7 @@ export function DeveloperSettings({ navigate }: { navigate: (p: string) => void 
             type="button"
             className="wk-btn wk-btn--primary"
             data-testid="editor-plugins-create"
-            onClick={() => startCreateEditorPlugin(navigate)}
+            onClick={() => startCreateEditorPlugin()}
           >
             Create an editor plugin
           </button>

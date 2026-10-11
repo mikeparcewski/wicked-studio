@@ -1,12 +1,7 @@
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
-import { api } from '../../api/client.js';
-import type { LaunchBodyWithDeliver, RepoEntry, SessionView } from '../../api/types.js';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { SessionView } from '../../api/types.js';
 import { chipText, messageWithAbout, projectChip, type AboutChip } from '../../board/aboutChips.js';
-import { composerSendRefusal, gateSentence, gatePostureWord, NO_REPO_REASON, readyLead, workflowLaunchState } from '../../board/launchModel.js';
-import { Switch } from '../ui/Switch.js';
-import {
-  COMPOSER_DEFAULT_GATE_POSTURE,
-} from '../composerDefaults.js';
+import { composerSendRefusal } from '../../board/launchModel.js';
 import {
   parseWorkflowCommand, workflowItems, WORKFLOWS_LOADING_LINE, type WorkflowRow,
 } from '../../board/workflowCommand.js';
@@ -14,7 +9,6 @@ import {
   draftTarget, dropToken, menuToken, slashItems, wordOf, type DraftRunState, type DraftTarget, type SlashItem,
 } from '../../board/planDraft.js';
 import { gateInstance } from '../../board/proposalCard.js';
-import { sessionPath } from '../../board/sessionModel.js';
 import { useRoster } from '../../hooks/useRoster.js';
 import { seatLabel, userSeats } from '../../board/seatNames.js';
 import { defaultSelection } from '../../board/chatOpen.js';
@@ -24,20 +18,15 @@ import { usePlanGate } from '../../store/planGates.js';
 import { addGateDraftStep, queueMidRunStep } from '../../store/planDrafts.js';
 import { useGateStore } from '../../store/gates.js';
 import { useProjectsStore } from '../../store/projects.js';
-import { useProvenanceStore } from '../../store/provenance.js';
-import { fetchReposCached, getCachedRepos } from '../../store/repoCache.js';
 import { useWorkflowDefs } from '../../store/workflowCache.js';
 import {
   addAboutChip, backspaceAboutChip, chipsOf, clearAboutChips, removeAboutChip, useComposerChips,
 } from '../../store/composerChips.js';
 import { humanTitle } from '../runIdentity.js';
-import type { ConfirmMode } from '../ContextPopover.js';
 import { useCapabilities } from '../../store/capabilities.js';
-import { useLaunchPreview } from '../../hooks/useLaunchPlan.js';
 import { takeComposerSeed, useComposerSeed } from '../../store/composerSeed.js';
 import { SlashMenu, type AtItem } from './SlashMenu.js';
-import { ReducedAssuranceOptIn } from './AssuranceReceipt.js';
-import { TechDetails } from '../ui/TechDetails.js';
+import { openLaunchWizard } from '../../store/launchWizard.js';
 import { usePhone } from '../../hooks/usePhone.js';
 
 /** Where a send goes besides the words: the project an `@project` chip named, and whether it opens a fresh session. */
@@ -123,7 +112,7 @@ export function shortPlaceholder(text: string, max = 18): string {
 
 export function Composer({
   composerKey, text, setText, onSend, runs = [], started = false, placeholder, ariaLabel, variant, className = '',
-  inputRef, navigate, hint = false, footer = null,
+  inputRef, hint = false, footer = null,
 }: {
   /** `desk`, or the session id. */
   composerKey: string;
@@ -160,9 +149,6 @@ export function Composer({
   const presetsState = usePlanCatalog((s) => s.presets[project?.projectId ?? '']);
   const presets = Array.isArray(presetsState) ? presetsState : null;
   const wfChip = (chips.find((c) => c.kind === 'workflow') as Extract<AboutChip, { kind: 'workflow' }> | undefined) ?? null;
-  const chatIdOnLaunch = useCapabilities((s) => s.chatIdOnLaunch);
-  const deliverGate = useCapabilities((s) => s.deliverGate);
-  const reducedCap = useCapabilities((s) => s.reducedAssurance);
   const askPathOn = useCapabilities((s) => s.askPath);
   const own = useRef<HTMLTextAreaElement | null>(null);
   // A one-row box on a phone shows only the placeholder's first clause, ended by an ellipsis —
@@ -173,18 +159,6 @@ export function Composer({
   const [cursor, setCursor] = useState(0);
   const [closedAt, setClosedAt] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
-  const [repos, setRepos] = useState<RepoEntry[] | null>(getCachedRepos());
-  const [repoRef, setRepoRef] = useState<string | null>(null);
-  // Per-composer ids for the launch strip's labels and validation line (two composers may share a page).
-  const stripId = useId();
-  // Once the user picks (or clears) the repository, no default is applied over their choice.
-  const repoTouched = useRef(false);
-  const [deliverOn, setDeliverOn] = useState(true);
-  const [confirmMode, setConfirmMode] = useState<ConfirmMode>(COMPOSER_DEFAULT_GATE_POSTURE.mode);
-  const [launching, setLaunching] = useState(false);
-  const [launchError, setLaunchError] = useState<string | null>(null);
-  // wicked-core#850 EX-01: the explicit reduced-assurance opt-in on a one-seat workflow launch.
-  const [reduced, setReduced] = useState(false);
 
   const token = menuToken(text, caret);
   const menuOpen = token !== null && closedAt !== `${token.trigger}${token.start}`;
@@ -198,23 +172,11 @@ export function Composer({
     if (menuOpen && token?.trigger === '@' && useProjectsStore.getState().projects.length === 0) void useProjectsStore.getState().load();
   }, [menuOpen, token?.trigger]);
 
-  // S19a: a workflow chip needs the repository list (a user gesture named the work).
-  useEffect(() => {
-    if (wfChip === null || repos !== null) return;
-    fetchReposCached().then(setRepos, () => setRepos([]));
-  }, [wfChip, repos]);
-  // UX audit row 24: in a session whose work already names a repository, a workflow launched from
-  // here defaults to that repository (the newest run's), instead of asking for one again.
+  // UX audit row 24: a job started from a session defaults to the repository its work names.
   const sessionRepo = useMemo(
     () => [...runs].reverse().map((v) => v.session.repo_ref).find((r): r is string => typeof r === 'string' && r !== '') ?? null,
     [runs],
   );
-  useEffect(() => {
-    if (wfChip === null || repoRef !== null || repos === null || repoTouched.current) return;
-    const known = sessionRepo === null ? undefined : repos.find((r) => r.id === sessionRepo || r.name === sessionRepo);
-    if (known !== undefined) { setRepoRef(known.id); return; }
-    if (repos.length === 1 && repos[0] !== undefined) setRepoRef(repos[0].id);
-  }, [wfChip, repos, repoRef, sessionRepo]);
 
   // `/workflow-<key>` rows lead the `/` menu only as a FIRST token (a named work), and only while no
   // workflow is already named (a second pick replaces the chip).
@@ -285,32 +247,7 @@ export function Composer({
     : sendSeats.length === 0 ? NO_SEAT_PICKED
       : namedDropped ? `${namedHelper?.label ?? 'The helper you named'} is named to answer but is left out of the helpers row — turn it on, or remove the chip.`
         : null;
-  const launchState = wfChip !== null ? workflowLaunchState(repoRef, roster) : null;
-  const wfDef = wfChip !== null ? (defs ?? []).find((d) => d.id === wfChip.workflowId) ?? null : null;
-  // A named def that runs no code is not a delivering launch; an unknown name (a preset) may deliver.
-  const deliverVisible = wfChip !== null && (wfDef === null ? true : wfDef.phases.some((p) => p.executes_code));
-  const canSend = text.trim() !== '' && refusal === null && seatRefusal === null && (launchState === null || launchState.ready) && !launching;
-
-  // S19a: the composer reads the SAME gate rule the launch form does — the `before:N` shift past the
-  // PA's scope step included — so a launch from here and one from the form can never disagree.
-  const beforeOrd = COMPOSER_DEFAULT_GATE_POSTURE.beforeOrd;
-  const autoDeliver = confirmMode === 'none';
-  const launchPreview = useLaunchPreview({
-    plan: null,
-    workflow: wfChip?.workflowId ?? '',
-    projectId: project?.projectId ?? null,
-    repoRef,
-    deliver: deliverVisible ? (deliverOn ? 'pr' : 'none') : null,
-    mode: undefined,
-    confirm: confirmMode,
-    beforeOrd,
-  });
-  const targetRepo = repoRef ?? (repos !== null && repos.length === 1 ? repos[0]?.id ?? null : null);
-  const repoLabel = targetRepo === null ? 'no repository' : ((repos ?? []).find((r) => r.id === targetRepo)?.name ?? targetRepo);
-  const deliverShown = deliverVisible && deliverOn;
-  const deliverWord = autoDeliver && deliverGate === true
-    ? 'delivers on its own, with no stop before the push'
-    : 'delivers once you approve it';
+  const canSend = text.trim() !== '' && refusal === null && seatRefusal === null;
 
   const syncCaret = (el: HTMLTextAreaElement): void => setCaret(el.selectionStart ?? el.value.length);
   const focusEnd = (value: string): void => {
@@ -371,13 +308,17 @@ export function Composer({
       ? (started ? `Your next message starts a new session in ${item.label}.` : null)
       : (!started && useCapabilities.getState().askPath ? `${item.label} will answer this conversation.` : null));
   };
+  // The launch wizard (operator 2026-10-11): naming a workflow opens the one modal, prefilled with
+  // what this composer knows — the words so far, its project chip, the session's repository — and
+  // the words move into the wizard's draft. Nothing is sent from here.
+  const startJob = (workflowId: string, words: string): void => {
+    openLaunchWizard({ workflowId, intent: words.trim(), projectId: project?.projectId ?? null, composerKey, contextRepo: sessionRepo });
+    setText('');
+    setNote(null);
+  };
   const pickWorkflow = (item: WorkflowRow): void => {
     if (token === null) return;
-    const next = dropToken(text, token.start, caret);
-    setText(next);
-    focusEnd(next);
-    setLaunchError(null);
-    addAboutChip(composerKey, { kind: 'workflow', key: `wf:${item.workflowId}`, label: `/workflow-${item.workflowId}`, workflowId: item.workflowId });
+    startJob(item.workflowId, dropToken(text, token.start, caret));
   };
   const pick = (i: number): void => {
     if (token?.trigger === '/') {
@@ -386,63 +327,8 @@ export function Composer({
     } else { const it = ats[i]; if (it !== undefined) pickAt(it); }
   };
 
-  // studio#631: only the seats the helpers row has on — never the whole council behind the row's back.
-  // The same seats the helpers row shows (council-enabled, addressable), minus the dropped (codex r1).
-  const launchSeats = (roster ?? []).filter((s) => eligibleSeats.includes(s.key) && !dropped.includes(s.key));
-  // EX-01: one seat builds and reviews — offer the opt-in (said first) on a daemon that takes it.
-  const offerReduced = wfChip !== null && reducedCap && launchSeats.length === 1;
-  // The opt-in is THIS launch's: naming another workflow, dropping the chip or launching clears it.
-  const wfKey = wfChip?.workflowId ?? null;
-  useEffect(() => { setReduced(false); repoTouched.current = false; }, [wfKey]);
-
-  /** S19a: POST the launch a named workflow runs — the wire the launch form sends, from the composer. */
-  const launchWorkflow = async (workflowId: string, intent: string): Promise<void> => {
-    setLaunching(true);
-    setLaunchError(null);
-    // Everything that can fail — the launch preview's gate placement included — sits inside the try,
-    // so a refusal is said on screen and the composer never stays "Launching…".
-    try {
-      const seats = launchSeats;
-      const body: LaunchBodyWithDeliver = { problem: intent, workflow: workflowId };
-      if (offerReduced && reduced) body.reducedAssurance = true;
-      if (seats.length > 0) body.clisJson = JSON.stringify(seats);
-      const targetRepo = repoRef ?? (repos !== null && repos.length === 1 ? repos[0]?.id ?? null : null);
-      if (targetRepo !== null) body.repoRef = targetRepo;
-      if (project !== null) body.projectId = project.projectId;
-      // The gate posture is the form's rule: the `before:N` shift past the PA's scope step is read off
-      // the same launch preview (`mode` is undefined here — a composer has no mode pill — so the
-      // posture select speaks, exactly as it does on a Balanced form).
-      const humanConfirm = await launchPreview.resolveHumanConfirm();
-      if (humanConfirm !== undefined) body.humanConfirm = humanConfirm;
-      if (deliverVisible) body.deliver = deliverOn ? 'pr' : 'none';
-      // F-E2E-030: only the explicitly unattended posture sends the opt-out, and only with a delivery.
-      if (body.deliver === 'pr' && autoDeliver && deliverGate === true) body.deliverGate = 'auto';
-      // A chat's composer names the chat (only on a daemon that accepts the key), so the run lands in
-      // that chat's session; a Desk launch opens a `run:<id>` session instead.
-      const chat = chatIdOnLaunch && composerKey !== 'desk' && !composerKey.startsWith('run:') ? composerKey : null;
-      if (chat !== null) body.chatId = chat;
-      const { runId } = await api.launchRun(body);
-      useProvenanceStore.getState().markLaunchedHere(runId);
-      setReduced(false);
-      clearAboutChips(composerKey);
-      setText('');
-      setNote(null);
-      navigate?.(chat !== null ? sessionPath(chat) : sessionPath(`run:${runId}`));
-    } catch (err) {
-      // A failed launch keeps the words and the chip, and says the daemon's own words.
-      setLaunchError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setLaunching(false);
-    }
-  };
 
   const send = (): void => {
-    if (launching) return;
-    if (wfChip !== null) {
-      if (!canSend) return;
-      void launchWorkflow(wfChip.workflowId, text.trim());
-      return;
-    }
     // A `/workflow-<key>` line typed whole (menu closed, a paste): Enter NAMES it — the options row
     // then asks for the repository. Nothing is sent until the next Enter.
     const typed = parseWorkflowCommand(text);
@@ -453,9 +339,7 @@ export function Composer({
         setNote(defs === null ? WORKFLOWS_LOADING_LINE : `This daemon lists no workflow named ${typed.key} — nothing was sent.`);
         return;
       }
-      addAboutChip(composerKey, { kind: 'workflow', key: `wf:${known.key}`, label: `/workflow-${known.key}`, workflowId: known.workflowId });
-      setText(typed.rest);
-      setNote(null);
+      startJob(known.workflowId, typed.rest);
       return;
     }
     if (!canSend) return;
@@ -503,86 +387,6 @@ export function Composer({
           ))}
           {refusal !== null && <span data-testid="composer-refused" role="status" className="wk-composer-note wk-composer-note--bad">{refusal}</span>}
           {refusal === null && note !== null && <span data-testid="composer-note" role="status" className="wk-composer-note">{note}</span>}
-        </div>
-      )}
-      {wfChip !== null && (
-        <div
-          data-testid="composer-launch-row"
-          data-workflow={wfChip.workflowId}
-          role="group"
-          aria-label={`Launch ${chipText(wfChip)}`}
-          className="wk-composer-launch"
-        >
-          {/* One tidy launch strip (operator 2026-10-10, UX audit row 3): the workflow is named once —
-              by its chip above — and each control carries a visible label, spaced, never fused into text. */}
-          <div className="wk-composer-launch-controls">
-            <label className="wk-composer-launch-field">
-              <span id={`${stripId}-repo`} className="wk-composer-launch-label">Repository</span>
-              <select
-                data-testid="launch-row-repo"
-                aria-labelledby={`${stripId}-repo`}
-                aria-invalid={launchState?.missing === 'repo'}
-                aria-describedby={launchState?.missing === 'repo' ? `${stripId}-line` : undefined}
-                value={repoRef ?? ''}
-                onChange={(e) => { repoTouched.current = true; setRepoRef(e.target.value === '' ? null : e.target.value); }}
-                className="wk-field wk-composer-launch-repo"
-              >
-                <option value="">Choose a repository…</option>
-                {(repos ?? []).map((r) => <option key={r.id} value={r.id}>{r.name ?? r.id}</option>)}
-              </select>
-            </label>
-            <label className="wk-composer-launch-field">
-              <span id={`${stripId}-gate`} className="wk-composer-launch-label">Ask me</span>
-              <select
-                data-testid="launch-row-gate"
-                aria-labelledby={`${stripId}-gate`}
-                value={confirmMode}
-                onChange={(e) => setConfirmMode(e.target.value as ConfirmMode)}
-                className="wk-field wk-composer-launch-gate"
-              >
-                <option value="before">{gatePostureWord('before', beforeOrd)}</option>
-                <option value="all">{gatePostureWord('all', beforeOrd)}</option>
-                <option value="none">{gatePostureWord('none', beforeOrd, deliverShown && deliverGate === true)}</option>
-              </select>
-            </label>
-            {deliverVisible && (
-              <div data-testid="launch-row-deliver" className="wk-composer-launch-deliver">
-                <Switch label="Deliver when done" checked={deliverOn} onChange={setDeliverOn} data-testid="launch-row-deliver-toggle" />
-              </div>
-            )}
-            {offerReduced && <ReducedAssuranceOptIn checked={reduced} onChange={setReduced} testId="launch-row-reduced-assurance" />}
-          </div>
-          <span
-            id={`${stripId}-line`}
-            data-testid="composer-launch-line"
-            role="status"
-            data-missing={launchState?.missing ?? undefined}
-            className={`wk-composer-launch-line${launchState?.missing === 'repo' ? ' wk-composer-launch-line--bad' : ''}`}
-          >
-            {launching ? 'Launching…'
-              : launchState?.missing === 'repo' ? NO_REPO_REASON
-                : (
-                  <>
-                    {readyLead(canSend, refusal)}
-                    <span data-testid="composer-launch-target" style={{ color: targetRepo === null ? 'var(--status-gate)' : 'var(--ink-high)' }}>{repoLabel}</span>
-                    {' · '}
-                    <span data-testid="composer-launch-gate-word">{gateSentence(confirmMode, beforeOrd)}</span>
-                    {deliverShown && (
-                      <>
-                        {' · '}
-                        <span data-testid="composer-launch-deliver-word">{deliverWord}</span>
-                      </>
-                    )}
-                  </>
-                )}
-          </span>
-          {/* §4.7: the daemon's own words live in Technical details; the default layer says it plainly. */}
-          {launchError !== null && (
-            <div data-testid="composer-launch-error" role="alert" className="wk-composer-note wk-composer-note--bad">
-              Couldn’t launch this. Your words and choices are kept, so you can try again.
-              <TechDetails text={launchError} data-testid="composer-launch-error-detail" />
-            </div>
-          )}
         </div>
       )}
       {showSeats && (

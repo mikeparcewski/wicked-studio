@@ -3,6 +3,7 @@ import type { SessionView } from '../api/types.js';
 import { captureConsequence, captureFiledChip, captureFiledLine, isCaptureImage } from '../board/captureModel.js';
 import { ambientProjectId } from '../hooks/ambientProject.js';
 import { useCapture } from '../hooks/useCapture.js';
+import { usePhone } from '../hooks/usePhone.js';
 import { useProjectsStore } from '../store/projects.js';
 
 /**
@@ -28,21 +29,11 @@ const S = {
   },
   row: { display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' },
   chip: {
-    fontSize: 'var(--text-2xs)', fontFamily: 'var(--font-mono)', color: 'var(--ink-muted)',
+    fontSize: 'var(--text-xs)', color: 'var(--ink-muted)', display: 'inline-flex', alignItems: 'center',
     border: '1px solid var(--surface-raised)', borderRadius: 'var(--radius-md)', padding: '1px 6px',
   },
-  ghost: {
-    background: 'transparent', color: 'var(--ink-muted)', cursor: 'pointer',
-    border: '1px solid var(--surface-raised)', borderRadius: 'var(--radius-md)',
-    padding: '3px 8px', fontSize: 'var(--text-2xs)', fontFamily: 'var(--font-mono)',
-  },
-  primary: {
-    background: 'var(--accent)', color: 'var(--accent-fg)', border: 'none', cursor: 'pointer',
-    borderRadius: 'var(--radius-md)', padding: '4px 12px', fontSize: 'var(--text-xs)',
-    fontWeight: 'var(--weight-bold)',
-  },
   status: {
-    fontSize: 'var(--text-2xs)', fontFamily: 'var(--font-mono)', color: 'var(--ink-muted)',
+    fontSize: 'var(--text-xs)', color: 'var(--ink-muted)',
     minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
   },
 } as const satisfies Record<string, React.CSSProperties>;
@@ -59,6 +50,7 @@ export function CaptureDrop({ runs, pathname = '/', inline = false, opens = 'dow
   /** Where "Review" goes: Home's Needs You triage. Absent = already there (no link). */
   onReview?: (() => void) | undefined;
 }): React.ReactElement | null {
+  const phone = usePhone();
   const projects = useProjectsStore((s) => s.projects).filter((p) => p.id !== 'default');
   const cap = useCapture(runs);
   const [open, setOpen] = useState(false);
@@ -94,11 +86,11 @@ export function CaptureDrop({ runs, pathname = '/', inline = false, opens = 'dow
     <span data-testid={testId} {...statusData} style={{ ...S.row, minWidth: 0 }}>
       <span data-testid={`${testId}-line`} style={{ ...S.status, whiteSpace: 'normal', flex: '1 1 200px' }}>{fullLine}</span>
       {onReview !== undefined && cap.filed !== null && cap.filed.waiting > 0 && (
-        <button type="button" data-testid="capture-review" onClick={onReview} style={{ ...S.ghost, color: 'var(--accent)', whiteSpace: 'nowrap' }}>
-          Review in Needs You ›
+        <button type="button" data-testid="capture-review" onClick={onReview} className="wk-btn wk-btn--secondary wk-btn--sm">
+          Review in Needs you
         </button>
       )}
-      <button type="button" data-testid="capture-dismiss" aria-label="Dismiss the capture status" onClick={cap.clear} style={{ ...S.ghost, border: 'none' }}>
+      <button type="button" data-testid="capture-dismiss" aria-label="Dismiss the capture status" title="Dismiss the capture status" onClick={cap.clear} className="wk-btn wk-btn--icon wk-btn--quiet wk-btn--sm">
         ×
       </button>
     </span>
@@ -113,7 +105,11 @@ export function CaptureDrop({ runs, pathname = '/', inline = false, opens = 'dow
       onDrop={(e) => { e.preventDefault(); e.stopPropagation(); addFiles(e.dataTransfer.files); }}
       style={{
         ...S.panel,
-        ...(inline ? {} : {
+        ...(inline ? {} : phone ? {
+          // A phone: the drop spans the screen above the composer, never clipped off its edge.
+          position: 'fixed', left: '8px', right: '8px', bottom: 'calc(var(--tap-min) * 3)', zIndex: 45,
+          maxHeight: '60dvh', overflowY: 'auto',
+        } : {
           position: 'absolute', ...(opens === 'up' ? { bottom: 'calc(100% + 6px)' } : { top: 'calc(100% + 6px)' }),
           left: 0, width: 'min(440px, 90vw)', zIndex: 45,
         }),
@@ -127,7 +123,8 @@ export function CaptureDrop({ runs, pathname = '/', inline = false, opens = 'dow
           data-testid="capture-project"
           value={project.id}
           onChange={(e) => setPicked(e.target.value)}
-          style={{ ...S.ghost, cursor: 'pointer' }}
+          className="wk-field"
+          style={{ padding: '0 8px' }}
         >
           {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
@@ -151,15 +148,16 @@ export function CaptureDrop({ runs, pathname = '/', inline = false, opens = 'dow
           style={{ display: 'none' }}
           onChange={(e) => { addFiles(e.target.files); e.target.value = ''; }}
         />
-        <button type="button" style={S.ghost} onClick={() => fileInput.current?.click()}>Add files or a photo</button>
+        <button type="button" className="wk-btn wk-btn--secondary wk-btn--sm" onClick={() => fileInput.current?.click()}>Add files or a photo…</button>
         {files.map((f, i) => (
           <span key={`${f.name}-${i}`} data-testid="capture-file" data-kind={isCaptureImage(f) ? 'image' : 'text'} style={S.chip}>
             {isCaptureImage(f) ? 'photo' : 'text'} · {f.name}
             <button
               type="button"
               aria-label={`Remove ${f.name}`}
+              title={`Remove ${f.name}`}
               onClick={() => setFiles((cur) => cur.filter((_, j) => j !== i))}
-              style={{ ...S.ghost, border: 'none', padding: '0 0 0 4px' }}
+              className="wk-btn wk-btn--icon wk-btn--quiet wk-btn--sm"
             >
               ×
             </button>
@@ -171,7 +169,7 @@ export function CaptureDrop({ runs, pathname = '/', inline = false, opens = 'dow
           data-testid="capture-send"
           disabled={cap.sending}
           onClick={() => void send()}
-          style={{ ...S.primary, opacity: cap.sending ? 0.6 : 1 }}
+          className="wk-btn wk-btn--primary wk-btn--sm"
         >
           {cap.sending ? 'Sending…' : `Capture to ${project.name}`}
         </button>

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { Project } from '../src/api/types.js';
+import { resetLaunchWizard, useLaunchWizard } from '../src/store/launchWizard.js';
 import { makeView } from './factories.js';
 
 /**
@@ -205,7 +206,7 @@ describe('the verb table (§1.3)', () => {
     renderPalette();
     fireEvent.change(screen.getByTestId('palette-input'), { target: { value: '> ' } });
     const names = rows().map((r) => r.textContent ?? '');
-    for (const v of ['New Build', 'New Chat', 'New Project', 'Toggle Theme', 'Open Terminal']) {
+    for (const v of ['New job', 'New Chat', 'New Project', 'Toggle Theme', 'Open Terminal']) {
       expect(names.some((n) => n.includes(v))).toBe(true);
     }
     expect(names.some((n) => n.includes('Cancel run'))).toBe(false);
@@ -244,27 +245,13 @@ describe('the verb table (§1.3)', () => {
     expect(useAppearanceStore.getState().appearance.theme).not.toBe(before);
   });
 
-  it('S19b: New Build seeds the Desk composer with /workflow- (the project\'s @ chip inside a project) and sends nothing', () => {
-    useComposerChips.setState({ byComposer: {} });
-    useComposerSeed.setState({ seed: null });
-    const { navigate } = renderPalette();
-    fireEvent.change(screen.getByTestId('palette-input'), { target: { value: '> new build' } });
-    fireEvent.click(rows().find((r) => r.textContent?.includes('New Build'))!);
-    // From a page with no composer: the Desk first, its composer seeded with the command's start.
-    expect(navigate).toHaveBeenCalledWith('/');
-    expect(useComposerSeed.getState().seed).toEqual({ composerKey: 'desk', text: '/workflow-' });
-    expect(chipsOf(useComposerChips.getState(), 'desk')).toEqual([]);
-
-    cleanup();
-    useComposerSeed.setState({ seed: null });
-    const scoped = renderPalette({ projectId: 'q3-review-deck' });
-    fireEvent.change(screen.getByTestId('palette-input'), { target: { value: '> new build' } });
-    fireEvent.click(rows().find((r) => r.textContent?.includes('New Build'))!);
-    expect(scoped.navigate).toHaveBeenCalledWith('/');
-    expect(scoped.navigate.mock.calls.flat().some((p) => String(p).startsWith('/p/'))).toBe(false);
-    expect(chipsOf(useComposerChips.getState(), 'desk').map((c) => c.key)).toEqual(['project:q3-review-deck']);
-    expect(useComposerSeed.getState().seed).toEqual({ composerKey: 'desk', text: '/workflow-' });
-    // The seed is not a draft: nothing is written as the message, nothing is sent.
+  it('New job opens the launch wizard where you are (the project in scope), navigates nowhere and sends nothing', () => {
+    resetLaunchWizard();
+    const { navigate } = renderPalette({ projectId: 'q3-review-deck' });
+    fireEvent.change(screen.getByTestId('palette-input'), { target: { value: '> new job' } });
+    fireEvent.click(rows().find((r) => r.textContent?.includes('New job'))!);
+    expect(navigate).not.toHaveBeenCalled();
+    expect(useLaunchWizard.getState()).toMatchObject({ open: true, draft: { workflowId: null, projectId: 'q3-review-deck', composerKey: 'desk' } });
     expect(useSessionDrafts.getState().drafts['desk'] ?? '').toBe('');
   });
 
@@ -281,17 +268,17 @@ describe('the verb table (§1.3)', () => {
     expect(useSessionDrafts.getState().drafts['desk'] ?? '').toBe('');
   });
 
-  it('S19b: on a session page New Build seeds THAT composer and stays (no navigation)', () => {
-    useComposerSeed.setState({ seed: null });
+  it('on a session page New job opens the wizard for THAT composer (its launch lands in that chat)', () => {
+    resetLaunchWizard();
     const host = document.createElement('div');
     host.setAttribute('data-testid', 'composer');
     host.setAttribute('data-composer', 'run:r-1');
     document.body.appendChild(host);
     const { navigate } = renderPalette();
-    fireEvent.change(screen.getByTestId('palette-input'), { target: { value: '> new build' } });
-    fireEvent.click(rows().find((r) => r.textContent?.includes('New Build'))!);
+    fireEvent.change(screen.getByTestId('palette-input'), { target: { value: '> new job' } });
+    fireEvent.click(rows().find((r) => r.textContent?.includes('New job'))!);
     expect(navigate).not.toHaveBeenCalled();
-    expect(useComposerSeed.getState().seed).toEqual({ composerKey: 'run:r-1', text: '/workflow-' });
+    expect(useLaunchWizard.getState().draft?.composerKey).toBe('run:r-1');
     host.remove();
   });
 });

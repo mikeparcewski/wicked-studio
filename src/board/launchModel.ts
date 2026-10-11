@@ -1,4 +1,4 @@
-import type { BaseSkillPosture, BaseSkillRefusedResponse, RosterSeat } from '../api/types.js';
+import type { BaseSkillPosture, BaseSkillRefusedResponse, LaunchBodyWithDeliver, RosterSeat } from '../api/types.js';
 import { ApiError } from '../api/errors.js';
 import { chatAdmissionOf } from './chatOpen.js';
 import { noCarryingSeatReason, seatCanCarry } from '../components/gateVerdictModel.js';
@@ -182,3 +182,41 @@ export function newLaunchId(): string | null {
 
 /** studio#404: how long a launch POST is outstanding before the composer looks for the run itself. */
 export const LAUNCH_PROBE_AFTER_SECS = 5;
+
+/**
+ * The one `POST /runs` body a named-workflow launch sends (the launch wizard; formerly the composer's
+ * inline strip, whose body this reproduces field for field — tests/launchWizard.test.tsx pins it).
+ * Pure: every capability and choice is passed in.
+ */
+export interface WorkflowLaunchChoices {
+  workflowId: string;
+  intent: string;
+  /** The seats this launch uses (already filtered to the helpers shown, minus the dropped). */
+  seats: readonly RosterSeat[];
+  repoRef: string | null;
+  projectId: string | null;
+  /** The gate posture's wire token, resolved by the launch preview (undefined = say nothing). */
+  humanConfirm: string | undefined;
+  /** null = the workflow runs no code, so no delivery key is sent. */
+  deliver: 'pr' | 'none' | null;
+  /** The "never ask me" posture on a daemon that keeps a deliver gate. */
+  autoDeliverGate: boolean;
+  reducedAssurance: boolean;
+  skipQeReason: string | null;
+  chatId: string | null;
+}
+
+export function workflowLaunchBody(c: WorkflowLaunchChoices): LaunchBodyWithDeliver {
+  const body: LaunchBodyWithDeliver = { problem: c.intent.trim(), workflow: c.workflowId };
+  if (c.reducedAssurance) body.reducedAssurance = true;
+  if (c.seats.length > 0) body.clisJson = JSON.stringify(c.seats);
+  if (c.repoRef !== null) body.repoRef = c.repoRef;
+  if (c.projectId !== null) body.projectId = c.projectId;
+  if (c.humanConfirm !== undefined) body.humanConfirm = c.humanConfirm;
+  if (c.deliver !== null) body.deliver = c.deliver;
+  // F-E2E-030: only the explicitly unattended posture sends the opt-out, and only with a delivery.
+  if (body.deliver === 'pr' && c.autoDeliverGate) body.deliverGate = 'auto';
+  if (c.skipQeReason !== null && c.skipQeReason.trim() !== '') body.skipQeAcceptance = { reason: c.skipQeReason.trim() };
+  if (c.chatId !== null) body.chatId = c.chatId;
+  return body;
+}

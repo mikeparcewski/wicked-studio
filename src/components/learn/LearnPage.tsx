@@ -3,12 +3,12 @@ import { api } from '../../api/client.js';
 import { readErrorKind } from '../../api/errors.js';
 import type { RepoEntry } from '../../api/types.js';
 import { relTime } from '../../board/relTime.js';
-import { seedComposer } from '../../store/composerSeed.js';
 import { EmptyState, OverflowMenu, PageFrame, Segmented, Skeleton, StateBanner, Switch } from '../ui/index.js';
+import { openLaunchWizard } from '../../store/launchWizard.js';
 import {
   EVERY_HOURS,
   EVERY_OPTIONS,
-  LEARN_COMMAND,
+  LEARN_WORKFLOW_ID,
   defaultEvery,
   dueIn,
   everyOf,
@@ -96,9 +96,10 @@ export function LearnPage({ navigate }: { navigate: (p: string) => void }): Reac
     }
   };
 
+  // "Learn something new" opens the launch wizard for the learn workflow (operator 2026-10-11,
+  // reel chapter 60): the what / where / options steps, then Launch — not a typed command.
   const startNew = (): void => {
-    seedComposer('desk', LEARN_COMMAND);
-    navigate('/');
+    openLaunchWizard({ workflowId: LEARN_WORKFLOW_ID });
   };
 
   const repoName = repos?.find((r) => r.id === repoRef)?.name ?? null;

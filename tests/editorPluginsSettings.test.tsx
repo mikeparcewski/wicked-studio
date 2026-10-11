@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
-  CREATE_EDITOR_COMMAND,
+  CREATE_EDITOR_WORKFLOW_ID,
   DeveloperSettings,
   devHostHref,
   EditorPluginList,
@@ -9,6 +9,7 @@ import {
   permissionsInWords,
 } from '../src/components/editors/EditorPluginsSettings.js';
 import { EditorHostPage } from '../src/components/editors/EditorHostPage.js';
+import { useLaunchWizard } from '../src/store/launchWizard.js';
 import { takeComposerSeed } from '../src/store/composerSeed.js';
 
 /** Settings → Developer → Editor plugins (operator ruling X3) and the editor test page's empty state. */
@@ -76,8 +77,8 @@ describe('Settings → Developer → Editor plugins', () => {
     fireEvent.click(screen.getByTestId('editor-plugins-devhost'));
     expect(navigate).toHaveBeenLastCalledWith('/editors/dev');
     fireEvent.click(screen.getByTestId('editor-plugins-create'));
-    expect(navigate).toHaveBeenLastCalledWith('/');
-    expect(takeComposerSeed('desk')).toBe(CREATE_EDITOR_COMMAND);
+    expect(useLaunchWizard.getState()).toMatchObject({ open: true, draft: { workflowId: CREATE_EDITOR_WORKFLOW_ID } });
+    expect(takeComposerSeed('desk')).toBeNull();
     expect(f.mock.calls.every(([, init]) => (init as RequestInit | undefined)?.method === undefined || (init as RequestInit).method === 'GET')).toBe(true);
   });
 

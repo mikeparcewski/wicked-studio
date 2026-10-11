@@ -26,6 +26,8 @@ import { clearRepoCache } from '../src/store/repoCache.js';
 import { peekRetryPrefill, setRetryPrefill, takeRetryPrefill } from '../src/store/retryPrefill.js';
 import { clearCachedRoster, setCachedRoster } from '../src/store/rosterCache.js';
 import { clearCachedWorkflows, setCachedWorkflows } from '../src/store/workflowCache.js';
+import { LaunchWizard } from '../src/components/launch/LaunchWizard.js';
+import { resetLaunchWizard } from '../src/store/launchWizard.js';
 import { makeUnit, makeView } from './factories.js';
 
 const RUN = 'r-ex01';
@@ -220,7 +222,12 @@ describe('the composer\'s /workflow row', () => {
   }
   function Harness(): React.ReactElement {
     const [text, setText] = useState('');
-    return <Composer composerKey="desk" text={text} setText={setText} onSend={() => {}} started={false} placeholder="p" ariaLabel="a" variant="desk" navigate={() => {}} />;
+    return (
+      <>
+        <Composer composerKey="desk" text={text} setText={setText} onSend={() => {}} started={false} placeholder="p" ariaLabel="a" variant="desk" navigate={() => {}} />
+        <LaunchWizard navigate={() => {}} />
+      </>
+    );
   }
   function type(text: string): void {
     const box = screen.getByTestId('desk-composer-input') as HTMLTextAreaElement;
@@ -229,14 +236,19 @@ describe('the composer\'s /workflow row', () => {
     fireEvent.select(box);
   }
   const key = (k: string): void => { fireEvent.keyDown(screen.getByTestId('desk-composer-input'), { key: k }); };
+  // The launch wizard (operator 2026-10-11): name the workflow, then walk to its options step.
   async function nameWorkflow(): Promise<void> {
-    type('x');
     type('/workflow-mcp-server');
     key('Enter');
-    await waitFor(() => expect(screen.getByTestId('composer-launch-row')).toBeInTheDocument());
-    type('build an MCP server for the ledger');
-    await waitFor(() => expect((screen.getByTestId('launch-row-repo') as HTMLSelectElement).value).toBe('repo-1'));
+    fireEvent.change(await screen.findByTestId('launch-wizard-intent'), { target: { value: 'build an MCP server for the ledger' } });
+    fireEvent.click(screen.getByTestId('launch-wizard-next'));
+    await waitFor(() => expect((screen.getByTestId('launch-wizard-repo') as HTMLSelectElement).value).toBe('repo-1'));
+    fireEvent.click(screen.getByTestId('launch-wizard-next'));
   }
+  const launch = (): void => {
+    fireEvent.click(screen.getByTestId('launch-wizard-next'));
+    fireEvent.click(screen.getByTestId('launch-wizard-launch'));
+  };
   beforeEach(() => {
     vi.restoreAllMocks();
     resetComposerSeats();
@@ -245,6 +257,7 @@ describe('the composer\'s /workflow row', () => {
     setCachedWorkflows(WF);
     clearRepoCache();
     useComposerChips.setState({ byComposer: {} });
+    resetLaunchWizard();
     useCapabilities.setState({ reducedAssurance: true });
   });
   afterEach(() => { cleanup(); vi.unstubAllGlobals(); resetComposerSeats(); useCapabilities.setState({ reducedAssurance: false }); });
@@ -253,22 +266,22 @@ describe('the composer\'s /workflow row', () => {
     stub([seat('claude')]);
     render(<Harness />);
     await nameWorkflow();
-    expect(screen.getByTestId('launch-row-reduced-assurance-disclosure').textContent).toMatch(/creator's seat reviews its own work/);
-    fireEvent.click(screen.getByTestId('launch-row-reduced-assurance-toggle'));
-    key('Enter');
+    expect(screen.getByTestId('launch-wizard-reduced-disclosure').textContent).toMatch(/creator's seat reviews its own work/);
+    fireEvent.click(screen.getByTestId('launch-wizard-reduced-toggle'));
+    launch();
     await waitFor(() => expect(posts.some((p) => p.path === '/runs')).toBe(true));
     expect(posts.find((p) => p.path === '/runs')!.body.reducedAssurance).toBe(true);
     // codex r1: the opt-in was THAT launch's — the next one starts unticked.
     await nameWorkflow();
-    expect((screen.getByTestId('launch-row-reduced-assurance-toggle') as HTMLInputElement).checked).toBe(false);
+    expect((screen.getByTestId('launch-wizard-reduced-toggle') as HTMLInputElement).checked).toBe(false);
   });
 
   it('two seats: not offered, not sent', async () => {
     stub([seat('claude'), seat('codex')]);
     render(<Harness />);
     await nameWorkflow();
-    expect(screen.queryByTestId('launch-row-reduced-assurance')).toBeNull();
-    key('Enter');
+    expect(screen.queryByTestId('launch-wizard-reduced')).toBeNull();
+    launch();
     await waitFor(() => expect(posts.some((p) => p.path === '/runs')).toBe(true));
     expect('reducedAssurance' in posts.find((p) => p.path === '/runs')!.body).toBe(false);
   });

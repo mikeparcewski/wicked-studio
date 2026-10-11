@@ -8,16 +8,16 @@ records POST /runs):
   1. MENU: `/wo` groups "Start work" with the daemon's five ordinary defs (feature, bug, migration,
      domain-extraction, capture-learnings), each line read off the catalog ("2 phases: plan → build"),
      and never the system flow (chat); a mid-text `/workflow-` is a sentence — no rows.
-  2. NAME: picking a row names it — a `/workflow-bug` chip and the options row, no POST.
-  3. REFUSE: with no repository the composer says "Pick the repository this works in" and Enter
-     sends NOTHING (0 POST /runs recorded).
-  4. LAUNCH: with a repository the lone repo is picked, the line reads ready, and Enter makes
+  2. WIZARD (operator 2026-10-11): picking a row opens the launch wizard — a modal dialog on its
+     "what" step, focus in the box, no inline strip, no POST.
+  3. REFUSE: with no repository the wizard's Where step holds Next and says why; nothing is sent.
+  4. LAUNCH: with a repository (the lone one is picked), Next → options → review → Launch makes
      exactly ONE POST /runs carrying workflow=bug, repoRef=studio-api, humanConfirm=before:1,
      deliver=pr and the intent as `problem` — then the page opens the run's session.
-  5. × removes the chip; Escape never launches.
+  5. Escape closes the wizard, keeps the draft for the next open, and never launches.
   S19b (the removals, the launch form's grammar, discoverability):
-  6. ⌘K `>New Build` — from a page with no composer (/runs/new) and from the Desk — lands on the
-     Desk with `/workflow-` in its composer, focused, the menu open on "Start work"; nothing is sent.
+  6. ⌘K `>New job` — from a page with no composer (/runs/new) and from the Desk — opens the wizard
+     where you are, on its first step (the kind of job, the daemon's catalog); nothing is sent.
   7. no "Detected:" anywhere on the Desk or the launch form, for a code-shaped sentence (the banner
      is gone), and the launch options drawer has no "Choose workflow".
   8. on /runs/new, `/` at the start of launch-problem opens the same menu; a pick sets the form's
@@ -210,11 +210,21 @@ with sync_playwright() as p:
           and full_dark["activeInView"] and full_dark["tinted"] and full_light["tinted"],
           dark=full_dark, light=full_light)
 
+    # ── 2: a pick opens the LAUNCH WIZARD (operator 2026-10-11) — a modal, no chip, no POST ──
     page.locator('[data-testid="composer-menu-item"][data-cmd="workflow-bug"]').click()
-    page.get_by_test_id("composer-chip").wait_for(state="visible", timeout=8000)
-    chip = page.get_by_test_id("composer-chip").inner_text()
-    check("pick-names-the-workflow", "/workflow-bug" in chip and launch_posts() == [],
-          chip=chip, posts=launch_posts())
+    page.get_by_test_id("launch-wizard").wait_for(state="visible", timeout=8000)
+    wiz = page.evaluate("""() => { const d = document.querySelector('[data-testid="launch-wizard"]');
+        return { role: d.getAttribute('role'), modal: d.getAttribute('aria-modal'),
+                 step: document.querySelector('[data-testid="launch-wizard-step"]').dataset.step,
+                 focused: document.activeElement?.dataset?.testid ?? null,
+                 strip: document.querySelectorAll('[data-testid="composer-launch-row"]').length }; }""")
+    page.screenshot(path=str(SHOTS / "desk-slash-workflows-wizard.png"))
+    check("pick-opens-the-wizard",
+          wiz["role"] == "dialog" and wiz["modal"] == "true" and wiz["step"] == "what"
+          and wiz["focused"] == "launch-wizard-intent" and wiz["strip"] == 0 and launch_posts() == [],
+          wiz=wiz, posts=launch_posts())
+    page.keyboard.press("Escape")
+    page.get_by_test_id("launch-wizard").wait_for(state="detached", timeout=5000)
 
     # a mid-text /workflow- is a sentence: no Start work rows
     box.fill("")
@@ -225,40 +235,43 @@ with sync_playwright() as p:
     check("mid-text-is-a-sentence", mid == 0, rows=mid)
     page.keyboard.press("Escape")
 
-    # ── 3: no repository → the composer refuses and sends nothing ─────────────────
+    def wizard_for_bug(intent: str) -> None:
+        box = page.get_by_test_id("desk-composer-input")
+        box.click()
+        box.fill("")
+        box.type("/workflow-")
+        page.locator('[data-testid="composer-menu-item"][data-cmd="workflow-bug"]').wait_for(state="visible", timeout=8000)
+        page.locator('[data-testid="composer-menu-item"][data-cmd="workflow-bug"]').click()
+        page.get_by_test_id("launch-wizard-intent").wait_for(state="visible", timeout=8000)
+        page.get_by_test_id("launch-wizard-intent").fill(intent)
+        page.get_by_test_id("launch-wizard-next").click()
+
+    # ── 3: no repository → the wizard's Where step holds Next and says why; nothing is sent ──
     set_fixture(origin, workflow_catalog=True, repo=False, sessions=True, reset_gate_posts=True)
     open_desk()
-    box = page.get_by_test_id("desk-composer-input")
-    box.click()
-    box.type("/workflow-")
-    page.locator('[data-testid="composer-menu-item"][data-cmd="workflow-bug"]').wait_for(state="visible", timeout=8000)
-    page.locator('[data-testid="composer-menu-item"][data-cmd="workflow-bug"]').click()
-    page.wait_for_timeout(150)
-    box.type("the charge never clears")
+    wizard_for_bug("the charge never clears")
+    page.get_by_test_id("launch-wizard-repo").wait_for(state="visible", timeout=8000)
     page.wait_for_timeout(300)
-    line = page.get_by_test_id("composer-launch-line").inner_text()
+    blocker = page.get_by_test_id("launch-wizard-blocker").inner_text()
+    held = page.get_by_test_id("launch-wizard-next").is_disabled()
     page.screenshot(path=str(SHOTS / "desk-slash-workflows-refused.png"))
-    page.keyboard.press("Enter")
-    page.wait_for_timeout(700)
-    check("no-repo-refuses", "Pick the repository this works in" in line and launch_posts() == [],
-          line=line, posts=launch_posts())
+    check("no-repo-refuses", "Choose the repository" in blocker and held and launch_posts() == [],
+          blocker=blocker, held=held, posts=launch_posts())
+    page.keyboard.press("Escape")
 
-    # ── 4: with a repository, Enter launches exactly once ─────────────────────────
+    # ── 4: with a repository: Next, Next, review, Launch → exactly one POST, then the session ──
     set_fixture(origin, workflow_catalog=True, repo=True, sessions=True, reset_gate_posts=True)
+    page.evaluate("() => { try { localStorage.removeItem('wicked_composer_dropped_seats'); } catch (e) {} }")
     open_desk()
-    box = page.get_by_test_id("desk-composer-input")
-    box.click()
-    box.type("/workflow-")
-    page.locator('[data-testid="composer-menu-item"][data-cmd="workflow-bug"]').wait_for(state="visible", timeout=8000)
-    page.locator('[data-testid="composer-menu-item"][data-cmd="workflow-bug"]').click()
-    page.wait_for_timeout(150)
-    box.type("the charge never clears")
+    wizard_for_bug("the charge never clears")
     page.wait_for_function(
-        "() => { const e = document.querySelector('[data-testid=\"launch-row-repo\"]'); return e && e.value && e.value !== ''; }",
+        "() => { const e = document.querySelector('[data-testid=\"launch-wizard-repo\"]'); return e && e.value && e.value !== ''; }",
         timeout=8000)
-    ready = page.get_by_test_id("composer-launch-line").inner_text()
+    page.get_by_test_id("launch-wizard-next").click()
+    page.get_by_test_id("launch-wizard-next").click()
+    review = page.get_by_test_id("launch-wizard-review").inner_text()
     page.screenshot(path=str(SHOTS / "desk-slash-workflows-ready.png"))
-    page.keyboard.press("Enter")
+    page.get_by_test_id("launch-wizard-launch").click()
     posts = wait_posts(1)
     try:
         page.wait_for_function("() => location.pathname.startsWith('/s/')", timeout=8000)
@@ -268,72 +281,56 @@ with sync_playwright() as p:
     page.screenshot(path=str(SHOTS / "desk-slash-workflows-launched.png"))
     body = posts[0] if posts else {}
     check("one-launch",
-          len(posts) == 1 and "Ready to send" in ready
+          len(posts) == 1 and "the charge never clears" in review
           and body.get("workflow") == "bug" and body.get("repoRef") == "studio-api"
           and body.get("humanConfirm") == "before:1" and body.get("deliver") == "pr"
           and body.get("problem") == "the charge never clears",
-          ready=ready, count=len(posts), body=body)
+          review=review, count=len(posts), body=body)
     check("opens-the-run", went.startswith("/s/"), path=went)
 
-    # ── 5: × removes the chip; Escape is never a launch ───────────────────────────
+    # ── 5: Escape closes the wizard, keeps the draft, and never launches ───────────
     set_fixture(origin, workflow_catalog=True, repo=True, sessions=True, reset_gate_posts=True)
     open_desk()
+    wizard_for_bug("keep this draft")
+    page.keyboard.press("Escape")
+    page.get_by_test_id("launch-wizard").wait_for(state="detached", timeout=5000)
+    page.wait_for_timeout(300)
     box = page.get_by_test_id("desk-composer-input")
     box.click()
     box.type("/workflow-")
-    page.locator('[data-testid="composer-menu-item"][data-cmd="workflow-bug"]').wait_for(state="visible", timeout=8000)
     page.locator('[data-testid="composer-menu-item"][data-cmd="workflow-bug"]').click()
-    page.get_by_test_id("composer-chip").wait_for(state="visible", timeout=8000)
-    page.get_by_test_id("composer-chip-remove").click()
-    page.wait_for_timeout(200)
-    removed = page.locator('[data-testid="composer-chip"]').count() == 0
-    check("x-removes-the-chip", removed and launch_posts() == [], removed=removed, posts=launch_posts())
-
-    box.type("/workflow-")
-    page.locator('[data-testid="composer-menu-item"][data-cmd="workflow-bug"]').wait_for(state="visible", timeout=8000)
-    page.locator('[data-testid="composer-menu-item"][data-cmd="workflow-bug"]').click()
-    page.wait_for_timeout(150)
-    box.type("the charge never clears")
+    page.get_by_test_id("launch-wizard-intent").wait_for(state="visible", timeout=8000)
+    kept = page.get_by_test_id("launch-wizard-intent").input_value()
     page.keyboard.press("Escape")
-    page.wait_for_timeout(500)
-    check("escape-sends-nothing", launch_posts() == [], posts=launch_posts())
+    check("escape-sends-nothing", launch_posts() == [] and kept == "keep this draft", kept=kept, posts=launch_posts())
 
-    # ── 6: ⌘K "New Build" seeds /workflow- in the Desk composer with the menu open ────
-    def new_build() -> None:
+    # ── 6: ⌘K "New job" opens the wizard on its first step (the kind of job) — from a page with
+    #    no composer (/runs/new) and from the Desk; nothing is sent ──
+    def new_job() -> dict:
         page.keyboard.press("ControlOrMeta+k")
         page.get_by_test_id("palette-input").wait_for(state="visible", timeout=5000)
-        page.get_by_test_id("palette-input").fill("> New Build")
-        page.locator('[data-testid="palette-row"]', has_text="New Build").first.click()
-
-    def seeded_state() -> dict:
-        page.wait_for_function(
-            "() => document.querySelector('[data-testid=\"desk-composer-input\"]')?.value === '/workflow-'",
-            timeout=8000)
-        page.get_by_test_id("composer-menu").wait_for(state="visible", timeout=8000)
-        return page.evaluate("""() => ({
-            path: location.pathname,
-            value: document.querySelector('[data-testid="desk-composer-input"]')?.value ?? null,
-            focused: document.activeElement?.dataset?.testid ?? null,
-            rows: [...document.querySelectorAll('[data-testid="composer-menu-item"][data-group="start-work"]')].length,
-            hint: document.querySelectorAll('[data-testid="composer-hint"]').length })""")
+        page.get_by_test_id("palette-input").fill("> New job")
+        page.locator('[data-testid="palette-row"]', has_text="New job").first.click()
+        page.get_by_test_id("launch-wizard").wait_for(state="visible", timeout=8000)
+        st = page.evaluate("""() => ({ path: location.pathname,
+            step: document.querySelector('[data-testid="launch-wizard-step"]')?.dataset.step ?? null,
+            rows: document.querySelectorAll('[data-testid^="launch-wizard-workflow-"]').length })""")
+        page.keyboard.press("Escape")
+        page.get_by_test_id("launch-wizard").wait_for(state="detached", timeout=5000)
+        return st
 
     set_fixture(origin, workflow_catalog=True, repo=True, sessions=True, reset_gate_posts=True)
     page.goto(f"{origin}/runs/new", wait_until="networkidle")
     page.get_by_test_id("launch-problem").wait_for(state="visible", timeout=15000)
     page.evaluate("() => document.activeElement && document.activeElement.blur()")
-    new_build()
-    from_form = seeded_state()
-    page.screenshot(path=str(SHOTS / "desk-slash-workflows-new-build.png"))
-    page.keyboard.press("Escape")
-    page.get_by_test_id("desk-composer-input").fill("")
+    page.evaluate("() => { try { sessionStorage.clear(); } catch (e) {} }")
+    from_form = new_job()
+    open_desk()
     page.evaluate("() => document.activeElement && document.activeElement.blur()")
-    new_build()
-    from_desk = seeded_state()
-    page.keyboard.press("Escape")
-    page.get_by_test_id("desk-composer-input").fill("")
-    check("new-build-seeds-the-composer",
-          all(st["path"] == "/" and st["value"] == "/workflow-" and st["focused"] == "desk-composer-input"
-              and st["rows"] >= 5 and st["hint"] == 0 for st in (from_form, from_desk))
+    from_desk = new_job()
+    check("new-job-opens-the-wizard",
+          from_form["path"] == "/runs/new" and from_desk["path"] == "/"
+          and all(st["rows"] >= 5 for st in (from_form, from_desk))
           and launch_posts() == [],
           from_form=from_form, from_desk=from_desk, posts=launch_posts())
 

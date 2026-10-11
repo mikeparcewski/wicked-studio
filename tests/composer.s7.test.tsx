@@ -7,6 +7,7 @@ import { flushDecisionsForTest, resetDecisionsForTest } from '../src/board/undoQ
 import { Composer, type ComposerSend } from '../src/components/session/Composer.js';
 import { ProposalCard } from '../src/components/session/ProposalCard.js';
 import { useComposerChips } from '../src/store/composerChips.js';
+import { resetLaunchWizard, useLaunchWizard } from '../src/store/launchWizard.js';
 import { seedComposer, useComposerSeed } from '../src/store/composerSeed.js';
 import { useGateStore } from '../src/store/gates.js';
 import { resetPlanCatalog } from '../src/store/planCatalog.js';
@@ -78,6 +79,7 @@ function type(text: string): void {
 const key = (k: string): void => { fireEvent.keyDown(screen.getByTestId('session-composer-input'), { key: k }); };
 
 beforeEach(() => {
+  resetLaunchWizard();
   repos = [REPO];
   stubWire();
   setCachedRoster([SEAT]);
@@ -294,24 +296,14 @@ describe('S19a: a workflow is named in the composer and launched from it', () =>
     const startRows = screen.getAllByTestId('composer-menu-item').filter((r) => r.getAttribute('data-group') === 'start-work');
     expect(startRows.map((r) => r.getAttribute('data-cmd'))).toStrictEqual(['workflow-bug', 'workflow-feature']);
     fireEvent.mouseDown(startRows[0]!);
+    // The launch wizard (operator 2026-10-11): the pick opens the one modal on that workflow — no
+    // chip, no inline strip, nothing sent (tests/launchWizard.test.tsx drives its steps and body).
     expect(screen.queryByTestId('composer-menu')).toBeNull();
-    expect(screen.getByTestId('composer-chip').getAttribute('data-kind')).toBe('workflow');
-    expect(screen.getByTestId('composer-chip').textContent).toContain('/workflow-bug');
-    // No repository chosen yet: the composer refuses, says why, and sends nothing.
-    type('the charge never clears');
-    expect(screen.getByTestId('composer-launch-line').textContent).toMatch(/Pick the repository/);
-    key('Enter');
+    expect(useLaunchWizard.getState().open).toBe(true);
+    expect(useLaunchWizard.getState().draft?.workflowId).toBe('bug');
+    expect(screen.queryByTestId('composer-launch-row')).toBeNull();
     expect(posts).toStrictEqual([]);
-    // The lone repo is chosen for the operator; then Enter is the launch.
-    await waitFor(() => expect((screen.getByTestId('launch-row-repo') as HTMLSelectElement).value).toBe('repo-1'));
-    expect(screen.getByTestId('composer-launch-line').textContent).toMatch(/Ready to send/);
-    key('Enter');
-    await waitFor(() => expect(posts.some((p) => p.path === '/runs')).toBe(true));
-    const body = posts.find((p) => p.path === '/runs')!.body;
-    expect(body).toMatchObject({ problem: 'the charge never clears', workflow: 'bug', repoRef: 'repo-1', humanConfirm: 'before:1', deliver: 'pr' });
-    expect(String(body.clisJson)).toContain('"claude"');
-    expect(navigate).toHaveBeenCalledTimes(1);
-    expect(navigate.mock.calls[0]![0]).toContain('r-new');
+    expect(navigate).not.toHaveBeenCalled();
   });
 
   it('a /workflow- token that is not the first token opens no rows, makes no chip, and launches nothing', async () => {
@@ -326,21 +318,16 @@ describe('S19a: a workflow is named in the composer and launched from it', () =>
     expect(screen.queryByTestId('composer-chip')).toBeNull();
   });
 
-  it('a whole command typed in sends nothing on the first Enter (it names the work), then launches on the next', async () => {
-    const navigate = vi.fn();
-    render(<Harness runs={[]} onSend={() => {}} navigate={navigate} />);
+  it('a whole command typed in opens the wizard on Enter, carrying the words after it, and sends nothing', async () => {
+    render(<Harness runs={[]} onSend={() => {}} />);
     type('/workflow-bug');
     await screen.findByTestId('composer-menu');
     key('Escape');
     expect(screen.queryByTestId('composer-menu')).toBeNull();
+    type('/workflow-bug the charge never clears');
     key('Enter');
-    expect(screen.getByTestId('composer-chip').textContent).toContain('/workflow-bug');
+    expect(useLaunchWizard.getState().draft).toMatchObject({ workflowId: 'bug', intent: 'the charge never clears' });
     expect(posts).toStrictEqual([]);
-    type('the charge never clears');
-    await waitFor(() => expect((screen.getByTestId('launch-row-repo') as HTMLSelectElement).value).toBe('repo-1'));
-    key('Enter');
-    await waitFor(() => expect(posts.some((p) => p.path === '/runs')).toBe(true));
-    expect(posts.find((p) => p.path === '/runs')!.body).toMatchObject({ workflow: 'bug', problem: 'the charge never clears' });
   });
 
   it('a typed command the daemon does not list names nothing and sends nothing', async () => {
@@ -389,20 +376,6 @@ describe('S19a: a workflow is named in the composer and launched from it', () =>
     expect(posts).toStrictEqual([]);
     expect(screen.queryByTestId('composer-chip')).toBeNull();
   });
-
-  it('Backspace in the empty box removes the workflow chip, and the options row offers the form gate postures', async () => {
-    render(<Harness runs={[]} onSend={() => {}} />);
-    type('/workflow-');
-    await screen.findByTestId('composer-menu');
-    fireEvent.mouseDown(screen.getAllByTestId('composer-menu-item').filter((r) => r.getAttribute('data-cmd') === 'workflow-bug')[0]!);
-    expect(screen.getByTestId('composer-chip').getAttribute('data-kind')).toBe('workflow');
-    // The options row names the form's gate postures, not a static line.
-    const gate = screen.getByTestId('launch-row-gate') as HTMLSelectElement;
-    expect([...gate.options].map((o) => o.textContent)).toStrictEqual(['Before the first step', 'Before every step', 'Never: run straight through']);
-    key('Backspace');
-    expect(screen.queryByTestId('composer-chip')).toBeNull();
-    expect(screen.queryByTestId('composer-launch-row')).toBeNull();
-  });
 });
 
 describe('S19b: no Detected banner, the hint, and the composer seed', () => {
@@ -428,7 +401,7 @@ describe('S19b: no Detected banner, the hint, and the composer seed', () => {
     expect(posts).toStrictEqual([]);
   });
 
-  it('"Type / for workflows" sits under the box beside the footer; hidden while the menu is open or a chip is present', async () => {
+  it('"Type / for workflows" sits under the box beside the footer; hidden while the menu is open, back once a pick opened the wizard', async () => {
     render(<DeskHarness />);
     expect(screen.getByTestId('composer-hint').textContent).toBe('Type / for workflows');
     expect(screen.getByTestId('foot-slot')).toBeInTheDocument();
@@ -436,9 +409,9 @@ describe('S19b: no Detected banner, the hint, and the composer seed', () => {
     await screen.findByTestId('composer-menu');
     expect(screen.queryByTestId('composer-hint')).toBeNull();
     fireEvent.mouseDown(screen.getAllByTestId('composer-menu-item').filter((r) => r.getAttribute('data-cmd') === 'workflow-bug')[0]!);
-    expect(screen.getByTestId('composer-chip')).toBeInTheDocument();
+    expect(useLaunchWizard.getState().draft?.workflowId).toBe('bug');
     expect(screen.queryByTestId('composer-menu')).toBeNull();
-    expect(screen.queryByTestId('composer-hint')).toBeNull();
+    expect(screen.getByTestId('composer-hint')).toBeInTheDocument();
     expect(screen.getByTestId('foot-slot')).toBeInTheDocument();
   });
 
@@ -454,54 +427,5 @@ describe('S19b: no Detected banner, the hint, and the composer seed', () => {
     await waitFor(() => expect(document.activeElement).toBe(screen.getByTestId('desk-composer-input')));
     await screen.findByTestId('composer-menu');
     expect(screen.getAllByTestId('composer-menu-item').some((r) => r.getAttribute('data-group') === 'start-work')).toBe(true);
-  });
-});
-
-describe('the slash-launch strip (operator 2026-10-10, UX audit row 3): one name, labelled controls, validation on the control', () => {
-  async function pick(): Promise<HTMLElement> {
-    type('/workflow-');
-    await screen.findByTestId('composer-menu');
-    fireEvent.mouseDown(screen.getAllByTestId('composer-menu-item').filter((r) => r.getAttribute('data-cmd') === 'workflow-feature')[0]!);
-    return screen.getByTestId('composer-launch-row');
-  }
-
-  it('names the workflow exactly once in the composer — the chip — and never again in the strip', async () => {
-    const { container } = render(<Harness runs={[]} onSend={() => {}} />);
-    const row = await pick();
-    type('add a dark mode');
-    await waitFor(() => expect(screen.getByTestId('composer-launch-line').textContent).toMatch(/Ready to send/));
-    const composerText = (container.textContent ?? '').split('/workflow-feature').length - 1;
-    expect(composerText).toBe(1);
-    expect(screen.getByTestId('composer-chip').textContent).toContain('/workflow-feature');
-    expect(row.textContent).not.toContain('/workflow-feature');
-  });
-
-  it('every control carries a visible label; the gate options finish the sentence "Ask me"', async () => {
-    render(<Harness runs={[]} onSend={() => {}} />);
-    const row = await pick();
-    const labels = [...row.querySelectorAll('.wk-composer-launch-label')].map((l) => l.textContent);
-    expect(labels).toStrictEqual(['Repository', 'Ask me']);
-    expect(screen.getByTestId('launch-row-repo').closest('label')?.textContent).toContain('Repository');
-    const gate = screen.getByTestId('launch-row-gate') as HTMLSelectElement;
-    expect(gate.closest('label')?.textContent).toContain('Ask me');
-    expect([...gate.options].map((o) => o.textContent)).toStrictEqual(['Before the first step', 'Before every step', 'Never: run straight through']);
-    // The accessible names are the visible labels (codex review r1).
-    expect(screen.getByRole('combobox', { name: 'Ask me' })).toBe(gate);
-    expect(screen.getByRole('combobox', { name: 'Repository' })).toBe(screen.getByTestId('launch-row-repo'));
-  });
-
-  it('with no repository the message is tied to the repository control and sits outside the controls row', async () => {
-    repos = [];
-    stubWire();
-    render(<Harness runs={[]} onSend={() => {}} />);
-    const row = await pick();
-    type('add a dark mode');
-    const repo = screen.getByTestId('launch-row-repo');
-    await waitFor(() => expect(repo).toHaveAttribute('aria-invalid', 'true'));
-    const line = screen.getByTestId('composer-launch-line');
-    expect(repo.getAttribute('aria-describedby')).toBe(line.id);
-    expect(line.textContent).toBe('Pick the repository this works in');
-    expect(row.querySelector('.wk-composer-launch-controls')?.contains(line)).toBe(false);
-    expect(line.className).toContain('wk-composer-launch-line--bad');
   });
 });

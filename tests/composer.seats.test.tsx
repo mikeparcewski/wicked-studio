@@ -13,6 +13,8 @@ import { chosenSeats, resetComposerSeats, useComposerSeats } from '../src/store/
 import { resetPlanCatalog } from '../src/store/planCatalog.js';
 import { clearRepoCache } from '../src/store/repoCache.js';
 import { clearCachedRoster, setCachedRoster } from '../src/store/rosterCache.js';
+import { LaunchWizard } from '../src/components/launch/LaunchWizard.js';
+import { resetLaunchWizard } from '../src/store/launchWizard.js';
 import { clearCachedWorkflows, setCachedWorkflows } from '../src/store/workflowCache.js';
 
 const seat = (key: string): RosterSeat =>
@@ -37,7 +39,12 @@ function stubWire(): void {
 
 function Harness({ started = false, onSend }: { started?: boolean; onSend: (m: string, o: ComposerSend) => void }): React.ReactElement {
   const [text, setText] = useState('');
-  return <Composer composerKey="desk" text={text} setText={setText} onSend={onSend} started={started} placeholder="p" ariaLabel="a" variant="desk" navigate={() => {}} />;
+  return (
+    <>
+      <Composer composerKey="desk" text={text} setText={setText} onSend={onSend} started={started} placeholder="p" ariaLabel="a" variant="desk" navigate={() => {}} />
+      <LaunchWizard navigate={() => {}} />
+    </>
+  );
 }
 function type(text: string): void {
   const box = screen.getByTestId('desk-composer-input') as HTMLTextAreaElement;
@@ -58,6 +65,7 @@ beforeEach(() => {
   setCachedWorkflows(WF);
   clearRepoCache();
   useComposerChips.setState({ byComposer: {} });
+  resetLaunchWizard();
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); resetComposerSeats(); });
 
@@ -78,11 +86,15 @@ describe('studio#631: the composer helpers row', () => {
     fireEvent.click(seatButton('copilot'));
     expect(seatButton('codex').getAttribute('aria-pressed')).toBe('false');
     type('/workflow-mcp-server');
-    key('Enter'); // names the workflow (the menu row or the typed whole line)
-    await waitFor(() => expect(screen.getByTestId('composer-launch-row')).toBeInTheDocument());
-    type('build an MCP server for the ledger');
-    await waitFor(() => expect((screen.getByTestId('launch-row-repo') as HTMLSelectElement).value).toBe('repo-1'));
-    key('Enter');
+    key('Enter'); // opens the launch wizard on that workflow
+    fireEvent.change(await screen.findByTestId('launch-wizard-intent'), { target: { value: 'build an MCP server for the ledger' } });
+    fireEvent.click(screen.getByTestId('launch-wizard-next'));
+    await waitFor(() => expect((screen.getByTestId('launch-wizard-repo') as HTMLSelectElement).value).toBe('repo-1'));
+    fireEvent.click(screen.getByTestId('launch-wizard-next'));
+    // The options step shows the same helpers, with the row's choice applied.
+    expect(screen.getAllByTestId('launch-wizard-seat').filter((b) => b.getAttribute('aria-pressed') === 'true').map((b) => b.dataset.key)).toEqual(['claude', 'pi']);
+    fireEvent.click(screen.getByTestId('launch-wizard-next'));
+    fireEvent.click(screen.getByTestId('launch-wizard-launch'));
     await waitFor(() => expect(posts.some((p) => p.path === '/runs')).toBe(true));
     const seats = (JSON.parse(String(posts.find((p) => p.path === '/runs')!.body.clisJson)) as Array<{ key: string }>).map((s) => s.key);
     expect(seats).toEqual(['claude', 'pi']);
