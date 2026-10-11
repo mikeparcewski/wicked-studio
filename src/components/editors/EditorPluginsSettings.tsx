@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { listEditors, type EditorView } from '../../api/editors.js';
 import { seedComposer } from '../../store/composerSeed.js';
-import { useDisplayText } from '../../hooks/useHomePath.js';
+import { EmptyState, PageFrame, Skeleton, StateBanner } from '../ui/index.js';
 
 /**
  * Settings → Developer → Editor plugins (operator ruling X3, 2026-10-10; DES-EDITOR-PLUGINS-001 §3.2).
@@ -85,14 +85,6 @@ export function useEditorList(): { load: Load; retry: () => void; retrying: bool
   return { load, retry, retrying };
 }
 
-const tagStyle: React.CSSProperties = {
-  fontSize: 'var(--text-xs)',
-  color: 'var(--ink-body)',
-  background: 'var(--surface-raised)',
-  borderRadius: 'var(--radius-sm)',
-  padding: '1px 6px',
-};
-
 function EditorRow({ e, navigate, compact }: { e: EditorView; navigate: (p: string) => void; compact: boolean }): React.ReactElement {
   const href = devHostHref(e);
   const words = permissionsInWords(e.permissions);
@@ -100,8 +92,8 @@ function EditorRow({ e, navigate, compact }: { e: EditorView; navigate: (p: stri
     <li data-testid="editor-plugin-row" data-editor={e.id} className="py-3 border-b last:border-b-0" style={{ borderColor: 'var(--border-subtle)' }}>
       <p className="flex flex-wrap items-center gap-2" style={{ fontSize: 'var(--text-md)', color: 'var(--ink-high)', fontWeight: 600 }}>
         <span>{e.title}</span>
-        <span data-testid="editor-plugin-source" style={tagStyle}>{e.first_party ? 'Built in' : 'Installed'}</span>
-        {!e.enabled && <span data-testid="editor-plugin-off" style={tagStyle}>Off</span>}
+        <span data-testid="editor-plugin-source" className="wk-tag">{e.first_party ? 'Built in' : 'Installed'}</span>
+        {!e.enabled && <span data-testid="editor-plugin-off" className="wk-tag">Off</span>}
       </p>
       <p style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-body)', marginTop: 2 }}>
         Version {e.version} · opens {kindsInWords(e.kinds)}
@@ -128,51 +120,33 @@ function EditorRow({ e, navigate, compact }: { e: EditorView; navigate: (p: stri
 /** The list itself, with its loading, error, unsupported and empty states. */
 export function EditorPluginList({ navigate, compact = false }: { navigate: (p: string) => void; compact?: boolean }): React.ReactElement {
   const { load, retry, retrying } = useEditorList();
-  const showText = useDisplayText(); // raw error text: home and temp paths read ~ unless technical details are on
-  if (load.state === 'loading') {
-    return (
-      <ul data-testid="editor-plugins-loading" aria-busy="true" aria-label="Loading editor plugins">
-        {[0, 1].map((i) => (
-          <li key={i} className="py-3">
-            <div style={{ height: 12, width: '40%', background: 'var(--surface-raised)', borderRadius: 'var(--radius-sm)' }} />
-            <div style={{ height: 10, width: '60%', marginTop: 6, background: 'var(--surface-raised)', borderRadius: 'var(--radius-sm)' }} />
-          </li>
-        ))}
-      </ul>
-    );
-  }
+  if (load.state === 'loading') return <Skeleton rows={2} data-testid="editor-plugins-loading" />;
   if (load.state === 'error') {
-    return (
-      <div data-testid="editor-plugins-error" role="alert" className="py-3 flex flex-wrap items-center gap-3">
-        <p style={{ fontSize: 'var(--text-sm)', color: 'var(--ink-body)' }}>Couldn’t load the editor plugins.</p>
-        <button type="button" className="wk-btn wk-btn--secondary wk-btn--sm" data-testid="editor-plugins-retry" onClick={retry} disabled={retrying}>
-          {retrying ? 'Retrying…' : 'Retry'}
-        </button>
-        <details className="w-full" style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-body)' }}>
-          <summary>Technical details</summary>
-          <pre style={{ fontFamily: 'var(--font-mono)', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{showText(load.error)}</pre>
-        </details>
-      </div>
-    );
+    return <StateBanner kind="error" what="the editor plugins" error={load.error} onRetry={retry} retrying={retrying} data-testid="editor-plugins-error" />;
   }
   if (load.state === 'unsupported') {
-    return (
-      <p data-testid="editor-plugins-unsupported" className="py-3" style={{ fontSize: 'var(--text-sm)', color: 'var(--ink-body)' }}>
-        This version of studio’s service has no editor plugins to list. Update it to see them here.
-      </p>
-    );
+    return <EmptyState data-testid="editor-plugins-unsupported" title="This version of studio’s service has no editor plugins to list." body="Update it to see them here." />;
   }
   if (load.editors.length === 0) {
-    return (
-      <p data-testid="editor-plugins-empty" className="py-3" style={{ fontSize: 'var(--text-sm)', color: 'var(--ink-body)' }}>
-        No editor plugins yet. Create one, and it shows here once it is installed.
-      </p>
-    );
+    return <EmptyState data-testid="editor-plugins-empty" title="No editor plugins yet." body="Create one, and it shows here once it is installed." />;
   }
   return (
     <ul data-testid="editor-plugins-list" aria-label="Editor plugins">
       {load.editors.map((e) => <EditorRow key={e.id} e={e} navigate={navigate} compact={compact} />)}
     </ul>
+  );
+}
+
+/** The editor test page with no editor named (UX audit row 39): the installed editors to open. */
+export function EditorTestPagePicker({ navigate }: { navigate: (p: string) => void }): React.ReactElement {
+  return (
+    <PageFrame
+      data-testid="editor-host-pick"
+      title="Editor test page"
+      intro="Pick an editor to open it in the real sandbox over a sample page. Editor plugins are listed in Settings, under Developer."
+    >
+      <EditorPluginList navigate={navigate} compact />
+    </PageFrame>
   );
 }
 
@@ -188,16 +162,15 @@ export function DeveloperSettings({ navigate }: { navigate: (p: string) => void 
     <section
       data-testid="developer-settings"
       aria-labelledby="developer-settings-title"
-      className="rounded-xl px-5 py-4 mb-6"
-      style={{ background: 'var(--surface-card)', border: '1px solid var(--surface-raised)' }}
+      className="wk-card mb-6"
     >
-      <h2 id="developer-settings-title" style={{ fontSize: 'var(--text-md)', fontWeight: 600, color: 'var(--ink-high)' }}>Developer</h2>
+      <h2 id="developer-settings-title" className="wk-section-title">Developer</h2>
       <div data-testid="editor-plugins-settings" className="mt-3">
         <h3 style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--ink-high)' }}>Editor plugins</h3>
         <p className="mt-1" style={{ fontSize: 'var(--text-xs)', color: 'var(--ink-body)' }}>
           Editors open what studio makes, such as pages and documents, in a sandbox: each can do only what its row
-          lists. Built-in ones ship with studio. When a create run finishes and its editor passes studio’s checks, you
-          approve the install in that run, and the editor appears here.
+          lists. Built-in ones ship with studio. Create an editor plugin starts a session that builds one; when it
+          passes studio’s checks, that session asks you to approve the install, and the editor appears here.
         </p>
         <div className="mt-3 flex flex-wrap items-center gap-3">
           <button

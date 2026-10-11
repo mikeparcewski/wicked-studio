@@ -105,7 +105,7 @@ describe('Settings → Developer → Editor plugins', () => {
     expect(screen.queryByTestId('editor-plugins-empty')).toBeNull();
     expect(screen.getByTestId('editor-plugins-error').textContent).not.toContain(FAKE_HOME);
     fail = false;
-    fireEvent.click(screen.getByTestId('editor-plugins-retry'));
+    fireEvent.click(screen.getByTestId('editor-plugins-error-retry'));
     await waitFor(() => expect(screen.getAllByTestId('editor-plugin-row')).toHaveLength(2));
     expect(f.mock.calls.filter(([u]) => String(u).includes('/editors')).length).toBe(2);
   });

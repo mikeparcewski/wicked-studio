@@ -11,11 +11,11 @@
   "version": 1,
   "studioVersion": "0.7.4",
   "counts": {
-    "files": 179,
-    "occurrences": 2069,
-    "static": 1836,
-    "dynamic": 48,
-    "computed": 6
+    "files": 193,
+    "occurrences": 2119,
+    "static": 1850,
+    "dynamic": 54,
+    "computed": 17
   },
   "static": [
     {
@@ -1096,6 +1096,12 @@
       ]
     },
     {
+      "testId": "combobox",
+      "files": [
+        "src/components/ui/Combobox.tsx"
+      ]
+    },
+    {
       "testId": "command-palette",
       "files": [
         "src/components/CommandPalette.tsx"
@@ -2074,7 +2080,7 @@
     {
       "testId": "editor-host-pick",
       "files": [
-        "src/components/editors/EditorHostPage.tsx"
+        "src/components/editors/EditorPluginsSettings.tsx"
       ]
     },
     {
@@ -2156,12 +2162,6 @@
       ]
     },
     {
-      "testId": "editor-plugins-retry",
-      "files": [
-        "src/components/editors/EditorPluginsSettings.tsx"
-      ]
-    },
-    {
       "testId": "editor-plugins-settings",
       "files": [
         "src/components/editors/EditorPluginsSettings.tsx"
@@ -2201,6 +2201,12 @@
       "testId": "elicitation-prompt",
       "files": [
         "src/components/ElicitationPrompt.tsx"
+      ]
+    },
+    {
+      "testId": "empty-state",
+      "files": [
+        "src/components/ui/StateBanner.tsx"
       ]
     },
     {
@@ -2585,6 +2591,12 @@
       "testId": "failure-send-back-note",
       "files": [
         "src/components/session/RunRecord.tsx"
+      ]
+    },
+    {
+      "testId": "file-pick",
+      "files": [
+        "src/components/ui/FilePick.tsx"
       ]
     },
     {
@@ -4834,6 +4846,12 @@
       ]
     },
     {
+      "testId": "overflow-menu",
+      "files": [
+        "src/components/ui/OverflowMenu.tsx"
+      ]
+    },
+    {
       "testId": "page-edit-input",
       "files": [
         "src/components/session/PageEditor.tsx",
@@ -4851,6 +4869,7 @@
       "testId": "page-frame",
       "files": [
         "src/components/session/PageEditor.tsx",
+        "src/components/ui/PageFrame.tsx",
         "src/plugins/wicked-page/plugin.ts"
       ]
     },
@@ -5057,6 +5076,18 @@
       "testId": "phase-selection",
       "files": [
         "src/components/PhasePicker.tsx"
+      ]
+    },
+    {
+      "testId": "phone-needs-badge",
+      "files": [
+        "src/components/ui/PhoneNeedsBadge.tsx"
+      ]
+    },
+    {
+      "testId": "phone-topbar",
+      "files": [
+        "src/components/ui/TopBar.tsx"
       ]
     },
     {
@@ -5483,6 +5514,12 @@
       "testId": "product-totals",
       "files": [
         "src/components/product/ProductPage.tsx"
+      ]
+    },
+    {
+      "testId": "progress",
+      "files": [
+        "src/components/ui/Progress.tsx"
       ]
     },
     {
@@ -5915,6 +5952,24 @@
       "testId": "rail-api-server",
       "files": [
         "src/components/HealthRailSection.tsx"
+      ]
+    },
+    {
+      "testId": "rail-drawer",
+      "files": [
+        "src/components/ui/RailDrawer.tsx"
+      ]
+    },
+    {
+      "testId": "rail-drawer-scrim",
+      "files": [
+        "src/components/ui/RailDrawer.tsx"
+      ]
+    },
+    {
+      "testId": "rail-drawer-toggle",
+      "files": [
+        "src/components/ui/TopBar.tsx"
       ]
     },
     {
@@ -8017,6 +8072,12 @@
       ]
     },
     {
+      "testId": "skeleton",
+      "files": [
+        "src/components/ui/StateBanner.tsx"
+      ]
+    },
+    {
       "testId": "skills-add-open",
       "files": [
         "src/components/SkillsPage.tsx"
@@ -8960,6 +9021,12 @@
       ]
     },
     {
+      "testId": "stat-line",
+      "files": [
+        "src/components/ui/StatLine.tsx"
+      ]
+    },
+    {
       "testId": "stat-ready",
       "files": [
         "src/components/RepositoriesPanel.tsx"
@@ -8981,6 +9048,12 @@
       "testId": "stat-value",
       "files": [
         "src/components/dashboardKit.tsx"
+      ]
+    },
+    {
+      "testId": "state-banner",
+      "files": [
+        "src/components/ui/StateBanner.tsx"
       ]
     },
     {
@@ -9922,9 +9995,21 @@
       ]
     },
     {
+      "testId": "tabs",
+      "files": [
+        "src/components/ui/Tabs.tsx"
+      ]
+    },
+    {
       "testId": "team-message-receipt",
       "files": [
         "src/components/ChatInput.tsx"
+      ]
+    },
+    {
+      "testId": "tech-details",
+      "files": [
+        "src/components/ui/TechDetails.tsx"
       ]
     },
     {
@@ -11078,6 +11163,12 @@
       ]
     },
     {
+      "pattern": "*-button",
+      "files": [
+        "src/components/ui/OverflowMenu.tsx"
+      ]
+    },
+    {
       "pattern": "*-chip",
       "files": [
         "src/components/SteeringRuleForm.tsx",
@@ -11091,6 +11182,12 @@
       ]
     },
     {
+      "pattern": "*-detail",
+      "files": [
+        "src/components/ui/StateBanner.tsx"
+      ]
+    },
+    {
       "pattern": "*-disclosure",
       "files": [
         "src/components/session/AssuranceReceipt.tsx"
@@ -11100,6 +11197,12 @@
       "pattern": "*-editor",
       "files": [
         "src/components/SteeringGrid.tsx"
+      ]
+    },
+    {
+      "pattern": "*-fill",
+      "files": [
+        "src/components/ui/Progress.tsx"
       ]
     },
     {
@@ -11118,7 +11221,9 @@
       "pattern": "*-input",
       "files": [
         "src/components/FacetAutocomplete.tsx",
-        "src/components/SteeringGrid.tsx"
+        "src/components/SteeringGrid.tsx",
+        "src/components/ui/Combobox.tsx",
+        "src/components/ui/FilePick.tsx"
       ]
     },
     {
@@ -11131,6 +11236,18 @@
       "pattern": "*-link",
       "files": [
         "src/components/session/CodebaseDownload.tsx"
+      ]
+    },
+    {
+      "pattern": "*-list",
+      "files": [
+        "src/components/ui/OverflowMenu.tsx"
+      ]
+    },
+    {
+      "pattern": "*-more",
+      "files": [
+        "src/components/ui/Tabs.tsx"
       ]
     },
     {
@@ -11155,6 +11272,12 @@
       "pattern": "*-reonboard",
       "files": [
         "src/components/RepoFindings.tsx"
+      ]
+    },
+    {
+      "pattern": "*-retry",
+      "files": [
+        "src/components/ui/StateBanner.tsx"
       ]
     },
     {
@@ -11404,7 +11527,84 @@
         "src/components/WhatWhere.tsx",
         "src/components/dashboardKit.tsx",
         "src/components/session/AssuranceReceipt.tsx",
-        "src/components/session/CodebaseDownload.tsx"
+        "src/components/session/CodebaseDownload.tsx",
+        "src/components/ui/Combobox.tsx",
+        "src/components/ui/FilePick.tsx",
+        "src/components/ui/OverflowMenu.tsx",
+        "src/components/ui/PageFrame.tsx",
+        "src/components/ui/Progress.tsx",
+        "src/components/ui/Segmented.tsx",
+        "src/components/ui/StatLine.tsx",
+        "src/components/ui/StateBanner.tsx",
+        "src/components/ui/Switch.tsx",
+        "src/components/ui/Tabs.tsx",
+        "src/components/ui/TechDetails.tsx"
+      ]
+    },
+    {
+      "expression": "testId = 'combobox'",
+      "files": [
+        "src/components/ui/Combobox.tsx"
+      ]
+    },
+    {
+      "expression": "testId = 'empty-state'",
+      "files": [
+        "src/components/ui/StateBanner.tsx"
+      ]
+    },
+    {
+      "expression": "testId = 'file-pick'",
+      "files": [
+        "src/components/ui/FilePick.tsx"
+      ]
+    },
+    {
+      "expression": "testId = 'overflow-menu'",
+      "files": [
+        "src/components/ui/OverflowMenu.tsx"
+      ]
+    },
+    {
+      "expression": "testId = 'page-frame'",
+      "files": [
+        "src/components/ui/PageFrame.tsx"
+      ]
+    },
+    {
+      "expression": "testId = 'progress'",
+      "files": [
+        "src/components/ui/Progress.tsx"
+      ]
+    },
+    {
+      "expression": "testId = 'skeleton'",
+      "files": [
+        "src/components/ui/StateBanner.tsx"
+      ]
+    },
+    {
+      "expression": "testId = 'stat-line'",
+      "files": [
+        "src/components/ui/StatLine.tsx"
+      ]
+    },
+    {
+      "expression": "testId = 'state-banner'",
+      "files": [
+        "src/components/ui/StateBanner.tsx"
+      ]
+    },
+    {
+      "expression": "testId = 'tabs'",
+      "files": [
+        "src/components/ui/Tabs.tsx"
+      ]
+    },
+    {
+      "expression": "testId = 'tech-details'",
+      "files": [
+        "src/components/ui/TechDetails.tsx"
       ]
     },
     {

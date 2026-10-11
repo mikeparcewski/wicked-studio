@@ -5,7 +5,7 @@ import { FakeDocAdapter } from '../../editors/fakeAdapter.js';
 import { bundleUrl, fetchGrants, type Chip } from '../../editors/model.js';
 import { PERMISSIONS, SIZES, type PermissionId, type Size } from '../../editors/protocol.js';
 import { readThemeTokens } from '../../editors/theme.js';
-import { EditorPluginList } from './EditorPluginsSettings.js';
+import { EditorTestPagePicker } from './EditorPluginsSettings.js';
 
 /**
  * THE EDITOR HOST PAGE (DES-EDITOR-PLUGINS-001 §10 step 2, §12.1; slice EP-P1): one editor plugin in
@@ -165,15 +165,7 @@ export function EditorHostPage({ mode, navigate }: { mode: 'dev' | 'conformance'
     return (
       // A single scrolling column (codex): not the two-column host frame, which reserves the host's side panel.
       <div data-testid="editor-host-page" data-mode={mode} className="flex-1 min-w-0 overflow-y-auto">
-        <div data-testid="editor-host-pick" className="max-w-2xl" style={{ padding: 'var(--space-6) var(--space-4)' }}>
-          <h1 className="wk-page-title">Editor test page</h1>
-          <p className="mt-1" style={{ fontSize: 'var(--text-sm)', color: 'var(--ink-muted)' }}>
-            Pick an editor to open it in the real sandbox over a sample page. Editor plugins are listed in Settings, under Developer.
-          </p>
-          <div className="mt-3">
-            <EditorPluginList navigate={navigate ?? ((p) => { history.pushState(null, '', p); window.dispatchEvent(new PopStateEvent('popstate')); })} compact />
-          </div>
-        </div>
+        <EditorTestPagePicker navigate={navigate ?? ((p) => { history.pushState(null, '', p); window.dispatchEvent(new PopStateEvent('popstate')); })} />
       </div>
     );
   }
