@@ -100,7 +100,7 @@ with sync_playwright() as p:
         page.get_by_test_id("launch-problem").wait_for(state="visible", timeout=15000)
         body = page.evaluate("() => document.body.innerText || ''")
         check("d1-team-model-line",
-              "The PA scores and plans it, you approve the plan, and the team works it." in body
+              "you approve the plan before any work starts." in body and "The PA" not in body
               and "council elects" not in body)
         check("d2-no-notice-before-a-choice", page.get_by_test_id("deliver-notice").count() == 0)
         picker = page.locator('[data-testid="launch-project-row"] [data-testid="launch-repo-picker"]')

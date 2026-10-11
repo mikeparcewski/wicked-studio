@@ -90,15 +90,19 @@ describe('studio#275: the discipline skill on the composer', () => {
   it('says the base skill and generation the next launch carries', async () => {
     health(POSTURE);
     render(<ChatInput runId={null} runStatus={null} onLaunched={vi.fn()} />);
-    await waitFor(() => expect(screen.getByTestId('launch-base-skill').textContent)
+    // The name and generation are internals: in Technical details, nothing on the default layer.
+    await waitFor(() => expect(screen.getByTestId('launch-base-skill').querySelector('pre')?.textContent)
       .toBe('discipline skill: wicked-garden-governed-worker gen 7'));
+    expect(screen.getByTestId('launch-base-skill').tagName).toBe('DETAILS');
+    expect(screen.queryByTestId('launch-base-skill-warning')).toBeNull();
   });
 
   it('says a missing skill refuses launches under require', async () => {
     health({ ...POSTURE, present: false, gen: 7 });
     render(<ChatInput runId={null} runStatus={null} onLaunched={vi.fn()} />);
-    await waitFor(() => expect(screen.getByTestId('launch-base-skill').textContent)
+    await waitFor(() => expect(screen.getByTestId('launch-base-skill').querySelector('pre')?.textContent)
       .toBe('discipline skill: wicked-garden-governed-worker MISSING — runs will be refused at intake'));
+    expect(screen.getByTestId('launch-base-skill-warning').textContent).toMatch(/^Launches will be refused/);
   });
 
   it('says nothing on a daemon without the field, or with the setting off', async () => {

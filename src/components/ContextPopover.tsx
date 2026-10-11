@@ -1,4 +1,5 @@
 import { seatStandingWord } from './HealthRailSection.js';
+import { seatLabel, userSeats } from '../board/seatNames.js';
 import type { EntityMode, RepoEntry, RosterSeat } from '../api/types.js';
 
 export type ConfirmMode = 'none' | 'all' | 'before';
@@ -69,12 +70,12 @@ export function ContextPopover({
           takes none), so a picker that showed "N files attached" and dropped them is gone. */}
       {/* ── CLIs on/off ──────────────────────────────────────────── */}
       <div className="px-4 py-3">
-        <SectionHead>CLIs on/off</SectionHead>
+        <SectionHead>Helpers</SectionHead>
         {roster.length === 0 ? (
-          <span style={{ color: 'var(--ink-dim)' }}>No roster loaded</span>
+          <span style={{ color: 'var(--ink-dim)' }}>No helpers listed yet</span>
         ) : (
           <div className="flex flex-wrap gap-x-4 gap-y-1.5">
-            {roster.map((seat) => (
+            {userSeats(roster).map((seat) => (
               <label
                 key={seat.key}
                 className="flex items-center gap-1.5 cursor-pointer"
@@ -86,10 +87,10 @@ export function ContextPopover({
                   onChange={() => onToggleCli(seat.key)}
                   data-testid={`launch-seat-${seat.key}`}
                 />
-                <span>{seat.key}</span>
+                <span>{seatLabel(seat)}</span>
                 {seat.health?.status === 'inactive' && (
                   <span
-                    className="rounded-full border px-1.5 text-[10px] font-mono"
+                    className="rounded-full border px-1.5 text-[11px]"
                     style={{ color: 'var(--status-fail)', borderColor: 'var(--status-fail-dim)' }}
                     title={seat.health.message ?? 'marked inactive by the platform'}
                     data-testid={`seat-health-${seat.key}`}
@@ -101,9 +102,9 @@ export function ContextPopover({
                     a seat the daemon marks `auth: not_required` never reads "sign in needed". */}
                 {seatStandingWord(seat).kind === 'signed-out' && (
                   <span
-                    className="rounded-full border px-1.5 text-[10px] font-mono"
+                    className="rounded-full border px-1.5 text-[11px]"
                     style={{ color: 'var(--status-fail)', borderColor: 'var(--status-fail-dim)' }}
-                    title={`${seat.key} isn't signed in — runs routed there will fall back or fail. Sign in in Settings.`}
+                    title={`${seatLabel(seat)} isn't signed in — runs routed there will fall back or fail. Sign in in Settings.`}
                     data-testid={`seat-signin-${seat.key}`}
                   >
                     sign in needed
