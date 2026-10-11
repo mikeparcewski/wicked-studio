@@ -1624,9 +1624,9 @@ button.wk-walk-chapter-btn:hover .wk-walk-chapter-title { text-decoration: under
 }
 .wk-health-card-title { margin: 0 0 8px; font-size: var(--text-sm); font-weight: var(--weight-bold); color: var(--ink-high); }
 
-/* Touch: under 640 px the rail's quick icons keep a 32 px hit area (studio#421 change 5). */
-@media (max-width: 640px) {
-  .wk-rail-icon-btn { width: 32px; height: 32px; }
+/* Touch: on the phone breakpoint the rail's quick icons take the contract's tap target (UI-CONTRACT §3). */
+@media (max-width: 767px) {
+  .wk-rail-icon-btn { width: var(--tap-min, 44px); height: var(--tap-min, 44px); }
 }
 
 /* /health readability (image review): clear the floating Ask button; one upgrade note; on a narrow card
