@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { useLaunchWizard } from '../src/store/launchWizard.js';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 /**
@@ -140,7 +141,7 @@ describe('LearnPage', () => {
     expect(screen.queryByText('A late')).toBeNull();
   });
 
-  it('says nothing is learned yet and seeds the composer with /workflow-learn', async () => {
+  it('says nothing is learned yet, and "Learn something new" opens the launch wizard for learn', async () => {
     listRepos.mockResolvedValue(repos);
     schedules.mockResolvedValue({ schedules: [] });
     topics.mockResolvedValue({ repoRef: 'r1', topics: [] });
@@ -148,8 +149,9 @@ describe('LearnPage', () => {
     render(<LearnPage navigate={navigate} />);
     expect(await screen.findByText('Nothing learned in demo yet.')).toBeTruthy();
     fireEvent.click(screen.getByTestId('learn-new'));
-    expect(useComposerSeed.getState().seed).toEqual({ composerKey: 'desk', text: '/workflow-learn ' });
-    expect(navigate).toHaveBeenCalledWith('/');
+    expect(useLaunchWizard.getState()).toMatchObject({ open: true, draft: { workflowId: 'learn' } });
+    expect(useComposerSeed.getState().seed).toBeNull();
+    expect(navigate).not.toHaveBeenCalled();
   });
 
   it('a failed read shows one banner and no counts, never a zero', async () => {

@@ -26,6 +26,7 @@ import { Terminal } from './Terminal.js';
 import { addAboutChip } from '../store/composerChips.js';
 import { everythingPath } from '../board/everythingModel.js';
 import { seedNewChat } from '../board/chatMoves.js';
+import { openLaunchWizard } from '../store/launchWizard.js';
 import { pageComposerKey, seedComposer } from '../store/composerSeed.js';
 
 /**
@@ -547,20 +548,13 @@ export function CommandPalette({
     // Verbs (§1.3's table — each names its existing mechanism, none invents one).
     const verbs: Array<{ name: string; action: () => void; when?: boolean }> = [
       {
-        // S19b: a build starts by naming its workflow — the page's composer (a session's), else the
-        // Desk's (the project's @ chip when one is ambient), gets `/workflow-` focused so the `/`
-        // menu opens. Nothing is sent until the user sends.
-        name: 'New Build',
+        // The launch wizard (operator 2026-10-11): a new job opens the one modal where you are — it
+        // asks for the kind of job first; a session page's composer is the one it launches from.
+        // Nothing is sent until Launch.
+        name: 'New job',
         action: () => {
           onClose();
-          const here = pageComposerKey();
-          if (here !== null && here !== 'desk') {
-            seedComposer(here, '/workflow-');
-            return;
-          }
-          navigate('/');
-          seedNewChat(projectId, projectId === null ? null : projects.find((p) => p.id === projectId)?.name ?? null);
-          seedComposer('desk', '/workflow-');
+          openLaunchWizard({ projectId, composerKey: pageComposerKey() ?? 'desk' });
         },
       },
       {

@@ -11,10 +11,10 @@
   "version": 1,
   "studioVersion": "0.7.7",
   "counts": {
-    "files": 198,
-    "occurrences": 2224,
-    "static": 1937,
-    "dynamic": 60,
+    "files": 199,
+    "occurrences": 2236,
+    "static": 1948,
+    "dynamic": 61,
     "computed": 19
   },
   "static": [
@@ -1177,48 +1177,6 @@
       "testId": "composer-hint",
       "files": [
         "src/board/objectActions.ts",
-        "src/components/session/Composer.tsx"
-      ]
-    },
-    {
-      "testId": "composer-launch-deliver-word",
-      "files": [
-        "src/components/session/Composer.tsx"
-      ]
-    },
-    {
-      "testId": "composer-launch-error",
-      "files": [
-        "src/components/session/Composer.tsx"
-      ]
-    },
-    {
-      "testId": "composer-launch-error-detail",
-      "files": [
-        "src/components/session/Composer.tsx"
-      ]
-    },
-    {
-      "testId": "composer-launch-gate-word",
-      "files": [
-        "src/components/session/Composer.tsx"
-      ]
-    },
-    {
-      "testId": "composer-launch-line",
-      "files": [
-        "src/components/session/Composer.tsx"
-      ]
-    },
-    {
-      "testId": "composer-launch-row",
-      "files": [
-        "src/components/session/Composer.tsx"
-      ]
-    },
-    {
-      "testId": "composer-launch-target",
-      "files": [
         "src/components/session/Composer.tsx"
       ]
     },
@@ -3542,36 +3500,6 @@
       ]
     },
     {
-      "testId": "launch-row-deliver",
-      "files": [
-        "src/components/session/Composer.tsx"
-      ]
-    },
-    {
-      "testId": "launch-row-deliver-toggle",
-      "files": [
-        "src/components/session/Composer.tsx"
-      ]
-    },
-    {
-      "testId": "launch-row-gate",
-      "files": [
-        "src/components/session/Composer.tsx"
-      ]
-    },
-    {
-      "testId": "launch-row-reduced-assurance",
-      "files": [
-        "src/components/session/Composer.tsx"
-      ]
-    },
-    {
-      "testId": "launch-row-repo",
-      "files": [
-        "src/components/session/Composer.tsx"
-      ]
-    },
-    {
       "testId": "launch-started",
       "files": [
         "src/components/ChatInput.tsx"
@@ -3605,6 +3533,144 @@
       "testId": "launch-target-row",
       "files": [
         "src/components/ChatInput.tsx"
+      ]
+    },
+    {
+      "testId": "launch-wizard",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
+      "testId": "launch-wizard-back",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
+      "testId": "launch-wizard-blocker",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
+      "testId": "launch-wizard-change",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
+      "testId": "launch-wizard-close",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
+      "testId": "launch-wizard-deliver",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
+      "testId": "launch-wizard-deliver-toggle",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
+      "testId": "launch-wizard-error",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
+      "testId": "launch-wizard-error-detail",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
+      "testId": "launch-wizard-gate",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
+      "testId": "launch-wizard-helpers",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
+      "testId": "launch-wizard-intent",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
+      "testId": "launch-wizard-launch",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
+      "testId": "launch-wizard-next",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
+      "testId": "launch-wizard-progress",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
+      "testId": "launch-wizard-project",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
+      "testId": "launch-wizard-qe",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
+      "testId": "launch-wizard-reduced",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
+      "testId": "launch-wizard-repo",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
+      "testId": "launch-wizard-review",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
+      "testId": "launch-wizard-scrim",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
+      "testId": "launch-wizard-seat",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
+      ]
+    },
+    {
+      "testId": "launch-wizard-step",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
       ]
     },
     {
@@ -11913,6 +11979,12 @@
       "pattern": "launch-seat-*",
       "files": [
         "src/components/ContextPopover.tsx"
+      ]
+    },
+    {
+      "pattern": "launch-wizard-workflow-*",
+      "files": [
+        "src/components/launch/LaunchWizard.tsx"
       ]
     },
     {

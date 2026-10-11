@@ -1,21 +1,5 @@
 /* Section CSS: composer (design/UI-CONTRACT.md §6). Only that section edits this file. */
 
-/* The slash-launch strip (operator 2026-10-10, UX audit row 3): labelled, spaced controls on one or two
-   rows; the status line on its own row; on the phone breakpoint every control takes the full width. */
-.wk-composer-launch { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-card); }
-.wk-composer-launch-controls { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px 16px; }
-.wk-composer-launch-field { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
-.wk-composer-launch-label { font-size: var(--text-2xs); font-weight: var(--weight-semi); color: var(--ink-muted); }
-.wk-composer-launch-repo { min-width: 220px; max-width: 100%; padding: 0 8px; }
-.wk-composer-launch-gate { min-width: 200px; max-width: 100%; padding: 0 8px; }
-.wk-composer-launch-deliver { display: inline-flex; align-items: center; min-height: var(--control-h); }
-.wk-composer-launch-line { font-size: var(--text-xs); color: var(--ink-muted); }
-/* A required choice not made yet is waiting on you, not a failure (contract §2: red only for a real fail). */
-.wk-composer-launch-line--bad { color: var(--status-gate); }
-@media (max-width: 767px) {
-  .wk-composer-launch-controls { flex-direction: column; align-items: stretch; }
-  .wk-composer-launch-repo, .wk-composer-launch-gate { min-width: 0; width: 100%; }
-}
 
 
 /* UX audit row 23: ONE focus ring — the input box's (.wk-desk-composer:focus-within). The older
@@ -38,7 +22,7 @@
   .wk-composer-chip-x { min-width: var(--tap-min); min-height: var(--tap-min); }
   .wk-composer-menu-item { min-height: var(--tap-min); }
   .wk-composer form > button[type='submit'] { width: var(--tap-min); height: var(--tap-min); }
-  select.wk-composer-launch-repo, select.wk-composer-launch-gate, .wk-composer-form-select.wk-field { min-height: var(--tap-min); }
+  .wk-composer-form-select.wk-field { min-height: var(--tap-min); }
   [data-testid='phase-picker-toggle'] { min-height: var(--tap-min); }
   button.wk-composer-form-plus { width: var(--tap-min); height: var(--tap-min); }
 }
@@ -48,3 +32,51 @@
 .wk-composer-form-select { height: var(--control-h-sm); padding: 0 8px; font-size: var(--text-xs); }
 /* A label and its control wrap together, never split across lines. */
 .wk-composer-form-pair { display: inline-flex; align-items: center; gap: 8px; }
+
+/* The launch wizard (operator 2026-10-11): a centred modal on desktop, a full-height sheet on a phone. */
+.wk-launch-wizard-scrim { position: fixed; inset: 0; z-index: 60; background: var(--scrim); display: flex; align-items: center; justify-content: center; padding: var(--space-6); }
+.wk-launch-wizard {
+  display: flex; flex-direction: column; width: min(640px, 100%); max-height: min(720px, calc(100dvh - 48px));
+  background: var(--surface-overlay); border: 1px solid var(--border-strong); border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-overlay); color: var(--ink-body); --focus-gap: var(--surface-overlay);
+}
+.wk-launch-wizard-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); padding: var(--space-4) var(--space-5) var(--space-3); border-bottom: 1px solid var(--border-subtle); }
+.wk-launch-wizard-title { margin: 0; font-size: var(--text-lg); font-weight: var(--weight-semi); color: var(--ink-high); }
+.wk-launch-wizard-progress { margin: 2px 0 0; font-size: var(--text-xs); color: var(--ink-muted); }
+.wk-launch-wizard-body { flex: 1 1 auto; overflow-y: auto; display: flex; flex-direction: column; gap: var(--space-4); padding: var(--space-4) var(--space-5); }
+.wk-launch-wizard-field, .wk-launch-wizard-fieldset { display: flex; flex-direction: column; gap: var(--space-1); margin: 0; padding: 0; border: 0; min-width: 0; }
+.wk-launch-wizard-intent { min-height: 120px; padding: 8px 10px; font-size: var(--text-sm); resize: vertical; }
+.wk-launch-wizard-choices { display: flex; flex-direction: column; gap: var(--space-2); }
+.wk-launch-wizard-choice {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; padding: 10px 12px;
+  background: var(--surface-raised); border: 1px solid var(--border); border-radius: var(--radius-md); color: var(--ink-high); font: inherit; cursor: pointer;
+}
+.wk-launch-wizard-choice:hover { border-color: var(--border-strong); }
+.wk-launch-wizard-choice:focus-visible { outline: 2px solid transparent; box-shadow: var(--focus-ring); }
+.wk-launch-wizard-choice--on { border-color: var(--accent); background: var(--accent-wash); }
+.wk-launch-wizard-choice-name { font-size: var(--text-sm); font-weight: var(--weight-semi); }
+.wk-launch-wizard-choice-line { font-size: var(--text-xs); color: var(--ink-muted); }
+.wk-launch-wizard-seats { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.wk-launch-wizard-review { margin: 0; display: flex; flex-direction: column; gap: var(--space-2); font-size: var(--text-sm); }
+.wk-launch-wizard-review > div { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: var(--space-3); }
+.wk-launch-wizard-review dt { color: var(--ink-muted); }
+.wk-launch-wizard-review dd { margin: 0; color: var(--ink-high); overflow-wrap: anywhere; }
+.wk-launch-wizard-review-intent { white-space: pre-wrap; }
+.wk-launch-wizard-foot { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-3) var(--space-5) var(--space-4); border-top: 1px solid var(--border-subtle); }
+.wk-launch-wizard-actions { display: flex; justify-content: flex-end; gap: var(--space-2); }
+.wk-launch-wizard-actions > :first-child:not(:last-child) { margin-right: auto; }
+@media (max-width: 767px) {
+  .wk-launch-wizard-scrim { padding: 0; align-items: stretch; }
+  .wk-launch-wizard { width: 100%; max-height: none; height: 100dvh; border-radius: 0; border: 0; }
+  .wk-launch-wizard-head, .wk-launch-wizard-body, .wk-launch-wizard-foot { padding-inline: var(--space-4); }
+  .wk-launch-wizard-review > div { grid-template-columns: 1fr; gap: 0; }
+  .wk-launch-wizard .wk-btn, .wk-launch-wizard select.wk-field, .wk-launch-wizard-choice { min-height: var(--tap-min); }
+}
+.wk-launch-wizard select.wk-field { min-height: var(--control-h); padding: 0 10px; font-size: var(--text-sm); }
+/* Helper choices read as toggles: a visible edge, the selected ones filled (wizard UX gate, codex). */
+.wk-launch-wizard .wk-composer-seat { border: 1px solid var(--border-strong); background: var(--surface-raised); }
+.wk-launch-wizard .wk-composer-seat[aria-pressed='true'] { border-color: var(--accent); background: var(--accent-wash); color: var(--ink-high); }
+.wk-launch-wizard .wk-composer-seat--off { border-style: dashed; }
+@media (max-width: 767px) {
+  .wk-launch-wizard select.wk-field, .wk-launch-wizard .wk-composer-seat { min-height: var(--tap-min); }
+}

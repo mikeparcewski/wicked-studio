@@ -144,8 +144,8 @@ export function lastRunLine(s: LearnSchedule): string | null {
   }
 }
 
-/** The composer words that start learning something new (the `/workflow-learn` command). */
-export const LEARN_COMMAND = '/workflow-learn ';
+/** The learn workflow's id: "Learn something new" opens the launch wizard on it. */
+export const LEARN_WORKFLOW_ID = 'learn';
 
 /** When the next refresh is due, in words: "in 3 days", "within the hour", "due now". */
 export function dueIn(at: number, now: number = Date.now()): string {

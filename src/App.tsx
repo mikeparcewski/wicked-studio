@@ -26,6 +26,7 @@ import { WorkflowViewer } from './components/WorkflowViewer.js';
 import { ShortcutOverlay } from './components/ShortcutOverlay.js';
 import { PeekCard } from './components/PeekCard.js';
 import { UndoToasts } from './components/UndoToasts.js';
+import { LaunchWizard } from './components/launch/LaunchWizard.js';
 import { ConnectionStatus } from './components/ConnectionStatus.js';
 import { SystemSettings } from './components/SystemSettings.js';
 import { ThemePage } from './components/ThemePage.js';
@@ -728,6 +729,9 @@ export function App(): React.ReactElement {
           usePeekJump and board/undoQueue. */}
       <PeekCard view={peek} />
       <UndoToasts />
+
+      {/* The launch wizard (operator 2026-10-11): every start point opens this one modal. */}
+      <LaunchWizard navigate={navigate} />
 
       {/* The lost-connection banner (crew#551): names the one-line fix while /ws is down. */}
       <ConnectionStatus />

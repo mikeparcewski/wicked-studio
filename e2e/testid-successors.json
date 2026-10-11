@@ -738,6 +738,18 @@
     "rail-governance-outbox": "rail-governance-detail",
     "rail-governance-by-type": "rail-governance-detail",
     "rail-governance-by-reason": "rail-governance-detail",
-    "rail-governance-range": "rail-governance-detail"
+    "rail-governance-range": "rail-governance-detail",
+    "composer-launch-row": "launch-wizard",
+    "composer-launch-line": "launch-wizard-review",
+    "composer-launch-target": "launch-wizard-repo",
+    "composer-launch-gate-word": "launch-wizard-gate",
+    "composer-launch-deliver-word": "launch-wizard-deliver",
+    "composer-launch-error": "launch-wizard-error",
+    "composer-launch-error-detail": "launch-wizard-error-detail",
+    "launch-row-repo": "launch-wizard-repo",
+    "launch-row-gate": "launch-wizard-gate",
+    "launch-row-deliver": "launch-wizard-deliver",
+    "launch-row-deliver-toggle": "launch-wizard-deliver-toggle",
+    "launch-row-reduced-assurance": "launch-wizard-reduced"
   }
 }

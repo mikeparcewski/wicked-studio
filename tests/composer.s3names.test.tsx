@@ -4,12 +4,13 @@
  * menu and the helpers row, groups the `@` menu under one header per kind, and says a project pick
  * once (the chip), with a placeholder that names the next thing to type after a workflow pick.
  */
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Project, RepoEntry, RosterSeat, SessionView, WorkflowDef } from '../src/api/types.js';
 import { Composer, shortPlaceholder } from '../src/components/session/Composer.js';
 import { useComposerChips } from '../src/store/composerChips.js';
+import { resetLaunchWizard, useLaunchWizard } from '../src/store/launchWizard.js';
 import { resetComposerSeats } from '../src/store/composerSeats.js';
 import { resetPlanCatalog } from '../src/store/planCatalog.js';
 import { useProjectsStore } from '../src/store/projects.js';
@@ -57,6 +58,7 @@ function type(text: string): void {
 }
 
 beforeEach(() => {
+  resetLaunchWizard();
   stubWire();
   clearCachedRoster();
   setCachedRoster(ROSTER);
@@ -103,54 +105,18 @@ describe('S3: one name per helper, the same list in @ and the helpers row', () =
     expect(screen.queryByTestId('composer-note')).toBeNull();
   });
 
-  it('after a workflow pick the placeholder names what to type next', () => {
-    render(<Harness />);
-    const box = screen.getByTestId('desk-composer-input');
-    expect(box.getAttribute('placeholder')).toBe('Ask anything');
-    type('/workflow-feature');
-    fireEvent.keyDown(box, { key: 'Enter' });
-    expect(box.getAttribute('placeholder')).toBe('Describe the work to launch');
-  });
-
-  it('row 24: a workflow launched in a session defaults to the repository its work already names', async () => {
+  it('row 24: a job started in a session hands the wizard the repository its work already names', () => {
     render(<Harness runs={[RUN]} />);
     type('/workflow-feature');
     fireEvent.keyDown(screen.getByTestId('desk-composer-input'), { key: 'Enter' });
-    await waitFor(() => expect((screen.getByTestId('launch-row-repo') as HTMLSelectElement).value).toBe('repo-b'));
+    expect(useLaunchWizard.getState().draft).toMatchObject({ workflowId: 'feature', contextRepo: 'repo-b' });
   });
 
-  it('row 24: on the Desk (no session repo) and several repositories, nothing is guessed', async () => {
+  it('row 24: on the Desk there is no session repository to hand over', () => {
     render(<Harness />);
     type('/workflow-feature');
     fireEvent.keyDown(screen.getByTestId('desk-composer-input'), { key: 'Enter' });
-    await waitFor(() => expect(screen.getByTestId('launch-row-repo').querySelectorAll('option').length).toBe(3));
-    expect((screen.getByTestId('launch-row-repo') as HTMLSelectElement).value).toBe('');
-  });
-
-  it('row 24 (codex r1): clearing the repository is the user speaking — the session default is not re-applied', async () => {
-    render(<Harness runs={[RUN]} />);
-    type('/workflow-feature');
-    fireEvent.keyDown(screen.getByTestId('desk-composer-input'), { key: 'Enter' });
-    const select = screen.getByTestId('launch-row-repo') as HTMLSelectElement;
-    await waitFor(() => expect(select.value).toBe('repo-b'));
-    fireEvent.change(select, { target: { value: '' } });
-    await new Promise((r) => setTimeout(r, 50));
-    expect(select.value).toBe('');
-  });
-
-  it('a refused launch says so plainly; the daemon text sits in Technical details, home path as ~', async () => {
-    render(<Harness runs={[RUN]} />);
-    type('/workflow-feature');
-    fireEvent.keyDown(screen.getByTestId('desk-composer-input'), { key: 'Enter' });
-    await waitFor(() => expect((screen.getByTestId('launch-row-repo') as HTMLSelectElement).value).toBe('repo-b'));
-    type('add a dark mode');
-    fireEvent.keyDown(screen.getByTestId('desk-composer-input'), { key: 'Enter' });
-    const err = await screen.findByTestId('composer-launch-error');
-    expect(err.textContent).toMatch(/^Couldn’t launch this\./);
-    const detail = screen.getByTestId('composer-launch-error-detail');
-    expect(detail.tagName).toBe('DETAILS');
-    expect(detail.textContent).toContain('~/src/beta');
-    expect(err.textContent).not.toContain('/root/');
+    expect(useLaunchWizard.getState().draft).toMatchObject({ workflowId: 'feature', contextRepo: null });
   });
 
   it('the 390 px placeholder is the first clause with an ellipsis, never a cut sentence', () => {
