@@ -9,6 +9,7 @@ import { NotFoundPage } from './components/NotFoundPage.js';
 import { SkipLink } from './components/SkipLink.js';
 import { ProjectDetailPage } from './components/ProjectDetailPage.js';
 import { RepositoriesPanel } from './components/RepositoriesPanel.js';
+import { LearnPage } from './components/learn/LearnPage.js';
 import { RepoDetailPage } from './components/RepoDetailPage.js';
 import { RepoGraphModal } from './components/RepoGraphModal.js';
 import { RightPanel } from './components/RightPanel.js';
@@ -524,6 +525,9 @@ export function App(): React.ReactElement {
     }
     // `/mcp` — MCP tools (DES-MCP-TOOLS-001 §7): the registered servers, their tools, the policy
     // matrix and Approve / Revoke. `?server=<name>` deep-links a server row open.
+    if (panel === 'learn') {
+      return <LearnPage navigate={navigate} />;
+    }
     if (panel === 'mcp') {
       return (
         <div className="flex flex-1 overflow-hidden">

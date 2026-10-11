@@ -77,7 +77,7 @@ with sync_playwright() as p:
         page.wait_for_timeout(150)
 
     # ── 1. the GO TO group (a word lists the per-item rows too) ─────────────────────
-    # 24 destinations: X1 dropped "Start a chat" (/chat/new); the New Chat verb seeds the Desk.
+    # 24 destinations: main's 23 plus Learn (/learn).
     open_palette("go:")
     dest_rows = page.get_by_test_id("palette-row").count()
     page.keyboard.press("Escape")
@@ -87,7 +87,7 @@ with sync_playwright() as p:
     page.screenshot(path=str(SHOTS / "desk-cmdk-go.png"))
     page.keyboard.press("Escape")
     groups = {r["group"] for r in rows}
-    check("go-group", groups == {"go"} and dest_rows == 23 and len(rows) > 23, groups=sorted(groups), destinations=dest_rows, rows=len(rows))
+    check("go-group", groups == {"go"} and dest_rows == 24 and len(rows) > 24, groups=sorted(groups), destinations=dest_rows, rows=len(rows))
 
     def reach(href: str, label: str) -> dict:
         open_palette(f"go: {label}")
@@ -119,7 +119,7 @@ with sync_playwright() as p:
     FIXED = {"/", "/watch", "/rules", "/everything?tab=sessions", "/everything?tab=made", "/everything?tab=helpers",
              "/everything?tab=handed", "/everything?tab=projects", "/steering/dashboard",
              "/steering/policies", "/steering/memories", "/testing/campaigns", "/testing/evals", "/repos", "/repos/new",
-             "/runs/new", "/workflows", "/product", "/skills", "/mcp", "/system", "/theme", "/editors/dev"}
+             "/runs/new", "/workflows", "/product", "/skills", "/mcp", "/learn", "/system", "/theme", "/editors/dev"}
     open_palette("go:")
     fixed = page.get_by_test_id("palette-row").evaluate_all(
         "els => els.map(e => ({ href: e.getAttribute('href'), label: e.innerText.split('\\n')[0] }))")
