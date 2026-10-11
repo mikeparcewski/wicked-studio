@@ -76,7 +76,7 @@
 
 .wk-btn--secondary {
   background: var(--surface-raised);
-  border-color: var(--border);
+  border-color: var(--border-strong);
   color: var(--ink-body);
 }
 .wk-btn--secondary:hover:not(:disabled) {
@@ -1594,6 +1594,7 @@ button.wk-walk-chapter-btn:hover .wk-walk-chapter-title { text-decoration: under
   .wk-topbar-brand b { color: var(--ink-high); }
   .wk-topbar-brand .wk-desk-dot { background: var(--spark); box-shadow: 0 0 0 1.5px var(--accent); }
   .wk-topbar-badge { flex-shrink: 0; padding-right: var(--space-2); }
+  .wk-topbar-checking { color: var(--ink-muted); font-size: var(--text-xs); }
   .wk-rail-scrim { position: fixed; inset: 0; z-index: 80; background: var(--scrim); }
   .wk-rail-drawer { position: fixed; top: 0; bottom: 0; left: 0; z-index: 81; display: flex; transform: translateX(-100%); visibility: hidden; transition: transform var(--dur-base) var(--ease-out), visibility 0s linear var(--dur-base); box-shadow: var(--shadow-overlay); }
   .wk-rail-drawer--open { transform: none; visibility: visible; transition: transform var(--dur-base) var(--ease-out); }
@@ -1603,6 +1604,7 @@ button.wk-walk-chapter-btn:hover .wk-walk-chapter-title { text-decoration: under
   /* Phone tap targets (UI-CONTRACT §2 --tap-min) on the shared controls. */
   .wk-btn, .wk-need-act, button.wk-chip, a.wk-chip, .wk-segmented-option, .wk-tab, .wk-switch { min-height: var(--tap-min); }
   .wk-btn--icon { width: var(--tap-min); min-width: var(--tap-min); }
+  .wk-field, .wk-tech-details-summary { min-height: var(--tap-min); }
   /* A one-glyph segment ("1"…"5") is 44 px wide too, not only tall (UI-CONTRACT ASK, w9-council). */
   .wk-segmented-option { min-width: var(--tap-min); }
   .wk-rail-drawer .wk-rail a, .wk-rail-drawer .wk-rail button { min-height: var(--tap-min); }
